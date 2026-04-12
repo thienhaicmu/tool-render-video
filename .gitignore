@@ -1,0 +1,91 @@
+# ================================================
+# OS / Editor
+# ================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ================================================
+# Claude Code internal settings
+# ================================================
+.claude/
+
+# ================================================
+# Python — virtual env & compiled files
+# ================================================
+backend/.venv/
+.venv/
+venv/
+env/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.pdb
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# ================================================
+# Node / Electron — dependencies & build outputs
+# ================================================
+**/node_modules/
+desktop-shell/dist/
+desktop-shell/build/
+desktop-shell/out/
+desktop-shell/.electron-builder/
+desktop-shell/.cache/
+desktop-shell/backend-bin/
+
+# ================================================
+# Runtime data — generated at runtime, NOT source
+# ================================================
+data/
+channels/*/upload/
+channels/*/logs/
+channels/*/browser-profile/
+channels/*/account/
+
+# ================================================
+# PyInstaller build outputs
+# ================================================
+backend/build/
+backend/dist/
+*.spec
+
+# ================================================
+# DB / Logs / Secrets
+# ================================================
+*.log
+*.db
+*.sqlite3
+.env
+.env.*
+reports/
+temp/
+
+# ================================================
+# Media files (VERY IMPORTANT)
+# ================================================
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.flv
+*.wav
+*.mp3
+# ================================================
+# AI / ML models & cache
+# ================================================
+models/
+checkpoints/
+*.pt
+*.pth
+*.onnx
+*.bin
+.cache/

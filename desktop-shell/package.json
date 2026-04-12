@@ -1,0 +1,54 @@
+{
+  "name": "yt-tiktok-desktop-shell",
+  "version": "0.1.0",
+  "description": "Render Studio Desktop Shell",
+  "author": "Render Studio Team",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^31.0.2",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.local.renderstudio",
+    "productName": "Render Studio Desktop",
+    "forceCodeSigning": false,
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!**/.venv/**",
+          "!**/__pycache__/**",
+          "!**/.pytest_cache/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "backend-bin",
+        "to": "backend-bin",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "files": [
+      "main.js",
+      "package.json"
+    ]
+  }
+}

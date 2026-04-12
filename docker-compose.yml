@@ -1,0 +1,20 @@
+services:
+  app:
+    build: ./backend
+    container_name: yt-tiktok-platform
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+      - APP_DATA_DIR=/data
+      - DATABASE_PATH=/data/app.db
+      - REPORTS_DIR=/data/reports
+      - CHANNELS_DIR=/data/channels
+      - TEMP_DIR=/data/temp
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    volumes:
+      - ./channels:/data/channels
+      - ./reports:/data/reports
+      - ./temp:/data/temp
+      - ./data:/data
+    shm_size: "2gb"

@@ -1,0 +1,10 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+openpyxl==3.1.5
+yt-dlp==2025.3.31
+openai-whisper==20231117
+scenedetect[opencv]==0.6.4
+playwright==1.51.0
+numpy==1.26.4
+opencv-python-headless==4.10.0.84
+python-multipart==0.0.9
