@@ -17,22 +17,29 @@ def slugify(text: str) -> str:
     return text.strip("-")[:80] or "video"
 
 
+def _ensure_ffmpeg_on_path() -> str:
+    """Add ffmpeg dir to PATH once and return the binary path."""
+    ffmpeg_bin = ensure_ffmpeg_available()
+    ffmpeg_dir = str(Path(ffmpeg_bin).parent)
+    current_path = os.environ.get("PATH", "")
+    if ffmpeg_dir not in current_path.split(os.pathsep):
+        os.environ["PATH"] = ffmpeg_dir + os.pathsep + current_path
+    return ffmpeg_bin
+
+
+_IOS = {"extractor_args": {"youtube": {"player_client": ["ios"]}}}
+
+
 def check_youtube_download_health(url: str) -> dict:
     """
     Probe a YouTube URL without downloading to check availability and max resolution.
-    Tries each player client in order and returns info from the first that works.
+    Uses ios client (only reliable client without PO Token as of 2026-04).
     """
-    ffmpeg_bin = ensure_ffmpeg_available()
-    ffmpeg_dir = str(Path(ffmpeg_bin).parent)
-    os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+    _ensure_ffmpeg_on_path()
 
-    # tv_embedded first — only client giving DASH without PO Token (tested 2026-04-09)
     clients = [
-        ("tv_embedded", {"extractor_args": {"youtube": {"player_client": ["tv_embedded"]}}}),
-        ("android",     {"extractor_args": {"youtube": {"player_client": ["android"]}}}),
-        ("web",         {"extractor_args": {"youtube": {"player_client": ["web"]}}}),
-        ("ios",         {"extractor_args": {"youtube": {"player_client": ["ios"]}}}),
-        ("auto",        {}),
+        ("ios",  _IOS),
+        ("auto", {}),
     ]
 
     last_payload: dict = {}
@@ -93,44 +100,25 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
     """
     Download a YouTube video at the highest available resolution.
 
-    Priority order:
-      1. android client  → bestvideo+bestaudio  (1080p60, very reliable, no PO token)
-      2. web client      → bestvideo+bestaudio  (up to 4K, may 403 sometimes)
-      3. ios client      → bestvideo+bestaudio  (up to 1440p, good fallback)
-      4. tv_embedded     → bestvideo+bestaudio  (lower quality cap, no bot check)
-      5. android         → mp4-only combined    (single file, no merge needed)
-      6. auto            → best                 (absolute last resort)
+    Priority order (tested 2026-04-13):
+      1. ios  → bestvideo+bestaudio ≤1080p  (HLS, reliable without PO Token)
+      2. ios  → bestvideo+bestaudio any     (no height cap)
+      3. auto → bestvideo+bestaudio ≤1080p  (yt-dlp default client selection)
+      4. auto → best                        (absolute last resort)
 
-    All DASH splits are remuxed to mp4 via ffmpeg.
+    All adaptive streams are merged to mp4 via ffmpeg.
     """
     temp_dir.mkdir(parents=True, exist_ok=True)
-    ffmpeg_bin = ensure_ffmpeg_available()
-    ffmpeg_dir = str(Path(ffmpeg_bin).parent)
-    os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
-
-    # ── Attempt order ─────────────────────────────────────────────────────────
-    # [acodec=none]  → video-only DASH stream  (never combined/muxed 360p)
-    # [vcodec=none]  → audio-only DASH stream
-    #
-    # TESTED 2026-04-09: tv_embedded is the ONLY client that returns DASH
-    # streams (up to 2160p/4K) without GVS PO Token or cookies.
-    # web/ios/mweb/android all require PO Token → skip HTTPS DASH → fall to 360p.
-    # tv_embedded bị YouTube chặn từ 2026-04 — không dùng nữa
-    _ANDROID = {"extractor_args": {"youtube": {"player_client": ["android"]}}}
-    _IOS = {"extractor_args": {"youtube": {"player_client": ["ios"]}}}
+    ffmpeg_bin = _ensure_ffmpeg_on_path()
 
     attempts = [
-        # 1. android best mp4 ≤1080p (combined, không cần merge, ổn định nhất)
-        (_ANDROID, "best[ext=mp4][height<=1080]/best[ext=mp4]"),
-        # 2. ios best mp4 ≤1080p
-        (_IOS, "best[ext=mp4][height<=1080]/best[ext=mp4]"),
-        # 3. android best bất kỳ format ≤1080p
-        (_ANDROID, "best[height<=1080]/best"),
-        # 4. ios best bất kỳ format ≤1080p
-        (_IOS, "best[height<=1080]/best"),
-        # 5. auto client — để yt-dlp tự chọn (cần PO token hoặc cookie để lấy DASH)
-        ({}, "best[height<=1080]/best"),
-        # 6. fallback tuyệt đối — bất kỳ chất lượng nào
+        # 1. ios: merge best video ≤1080p + best audio → mp4
+        (_IOS, "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"),
+        # 2. ios: no height cap (for videos only available at higher res)
+        (_IOS, "bestvideo+bestaudio/best"),
+        # 3. auto fallback: yt-dlp picks client
+        ({}, "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"),
+        # 4. absolute last resort
         ({}, "best"),
     ]
 
@@ -246,9 +234,10 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
         }
 
     def _cleanup_partial():
+        """Remove ALL source* files so the next attempt starts clean."""
         for p in temp_dir.glob("source*"):
             try:
-                if p.is_file() and p.stat().st_size == 0:
+                if p.is_file():
                     p.unlink(missing_ok=True)
             except Exception:
                 pass

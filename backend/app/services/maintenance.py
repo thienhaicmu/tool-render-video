@@ -1,7 +1,30 @@
 from __future__ import annotations
 
+import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+
+def prune_preview_dirs(temp_dir: Path, max_age_hours: int = 6):
+    """Remove stale preview session dirs older than max_age_hours."""
+    preview_root = temp_dir / "preview"
+    if not preview_root.exists():
+        return {"removed": 0, "kept": 0}
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    removed = kept = 0
+    for d in preview_root.iterdir():
+        if not d.is_dir():
+            continue
+        try:
+            mtime = datetime.fromtimestamp(d.stat().st_mtime, tz=timezone.utc)
+            if mtime < cutoff:
+                shutil.rmtree(d, ignore_errors=True)
+                removed += 1
+            else:
+                kept += 1
+        except Exception:
+            pass
+    return {"removed": removed, "kept": kept}
 
 
 def prune_job_logs(channels_dir: Path, keep_last: int = 30, older_than_days: int = 10):

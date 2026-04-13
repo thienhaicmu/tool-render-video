@@ -2880,8 +2880,35 @@ async function startRender(){
     part_order: 'viral',
   };
 
-  // ── Open editor view for both YouTube and local ──
-  openEditorView(sourceMode, sourceMode === 'youtube' ? youtubeUrl : localVideoPath, payload);
+  // ── YouTube: download trước, xong mới mở editor ──
+  // ── Local: mở editor ngay (prepare-source chỉ validate, rất nhanh) ──
+  if (sourceMode === 'youtube') {
+    const btn = qs('start_render_btn');
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Đang download YouTube…';
+    btn.style.opacity = '0.75';
+    addEvent('Đang download video từ YouTube…', 'render');
+    try {
+      const pr = await fetch('/api/render/prepare-source', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ source_mode: 'youtube', youtube_url: youtubeUrl }),
+      });
+      const pd = await pr.json();
+      if (!pr.ok) throw new Error(pd.detail || 'prepare-source failed');
+      addEvent(`Download xong: ${pd.title} (${_fmtTime(pd.duration || 0)})`, 'render');
+      payload.edit_session_id = pd.session_id;
+      openEditorView_withSession(pd, youtubeUrl, payload);
+    } catch(err) {
+      addEvent(`Download lỗi: ${err.message}`, 'render');
+      btn.disabled = false;
+      btn.textContent = origText;
+      btn.style.opacity = '1';
+      return;
+    }
+  } else {
+    openEditorView(sourceMode, localVideoPath, payload);
+  }
 }
 
 async function resumeRender(){
@@ -3858,6 +3885,34 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
     addEvent(`Editor prepare error: ${err.message}`, 'render');
     if (_ev.duration > 0) _evSetDuration(_ev.duration);
   }
+}
+
+/* ── Open editor with pre-downloaded YouTube session ──────── */
+function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
+  _ev.sessionId = pd.session_id;
+  _ev.duration = pd.duration || 0;
+  _ev.pendingPayload = pendingPayload;
+  _ev.videoReady = false;
+
+  setView('editor');
+  qs('evSourceName').textContent = pd.title || urlOrPath || '…';
+  qs('evLoadingOverlay').style.display = 'flex';
+  qs('evLoadingText').textContent = 'Đang tải preview…';
+  qs('evVideo').style.display = 'none';
+  qs('evSubOverlay').style.display = 'none';
+  qs('evStartBtn').disabled = true;
+  qs('evStatusLine').textContent = '⏳ Đang tải preview video…';
+  _evResetTrimUI();
+  evUpdateSubPreview();
+  evUpdateAspectRatio();
+
+  if (pendingPayload) pendingPayload.edit_session_id = pd.session_id;
+  _evSetDuration(_ev.duration);
+  _evLoadVideo(`/api/render/preview-video/${pd.session_id}`);
+
+  // Restore start button
+  const btn = qs('start_render_btn');
+  if (btn) { btn.disabled = false; btn.textContent = '▶ Tiếp theo: Chỉnh sửa & Render'; btn.style.opacity = '1'; }
 }
 
 function _evLoadVideo(src) {

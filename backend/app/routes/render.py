@@ -31,6 +31,44 @@ HIGH_MOTION_MIN_SCORE = 60
 HIGH_MOTION_MIN_KEEP = 3
 _JOB_LOG_DIRS: dict[str, Path] = {}
 _PREVIEW_SESSIONS: dict[str, dict] = {}  # session_id -> {video_path, duration, title, work_dir}
+_PREVIEW_DIR = TEMP_DIR / "preview"
+
+
+def _save_session(session_id: str, data: dict):
+    """Persist session to memory + JSON file (survives server restart)."""
+    _PREVIEW_SESSIONS[session_id] = data
+    try:
+        meta_path = Path(data["work_dir"]) / "session.json"
+        meta_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _load_session(session_id: str) -> dict | None:
+    """Load session from memory or fallback to disk JSON."""
+    if session_id in _PREVIEW_SESSIONS:
+        return _PREVIEW_SESSIONS[session_id]
+    meta_path = _PREVIEW_DIR / session_id / "session.json"
+    if meta_path.exists():
+        try:
+            data = json.loads(meta_path.read_text(encoding="utf-8"))
+            if Path(data.get("video_path", "")).exists():
+                _PREVIEW_SESSIONS[session_id] = data
+                return data
+        except Exception:
+            pass
+    return None
+
+
+def _cleanup_preview_session(session_id: str):
+    """Remove preview session from memory and disk after render consumes it."""
+    _PREVIEW_SESSIONS.pop(session_id, None)
+    preview_dir = _PREVIEW_DIR / session_id
+    if preview_dir.exists():
+        try:
+            shutil.rmtree(preview_dir, ignore_errors=True)
+        except Exception:
+            pass
 
 
 def _job_log(channel_code: str, job_id: str, message: str, kind: str = "info"):
@@ -271,14 +309,14 @@ def prepare_source(payload: PrepareSourceRequest):
                 raise HTTPException(status_code=400, detail=f"File not found: {src}")
             duration = _probe_video_duration(src)
             preview_path = _ensure_h264_preview(src, work_dir)
-            _PREVIEW_SESSIONS[session_id] = {
+            _save_session(session_id, {
                 "video_path": str(src),           # original used for render
                 "preview_path": str(preview_path), # h264 used for browser preview
                 "duration": duration,
                 "title": src.stem,
                 "work_dir": str(work_dir),
                 "source_mode": "local",
-            }
+            })
             return {"session_id": session_id, "duration": duration, "title": src.stem}
         else:
             yt_url = (payload.youtube_url or "").strip()
@@ -287,14 +325,14 @@ def prepare_source(payload: PrepareSourceRequest):
             source = download_youtube(yt_url, work_dir)
             src = Path(source["filepath"])
             preview_path = _ensure_h264_preview(src, work_dir)
-            _PREVIEW_SESSIONS[session_id] = {
+            _save_session(session_id, {
                 "video_path": source["filepath"],  # original used for render
                 "preview_path": str(preview_path), # h264 used for browser preview
                 "duration": source["duration"],
                 "title": source["title"],
                 "work_dir": str(work_dir),
                 "source_mode": "youtube",
-            }
+            })
             return {"session_id": session_id, "duration": source["duration"], "title": source["title"]}
     except HTTPException:
         raise
@@ -306,7 +344,7 @@ def prepare_source(payload: PrepareSourceRequest):
 @router.get("/preview-video/{session_id}")
 def preview_video(session_id: str):
     """Serve H.264 preview video with proper range support for HTML5 player."""
-    session = _PREVIEW_SESSIONS.get(session_id)
+    session = _load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Preview session not found")
 
@@ -369,9 +407,8 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
     try:
         _set_stage("downloading", 5, "Preparing source video")
         edit_session_id = (getattr(payload, "edit_session_id", None) or "").strip()
-        if edit_session_id and edit_session_id in _PREVIEW_SESSIONS:
-            # Reuse pre-downloaded / validated video from editor session
-            sess = _PREVIEW_SESSIONS[edit_session_id]
+        sess = _load_session(edit_session_id) if edit_session_id else None
+        if sess:
             source_path = Path(sess["video_path"])
             if not source_path.exists():
                 raise RuntimeError(f"Editor session video not found: {source_path}")
@@ -441,9 +478,19 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
                 keep_source_dir = output_dir.parent / "source"
             keep_path = _reserve_source_path_in_dir(keep_source_dir, source["slug"], ext=ext)
             if not keep_path.exists():
-                shutil.copy2(source_path, keep_path)
+                # Move instead of copy when source is in temp dir (instant on same drive, saves I/O + disk)
+                is_temp_source = str(source_path).startswith(str(TEMP_DIR))
+                if is_temp_source:
+                    try:
+                        shutil.move(str(source_path), str(keep_path))
+                        _job_log(effective_channel, job_id, f"Source moved (zero-copy) to: {keep_path}")
+                    except Exception:
+                        shutil.copy2(source_path, keep_path)
+                        _job_log(effective_channel, job_id, f"Source copied to: {keep_path}")
+                else:
+                    shutil.copy2(source_path, keep_path)
+                    _job_log(effective_channel, job_id, f"Source copied to: {keep_path}")
             source_path = keep_path
-            _job_log(effective_channel, job_id, f"Source kept at: {source_path}")
 
         _set_stage("scene_detection", 15, "Detecting scenes")
         scenes = detect_scenes(str(source_path)) if payload.auto_detect_scene else []
@@ -719,6 +766,9 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
                 _job_log(effective_channel, job_id, "Temporary files cleaned")
             except Exception as cleanup_err:
                 _job_log(effective_channel, job_id, f"Temp cleanup warning: {cleanup_err}")
+        # Cleanup preview session (video already moved/copied to output)
+        if edit_session_id:
+            _cleanup_preview_session(edit_session_id)
         _JOB_LOG_DIRS.pop(job_id, None)
 
 
