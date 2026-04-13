@@ -83,6 +83,7 @@ temp/
 # AI / ML models & cache
 # ================================================
 models/
+!backend/app/models/
 checkpoints/
 *.pt
 *.pth
