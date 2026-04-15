@@ -1,12 +1,83 @@
 
 import json
+import logging
+import os
 import sqlite3
+import threading
+from pathlib import Path
 from typing import Any
 from app.core.config import DATABASE_PATH
 
+logger = logging.getLogger("app.db")
+_DB_PATH_LOCK = threading.Lock()
+_ACTIVE_DB_PATH: Path | None = None
+
+
+def _default_fallback_db_path() -> Path:
+    if os.name == "nt":
+        base = Path(os.getenv("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
+        return base / "tool-render-video" / "data" / "app.db"
+    return Path.home() / ".tool-render-video" / "data" / "app.db"
+
+
+def _force_writable_file(path: Path):
+    try:
+        if path.exists():
+            mode = path.stat().st_mode
+            path.chmod(mode | 0o200)
+    except Exception:
+        pass
+
+
+def _can_write_sqlite(path: Path) -> bool:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _force_writable_file(path)
+        _force_writable_file(path.with_suffix(path.suffix + "-wal"))
+        _force_writable_file(path.with_suffix(path.suffix + "-shm"))
+        conn = sqlite3.connect(str(path), timeout=5)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("CREATE TABLE IF NOT EXISTS __db_write_check (id INTEGER PRIMARY KEY AUTOINCREMENT)")
+            conn.execute("INSERT INTO __db_write_check DEFAULT VALUES")
+            conn.commit()
+            conn.execute("DELETE FROM __db_write_check WHERE id = (SELECT MAX(id) FROM __db_write_check)")
+            conn.commit()
+        finally:
+            conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def _resolve_db_path() -> Path:
+    global _ACTIVE_DB_PATH
+    if _ACTIVE_DB_PATH is not None:
+        return _ACTIVE_DB_PATH
+    with _DB_PATH_LOCK:
+        if _ACTIVE_DB_PATH is not None:
+            return _ACTIVE_DB_PATH
+        primary = Path(DATABASE_PATH)
+        if _can_write_sqlite(primary):
+            _ACTIVE_DB_PATH = primary
+            return _ACTIVE_DB_PATH
+        fallback = _default_fallback_db_path()
+        if _can_write_sqlite(fallback):
+            _ACTIVE_DB_PATH = fallback
+            logger.warning(
+                "Database path '%s' is not writable; using fallback '%s'.",
+                primary,
+                fallback,
+            )
+            return _ACTIVE_DB_PATH
+        raise RuntimeError(
+            f"No writable SQLite database path available. Tried: {primary} and {fallback}"
+        )
+
 
 def get_conn():
-    conn = sqlite3.connect(DATABASE_PATH, timeout=30)
+    db_path = _resolve_db_path()
+    conn = sqlite3.connect(str(db_path), timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA journal_mode=WAL;')
     conn.execute('PRAGMA synchronous=NORMAL;')

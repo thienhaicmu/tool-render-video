@@ -144,15 +144,23 @@ def _write_channel_profile(base: Path, channel_code: str, account_key: str,
 def _seed_portable_installers_to_channel(base: Path) -> list[str]:
     """
     Copy portable browser installers into channel/browser-profile so first login can bootstrap runtime.
-    Source: <project_root>/data/installers/portableapps
+    Source priority:
+    1) <project_root>/data/installers/portableapps
+    2) %USERPROFILE%/Desktop (fallback for local operator workflow)
     """
     copied: list[str] = []
     channel_browser_root = base / "browser-profile"
     channel_browser_root.mkdir(parents=True, exist_ok=True)
 
     project_root = Path(__file__).resolve().parents[3]
+    installers_roots: list[Path] = []
     installers_root = project_root / "data" / "installers" / "portableapps"
-    if not installers_root.exists() or not installers_root.is_dir():
+    if installers_root.exists() and installers_root.is_dir():
+        installers_roots.append(installers_root)
+    desktop_dir = Path.home() / "Desktop"
+    if desktop_dir.exists() and desktop_dir.is_dir():
+        installers_roots.append(desktop_dir)
+    if not installers_roots:
         return copied
 
     patterns = [
@@ -161,8 +169,9 @@ def _seed_portable_installers_to_channel(base: Path) -> list[str]:
         "ChromePortable*.paf.exe",
     ]
     candidates: list[Path] = []
-    for pat in patterns:
-        candidates.extend(sorted(installers_root.glob(pat)))
+    for root in installers_roots:
+        for pat in patterns:
+            candidates.extend(sorted(root.glob(pat)))
 
     seen = set()
     def _is_windows_exe_file(path: Path) -> bool:

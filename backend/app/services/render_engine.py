@@ -263,10 +263,15 @@ def _detect_windows_fonts_dir() -> str | None:
 
 
 def _get_custom_fonts_dir() -> str | None:
-    """Return path to bundled fonts directory (backend/fonts/)."""
-    candidate = Path(__file__).resolve().parents[3] / "fonts"
-    if candidate.exists():
-        return str(candidate)
+    """Return path to bundled fonts directory."""
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[2] / "fonts",  # backend/fonts (current project layout)
+        here.parents[3] / "fonts",  # legacy: repo/fonts
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
     return None
 
 

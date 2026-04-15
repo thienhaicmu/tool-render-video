@@ -254,7 +254,13 @@ def _write_segment_level_srt(result: dict, srt_path: str):
 # ASS style definitions
 # ---------------------------------------------------------------------------
 
-def _resolve_ass_style(subtitle_style: str = "tiktok_bounce_v1", scale_y: int = 106, highlight_per_word: bool = True):
+def _resolve_ass_style(
+    subtitle_style: str = "tiktok_bounce_v1",
+    scale_y: int = 106,
+    highlight_per_word: bool = True,
+    font_name: str = "Bungee",
+    margin_v: int = 170,
+):
     """Return (style_line, line_fx) for the requested subtitle style.
 
     line_fx is prepended to each Dialogue text field (ASS override tags).
@@ -265,52 +271,52 @@ def _resolve_ass_style(subtitle_style: str = "tiktok_bounce_v1", scale_y: int = 
     # --- Bounce pop-in tag: scale from 118% → 100% over 220ms ---
     BOUNCE_FX = r"{\fscx118\fscy118\t(0,220,\fscx100\fscy100)}"
 
-    margin_v = 170
+    safe_font = (font_name or "Bungee").replace(",", " ").strip() or "Bungee"
 
     if style == "viral_clean_montserrat":
         line_fx = BOUNCE_FX if highlight_per_word else ""
         return (
-            f"Style: Default,Bungee,34,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},34,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "viral_soft_poppins":
         line_fx = BOUNCE_FX if highlight_per_word else ""
         return (
-            f"Style: Default,Bungee,32,&H00F0F0F0,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},32,&H00F0F0F0,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "viral_pop_anton":
         line_fx = BOUNCE_FX if highlight_per_word else r"{\bord3\fscx100\fscy108}"
         return (
-            f"Style: Default,Bungee,40,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},40,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "viral_compact_barlow":
         line_fx = BOUNCE_FX if highlight_per_word else ""
         return (
-            f"Style: Default,Bungee,36,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},36,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "clean_bold_01":
         return (
-            f"Style: Default,Bungee,34,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,165,1",
+            f"Style: Default,{safe_font},34,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,165,1",
             BOUNCE_FX if highlight_per_word else "",
         )
     if style == "story_clean_01":
         return (
-            f"Style: Default,Bungee,32,&H00F6F6F6,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,2,0,2,40,40,165,1",
+            f"Style: Default,{safe_font},32,&H00F6F6F6,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,2,0,2,40,40,165,1",
             BOUNCE_FX if highlight_per_word else "",
         )
 
     # Default / tiktok_bounce_v1 — Bungee font, word-by-word bounce
     if highlight_per_word:
         return (
-            f"Style: Default,Bungee,38,&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,175,1",
+            f"Style: Default,{safe_font},38,&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,175,1",
             BOUNCE_FX,
         )
     # Segment mode
     return (
-        f"Style: Default,Bungee,34,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,165,1",
+        f"Style: Default,{safe_font},34,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,165,1",
         "",
     )
 
@@ -341,8 +347,16 @@ def srt_to_ass_bounce(
     subtitle_style: str = "tiktok_bounce_v1",
     scale_y: int = 106,
     highlight_per_word: bool = True,
+    font_name: str = "Bungee",
+    margin_v: int = 170,
 ):
-    ass_style, line_fx = _resolve_ass_style(subtitle_style, scale_y, highlight_per_word)
+    ass_style, line_fx = _resolve_ass_style(
+        subtitle_style,
+        scale_y,
+        highlight_per_word,
+        font_name=font_name,
+        margin_v=margin_v,
+    )
     header = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080

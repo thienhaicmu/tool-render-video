@@ -436,6 +436,12 @@
                   <option value="Anton">Anton (Bold)</option>
                   <option value="Bebas Neue">Bebas Neue (Caps)</option>
                   <option value="Oswald">Oswald (Compact)</option>
+                  <option value="Impact">Impact (Punchy)</option>
+                  <option value="Arial Black">Arial Black (Heavy)</option>
+                  <option value="Segoe UI Black">Segoe UI Black (Clean Bold)</option>
+                  <option value="Archivo Black">Archivo Black (Viral)</option>
+                  <option value="Teko">Teko (Tall)</option>
+                  <option value="Luckiest Guy">Luckiest Guy (Fun)</option>
                   <option value="Montserrat">Montserrat (Clean)</option>
                   <option value="Roboto">Roboto (Modern)</option>
                 </select>
@@ -4174,6 +4180,10 @@ async function startRenderFromEditor() {
   const posY = Number(qs('evSubPos').value);
   payload.sub_margin_v  = Math.round((posY / 100) * 1440 * 0.85);
   payload.subtitle_style = 'pro_karaoke';
+  // Editor mode: user expects subtitle on all exported parts.
+  payload.subtitle_only_viral_high = false;
+  payload.subtitle_viral_min_score = 0;
+  payload.subtitle_viral_top_ratio = 1.0;
 
   // ── Render settings ──────────────────────────────────────────
   payload.aspect_ratio   = qs('evAspectRatio').value;

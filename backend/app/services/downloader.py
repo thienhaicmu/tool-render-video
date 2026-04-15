@@ -28,6 +28,8 @@ def _ensure_ffmpeg_on_path() -> str:
 
 
 _IOS = {"extractor_args": {"youtube": {"player_client": ["ios"]}}}
+_ANDROID = {"extractor_args": {"youtube": {"player_client": ["android"]}}}
+_TV = {"extractor_args": {"youtube": {"player_client": ["tv_embedded"]}}}
 
 
 def check_youtube_download_health(url: str) -> dict:
@@ -38,7 +40,9 @@ def check_youtube_download_health(url: str) -> dict:
     _ensure_ffmpeg_on_path()
 
     clients = [
-        ("ios",  _IOS),
+        ("ios", _IOS),
+        ("android", _ANDROID),
+        ("tv_embedded", _TV),
         ("auto", {}),
     ]
 
@@ -101,24 +105,27 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
     Download a YouTube video at the highest available resolution.
 
     Priority order (tested 2026-04-13):
-      1. ios  → bestvideo+bestaudio ≤1080p  (HLS, reliable without PO Token)
-      2. ios  → bestvideo+bestaudio any     (no height cap)
-      3. auto → bestvideo+bestaudio ≤1080p  (yt-dlp default client selection)
-      4. auto → best                        (absolute last resort)
+      1. ios  -> adaptive A/V with <=1080p target
+      2. ios  -> adaptive A/V without cap
+      3. auto -> adaptive A/V with <=1080p target
+      4. auto -> adaptive A/V without cap
+      5. auto -> progressive fallback
+      6. auto -> best (last resort)
 
     All adaptive streams are merged to mp4 via ffmpeg.
     """
     temp_dir.mkdir(parents=True, exist_ok=True)
     ffmpeg_bin = _ensure_ffmpeg_on_path()
-
     attempts = [
-        # 1. ios: merge best video ≤1080p + best audio → mp4
-        (_IOS, "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"),
-        # 2. ios: no height cap (for videos only available at higher res)
-        (_IOS, "bestvideo+bestaudio/best"),
-        # 3. auto fallback: yt-dlp picks client
-        ({}, "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"),
-        # 4. absolute last resort
+        (_IOS, "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
+        (_IOS, "bv*+ba/b"),
+        (_ANDROID, "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
+        (_ANDROID, "bv*+ba/b"),
+        (_TV, "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
+        (_TV, "bv*+ba/b"),
+        ({}, "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
+        ({}, "bv*+ba/b"),
+        ({}, "b[height<=1080]/b"),
         ({}, "best"),
     ]
 
@@ -129,7 +136,7 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
         "prefer_ffmpeg": True,
         # merge adaptive video+audio streams into a single mp4
         "merge_output_format": "mp4",
-        # prefer DASH (https direct) over HLS (m3u8) — HLS fragments often return empty
+        # prefer DASH (https direct) over HLS (m3u8) - HLS fragments often return empty
         "format_sort": ["proto:https", "proto:http"],
         # faster fragment downloads for DASH (1080p+ is always DASH on YouTube)
         "concurrent_fragment_downloads": 4,
@@ -219,7 +226,7 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
         # Reject silently-low-quality results so the next attempt can try
         if height and height < 480:
             raise RuntimeError(
-                f"Got only {height}p — rejecting, trying next strategy"
+                f"Got only {height}p - rejecting, trying next strategy"
             )
 
         return {
@@ -233,6 +240,67 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
             "selected_format": fmt_id,
         }
 
+    def _probe_info(client_kwargs: dict) -> dict:
+        probe_opts = {
+            "skip_download": True,
+            "quiet": True,
+            "noplaylist": True,
+            "extractor_retries": 2,
+            **client_kwargs,
+        }
+        if cookiefile:
+            probe_opts["cookiefile"] = common["cookiefile"]
+        with YoutubeDL(probe_opts) as ydl:
+            return ydl.extract_info(url, download=False)
+
+    def _dynamic_format_candidates(info: dict) -> list[str]:
+        formats = [f for f in (info.get("formats") or []) if isinstance(f, dict)]
+        videos = [
+            f for f in formats
+            if str(f.get("vcodec") or "none").lower() != "none"
+            and str(f.get("acodec") or "none").lower() == "none"
+            and f.get("format_id")
+        ]
+        audios = [
+            f for f in formats
+            if str(f.get("acodec") or "none").lower() != "none"
+            and str(f.get("vcodec") or "none").lower() == "none"
+            and f.get("format_id")
+        ]
+        progressive = [
+            f for f in formats
+            if str(f.get("vcodec") or "none").lower() != "none"
+            and str(f.get("acodec") or "none").lower() != "none"
+            and f.get("format_id")
+        ]
+        videos = sorted(videos, key=lambda x: (int(float(x.get("height") or 0)), int(float(x.get("fps") or 0))), reverse=True)
+        audios = sorted(audios, key=lambda x: int(float(x.get("abr") or 0)), reverse=True)
+        progressive = sorted(progressive, key=lambda x: (int(float(x.get("height") or 0)), int(float(x.get("fps") or 0))), reverse=True)
+
+        out: list[str] = []
+        if videos and audios:
+            # best adaptive
+            out.append(f"{videos[0]['format_id']}+{audios[0]['format_id']}")
+            # cap to <=1080 if available
+            v1080 = next((v for v in videos if int(float(v.get("height") or 0)) <= 1080), None)
+            if v1080:
+                out.append(f"{v1080['format_id']}+{audios[0]['format_id']}")
+        if progressive:
+            out.append(str(progressive[0]["format_id"]))
+            p1080 = next((p for p in progressive if int(float(p.get("height") or 0)) <= 1080), None)
+            if p1080:
+                out.append(str(p1080["format_id"]))
+        # final generic fallbacks
+        out.extend(["bv*+ba/b", "best"])
+        # de-dup keep order
+        seen = set()
+        deduped: list[str] = []
+        for f in out:
+            if f and f not in seen:
+                deduped.append(f)
+                seen.add(f)
+        return deduped
+
     def _cleanup_partial():
         """Remove ALL source* files so the next attempt starts clean."""
         for p in temp_dir.glob("source*"):
@@ -244,8 +312,14 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
 
     last_err: Exception | None = None
 
-    for client_kwargs, fmt in attempts:
-        opts = {**common, **client_kwargs, "format": fmt}
+    unavailable_requested = False
+    attempted_formats: list[str] = []
+
+    for idx, (client_kwargs, fmt) in enumerate(attempts, start=1):
+        opts = {**common, **client_kwargs}
+        if fmt:
+            opts["format"] = fmt
+            attempted_formats.append(fmt)
         client_name = (
             (client_kwargs.get("extractor_args") or {})
             .get("youtube", {})
@@ -256,22 +330,89 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
             h = result.get("selected_height", 0)
             fps_val = result.get("selected_fps", 0)
             logger.info(
-                "Download OK | client=%s | format=%s | %dp%s",
-                client_name, fmt[:60], h, f"@{fps_val}fps" if fps_val else "",
+                "Download OK | attempt=%d/%d | client=%s | format=%s | %dp%s",
+                idx, len(attempts), client_name, fmt[:60], h, f"@{fps_val}fps" if fps_val else "",
             )
             return result
         except Exception as exc:
+            msg = str(exc)
+            if "Requested format is not available" in msg:
+                unavailable_requested = True
             logger.warning(
-                "Download attempt failed | client=%s | format=%s | %s",
-                client_name, fmt[:60], exc,
+                "Download attempt failed | attempt=%d/%d | client=%s | format=%s | reason=%s",
+                idx, len(attempts), client_name, fmt[:60], msg,
             )
             last_err = exc
             _cleanup_partial()
 
+    # Dynamic fallback: probe available formats and retry with concrete format IDs.
+    if unavailable_requested:
+        dynamic_attempts: list[tuple[dict, str]] = []
+        for client_kwargs in (_IOS, _ANDROID, _TV, {}):
+            try:
+                info = _probe_info(client_kwargs)
+                for fmt in _dynamic_format_candidates(info):
+                    dynamic_attempts.append((client_kwargs, fmt))
+            except Exception as exc:
+                logger.warning("Dynamic probe failed | client=%s | %s",
+                               ((client_kwargs.get("extractor_args") or {}).get("youtube", {}).get("player_client", ["auto"])[0]),
+                               exc)
+        # de-dup attempts while preserving order
+        seen_pairs = set()
+        dynamic_unique: list[tuple[dict, str]] = []
+        for ck, fmt in dynamic_attempts:
+            cname = ((ck.get("extractor_args") or {}).get("youtube", {}).get("player_client", ["auto"])[0])
+            key = (cname, fmt)
+            if key in seen_pairs:
+                continue
+            seen_pairs.add(key)
+            dynamic_unique.append((ck, fmt))
+
+        for idx, (client_kwargs, fmt) in enumerate(dynamic_unique[:8], start=1):
+            opts = {**common, **client_kwargs, "format": fmt}
+            client_name = (
+                (client_kwargs.get("extractor_args") or {})
+                .get("youtube", {})
+                .get("player_client", ["auto"])[0]
+            )
+            attempted_formats.append(fmt)
+            try:
+                result = _try_download(opts)
+                h = result.get("selected_height", 0)
+                fps_val = result.get("selected_fps", 0)
+                logger.info(
+                    "Dynamic download OK | attempt=%d/%d | client=%s | format=%s | %dp%s",
+                    idx, min(8, len(dynamic_unique)), client_name, fmt[:60], h, f"@{fps_val}fps" if fps_val else "",
+                )
+                return result
+            except Exception as exc:
+                logger.warning(
+                    "Dynamic download failed | attempt=%d/%d | client=%s | format=%s | reason=%s",
+                    idx, min(8, len(dynamic_unique)), client_name, fmt[:60], exc,
+                )
+                last_err = exc
+                _cleanup_partial()
+
+    last_err_text = str(last_err or "")
+    extract_fail = "Failed to extract any player response" in last_err_text
     if isinstance(last_err, DownloadError):
-        raise RuntimeError(str(last_err)) from last_err
+        if extract_fail:
+            cookie_hint = (
+                "Add valid cookies via YTDLP_COOKIEFILE and retry."
+                if not cookiefile
+                else "Verify your cookie file is valid/fresh and retry."
+            )
+            raise RuntimeError(
+                "yt-dlp could not extract YouTube player response after trying ios/android/tv/auto clients. "
+                f"{cookie_hint} Also ensure yt-dlp is up to date (`python -m pip install -U yt-dlp`). "
+                f"Tried formats: {', '.join(attempted_formats[:12])}"
+            ) from last_err
+        raise RuntimeError(
+            f"{last_err}. Tried formats: {', '.join(attempted_formats[:12])}"
+        ) from last_err
     if last_err:
         raise RuntimeError(
-            f"Download failed after all fallback strategies: {last_err}"
+            f"Download failed after all fallback strategies: {last_err}. Tried formats: {', '.join(attempted_formats[:12])}"
         ) from last_err
     raise RuntimeError("Download failed with unknown error")
+
