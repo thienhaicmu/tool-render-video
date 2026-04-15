@@ -1,17 +1,19 @@
 
 import json
 import os
+import re
 import shutil
 import traceback
 import uuid
 import logging
 import subprocess
+from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
-from app.models.schemas import RenderRequest, DownloadHealthRequest, PrepareSourceRequest
+from app.models.schemas import RenderRequest, DownloadHealthRequest, PrepareSourceRequest, QuickProcessRequest
 from app.services.db import upsert_job, update_job_progress, upsert_job_part, get_job, list_job_parts
 from app.services.job_manager import submit_job
 from app.services.channel_service import ensure_channel
@@ -432,6 +434,7 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
             _job_log(effective_channel, job_id, f"Local source selected: {source_path}")
         else:
             yt_url = (payload.youtube_url or "").strip() or (payload.youtube_urls[0] if payload.youtube_urls else "")
+            _job_log(effective_channel, job_id, f"YouTube source URL: {yt_url}")
             source = download_youtube(yt_url, work_dir)
             _job_log(
                 effective_channel,
@@ -537,6 +540,16 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
             subtitle_enabled_by_idx[idx] = payload.add_subtitle and (
                 (not payload.subtitle_only_viral_high) or int(seg.get("viral_score", 0)) >= int(subtitle_cutoff)
             )
+        if payload.add_subtitle and not any(subtitle_enabled_by_idx.values()):
+            # Safety fallback: avoid "no subtitle at all" when viral gates are too strict.
+            for idx in range(1, total_parts + 1):
+                subtitle_enabled_by_idx[idx] = True
+            _job_log(
+                effective_channel,
+                job_id,
+                "No parts passed subtitle viral filters; fallback enabled subtitles for all parts",
+                kind="warning",
+            )
 
         if payload.add_subtitle and any(subtitle_enabled_by_idx.values()):
             _set_stage("transcribing_full", 28, "Transcribing full video once")
@@ -610,7 +623,15 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
                             outline_size=getattr(payload, "sub_outline", 3),
                         )
                     else:
-                        srt_to_ass_bounce(str(srt_part), str(ass_part), subtitle_style=payload.subtitle_style, scale_y=payload.frame_scale_y, highlight_per_word=payload.highlight_per_word)
+                        srt_to_ass_bounce(
+                            str(srt_part),
+                            str(ass_part),
+                            subtitle_style=payload.subtitle_style,
+                            scale_y=payload.frame_scale_y,
+                            highlight_per_word=payload.highlight_per_word,
+                            font_name=getattr(payload, "sub_font", "Bungee"),
+                            margin_v=getattr(payload, "sub_margin_v", 170),
+                        )
                     _job_log(effective_channel, job_id, f"Part {idx} subtitle style rendered: {payload.subtitle_style}", kind="debug")
             else:
                 _job_log(effective_channel, job_id, f"Part {idx} subtitle disabled", kind="debug")
@@ -913,6 +934,218 @@ def download_health(payload: DownloadHealthRequest):
     if not url:
         raise HTTPException(status_code=400, detail="youtube_url is required")
     return check_youtube_download_health(url)
+
+
+def _run_ffmpeg_checked(cmd: list[str], fail_message: str):
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        detail = ((proc.stderr or "") + "\n" + (proc.stdout or "")).strip()
+        if len(detail) > 1200:
+            detail = detail[-1200:]
+        raise HTTPException(status_code=500, detail=f"{fail_message}: {detail or 'unknown ffmpeg error'}")
+    return proc
+
+
+def _detect_leading_black_duration(input_path: Path, min_duration: float, threshold: float) -> float:
+    """
+    Detect black frames only at the beginning and return trim seconds (black_end).
+    Returns 0.0 when no leading black intro matches criteria.
+    """
+    cmd = [
+        get_ffmpeg_bin(),
+        "-hide_banner",
+        "-loglevel", "info",
+        "-i", str(input_path),
+        "-vf", f"blackdetect=d={min_duration:.3f}:pic_th={threshold:.3f}",
+        "-an",
+        "-f", "null",
+        "-",
+    ]
+    proc = _run_ffmpeg_checked(cmd, "FFmpeg black-intro detection failed")
+    output = ((proc.stderr or "") + "\n" + (proc.stdout or "")).strip()
+
+    pattern = re.compile(r"black_start:(?P<start>\d+(\.\d+)?)\s+black_end:(?P<end>\d+(\.\d+)?)\s+black_duration:(?P<dur>\d+(\.\d+)?)")
+    for match in pattern.finditer(output):
+        start = float(match.group("start"))
+        end = float(match.group("end"))
+        dur = float(match.group("dur"))
+        # Trim only if black section starts at beginning.
+        if start <= 0.12 and dur >= min_duration:
+            return max(0.0, end)
+        break
+    return 0.0
+
+
+@router.post("/quick-process")
+def quick_process(payload: QuickProcessRequest):
+    """
+    Simple one-shot flow:
+    - Download from YouTube URL
+    - Optionally apply resize/filter
+    - Save to exact output file path
+    """
+    source = (payload.source or "").strip().lower()
+    url = (payload.url or "").strip()
+    local_path_raw = (payload.path or "").strip()
+    output_raw = (payload.output or "").strip()
+
+    if source not in ("youtube", "local"):
+        raise HTTPException(status_code=400, detail="source must be 'youtube' or 'local'")
+    if source == "youtube" and not url:
+        raise HTTPException(status_code=400, detail="url is required when source='youtube'")
+    if source == "youtube":
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise HTTPException(status_code=400, detail="url must be a valid http(s) URL")
+    if source == "local" and not local_path_raw:
+        raise HTTPException(status_code=400, detail="path is required when source='local'")
+    if not output_raw:
+        raise HTTPException(status_code=400, detail="output is required")
+
+    if (payload.resize_width and not payload.resize_height) or (payload.resize_height and not payload.resize_width):
+        raise HTTPException(status_code=400, detail="resize_width and resize_height must be provided together")
+    if payload.resize_width is not None and payload.resize_width <= 0:
+        raise HTTPException(status_code=400, detail="resize_width must be > 0")
+    if payload.resize_height is not None and payload.resize_height <= 0:
+        raise HTTPException(status_code=400, detail="resize_height must be > 0")
+    if payload.black_min_duration <= 0:
+        raise HTTPException(status_code=400, detail="black_min_duration must be > 0")
+    if payload.black_threshold < 0 or payload.black_threshold > 1:
+        raise HTTPException(status_code=400, detail="black_threshold must be between 0 and 1")
+
+    output_path = Path(output_raw).expanduser()
+    if not output_path.is_absolute():
+        output_path = (Path.cwd() / output_path).resolve()
+    if output_path.exists() and output_path.is_dir():
+        raise HTTPException(status_code=400, detail="output must be a file path, not a directory")
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid output path: {exc}") from exc
+
+    job_id = str(uuid.uuid4())
+    work_dir = TEMP_DIR / f"quick_{job_id}"
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        if source == "youtube":
+            try:
+                downloaded = download_youtube(url, work_dir)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Failed to download YouTube URL: {exc}") from exc
+            src_path = Path(downloaded["filepath"]).resolve()
+            downloaded_title = downloaded.get("title", "")
+            duration = int(downloaded.get("duration") or 0)
+        else:
+            src_path = Path(local_path_raw).expanduser()
+            if not src_path.is_absolute():
+                src_path = (Path.cwd() / src_path).resolve()
+            if not src_path.exists() or not src_path.is_file():
+                raise HTTPException(status_code=400, detail=f"Local file not found: {src_path}")
+            downloaded_title = src_path.stem
+            duration = _probe_video_duration(src_path)
+
+        vf_parts: list[str] = []
+        if payload.resize_width and payload.resize_height:
+            vf_parts.append(f"scale={int(payload.resize_width)}:{int(payload.resize_height)}")
+        if (payload.video_filter or "").strip():
+            vf_parts.append((payload.video_filter or "").strip())
+
+        overwrite_flag = "-y" if payload.overwrite else "-n"
+        trim_start_sec = 0.0
+        if payload.trim_black_intro:
+            trim_start_sec = _detect_leading_black_duration(
+                src_path,
+                min_duration=float(payload.black_min_duration),
+                threshold=float(payload.black_threshold),
+            )
+
+        has_transform = bool(vf_parts) or (trim_start_sec > 0)
+
+        if not has_transform:
+            # Fast path: no transform requested and no leading black to trim.
+            copy_cmd = [
+                get_ffmpeg_bin(),
+                overwrite_flag,
+                "-i", str(src_path),
+                "-c", "copy",
+                "-movflags", "+faststart",
+                str(output_path),
+            ]
+            try:
+                _run_ffmpeg_checked(copy_cmd, "FFmpeg copy failed")
+            except Exception:
+                has_transform = True
+
+        if has_transform:
+            # Single processing pass. Avoid intermediate temp files.
+            cmd = [
+                get_ffmpeg_bin(),
+                overwrite_flag,
+            ]
+            if trim_start_sec > 0:
+                cmd += ["-ss", f"{trim_start_sec:.3f}"]
+            cmd += ["-i", str(src_path)]
+            if vf_parts:
+                cmd += ["-vf", ",".join(vf_parts)]
+            if trim_start_sec > 0 and not vf_parts:
+                # Fast trim path with stream copy; fallback to encode for edge cases.
+                trim_copy_cmd = [
+                    *cmd,
+                    "-c", "copy",
+                    "-movflags", "+faststart",
+                    str(output_path),
+                ]
+                try:
+                    _run_ffmpeg_checked(trim_copy_cmd, "FFmpeg trim copy failed")
+                except HTTPException:
+                    trim_encode_cmd = [
+                        *cmd,
+                        "-c:v", "libx264",
+                        "-preset", "medium",
+                        "-crf", "20",
+                        "-c:a", "aac",
+                        "-b:a", "192k",
+                        "-movflags", "+faststart",
+                        str(output_path),
+                    ]
+                    _run_ffmpeg_checked(trim_encode_cmd, "FFmpeg trim encode failed")
+            else:
+                cmd += [
+                    "-c:v", "libx264",
+                    "-preset", "medium",
+                    "-crf", "20",
+                    "-c:a", "aac",
+                    "-b:a", "192k",
+                    "-movflags", "+faststart",
+                    str(output_path),
+                ]
+                _run_ffmpeg_checked(cmd, "FFmpeg processing failed")
+
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            raise RuntimeError(f"Output file was not created: {output_path}")
+
+        return {
+            "status": "completed",
+            "source": source,
+            "url": url if source == "youtube" else "",
+            "path": str(src_path) if source == "local" else "",
+            "output": str(output_path),
+            "downloaded_title": downloaded_title,
+            "duration": duration,
+            "processed": has_transform,
+            "trim_applied": trim_start_sec > 0,
+            "trim_start_sec": round(trim_start_sec, 3),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        try:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        except Exception:
+            pass
 
 
 @router.post("/resume/{job_id}")

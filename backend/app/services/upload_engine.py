@@ -205,6 +205,11 @@ def _default_profile_config(channel_code: str, account_key: str, settings: dict 
             # Each value is a list of fallback selectors tried in order.
             # String values are also accepted (treated as single-item list).
             "file_input": ["input[type='file']"],
+            "upload_option": [
+                "button:has-text('Select video')",
+                "button:has-text('Upload')",
+                "button:has-text('Choose file')",
+            ],
             "caption": [
                 "[data-e2e='caption-input']",
                 "div[data-e2e='caption-input']",
@@ -612,6 +617,99 @@ def _try_locator(page, selector_or_list, timeout: int = 10000):
     raise last_exc
 
 
+def _selector_list(selector_or_list) -> list[str]:
+    if isinstance(selector_or_list, list):
+        return [str(x).strip() for x in selector_or_list if str(x).strip()]
+    s = str(selector_or_list or "").strip()
+    return [s] if s else []
+
+
+def _wait_any_selector(page, selector_or_list, timeout_ms: int = 20000):
+    candidates = _selector_list(selector_or_list)
+    if not candidates:
+        return None
+    deadline = time.time() + (timeout_ms / 1000.0)
+    last_exc = None
+    while time.time() < deadline:
+        for sel in candidates:
+            try:
+                loc = page.locator(sel).first
+                if loc.count() > 0:
+                    try:
+                        if loc.is_visible():
+                            return sel
+                    except Exception:
+                        return sel
+            except Exception as exc:
+                last_exc = exc
+        page.wait_for_timeout(300)
+    if last_exc:
+        raise last_exc
+    return None
+
+
+def _first_existing_selector(page, selector_or_list):
+    for sel in _selector_list(selector_or_list):
+        try:
+            if page.locator(sel).count() > 0:
+                return sel
+        except Exception:
+            continue
+    return None
+
+
+def _wait_upload_started(page, video_path: Path, timeout_ms: int = 120000) -> bool:
+    markers = [
+        "[data-e2e*='upload' i]",
+        "text=/uploading|processing|uploaded|đang tải|đang xử lý/i",
+        "text=/0%|1%|2%|3%|4%|5%/i",
+        f"text={video_path.name}",
+    ]
+    try:
+        return bool(_wait_any_selector(page, markers, timeout_ms=timeout_ms))
+    except Exception:
+        return False
+
+
+def _wait_upload_outcome(page, timeout_ms: int = 180000) -> tuple[str, str]:
+    success_markers = [
+        "text=/uploaded|posted|scheduled|success|thành công|đã lên lịch/i",
+        "[data-e2e*='success' i]",
+    ]
+    failure_markers = [
+        "text=/failed|couldn't upload|cannot upload|error|thất bại/i",
+        "text=/try again|retry/i",
+        "[data-e2e*='error' i]",
+    ]
+    blocked_markers = [
+        "text=/verify|captcha|suspicious|blocked|challenge/i",
+        "text=/log in|login|sign in/i",
+    ]
+    deadline = time.time() + (timeout_ms / 1000.0)
+    while time.time() < deadline:
+        if _first_existing_selector(page, blocked_markers):
+            return ("blocked", "Upload blocked by verification/login challenge.")
+        if _first_existing_selector(page, failure_markers):
+            return ("failed", "Upload failed according to TikTok UI state.")
+        if _first_existing_selector(page, success_markers):
+            return ("success", "Upload completed successfully.")
+        page.wait_for_timeout(1000)
+    return ("timeout", "Upload outcome timeout: success/failure state not detected.")
+
+
+def _try_select_upload_option(page, selectors: dict):
+    option_selector = selectors.get("upload_option")
+    if not option_selector:
+        return
+    try:
+        sel = _wait_any_selector(page, option_selector, timeout_ms=5000)
+        if sel:
+            page.locator(sel).first.click()
+            page.wait_for_timeout(500)
+    except Exception:
+        pass
+
+
 def _screenshot_on_error(page, label: str):
     """Save a debug screenshot when an upload step fails."""
     try:
@@ -762,19 +860,30 @@ def _try_autofill_mail_login(page, mail_username: str, mail_password: str) -> bo
 def _upload_once(cfg: dict, video_path: Path, scheduled_iso: str, caption: str, use_schedule: bool, headless: bool):
     selectors = cfg.get("selectors", {})
     upload_url = cfg.get("upload_url", "https://www.tiktok.com/upload")
+    if not video_path.exists() or not video_path.is_file():
+        raise RuntimeError(f"Upload source file not found: {video_path}")
 
     with sync_playwright() as p:
         context = _launch_persistent_context(p, cfg, headless=headless)
         try:
             page = context.new_page()
             page.goto(upload_url, wait_until="domcontentloaded", timeout=90000)
-            page.wait_for_timeout(1500)
+            page.wait_for_timeout(1200)
 
             file_input = selectors.get("file_input", "input[type='file']")
-            page.set_input_files(file_input, str(video_path))
+            if not _is_upload_logged_in(page, file_input):
+                raise RuntimeError("Upload session is not authenticated. Please login first.")
 
-            # Wait for upload widgets to stabilize.
-            page.wait_for_timeout(9000)
+            _try_select_upload_option(page, selectors)
+            input_selector = _wait_any_selector(page, file_input, timeout_ms=30000)
+            if not input_selector:
+                _screenshot_on_error(page, "upload_input_not_found")
+                raise RuntimeError("Upload file input is not available on upload screen.")
+            page.set_input_files(input_selector, str(video_path))
+
+            if not _wait_upload_started(page, video_path, timeout_ms=120000):
+                _screenshot_on_error(page, "upload_not_started")
+                raise RuntimeError("Upload did not start after selecting file.")
 
             caption_selector = selectors.get("caption")
             if caption_selector and caption:
@@ -787,15 +896,21 @@ def _upload_once(cfg: dict, video_path: Path, scheduled_iso: str, caption: str, 
             if submit_selector:
                 try:
                     _try_locator(page, submit_selector, timeout=12000).click()
-                    page.wait_for_timeout(3000)
                 except Exception:
                     _screenshot_on_error(page, "submit_not_found")
                     raise
+
+            outcome, outcome_message = _wait_upload_outcome(page, timeout_ms=180000)
+            if outcome != "success":
+                _screenshot_on_error(page, f"upload_{outcome}")
+                raise RuntimeError(outcome_message)
 
             return {
                 "upload_url": upload_url,
                 "scheduled_time": scheduled_iso,
                 "caption": caption,
+                "upload_state": outcome,
+                "upload_message": outcome_message,
             }
         finally:
             context.close()
@@ -807,7 +922,9 @@ def _build_launch_kwargs(cfg: dict, headless: bool) -> dict:
         "user_data_dir": cfg["user_data_dir"],
         "headless": headless,
     }
-    if (cfg.get("network_mode", "direct").lower() == "proxy") and cfg.get("proxy_server"):
+    if cfg.get("network_mode", "direct").lower() == "proxy":
+        if not str(cfg.get("proxy_server") or "").strip():
+            raise RuntimeError("Proxy mode is enabled but proxy_server is empty.")
         proxy_cfg = {"server": cfg.get("proxy_server")}
         if cfg.get("proxy_username"):
             proxy_cfg["username"] = cfg.get("proxy_username")
@@ -1002,11 +1119,27 @@ def _resolve_browser_type_and_executable(cfg: dict) -> tuple[str, str | None]:
 
 
 def _portable_installer_for_pref(browser_root: Path, pref: str) -> Path | None:
+    # Search both top-level and nested folders inside channel/browser-profile.
     if pref in ("firefoxportable", "firefox"):
-        matches = sorted(browser_root.glob("FirefoxPortable*.paf.exe"))
-        return matches[-1] if matches else None
-    matches = sorted(browser_root.glob("*Chrome*Portable*.paf.exe"))
-    return matches[-1] if matches else None
+        patterns = ["FirefoxPortable*.paf.exe"]
+    else:
+        patterns = ["*Chrome*Portable*.paf.exe", "ChromePortable*.paf.exe", "GoogleChromePortable*.paf.exe"]
+
+    found: list[Path] = []
+    for pat in patterns:
+        try:
+            found.extend([p for p in browser_root.glob(pat) if p.is_file()])
+        except Exception:
+            pass
+        try:
+            found.extend([p for p in browser_root.rglob(pat) if p.is_file()])
+        except Exception:
+            pass
+    if not found:
+        return None
+    # Pick newest file when multiple installers exist.
+    found = sorted(set(found), key=lambda p: p.stat().st_mtime)
+    return found[-1]
 
 
 def _is_windows_exe_file(path: Path) -> bool:
@@ -1226,14 +1359,10 @@ def _launch_persistent_context(playwright, cfg: dict, headless: bool):
         raise
 
 
-def _is_upload_logged_in(page, file_input_selector: str) -> bool:
+def _is_upload_logged_in(page, file_input_selector) -> bool:
     current_url = (page.url or "").lower()
     redirected_to_login = ("login" in current_url) or ("signin" in current_url)
-    has_file_input = False
-    try:
-        has_file_input = page.locator(file_input_selector).count() > 0
-    except Exception:
-        has_file_input = False
+    has_file_input = _first_existing_selector(page, file_input_selector) is not None
     return bool(has_file_input and not redirected_to_login)
 
 

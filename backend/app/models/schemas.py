@@ -46,6 +46,20 @@ class DownloadHealthRequest(BaseModel):
     youtube_url: Optional[str] = ""
 
 
+class QuickProcessRequest(BaseModel):
+    source: str = "youtube"
+    url: str = ""
+    path: str = ""
+    output: str = ""
+    resize_width: Optional[int] = None
+    resize_height: Optional[int] = None
+    video_filter: Optional[str] = None
+    trim_black_intro: bool = False
+    black_min_duration: float = 0.5
+    black_threshold: float = 0.10
+    overwrite: bool = True
+
+
 class RenderRequest(BaseModel):
     # Source
     source_mode: Optional[str] = "youtube"
