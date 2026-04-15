@@ -662,7 +662,7 @@ def _wait_upload_started(page, video_path: Path, timeout_ms: int = 120000) -> bo
     markers = [
         "[data-e2e*='upload' i]",
         "text=/uploading|processing|uploaded|đang tải|đang xử lý/i",
-        "text=/0%|1%|2%|3%|4%|5%/i",
+        "text=/\\b\\d{1,3}%\\b/i",
         f"text={video_path.name}",
     ]
     try:
@@ -869,17 +869,27 @@ def _upload_once(cfg: dict, video_path: Path, scheduled_iso: str, caption: str, 
             page = context.new_page()
             page.goto(upload_url, wait_until="domcontentloaded", timeout=90000)
             page.wait_for_timeout(1200)
+            try:
+                page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
 
             file_input = selectors.get("file_input", "input[type='file']")
             if not _is_upload_logged_in(page, file_input):
                 raise RuntimeError("Upload session is not authenticated. Please login first.")
 
             _try_select_upload_option(page, selectors)
-            input_selector = _wait_any_selector(page, file_input, timeout_ms=30000)
+            input_selector = _wait_any_selector(page, file_input, timeout_ms=45000)
+            if not input_selector:
+                _try_select_upload_option(page, selectors)
+                input_selector = _wait_any_selector(page, file_input, timeout_ms=20000) or _first_existing_selector(page, file_input)
             if not input_selector:
                 _screenshot_on_error(page, "upload_input_not_found")
-                raise RuntimeError("Upload file input is not available on upload screen.")
-            page.set_input_files(input_selector, str(video_path))
+                raise RuntimeError("Upload file input is not available on upload screen after readiness checks.")
+            try:
+                page.set_input_files(input_selector, str(video_path))
+            except Exception:
+                page.locator(input_selector).first.set_input_files(str(video_path))
 
             if not _wait_upload_started(page, video_path, timeout_ms=120000):
                 _screenshot_on_error(page, "upload_not_started")

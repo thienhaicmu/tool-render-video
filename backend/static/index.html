@@ -255,6 +255,11 @@
     .evSubOverlay { position: absolute; left: 0; right: 0; display: flex; justify-content: center; pointer-events: none; z-index: 4; transition: bottom .15s; }
     .evSubInner { text-align: center; line-height: 1.15; max-width: 90%; }
     .evSubWord { display: inline; }
+    .evTextLayersOverlay { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+    .evTextLayerPreview { position: absolute; max-width: 88%; white-space: pre-wrap; line-height: 1.2; }
+    .evLayerItem { display:flex; align-items:center; gap:6px; justify-content:space-between; padding:6px 8px; border:1px solid var(--card-border); border-radius:8px; background:#0f172a66; }
+    .evLayerItem.active { border-color:#3b82f6; box-shadow:0 0 0 1px #3b82f655 inset; }
+    .evTinyBtn { font-size:11px; padding:3px 7px; border-radius:6px; border:1px solid var(--card-border); background:#0f172a; color:var(--text); cursor:pointer; }
     /* Timeline strip */
     .evTimeline { flex-shrink: 0; height: 52px; background: #070a14; border-top: 1px solid #1e2d45; display: flex; align-items: center; padding: 0 14px; gap: 10px; }
     .evTimelineBarWrap { flex: 1; position: relative; height: 8px; background: #1e2d45; border-radius: 999px; cursor: pointer; }
@@ -363,6 +368,7 @@
                 <span style="font-family:'Bungee',sans-serif;font-size:clamp(12px,4cqw,46px);color:#FFFF00;-webkit-text-stroke:2px #000;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000">POV: </span><span style="font-family:'Bungee',sans-serif;font-size:clamp(12px,4cqw,46px);color:#FFF;-webkit-text-stroke:2px #000;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000">never gonna</span>
               </div>
             </div>
+            <div class="evTextLayersOverlay" id="evTextLayersOverlay"></div>
 
             <!-- Loading overlay -->
             <div class="evLoadingOverlay" id="evLoadingOverlay">
@@ -475,6 +481,104 @@
             </div>
             <div style="margin-top:10px;padding:10px;background:#000;border-radius:8px;text-align:center;min-height:60px;display:flex;align-items:center;justify-content:center" id="evSubStaticPreview">
               <span id="evSubStaticText" style="font-family:'Bungee';font-size:28px;color:#fff;-webkit-text-stroke:2px #000">Preview subtitle</span>
+            </div>
+          </div>
+
+          <div class="evSection">
+            <div class="evSectionTitle">📝 Text Overlay Layers</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evAddTextLayer()">+ Add Text</button>
+              <span style="font-size:11px;color:var(--text-muted)">Max 8 layers. Top item renders above lower item.</span>
+            </div>
+            <div id="evTextLayerList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+            <div id="evTextLayerEditor" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <label class="field" style="grid-column:1 / -1">
+                <span class="fieldLabel">Text</span>
+                <textarea class="fieldInput" id="evTxtContent" rows="2" placeholder="Type overlay text..." oninput="evUpdateSelectedTextLayer()"></textarea>
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Start time (s)</span>
+                <input class="fieldInput" type="number" id="evTxtStartTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">End time (s, 0=full)</span>
+                <input class="fieldInput" type="number" id="evTxtEndTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Font</span>
+                <select class="fieldInput" id="evTxtFont" onchange="evUpdateSelectedTextLayer()">
+                  <option value="Bungee">Bungee</option>
+                  <option value="Anton">Anton</option>
+                  <option value="Bebas Neue">Bebas Neue</option>
+                  <option value="Oswald">Oswald</option>
+                  <option value="Impact">Impact</option>
+                  <option value="Arial Black">Arial Black</option>
+                  <option value="Segoe UI Black">Segoe UI Black</option>
+                  <option value="Montserrat">Montserrat</option>
+                  <option value="Roboto">Roboto</option>
+                  <option value="Arial">Arial</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Font size</span>
+                <input class="fieldInput" type="number" id="evTxtSize" min="12" max="160" value="32" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Color</span>
+                <input type="color" id="evTxtColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Position</span>
+                <select class="fieldInput" id="evTxtPos" onchange="evApplyLayerPresetPosition()">
+                  <option value="top-left">top-left</option>
+                  <option value="top-center">top-center</option>
+                  <option value="top-right">top-right</option>
+                  <option value="center">center</option>
+                  <option value="bottom-left">bottom-left</option>
+                  <option value="bottom-center" selected>bottom-center</option>
+                  <option value="bottom-right">bottom-right</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Alignment</span>
+                <select class="fieldInput" id="evTxtAlign" onchange="evUpdateSelectedTextLayer()">
+                  <option value="left">left</option>
+                  <option value="center" selected>center</option>
+                  <option value="right">right</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="fieldLabel">X (%)</span>
+                <input class="fieldInput" type="number" id="evTxtX" min="0" max="100" step="1" value="50" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Y (%)</span>
+                <input class="fieldInput" type="number" id="evTxtY" min="0" max="100" step="1" value="90" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="evTxtBold" onchange="evUpdateSelectedTextLayer()"> <span style="font-size:12px;color:var(--text)">Bold</span></label>
+              <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="evTxtOutlineEnabled" checked onchange="evUpdateSelectedTextLayer()"> <span style="font-size:12px;color:var(--text)">Outline</span></label>
+              <label class="field">
+                <span class="fieldLabel">Outline px</span>
+                <input class="fieldInput" type="number" id="evTxtOutlineThickness" min="0" max="8" value="2" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="evTxtShadowEnabled" onchange="evUpdateSelectedTextLayer()"> <span style="font-size:12px;color:var(--text)">Shadow</span></label>
+              <label class="field">
+                <span class="fieldLabel">Shadow X</span>
+                <input class="fieldInput" type="number" id="evTxtShadowX" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Shadow Y</span>
+                <input class="fieldInput" type="number" id="evTxtShadowY" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="evTxtBgEnabled" onchange="evUpdateSelectedTextLayer()"> <span style="font-size:12px;color:var(--text)">Background box</span></label>
+              <label class="field">
+                <span class="fieldLabel">BG color</span>
+                <input type="color" id="evTxtBgColor" value="#000000" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">BG padding</span>
+                <input class="fieldInput" type="number" id="evTxtBgPadding" min="0" max="64" value="10" oninput="evUpdateSelectedTextLayer()">
+              </label>
             </div>
           </div>
 
@@ -2857,6 +2961,7 @@ async function startRender(){
     max_part_sec: 180,
     add_subtitle: true,
     add_title_overlay: true,
+    title_overlay_text: '',
     auto_detect_scene: true,
     prioritize_scene_cuts: true,
     highlight_per_word: true,
@@ -2884,6 +2989,7 @@ async function startRender(){
     subtitle_viral_top_ratio: 0.6,
     max_parallel_parts: 1,
     part_order: 'viral',
+    text_layers: [],
   };
 
   // ── YouTube: download trước, xong mới mở editor ──
@@ -3823,7 +3929,225 @@ addEvent('Dashboard ready');
 let _ev = {
   sessionId: null, duration: 0, pendingPayload: null,
   videoReady: false, subAnimTimer: null, subWordIdx: 0, bgmPath: null,
+  textLayers: [], selectedTextLayer: 0,
 };
+const EV_MAX_TEXT_LAYERS = 8;
+const EV_TEXT_POS_TO_XY = {
+  'top-left': [5, 5],
+  'top-center': [50, 5],
+  'top-right': [95, 5],
+  'center': [50, 50],
+  'bottom-left': [5, 90],
+  'bottom-center': [50, 90],
+  'bottom-right': [95, 90],
+};
+
+function evPresetToXY(position) {
+  return EV_TEXT_POS_TO_XY[position] || EV_TEXT_POS_TO_XY['bottom-center'];
+}
+
+function _evNewTextLayer(order) {
+  const duration = Number(_ev.duration || 0);
+  return {
+    id: `txt_${Date.now()}_${Math.floor(Math.random() * 9999)}`,
+    text: 'New Text',
+    font_family: 'Bungee',
+    font_size: 32,
+    color: '#ffffff',
+    position: 'bottom-center',
+    x_percent: 50,
+    y_percent: 90,
+    alignment: 'center',
+    bold: false,
+    outline: { enabled: true, thickness: 2 },
+    shadow: { enabled: false, offset_x: 2, offset_y: 2 },
+    background: { enabled: false, color: '#00000099', padding: 10 },
+    start_time: 0,
+    end_time: duration > 0 ? Math.round(duration * 10) / 10 : 0,
+    order: Number(order || 0),
+  };
+}
+
+function evInitTextLayers() {
+  _ev.textLayers = [];
+  _ev.selectedTextLayer = 0;
+  evRenderTextLayerList();
+  evRenderTextLayerPreview();
+}
+
+function evAddTextLayer() {
+  if ((_ev.textLayers || []).length >= EV_MAX_TEXT_LAYERS) {
+    addEvent(`Text overlay limit reached (${EV_MAX_TEXT_LAYERS}).`, 'render');
+    return;
+  }
+  _ev.textLayers.push(_evNewTextLayer(_ev.textLayers.length));
+  _ev.selectedTextLayer = _ev.textLayers.length - 1;
+  evRenderTextLayerList();
+  evRenderTextLayerPreview();
+}
+
+function evApplyLayerPresetPosition() {
+  const [x, y] = evPresetToXY(qs('evTxtPos')?.value || 'bottom-center');
+  if (qs('evTxtX')) qs('evTxtX').value = x;
+  if (qs('evTxtY')) qs('evTxtY').value = y;
+  evUpdateSelectedTextLayer();
+}
+
+function evSelectTextLayer(index) {
+  if (index < 0 || index >= _ev.textLayers.length) return;
+  _ev.selectedTextLayer = index;
+  evRenderTextLayerList();
+}
+
+function evMoveTextLayer(index, dir) {
+  const j = index + dir;
+  if (index < 0 || j < 0 || index >= _ev.textLayers.length || j >= _ev.textLayers.length) return;
+  const arr = _ev.textLayers;
+  [arr[index], arr[j]] = [arr[j], arr[index]];
+  _ev.selectedTextLayer = j;
+  arr.forEach((l, i) => l.order = i);
+  evRenderTextLayerList();
+  evRenderTextLayerPreview();
+}
+
+function evDeleteTextLayer(index) {
+  if (index < 0 || index >= _ev.textLayers.length) return;
+  _ev.textLayers.splice(index, 1);
+  _ev.textLayers.forEach((l, i) => l.order = i);
+  _ev.selectedTextLayer = Math.max(0, Math.min(_ev.selectedTextLayer, _ev.textLayers.length - 1));
+  evRenderTextLayerList();
+  evRenderTextLayerPreview();
+}
+
+function evRenderTextLayerList() {
+  const box = qs('evTextLayerList');
+  if (!box) return;
+  if (!_ev.textLayers.length) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">No text layer configured.</div>';
+    const editor = qs('evTextLayerEditor');
+    if (editor) editor.style.display = 'none';
+    return;
+  }
+  const selected = _ev.selectedTextLayer;
+  box.innerHTML = _ev.textLayers.map((layer, i) => {
+    const name = String(layer.text || '').trim() || '(empty)';
+    const pos = String(layer.position || 'bottom-center');
+    const xp = Math.max(0, Math.min(100, Number(layer.x_percent ?? 50)));
+    const yp = Math.max(0, Math.min(100, Number(layer.y_percent ?? 90)));
+    const st = Number(layer.start_time || 0);
+    const et = Number(layer.end_time || 0);
+    const timing = et > 0 ? `${st.toFixed(1)}s→${et.toFixed(1)}s` : `${st.toFixed(1)}s→end`;
+    return `<div class="evLayerItem ${selected===i?'active':''}">
+      <button class="evTinyBtn" onclick="evSelectTextLayer(${i})" style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i+1}. ${esc(name)} <span style="opacity:.7">• ${esc(pos)} (${xp.toFixed(0)}%,${yp.toFixed(0)}%) • ${timing}</span></button>
+      <button class="evTinyBtn" onclick="evMoveTextLayer(${i},-1)">↑</button>
+      <button class="evTinyBtn" onclick="evMoveTextLayer(${i},1)">↓</button>
+      <button class="evTinyBtn" onclick="evDeleteTextLayer(${i})">✕</button>
+    </div>`;
+  }).join('');
+  const editor = qs('evTextLayerEditor');
+  if (editor) editor.style.display = 'grid';
+  const cur = _ev.textLayers[selected];
+  if (!cur) return;
+  qs('evTxtContent').value = cur.text || '';
+  qs('evTxtFont').value = cur.font_family || 'Bungee';
+  qs('evTxtSize').value = Number(cur.font_size || 42);
+  qs('evTxtColor').value = cur.color || '#ffffff';
+  qs('evTxtPos').value = cur.position || 'bottom-center';
+  qs('evTxtX').value = Math.max(0, Math.min(100, Number(cur.x_percent ?? evPresetToXY(cur.position || 'bottom-center')[0])));
+  qs('evTxtY').value = Math.max(0, Math.min(100, Number(cur.y_percent ?? evPresetToXY(cur.position || 'bottom-center')[1])));
+  qs('evTxtAlign').value = cur.alignment || 'center';
+  qs('evTxtStartTime').value = Number(cur.start_time || 0);
+  qs('evTxtEndTime').value = Number(cur.end_time || 0);
+  qs('evTxtBold').checked = !!cur.bold;
+  qs('evTxtOutlineEnabled').checked = !!cur.outline?.enabled;
+  qs('evTxtOutlineThickness').value = Number(cur.outline?.thickness ?? 2);
+  qs('evTxtShadowEnabled').checked = !!cur.shadow?.enabled;
+  qs('evTxtShadowX').value = Number(cur.shadow?.offset_x ?? 2);
+  qs('evTxtShadowY').value = Number(cur.shadow?.offset_y ?? 2);
+  qs('evTxtBgEnabled').checked = !!cur.background?.enabled;
+  qs('evTxtBgColor').value = String(cur.background?.color || '#00000099').slice(0, 7);
+  qs('evTxtBgPadding').value = Number(cur.background?.padding ?? 10);
+}
+
+function evUpdateSelectedTextLayer() {
+  const i = _ev.selectedTextLayer;
+  const layer = _ev.textLayers[i];
+  if (!layer) return;
+  layer.text = String(qs('evTxtContent')?.value || '').trim();
+  layer.font_family = qs('evTxtFont')?.value || 'Bungee';
+  layer.font_size = Math.max(12, Math.min(160, Number(qs('evTxtSize')?.value || 42)));
+  layer.color = qs('evTxtColor')?.value || '#ffffff';
+  layer.position = qs('evTxtPos')?.value || 'bottom-center';
+  layer.x_percent = Math.max(0, Math.min(100, Number(qs('evTxtX')?.value || 50)));
+  layer.y_percent = Math.max(0, Math.min(100, Number(qs('evTxtY')?.value || 90)));
+  layer.alignment = qs('evTxtAlign')?.value || 'center';
+  const startTime = Math.max(0, Number(qs('evTxtStartTime')?.value || 0));
+  const rawEndTime = Math.max(0, Number(qs('evTxtEndTime')?.value || 0));
+  let endTime = rawEndTime;
+  if (endTime > 0 && endTime <= startTime) {
+    endTime = startTime + 0.1;
+    if (qs('evTxtEndTime')) qs('evTxtEndTime').value = String(Math.round(endTime * 10) / 10);
+  }
+  layer.start_time = startTime;
+  layer.end_time = endTime;
+  layer.bold = !!qs('evTxtBold')?.checked;
+  layer.outline = {
+    enabled: !!qs('evTxtOutlineEnabled')?.checked,
+    thickness: Math.max(0, Math.min(8, Number(qs('evTxtOutlineThickness')?.value || 0))),
+  };
+  layer.shadow = {
+    enabled: !!qs('evTxtShadowEnabled')?.checked,
+    offset_x: Math.max(-20, Math.min(20, Number(qs('evTxtShadowX')?.value || 0))),
+    offset_y: Math.max(-20, Math.min(20, Number(qs('evTxtShadowY')?.value || 0))),
+  };
+  const bgHex = qs('evTxtBgColor')?.value || '#000000';
+  layer.background = {
+    enabled: !!qs('evTxtBgEnabled')?.checked,
+    color: `${bgHex}99`,
+    padding: Math.max(0, Math.min(64, Number(qs('evTxtBgPadding')?.value || 0))),
+  };
+  evRenderTextLayerList();
+  evRenderTextLayerPreview();
+}
+
+function evRenderTextLayerPreview() {
+  const overlay = qs('evTextLayersOverlay');
+  if (!overlay) return;
+  const layers = (_ev.textLayers || []).slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+  if (!layers.length) {
+    overlay.innerHTML = '';
+    return;
+  }
+  const now = Number(qs('evVideo')?.currentTime || 0);
+  overlay.innerHTML = layers.filter((l) => {
+    const st = Math.max(0, Number(l.start_time || 0));
+    const et = Math.max(0, Number(l.end_time || 0));
+    if (now < st) return false;
+    if (et > 0 && now >= et) return false;
+    return true;
+  }).map((l) => {
+    const defXY = evPresetToXY(l.position || 'bottom-center');
+    const x = Math.max(0, Math.min(100, Number(l.x_percent ?? defXY[0])));
+    const y = Math.max(0, Math.min(100, Number(l.y_percent ?? defXY[1])));
+    const style = [];
+    style.push(`left:${x}%`);
+    style.push(`top:${y}%`);
+    style.push(`font-family:'${String(l.font_family || 'Bungee').replace(/'/g,'')}','Arial',sans-serif`);
+    style.push(`font-size:${Math.max(12, Number(l.font_size || 42))}px`);
+    style.push(`color:${l.color || '#ffffff'}`);
+    style.push(`font-weight:${l.bold ? '700' : '500'}`);
+    style.push(`text-align:${l.alignment || 'center'}`);
+    const outlinePx = (l.outline?.enabled ? Number(l.outline?.thickness || 0) : 0);
+    if (outlinePx > 0) style.push(`-webkit-text-stroke:${outlinePx}px #000`);
+    if (l.shadow?.enabled) style.push(`text-shadow:${Number(l.shadow.offset_x||2)}px ${Number(l.shadow.offset_y||2)}px 4px rgba(0,0,0,.75)`);
+    if (l.background?.enabled) {
+      style.push(`background:${l.background.color || '#00000099'}`);
+      style.push(`padding:${Math.max(0, Number(l.background.padding || 0))}px`);
+      style.push('border-radius:6px');
+    }
+    return `<div class="evTextLayerPreview" style="${style.join(';')}">${esc(String(l.text || ''))}</div>`;
+  }).join('');
+}
 
 function evToggleBgmFields() {
   const el = qs('evBgmFields');
@@ -3866,6 +4190,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   qs('evStatusLine').textContent = sourceMode === 'youtube' ? '⏳ Download YouTube — có thể mất 30–60 giây…' : '⏳ Đang chuẩn bị preview…';
   _evResetTrimUI();
   evUpdateSubPreview();
+  evInitTextLayers();
   evUpdateAspectRatio();  // apply aspect ratio frame from dropdown
 
   try {
@@ -3878,6 +4203,9 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
     _ev.sessionId = pd.session_id;
     _ev.duration  = pd.duration || 0;
     qs('evSourceName').textContent = pd.title || urlOrPath;
+    if (qs('evTitleOverlayText') && !String(qs('evTitleOverlayText').value || '').trim()) {
+      qs('evTitleOverlayText').value = String(pd.title || '');
+    }
     if (pendingPayload) pendingPayload.edit_session_id = pd.session_id;
     _evSetDuration(_ev.duration);
 
@@ -3902,6 +4230,9 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
 
   setView('editor');
   qs('evSourceName').textContent = pd.title || urlOrPath || '…';
+  if (qs('evTitleOverlayText') && !String(qs('evTitleOverlayText').value || '').trim()) {
+    qs('evTitleOverlayText').value = String(pd.title || '');
+  }
   qs('evLoadingOverlay').style.display = 'flex';
   qs('evLoadingText').textContent = 'Đang tải preview…';
   qs('evVideo').style.display = 'none';
@@ -3910,6 +4241,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   qs('evStatusLine').textContent = '⏳ Đang tải preview video…';
   _evResetTrimUI();
   evUpdateSubPreview();
+  evInitTextLayers();
   evUpdateAspectRatio();
 
   if (pendingPayload) pendingPayload.edit_session_id = pd.session_id;
@@ -3960,6 +4292,7 @@ function _evOnTimeUpdate() {
   const pct = (video.currentTime / _ev.duration) * 100;
   qs('evTimelineProgress').style.width = `${pct}%`;
   qs('evCurTime').textContent = _fmtTime(video.currentTime);
+  evRenderTextLayerPreview();
 }
 
 function evSeekClick(e) {
@@ -4185,6 +4518,18 @@ async function startRenderFromEditor() {
   payload.subtitle_viral_min_score = 0;
   payload.subtitle_viral_top_ratio = 1.0;
 
+  // ── Multi-layer text overlay ──────────────────────────────────
+  const layers = (_ev.textLayers || [])
+    .map((l, i) => {
+      const start = Math.max(0, Number(l.start_time || 0));
+      const rawEnd = Math.max(0, Number(l.end_time || 0));
+      const end = (rawEnd > 0 && rawEnd <= start) ? (start + 0.1) : rawEnd;
+      return { ...l, order: i, start_time: start, end_time: end };
+    })
+    .filter((l) => String(l.text || '').trim().length > 0)
+    .slice(0, EV_MAX_TEXT_LAYERS);
+  payload.text_layers = layers;
+
   // ── Render settings ──────────────────────────────────────────
   payload.aspect_ratio   = qs('evAspectRatio').value;
   payload.playback_speed = Number(qs('evPlaybackSpeed').value);
@@ -4194,6 +4539,8 @@ async function startRenderFromEditor() {
   payload.max_export_parts = Number(qs('evMaxExportParts').value || 0);
   payload.part_order     = qs('evPartOrder').value;
   payload.frame_scale_y  = Math.max(80, Math.min(130, Number(qs('evFrameScaleY').value || 106)));
+  payload.title_overlay_text = '';
+  payload.add_title_overlay = false;
 
   const evDev = qs('evRenderDevice').value;
   payload.encoder_mode = evDev === 'gpu' ? 'nvenc' : (evDev === 'cpu' ? 'cpu' : 'auto');
@@ -4242,7 +4589,7 @@ async function startRenderFromEditor() {
     payload.reup_bgm_path = null;
   }
 
-  addEvent(`Editor → Render | device=${evDev} | profile=${profile} | aspect=${payload.aspect_ratio} | speed=${payload.playback_speed}x | trim ${_fmtTime(inSec)}→${_fmtTime(outSec)} | vol ${Math.round(vol*100)}%`, 'render');
+  addEvent(`Editor → Render | device=${evDev} | profile=${profile} | aspect=${payload.aspect_ratio} | speed=${payload.playback_speed}x | trim ${_fmtTime(inSec)}→${_fmtTime(outSec)} | vol ${Math.round(vol*100)}% | text_layers=${layers.length} | title=off`, 'render');
 
   if (_ev.subAnimTimer) { clearInterval(_ev.subAnimTimer); _ev.subAnimTimer = null; }
   const video = qs('evVideo');

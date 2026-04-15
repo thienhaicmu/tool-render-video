@@ -4,6 +4,7 @@ import math
 import os
 import subprocess
 import time
+import logging
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -13,7 +14,9 @@ import cv2
 import numpy as np
 
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
+from app.services.text_overlay import append_text_layer_filters
 
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Config
@@ -771,8 +774,12 @@ def render_motion_aware_crop(
     reup_bgm_path: str | None = None,
     reup_bgm_gain: float = 0.18,
     playback_speed: float = 1.07,
+    text_layers: list[dict] | None = None,
     cfg: MotionCropConfig | None = None,
 ) -> str:
+    layer_count = len(text_layers or [])
+    if layer_count:
+        logger.info("Applying %d text overlay layer(s) in motion-aware pipeline", layer_count)
     cfg = cfg or MotionCropConfig(scale_x_percent=scale_x_percent, scale_y_percent=scale_y_percent)
 
     src_w, src_h, _ = ffprobe_video_info(input_path)
@@ -848,6 +855,7 @@ def render_motion_aware_crop(
         if fontfile:
             drawtext += f":fontfile='{_safe_filter_path(fontfile)}'"
         vf_parts.append(drawtext)
+    append_text_layer_filters(vf_parts, text_layers)
 
     speed = _sanitize_speed(playback_speed)
     if abs(speed - 1.0) > 1e-4:

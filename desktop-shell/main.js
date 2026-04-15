@@ -268,7 +268,9 @@ function createWindow() {
     winOpts.icon = iconPath;
   }
   mainWindow = new BrowserWindow(winOpts);
-  mainWindow.loadURL(BACKEND_URL);
+  // Force fresh UI load to avoid stale cached index.html after frontend updates.
+  mainWindow.webContents.session.clearCache().catch(() => {});
+  mainWindow.loadURL(`${BACKEND_URL}/?v=${Date.now()}`);
 }
 
 async function bootstrap() {

@@ -24,8 +24,9 @@ from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, s
 from app.services.render_engine import cut_video, render_part_smart
 from app.services.viral_scorer import score_segments
 from app.services.report_service import append_rows
-from app.core.config import TEMP_DIR, REPORTS_DIR, CHANNELS_DIR
+from app.core.config import TEMP_DIR, REPORTS_DIR, CHANNELS_DIR, LOGS_DIR
 from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin
+from app.services.text_overlay import normalize_text_layers, MAX_TEXT_LAYERS
 
 router = APIRouter(prefix="/api/render", tags=["render"])
 logger = logging.getLogger("app.render")
@@ -96,6 +97,83 @@ def _job_log(channel_code: str, job_id: str, message: str, kind: str = "info"):
         f.write(f"[{datetime.utcnow().isoformat()}Z] [{kind.upper()}] {message}\n")
 
 
+def _append_json_line(path: Path, entry: dict):
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _render_error_code(step: str, message: str, exc: Exception | None = None) -> str:
+    text = f"{step} {message} {exc or ''}".lower()
+    if "not found" in text or "filenotfounderror" in text:
+        return "RN002"
+    if "output" in text and ("invalid" in text or "permission" in text or "path" in text):
+        return "RN003"
+    if "ffmpeg" in text:
+        return "RN004"
+    if "scene" in text and ("detect" in text or "detection" in text):
+        return "RN005"
+    if "trim" in text:
+        return "RN006"
+    return "RN001"
+
+
+def _emit_render_event(
+    *,
+    channel_code: str,
+    job_id: str,
+    event: str,
+    level: str,
+    message: str,
+    step: str,
+    context: dict | None = None,
+    exception: Exception | None = None,
+    traceback_text: str = "",
+    duration_ms: int | None = None,
+):
+    lvl = (level or "INFO").upper()
+    err_code = ""
+    if lvl in {"ERROR", "CRITICAL", "FATAL"} or event.endswith(".error"):
+        err_code = _render_error_code(step, message, exception=exception)
+    entry = {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "level": lvl,
+        "event": event,
+        "module": "render",
+        "message": message,
+        "job_id": job_id,
+        "step": step,
+        "error_code": err_code,
+        "context": context or {},
+        "exception": (str(exception) if exception else ""),
+        "traceback": traceback_text or "",
+        "duration_ms": duration_ms or 0,
+    }
+    log_dir = _JOB_LOG_DIRS.get(job_id) or (CHANNELS_DIR / channel_code / "logs")
+    _append_json_line(log_dir / f"{job_id}.log", entry)
+    _append_json_line(LOGS_DIR / "app.log", entry)
+    if lvl in {"ERROR", "CRITICAL", "FATAL"}:
+        _append_json_line(LOGS_DIR / "error.log", entry)
+
+
+def _event_from_stage(stage: str) -> str:
+    s = (stage or "").strip().lower()
+    if s in {"downloading"}:
+        return "render.download.start"
+    if s in {"scene_detecting"}:
+        return "render.scene.detect.start"
+    if s in {"rendering", "rendering_parallel"}:
+        return "render.ffmpeg.start"
+    if s in {"writing_report"}:
+        return "render.complete"
+    if s in {"failed"}:
+        return "render.error"
+    return "render.start"
+
+
 def _resolve_job_log_dir(output_dir: Path, output_mode: str, channel_code: str) -> Path:
     out = output_dir.resolve()
     if output_mode == "channel":
@@ -152,6 +230,16 @@ def _validate_render_source(payload: RenderRequest):
                 status_code=400,
                 detail=f"output_dir must be inside selected channel folder '{channel}' (example: D:/data/{channel}/upload/video_output).",
             )
+
+
+def _validate_text_layers_or_400(payload: RenderRequest) -> list[dict]:
+    try:
+        raw_layers = [x.model_dump() if hasattr(x, "model_dump") else dict(x) for x in (payload.text_layers or [])]
+        if len(raw_layers) > MAX_TEXT_LAYERS:
+            raise ValueError(f"text_layers exceeds maximum {MAX_TEXT_LAYERS}")
+        return normalize_text_layers(raw_layers)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid text_layers: {exc}") from exc
 
 
 def _resolve_profile(payload: RenderRequest):
@@ -303,12 +391,55 @@ def prepare_source(payload: PrepareSourceRequest):
     session_id = str(uuid.uuid4())
     work_dir = TEMP_DIR / "preview" / session_id
     work_dir.mkdir(parents=True, exist_ok=True)
+    _emit_render_event(
+        channel_code="preview",
+        job_id=session_id,
+        event="render.prepare_source.start",
+        level="INFO",
+        message="Preparing source",
+        step="render.prepare_source",
+    )
     try:
         mode = (payload.source_mode or "youtube").lower().strip()
+        _emit_render_event(
+            channel_code="preview",
+            job_id=session_id,
+            event="render.prepare_source.detect_input",
+            level="INFO",
+            message=f"Detecting source type: {mode}",
+            step="render.prepare_source.detect_input",
+            context={"source_mode": mode},
+        )
+        _emit_render_event(
+            channel_code="preview",
+            job_id=session_id,
+            event="render.prepare_source.validate_input",
+            level="INFO",
+            message="Validating source input",
+            step="render.prepare_source.validate_input",
+        )
         if mode == "local":
             src = Path(payload.source_video_path or "").expanduser().resolve()
             if not src.exists() or not src.is_file():
                 raise HTTPException(status_code=400, detail=f"File not found: {src}")
+            _emit_render_event(
+                channel_code="preview",
+                job_id=session_id,
+                event="render.prepare_source.prepare_paths",
+                level="INFO",
+                message="Preparing source paths",
+                step="render.prepare_source.prepare_paths",
+                context={"source_path": str(src), "work_dir": str(work_dir)},
+            )
+            _emit_render_event(
+                channel_code="preview",
+                job_id=session_id,
+                event="render.prepare_source.select_strategy",
+                level="INFO",
+                message="Selecting local source strategy",
+                step="render.prepare_source.select_strategy",
+                context={"strategy": "local_preview"},
+            )
             duration = _probe_video_duration(src)
             preview_path = _ensure_h264_preview(src, work_dir)
             _save_session(session_id, {
@@ -319,11 +450,38 @@ def prepare_source(payload: PrepareSourceRequest):
                 "work_dir": str(work_dir),
                 "source_mode": "local",
             })
+            _emit_render_event(
+                channel_code="preview",
+                job_id=session_id,
+                event="render.prepare_source.success",
+                level="INFO",
+                message="Source prepared successfully",
+                step="render.prepare_source.success",
+                context={"source_mode": "local", "duration": duration},
+            )
             return {"session_id": session_id, "duration": duration, "title": src.stem}
         else:
             yt_url = (payload.youtube_url or "").strip()
             if not yt_url:
                 raise HTTPException(status_code=400, detail="youtube_url is required")
+            _emit_render_event(
+                channel_code="preview",
+                job_id=session_id,
+                event="render.prepare_source.prepare_paths",
+                level="INFO",
+                message="Preparing source paths",
+                step="render.prepare_source.prepare_paths",
+                context={"work_dir": str(work_dir)},
+            )
+            _emit_render_event(
+                channel_code="preview",
+                job_id=session_id,
+                event="render.prepare_source.select_strategy",
+                level="INFO",
+                message="Selecting YouTube download strategy",
+                step="render.prepare_source.select_strategy",
+                context={"strategy": "youtube_download", "url": yt_url},
+            )
             source = download_youtube(yt_url, work_dir)
             src = Path(source["filepath"])
             preview_path = _ensure_h264_preview(src, work_dir)
@@ -335,11 +493,42 @@ def prepare_source(payload: PrepareSourceRequest):
                 "work_dir": str(work_dir),
                 "source_mode": "youtube",
             })
+            _emit_render_event(
+                channel_code="preview",
+                job_id=session_id,
+                event="render.prepare_source.success",
+                level="INFO",
+                message="Source prepared successfully",
+                step="render.prepare_source.success",
+                context={"source_mode": "youtube", "duration": source.get("duration", 0), "title": source.get("title", "")},
+            )
             return {"session_id": session_id, "duration": source["duration"], "title": source["title"]}
-    except HTTPException:
+    except HTTPException as exc:
+        _emit_render_event(
+            channel_code="preview",
+            job_id=session_id,
+            event="render.prepare_source.error",
+            level="ERROR",
+            message=f"Source preparation failed: {exc.detail}",
+            step="render.prepare_source.error",
+            context={"source_mode": (payload.source_mode or "youtube").lower().strip(), "url": (payload.youtube_url or "").strip(), "path": (payload.source_video_path or "").strip()},
+            exception=exc,
+            traceback_text=traceback.format_exc(),
+        )
         raise
     except Exception as exc:
         logger.error("prepare-source error: %s", exc)
+        _emit_render_event(
+            channel_code="preview",
+            job_id=session_id,
+            event="render.prepare_source.error",
+            level="ERROR",
+            message=f"Source preparation failed: {exc}",
+            step="render.prepare_source.error",
+            context={"source_mode": (payload.source_mode or "youtube").lower().strip(), "url": (payload.youtube_url or "").strip(), "path": (payload.source_video_path or "").strip()},
+            exception=exc,
+            traceback_text=traceback.format_exc(),
+        )
         raise HTTPException(status_code=500, detail=str(exc))
 
 
@@ -367,6 +556,7 @@ def preview_video(session_id: str):
 def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = False):
     output_mode = (payload.output_mode or "channel").strip().lower()
     effective_channel = (payload.channel_code or "").strip() or "manual"
+    started_at = datetime.utcnow()
     if output_mode == "channel":
         ensure_channel(effective_channel)
         if not (payload.render_output_subdir or "").strip():
@@ -376,7 +566,39 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         output_dir = Path(payload.output_dir).expanduser()
         if not output_dir.is_absolute():
             output_dir = (Path.cwd() / output_dir).resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    _emit_render_event(
+        channel_code=effective_channel,
+        job_id=job_id,
+        event="render.output.prepare.start",
+        level="INFO",
+        message="Preparing output directory",
+        step="render.output.prepare",
+        context={"output_dir": str(output_dir)},
+    )
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.output.prepare.success",
+            level="INFO",
+            message="Output directory ready",
+            step="render.output.prepare",
+            context={"output_dir": str(output_dir)},
+        )
+    except Exception as output_exc:
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.output.prepare.error",
+            level="ERROR",
+            message=f"Failed to prepare output directory: {output_exc}",
+            step="render.output.prepare",
+            context={"output_dir": str(output_dir)},
+            exception=output_exc,
+            traceback_text=traceback.format_exc(),
+        )
+        raise
     _JOB_LOG_DIRS[job_id] = _resolve_job_log_dir(output_dir, output_mode, effective_channel)
     work_dir = TEMP_DIR / job_id
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -389,11 +611,64 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         current_stage = stage
         update_job_progress(job_id, stage, progress, message)
         _job_log(effective_channel, job_id, f"[STAGE] {stage} | {message}")
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event=_event_from_stage(stage),
+            level="INFO",
+            message=message,
+            step=stage,
+            context={"progress_percent": progress},
+        )
 
     _job_log(
         effective_channel,
         job_id,
         f"Render started | resume={resume_mode} | profile={payload.render_profile} | codec={payload.video_codec} | reup_mode={payload.reup_mode} | source_mode={payload.source_mode} | output_mode={output_mode}",
+    )
+    try:
+        normalized_text_layers = _validate_text_layers_or_400(payload)
+    except Exception as layer_exc:
+        normalized_text_layers = []
+        _job_log(effective_channel, job_id, f"Text layer parse warning: {layer_exc}", kind="warning")
+    _job_log(
+        effective_channel,
+        job_id,
+        f"Text overlay layers accepted: {len(normalized_text_layers)}",
+    )
+    for layer_idx, layer in enumerate(normalized_text_layers, start=1):
+        _job_log(
+            effective_channel,
+            job_id,
+            f"Text layer {layer_idx}: order={layer.get('order', layer_idx-1)} "
+            f"pos={layer.get('position', 'bottom-center')} "
+            f"xy={float(layer.get('x_percent', 50) or 50):.1f}%,{float(layer.get('y_percent', 90) or 90):.1f}% "
+            f"time={float(layer.get('start_time', 0) or 0):.2f}->{float(layer.get('end_time', 0) or 0):.2f}",
+            kind="debug",
+        )
+    _emit_render_event(
+        channel_code=effective_channel,
+        job_id=job_id,
+        event="render.text_layers.accepted",
+        level="INFO",
+        message=f"Accepted {len(normalized_text_layers)} text layer(s)",
+        step="render.text_layers",
+        context={"layer_count": len(normalized_text_layers)},
+    )
+    _emit_render_event(
+        channel_code=effective_channel,
+        job_id=job_id,
+        event="render.start",
+        level="INFO",
+        message="Render started",
+        step="render.start",
+        context={
+            "resume_mode": bool(resume_mode),
+            "profile": payload.render_profile,
+            "codec": payload.video_codec,
+            "source_mode": payload.source_mode,
+            "output_mode": output_mode,
+        },
     )
     upsert_job(
         job_id,
@@ -407,9 +682,44 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         message="Resuming render job" if resume_mode else "Initializing render job",
     )
     try:
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.prepare_source.start",
+            level="INFO",
+            message="Preparing source",
+            step="render.prepare_source",
+            context={"source_mode": payload.source_mode},
+        )
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.input.validate.start",
+            level="INFO",
+            message="Validating render input",
+            step="render.input.validate",
+        )
         _set_stage("downloading", 5, "Preparing source video")
         edit_session_id = (getattr(payload, "edit_session_id", None) or "").strip()
         sess = _load_session(edit_session_id) if edit_session_id else None
+        detected_source_mode = "session" if sess else ((payload.source_mode or "youtube").lower())
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.prepare_source.detect_input",
+            level="INFO",
+            message=f"Detecting source type: {detected_source_mode}",
+            step="render.prepare_source.detect_input",
+            context={"source_mode": detected_source_mode},
+        )
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.prepare_source.validate_input",
+            level="INFO",
+            message="Validating source input",
+            step="render.prepare_source.validate_input",
+        )
         if sess:
             source_path = Path(sess["video_path"])
             if not source_path.exists():
@@ -420,6 +730,24 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
                 "duration": sess.get("duration") or _probe_video_duration(source_path),
                 "filepath": str(source_path),
             }
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.prepare_source.prepare_paths",
+                level="INFO",
+                message="Preparing source paths",
+                step="render.prepare_source.prepare_paths",
+                context={"source_path": str(source_path), "work_dir": str(work_dir)},
+            )
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.prepare_source.select_strategy",
+                level="INFO",
+                message="Selecting editor-session source strategy",
+                step="render.prepare_source.select_strategy",
+                context={"strategy": "editor_session"},
+            )
             _job_log(effective_channel, job_id, f"Reusing editor session video: {source_path}")
         elif (payload.source_mode or "youtube").lower() == "local":
             source_path = Path(payload.source_video_path or "").expanduser().resolve()
@@ -431,11 +759,69 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
                 "duration": _probe_video_duration(source_path),
                 "filepath": str(source_path),
             }
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.prepare_source.prepare_paths",
+                level="INFO",
+                message="Preparing source paths",
+                step="render.prepare_source.prepare_paths",
+                context={"source_path": str(source_path), "work_dir": str(work_dir)},
+            )
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.prepare_source.select_strategy",
+                level="INFO",
+                message="Selecting local source strategy",
+                step="render.prepare_source.select_strategy",
+                context={"strategy": "local_source"},
+            )
             _job_log(effective_channel, job_id, f"Local source selected: {source_path}")
         else:
             yt_url = (payload.youtube_url or "").strip() or (payload.youtube_urls[0] if payload.youtube_urls else "")
             _job_log(effective_channel, job_id, f"YouTube source URL: {yt_url}")
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.prepare_source.prepare_paths",
+                level="INFO",
+                message="Preparing source paths",
+                step="render.prepare_source.prepare_paths",
+                context={"work_dir": str(work_dir)},
+            )
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.prepare_source.select_strategy",
+                level="INFO",
+                message="Selecting YouTube download strategy",
+                step="render.prepare_source.select_strategy",
+                context={"strategy": "youtube_download", "url": yt_url},
+            )
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.download.start",
+                level="INFO",
+                message="Downloading source from YouTube",
+                step="render.download",
+                context={"url": yt_url},
+            )
             source = download_youtube(yt_url, work_dir)
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.download.success",
+                level="INFO",
+                message="YouTube source downloaded",
+                step="render.download",
+                context={
+                    "title": source.get("title", ""),
+                    "duration": source.get("duration", 0),
+                    "format": source.get("selected_format", ""),
+                },
+            )
             _job_log(
                 effective_channel,
                 job_id,
@@ -444,6 +830,24 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
                 f"format={source.get('selected_format', '')}",
             )
             source_path = Path(source["filepath"])
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.input.validate.success",
+            level="INFO",
+            message="Render input validated",
+            step="render.input.validate",
+            context={"source_path": str(source_path)},
+        )
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.prepare_source.success",
+            level="INFO",
+            message="Source prepared successfully",
+            step="render.prepare_source.success",
+            context={"source_mode": detected_source_mode, "source_path": str(source_path)},
+        )
 
         # Apply editor edits: trim and/or volume adjustment
         trim_in = float(getattr(payload, "edit_trim_in", 0) or 0)
@@ -496,7 +900,24 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
             source_path = keep_path
 
         _set_stage("scene_detection", 15, "Detecting scenes")
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.scene.detect.start",
+            level="INFO",
+            message="Detecting scenes",
+            step="render.scene.detect",
+        )
         scenes = detect_scenes(str(source_path)) if payload.auto_detect_scene else []
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.scene.detect.success",
+            level="INFO",
+            message=f"Detected {len(scenes)} scenes",
+            step="render.scene.detect",
+            context={"scene_count": len(scenes)},
+        )
         _job_log(effective_channel, job_id, f"Scene detection done: {len(scenes)} scenes")
 
         _set_stage("segment_building", 25, "Building smart segments")
@@ -636,9 +1057,10 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
             else:
                 _job_log(effective_channel, job_id, f"Part {idx} subtitle disabled", kind="debug")
 
+            overlay_title = (payload.title_overlay_text or "").strip() or source["title"]
             upsert_job_part(job_id, idx, part_name, "rendering", 70, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Rendering final video")
             render_part_smart(
-                str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, source["title"] if payload.add_title_overlay else "",
+                str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if payload.add_title_overlay else "",
                 payload.aspect_ratio, payload.frame_scale_x, payload.frame_scale_y,
                 payload.motion_aware_crop,
                 reframe_mode=payload.reframe_mode,
@@ -660,7 +1082,15 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
                 reup_bgm_path=payload.reup_bgm_path,
                 reup_bgm_gain=payload.reup_bgm_gain,
                 playback_speed=float(payload.playback_speed or 1.07),
+                text_layers=normalized_text_layers,
             )
+            if normalized_text_layers:
+                _job_log(
+                    effective_channel,
+                    job_id,
+                    f"Applied {len(normalized_text_layers)} text layer(s) on part {idx}/{total_parts}",
+                    kind="debug",
+                )
             _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} done", kind="info")
 
             upsert_job_part(job_id, idx, part_name, "done", 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Completed")
@@ -683,6 +1113,25 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         completed_parts = 0
         failed_parts = []
         _set_stage("rendering_parallel" if max_workers > 1 else "rendering", 30, f"Rendering parts 0/{total_parts}")
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.ffmpeg.start",
+            level="INFO",
+            message="Running ffmpeg render",
+            step="render.ffmpeg",
+            context={"total_parts": total_parts, "workers": max_workers},
+        )
+        if normalized_text_layers:
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.text_layers.apply",
+                level="INFO",
+                message="Applying text overlay layers during render",
+                step="render.text_layers",
+                context={"layer_count": len(normalized_text_layers), "total_parts": total_parts},
+            )
 
         if max_workers == 1:
             for idx, seg in enumerate(scored, start=1):
@@ -763,11 +1212,77 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         _job_log(effective_channel, job_id, f"Report written: {report_path}")
         upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored}, stage="done", progress_percent=100, message="Render completed")
         _job_log(effective_channel, job_id, f"Render completed with {len(outputs)}/{total_parts} outputs")
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.ffmpeg.success",
+            level="INFO",
+            message="FFmpeg render completed",
+            step="render.ffmpeg",
+            context={"outputs": len(outputs), "total_parts": total_parts},
+        )
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.complete",
+            level="INFO",
+            message="Render success",
+            step="render.complete",
+            duration_ms=int((datetime.utcnow() - started_at).total_seconds() * 1000),
+            context={"outputs": len(outputs), "total_parts": total_parts},
+        )
     except Exception as e:
         fail_message = f"Failed at step '{current_stage}': {e}"
+        tb = traceback.format_exc()
         _job_log(effective_channel, job_id, f"[ERROR_STEP] {current_stage}")
         _job_log(effective_channel, job_id, f"Render failed: {e}")
-        _job_log(effective_channel, job_id, traceback.format_exc())
+        _job_log(effective_channel, job_id, tb)
+        if current_stage in {"scene_detection"}:
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.scene.detect.error",
+                level="ERROR",
+                message=f"Scene detection failed: {e}",
+                step="render.scene.detect",
+                exception=e,
+                traceback_text=tb,
+            )
+        if current_stage in {"downloading"}:
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.download.error",
+                level="ERROR",
+                message=f"Source download failed: {e}",
+                step="render.download",
+                exception=e,
+                traceback_text=tb,
+            )
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.error",
+            level="ERROR",
+            message=fail_message,
+            step=current_stage,
+            exception=e,
+            traceback_text=tb,
+            duration_ms=int((datetime.utcnow() - started_at).total_seconds() * 1000),
+            context={"current_stage": current_stage, "source_mode": payload.source_mode, "youtube_url": (payload.youtube_url or ""), "source_video_path": (payload.source_video_path or "")},
+        )
+        if current_stage in {"starting", "downloading", "render.input.validate"}:
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="render.prepare_source.error",
+                level="ERROR",
+                message=f"Source preparation failed: {e}",
+                step="render.prepare_source.error",
+                exception=e,
+                traceback_text=tb,
+                context={"current_stage": current_stage, "source_mode": payload.source_mode, "youtube_url": (payload.youtube_url or ""), "source_video_path": (payload.source_video_path or "")},
+            )
         upsert_job(
             job_id,
             "render",
@@ -796,6 +1311,7 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
 @router.post("/process")
 def create_render_job(payload: RenderRequest):
     _validate_render_source(payload)
+    _validate_text_layers_or_400(payload)
     effective_channel = (payload.channel_code or "").strip() or "manual"
     job_id = payload.resume_job_id or str(uuid.uuid4())
     existing = get_job(job_id) if payload.resume_job_id else None
@@ -808,6 +1324,7 @@ def create_render_job(payload: RenderRequest):
 @router.post("/process/batch")
 def create_render_batch(payload: RenderRequest):
     _validate_render_source(payload)
+    _validate_text_layers_or_400(payload)
     effective_channel = (payload.channel_code or "").strip() or "manual"
     if (payload.source_mode or "youtube").lower() != "youtube":
         raise HTTPException(status_code=400, detail="Batch mode supports youtube source only")
@@ -989,6 +1506,16 @@ def quick_process(payload: QuickProcessRequest):
     local_path_raw = (payload.path or "").strip()
     output_raw = (payload.output or "").strip()
 
+    quick_job_id = str(uuid.uuid4())
+    _emit_render_event(
+        channel_code="quick",
+        job_id=quick_job_id,
+        event="render.start",
+        level="INFO",
+        message="Quick render started",
+        step="render.start",
+        context={"source": source},
+    )
     if source not in ("youtube", "local"):
         raise HTTPException(status_code=400, detail="source must be 'youtube' or 'local'")
     if source == "youtube" and not url:
@@ -1028,10 +1555,46 @@ def quick_process(payload: QuickProcessRequest):
     work_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        _emit_render_event(
+            channel_code="quick",
+            job_id=quick_job_id,
+            event="render.input.validate.start",
+            level="INFO",
+            message="Validating quick render input",
+            step="render.input.validate",
+        )
         if source == "youtube":
             try:
+                _emit_render_event(
+                    channel_code="quick",
+                    job_id=quick_job_id,
+                    event="render.download.start",
+                    level="INFO",
+                    message="Downloading YouTube source",
+                    step="render.download",
+                    context={"url": url},
+                )
                 downloaded = download_youtube(url, work_dir)
+                _emit_render_event(
+                    channel_code="quick",
+                    job_id=quick_job_id,
+                    event="render.download.success",
+                    level="INFO",
+                    message="YouTube download success",
+                    step="render.download",
+                    context={"title": downloaded.get("title", ""), "duration": downloaded.get("duration", 0)},
+                )
             except Exception as exc:
+                _emit_render_event(
+                    channel_code="quick",
+                    job_id=quick_job_id,
+                    event="render.download.error",
+                    level="ERROR",
+                    message=f"YouTube download failed: {exc}",
+                    step="render.download",
+                    exception=exc,
+                    traceback_text=traceback.format_exc(),
+                )
                 raise HTTPException(status_code=400, detail=f"Failed to download YouTube URL: {exc}") from exc
             src_path = Path(downloaded["filepath"]).resolve()
             downloaded_title = downloaded.get("title", "")
@@ -1060,6 +1623,15 @@ def quick_process(payload: QuickProcessRequest):
                 threshold=float(payload.black_threshold),
             )
 
+        _emit_render_event(
+            channel_code="quick",
+            job_id=quick_job_id,
+            event="render.input.validate.success",
+            level="INFO",
+            message="Quick render input validated",
+            step="render.input.validate",
+            context={"source_path": str(src_path), "output": str(output_path)},
+        )
         has_transform = bool(vf_parts) or (trim_start_sec > 0)
 
         if not has_transform:
@@ -1079,6 +1651,15 @@ def quick_process(payload: QuickProcessRequest):
 
         if has_transform:
             # Single processing pass. Avoid intermediate temp files.
+            _emit_render_event(
+                channel_code="quick",
+                job_id=quick_job_id,
+                event="render.ffmpeg.start",
+                level="INFO",
+                message="Running ffmpeg quick process",
+                step="render.ffmpeg",
+                context={"trim_start_sec": round(trim_start_sec, 3), "filters": len(vf_parts)},
+            )
             cmd = [
                 get_ffmpeg_bin(),
                 overwrite_flag,
@@ -1121,9 +1702,26 @@ def quick_process(payload: QuickProcessRequest):
                     str(output_path),
                 ]
                 _run_ffmpeg_checked(cmd, "FFmpeg processing failed")
+            _emit_render_event(
+                channel_code="quick",
+                job_id=quick_job_id,
+                event="render.ffmpeg.success",
+                level="INFO",
+                message="Quick ffmpeg processing completed",
+                step="render.ffmpeg",
+            )
 
         if not output_path.exists() or output_path.stat().st_size == 0:
             raise RuntimeError(f"Output file was not created: {output_path}")
+        _emit_render_event(
+            channel_code="quick",
+            job_id=quick_job_id,
+            event="render.complete",
+            level="INFO",
+            message="Quick render success",
+            step="render.complete",
+            context={"output": str(output_path)},
+        )
 
         return {
             "status": "completed",
@@ -1138,8 +1736,26 @@ def quick_process(payload: QuickProcessRequest):
             "trim_start_sec": round(trim_start_sec, 3),
         }
     except HTTPException:
+        _emit_render_event(
+            channel_code="quick",
+            job_id=quick_job_id,
+            event="render.error",
+            level="ERROR",
+            message="Quick render request failed",
+            step="render.error",
+        )
         raise
     except Exception as exc:
+        _emit_render_event(
+            channel_code="quick",
+            job_id=quick_job_id,
+            event="render.error",
+            level="ERROR",
+            message=f"Quick render failed: {exc}",
+            step="render.error",
+            exception=exc,
+            traceback_text=traceback.format_exc(),
+        )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         try:

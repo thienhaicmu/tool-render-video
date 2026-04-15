@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from app.services.motion_crop import render_motion_aware_crop, MotionCropConfig
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
+from app.services.text_overlay import append_text_layer_filters
 
 
 logger = logging.getLogger(__name__)
@@ -334,6 +335,7 @@ def render_part(
     reup_bgm_path: str | None = None,
     reup_bgm_gain: float = 0.18,
     playback_speed: float = 1.07,
+    text_layers: list[dict] | None = None,
 ):
     preset_low = (video_preset or "").lower()
     sws = "lanczos" if preset_low in ("slower", "veryslow") else "bicubic"
@@ -379,6 +381,10 @@ def render_part(
         if fontfile:
             drawtext += f":fontfile='{_safe_filter_path(fontfile)}'"
         vf_parts.append(drawtext)
+    layer_count = len(text_layers or [])
+    if layer_count:
+        logger.info("Applying %d text overlay layer(s)", layer_count)
+    append_text_layer_filters(vf_parts, text_layers)
     speed = _sanitize_speed(playback_speed)
     if abs(speed - 1.0) > 1e-4:
         vf_parts.append(f"setpts=PTS/{speed:.4f}")
@@ -513,6 +519,7 @@ def render_part_smart(
     reup_bgm_path: str | None = None,
     reup_bgm_gain: float = 0.18,
     playback_speed: float = 1.07,
+    text_layers: list[dict] | None = None,
 ):
     if motion_aware_crop:
         try:
@@ -545,6 +552,7 @@ def render_part_smart(
                 reup_bgm_path=reup_bgm_path,
                 reup_bgm_gain=reup_bgm_gain,
                 playback_speed=playback_speed,
+                text_layers=text_layers,
                 cfg=crop_cfg,
             )
         except Exception as exc:
@@ -576,6 +584,7 @@ def render_part_smart(
                 reup_bgm_path=reup_bgm_path,
                 reup_bgm_gain=reup_bgm_gain,
                 playback_speed=playback_speed,
+                text_layers=text_layers,
             )
 
     return render_part(
@@ -604,4 +613,5 @@ def render_part_smart(
         reup_bgm_path=reup_bgm_path,
         reup_bgm_gain=reup_bgm_gain,
         playback_speed=playback_speed,
+        text_layers=text_layers,
     )

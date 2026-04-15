@@ -60,6 +60,42 @@ class QuickProcessRequest(BaseModel):
     overwrite: bool = True
 
 
+class TextLayerOutline(BaseModel):
+    enabled: bool = False
+    thickness: int = 2
+
+
+class TextLayerShadow(BaseModel):
+    enabled: bool = False
+    offset_x: int = 2
+    offset_y: int = 2
+
+
+class TextLayerBackground(BaseModel):
+    enabled: bool = False
+    color: str = "#00000099"
+    padding: int = 10
+
+
+class TextLayerConfig(BaseModel):
+    id: str
+    text: str
+    font_family: str = "Bungee"
+    font_size: int = 42
+    color: str = "#FFFFFF"
+    position: str = "bottom-center"
+    x_percent: Optional[float] = None
+    y_percent: Optional[float] = None
+    alignment: str = "center"
+    bold: bool = False
+    outline: TextLayerOutline = Field(default_factory=TextLayerOutline)
+    shadow: TextLayerShadow = Field(default_factory=TextLayerShadow)
+    background: TextLayerBackground = Field(default_factory=TextLayerBackground)
+    start_time: float = 0.0
+    end_time: float = 0.0
+    order: int = 0
+
+
 class RenderRequest(BaseModel):
     # Source
     source_mode: Optional[str] = "youtube"
@@ -120,6 +156,7 @@ class RenderRequest(BaseModel):
 
     # Overlay / effect
     add_title_overlay: bool = True
+    title_overlay_text: Optional[str] = ""
     effect_preset: str = "slay_soft_01"
 
     # Reup mode
@@ -140,6 +177,7 @@ class RenderRequest(BaseModel):
     edit_trim_in: float = 0
     edit_trim_out: float = 0
     edit_volume: float = 1.0
+    text_layers: list[TextLayerConfig] = Field(default_factory=list)
 
 
 # ── Upload ───────────────────────────────────────────────────────────────
