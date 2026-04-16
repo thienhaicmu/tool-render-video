@@ -376,15 +376,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         lines = [x.strip() for x in block.splitlines() if x.strip()]
         if len(lines) < 3:
             continue
-        times = lines[1].replace(",", ".").split(" --> ")
+        time_line = lines[1]
+        if " --> " not in time_line:
+            continue
+        start_s, end_s = time_line.split(" --> ", 1)
+        start_ass = _ass_time(parse_srt_timestamp(start_s))
+        end_ass   = _ass_time(parse_srt_timestamp(end_s))
         text = " ".join(lines[2:]).replace("{", "(").replace("}", ")")
-        out.append(f"Dialogue: 0,{times[0]},{times[1]},Default,,0,0,0,,{line_fx}{text}\n")
+        out.append(f"Dialogue: 0,{start_ass},{end_ass},Default,,0,0,0,,{line_fx}{text}\n")
     Path(ass_path).write_text("".join(out), encoding="utf-8")
     return ass_path
 
 
 # ---------------------------------------------------------------------------
-# Pro Karaoke subtitle
+# Pro Karaoke subtitle (srt_to_ass_karaoke)
 # ---------------------------------------------------------------------------
 
 def _hex_to_ass(hex_color: str, alpha: int = 0) -> str:
@@ -474,3 +479,46 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     Path(ass_path).write_text("".join(out), encoding="utf-8")
     return ass_path
+
+
+# ---------------------------------------------------------------------------
+# Subtitle burn-in
+# ---------------------------------------------------------------------------
+
+def _safe_filter_path(p: str) -> str:
+    """Escape a file path for use inside an ffmpeg filter option value."""
+    return p.replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
+
+
+def burn_subtitle_onto_video(
+    input_path: str,
+    ass_path: str,
+    output_path: str,
+    fonts_dir: str | None = None,
+    retry_count: int = 2,
+):
+    """Burn an ASS subtitle file onto a video using ffmpeg.
+
+    Raises FileNotFoundError if ass_path does not exist (instead of silently
+    dropping the subtitle and producing a video without captions).
+    """
+    ass_file = Path(ass_path)
+    if not ass_file.exists():
+        raise FileNotFoundError(f"ASS subtitle file not found: {ass_path}")
+
+    safe_ass = _safe_filter_path(str(ass_file.resolve()))
+    if fonts_dir and Path(fonts_dir).is_dir():
+        safe_fonts = _safe_filter_path(str(Path(fonts_dir).resolve()))
+        vf = f"ass='{safe_ass}':fontsdir='{safe_fonts}'"
+    else:
+        vf = f"ass='{safe_ass}'"
+
+    cmd = [
+        get_ffmpeg_bin(), "-y",
+        "-i", input_path,
+        "-vf", vf,
+        "-c:a", "copy",
+        output_path,
+    ]
+    _run_with_retry(cmd, retries=retry_count)
+    return output_path

@@ -1,0 +1,17 @@
+{
+  "name": "claude-cowork-v2",
+  "version": "3.0.0",
+  "description": "Runtime bug logging and auto-fix workflow — Version 3",
+  "private": true,
+  "scripts": {
+    "capture-error": "ts-node scripts/capture-error.ts",
+    "build-bug-prompt": "ts-node scripts/build-bug-prompt.ts",
+    "log_error": "ts-node scripts/log-error.ts",
+    "log_error:run": "ts-node scripts/log-error.ts --run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

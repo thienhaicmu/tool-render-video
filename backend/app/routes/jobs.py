@@ -90,10 +90,71 @@ def api_get_job_logs(job_id: str, lines: int = 120):
     return {"job_id": job_id, "log_file": str(log_path), "items": list(tail)}
 
 
+def _compute_progress_summary(parts: list) -> dict:
+    """Compute aggregated per-job progress from the parts list.
+
+    Returns a dict with:
+      total_parts, completed_parts, failed_parts, pending_parts,
+      processing_parts (alias: in_progress_count),
+      active_parts      list of {part_no, status, progress_percent} for all active parts,
+      current_part      part_no of the first active part (kept for backward compat),
+      current_stage     status  of the first active part (kept for backward compat),
+      overall_progress_percent  mean of all part progress_percent (alias: parts_percent),
+      parts_percent     same as overall_progress_percent (backward compat alias).
+    """
+    total = len(parts)
+    if total == 0:
+        return {
+            "total_parts": 0,
+            "completed_parts": 0,
+            "failed_parts": 0,
+            "pending_parts": 0,
+            "processing_parts": 0,
+            "in_progress_count": 0,
+            "active_parts": [],
+            "current_part": None,
+            "current_stage": None,
+            "overall_progress_percent": 0.0,
+            "parts_percent": 0.0,
+        }
+
+    _active = {"cutting", "transcribing", "rendering"}
+    completed = sum(1 for p in parts if (p.get("status") or "") == "done")
+    failed    = sum(1 for p in parts if (p.get("status") or "") == "failed")
+    in_prog   = [p for p in parts if (p.get("status") or "") in _active]
+    pending   = total - completed - failed - len(in_prog)
+
+    pct_sum   = sum(int(p.get("progress_percent") or 0) for p in parts)
+    overall   = round(pct_sum / total, 1)
+
+    active_parts = [
+        {
+            "part_no":          p.get("part_no"),
+            "status":           p.get("status"),
+            "progress_percent": int(p.get("progress_percent") or 0),
+        }
+        for p in in_prog
+    ]
+
+    return {
+        "total_parts":               total,
+        "completed_parts":           completed,
+        "failed_parts":              failed,
+        "pending_parts":             max(0, pending),
+        "processing_parts":          len(in_prog),
+        "in_progress_count":         len(in_prog),   # backward compat
+        "active_parts":              active_parts,
+        "current_part":              in_prog[0].get("part_no") if in_prog else None,
+        "current_stage":             in_prog[0].get("status")  if in_prog else None,
+        "overall_progress_percent":  overall,
+        "parts_percent":             overall,         # backward compat alias
+    }
+
+
 @router.websocket("/{job_id}/ws")
 async def ws_job_progress(websocket: WebSocket, job_id: str):
     """
-    WebSocket endpoint — streams job + parts updates every 500 ms.
+    WebSocket endpoint — streams job + parts + summary every 500 ms.
     Closes automatically when the job reaches a terminal state.
     Frontend falls back to HTTP polling if this endpoint fails.
     """
@@ -104,8 +165,9 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
             if not job:
                 await websocket.send_json({"error": "not_found"})
                 break
-            parts = list_job_parts(job_id)
-            await websocket.send_json({"job": job, "parts": parts})
+            parts   = list_job_parts(job_id)
+            summary = _compute_progress_summary(parts)
+            await websocket.send_json({"job": job, "parts": parts, "summary": summary})
             if job.get("status") in ("completed", "failed"):
                 break
             await asyncio.sleep(0.5)

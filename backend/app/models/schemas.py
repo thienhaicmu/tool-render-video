@@ -169,7 +169,9 @@ class RenderRequest(BaseModel):
     playback_speed: float = 1.07
 
     # Parallel / retry
-    max_parallel_parts: int = 1
+    # 0 = adaptive (backend selects safe workers from cpu_count + pipeline flags)
+    # >=1 = user ceiling — backend will not exceed this value but may use fewer
+    max_parallel_parts: int = 0
     retry_count: int = 2
 
     # Editor session

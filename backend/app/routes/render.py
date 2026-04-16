@@ -1101,15 +1101,35 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
                 _safe_unlink(ass_part)
             return {"idx": idx, "output": str(final_part), "row": row, "skipped": False}
 
-        requested_workers = max(1, min(6, int(payload.max_parallel_parts or 1)))
         heavy_pipeline = bool(payload.motion_aware_crop or payload.add_subtitle or payload.reup_mode)
         mode = (payload.encoder_mode or "auto").lower()
+        cpu_total = os.cpu_count() or 2
+
+        # Adaptive hardware cap:
+        #  - CPU encoder: each ffmpeg process consumes many threads; allow ~1 per 4 cores
+        #  - NVENC/auto: GPU handles encode; limit by motion-analysis CPU and I/O
         if mode == "cpu":
-            worker_cap = 1
+            hw_cap = max(1, min(3, cpu_total // 4))
         else:
-            worker_cap = 2 if heavy_pipeline else 3
-        max_workers = max(1, min(requested_workers, worker_cap))
-        _job_log(effective_channel, job_id, f"Parallel render workers={max_workers}, encoder_mode={payload.encoder_mode}")
+            hw_cap = max(1, min(4, cpu_total // 2))
+        # Heavy pipeline (motion-crop / subtitle / reup): halve the cap to avoid CPU saturation
+        if heavy_pipeline:
+            hw_cap = max(1, hw_cap // 2)
+
+        # max_parallel_parts == 0 means "adaptive / let backend decide"
+        # max_parallel_parts >= 1 means user ceiling — honour it but never exceed hw_cap
+        user_req = int(payload.max_parallel_parts or 0)
+        if user_req >= 1:
+            max_workers = max(1, min(user_req, hw_cap))
+        else:
+            max_workers = hw_cap
+
+        _job_log(
+            effective_channel, job_id,
+            f"Adaptive workers={max_workers} "
+            f"(cpu={cpu_total}, mode={mode}, heavy={heavy_pipeline}, "
+            f"hw_cap={hw_cap}, user_req={user_req})",
+        )
         completed_parts = 0
         failed_parts = []
         _set_stage("rendering_parallel" if max_workers > 1 else "rendering", 30, f"Rendering parts 0/{total_parts}")

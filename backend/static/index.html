@@ -215,6 +215,43 @@
     .statusBadge.failed { background: rgba(239,68,68,.15); color: #f87171; }
     .scoreBox { padding: 4px 10px; border-radius: 8px; background: #1e2d45; border: 1px solid var(--card-border); font-size: 11px; color: var(--text-dim); }
 
+    /* ── Parts progress grid ─────────────────────────────────────────── */
+    .partsSummaryStrip { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+    .partsSummaryLabel { font-size: 12px; font-weight: 700; color: var(--text); margin-right: 4px; }
+    .partsSummaryAvg { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+    .psBadge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+    .psBadge.sdone { background: rgba(16,185,129,.15); color: #34d399; }
+    .psBadge.srendering { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .psBadge.sfailed { background: rgba(239,68,68,.15); color: #f87171; }
+    .psBadge.squeued { background: #1e2d45; color: var(--text-dim); }
+    .partsProgressGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 6px; max-height: 220px; overflow-y: auto; margin-top: 4px; }
+    .partProgressCard { padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--card-border); background: var(--input-bg); display: flex; flex-direction: column; gap: 5px; transition: border-color .3s, background .3s; }
+    .partProgressCard.cutting, .partProgressCard.transcribing, .partProgressCard.rendering { border-color: rgba(59,130,246,.55); background: rgba(59,130,246,.07); animation: partActivePulse 2s ease-in-out infinite; }
+    .partProgressCard.done { border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.05); }
+    .partProgressCard.failed { border-color: rgba(239,68,68,.3); background: rgba(239,68,68,.04); }
+    @keyframes partActivePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); } 50% { box-shadow: 0 0 0 3px rgba(59,130,246,.18); } }
+    .pCardTop { display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+    .pNo { font-size: 11px; font-weight: 700; color: var(--text); }
+    .pPct { font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .pBar { height: 4px; border-radius: 999px; background: #1e2d45; overflow: hidden; }
+    .pBarFill { height: 100%; border-radius: inherit; transition: width .5s cubic-bezier(.25,.8,.25,1); background: #2d3748; }
+    .pBarFill.cutting { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+    .pBarFill.transcribing { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+    .pBarFill.rendering { background: linear-gradient(90deg, #3b82f6, #10b981); }
+    .pBarFill.done { background: #10b981; }
+    .pBarFill.failed { background: #ef4444; }
+    .pStage { font-size: 10px; color: var(--text-muted); text-transform: capitalize; line-height: 1.2; }
+    /* Active parts highlight bar at top of partFocus */
+    .activePartsBar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; padding: 8px 10px; background: rgba(59,130,246,.06); border: 1px solid rgba(59,130,246,.2); border-radius: var(--radius-sm); }
+    .activePartsBar:empty { display: none; }
+    .activePartChip { display: flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; border-radius: 999px; background: rgba(59,130,246,.15); border: 1px solid rgba(59,130,246,.3); font-size: 11px; font-weight: 600; color: #93c5fd; white-space: nowrap; }
+    .activePartChip .chipDot { width: 6px; height: 6px; border-radius: 50%; background: #3b82f6; animation: chipBlink 1.1s ease-in-out infinite; flex-shrink: 0; }
+    .activePartChip .chipDot.cutting { background: #f59e0b; }
+    .activePartChip .chipDot.transcribing { background: #8b5cf6; }
+    .activePartChip .chipDot.rendering { background: #3b82f6; }
+    @keyframes chipBlink { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+    .workersBadge { margin-left: auto; padding: 2px 8px; border-radius: 999px; background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.25); font-size: 10px; font-weight: 700; color: #34d399; white-space: nowrap; }
+
     .logBox { min-height: 160px; max-height: 280px; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
     .logLine { font-size: 12px; color: var(--text-dim); padding: 8px 12px; background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.5; }
     .emptyState { padding: 20px; color: var(--text-muted); text-align: center; font-size: 13px; }
@@ -256,7 +293,8 @@
     .evSubInner { text-align: center; line-height: 1.15; max-width: 90%; }
     .evSubWord { display: inline; }
     .evTextLayersOverlay { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
-    .evTextLayerPreview { position: absolute; max-width: 88%; white-space: pre-wrap; line-height: 1.2; }
+    .evTextLayerPreview { position: absolute; max-width: 88%; white-space: pre-wrap; line-height: 1.2; pointer-events: auto; cursor: move; user-select: none; -webkit-user-select: none; }
+    .evTextLayerPreview.evTLSelected { outline: 2px dashed rgba(59,130,246,.85); outline-offset: 4px; }
     .evLayerItem { display:flex; align-items:center; gap:6px; justify-content:space-between; padding:6px 8px; border:1px solid var(--card-border); border-radius:8px; background:#0f172a66; }
     .evLayerItem.active { border-color:#3b82f6; box-shadow:0 0 0 1px #3b82f655 inset; }
     .evTinyBtn { font-size:11px; padding:3px 7px; border-radius:6px; border:1px solid var(--card-border); background:#0f172a; color:var(--text); cursor:pointer; }
@@ -1311,6 +1349,63 @@ const logStateByScope = {
   channels: { lastText: '', lastAt: 0, lastNode: null, lastCount: 1 },
 };
 let lastProgressBucket = -1;
+
+// ── Smooth progress animation state ────────────────────────────────────────
+// _partTarget[partNo]   = last known backend progress %  (source of truth)
+// _partDisplay[partNo]  = visually displayed progress %  (animated toward target)
+// _jobTargetPct         = last known job-level overall %
+// _jobDisplayPct        = visually displayed job %
+const _partTarget  = {};
+const _partDisplay = {};
+let _jobTargetPct  = 0;
+let _jobDisplayPct = 0;
+let _smoothRafId   = null;
+
+function _easeToward(current, target, maxStep) {
+  if(current >= target) return target;
+  const diff = target - current;
+  const step = Math.min(maxStep, Math.max(0.3, diff * 0.08));
+  return Math.min(target, current + step);
+}
+
+function _tickSmooth() {
+  let anyMoving = false;
+
+  // Ease job-level bar
+  if(_jobDisplayPct < _jobTargetPct) {
+    _jobDisplayPct = _easeToward(_jobDisplayPct, _jobTargetPct, 1.5);
+    const pct = _jobDisplayPct.toFixed(1);
+    const bar = document.getElementById('job_bar');
+    const pctEl = document.getElementById('job_percent');
+    if(bar) bar.style.width = pct + '%';
+    if(pctEl) pctEl.textContent = Math.round(_jobDisplayPct) + '%';
+    anyMoving = true;
+  }
+
+  // Ease per-part bars (only update DOM elements that exist in current render)
+  for(const [key, target] of Object.entries(_partTarget)) {
+    const cur = _partDisplay[key] || 0;
+    if(cur < target) {
+      const next = _easeToward(cur, target, 2);
+      _partDisplay[key] = next;
+      // Update bar and pct text in-place without re-rendering
+      const barEl = document.getElementById(`pbar_${key}`);
+      const pctEl = document.getElementById(`ppct_${key}`);
+      if(barEl) barEl.style.width = next.toFixed(1) + '%';
+      if(pctEl) pctEl.textContent = Math.round(next) + '%';
+      anyMoving = true;
+    } else {
+      _partDisplay[key] = target;
+    }
+  }
+
+  _smoothRafId = anyMoving ? requestAnimationFrame(_tickSmooth) : null;
+}
+
+function _scheduleSmooth() {
+  if(!_smoothRafId) _smoothRafId = requestAnimationFrame(_tickSmooth);
+}
+
 let currentUploadRunId = null;
 let uploadPollTimer = null;
 let uploadLoginValid = false;
@@ -2846,34 +2941,114 @@ function renderParts(items){
   `}).join('');
 }
 
-function renderPartFocus(items){
+function computeProgressSummary(parts){
+  const total = (parts||[]).length;
+  const empty = {
+    total_parts:0, completed_parts:0, failed_parts:0, pending_parts:0,
+    processing_parts:0, in_progress_count:0, active_parts:[],
+    current_part:null, current_stage:null,
+    overall_progress_percent:0, parts_percent:0,
+  };
+  if(!total) return empty;
+  const _active = ['cutting','transcribing','rendering'];
+  const done    = parts.filter(p=>(p.status||'')==='done').length;
+  const failed  = parts.filter(p=>(p.status||'')==='failed').length;
+  const inProg  = parts.filter(p=>_active.includes(p.status||''));
+  const pending = Math.max(0, total - done - failed - inProg.length);
+  const pSum    = parts.reduce((s,p)=>s+Number(p.progress_percent||0),0);
+  const overall = total>0 ? Math.round(pSum/total*10)/10 : 0;
+  const activeParts = inProg.map(p=>({
+    part_no: p.part_no,
+    status:  p.status,
+    progress_percent: Number(p.progress_percent||0),
+  }));
+  return {
+    total_parts:               total,
+    completed_parts:           done,
+    failed_parts:              failed,
+    pending_parts:             pending,
+    processing_parts:          inProg.length,
+    in_progress_count:         inProg.length,
+    active_parts:              activeParts,
+    current_part:              inProg[0]?.part_no??null,
+    current_stage:             inProg[0]?.status??null,
+    overall_progress_percent:  overall,
+    parts_percent:             overall,
+  };
+}
+
+function renderPartFocus(items, summary){
   const box = qs('part_focus');
   if(!box) return;
-  if(!items || !items.length){
-    box.innerHTML = '<div class="partFocusTitle">Live Part Tracking</div><div class="partFocusLine">No part is processing right now.</div>';
+
+  const ordered = [...(items||[])].sort((a,b)=>Number(a.part_no||0)-Number(b.part_no||0));
+  const s = summary || computeProgressSummary(ordered);
+
+  if(!s.total_parts){
+    box.innerHTML = '<div class="partFocusTitle">Live Part Tracking</div><div class="partFocusLine">No parts yet.</div>';
     return;
   }
-  const ordered = [...items].sort((a,b)=>Number(a.part_no||0)-Number(b.part_no||0));
-  const total = ordered.length;
-  const done = ordered.filter(p => (p.status || '').toLowerCase() === 'done').length;
-  const running = ordered.filter(p => ['cutting','transcribing','rendering'].includes((p.status || '').toLowerCase()));
-  const avgViral = ordered.reduce((acc, p) => acc + Number(p.viral_score || 0), 0) / Math.max(1, ordered.length);
-  const lines = [];
-  lines.push('<div class="partFocusTitle">Live Part Tracking</div>');
-  lines.push(`<div class="partFocusLine">Parts done: ${done}/${total} | Avg viral: ${avgViral.toFixed(1)}</div>`);
-  if(running.length){
-    running.slice(0, 3).forEach((p) => {
-      lines.push(`<div class="partFocusLine">Part ${Number(p.part_no || 0)} ${partStatusLabel(p.status)} | ${Number(p.progress_percent || 0)}% | Viral ${Number(p.viral_score || 0).toFixed(0)}</div>`);
-    });
-  } else {
-    const waiting = ordered.filter(p => (p.status || '').toLowerCase() === 'queued').length;
-    if(waiting > 0){
-      lines.push(`<div class="partFocusLine">No active part, ${waiting} part(s) queued.</div>`);
-    } else {
-      lines.push('<div class="partFocusLine">No active part.</div>');
-    }
+
+  // ── Sync smooth-animation targets from backend data ─────────────────
+  ordered.forEach(p => {
+    const key = String(p.part_no || 0);
+    const backendPct = Number(p.progress_percent || 0);
+    _partTarget[key] = backendPct;
+    // On first sight of a part, seed display at backend value (no fake lag on fresh data)
+    if(_partDisplay[key] == null) _partDisplay[key] = backendPct;
+    // If part completed or failed, snap display to final value immediately
+    const st = (p.status||'').toLowerCase();
+    if(st === 'done' || st === 'failed') _partDisplay[key] = backendPct;
+  });
+  _scheduleSmooth();
+
+  const pending = s.pending_parts ?? (s.total_parts - s.completed_parts - s.failed_parts - s.processing_parts);
+
+  // ── Active parts highlight bar ───────────────────────────────────────
+  const activeParts = s.active_parts || [];
+  let activeBarHtml = '';
+  if(activeParts.length > 0){
+    const chips = activeParts.map(ap => {
+      const st = (ap.status||'').toLowerCase();
+      return `<span class="activePartChip"><span class="chipDot ${st}"></span>P${Number(ap.part_no||0)} · ${partStatusLabel(st)}</span>`;
+    }).join('');
+    const workerLabel = activeParts.length > 1
+      ? `<span class="workersBadge">${activeParts.length} parallel</span>`
+      : '';
+    activeBarHtml = `<div class="activePartsBar">${chips}${workerLabel}</div>`;
   }
-  box.innerHTML = lines.join('');
+
+  // ── Summary strip ────────────────────────────────────────────────────
+  let stripHtml = `<div class="partsSummaryStrip">
+    <span class="partsSummaryLabel">Parts</span>
+    <span class="psBadge sdone">${s.completed_parts} done</span>`;
+  if(s.processing_parts > 0)
+    stripHtml += `<span class="psBadge srendering">${s.processing_parts} active</span>`;
+  if(s.failed_parts > 0)
+    stripHtml += `<span class="psBadge sfailed">${s.failed_parts} failed</span>`;
+  if(pending > 0)
+    stripHtml += `<span class="psBadge squeued">${pending} queued</span>`;
+  const overallPct = s.overall_progress_percent ?? s.parts_percent ?? 0;
+  stripHtml += `<span class="partsSummaryAvg">${overallPct}% avg</span></div>`;
+
+  // ── Per-part mini cards (IDs for in-place smooth update) ─────────────
+  const cardsHtml = ordered.map(p => {
+    const st   = (p.status||'queued').toLowerCase();
+    const key  = String(p.part_no || 0);
+    const disp = Math.round(_partDisplay[key] ?? Number(p.progress_percent||0));
+    const active = ['cutting','transcribing','rendering'].includes(st);
+    const stageText = active ? `${partStatusLabel(st)}` : partStatusLabel(st);
+    return `<div class="partProgressCard ${st}">
+      <div class="pCardTop">
+        <span class="pNo">P${Number(p.part_no||0)}</span>
+        <span class="pPct" id="ppct_${key}">${disp}%</span>
+      </div>
+      <div class="pBar"><div class="pBarFill ${st}" id="pbar_${key}" style="width:${disp}%"></div></div>
+      <div class="pStage">${stageText}</div>
+    </div>`;
+  }).join('');
+
+  box.innerHTML = `<div class="partFocusTitle">Live Part Tracking</div>${activeBarHtml}${stripHtml}<div class="partsProgressGrid">${cardsHtml}</div>`;
 }
 
 async function startRender(){
@@ -2987,7 +3162,7 @@ async function startRender(){
     subtitle_only_viral_high: true,
     subtitle_viral_min_score: 68,
     subtitle_viral_top_ratio: 0.6,
-    max_parallel_parts: 1,
+    max_parallel_parts: 0,
     part_order: 'viral',
     text_layers: [],
   };
@@ -3034,32 +3209,62 @@ async function resumeRender(){
   lastMessage = '';
   lastStatus = '';
   lastProgressBucket = -1;
+  // Reset smooth animation state for fresh job
+  _jobTargetPct = 0; _jobDisplayPct = 0;
+  for(const k of Object.keys(_partTarget)) delete _partTarget[k];
+  for(const k of Object.keys(_partDisplay)) delete _partDisplay[k];
   setRenderActionBusy(true);
   setHeaderJob('Render resumed');
   addEvent('Resume queued', 'render');
   startPolling();
 }
 
-function _applyJobUpdate(job, parts){
-  const progress = Number(job.progress_percent || 0);
+function _applyJobUpdate(job, parts, summary){
+  const s = summary || computeProgressSummary(parts||[]);
+  const jobProgress = Number(job.progress_percent || 0);
+  const stage = (job.stage || '').toLowerCase();
+
+  // During rendering, derive finer progress from parts aggregate.
+  // Rendering occupies 30–90 % of the overall bar.
+  const overallPct = s.overall_progress_percent ?? s.parts_percent ?? 0;
+  let targetPercent = jobProgress;
+  if((stage === 'rendering' || stage === 'rendering_parallel') && s.total_parts > 0 && overallPct > 0){
+    targetPercent = Math.min(90, Math.round(30 + (overallPct / 100) * 60));
+  }
+  // Snap to 100 immediately on terminal states
+  if(job.status === 'completed') targetPercent = 100;
+
+  // Feed the smooth animation target; the RAF loop updates DOM for job bar
+  _jobTargetPct = Math.max(_jobTargetPct, targetPercent);
+  if(job.status === 'completed' || job.status === 'failed'){
+    _jobTargetPct = targetPercent;
+    _jobDisplayPct = targetPercent;
+    const bar = document.getElementById('job_bar');
+    const pctEl = document.getElementById('job_percent');
+    if(bar) bar.style.width = targetPercent + '%';
+    if(pctEl) pctEl.textContent = targetPercent + '%';
+  } else {
+    _scheduleSmooth();
+  }
+
   qs('job_stage_pill').textContent = job.stage || 'running';
   qs('job_title').textContent = job.status === 'queued' ? 'Queued job' : 'Processing video';
   qs('job_meta_1').textContent = `Channel ${job.channel_code || '-'} | Source -`;
-  qs('job_percent').textContent = `${progress}%`;
   qs('job_message').textContent = job.message || '-';
-  qs('job_bar').style.width = `${progress}%`;
   setActionState(job);
   renderPipeline(job.stage, job.status);
-  renderSteps(progress);
+  renderSteps(targetPercent);
 
   renderParts(parts);
-  renderPartFocus(parts);
-  const doneCount = parts.filter(p => (p.status || '').toLowerCase() === 'done').length;
-  qs('job_meta_2').textContent = `${doneCount}/${parts.length} parts done | step ${stageLabelPlain(job.stage)}`;
+  renderPartFocus(parts, s);
+  const doneCount = s.total_parts ? s.completed_parts : parts.filter(p => (p.status || '').toLowerCase() === 'done').length;
+  const totalCount = s.total_parts || parts.length;
+  const parallelNote = s.processing_parts > 1 ? ` | ${s.processing_parts} parallel` : '';
+  qs('job_meta_2').textContent = `${doneCount}/${totalCount} parts done | step ${stageLabelPlain(job.stage)}${parallelNote}`;
 
   if(job.stage && job.stage !== lastStage){
     if(lastStage) addEvent(`Finished step: ${stageLabelPlain(lastStage)}`, 'render');
-    addEvent(`Stage: ${stageLabelPlain(job.stage)} (${progress}%)`, 'render');
+    addEvent(`Stage: ${stageLabelPlain(job.stage)} (${targetPercent}%)`, 'render');
     lastStage = job.stage;
   }
   if(job.message && job.message !== lastMessage){
@@ -3070,9 +3275,9 @@ function _applyJobUpdate(job, parts){
     addEvent(`Status: ${job.status}`, 'render');
     lastStatus = job.status;
   }
-  const bucket = Math.floor(progress / 10);
+  const bucket = Math.floor(targetPercent / 10);
   if(job.status === 'running' && bucket !== lastProgressBucket){
-    addEvent(`Running: ${stageLabelPlain(job.stage)} (${progress}%)`, 'render');
+    addEvent(`Running: ${stageLabelPlain(job.stage)} (${targetPercent}%)`, 'render');
     lastProgressBucket = bucket;
   }
 
@@ -3103,7 +3308,7 @@ async function loadJobProgress(){
     ]);
     const job = await jobRes.json();
     const partsData = await partsRes.json();
-    _applyJobUpdate(job, partsData.items || []);
+    _applyJobUpdate(job, partsData.items || [], computeProgressSummary(partsData.items || []));
   } catch(_) {}
 }
 
@@ -3124,7 +3329,7 @@ function startPolling(){
     try {
       const d = JSON.parse(ev.data);
       if(d.error) return;
-      _applyJobUpdate(d.job, d.parts || []);
+      _applyJobUpdate(d.job, d.parts || [], d.summary || null);
     } catch(_) {}
   };
 
@@ -3952,7 +4157,7 @@ function _evNewTextLayer(order) {
     id: `txt_${Date.now()}_${Math.floor(Math.random() * 9999)}`,
     text: 'New Text',
     font_family: 'Bungee',
-    font_size: 32,
+    font_size: 42,
     color: '#ffffff',
     position: 'bottom-center',
     x_percent: 50,
@@ -3997,6 +4202,7 @@ function evSelectTextLayer(index) {
   if (index < 0 || index >= _ev.textLayers.length) return;
   _ev.selectedTextLayer = index;
   evRenderTextLayerList();
+  evRenderTextLayerPreview();
 }
 
 function evMoveTextLayer(index, dir) {
@@ -4118,6 +4324,9 @@ function evRenderTextLayerPreview() {
     overlay.innerHTML = '';
     return;
   }
+  // Scale font sizes relative to 1080px reference width so preview matches render output
+  const overlayRect = overlay.getBoundingClientRect();
+  const scale = overlayRect.width > 0 ? overlayRect.width / 1080 : 1;
   const now = Number(qs('evVideo')?.currentTime || 0);
   overlay.innerHTML = layers.filter((l) => {
     const st = Math.max(0, Number(l.start_time || 0));
@@ -4126,14 +4335,19 @@ function evRenderTextLayerPreview() {
     if (et > 0 && now >= et) return false;
     return true;
   }).map((l) => {
+    const origIdx = _ev.textLayers.findIndex(tl => tl.id === l.id);
+    const isSelected = origIdx === _ev.selectedTextLayer;
     const defXY = evPresetToXY(l.position || 'bottom-center');
     const x = Math.max(0, Math.min(100, Number(l.x_percent ?? defXY[0])));
     const y = Math.max(0, Math.min(100, Number(l.y_percent ?? defXY[1])));
     const style = [];
     style.push(`left:${x}%`);
     style.push(`top:${y}%`);
+    // translate(-x%, -y%) so the anchor point tracks (w-text_w)*x/100 — matches ffmpeg drawtext formula exactly
+    style.push(`transform:translate(-${x}%,-${y}%)`);
     style.push(`font-family:'${String(l.font_family || 'Bungee').replace(/'/g,'')}','Arial',sans-serif`);
-    style.push(`font-size:${Math.max(12, Number(l.font_size || 42))}px`);
+    const scaledSize = Math.max(8, Math.round(Number(l.font_size || 42) * scale));
+    style.push(`font-size:${scaledSize}px`);
     style.push(`color:${l.color || '#ffffff'}`);
     style.push(`font-weight:${l.bold ? '700' : '500'}`);
     style.push(`text-align:${l.alignment || 'center'}`);
@@ -4145,8 +4359,39 @@ function evRenderTextLayerPreview() {
       style.push(`padding:${Math.max(0, Number(l.background.padding || 0))}px`);
       style.push('border-radius:6px');
     }
-    return `<div class="evTextLayerPreview" style="${style.join(';')}">${esc(String(l.text || ''))}</div>`;
+    const selClass = isSelected ? ' evTLSelected' : '';
+    return `<div class="evTextLayerPreview${selClass}" onmousedown="evTextLayerDragStart(event,'${l.id}')" style="${style.join(';')}">${esc(String(l.text || ''))}</div>`;
   }).join('');
+}
+
+function evTextLayerDragStart(e, layerId) {
+  e.preventDefault(); e.stopPropagation();
+  const layerIdx = _ev.textLayers.findIndex(tl => tl.id === layerId);
+  if (layerIdx < 0) return;
+  const layer = _ev.textLayers[layerIdx];
+  _ev.selectedTextLayer = layerIdx;
+  evRenderTextLayerList();
+  const overlay = qs('evTextLayersOverlay');
+  const rect = overlay.getBoundingClientRect();
+  const startClientX = e.clientX, startClientY = e.clientY;
+  const startXPct = Number(layer.x_percent ?? 50);
+  const startYPct = Number(layer.y_percent ?? 90);
+  function onMove(me) {
+    const dx = (me.clientX - startClientX) / rect.width * 100;
+    const dy = (me.clientY - startClientY) / rect.height * 100;
+    layer.x_percent = Math.round(Math.max(0, Math.min(100, startXPct + dx)) * 10) / 10;
+    layer.y_percent = Math.round(Math.max(0, Math.min(100, startYPct + dy)) * 10) / 10;
+    if (qs('evTxtX')) qs('evTxtX').value = layer.x_percent.toFixed(1);
+    if (qs('evTxtY')) qs('evTxtY').value = layer.y_percent.toFixed(1);
+    evRenderTextLayerPreview();
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    evRenderTextLayerList();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
 }
 
 function evToggleBgmFields() {
@@ -4550,8 +4795,8 @@ async function startRenderFromEditor() {
   payload.render_profile = profile;
   payload.video_preset   = presetByProfile[profile] || 'slow';
 
-  const heavyPipeline = qs('evMotionCrop').checked || qs('evReupMode').checked || qs('evAddSubtitle').checked;
-  payload.max_parallel_parts = evDev === 'gpu' ? (heavyPipeline ? 1 : 2) : 1;
+  // 0 = adaptive: backend selects safe workers based on cpu_count, encoder mode, pipeline type
+  payload.max_parallel_parts = 0;
 
   // ── Toggles ──────────────────────────────────────────────────
   payload.add_subtitle    = qs('evAddSubtitle').checked;
@@ -4871,6 +5116,10 @@ async function _submitRenderPayload(payload, isBatch) {
   currentJobId = isBatch ? data.batch_id : data.job_id;
   activeJobStartedAt = Date.now();
   lastStage = ''; lastMessage = ''; lastStatus = ''; lastProgressBucket = -1;
+  // Reset smooth animation state for fresh job
+  _jobTargetPct = 0; _jobDisplayPct = 0;
+  for(const k of Object.keys(_partTarget)) delete _partTarget[k];
+  for(const k of Object.keys(_partDisplay)) delete _partDisplay[k];
   setRenderActionBusy(true);
   setHeaderJob('Render running');
   addEvent(isBatch ? `Queued render batch (${data.count || '?'} links)` : 'Queued render job', 'render');
