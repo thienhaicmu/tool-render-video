@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "artifact-manifest.schema.json",
+  "title": "ArtifactManifest",
+  "description": "Schema for the artifact manifest produced after archiving a task run.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "run_id",
+    "archived_at",
+    "artifact_root",
+    "files"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "2.0"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 8
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 8
+    },
+    "archived_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "artifact_root": {
+      "type": "string",
+      "description": "Relative path to the artifact directory for this run"
+    },
+    "pipeline_status": {
+      "type": "string",
+      "enum": ["completed", "partial", "failed"],
+      "description": "Overall pipeline outcome"
+    },
+    "execution_status": {
+      "type": "string",
+      "enum": ["success", "partial", "failed", "timeout", "dry_run", "simulated"]
+    },
+    "review_verdict": {
+      "type": "string",
+      "enum": ["accepted", "accepted_with_followup", "changes_requested", "rejected", "skipped"]
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "type"],
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": [
+              "raw-prompt",
+              "normalized-prompt",
+              "task-pack",
+              "execution-result",
+              "review-report",
+              "final-summary",
+              "logs-index",
+              "stdout",
+              "stderr",
+              "other"
+            ]
+          },
+          "size_bytes": { "type": "number" },
+          "sha256": { "type": "string" }
+        }
+      },
+      "description": "Index of all files in this artifact bundle"
+    },
+    "retention_expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this artifact bundle may be pruned"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

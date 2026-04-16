@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "task.schema.json",
+  "title": "RawTask",
+  "description": "Schema for a raw task as submitted via the task intake endpoint.",
+  "type": "object",
+  "required": ["task_id", "submitted_at", "submitted_by", "raw_prompt"],
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "minLength": 8,
+      "description": "Unique identifier assigned at intake"
+    },
+    "submitted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when task was submitted"
+    },
+    "submitted_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier for the user or system that submitted the task"
+    },
+    "raw_prompt": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 8000,
+      "description": "The raw engineering request text. Never sent directly to executor."
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "normal", "high", "critical"],
+      "default": "normal"
+    },
+    "labels": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional organizational labels"
+    },
+    "target_branch": {
+      "type": "string",
+      "description": "Git branch the task should be executed against"
+    },
+    "project_hint": {
+      "type": "string",
+      "description": "Optional hint about which sub-project or service this task relates to"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "path"],
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      },
+      "description": "Optional attached files for context"
+    }
+  }
+}

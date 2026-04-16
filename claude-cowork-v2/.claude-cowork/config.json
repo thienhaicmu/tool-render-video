@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0",
+  "project_name": "my-engineering-project",
+  "executor_mode": "simulated",
+  "claude_cli_command": "claude",
+  "normalizer_provider": "mock",
+  "normalizer_model": "claude-sonnet-4-6",
+  "reviewer_provider": "mock",
+  "reviewer_model": "claude-sonnet-4-6",
+  "log_level": "info",
+  "artifact_root": "artifacts",
+  "tasks_root": "tasks",
+  "logs_root": "logs",
+  "retention_days": 30,
+  "max_retries": 2,
+  "timeout_seconds": 300,
+  "doc_paths": [
+    "docs/project-overview.md",
+    "docs/architecture.md",
+    "docs/coding-standards.md",
+    "docs/prompt-rules.md"
+  ]
+}

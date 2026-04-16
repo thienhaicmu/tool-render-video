@@ -1,0 +1,32 @@
+{
+  "name": "claude-cowork-v2",
+  "version": "2.0.0",
+  "description": "Production-ready AI-assisted engineering pipeline powered by Claude Code",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "pipeline": "tsx scripts/pipeline.ts",
+    "intake": "tsx scripts/task-intake.ts",
+    "normalize": "tsx scripts/normalize-prompt.ts",
+    "execute": "tsx scripts/run-claude-task.ts",
+    "review": "tsx scripts/review-task.ts",
+    "archive": "tsx scripts/archive-artifacts.ts"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "dotenv": "^16.4.5",
+    "execa": "^9.3.0",
+    "fs-extra": "^11.2.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.15.0",
+    "typescript": "^5.4.5"
+  }
+}

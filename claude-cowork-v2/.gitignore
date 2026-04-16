@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.local
+artifacts/
+logs/
+tasks/normalized/
+tasks/taskpacks/
+tasks/execution-results/
+tasks/reviews/
+.claude-cowork/state.json
+.DS_Store
+Thumbs.db
+*.swp

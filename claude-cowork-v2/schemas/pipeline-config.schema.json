@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "pipeline-config.schema.json",
+  "title": "PipelineConfig",
+  "description": "Schema for .claude-cowork/config.json. Validated at startup.",
+  "type": "object",
+  "required": [
+    "version",
+    "project_name",
+    "executor_mode",
+    "normalizer_provider",
+    "reviewer_provider",
+    "log_level",
+    "artifact_root",
+    "tasks_root",
+    "logs_root"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "project_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "executor_mode": {
+      "type": "string",
+      "enum": ["claude_cli", "simulated", "dry_run"]
+    },
+    "claude_cli_command": {
+      "type": "string",
+      "default": "claude"
+    },
+    "normalizer_provider": {
+      "type": "string",
+      "enum": ["mock", "openai_compat"]
+    },
+    "normalizer_model": {
+      "type": "string"
+    },
+    "normalizer_base_url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "reviewer_provider": {
+      "type": "string",
+      "enum": ["mock", "openai_compat", "deterministic"]
+    },
+    "reviewer_model": {
+      "type": "string"
+    },
+    "reviewer_base_url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "log_level": {
+      "type": "string",
+      "enum": ["debug", "info", "warn", "error"]
+    },
+    "artifact_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tasks_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "logs_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "retention_days": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 365,
+      "default": 30
+    },
+    "max_retries": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 5,
+      "default": 2
+    },
+    "timeout_seconds": {
+      "type": "number",
+      "minimum": 30,
+      "maximum": 3600,
+      "default": 300
+    },
+    "doc_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Docs to include as context for normalization"
+    }
+  }
+}

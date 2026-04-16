@@ -1,0 +1,146 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "normalized-prompt.schema.json",
+  "title": "NormalizedPrompt",
+  "description": "Schema for a fully normalized engineering task produced by the prompt normalizer.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "task_type",
+    "title",
+    "objective",
+    "business_context",
+    "project_context_needed",
+    "scope_in",
+    "scope_out",
+    "constraints",
+    "assumptions",
+    "related_files",
+    "acceptance_criteria",
+    "logging_requirements",
+    "review_checkpoints",
+    "expected_deliverables",
+    "estimated_complexity",
+    "raw_task_ref",
+    "normalized_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "2.0"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 8,
+      "description": "Unique task identifier (ULID or UUID)"
+    },
+    "task_type": {
+      "type": "string",
+      "enum": ["bugfix", "feature", "refactor", "infra", "docs", "test", "security", "performance"],
+      "description": "Canonical task category"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 120,
+      "description": "Human-readable summary of the task"
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 20,
+      "description": "Single, measurable objective for this task"
+    },
+    "business_context": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Why this task matters to the business or users"
+    },
+    "project_context_needed": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 0,
+      "description": "List of doc file paths the executor should read for context"
+    },
+    "scope_in": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 5 },
+      "minItems": 1,
+      "description": "Explicit list of files/functions/modules in scope"
+    },
+    "scope_out": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 3 },
+      "minItems": 1,
+      "description": "Explicit list of items explicitly excluded from this task"
+    },
+    "constraints": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 5 },
+      "minItems": 1,
+      "description": "Hard rules the executor must not violate"
+    },
+    "assumptions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 5 },
+      "description": "Assumptions the normalizer made in scoping this task"
+    },
+    "related_files": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "File paths relevant to this task (for executor context)"
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 10 },
+      "minItems": 1,
+      "description": "Measurable, observable criteria defining task completion"
+    },
+    "logging_requirements": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Specific log events the implementation must emit"
+    },
+    "review_checkpoints": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 10 },
+      "minItems": 1,
+      "description": "Specific things the reviewer must verify"
+    },
+    "expected_deliverables": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 5 },
+      "minItems": 1,
+      "description": "Concrete artifacts the executor must produce"
+    },
+    "risk_flags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Potential risks that the executor and reviewer should watch for"
+    },
+    "estimated_complexity": {
+      "type": "string",
+      "enum": ["trivial", "small", "medium", "large", "xl"],
+      "description": "Rough complexity estimate to calibrate execution depth"
+    },
+    "raw_task_ref": {
+      "type": "string",
+      "minLength": 5,
+      "description": "Path to the originating raw task file for traceability"
+    },
+    "normalized_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when normalization completed"
+    },
+    "normalizer_model": {
+      "type": "string",
+      "description": "Model identifier used for normalization"
+    },
+    "normalizer_provider": {
+      "type": "string",
+      "description": "Provider used for normalization"
+    }
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "execution-log.schema.json",
+  "title": "ExecutionResult",
+  "description": "Schema for the JSON result produced after a task execution run.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "run_id",
+    "session_id",
+    "started_at",
+    "completed_at",
+    "status",
+    "executor_mode"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "2.0"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 8
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 8,
+      "description": "Unique identifier for this specific execution run"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 8,
+      "description": "Session identifier grouping related runs"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "partial", "failed", "timeout", "dry_run", "simulated"]
+    },
+    "executor_mode": {
+      "type": "string",
+      "enum": ["claude_cli", "simulated", "dry_run"]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Human-readable summary of what the executor did"
+    },
+    "files_read": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Files the executor read during execution"
+    },
+    "files_changed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "operation"],
+        "properties": {
+          "path": { "type": "string" },
+          "operation": {
+            "type": "string",
+            "enum": ["created", "modified", "deleted"]
+          },
+          "lines_added": { "type": "number" },
+          "lines_removed": { "type": "number" }
+        }
+      }
+    },
+    "stdout_excerpt": {
+      "type": "string",
+      "description": "First 4000 chars of stdout, for log reference"
+    },
+    "stderr_excerpt": {
+      "type": "string",
+      "description": "First 2000 chars of stderr, for log reference"
+    },
+    "stdout_path": {
+      "type": "string",
+      "description": "Path to full stdout log file"
+    },
+    "stderr_path": {
+      "type": "string",
+      "description": "Path to full stderr log file"
+    },
+    "exit_code": {
+      "type": ["number", "null"]
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Risk flags observed during execution"
+    },
+    "followups": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Follow-up actions recommended by the executor"
+    },
+    "raw_output_ref": {
+      "type": "string",
+      "description": "Path to the raw output artifact for this run"
+    },
+    "error": {
+      "type": ["string", "null"],
+      "description": "Error message if status is failed"
+    }
+  }
+}

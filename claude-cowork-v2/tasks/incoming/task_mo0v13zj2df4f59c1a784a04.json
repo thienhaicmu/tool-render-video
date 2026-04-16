@@ -1,0 +1,14 @@
+{
+  "task_id": "task_mo0v13zj2df4f59c1a784a04",
+  "submitted_at": "2026-04-16T02:28:26.095Z",
+  "submitted_by": "alice@example.com",
+  "raw_prompt": "The user login endpoint sometimes returns a 500 error when the email contains uppercase letters. The bug is in the auth service — it looks like the email comparison is case-sensitive. Fix it so that login works regardless of how the user typed their email, but make sure the stored email in the database stays lowercase for consistency.",
+  "priority": "high",
+  "labels": [
+    "auth",
+    "bugfix",
+    "user-facing"
+  ],
+  "target_branch": "main",
+  "project_hint": "backend-auth-service"
+}
