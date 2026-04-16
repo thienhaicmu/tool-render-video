@@ -8,7 +8,7 @@ import logging
 from app.services.db import init_db
 from app.services.channel_service import ensure_channel
 from app.services.maintenance import prune_job_logs, prune_preview_dirs
-from app.core.config import CHANNELS_DIR, TEMP_DIR
+from app.core.config import TEMP_DIR, LOGS_DIR
 from app.routes.channels import router as channels_router
 from app.routes.render import router as render_router
 from app.routes.upload import router as upload_router
@@ -83,7 +83,7 @@ def startup():
     ensure_channel("k1")
     keep_last = int(os.getenv("LOG_KEEP_LAST", "30"))
     older_days = int(os.getenv("LOG_KEEP_DAYS", "10"))
-    prune_job_logs(CHANNELS_DIR, keep_last=keep_last, older_than_days=older_days)
+    prune_job_logs(LOGS_DIR, keep_last=keep_last, older_than_days=older_days)
     prune_preview_dirs(TEMP_DIR, max_age_hours=6)
     # Re-queue any render jobs that were interrupted by a previous server restart
     recover_pending_render_jobs()

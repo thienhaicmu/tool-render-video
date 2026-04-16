@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.core.config import CHANNELS_DIR, LOGS_DIR
+from app.core.config import LOGS_DIR
 from app.services.qa_runner import run_test_command
 
 
@@ -168,21 +168,20 @@ def _current_jobs() -> list[tuple[str, str]]:
 def _discover_logs() -> list[tuple[Path, str]]:
     seen = set()
     out: list[tuple[Path, str]] = []
-    for jid, ch in _current_jobs():
-        for p in [CHANNELS_DIR / ch / "logs" / f"{jid}.log", CHANNELS_DIR / ch / "upload" / "logs" / f"{jid}.log"]:
-            rp = p.resolve()
-            if p.exists() and p.is_file() and rp not in seen:
-                out.append((p, "current_job"))
-                seen.add(rp)
+    for jid, _ch in _current_jobs():
+        p = LOGS_DIR / "render" / f"{jid}.log"
+        rp = p.resolve()
+        if p.exists() and p.is_file() and rp not in seen:
+            out.append((p, "current_job"))
+            seen.add(rp)
     for p, typ in [(LOGS_DIR / "error.log", "error_log"), (LOGS_DIR / "app.log", "app_log")]:
         rp = p.resolve()
         if p.exists() and p.is_file() and rp not in seen:
             out.append((p, typ))
             seen.add(rp)
     recent: list[Path] = []
-    for root in [LOGS_DIR, CHANNELS_DIR]:
-        if root.exists():
-            recent.extend([p for p in root.rglob("*.log") if p.is_file()])
+    if LOGS_DIR.exists():
+        recent.extend([p for p in LOGS_DIR.rglob("*.log") if p.is_file()])
     for p in sorted(recent, key=lambda x: x.stat().st_mtime, reverse=True)[:30]:
         rp = p.resolve()
         if rp not in seen:

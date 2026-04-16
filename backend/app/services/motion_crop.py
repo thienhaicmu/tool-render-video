@@ -744,6 +744,58 @@ def build_motion_path(
 
 
 # ---------------------------------------------------------------------------
+# Text layer helpers (mirrors render_engine._build_text_layer_filters)
+# ---------------------------------------------------------------------------
+
+_TL_PRESET_POS: dict[str, tuple[float, float]] = {
+    "top-left":      (0.05, 0.08),
+    "top-center":    (0.50, 0.08),
+    "top-right":     (0.95, 0.08),
+    "center":        (0.50, 0.50),
+    "bottom-left":   (0.05, 0.90),
+    "bottom-center": (0.50, 0.90),
+    "bottom-right":  (0.95, 0.90),
+}
+
+
+def _build_text_layer_filters_mc(text_layers: list) -> list[str]:
+    if not text_layers:
+        return []
+    fontfile = _detect_windows_fontfile()
+    filters: list[str] = []
+    for layer in sorted(text_layers, key=lambda l: int(getattr(l, "order", 0) if not isinstance(l, dict) else l.get("order", 0))):
+        def _g(attr, default):
+            return getattr(layer, attr, default) if not isinstance(layer, dict) else layer.get(attr, default)
+        text = (_g("text", "") or "").strip()
+        if not text:
+            continue
+        safe = text.replace("\\", "\\\\").replace("'", "\\'").replace(":", r"\:").replace(",", r"\,")[:200]
+        if _g("position_mode", "custom") == "preset":
+            x_norm, y_norm = _TL_PRESET_POS.get(str(_g("position", "bottom-center") or "bottom-center"), (0.50, 0.90))
+        else:
+            x_norm = max(0.0, min(1.0, float(_g("x", 0.5) or 0.5)))
+            y_norm = max(0.0, min(1.0, float(_g("y", 0.85) or 0.85)))
+        alignment = str(_g("alignment", "center") or "center")
+        x_expr = f"w*{x_norm:.4f}-text_w/2" if alignment == "center" else (f"w*{x_norm:.4f}" if alignment == "left" else f"w*{x_norm:.4f}-text_w")
+        y_expr = f"h*{y_norm:.4f}-text_h/2"
+        color = str(_g("color", "#FFFFFF") or "#FFFFFF").lstrip("#")
+        color_expr = f"0x{color.upper()}" if len(color) == 6 else "white"
+        fontsize = max(8, min(200, int(_g("font_size", 32) or 32)))
+        dt = f"drawtext=text='{safe}':fontcolor={color_expr}:fontsize={fontsize}:x={x_expr}:y={y_expr}"
+        if _g("bold", False):
+            dt += ":bold=1"
+        outline_px = int(_g("outline", 2) or 0)
+        if outline_px > 0:
+            dt += f":borderw={outline_px}:bordercolor=black@0.9"
+        if _g("shadow", True):
+            dt += ":shadowx=2:shadowy=2:shadowcolor=black@0.6"
+        if fontfile:
+            dt += f":fontfile='{_safe_filter_path(fontfile)}'"
+        filters.append(dt)
+    return filters
+
+
+# ---------------------------------------------------------------------------
 # Main render function (signature unchanged)
 # ---------------------------------------------------------------------------
 
@@ -772,6 +824,7 @@ def render_motion_aware_crop(
     reup_bgm_gain: float = 0.18,
     playback_speed: float = 1.07,
     cfg: MotionCropConfig | None = None,
+    text_layers: list | None = None,
 ) -> str:
     cfg = cfg or MotionCropConfig(scale_x_percent=scale_x_percent, scale_y_percent=scale_y_percent)
 
@@ -848,6 +901,9 @@ def render_motion_aware_crop(
         if fontfile:
             drawtext += f":fontfile='{_safe_filter_path(fontfile)}'"
         vf_parts.append(drawtext)
+
+    if text_layers:
+        vf_parts.extend(_build_text_layer_filters_mc(text_layers))
 
     speed = _sanitize_speed(playback_speed)
     if abs(speed - 1.0) > 1e-4:

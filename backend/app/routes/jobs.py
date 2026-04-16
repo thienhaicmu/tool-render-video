@@ -1,55 +1,17 @@
 
 import asyncio
-import json
 from collections import deque
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from app.services.db import list_jobs, get_job, list_job_parts
 from app.services.maintenance import prune_job_logs
-from app.core.config import CHANNELS_DIR
+from app.core.config import LOGS_DIR
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
 def _resolve_job_log_path(row: dict, job_id: str) -> Path:
-    channel = str(row.get("channel_code") or "").strip()
-    candidates: list[Path] = []
-    if channel:
-        candidates.append(CHANNELS_DIR / channel / "logs" / f"{job_id}.log")
-    try:
-        payload = json.loads(row.get("payload_json") or "{}")
-    except Exception:
-        payload = {}
-    out_raw = str(payload.get("output_dir") or "").strip()
-    mode = str(payload.get("output_mode") or "").strip().lower()
-    if out_raw:
-        out_path = Path(out_raw).expanduser()
-        if not out_path.is_absolute():
-            out_path = (Path.cwd() / out_path).resolve()
-        else:
-            out_path = out_path.resolve()
-        if mode == "channel" and channel:
-            chan = channel.lower()
-            for p in [out_path, *out_path.parents]:
-                if p.name.strip().lower() == chan:
-                    candidates.insert(0, p / "logs" / f"{job_id}.log")
-                    break
-        if out_path.name.strip().lower() in ("video_output", "video_out") and out_path.parent.name.strip().lower() == "upload":
-            candidates.append(out_path.parent.parent / "logs" / f"{job_id}.log")
-        candidates.append(out_path / "logs" / f"{job_id}.log")
-
-    seen = set()
-    uniq: list[Path] = []
-    for c in candidates:
-        key = str(c).lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        uniq.append(c)
-    for c in uniq:
-        if c.exists():
-            return c
-    return uniq[0] if uniq else (CHANNELS_DIR / "manual" / "logs" / f"{job_id}.log")
+    return LOGS_DIR / "render" / f"{job_id}.log"
 
 
 @router.get("")
@@ -117,4 +79,4 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
 
 @router.post("/cleanup/logs")
 def api_cleanup_logs(keep_last: int = 30, older_than_days: int = 10):
-    return prune_job_logs(CHANNELS_DIR, keep_last=keep_last, older_than_days=older_than_days)
+    return prune_job_logs(LOGS_DIR, keep_last=keep_last, older_than_days=older_than_days)

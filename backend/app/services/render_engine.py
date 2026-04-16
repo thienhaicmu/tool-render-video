@@ -252,6 +252,57 @@ def _detect_windows_fontfile() -> str | None:
     return None
 
 
+# Map: font_family name → list of candidate filenames to search (bundled fonts dir first, then system)
+_FONT_FAMILY_CANDIDATES: dict[str, list[str]] = {
+    "Bungee":          ["Bungee-Regular.ttf", "bungee.ttf"],
+    "Impact":          ["impact.ttf"],
+    "Arial Black":     ["ariblk.ttf", "arialbd.ttf", "arial.ttf"],
+    "Arial Bold":      ["arialbd.ttf", "arial.ttf"],
+    "Segoe UI Black":  ["segoeuib.ttf", "segoeui.ttf"],
+    "Tahoma Bold":     ["tahomabd.ttf", "tahoma.ttf"],
+    "Verdana Bold":    ["verdanab.ttf", "verdana.ttf"],
+    "Times New Roman": ["times.ttf"],
+    "Trebuchet MS":    ["trebucbd.ttf", "trebuc.ttf"],
+    # Web-only fonts — fall back to Impact (bold/condensed feel)
+    "Anton":           ["impact.ttf", "ariblk.ttf"],
+    "Bebas Neue":      ["impact.ttf", "ariblk.ttf"],
+    "Oswald":          ["ariblk.ttf", "arialbd.ttf"],
+    "Montserrat":      ["arialbd.ttf", "arial.ttf"],
+    "Roboto":          ["arial.ttf"],
+    "Archivo Black":   ["ariblk.ttf", "arialbd.ttf"],
+    "Teko":            ["impact.ttf"],
+    "Luckiest Guy":    ["impact.ttf", "ariblk.ttf"],
+}
+
+
+def _resolve_font_file(font_family: str | None) -> str | None:
+    """Resolve a font family name to an absolute TTF file path.
+
+    Search order: bundled fonts dir → Windows Fonts dir → default fallback.
+    """
+    custom_dir = _get_custom_fonts_dir()
+    windir = os.environ.get("WINDIR")
+    sys_dir = Path(windir) / "Fonts" if windir else None
+
+    candidates = _FONT_FAMILY_CANDIDATES.get(str(font_family or ""), [])
+    # Also try exact filename match as fallback
+    if not candidates:
+        candidates = [f"{font_family}.ttf", "arial.ttf"]
+
+    for fname in candidates:
+        if custom_dir:
+            p = Path(custom_dir) / fname
+            if p.exists():
+                return str(p)
+        if sys_dir:
+            p = sys_dir / fname
+            if p.exists():
+                return str(p)
+
+    # Final fallback: any available font
+    return _detect_windows_fontfile()
+
+
 def _detect_windows_fonts_dir() -> str | None:
     windir = os.environ.get("WINDIR")
     if not windir:
@@ -307,6 +358,95 @@ def cut_video(input_path: str, output_path: str, start_time: float, end_time: fl
     _run_ffmpeg_with_retry(fallback_cmd, retry_count=retry_count)
 
 
+# ── Text layer helpers ────────────────────────────────────────────────────────
+
+_TL_PRESET_POSITIONS: dict[str, tuple[float, float]] = {
+    "top-left":      (0.05, 0.08),
+    "top-center":    (0.50, 0.08),
+    "top-right":     (0.95, 0.08),
+    "center":        (0.50, 0.50),
+    "bottom-left":   (0.05, 0.90),
+    "bottom-center": (0.50, 0.90),
+    "bottom-right":  (0.95, 0.90),
+}
+
+
+def _build_text_layer_filters(text_layers: list) -> list[str]:
+    """Convert a list of TextLayer-like dicts/objects into ffmpeg drawtext filter strings.
+
+    Coordinates (x, y) are normalized 0.0–1.0 fractions of frame width/height.
+    The expressions use ffmpeg's runtime variables w/h/text_w/text_h so they
+    resolve correctly for any output resolution.
+    """
+    if not text_layers:
+        return []
+
+    filters: list[str] = []
+
+    for layer in sorted(text_layers, key=lambda l: int(getattr(l, "order", 0) if not isinstance(l, dict) else l.get("order", 0))):
+        text = (getattr(layer, "text", "") if not isinstance(layer, dict) else layer.get("text", "")) or ""
+        text = text.strip()
+        if not text:
+            continue
+
+        def _g(attr: str, default):
+            return getattr(layer, attr, default) if not isinstance(layer, dict) else layer.get(attr, default)
+
+        # Escape for ffmpeg drawtext: \\ → \\\\, : → \:, ' → \', , → \,
+        safe = text.replace("\\", "\\\\").replace("'", "\\'").replace(":", r"\:").replace(",", r"\,")[:200]
+
+        # Normalized position
+        if _g("position_mode", "custom") == "preset":
+            pos_name = str(_g("position", "bottom-center") or "bottom-center")
+            x_norm, y_norm = _TL_PRESET_POSITIONS.get(pos_name, (0.50, 0.90))
+        else:
+            x_norm = max(0.0, min(1.0, float(_g("x", 0.5) or 0.5)))
+            y_norm = max(0.0, min(1.0, float(_g("y", 0.85) or 0.85)))
+
+        # Horizontal expression depends on text alignment
+        alignment = str(_g("alignment", "center") or "center")
+        if alignment == "left":
+            x_expr = f"w*{x_norm:.4f}"
+        elif alignment == "right":
+            x_expr = f"w*{x_norm:.4f}-text_w"
+        else:
+            x_expr = f"w*{x_norm:.4f}-text_w/2"
+        y_expr = f"h*{y_norm:.4f}-text_h/2"
+
+        color = str(_g("color", "#FFFFFF") or "#FFFFFF").lstrip("#")
+        if len(color) == 6:
+            color_expr = f"0x{color.upper()}"
+        else:
+            color_expr = "white"
+
+        fontsize = max(8, min(200, int(_g("font_size", 32) or 32)))
+
+        dt = (
+            f"drawtext=text='{safe}'"
+            f":fontcolor={color_expr}"
+            f":fontsize={fontsize}"
+            f":x={x_expr}:y={y_expr}"
+        )
+
+        if _g("bold", False):
+            dt += ":bold=1"
+
+        outline_px = int(_g("outline", 2) or 0)
+        if outline_px > 0:
+            dt += f":borderw={outline_px}:bordercolor=black@0.9"
+
+        if _g("shadow", True):
+            dt += ":shadowx=2:shadowy=2:shadowcolor=black@0.6"
+
+        font_family = str(_g("font_family", "Bungee") or "Bungee")
+        layer_fontfile = _resolve_font_file(font_family)
+        if layer_fontfile:
+            dt += f":fontfile='{_safe_filter_path(layer_fontfile)}'"
+
+        filters.append(dt)
+
+    return filters
+
 
 def render_part(
     input_path: str,
@@ -334,6 +474,7 @@ def render_part(
     reup_bgm_path: str | None = None,
     reup_bgm_gain: float = 0.18,
     playback_speed: float = 1.07,
+    text_layers: list | None = None,
 ):
     preset_low = (video_preset or "").lower()
     sws = "lanczos" if preset_low in ("slower", "veryslow") else "bicubic"
@@ -379,6 +520,8 @@ def render_part(
         if fontfile:
             drawtext += f":fontfile='{_safe_filter_path(fontfile)}'"
         vf_parts.append(drawtext)
+    if text_layers:
+        vf_parts.extend(_build_text_layer_filters(text_layers))
     speed = _sanitize_speed(playback_speed)
     if abs(speed - 1.0) > 1e-4:
         vf_parts.append(f"setpts=PTS/{speed:.4f}")
@@ -513,6 +656,7 @@ def render_part_smart(
     reup_bgm_path: str | None = None,
     reup_bgm_gain: float = 0.18,
     playback_speed: float = 1.07,
+    text_layers: list | None = None,
 ):
     if motion_aware_crop:
         try:
@@ -546,6 +690,7 @@ def render_part_smart(
                 reup_bgm_gain=reup_bgm_gain,
                 playback_speed=playback_speed,
                 cfg=crop_cfg,
+                text_layers=text_layers,
             )
         except Exception as exc:
             logger.warning("Motion-aware crop failed, fallback to standard render: %s", exc)
@@ -576,6 +721,7 @@ def render_part_smart(
                 reup_bgm_path=reup_bgm_path,
                 reup_bgm_gain=reup_bgm_gain,
                 playback_speed=playback_speed,
+                text_layers=text_layers,
             )
 
     return render_part(
@@ -604,4 +750,5 @@ def render_part_smart(
         reup_bgm_path=reup_bgm_path,
         reup_bgm_gain=reup_bgm_gain,
         playback_speed=playback_speed,
+        text_layers=text_layers,
     )

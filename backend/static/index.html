@@ -425,10 +425,17 @@
             </div>
           </div>
 
-          <!-- ② Subtitle Style -->
+          <!-- ② Subtitle Style + Text Layers -->
           <div class="evSection">
-            <div class="evSectionTitle">💬 Subtitle Style (Live Preview)</div>
+            <div class="evSectionTitle">💬 Subtitle &amp; Text Overlays</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <label class="field fieldSpan2" style="grid-column:1/-1">
+                <span class="fieldLabel">Kiểu subtitle</span>
+                <select class="fieldInput" id="evSubStyle" onchange="evUpdateSubPreview()">
+                  <option value="tiktok_bounce_v1" selected>Bounce (chuẩn viral)</option>
+                  <option value="pro_karaoke">Karaoke (highlight từng từ)</option>
+                </select>
+              </label>
               <label class="field">
                 <span class="fieldLabel">Font chữ</span>
                 <select class="fieldInput" id="evSubFont" onchange="evUpdateSubPreview()">
@@ -454,11 +461,11 @@
                 <span class="fieldLabel">🎨 Màu chữ chính</span>
                 <div style="display:flex;gap:8px;align-items:center">
                   <input type="color" id="evSubColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSubPreview()">
-                  <span style="font-size:12px;color:var(--text-muted)">Màu nền tất cả từ</span>
+                  <span style="font-size:12px;color:var(--text-muted)">Tất cả từ</span>
                 </div>
               </label>
               <label class="field">
-                <span class="fieldLabel">✨ Màu highlight (karaoke)</span>
+                <span class="fieldLabel">✨ Màu highlight</span>
                 <div style="display:flex;gap:8px;align-items:center">
                   <input type="color" id="evSubHighlight" value="#ffff00" class="evColorPicker" oninput="evUpdateSubPreview()">
                   <span style="font-size:12px;color:var(--text-muted)">Từ đang nói</span>
@@ -476,6 +483,102 @@
             <div style="margin-top:10px;padding:10px;background:#000;border-radius:8px;text-align:center;min-height:60px;display:flex;align-items:center;justify-content:center" id="evSubStaticPreview">
               <span id="evSubStaticText" style="font-family:'Bungee';font-size:28px;color:#fff;-webkit-text-stroke:2px #000">Preview subtitle</span>
             </div>
+
+            <!-- ── Text Layers (merged, drags on main video frame) ── -->
+            <div style="margin-top:14px;border-top:1px solid var(--card-border);padding-top:12px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                <span style="font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.07em">📝 Text Layers</span>
+                <button class="ghostButton" style="font-size:12px;padding:4px 10px;margin-left:auto" onclick="tlAddLayer()">＋ Thêm text</button>
+              </div>
+              <div id="tlLayerList" style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
+                <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:8px 0">Chưa có layer — nhấn "＋ Thêm text"<br><span style="font-size:11px;opacity:.7">Kéo trực tiếp trên khung video để định vị</span></div>
+              </div>
+              <!-- Layer editor panel -->
+              <div id="tlEditorPanel" style="display:none;border-top:1px solid var(--card-border);padding-top:10px;margin-top:4px">
+                <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Chỉnh sửa layer</div>
+                <div style="display:grid;grid-template-columns:1fr;gap:8px">
+                  <label class="field">
+                    <span class="fieldLabel">Nội dung text</span>
+                    <textarea class="fieldInput" id="tlTxt" rows="2" style="resize:vertical" oninput="tlField('text',this.value)"></textarea>
+                  </label>
+                  <label class="field fieldSpan2">
+                    <span class="fieldLabel">🔤 Font chữ</span>
+                    <select class="fieldInput" id="tlFontFamily" onchange="tlFontFamilyChange(this.value)">
+                      <option value="Bungee">Bungee (Viral 🔥)</option>
+                      <option value="Impact">Impact (Punchy)</option>
+                      <option value="Arial Black">Arial Black (Heavy)</option>
+                      <option value="Anton">Anton (Bold)</option>
+                      <option value="Bebas Neue">Bebas Neue (Caps)</option>
+                      <option value="Oswald">Oswald (Compact)</option>
+                      <option value="Segoe UI Black">Segoe UI Black (Clean Bold)</option>
+                      <option value="Tahoma Bold">Tahoma Bold</option>
+                      <option value="Verdana Bold">Verdana Bold</option>
+                      <option value="Archivo Black">Archivo Black</option>
+                      <option value="Teko">Teko (Tall)</option>
+                      <option value="Luckiest Guy">Luckiest Guy (Fun)</option>
+                      <option value="Montserrat">Montserrat (Clean)</option>
+                      <option value="Roboto">Roboto (Modern)</option>
+                      <option value="Times New Roman">Times New Roman (Classic)</option>
+                    </select>
+                  </label>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <label class="field">
+                      <span class="fieldLabel">Cỡ chữ: <strong id="tlFontSizeVal">32</strong>px</span>
+                      <input type="range" id="tlFontSize" min="12" max="120" value="32" style="width:100%;accent-color:#3b82f6;margin-top:6px" oninput="tlFontSizeChange(this.value)">
+                    </label>
+                    <label class="field">
+                      <span class="fieldLabel">🎨 Màu chữ</span>
+                      <input type="color" id="tlColor" value="#ffffff" class="evColorPicker" oninput="tlField('color',this.value)">
+                    </label>
+                    <label class="field">
+                      <span class="fieldLabel">Căn chữ</span>
+                      <select class="fieldInput" id="tlAlignment" onchange="tlField('alignment',this.value)">
+                        <option value="left">Trái</option>
+                        <option value="center" selected>Giữa</option>
+                        <option value="right">Phải</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span class="fieldLabel">Viền: <strong id="tlOutlineVal">2</strong>px</span>
+                      <input type="range" id="tlOutline" min="0" max="8" value="2" style="width:100%;accent-color:#3b82f6;margin-top:6px" oninput="tlOutlineChange(this.value)">
+                    </label>
+                  </div>
+                  <div style="display:flex;gap:16px">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                      <input type="checkbox" id="tlBold" onchange="tlField('bold',this.checked)" style="accent-color:#3b82f6">
+                      <span style="font-size:12px;color:var(--text)">Bold</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                      <input type="checkbox" id="tlShadow" checked onchange="tlField('shadow',this.checked)" style="accent-color:#3b82f6">
+                      <span style="font-size:12px;color:var(--text)">Shadow</span>
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span class="fieldLabel">Vị trí</span>
+                    <select class="fieldInput" id="tlPositionMode" onchange="tlPositionModeChange()">
+                      <option value="custom">Tự do (kéo trên video)</option>
+                      <option value="preset">Preset</option>
+                    </select>
+                  </label>
+                  <div id="tlPresetRow" style="display:none">
+                    <select class="fieldInput" id="tlPresetPos" onchange="tlPresetChange()">
+                      <option value="top-left">Trên trái</option>
+                      <option value="top-center">Trên giữa</option>
+                      <option value="top-right">Trên phải</option>
+                      <option value="center">Giữa</option>
+                      <option value="bottom-left">Dưới trái</option>
+                      <option value="bottom-center" selected>Dưới giữa</option>
+                      <option value="bottom-right">Dưới phải</option>
+                    </select>
+                  </div>
+                  <div id="tlCustomRow" style="display:flex;gap:12px;align-items:center">
+                    <span style="font-size:11px;color:var(--text-muted)">X: <strong id="tlXPct">50</strong>%</span>
+                    <span style="font-size:11px;color:var(--text-muted)">Y: <strong id="tlYPct">85</strong>%</span>
+                    <span style="font-size:11px;color:var(--accent)">← kéo trực tiếp trên video</span>
+                  </div>
+                </div>
+              </div><!-- /tlEditorPanel -->
+            </div><!-- /Text Layers -->
           </div>
 
           <!-- ③ Volume -->
@@ -617,6 +720,7 @@
             </div>
           </div>
 
+
         </div><!-- /evRightScroll -->
 
         <!-- Footer -->
@@ -664,7 +768,7 @@
           <input type="hidden" id="part_order" value="viral">
           <input type="hidden" id="frame_scale_x" value="100">
           <input type="hidden" id="frame_scale_y" value="106">
-          <input type="hidden" id="subtitle_style" value="pro_karaoke">
+          <input type="hidden" id="subtitle_style" value="tiktok_bounce_v1">
           <input type="hidden" id="transform_preset" value="slight">
           <input type="hidden" id="motion_aware_crop" value="1">
           <input type="hidden" id="add_subtitle" value="1">
@@ -2863,7 +2967,7 @@ async function startRender(){
     auto_pick_standout: true,
     effect_preset: 'story_clean_01',
     language: 'auto',
-    subtitle_style: 'pro_karaoke',
+    subtitle_style: 'tiktok_bounce_v1',
     max_export_parts: 0,
     frame_scale_x: 100,
     frame_scale_y: 106,
@@ -3820,6 +3924,201 @@ addEvent('Dashboard ready');
 // No resize listener needed — overlay uses % inside fixed-aspect frame
 
 // ── Editor View (full-screen) ───────────────────────────────────────────────
+// ── Text Layers ─────────────────────────────────────────────────────────────
+
+let _tlLayers   = [];   // Array<{id,text,font_size,font_family,color,alignment,position_mode,position,x,y,order,bold,outline,shadow}>
+let _tlSelected = null; // id of currently selected layer
+
+const _TL_PRESET_MAP = {
+  'top-left':      [.05, .08], 'top-center':    [.50, .08], 'top-right':  [.95, .08],
+  'center':        [.50, .50],
+  'bottom-left':   [.05, .90], 'bottom-center': [.50, .90], 'bottom-right': [.95, .90],
+};
+
+function _tlId() { return 'tl_' + Math.random().toString(36).slice(2, 9); }
+function _tlLayer(id) { return _tlLayers.find(l => l.id === (id || _tlSelected)); }
+
+function tlAddLayer() {
+  if (_tlLayers.length >= 10) { alert('Tối đa 10 text layers'); return; }
+  const layer = {
+    id: _tlId(), text: 'New Text', font_size: 32, font_family: 'Bungee', color: '#ffffff',
+    alignment: 'center', position_mode: 'custom',
+    position: 'bottom-center', x: 0.50, y: 0.85,
+    order: _tlLayers.length, bold: false, outline: 2, shadow: true,
+  };
+  _tlLayers.push(layer);
+  _tlSelected = layer.id;
+  _tlRenderList(); _tlRenderPreview(); _tlRenderEditor();
+}
+
+function tlRemoveLayer(id) {
+  _tlLayers = _tlLayers.filter(l => l.id !== id);
+  if (_tlSelected === id) _tlSelected = _tlLayers.length ? _tlLayers[0].id : null;
+  _tlRenderList(); _tlRenderPreview(); _tlRenderEditor();
+}
+
+function tlSelectLayer(id) {
+  _tlSelected = id;
+  _tlRenderList(); _tlRenderEditor();
+}
+
+// Called from editor fields
+function tlField(field, value) {
+  const l = _tlLayer(); if (!l) return;
+  if (['font_size', 'outline', 'order'].includes(field)) l[field] = Number(value);
+  else if (['bold', 'shadow'].includes(field)) l[field] = Boolean(value);
+  else l[field] = value;
+  _tlRenderPreview(); _tlRenderList();
+}
+
+function tlFontSizeChange(v) {
+  if (qs('tlFontSizeVal')) qs('tlFontSizeVal').textContent = v;
+  tlField('font_size', v);
+}
+
+function tlFontFamilyChange(v) {
+  tlField('font_family', v);
+}
+
+function tlOutlineChange(v) {
+  if (qs('tlOutlineVal')) qs('tlOutlineVal').textContent = v;
+  tlField('outline', v);
+}
+
+function tlPositionModeChange() {
+  const l = _tlLayer(); if (!l) return;
+  l.position_mode = qs('tlPositionMode').value;
+  if (l.position_mode === 'preset') {
+    l.position = qs('tlPresetPos').value || 'bottom-center';
+    [l.x, l.y] = _TL_PRESET_MAP[l.position] || [.50, .90];
+  }
+  qs('tlPresetRow').style.display = l.position_mode === 'preset' ? 'block' : 'none';
+  qs('tlCustomRow').style.display = l.position_mode === 'custom' ? 'flex'  : 'none';
+  _tlRenderPreview(); _tlRenderList();
+}
+
+function tlPresetChange() {
+  const l = _tlLayer(); if (!l) return;
+  l.position = qs('tlPresetPos').value;
+  l.position_mode = 'preset';
+  [l.x, l.y] = _TL_PRESET_MAP[l.position] || [.50, .90];
+  _tlRenderPreview(); _tlRenderList();
+}
+
+function _tlRenderList() {
+  const el = qs('tlLayerList'); if (!el) return;
+  if (!_tlLayers.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:10px 0">Chưa có layer — nhấn "+ Add Text"</div>';
+    return;
+  }
+  el.innerHTML = _tlLayers.map(l => `
+    <div onclick="tlSelectLayer('${l.id}')" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;
+         background:${_tlSelected===l.id?'rgba(59,130,246,.15)':'transparent'};
+         border:1px solid ${_tlSelected===l.id?'var(--accent)':'transparent'}">
+      <div style="flex:1;overflow:hidden;min-width:0">
+        <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.text||'(trống)'}</div>
+        <div style="font-size:10px;color:var(--text-muted)">${l.position_mode==='custom'?`x:${(l.x*100).toFixed(0)}% y:${(l.y*100).toFixed(0)}%`:l.position}</div>
+      </div>
+      <div style="width:13px;height:13px;border-radius:50%;background:${l.color};border:1px solid rgba(255,255,255,.3);flex-shrink:0"></div>
+      <button onclick="event.stopPropagation();tlRemoveLayer('${l.id}')" style="background:none;border:none;color:#ef4444;cursor:pointer;padding:2px 5px;font-size:13px;line-height:1">✕</button>
+    </div>`).join('');
+}
+
+function _tlRenderEditor() {
+  const panel = qs('tlEditorPanel'); if (!panel) return;
+  const l = _tlLayer();
+  if (!l) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  qs('tlTxt').value           = l.text;
+  qs('tlFontSize').value      = l.font_size;
+  qs('tlFontSizeVal').textContent = l.font_size;
+  if (qs('tlFontFamily')) qs('tlFontFamily').value = l.font_family || 'Bungee';
+  qs('tlColor').value         = l.color;
+  qs('tlAlignment').value     = l.alignment;
+  qs('tlBold').checked        = l.bold;
+  qs('tlOutline').value       = l.outline;
+  qs('tlOutlineVal').textContent = l.outline;
+  qs('tlShadow').checked      = l.shadow;
+  qs('tlPositionMode').value  = l.position_mode;
+  qs('tlPresetPos').value     = l.position || 'bottom-center';
+  qs('tlPresetRow').style.display = l.position_mode === 'preset' ? 'block' : 'none';
+  qs('tlCustomRow').style.display = l.position_mode === 'custom' ? 'flex'  : 'none';
+  if (qs('tlXPct')) qs('tlXPct').textContent = (l.x * 100).toFixed(0);
+  if (qs('tlYPct')) qs('tlYPct').textContent = (l.y * 100).toFixed(0);
+}
+
+function _tlRenderPreview() {
+  const container = qs('evVideoFrame'); if (!container) return;
+  // Remove old layer nodes
+  container.querySelectorAll('.tlNode').forEach(n => n.remove());
+
+  _tlLayers.forEach(layer => {
+    const div = document.createElement('div');
+    div.className = 'tlNode';
+    div.dataset.id = layer.id;
+    div.textContent = layer.text || 'Text';
+    const sel = layer.id === _tlSelected;
+    // Scale font proportionally to frame width vs 1080px render width
+    const frameW = container.offsetWidth || 270;
+    const scaledSize = Math.max(8, Math.round(layer.font_size * frameW / 1080));
+    Object.assign(div.style, {
+      position:   'absolute',
+      left:       (layer.x * 100) + '%',
+      top:        (layer.y * 100) + '%',
+      transform:  layer.alignment === 'left' ? 'translate(0,-50%)' : layer.alignment === 'right' ? 'translate(-100%,-50%)' : 'translate(-50%,-50%)',
+      fontSize:   scaledSize + 'px',
+      fontFamily: `'${layer.font_family || 'Bungee'}', sans-serif`,
+      fontWeight: layer.bold ? 'bold' : 'normal',
+      color:      layer.color,
+      textAlign:  layer.alignment,
+      whiteSpace: 'nowrap',
+      cursor:     'grab',
+      userSelect: 'none',
+      outline:    sel ? '1px dashed rgba(59,130,246,.9)' : 'none',
+      padding:    '1px 3px',
+      zIndex:     10 + layer.order,
+      textShadow: layer.shadow ? '1px 1px 3px rgba(0,0,0,.9)' : 'none',
+      webkitTextStroke: layer.outline > 0 ? `${Math.max(1, Math.round(layer.outline / 2))}px rgba(0,0,0,.8)` : '',
+    });
+    div.addEventListener('mousedown', e => {
+      e.preventDefault();
+      if (_tlSelected !== layer.id) { tlSelectLayer(layer.id); }
+      _tlStartDrag(e, layer.id);
+    });
+    container.appendChild(div);
+  });
+}
+
+function _tlStartDrag(e, id) {
+  const container = qs('evVideoFrame'); if (!container) return;
+  const rect = container.getBoundingClientRect();
+  const onMove = me => {
+    const l = _tlLayer(id); if (!l) return;
+    l.x = Math.max(0, Math.min(1, (me.clientX - rect.left)  / rect.width));
+    l.y = Math.max(0, Math.min(1, (me.clientY - rect.top)   / rect.height));
+    l.position_mode = 'custom';
+    // Update position display live
+    const node = container.querySelector(`.tlNode[data-id="${id}"]`);
+    if (node) { node.style.left = (l.x * 100) + '%'; node.style.top = (l.y * 100) + '%'; }
+    if (_tlSelected === id) {
+      if (qs('tlXPct')) qs('tlXPct').textContent = (l.x * 100).toFixed(0);
+      if (qs('tlYPct')) qs('tlYPct').textContent = (l.y * 100).toFixed(0);
+      if (qs('tlPositionMode')) qs('tlPositionMode').value = 'custom';
+      if (qs('tlPresetRow')) qs('tlPresetRow').style.display = 'none';
+      if (qs('tlCustomRow')) qs('tlCustomRow').style.display = 'flex';
+    }
+    _tlRenderList();
+  };
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// ── End Text Layers ──────────────────────────────────────────────────────────
+
 let _ev = {
   sessionId: null, duration: 0, pendingPayload: null,
   videoReady: false, subAnimTimer: null, subWordIdx: 0, bgmPath: null,
@@ -4148,6 +4447,9 @@ function cancelEditorView() {
   if (_ev.subAnimTimer) { clearInterval(_ev.subAnimTimer); _ev.subAnimTimer = null; }
   const video = qs('evVideo');
   if (video) { video.pause(); video.src = ''; video.style.display = 'none'; }
+  // Remove text layer nodes from video frame
+  const frame = qs('evVideoFrame');
+  if (frame) frame.querySelectorAll('.tlNode').forEach(n => n.remove());
   setView('render');
   setRenderActionBusy(false);
   addEvent('Editor view: huỷ.', 'render');
@@ -4178,8 +4480,9 @@ async function startRenderFromEditor() {
   payload.sub_highlight = qs('evSubHighlight').value;
   payload.sub_outline   = Number(qs('evSubOutline').value);
   const posY = Number(qs('evSubPos').value);
-  payload.sub_margin_v  = Math.round((posY / 100) * 1440 * 0.85);
-  payload.subtitle_style = 'pro_karaoke';
+  const _arH = payload.aspect_ratio === '9:16' ? 1920 : (payload.aspect_ratio === '1:1' ? 1080 : 1440);
+  payload.sub_margin_v  = Math.round((posY / 100) * _arH);
+  payload.subtitle_style = qs('evSubStyle')?.value || 'tiktok_bounce_v1';
   // Editor mode: user expects subtitle on all exported parts.
   payload.subtitle_only_viral_high = false;
   payload.subtitle_viral_min_score = 0;
@@ -4211,6 +4514,18 @@ async function startRenderFromEditor() {
   payload.motion_aware_crop = qs('evMotionCrop').checked;
   payload.reframe_mode    = qs('evReframeMode').value;
   payload.cleanup_temp_files = qs('evCleanupTemp').checked;
+
+  // ── Text Layers ──────────────────────────────────────────────
+  payload.text_layers = _tlLayers
+    .filter(l => (l.text || '').trim().length > 0)
+    .map(l => ({
+      id: l.id, text: l.text.trim(),
+      font_size: Math.max(8, Math.min(200, l.font_size)),
+      color: l.color, alignment: l.alignment,
+      position_mode: l.position_mode, position: l.position,
+      x: l.x, y: l.y, order: l.order,
+      bold: l.bold, outline: l.outline, shadow: l.shadow,
+    }));
 
   // ── Reup Mode ────────────────────────────────────────────────
   const reupEnabled = qs('evReupMode').checked;

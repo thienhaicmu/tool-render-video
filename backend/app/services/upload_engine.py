@@ -332,7 +332,6 @@ def ensure_upload_account_profile(channel_code: str, account_key: str = "default
         Path(cfg["video_input_dir"]),
         Path(cfg["uploaded_dir"]),
         Path(cfg["failed_dir"]),
-        Path(CHANNELS_DIR / channel_code / "logs"),
     ):
         p.mkdir(parents=True, exist_ok=True)
     return cfg

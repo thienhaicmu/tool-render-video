@@ -24,14 +24,13 @@ from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, s
 from app.services.render_engine import cut_video, render_part_smart
 from app.services.viral_scorer import score_segments
 from app.services.report_service import append_rows
-from app.core.config import TEMP_DIR, REPORTS_DIR, CHANNELS_DIR
+from app.core.config import TEMP_DIR, REPORTS_DIR, CHANNELS_DIR, LOGS_DIR
 from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin
 
 router = APIRouter(prefix="/api/render", tags=["render"])
 logger = logging.getLogger("app.render")
 HIGH_MOTION_MIN_SCORE = 60
 HIGH_MOTION_MIN_KEEP = 3
-_JOB_LOG_DIRS: dict[str, Path] = {}
 _PREVIEW_SESSIONS: dict[str, dict] = {}  # session_id -> {video_path, duration, title, work_dir}
 _PREVIEW_DIR = TEMP_DIR / "preview"
 
@@ -89,26 +88,11 @@ def _job_log(channel_code: str, job_id: str, message: str, kind: str = "info"):
             logger.info(line)
     except Exception:
         pass
-    log_dir = _JOB_LOG_DIRS.get(job_id) or (CHANNELS_DIR / channel_code / "logs")
+    log_dir = LOGS_DIR / "render"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{job_id}.log"
     with log_path.open("a", encoding="utf-8") as f:
         f.write(f"[{datetime.utcnow().isoformat()}Z] [{kind.upper()}] {message}\n")
-
-
-def _resolve_job_log_dir(output_dir: Path, output_mode: str, channel_code: str) -> Path:
-    out = output_dir.resolve()
-    if output_mode == "channel":
-        chan = (channel_code or "").strip().lower()
-        if chan:
-            for p in [out, *out.parents]:
-                if p.name.strip().lower() == chan:
-                    return p / "logs"
-    if out.name.strip().lower() in ("video_output", "video_out"):
-        parent = out.parent
-        if parent.name.strip().lower() == "upload":
-            return parent.parent / "logs"
-    return out / "logs"
 
 
 def _validate_render_source(payload: RenderRequest):
@@ -137,14 +121,14 @@ def _validate_render_source(payload: RenderRequest):
     if not (payload.output_dir or "").strip():
         raise HTTPException(status_code=400, detail="output_dir is required")
     out_path = Path(str(payload.output_dir).strip())
-    out_leaf = (out_path.name or "").strip().lower()
-    valid_video_out_names = {"video_output", "video_out"}
-    if out_leaf not in valid_video_out_names:
-        raise HTTPException(
-            status_code=400,
-            detail="output_dir must point to a video output folder named 'video_output' or 'video_out'.",
-        )
     if output_mode == "channel":
+        out_leaf = (out_path.name or "").strip().lower()
+        valid_video_out_names = {"video_output", "video_out"}
+        if out_leaf not in valid_video_out_names:
+            raise HTTPException(
+                status_code=400,
+                detail="output_dir must point to a video output folder named 'video_output' or 'video_out'.",
+            )
         parts = [str(p).strip().lower() for p in out_path.parts if str(p).strip()]
         chan = channel.lower()
         if chan not in parts:
@@ -214,6 +198,9 @@ def _ensure_h264_preview(src: Path, work_dir: Path) -> Path:
     """
     If src is already H.264 return as-is.
     Otherwise fast-transcode to H.264 720p preview so Electron can play it.
+
+    Timeout is computed from video duration: 90s per minute of video, min 300s.
+    Tries h264_nvenc first (GPU); falls back to libx264 with all CPU threads.
     """
     codec = _probe_video_codec(src)
     if codec in ("h264", "avc", "avc1"):
@@ -221,17 +208,39 @@ def _ensure_h264_preview(src: Path, work_dir: Path) -> Path:
     out = work_dir / "preview_h264.mp4"
     if out.exists():
         return out
-    logger.info("Transcoding preview to H.264 (source codec=%s) …", codec)
+
+    duration_s = _probe_video_duration(src)
+    timeout_s = max(300, int(duration_s * 1.5) + 60)
+
+    # Prefer GPU encode when available — much faster and avoids timeout on long videos
+    from app.services.render_engine import _has_encoder, _nvenc_runtime_ready  # local import to avoid circular
+    use_nvenc = _has_encoder("h264_nvenc") and _nvenc_runtime_ready("h264_nvenc")
+    if use_nvenc:
+        video_codec_args = ["-c:v", "h264_nvenc", "-preset", "p1", "-cq", "28"]
+    else:
+        video_codec_args = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-threads", "0"]
+
+    logger.info(
+        "Transcoding preview to H.264 (source codec=%s, encoder=%s, timeout=%ds) …",
+        codec, "h264_nvenc" if use_nvenc else "libx264", timeout_s,
+    )
     cmd = [
         get_ffmpeg_bin(), "-y",
         "-i", str(src),
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+        *video_codec_args,
         "-vf", "scale='min(1280,iw)':-2",  # cap at 720p width
         "-c:a", "aac", "-b:a", "128k",
         "-movflags", "+faststart",
         str(out),
     ]
-    subprocess.run(cmd, capture_output=True, timeout=300)
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "Preview transcode timed out after %ds (duration=%ds, encoder=%s) — serving source as-is",
+            timeout_s, duration_s, "h264_nvenc" if use_nvenc else "libx264",
+        )
+        return src
     return out if out.exists() else src
 
 
@@ -377,7 +386,6 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         if not output_dir.is_absolute():
             output_dir = (Path.cwd() / output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    _JOB_LOG_DIRS[job_id] = _resolve_job_log_dir(output_dir, output_mode, effective_channel)
     work_dir = TEMP_DIR / job_id
     work_dir.mkdir(parents=True, exist_ok=True)
     tuned = _resolve_profile(payload)
@@ -637,6 +645,9 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
                 _job_log(effective_channel, job_id, f"Part {idx} subtitle disabled", kind="debug")
 
             upsert_job_part(job_id, idx, part_name, "rendering", 70, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Rendering final video")
+            active_text_layers = payload.text_layers or []
+            if active_text_layers:
+                _job_log(effective_channel, job_id, f"render.text_layers.start | count={len(active_text_layers)} | part={idx}")
             render_part_smart(
                 str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, source["title"] if payload.add_title_overlay else "",
                 payload.aspect_ratio, payload.frame_scale_x, payload.frame_scale_y,
@@ -660,7 +671,10 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
                 reup_bgm_path=payload.reup_bgm_path,
                 reup_bgm_gain=payload.reup_bgm_gain,
                 playback_speed=float(payload.playback_speed or 1.07),
+                text_layers=active_text_layers or None,
             )
+            if active_text_layers:
+                _job_log(effective_channel, job_id, f"render.text_layers.success | count={len(active_text_layers)} | part={idx}")
             _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} done", kind="info")
 
             upsert_job_part(job_id, idx, part_name, "done", 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Completed")
@@ -790,7 +804,6 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         # Cleanup preview session (video already moved/copied to output)
         if edit_session_id:
             _cleanup_preview_session(edit_session_id)
-        _JOB_LOG_DIRS.pop(job_id, None)
 
 
 @router.post("/process")

@@ -36,6 +36,23 @@ class ChannelInfo(BaseModel):
 
 # ── Render ───────────────────────────────────────────────────────────────
 
+class TextLayer(BaseModel):
+    id: str = ""
+    text: str = "New Text"
+    font_size: int = 32
+    color: str = "#FFFFFF"
+    alignment: str = "center"   # left | center | right
+    position_mode: str = "custom"  # preset | custom
+    position: Optional[str] = "bottom-center"  # used when position_mode=preset
+    x: float = 0.5   # normalized 0.0–1.0, used when position_mode=custom
+    y: float = 0.85  # normalized 0.0–1.0
+    order: int = 0
+    bold: bool = False
+    outline: int = 2
+    shadow: bool = True
+    font_family: str = "Bungee"
+
+
 class PrepareSourceRequest(BaseModel):
     source_mode: Optional[str] = "youtube"
     youtube_url: Optional[str] = ""
@@ -140,6 +157,9 @@ class RenderRequest(BaseModel):
     edit_trim_in: float = 0
     edit_trim_out: float = 0
     edit_volume: float = 1.0
+
+    # Text layers (static overlays positioned by user)
+    text_layers: list[TextLayer] = Field(default_factory=list)
 
 
 # ── Upload ───────────────────────────────────────────────────────────────
