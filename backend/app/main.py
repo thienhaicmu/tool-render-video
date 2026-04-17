@@ -32,11 +32,30 @@ class _SuppressNoisyAccessFilter(logging.Filter):
         return not any(p in msg for p in noisy_patterns)
 
 
+class _SuppressClientDisconnect(logging.Filter):
+    _PHRASES = (
+        "client disconnected",
+        "connection closed",
+        "peer closed connection without sending complete message body",
+        "disconnect without closing handshake",
+    )
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage().lower()
+        return not any(p in msg for p in self._PHRASES)
+
+
 def _configure_access_log_filter():
     logger = logging.getLogger("uvicorn.access")
     if any(isinstance(f, _SuppressNoisyAccessFilter) for f in logger.filters):
         return
     logger.addFilter(_SuppressNoisyAccessFilter())
+
+
+def _configure_error_log_filter():
+    logger = logging.getLogger("uvicorn.error")
+    if any(isinstance(f, _SuppressClientDisconnect) for f in logger.filters):
+        return
+    logger.addFilter(_SuppressClientDisconnect())
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_ROOT.parent
@@ -79,6 +98,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.on_event("startup")
 def startup():
     _configure_access_log_filter()
+    _configure_error_log_filter()
     init_db()
     ensure_channel("k1")
     keep_last = int(os.getenv("LOG_KEEP_LAST", "30"))

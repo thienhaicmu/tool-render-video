@@ -14,7 +14,8 @@ else:
     has_project_channels = DEFAULT_CHANNELS_DIR.exists() and any(DEFAULT_CHANNELS_DIR.iterdir())
     CHANNELS_DIR = DEFAULT_CHANNELS_DIR if has_project_channels else (APP_DATA_DIR / "channels")
 TEMP_DIR = Path(os.getenv("TEMP_DIR", APP_DATA_DIR / "temp"))
-LOGS_DIR  = APP_DATA_DIR / "logs"
+LOGS_DIR     = APP_DATA_DIR / "logs"
+REQUEST_LOG  = LOGS_DIR / "request.log"   # Type 1: request/validation errors
 
 for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, DATABASE_PATH.parent]:
     p.mkdir(parents=True, exist_ok=True)

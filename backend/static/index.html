@@ -309,6 +309,12 @@
     .evRightHeader { padding: 12px 16px; border-bottom: 1px solid var(--card-border); background: var(--sidebar-bg); flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
     .evRightTitle { font-size: 15px; font-weight: 700; color: #f1f5f9; flex: 1; }
     .evSourceName { font-size: 11px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .evInfoStrip { display: flex; flex-direction: column; gap: 3px; margin-top: 5px; }
+    .evInfoRow { font-size: 10px; color: var(--text-muted); display: flex; gap: 4px; align-items: center; overflow: hidden; }
+    .evInfoRow .evInfoLabel { flex: 0 0 auto; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; }
+    .evInfoRow .evInfoVal { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .evSessionDot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 6px; background: var(--text-muted); transition: background .3s; }
+    .evSessionDot.active { background: var(--success); }
     .evRightScroll { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
     .evSection { background: var(--input-bg); border: 1px solid var(--card-border); border-radius: var(--radius-sm); padding: 12px 14px; }
     .evSectionTitle { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 10px; }
@@ -436,6 +442,17 @@
           <div style="min-width:0;flex:1">
             <div class="evRightTitle">🎬 Video Editor</div>
             <div class="evSourceName" id="evSourceName">Chưa chọn nguồn</div>
+            <div class="evInfoStrip">
+              <div class="evInfoRow">
+                <span class="evSessionDot" id="evSessionDot"></span>
+                <span class="evInfoLabel">Session:</span>
+                <span class="evInfoVal" id="evInfoSession">—</span>
+              </div>
+              <div class="evInfoRow">
+                <span class="evInfoLabel">Output:</span>
+                <span class="evInfoVal" id="evInfoOutput">—</span>
+              </div>
+            </div>
           </div>
           <button class="ghostButton" style="font-size:12px;padding:5px 10px" onclick="cancelEditorView()">← Huỷ</button>
         </div>
@@ -492,7 +509,7 @@
               </label>
               <label class="field">
                 <span class="fieldLabel">Cỡ chữ: <strong id="evSubSizeVal">46</strong>px</span>
-                <input type="range" id="evSubSize" min="24" max="80" value="46" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
+                <input type="range" id="evSubSize" min="24" max="120" value="46" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
               </label>
               <label class="field">
                 <span class="fieldLabel">🎨 Màu chữ chính</span>
@@ -524,99 +541,148 @@
 
           <div class="evSection">
             <div class="evSectionTitle">📝 Text Overlay Layers</div>
-            <div style="display:flex;gap:8px;margin-bottom:8px">
+            <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
               <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evAddTextLayer()">+ Add Text</button>
               <span style="font-size:11px;color:var(--text-muted)">Max 8 layers. Top item renders above lower item.</span>
             </div>
             <div id="evTextLayerList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
-            <div id="evTextLayerEditor" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              <label class="field" style="grid-column:1 / -1">
-                <span class="fieldLabel">Text</span>
-                <textarea class="fieldInput" id="evTxtContent" rows="2" placeholder="Type overlay text..." oninput="evUpdateSelectedTextLayer()"></textarea>
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Start time (s)</span>
-                <input class="fieldInput" type="number" id="evTxtStartTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
-              </label>
-              <label class="field">
-                <span class="fieldLabel">End time (s, 0=full)</span>
-                <input class="fieldInput" type="number" id="evTxtEndTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Font</span>
-                <select class="fieldInput" id="evTxtFont" onchange="evUpdateSelectedTextLayer()">
-                  <option value="Bungee">Bungee</option>
-                  <option value="Anton">Anton</option>
-                  <option value="Bebas Neue">Bebas Neue</option>
-                  <option value="Oswald">Oswald</option>
-                  <option value="Impact">Impact</option>
-                  <option value="Arial Black">Arial Black</option>
-                  <option value="Segoe UI Black">Segoe UI Black</option>
-                  <option value="Montserrat">Montserrat</option>
-                  <option value="Roboto">Roboto</option>
-                  <option value="Arial">Arial</option>
-                </select>
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Font size</span>
-                <input class="fieldInput" type="number" id="evTxtSize" min="12" max="160" value="32" oninput="evUpdateSelectedTextLayer()">
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Color</span>
-                <input type="color" id="evTxtColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Position</span>
-                <select class="fieldInput" id="evTxtPos" onchange="evApplyLayerPresetPosition()">
-                  <option value="top-left">top-left</option>
-                  <option value="top-center">top-center</option>
-                  <option value="top-right">top-right</option>
-                  <option value="center">center</option>
-                  <option value="bottom-left">bottom-left</option>
-                  <option value="bottom-center" selected>bottom-center</option>
-                  <option value="bottom-right">bottom-right</option>
-                </select>
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Alignment</span>
-                <select class="fieldInput" id="evTxtAlign" onchange="evUpdateSelectedTextLayer()">
-                  <option value="left">left</option>
-                  <option value="center" selected>center</option>
-                  <option value="right">right</option>
-                </select>
-              </label>
-              <label class="field">
-                <span class="fieldLabel">X (%)</span>
-                <input class="fieldInput" type="number" id="evTxtX" min="0" max="100" step="1" value="50" oninput="evUpdateSelectedTextLayer()">
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Y (%)</span>
-                <input class="fieldInput" type="number" id="evTxtY" min="0" max="100" step="1" value="90" oninput="evUpdateSelectedTextLayer()">
-              </label>
-              <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="evTxtBold" onchange="evUpdateSelectedTextLayer()"> <span style="font-size:12px;color:var(--text)">Bold</span></label>
-              <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="evTxtOutlineEnabled" checked onchange="evUpdateSelectedTextLayer()"> <span style="font-size:12px;color:var(--text)">Outline</span></label>
-              <label class="field">
-                <span class="fieldLabel">Outline px</span>
-                <input class="fieldInput" type="number" id="evTxtOutlineThickness" min="0" max="8" value="2" oninput="evUpdateSelectedTextLayer()">
-              </label>
-              <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="evTxtShadowEnabled" onchange="evUpdateSelectedTextLayer()"> <span style="font-size:12px;color:var(--text)">Shadow</span></label>
-              <label class="field">
-                <span class="fieldLabel">Shadow X</span>
-                <input class="fieldInput" type="number" id="evTxtShadowX" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Shadow Y</span>
-                <input class="fieldInput" type="number" id="evTxtShadowY" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
-              </label>
-              <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="evTxtBgEnabled" onchange="evUpdateSelectedTextLayer()"> <span style="font-size:12px;color:var(--text)">Background box</span></label>
-              <label class="field">
-                <span class="fieldLabel">BG color</span>
-                <input type="color" id="evTxtBgColor" value="#000000" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
-              </label>
-              <label class="field">
-                <span class="fieldLabel">BG padding</span>
-                <input class="fieldInput" type="number" id="evTxtBgPadding" min="0" max="64" value="10" oninput="evUpdateSelectedTextLayer()">
-              </label>
+            <div id="evTextLayerEditor" style="display:none">
+
+              <!-- Style Presets -->
+              <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+                <span style="font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;flex:0 0 auto">Preset:</span>
+                <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('default')">Default</button>
+                <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('bold_white')">Bold White</button>
+                <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('yellow_sub')">Yellow Subtitle</button>
+                <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('meme')">Meme</button>
+              </div>
+
+              <!-- Group: Text -->
+              <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Text</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+                <label class="field" style="grid-column:1 / -1">
+                  <span class="fieldLabel">Content</span>
+                  <textarea class="fieldInput" id="evTxtContent" rows="2" placeholder="Type overlay text..." oninput="evUpdateSelectedTextLayer()"></textarea>
+                </label>
+                <label class="field">
+                  <span class="fieldLabel">Font</span>
+                  <select class="fieldInput" id="evTxtFont" onchange="evUpdateSelectedTextLayer()">
+                    <option value="Bungee" selected>Bungee (Viral 🔥)</option>
+                    <option value="Anton">Anton (Bold)</option>
+                    <option value="Bebas Neue">Bebas Neue (Caps)</option>
+                    <option value="Oswald">Oswald (Compact)</option>
+                    <option value="Impact">Impact (Punchy)</option>
+                    <option value="Arial Black">Arial Black (Heavy)</option>
+                    <option value="Segoe UI Black">Segoe UI Black (Clean Bold)</option>
+                    <option value="Archivo Black">Archivo Black (Viral)</option>
+                    <option value="Teko">Teko (Tall)</option>
+                    <option value="Luckiest Guy">Luckiest Guy (Fun)</option>
+                    <option value="Montserrat">Montserrat (Clean)</option>
+                    <option value="Roboto">Roboto (Modern)</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="fieldLabel">Font size</span>
+                  <input class="fieldInput" type="number" id="evTxtSize" min="12" max="300" value="48" oninput="evUpdateSelectedTextLayer()">
+                </label>
+                <label class="field">
+                  <span class="fieldLabel">Color</span>
+                  <input type="color" id="evTxtColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
+                </label>
+                <label class="field">
+                  <span class="fieldLabel">Alignment</span>
+                  <select class="fieldInput" id="evTxtAlign" onchange="evUpdateSelectedTextLayer()">
+                    <option value="left">left</option>
+                    <option value="center" selected>center</option>
+                    <option value="right">right</option>
+                  </select>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;align-self:end;padding-bottom:4px">
+                  <input type="checkbox" id="evTxtBold" onchange="evUpdateSelectedTextLayer()">
+                  <span style="font-size:12px;color:var(--text)">Bold</span>
+                </label>
+              </div>
+
+              <!-- Group: Timing -->
+              <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Timing</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+                <label class="field">
+                  <span class="fieldLabel">Start time (s)</span>
+                  <input class="fieldInput" type="number" id="evTxtStartTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
+                </label>
+                <label class="field">
+                  <span class="fieldLabel">End time (s, 0=full)</span>
+                  <input class="fieldInput" type="number" id="evTxtEndTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
+                </label>
+              </div>
+
+              <!-- Group: Position -->
+              <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Position</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+                <label class="field">
+                  <span class="fieldLabel">Preset</span>
+                  <select class="fieldInput" id="evTxtPos" onchange="evApplyLayerPresetPosition()">
+                    <option value="top-left">top-left</option>
+                    <option value="top-center">top-center</option>
+                    <option value="top-right">top-right</option>
+                    <option value="center">center</option>
+                    <option value="bottom-left">bottom-left</option>
+                    <option value="bottom-center" selected>bottom-center</option>
+                    <option value="bottom-right">bottom-right</option>
+                  </select>
+                </label>
+                <div></div>
+                <label class="field">
+                  <span class="fieldLabel">X (%)</span>
+                  <input class="fieldInput" type="number" id="evTxtX" min="0" max="100" step="1" value="50" oninput="evUpdateSelectedTextLayer()">
+                </label>
+                <label class="field">
+                  <span class="fieldLabel">Y (%)</span>
+                  <input class="fieldInput" type="number" id="evTxtY" min="0" max="100" step="1" value="90" oninput="evUpdateSelectedTextLayer()">
+                </label>
+              </div>
+
+              <!-- Group: Style -->
+              <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Style</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <label style="display:flex;align-items:center;gap:8px">
+                  <input type="checkbox" id="evTxtOutlineEnabled" checked onchange="evUpdateSelectedTextLayer()">
+                  <span style="font-size:12px;color:var(--text)">Outline</span>
+                </label>
+                <label class="field">
+                  <span class="fieldLabel">Outline px</span>
+                  <input class="fieldInput" type="number" id="evTxtOutlineThickness" min="0" max="8" value="2" oninput="evUpdateSelectedTextLayer()">
+                </label>
+                <label style="display:flex;align-items:center;gap:8px">
+                  <input type="checkbox" id="evTxtShadowEnabled" onchange="evUpdateSelectedTextLayer()">
+                  <span style="font-size:12px;color:var(--text)">Shadow</span>
+                </label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                  <label class="field">
+                    <span class="fieldLabel">Shadow X</span>
+                    <input class="fieldInput" type="number" id="evTxtShadowX" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
+                  </label>
+                  <label class="field">
+                    <span class="fieldLabel">Shadow Y</span>
+                    <input class="fieldInput" type="number" id="evTxtShadowY" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
+                  </label>
+                </div>
+                <label style="display:flex;align-items:center;gap:8px">
+                  <input type="checkbox" id="evTxtBgEnabled" onchange="evUpdateSelectedTextLayer()">
+                  <span style="font-size:12px;color:var(--text)">Background box</span>
+                </label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                  <label class="field">
+                    <span class="fieldLabel">BG color</span>
+                    <input type="color" id="evTxtBgColor" value="#000000" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
+                  </label>
+                  <label class="field">
+                    <span class="fieldLabel">BG padding</span>
+                    <input class="fieldInput" type="number" id="evTxtBgPadding" min="0" max="64" value="10" oninput="evUpdateSelectedTextLayer()">
+                  </label>
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -764,6 +830,7 @@
         <!-- Footer -->
         <div class="evFooter">
           <span id="evStatusLine" style="flex:1;font-size:12px;color:var(--text-muted)">Đang chuẩn bị…</span>
+          <button class="ghostButton" id="evReopenBtn" onclick="evReopenEditor()" style="display:none;font-size:12px;padding:5px 10px">↺ Re-open Editor</button>
           <button class="primaryButton" id="evStartBtn" onclick="startRenderFromEditor()" disabled>▶ Bắt đầu Render</button>
         </div>
       </div><!-- /evRight -->
@@ -818,7 +885,7 @@
 
           <div class="formGrid">
             <label class="field"><span class="fieldLabel">Nguồn video</span><select class="fieldInput" id="source_mode"><option value="youtube" selected>YouTube Link</option><option value="local">Local Video File</option></select></label>
-            <label class="field"><span class="fieldLabel">Chế độ output</span><select class="fieldInput" id="output_mode"><option value="channel" selected>Theo Channel</option><option value="manual">Thư mục thủ công</option></select></label>
+            <label class="field"><span class="fieldLabel">Chế độ output</span><select class="fieldInput" id="output_mode"><option value="channel">Theo Channel</option><option value="manual" selected>Thư mục thủ công</option></select></label>
             <label class="field fieldSpan2" id="field_render_channels_root">
               <span class="fieldLabel">Thư mục gốc Channels</span>
               <div class="actionsRow" style="margin-top:0">
@@ -1968,8 +2035,8 @@ async function checkDownloadHealth(){
     });
     const data = await res.json();
     if(!res.ok){
-      setYoutubeHealthState('warn', `Health status: warning (${data.detail || 'request failed'})`);
-      addEvent(`Download Health failed: ${data.detail || 'unknown error'}`, 'render');
+      setYoutubeHealthState('warn', `Health status: warning (${_formatApiError(data.detail)})`);
+      addEvent(`Download Health failed: ${_formatApiError(data.detail)}`, 'render');
       return;
     }
     if(data.ok){
@@ -3182,7 +3249,7 @@ async function startRender(){
         body: JSON.stringify({ source_mode: 'youtube', youtube_url: youtubeUrl }),
       });
       const pd = await pr.json();
-      if (!pr.ok) throw new Error(pd.detail || 'prepare-source failed');
+      if (!pr.ok) throw new Error(_formatApiError(pd.detail));
       addEvent(`Download xong: ${pd.title} (${_fmtTime(pd.duration || 0)})`, 'render');
       payload.edit_session_id = pd.session_id;
       openEditorView_withSession(pd, youtubeUrl, payload);
@@ -3530,8 +3597,8 @@ async function ensureUploadAccount(){
   const res = await fetch('/api/upload/accounts/ensure', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
   const data = await res.json();
   if(!res.ok){
-    setUploadAction('profile', 'failed', `Ensure account failed: ${data.detail || 'unknown error'}`);
-    addEvent(`Ensure account failed: ${data.detail || 'unknown error'}`);
+    setUploadAction('profile', 'failed', `Ensure account failed: ${_formatApiError(data.detail)}`);
+    addEvent(`Ensure account failed: ${_formatApiError(data.detail)}`);
     return;
   }
   uploadLoginValid = false;
@@ -3546,8 +3613,8 @@ async function checkUploadLoginStatus(showLog = true){
   const data = await res.json();
   if(!res.ok){
     uploadLoginValid = false;
-    setUploadAction('login_check', 'failed', `Login check failed: ${data.detail || 'unknown error'}`);
-    if(showLog) addEvent(`Login check failed: ${data.detail || 'unknown error'}`);
+    setUploadAction('login_check', 'failed', `Login check failed: ${_formatApiError(data.detail)}`);
+    if(showLog) addEvent(`Login check failed: ${_formatApiError(data.detail)}`);
     return false;
   }
   uploadLoginValid = !!data.logged_in;
@@ -3573,8 +3640,8 @@ async function startLogin(){
   const data = await res.json();
   uploadLoginValid = false;
   if(!res.ok){
-    setUploadAction('login', 'failed', `Login start failed: ${data.detail || 'unknown error'}`);
-    addEvent(`Upload login failed: ${data.detail || 'unknown error'}`);
+    setUploadAction('login', 'failed', `Login start failed: ${_formatApiError(data.detail)}`);
+    addEvent(`Upload login failed: ${_formatApiError(data.detail)}`);
     return;
   }
   setUploadAction('login', 'running', data.message || 'Login browser opened. Complete login then close tab.', `account=${payload.account_key}`);
@@ -3637,7 +3704,7 @@ async function pollUploadRun(){
   const res = await fetch(`/api/upload/schedule/runs/${currentUploadRunId}`);
   const data = await res.json();
   if(!res.ok){
-    addEvent(`Upload poll failed: ${data.detail || 'unknown error'}`);
+    addEvent(`Upload poll failed: ${_formatApiError(data.detail)}`);
     clearInterval(uploadPollTimer);
     uploadPollTimer = null;
     return;
@@ -3678,8 +3745,8 @@ async function scheduleUpload(){
   const res = await fetch('/api/upload/schedule/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
   const data = await res.json();
   if(!res.ok){
-    setUploadAction('queue', 'failed', `Upload start failed: ${data.detail || 'unknown error'}`);
-    addEvent(`Upload start failed: ${data.detail || 'unknown error'}`);
+    setUploadAction('queue', 'failed', `Upload start failed: ${_formatApiError(data.detail)}`);
+    addEvent(`Upload start failed: ${_formatApiError(data.detail)}`);
     return;
   }
   currentUploadRunId = data.run_id;
@@ -4132,9 +4199,10 @@ addEvent('Dashboard ready');
 
 // ── Editor View (full-screen) ───────────────────────────────────────────────
 let _ev = {
-  sessionId: null, duration: 0, pendingPayload: null,
+  sessionId: null, exportDir: null, duration: 0, pendingPayload: null,
   videoReady: false, subAnimTimer: null, subWordIdx: 0, bgmPath: null,
   textLayers: [], selectedTextLayer: 0,
+  sourceMode: null, sourceUrl: null,
 };
 const EV_MAX_TEXT_LAYERS = 8;
 const EV_TEXT_POS_TO_XY = {
@@ -4147,6 +4215,7 @@ const EV_TEXT_POS_TO_XY = {
   'bottom-right': [95, 90],
 };
 
+// ── TEXT LAYER FACTORY + DEFAULTS ────────────────────────────────────────────
 function evPresetToXY(position) {
   return EV_TEXT_POS_TO_XY[position] || EV_TEXT_POS_TO_XY['bottom-center'];
 }
@@ -4157,7 +4226,7 @@ function _evNewTextLayer(order) {
     id: `txt_${Date.now()}_${Math.floor(Math.random() * 9999)}`,
     text: 'New Text',
     font_family: 'Bungee',
-    font_size: 42,
+    font_size: 48,
     color: '#ffffff',
     position: 'bottom-center',
     x_percent: 50,
@@ -4225,6 +4294,7 @@ function evDeleteTextLayer(index) {
   evRenderTextLayerPreview();
 }
 
+// ── TEXT LAYER LIST RENDER + FORM SYNC ───────────────────────────────────────
 function evRenderTextLayerList() {
   const box = qs('evTextLayerList');
   if (!box) return;
@@ -4251,7 +4321,7 @@ function evRenderTextLayerList() {
     </div>`;
   }).join('');
   const editor = qs('evTextLayerEditor');
-  if (editor) editor.style.display = 'grid';
+  if (editor) editor.style.display = 'block';
   const cur = _ev.textLayers[selected];
   if (!cur) return;
   qs('evTxtContent').value = cur.text || '';
@@ -4279,9 +4349,9 @@ function evUpdateSelectedTextLayer() {
   const i = _ev.selectedTextLayer;
   const layer = _ev.textLayers[i];
   if (!layer) return;
-  layer.text = String(qs('evTxtContent')?.value || '').trim();
+  layer.text = String(qs('evTxtContent')?.value || '');
   layer.font_family = qs('evTxtFont')?.value || 'Bungee';
-  layer.font_size = Math.max(12, Math.min(160, Number(qs('evTxtSize')?.value || 42)));
+  layer.font_size = Math.max(12, Math.min(300, Number(qs('evTxtSize')?.value || 48)));
   layer.color = qs('evTxtColor')?.value || '#ffffff';
   layer.position = qs('evTxtPos')?.value || 'bottom-center';
   layer.x_percent = Math.max(0, Math.min(100, Number(qs('evTxtX')?.value || 50)));
@@ -4316,6 +4386,7 @@ function evUpdateSelectedTextLayer() {
   evRenderTextLayerPreview();
 }
 
+// ── TEXT LAYER PREVIEW (video overlay) ───────────────────────────────────────
 function evRenderTextLayerPreview() {
   const overlay = qs('evTextLayersOverlay');
   if (!overlay) return;
@@ -4364,6 +4435,7 @@ function evRenderTextLayerPreview() {
   }).join('');
 }
 
+// ── TEXT LAYER DRAG ───────────────────────────────────────────────────────────
 function evTextLayerDragStart(e, layerId) {
   e.preventDefault(); e.stopPropagation();
   const layerIdx = _ev.textLayers.findIndex(tl => tl.id === layerId);
@@ -4416,12 +4488,28 @@ async function evOnBgmPicked(ev) {
   }
 }
 
+/* ── Info strip helper ────────────────────────────────────── */
+// ── EDITOR OPEN / CLOSE / REOPEN ─────────────────────────────────────────────
+function _evUpdateInfoStrip() {
+  const dot = qs('evSessionDot');
+  const sessionEl = qs('evInfoSession');
+  const outputEl = qs('evInfoOutput');
+  if (dot) {
+    if (_ev.sessionId) { dot.classList.add('active'); } else { dot.classList.remove('active'); }
+  }
+  if (sessionEl) sessionEl.textContent = _ev.sessionId ? 'Active (may expire)' : '—';
+  if (outputEl) outputEl.textContent = _ev.exportDir ? _ev.exportDir.replace(/\\/g, '/') : '—';
+}
+
 /* ── Open editor view ─────────────────────────────────────── */
 async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   _ev.sessionId = null;
+  _ev.exportDir = null;
   _ev.duration = 0;
   _ev.pendingPayload = pendingPayload;
   _ev.videoReady = false;
+  _ev.sourceMode = sourceMode;
+  _ev.sourceUrl = urlOrPath;
 
   // Init editor settings with defaults (editor is source of truth for all render params)
 
@@ -4432,7 +4520,11 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   qs('evVideo').style.display = 'none';
   qs('evSubOverlay').style.display = 'none';  // hide until video ready
   qs('evStartBtn').disabled = true;
+  qs('evStartBtn').textContent = '▶ Bắt đầu Render';
+  if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'none';
   qs('evStatusLine').textContent = sourceMode === 'youtube' ? '⏳ Download YouTube — có thể mất 30–60 giây…' : '⏳ Đang chuẩn bị preview…';
+  qs('evStatusLine').style.color = '';
+  _evUpdateInfoStrip();
   _evResetTrimUI();
   evUpdateSubPreview();
   evInitTextLayers();
@@ -4444,8 +4536,9 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
       body: JSON.stringify({ source_mode: sourceMode, youtube_url: sourceMode === 'youtube' ? urlOrPath : null, source_video_path: sourceMode === 'local' ? urlOrPath : null }),
     });
     const pd = await pr.json();
-    if (!pr.ok) throw new Error(pd.detail || 'prepare-source failed');
+    if (!pr.ok) throw new Error(_formatApiError(pd.detail));
     _ev.sessionId = pd.session_id;
+    _ev.exportDir = pd.export_dir || null;
     _ev.duration  = pd.duration || 0;
     qs('evSourceName').textContent = pd.title || urlOrPath;
     if (qs('evTitleOverlayText') && !String(qs('evTitleOverlayText').value || '').trim()) {
@@ -4453,6 +4546,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
     }
     if (pendingPayload) pendingPayload.edit_session_id = pd.session_id;
     _evSetDuration(_ev.duration);
+    _evUpdateInfoStrip();
 
     // Always use backend preview endpoint (H.264 transcoded, range-supported)
     _evLoadVideo(`/api/render/preview-video/${pd.session_id}`);
@@ -4469,9 +4563,12 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
 /* ── Open editor with pre-downloaded YouTube session ──────── */
 function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   _ev.sessionId = pd.session_id;
+  _ev.exportDir = pd.export_dir || null;
   _ev.duration = pd.duration || 0;
   _ev.pendingPayload = pendingPayload;
   _ev.videoReady = false;
+  _ev.sourceMode = _ev.sourceMode || 'youtube';
+  _ev.sourceUrl = _ev.sourceUrl || urlOrPath;
 
   setView('editor');
   qs('evSourceName').textContent = pd.title || urlOrPath || '…';
@@ -4483,7 +4580,11 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   qs('evVideo').style.display = 'none';
   qs('evSubOverlay').style.display = 'none';
   qs('evStartBtn').disabled = true;
+  qs('evStartBtn').textContent = '▶ Bắt đầu Render';
+  if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'none';
   qs('evStatusLine').textContent = '⏳ Đang tải preview video…';
+  qs('evStatusLine').style.color = '';
+  _evUpdateInfoStrip();
   _evResetTrimUI();
   evUpdateSubPreview();
   evInitTextLayers();
@@ -4673,6 +4774,7 @@ function evUpdateAspectRatio() {
   _evSyncSubOverlay();
 }
 
+// ── VIDEO PLAYBACK + TIMELINE ─────────────────────────────────────────────────
 function evUpdateSubPreview() {
   const font      = qs('evSubFont').value;
   const size      = Number(qs('evSubSize').value);
@@ -4731,10 +4833,73 @@ function cancelEditorView() {
   addEvent('Editor view: huỷ.', 'render');
 }
 
+/* ── Re-open editor after session expiry ──────────────────── */
+function evReopenEditor() {
+  if (!_ev.sourceMode || !_ev.sourceUrl) {
+    qs('evStatusLine').textContent = '⚠ Source info not available — please start a new render.';
+    return;
+  }
+  openEditorView(_ev.sourceMode, _ev.sourceUrl, _ev.pendingPayload);
+}
+
+/* ── Apply style preset to selected text layer ────────────── */
+// ── STYLE PRESETS ─────────────────────────────────────────────────────────────
+function evApplyStylePreset(name) {
+  const i = _ev.selectedTextLayer;
+  const layer = _ev.textLayers[i];
+  if (!layer) return;
+  const PRESETS = {
+    default:    { font_size: 48, color: '#ffffff', bold: false,
+                  outline: { enabled: true,  thickness: 2 },
+                  shadow:  { enabled: false, offset_x: 2, offset_y: 2 },
+                  background: { enabled: false, color: '#00000099', padding: 10 } },
+    bold_white: { font_size: 64, color: '#ffffff', bold: true,
+                  outline: { enabled: true,  thickness: 3 },
+                  shadow:  { enabled: false, offset_x: 2, offset_y: 2 },
+                  background: { enabled: false, color: '#00000099', padding: 10 } },
+    yellow_sub: { font_size: 52, color: '#ffff00', bold: false,
+                  outline: { enabled: true,  thickness: 2 },
+                  shadow:  { enabled: false, offset_x: 2, offset_y: 2 },
+                  background: { enabled: false, color: '#00000099', padding: 10 } },
+    meme:       { font_size: 96, color: '#ffffff', bold: true,
+                  outline: { enabled: true,  thickness: 4 },
+                  shadow:  { enabled: false, offset_x: 2, offset_y: 2 },
+                  background: { enabled: false, color: '#00000099', padding: 10 },
+                  alignment: 'center' },
+  };
+  const p = PRESETS[name];
+  if (!p) return;
+  // Apply style fields only — x_percent, y_percent, position are intentionally not touched
+  layer.font_size  = p.font_size;
+  layer.color      = p.color;
+  layer.bold       = p.bold;
+  layer.outline    = { ...p.outline };
+  layer.shadow     = { ...p.shadow };
+  layer.background = { ...p.background };
+  if (p.alignment !== undefined) layer.alignment = p.alignment;
+  evRenderTextLayerList();
+  evRenderTextLayerPreview();
+}
+
 /* ── Start render from editor ─────────────────────────────── */
+// ── RENDER SUBMIT ─────────────────────────────────────────────────────────────
 async function startRenderFromEditor() {
   const payload = _ev.pendingPayload;
   if (!payload) { addEvent('Không có render payload!', 'render'); return; }
+
+  // Pre-submit validation
+  if (!_ev.sessionId) {
+    qs('evStatusLine').textContent = '⚠ No session — please re-open editor first.';
+    qs('evStatusLine').style.color = '#ef4444';
+    return;
+  }
+  const invalidLayer = (_ev.textLayers || []).find(l => !String(l.text || '').trim());
+  if (invalidLayer !== undefined) {
+    const idx = (_ev.textLayers || []).indexOf(invalidLayer) + 1;
+    qs('evStatusLine').textContent = `⚠ Text layer #${idx} is empty — add content or remove it.`;
+    qs('evStatusLine').style.color = '#ef4444';
+    return;
+  }
 
   // ── Trim & Volume ───────────────────────────────────────────
   const dur  = _ev.duration;
@@ -4764,12 +4929,15 @@ async function startRenderFromEditor() {
   payload.subtitle_viral_top_ratio = 1.0;
 
   // ── Multi-layer text overlay ──────────────────────────────────
+  const _toOutline = (v) => (v && typeof v === 'object') ? v : { enabled: false, thickness: typeof v === 'number' ? Math.max(0, Math.min(8, v)) : 2 };
+  const _toShadow  = (v) => (v && typeof v === 'object') ? v : { enabled: false, offset_x: 2, offset_y: 2 };
+  const _toBg      = (v) => (v && typeof v === 'object') ? v : { enabled: false, color: '#00000099', padding: 10 };
   const layers = (_ev.textLayers || [])
     .map((l, i) => {
       const start = Math.max(0, Number(l.start_time || 0));
       const rawEnd = Math.max(0, Number(l.end_time || 0));
       const end = (rawEnd > 0 && rawEnd <= start) ? (start + 0.1) : rawEnd;
-      return { ...l, order: i, start_time: start, end_time: end };
+      return { ...l, order: i, start_time: start, end_time: end, outline: _toOutline(l.outline), shadow: _toShadow(l.shadow), background: _toBg(l.background) };
     })
     .filter((l) => String(l.text || '').trim().length > 0)
     .slice(0, EV_MAX_TEXT_LAYERS);
@@ -4834,14 +5002,59 @@ async function startRenderFromEditor() {
     payload.reup_bgm_path = null;
   }
 
+  // ── Output dir override (editor→render: bypass channel selection) ────────────
+  {
+    let raw = (payload.output_dir || '').replace(/\\/g, '/').trim();
+    if (!raw) {
+      // Fall back to the export_dir returned by prepare-source for this session.
+      raw = (_ev.exportDir || '').replace(/\\/g, '/').trim();
+    }
+    if (!raw) {
+      qs('evStatusLine').textContent = '⚠ Thư mục xuất chưa cấu hình. Vui lòng chọn channel hoặc nhập thư mục ở màn hình chính rồi mở lại editor.';
+      qs('evStatusLine').style.color = '#ef4444';
+      qs('evStartBtn').disabled = false;
+      return;
+    }
+    const leaf = raw.split('/').filter(Boolean).pop().toLowerCase();
+    payload.output_dir   = ['video_output', 'video_out'].includes(leaf) ? raw : raw + '/video_output';
+    payload.output_mode  = 'manual';
+    payload.channel_code = '';
+    payload.render_output_subdir = '';
+  }
+
   addEvent(`Editor → Render | device=${evDev} | profile=${profile} | aspect=${payload.aspect_ratio} | speed=${payload.playback_speed}x | trim ${_fmtTime(inSec)}→${_fmtTime(outSec)} | vol ${Math.round(vol*100)}% | text_layers=${layers.length} | title=off`, 'render');
 
   if (_ev.subAnimTimer) { clearInterval(_ev.subAnimTimer); _ev.subAnimTimer = null; }
-  const video = qs('evVideo');
-  if (video) { video.pause(); video.src = ''; video.style.display = 'none'; }
+  qs('evStartBtn').disabled = true;
+  qs('evStartBtn').textContent = '⏳ Sending…';
+  if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'none';
+  qs('evStatusLine').textContent = '⏳ Đang gửi yêu cầu render…';
+  qs('evStatusLine').style.color = '';
 
-  setView('render');
-  await _submitRenderPayload(payload, false);
+  const _renderResult = await _submitRenderPayload(payload, false);
+  if (_renderResult && _renderResult.ok) {
+    qs('evStatusLine').textContent = 'Render started ✓ — chuyển sang Jobs…';
+    qs('evStatusLine').style.color = 'var(--success)';
+    const video = qs('evVideo');
+    if (video) { video.pause(); video.src = ''; video.style.display = 'none'; }
+    setView('render');
+  } else {
+    const errMsg = (_renderResult && _renderResult.error) || 'Không thể gửi yêu cầu render.';
+    const isSessionErr = /editor session|session.*expired|session.*not found|no active session/i.test(errMsg);
+    const logHint = ' · Logs: %APPDATA%\\tool-render-video\\logs';
+    if (isSessionErr) {
+      qs('evStatusLine').textContent = 'Session expired — please re-open editor.' + logHint;
+      qs('evStatusLine').style.color = '#ef4444';
+      if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'inline-flex';
+      qs('evStartBtn').disabled = true;
+      qs('evStartBtn').textContent = '▶ Bắt đầu Render';
+    } else {
+      qs('evStartBtn').disabled = false;
+      qs('evStartBtn').textContent = '↺ Retry Render';
+      qs('evStatusLine').textContent = `⚠ ${errMsg}${logHint}`;
+      qs('evStatusLine').style.color = '#ef4444';
+    }
+  }
 }
 
 // ── Video Editor (old modal — kept for reference/batch) ─────────────────────
@@ -5104,14 +5317,28 @@ async function applyEditsAndRender() {
   await _submitRenderPayload(payload, _editorIsBatch);
 }
 
+function _formatApiError(detail) {
+  if (!detail) return 'unknown error';
+  // Pydantic 422: detail is an array of {loc, msg, type} objects
+  if (Array.isArray(detail)) {
+    return detail.map(e => {
+      const field = Array.isArray(e.loc) ? e.loc.filter(x => x !== 'body').join('.') : '';
+      return field ? `${field}: ${e.msg}` : (e.msg || JSON.stringify(e));
+    }).join(' | ');
+  }
+  // HTTPException 400/500: detail is a plain string
+  return typeof detail === 'string' ? detail : JSON.stringify(detail);
+}
+
 async function _submitRenderPayload(payload, isBatch) {
   const endpoint = isBatch ? '/api/render/process/batch' : '/api/render/process';
   const res  = await fetch(endpoint, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
   const data = await res.json();
   if (!res.ok) {
-    addEvent(`Start render failed: ${data.detail || 'unknown error'}`, 'render');
+    const errMsg = _formatApiError(data.detail);
+    addEvent(`Start render failed: ${errMsg}`, 'render');
     setRenderActionBusy(false);
-    return;
+    return { ok: false, error: errMsg };
   }
   currentJobId = isBatch ? data.batch_id : data.job_id;
   activeJobStartedAt = Date.now();
@@ -5124,6 +5351,7 @@ async function _submitRenderPayload(payload, isBatch) {
   setHeaderJob('Render running');
   addEvent(isBatch ? `Queued render batch (${data.count || '?'} links)` : 'Queued render job', 'render');
   startPolling();
+  return { ok: true, error: null };
 }
 </script>
 </body>

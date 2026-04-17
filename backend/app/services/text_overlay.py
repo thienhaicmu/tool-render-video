@@ -155,8 +155,8 @@ def normalize_text_layers(text_layers: list[dict[str, Any]] | None) -> list[dict
             font_size = int(raw.get("font_size") or 42)
         except Exception:
             raise ValueError(f"text_layers[{idx}].font_size must be number")
-        if font_size < 12 or font_size > 160:
-            raise ValueError(f"text_layers[{idx}].font_size out of range (12-160)")
+        if font_size < 12 or font_size > 300:
+            raise ValueError(f"text_layers[{idx}].font_size out of range (12-300)")
 
         color = _ensure_hex_color(str(raw.get("color") or "#FFFFFF"), "#FFFFFF")
         position = str(raw.get("position") or "bottom-center").strip().lower()
@@ -302,4 +302,4 @@ def append_text_layer_filters(vf_parts: list[str], text_layers: list[dict[str, A
         elif start_t > 0:
             draw.append(f"enable='gte(t\\,{start_t:.3f})'")
 
-        vf_parts.append(":".join(draw))
+        vf_parts.append(draw[0] + "=" + ":".join(draw[1:]))

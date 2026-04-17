@@ -330,8 +330,9 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
             h = result.get("selected_height", 0)
             fps_val = result.get("selected_fps", 0)
             logger.info(
-                "Download OK | attempt=%d/%d | client=%s | format=%s | %dp%s",
+                "Download OK | attempt=%d/%d | client=%s | format=%s | %dp%s%s",
                 idx, len(attempts), client_name, fmt[:60], h, f"@{fps_val}fps" if fps_val else "",
+                f" (after {idx-1} retries)" if idx > 1 else "",
             )
             return result
         except Exception as exc:
@@ -339,7 +340,7 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
             if "Requested format is not available" in msg:
                 unavailable_requested = True
             logger.warning(
-                "Download attempt failed | attempt=%d/%d | client=%s | format=%s | reason=%s",
+                "Download attempt failed (will retry) | attempt=%d/%d | client=%s | format=%s | reason=%s",
                 idx, len(attempts), client_name, fmt[:60], msg,
             )
             last_err = exc
@@ -381,13 +382,14 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
                 h = result.get("selected_height", 0)
                 fps_val = result.get("selected_fps", 0)
                 logger.info(
-                    "Dynamic download OK | attempt=%d/%d | client=%s | format=%s | %dp%s",
+                    "Dynamic download OK | attempt=%d/%d | client=%s | format=%s | %dp%s%s",
                     idx, min(8, len(dynamic_unique)), client_name, fmt[:60], h, f"@{fps_val}fps" if fps_val else "",
+                    f" (after {idx-1} retries)" if idx > 1 else "",
                 )
                 return result
             except Exception as exc:
                 logger.warning(
-                    "Dynamic download failed | attempt=%d/%d | client=%s | format=%s | reason=%s",
+                    "Dynamic download failed (will retry) | attempt=%d/%d | client=%s | format=%s | reason=%s",
                     idx, min(8, len(dynamic_unique)), client_name, fmt[:60], exc,
                 )
                 last_err = exc
