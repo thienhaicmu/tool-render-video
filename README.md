@@ -357,11 +357,11 @@ All render events are written to structured log files.
 
 ### Log locations
 
-| File | Contents |
-|---|---|
-| `channels/{code}/logs/{job_id}.log` | Per-job structured JSON events |
-| `data/logs/app.log` | All events from all jobs |
-| `data/logs/error.log` | ERROR / CRITICAL events only |
+| File | Contents | Purpose |
+|---|---|---|
+| `channels/{code}/logs/{job_id}.log` | Per-job structured JSON events | Trace a single render from start to finish |
+| `data/logs/app.log` | All events from all jobs | Full audit trail across all channels |
+| `data/logs/error.log` | `ERROR` / `CRITICAL` events only | Quick error triage without noise |
 
 Each log entry is a JSON line:
 
@@ -410,7 +410,10 @@ curl http://localhost:8000/api/jobs/{job_id}
 # 2. Read log
 curl "http://localhost:8000/api/jobs/{job_id}/logs?lines=200"
 
-# 3. Tail error log directly
+# 3. View formatted error log (desktop-shell)
+cd desktop-shell && npm run logerror
+
+# 4. Tail error log directly
 Get-Content data\logs\error.log -Tail 50
 ```
 

@@ -6,7 +6,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist:win": "electron-builder --win portable"
+    "dist:win": "electron-builder --win portable",
+    "logerror": "node scripts/logerror.js"
   },
   "devDependencies": {
     "electron": "^31.0.2",
