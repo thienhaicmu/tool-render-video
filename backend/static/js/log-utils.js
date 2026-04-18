@@ -60,3 +60,20 @@ function addEvent(text, scope = 'auto'){
   st.lastCount = 1;
 }
 
+// ── Toast notifications ─────────────────────────────────────────────────────
+// Ephemeral, non-blocking feedback. Does NOT replace addEvent() or status lines.
+// type: 'info' (4 s) | 'success' (4 s) | 'error' (6 s)
+function showToast(message, type = 'info') {
+  const root = document.getElementById('toastRoot');
+  if (!root) return; // container missing → fail silently
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = String(message || '');
+  root.appendChild(el);
+  const delay = type === 'error' ? 6000 : 4000;
+  setTimeout(() => {
+    el.classList.add('dismissing');
+    setTimeout(() => el.remove(), 120); // wait for toastOut animation
+  }, delay);
+}
+

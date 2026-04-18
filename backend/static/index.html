@@ -83,6 +83,9 @@
         </div>
       </div>
 
+      <!-- Resizable divider — drag to adjust preview ↔ controls width -->
+      <div class="evDivider" id="evDivider"></div>
+
       <!-- RIGHT: Controls Panel -->
       <div class="evRight">
         <div class="evRightHeader">
@@ -1000,5 +1003,7 @@
 <script src="/static/js/editor-view.js"></script>
 <script src="/static/js/editor-modal.js"></script>
 <script src="/static/js/init.js"></script>
+<!-- Toast notification container — populated by showToast() in log-utils.js -->
+<div id="toastRoot" class="toastRoot"></div>
 </body>
 </html>

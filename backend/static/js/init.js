@@ -91,5 +91,30 @@ loadJobs();
 initWarmup();
 addEvent('Dashboard ready');
 
+// ── Editor keyboard shortcuts ──────────────────────────────────────────────
+// Single centralized keydown handler. All guards run before any action fires.
+// IIFE keeps _isTyping private (not a global utility).
+(function () {
+  function _isTyping(el) {
+    if (!el) return false;
+    const t = el.tagName;
+    return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || !!el.isContentEditable;
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return; // never steal modifier combos
+    if (_isTyping(e.target)) return;                 // focus is in a text field → ignore
+    if (currentView !== 'editor') return;            // editor must be the active view
+
+    switch (e.code) {
+      case 'Space':  e.preventDefault(); evTogglePlay();          break; // prevents page scroll
+      case 'KeyI':                        evSetTrimIn();           break;
+      case 'KeyO':                        evSetTrimOut();          break;
+      case 'Escape':                      cancelEditorView();      break;
+      case 'Enter':  e.preventDefault(); startRenderFromEditor(); break; // prevents button re-click
+    }
+  });
+})();
+
 // No resize listener needed — overlay uses % inside fixed-aspect frame
 

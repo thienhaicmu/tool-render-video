@@ -52,6 +52,14 @@ function setView(view){
   document.querySelectorAll('.navItem[data-view]').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-view') === view);
   });
+
+  // Subtle enter animation: fade + lift the incoming content over 120ms.
+  // Remove → reflow → re-add restarts the animation even on repeated calls.
+  if (mainArea) {
+    mainArea.classList.remove('viewEntering');
+    void mainArea.offsetWidth; // force reflow so browser registers the removal
+    mainArea.classList.add('viewEntering');
+  }
 }
 
 function bindNav(){

@@ -53,6 +53,7 @@ function evInitTextLayers() {
 function evAddTextLayer() {
   if ((_ev.textLayers || []).length >= EV_MAX_TEXT_LAYERS) {
     addEvent(`Text overlay limit reached (${EV_MAX_TEXT_LAYERS}).`, 'render');
+    showToast(`Max text layers (${EV_MAX_TEXT_LAYERS}) reached`, 'info'); // log panel hidden in editor view
     return;
   }
   _ev.textLayers.push(_evNewTextLayer(_ev.textLayers.length));
@@ -841,6 +842,7 @@ async function startRenderFromEditor() {
   if (_renderResult && _renderResult.ok) {
     qs('evStatusLine').textContent = 'Render started ✓ — chuyển sang Jobs…';
     qs('evStatusLine').style.color = 'var(--success)';
+    showToast('Render queued ✓', 'success'); // status line disappears on view switch; toast persists
     const video = qs('evVideo');
     if (video) { video.pause(); video.src = ''; video.style.display = 'none'; }
     setView('render');
@@ -862,5 +864,50 @@ async function startRenderFromEditor() {
     }
   }
 }
+
+// ── Resizable divider (preview ↔ controls) ────────────────────────────────
+// mousedown on #evDivider only. mousemove/mouseup go on document during drag
+// and are removed immediately on release. No interference with text-layer drag
+// (which is gated on _ev.dragLayer inside evTextLayersOverlay).
+(function () {
+  var divider = document.getElementById('evDivider');
+  if (!divider) return;
+
+  var _drag   = false;
+  var _startX = 0;
+  var _startW = 0;
+
+  function _onMove(e) {
+    if (!_drag) return;
+    var right = document.querySelector('.evRight');
+    if (!right) return;
+    // Dragging right → deltaX > 0 → right panel narrows (preview expands) ✓
+    var newW = Math.min(700, Math.max(300, _startW - (e.clientX - _startX)));
+    right.style.width = newW + 'px';
+  }
+
+  function _onUp() {
+    if (!_drag) return;
+    _drag = false;
+    var layout = document.getElementById('view_editor');
+    if (layout) layout.classList.remove('resizing');
+    document.removeEventListener('mousemove', _onMove);
+    document.removeEventListener('mouseup',   _onUp);
+  }
+
+  divider.addEventListener('mousedown', function (e) {
+    if (window.innerWidth < 900) return; // stacked layout on small screens — no drag
+    var right = document.querySelector('.evRight');
+    if (!right) return;
+    _drag   = true;
+    _startX = e.clientX;
+    _startW = right.getBoundingClientRect().width;
+    var layout = document.getElementById('view_editor');
+    if (layout) layout.classList.add('resizing');
+    e.preventDefault(); // prevent text selection on drag start
+    document.addEventListener('mousemove', _onMove);
+    document.addEventListener('mouseup',   _onUp);
+  });
+})();
 
 // ── Video Editor (old modal — kept for reference/batch) ─────────────────────
