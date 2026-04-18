@@ -20,6 +20,7 @@ class JobStage(str, Enum):
 class JobPartStage(str, Enum):
     """Per-part status recorded in job_parts.status column."""
     QUEUED       = "queued"
+    WAITING      = "waiting"      # worker thread claimed the part, work not started yet
     CUTTING      = "cutting"
     TRANSCRIBING = "transcribing"
     RENDERING    = "rendering"

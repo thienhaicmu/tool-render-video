@@ -1,7 +1,9 @@
 
 import asyncio
 import json
+import time
 from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from app.services.db import list_jobs, get_job, list_job_parts
@@ -9,6 +11,23 @@ from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+
+_STUCK_THRESHOLD_S = 120   # seconds with no DB update before a part is flagged stuck
+_ACTIVE_STATUSES   = {"waiting", "cutting", "transcribing", "rendering"}
+
+
+def _updated_at_ts(val: str | None) -> float:
+    """Parse a SQLite UTC timestamp string ('YYYY-MM-DD HH:MM:SS') to a Unix float.
+
+    Returns 0.0 on any parse failure so callers can treat it as 'never updated'.
+    """
+    if not val:
+        return 0.0
+    try:
+        dt = datetime.strptime(val.strip(), "%Y-%m-%d %H:%M:%S")
+        return dt.replace(tzinfo=timezone.utc).timestamp()
+    except Exception:
+        return 0.0
 
 
 def _resolve_job_log_path(row: dict, job_id: str) -> Path:
@@ -112,29 +131,37 @@ def _compute_progress_summary(parts: list) -> dict:
             "processing_parts": 0,
             "in_progress_count": 0,
             "active_parts": [],
+            "stuck_parts": [],
             "current_part": None,
             "current_stage": None,
             "overall_progress_percent": 0.0,
             "parts_percent": 0.0,
         }
 
-    _active = {"cutting", "transcribing", "rendering"}
     completed = sum(1 for p in parts if (p.get("status") or "") == "done")
     failed    = sum(1 for p in parts if (p.get("status") or "") == "failed")
-    in_prog   = [p for p in parts if (p.get("status") or "") in _active]
+    in_prog   = [p for p in parts if (p.get("status") or "") in _ACTIVE_STATUSES]
     pending   = total - completed - failed - len(in_prog)
 
     pct_sum   = sum(int(p.get("progress_percent") or 0) for p in parts)
     overall   = round(pct_sum / total, 1)
 
-    active_parts = [
-        {
+    now_ts = time.time()
+    active_parts = []
+    stuck_parts  = []
+    for p in in_prog:
+        active_parts.append({
             "part_no":          p.get("part_no"),
             "status":           p.get("status"),
             "progress_percent": int(p.get("progress_percent") or 0),
-        }
-        for p in in_prog
-    ]
+        })
+        last_ts = _updated_at_ts(p.get("updated_at"))
+        if last_ts > 0 and (now_ts - last_ts) > _STUCK_THRESHOLD_S:
+            stuck_parts.append({
+                "part_no":      p.get("part_no"),
+                "status":       p.get("status"),
+                "stuck_seconds": int(now_ts - last_ts),
+            })
 
     return {
         "total_parts":               total,
@@ -144,6 +171,7 @@ def _compute_progress_summary(parts: list) -> dict:
         "processing_parts":          len(in_prog),
         "in_progress_count":         len(in_prog),   # backward compat
         "active_parts":              active_parts,
+        "stuck_parts":               stuck_parts,
         "current_part":              in_prog[0].get("part_no") if in_prog else None,
         "current_stage":             in_prog[0].get("status")  if in_prog else None,
         "overall_progress_percent":  overall,

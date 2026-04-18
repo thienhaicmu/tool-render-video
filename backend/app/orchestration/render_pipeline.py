@@ -2,6 +2,8 @@
 import json
 import os
 import shutil
+import threading
+import time
 import traceback
 import logging
 import subprocess
@@ -17,7 +19,7 @@ from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes
 from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time
-from app.services.render_engine import cut_video, render_part_smart
+from app.services.render_engine import cut_video, render_part_smart, nvenc_available
 from app.services.viral_scorer import score_segments
 from app.services.report_service import append_rows
 from app.core.config import TEMP_DIR, CHANNELS_DIR, LOGS_DIR
@@ -26,6 +28,57 @@ from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin
 from app.services.text_overlay import normalize_text_layers, MAX_TEXT_LAYERS
 
 logger = logging.getLogger("app.render")
+
+_PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes to update progress
+
+
+def _render_progress_timer(
+    stop_event: threading.Event,
+    job_id: str,
+    part_no: int,
+    part_name: str,
+    seg: dict,
+    output_file: str,
+    encode_start: float,
+    expected_duration: float,
+):
+    """Background thread that emits linear progress estimates while FFmpeg runs.
+
+    Wakes every _PROGRESS_TICK_SEC seconds and writes an interpolated progress
+    value in the 70–99% band to the DB.  Exits cleanly when stop_event is set.
+
+    Design notes:
+    - Uses stop_event.wait(timeout) rather than time.sleep so it wakes
+      immediately when stop_event.set() is called (no lingering sleep).
+    - Clamps at 99% — the caller always writes the authoritative 100% after
+      render_part_smart() returns, guaranteeing that the final DB write wins.
+    - All exceptions are swallowed; a noisy timer must never crash a render thread.
+    """
+    while not stop_event.wait(timeout=_PROGRESS_TICK_SEC):
+        elapsed = time.monotonic() - encode_start
+        if expected_duration > 0:
+            progress = min(99, 70 + int(30 * elapsed / expected_duration))
+        else:
+            progress = 85  # unknown duration — park at midpoint
+        try:
+            upsert_job_part(
+                job_id,
+                part_no,
+                part_name,
+                JobPartStage.RENDERING,
+                progress,
+                seg["start"],
+                seg["end"],
+                seg["duration"],
+                seg.get("viral_score", 0),
+                seg.get("motion_score", 0),
+                seg.get("hook_score", 0),
+                output_file,
+                "Rendering final video",
+            )
+        except Exception:
+            pass  # never let a DB error kill the timer thread
+
 
 HIGH_MOTION_MIN_SCORE = 60
 HIGH_MOTION_MIN_KEEP = 3
@@ -716,6 +769,10 @@ def run_render_pipeline(
                 _job_log(effective_channel, job_id, f"Part {idx} skipped: final output already exists", kind="debug")
                 return {"idx": idx, "output": str(final_part), "row": None, "skipped": True}
 
+            # Worker thread has claimed this part — mark as WAITING before any I/O so
+            # the UI can distinguish "queued but not yet started" from "claimed by a thread".
+            upsert_job_part(job_id, idx, part_name, JobPartStage.WAITING, 5, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), "", "Waiting for worker")
+
             upsert_job_part(job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
             if not (payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
                 cut_video(str(source_path), str(raw_part), seg["start"], seg["end"], retry_count=retry_count)
@@ -763,31 +820,53 @@ def run_render_pipeline(
 
             overlay_title = (payload.title_overlay_text or "").strip() or source["title"]
             upsert_job_part(job_id, idx, part_name, JobPartStage.RENDERING, 70, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Rendering final video")
-            render_part_smart(
-                str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if payload.add_title_overlay else "",
-                payload.aspect_ratio, payload.frame_scale_x, payload.frame_scale_y,
-                payload.motion_aware_crop,
-                reframe_mode=payload.reframe_mode,
-                add_subtitle=part_subtitle_enabled,
-                add_title_overlay=payload.add_title_overlay,
-                effect_preset=payload.effect_preset,
-                transition_sec=tuned["transition_sec"],
-                video_codec=payload.video_codec,
-                video_crf=tuned["video_crf"],
-                video_preset=tuned["video_preset"],
-                audio_bitrate=payload.audio_bitrate,
-                retry_count=retry_count,
-                encoder_mode=payload.encoder_mode,
-                output_fps=payload.output_fps,
-                reup_mode=payload.reup_mode,
-                reup_overlay_enable=payload.reup_overlay_enable,
-                reup_overlay_opacity=payload.reup_overlay_opacity,
-                reup_bgm_enable=payload.reup_bgm_enable,
-                reup_bgm_path=payload.reup_bgm_path,
-                reup_bgm_gain=payload.reup_bgm_gain,
-                playback_speed=float(payload.playback_speed or 1.07),
-                text_layers=normalized_text_layers,
+
+            # Start a background timer that writes linear progress estimates
+            # (70–99%) every _PROGRESS_TICK_SEC seconds while FFmpeg runs.
+            # Stopped in `finally` before the authoritative 100% write.
+            _encode_stop = threading.Event()
+            _encode_timer = threading.Thread(
+                target=_render_progress_timer,
+                args=(
+                    _encode_stop, job_id, idx, part_name, seg,
+                    str(final_part),
+                    time.monotonic(),
+                    max(float(seg.get("duration") or 0), 1.0),
+                ),
+                daemon=True,
+                name=f"progress-timer-{job_id[:8]}-p{idx}",
             )
+            _encode_timer.start()
+            try:
+                render_part_smart(
+                    str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if payload.add_title_overlay else "",
+                    payload.aspect_ratio, payload.frame_scale_x, payload.frame_scale_y,
+                    payload.motion_aware_crop,
+                    reframe_mode=payload.reframe_mode,
+                    add_subtitle=part_subtitle_enabled,
+                    add_title_overlay=payload.add_title_overlay,
+                    effect_preset=payload.effect_preset,
+                    transition_sec=tuned["transition_sec"],
+                    video_codec=payload.video_codec,
+                    video_crf=tuned["video_crf"],
+                    video_preset=tuned["video_preset"],
+                    audio_bitrate=payload.audio_bitrate,
+                    retry_count=retry_count,
+                    encoder_mode=payload.encoder_mode,
+                    output_fps=payload.output_fps,
+                    reup_mode=payload.reup_mode,
+                    reup_overlay_enable=payload.reup_overlay_enable,
+                    reup_overlay_opacity=payload.reup_overlay_opacity,
+                    reup_bgm_enable=payload.reup_bgm_enable,
+                    reup_bgm_path=payload.reup_bgm_path,
+                    reup_bgm_gain=payload.reup_bgm_gain,
+                    playback_speed=float(payload.playback_speed or 1.07),
+                    text_layers=normalized_text_layers,
+                )
+            finally:
+                # Signal and wait so the timer thread cannot write after DONE/100.
+                _encode_stop.set()
+                _encode_timer.join(timeout=5.0)
             if normalized_text_layers:
                 _job_log(
                     effective_channel,
@@ -805,20 +884,29 @@ def run_render_pipeline(
                 _safe_unlink(ass_part)
             return {"idx": idx, "output": str(final_part), "row": row, "skipped": False}
 
-        heavy_pipeline = bool(payload.motion_aware_crop or payload.add_subtitle or payload.reup_mode)
-        mode = (payload.encoder_mode or "auto").lower()
         cpu_total = os.cpu_count() or 2
+        gpu_ready = nvenc_available()
+        heavy_opts = sum([
+            bool(payload.motion_aware_crop),
+            bool(payload.add_subtitle),
+            bool(payload.reup_mode),
+            bool(payload.text_layers),
+        ])
 
         # Adaptive hardware cap:
-        #  - CPU encoder: each ffmpeg process consumes many threads; allow ~1 per 4 cores
-        #  - NVENC/auto: GPU handles encode; limit by motion-analysis CPU and I/O
-        if mode == "cpu":
-            hw_cap = max(1, min(3, cpu_total // 4))
+        #  - GPU/NVENC: encode offloaded to GPU; CPU handles decode + filters only
+        #  - CPU-only: every ffmpeg thread is pure CPU — be more conservative
+        if gpu_ready:
+            base = max(2, cpu_total // 3)
+            hard_ceiling = 6
         else:
-            hw_cap = max(1, min(4, cpu_total // 2))
-        # Heavy pipeline (motion-crop / subtitle / reup): halve the cap to avoid CPU saturation
-        if heavy_pipeline:
-            hw_cap = max(1, hw_cap // 2)
+            base = max(1, cpu_total // 4)
+            hard_ceiling = 4
+
+        # Each heavy option (motion-crop, subtitle, reup, text_layers) adds per-frame
+        # CPU cost; reduce cap by 1 per option, capped at 3 steps down.
+        heavy_penalty = min(heavy_opts, 3)
+        hw_cap = max(1, min(base - heavy_penalty, hard_ceiling))
 
         # max_parallel_parts == 0 means "adaptive / let backend decide"
         # max_parallel_parts >= 1 means user ceiling — honour it but never exceed hw_cap
@@ -830,9 +918,7 @@ def run_render_pipeline(
 
         _job_log(
             effective_channel, job_id,
-            f"Adaptive workers={max_workers} "
-            f"(cpu={cpu_total}, mode={mode}, heavy={heavy_pipeline}, "
-            f"hw_cap={hw_cap}, user_req={user_req})",
+            f"Using max_workers={max_workers} (cpu={cpu_total}, gpu={gpu_ready}, heavy_opts={heavy_opts})",
         )
         completed_parts = 0
         failed_parts = []

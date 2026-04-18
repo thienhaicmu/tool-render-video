@@ -211,9 +211,20 @@
     .statusBadge { padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: capitalize; background: #1e2d45; color: var(--text-dim); }
     .statusBadge.done { background: rgba(16,185,129,.15); color: #34d399; }
     .statusBadge.rendering, .statusBadge.transcribing, .statusBadge.cutting { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .statusBadge.waiting { background: rgba(148,163,184,.15); color: #94a3b8; }
     .statusBadge.queued, .statusBadge.pending { background: #1e2d45; color: var(--text-dim); }
     .statusBadge.failed { background: rgba(239,68,68,.15); color: #f87171; }
     .scoreBox { padding: 4px 10px; border-radius: 8px; background: #1e2d45; border: 1px solid var(--card-border); font-size: 11px; color: var(--text-dim); }
+    .partError { font-size: 11px; color: #f87171; margin-top: 4px; word-break: break-word; }
+    /* ── Stuck part indicators ──────────────────────────────────────── */
+    .partRow.stuck { border-color: rgba(245,158,11,.45) !important; background: rgba(245,158,11,.05) !important; }
+    .partStuckNote { font-size: 11px; color: #fbbf24; margin-top: 3px; }
+    .partProgressCard.stuck { border-color: rgba(245,158,11,.55) !important; background: rgba(245,158,11,.07) !important; animation: stuckPulse 2.5s ease-in-out infinite !important; }
+    @keyframes stuckPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); } 50% { box-shadow: 0 0 0 3px rgba(245,158,11,.22); } }
+    .pBarFill.stuck { background: linear-gradient(90deg, #f59e0b, #fbbf24) !important; }
+    .pStuck { font-size: 10px; color: #fbbf24; margin-top: 2px; line-height: 1.2; }
+    .activePartChip.stuck { background: rgba(245,158,11,.15) !important; border-color: rgba(245,158,11,.35) !important; color: #fbbf24 !important; }
+    .activePartChip.stuck .chipDot { background: #f59e0b !important; animation: stuckPulse 2.5s ease-in-out infinite !important; }
 
     /* ── Parts progress grid ─────────────────────────────────────────── */
     .partsSummaryStrip { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
@@ -227,6 +238,7 @@
     .partsProgressGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 6px; max-height: 220px; overflow-y: auto; margin-top: 4px; }
     .partProgressCard { padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--card-border); background: var(--input-bg); display: flex; flex-direction: column; gap: 5px; transition: border-color .3s, background .3s; }
     .partProgressCard.cutting, .partProgressCard.transcribing, .partProgressCard.rendering { border-color: rgba(59,130,246,.55); background: rgba(59,130,246,.07); animation: partActivePulse 2s ease-in-out infinite; }
+    .partProgressCard.waiting { border-color: rgba(148,163,184,.35); background: rgba(148,163,184,.04); animation: partActivePulse 3s ease-in-out infinite; }
     .partProgressCard.done { border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.05); }
     .partProgressCard.failed { border-color: rgba(239,68,68,.3); background: rgba(239,68,68,.04); }
     @keyframes partActivePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); } 50% { box-shadow: 0 0 0 3px rgba(59,130,246,.18); } }
@@ -235,6 +247,7 @@
     .pPct { font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
     .pBar { height: 4px; border-radius: 999px; background: #1e2d45; overflow: hidden; }
     .pBarFill { height: 100%; border-radius: inherit; transition: width .5s cubic-bezier(.25,.8,.25,1); background: #2d3748; }
+    .pBarFill.waiting { background: linear-gradient(90deg, #64748b, #94a3b8); }
     .pBarFill.cutting { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
     .pBarFill.transcribing { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
     .pBarFill.rendering { background: linear-gradient(90deg, #3b82f6, #10b981); }
@@ -246,6 +259,7 @@
     .activePartsBar:empty { display: none; }
     .activePartChip { display: flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; border-radius: 999px; background: rgba(59,130,246,.15); border: 1px solid rgba(59,130,246,.3); font-size: 11px; font-weight: 600; color: #93c5fd; white-space: nowrap; }
     .activePartChip .chipDot { width: 6px; height: 6px; border-radius: 50%; background: #3b82f6; animation: chipBlink 1.1s ease-in-out infinite; flex-shrink: 0; }
+    .activePartChip .chipDot.waiting { background: #94a3b8; }
     .activePartChip .chipDot.cutting { background: #f59e0b; }
     .activePartChip .chipDot.transcribing { background: #8b5cf6; }
     .activePartChip .chipDot.rendering { background: #3b82f6; }
@@ -2873,6 +2887,7 @@ function partStatusLabel(status){
   const s = (status || '').toLowerCase();
   const map = {
     queued: 'queued',
+    waiting: 'waiting',
     cutting: 'cutting',
     transcribing: 'transcribing',
     rendering: 'rendering',
@@ -2980,20 +2995,28 @@ function renderSteps(progress){
   }).join('');
 }
 
-function renderParts(items){
+function renderParts(items, summary){
   const wrap = qs('parts_wrap');
   if(!items || !items.length){ wrap.innerHTML = '<div class="emptyState">No parts yet.</div>'; return; }
   const ordered = [...items].sort((a,b)=>Number(a.part_no||0)-Number(b.part_no||0));
+  const stuckMap = _stuckPartsMap(summary, items);
   wrap.innerHTML = ordered.map((p, idx) => {
-    const st = (p.status || '').toLowerCase();
-    const isRun = st === 'cutting' || st === 'transcribing' || st === 'rendering';
+    const st     = (p.status || '').toLowerCase();
+    const isRun  = st === 'waiting' || st === 'cutting' || st === 'transcribing' || st === 'rendering';
+    const key    = String(p.part_no ?? idx + 1);
+    const isStuck = isRun && stuckMap.has(key);
+    const errMsg  = st === 'failed' ? esc(p.message || '') : '';
+    const errHtml = errMsg ? `<div class="partError">${errMsg}</div>` : '';
+    const stuckHtml = isStuck ? `<div class="partStuckNote">${_stuckLabel(stuckMap.get(key))}</div>` : '';
+    const rowClass  = isRun ? (isStuck ? 'running stuck' : 'running') : '';
     return `
-    <div class="partRow ${isRun ? 'running' : ''}">
+    <div class="partRow ${rowClass}">
       <div class="partLeft">
         <div class="rankBadge">P${Number(p.part_no || idx + 1)}</div>
         <div>
           <div class="partName">${esc(p.part_name)}</div>
           <div class="partMeta">${Number(p.start_sec || 0).toFixed(1)}s -> ${Number(p.end_sec || 0).toFixed(1)}s | Motion ${Number(p.motion_score || 0).toFixed(0)} | Hook ${Number(p.hook_score || 0).toFixed(0)}</div>
+          ${errHtml}${stuckHtml}
         </div>
       </div>
       <div>
@@ -3008,27 +3031,71 @@ function renderParts(items){
   `}).join('');
 }
 
+// ── Stuck-part helpers ────────────────────────────────────────────────
+const _STUCK_THRESHOLD_S = 120;
+
+function _parseUpdatedAt(val) {
+  // Parse SQLite UTC string "YYYY-MM-DD HH:MM:SS" to a Unix seconds float.
+  if (!val) return 0;
+  try { return new Date(String(val).trim().replace(' ', 'T') + 'Z').getTime() / 1000; }
+  catch(_) { return 0; }
+}
+
+function _stuckLabel(seconds) {
+  if (seconds < 60) return `No progress for ${seconds}s`;
+  const m = Math.floor(seconds / 60), s = seconds % 60;
+  return s > 0 ? `No progress for ${m}m ${s}s` : `No progress for ${m}m`;
+}
+
+// Returns a Map<partNoStr, stuckSeconds> for all currently-stuck active parts.
+// Prefers server-computed stuck_parts (from WS summary) when available;
+// falls back to client-side computation from parts' own updated_at field.
+function _stuckPartsMap(summary, parts) {
+  const sp = (summary||{}).stuck_parts;
+  if (sp && sp.length > 0) {
+    const m = new Map();
+    sp.forEach(e => m.set(String(e.part_no ?? ''), Number(e.stuck_seconds || 0)));
+    return m;
+  }
+  // HTTP-polling fallback: compute from updated_at on each part
+  const _active = ['waiting','cutting','transcribing','rendering'];
+  const now = Date.now() / 1000;
+  const m = new Map();
+  (parts||[]).forEach(p => {
+    if (!_active.includes((p.status||'').toLowerCase())) return;
+    const ts = _parseUpdatedAt(p.updated_at);
+    if (ts > 0 && (now - ts) > _STUCK_THRESHOLD_S)
+      m.set(String(p.part_no ?? ''), Math.round(now - ts));
+  });
+  return m;
+}
+// ─────────────────────────────────────────────────────────────────────
+
 function computeProgressSummary(parts){
   const total = (parts||[]).length;
   const empty = {
     total_parts:0, completed_parts:0, failed_parts:0, pending_parts:0,
-    processing_parts:0, in_progress_count:0, active_parts:[],
+    processing_parts:0, in_progress_count:0, active_parts:[], stuck_parts:[],
     current_part:null, current_stage:null,
     overall_progress_percent:0, parts_percent:0,
   };
   if(!total) return empty;
-  const _active = ['cutting','transcribing','rendering'];
+  const _active = ['waiting','cutting','transcribing','rendering'];
   const done    = parts.filter(p=>(p.status||'')==='done').length;
   const failed  = parts.filter(p=>(p.status||'')==='failed').length;
   const inProg  = parts.filter(p=>_active.includes(p.status||''));
   const pending = Math.max(0, total - done - failed - inProg.length);
   const pSum    = parts.reduce((s,p)=>s+Number(p.progress_percent||0),0);
   const overall = total>0 ? Math.round(pSum/total*10)/10 : 0;
-  const activeParts = inProg.map(p=>({
-    part_no: p.part_no,
-    status:  p.status,
-    progress_percent: Number(p.progress_percent||0),
-  }));
+  const now = Date.now() / 1000;
+  const activeParts = [];
+  const stuckParts  = [];
+  inProg.forEach(p => {
+    activeParts.push({ part_no: p.part_no, status: p.status, progress_percent: Number(p.progress_percent||0) });
+    const ts = _parseUpdatedAt(p.updated_at);
+    if (ts > 0 && (now - ts) > _STUCK_THRESHOLD_S)
+      stuckParts.push({ part_no: p.part_no, status: p.status, stuck_seconds: Math.round(now - ts) });
+  });
   return {
     total_parts:               total,
     completed_parts:           done,
@@ -3037,6 +3104,7 @@ function computeProgressSummary(parts){
     processing_parts:          inProg.length,
     in_progress_count:         inProg.length,
     active_parts:              activeParts,
+    stuck_parts:               stuckParts,
     current_part:              inProg[0]?.part_no??null,
     current_stage:             inProg[0]?.status??null,
     overall_progress_percent:  overall,
@@ -3071,13 +3139,17 @@ function renderPartFocus(items, summary){
 
   const pending = s.pending_parts ?? (s.total_parts - s.completed_parts - s.failed_parts - s.processing_parts);
 
+  const stuckMap = _stuckPartsMap(s, ordered);
+
   // ── Active parts highlight bar ───────────────────────────────────────
   const activeParts = s.active_parts || [];
   let activeBarHtml = '';
   if(activeParts.length > 0){
     const chips = activeParts.map(ap => {
-      const st = (ap.status||'').toLowerCase();
-      return `<span class="activePartChip"><span class="chipDot ${st}"></span>P${Number(ap.part_no||0)} · ${partStatusLabel(st)}</span>`;
+      const st      = (ap.status||'').toLowerCase();
+      const apKey   = String(ap.part_no ?? '');
+      const isStuck = stuckMap.has(apKey);
+      return `<span class="activePartChip${isStuck ? ' stuck' : ''}"><span class="chipDot ${st}"></span>P${Number(ap.part_no||0)} · ${partStatusLabel(st)}${isStuck ? ' ⚠' : ''}</span>`;
     }).join('');
     const workerLabel = activeParts.length > 1
       ? `<span class="workersBadge">${activeParts.length} parallel</span>`
@@ -3093,6 +3165,8 @@ function renderPartFocus(items, summary){
     stripHtml += `<span class="psBadge srendering">${s.processing_parts} active</span>`;
   if(s.failed_parts > 0)
     stripHtml += `<span class="psBadge sfailed">${s.failed_parts} failed</span>`;
+  if(stuckMap.size > 0)
+    stripHtml += `<span class="psBadge" style="background:rgba(245,158,11,.15);color:#fbbf24;">${stuckMap.size} stuck</span>`;
   if(pending > 0)
     stripHtml += `<span class="psBadge squeued">${pending} queued</span>`;
   const overallPct = s.overall_progress_percent ?? s.parts_percent ?? 0;
@@ -3100,18 +3174,22 @@ function renderPartFocus(items, summary){
 
   // ── Per-part mini cards (IDs for in-place smooth update) ─────────────
   const cardsHtml = ordered.map(p => {
-    const st   = (p.status||'queued').toLowerCase();
-    const key  = String(p.part_no || 0);
-    const disp = Math.round(_partDisplay[key] ?? Number(p.progress_percent||0));
-    const active = ['cutting','transcribing','rendering'].includes(st);
-    const stageText = active ? `${partStatusLabel(st)}` : partStatusLabel(st);
-    return `<div class="partProgressCard ${st}">
+    const st      = (p.status||'queued').toLowerCase();
+    const key     = String(p.part_no || 0);
+    const disp    = Math.round(_partDisplay[key] ?? Number(p.progress_percent||0));
+    const active  = ['waiting','cutting','transcribing','rendering'].includes(st);
+    const isStuck = active && stuckMap.has(key);
+    const cardClass = `partProgressCard ${st}${isStuck ? ' stuck' : ''}`;
+    const barClass  = `pBarFill ${isStuck ? 'stuck' : st}`;
+    const stuckNote = isStuck ? `<div class="pStuck">${_stuckLabel(stuckMap.get(key))}</div>` : '';
+    return `<div class="${cardClass}">
       <div class="pCardTop">
         <span class="pNo">P${Number(p.part_no||0)}</span>
         <span class="pPct" id="ppct_${key}">${disp}%</span>
       </div>
-      <div class="pBar"><div class="pBarFill ${st}" id="pbar_${key}" style="width:${disp}%"></div></div>
-      <div class="pStage">${stageText}</div>
+      <div class="pBar"><div class="${barClass}" id="pbar_${key}" style="width:${disp}%"></div></div>
+      <div class="pStage${isStuck ? ' stuck' : ''}">${partStatusLabel(st)}</div>
+      ${stuckNote}
     </div>`;
   }).join('');
 
@@ -3322,7 +3400,7 @@ function _applyJobUpdate(job, parts, summary){
   renderPipeline(job.stage, job.status);
   renderSteps(targetPercent);
 
-  renderParts(parts);
+  renderParts(parts, s);
   renderPartFocus(parts, s);
   const doneCount = s.total_parts ? s.completed_parts : parts.filter(p => (p.status || '').toLowerCase() === 'done').length;
   const totalCount = s.total_parts || parts.length;

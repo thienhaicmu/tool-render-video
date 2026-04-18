@@ -12,6 +12,7 @@ Why not Celery?
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import concurrent.futures
 from typing import Callable
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 _executor: concurrent.futures.ThreadPoolExecutor | None = None
 _lock = threading.Lock()
 _active_job_ids: set[str] = set()
-_MAX_WORKERS = 4
+_MAX_WORKERS = max(2, (os.cpu_count() or 4) // 2)
 
 
 def _get_executor() -> concurrent.futures.ThreadPoolExecutor:

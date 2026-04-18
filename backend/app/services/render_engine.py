@@ -69,6 +69,20 @@ def _nvenc_runtime_ready(codec_name: str) -> bool:
         return False
 
 
+@lru_cache(maxsize=1)
+def nvenc_available() -> bool:
+    """Return True if at least one NVENC encoder is present and runtime-ready.
+
+    Cached at module level so the GPU probe runs at most once per process.
+    Importable by other modules (e.g. render_pipeline) to inform worker
+    count decisions before any encoding actually starts.
+    """
+    for codec_name in ("h264_nvenc", "hevc_nvenc"):
+        if _has_encoder(codec_name) and _nvenc_runtime_ready(codec_name):
+            return True
+    return False
+
+
 def _resolve_codec(codec: str, encoder_mode: str = "auto"):
     c = (codec or "h264").lower()
     mode = (encoder_mode or "auto").lower()
