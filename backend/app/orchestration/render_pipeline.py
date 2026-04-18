@@ -382,6 +382,10 @@ def run_render_pipeline(
     except Exception as layer_exc:
         normalized_text_layers = []
         _job_log(effective_channel, job_id, f"Text layer parse warning: {layer_exc}", kind="warning")
+        update_job_progress(
+            job_id, "starting", 0,
+            f"⚠️ Text overlays skipped (parse error): {layer_exc}",
+        )
     _job_log(
         effective_channel,
         job_id,
