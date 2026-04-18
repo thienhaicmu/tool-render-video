@@ -276,10 +276,17 @@
     @media (max-width: 900px) { .appShell { grid-template-columns: 1fr; } .sidebar { flex-direction: row; align-items: center; overflow:auto; padding: 12px; } .navList{flex-direction:row;} .toggleGrid,.formGrid,.stepsGrid,.featureLauncher{grid-template-columns:1fr;} .evLayout { flex-direction: column; } .evRight { width: 100% !important; max-width: none; flex-shrink: 1; } .evDivider { display: none; } }
 
     /* ── Editor Full-Screen View ────────────────────────────────────── */
+    /* Viewport lock: prevent page-level scroll while editor is active.
+       :has() is safe — Electron 31 uses Chromium 126 (support since Chrome 105).
+       Applies only when .editorMode is present; all other views are unaffected. */
+    html:has(.mainArea.editorMode)               { height: 100%; overflow: hidden; }
+    html:has(.mainArea.editorMode) body          { height: 100%; overflow: hidden; }
+    html:has(.mainArea.editorMode) .appShell     { height: 100vh; overflow: hidden; }
     .mainArea.editorMode { padding: 0 !important; overflow: hidden !important; display: flex; flex-direction: column; }
-    .evLayout { display: flex; flex: 1; min-height: 0; }
+    .evLayout { display: flex; flex: 1; min-height: 0; overflow: hidden; align-items: stretch; }
     /* Left — video panel */
-    .evLeft { display: flex; flex-direction: column; background: #0a0a0a; min-height: 0; flex: 1 1 auto; min-width: 320px; overflow: hidden; }
+    .evLeft { display: flex; flex-direction: column; background: #0a0a0a; min-height: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+    .evAspectBar { flex-shrink: 0; height: 28px; background: #070a14; border-bottom: 1px solid #1e2d45; display: flex; align-items: center; padding: 0 12px; gap: 8px; overflow: hidden; }
     /* Outer box: centers the frame, shows letterbox/pillarbox in dark */
     .evVideoBox { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #0a0a0a; }
     /* Inner frame: exact aspect ratio of the output — video fills it with cover */
@@ -291,7 +298,7 @@
       aspect-ratio: 9 / 16;   /* updated by JS on aspect ratio change */
       background: #000;
       overflow: hidden;
-      box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 8px 32px rgba(0,0,0,.7);
+      box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 0 0 4px rgba(59,130,246,.1), 0 16px 48px rgba(0,0,0,.85);
     }
     /* Video fills the frame exactly — mimics render crop */
     .evVideo { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -302,19 +309,23 @@
     .evSubInner { text-align: center; line-height: 1.15; max-width: 90%; }
     .evSubWord { display: inline; }
     .evTextLayersOverlay { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
-    .evTextLayerPreview { position: absolute; max-width: 88%; white-space: pre-wrap; line-height: 1.2; pointer-events: auto; cursor: move; user-select: none; -webkit-user-select: none; }
-    .evTextLayerPreview.evTLSelected { outline: 2px dashed rgba(59,130,246,.85); outline-offset: 4px; }
+    .evTextLayerPreview { position: absolute; max-width: 88%; white-space: pre-wrap; line-height: 1.2; pointer-events: auto; cursor: move; user-select: none; -webkit-user-select: none; border-radius: 2px; }
+    .evTextLayerPreview:hover:not(.evTLSelected) { outline: 1px solid rgba(148,163,184,.4); outline-offset: 5px; }
+    .evTextLayerPreview.evTLSelected { outline: none; box-shadow: 0 0 0 1px rgba(59,130,246,.45), 0 0 16px rgba(59,130,246,.18); }
+    .evTLSelected::before { content: ''; position: absolute; inset: -7px; border: 2px solid rgba(59,130,246,.9); border-radius: 3px; pointer-events: none; z-index: 1; }
+    .evTLSelected::after { content: ''; position: absolute; inset: -7px; pointer-events: none; z-index: 1; background: radial-gradient(circle at 0% 0%, #60a5fa 5px, transparent 5px), radial-gradient(circle at 100% 0%, #60a5fa 5px, transparent 5px), radial-gradient(circle at 0% 100%, #60a5fa 5px, transparent 5px), radial-gradient(circle at 100% 100%, #60a5fa 5px, transparent 5px); }
     .evLayerItem { display:flex; align-items:center; gap:6px; justify-content:space-between; padding:6px 8px; border:1px solid var(--card-border); border-radius:8px; background:#0f172a66; }
     .evLayerItem.active { border-color:#3b82f6; box-shadow:0 0 0 1px #3b82f655 inset; }
     .evTinyBtn { font-size:11px; padding:3px 7px; border-radius:6px; border:1px solid var(--card-border); background:#0f172a; color:var(--text); cursor:pointer; }
     /* Timeline strip */
-    .evTimeline { flex-shrink: 0; height: 58px; background: #070a14; border-top: 1px solid #253550; display: flex; align-items: center; padding: 0 14px; gap: 10px; }
-    .evTimelineBarWrap { flex: 1; position: relative; height: 10px; background: #1a2d42; border-radius: 999px; cursor: pointer; }
+    .evTimeline { flex-shrink: 0; height: 64px; background: #070a14; border-top: 2px solid #2a3f60; display: flex; align-items: center; padding: 0 14px; gap: 10px; overflow: hidden; }
+    .evTimelineBarWrap { flex: 1; position: relative; height: 12px; background: #1a2d42; border-radius: 999px; cursor: pointer; }
     .evTimelineProgress { position: absolute; left: 0; top: 0; height: 100%; background: #3b82f6; border-radius: 999px; pointer-events: none; }
-    .evTrimRegion { position: absolute; top: 0; height: 100%; background: rgba(16,185,129,.25); border-left: 2px solid #10b981; border-right: 2px solid #10b981; pointer-events: none; }
+    .evTimelineProgress::after { content: ''; position: absolute; right: 0; top: 50%; transform: translate(50%, -50%); width: 14px; height: 14px; border-radius: 50%; background: #60a5fa; border: 2px solid #fff; box-shadow: 0 0 0 2px rgba(96,165,250,.4), 0 2px 6px rgba(0,0,0,.5); pointer-events: none; }
+    .evTrimRegion { position: absolute; top: 0; height: 100%; background: rgba(16,185,129,.38); border-left: 2px solid #10b981; border-right: 2px solid #10b981; pointer-events: none; }
     .evTimeText { font-size: 11px; color: var(--text-muted); min-width: 60px; text-align: center; }
     /* Right panel — width controlled by JS drag; divider replaces border-left */
-    .evRight { display: flex; flex-direction: column; background: var(--card-bg); min-height: 0; width: 400px; flex-shrink: 0; min-width: 300px; max-width: 700px; }
+    .evRight { display: flex; flex-direction: column; background: var(--card-bg); min-height: 0; width: 400px; flex-shrink: 0; min-width: 300px; max-width: 700px; overflow: hidden; }
     /* Divider between preview and controls */
     .evDivider { flex-shrink: 0; width: 6px; cursor: col-resize; background: transparent; position: relative; }
     .evDivider::before { content: ''; position: absolute; left: 50%; top: 15%; bottom: 15%; width: 2px; background: #253550; transform: translateX(-50%); opacity: .5; transition: opacity .15s, background .15s; }
@@ -322,7 +333,7 @@
     /* Lock cursor and selection during active drag */
     .evLayout.resizing { user-select: none; cursor: col-resize; }
     .evLayout.resizing * { cursor: col-resize !important; }
-    .evRightHeader { padding: 12px 16px; border-bottom: 1px solid var(--card-border); background: var(--sidebar-bg); flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+    .evRightHeader { padding: 12px 16px; border-bottom: 1px solid var(--card-border); background: var(--sidebar-bg); flex-shrink: 0; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 0 rgba(59,130,246,.1); }
     .evRightTitle { font-size: 15px; font-weight: 700; color: #f1f5f9; flex: 1; }
     .evSourceName { font-size: 11px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .evInfoStrip { display: flex; flex-direction: column; gap: 3px; margin-top: 5px; }
@@ -331,16 +342,16 @@
     .evInfoRow .evInfoVal { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .evSessionDot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 6px; background: var(--text-muted); transition: background .3s; }
     .evSessionDot.active { background: var(--success); }
-    .evRightScroll { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
-    .evSection { background: linear-gradient(180deg, #0f1b2e 0%, #0d1526 100%); border: 1px solid var(--card-border); border-top-color: #1e3050; border-radius: var(--radius-sm); padding: 12px 14px; }
-    .evSectionTitle { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 10px; }
+    .evRightScroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+    .evSection { background: linear-gradient(180deg, #0f1b2e 0%, #0d1526 100%); border: 1px solid var(--card-border); border-top-color: #1e3050; border-radius: var(--radius-sm); padding: 12px 14px; overflow: hidden; }
+    .evSectionTitle { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.05); }
     .evTrimBarWrap { position: relative; height: 32px; margin: 6px 0; }
     .evTrimTrack { position: absolute; top: 50%; left: 0; right: 0; height: 6px; background: #1e2d45; border-radius: 999px; transform: translateY(-50%); }
     .evTrimFill { position: absolute; top: 50%; height: 6px; background: linear-gradient(90deg,#3b82f6,#10b981); border-radius: 999px; transform: translateY(-50%); }
     .evTrimBarWrap input[type=range] { position: absolute; width: 100%; height: 100%; top: 0; left: 0; appearance: none; -webkit-appearance: none; background: transparent; pointer-events: none; margin: 0; outline: none; }
     .evTrimBarWrap input[type=range]::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #3b82f6; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(59,130,246,.5); cursor: pointer; pointer-events: all; }
     .evTrimBarWrap input[type=range]::-webkit-slider-runnable-track { background: transparent; }
-    .evFooter { padding: 12px 16px; border-top: 1px solid var(--card-border); background: var(--sidebar-bg); flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+    .evFooter { padding: 12px 16px; border-top: 1px solid var(--card-border); background: var(--sidebar-bg); flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     /* color picker */
     .evColorPicker { width: 38px; height: 34px; border-radius: 8px; border: 1px solid var(--card-border); cursor: pointer; background: none; padding: 2px; }
 

@@ -250,6 +250,7 @@ function evTextLayerDragStart(e, layerId) {
   const layer = _ev.textLayers[layerIdx];
   _ev.selectedTextLayer = layerIdx;
   evRenderTextLayerList();
+  evRenderTextLayerPreview();
   const overlay = qs('evTextLayersOverlay');
   const rect = overlay.getBoundingClientRect();
   const startClientX = e.clientX, startClientY = e.clientY;
