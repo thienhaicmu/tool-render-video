@@ -15,6 +15,7 @@ function resetRenderSessionUi(){
   if(qs('event_log_render')) qs('event_log_render').innerHTML = '';
   setHeaderJob('No active job');
   qs('job_stage_pill').textContent = 'Idle';
+  if (qs('job_stage_pill')) qs('job_stage_pill').dataset.stage = '';
   qs('job_title').textContent = 'No active job';
   qs('job_meta_1').textContent = 'Channel - | Source -';
   qs('job_meta_2').textContent = '0/0 parts done | 0 scenes';
@@ -23,8 +24,11 @@ function resetRenderSessionUi(){
   qs('job_bar').style.width = '0%';
   qs('action_title').textContent = 'Waiting for job';
   qs('action_state').textContent = 'idle';
+  if (qs('action_state')) qs('action_state').dataset.status = 'idle';
   qs('action_message').textContent = 'No active processing task.';
   qs('action_meta').textContent = 'Elapsed 00:00 | Updated -';
+  const _vmReset = qs('view_monitor');
+  if (_vmReset) _vmReset.dataset.jmStatus = 'idle';
   renderPipeline('queued', 'queued');
   renderSteps(0);
   renderParts([]);
@@ -95,6 +99,13 @@ function setActionState(job){
   qs('action_state').textContent = status || 'running';
   qs('action_message').textContent = job.message || stageLabel(stage);
   qs('action_meta').textContent = `Elapsed ${elapsed} | Updated ${new Date().toLocaleTimeString()}`;
+  // Phase 6: propagate status/stage as data attributes for CSS visual state
+  const _vm = qs('view_monitor');
+  if (_vm) _vm.dataset.jmStatus = status || 'running';
+  const _stEl = qs('action_state');
+  if (_stEl) _stEl.dataset.status = status || 'running';
+  const _pill = qs('job_stage_pill');
+  if (_pill) _pill.dataset.stage = stage;
 }
 function pipelineStateByStage(stage, status){
   const s = (stage || '').toLowerCase();
@@ -382,5 +393,38 @@ function renderPartFocus(items, summary){
   }).join('');
 
   box.innerHTML = `<div class="partFocusTitle">Live Part Tracking</div>${activeBarHtml}${stripHtml}<div class="partsProgressGrid">${cardsHtml}</div>`;
+}
+
+function updateStatusBar(job, summary) {
+  const dot   = qs('sbDot');
+  const label = qs('sbLabel');
+  const sumEl = qs('sbSummary');
+  const pctEl = qs('sbPct');
+  const area  = qs('sbJobArea');
+  if (!dot || !label) return;
+
+  const status    = (job.status  || '').toLowerCase();
+  const stage     = (job.stage   || '').toLowerCase();
+  const pct       = Math.round(Number(job.progress_percent || 0));
+  const isRunning = status === 'running';
+  const isDone    = status === 'completed';
+  const isFailed  = status === 'failed';
+
+  dot.className = 'statusDot ' + (isFailed ? 'statusDotFailed' : isRunning ? 'statusDotRunning' : 'statusDotReady');
+  label.textContent = isDone ? 'Done' : isFailed ? 'Failed' : isRunning ? stageLabelPlain(stage) : 'Idle';
+
+  if (sumEl) {
+    if (summary && summary.total_parts > 0) {
+      const d = summary.completed_parts || 0;
+      const t = summary.total_parts || 0;
+      const a = summary.processing_parts > 0 ? ` · ${summary.processing_parts} active` : '';
+      sumEl.textContent = `— ${d}/${t} parts${a}`;
+    } else {
+      sumEl.textContent = '';
+    }
+  }
+
+  if (pctEl) pctEl.textContent = (isRunning || isDone) ? pct + '%' : '';
+  if (area)  area.style.cursor = currentJobId ? 'pointer' : 'default';
 }
 

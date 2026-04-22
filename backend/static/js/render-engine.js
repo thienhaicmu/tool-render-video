@@ -204,6 +204,7 @@ function _applyJobUpdate(job, parts, summary){
 
   renderParts(parts, s);
   renderPartFocus(parts, s);
+  updateStatusBar(job, s);
   const doneCount = s.total_parts ? s.completed_parts : parts.filter(p => (p.status || '').toLowerCase() === 'done').length;
   const totalCount = s.total_parts || parts.length;
   const parallelNote = s.processing_parts > 1 ? ` | ${s.processing_parts} parallel` : '';

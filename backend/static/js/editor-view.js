@@ -79,6 +79,18 @@ function evSelectTextLayer(index) {
   _ev.selectedTextLayer = index;
   evRenderTextLayerList();
   evRenderTextLayerPreview();
+  _evFlashSelectedLayer();
+}
+
+function _evFlashSelectedLayer() {
+  const overlay = qs('evTextLayersOverlay');
+  if (!overlay) return;
+  const sel = overlay.querySelector('.evTLSelected');
+  if (!sel) return;
+  sel.classList.remove('evTLFlash');
+  void sel.offsetWidth;
+  sel.classList.add('evTLFlash');
+  setTimeout(() => sel.classList.remove('evTLFlash'), 170);
 }
 
 function evMoveTextLayer(index, dir) {
@@ -105,6 +117,7 @@ function evDeleteTextLayer(index) {
 function evRenderTextLayerList() {
   const box = qs('evTextLayerList');
   if (!box) return;
+  document.getElementById('appInspector')?.classList.toggle('inspHasLayers', !!_ev.textLayers.length);
   if (!_ev.textLayers.length) {
     box.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">No text layer configured.</div>';
     const editor = qs('evTextLayerEditor');
@@ -240,6 +253,7 @@ function evRenderTextLayerPreview() {
     const selClass = isSelected ? ' evTLSelected' : '';
     return `<div class="evTextLayerPreview${selClass}" onmousedown="evTextLayerDragStart(event,'${l.id}')" style="${style.join(';')}">${esc(String(l.text || ''))}</div>`;
   }).join('');
+  overlay.classList.toggle('evHasSelection', !!overlay.querySelector('.evTLSelected'));
 }
 
 // ── TEXT LAYER DRAG ───────────────────────────────────────────────────────────
@@ -252,6 +266,8 @@ function evTextLayerDragStart(e, layerId) {
   evRenderTextLayerList();
   evRenderTextLayerPreview();
   const overlay = qs('evTextLayersOverlay');
+  if (overlay) overlay.classList.add('evTLDragging');
+  document.body.style.cursor = 'grabbing';
   const rect = overlay.getBoundingClientRect();
   const startClientX = e.clientX, startClientY = e.clientY;
   const startXPct = Number(layer.x_percent ?? 50);
@@ -268,6 +284,9 @@ function evTextLayerDragStart(e, layerId) {
   function onUp() {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    const dragOverlay = qs('evTextLayersOverlay');
+    if (dragOverlay) dragOverlay.classList.remove('evTLDragging');
+    document.body.style.cursor = '';
     evRenderTextLayerList();
   }
   document.addEventListener('mousemove', onMove);
@@ -841,12 +860,12 @@ async function startRenderFromEditor() {
 
   const _renderResult = await _submitRenderPayload(payload, false);
   if (_renderResult && _renderResult.ok) {
-    qs('evStatusLine').textContent = 'Render started ✓ — chuyển sang Jobs…';
+    qs('evStatusLine').textContent = 'Render started ✓ — opening monitor…';
     qs('evStatusLine').style.color = 'var(--success)';
-    showToast('Render queued ✓', 'success'); // status line disappears on view switch; toast persists
+    showToast('Render queued ✓', 'success');
     const video = qs('evVideo');
     if (video) { video.pause(); video.src = ''; video.style.display = 'none'; }
-    setView('render');
+    setView('monitor');
   } else {
     const errMsg = (_renderResult && _renderResult.error) || 'Không thể gửi yêu cầu render.';
     const isSessionErr = /editor session|session.*expired|session.*not found|no active session/i.test(errMsg);

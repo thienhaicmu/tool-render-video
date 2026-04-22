@@ -13,29 +13,187 @@
 </head>
 <body>
 <div class="appShell">
-  <aside class="sidebar">
-    <div class="brandWrap">
+  <header class="appTopBar">
+    <div class="appTopBarBrand">
       <div class="brandBadge">NM</div>
-      <div>
-        <div class="brandTitle">Render Studio</div>
-        <div class="brandSub">Local AI render platform</div>
-      </div>
+      <div class="brandTitle">Render Studio</div>
     </div>
-    <nav class="navList">
-      <button class="navItem active" data-view="render">Render</button>
+    <nav class="appTopBarNav">
+      <button class="navItem active" data-view="render">Studio</button>
       <button class="navItem" data-view="upload">Upload</button>
       <button class="navItem" data-view="channels">Channels</button>
       <button class="navItem" data-view="reports">Reports</button>
       <button class="navItem" data-view="settings">Settings</button>
     </nav>
-  </aside>
+    <div class="appTopBarChips">
+      <div class="pill">Local AI · FastAPI</div>
+      <div class="pill" id="warmup_chip" title="Click to see details" onclick="toggleWarmupPanel()" style="cursor:pointer">⏳ Loading models...</div>
+    </div>
+  </header>
+  <nav class="sidebar" id="sidebarPanel">
+    <div class="sidebarHeader">
+      <div class="sidebarTitle">Render Studio</div>
+    </div>
+    <div class="sidebarScrollable">
+
+      <section id="card_render_setup" class="setupCard">
+
+        <!-- Hidden fields: read by startRender() — IDs must not change -->
+        <input type="hidden" id="aspect_ratio" value="3:4">
+        <input type="hidden" id="render_profile" value="balanced">
+        <input type="hidden" id="render_device" value="auto">
+        <input type="hidden" id="output_fps" value="60">
+        <input type="hidden" id="playback_speed" value="1.07">
+        <input type="hidden" id="min_part_sec" value="70">
+        <input type="hidden" id="max_part_sec" value="180">
+        <input type="hidden" id="max_export_parts" value="0">
+        <input type="hidden" id="part_order" value="viral">
+        <input type="hidden" id="frame_scale_x" value="100">
+        <input type="hidden" id="frame_scale_y" value="106">
+        <input type="hidden" id="subtitle_style" value="pro_karaoke">
+        <input type="hidden" id="transform_preset" value="slight">
+        <input type="hidden" id="motion_aware_crop" value="1">
+        <input type="hidden" id="add_subtitle" value="1">
+        <input type="hidden" id="reup_mode" value="0">
+        <input type="hidden" id="cleanup_temp_files" value="1">
+        <input type="hidden" id="reup_bgm_enable" value="0">
+        <input type="hidden" id="reup_bgm_path" value="">
+        <input type="hidden" id="reup_bgm_gain" value="0.18">
+
+        <div class="setupGroups">
+
+          <!-- ① Source -->
+          <div class="setupGroup">
+            <div class="setupGroupTitle">Source</div>
+            <div class="formGrid">
+              <label class="field">
+                <span class="fieldLabel">Source Type</span>
+                <select class="fieldInput" id="source_mode">
+                  <option value="youtube" selected>YouTube Link</option>
+                  <option value="local">Local Video File</option>
+                </select>
+              </label>
+              <div></div>
+              <label class="field fieldSpan2" id="field_youtube_url">
+                <span class="fieldLabel">YouTube URL</span>
+                <input class="fieldInput" id="youtube_url" placeholder="https://www.youtube.com/watch?v=...">
+              </label>
+              <label class="field fieldSpan2 hiddenView" id="field_source_video_path">
+                <span class="fieldLabel">Local Video</span>
+                <div class="actionsRow" style="margin-top:0">
+                  <input class="fieldInput" id="source_video_path" placeholder="No file selected" readonly>
+                  <button type="button" class="secondaryButton" id="pick_local_video_btn" onclick="browseLocalVideo()">Choose Video</button>
+                </div>
+                <div class="sectionSubtitle" id="source_video_name" style="margin-top:6px">No video selected.</div>
+                <input id="local_video_file_picker" type="file" accept="video/*" class="hiddenView">
+              </label>
+            </div>
+          </div>
+
+          <!-- ② Output -->
+          <div class="setupGroup">
+            <div class="setupGroupTitle">Output</div>
+            <div class="formGrid">
+              <label class="field">
+                <span class="fieldLabel">Output Mode</span>
+                <select class="fieldInput" id="output_mode">
+                  <option value="channel">By Channel</option>
+                  <option value="manual" selected>Manual Folder</option>
+                </select>
+              </label>
+              <div></div>
+              <label class="field fieldSpan2" id="field_render_channels_root">
+                <span class="fieldLabel">Channels Root Folder</span>
+                <div class="actionsRow" style="margin-top:0">
+                  <input class="fieldInput" id="render_channels_root" placeholder="Select root folder containing channels" readonly disabled>
+                  <button type="button" class="ghostButton" onclick="pickChannelsRoot('render')">Choose Folder</button>
+                </div>
+              </label>
+              <label class="field fieldSpan2" id="field_channel_code">
+                <span class="fieldLabel">Channel</span>
+                <select class="fieldInput" id="channel_code"><option value="">Select channel</option></select>
+              </label>
+              <label class="field fieldSpan2" id="field_render_output_dir">
+                <span class="fieldLabel">Output Folder</span>
+                <input class="fieldInput" id="render_output_dir" placeholder="Auto from channel" readonly>
+                <div class="sectionSubtitle" id="render_output_dir_hint" style="margin-top:6px">Auto-filled when channel is selected.</div>
+              </label>
+              <label class="field fieldSpan2 hiddenView" id="field_manual_output_dir">
+                <span class="fieldLabel">Output Folder</span>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input class="fieldInput" id="manual_output_dir" placeholder="e.g. D:\videos\output" style="flex:1">
+                  <button type="button" id="btn_pick_output_dir" class="btn btnSecondary" style="white-space:nowrap;padding:0 14px;height:38px">📁 Choose</button>
+                </div>
+                <div class="sectionSubtitle" id="manual_output_dir_hint" style="margin-top:6px">All output saved here.</div>
+              </label>
+            </div>
+          </div>
+
+          <!-- ③ Render Settings -->
+          <div class="setupGroup">
+            <div class="setupGroupTitle">Render Settings</div>
+            <div class="formGrid formGrid3">
+              <label class="field">
+                <span class="fieldLabel">Aspect Ratio</span>
+                <select class="fieldInput" onchange="document.getElementById('aspect_ratio').value=this.value">
+                  <option value="3:4" selected>3:4 Vertical</option>
+                  <option value="9:16">9:16 TikTok Full</option>
+                  <option value="1:1">1:1 Square</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Render Profile</span>
+                <select class="fieldInput" onchange="document.getElementById('render_profile').value=this.value">
+                  <option value="fast">Fast</option>
+                  <option value="balanced" selected>Balanced</option>
+                  <option value="quality">Quality</option>
+                  <option value="best">Best (slowest)</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Encoder</span>
+                <select class="fieldInput" onchange="document.getElementById('render_device').value=this.value">
+                  <option value="auto" selected>Auto (detect GPU)</option>
+                  <option value="gpu">GPU (NVENC)</option>
+                  <option value="cpu">CPU only</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Min Clip (sec)</span>
+                <input class="fieldInput" type="number" min="20" max="600" value="70" onchange="document.getElementById('min_part_sec').value=this.value">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Max Clip (sec)</span>
+                <input class="fieldInput" type="number" min="30" max="900" value="180" onchange="document.getElementById('max_part_sec').value=this.value">
+              </label>
+              <div></div>
+            </div>
+          </div>
+
+        </div><!-- /setupGroups -->
+
+        <div class="setupActions">
+          <div class="resumeRow">
+            <button class="ghostButton" onclick="resumeRender()">↺ Resume Job</button>
+            <input class="fieldInput" id="resume_job_id" placeholder="Job ID" style="max-width:180px">
+          </div>
+          <button class="primaryButton" id="start_render_btn" onclick="startRender()">▶ Open Editor</button>
+        </div>
+
+      </section><!-- /card_render_setup -->
+
+    </div><!-- /sidebarScrollable -->
+  </nav>
 
   <main class="mainArea" id="mainArea">
 
     <!-- ═══════════════════════════════════════════════════════════════
-         EDITOR VIEW — full-screen source editor (local/YouTube)
+         EDITOR VIEW — in-layout center-stage editor (local/YouTube)
     ════════════════════════════════════════════════════════════════ -->
     <div id="view_editor" class="evLayout hiddenView">
+
+      <!-- Workspace: preview + controls (above timeline) -->
+      <div class="evWorkspace">
 
       <!-- LEFT: Video Preview -->
       <div class="evLeft">
@@ -71,429 +229,37 @@
           </div><!-- /evVideoFrame -->
         </div>
 
-        <!-- Timeline bar -->
-        <div class="evTimeline">
-          <span class="evTimeText" id="evCurTime">0:00:00</span>
-          <div class="evTimelineBarWrap" id="evTimelineBarWrap" onclick="evSeekClick(event)">
-            <div class="evTimelineProgress" id="evTimelineProgress" style="width:0%"></div>
-            <div class="evTrimRegion" id="evTrimRegion" style="left:0%;width:100%"></div>
-          </div>
-          <span class="evTimeText" id="evTotalTime">0:00:00</span>
-          <button class="ghostButton" style="padding:5px 10px;font-size:12px" onclick="evTogglePlay()" id="evPlayBtn">▶</button>
+      </div><!-- /evLeft -->
+
+
+      </div><!-- /evWorkspace -->
+
+      <!-- Timeline — full-width, anchored at bottom of editor -->
+      <div class="evTimeline">
+        <span class="evTimeText" id="evCurTime">0:00:00</span>
+        <div class="evTimelineBarWrap" id="evTimelineBarWrap" onclick="evSeekClick(event)">
+          <div class="evTimelineProgress" id="evTimelineProgress" style="width:0%"></div>
+          <div class="evTrimRegion" id="evTrimRegion" style="left:0%;width:100%"></div>
         </div>
+        <span class="evTimeText" id="evTotalTime">0:00:00</span>
+        <button class="ghostButton" style="padding:5px 10px;font-size:12px" onclick="evTogglePlay()" id="evPlayBtn">▶</button>
       </div>
 
-      <!-- Resizable divider — drag to adjust preview ↔ controls width -->
-      <div class="evDivider" id="evDivider"></div>
-
-      <!-- RIGHT: Controls Panel -->
-      <div class="evRight">
-        <div class="evRightHeader">
-          <div style="min-width:0;flex:1">
-            <div class="evRightTitle">🎬 Video Editor</div>
-            <div class="evSourceName" id="evSourceName">Chưa chọn nguồn</div>
-            <div class="evInfoStrip">
-              <div class="evInfoRow">
-                <span class="evSessionDot" id="evSessionDot"></span>
-                <span class="evInfoLabel">Session:</span>
-                <span class="evInfoVal" id="evInfoSession">—</span>
-              </div>
-              <div class="evInfoRow">
-                <span class="evInfoLabel">Output:</span>
-                <span class="evInfoVal" id="evInfoOutput">—</span>
-              </div>
-            </div>
-          </div>
-          <button class="ghostButton" style="font-size:12px;padding:5px 10px" onclick="cancelEditorView()">← Huỷ</button>
-        </div>
-
-        <div class="evRightScroll">
-
-          <!-- ① Trim -->
-          <div class="evSection">
-            <div class="evSectionTitle">✂️ Trim Video</div>
-            <div class="evTrimBarWrap" id="evTrimBarWrap">
-              <div class="evTrimTrack"></div>
-              <div class="evTrimFill" id="evTrimFill" style="left:0%;width:100%"></div>
-              <input type="range" id="evTrimInSlider"  min="0" max="1000" value="0"    step="1" oninput="evTrimSliderChange()">
-              <input type="range" id="evTrimOutSlider" min="0" max="1000" value="1000" step="1" oninput="evTrimSliderChange()">
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
-              <label class="field">
-                <span class="fieldLabel">⏮ Bắt đầu từ (giây)</span>
-                <input class="fieldInput" type="number" id="evTrimInSec" min="0" step="1" value="0" oninput="evTrimSecChange()">
-              </label>
-              <label class="field">
-                <span class="fieldLabel">⏭ Kết thúc tại (giây)</span>
-                <input class="fieldInput" type="number" id="evTrimOutSec" min="0" step="1" placeholder="hết video" oninput="evTrimSecChange()">
-              </label>
-            </div>
-            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
-              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetTrimIn()">📍 IN tại playhead</button>
-              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetTrimOut()">📍 OUT tại playhead</button>
-              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evResetTrim()">↺ Reset</button>
-              <span id="evTrimInfo" style="margin-left:auto;font-size:11px;color:var(--text-muted)">Toàn bộ video</span>
-            </div>
-          </div>
-
-          <!-- ② Subtitle Style -->
-          <div class="evSection">
-            <div class="evSectionTitle">💬 Subtitle Style (Live Preview)</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <label class="field">
-                <span class="fieldLabel">Font chữ</span>
-                <select class="fieldInput" id="evSubFont" onchange="evUpdateSubPreview()">
-                  <option value="Bungee" selected>Bungee (Viral 🔥)</option>
-                  <option value="Anton">Anton (Bold)</option>
-                  <option value="Bebas Neue">Bebas Neue (Caps)</option>
-                  <option value="Oswald">Oswald (Compact)</option>
-                  <option value="Impact">Impact (Punchy)</option>
-                  <option value="Arial Black">Arial Black (Heavy)</option>
-                  <option value="Segoe UI Black">Segoe UI Black (Clean Bold)</option>
-                  <option value="Archivo Black">Archivo Black (Viral)</option>
-                  <option value="Teko">Teko (Tall)</option>
-                  <option value="Luckiest Guy">Luckiest Guy (Fun)</option>
-                  <option value="Montserrat">Montserrat (Clean)</option>
-                  <option value="Roboto">Roboto (Modern)</option>
-                </select>
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Cỡ chữ: <strong id="evSubSizeVal">46</strong>px</span>
-                <input type="range" id="evSubSize" min="24" max="120" value="46" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
-              </label>
-              <label class="field">
-                <span class="fieldLabel">🎨 Màu chữ chính</span>
-                <div style="display:flex;gap:8px;align-items:center">
-                  <input type="color" id="evSubColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSubPreview()">
-                  <span style="font-size:12px;color:var(--text-muted)">Màu nền tất cả từ</span>
-                </div>
-              </label>
-              <label class="field">
-                <span class="fieldLabel">✨ Màu highlight (karaoke)</span>
-                <div style="display:flex;gap:8px;align-items:center">
-                  <input type="color" id="evSubHighlight" value="#ffff00" class="evColorPicker" oninput="evUpdateSubPreview()">
-                  <span style="font-size:12px;color:var(--text-muted)">Từ đang nói</span>
-                </div>
-              </label>
-              <label class="field">
-                <span class="fieldLabel">📍 Vị trí Y (% từ dưới): <strong id="evSubPosVal">15</strong>%</span>
-                <input type="range" id="evSubPos" min="5" max="60" value="15" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
-              </label>
-              <label class="field">
-                <span class="fieldLabel">◎ Viền (outline): <strong id="evSubOutlineVal">3</strong>px</span>
-                <input type="range" id="evSubOutline" min="0" max="8" value="3" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
-              </label>
-            </div>
-            <div style="margin-top:10px;padding:10px;background:#000;border-radius:8px;text-align:center;min-height:60px;display:flex;align-items:center;justify-content:center" id="evSubStaticPreview">
-              <span id="evSubStaticText" style="font-family:'Bungee';font-size:28px;color:#fff;-webkit-text-stroke:2px #000">Preview subtitle</span>
-            </div>
-          </div>
-
-          <div class="evSection">
-            <div class="evSectionTitle">📝 Text Overlay Layers</div>
-            <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
-              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evAddTextLayer()">+ Add Text</button>
-              <span style="font-size:11px;color:var(--text-muted)">Max 8 layers. Top item renders above lower item.</span>
-            </div>
-            <div id="evTextLayerList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
-            <div id="evTextLayerEditor" style="display:none">
-
-              <!-- Style Presets -->
-              <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-                <span style="font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;flex:0 0 auto">Preset:</span>
-                <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('default')">Default</button>
-                <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('bold_white')">Bold White</button>
-                <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('yellow_sub')">Yellow Subtitle</button>
-                <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('meme')">Meme</button>
-              </div>
-
-              <!-- Group: Text -->
-              <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Text</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-                <label class="field" style="grid-column:1 / -1">
-                  <span class="fieldLabel">Content</span>
-                  <textarea class="fieldInput" id="evTxtContent" rows="2" placeholder="Type overlay text..." oninput="evUpdateSelectedTextLayer()"></textarea>
-                </label>
-                <label class="field">
-                  <span class="fieldLabel">Font</span>
-                  <select class="fieldInput" id="evTxtFont" onchange="evUpdateSelectedTextLayer()">
-                    <option value="Bungee" selected>Bungee (Viral 🔥)</option>
-                    <option value="Anton">Anton (Bold)</option>
-                    <option value="Bebas Neue">Bebas Neue (Caps)</option>
-                    <option value="Oswald">Oswald (Compact)</option>
-                    <option value="Impact">Impact (Punchy)</option>
-                    <option value="Arial Black">Arial Black (Heavy)</option>
-                    <option value="Segoe UI Black">Segoe UI Black (Clean Bold)</option>
-                    <option value="Archivo Black">Archivo Black (Viral)</option>
-                    <option value="Teko">Teko (Tall)</option>
-                    <option value="Luckiest Guy">Luckiest Guy (Fun)</option>
-                    <option value="Montserrat">Montserrat (Clean)</option>
-                    <option value="Roboto">Roboto (Modern)</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span class="fieldLabel">Font size</span>
-                  <input class="fieldInput" type="number" id="evTxtSize" min="12" max="300" value="48" oninput="evUpdateSelectedTextLayer()">
-                </label>
-                <label class="field">
-                  <span class="fieldLabel">Color</span>
-                  <input type="color" id="evTxtColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
-                </label>
-                <div style="display:none"><!-- alignment field hidden: stored but has no render effect yet -->
-                  <label class="field">
-                    <span class="fieldLabel">Alignment</span>
-                    <select class="fieldInput" id="evTxtAlign" onchange="evUpdateSelectedTextLayer()">
-                      <option value="left">left</option>
-                      <option value="center" selected>center</option>
-                      <option value="right">right</option>
-                    </select>
-                  </label>
-                </div>
-                <label style="display:flex;align-items:center;gap:8px;align-self:end;padding-bottom:4px">
-                  <input type="checkbox" id="evTxtBold" onchange="evUpdateSelectedTextLayer()">
-                  <span style="font-size:12px;color:var(--text)">Bold</span>
-                </label>
-              </div>
-
-              <!-- Group: Timing -->
-              <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Timing</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-                <label class="field">
-                  <span class="fieldLabel">Start time (s)</span>
-                  <input class="fieldInput" type="number" id="evTxtStartTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
-                </label>
-                <label class="field">
-                  <span class="fieldLabel">End time (s, 0=full)</span>
-                  <input class="fieldInput" type="number" id="evTxtEndTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
-                </label>
-              </div>
-
-              <!-- Group: Position -->
-              <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Position</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-                <label class="field">
-                  <span class="fieldLabel">Preset</span>
-                  <select class="fieldInput" id="evTxtPos" onchange="evApplyLayerPresetPosition()">
-                    <option value="top-left">top-left</option>
-                    <option value="top-center">top-center</option>
-                    <option value="top-right">top-right</option>
-                    <option value="center">center</option>
-                    <option value="bottom-left">bottom-left</option>
-                    <option value="bottom-center" selected>bottom-center</option>
-                    <option value="bottom-right">bottom-right</option>
-                  </select>
-                </label>
-                <div></div>
-                <label class="field">
-                  <span class="fieldLabel">X (%)</span>
-                  <input class="fieldInput" type="number" id="evTxtX" min="0" max="100" step="1" value="50" oninput="evUpdateSelectedTextLayer()">
-                </label>
-                <label class="field">
-                  <span class="fieldLabel">Y (%)</span>
-                  <input class="fieldInput" type="number" id="evTxtY" min="0" max="100" step="1" value="90" oninput="evUpdateSelectedTextLayer()">
-                </label>
-                <div style="grid-column:1 / -1;display:flex;gap:6px;align-items:center">
-                  <span style="font-size:10px;color:var(--text-dim);flex:0 0 auto">Align X:</span>
-                  <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="evSetLayerX(5)">Left</button>
-                  <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="evSetLayerX(50)">Center</button>
-                  <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="evSetLayerX(95)">Right</button>
-                </div>
-              </div>
-
-              <!-- Group: Style -->
-              <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Style</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                <label style="display:flex;align-items:center;gap:8px">
-                  <input type="checkbox" id="evTxtOutlineEnabled" checked onchange="evUpdateSelectedTextLayer()">
-                  <span style="font-size:12px;color:var(--text)">Outline</span>
-                </label>
-                <label class="field">
-                  <span class="fieldLabel">Outline px</span>
-                  <input class="fieldInput" type="number" id="evTxtOutlineThickness" min="0" max="8" value="2" oninput="evUpdateSelectedTextLayer()">
-                </label>
-                <label style="display:flex;align-items:center;gap:8px">
-                  <input type="checkbox" id="evTxtShadowEnabled" onchange="evUpdateSelectedTextLayer()">
-                  <span style="font-size:12px;color:var(--text)">Shadow</span>
-                </label>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                  <label class="field">
-                    <span class="fieldLabel">Shadow X</span>
-                    <input class="fieldInput" type="number" id="evTxtShadowX" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
-                  </label>
-                  <label class="field">
-                    <span class="fieldLabel">Shadow Y</span>
-                    <input class="fieldInput" type="number" id="evTxtShadowY" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
-                  </label>
-                </div>
-                <label style="display:flex;align-items:center;gap:8px">
-                  <input type="checkbox" id="evTxtBgEnabled" onchange="evUpdateSelectedTextLayer()">
-                  <span style="font-size:12px;color:var(--text)">Background box</span>
-                </label>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                  <label class="field">
-                    <span class="fieldLabel">BG color</span>
-                    <input type="color" id="evTxtBgColor" value="#000000" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
-                  </label>
-                  <label class="field">
-                    <span class="fieldLabel">BG padding</span>
-                    <input class="fieldInput" type="number" id="evTxtBgPadding" min="0" max="64" value="10" oninput="evUpdateSelectedTextLayer()">
-                  </label>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          <!-- ③ Volume -->
-          <div class="evSection">
-            <div class="evSectionTitle">🔊 Âm lượng</div>
-            <div style="display:flex;gap:10px;align-items:center">
-              <input type="range" id="evVolume" min="0" max="200" value="100" step="1" style="flex:1;accent-color:#3b82f6" oninput="evVolumeSliderChange()">
-              <input class="fieldInput" type="number" id="evVolumeNum" min="0" max="200" value="100" step="5" style="width:68px;text-align:center;padding:6px 8px" oninput="evVolumeNumChange()">
-              <span style="color:var(--text-muted);font-size:12px">%</span>
-            </div>
-            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(50)">50%</button>
-              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(80)">80%</button>
-              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(100)">100%</button>
-              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(120)">+20%</button>
-              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(150)">+50%</button>
-            </div>
-          </div>
-
-          <!-- ④ Render Settings -->
-          <div class="evSection">
-            <div class="evSectionTitle">⚙️ Cài đặt Render</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <label class="field"><span class="fieldLabel">Tỉ lệ khung hình</span>
-                <select class="fieldInput" id="evAspectRatio" onchange="evUpdateAspectRatio()">
-                  <option value="3:4" selected>3:4 Vertical</option>
-                  <option value="9:16">9:16 TikTok Full</option>
-                  <option value="1:1">1:1 Square</option>
-                </select>
-              </label>
-              <label class="field"><span class="fieldLabel">Tốc độ phát</span>
-                <select class="fieldInput" id="evPlaybackSpeed">
-                  <option value="1.0">1.0x (gốc)</option>
-                  <option value="1.05">1.05x</option>
-                  <option value="1.07" selected>1.07x (+7%)</option>
-                  <option value="1.1">1.1x (+10%)</option>
-                  <option value="1.15">1.15x (+15%)</option>
-                </select>
-              </label>
-              <label class="field"><span class="fieldLabel">Min part (giây)</span>
-                <input class="fieldInput" type="number" id="evMinPart" value="70" min="20" max="600">
-              </label>
-              <label class="field"><span class="fieldLabel">Max part (giây)</span>
-                <input class="fieldInput" type="number" id="evMaxPart" value="180" min="30" max="900">
-              </label>
-              <label class="field"><span class="fieldLabel">Render Profile</span>
-                <select class="fieldInput" id="evRenderProfile">
-                  <option value="best">Best (chậm nhất)</option>
-                  <option value="quality">Quality</option>
-                  <option value="balanced" selected>Balanced (khuyến nghị)</option>
-                  <option value="fast">Fast (nhanh)</option>
-                </select>
-              </label>
-              <label class="field"><span class="fieldLabel">GPU render</span>
-                <select class="fieldInput" id="evRenderDevice">
-                  <option value="auto" selected>Auto (detect GPU)</option>
-                  <option value="gpu">GPU (NVENC)</option>
-                  <option value="cpu">CPU only</option>
-                </select>
-              </label>
-              <label class="field"><span class="fieldLabel">Output FPS</span>
-                <select class="fieldInput" id="evOutputFps">
-                  <option value="30">30 fps</option>
-                  <option value="48">48 fps</option>
-                  <option value="60" selected>60 fps</option>
-                </select>
-              </label>
-              <label class="field"><span class="fieldLabel">Max export parts</span>
-                <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
-                <span style="font-size:11px;color:var(--text-muted);margin-top:2px">0 = không giới hạn</span>
-              </label>
-              <label class="field"><span class="fieldLabel">Thứ tự part</span>
-                <select class="fieldInput" id="evPartOrder">
-                  <option value="viral" selected>Viral score (cao → thấp)</option>
-                  <option value="timeline">Timeline (theo thứ tự)</option>
-                </select>
-              </label>
-              <label class="field"><span class="fieldLabel">Scale Y (%)</span>
-                <input class="fieldInput" type="number" id="evFrameScaleY" value="106" min="80" max="130">
-                <span style="font-size:11px;color:var(--text-muted);margin-top:2px">Zoom dọc (100=gốc)</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- ⑤ Transform & Enhancements -->
-          <div class="evSection">
-            <div class="evSectionTitle">🎨 Transform & Enhance</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-              <label class="field"><span class="fieldLabel">Transform Preset</span>
-                <select class="fieldInput" id="evTransformPreset">
-                  <option value="slight" selected>Slightly Different</option>
-                  <option value="strong">Strong Transform</option>
-                </select>
-              </label>
-              <label class="field"><span class="fieldLabel">Reframe Mode</span>
-                <select class="fieldInput" id="evReframeMode">
-                  <option value="subject" selected>Subject (face/body tracking)</option>
-                  <option value="motion">Motion (pixel diff)</option>
-                </select>
-              </label>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:8px">
-              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
-                <input type="checkbox" id="evAddSubtitle" checked style="width:16px;height:16px;accent-color:#3b82f6">
-                <span style="font-size:13px;color:var(--text)">💬 Thêm subtitle tự động (Whisper AI)</span>
-              </label>
-              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
-                <input type="checkbox" id="evMotionCrop" checked style="width:16px;height:16px;accent-color:#3b82f6">
-                <span style="font-size:13px;color:var(--text)">🎯 Motion-aware crop (auto reframe)</span>
-              </label>
-              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
-                <input type="checkbox" id="evReupMode" style="width:16px;height:16px;accent-color:#8b5cf6">
-                <span style="font-size:13px;color:var(--text)">🔄 Reup Mode (color + overlay enhance)</span>
-              </label>
-              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
-                <input type="checkbox" id="evCleanupTemp" checked style="width:16px;height:16px;accent-color:#10b981">
-                <span style="font-size:13px;color:var(--text)">🗑️ Xoá temp files sau khi xong</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- ⑥ Background Music -->
-          <div class="evSection">
-            <div class="evSectionTitle">🎵 Background Music (BGM)</div>
-            <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer;margin-bottom:10px">
-              <input type="checkbox" id="evBgmEnable" style="width:16px;height:16px;accent-color:#f59e0b" onchange="evToggleBgmFields()">
-              <span style="font-size:13px;color:var(--text)">Bật Background Music</span>
-            </label>
-            <div id="evBgmFields" style="display:none;flex-direction:column;gap:8px">
-              <div style="display:flex;gap:8px;align-items:center">
-                <input class="fieldInput" id="evBgmPath" placeholder="Chưa chọn file BGM" readonly style="flex:1">
-                <button class="ghostButton" style="white-space:nowrap" onclick="evPickBgmFile()">Chọn BGM</button>
-              </div>
-              <input id="ev_bgm_file_picker" type="file" accept="audio/*" style="display:none" onchange="evOnBgmPicked(event)">
-              <label class="field">
-                <span class="fieldLabel">BGM Volume (0.01–1.0)</span>
-                <input class="fieldInput" type="number" id="evBgmGain" value="0.18" min="0.01" max="1.0" step="0.01">
-              </label>
-            </div>
-          </div>
-
-        </div><!-- /evRightScroll -->
-
-        <!-- Footer -->
-        <div class="evFooter">
-          <span id="evStatusLine" style="flex:1;font-size:12px;color:var(--text-muted)">Đang chuẩn bị…</span>
-          <button class="ghostButton" id="evReopenBtn" onclick="evReopenEditor()" style="display:none;font-size:12px;padding:5px 10px">↺ Re-open Editor</button>
-          <button class="primaryButton" id="evStartBtn" onclick="startRenderFromEditor()" disabled>▶ Bắt đầu Render</button>
-        </div>
-      </div><!-- /evRight -->
-
     </div><!-- /view_editor -->
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         JOB MONITOR VIEW — full center-stage render progress
+    ════════════════════════════════════════════════════════════════ -->
+    <!-- view_monitor: permanently hidden; remaining IDs silently updated by JS -->
+    <div id="view_monitor" class="hiddenView" data-jm-status="idle" style="display:none">
+      <div class="actionTitle" id="action_title"></div>
+      <div class="actionState" id="action_state"></div>
+      <div class="actionMessage" id="action_message"></div>
+      <div class="actionMeta" id="action_meta"></div>
+      <div id="part_focus"></div>
+      <div class="stepsGrid" id="steps_grid"></div>
+      <div class="hiddenView" id="jobs_out"></div>
+    </div>
 
     <!-- ── Normal page header + grid ─────────────────────────────── -->
     <header class="pageHeader">
@@ -502,91 +268,15 @@
         <div class="pageSubtitle" id="page_subtitle_text">Render, upload, and channel management dashboard by dedicated workspace sections.</div>
       </div>
       <div class="headerChips">
-        <div class="pill">Backend FastAPI local</div>
-        <div class="pill" id="warmup_chip" title="Click to see details" onclick="toggleWarmupPanel()" style="cursor:pointer">⏳ Loading models...</div>
         <div class="pill primaryPill" id="job_chip">No active job</div>
       </div>
     </header>
 
     <div class="layoutGrid" id="layout_grid">
+
+      <!-- card_render_setup lives in appBottomPanel → abpSetupPanel -->
+
       <div class="leftColumn" id="left_column">
-        <section class="card" id="card_render_setup">
-          <div class="sectionHeader">
-            <div>
-              <div class="sectionTitle">Render Setup</div>
-              <div class="sectionSubtitle">Chọn nguồn video + channel → nhấn Tiếp theo để chỉnh sửa và render.</div>
-            </div>
-            <button class="ghostButton" onclick="loadJobs()">Refresh Jobs</button>
-          </div>
-
-          <!-- Hidden fields (read by startRender, set by editor UI) -->
-          <input type="hidden" id="aspect_ratio" value="3:4">
-          <input type="hidden" id="render_profile" value="balanced">
-          <input type="hidden" id="render_device" value="auto">
-          <input type="hidden" id="output_fps" value="60">
-          <input type="hidden" id="playback_speed" value="1.07">
-          <input type="hidden" id="min_part_sec" value="70">
-          <input type="hidden" id="max_part_sec" value="180">
-          <input type="hidden" id="max_export_parts" value="0">
-          <input type="hidden" id="part_order" value="viral">
-          <input type="hidden" id="frame_scale_x" value="100">
-          <input type="hidden" id="frame_scale_y" value="106">
-          <input type="hidden" id="subtitle_style" value="pro_karaoke">
-          <input type="hidden" id="transform_preset" value="slight">
-          <input type="hidden" id="motion_aware_crop" value="1">
-          <input type="hidden" id="add_subtitle" value="1">
-          <input type="hidden" id="reup_mode" value="0">
-          <input type="hidden" id="cleanup_temp_files" value="1">
-          <input type="hidden" id="reup_bgm_enable" value="0">
-          <input type="hidden" id="reup_bgm_path" value="">
-          <input type="hidden" id="reup_bgm_gain" value="0.18">
-
-          <div class="formGrid">
-            <label class="field"><span class="fieldLabel">Nguồn video</span><select class="fieldInput" id="source_mode"><option value="youtube" selected>YouTube Link</option><option value="local">Local Video File</option></select></label>
-            <label class="field"><span class="fieldLabel">Chế độ output</span><select class="fieldInput" id="output_mode"><option value="channel">Theo Channel</option><option value="manual" selected>Thư mục thủ công</option></select></label>
-            <label class="field fieldSpan2" id="field_render_channels_root">
-              <span class="fieldLabel">Thư mục gốc Channels</span>
-              <div class="actionsRow" style="margin-top:0">
-                <input class="fieldInput" id="render_channels_root" placeholder="Chọn thư mục gốc chứa channels" readonly disabled>
-                <button type="button" class="ghostButton" onclick="pickChannelsRoot('render')">Chọn Folder</button>
-              </div>
-            </label>
-            <label class="field fieldSpan2" id="field_channel_code"><span class="fieldLabel">Channel</span><select class="fieldInput" id="channel_code"><option value="">Chọn channel</option></select></label>
-            <label class="field fieldSpan2" id="field_youtube_url">
-              <span class="fieldLabel">YouTube URL</span>
-              <input class="fieldInput" id="youtube_url" placeholder="https://www.youtube.com/watch?v=...">
-            </label>
-            <label class="field fieldSpan2 hiddenView" id="field_source_video_path">
-              <span class="fieldLabel">Video Local</span>
-              <div class="actionsRow" style="margin-top:0">
-                <input class="fieldInput" id="source_video_path" placeholder="Chưa chọn file" readonly>
-                <button type="button" class="secondaryButton" id="pick_local_video_btn" onclick="browseLocalVideo()">Chọn Video</button>
-              </div>
-              <div class="sectionSubtitle" id="source_video_name" style="margin-top:6px">Chưa chọn video.</div>
-              <input id="local_video_file_picker" type="file" accept="video/*" class="hiddenView">
-            </label>
-            <label class="field fieldSpan2" id="field_render_output_dir">
-              <span class="fieldLabel">Thư mục output</span>
-              <input class="fieldInput" id="render_output_dir" placeholder="Tự động theo channel" readonly>
-              <div class="sectionSubtitle" id="render_output_dir_hint" style="margin-top:6px">Tự động điền khi chọn channel.</div>
-            </label>
-            <label class="field fieldSpan2 hiddenView" id="field_manual_output_dir">
-              <span class="fieldLabel">Thư mục output (thủ công)</span>
-              <div style="display:flex;gap:8px;align-items:center">
-                <input class="fieldInput" id="manual_output_dir" placeholder="Ví dụ: D:\videos\output" style="flex:1">
-                <button type="button" id="btn_pick_output_dir" class="btn btnSecondary" style="white-space:nowrap;padding:0 14px;height:38px">📁 Chọn</button>
-              </div>
-              <div class="sectionSubtitle" id="manual_output_dir_hint" style="margin-top:6px">Toàn bộ output sẽ lưu vào thư mục này.</div>
-            </label>
-          </div>
-
-          <div class="actionsRow">
-            <button class="secondaryButton" onclick="resumeRender()">Resume by Job ID</button>
-            <input class="fieldInput" id="resume_job_id" placeholder="Enter job id to resume" style="max-width:260px">
-            <div class="actionSpacer"></div>
-            <button class="primaryButton" id="start_render_btn" onclick="startRender()">▶ Tiếp theo: Chỉnh sửa & Render</button>
-          </div>
-        </section>
 
         <section class="card" id="card_upload">
           <div class="sectionHeader">
@@ -744,12 +434,7 @@
           </div>
         </section>
 
-        <section class="card" id="card_logs">
-          <div class="sectionHeader">
-            <div><div class="sectionTitle">Render Live Log</div><div class="sectionSubtitle">Shows render runtime events and latest errors.</div></div>
-          </div>
-          <div class="logBox" id="event_log_render"></div>
-        </section>
+        <section class="card hiddenView" id="card_logs"></section>
 
         <section class="card hiddenView" id="card_channels">
           <div class="sectionHeader">
@@ -815,62 +500,470 @@
       </div>
 
       <div class="rightColumn" id="right_column">
-        <section class="card" id="card_progress">
-          <div class="sectionHeader">
-            <div><div class="sectionTitle">Render Progress</div><div class="sectionSubtitle">Track pipeline and each part in real time.</div></div>
-            <div class="pill primaryPill" id="job_stage_pill">Idle</div>
-          </div>
-          <div class="heroProgress">
-            <div class="heroProgressLeft">
-              <div class="thumb thumbPlaceholder">NM</div>
-              <div>
-                <div class="jobTitle" id="job_title">No active job</div>
-                <div class="jobMeta" id="job_meta_1">Channel - | Source -</div>
-                <div class="jobMeta" id="job_meta_2">0/0 parts done | 0 scenes</div>
-              </div>
-            </div>
-            <div class="heroProgressRight">
-              <div class="bigPercent" id="job_percent">0%</div>
-              <div class="smallLabel" id="job_message">Initializing</div>
-            </div>
-          </div>
-          <div class="progressBar"><div class="progressValue" id="job_bar"></div></div>
-          <div class="actionCenter">
-            <div class="actionTop">
-              <div>
-                <div class="actionTitle" id="action_title">Waiting for job</div>
-                <div class="actionHint">The system will show each step as soon as you click Download + Render.</div>
-              </div>
-              <div class="actionState" id="action_state">idle</div>
-            </div>
-            <div class="actionMessage" id="action_message">No active processing task.</div>
-            <div class="actionMeta" id="action_meta">Elapsed 00:00 | Updated -</div>
-            <div class="pipelineWrap" id="pipeline_wrap"></div>
-          </div>
-          <div class="partFocus" id="part_focus">
-            <div class="partFocusTitle">Live Part Tracking</div>
-            <div class="partFocusLine">No part is being processed.</div>
-          </div>
-          <div class="stepsGrid" id="steps_grid"></div>
-        </section>
-
-        <section class="card" id="card_parts">
-          <div class="sectionHeader">
-            <div><div class="sectionTitle">Rendered Parts</div><div class="sectionSubtitle">Status, progress, and viral score of each part.</div></div>
-            <div class="pill">Sorted by viral score</div>
-          </div>
-          <div class="partList" id="parts_wrap"><div class="emptyState">No parts yet.</div></div>
-        </section>
-
-        <section class="card" id="card_jobs">
-          <div class="sectionHeader">
-            <div><div class="sectionTitle">Recent Jobs</div><div class="sectionSubtitle">Overview of latest jobs.</div></div>
-          </div>
-          <div class="partList" id="jobs_out"><div class="emptyState">No jobs yet.</div></div>
-        </section>
+        <section class="card hiddenView" id="card_progress"></section>
+        <section class="card hiddenView" id="card_parts"></section>
+        <section class="card hiddenView" id="card_jobs"></section>
       </div>
     </div>
   </main>
+  <aside class="appInspector" id="appInspector">
+    <!-- Right panel header -->
+    <div class="evRightHeader">
+      <div style="min-width:0;flex:1">
+        <div class="evRightTitle">🎬 Video Editor</div>
+        <div class="evSourceName" id="evSourceName">Chưa chọn nguồn</div>
+        <div class="evInfoStrip">
+          <div class="evInfoRow">
+            <span class="evSessionDot" id="evSessionDot"></span>
+            <span class="evInfoLabel">Session:</span>
+            <span class="evInfoVal" id="evInfoSession">—</span>
+          </div>
+          <div class="evInfoRow">
+            <span class="evInfoLabel">Output:</span>
+            <span class="evInfoVal" id="evInfoOutput">—</span>
+          </div>
+        </div>
+      </div>
+      <button class="ghostButton" style="font-size:12px;padding:5px 10px" onclick="cancelEditorView()">← Huỷ</button>
+    </div>
+
+    <!-- Scrollable body: editor tool sections + inspector sections -->
+    <div class="evRightScroll inspPaneBody">
+
+      <!-- ① Trim -->
+      <div class="evSection">
+        <div class="evSectionTitle">✂️ Trim Video</div>
+        <div class="evTrimBarWrap" id="evTrimBarWrap">
+          <div class="evTrimTrack"></div>
+          <div class="evTrimFill" id="evTrimFill" style="left:0%;width:100%"></div>
+          <input type="range" id="evTrimInSlider"  min="0" max="1000" value="0"    step="1" oninput="evTrimSliderChange()">
+          <input type="range" id="evTrimOutSlider" min="0" max="1000" value="1000" step="1" oninput="evTrimSliderChange()">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+          <label class="field">
+            <span class="fieldLabel">⏮ Bắt đầu từ (giây)</span>
+            <input class="fieldInput" type="number" id="evTrimInSec" min="0" step="1" value="0" oninput="evTrimSecChange()">
+          </label>
+          <label class="field">
+            <span class="fieldLabel">⏭ Kết thúc tại (giây)</span>
+            <input class="fieldInput" type="number" id="evTrimOutSec" min="0" step="1" placeholder="hết video" oninput="evTrimSecChange()">
+          </label>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetTrimIn()">📍 IN tại playhead</button>
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetTrimOut()">📍 OUT tại playhead</button>
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evResetTrim()">↺ Reset</button>
+          <span id="evTrimInfo" style="margin-left:auto;font-size:11px;color:var(--text-muted)">Toàn bộ video</span>
+        </div>
+      </div>
+
+      <!-- ② Audio / Volume -->
+      <div class="evSection">
+        <div class="evSectionTitle">🔊 Âm lượng</div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <input type="range" id="evVolume" min="0" max="200" value="100" step="1" style="flex:1;accent-color:#3b82f6" oninput="evVolumeSliderChange()">
+          <input class="fieldInput" type="number" id="evVolumeNum" min="0" max="200" value="100" step="5" style="width:68px;text-align:center;padding:6px 8px" oninput="evVolumeNumChange()">
+          <span style="color:var(--text-muted);font-size:12px">%</span>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(50)">50%</button>
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(80)">80%</button>
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(100)">100%</button>
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(120)">+20%</button>
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(150)">+50%</button>
+        </div>
+      </div>
+
+      <!-- ③ BGM -->
+      <div class="evSection">
+        <div class="evSectionTitle">🎵 Background Music (BGM)</div>
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer;margin-bottom:10px">
+          <input type="checkbox" id="evBgmEnable" style="width:16px;height:16px;accent-color:#f59e0b" onchange="evToggleBgmFields()">
+          <span style="font-size:13px;color:var(--text)">Bật Background Music</span>
+        </label>
+        <div id="evBgmFields" style="display:none;flex-direction:column;gap:8px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="fieldInput" id="evBgmPath" placeholder="Chưa chọn file BGM" readonly style="flex:1">
+            <button class="ghostButton" style="white-space:nowrap" onclick="evPickBgmFile()">Chọn BGM</button>
+          </div>
+          <input id="ev_bgm_file_picker" type="file" accept="audio/*" style="display:none" onchange="evOnBgmPicked(event)">
+          <label class="field">
+            <span class="fieldLabel">BGM Volume (0.01–1.0)</span>
+            <input class="fieldInput" type="number" id="evBgmGain" value="0.18" min="0.01" max="1.0" step="0.01">
+          </label>
+        </div>
+      </div>
+
+      <!-- ④ Transform & Enhance -->
+      <div class="evSection">
+        <div class="evSectionTitle">🎨 Transform & Enhance</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <label class="field"><span class="fieldLabel">Transform Preset</span>
+            <select class="fieldInput" id="evTransformPreset">
+              <option value="slight" selected>Slightly Different</option>
+              <option value="strong">Strong Transform</option>
+            </select>
+          </label>
+          <label class="field"><span class="fieldLabel">Reframe Mode</span>
+            <select class="fieldInput" id="evReframeMode">
+              <option value="subject" selected>Subject (face/body tracking)</option>
+              <option value="motion">Motion (pixel diff)</option>
+            </select>
+          </label>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
+            <input type="checkbox" id="evAddSubtitle" checked style="width:16px;height:16px;accent-color:#3b82f6">
+            <span style="font-size:13px;color:var(--text)">💬 Thêm subtitle tự động (Whisper AI)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
+            <input type="checkbox" id="evMotionCrop" checked style="width:16px;height:16px;accent-color:#3b82f6">
+            <span style="font-size:13px;color:var(--text)">🎯 Motion-aware crop (auto reframe)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
+            <input type="checkbox" id="evReupMode" style="width:16px;height:16px;accent-color:#8b5cf6">
+            <span style="font-size:13px;color:var(--text)">🔄 Reup Mode (color + overlay enhance)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
+            <input type="checkbox" id="evCleanupTemp" checked style="width:16px;height:16px;accent-color:#10b981">
+            <span style="font-size:13px;color:var(--text)">🗑️ Xoá temp files sau khi xong</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- ⑤ Render Settings -->
+      <div class="evSection">
+        <div class="evSectionTitle">⚙️ Cài đặt Render</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <label class="field"><span class="fieldLabel">Tỉ lệ khung hình</span>
+            <select class="fieldInput" id="evAspectRatio" onchange="evUpdateAspectRatio()">
+              <option value="3:4" selected>3:4 Vertical</option>
+              <option value="9:16">9:16 TikTok Full</option>
+              <option value="1:1">1:1 Square</option>
+            </select>
+          </label>
+          <label class="field"><span class="fieldLabel">Tốc độ phát</span>
+            <select class="fieldInput" id="evPlaybackSpeed">
+              <option value="1.0">1.0x (gốc)</option>
+              <option value="1.05">1.05x</option>
+              <option value="1.07" selected>1.07x (+7%)</option>
+              <option value="1.1">1.1x (+10%)</option>
+              <option value="1.15">1.15x (+15%)</option>
+            </select>
+          </label>
+          <label class="field"><span class="fieldLabel">Min part (giây)</span>
+            <input class="fieldInput" type="number" id="evMinPart" value="70" min="20" max="600">
+          </label>
+          <label class="field"><span class="fieldLabel">Max part (giây)</span>
+            <input class="fieldInput" type="number" id="evMaxPart" value="180" min="30" max="900">
+          </label>
+          <label class="field"><span class="fieldLabel">Render Profile</span>
+            <select class="fieldInput" id="evRenderProfile">
+              <option value="best">Best (chậm nhất)</option>
+              <option value="quality">Quality</option>
+              <option value="balanced" selected>Balanced (khuyến nghị)</option>
+              <option value="fast">Fast (nhanh)</option>
+            </select>
+          </label>
+          <label class="field"><span class="fieldLabel">GPU render</span>
+            <select class="fieldInput" id="evRenderDevice">
+              <option value="auto" selected>Auto (detect GPU)</option>
+              <option value="gpu">GPU (NVENC)</option>
+              <option value="cpu">CPU only</option>
+            </select>
+          </label>
+          <label class="field"><span class="fieldLabel">Output FPS</span>
+            <select class="fieldInput" id="evOutputFps">
+              <option value="30">30 fps</option>
+              <option value="48">48 fps</option>
+              <option value="60" selected>60 fps</option>
+            </select>
+          </label>
+          <label class="field"><span class="fieldLabel">Max export parts</span>
+            <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
+            <span style="font-size:11px;color:var(--text-muted);margin-top:2px">0 = không giới hạn</span>
+          </label>
+          <label class="field"><span class="fieldLabel">Thứ tự part</span>
+            <select class="fieldInput" id="evPartOrder">
+              <option value="viral" selected>Viral score (cao → thấp)</option>
+              <option value="timeline">Timeline (theo thứ tự)</option>
+            </select>
+          </label>
+          <label class="field"><span class="fieldLabel">Scale Y (%)</span>
+            <input class="fieldInput" type="number" id="evFrameScaleY" value="106" min="80" max="130">
+            <span style="font-size:11px;color:var(--text-muted);margin-top:2px">Zoom dọc (100=gốc)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Subtitle Style — visible when no text layers exist -->
+      <div class="evSection" id="inspSubtitlePane">
+        <div class="evSectionTitle">💬 Subtitle Style (Live Preview)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <label class="field">
+            <span class="fieldLabel">Font chữ</span>
+            <select class="fieldInput" id="evSubFont" onchange="evUpdateSubPreview()">
+              <option value="Bungee" selected>Bungee (Viral 🔥)</option>
+              <option value="Anton">Anton (Bold)</option>
+              <option value="Bebas Neue">Bebas Neue (Caps)</option>
+              <option value="Oswald">Oswald (Compact)</option>
+              <option value="Impact">Impact (Punchy)</option>
+              <option value="Arial Black">Arial Black (Heavy)</option>
+              <option value="Segoe UI Black">Segoe UI Black (Clean Bold)</option>
+              <option value="Archivo Black">Archivo Black (Viral)</option>
+              <option value="Teko">Teko (Tall)</option>
+              <option value="Luckiest Guy">Luckiest Guy (Fun)</option>
+              <option value="Montserrat">Montserrat (Clean)</option>
+              <option value="Roboto">Roboto (Modern)</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="fieldLabel">Cỡ chữ: <strong id="evSubSizeVal">46</strong>px</span>
+            <input type="range" id="evSubSize" min="24" max="120" value="46" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
+          </label>
+          <label class="field">
+            <span class="fieldLabel">🎨 Màu chữ chính</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="color" id="evSubColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSubPreview()">
+              <span style="font-size:12px;color:var(--text-muted)">Màu nền tất cả từ</span>
+            </div>
+          </label>
+          <label class="field">
+            <span class="fieldLabel">✨ Màu highlight (karaoke)</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="color" id="evSubHighlight" value="#ffff00" class="evColorPicker" oninput="evUpdateSubPreview()">
+              <span style="font-size:12px;color:var(--text-muted)">Từ đang nói</span>
+            </div>
+          </label>
+          <label class="field">
+            <span class="fieldLabel">📍 Vị trí Y (% từ dưới): <strong id="evSubPosVal">15</strong>%</span>
+            <input type="range" id="evSubPos" min="5" max="60" value="15" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
+          </label>
+          <label class="field">
+            <span class="fieldLabel">◎ Viền (outline): <strong id="evSubOutlineVal">3</strong>px</span>
+            <input type="range" id="evSubOutline" min="0" max="8" value="3" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
+          </label>
+        </div>
+        <div style="margin-top:10px;padding:10px;background:#000;border-radius:8px;text-align:center;min-height:60px;display:flex;align-items:center;justify-content:center" id="evSubStaticPreview">
+          <span id="evSubStaticText" style="font-family:'Bungee';font-size:28px;color:#fff;-webkit-text-stroke:2px #000">Preview subtitle</span>
+        </div>
+      </div>
+      <!-- Text Overlay Layers — editor shown when a layer is selected (JS-managed) -->
+      <div class="evSection">
+        <div class="evSectionTitle">📝 Text Overlay Layers</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evAddTextLayer()">+ Add Text</button>
+          <span style="font-size:11px;color:var(--text-muted)">Max 8 layers. Top item renders above lower item.</span>
+        </div>
+        <div id="evTextLayerList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+        <div id="evTextLayerEditor" style="display:none">
+          <!-- Style Presets -->
+          <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+            <span style="font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;flex:0 0 auto">Preset:</span>
+            <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('default')">Default</button>
+            <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('bold_white')">Bold White</button>
+            <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('yellow_sub')">Yellow Subtitle</button>
+            <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('meme')">Meme</button>
+          </div>
+          <!-- Group: Text -->
+          <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Text</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <label class="field" style="grid-column:1 / -1">
+              <span class="fieldLabel">Content</span>
+              <textarea class="fieldInput" id="evTxtContent" rows="2" placeholder="Type overlay text..." oninput="evUpdateSelectedTextLayer()"></textarea>
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Font</span>
+              <select class="fieldInput" id="evTxtFont" onchange="evUpdateSelectedTextLayer()">
+                <option value="Bungee" selected>Bungee (Viral 🔥)</option>
+                <option value="Anton">Anton (Bold)</option>
+                <option value="Bebas Neue">Bebas Neue (Caps)</option>
+                <option value="Oswald">Oswald (Compact)</option>
+                <option value="Impact">Impact (Punchy)</option>
+                <option value="Arial Black">Arial Black (Heavy)</option>
+                <option value="Segoe UI Black">Segoe UI Black (Clean Bold)</option>
+                <option value="Archivo Black">Archivo Black (Viral)</option>
+                <option value="Teko">Teko (Tall)</option>
+                <option value="Luckiest Guy">Luckiest Guy (Fun)</option>
+                <option value="Montserrat">Montserrat (Clean)</option>
+                <option value="Roboto">Roboto (Modern)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Font size</span>
+              <input class="fieldInput" type="number" id="evTxtSize" min="12" max="300" value="48" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Color</span>
+              <input type="color" id="evTxtColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <div style="display:none"><!-- alignment field hidden: stored but has no render effect yet -->
+              <label class="field">
+                <span class="fieldLabel">Alignment</span>
+                <select class="fieldInput" id="evTxtAlign" onchange="evUpdateSelectedTextLayer()">
+                  <option value="left">left</option>
+                  <option value="center" selected>center</option>
+                  <option value="right">right</option>
+                </select>
+              </label>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;align-self:end;padding-bottom:4px">
+              <input type="checkbox" id="evTxtBold" onchange="evUpdateSelectedTextLayer()">
+              <span style="font-size:12px;color:var(--text)">Bold</span>
+            </label>
+          </div>
+          <!-- Group: Timing -->
+          <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Timing</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <label class="field">
+              <span class="fieldLabel">Start time (s)</span>
+              <input class="fieldInput" type="number" id="evTxtStartTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">End time (s, 0=full)</span>
+              <input class="fieldInput" type="number" id="evTxtEndTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
+            </label>
+          </div>
+          <!-- Group: Position -->
+          <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Position</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <label class="field">
+              <span class="fieldLabel">Preset</span>
+              <select class="fieldInput" id="evTxtPos" onchange="evApplyLayerPresetPosition()">
+                <option value="top-left">top-left</option>
+                <option value="top-center">top-center</option>
+                <option value="top-right">top-right</option>
+                <option value="center">center</option>
+                <option value="bottom-left">bottom-left</option>
+                <option value="bottom-center" selected>bottom-center</option>
+                <option value="bottom-right">bottom-right</option>
+              </select>
+            </label>
+            <div></div>
+            <label class="field">
+              <span class="fieldLabel">X (%)</span>
+              <input class="fieldInput" type="number" id="evTxtX" min="0" max="100" step="1" value="50" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Y (%)</span>
+              <input class="fieldInput" type="number" id="evTxtY" min="0" max="100" step="1" value="90" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <div style="grid-column:1 / -1;display:flex;gap:6px;align-items:center">
+              <span style="font-size:10px;color:var(--text-dim);flex:0 0 auto">Align X:</span>
+              <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="evSetLayerX(5)">Left</button>
+              <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="evSetLayerX(50)">Center</button>
+              <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="evSetLayerX(95)">Right</button>
+            </div>
+          </div>
+          <!-- Group: Style -->
+          <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Style</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <label style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="evTxtOutlineEnabled" checked onchange="evUpdateSelectedTextLayer()">
+              <span style="font-size:12px;color:var(--text)">Outline</span>
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Outline px</span>
+              <input class="fieldInput" type="number" id="evTxtOutlineThickness" min="0" max="8" value="2" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="evTxtShadowEnabled" onchange="evUpdateSelectedTextLayer()">
+              <span style="font-size:12px;color:var(--text)">Shadow</span>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <label class="field">
+                <span class="fieldLabel">Shadow X</span>
+                <input class="fieldInput" type="number" id="evTxtShadowX" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Shadow Y</span>
+                <input class="fieldInput" type="number" id="evTxtShadowY" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
+              </label>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="evTxtBgEnabled" onchange="evUpdateSelectedTextLayer()">
+              <span style="font-size:12px;color:var(--text)">Background box</span>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <label class="field">
+                <span class="fieldLabel">BG color</span>
+                <input type="color" id="evTxtBgColor" value="#000000" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">BG padding</span>
+                <input class="fieldInput" type="number" id="evTxtBgPadding" min="0" max="64" value="10" oninput="evUpdateSelectedTextLayer()">
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /evRightScroll.inspPaneBody -->
+
+    <!-- Right panel footer -->
+    <div class="evFooter">
+      <span id="evStatusLine" style="flex:1;font-size:12px;color:var(--text-muted)">Đang chuẩn bị…</span>
+      <button class="ghostButton" id="evReopenBtn" onclick="evReopenEditor()" style="display:none;font-size:12px;padding:5px 10px">↺ Re-open Editor</button>
+      <button class="primaryButton" id="evStartBtn" onclick="startRenderFromEditor()" disabled>▶ Bắt đầu Render</button>
+    </div>
+  </aside>
+  <!-- ═══════════════════════════════════════════════════════════════
+       BOTTOM PANEL — Process Timeline + Live Log + Source Setup
+  ════════════════════════════════════════════════════════════════ -->
+  <section class="appBottomPanel" id="appBottomPanel">
+
+    <!-- Toolbar: job status summary + Source Setup toggle -->
+    <div class="abpToolbar">
+      <div class="abpToolbarJob">
+        <div class="abpJobTitle" id="job_title">No active job</div>
+        <div class="abpJobMeta" id="job_meta_1"></div>
+        <div class="abpJobMeta" id="job_meta_2"></div>
+      </div>
+      <div class="abpToolbarProgress">
+        <div class="jmProgressBar abpProgressBar"><div class="progressValue" id="job_bar"></div></div>
+        <span class="abpJobMsg" id="job_message"></span>
+      </div>
+      <div class="abpToolbarRight">
+        <div class="abpPct" id="job_percent">0%</div>
+        <div class="pill primaryPill" id="job_stage_pill" style="font-size:11px;padding:3px 10px">Idle</div>
+      </div>
+    </div>
+
+    <!-- Main body: process timeline | live log -->
+    <div class="abpBody">
+
+      <!-- Left: pipeline stages + parts timeline -->
+      <div class="abpTimeline">
+        <div class="abpSectionLabel">Pipeline</div>
+        <div class="pipelineWrap" id="pipeline_wrap"></div>
+        <div class="abpSectionLabel" style="margin-top:6px">Parts</div>
+        <div class="jmPartsSection" style="border:none;padding:0;background:none">
+          <div class="partList jmPartList" id="parts_wrap">
+            <div class="emptyState">No parts yet.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: live log -->
+      <div class="abpLog">
+        <div class="abpSectionLabel">Live Log</div>
+        <div class="logBox jmLogBox abpLogBox" id="event_log_render"></div>
+      </div>
+
+    </div><!-- /abpBody -->
+
+  </section><!-- /appBottomPanel -->
+
+  <footer class="appStatusBar" id="appStatusBar">
+    <div class="statusBarLeft sbClickable" id="sbJobArea" onclick="if(currentJobId){setView('monitor')}" title="Click to open Job Monitor">
+      <span class="statusDot statusDotReady" id="sbDot"></span>
+      <span class="statusLabel" id="sbLabel">Ready</span>
+      <span class="sbSummary" id="sbSummary"></span>
+    </div>
+    <div class="statusBarRight">
+      <span class="sbPct" id="sbPct"></span>
+      <span class="statusSystem">ffmpeg · Whisper · GPU auto</span>
+    </div>
+  </footer>
 </div>
 
 <!-- ─── Video Editor Modal ──────────────────────────────────────────────── -->

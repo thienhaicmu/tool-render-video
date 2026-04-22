@@ -6,48 +6,35 @@ function setView(view){
   const isReports  = view === 'reports';
   const isSettings = view === 'settings';
   const isEditor   = view === 'editor';
+  // monitor view retired — bottom panel is always visible
 
-  // Editor view: take over mainArea entirely
+  // Editor view: take over mainArea entirely (CSS :has rules + editorMode class)
   const mainArea = qs('mainArea');
   if (mainArea) mainArea.classList.toggle('editorMode', isEditor);
   qs('view_editor').classList.toggle('hiddenView', !isEditor);
 
-  // Normal views: hide page header + grid when in editor mode
+  // pageHeader + layout_grid only visible for upload/channels/reports/settings
+  const showMainContent = !isRender && !isEditor;
   const pageHeader = document.querySelector('.pageHeader');
-  if (pageHeader) pageHeader.classList.toggle('hiddenView', isEditor);
-  qs('layout_grid').classList.toggle('hiddenView', isEditor);
-  if (!isEditor) {
-    qs('layout_grid').classList.toggle('singleCol', !isRender);
+  if (pageHeader) pageHeader.classList.toggle('hiddenView', !showMainContent);
+  qs('layout_grid').classList.toggle('hiddenView', !showMainContent);
+  if (showMainContent) {
+    qs('layout_grid').classList.toggle('singleCol', true);
   }
-  qs('right_column').classList.toggle('hiddenView', !isRender || isEditor);
 
-  qs('card_render_setup').classList.toggle('hiddenView', !isRender || isEditor);
+  // Right column always hidden — content lives in appInspector
+  qs('right_column').classList.toggle('hiddenView', true);
+
+  // card_render_setup lives in sidebar — not toggled here
   qs('card_upload').classList.toggle('hiddenView', !isUpload);
-  qs('card_progress').classList.toggle('hiddenView', !isRender || isEditor);
-  qs('card_parts').classList.toggle('hiddenView', !isRender || isEditor);
-  qs('card_jobs').classList.toggle('hiddenView', !isRender || isEditor);
-  qs('card_logs').classList.toggle('hiddenView', !isRender || isEditor);
   qs('card_channels').classList.toggle('hiddenView', !isChannels);
   qs('card_reports').classList.toggle('hiddenView', !isReports);
   qs('card_settings').classList.toggle('hiddenView', !isSettings);
 
-  if (isRender) setPageHeader('Render Studio', 'Configure and run render jobs with full stage visibility.');
-  if (isUpload) setPageHeader('Upload Studio', 'Choose Action -> Select Channel -> Login or Upload.');
+  if (isUpload)  setPageHeader('Upload Studio', 'Choose Action -> Select Channel -> Login or Upload.');
   if (isChannels) setPageHeader('Channel Management', 'Choose Root Folder -> Enter Channel Code -> Configure -> Create.');
   if (isReports) setPageHeader('Reports', 'Review render and upload reporting output.');
   if (isSettings) setPageHeader('Settings', 'System maintenance and operational options.');
-  if (isRender) {
-    const progTitle = document.querySelector('#card_progress .sectionTitle');
-    const progSub = document.querySelector('#card_progress .sectionSubtitle');
-    const partTitle = document.querySelector('#card_parts .sectionTitle');
-    const partSub = document.querySelector('#card_parts .sectionSubtitle');
-    const hint = document.querySelector('#card_progress .actionHint');
-    if (progTitle) progTitle.textContent = 'Render Progress';
-    if (progSub) progSub.textContent = 'Track pipeline and parts in real time.';
-    if (partTitle) partTitle.textContent = 'Rendered Parts';
-    if (partSub) partSub.textContent = 'Part status, progress, and viral score.';
-    if (hint) hint.textContent = 'Live action updates after you click Render.';
-  }
 
   document.querySelectorAll('.navItem[data-view]').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-view') === view);
@@ -152,3 +139,11 @@ function syncOutputModeUI(){
   }
 }
 
+
+function toggleSourceSetup() {
+  const panel = document.getElementById('abpSetupPanel');
+  const btn   = document.getElementById('abpSetupToggle');
+  if (!panel) return;
+  const hidden = panel.classList.toggle('hiddenView');
+  if (btn) btn.textContent = hidden ? '⚙ Source Setup' : '✕ Close Setup';
+}
