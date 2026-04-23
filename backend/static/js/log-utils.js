@@ -51,6 +51,9 @@ function addEvent(text, scope = 'auto'){
 
   const div = document.createElement('div');
   div.className = 'logLine';
+  if (/failed|error/i.test(normalized)) div.classList.add('important', 'error');
+  else if (/render complete|job completed|complete/i.test(normalized)) div.classList.add('important', 'success');
+  else if (/stage:|resume queued|render queued|download complete|downloading youtube/i.test(normalized)) div.classList.add('important');
   div.textContent = `[${new Date().toLocaleTimeString()}] ${normalized}`;
   box.prepend(div);
   while (box.children.length > 28) box.removeChild(box.lastChild);

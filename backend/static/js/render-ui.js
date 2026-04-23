@@ -1,3 +1,6 @@
+const RENDER_FLOW_ORDER = ['source', 'configure', 'rendering', 'complete'];
+let _renderFlowStepRank = 0;
+
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
 function resetRenderSessionUi(){
   _localEditorVideoSrc  = null;
@@ -27,8 +30,6 @@ function resetRenderSessionUi(){
   if (qs('action_state')) qs('action_state').dataset.status = 'idle';
   qs('action_message').textContent = 'No active processing task.';
   qs('action_meta').textContent = 'Elapsed 00:00 | Updated -';
-  const _vmReset = qs('view_monitor');
-  if (_vmReset) _vmReset.dataset.jmStatus = 'idle';
   renderPipeline('queued', 'queued');
   renderSteps(0);
   renderParts([]);
@@ -36,55 +37,77 @@ function resetRenderSessionUi(){
   if(RENDER_SESSION_ONLY && qs('jobs_out')){
     qs('jobs_out').innerHTML = '<div class="emptyState">Session mode: old jobs are hidden.</div>';
   }
+  setRenderFlowState('source', 'Select source', { source: 'active', force: true });
+  hideRenderCompletionBar();
 }
 function fmtElapsed(ms){
   const sec = Math.max(0, Math.floor(ms / 1000));
-  const mm = String(Math.floor(sec / 60)).padStart(2, '0');
-  const ss = String(sec % 60).padStart(2, '0');
-  return `${mm}:${ss}`;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  return `${m}m ${s}s`;
 }
 function stageLabel(stage){
   const map = {
     queued: 'Queued',
-    starting: 'Initializing render resources',
-    downloading: 'Downloading source video',
-    scene_detection: 'Detecting scene boundaries',
+    starting: 'Preparing render',
+    downloading: 'Preparing source',
+    scene_detection: 'Detecting scenes',
     segment_building: 'Building smart segments',
-    transcribing_full: 'Generating full subtitles',
-    rendering: 'Rendering parts',
-    rendering_parallel: 'Rendering parts (parallel)',
+    transcribing_full: 'Generating subtitles',
+    rendering: 'Rendering clips',
+    rendering_parallel: 'Rendering clips',
     writing_report: 'Writing report and outputs',
-    done: 'Completed',
+    done: 'Complete',
     failed: 'Failed',
   };
   return map[stage] || 'Processing';
 }
 function stageLabelPlain(stage){
   const map = {
-    queued: 'Queued',
-    starting: 'Starting',
-    downloading: 'Download',
-    scene_detection: 'Scene Detection',
-    segment_building: 'Segment Build',
-    transcribing_full: 'Subtitle (Full)',
-    rendering: 'Render',
-    rendering_parallel: 'Render (Parallel)',
-    writing_report: 'Report',
+    queued: 'Waiting',
+    starting: 'Preparing',
+    downloading: 'Preparing source',
+    scene_detection: 'Detecting scenes',
+    segment_building: 'Building segments',
+    transcribing_full: 'Generating subtitles',
+    rendering: 'Rendering clips',
+    rendering_parallel: 'Rendering clips',
+    writing_report: 'Writing report',
     done: 'Done',
     failed: 'Failed',
   };
   return map[(stage || '').toLowerCase()] || (stage || '-');
 }
+function friendlyJobMessage(job){
+  const status = String(job?.status || '').toLowerCase();
+  const stage = String(job?.stage || '').toLowerCase();
+  if (status === 'completed') return 'Render complete.';
+  if (status === 'failed') return 'Render failed. Check details below.';
+  if (status === 'queued') return 'Waiting to start.';
+  return stageLabel(stage);
+}
+function getCompletedClipCount(summary, parts){
+  const items = Array.isArray(parts) ? parts : [];
+  const completedFromSummary = Number(summary?.completed_parts);
+  const totalFromSummary = Number(summary?.total_parts);
+  if (Number.isFinite(completedFromSummary) && completedFromSummary > 0) return completedFromSummary;
+  const doneParts = items.filter((p) => String(p?.status || '').toLowerCase() === 'done').length;
+  if (doneParts > 0) return doneParts;
+  if (Number.isFinite(totalFromSummary) && totalFromSummary > 0) return totalFromSummary;
+  return items.length || 0;
+}
 function partStatusLabel(status){
   const s = (status || '').toLowerCase();
   const map = {
-    queued: 'queued',
-    waiting: 'waiting',
-    cutting: 'cutting',
-    transcribing: 'transcribing',
-    rendering: 'rendering',
-    done: 'done',
-    failed: 'failed'
+    queued: 'Waiting',
+    waiting: 'Waiting',
+    cutting: 'Cutting clip',
+    transcribing: 'Generating subtitles',
+    rendering: 'Rendering',
+    done: 'Done',
+    failed: 'Failed'
   };
   return map[s] || s;
 }
@@ -95,17 +118,383 @@ function setActionState(job){
   if (running && !activeJobStartedAt) activeJobStartedAt = Date.now();
   if (!running && !activeJobStartedAt) activeJobStartedAt = Date.now();
   const elapsed = fmtElapsed(Date.now() - (activeJobStartedAt || Date.now()));
+  const friendly = friendlyJobMessage(job);
+  const backendDetail = String(job.message || '').trim();
   qs('action_title').textContent = stageLabel(stage);
   qs('action_state').textContent = status || 'running';
-  qs('action_message').textContent = job.message || stageLabel(stage);
-  qs('action_meta').textContent = `Elapsed ${elapsed} | Updated ${new Date().toLocaleTimeString()}`;
-  // Phase 6: propagate status/stage as data attributes for CSS visual state
-  const _vm = qs('view_monitor');
-  if (_vm) _vm.dataset.jmStatus = status || 'running';
+  qs('action_message').textContent = friendly;
+  qs('action_meta').textContent = `Running for ${elapsed} | Updated ${new Date().toLocaleTimeString()}${backendDetail ? ` | Detail: ${backendDetail}` : ''}`;
+  // propagate status/stage as data attributes for CSS visual state
   const _stEl = qs('action_state');
   if (_stEl) _stEl.dataset.status = status || 'running';
   const _pill = qs('job_stage_pill');
-  if (_pill) _pill.dataset.stage = stage;
+  if (_pill) {
+    if (_pill.dataset.stage && _pill.dataset.stage !== stage) {
+      _pill.classList.remove('stageChanged');
+      void _pill.offsetWidth;
+      _pill.classList.add('stageChanged');
+    }
+    _pill.dataset.stage = stage;
+  }
+}
+
+function setRenderFlowState(activeStep, subtitle, overrides = {}) {
+  const order = RENDER_FLOW_ORDER;
+  const force = overrides.force === true;
+  const idx = order.indexOf(activeStep);
+  if (idx < 0) return;
+  const targetIdx = (!force && idx < _renderFlowStepRank) ? _renderFlowStepRank : idx;
+  const targetStep = order[targetIdx];
+  if (force || targetIdx > _renderFlowStepRank) _renderFlowStepRank = targetIdx;
+  const subByStep = {
+    source: qs('flow_sub_source'),
+    configure: qs('flow_sub_configure'),
+    rendering: qs('flow_sub_rendering'),
+    complete: qs('flow_sub_complete'),
+  };
+  Object.entries(subByStep).forEach(([key, el]) => {
+    if (!el) return;
+    if (key === targetStep && subtitle && el.textContent !== subtitle) {
+      el.textContent = subtitle;
+      el.classList.remove('flowSubChanging');
+      void el.offsetWidth;
+      el.classList.add('flowSubChanging');
+    }
+  });
+  document.querySelectorAll('.renderFlowStep[data-flow-step]').forEach((node) => {
+    const key = node.getAttribute('data-flow-step');
+    let state = 'pending';
+    if (overrides[key]) {
+      state = overrides[key];
+    } else {
+      const kIdx = order.indexOf(key);
+      if (kIdx < targetIdx) state = 'done';
+      if (kIdx === targetIdx) state = 'active';
+    }
+    const changed = !node.classList.contains(state);
+    node.classList.remove('pending', 'active', 'done');
+    node.classList.add(state);
+    if (changed) {
+      node.classList.remove('flowStepChanged');
+      void node.offsetWidth;
+      node.classList.add('flowStepChanged');
+    }
+  });
+}
+
+function updateRenderFlowByJob(job, summary, parts = []) {
+  const stage = String(job?.stage || '').toLowerCase();
+  const status = String(job?.status || '').toLowerCase();
+  if (status === 'completed') {
+    setRenderFlowState('complete', `${getCompletedClipCount(summary, parts)} clips ready`);
+    return;
+  }
+  if (status === 'failed') {
+    setRenderFlowState('rendering', 'Failed', { source: 'done', configure: 'done', rendering: 'active', complete: 'pending' });
+    return;
+  }
+  if (stage === 'queued' || stage === 'starting' || stage === 'downloading') {
+    const step = _renderFlowStepRank >= RENDER_FLOW_ORDER.indexOf('rendering') ? 'rendering' : 'source';
+    setRenderFlowState(step, stageLabelPlain(stage));
+    return;
+  }
+  if (stage === 'scene_detection' || stage === 'segment_building' || stage === 'transcribing_full' || stage === 'rendering' || stage === 'rendering_parallel' || stage === 'writing_report') {
+    const pct = Math.round(Number(job?.progress_percent || 0));
+    setRenderFlowState('rendering', `${stageLabelPlain(stage)} - ${pct}%`);
+    return;
+  }
+}
+
+function buildCompletionHandoff(summary, parts, job) {
+  const items = Array.isArray(parts) ? parts : [];
+  const failed = Number(summary?.failed_parts ?? items.filter((p) => String(p?.status || '').toLowerCase() === 'failed').length) || 0;
+  const total = Number(summary?.total_parts ?? items.length) || 0;
+  const summaryCompleted = Number(summary?.completed_parts);
+  const doneParts = items.filter((p) => String(p?.status || '').toLowerCase() === 'done').length;
+  const completed = Number.isFinite(summaryCompleted)
+    ? summaryCompleted
+    : (doneParts || Math.max(0, total - failed));
+  const totalLabel = total || (completed + failed);
+  const outputDir = getCurrentJobOutputDir(job);
+  const main = failed > 0
+    ? `Render complete - ${completed} clips completed, ${failed} failed`
+    : `✓ Render complete - ${completed} clips ready`;
+  const detailParts = [];
+  if (totalLabel > 0) detailParts.push(`${totalLabel} total clips`);
+  detailParts.push(failed > 0 ? 'Review failed clips in the log' : 'Report generated successfully');
+  detailParts.push(outputDir ? 'Saved to output folder' : 'Output folder path unavailable');
+  return { main, detail: detailParts.join(' · ') };
+}
+
+function showRenderCompletionBar(text, detail) {
+  const bar = qs('render_completion_bar');
+  if (!bar) return;
+  const msg = qs('render_completion_msg');
+  if (msg && text) msg.textContent = text;
+  const summary = qs('render_completion_summary');
+  if (summary) summary.textContent = detail || '';
+  bar.classList.remove('hiddenView');
+}
+
+function hideRenderCompletionBar() {
+  const bar = qs('render_completion_bar');
+  if (!bar) return;
+  bar.classList.add('hiddenView');
+  const summary = qs('render_completion_summary');
+  if (summary) summary.textContent = '';
+}
+
+function getCurrentJobOutputDir(job) {
+  try {
+    const payload = JSON.parse(job?.payload_json || '{}');
+    return String(payload.output_dir || '').trim();
+  } catch (_) {
+    return '';
+  }
+}
+
+function openRenderOutputFolder() {
+  if (!currentJobId) return;
+  fetch(`/api/jobs/${currentJobId}`)
+    .then((r) => r.json())
+    .then((job) => {
+      const out = getCurrentJobOutputDir(job);
+      if (!out) {
+        showToast('Output folder is unavailable for this job', 'info');
+        return;
+      }
+      openStoredOutputPath(out);
+    })
+    .catch(() => showToast('Unable to load output folder path', 'error'));
+}
+
+function copyOutputPathToClipboard(out) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(out)
+      .then(() => showToast('Output folder path copied to clipboard', 'info'))
+      .catch(() => showToast(`Output folder: ${out}`, 'info'));
+  } else {
+    showToast(`Output folder: ${out}`, 'info');
+  }
+}
+
+function openStoredOutputPath(out) {
+  const target = String(out || '').trim();
+  if (!target) {
+    showToast('Output folder is unavailable for this job', 'info');
+    return;
+  }
+  if (window.electronAPI?.openPath) {
+    Promise.resolve(window.electronAPI.openPath(target))
+      .then((result) => {
+        if (result) {
+          copyOutputPathToClipboard(target);
+          return;
+        }
+        showToast('Opening output folder', 'success');
+      })
+      .catch(() => copyOutputPathToClipboard(target));
+  } else {
+    copyOutputPathToClipboard(target);
+  }
+  addEvent(`Output folder: ${target}`, 'render');
+}
+
+const RENDER_HISTORY_KEY = 'toolRenderVideo.recentRenders.v1';
+const RENDER_HISTORY_LIMIT = 15;
+
+function _renderHistoryRead() {
+  try {
+    const raw = localStorage.getItem(RENDER_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function _renderHistoryWrite(items) {
+  try {
+    localStorage.setItem(RENDER_HISTORY_KEY, JSON.stringify(items.slice(0, RENDER_HISTORY_LIMIT)));
+  } catch (_) {}
+}
+
+function _renderHistoryPayload(job) {
+  try {
+    const raw = job?.payload_json;
+    if (!raw) return {};
+    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch (_) {
+    return {};
+  }
+}
+
+function _renderHistoryFileName(value) {
+  const clean = String(value || '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || '';
+  return clean || String(value || '').trim();
+}
+
+function _renderHistoryTitle(sourceType, sourceValue) {
+  const value = String(sourceValue || '').trim();
+  if (!value) return 'Untitled render';
+  if (sourceType === 'local') return _renderHistoryFileName(value) || 'Local video';
+  try {
+    const u = new URL(value);
+    return u.searchParams.get('v') ? `YouTube ${u.searchParams.get('v')}` : u.hostname.replace(/^www\./, '');
+  } catch (_) {
+    return value.length > 54 ? `${value.slice(0, 51)}...` : value;
+  }
+}
+
+function _renderHistoryStatus(completed, failed) {
+  if (failed > 0 && completed > 0) return 'partial';
+  if (failed > 0 && completed === 0) return 'failed';
+  if (completed > 0 && failed === 0) return 'completed';
+  return 'failed';
+}
+
+function _renderHistoryStatusText(status) {
+  if (status === 'partial') return 'Partial';
+  if (status === 'failed') return 'Failed';
+  return 'Completed';
+}
+
+function _renderHistoryClipSummary(entry) {
+  const completed = Number(entry.completedParts || 0);
+  const failed = Number(entry.failedParts || 0);
+  if (completed > 0 && failed > 0) return `${completed} clips · ${failed} failed`;
+  if (failed > 0) return `${failed} failed`;
+  return `${completed} clips`;
+}
+
+function _renderHistoryRelativeTime(ts) {
+  const t = Number(ts || 0);
+  if (!t) return 'just now';
+  const seconds = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function _renderHistoryAttr(value) {
+  return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function buildRenderHistoryEntry(job, summary, parts) {
+  const payload = _renderHistoryPayload(job);
+  const items = Array.isArray(parts) ? parts : [];
+  const completed = Number(summary?.completed_parts ?? items.filter((p) => String(p?.status || '').toLowerCase() === 'done').length) || 0;
+  const failed = Number(summary?.failed_parts ?? items.filter((p) => String(p?.status || '').toLowerCase() === 'failed').length) || 0;
+  const total = Number(summary?.total_parts ?? items.length) || (completed + failed);
+  const sourceType = String(payload.source_mode || (payload.youtube_url ? 'youtube' : 'local')).toLowerCase();
+  const rawSource = sourceType === 'youtube' ? payload.youtube_url : payload.source_video_path;
+  const sourceValue = sourceType === 'local' ? _renderHistoryFileName(rawSource) : String(rawSource || '').trim();
+  const outputDir = String(payload.output_dir || '').trim();
+  const stamp = Date.parse(job?.completed_at || job?.updated_at || job?.created_at || '') || Date.now();
+  return {
+    jobId: String(job?.id || job?.job_id || currentJobId || '').trim(),
+    sourceType,
+    sourceValue,
+    outputDir,
+    totalParts: total,
+    completedParts: completed,
+    failedParts: failed,
+    timestamp: stamp,
+    title: _renderHistoryTitle(sourceType, rawSource),
+    status: _renderHistoryStatus(completed, failed),
+  };
+}
+
+function saveRenderHistoryEntry(job, summary, parts) {
+  const entry = buildRenderHistoryEntry(job, summary, parts);
+  if (!entry.jobId) return;
+  const existing = _renderHistoryRead().filter((item) => item.jobId !== entry.jobId);
+  const next = [entry, ...existing].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
+  _renderHistoryWrite(next);
+  renderRenderHistory();
+}
+
+function renderRenderHistory() {
+  const box = qs('render_history_list');
+  if (!box) return;
+  const items = _renderHistoryRead();
+  if (!items.length) {
+    box.innerHTML = '<div class="renderHistoryEmpty">No recent renders yet<div>Your completed renders will appear here.</div></div>';
+    return;
+  }
+  box.innerHTML = items.map((entry) => {
+    const status = _renderHistoryStatusText(entry.status);
+    const icon = entry.status === 'failed' ? '✕' : entry.status === 'partial' ? '⚠' : '✓';
+    const openDisabled = entry.outputDir ? '' : ' disabled';
+    return `<div class="renderHistoryItem ${esc(entry.status || 'completed')}">
+      <div class="renderHistoryMain">
+        <div class="renderHistoryTop">
+          <span class="renderHistoryStatusIcon">${icon}</span>
+          <span class="renderHistoryTitle" title="${_renderHistoryAttr(entry.sourceValue)}">${esc(entry.title || 'Untitled render')}</span>
+          <span class="renderHistoryTime">${_renderHistoryRelativeTime(entry.timestamp)}</span>
+        </div>
+        <div class="renderHistoryMeta">${status} · ${esc(_renderHistoryClipSummary(entry))}</div>
+      </div>
+      <div class="renderHistoryActions">
+        <button class="ghostButton" type="button"${openDisabled} onclick="openRenderHistoryOutput('${encodeURIComponent(entry.jobId)}')">Open Output Folder</button>
+        <button class="secondaryButton" type="button" onclick="rerunRenderHistory('${encodeURIComponent(entry.jobId)}')">Rerun</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openRenderHistoryOutput(jobId) {
+  jobId = decodeURIComponent(String(jobId || ''));
+  const entry = _renderHistoryRead().find((item) => item.jobId === jobId);
+  if (!entry) {
+    showToast('Render history item not found', 'error');
+    renderRenderHistory();
+    return;
+  }
+  openStoredOutputPath(entry.outputDir);
+}
+
+function rerunRenderHistory(jobId) {
+  jobId = decodeURIComponent(String(jobId || ''));
+  const entry = _renderHistoryRead().find((item) => item.jobId === jobId);
+  if (!entry) {
+    showToast('Render history item not found', 'error');
+    renderRenderHistory();
+    return;
+  }
+  setView('render');
+  hideRenderCompletionBar();
+  setRenderFlowState('source', 'Source ready', { force: true });
+  if (qs('output_mode') && entry.outputDir) {
+    qs('output_mode').value = 'manual';
+    syncOutputModeUI();
+    if (qs('manual_output_dir')) qs('manual_output_dir').value = entry.outputDir;
+  }
+  if (qs('source_mode')) qs('source_mode').value = entry.sourceType === 'local' ? 'local' : 'youtube';
+  syncSourceModeUI();
+  if (entry.sourceType === 'youtube') {
+    if (qs('youtube_url')) qs('youtube_url').value = entry.sourceValue || '';
+    setRenderFlowState('source', 'YouTube URL restored', { force: true });
+    showToast('YouTube source restored. Open editor to rerun.', 'success');
+  } else {
+    selectedLocalVideoPath = '';
+    _pendingLocalFile = null;
+    if (qs('source_video_path')) qs('source_video_path').value = '';
+    if (qs('source_video_name')) qs('source_video_name').textContent = 'Please reselect the local file.';
+    setRenderFlowState('source', 'Reselect local file', { force: true });
+    showToast('Please reselect the local file', 'info');
+  }
+}
+
+function focusBottomPanel() {
+  const panel = qs('appBottomPanel');
+  if (!panel) return;
+  if (typeof _collapseBottomPanel === 'function') _collapseBottomPanel(false);
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 function pipelineStateByStage(stage, status){
   const s = (stage || '').toLowerCase();
@@ -120,7 +509,7 @@ function pipelineStateByStage(stage, status){
   });
 }
 function renderPipeline(stage, status){
-  const stateLabel = { pending: 'pending', running: 'running', done: 'done', failed: 'failed' };
+  const stateLabel = { pending: 'Waiting', running: 'In Progress', done: 'Done', failed: 'Failed' };
   const nodes = pipelineStateByStage(stage, status);
   qs('pipeline_wrap').innerHTML = nodes.map(n => `
     <div class="pipelineNode ${n.state}">
@@ -134,10 +523,18 @@ function setRenderActionBusy(isBusy){
   if(!btn) return;
   btn.disabled = !!isBusy;
   btn.style.opacity = isBusy ? '0.75' : '1';
-  btn.textContent = isBusy ? 'Running...' : 'Download + Render';
+  btn.textContent = isBusy ? 'Rendering...' : 'Open Editor';
 
   // Expand bottom panel when job starts so pipeline/log are immediately visible.
-  if (isBusy && typeof _collapseBottomPanel === 'function') _collapseBottomPanel(false);
+  if (isBusy) {
+    focusBottomPanel();
+    const panel = qs('appBottomPanel');
+    if (panel) {
+      panel.classList.remove('renderStartPulse');
+      void panel.offsetWidth;
+      panel.classList.add('renderStartPulse');
+    }
+  }
 
   // Lock/unlock all form inputs in the render setup card
   const card = document.querySelector('#card_render_setup');
@@ -190,7 +587,7 @@ function stepStatus(index, progress){
 }
 
 function renderSteps(progress){
-  const stateLabel = { pending: 'pending', running: 'running', done: 'done' };
+  const stateLabel = { pending: 'Waiting', running: 'In Progress', done: 'Done' };
   qs('steps_grid').innerHTML = steps.map((s, i) => {
     const st = stepStatus(i, progress || 0);
     return `<div class="stepCard ${st}"><div class="stepIconWrap">${st === 'done' ? 'OK' : st === 'running' ? 'RUN' : '...'}</div><div><div class="stepTitle">${s.label}</div><div class="stepStatus">${stateLabel[st] || st}</div></div></div>`;
@@ -199,31 +596,37 @@ function renderSteps(progress){
 
 function renderParts(items, summary){
   const wrap = qs('parts_wrap');
-  if(!items || !items.length){ wrap.innerHTML = '<div class="emptyState">No parts yet.</div>'; return; }
+  if(!items || !items.length){ wrap.innerHTML = '<div class="emptyState">Parts will appear here once rendering begins.</div>'; return; }
   const ordered = [...items].sort((a,b)=>Number(a.part_no||0)-Number(b.part_no||0));
   const stuckMap = _stuckPartsMap(summary, items);
+  syncPartProgressTargets(ordered);
   wrap.innerHTML = ordered.map((p, idx) => {
     const st     = (p.status || '').toLowerCase();
     const isRun  = st === 'waiting' || st === 'cutting' || st === 'transcribing' || st === 'rendering';
     const key    = String(p.part_no ?? idx + 1);
     const isStuck = isRun && stuckMap.has(key);
+    const disp   = Math.round(_partDisplay[key] ?? Number(p.progress_percent || 0));
     const errMsg  = st === 'failed' ? esc(p.message || '') : '';
     const errHtml = errMsg ? `<div class="partError">${errMsg}</div>` : '';
     const stuckHtml = isStuck ? `<div class="partStuckNote">${_stuckLabel(stuckMap.get(key))}</div>` : '';
-    const rowClass  = isRun ? (isStuck ? 'running stuck' : 'running') : '';
+    const rowClass  = `${st || 'queued'}${isRun ? ' running' : ''}${isStuck ? ' stuck' : ''}`.trim();
+    const partName = p.part_name ? esc(p.part_name) : `Part ${Number(p.part_no || idx + 1)}`;
     return `
     <div class="partRow ${rowClass}">
       <div class="partLeft">
         <div class="rankBadge">P${Number(p.part_no || idx + 1)}</div>
         <div>
-          <div class="partName">${esc(p.part_name)}</div>
+          <div class="partName">${partName}</div>
           <div class="partMeta">${Number(p.start_sec || 0).toFixed(1)}s -> ${Number(p.end_sec || 0).toFixed(1)}s | Motion ${Number(p.motion_score || 0).toFixed(0)} | Hook ${Number(p.hook_score || 0).toFixed(0)}</div>
           ${errHtml}${stuckHtml}
         </div>
       </div>
-      <div>
-        <div class="miniProgress"><div class="miniProgressValue" style="width:${Number(p.progress_percent || 0)}%"></div></div>
-        <div class="partMeta">${Number(p.progress_percent || 0)}%</div>
+      <div class="partProgressCell">
+        <div class="partProgressTop">
+          <span class="partProgressLabel">${partStatusLabel(st)}</span>
+          <span class="partProgressPct" id="row_ppct_${key}">${disp}%</span>
+        </div>
+        <div class="miniProgress"><div class="miniProgressValue ${esc(st)}" id="row_pbar_${key}" style="width:${disp}%"></div></div>
       </div>
       <div class="partRight">
         <div class="statusBadge ${esc((p.status || '').toLowerCase())}">${partStatusLabel(p.status)}</div>
@@ -231,6 +634,18 @@ function renderParts(items, summary){
       </div>
     </div>
   `}).join('');
+}
+
+function syncPartProgressTargets(items) {
+  (items || []).forEach((p, idx) => {
+    const key = String(p.part_no ?? idx + 1);
+    const backendPct = Number(p.progress_percent || 0);
+    _partTarget[key] = backendPct;
+    if(_partDisplay[key] == null) _partDisplay[key] = backendPct;
+    const st = (p.status||'').toLowerCase();
+    if(st === 'done' || st === 'failed') _partDisplay[key] = backendPct;
+  });
+  _scheduleSmooth();
 }
 
 // ── Stuck-part helpers ────────────────────────────────────────────────
@@ -322,22 +737,12 @@ function renderPartFocus(items, summary){
   const s = summary || computeProgressSummary(ordered);
 
   if(!s.total_parts){
-    box.innerHTML = '<div class="partFocusTitle">Live Part Tracking</div><div class="partFocusLine">No parts yet.</div>';
+    box.innerHTML = '<div class="partFocusTitle">Live Part Tracking</div><div class="partFocusLine">Parts will appear here once rendering begins.</div>';
     return;
   }
 
   // ── Sync smooth-animation targets from backend data ─────────────────
-  ordered.forEach(p => {
-    const key = String(p.part_no || 0);
-    const backendPct = Number(p.progress_percent || 0);
-    _partTarget[key] = backendPct;
-    // On first sight of a part, seed display at backend value (no fake lag on fresh data)
-    if(_partDisplay[key] == null) _partDisplay[key] = backendPct;
-    // If part completed or failed, snap display to final value immediately
-    const st = (p.status||'').toLowerCase();
-    if(st === 'done' || st === 'failed') _partDisplay[key] = backendPct;
-  });
-  _scheduleSmooth();
+  syncPartProgressTargets(ordered);
 
   const pending = s.pending_parts ?? (s.total_parts - s.completed_parts - s.failed_parts - s.processing_parts);
 

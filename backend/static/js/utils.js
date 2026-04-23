@@ -41,7 +41,7 @@ function applyEnglishLabels(){
   set('#card_render_setup .sectionTitle', 'Render Setup');
   set('#card_render_setup .sectionSubtitle', 'Minimal mode: select source + channel, then run.');
   set('#card_render_setup .ghostButton', 'Refresh Jobs');
-  set('#start_render_btn', 'Download + Render');
+  set('#start_render_btn', 'Open Editor');
   const resumeBtn = document.querySelector('#card_render_setup .secondaryButton');
   if (resumeBtn) resumeBtn.textContent = 'Resume by Job ID';
   const resumeInput = qs('resume_job_id'); if (resumeInput) resumeInput.placeholder = 'Enter job id to resume';

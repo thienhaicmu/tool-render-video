@@ -12,6 +12,8 @@ function setView(view){
   const mainArea = qs('mainArea');
   if (mainArea) mainArea.classList.toggle('editorMode', isEditor);
   qs('view_editor').classList.toggle('hiddenView', !isEditor);
+  const flowBar = qs('render_flow_bar');
+  if (flowBar) flowBar.classList.toggle('hiddenView', !(isRender || isEditor));
 
   // pageHeader + layout_grid only visible for upload/channels/reports/settings
   const showMainContent = !isRender && !isEditor;
@@ -48,6 +50,8 @@ function setView(view){
   // Render home panel: show idle dashboard only in render view.
   const rhp = qs('render_home_panel');
   if (rhp) rhp.classList.toggle('hiddenView', !isRender);
+  if (isRender && typeof renderRenderHistory === 'function') renderRenderHistory();
+  if (!isRender && !isEditor && typeof hideRenderCompletionBar === 'function') hideRenderCompletionBar();
 
   // Bottom panel: auto-collapse when switching views with no active job.
   if (!currentJobId) _collapseBottomPanel(true);

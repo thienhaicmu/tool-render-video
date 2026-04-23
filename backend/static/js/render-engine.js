@@ -8,6 +8,9 @@ async function startRender(){
     ? (selectedRenderOutputDir || qs('render_output_dir').value || '').trim()
     : (qs('manual_output_dir')?.value || '').trim();
 
+  hideRenderCompletionBar();
+  setRenderFlowState('source', sourceMode === 'youtube' ? 'YouTube source selected' : 'Local source selected', { force: true });
+
   if(outputMode === 'channel' && !channel){
     addEvent('Validation error: please select target channel first.', 'render');
     return;
@@ -44,21 +47,28 @@ async function startRender(){
       }
     }
   }
-  if(sourceMode === 'youtube'){
-    if(!youtubeUrl){
-      addEvent('Vui lòng nhập YouTube URL.', 'render');
+  if (sourceMode === 'youtube') {
+    const validYouTube = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(youtubeUrl || '');
+    if (!youtubeUrl) {
+      addEvent('Please enter a YouTube URL.', 'render');
+      showToast('Please enter a YouTube URL', 'error');
       return;
     }
-  } else {
-    // Browser mode: upload file to server if needed
-    if(_pendingLocalFile){
-      localVideoPath = await uploadLocalFileIfNeeded();
-    }
-    if(!localVideoPath){
-      addEvent('Vui lòng chọn video local trước.', 'render');
+    if (!validYouTube) {
+      addEvent('Please enter a valid YouTube URL (youtube.com or youtu.be).', 'render');
+      showToast('Invalid YouTube URL', 'error');
       return;
     }
   }
+
+  if (sourceMode !== 'youtube' && _pendingLocalFile) {
+    localVideoPath = await uploadLocalFileIfNeeded();
+  }
+  if (sourceMode !== 'youtube' && !localVideoPath) {
+    addEvent('Please choose a local video first.', 'render');
+    return;
+  }
+
   // Base payload — all render settings will be finalized in the editor screen
   const payload = {
     output_mode: outputMode,
@@ -117,6 +127,7 @@ async function startRender(){
   // ── YouTube: download first (with cancel support), then open editor ──
   // ── Local: open editor immediately (prepare-source is fast validation only) ──
   if (sourceMode === 'youtube') {
+    setRenderFlowState('source', 'Downloading source');
     const btn = qs('start_render_btn');
     const origText = btn.textContent;
     btn.disabled = true;
@@ -152,6 +163,7 @@ async function startRender(){
       if (dlMsg) dlMsg.textContent = `Downloaded: ${pd.title || 'video'} (${dur})`;
       addEvent(`Download complete: ${pd.title} (${dur})`, 'render');
       showToast(`Downloaded: ${pd.title || 'video'} (${dur})`, 'success');
+      setRenderFlowState('configure', 'Editing clip');
       payload.edit_session_id = pd.session_id;
       openEditorView_withSession(pd, youtubeUrl, payload);
     } catch(err) {
@@ -173,6 +185,7 @@ async function startRender(){
     }
     return;
   } else {
+    setRenderFlowState('configure', 'Preparing editor');
     openEditorView(sourceMode, localVideoPath, payload);
   }
 }
@@ -199,8 +212,10 @@ async function resumeRender(){
   _jobTargetPct = 0; _jobDisplayPct = 0;
   for(const k of Object.keys(_partTarget)) delete _partTarget[k];
   for(const k of Object.keys(_partDisplay)) delete _partDisplay[k];
+  hideRenderCompletionBar();
   setRenderActionBusy(true);
   setHeaderJob('Render resumed');
+  setRenderFlowState('rendering', 'Resumed render', { force: true });
   addEvent('Resume queued', 'render');
   startPolling();
 }
@@ -233,18 +248,19 @@ function _applyJobUpdate(job, parts, summary){
     _scheduleSmooth();
   }
 
-  qs('job_stage_pill').textContent = job.stage || 'running';
+  qs('job_stage_pill').textContent = stageLabelPlain(job.stage);
   qs('job_title').textContent = job.status === 'queued' ? 'Queued job' : 'Processing video';
   qs('job_meta_1').textContent = `Channel ${job.channel_code || '-'} | Source -`;
-  qs('job_message').textContent = job.message || '-';
+  qs('job_message').textContent = friendlyJobMessage(job);
   setActionState(job);
   renderPipeline(job.stage, job.status);
   renderSteps(targetPercent);
+  updateRenderFlowByJob(job, s, parts);
 
   renderParts(parts, s);
   renderPartFocus(parts, s);
   updateStatusBar(job, s);
-  const doneCount = s.total_parts ? s.completed_parts : parts.filter(p => (p.status || '').toLowerCase() === 'done').length;
+  const doneCount = getCompletedClipCount(s, parts);
   const totalCount = s.total_parts || parts.length;
   const parallelNote = s.processing_parts > 1 ? ` | ${s.processing_parts} parallel` : '';
   qs('job_meta_2').textContent = `${doneCount}/${totalCount} parts done | step ${stageLabelPlain(job.stage)}${parallelNote}`;
@@ -272,6 +288,7 @@ function _applyJobUpdate(job, parts, summary){
     _stopJobWs();
     if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
     setRenderActionBusy(false);
+    saveRenderHistoryEntry(job, s, parts);
     if(job.status === 'failed' && currentJobId && lastFailLogJobId !== currentJobId){
       fetch(`/api/jobs/${currentJobId}/logs?lines=1`)
         .then(r => r.json()).then(ldata => {
@@ -280,6 +297,13 @@ function _applyJobUpdate(job, parts, summary){
           else addEvent('Failed. Please check channel log file for technical details.', 'render');
           lastFailLogJobId = currentJobId;
         }).catch(_=>{ addEvent('Failed. Please check channel log file for technical details.', 'render'); });
+    }
+    if (job.status === 'completed') {
+      const handoff = buildCompletionHandoff(s, parts, job);
+      showRenderCompletionBar(handoff.main, handoff.detail);
+      setRenderFlowState('complete', `${doneCount} clips ready`);
+    } else {
+      hideRenderCompletionBar();
     }
     addEvent(`Job ${job.status}`, 'render');
   }

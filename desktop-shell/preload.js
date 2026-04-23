@@ -9,5 +9,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return '';
     }
   },
+  openPath: async (targetPath) => {
+    try {
+      return await ipcRenderer.invoke('shell:openPath', String(targetPath || ''));
+    } catch (e) {
+      return e?.message || String(e || 'Unable to open path');
+    }
+  },
 });
 

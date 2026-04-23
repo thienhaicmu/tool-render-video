@@ -15,6 +15,167 @@ const EV_TEXT_POS_TO_XY = {
   'bottom-center': [50, 90],
   'bottom-right': [95, 90],
 };
+let _evUiInitialized = false;
+let _evMoreCollapsed = true;
+
+function _evSetText(selector, text) {
+  const el = document.querySelector(selector);
+  if (el) el.textContent = text;
+}
+
+function evSetStatus(message, detail = '', isError = false) {
+  const line = qs('evStatusLine');
+  const small = qs('evStatusDetail');
+  if (line) {
+    line.textContent = message || '';
+    line.style.color = isError ? '#ef4444' : 'var(--text-muted)';
+  }
+  if (small) small.textContent = detail || '';
+}
+
+function _evToggleCollapse(sectionId) {
+  const sec = qs(sectionId);
+  if (!sec) return;
+  sec.classList.toggle('isCollapsed');
+}
+
+function _evEnsureSectionCollapse(sectionId, summaryId, summaryText) {
+  const sec = qs(sectionId);
+  if (!sec) return;
+  sec.classList.add('evSectionCollapsible');
+  if (!sec.querySelector('.evCollapseSummary')) {
+    const s = document.createElement('div');
+    s.className = 'evCollapseSummary';
+    s.id = summaryId;
+    s.textContent = summaryText;
+    sec.insertBefore(s, sec.children[1] || null);
+  }
+  const title = sec.querySelector('.evSectionTitle');
+  if (title && !title.dataset.collapseBound) {
+    title.dataset.collapseBound = '1';
+    title.style.cursor = 'pointer';
+    title.addEventListener('click', () => _evToggleCollapse(sectionId));
+  }
+}
+
+function evToggleSection(sectionId) {
+  _evToggleCollapse(sectionId);
+}
+
+function evSyncQuickSetting(kind, source = 'quick') {
+  const aspectQuick = qs('evAspectRatioQuick');
+  const profileQuick = qs('evRenderProfileQuick');
+  const aspectMain = qs('evAspectRatio');
+  const profileMain = qs('evRenderProfile');
+  if (kind === 'aspect' && aspectQuick && aspectMain && source === 'quick') {
+    aspectMain.value = aspectQuick.value;
+    evUpdateAspectRatio();
+  }
+  if (kind === 'aspect' && aspectQuick && aspectMain && source === 'main') {
+    aspectQuick.value = aspectMain.value;
+  }
+  if (kind === 'profile' && profileQuick && profileMain && source === 'quick') {
+    profileMain.value = profileQuick.value;
+  }
+  if (kind === 'profile' && profileQuick && profileMain && source === 'main') {
+    profileQuick.value = profileMain.value;
+  }
+}
+
+function _evSyncQuickControlsFromMain() {
+  evSyncQuickSetting('aspect', 'main');
+  evSyncQuickSetting('profile', 'main');
+}
+
+function evToggleMoreSettings() {
+  _evMoreCollapsed = !_evMoreCollapsed;
+  document.querySelectorAll('.evMoreSettingItem').forEach((el) => el.classList.toggle('hiddenView', _evMoreCollapsed));
+  const sec = qs('evSectionMoreSettings');
+  if (sec) sec.classList.toggle('isCollapsed', _evMoreCollapsed);
+}
+
+function _evEnsureGuidedSections() {
+  const pane = document.querySelector('.evRightScroll.inspPaneBody');
+  if (!pane || _evUiInitialized) return;
+
+  const trimSec = pane.querySelector('[data-section-type="trim"]');
+  const volSec = pane.querySelector('[data-section-type="volume"]');
+  const bgmSec = pane.querySelector('[data-section-type="bgm"]');
+  const fxSec = pane.querySelector('[data-section-type="transform"]');
+  const renderSec = pane.querySelector('[data-section-type="render-settings"]');
+  const subtitleSec = qs('inspSubtitlePane');
+  const textSec = pane.querySelector('[data-section-type="text-layers"]');
+
+  if (trimSec) trimSec.id = 'evSectionTrim';
+  if (volSec) volSec.id = 'evSectionVolume';
+  if (bgmSec) bgmSec.classList.add('evMoreSettingItem');
+  if (fxSec) fxSec.classList.add('evMoreSettingItem');
+  if (renderSec) renderSec.classList.add('evMoreSettingItem');
+
+  _evSetText('#evSectionTrim .evSectionTitle', 'Trim');
+  _evSetText('#evSectionVolume .evSectionTitle', 'Volume');
+  _evSetText('#evTrimInfo', 'Full video');
+  _evSetText('#evStatusLine', 'Preparing editor...');
+  _evSetText('#evStartBtn', '▶ Start Render');
+  _evSetText('#evSourceName', 'No source selected');
+  _evSetText('#evSubStaticText', 'Preview subtitle');
+  const cancelBtn = document.querySelector('.evRightHeader .ghostButton');
+  if (cancelBtn) cancelBtn.textContent = '← Cancel';
+  const inLabel = qs('evTrimInSec')?.closest('label')?.querySelector('.fieldLabel');
+  const outLabel = qs('evTrimOutSec')?.closest('label')?.querySelector('.fieldLabel');
+  if (inLabel) inLabel.textContent = 'Start (sec)';
+  if (outLabel) outLabel.textContent = 'End (sec)';
+
+  if (!qs('evSectionBasic')) {
+    const basic = document.createElement('div');
+    basic.id = 'evSectionBasic';
+    basic.className = 'evSection';
+    basic.innerHTML = `
+      <div class="evSectionTitle">Basic Render Settings</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <label class="field"><span class="fieldLabel">Aspect Ratio</span><select class="fieldInput" id="evAspectRatioQuick"></select></label>
+        <label class="field"><span class="fieldLabel">Render Profile</span><select class="fieldInput" id="evRenderProfileQuick"></select></label>
+      </div>`;
+    volSec?.insertAdjacentElement('afterend', basic);
+    const mainAspect = qs('evAspectRatio');
+    const mainProfile = qs('evRenderProfile');
+    const qAspect = qs('evAspectRatioQuick');
+    const qProfile = qs('evRenderProfileQuick');
+    if (mainAspect && qAspect) {
+      qAspect.innerHTML = mainAspect.innerHTML;
+      qAspect.value = mainAspect.value;
+      qAspect.addEventListener('change', () => evSyncQuickSetting('aspect'));
+      mainAspect.addEventListener('change', () => evSyncQuickSetting('aspect', 'main'));
+    }
+    if (mainProfile && qProfile) {
+      qProfile.innerHTML = mainProfile.innerHTML;
+      qProfile.value = mainProfile.value;
+      qProfile.addEventListener('change', () => evSyncQuickSetting('profile'));
+      mainProfile.addEventListener('change', () => evSyncQuickSetting('profile', 'main'));
+    }
+  }
+
+  if (!qs('evSectionMoreSettings')) {
+    const header = document.createElement('div');
+    header.id = 'evSectionMoreSettings';
+    header.className = 'evSection evSectionCollapsible isCollapsed';
+    header.innerHTML = `
+      <div class="evSectionTitle" style="cursor:pointer" onclick="evToggleMoreSettings()">More Settings</div>
+      <div class="evCollapseSummary" id="evSummaryMoreSettings">Optional settings</div>`;
+    qs('evSectionBasic')?.insertAdjacentElement('afterend', header);
+  }
+
+  _evEnsureSectionCollapse('inspSubtitlePane', 'evSummarySubtitle', 'Default subtitle style');
+  if (subtitleSec) subtitleSec.classList.add('isCollapsed');
+  if (textSec) {
+    textSec.id = 'evSectionTextLayers';
+    _evEnsureSectionCollapse('evSectionTextLayers', 'evSummaryTextLayers', 'No text layers added');
+    textSec.classList.add('isCollapsed');
+  }
+
+  document.querySelectorAll('.evMoreSettingItem').forEach((el) => el.classList.add('hiddenView'));
+  _evUiInitialized = true;
+}
 
 // ── TEXT LAYER FACTORY + DEFAULTS ────────────────────────────────────────────
 function evPresetToXY(position) {
@@ -118,6 +279,8 @@ function evRenderTextLayerList() {
   const box = qs('evTextLayerList');
   if (!box) return;
   document.getElementById('appInspector')?.classList.toggle('inspHasLayers', !!_ev.textLayers.length);
+  const txtSummary = qs('evSummaryTextLayers');
+  if (txtSummary) txtSummary.textContent = _ev.textLayers.length ? `${_ev.textLayers.length} text layer(s)` : 'No text layers added';
   if (!_ev.textLayers.length) {
     box.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">No text layer configured.</div>';
     const editor = qs('evTextLayerEditor');
@@ -330,6 +493,11 @@ function _evUpdateInfoStrip() {
 
 /* ── Open editor view ─────────────────────────────────────── */
 async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
+  _evEnsureGuidedSections();
+  if (!_evMoreCollapsed) evToggleMoreSettings();
+  qs('inspSubtitlePane')?.classList.add('isCollapsed');
+  qs('evSectionTextLayers')?.classList.add('isCollapsed');
+  _evSyncQuickControlsFromMain();
   _ev.sessionId = null;
   _ev.exportDir = null;
   _ev.duration = 0;
@@ -341,15 +509,16 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   // Init editor settings with defaults (editor is source of truth for all render params)
 
   setView('editor');
+  setRenderFlowState('configure', 'Preparing editor');
   qs('evSourceName').textContent = urlOrPath || '…';
   qs('evLoadingOverlay').style.display = 'flex';
-  qs('evLoadingText').textContent = sourceMode === 'youtube' ? 'Đang tải video từ YouTube…' : 'Đang phân tích video…';
+  qs('evLoadingText').textContent = sourceMode === 'youtube' ? 'Downloading video from YouTube...' : 'Analyzing video...';
   qs('evVideo').style.display = 'none';
   qs('evSubOverlay').style.display = 'none';  // hide until video ready
   qs('evStartBtn').disabled = true;
-  qs('evStartBtn').textContent = '▶ Bắt đầu Render';
+  qs('evStartBtn').textContent = '▶ Start Render';
   if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'none';
-  qs('evStatusLine').textContent = sourceMode === 'youtube' ? '⏳ Download YouTube — có thể mất 30–60 giây…' : '⏳ Đang chuẩn bị preview…';
+  qs('evStatusLine').textContent = sourceMode === 'youtube' ? 'Downloading YouTube source (may take 30-60 seconds)...' : 'Preparing preview...';
   qs('evStatusLine').style.color = '';
   _evUpdateInfoStrip();
   _evResetTrimUI();
@@ -379,9 +548,9 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
     _evLoadVideo(`/api/render/preview-video/${pd.session_id}`);
 
   } catch(err) {
-    qs('evLoadingText').textContent = `Lỗi: ${err.message}`;
+    qs('evLoadingText').textContent = `Error: ${err.message}`;
     qs('evStartBtn').disabled = false;
-    qs('evStatusLine').textContent = `Lỗi chuẩn bị video. Vẫn có thể render.`;
+    qs('evStatusLine').textContent = 'Could not prepare preview. You can still submit render.';
     addEvent(`Editor prepare error: ${err.message}`, 'render');
     if (_ev.duration > 0) _evSetDuration(_ev.duration);
   }
@@ -389,6 +558,11 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
 
 /* ── Open editor with pre-downloaded YouTube session ──────── */
 function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
+  _evEnsureGuidedSections();
+  if (!_evMoreCollapsed) evToggleMoreSettings();
+  qs('inspSubtitlePane')?.classList.add('isCollapsed');
+  qs('evSectionTextLayers')?.classList.add('isCollapsed');
+  _evSyncQuickControlsFromMain();
   _ev.sessionId = pd.session_id;
   _ev.exportDir = pd.export_dir || null;
   _ev.duration = pd.duration || 0;
@@ -398,18 +572,19 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   _ev.sourceUrl = _ev.sourceUrl || urlOrPath;
 
   setView('editor');
+  setRenderFlowState('configure', 'Editing clip');
   qs('evSourceName').textContent = pd.title || urlOrPath || '…';
   if (qs('evTitleOverlayText') && !String(qs('evTitleOverlayText').value || '').trim()) {
     qs('evTitleOverlayText').value = String(pd.title || '');
   }
   qs('evLoadingOverlay').style.display = 'flex';
-  qs('evLoadingText').textContent = 'Đang tải preview…';
+  qs('evLoadingText').textContent = 'Loading preview...';
   qs('evVideo').style.display = 'none';
   qs('evSubOverlay').style.display = 'none';
   qs('evStartBtn').disabled = true;
-  qs('evStartBtn').textContent = '▶ Bắt đầu Render';
+  qs('evStartBtn').textContent = '▶ Start Render';
   if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'none';
-  qs('evStatusLine').textContent = '⏳ Đang tải preview video…';
+  qs('evStatusLine').textContent = 'Loading video preview...';
   qs('evStatusLine').style.color = '';
   _evUpdateInfoStrip();
   _evResetTrimUI();
@@ -423,7 +598,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
 
   // Restore start button
   const btn = qs('start_render_btn');
-  if (btn) { btn.disabled = false; btn.textContent = '▶ Tiếp theo: Chỉnh sửa & Render'; btn.style.opacity = '1'; }
+  if (btn) { btn.disabled = false; btn.textContent = 'Next: Edit and Render'; btn.style.opacity = '1'; }
 }
 
 function _evLoadVideo(src) {
@@ -436,7 +611,7 @@ function _evLoadVideo(src) {
     video.style.display = 'block';
     _ev.videoReady = true;
     qs('evStartBtn').disabled = false;
-    qs('evStatusLine').textContent = 'Video sẵn sàng. Chỉnh sửa rồi nhấn Bắt đầu Render.';
+    qs('evStatusLine').textContent = 'Video is ready. Adjust settings and click Start Render.';
     qs('evSubOverlay').style.display = 'flex';
     // Sync subtitle overlay and start animation
     _evSyncSubOverlay();
@@ -444,11 +619,11 @@ function _evLoadVideo(src) {
     video.addEventListener('timeupdate', _evOnTimeUpdate);
   };
   video.onerror = () => {
-    qs('evLoadingText').textContent = 'Preview không khả dụng';
-    qs('evLoadingOverlay').querySelector('div:last-child').textContent = 'Trim & subtitle vẫn hoạt động ✓';
+    qs('evLoadingText').textContent = 'Preview unavailable';
+    qs('evLoadingOverlay').querySelector('div:last-child').textContent = 'Trim and subtitle preview are still available';
     qs('evLoadingOverlay').querySelector('.editorSpinner').style.display = 'none';
     qs('evStartBtn').disabled = false;
-    qs('evStatusLine').textContent = 'Preview lỗi codec — mọi chức năng vẫn hoạt động.';
+    qs('evStatusLine').textContent = 'Preview codec is unsupported, but render settings still work.';
     // Show subtitle preview even without video (over loading overlay)
     qs('evSubOverlay').style.display = 'flex';
     qs('evSubOverlay').style.left = '0';
@@ -539,9 +714,11 @@ function _evUpdateTrimUI() {
   qs('evTrimFill').style.width = `${(outV-inV)*0.1}%`;
   qs('evTrimRegion').style.left  = `${inV*0.1}%`;
   qs('evTrimRegion').style.width = `${(outV-inV)*0.1}%`;
+  const trimLabel = qs('evTrimRegionLabel');
+  if (trimLabel) trimLabel.textContent = `Trim ${_fmtTime(inSec)} → ${_fmtTime(outSec)}`;
   qs('evTrimInfo').textContent = dur > 0
     ? `${_fmtTime(inSec)} → ${_fmtTime(outSec)} (${_fmtTime(sel)})`
-    : 'Toàn bộ video';
+    : 'Full video';
 }
 
 function evSetTrimIn() {
@@ -613,6 +790,8 @@ function evUpdateSubPreview() {
   qs('evSubSizeVal').textContent    = size;
   qs('evSubPosVal').textContent     = posY;
   qs('evSubOutlineVal').textContent = outline;
+  const subSummary = qs('evSummarySubtitle');
+  if (subSummary) subSummary.textContent = `${font} · ${size}px`;
 
   // Sync overlay position to actual video frame
   _evSyncSubOverlay();
@@ -657,7 +836,7 @@ function cancelEditorView() {
   if (video) { video.pause(); video.src = ''; video.style.display = 'none'; }
   setView('render');
   setRenderActionBusy(false);
-  addEvent('Editor view: huỷ.', 'render');
+  addEvent('Editor view closed.', 'render');
 }
 
 /* ── Re-open editor after session expiry ──────────────────── */
@@ -712,18 +891,19 @@ function evApplyStylePreset(name) {
 // ── RENDER SUBMIT ─────────────────────────────────────────────────────────────
 async function startRenderFromEditor() {
   const payload = _ev.pendingPayload;
-  if (!payload) { addEvent('Không có render payload!', 'render'); return; }
+  setRenderFlowState('rendering', 'Submitting render request');
+  if (!payload) { addEvent('Missing render payload.', 'render'); return; }
 
   // Pre-submit validation
   if (!_ev.sessionId) {
-    qs('evStatusLine').textContent = '⚠ No session — please re-open editor first.';
+    qs('evStatusLine').textContent = 'No session found. Please re-open editor first.';
     qs('evStatusLine').style.color = '#ef4444';
     return;
   }
   const invalidLayer = (_ev.textLayers || []).find(l => !String(l.text || '').trim());
   if (invalidLayer !== undefined) {
     const idx = (_ev.textLayers || []).indexOf(invalidLayer) + 1;
-    qs('evStatusLine').textContent = `⚠ Text layer #${idx} is empty — add content or remove it.`;
+    qs('evStatusLine').textContent = `Text layer #${idx} is empty. Add content or remove it.`;
     qs('evStatusLine').style.color = '#ef4444';
     return;
   }
@@ -837,7 +1017,7 @@ async function startRenderFromEditor() {
       raw = (_ev.exportDir || '').replace(/\\/g, '/').trim();
     }
     if (!raw) {
-      qs('evStatusLine').textContent = '⚠ Thư mục xuất chưa cấu hình. Vui lòng chọn channel hoặc nhập thư mục ở màn hình chính rồi mở lại editor.';
+      qs('evStatusLine').textContent = 'Output folder is not configured. Choose a channel or manual folder on the main screen, then re-open editor.';
       qs('evStatusLine').style.color = '#ef4444';
       qs('evStartBtn').disabled = false;
       return;
@@ -849,38 +1029,48 @@ async function startRenderFromEditor() {
     payload.render_output_subdir = '';
   }
 
-  addEvent(`Editor → Render | device=${evDev} | profile=${profile} | aspect=${payload.aspect_ratio} | speed=${payload.playback_speed}x | trim ${_fmtTime(inSec)}→${_fmtTime(outSec)} | vol ${Math.round(vol*100)}% | text_layers=${layers.length} | title=off`, 'render');
+  addEvent(`Editor -> Render | device=${evDev} | profile=${profile} | aspect=${payload.aspect_ratio} | speed=${payload.playback_speed}x | trim ${_fmtTime(inSec)}->${_fmtTime(outSec)} | vol ${Math.round(vol*100)}% | text_layers=${layers.length} | title=off`, 'render');
 
   if (_ev.subAnimTimer) { clearInterval(_ev.subAnimTimer); _ev.subAnimTimer = null; }
   qs('evStartBtn').disabled = true;
-  qs('evStartBtn').textContent = '⏳ Sending…';
+  qs('evStartBtn').textContent = 'Sending...';
+  evSetStatus('Submitting render request...');
+  qs('evStartBtn').textContent = 'Sending...';
   if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'none';
-  qs('evStatusLine').textContent = '⏳ Đang gửi yêu cầu render…';
+  qs('evStatusLine').textContent = 'Submitting render request...';
   qs('evStatusLine').style.color = '';
 
   const _renderResult = await _submitRenderPayload(payload, false);
   if (_renderResult && _renderResult.ok) {
-    qs('evStatusLine').textContent = 'Render started ✓ — opening monitor…';
+    evSetStatus('Render started. Tracking in process panel...');
+    qs('evStatusLine').textContent = 'Render started. Opening process panel...';
     qs('evStatusLine').style.color = 'var(--success)';
-    showToast('Render queued ✓', 'success');
+    showToast('Render queued', 'success');
     const video = qs('evVideo');
     if (video) { video.pause(); video.src = ''; video.style.display = 'none'; }
-    setView('monitor');
+    setView('render');
+    setRenderFlowState('rendering', 'Queued - 0%');
+    focusBottomPanel();
+    evSetStatus('Render started. Tracking in process panel...');
   } else {
-    const errMsg = (_renderResult && _renderResult.error) || 'Không thể gửi yêu cầu render.';
+    const errMsg = (_renderResult && _renderResult.error) || 'Unable to submit render request.';
     const isSessionErr = /editor session|session.*expired|session.*not found|no active session/i.test(errMsg);
-    const logHint = ' · Logs: %APPDATA%\\tool-render-video\\logs';
+    const logHint = ' | Logs: %APPDATA%\\tool-render-video\\logs';
     if (isSessionErr) {
-      qs('evStatusLine').textContent = 'Session expired — please re-open editor.' + logHint;
+      evSetStatus('Session expired. Re-open editor.', 'Technical details: %APPDATA%\\tool-render-video\\logs', true);
+      qs('evStatusLine').textContent = 'Session expired. Please re-open editor.' + logHint;
       qs('evStatusLine').style.color = '#ef4444';
+      evSetStatus('Session expired. Re-open editor.', 'Technical details: %APPDATA%\\tool-render-video\\logs', true);
       if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'inline-flex';
       qs('evStartBtn').disabled = true;
-      qs('evStartBtn').textContent = '▶ Bắt đầu Render';
+      qs('evStartBtn').textContent = 'Start Render';
     } else {
+      evSetStatus('Render could not start.', `Technical details: ${errMsg}`, true);
       qs('evStartBtn').disabled = false;
-      qs('evStartBtn').textContent = '↺ Retry Render';
-      qs('evStatusLine').textContent = `⚠ ${errMsg}${logHint}`;
+      qs('evStartBtn').textContent = 'Retry Render';
+      qs('evStatusLine').textContent = 'Render could not start.';
       qs('evStatusLine').style.color = '#ef4444';
+      evSetStatus('Render could not start.', `Technical details: ${errMsg}`, true);
     }
   }
 }

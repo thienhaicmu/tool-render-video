@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const { spawn } = require('child_process');
 const http = require('http');
 const path = require('path');
@@ -305,6 +305,12 @@ ipcMain.handle('dialog:pickDirectory', async () => {
   });
   if (result.canceled || !result.filePaths || !result.filePaths.length) return '';
   return String(result.filePaths[0] || '');
+});
+
+ipcMain.handle('shell:openPath', async (_event, targetPath) => {
+  const p = String(targetPath || '').trim();
+  if (!p) return 'Missing path';
+  return shell.openPath(p);
 });
 app.on('window-all-closed', () => {
   if (backendProc && !backendProc.killed) {

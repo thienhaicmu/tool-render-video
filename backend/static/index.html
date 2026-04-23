@@ -195,6 +195,39 @@
   </nav>
 
   <main class="mainArea" id="mainArea">
+    <section id="render_flow_bar" class="renderFlowBar hiddenView" aria-label="Render flow">
+      <div class="renderFlowStep" data-flow-step="source">
+        <div class="renderFlowNum">1</div>
+        <div class="renderFlowText">
+          <div class="renderFlowTitle">Source</div>
+          <div class="renderFlowSub" id="flow_sub_source">Select source</div>
+        </div>
+      </div>
+      <div class="renderFlowArrow">→</div>
+      <div class="renderFlowStep" data-flow-step="configure">
+        <div class="renderFlowNum">2</div>
+        <div class="renderFlowText">
+          <div class="renderFlowTitle">Configure</div>
+          <div class="renderFlowSub" id="flow_sub_configure">Waiting for editor</div>
+        </div>
+      </div>
+      <div class="renderFlowArrow">→</div>
+      <div class="renderFlowStep" data-flow-step="rendering">
+        <div class="renderFlowNum">3</div>
+        <div class="renderFlowText">
+          <div class="renderFlowTitle">Rendering</div>
+          <div class="renderFlowSub" id="flow_sub_rendering">Waiting</div>
+        </div>
+      </div>
+      <div class="renderFlowArrow">→</div>
+      <div class="renderFlowStep" data-flow-step="complete">
+        <div class="renderFlowNum">4</div>
+        <div class="renderFlowText">
+          <div class="renderFlowTitle">Complete</div>
+          <div class="renderFlowSub" id="flow_sub_complete">Not finished</div>
+        </div>
+      </div>
+    </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
          EDITOR VIEW — in-layout center-stage editor (local/YouTube)
@@ -208,9 +241,9 @@
       <div class="evLeft">
         <!-- Aspect ratio indicator bar -->
         <div class="evAspectBar">
-          <span style="font-size:11px;color:var(--text-muted)">Tỉ lệ khung hình:</span>
+          <span style="font-size:11px;color:var(--text-muted)">Aspect ratio:</span>
           <span id="evAspectBadge" style="font-size:11px;font-weight:700;color:#60a5fa;background:rgba(59,130,246,.12);padding:2px 8px;border-radius:4px">9:16</span>
-          <span style="font-size:11px;color:var(--text-muted);margin-left:4px">— preview crop chính xác như output</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:4px">— preview crop matches output framing</span>
         </div>
 
         <div class="evVideoBox" id="evVideoBox">
@@ -231,8 +264,8 @@
             <!-- Loading overlay -->
             <div class="evLoadingOverlay" id="evLoadingOverlay">
               <div class="editorSpinner"></div>
-              <div id="evLoadingText" style="color:var(--text-dim);font-size:13px;font-weight:600">Đang tải video…</div>
-              <div style="font-size:11px;color:var(--text-muted)">Có thể mất vài chục giây</div>
+              <div id="evLoadingText" style="color:var(--text-dim);font-size:13px;font-weight:600">Loading video…</div>
+              <div style="font-size:11px;color:var(--text-muted)">This can take a few seconds</div>
             </div>
 
           </div><!-- /evVideoFrame -->
@@ -249,7 +282,9 @@
         <div class="evTimelineBarWrap" id="evTimelineBarWrap" onclick="evSeekClick(event)">
           <div class="evTimelineProgress" id="evTimelineProgress" style="width:0%"></div>
           <div class="evTrimRegion" id="evTrimRegion" style="left:0%;width:100%"></div>
+          <div class="evTrimRegionLabel" id="evTrimRegionLabel">Trim: full video</div>
         </div>
+        <span class="evTrimHelper">Use right panel to adjust trim range</span>
         <span class="evTimeText" id="evTotalTime">0:00:00</span>
         <button class="ghostButton" style="padding:5px 10px;font-size:12px" onclick="evTogglePlay()" id="evPlayBtn">▶</button>
       </div>
@@ -276,7 +311,7 @@
         <div class="renderHomeTitle">Pipeline Steps</div>
         <div class="renderHomeRow"><span class="renderHomeStepNum">1</span>Paste YouTube URL or choose a local video in <strong>Source Setup</strong> below.</div>
         <div class="renderHomeRow"><span class="renderHomeStepNum">2</span>Select an output channel (or manual folder) and configure render options.</div>
-        <div class="renderHomeRow"><span class="renderHomeStepNum">3</span>Click <strong>Download + Render</strong> — progress appears in the panel below.</div>
+        <div class="renderHomeRow"><span class="renderHomeStepNum">3</span>Open editor, adjust your clip, then start render.</div>
         <div class="renderHomeRow"><span class="renderHomeStepNum">4</span>When done, parts and the report are saved to the output folder.</div>
       </div>
       <div class="renderHomeCard">
@@ -284,6 +319,12 @@
         <div class="renderHomeRow"><span class="rhDot green"></span>ffmpeg — available</div>
         <div class="renderHomeRow"><span class="rhDot green"></span>Whisper — available</div>
         <div class="renderHomeRow"><span class="rhDot blue"></span>GPU auto-detect — enabled</div>
+      </div>
+      <div class="renderHomeCard renderHistoryCard">
+        <div class="renderHomeTitle">Recent Renders</div>
+        <div id="render_history_list" class="renderHistoryList">
+          <div class="renderHistoryEmpty">No recent renders yet</div>
+        </div>
       </div>
     </div>
 
@@ -554,7 +595,7 @@
     <div class="evRightHeader">
       <div style="min-width:0;flex:1">
         <div class="evRightTitle">🎬 Video Editor</div>
-        <div class="evSourceName" id="evSourceName">Chưa chọn nguồn</div>
+        <div class="evSourceName" id="evSourceName">No source selected</div>
         <div class="evInfoStrip">
           <div class="evInfoRow">
             <span class="evSessionDot" id="evSessionDot"></span>
@@ -567,14 +608,14 @@
           </div>
         </div>
       </div>
-      <button class="ghostButton" style="font-size:12px;padding:5px 10px" onclick="cancelEditorView()">← Huỷ</button>
+      <button class="ghostButton" style="font-size:12px;padding:5px 10px" onclick="cancelEditorView()">← Cancel</button>
     </div>
 
     <!-- Scrollable body: editor tool sections + inspector sections -->
     <div class="evRightScroll inspPaneBody">
 
       <!-- ① Trim -->
-      <div class="evSection">
+      <div class="evSection" data-section-type="trim">
         <div class="evSectionTitle">✂️ Trim Video</div>
         <div class="evTrimBarWrap" id="evTrimBarWrap">
           <div class="evTrimTrack"></div>
@@ -584,25 +625,25 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
           <label class="field">
-            <span class="fieldLabel">⏮ Bắt đầu từ (giây)</span>
+            <span class="fieldLabel">⏮ Start at (sec)</span>
             <input class="fieldInput" type="number" id="evTrimInSec" min="0" step="1" value="0" oninput="evTrimSecChange()">
           </label>
           <label class="field">
-            <span class="fieldLabel">⏭ Kết thúc tại (giây)</span>
-            <input class="fieldInput" type="number" id="evTrimOutSec" min="0" step="1" placeholder="hết video" oninput="evTrimSecChange()">
+            <span class="fieldLabel">⏭ End at (sec)</span>
+            <input class="fieldInput" type="number" id="evTrimOutSec" min="0" step="1" placeholder="full video" oninput="evTrimSecChange()">
           </label>
         </div>
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetTrimIn()">📍 IN tại playhead</button>
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetTrimOut()">📍 OUT tại playhead</button>
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetTrimIn()">📍 Set IN at playhead</button>
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetTrimOut()">📍 Set OUT at playhead</button>
           <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evResetTrim()">↺ Reset</button>
-          <span id="evTrimInfo" style="margin-left:auto;font-size:11px;color:var(--text-muted)">Toàn bộ video</span>
+          <span id="evTrimInfo" style="margin-left:auto;font-size:11px;color:var(--text-muted)">Full video</span>
         </div>
       </div>
 
       <!-- ② Audio / Volume -->
-      <div class="evSection">
-        <div class="evSectionTitle">🔊 Âm lượng</div>
+      <div class="evSection" data-section-type="volume">
+        <div class="evSectionTitle">🔊 Volume</div>
         <div style="display:flex;gap:10px;align-items:center">
           <input type="range" id="evVolume" min="0" max="200" value="100" step="1" style="flex:1;accent-color:#3b82f6" oninput="evVolumeSliderChange()">
           <input class="fieldInput" type="number" id="evVolumeNum" min="0" max="200" value="100" step="5" style="width:68px;text-align:center;padding:6px 8px" oninput="evVolumeNumChange()">
@@ -618,16 +659,16 @@
       </div>
 
       <!-- ③ BGM -->
-      <div class="evSection">
+      <div class="evSection" data-section-type="bgm">
         <div class="evSectionTitle">🎵 Background Music (BGM)</div>
         <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer;margin-bottom:10px">
           <input type="checkbox" id="evBgmEnable" style="width:16px;height:16px;accent-color:#f59e0b" onchange="evToggleBgmFields()">
-          <span style="font-size:13px;color:var(--text)">Bật Background Music</span>
+          <span style="font-size:13px;color:var(--text)">Enable Background Music</span>
         </label>
         <div id="evBgmFields" style="display:none;flex-direction:column;gap:8px">
           <div style="display:flex;gap:8px;align-items:center">
-            <input class="fieldInput" id="evBgmPath" placeholder="Chưa chọn file BGM" readonly style="flex:1">
-            <button class="ghostButton" style="white-space:nowrap" onclick="evPickBgmFile()">Chọn BGM</button>
+            <input class="fieldInput" id="evBgmPath" placeholder="No BGM file selected" readonly style="flex:1">
+            <button class="ghostButton" style="white-space:nowrap" onclick="evPickBgmFile()">Choose BGM</button>
           </div>
           <input id="ev_bgm_file_picker" type="file" accept="audio/*" style="display:none" onchange="evOnBgmPicked(event)">
           <label class="field">
@@ -638,7 +679,7 @@
       </div>
 
       <!-- ④ Transform & Enhance -->
-      <div class="evSection">
+      <div class="evSection" data-section-type="transform">
         <div class="evSectionTitle">🎨 Transform & Enhance</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <label class="field"><span class="fieldLabel">Transform Preset</span>
@@ -657,7 +698,7 @@
         <div style="display:flex;flex-direction:column;gap:8px">
           <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
             <input type="checkbox" id="evAddSubtitle" checked style="width:16px;height:16px;accent-color:#3b82f6">
-            <span style="font-size:13px;color:var(--text)">💬 Thêm subtitle tự động (Whisper AI)</span>
+            <span style="font-size:13px;color:var(--text)">💬 Auto subtitles (Whisper AI)</span>
           </label>
           <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
             <input type="checkbox" id="evMotionCrop" checked style="width:16px;height:16px;accent-color:#3b82f6">
@@ -669,43 +710,43 @@
           </label>
           <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
             <input type="checkbox" id="evCleanupTemp" checked style="width:16px;height:16px;accent-color:#10b981">
-            <span style="font-size:13px;color:var(--text)">🗑️ Xoá temp files sau khi xong</span>
+            <span style="font-size:13px;color:var(--text)">🗑️ Clean temporary files after completion</span>
           </label>
         </div>
       </div>
 
       <!-- ⑤ Render Settings -->
-      <div class="evSection">
-        <div class="evSectionTitle">⚙️ Cài đặt Render</div>
+      <div class="evSection" data-section-type="render-settings">
+        <div class="evSectionTitle">⚙️ Render Settings</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <label class="field"><span class="fieldLabel">Tỉ lệ khung hình</span>
+          <label class="field"><span class="fieldLabel">Aspect ratio</span>
             <select class="fieldInput" id="evAspectRatio" onchange="evUpdateAspectRatio()">
               <option value="3:4" selected>3:4 Vertical</option>
               <option value="9:16">9:16 TikTok Full</option>
               <option value="1:1">1:1 Square</option>
             </select>
           </label>
-          <label class="field"><span class="fieldLabel">Tốc độ phát</span>
+          <label class="field"><span class="fieldLabel">Playback speed</span>
             <select class="fieldInput" id="evPlaybackSpeed">
-              <option value="1.0">1.0x (gốc)</option>
+              <option value="1.0">1.0x (original)</option>
               <option value="1.05">1.05x</option>
               <option value="1.07" selected>1.07x (+7%)</option>
               <option value="1.1">1.1x (+10%)</option>
               <option value="1.15">1.15x (+15%)</option>
             </select>
           </label>
-          <label class="field"><span class="fieldLabel">Min part (giây)</span>
+          <label class="field"><span class="fieldLabel">Min part (sec)</span>
             <input class="fieldInput" type="number" id="evMinPart" value="70" min="20" max="600">
           </label>
-          <label class="field"><span class="fieldLabel">Max part (giây)</span>
+          <label class="field"><span class="fieldLabel">Max part (sec)</span>
             <input class="fieldInput" type="number" id="evMaxPart" value="180" min="30" max="900">
           </label>
           <label class="field"><span class="fieldLabel">Render Profile</span>
             <select class="fieldInput" id="evRenderProfile">
-              <option value="best">Best (chậm nhất)</option>
+              <option value="best">Best (slowest)</option>
               <option value="quality">Quality</option>
-              <option value="balanced" selected>Balanced (khuyến nghị)</option>
-              <option value="fast">Fast (nhanh)</option>
+              <option value="balanced" selected>Balanced (recommended)</option>
+              <option value="fast">Fast</option>
             </select>
           </label>
           <label class="field"><span class="fieldLabel">GPU render</span>
@@ -724,27 +765,27 @@
           </label>
           <label class="field"><span class="fieldLabel">Max export parts</span>
             <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
-            <span style="font-size:11px;color:var(--text-muted);margin-top:2px">0 = không giới hạn</span>
+            <span style="font-size:11px;color:var(--text-muted);margin-top:2px">0 = no limit</span>
           </label>
-          <label class="field"><span class="fieldLabel">Thứ tự part</span>
+          <label class="field"><span class="fieldLabel">Part order</span>
             <select class="fieldInput" id="evPartOrder">
-              <option value="viral" selected>Viral score (cao → thấp)</option>
-              <option value="timeline">Timeline (theo thứ tự)</option>
+              <option value="viral" selected>Viral score (high → low)</option>
+              <option value="timeline">Timeline (original order)</option>
             </select>
           </label>
           <label class="field"><span class="fieldLabel">Scale Y (%)</span>
             <input class="fieldInput" type="number" id="evFrameScaleY" value="106" min="80" max="130">
-            <span style="font-size:11px;color:var(--text-muted);margin-top:2px">Zoom dọc (100=gốc)</span>
+            <span style="font-size:11px;color:var(--text-muted);margin-top:2px">Vertical zoom (100=original)</span>
           </label>
         </div>
       </div>
 
       <!-- Subtitle Style — visible when no text layers exist -->
-      <div class="evSection" id="inspSubtitlePane">
+      <div class="evSection" id="inspSubtitlePane" data-section-type="subtitle">
         <div class="evSectionTitle">💬 Subtitle Style (Live Preview)</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <label class="field">
-            <span class="fieldLabel">Font chữ</span>
+            <span class="fieldLabel">Font</span>
             <select class="fieldInput" id="evSubFont" onchange="evUpdateSubPreview()">
               <option value="Bungee" selected>Bungee (Viral 🔥)</option>
               <option value="Anton">Anton (Bold)</option>
@@ -761,29 +802,29 @@
             </select>
           </label>
           <label class="field">
-            <span class="fieldLabel">Cỡ chữ: <strong id="evSubSizeVal">46</strong>px</span>
+            <span class="fieldLabel">Font size: <strong id="evSubSizeVal">46</strong>px</span>
             <input type="range" id="evSubSize" min="24" max="120" value="46" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
           </label>
           <label class="field">
-            <span class="fieldLabel">🎨 Màu chữ chính</span>
+            <span class="fieldLabel">🎨 Primary text color</span>
             <div style="display:flex;gap:8px;align-items:center">
               <input type="color" id="evSubColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSubPreview()">
-              <span style="font-size:12px;color:var(--text-muted)">Màu nền tất cả từ</span>
+              <span style="font-size:12px;color:var(--text-muted)">Default word color</span>
             </div>
           </label>
           <label class="field">
-            <span class="fieldLabel">✨ Màu highlight (karaoke)</span>
+            <span class="fieldLabel">✨ Highlight color</span>
             <div style="display:flex;gap:8px;align-items:center">
               <input type="color" id="evSubHighlight" value="#ffff00" class="evColorPicker" oninput="evUpdateSubPreview()">
-              <span style="font-size:12px;color:var(--text-muted)">Từ đang nói</span>
+              <span style="font-size:12px;color:var(--text-muted)">Current spoken word</span>
             </div>
           </label>
           <label class="field">
-            <span class="fieldLabel">📍 Vị trí Y (% từ dưới): <strong id="evSubPosVal">15</strong>%</span>
+            <span class="fieldLabel">📍 Y Position (% from bottom): <strong id="evSubPosVal">15</strong>%</span>
             <input type="range" id="evSubPos" min="5" max="60" value="15" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
           </label>
           <label class="field">
-            <span class="fieldLabel">◎ Viền (outline): <strong id="evSubOutlineVal">3</strong>px</span>
+            <span class="fieldLabel">◎ Outline: <strong id="evSubOutlineVal">3</strong>px</span>
             <input type="range" id="evSubOutline" min="0" max="8" value="3" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
           </label>
         </div>
@@ -792,7 +833,7 @@
         </div>
       </div>
       <!-- Text Overlay Layers — editor shown when a layer is selected (JS-managed) -->
-      <div class="evSection">
+      <div class="evSection" data-section-type="text-layers">
         <div class="evSectionTitle">📝 Text Overlay Layers</div>
         <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
           <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evAddTextLayer()">+ Add Text</button>
@@ -944,9 +985,12 @@
 
     <!-- Right panel footer -->
     <div class="evFooter">
-      <span id="evStatusLine" style="flex:1;font-size:12px;color:var(--text-muted)">Đang chuẩn bị…</span>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span id="evStatusLine" style="font-size:12px;color:var(--text-muted)">Preparing editor...</span>
+        <span id="evStatusDetail" style="font-size:10px;color:var(--text-muted);opacity:.8"></span>
+      </div>
       <button class="ghostButton" id="evReopenBtn" onclick="evReopenEditor()" style="display:none;font-size:12px;padding:5px 10px">↺ Re-open Editor</button>
-      <button class="primaryButton" id="evStartBtn" onclick="startRenderFromEditor()" disabled>▶ Bắt đầu Render</button>
+      <button class="primaryButton" id="evStartBtn" onclick="startRenderFromEditor()" disabled>▶ Start Render</button>
     </div>
   </aside>
   <!-- ═══════════════════════════════════════════════════════════════
@@ -972,6 +1016,17 @@
       </div>
     </div>
 
+    <div id="render_completion_bar" class="renderCompletionBar hiddenView">
+      <div class="renderCompletionText">
+        <div class="renderCompletionMsg" id="render_completion_msg">✓ Render complete — 0 clips ready</div>
+        <div class="renderCompletionSummary" id="render_completion_summary"></div>
+      </div>
+      <div class="renderCompletionActions">
+        <button class="primaryButton" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
+        <button class="ghostButton" type="button" onclick="setView('upload')">Go to Upload</button>
+      </div>
+    </div>
+
     <!-- Main body: process timeline | live log -->
     <div class="abpBody">
 
@@ -982,7 +1037,7 @@
         <div class="abpSectionLabel" style="margin-top:6px">Parts</div>
         <div class="jmPartsSection" style="border:none;padding:0;background:none">
           <div class="partList jmPartList" id="parts_wrap">
-            <div class="emptyState">No parts yet.</div>
+            <div class="emptyState">Parts will appear here once rendering begins.</div>
           </div>
         </div>
       </div>
@@ -998,7 +1053,7 @@
   </section><!-- /appBottomPanel -->
 
   <footer class="appStatusBar" id="appStatusBar">
-    <div class="statusBarLeft sbClickable" id="sbJobArea" onclick="if(currentJobId){setView('monitor')}" title="Click to open Job Monitor">
+    <div class="statusBarLeft sbClickable" id="sbJobArea" onclick="focusBottomPanel()" title="Jump to process panel">
       <span class="statusDot statusDotReady" id="sbDot"></span>
       <span class="statusLabel" id="sbLabel">Ready</span>
       <span class="sbSummary" id="sbSummary"></span>

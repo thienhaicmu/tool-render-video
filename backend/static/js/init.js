@@ -84,6 +84,7 @@ syncNewChannelNetworkModeUI();
 renderYoutubeUrlBatch();
 setView('render');
 resetRenderSessionUi();
+renderRenderHistory();
 renderUploadRun(null);
 initChannelsRoot();
 syncNewChannelPathUI();

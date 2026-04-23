@@ -28,8 +28,12 @@ function _tickSmooth() {
       // Update bar and pct text in-place without re-rendering
       const barEl = document.getElementById(`pbar_${key}`);
       const pctEl = document.getElementById(`ppct_${key}`);
+      const rowBarEl = document.getElementById(`row_pbar_${key}`);
+      const rowPctEl = document.getElementById(`row_ppct_${key}`);
       if(barEl) barEl.style.width = next.toFixed(1) + '%';
       if(pctEl) pctEl.textContent = Math.round(next) + '%';
+      if(rowBarEl) rowBarEl.style.width = next.toFixed(1) + '%';
+      if(rowPctEl) rowPctEl.textContent = Math.round(next) + '%';
       anyMoving = true;
     } else {
       _partDisplay[key] = target;
