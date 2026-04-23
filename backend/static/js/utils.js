@@ -19,6 +19,10 @@ function setPageHeader(title, subtitle){
 
 function applyEnglishLabels(){
   const set = (selector, text) => { const el = document.querySelector(selector); if (el) el.textContent = text; };
+  const setNavLabel = (view, text) => {
+    const el = document.querySelector(`.navItem[data-view="${view}"]`);
+    if (el) el.textContent = text;
+  };
   const setLabel = (id, text) => {
     const el = qs(id);
     const holder = el?.closest('label')?.querySelector('.fieldLabel');
@@ -31,11 +35,10 @@ function applyEnglishLabels(){
   };
 
   set('.brandSub', 'Local AI video platform');
-  document.querySelectorAll('.navItem[data-view]')[0] && (document.querySelectorAll('.navItem[data-view]')[0].textContent = 'Render');
-  document.querySelectorAll('.navItem[data-view]')[1] && (document.querySelectorAll('.navItem[data-view]')[1].textContent = 'Upload');
-  document.querySelectorAll('.navItem[data-view]')[2] && (document.querySelectorAll('.navItem[data-view]')[2].textContent = 'Channels');
-  document.querySelectorAll('.navItem[data-view]')[3] && (document.querySelectorAll('.navItem[data-view]')[3].textContent = 'Reports');
-  document.querySelectorAll('.navItem[data-view]')[4] && (document.querySelectorAll('.navItem[data-view]')[4].textContent = 'Settings');
+  setNavLabel('download', 'Download');
+  setNavLabel('render', 'Render');
+  setNavLabel('upload', 'Upload');
+  setNavLabel('history', 'History');
   set('#job_chip', 'No active job');
 
   set('#card_render_setup .sectionTitle', 'Render Setup');

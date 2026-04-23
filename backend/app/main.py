@@ -10,6 +10,7 @@ from app.services.channel_service import ensure_channel
 from app.services.maintenance import prune_job_logs, prune_preview_dirs
 from app.core.config import CHANNELS_DIR, TEMP_DIR
 from app.routes.channels import router as channels_router
+from app.routes.download import router as download_router
 from app.routes.render import router as render_router
 from app.routes.upload import router as upload_router
 from app.routes.jobs import router as jobs_router
@@ -88,6 +89,7 @@ os.environ.setdefault("TMP",  str(_DATA_DIR / "tmp"))
 
 app = FastAPI(title="YT TikTok Desktop Local Platform")
 app.include_router(channels_router)
+app.include_router(download_router)
 app.include_router(render_router)
 app.include_router(upload_router)
 app.include_router(jobs_router)

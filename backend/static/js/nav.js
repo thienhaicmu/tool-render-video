@@ -1,6 +1,8 @@
 function setView(view){
   currentView = view;
   const isRender   = view === 'render';
+  const isDownload = view === 'download';
+  const isHistory  = view === 'history';
   const isUpload   = view === 'upload';
   const isChannels = view === 'channels';
   const isReports  = view === 'reports';
@@ -12,11 +14,15 @@ function setView(view){
   const mainArea = qs('mainArea');
   if (mainArea) mainArea.classList.toggle('editorMode', isEditor);
   qs('view_editor').classList.toggle('hiddenView', !isEditor);
+  const downloadView = qs('view_download');
+  if (downloadView) downloadView.classList.toggle('hiddenView', !isDownload);
+  const historyView = qs('view_history');
+  if (historyView) historyView.classList.toggle('hiddenView', !isHistory);
   const flowBar = qs('render_flow_bar');
   if (flowBar) flowBar.classList.toggle('hiddenView', !(isRender || isEditor));
 
   // pageHeader + layout_grid only visible for upload/channels/reports/settings
-  const showMainContent = !isRender && !isEditor;
+  const showMainContent = !isRender && !isEditor && !isDownload && !isHistory;
   const pageHeader = document.querySelector('.pageHeader');
   if (pageHeader) pageHeader.classList.toggle('hiddenView', !showMainContent);
   qs('layout_grid').classList.toggle('hiddenView', !showMainContent);
@@ -27,13 +33,18 @@ function setView(view){
   // Right column always hidden — content lives in appInspector
   qs('right_column').classList.toggle('hiddenView', true);
 
-  // card_render_setup lives in sidebar — not toggled here
+  // Sidebar setup cards only show for their workflow tabs.
+  const renderSetup = qs('card_render_setup');
+  if (renderSetup) renderSetup.classList.toggle('hiddenView', !(isRender || isEditor));
+  const downloadSetup = qs('card_download_setup');
+  if (downloadSetup) downloadSetup.classList.toggle('hiddenView', !isDownload);
   qs('card_upload').classList.toggle('hiddenView', !isUpload);
   qs('card_channels').classList.toggle('hiddenView', !isChannels);
   qs('card_reports').classList.toggle('hiddenView', !isReports);
   qs('card_settings').classList.toggle('hiddenView', !isSettings);
 
   if (isUpload)  setPageHeader('Upload Studio', 'Choose Action -> Select Channel -> Login or Upload.');
+  if (isHistory) setPageHeader('History', 'Recent Download and Render activity');
   if (isChannels) setPageHeader('Channel Management', 'Choose Root Folder -> Enter Channel Code -> Configure -> Create.');
   if (isReports) setPageHeader('Reports', 'Review render and upload reporting output.');
   if (isSettings) setPageHeader('Settings', 'System maintenance and operational options.');
@@ -51,10 +62,19 @@ function setView(view){
   const rhp = qs('render_home_panel');
   if (rhp) rhp.classList.toggle('hiddenView', !isRender || !!currentJobId);
   if (typeof updateRenderMainState === 'function') {
-    if (currentJobId && isRender) updateRenderMainState({ status: 'running', stage: 'queued', progress_percent: (typeof _jobDisplayPct !== 'undefined' ? _jobDisplayPct : 0) || 0 }, null, []);
+    if (currentJobId && isRender) {
+      const fallbackJob = { status: 'running', stage: 'queued', progress_percent: (typeof _jobDisplayPct !== 'undefined' ? _jobDisplayPct : 0) || 0 };
+      updateRenderMainState(
+        (typeof _renderMonitorLastJob !== 'undefined' && _renderMonitorLastJob) ? _renderMonitorLastJob : fallbackJob,
+        (typeof _renderMonitorLastSummary !== 'undefined' && _renderMonitorLastSummary) ? _renderMonitorLastSummary : null,
+        (typeof _renderMonitorLastParts !== 'undefined' && _renderMonitorLastParts) ? _renderMonitorLastParts : []
+      );
+    }
     if (!currentJobId) updateRenderMainState(null, null, []);
   }
   if (isRender && typeof renderRenderHistory === 'function') renderRenderHistory();
+  if (isDownload && typeof renderDownloadQueue === 'function') renderDownloadQueue();
+  if (isHistory && typeof loadHistoryView === 'function') loadHistoryView();
   if (!isRender && !isEditor && typeof hideRenderCompletionBar === 'function') hideRenderCompletionBar();
 
   // Bottom panel: auto-collapse when switching views with no active job.

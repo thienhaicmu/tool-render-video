@@ -7,6 +7,7 @@ let _renderMonitorLastJob = null;
 let _renderMonitorLastSummary = null;
 let _renderMonitorLastParts = [];
 let _renderMonitorHeartbeatTimer = null;
+let _renderLogsUserToggled = false;
 const RENDER_MONITOR_STALL_MS = 45000;
 
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
@@ -47,6 +48,8 @@ function resetRenderSessionUi(){
   setRenderFlowState('source', 'Select source', { source: 'active', force: true });
   hideRenderCompletionBar();
   resetRenderMonitorHeartbeat();
+  _renderLogsUserToggled = false;
+  setRenderLogsCollapsed(false);
   updateRenderMainState(null, null, []);
 }
 function fmtElapsed(ms){
@@ -353,14 +356,14 @@ function buildCompletionHandoff(summary, parts, job) {
     ? summaryCompleted
     : (doneParts || Math.max(0, total - failed));
   const totalLabel = total || (completed + failed);
-  const outputDir = getCurrentJobOutputDir(job);
+  const outputLabel = getRenderWorkspaceOutputLabel(job);
   const main = failed > 0
     ? `Render complete - ${completed} clips completed, ${failed} failed`
     : `✓ Render complete - ${completed} clips ready`;
   const detailParts = [];
   if (totalLabel > 0) detailParts.push(`${totalLabel} total clips`);
   detailParts.push(failed > 0 ? 'Review failed clips in the log' : 'Report generated successfully');
-  detailParts.push(outputDir ? 'Saved to output folder' : 'Output folder path unavailable');
+  detailParts.push(outputLabel);
   return { main, detail: detailParts.join(' · ') };
 }
 
@@ -380,6 +383,59 @@ function hideRenderCompletionBar() {
   bar.classList.add('hiddenView');
   const summary = qs('render_completion_summary');
   if (summary) summary.textContent = '';
+}
+
+function getCurrentJobPayload(job) {
+  try {
+    const raw = job?.payload_json;
+    if (!raw) return {};
+    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch (_) {
+    return {};
+  }
+}
+
+function getRenderWorkspaceSourceText(job) {
+  const payload = getCurrentJobPayload(job);
+  const evSource = typeof _ev !== 'undefined' ? String(_ev.sourceUrl || '').trim() : '';
+  const rawSource = String(
+    payload.source_video_path ||
+    payload.youtube_url ||
+    evSource ||
+    ''
+  ).trim();
+  if (!rawSource) return 'No source selected';
+  const sourceMode = String(payload.source_mode || (payload.youtube_url ? 'youtube' : (rawSource.startsWith('http') ? 'youtube' : 'local'))).toLowerCase();
+  if (sourceMode === 'local') {
+    return rawSource.replace(/\\/g, '/').split('/').filter(Boolean).pop() || rawSource;
+  }
+  if (typeof _ev !== 'undefined' && String(_ev.sourceUrl || '').trim() && String(_ev.sourceUrl).trim() !== rawSource) {
+    return `${String(_ev.sourceUrl).trim()} · ${rawSource}`;
+  }
+  return rawSource;
+}
+
+function getRenderWorkspaceOutputText(job) {
+  const payload = getCurrentJobPayload(job);
+  const outputDir = getCurrentJobOutputDir(job);
+  if (!outputDir) return 'Output folder not set';
+  const outputMode = String(payload.output_mode || '').toLowerCase();
+  if (outputMode === 'manual') return `Manual output folder · ${outputDir}`;
+  if (outputMode === 'channel') {
+    const channel = String(payload.channel_code || '').trim();
+    return channel ? `Channel ${channel} output folder · ${outputDir}` : `Channel output folder · ${outputDir}`;
+  }
+  return `Output folder · ${outputDir}`;
+}
+
+function getRenderWorkspaceOutputLabel(job) {
+  const payload = getCurrentJobPayload(job);
+  const outputDir = getCurrentJobOutputDir(job);
+  if (!outputDir) return 'Output folder path unavailable';
+  const outputMode = String(payload.output_mode || '').toLowerCase();
+  if (outputMode === 'manual') return 'Saved to manual output folder';
+  if (outputMode === 'channel') return 'Saved to channel output folder';
+  return 'Saved to output folder';
 }
 
 function updateRenderMainState(job, summary, parts = []) {
@@ -405,6 +461,14 @@ function updateRenderMainState(job, summary, parts = []) {
   const total = Number(s?.total_parts || parts.length || 0);
   const active = Number(s?.processing_parts || 0);
   const failed = Number(s?.failed_parts || 0);
+  const sourceText = getRenderWorkspaceSourceText(job);
+  const outputText = getRenderWorkspaceOutputText(job);
+  const outputLabel = getRenderWorkspaceOutputLabel(job);
+  const workspaceStage = terminal
+    ? (status === 'completed'
+      ? (failed > 0 ? 'Render finished with some clip failures' : 'Render completed successfully')
+      : 'Render failed before all clips finished')
+    : `${stageLabel(job?.stage || 'queued')}. This render is using the same source workspace you just configured.`;
   const clipBits = [];
   if (total > 0) clipBits.push(`${done}/${total} clips done`);
   if (active > 0) clipBits.push(`${active} rendering`);
@@ -414,17 +478,43 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('render_active_title')) qs('render_active_title').textContent = title;
   if (qs('render_active_pct')) qs('render_active_pct').textContent = `${pct}%`;
   if (qs('render_active_bar')) qs('render_active_bar').style.width = `${pct}%`;
-  if (qs('render_active_meta')) qs('render_active_meta').textContent = clipBits.length ? clipBits.join(' | ') : 'Clips will appear in the output panel below.';
+  if (qs('render_active_meta')) {
+    if (status === 'completed') {
+      qs('render_active_meta').textContent = failed > 0
+        ? `${outputLabel}. ${done} clips are ready and ${failed} need review. View clips below.`
+        : `${outputLabel}. All completed clips are listed below.`;
+    } else if (status === 'failed') {
+      qs('render_active_meta').textContent = clipBits.length ? `${clipBits.join(' | ')} | Review clips and diagnostics below.` : 'Review diagnostics below.';
+    } else {
+      qs('render_active_meta').textContent = clipBits.length ? `${clipBits.join(' | ')} | Clips will appear below as they finish.` : 'Clips will appear below as rendering progresses.';
+    }
+  }
+  if (qs('render_workspace_source')) qs('render_workspace_source').textContent = sourceText;
+  if (qs('render_workspace_output')) qs('render_workspace_output').textContent = outputText;
+  if (qs('render_workspace_stage')) qs('render_workspace_stage').textContent = workspaceStage;
+  const previewState = status === 'failed' ? 'failed' : status === 'completed' ? 'complete' : 'active';
+  if (qs('render_workspace_preview')) qs('render_workspace_preview').dataset.previewState = previewState;
+  if (qs('render_workspace_preview_badge')) qs('render_workspace_preview_badge').textContent = status === 'completed' ? 'Results' : status === 'failed' ? 'Attention' : 'Rendering';
+  if (qs('render_workspace_preview_title')) {
+    qs('render_workspace_preview_title').textContent = status === 'completed'
+      ? (failed > 0 ? 'Render finished with review items' : 'Results are ready')
+      : status === 'failed'
+      ? 'Render stopped before completion'
+      : 'Rendering in progress';
+  }
+  if (qs('render_workspace_preview_text')) {
+    qs('render_workspace_preview_text').textContent = status === 'completed'
+      ? 'This workspace stays tied to the same source and destination so you can confirm where outputs were saved.'
+      : status === 'failed'
+      ? 'Preview is unavailable here, but the same source and destination context is preserved while you review progress below.'
+      : 'Preview unavailable during render. This workspace remains tied to the same source and output destination you selected in the editor.';
+  }
   if (qs('render_active_actions')) qs('render_active_actions').classList.toggle('hiddenView', status !== 'completed');
 }
 
 function getCurrentJobOutputDir(job) {
-  try {
-    const payload = JSON.parse(job?.payload_json || '{}');
-    return String(payload.output_dir || '').trim();
-  } catch (_) {
-    return '';
-  }
+  const payload = getCurrentJobPayload(job);
+  return String(payload.output_dir || '').trim();
 }
 
 function openRenderOutputFolder() {
@@ -664,6 +754,44 @@ function rerunRenderHistory(jobId) {
   }
 }
 
+function applyRenderJobPrefill(job) {
+  const payload = _renderHistoryPayload(job);
+  const sourceMode = String(payload.source_mode || (payload.youtube_url ? 'youtube' : 'local')).toLowerCase();
+  const outputDir = String(payload.output_dir || '').trim();
+  setView('render');
+  hideRenderCompletionBar();
+  setRenderFlowState('source', 'Source ready', { force: true });
+  if (qs('output_mode') && outputDir) {
+    qs('output_mode').value = 'manual';
+    syncOutputModeUI();
+    if (qs('manual_output_dir')) qs('manual_output_dir').value = outputDir;
+  }
+  if (qs('source_mode')) qs('source_mode').value = sourceMode === 'local' ? 'local' : 'youtube';
+  syncSourceModeUI();
+  if (sourceMode === 'youtube') {
+    if (qs('youtube_url')) qs('youtube_url').value = String(payload.youtube_url || '').trim();
+    setRenderFlowState('source', 'YouTube URL restored', { force: true });
+    showToast('YouTube source restored. Open editor to rerun.', 'success');
+  } else {
+    selectedLocalVideoPath = '';
+    _pendingLocalFile = null;
+    if (qs('source_video_path')) qs('source_video_path').value = '';
+    if (qs('source_video_name')) qs('source_video_name').textContent = 'Please reselect the local file.';
+    setRenderFlowState('source', 'Reselect local file', { force: true });
+    showToast('Please reselect the local file', 'info');
+  }
+}
+
+async function rerunRenderJob(jobId) {
+  const res = await fetch(`/api/jobs/${encodeURIComponent(String(jobId || '').trim())}`);
+  const data = await res.json();
+  if (!res.ok) {
+    showToast(data.detail || 'Render job could not be loaded', 'error');
+    return;
+  }
+  applyRenderJobPrefill(data);
+}
+
 function focusBottomPanel() {
   const panel = qs('appBottomPanel');
   if (!panel) return;
@@ -671,12 +799,25 @@ function focusBottomPanel() {
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+function setRenderLogsCollapsed(collapsed, options = {}) {
+  const panel = qs('appBottomPanel');
+  if (!panel) return;
+  panel.classList.toggle('logsCollapsed', !!collapsed);
+  const btn = document.querySelector('.abpLogToggle');
+  if (btn) btn.textContent = collapsed ? 'Show logs' : 'Hide logs';
+  if (options.fromUser) _renderLogsUserToggled = true;
+}
+
+function maybeAutoCollapseRenderLogs() {
+  if (_renderLogsUserToggled) return;
+  if (window.innerWidth >= 900) return;
+  setRenderLogsCollapsed(true);
+}
+
 function toggleRenderLogs() {
   const panel = qs('appBottomPanel');
   if (!panel) return;
-  const collapsed = panel.classList.toggle('logsCollapsed');
-  const btn = document.querySelector('.abpLogToggle');
-  if (btn) btn.textContent = collapsed ? 'Show logs' : 'Hide logs';
+  setRenderLogsCollapsed(!panel.classList.contains('logsCollapsed'), { fromUser: true });
 }
 function pipelineStateByStage(stage, status){
   const s = (stage || '').toLowerCase();
@@ -728,6 +869,7 @@ function setRenderActionBusy(isBusy){
     updateRenderMonitorHeartbeat(_renderMonitorLastJob, _renderMonitorLastSummary, []);
     updateRenderMainState({ status: 'running', stage: 'queued', progress_percent: _jobDisplayPct || 0 }, computeProgressSummary([]), []);
     focusBottomPanel();
+    maybeAutoCollapseRenderLogs();
     const panel = qs('appBottomPanel');
     if (panel) {
       panel.classList.remove('renderStartPulse');
@@ -1083,4 +1225,3 @@ function updateStatusBar(job, summary) {
   if (pctEl) pctEl.textContent = (isRunning || isDone) ? pct + '%' : '';
   if (area)  area.style.cursor = currentJobId ? 'pointer' : 'default';
 }
-

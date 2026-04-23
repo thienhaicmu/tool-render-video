@@ -85,6 +85,8 @@ renderYoutubeUrlBatch();
 setView('render');
 resetRenderSessionUi();
 renderRenderHistory();
+if (typeof renderDownloadQueue === 'function') renderDownloadQueue();
+if (typeof renderHistoryView === 'function') renderHistoryView();
 renderUploadRun(null);
 initChannelsRoot();
 syncNewChannelPathUI();

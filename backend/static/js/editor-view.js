@@ -1060,7 +1060,7 @@ async function startRenderFromEditor() {
     qs('evStatusLine').style.color = 'var(--success)';
     showToast('Render queued', 'success');
     const video = qs('evVideo');
-    if (video) { video.pause(); video.src = ''; video.style.display = 'none'; }
+    if (video) { video.pause(); video.style.display = 'none'; }
     setView('render');
     setRenderFlowState('rendering', 'Queued - 0%');
     focusBottomPanel();

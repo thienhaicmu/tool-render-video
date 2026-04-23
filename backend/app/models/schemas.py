@@ -46,6 +46,15 @@ class DownloadHealthRequest(BaseModel):
     youtube_url: Optional[str] = ""
 
 
+class DownloadBatchRequest(BaseModel):
+    urls: list[str] = Field(default_factory=list)
+    output_dir: str = ""
+
+
+class DownloadRetryRequest(BaseModel):
+    part_numbers: list[int] = Field(default_factory=list)
+
+
 class QuickProcessRequest(BaseModel):
     source: str = "youtube"
     url: str = ""

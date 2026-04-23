@@ -19,15 +19,20 @@
       <div class="brandTitle">Render Studio</div>
     </div>
     <nav class="appTopBarNav">
-      <button class="navItem active" data-view="render">Studio</button>
+      <button class="navItem" data-view="download">Download</button>
+      <button class="navItem active" data-view="render">Render</button>
       <button class="navItem" data-view="upload">Upload</button>
-      <button class="navItem" data-view="channels">Channels</button>
-      <button class="navItem" data-view="reports">Reports</button>
-      <button class="navItem" data-view="settings">Settings</button>
+      <button class="navItem" data-view="history">History</button>
     </nav>
     <div class="appTopBarChips">
       <div class="pill">Local AI · FastAPI</div>
       <div class="pill" id="warmup_chip" title="Click to see details" onclick="toggleWarmupPanel()" style="cursor:pointer">⏳ Loading models...</div>
+      <button class="topBarIconBtn" type="button" onclick="setView('settings')" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 8.25a3.75 3.75 0 1 0 0 7.5a3.75 3.75 0 0 0 0-7.5Z" fill="currentColor"></path>
+          <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.75.75 0 0 0 .18-.96l-1.92-3.32a.75.75 0 0 0-.9-.33l-2.39.96a7.08 7.08 0 0 0-1.63-.94l-.36-2.54A.75.75 0 0 0 13.41 1h-3.82a.75.75 0 0 0-.74.63l-.36 2.54c-.58.22-1.13.54-1.63.94l-2.39-.96a.75.75 0 0 0-.9.33L1.65 8.2a.75.75 0 0 0 .18.96l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L1.83 14.2a.75.75 0 0 0-.18.96l1.92 3.32a.75.75 0 0 0 .9.33l2.39-.96c.5.4 1.05.72 1.63.94l.36 2.54a.75.75 0 0 0 .74.63h3.82a.75.75 0 0 0 .74-.63l.36-2.54c.58-.22 1.13-.54 1.63-.94l2.39.96a.75.75 0 0 0 .9-.33l1.92-3.32a.75.75 0 0 0-.18-.96l-2.03-1.58Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+        </svg>
+      </button>
     </div>
   </header>
   <nav class="sidebar" id="sidebarPanel">
@@ -149,6 +154,42 @@
         </div>
 
       </section><!-- /card_render_setup -->
+
+      <section id="card_download_setup" class="setupCard hiddenView">
+        <div class="setupGroups">
+          <div class="setupGroup">
+            <div class="setupGroupTitle">Links</div>
+            <div class="formGrid">
+              <label class="field fieldSpan2">
+                <span class="fieldLabel">Paste Public Links</span>
+                <textarea class="fieldInput downloadLinksInput" id="download_links_input" placeholder="https://www.youtube.com/watch?v=...&#10;https://www.facebook.com/...&#10;https://www.instagram.com/reel/..."></textarea>
+                <div class="sectionSubtitle" id="download_links_hint" style="margin-top:6px">One link per line. Exact duplicates are ignored.</div>
+              </label>
+            </div>
+            <div class="actionsRow">
+              <button class="secondaryButton" type="button" onclick="parseDownloadLinks()">Parse Links</button>
+              <button class="ghostButton" type="button" onclick="clearDownloadLinks()">Clear</button>
+            </div>
+          </div>
+          <div class="setupGroup">
+            <div class="setupGroupTitle">Save Folder</div>
+            <div class="formGrid">
+              <label class="field fieldSpan2">
+                <span class="fieldLabel">Destination</span>
+                <div class="actionsRow" style="margin-top:0">
+                  <input class="fieldInput" id="download_output_dir" placeholder="Choose a local save folder" readonly>
+                  <button type="button" class="ghostButton" id="download_pick_folder_btn" onclick="pickDownloadFolder()">Choose Folder</button>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="setupActions">
+          <button class="primaryButton" type="button" id="download_start_btn" onclick="startDownloadBatch()">Start Download</button>
+          <button class="secondaryButton" type="button" id="download_retry_failed_btn" onclick="retryFailedDownloads()">Retry Failed</button>
+          <button class="ghostButton" type="button" id="download_open_folder_btn" onclick="openDownloadFolder()">Open Folder</button>
+        </div>
+      </section>
 
     </div><!-- /sidebarScrollable -->
   </nav>
@@ -296,6 +337,29 @@
           </div>
           <div class="renderActivePct" id="render_active_pct">0%</div>
         </div>
+        <div class="renderWorkspaceShell">
+          <div class="renderWorkspacePreview" id="render_workspace_preview" data-preview-state="idle">
+            <div class="renderWorkspacePreviewInner">
+              <div class="renderWorkspacePreviewBadge" id="render_workspace_preview_badge">Preview</div>
+              <div class="renderWorkspacePreviewTitle" id="render_workspace_preview_title">Render workspace</div>
+              <div class="renderWorkspacePreviewText" id="render_workspace_preview_text">Source preview will remain represented here during render.</div>
+            </div>
+          </div>
+          <div class="renderWorkspaceInfo">
+            <div class="renderWorkspaceInfoRow">
+              <span class="renderWorkspaceLabel">Source</span>
+              <span class="renderWorkspaceValue" id="render_workspace_source">No source selected</span>
+            </div>
+            <div class="renderWorkspaceInfoRow">
+              <span class="renderWorkspaceLabel">Destination</span>
+              <span class="renderWorkspaceValue" id="render_workspace_output">Output folder not set</span>
+            </div>
+            <div class="renderWorkspaceInfoRow">
+              <span class="renderWorkspaceLabel">Current step</span>
+              <span class="renderWorkspaceValue" id="render_workspace_stage">Open editor to start a render</span>
+            </div>
+          </div>
+        </div>
         <div class="renderActiveProgress"><div id="render_active_bar"></div></div>
         <div class="renderActiveMeta" id="render_active_meta">Clips will appear in the output panel below.</div>
         <div class="renderActiveActions hiddenView" id="render_active_actions">
@@ -304,6 +368,46 @@
         </div>
       </div>
     </div>
+
+    <section id="view_download" class="downloadWorkspace hiddenView" aria-live="polite">
+      <div class="downloadWorkspaceHeader">
+        <div>
+          <div class="downloadWorkspaceTitle">Batch Download</div>
+          <div class="downloadWorkspaceSub" id="download_summary_text">Paste public social video links to build a download queue.</div>
+        </div>
+        <div class="downloadWorkspaceMeta">
+          <div class="downloadBatchStatus" id="download_batch_status">Idle</div>
+          <div class="downloadBatchMeta" id="download_batch_meta">No active batch</div>
+        </div>
+      </div>
+      <div class="downloadQueuePanel">
+        <div class="downloadQueueHeader">
+          <div class="downloadQueueTitle">Download Queue</div>
+          <div class="downloadQueueMeta" id="download_queue_meta">0 items</div>
+        </div>
+        <div class="downloadQueueList" id="download_queue_list">
+          <div class="emptyState">Paste one or more public links, then click Parse Links.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="view_history" class="downloadWorkspace hiddenView" aria-live="polite">
+      <div class="downloadWorkspaceHeader">
+        <div>
+          <div class="downloadWorkspaceTitle">History</div>
+          <div class="downloadWorkspaceSub">Recent Download and Render activity</div>
+        </div>
+      </div>
+      <div class="downloadQueuePanel historyPanel">
+        <div class="downloadQueueHeader">
+          <div class="downloadQueueTitle">Recent activity</div>
+          <div class="downloadQueueMeta" id="history_status_text">Loading recent activity...</div>
+        </div>
+        <div class="historyList" id="history_list">
+          <div class="emptyState">Your recent Download and Render jobs will appear here.</div>
+        </div>
+      </div>
+    </section>
 
     <!-- ── Normal page header + grid ─────────────────────────────── -->
     <header class="pageHeader">
@@ -1025,14 +1129,14 @@
 
       <!-- Left: pipeline stages + parts timeline -->
       <div class="abpTimeline">
-        <div class="abpSectionLabel">Pipeline</div>
-        <div class="pipelineWrap" id="pipeline_wrap"></div>
         <div class="abpSectionLabel" id="clips_section_label" style="margin-top:6px">Clips</div>
         <div class="jmPartsSection" style="border:none;padding:0;background:none">
           <div class="partList jmPartList" id="parts_wrap">
             <div class="emptyState">Clips will appear here once rendering begins.</div>
           </div>
         </div>
+        <div class="abpSectionLabel abpPipelineLabel">Pipeline</div>
+        <div class="pipelineWrap" id="pipeline_wrap"></div>
       </div>
 
       <!-- Right: live log -->
@@ -1075,6 +1179,8 @@
 <script src="/static/js/upload-engine.js"></script>
 <script src="/static/js/channels.js"></script>
 <script src="/static/js/editor-view.js"></script>
+<script src="/static/js/download-ui.js"></script>
+<script src="/static/js/history-ui.js"></script>
 <script src="/static/js/init.js"></script>
 <!-- Toast notification container — populated by showToast() in log-utils.js -->
 <div id="toastRoot" class="toastRoot"></div>

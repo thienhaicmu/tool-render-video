@@ -2,6 +2,7 @@ import logging
 import os
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
@@ -9,6 +10,8 @@ from yt_dlp.utils import DownloadError
 from app.services.bin_paths import ensure_ffmpeg_available
 
 logger = logging.getLogger(__name__)
+
+SUPPORTED_PUBLIC_SOURCES = {"youtube", "facebook", "instagram"}
 
 
 def slugify(text: str) -> str:
@@ -25,6 +28,113 @@ def _ensure_ffmpeg_on_path() -> str:
     if ffmpeg_dir not in current_path.split(os.pathsep):
         os.environ["PATH"] = ffmpeg_dir + os.pathsep + current_path
     return ffmpeg_bin
+
+
+def detect_public_video_source(url: str) -> str:
+    raw = str(url or "").strip()
+    if not raw:
+        return "unknown"
+    try:
+        host = (urlparse(raw).hostname or "").lower()
+    except Exception:
+        return "unknown"
+    host = host[4:] if host.startswith("www.") else host
+    if host in {"youtube.com", "youtu.be", "m.youtube.com", "youtube-nocookie.com"} or host.endswith(".youtube.com") or host.endswith(".youtube-nocookie.com"):
+        return "youtube"
+    if host in {"facebook.com", "fb.watch", "m.facebook.com"} or host.endswith(".facebook.com"):
+        return "facebook"
+    if host in {"instagram.com", "instagr.am", "www.instagram.com"} or host.endswith(".instagram.com"):
+        return "instagram"
+    return "unknown"
+
+
+def _resolve_download_filepath(info: dict, temp_dir: Path) -> Path:
+    requested = info.get("requested_downloads") or []
+    filepath = requested[0].get("filepath") or "" if requested else ""
+    if not filepath:
+        with YoutubeDL({"quiet": True}) as ydl2:
+            filepath = ydl2.prepare_filename(info)
+    file_path = Path(filepath)
+    if not file_path.exists() or file_path.stat().st_size == 0:
+        candidates = sorted(
+            [p for p in temp_dir.glob("*") if p.is_file()],
+            key=lambda p: p.stat().st_size,
+            reverse=True,
+        )
+        if candidates:
+            file_path = candidates[0]
+    if not file_path.exists() or file_path.stat().st_size == 0:
+        raise RuntimeError("Downloaded file missing or empty")
+    return file_path
+
+
+def download_public_video(url: str, temp_dir: Path, progress_callback=None) -> dict:
+    source = detect_public_video_source(url)
+    if source not in SUPPORTED_PUBLIC_SOURCES:
+        raise RuntimeError("Unsupported link")
+
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    ffmpeg_bin = _ensure_ffmpeg_on_path()
+
+    def _progress_hook(data: dict):
+        if not progress_callback:
+            return
+        status = str(data.get("status") or "").lower()
+        if status == "downloading":
+            total = float(data.get("total_bytes") or data.get("total_bytes_estimate") or 0)
+            downloaded = float(data.get("downloaded_bytes") or 0)
+            pct = int((downloaded / total) * 100) if total > 0 else 0
+            progress_callback(min(99, max(1, pct)), "Downloading")
+        elif status == "finished":
+            progress_callback(99, "Finalizing file")
+
+    opts = {
+        "outtmpl": str(temp_dir / "%(title).80s [%(id)s].%(ext)s"),
+        "noplaylist": True,
+        "ffmpeg_location": ffmpeg_bin,
+        "prefer_ffmpeg": True,
+        "merge_output_format": "mp4",
+        "format": "bv*+ba/b/best",
+        "format_sort": ["proto:https", "proto:http"],
+        "concurrent_fragment_downloads": 4,
+        "retries": 8,
+        "fragment_retries": 8,
+        "extractor_retries": 4,
+        "file_access_retries": 4,
+        "quiet": True,
+        "no_warnings": False,
+        "progress_hooks": [_progress_hook],
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+        },
+    }
+
+    cookiefile = (os.getenv("YTDLP_COOKIEFILE", "") or "").strip()
+    if cookiefile:
+        p = Path(cookiefile).expanduser()
+        if p.is_file():
+            opts["cookiefile"] = str(p)
+
+    try:
+        with YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+        file_path = _resolve_download_filepath(info, temp_dir)
+        return {
+            "source": source,
+            "title": info.get("title") or file_path.stem,
+            "slug": slugify(info.get("title") or file_path.stem),
+            "duration": int(info.get("duration") or 0),
+            "filepath": str(file_path),
+            "thumbnail": info.get("thumbnail"),
+            "extractor": str(info.get("extractor_key") or source),
+            "webpage_url": str(info.get("webpage_url") or url),
+        }
+    except DownloadError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 _IOS = {"extractor_args": {"youtube": {"player_client": ["ios"]}}}

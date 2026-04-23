@@ -108,7 +108,7 @@ def recover_pending_render_jobs():
         jobs = list_jobs()
         marked = 0
         for job in jobs:
-            if job.get("kind") != "render":
+            if job.get("kind") not in ("render", "download"):
                 continue
             if job.get("status") not in ("queued", "running"):
                 continue
