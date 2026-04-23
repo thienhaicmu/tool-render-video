@@ -28,7 +28,7 @@
     button, input, select, textarea { font: inherit; }
 
     /* ── Layout ── */
-    .appShell { display: grid; grid-template-columns: 4fr 2fr 4fr; grid-template-rows: 42px 1fr minmax(260px, 35vh) 28px; height: 100vh; background: var(--bg); }
+    .appShell { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(320px, 420px); grid-template-rows: 42px minmax(0, 1fr) clamp(280px, 34vh, 440px) 28px; height: 100vh; background: var(--bg); }
 
     /* ── Sidebar / Left Nav ── */
     .sidebar { grid-column: 1; grid-row: 2; padding: 14px; background: var(--sidebar-bg); border-right: 1px solid #0e1729; color: var(--text); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -48,7 +48,7 @@
     .navItem[data-view="settings"] { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6z' fill='black'/%3E%3Cpath d='M19.4 13.4a7.7 7.7 0 0 0 .1-2.8l2-1.6-2-3.4-2.5.8a8.2 8.2 0 0 0-2.4-1.4L14.1 2h-4.2l-.5 2.9a8.2 8.2 0 0 0-2.4 1.4l-2.5-.8-2 3.4 2 1.6a7.7 7.7 0 0 0 .1 2.8l-2 1.6 2 3.4 2.5-.8a8.2 8.2 0 0 0 2.4 1.4l.5 2.9h4.2l.5-2.9a8.2 8.2 0 0 0 2.4-1.4l2.5.8 2-3.4-2-1.6z' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'/%3E%3C/svg%3E"); }
 
     /* ── Main area ── */
-    .mainArea { grid-column: 2; grid-row: 2; padding: 24px 28px; overflow-y: auto; min-height: 0; min-width: 0; }
+    .mainArea { grid-column: 2; grid-row: 2; padding: 18px 22px; overflow-y: auto; min-height: 0; min-width: 0; }
     .pageHeader { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--card-border); }
     .pageTitle { font-size: 22px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 10px; }
     .pageTitle::before { content: ""; width: 22px; height: 22px; flex: 0 0 22px; background: var(--accent); -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='5' width='18' height='14' rx='3' fill='black'/%3E%3Ccircle cx='12' cy='12' r='3.2' fill='white'/%3E%3C/svg%3E"); -webkit-mask-repeat: no-repeat; -webkit-mask-size: contain; mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='5' width='18' height='14' rx='3' fill='black'/%3E%3Ccircle cx='12' cy='12' r='3.2' fill='white'/%3E%3C/svg%3E"); mask-repeat: no-repeat; mask-size: contain; }
@@ -959,12 +959,12 @@
       border-right: 1px solid rgba(255,255,255,.04);
     }
     .abpTimeline .pipelineWrap { margin: 0; }
-    .abpTimeline .jmPartList { max-height: 110px; overflow-y: auto; }
+    .abpTimeline .jmPartList { max-height: none; overflow: visible; }
 
     /* Right: live log */
     .abpLog {
-      width: 320px;
-      flex-shrink: 0;
+      width: clamp(260px, 28vw, 420px);
+      flex: 0 1 clamp(260px, 28vw, 420px);
       display: flex;
       flex-direction: column;
       gap: 4px;
@@ -1083,6 +1083,123 @@
       border-color: rgba(255,255,255,.14);
     }
 
+    .abpMonitorHeader {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(96,165,250,.14);
+      background: linear-gradient(180deg, rgba(15,23,42,.92), rgba(8,13,24,.94));
+    }
+    .abpMonitorMain {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .monitorLiveDot {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      flex: 0 0 11px;
+      background: #64748b;
+      box-shadow: 0 0 0 4px rgba(100,116,139,.1);
+    }
+    .abpMonitorHeader[data-monitor-state="running"] .monitorLiveDot {
+      background: #22c55e;
+      box-shadow: 0 0 0 5px rgba(34,197,94,.13), 0 0 18px rgba(34,197,94,.38);
+      animation: monitorPulse 1.5s ease-in-out infinite;
+    }
+    .abpMonitorHeader[data-monitor-state="stalled"] .monitorLiveDot,
+    .abpMonitorHeader[data-monitor-state="failed"] .monitorLiveDot {
+      background: #f59e0b;
+      box-shadow: 0 0 0 5px rgba(245,158,11,.14), 0 0 18px rgba(245,158,11,.34);
+    }
+    .abpMonitorHeader[data-monitor-state="failed"] .monitorLiveDot {
+      background: #ef4444;
+      box-shadow: 0 0 0 5px rgba(239,68,68,.14), 0 0 18px rgba(239,68,68,.34);
+    }
+    .abpMonitorHeader[data-monitor-state="complete"] .monitorLiveDot {
+      background: #10b981;
+      box-shadow: 0 0 0 5px rgba(16,185,129,.14);
+    }
+    @keyframes monitorPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(.78); opacity: .72; }
+    }
+    .monitorTextBlock {
+      min-width: 0;
+    }
+    .monitorPrimary {
+      color: #f8fafc;
+      font-size: 18px;
+      font-weight: 850;
+      letter-spacing: 0;
+      line-height: 1.15;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .monitorSecondary {
+      margin-top: 3px;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .monitorHeartbeat {
+      flex: 0 0 auto;
+      border: 1px solid rgba(148,163,184,.16);
+      border-radius: 999px;
+      padding: 5px 10px;
+      color: #cbd5e1;
+      background: rgba(15,23,42,.76);
+      font-size: 12px;
+      font-weight: 750;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .abpMonitorHeader[data-monitor-state="stalled"] {
+      border-bottom-color: rgba(245,158,11,.32);
+      background: linear-gradient(180deg, rgba(49,33,12,.96), rgba(24,18,8,.96));
+    }
+    .abpMonitorHeader[data-monitor-state="stalled"] .monitorHeartbeat {
+      color: #fbbf24;
+      border-color: rgba(245,158,11,.35);
+      background: rgba(245,158,11,.1);
+    }
+    .abpMonitorHeader[data-monitor-state="failed"] {
+      border-bottom-color: rgba(239,68,68,.36);
+      background: linear-gradient(180deg, rgba(55,18,18,.96), rgba(24,9,9,.96));
+    }
+    .abpMonitorHeader[data-monitor-state="failed"] .monitorHeartbeat {
+      color: #fecaca;
+      border-color: rgba(239,68,68,.35);
+      background: rgba(239,68,68,.1);
+    }
+    .abpMonitorHeader[data-monitor-state="running"] {
+      border-bottom-color: rgba(34,197,94,.22);
+      background: linear-gradient(180deg, rgba(10,26,18,.95), rgba(6,17,13,.96));
+    }
+    .abpMonitorHeader[data-monitor-state="running"] .monitorHeartbeat {
+      color: #86efac;
+      border-color: rgba(34,197,94,.28);
+      background: rgba(34,197,94,.08);
+    }
+    .abpMonitorHeader[data-monitor-state="complete"] {
+      border-bottom-color: rgba(16,185,129,.28);
+      background: linear-gradient(180deg, rgba(8,22,16,.96), rgba(4,14,11,.97));
+    }
+    .abpMonitorHeader[data-monitor-state="complete"] .monitorHeartbeat {
+      color: #6ee7b7;
+      border-color: rgba(16,185,129,.28);
+      background: rgba(16,185,129,.08);
+    }
+
     /* ══════════════════════════════════════════════════════════════════
        Role-Mapping — TopBar Nav + Sidebar Form Panel
     ══════════════════════════════════════════════════════════════════ */
@@ -1122,13 +1239,13 @@
     /* Fix 1 — Inspector: only visible in editor view.
        noInspector class added/removed by setView() in nav.js.
        mainArea expands to fill the freed 4fr column. */
-    .appShell.noInspector { grid-template-columns: minmax(0,4fr) minmax(0,6fr); }
+    .appShell.noInspector { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
     .appShell.noInspector .appInspector { display: none; }
 
     /* Fix 2 — Bottom panel: collapsible when idle.
        abpCollapsed class toggled by toggleBottomPanel() / _collapseBottomPanel().
        Collapses to toolbar height only (44px). */
-    .appShell.abpCollapsed { grid-template-rows: 42px 1fr 44px 28px; }
+    .appShell.abpCollapsed { grid-template-rows: 42px minmax(0, 1fr) 160px 28px; }
     .appShell.abpCollapsed .abpBody { display: none; }
     .abpCollapseBtn {
       background: transparent;
@@ -1216,7 +1333,73 @@
       display: flex;
       flex-direction: column;
       gap: 12px;
-      padding: 20px 28px;
+      padding: 16px 6px;
+    }
+    .renderActivePanel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px 6px;
+    }
+    .renderActiveCard {
+      border: 1px solid rgba(96,165,250,.24);
+      border-radius: var(--radius);
+      background: linear-gradient(160deg,#101b2f 0%,#0b1322 100%);
+      padding: 16px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.34);
+    }
+    .renderActiveTop {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+    }
+    .renderActiveEyebrow {
+      color: #93c5fd;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .renderActiveTitle {
+      margin-top: 5px;
+      color: #f8fafc;
+      font-size: 20px;
+      font-weight: 800;
+    }
+    .renderActivePct {
+      color: #60a5fa;
+      font-size: 28px;
+      font-weight: 850;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .renderActiveProgress {
+      height: 9px;
+      margin-top: 14px;
+      border-radius: 999px;
+      background: rgba(30,45,69,.9);
+      overflow: hidden;
+      box-shadow: inset 0 1px 4px rgba(0,0,0,.45);
+    }
+    .renderActiveProgress > div {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg,#3b82f6,#10b981);
+      transition: width .45s cubic-bezier(.2,.8,.2,1);
+    }
+    .renderActiveMeta {
+      margin-top: 10px;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .renderActiveActions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 14px;
     }
     .renderHomeCard {
       background: linear-gradient(160deg,#131f35 0%,#0f1827 100%);
@@ -1542,4 +1725,254 @@
       color: #fecaca;
       background: rgba(239,68,68,.07);
       border-left-color: rgba(248,113,113,.7);
+    }
+
+    /* Bottom monitor hierarchy: clips and trust state first, diagnostics last */
+    .appBottomPanel.logsCollapsed .abpLogBox { display: none; }
+    .appBottomPanel.logsCollapsed .abpLog {
+      flex: 0 0 150px;
+      width: 150px;
+    }
+    .appBottomPanel.logsCollapsed .abpLog::after {
+      content: 'Logs hidden';
+      display: grid;
+      place-items: center;
+      min-height: 42px;
+      border: 1px dashed rgba(148,163,184,.18);
+      border-radius: 8px;
+      color: rgba(148,163,184,.72);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .abpLogHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .abpLogToggle {
+      border: 1px solid rgba(148,163,184,.14);
+      border-radius: 999px;
+      background: rgba(15,23,42,.55);
+      color: rgba(203,213,225,.74);
+      padding: 3px 8px;
+      font-size: 10px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    .abpLogToggle:hover {
+      color: #e2e8f0;
+      border-color: rgba(96,165,250,.28);
+    }
+    .abpLogBox {
+      opacity: .72;
+      border-color: rgba(148,163,184,.1);
+      background: rgba(2,6,23,.48);
+    }
+    .abpLogBox:focus-within,
+    .abpLogBox:hover {
+      opacity: .95;
+    }
+    .pipelineWrap {
+      opacity: .82;
+      grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+    }
+    .pipelineNode {
+      padding: 6px 7px;
+      border-color: rgba(148,163,184,.11);
+      background: rgba(15,23,42,.44);
+    }
+    .pipelineNode .nTitle {
+      font-size: 10px;
+    }
+    .pipelineNode .nState {
+      font-size: 9px;
+    }
+    .pipelineNode.done {
+      opacity: .72;
+      background: rgba(16,185,129,.06);
+    }
+    .pipelineNode.running {
+      opacity: 1;
+      border-color: rgba(96,165,250,.62);
+      background: rgba(37,99,235,.16);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 0 0 1px rgba(96,165,250,.08);
+    }
+    .pipelineNode.failed {
+      opacity: 1;
+      border-color: rgba(239,68,68,.45);
+      background: rgba(239,68,68,.1);
+    }
+    .clipsSummaryStrip {
+      border-color: rgba(96,165,250,.24);
+      background: linear-gradient(180deg, rgba(15,23,42,.72), rgba(10,16,28,.78));
+    }
+    .clipsSummaryTitle {
+      font-size: 14px;
+    }
+    .partRow.running {
+      border-color: rgba(96,165,250,.5);
+      background: rgba(37,99,235,.12);
+      box-shadow: inset 3px 0 0 rgba(96,165,250,.72);
+    }
+    .partRow.failed {
+      box-shadow: inset 3px 0 0 rgba(239,68,68,.72);
+    }
+    .partRow.done {
+      box-shadow: inset 3px 0 0 rgba(16,185,129,.55);
+    }
+    .partName {
+      font-size: 13px;
+    }
+    .statusBadge {
+      font-weight: 800;
+    }
+
+    /* Render tab layout and clips visibility refinements */
+    .appInspector {
+      width: auto;
+      min-width: 320px;
+      max-width: 420px;
+    }
+    .evSettingsGrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .evAdvancedSettings {
+      grid-column: 1 / -1;
+      border: 1px solid rgba(148,163,184,.14);
+      border-radius: 10px;
+      background: rgba(15,23,42,.44);
+      padding: 9px 10px 10px;
+    }
+    .evAdvancedSettings summary {
+      cursor: pointer;
+      color: #93c5fd;
+      font-size: 12px;
+      font-weight: 750;
+      outline: none;
+    }
+    .evAdvancedSettings .evSettingsGrid {
+      margin-top: 10px;
+    }
+    .appBottomPanel {
+      min-height: 0;
+    }
+    .abpBody {
+      gap: 0;
+    }
+    .abpTimeline {
+      padding: 10px 16px 14px;
+      gap: 8px;
+    }
+    .abpLog {
+      background: rgba(2,6,23,.28);
+    }
+    .abpSectionLabel {
+      font-size: 10px;
+      color: #93c5fd;
+    }
+    .clipsSummaryStrip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 8px 10px;
+      border: 1px solid rgba(96,165,250,.24);
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(15,23,42,.72), rgba(10,16,28,.78));
+    }
+    .clipsSummaryTitle {
+      color: #f8fafc;
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .clipsSummaryMeta {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    .clipsSummaryPct {
+      margin-left: auto;
+      color: #60a5fa;
+      font-size: 12px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .abpTimeline .partList {
+      gap: 8px;
+    }
+    .abpTimeline .partRow {
+      grid-template-columns: minmax(220px, 1.35fr) minmax(140px, .65fr) auto;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(13,21,38,.82);
+    }
+    .abpTimeline .partRow.done {
+      opacity: .9;
+    }
+    .clipDuration {
+      color: #cbd5e1;
+      font-weight: 650;
+    }
+    .clipSecondaryMetrics {
+      display: none;
+    }
+    .partRight .scoreBox {
+      opacity: .62;
+    }
+    .partRight .scoreBox:hover {
+      opacity: 1;
+    }
+    .emptyState {
+      color: var(--text-muted);
+    }
+    .renderActivePanel:not(.hiddenView) + .pageHeader,
+    .renderHomePanel:not(.hiddenView) + .renderActivePanel + .pageHeader {
+      display: none;
+    }
+
+    @media (max-width: 1180px) {
+      .appShell {
+        grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(300px, 360px);
+      }
+      .abpBody {
+        flex-direction: column;
+      }
+      .abpTimeline {
+        border-right: none;
+        border-bottom: 1px solid rgba(255,255,255,.04);
+        overflow-y: auto;
+      }
+      .abpLog {
+        width: auto;
+        flex: 0 0 clamp(96px, 24%, 150px);
+      }
+      .pipelineWrap {
+        grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .abpMonitorHeader {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .monitorHeartbeat {
+        max-width: 100%;
+        white-space: normal;
+      }
+      .evSettingsGrid {
+        grid-template-columns: 1fr;
+      }
+      .abpTimeline .partRow {
+        grid-template-columns: 1fr;
+      }
+      .partRight {
+        justify-content: flex-start;
+      }
+      .clipsSummaryPct {
+        margin-left: 0;
+      }
     }

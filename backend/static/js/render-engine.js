@@ -213,6 +213,8 @@ async function resumeRender(){
   for(const k of Object.keys(_partTarget)) delete _partTarget[k];
   for(const k of Object.keys(_partDisplay)) delete _partDisplay[k];
   hideRenderCompletionBar();
+  resetRenderMonitorHeartbeat();
+  updateRenderMainState(null, null, []);
   setRenderActionBusy(true);
   setHeaderJob('Render resumed');
   setRenderFlowState('rendering', 'Resumed render', { force: true });
@@ -247,6 +249,7 @@ function _applyJobUpdate(job, parts, summary){
   } else {
     _scheduleSmooth();
   }
+  markRenderMonitorUpdate(job, s, parts, targetPercent);
 
   qs('job_stage_pill').textContent = stageLabelPlain(job.stage);
   qs('job_title').textContent = job.status === 'queued' ? 'Queued job' : 'Processing video';
@@ -258,12 +261,13 @@ function _applyJobUpdate(job, parts, summary){
   updateRenderFlowByJob(job, s, parts);
 
   renderParts(parts, s);
-  renderPartFocus(parts, s);
+  updateRenderMainState(job, s, parts);
+  updateRenderMonitorHeartbeat(job, s, parts);
   updateStatusBar(job, s);
   const doneCount = getCompletedClipCount(s, parts);
   const totalCount = s.total_parts || parts.length;
   const parallelNote = s.processing_parts > 1 ? ` | ${s.processing_parts} parallel` : '';
-  qs('job_meta_2').textContent = `${doneCount}/${totalCount} parts done | step ${stageLabelPlain(job.stage)}${parallelNote}`;
+  qs('job_meta_2').textContent = `${doneCount}/${totalCount} clips done | ${stageLabelPlain(job.stage)}${parallelNote}`;
 
   if(job.stage && job.stage !== lastStage){
     if(lastStage) addEvent(`Finished step: ${stageLabelPlain(lastStage)}`, 'render');

@@ -1,5 +1,13 @@
 const RENDER_FLOW_ORDER = ['source', 'configure', 'rendering', 'complete'];
 let _renderFlowStepRank = 0;
+let _renderMonitorLastUpdateAt = 0;
+let _renderMonitorLastProgressAt = 0;
+let _renderMonitorLastSignature = '';
+let _renderMonitorLastJob = null;
+let _renderMonitorLastSummary = null;
+let _renderMonitorLastParts = [];
+let _renderMonitorHeartbeatTimer = null;
+const RENDER_MONITOR_STALL_MS = 45000;
 
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
 function resetRenderSessionUi(){
@@ -21,7 +29,7 @@ function resetRenderSessionUi(){
   if (qs('job_stage_pill')) qs('job_stage_pill').dataset.stage = '';
   qs('job_title').textContent = 'No active job';
   qs('job_meta_1').textContent = 'Channel - | Source -';
-  qs('job_meta_2').textContent = '0/0 parts done | 0 scenes';
+  qs('job_meta_2').textContent = '0/0 clips done';
   qs('job_percent').textContent = '0%';
   qs('job_message').textContent = 'Initializing';
   qs('job_bar').style.width = '0%';
@@ -33,12 +41,13 @@ function resetRenderSessionUi(){
   renderPipeline('queued', 'queued');
   renderSteps(0);
   renderParts([]);
-  renderPartFocus([]);
   if(RENDER_SESSION_ONLY && qs('jobs_out')){
     qs('jobs_out').innerHTML = '<div class="emptyState">Session mode: old jobs are hidden.</div>';
   }
   setRenderFlowState('source', 'Select source', { source: 'active', force: true });
   hideRenderCompletionBar();
+  resetRenderMonitorHeartbeat();
+  updateRenderMainState(null, null, []);
 }
 function fmtElapsed(ms){
   const sec = Math.max(0, Math.floor(ms / 1000));
@@ -80,6 +89,135 @@ function stageLabelPlain(stage){
   };
   return map[(stage || '').toLowerCase()] || (stage || '-');
 }
+
+function renderMonitorStageLabel(stage, status, summary = null){
+  const st = String(status || '').toLowerCase();
+  if (st === 'completed') return 'Render complete';
+  if (st === 'failed') return 'Render failed';
+  const s = String(stage || '').toLowerCase();
+  if ((s === 'rendering' || s === 'rendering_parallel') && summary) {
+    const active = Number(summary.processing_parts || 0);
+    if (active > 1) return `Rendering ${active} clips in parallel`;
+    if (active === 1) return 'Rendering 1 clip';
+  }
+  return stageLabel(stage);
+}
+
+function renderMonitorClipSummary(summary, parts = []){
+  const s = summary || computeProgressSummary(parts || []);
+  const total = Number(s.total_parts || parts.length || 0);
+  const done = Number(s.completed_parts || 0);
+  const active = Number(s.processing_parts || 0);
+  const failed = Number(s.failed_parts || 0);
+  if (!total) return 'No clips created yet';
+  const bits = [`${total} clips`];
+  if (done > 0) bits.push(`${done} done`);
+  if (active > 1) bits.push(`${active} in parallel`);
+  else if (active === 1) bits.push('1 rendering');
+  if (failed > 0) bits.push(`${failed} failed`);
+  return bits.join(' · ');
+}
+
+function renderMonitorRelative(ms){
+  if (!ms) return 'No backend update yet';
+  const sec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (sec < 2) return 'Last update just now';
+  if (sec < 60) return `Last update ${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return rem ? `Last update ${min}m ${rem}s ago` : `Last update ${min}m ago`;
+}
+
+function resetRenderMonitorHeartbeat(){
+  _renderMonitorLastUpdateAt = 0;
+  _renderMonitorLastProgressAt = 0;
+  _renderMonitorLastSignature = '';
+  _renderMonitorLastJob = null;
+  _renderMonitorLastSummary = null;
+  _renderMonitorLastParts = [];
+  updateRenderMonitorHeartbeat(null, null, []);
+}
+
+function ensureRenderMonitorHeartbeatTimer(){
+  if (_renderMonitorHeartbeatTimer) return;
+  _renderMonitorHeartbeatTimer = setInterval(() => {
+    updateRenderMonitorHeartbeat();
+  }, 1000);
+}
+
+function markRenderMonitorUpdate(job, summary, parts = [], targetPercent = null){
+  const now = Date.now();
+  _renderMonitorLastUpdateAt = now;
+  const s = summary || computeProgressSummary(parts || []);
+  _renderMonitorLastJob = job || null;
+  _renderMonitorLastSummary = s;
+  _renderMonitorLastParts = Array.isArray(parts) ? parts : [];
+  const signature = [
+    String(job?.status || ''),
+    String(job?.stage || ''),
+    Math.round(Number(targetPercent ?? job?.progress_percent ?? 0)),
+    Number(s.completed_parts || 0),
+    Number(s.processing_parts || 0),
+    Number(s.failed_parts || 0),
+    Number(s.total_parts || parts.length || 0)
+  ].join('|');
+  if (signature !== _renderMonitorLastSignature) {
+    _renderMonitorLastSignature = signature;
+    _renderMonitorLastProgressAt = now;
+  }
+  ensureRenderMonitorHeartbeatTimer();
+}
+
+function updateRenderMonitorHeartbeat(job, summary, parts = []){
+  const header = qs('render_monitor_header');
+  if (!header) return;
+  job = job || _renderMonitorLastJob;
+  summary = summary || _renderMonitorLastSummary;
+  parts = parts && parts.length ? parts : (_renderMonitorLastParts || []);
+  const status = String(job?.status || lastStatus || '').toLowerCase();
+  const running = currentJobId && status !== 'completed' && status !== 'failed';
+  const completed = status === 'completed';
+  const failed = status === 'failed';
+  const now = Date.now();
+  const noProgressMs = _renderMonitorLastProgressAt ? now - _renderMonitorLastProgressAt : 0;
+  const stalled = running && _renderMonitorLastProgressAt && noProgressMs > RENDER_MONITOR_STALL_MS;
+
+  let monitorState = 'idle';
+  if (running) monitorState = stalled ? 'stalled' : 'running';
+  if (completed) monitorState = 'complete';
+  if (failed) monitorState = 'failed';
+  header.dataset.monitorState = monitorState;
+
+  const pctText = qs('job_percent')?.textContent || '0%';
+  const stageText = job ? renderMonitorStageLabel(job.stage, job.status, summary) : (running ? stageLabelPlain(lastStage) : 'Ready to render');
+  const primary = qs('render_monitor_primary');
+  const secondary = qs('render_monitor_secondary');
+  const heartbeat = qs('render_monitor_heartbeat');
+  if (primary) {
+    if (failed) primary.textContent = `Render failed · ${pctText}`;
+    else if (completed) primary.textContent = `Render complete · ${pctText}`;
+    else if (running) primary.textContent = `${stageText} · ${pctText}`;
+    else primary.textContent = 'Ready to render';
+  }
+  if (secondary) {
+    const clipLine = renderMonitorClipSummary(summary, parts);
+    if (stalled) secondary.textContent = clipLine;
+    else if (completed) secondary.textContent = `${clipLine} · Final clips saved below`;
+    else if (failed) secondary.textContent = `${clipLine} · Check diagnostics`;
+    else secondary.textContent = running ? clipLine : 'No active render job.';
+  }
+  if (heartbeat) {
+    heartbeat.textContent = !currentJobId
+      ? 'Idle'
+      : stalled
+      ? `No progress update for ${Math.floor(noProgressMs / 1000)}s — render may be stalled`
+      : completed
+      ? 'Render complete'
+      : failed
+      ? 'Render failed'
+      : renderMonitorRelative(_renderMonitorLastUpdateAt);
+  }
+}
 function friendlyJobMessage(job){
   const status = String(job?.status || '').toLowerCase();
   const stage = String(job?.stage || '').toLowerCase();
@@ -105,8 +243,8 @@ function partStatusLabel(status){
     waiting: 'Waiting',
     cutting: 'Cutting clip',
     transcribing: 'Generating subtitles',
-    rendering: 'Rendering',
-    done: 'Done',
+    rendering: 'Rendering video',
+    done: 'Completed',
     failed: 'Failed'
   };
   return map[s] || s;
@@ -242,6 +380,42 @@ function hideRenderCompletionBar() {
   bar.classList.add('hiddenView');
   const summary = qs('render_completion_summary');
   if (summary) summary.textContent = '';
+}
+
+function updateRenderMainState(job, summary, parts = []) {
+  const activePanel = qs('render_active_panel');
+  const homePanel = qs('render_home_panel');
+  if (!activePanel || !homePanel) return;
+
+  const status = String(job?.status || '').toLowerCase();
+  const hasJob = !!job && !!currentJobId;
+  const terminal = status === 'completed' || status === 'failed';
+  const showActivePanel = hasJob && currentView === 'render';
+
+  homePanel.classList.toggle('hiddenView', !((currentView === 'render') && !showActivePanel));
+  activePanel.classList.toggle('hiddenView', !showActivePanel);
+  if (!showActivePanel) return;
+
+  const s = summary || computeProgressSummary(parts || []);
+  const pct = Math.max(0, Math.min(100, Math.round(Number(job?.progress_percent || 0))));
+  const title = terminal
+    ? (status === 'completed' ? 'Render complete' : 'Render failed')
+    : stageLabel(job?.stage || 'queued');
+  const done = getCompletedClipCount(s, parts);
+  const total = Number(s?.total_parts || parts.length || 0);
+  const active = Number(s?.processing_parts || 0);
+  const failed = Number(s?.failed_parts || 0);
+  const clipBits = [];
+  if (total > 0) clipBits.push(`${done}/${total} clips done`);
+  if (active > 0) clipBits.push(`${active} rendering`);
+  if (failed > 0) clipBits.push(`${failed} failed`);
+
+  if (qs('render_active_state')) qs('render_active_state').textContent = terminal ? 'Render Complete' : 'Current Render';
+  if (qs('render_active_title')) qs('render_active_title').textContent = title;
+  if (qs('render_active_pct')) qs('render_active_pct').textContent = `${pct}%`;
+  if (qs('render_active_bar')) qs('render_active_bar').style.width = `${pct}%`;
+  if (qs('render_active_meta')) qs('render_active_meta').textContent = clipBits.length ? clipBits.join(' | ') : 'Clips will appear in the output panel below.';
+  if (qs('render_active_actions')) qs('render_active_actions').classList.toggle('hiddenView', status !== 'completed');
 }
 
 function getCurrentJobOutputDir(job) {
@@ -496,6 +670,14 @@ function focusBottomPanel() {
   if (typeof _collapseBottomPanel === 'function') _collapseBottomPanel(false);
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
+
+function toggleRenderLogs() {
+  const panel = qs('appBottomPanel');
+  if (!panel) return;
+  const collapsed = panel.classList.toggle('logsCollapsed');
+  const btn = document.querySelector('.abpLogToggle');
+  if (btn) btn.textContent = collapsed ? 'Show logs' : 'Hide logs';
+}
 function pipelineStateByStage(stage, status){
   const s = (stage || '').toLowerCase();
   const st = (status || '').toLowerCase();
@@ -509,11 +691,20 @@ function pipelineStateByStage(stage, status){
   });
 }
 function renderPipeline(stage, status){
-  const stateLabel = { pending: 'Waiting', running: 'In Progress', done: 'Done', failed: 'Failed' };
+  const stateLabel = { pending: 'Waiting', running: 'Current', done: 'Done', failed: 'Failed' };
+  const pipelineLabel = {
+    queued: 'Queue',
+    downloading: 'Source',
+    scene: 'Scenes',
+    segment: 'Segments',
+    subtitle: 'Subtitles',
+    render: 'Clips',
+    report: 'Report'
+  };
   const nodes = pipelineStateByStage(stage, status);
   qs('pipeline_wrap').innerHTML = nodes.map(n => `
     <div class="pipelineNode ${n.state}">
-      <div class="nTitle">${n.label}</div>
+      <div class="nTitle">${pipelineLabel[n.key] || n.label}</div>
       <div class="nState">${stateLabel[n.state] || n.state}</div>
     </div>
   `).join('');
@@ -527,6 +718,15 @@ function setRenderActionBusy(isBusy){
 
   // Expand bottom panel when job starts so pipeline/log are immediately visible.
   if (isBusy) {
+    _renderMonitorLastUpdateAt = 0;
+    _renderMonitorLastProgressAt = Date.now();
+    _renderMonitorLastSignature = '';
+    _renderMonitorLastJob = { status: 'running', stage: 'queued', progress_percent: _jobDisplayPct || 0 };
+    _renderMonitorLastSummary = computeProgressSummary([]);
+    _renderMonitorLastParts = [];
+    ensureRenderMonitorHeartbeatTimer();
+    updateRenderMonitorHeartbeat(_renderMonitorLastJob, _renderMonitorLastSummary, []);
+    updateRenderMainState({ status: 'running', stage: 'queued', progress_percent: _jobDisplayPct || 0 }, computeProgressSummary([]), []);
     focusBottomPanel();
     const panel = qs('appBottomPanel');
     if (panel) {
@@ -534,6 +734,8 @@ function setRenderActionBusy(isBusy){
       void panel.offsetWidth;
       panel.classList.add('renderStartPulse');
     }
+  } else if (!currentJobId) {
+    updateRenderMainState(null, null, []);
   }
 
   // Lock/unlock all form inputs in the render setup card
@@ -596,13 +798,55 @@ function renderSteps(progress){
 
 function renderParts(items, summary){
   const wrap = qs('parts_wrap');
-  if(!items || !items.length){ wrap.innerHTML = '<div class="emptyState">Parts will appear here once rendering begins.</div>'; return; }
-  const ordered = [...items].sort((a,b)=>Number(a.part_no||0)-Number(b.part_no||0));
+  if(!items || !items.length){ wrap.innerHTML = '<div class="emptyState">Clips will appear here once rendering begins.</div>'; return; }
+  const s = summary || computeProgressSummary(items);
+  const activeStatuses = ['waiting', 'cutting', 'transcribing', 'rendering'];
+  const statusRank = (p) => {
+    const st = String(p.status || '').toLowerCase();
+    if (activeStatuses.includes(st)) return 0;
+    if (st === 'failed') return 1;
+    if (st === 'done') return 2;
+    return 3;
+  };
+  const ordered = [...items].sort((a,b)=>{
+    const ar = statusRank(a), br = statusRank(b);
+    if (ar !== br) return ar - br;
+    return Number(a.part_no||0)-Number(b.part_no||0);
+  });
   const stuckMap = _stuckPartsMap(summary, items);
   syncPartProgressTargets(ordered);
-  wrap.innerHTML = ordered.map((p, idx) => {
+  const total = Number(s.total_parts || items.length || 0);
+  const done = Number(s.completed_parts || 0);
+  const rendering = Number(s.processing_parts || 0);
+  const failed = Number(s.failed_parts || 0);
+  const pending = Math.max(0, total - done - rendering - failed);
+  const pct = Math.round(Number(s.overall_progress_percent ?? s.parts_percent ?? 0));
+
+  // Parallel worker chips: show per-worker status when > 1 part active simultaneously
+  const activeParts = s.active_parts || [];
+  let parallelBarHtml = '';
+  if (activeParts.length > 1) {
+    const chips = activeParts.map(ap => {
+      const st = (ap.status || '').toLowerCase();
+      const apKey = String(ap.part_no ?? '');
+      const isStuck = stuckMap.has(apKey);
+      return `<span class="activePartChip${isStuck ? ' stuck' : ''}"><span class="chipDot ${st}"></span>Clip ${Number(ap.part_no||0)} · ${partStatusLabel(st)}${isStuck ? ' ⚠' : ''}</span>`;
+    }).join('');
+    parallelBarHtml = `<div class="activePartsBar">${chips}<span class="workersBadge">${activeParts.length} parallel</span></div>`;
+  }
+
+  const renderingLabel = rendering > 1 ? `${rendering} in parallel` : rendering === 1 ? '1 rendering' : '';
+  const summaryHtml = `<div class="clipsSummaryStrip">
+    <span class="clipsSummaryTitle">${total} clips</span>
+    ${rendering > 0 ? `<span class="psBadge srendering">${renderingLabel}</span>` : ''}
+    ${done > 0 ? `<span class="psBadge sdone">${done} done</span>` : ''}
+    ${failed > 0 ? `<span class="psBadge sfailed">${failed} failed</span>` : ''}
+    ${pending > 0 ? `<span class="psBadge squeued">${pending} waiting</span>` : ''}
+    <span class="clipsSummaryPct">${pct}%</span>
+  </div>`;
+  const rowsHtml = ordered.map((p, idx) => {
     const st     = (p.status || '').toLowerCase();
-    const isRun  = st === 'waiting' || st === 'cutting' || st === 'transcribing' || st === 'rendering';
+    const isRun  = activeStatuses.includes(st);
     const key    = String(p.part_no ?? idx + 1);
     const isStuck = isRun && stuckMap.has(key);
     const disp   = Math.round(_partDisplay[key] ?? Number(p.progress_percent || 0));
@@ -610,14 +854,18 @@ function renderParts(items, summary){
     const errHtml = errMsg ? `<div class="partError">${errMsg}</div>` : '';
     const stuckHtml = isStuck ? `<div class="partStuckNote">${_stuckLabel(stuckMap.get(key))}</div>` : '';
     const rowClass  = `${st || 'queued'}${isRun ? ' running' : ''}${isStuck ? ' stuck' : ''}`.trim();
-    const partName = p.part_name ? esc(p.part_name) : `Part ${Number(p.part_no || idx + 1)}`;
+    const partNo = Number(p.part_no || idx + 1);
+    const partName = p.part_name ? esc(p.part_name) : `Clip ${partNo}`;
+    const startSec = Number(p.start_sec || 0);
+    const endSec = Number(p.end_sec || 0);
+    const duration = Math.max(0, endSec - startSec);
     return `
     <div class="partRow ${rowClass}">
       <div class="partLeft">
-        <div class="rankBadge">P${Number(p.part_no || idx + 1)}</div>
+        <div class="rankBadge">C${partNo}</div>
         <div>
           <div class="partName">${partName}</div>
-          <div class="partMeta">${Number(p.start_sec || 0).toFixed(1)}s -> ${Number(p.end_sec || 0).toFixed(1)}s | Motion ${Number(p.motion_score || 0).toFixed(0)} | Hook ${Number(p.hook_score || 0).toFixed(0)}</div>
+          <div class="partMeta"><span class="clipDuration">${duration.toFixed(1)}s</span> | ${startSec.toFixed(1)}s–${endSec.toFixed(1)}s</div>
           ${errHtml}${stuckHtml}
         </div>
       </div>
@@ -630,10 +878,10 @@ function renderParts(items, summary){
       </div>
       <div class="partRight">
         <div class="statusBadge ${esc((p.status || '').toLowerCase())}">${partStatusLabel(p.status)}</div>
-        <div class="scoreBox">Viral ${Number(p.viral_score || 0).toFixed(0)}</div>
       </div>
     </div>
   `}).join('');
+  wrap.innerHTML = parallelBarHtml + summaryHtml + rowsHtml;
 }
 
 function syncPartProgressTargets(items) {
@@ -737,7 +985,7 @@ function renderPartFocus(items, summary){
   const s = summary || computeProgressSummary(ordered);
 
   if(!s.total_parts){
-    box.innerHTML = '<div class="partFocusTitle">Live Part Tracking</div><div class="partFocusLine">Parts will appear here once rendering begins.</div>';
+    box.innerHTML = '<div class="partFocusTitle">Live Clip Tracking</div><div class="partFocusLine">Clips will appear here once rendering begins.</div>';
     return;
   }
 
@@ -766,7 +1014,7 @@ function renderPartFocus(items, summary){
 
   // ── Summary strip ────────────────────────────────────────────────────
   let stripHtml = `<div class="partsSummaryStrip">
-    <span class="partsSummaryLabel">Parts</span>
+    <span class="partsSummaryLabel">Clips</span>
     <span class="psBadge sdone">${s.completed_parts} done</span>`;
   if(s.processing_parts > 0)
     stripHtml += `<span class="psBadge srendering">${s.processing_parts} active</span>`;
@@ -800,7 +1048,7 @@ function renderPartFocus(items, summary){
     </div>`;
   }).join('');
 
-  box.innerHTML = `<div class="partFocusTitle">Live Part Tracking</div>${activeBarHtml}${stripHtml}<div class="partsProgressGrid">${cardsHtml}</div>`;
+  box.innerHTML = `<div class="partFocusTitle">Live Clip Tracking</div>${activeBarHtml}${stripHtml}<div class="partsProgressGrid">${cardsHtml}</div>`;
 }
 
 function updateStatusBar(job, summary) {
@@ -826,7 +1074,7 @@ function updateStatusBar(job, summary) {
       const d = summary.completed_parts || 0;
       const t = summary.total_parts || 0;
       const a = summary.processing_parts > 0 ? ` · ${summary.processing_parts} active` : '';
-      sumEl.textContent = `— ${d}/${t} parts${a}`;
+      sumEl.textContent = `- ${d}/${t} clips${a}`;
     } else {
       sumEl.textContent = '';
     }

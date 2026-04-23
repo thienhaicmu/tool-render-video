@@ -129,47 +129,6 @@
             </div>
           </div>
 
-          <!-- ③ Render Settings -->
-          <div class="setupGroup">
-            <div class="setupGroupTitle">Render Settings</div>
-            <div class="formGrid formGrid3">
-              <label class="field">
-                <span class="fieldLabel">Aspect Ratio</span>
-                <select class="fieldInput" onchange="document.getElementById('aspect_ratio').value=this.value">
-                  <option value="3:4" selected>3:4 Vertical</option>
-                  <option value="9:16">9:16 TikTok Full</option>
-                  <option value="1:1">1:1 Square</option>
-                </select>
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Render Profile</span>
-                <select class="fieldInput" onchange="document.getElementById('render_profile').value=this.value">
-                  <option value="fast">Fast</option>
-                  <option value="balanced" selected>Balanced</option>
-                  <option value="quality">Quality</option>
-                  <option value="best">Best (slowest)</option>
-                </select>
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Encoder</span>
-                <select class="fieldInput" onchange="document.getElementById('render_device').value=this.value">
-                  <option value="auto" selected>Auto (detect GPU)</option>
-                  <option value="gpu">GPU (NVENC)</option>
-                  <option value="cpu">CPU only</option>
-                </select>
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Min Clip (sec)</span>
-                <input class="fieldInput" type="number" min="20" max="600" value="70" onchange="document.getElementById('min_part_sec').value=this.value">
-              </label>
-              <label class="field">
-                <span class="fieldLabel">Max Clip (sec)</span>
-                <input class="fieldInput" type="number" min="30" max="900" value="180" onchange="document.getElementById('max_part_sec').value=this.value">
-              </label>
-              <div></div>
-            </div>
-          </div>
-
         </div><!-- /setupGroups -->
 
         <div class="setupActions">
@@ -312,7 +271,7 @@
         <div class="renderHomeRow"><span class="renderHomeStepNum">1</span>Paste YouTube URL or choose a local video in <strong>Source Setup</strong> below.</div>
         <div class="renderHomeRow"><span class="renderHomeStepNum">2</span>Select an output channel (or manual folder) and configure render options.</div>
         <div class="renderHomeRow"><span class="renderHomeStepNum">3</span>Open editor, adjust your clip, then start render.</div>
-        <div class="renderHomeRow"><span class="renderHomeStepNum">4</span>When done, parts and the report are saved to the output folder.</div>
+        <div class="renderHomeRow"><span class="renderHomeStepNum">4</span>When done, clips and the report are saved to the output folder.</div>
       </div>
       <div class="renderHomeCard">
         <div class="renderHomeTitle">System</div>
@@ -324,6 +283,24 @@
         <div class="renderHomeTitle">Recent Renders</div>
         <div id="render_history_list" class="renderHistoryList">
           <div class="renderHistoryEmpty">No recent renders yet</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="render_active_panel" class="renderActivePanel hiddenView" aria-live="polite">
+      <div class="renderActiveCard">
+        <div class="renderActiveTop">
+          <div>
+            <div class="renderActiveEyebrow" id="render_active_state">Current Render</div>
+            <div class="renderActiveTitle" id="render_active_title">Preparing render</div>
+          </div>
+          <div class="renderActivePct" id="render_active_pct">0%</div>
+        </div>
+        <div class="renderActiveProgress"><div id="render_active_bar"></div></div>
+        <div class="renderActiveMeta" id="render_active_meta">Clips will appear in the output panel below.</div>
+        <div class="renderActiveActions hiddenView" id="render_active_actions">
+          <button class="primaryButton" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
+          <button class="ghostButton" type="button" onclick="setView('upload')">Go to Upload</button>
         </div>
       </div>
     </div>
@@ -717,8 +694,8 @@
 
       <!-- ⑤ Render Settings -->
       <div class="evSection" data-section-type="render-settings">
-        <div class="evSectionTitle">⚙️ Render Settings</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="evSectionTitle">Render Settings</div>
+        <div class="evSettingsGrid">
           <label class="field"><span class="fieldLabel">Aspect ratio</span>
             <select class="fieldInput" id="evAspectRatio" onchange="evUpdateAspectRatio()">
               <option value="3:4" selected>3:4 Vertical</option>
@@ -726,19 +703,10 @@
               <option value="1:1">1:1 Square</option>
             </select>
           </label>
-          <label class="field"><span class="fieldLabel">Playback speed</span>
-            <select class="fieldInput" id="evPlaybackSpeed">
-              <option value="1.0">1.0x (original)</option>
-              <option value="1.05">1.05x</option>
-              <option value="1.07" selected>1.07x (+7%)</option>
-              <option value="1.1">1.1x (+10%)</option>
-              <option value="1.15">1.15x (+15%)</option>
-            </select>
-          </label>
-          <label class="field"><span class="fieldLabel">Min part (sec)</span>
+          <label class="field"><span class="fieldLabel">Min clip (sec)</span>
             <input class="fieldInput" type="number" id="evMinPart" value="70" min="20" max="600">
           </label>
-          <label class="field"><span class="fieldLabel">Max part (sec)</span>
+          <label class="field"><span class="fieldLabel">Max clip (sec)</span>
             <input class="fieldInput" type="number" id="evMaxPart" value="180" min="30" max="900">
           </label>
           <label class="field"><span class="fieldLabel">Render Profile</span>
@@ -749,34 +717,48 @@
               <option value="fast">Fast</option>
             </select>
           </label>
-          <label class="field"><span class="fieldLabel">GPU render</span>
-            <select class="fieldInput" id="evRenderDevice">
-              <option value="auto" selected>Auto (detect GPU)</option>
-              <option value="gpu">GPU (NVENC)</option>
-              <option value="cpu">CPU only</option>
-            </select>
-          </label>
-          <label class="field"><span class="fieldLabel">Output FPS</span>
-            <select class="fieldInput" id="evOutputFps">
-              <option value="30">30 fps</option>
-              <option value="48">48 fps</option>
-              <option value="60" selected>60 fps</option>
-            </select>
-          </label>
-          <label class="field"><span class="fieldLabel">Max export parts</span>
+          <label class="field"><span class="fieldLabel">Max clips</span>
             <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
             <span style="font-size:11px;color:var(--text-muted);margin-top:2px">0 = no limit</span>
           </label>
-          <label class="field"><span class="fieldLabel">Part order</span>
-            <select class="fieldInput" id="evPartOrder">
-              <option value="viral" selected>Viral score (high → low)</option>
-              <option value="timeline">Timeline (original order)</option>
-            </select>
-          </label>
-          <label class="field"><span class="fieldLabel">Scale Y (%)</span>
-            <input class="fieldInput" type="number" id="evFrameScaleY" value="106" min="80" max="130">
-            <span style="font-size:11px;color:var(--text-muted);margin-top:2px">Vertical zoom (100=original)</span>
-          </label>
+          <details class="evAdvancedSettings">
+            <summary>Advanced render options</summary>
+            <div class="evSettingsGrid">
+              <label class="field"><span class="fieldLabel">Playback speed</span>
+                <select class="fieldInput" id="evPlaybackSpeed">
+                  <option value="1.0">1.0x (original)</option>
+                  <option value="1.05">1.05x</option>
+                  <option value="1.07" selected>1.07x (+7%)</option>
+                  <option value="1.1">1.1x (+10%)</option>
+                  <option value="1.15">1.15x (+15%)</option>
+                </select>
+              </label>
+              <label class="field"><span class="fieldLabel">Encoder</span>
+                <select class="fieldInput" id="evRenderDevice">
+                  <option value="auto" selected>Auto (detect GPU)</option>
+                  <option value="gpu">GPU (NVENC)</option>
+                  <option value="cpu">CPU only</option>
+                </select>
+              </label>
+              <label class="field"><span class="fieldLabel">Output FPS</span>
+                <select class="fieldInput" id="evOutputFps">
+                  <option value="30">30 fps</option>
+                  <option value="48">48 fps</option>
+                  <option value="60" selected>60 fps</option>
+                </select>
+              </label>
+              <label class="field"><span class="fieldLabel">Clip order</span>
+                <select class="fieldInput" id="evPartOrder">
+                  <option value="viral" selected>Best clips first</option>
+                  <option value="timeline">Timeline order</option>
+                </select>
+              </label>
+              <label class="field"><span class="fieldLabel">Scale Y (%)</span>
+                <input class="fieldInput" type="number" id="evFrameScaleY" value="106" min="80" max="130">
+                <span style="font-size:11px;color:var(--text-muted);margin-top:2px">Vertical zoom (100=original)</span>
+              </label>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -1016,6 +998,17 @@
       </div>
     </div>
 
+    <div class="abpMonitorHeader" id="render_monitor_header" data-monitor-state="idle">
+      <div class="abpMonitorMain">
+        <span class="monitorLiveDot" id="render_monitor_dot"></span>
+        <div class="monitorTextBlock">
+          <div class="monitorPrimary" id="render_monitor_primary">Ready to render</div>
+          <div class="monitorSecondary" id="render_monitor_secondary">No active render job.</div>
+        </div>
+      </div>
+      <div class="monitorHeartbeat" id="render_monitor_heartbeat">Idle</div>
+    </div>
+
     <div id="render_completion_bar" class="renderCompletionBar hiddenView">
       <div class="renderCompletionText">
         <div class="renderCompletionMsg" id="render_completion_msg">✓ Render complete — 0 clips ready</div>
@@ -1034,17 +1027,20 @@
       <div class="abpTimeline">
         <div class="abpSectionLabel">Pipeline</div>
         <div class="pipelineWrap" id="pipeline_wrap"></div>
-        <div class="abpSectionLabel" style="margin-top:6px">Parts</div>
+        <div class="abpSectionLabel" id="clips_section_label" style="margin-top:6px">Clips</div>
         <div class="jmPartsSection" style="border:none;padding:0;background:none">
           <div class="partList jmPartList" id="parts_wrap">
-            <div class="emptyState">Parts will appear here once rendering begins.</div>
+            <div class="emptyState">Clips will appear here once rendering begins.</div>
           </div>
         </div>
       </div>
 
       <!-- Right: live log -->
       <div class="abpLog">
-        <div class="abpSectionLabel">Live Log</div>
+        <div class="abpLogHeader">
+          <div class="abpSectionLabel">Diagnostics</div>
+          <button class="abpLogToggle" type="button" onclick="toggleRenderLogs()">Hide logs</button>
+        </div>
         <div class="logBox jmLogBox abpLogBox" id="event_log_render"></div>
       </div>
 
@@ -1075,6 +1071,7 @@
 <script src="/static/js/upload-config.js"></script>
 <script src="/static/js/render-ui.js"></script>
 <script src="/static/js/render-engine.js"></script>
+<script src="/static/js/editor-modal.js"></script>
 <script src="/static/js/upload-engine.js"></script>
 <script src="/static/js/channels.js"></script>
 <script src="/static/js/editor-view.js"></script>

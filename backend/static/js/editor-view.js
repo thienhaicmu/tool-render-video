@@ -896,8 +896,11 @@ async function startRenderFromEditor() {
 
   // Pre-submit validation
   if (!_ev.sessionId) {
-    qs('evStatusLine').textContent = 'No session found. Please re-open editor first.';
+    const _noSessionMsg = 'No session found. Please re-open editor first.';
+    qs('evStatusLine').textContent = _noSessionMsg;
     qs('evStatusLine').style.color = '#ef4444';
+    addEvent(_noSessionMsg, 'render');
+    if (typeof showToast === 'function') showToast(_noSessionMsg, 'error');
     return;
   }
   const invalidLayer = (_ev.textLayers || []).find(l => !String(l.text || '').trim());
@@ -1040,6 +1043,16 @@ async function startRenderFromEditor() {
   qs('evStatusLine').textContent = 'Submitting render request...';
   qs('evStatusLine').style.color = '';
 
+  if (typeof _submitRenderPayload !== 'function') {
+    const _missingFnMsg = 'Internal error: render helper not loaded. Reload the app and try again.';
+    qs('evStatusLine').textContent = _missingFnMsg;
+    qs('evStatusLine').style.color = '#ef4444';
+    qs('evStartBtn').disabled = false;
+    qs('evStartBtn').textContent = '▶ Start Render';
+    addEvent(_missingFnMsg, 'render');
+    if (typeof showToast === 'function') showToast(_missingFnMsg, 'error');
+    return;
+  }
   const _renderResult = await _submitRenderPayload(payload, false);
   if (_renderResult && _renderResult.ok) {
     evSetStatus('Render started. Tracking in process panel...');

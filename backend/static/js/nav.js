@@ -49,7 +49,11 @@ function setView(view){
 
   // Render home panel: show idle dashboard only in render view.
   const rhp = qs('render_home_panel');
-  if (rhp) rhp.classList.toggle('hiddenView', !isRender);
+  if (rhp) rhp.classList.toggle('hiddenView', !isRender || !!currentJobId);
+  if (typeof updateRenderMainState === 'function') {
+    if (currentJobId && isRender) updateRenderMainState({ status: 'running', stage: 'queued', progress_percent: (typeof _jobDisplayPct !== 'undefined' ? _jobDisplayPct : 0) || 0 }, null, []);
+    if (!currentJobId) updateRenderMainState(null, null, []);
+  }
   if (isRender && typeof renderRenderHistory === 'function') renderRenderHistory();
   if (!isRender && !isEditor && typeof hideRenderCompletionBar === 'function') hideRenderCompletionBar();
 
