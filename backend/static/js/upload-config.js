@@ -1,4 +1,100 @@
 
+// ── Upload Step Wizard ───────────────────────────────────────────────────────
+// Maps each step to the DOM element IDs that belong to it.
+// setUploadWizardStep() adds .stepGated (display:none !important) to all
+// elements NOT in the active step, without touching the existing hiddenView
+// logic that controls field-level visibility within each step.
+const _UPLOAD_STEP_ELEMENTS = {
+  1: ['upload_feature_launcher', 'upload_flow_box', 'upload_cluster_context',
+      'upload_action_mode_field', 'upload_channels_root_field', 'channel_name_prefix_field',
+      'upload_channel_field', 'upload_mode_field', 'upload_ui_level_field', 'upload_config_mode_field'],
+  2: ['upload_cluster_account', 'upload_account_key_field', 'upload_profile_path_field',
+      'upload_config_actions_field', 'upload_credential_line_field',
+      'upload_tiktok_username_field', 'upload_tiktok_password_field',
+      'upload_mail_username_field', 'upload_mail_password_field',
+      'upload_login_username_field', 'upload_login_password_field',
+      'upload_browser_preference_field', 'upload_browser_executable_field',
+      'upload_login_actions_row'],
+  3: ['upload_cluster_source', 'upload_video_input_dir_field', 'upload_json_panel',
+      'upload_schedule_slots_wrap', 'upload_manual_select_wrap',
+      'upload_max_items_field', 'upload_caption_prefix_field',
+      'upload_cluster_caption_network', 'upload_caption_mode_field', 'upload_ollama_model_field',
+      'upload_network_mode_field', 'upload_proxy_server_wrap',
+      'upload_proxy_username_wrap', 'upload_proxy_password_wrap'],
+  4: ['upload_cluster_run', 'upload_run_hint_field', 'upload_dry_run_field',
+      'upload_include_hashtags_field', 'upload_headless_field',
+      'upload_run_actions_row', 'upload_status_panel', 'upload_log_row'],
+};
+const _UPLOAD_STEP_HINTS = {
+  1: 'Select action and channel to continue.',
+  2: 'Enter credentials, then run Login Flow.',
+  3: 'Configure upload source and caption options.',
+  4: 'Review settings, then run the upload plan.',
+};
+
+function setUploadWizardStep(n) {
+  uploadWizardStep = Math.max(1, Math.min(4, Number(n) || 1));
+
+  // Update step indicator pills
+  for (let i = 1; i <= 4; i++) {
+    const el = qs(`upload_step_${i}`);
+    if (!el) continue;
+    el.classList.toggle('stepActive', i === uploadWizardStep);
+    el.classList.toggle('stepDone', i < uploadWizardStep);
+  }
+
+  // Remove stepGated from every managed element
+  const allIds = Object.values(_UPLOAD_STEP_ELEMENTS).flat();
+  for (const id of allIds) {
+    const el = qs(id);
+    if (el) el.classList.remove('stepGated');
+  }
+
+  // Apply stepGated to all elements NOT in the active step
+  for (const [stepStr, ids] of Object.entries(_UPLOAD_STEP_ELEMENTS)) {
+    if (Number(stepStr) !== uploadWizardStep) {
+      for (const id of ids) {
+        const el = qs(id);
+        if (el) el.classList.add('stepGated');
+      }
+    }
+  }
+
+  // Update nav buttons
+  const backBtn = qs('upload_step_back');
+  const nextBtn = qs('upload_step_next');
+  const hint    = qs('upload_step_hint');
+  if (backBtn) backBtn.style.visibility = uploadWizardStep > 1 ? 'visible' : 'hidden';
+  if (nextBtn) nextBtn.style.display    = uploadWizardStep < 4 ? '' : 'none';
+  if (hint)    hint.textContent         = _UPLOAD_STEP_HINTS[uploadWizardStep] || '';
+}
+
+function advanceUploadStep() {
+  // Gate step 1 → 2: require channel selection
+  if (uploadWizardStep === 1) {
+    const hasRoot    = !!String(qs('upload_channels_root')?.value || '').trim();
+    const hasChannel = !!String(qs('upload_channel')?.value || '').trim();
+    if (!hasRoot) { showToast('Choose Channels Root Folder first', 'error'); return; }
+    if (!hasChannel) { showToast('Select a channel before continuing', 'error'); return; }
+  }
+  // Gate step 2 → 3 (login mode): skip to step 4 (no source needed)
+  if (uploadWizardStep === 2) {
+    const isLogin = (qs('upload_action_mode')?.value || 'upload') === 'login';
+    if (isLogin) { setUploadWizardStep(4); return; }
+  }
+  setUploadWizardStep(uploadWizardStep + 1);
+}
+
+function backUploadStep() {
+  // Reverse of the skip: login mode at step 4 goes back to step 2
+  if (uploadWizardStep === 4) {
+    const isLogin = (qs('upload_action_mode')?.value || 'upload') === 'login';
+    if (isLogin) { setUploadWizardStep(2); return; }
+  }
+  setUploadWizardStep(uploadWizardStep - 1);
+}
+// ── End Upload Step Wizard ───────────────────────────────────────────────────
+
 function setUploadConfigEditMode(enabled){
   uploadConfigEditMode = !!enabled;
   const canProceed = !!String(qs('upload_channels_root')?.value || '').trim() && !!String(qs('upload_channel')?.value || '').trim();

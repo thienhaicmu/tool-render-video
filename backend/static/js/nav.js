@@ -40,6 +40,21 @@ function setView(view){
     btn.classList.toggle('active', btn.getAttribute('data-view') === view);
   });
 
+  // Inspector: only meaningful in editor view. Hide it everywhere else to
+  // reclaim the 4fr right column for mainArea content.
+  const appShell = document.querySelector('.appShell');
+  if (appShell) appShell.classList.toggle('noInspector', !isEditor);
+
+  // Render home panel: show idle dashboard only in render view.
+  const rhp = qs('render_home_panel');
+  if (rhp) rhp.classList.toggle('hiddenView', !isRender);
+
+  // Bottom panel: auto-collapse when switching views with no active job.
+  if (!currentJobId) _collapseBottomPanel(true);
+
+  // Upload wizard: reset to step 1 when entering upload view.
+  if (isUpload && typeof setUploadWizardStep === 'function') setUploadWizardStep(1);
+
   // Subtle enter animation: fade + lift the incoming content over 120ms.
   // Remove → reflow → re-add restarts the animation even on repeated calls.
   if (mainArea) {
@@ -47,6 +62,21 @@ function setView(view){
     void mainArea.offsetWidth; // force reflow so browser registers the removal
     mainArea.classList.add('viewEntering');
   }
+}
+
+// ── Bottom panel collapse helpers ──────────────────────────────────────────
+function _collapseBottomPanel(collapsed) {
+  const shell = document.querySelector('.appShell');
+  if (!shell) return;
+  shell.classList.toggle('abpCollapsed', !!collapsed);
+  const btn = qs('abp_collapse_btn');
+  if (btn) btn.textContent = collapsed ? '▴' : '▾';
+}
+
+function toggleBottomPanel() {
+  const shell = document.querySelector('.appShell');
+  if (!shell) return;
+  _collapseBottomPanel(!shell.classList.contains('abpCollapsed'));
 }
 
 function bindNav(){

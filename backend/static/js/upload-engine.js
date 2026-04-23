@@ -15,6 +15,7 @@ function _startUploadWs(runId){
         _stopUploadWs();
         setUploadBusy(false);
         addEvent(`Upload run ${data.status}: ${runId}`);
+        showToast(data.status === 'completed' || data.status === 'done' ? 'Upload completed' : 'Upload run failed', data.status === 'completed' || data.status === 'done' ? 'success' : 'error');
       }
     } catch(_) {}
   };
@@ -47,6 +48,7 @@ async function pollUploadRun(){
     uploadPollTimer = null;
     setUploadBusy(false);
     addEvent(`Upload run ${data.status}: ${currentUploadRunId}`);
+    showToast(data.status === 'completed' ? 'Upload completed' : 'Upload run failed', data.status === 'completed' ? 'success' : 'error');
   }
 }
 
@@ -55,6 +57,7 @@ async function scheduleUpload(){
   if(action === 'login'){
     setUploadAction('login', 'running', 'Action is Login. Switch Action = Upload Videos to run upload.');
     addEvent('Action is Login. Switch Action to Upload Videos to run upload.');
+    showToast('Switch Action to "Upload Videos" to run upload', 'info');
     return;
   }
   const payload = collectUploadPayload();
@@ -62,6 +65,7 @@ async function scheduleUpload(){
   if(!validation.valid){
     setUploadAction('queue', 'failed', `Validation failed: ${validation.errors[0] || 'please review Upload settings.'}`);
     addEvent(`Validation error: ${validation.errors[0] || 'please review Upload settings.'}`);
+    showToast(validation.errors[0] || 'Validation failed — review Upload settings', 'error');
     return;
   }
   if(!payload.use_schedule){
@@ -79,6 +83,7 @@ async function scheduleUpload(){
   if(!res.ok){
     setUploadAction('queue', 'failed', `Upload start failed: ${_formatApiError(data.detail)}`);
     addEvent(`Upload start failed: ${_formatApiError(data.detail)}`);
+    showToast(`Upload failed: ${_formatApiError(data.detail)}`, 'error');
     return;
   }
   currentUploadRunId = data.run_id;
@@ -95,6 +100,7 @@ async function scheduleUpload(){
   setUploadBusy(true);
   setUploadAction('queued', 'running', `Upload run queued: ${currentUploadRunId}`, `Mode: ${payload.use_schedule ? 'scheduled' : 'manual'}`, 0);
   addEvent(`Upload run queued: ${currentUploadRunId}`);
+  showToast('Upload run queued — watch progress below', 'success');
   _startUploadWs(currentUploadRunId);
 }
 

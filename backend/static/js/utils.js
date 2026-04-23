@@ -1,4 +1,13 @@
 function qs(id){ return document.getElementById(id); }
+
+function _setBtnLoading(btnId, loadingText) {
+  const btn = qs(btnId);
+  if (!btn) return () => {};
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = loadingText;
+  return () => { btn.disabled = false; btn.textContent = orig; };
+}
 function esc(v){ return String(v ?? '').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function setPageHeader(title, subtitle){

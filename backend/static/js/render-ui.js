@@ -136,6 +136,9 @@ function setRenderActionBusy(isBusy){
   btn.style.opacity = isBusy ? '0.75' : '1';
   btn.textContent = isBusy ? 'Running...' : 'Download + Render';
 
+  // Expand bottom panel when job starts so pipeline/log are immediately visible.
+  if (isBusy && typeof _collapseBottomPanel === 'function') _collapseBottomPanel(false);
+
   // Lock/unlock all form inputs in the render setup card
   const card = document.querySelector('#card_render_setup');
   if(!card) return;

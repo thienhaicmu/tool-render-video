@@ -90,4 +90,6 @@ const uploadPipeline = [
   { key: 'done', label: 'Done' },
 ];
 let uploadActionStage = 'idle';
+let uploadWizardStep = 1;
+let _ytDownloadAbortCtrl = null;
 

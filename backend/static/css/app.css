@@ -981,3 +981,151 @@
     .sidebar .fieldLabel { font-size: 10px; }
     .sidebar .fieldInput { font-size: 12px; padding: 5px 8px; }
     .sidebar .primaryButton, .sidebar .ghostButton { font-size: 12px; padding: 7px 12px; }
+
+    /* ══════════════════════════════════════════════════════════════════
+       UX Fixes — Inspector visibility, bottom panel, upload wizard,
+       YouTube download progress, render home panel
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* Fix 1 — Inspector: only visible in editor view.
+       noInspector class added/removed by setView() in nav.js.
+       mainArea expands to fill the freed 4fr column. */
+    .appShell.noInspector { grid-template-columns: minmax(0,4fr) minmax(0,6fr); }
+    .appShell.noInspector .appInspector { display: none; }
+
+    /* Fix 2 — Bottom panel: collapsible when idle.
+       abpCollapsed class toggled by toggleBottomPanel() / _collapseBottomPanel().
+       Collapses to toolbar height only (44px). */
+    .appShell.abpCollapsed { grid-template-rows: 42px 1fr 44px 28px; }
+    .appShell.abpCollapsed .abpBody { display: none; }
+    .abpCollapseBtn {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 6px;
+      color: var(--text-muted);
+      padding: 2px 8px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .15s;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .abpCollapseBtn:hover { color: var(--text); border-color: rgba(59,130,246,.45); }
+
+    /* Fix 3 — YouTube download progress panel in sidebar */
+    .ytDlProgress {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: rgba(59,130,246,.07);
+      border: 1px solid rgba(59,130,246,.28);
+      border-radius: var(--radius-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .ytDlProgressRow { display: flex; align-items: center; gap: 8px; }
+    .ytDlProgressMsg { font-size: 12px; color: var(--text-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ytDlElapsed { font-size: 11px; color: var(--text-muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+    .ytDlProgressBar { height: 3px; border-radius: 999px; background: #1e2d45; overflow: hidden; }
+    .ytDlProgressFill { height: 100%; width: 35%; border-radius: inherit; background: linear-gradient(90deg,#3b82f6,#10b981); animation: ytDlSweep 1.5s ease-in-out infinite; }
+    @keyframes ytDlSweep { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+    .ytDlCancelBtn {
+      background: transparent;
+      border: 1px solid rgba(239,68,68,.35);
+      border-radius: 6px;
+      color: #f87171;
+      padding: 2px 9px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    .ytDlCancelBtn:hover { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.6); }
+
+    /* Fix 4 — Upload step wizard */
+    .stepGated { display: none !important; }
+    .uploadStepBar {
+      display: flex;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+      margin-bottom: 14px;
+    }
+    .uploadStepItem {
+      flex: 1;
+      padding: 8px 4px;
+      background: var(--input-bg);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      border-right: 1px solid var(--card-border);
+      transition: background .15s, color .15s;
+      user-select: none;
+    }
+    .uploadStepItem:last-child { border-right: none; }
+    .uploadStepItem:hover { background: rgba(255,255,255,.04); color: var(--text-dim); }
+    .uploadStepItem.stepActive { background: rgba(59,130,246,.14); color: #60a5fa; }
+    .uploadStepItem.stepDone { background: rgba(16,185,129,.08); color: #34d399; }
+    .uploadStepItem.stepDone::after { content: ' ✓'; }
+    .uploadStepNav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--card-border);
+    }
+    .uploadStepHint { flex: 1; font-size: 11px; color: var(--text-muted); font-style: italic; }
+
+    /* Fix 5 — Render home panel: shows in render idle view */
+    .renderHomePanel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 20px 28px;
+    }
+    .renderHomeCard {
+      background: linear-gradient(160deg,#131f35 0%,#0f1827 100%);
+      border: 1px solid var(--card-border);
+      border-top-color: #253550;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+    }
+    .renderHomeTitle {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+    .renderHomeRow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 0;
+      font-size: 12px;
+      color: var(--text-dim);
+      border-bottom: 1px solid rgba(255,255,255,.03);
+    }
+    .renderHomeRow:last-child { border-bottom: none; }
+    .rhDot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .rhDot.green { background: #10b981; }
+    .rhDot.yellow { background: #f59e0b; animation: dotPulse 1.5s ease-in-out infinite; }
+    .rhDot.blue { background: #3b82f6; }
+    .renderHomeStepNum {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: rgba(59,130,246,.15);
+      color: #60a5fa;
+      font-size: 11px;
+      font-weight: 700;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }

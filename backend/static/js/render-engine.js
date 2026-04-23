@@ -114,34 +114,73 @@ async function startRender(){
     text_layers: [],
   };
 
-  // ── YouTube: download trước, xong mới mở editor ──
-  // ── Local: mở editor ngay (prepare-source chỉ validate, rất nhanh) ──
+  // ── YouTube: download first (with cancel support), then open editor ──
+  // ── Local: open editor immediately (prepare-source is fast validation only) ──
   if (sourceMode === 'youtube') {
     const btn = qs('start_render_btn');
     const origText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = '⏳ Đang download YouTube…';
+    btn.textContent = '⏳ Downloading…';
     btn.style.opacity = '0.75';
-    addEvent('Đang download video từ YouTube…', 'render');
+
+    // Show download progress panel
+    const dlPanel = qs('yt_dl_progress');
+    const dlMsg   = qs('yt_dl_msg');
+    const dlElapsed = qs('yt_dl_elapsed');
+    if (dlPanel) dlPanel.classList.remove('hiddenView');
+    if (dlMsg) dlMsg.textContent = 'Downloading YouTube video…';
+
+    // Elapsed-time counter
+    let _dlStart = Date.now();
+    let _dlTimer = setInterval(() => {
+      const s = Math.round((Date.now() - _dlStart) / 1000);
+      if (dlElapsed) dlElapsed.textContent = s + 's';
+    }, 1000);
+
+    addEvent('Downloading YouTube video…', 'render');
+    _ytDownloadAbortCtrl = new AbortController();
     try {
       const pr = await fetch('/api/render/prepare-source', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ source_mode: 'youtube', youtube_url: youtubeUrl }),
+        signal: _ytDownloadAbortCtrl.signal,
       });
       const pd = await pr.json();
       if (!pr.ok) throw new Error(_formatApiError(pd.detail));
-      addEvent(`Download xong: ${pd.title} (${_fmtTime(pd.duration || 0)})`, 'render');
+      const dur = _fmtTime(pd.duration || 0);
+      if (dlMsg) dlMsg.textContent = `Downloaded: ${pd.title || 'video'} (${dur})`;
+      addEvent(`Download complete: ${pd.title} (${dur})`, 'render');
+      showToast(`Downloaded: ${pd.title || 'video'} (${dur})`, 'success');
       payload.edit_session_id = pd.session_id;
       openEditorView_withSession(pd, youtubeUrl, payload);
     } catch(err) {
-      addEvent(`Download lỗi: ${err.message}`, 'render');
+      const wasCancelled = err.name === 'AbortError';
+      if (wasCancelled) {
+        addEvent('Download cancelled.', 'render');
+        showToast('Download cancelled', 'info');
+      } else {
+        addEvent(`Download failed: ${err.message}`, 'render');
+        showToast(`Download failed: ${err.message}`, 'error');
+      }
       btn.disabled = false;
       btn.textContent = origText;
       btn.style.opacity = '1';
-      return;
+      if (dlPanel) dlPanel.classList.add('hiddenView');
+    } finally {
+      clearInterval(_dlTimer);
+      _ytDownloadAbortCtrl = null;
     }
+    return;
   } else {
     openEditorView(sourceMode, localVideoPath, payload);
+  }
+}
+
+function cancelYtDownload() {
+  if (_ytDownloadAbortCtrl) {
+    _ytDownloadAbortCtrl.abort();
+    _ytDownloadAbortCtrl = null;
   }
 }
 
@@ -473,25 +512,31 @@ function renderUploadRun(state){
 }
 
 async function ensureUploadAccount(){
+  const restore = _setBtnLoading('ensure_upload_btn', 'Preparing…');
   const payload = collectUploadPayload();
   setUploadAction('profile', 'running', `Ensuring profile for ${payload.account_key}...`);
   const res = await fetch('/api/upload/accounts/ensure', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
   const data = await res.json();
+  restore();
   if(!res.ok){
     setUploadAction('profile', 'failed', `Ensure account failed: ${_formatApiError(data.detail)}`);
     addEvent(`Ensure account failed: ${_formatApiError(data.detail)}`);
+    showToast(`Profile failed: ${_formatApiError(data.detail)}`, 'error');
     return;
   }
   uploadLoginValid = false;
   setUploadAction('profile', 'completed', `Profile ready for ${data.account_key}`, data.user_data_dir || '-');
   addEvent(`Upload account ready: ${data.account_key}`);
+  showToast(`Profile ready: ${data.account_key}`, 'success');
 }
 
 async function checkUploadLoginStatus(showLog = true){
+  const restore = _setBtnLoading('check_upload_btn', 'Checking…');
   const payload = collectUploadPayload();
   setUploadAction('login_check', 'running', `Checking login status for ${payload.account_key}...`);
   const res = await fetch('/api/upload/login/check', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
   const data = await res.json();
+  restore();
   if(!res.ok){
     uploadLoginValid = false;
     setUploadAction('login_check', 'failed', `Login check failed: ${_formatApiError(data.detail)}`);
@@ -507,26 +552,32 @@ async function checkUploadLoginStatus(showLog = true){
   if(showLog){
     if(uploadLoginValid){
       addEvent(`Login OK for ${payload.account_key}`);
+      showToast('Login session is valid', 'success');
     } else {
       addEvent(`Login required for ${payload.account_key}. Please click TikTok Login.`);
+      showToast('Not logged in — run Login Flow first', 'error');
     }
   }
   return uploadLoginValid;
 }
 
 async function startLogin(){
+  const restore = _setBtnLoading('start_upload_login_btn', 'Opening…');
   const payload = collectUploadPayload();
   setUploadAction('login', 'running', `Opening login flow for ${payload.account_key} (mail first, then TikTok)...`);
   const res = await fetch('/api/upload/login/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
   const data = await res.json();
+  restore();
   uploadLoginValid = false;
   if(!res.ok){
     setUploadAction('login', 'failed', `Login start failed: ${_formatApiError(data.detail)}`);
     addEvent(`Upload login failed: ${_formatApiError(data.detail)}`);
+    showToast(`Login failed: ${_formatApiError(data.detail)}`, 'error');
     return;
   }
   setUploadAction('login', 'running', data.message || 'Login browser opened. Complete login then close tab.', `account=${payload.account_key}`);
   addEvent(`Upload login: ${data.message || 'started'} (account=${payload.account_key})`);
+  showToast('Login browser opened — complete login in the browser window', 'info');
   if(data && typeof data === 'object'){
     addEvent(`Login runtime: browser=${data.browser_type || '-'} exe=${data.browser_executable || 'auto'} profile=${data.user_data_dir || '-'}`);
     addEvent(`Mail credential present: ${data.mail_credential_present ? 'yes' : 'no'}`);
@@ -539,6 +590,7 @@ async function startLogin(){
       syncUploadJsonModeUI();
       refreshUploadValidationState();
       addEvent('Login confirmed: switched UI to Upload mode.');
+      showToast('Login confirmed — switched to Upload mode', 'success');
     }
   }
 }

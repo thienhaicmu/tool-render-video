@@ -179,6 +179,15 @@
           </div>
           <button class="primaryButton" id="start_render_btn" onclick="startRender()">▶ Open Editor</button>
         </div>
+        <!-- YouTube download progress — visible only during active download -->
+        <div id="yt_dl_progress" class="ytDlProgress hiddenView">
+          <div class="ytDlProgressRow">
+            <span id="yt_dl_msg" class="ytDlProgressMsg">Downloading YouTube video…</span>
+            <span id="yt_dl_elapsed" class="ytDlElapsed">0s</span>
+            <button class="ytDlCancelBtn" onclick="cancelYtDownload()">✕ Cancel</button>
+          </div>
+          <div class="ytDlProgressBar"><div class="ytDlProgressFill"></div></div>
+        </div>
 
       </section><!-- /card_render_setup -->
 
@@ -261,6 +270,23 @@
       <div class="hiddenView" id="jobs_out"></div>
     </div>
 
+    <!-- ── Render home panel — idle dashboard, shown only in render view ── -->
+    <div id="render_home_panel" class="renderHomePanel hiddenView">
+      <div class="renderHomeCard">
+        <div class="renderHomeTitle">Pipeline Steps</div>
+        <div class="renderHomeRow"><span class="renderHomeStepNum">1</span>Paste YouTube URL or choose a local video in <strong>Source Setup</strong> below.</div>
+        <div class="renderHomeRow"><span class="renderHomeStepNum">2</span>Select an output channel (or manual folder) and configure render options.</div>
+        <div class="renderHomeRow"><span class="renderHomeStepNum">3</span>Click <strong>Download + Render</strong> — progress appears in the panel below.</div>
+        <div class="renderHomeRow"><span class="renderHomeStepNum">4</span>When done, parts and the report are saved to the output folder.</div>
+      </div>
+      <div class="renderHomeCard">
+        <div class="renderHomeTitle">System</div>
+        <div class="renderHomeRow"><span class="rhDot green"></span>ffmpeg — available</div>
+        <div class="renderHomeRow"><span class="rhDot green"></span>Whisper — available</div>
+        <div class="renderHomeRow"><span class="rhDot blue"></span>GPU auto-detect — enabled</div>
+      </div>
+    </div>
+
     <!-- ── Normal page header + grid ─────────────────────────────── -->
     <header class="pageHeader">
       <div>
@@ -280,11 +306,18 @@
 
         <section class="card" id="card_upload">
           <div class="sectionHeader">
-            <div><div class="sectionTitle">Upload</div><div class="sectionSubtitle">Choose Action -> Select Channel -> Login or Upload.</div></div>
+            <div><div class="sectionTitle">Upload</div><div class="sectionSubtitle">Follow steps 1→4 to login and upload videos.</div></div>
             <button class="ghostButton" onclick="setView('render')">Back to Main</button>
           </div>
+          <!-- Step wizard indicator — 4 sequential steps replace flat 5-cluster layout -->
+          <div id="upload_step_bar" class="uploadStepBar">
+            <div class="uploadStepItem stepActive" id="upload_step_1" onclick="setUploadWizardStep(1)" title="Step 1: Select Channel">1 · Channel</div>
+            <div class="uploadStepItem" id="upload_step_2" onclick="setUploadWizardStep(2)" title="Step 2: Login">2 · Login</div>
+            <div class="uploadStepItem" id="upload_step_3" onclick="setUploadWizardStep(3)" title="Step 3: Source">3 · Source</div>
+            <div class="uploadStepItem" id="upload_step_4" onclick="setUploadWizardStep(4)" title="Step 4: Run Upload">4 · Run</div>
+          </div>
           <div class="formGrid">
-            <div class="featureLauncher">
+            <div class="featureLauncher" id="upload_feature_launcher">
               <button class="featureLauncherBtn" id="feature_login_btn" onclick="quickOpenFeature('login')">
                 <div class="t">Login</div>
                 <div class="s">Select channel, enter credentials, open login flow</div>
@@ -400,7 +433,14 @@
             <div class="validationTitle" id="upload_validation_title">Validation: select channel to continue.</div>
             <div id="upload_validation_items"><div class="validationItem">Please choose Channel first.</div></div>
           </div>
-          <div class="actionRowBlock">
+          <!-- Step navigation: Back / Next buttons -->
+          <div id="upload_step_nav" class="uploadStepNav">
+            <span id="upload_step_hint" class="uploadStepHint">Select action and channel to continue.</span>
+            <button class="ghostButton" id="upload_step_back" onclick="backUploadStep()" style="visibility:hidden">← Back</button>
+            <button class="primaryButton" id="upload_step_next" onclick="advanceUploadStep()">Next →</button>
+          </div>
+          <!-- Login actions (Step 2) -->
+          <div class="actionRowBlock" id="upload_login_actions_row">
             <div class="actionRowTitle">Login Session Actions</div>
             <div class="actionsRow" style="margin-top:0">
               <button class="ghostButton" id="ensure_upload_btn" onclick="ensureUploadAccount()">Prepare Profile</button>
@@ -408,13 +448,15 @@
               <button class="ghostButton" id="check_upload_btn" onclick="checkUploadLoginStatus(true)">Check Login Status</button>
             </div>
           </div>
-          <div class="actionRowBlock">
+          <!-- Upload actions (Step 4) -->
+          <div class="actionRowBlock" id="upload_run_actions_row">
             <div class="actionRowTitle">Upload Actions</div>
             <div class="actionsRow" style="margin-top:0">
               <button class="primaryButton" id="run_upload_btn" onclick="scheduleUpload()">Run Upload Plan</button>
             </div>
           </div>
-          <div class="actionCenter" style="margin-top:12px">
+          <!-- Status panel (Step 4) -->
+          <div class="actionCenter" id="upload_status_panel" style="margin-top:12px">
             <div class="actionTop">
               <div>
                 <div class="actionTitle" id="upload_action_title">Upload run idle</div>
@@ -428,7 +470,8 @@
             <div class="uploadActionSteps" id="upload_action_steps"></div>
             <div class="partList" id="upload_items_box" style="max-height:180px"><div class="emptyState">No upload items yet.</div></div>
           </div>
-          <div class="actionRowBlock" style="margin-top:12px">
+          <!-- Live log (Step 4) -->
+          <div class="actionRowBlock" id="upload_log_row" style="margin-top:12px">
             <div class="actionRowTitle">Upload Live Log</div>
             <div class="logBox" id="event_log_upload"></div>
           </div>
@@ -925,6 +968,7 @@
       <div class="abpToolbarRight">
         <div class="abpPct" id="job_percent">0%</div>
         <div class="pill primaryPill" id="job_stage_pill" style="font-size:11px;padding:3px 10px">Idle</div>
+        <button class="abpCollapseBtn" id="abp_collapse_btn" onclick="toggleBottomPanel()" title="Show / hide process panel">▴</button>
       </div>
     </div>
 
@@ -966,121 +1010,6 @@
   </footer>
 </div>
 
-<!-- ─── Video Editor Modal ──────────────────────────────────────────────── -->
-<div id="editorModal" class="editorOverlay hiddenView">
-  <div class="editorContainer">
-
-    <!-- Header -->
-    <div class="editorHeader">
-      <div style="min-width:0">
-        <div class="editorTitle">🎬 Video Editor</div>
-        <div class="editorSourceName" id="editorSourceName">Loading…</div>
-      </div>
-      <div style="display:flex;gap:8px;flex-shrink:0">
-        <button class="ghostButton" onclick="skipEditor()" title="Bỏ qua editor, render ngay">Skip →</button>
-      </div>
-    </div>
-
-    <div class="editorBody">
-
-      <!-- ① Video area — always visible, overlays handle states -->
-      <div class="editorVideoWrap" id="editorVideoWrap">
-        <video id="editorVideo" class="editorVideo" controls preload="metadata" style="display:none"></video>
-        <!-- Loading overlay -->
-        <div id="editorVideoOverlay" class="editorVideoOverlayBox">
-          <div class="editorSpinner" id="editorSpinner"></div>
-          <div class="editorLoadingText" id="editorLoadingText">Đang download video…</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Có thể mất 30s–2 phút tùy kết nối</div>
-        </div>
-      </div>
-
-      <!-- ② Trim — always visible, disabled while loading -->
-      <div class="editorSection" id="editorTrimSection">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <div class="editorSectionTitle">✂️ Trim Video</div>
-          <div id="editorDurBadge" style="font-size:12px;color:var(--text-muted)">Thời lượng: —</div>
-        </div>
-
-        <!-- Slider timeline -->
-        <div class="trimSliderWrap" id="trimSliderWrap">
-          <div class="trimTrack"></div>
-          <div class="trimSelected" id="trimSelected" style="left:0%;width:100%"></div>
-          <input type="range" id="trimInSlider"  min="0" max="1000" value="0"    step="1" oninput="onTrimChange('slider')">
-          <input type="range" id="trimOutSlider" min="0" max="1000" value="1000" step="1" oninput="onTrimChange('slider')">
-        </div>
-
-        <!-- Exact time inputs -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">
-          <label class="field">
-            <span class="fieldLabel">⏮ Bắt đầu từ (giây)</span>
-            <input class="fieldInput" type="number" id="trimInSec" min="0" step="1" value="0" placeholder="0" oninput="onTrimChange('input-in')">
-          </label>
-          <label class="field">
-            <span class="fieldLabel">⏭ Kết thúc tại (giây)</span>
-            <input class="fieldInput" type="number" id="trimOutSec" min="0" step="1" placeholder="hết video" oninput="onTrimChange('input-out')">
-          </label>
-        </div>
-
-        <!-- Playhead buttons & info -->
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
-          <button class="ghostButton" style="font-size:12px;padding:5px 10px" onclick="setTrimIn()">📍 Set IN tại playhead</button>
-          <button class="ghostButton" style="font-size:12px;padding:5px 10px" onclick="setTrimOut()">📍 Set OUT tại playhead</button>
-          <button class="ghostButton" style="font-size:12px;padding:5px 10px" onclick="resetTrim()">↺ Reset</button>
-          <div style="margin-left:auto;font-size:12px;color:var(--text-dim)">
-            IN: <strong id="trimInDisplay" style="color:var(--text)">0:00:00</strong>
-            &nbsp;→&nbsp;
-            OUT: <strong id="trimOutDisplay" style="color:var(--text)">—</strong>
-            &nbsp;|&nbsp;
-            Sau trim: <strong id="trimDurDisplay" style="color:#10b981">—</strong>
-          </div>
-        </div>
-      </div>
-
-      <!-- ③ Volume — always visible -->
-      <div class="editorSection" id="editorVolumeSection">
-        <div class="editorSectionTitle">🔊 Âm lượng (Volume)</div>
-        <div class="volumeRow">
-          <span style="font-size:11px;color:var(--text-muted);min-width:28px">0%</span>
-          <input type="range" id="editorVolumeSlider" min="0" max="200" value="100" step="1" oninput="onVolumeChange()">
-          <span style="font-size:11px;color:var(--text-muted);min-width:36px;text-align:right">200%</span>
-          <input class="fieldInput" type="number" id="editorVolumeNum" min="0" max="200" value="100" step="5"
-            style="width:72px;text-align:center;padding:6px 8px"
-            oninput="onVolumeNumInput()">
-          <span style="font-size:13px;color:var(--text-muted)">%</span>
-        </div>
-        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-          <button class="ghostButton" style="font-size:11px;padding:4px 9px" onclick="setVolume(50)">50%</button>
-          <button class="ghostButton" style="font-size:11px;padding:4px 9px" onclick="setVolume(80)">80%</button>
-          <button class="ghostButton" style="font-size:11px;padding:4px 9px" onclick="setVolume(100)">100%</button>
-          <button class="ghostButton" style="font-size:11px;padding:4px 9px" onclick="setVolume(120)">120%</button>
-          <button class="ghostButton" style="font-size:11px;padding:4px 9px" onclick="setVolume(150)">150%</button>
-        </div>
-      </div>
-
-      <!-- ④ Summary bar -->
-      <div class="editorInfoBar" id="editorInfoBar">
-        <div class="editorInfoItem"><span class="editorInfoLabel">Thời lượng gốc:</span><span class="editorInfoValue" id="editorOrigDur">—</span></div>
-        <div class="editorInfoItem"><span class="editorInfoLabel">Sau trim:</span><span class="editorInfoValue" id="editorAfterTrimDur" style="color:#10b981">—</span></div>
-        <div class="editorInfoItem"><span class="editorInfoLabel">Volume:</span><span class="editorInfoValue" id="editorVolInfo">100%</span></div>
-        <div style="margin-left:auto;font-size:11px;color:var(--text-muted);font-style:italic">FFmpeg áp dụng trim + volume trước khi phân đoạn</div>
-      </div>
-
-    </div><!-- /editorBody -->
-
-    <div class="editorFooter">
-      <div style="font-size:12px;color:var(--text-muted);flex:1">
-        <span id="editorStatusLine">Đang chuẩn bị…</span>
-      </div>
-      <button class="ghostButton" onclick="cancelEditor()">Huỷ</button>
-      <button class="primaryButton" id="editorApplyBtn" onclick="applyEditsAndRender()" disabled>
-        ✅ Apply &amp; Render
-      </button>
-    </div>
-
-  </div>
-</div>
-
-
 <script src="/static/js/globals.js"></script>
 <script src="/static/js/warmup.js"></script>
 <script src="/static/js/smooth-progress.js"></script>
@@ -1094,7 +1023,6 @@
 <script src="/static/js/upload-engine.js"></script>
 <script src="/static/js/channels.js"></script>
 <script src="/static/js/editor-view.js"></script>
-<script src="/static/js/editor-modal.js"></script>
 <script src="/static/js/init.js"></script>
 <!-- Toast notification container — populated by showToast() in log-utils.js -->
 <div id="toastRoot" class="toastRoot"></div>
