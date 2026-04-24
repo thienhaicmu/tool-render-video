@@ -700,8 +700,12 @@ def run_render_pipeline(
                         shutil.copy2(source_path, keep_path)
                         _job_log(effective_channel, job_id, f"Source copied to: {keep_path}")
                 else:
-                    shutil.copy2(source_path, keep_path)
-                    _job_log(effective_channel, job_id, f"Source copied to: {keep_path}")
+                    try:
+                        os.link(source_path, keep_path)
+                        _job_log(effective_channel, job_id, f"local_source.copy_skipped path={source_path} hardlink={keep_path}")
+                    except OSError:
+                        shutil.copy2(source_path, keep_path)
+                        _job_log(effective_channel, job_id, f"local_source.copy_required path={source_path} dest={keep_path}")
             source_path = keep_path
 
         voice_audio_path = None

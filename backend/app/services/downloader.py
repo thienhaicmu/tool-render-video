@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -12,6 +13,74 @@ from app.services.bin_paths import ensure_ffmpeg_available
 logger = logging.getLogger(__name__)
 
 SUPPORTED_PUBLIC_SOURCES = {"youtube", "facebook", "instagram"}
+
+# ── Proxy sanitization ─────────────────────────────────────────────────────
+_PROXY_ENV_KEYS = (
+    "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY",
+    "https_proxy", "http_proxy", "all_proxy",
+)
+# Hosts that are never valid proxy targets — loopback only makes sense if the
+# proxy is actually running; port 9 (Discard Protocol) and similar indicate a
+# stale/broken OS proxy entry.
+_BAD_PROXY_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "0.0.0.0"})
+
+
+def _is_bad_proxy(proxy: str) -> bool:
+    """True if the proxy string points to a loopback/invalid host."""
+    try:
+        host = (urlparse(proxy).hostname or "").lower().strip()
+        return not host or host in _BAD_PROXY_HOSTS
+    except Exception:
+        return True
+
+
+def _resolve_ytdlp_proxy(context: str = "download") -> str:
+    """
+    Returns the value to pass as yt-dlp's ``proxy`` option.
+
+    Priority:
+    1. ``YTDLP_PROXY`` env var → explicit user override, used as-is.
+    2. System proxy env vars (HTTPS_PROXY / HTTP_PROXY / ALL_PROXY) →
+       sanitized; disabled (empty string) if host is loopback/bad.
+    3. ``urllib.request.getproxies()`` system proxy → same sanitization.
+    4. Nothing found → ``""`` (explicit no-proxy, prevents yt-dlp
+       auto-detection which could pick up a stale OS proxy entry).
+    """
+    explicit = (os.getenv("YTDLP_PROXY") or "").strip()
+    if explicit:
+        logger.info("download.proxy.detected context=%s source=YTDLP_PROXY", context)
+        return explicit
+
+    for key in _PROXY_ENV_KEYS:
+        val = (os.environ.get(key) or "").strip()
+        if not val:
+            continue
+        if _is_bad_proxy(val):
+            logger.warning(
+                "download.proxy.disabled context=%s source=%s proxy=%s reason=bad_host",
+                context, key, val,
+            )
+            return ""
+        logger.info("download.proxy.detected context=%s source=%s", context, key)
+        return val
+
+    try:
+        for scheme in ("https", "http", "all"):
+            val = (urllib.request.getproxies().get(scheme) or "").strip()
+            if not val:
+                continue
+            if _is_bad_proxy(val):
+                logger.warning(
+                    "download.proxy.disabled context=%s source=urllib scheme=%s proxy=%s reason=bad_host",
+                    context, scheme, val,
+                )
+                return ""
+            logger.info("download.proxy.detected context=%s source=urllib scheme=%s", context, scheme)
+            return val
+    except Exception:
+        pass
+
+    return ""  # explicit no-proxy
 
 
 def slugify(text: str) -> str:
@@ -73,8 +142,33 @@ def download_public_video(url: str, temp_dir: Path, progress_callback=None) -> d
     if source not in SUPPORTED_PUBLIC_SOURCES:
         raise RuntimeError("Unsupported link")
 
+    # YouTube: delegate to the multi-client retry pipeline so the Download tab
+    # gets the same reliability as the Render tab.
+    if source == "youtube":
+        yt = download_youtube(url, temp_dir, context="download", progress_callback=progress_callback)
+        src = Path(yt["filepath"])
+        title_stem = slugify(yt.get("title") or "video")
+        titled = src.parent / f"{title_stem}{src.suffix}"
+        try:
+            if src.exists() and src != titled and not titled.exists():
+                src.rename(titled)
+                yt = {**yt, "filepath": str(titled)}
+        except Exception:
+            pass
+        return {
+            "source": source,
+            "title": yt.get("title") or titled.stem,
+            "slug": yt.get("slug") or slugify(yt.get("title") or ""),
+            "duration": yt.get("duration") or 0,
+            "filepath": yt.get("filepath") or str(src),
+            "thumbnail": yt.get("thumbnail"),
+            "extractor": "youtube",
+            "webpage_url": url,
+        }
+
     temp_dir.mkdir(parents=True, exist_ok=True)
     ffmpeg_bin = _ensure_ffmpeg_on_path()
+    proxy_val = _resolve_ytdlp_proxy("download")
 
     def _progress_hook(data: dict):
         if not progress_callback:
@@ -101,6 +195,7 @@ def download_public_video(url: str, temp_dir: Path, progress_callback=None) -> d
         "fragment_retries": 8,
         "extractor_retries": 4,
         "file_access_retries": 4,
+        "proxy": proxy_val,
         "quiet": True,
         "no_warnings": False,
         "progress_hooks": [_progress_hook],
@@ -148,6 +243,7 @@ def check_youtube_download_health(url: str) -> dict:
     Uses ios client (only reliable client without PO Token as of 2026-04).
     """
     _ensure_ffmpeg_on_path()
+    proxy_val = _resolve_ytdlp_proxy("health_check")
 
     clients = [
         ("ios", _IOS),
@@ -165,6 +261,7 @@ def check_youtube_download_health(url: str) -> dict:
             "retries": 2,
             "fragment_retries": 2,
             "extractor_retries": 2,
+            "proxy": proxy_val,
             **client_kwargs,
         }
         cookiefile = (os.getenv("YTDLP_COOKIEFILE", "") or "").strip()
@@ -210,7 +307,7 @@ def check_youtube_download_health(url: str) -> dict:
     return last_payload
 
 
-def download_youtube(url: str, temp_dir: Path) -> dict:
+def download_youtube(url: str, temp_dir: Path, context: str = "render", progress_callback=None) -> dict:
     """
     Download a YouTube video at the highest available resolution.
 
@@ -223,9 +320,12 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
       6. auto -> best (last resort)
 
     All adaptive streams are merged to mp4 via ffmpeg.
+    ``context`` is passed to proxy resolution and structured logs.
+    ``progress_callback(pct, label)`` is optional; called with 1-99 during download.
     """
     temp_dir.mkdir(parents=True, exist_ok=True)
     ffmpeg_bin = _ensure_ffmpeg_on_path()
+    proxy_val = _resolve_ytdlp_proxy(context)
     attempts = [
         (_IOS, "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
         (_IOS, "bv*+ba/b"),
@@ -255,6 +355,10 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
         "extractor_retries": 5,
         "file_access_retries": 5,
         "skip_unavailable_fragments": False,
+        # Explicit proxy: "" = no proxy. Prevents yt-dlp from auto-detecting a
+        # stale/broken OS proxy entry (e.g. 127.0.0.1:9 from a stopped VPN).
+        # _resolve_ytdlp_proxy() returns a valid proxy string if YTDLP_PROXY is set.
+        "proxy": proxy_val,
         # suppress noisy output; errors surfaced via exceptions
         "quiet": True,
         "no_warnings": False,
@@ -266,6 +370,20 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
             ),
         },
     }
+
+    def _yt_progress_hook(data: dict):
+        if not progress_callback:
+            return
+        status = str(data.get("status") or "").lower()
+        if status == "downloading":
+            total = float(data.get("total_bytes") or data.get("total_bytes_estimate") or 0)
+            downloaded_bytes = float(data.get("downloaded_bytes") or 0)
+            pct = int((downloaded_bytes / total) * 100) if total > 0 else 0
+            progress_callback(min(99, max(1, pct)), "Downloading")
+        elif status == "finished":
+            progress_callback(99, "Finalizing file")
+
+    common["progress_hooks"] = [_yt_progress_hook]
 
     # Optional cookie file for unlocking higher-quality formats
     cookiefile = (os.getenv("YTDLP_COOKIEFILE", "") or "").strip()
@@ -436,13 +554,16 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
             .get("player_client", ["auto"])[0]
         )
         try:
+            logger.info(
+                "download.ytdlp.attempt context=%s attempt=%d/%d client=%s format=%s proxy_used=%s",
+                context, idx, len(attempts), client_name, fmt[:60], bool(proxy_val),
+            )
             result = _try_download(opts)
             h = result.get("selected_height", 0)
             fps_val = result.get("selected_fps", 0)
             logger.info(
-                "Download OK | attempt=%d/%d | client=%s | format=%s | %dp%s%s",
-                idx, len(attempts), client_name, fmt[:60], h, f"@{fps_val}fps" if fps_val else "",
-                f" (after {idx-1} retries)" if idx > 1 else "",
+                "download.ytdlp.success context=%s attempt=%d/%d client=%s format=%s height=%d%s",
+                context, idx, len(attempts), client_name, fmt[:60], h, f"@{fps_val}fps" if fps_val else "",
             )
             return result
         except Exception as exc:
@@ -450,8 +571,8 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
             if "Requested format is not available" in msg:
                 unavailable_requested = True
             logger.warning(
-                "Download attempt failed (will retry) | attempt=%d/%d | client=%s | format=%s | reason=%s",
-                idx, len(attempts), client_name, fmt[:60], msg,
+                "download.ytdlp.failed context=%s attempt=%d/%d client=%s format=%s proxy_used=%s reason=%s",
+                context, idx, len(attempts), client_name, fmt[:60], bool(proxy_val), msg,
             )
             last_err = exc
             _cleanup_partial()
@@ -507,24 +628,32 @@ def download_youtube(url: str, temp_dir: Path) -> dict:
 
     last_err_text = str(last_err or "")
     extract_fail = "Failed to extract any player response" in last_err_text
+    proxy_note = "Proxy was disabled for this download." if not proxy_val else f"Proxy used: {proxy_val}."
+    logger.error(
+        "download.failed_all_attempts context=%s proxy_used=%s extract_fail=%s tried_formats=%s last_error=%s",
+        context, bool(proxy_val), extract_fail, attempted_formats[:12], last_err_text[:200],
+    )
     if isinstance(last_err, DownloadError):
         if extract_fail:
             cookie_hint = (
-                "Add valid cookies via YTDLP_COOKIEFILE and retry."
+                "If the video is age-restricted or requires login, add valid cookies via YTDLP_COOKIEFILE."
                 if not cookiefile
                 else "Verify your cookie file is valid/fresh and retry."
             )
             raise RuntimeError(
-                "yt-dlp could not extract YouTube player response after trying ios/android/tv/auto clients. "
-                f"{cookie_hint} Also ensure yt-dlp is up to date (`python -m pip install -U yt-dlp`). "
+                "Unable to download this YouTube video. "
+                f"{proxy_note} Multiple client modes were tried (ios, android, tv, auto). "
+                f"{cookie_hint} Also ensure yt-dlp is up to date (`pip install -U yt-dlp`). "
                 f"Tried formats: {', '.join(attempted_formats[:12])}"
             ) from last_err
         raise RuntimeError(
-            f"{last_err}. Tried formats: {', '.join(attempted_formats[:12])}"
+            f"Unable to download this YouTube video. {proxy_note} "
+            f"Tried formats: {', '.join(attempted_formats[:12])}. Detail: {last_err}"
         ) from last_err
     if last_err:
         raise RuntimeError(
-            f"Download failed after all fallback strategies: {last_err}. Tried formats: {', '.join(attempted_formats[:12])}"
+            f"Unable to download this YouTube video after all fallback strategies. {proxy_note} "
+            f"Tried formats: {', '.join(attempted_formats[:12])}. Detail: {last_err}"
         ) from last_err
-    raise RuntimeError("Download failed with unknown error")
+    raise RuntimeError("Unable to download this YouTube video: unknown error")
 

@@ -64,6 +64,10 @@ def _friendly_download_error(exc: Exception) -> str:
         return "Private or unavailable video"
     if "login" in low or "sign in" in low or "cookies" in low:
         return "Login required"
+    if "proxy" in low or "unable to download" in low or "player response" in low:
+        return "Download failed. Please try another video or check network/proxy settings."
+    if "network" in low or "connection" in low or "timeout" in low:
+        return "Download failed. Please check your network connection and try again."
     return "Download could not be completed"
 
 

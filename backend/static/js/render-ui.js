@@ -454,6 +454,27 @@ function hideRenderCompletionBar() {
   if (summary) summary.textContent = '';
 }
 
+function backToEditorFromCompletion() {
+  const sessionId = (_ev && _ev.sessionId) || null;
+  if (!sessionId) {
+    addEvent('Editor session is no longer available. Please load the source again.', 'render');
+    if (typeof showToast === 'function') showToast('Editor session is no longer available. Please load the source again.', 'error');
+    return;
+  }
+  const pd = {
+    session_id: sessionId,
+    duration: (_ev && _ev.duration) || 0,
+    title: String(qs('evSourceName')?.textContent || (_ev && _ev.sourceUrl) || ''),
+    export_dir: (_ev && _ev.exportDir) || null,
+  };
+  const urlOrPath = (_ev && _ev.sourceUrl) || '';
+  const pendingPayload = (_ev && _ev.pendingPayload) || null;
+  hideRenderCompletionBar();
+  // Restore editor with the existing session — no re-download needed.
+  // currentJobId is intentionally left as-is (completed job, no active polling).
+  openEditorView_withSession(pd, urlOrPath, pendingPayload);
+}
+
 function getCurrentJobPayload(job) {
   try {
     const raw = job?.payload_json;
