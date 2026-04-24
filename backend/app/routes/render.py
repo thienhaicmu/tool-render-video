@@ -177,78 +177,117 @@ def _probe_video_codec(video_path: Path) -> str:
         return ""
 
 
-def _nvenc_available() -> bool:
-    """Return True if h264_nvenc is present in ffmpeg and runtime-ready."""
+def _probe_preview_profile(video_path: Path) -> dict:
+    """Return container/video/audio details used to decide browser preview compatibility."""
+    cmd = [
+        get_ffprobe_bin(),
+        "-v", "error",
+        "-show_entries", "format=format_name:stream=index,codec_type,codec_name",
+        "-of", "json",
+        str(video_path),
+    ]
     try:
-        from app.services.render_engine import _has_encoder, _nvenc_runtime_ready
-        return _has_encoder("h264_nvenc") and _nvenc_runtime_ready("h264_nvenc")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        data = json.loads(result.stdout or "{}")
+        streams = data.get("streams") or []
+        format_name = str((data.get("format") or {}).get("format_name") or "").lower()
+        video_codec = ""
+        audio_codec = ""
+        for stream in streams:
+            codec_type = str(stream.get("codec_type") or "").lower()
+            codec_name = str(stream.get("codec_name") or "").lower()
+            if codec_type == "video" and not video_codec:
+                video_codec = codec_name
+            elif codec_type == "audio" and not audio_codec:
+                audio_codec = codec_name
+        return {
+            "format_name": format_name,
+            "video_codec": video_codec,
+            "audio_codec": audio_codec,
+        }
     except Exception:
-        return False
+        return {
+            "format_name": "",
+            "video_codec": _probe_video_codec(video_path),
+            "audio_codec": "",
+        }
+
+
+def _is_browser_safe_preview(video_path: Path) -> bool:
+    """Return True when the source should play reliably in Chromium without preview transcoding."""
+    profile = _probe_preview_profile(video_path)
+    container = profile.get("format_name") or ""
+    video_codec = profile.get("video_codec") or ""
+    audio_codec = profile.get("audio_codec") or ""
+
+    container_ok = any(name in container for name in ("mp4", "mov"))
+    video_ok = video_codec in ("h264", "avc", "avc1")
+    audio_ok = (not audio_codec) or audio_codec in ("aac", "mp3")
+    return container_ok and video_ok and audio_ok
 
 
 def _ensure_h264_preview(src: Path, work_dir: Path, duration_sec: int = 0) -> Path:
     """
-    If src is already H.264 return as-is.
-    Otherwise fast-transcode to H.264 720p preview so Electron can play it.
+    Reuse the source only when it is already browser-safe for Chromium playback.
+    Otherwise generate a cached H.264 preview for the editor.
 
     Timeout is duration-aware: base 120s + 2s per second of video, capped at 3600s.
-    Tries h264_nvenc first (GPU) then falls back to libx264 (CPU).
     Returns src unchanged when transcoding fails so the caller can still serve it.
     """
-    codec = _probe_video_codec(src)
-    if codec in ("h264", "avc", "avc1"):
-        return src
     out = work_dir / "preview_h264.mp4"
-    if out.exists():
+    if out.exists() and out.stat().st_size > 0:
         return out
+    if _is_browser_safe_preview(src):
+        return src
 
-    # Duration-aware timeout: 120s base + 2s per video second, max 1 hour
     timeout_sec = min(3600, 120 + 2 * max(0, int(duration_sec)))
-
-    use_nvenc = _nvenc_available()
-    video_encoder = "h264_nvenc" if use_nvenc else "libx264"
+    profile = _probe_preview_profile(src)
+    has_audio = bool(profile.get("audio_codec"))
     logger.info(
-        "Transcoding preview to H.264 (source_codec=%s encoder=%s duration=%ss timeout=%ss) …",
-        codec, video_encoder, duration_sec, timeout_sec,
+        "Transcoding preview to browser-safe H.264 (format=%s video=%s audio=%s duration=%ss timeout=%ss)",
+        profile.get("format_name") or "",
+        profile.get("video_codec") or "",
+        profile.get("audio_codec") or "",
+        duration_sec,
+        timeout_sec,
     )
 
-    def _build_cmd(enc: str) -> list:
-        cmd = [get_ffmpeg_bin(), "-y", "-i", str(src)]
-        if enc == "h264_nvenc":
-            cmd += ["-c:v", "h264_nvenc", "-preset", "p2", "-cq", "28"]
-        else:
-            cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "28"]
-        cmd += [
-            "-vf", "scale='min(1280,iw)':-2",  # cap at 720p width
-            "-c:a", "aac", "-b:a", "128k",
-            "-movflags", "+faststart",
-            str(out),
-        ]
-        return cmd
+    cmd = [
+        get_ffmpeg_bin(),
+        "-y",
+        "-i", str(src),
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "28",
+        "-pix_fmt", "yuv420p",
+        "-vf", "scale='min(1280,iw)':-2",
+        "-movflags", "+faststart",
+    ]
+    if has_audio:
+        cmd += ["-c:a", "aac", "-b:a", "128k"]
+    else:
+        cmd += ["-an"]
+    cmd.append(str(out))
 
-    for enc in ([video_encoder, "libx264"] if use_nvenc else ["libx264"]):
-        try:
-            subprocess.run(_build_cmd(enc), capture_output=True, timeout=timeout_sec, check=False)
-            if out.exists() and out.stat().st_size > 0:
-                logger.info("Preview transcode OK (encoder=%s output=%s)", enc, out)
-                return out
-        except subprocess.TimeoutExpired:
-            logger.error(
-                "Preview transcode timed out after %ss (encoder=%s src=%s duration=%ss). "
-                "Falling back to original file for browser playback.",
-                timeout_sec, enc, src, duration_sec,
-            )
-            try:
-                out.unlink(missing_ok=True)
-            except Exception:
-                pass
-            break
-        except Exception as exc:
-            logger.warning("Preview transcode failed (encoder=%s): %s — trying next", enc, exc)
-            try:
-                out.unlink(missing_ok=True)
-            except Exception:
-                pass
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=timeout_sec, check=False)
+        if out.exists() and out.stat().st_size > 0:
+            logger.info("Preview transcode OK (output=%s)", out)
+            return out
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "Preview transcode timed out after %ss (src=%s duration=%ss). Falling back to original file.",
+            timeout_sec,
+            src,
+            duration_sec,
+        )
+    except Exception as exc:
+        logger.warning("Preview transcode failed for %s: %s", src, exc)
+
+    try:
+        out.unlink(missing_ok=True)
+    except Exception:
+        pass
 
     return src
 
