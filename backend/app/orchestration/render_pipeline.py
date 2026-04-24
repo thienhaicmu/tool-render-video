@@ -18,7 +18,7 @@ from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes
-from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time
+from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, has_audio_stream
 from app.services.render_engine import cut_video, render_part_smart, nvenc_available
 from app.services.viral_scorer import score_segments
 from app.services.report_service import append_rows
@@ -815,6 +815,7 @@ def run_render_pipeline(
         rows = []
         outputs = []
         full_srt = work_dir / f"{source['slug']}_full.srt"
+        full_srt_available = False
         existing_parts = {int(x["part_no"]): x for x in list_job_parts(job_id)}
         _job_log(effective_channel, job_id, f"Segment building done: {total_parts} parts")
 
@@ -843,13 +844,42 @@ def run_render_pipeline(
 
         if payload.add_subtitle and any(subtitle_enabled_by_idx.values()):
             _set_stage(JobStage.TRANSCRIBING_FULL, 28, "Transcribing full video once")
-            if not (payload.resume_from_last and full_srt.exists() and full_srt.stat().st_size > 0):
-                _t_transcribe = time.perf_counter()
-                transcribe_to_srt(str(source_path), str(full_srt), model_name=tuned["whisper_model"], retry_count=retry_count, highlight_per_word=payload.highlight_per_word)
-                _transcribe_ms = int((time.perf_counter() - _t_transcribe) * 1000)
-                _job_log(effective_channel, job_id, f"Full transcription done: model={tuned['whisper_model']} duration_ms={_transcribe_ms}")
-            else:
+            if payload.resume_from_last and full_srt.exists() and full_srt.stat().st_size > 0:
+                full_srt_available = True
                 _job_log(effective_channel, job_id, "Reuse existing full transcription", kind="debug")
+            else:
+                source_has_audio = has_audio_stream(str(source_path))
+                if not source_has_audio:
+                    _job_log(effective_channel, job_id, f"subtitle.audio_missing source={source_path}; subtitles skipped", kind="warning")
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="subtitle.audio_missing",
+                        level="WARNING",
+                        message="Source video has no usable audio stream; subtitles skipped",
+                        step="subtitle.transcribe",
+                        context={"source_path": str(source_path)},
+                    )
+                else:
+                    _t_transcribe = time.perf_counter()
+                    try:
+                        transcribe_to_srt(str(source_path), str(full_srt), model_name=tuned["whisper_model"], retry_count=retry_count, highlight_per_word=payload.highlight_per_word)
+                        full_srt_available = bool(full_srt.exists() and full_srt.stat().st_size > 0)
+                        _transcribe_ms = int((time.perf_counter() - _t_transcribe) * 1000)
+                        _job_log(effective_channel, job_id, f"Full transcription done: model={tuned['whisper_model']} duration_ms={_transcribe_ms}")
+                    except Exception as transcribe_exc:
+                        full_srt_available = False
+                        _safe_unlink(full_srt)
+                        _job_log(effective_channel, job_id, f"subtitle.audio_extract_failed source={source_path}: {transcribe_exc}", kind="warning")
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="subtitle.audio_extract_failed",
+                            level="WARNING",
+                            message=f"Subtitle transcription skipped after audio extraction failed: {transcribe_exc}",
+                            step="subtitle.transcribe",
+                            context={"source_path": str(source_path)},
+                        )
 
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
@@ -896,8 +926,12 @@ def run_render_pipeline(
             else:
                 _job_log(effective_channel, job_id, f"Part {idx} cut skipped (raw exists)", kind="debug")
 
-            part_subtitle_enabled = subtitle_enabled_by_idx.get(idx, False)
-            if payload.add_subtitle and not part_subtitle_enabled:
+            subtitle_selected_by_rule = subtitle_enabled_by_idx.get(idx, False)
+            part_subtitle_enabled = subtitle_selected_by_rule
+            if part_subtitle_enabled and not full_srt_available:
+                part_subtitle_enabled = False
+                _job_log(effective_channel, job_id, f"Part {idx} subtitle skipped: full transcript unavailable", kind="warning")
+            if payload.add_subtitle and not part_subtitle_enabled and not subtitle_selected_by_rule:
                 _job_log(effective_channel, job_id, f"Part {idx} subtitle skipped (viral={int(seg.get('viral_score', 0))} < cutoff={int(subtitle_cutoff)})")
 
             if part_subtitle_enabled:
@@ -1040,7 +1074,7 @@ def run_render_pipeline(
                 and voice_audio_path is None
             ):
                 _part_srt = srt_part if srt_part.exists() and srt_part.stat().st_size > 0 else None
-                if _part_srt is None and full_srt.exists() and full_srt.stat().st_size > 0:
+                if _part_srt is None and full_srt_available:
                     _slice_srt_tmp = work_dir / f"{source['slug']}_part_{idx:03d}_voice_tmp.srt"
                     try:
                         slice_srt_by_time(str(full_srt), str(_slice_srt_tmp), seg["start"], seg["end"], rebase_to_zero=True)
@@ -1098,7 +1132,16 @@ def run_render_pipeline(
                     else:
                         _job_log(effective_channel, job_id, f"VOICE_SUBTITLE_EMPTY: part {idx} subtitle text empty; narration skipped", kind="warning")
                 else:
-                    _job_log(effective_channel, job_id, f"VOICE_SUBTITLE_MISSING: part {idx} SRT not available; narration skipped", kind="warning")
+                    _job_log(effective_channel, job_id, f"voice_subtitle_source_missing part_no={idx} source=subtitle; narration skipped", kind="warning")
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="voice_subtitle_source_missing",
+                        level="WARNING",
+                        message=f"Subtitle voice source missing for part {idx}; narration skipped",
+                        step="voice.tts",
+                        context={"part_no": idx, "source": "subtitle"},
+                    )
             elif (
                 getattr(payload, "voice_enabled", False)
                 and getattr(payload, "voice_source", "manual") == "translated_subtitle"
@@ -1111,7 +1154,7 @@ def run_render_pipeline(
                 if _voice_srt is None:
                     _job_log(effective_channel, job_id, f"VOICE_TRANSLATED_SUBTITLE_MISSING: part {idx} translated SRT not found; falling back to original", kind="warning")
                     _voice_srt = srt_part if srt_part.exists() and srt_part.stat().st_size > 0 else None
-                if _voice_srt is None and full_srt.exists() and full_srt.stat().st_size > 0:
+                if _voice_srt is None and full_srt_available:
                     _vtrans_tmp = work_dir / f"{source['slug']}_part_{idx:03d}_vtrans_tmp.srt"
                     try:
                         slice_srt_by_time(str(full_srt), str(_vtrans_tmp), seg["start"], seg["end"], rebase_to_zero=True)
@@ -1169,7 +1212,16 @@ def run_render_pipeline(
                     else:
                         _job_log(effective_channel, job_id, f"VOICE_SUBTITLE_EMPTY: part {idx} translated subtitle text empty; narration skipped", kind="warning")
                 else:
-                    _job_log(effective_channel, job_id, f"VOICE_SUBTITLE_MISSING: part {idx} no SRT available for translated narration; skipped", kind="warning")
+                    _job_log(effective_channel, job_id, f"voice_subtitle_source_missing part_no={idx} source=translated_subtitle; narration skipped", kind="warning")
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="voice_subtitle_source_missing",
+                        level="WARNING",
+                        message=f"Translated subtitle voice source missing for part {idx}; narration skipped",
+                        step="voice.tts",
+                        context={"part_no": idx, "source": "translated_subtitle"},
+                    )
             _final_voice_path = voice_audio_path or _part_subtitle_voice_path
             if _final_voice_path:
                 mixed_part = final_part.with_name(final_part.stem + ".voice_tmp.mp4")

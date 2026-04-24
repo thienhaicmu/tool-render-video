@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import time
 import whisper
-from app.services.bin_paths import get_ffmpeg_bin
+from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
 
 _MODEL_CACHE = {}
 WORD_MIN_GAP_SEC = 0.02
@@ -131,6 +131,23 @@ def _ensure_ffmpeg_in_path_for_whisper():
     current = os.environ.get("PATH", "")
     if ffmpeg_dir and ffmpeg_dir not in current:
         os.environ["PATH"] = f"{ffmpeg_dir};{current}" if current else ffmpeg_dir
+
+
+def has_audio_stream(video_path: str) -> bool:
+    """Return True when ffprobe can see at least one audio stream."""
+    try:
+        cmd = [
+            get_ffprobe_bin(),
+            "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "stream=index",
+            "-of", "csv=p=0",
+            str(video_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return bool((result.stdout or "").strip())
+    except Exception:
+        return False
 
 
 def transcribe_to_srt(
