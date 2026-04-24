@@ -19,7 +19,7 @@ Write-Host "`n=== Building Electron Desktop App ===" -ForegroundColor Cyan
 Push-Location $DesktopDir
 try {
     npm.cmd install
-    npm.cmd run dist:win
+    npm.cmd run dist
 } finally {
     Pop-Location
 }

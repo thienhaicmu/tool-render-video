@@ -22,7 +22,6 @@ set "BACKEND=%ROOT%backend"
 set "VENV=%BACKEND%\.venv"
 set "PYTHON=%VENV%\Scripts\python.exe"
 set "PIP=%VENV%\Scripts\pip.exe"
-set "SPEC=%BACKEND%\render-backend.spec"
 
 echo.
 echo ============================================================
@@ -34,11 +33,6 @@ echo.
 if not exist "%PYTHON%" (
     echo [ERROR] Python venv not found at %VENV%
     echo         Run: cd backend ^&^& python -m venv .venv ^&^& .venv\Scripts\pip install -r requirements.txt
-    goto :fail
-)
-
-if not exist "%SPEC%" (
-    echo [ERROR] Spec file not found: %SPEC%
     goto :fail
 )
 
@@ -85,15 +79,35 @@ if /I "%~1"=="debug" (
 )
 
 cd /d "%BACKEND%"
-"%PYTHON%" -m PyInstaller %EXTRA_FLAGS% "%SPEC%"
+"%PYTHON%" -m playwright install chromium
+if errorlevel 1 (
+    echo [ERROR] Failed to install Playwright Chromium
+    goto :fail
+)
+
+"%PYTHON%" -m PyInstaller %EXTRA_FLAGS% ^
+    --noconfirm ^
+    --onefile ^
+    --name render-backend ^
+    --collect-all whisper ^
+    --collect-all scenedetect ^
+    --collect-all playwright ^
+    --collect-all openpyxl ^
+    --collect-all yt_dlp ^
+    --collect-all cv2 ^
+    --hidden-import uvicorn.logging ^
+    --hidden-import uvicorn.loops.auto ^
+    --hidden-import uvicorn.protocols.http.auto ^
+    --hidden-import uvicorn.protocols.websockets.auto ^
+    run_backend_server.py
 
 if errorlevel 1 (
     echo.
     echo [ERROR] PyInstaller build failed!
     echo.
     echo ── Common fixes ──────────────────────────────────────────
-    echo  1. Missing module?  Add to hiddenimports in render-backend.spec
-    echo  2. DLL conflict?    Check upx_exclude list in spec
+    echo  1. Missing module?  Add another --hidden-import or --collect-all
+    echo  2. DLL conflict?    Retry after clearing backend\build and backend\dist
     echo  3. Out of memory?   Close other apps, try: set PYINSTALLER_COMPILE_BOOTLOADER=1
     echo  4. Anti-virus?      Add backend\dist\ to exclusion list
     echo.

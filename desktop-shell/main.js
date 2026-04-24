@@ -12,8 +12,11 @@ const APP_ROOT = app.isPackaged ? process.resourcesPath : DEV_ROOT;
 const BACKEND_DIR = path.join(APP_ROOT, 'backend');
 const BACKEND_REQ_FILE = path.join(BACKEND_DIR, 'requirements.txt');
 const BACKEND_EXE_PACKAGED = path.join(APP_ROOT, 'backend-bin', 'render-backend.exe');
+const FFMPEG_BIN_PACKAGED = path.join(APP_ROOT, 'ffmpeg-bin', 'ffmpeg.exe');
+const FFPROBE_BIN_PACKAGED = path.join(APP_ROOT, 'ffmpeg-bin', 'ffprobe.exe');
+const USER_DATA_ROOT = app.getPath('userData');
 const DATA_DIR = app.isPackaged
-  ? path.join(path.dirname(process.execPath), 'data')
+  ? path.join(USER_DATA_ROOT, 'data')
   : path.join(DEV_ROOT, 'data');
 const VENV_DIR = app.isPackaged
   ? path.join(DATA_DIR, '.venv')
@@ -175,16 +178,42 @@ function isUvicornCmd(args) {
 function startBackendWithCommand(command, args) {
   return new Promise((resolve, reject) => {
     const channelsDir = app.isPackaged ? path.join(DATA_DIR, 'channels') : path.join(DEV_ROOT, 'channels');
+    const tempDir = path.join(DATA_DIR, 'temp');
+    const tmpDir = path.join(DATA_DIR, 'tmp');
+    const cacheDir = path.join(DATA_DIR, 'cache');
+    const torchDir = path.join(DATA_DIR, 'torch');
+    const hfDir = path.join(DATA_DIR, 'huggingface');
+    const pwDir = path.join(DATA_DIR, 'playwright');
     fs.mkdirSync(channelsDir, { recursive: true });
+    fs.mkdirSync(tempDir, { recursive: true });
+    fs.mkdirSync(tmpDir, { recursive: true });
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.mkdirSync(torchDir, { recursive: true });
+    fs.mkdirSync(hfDir, { recursive: true });
+    fs.mkdirSync(path.join(hfDir, 'hub'), { recursive: true });
+    fs.mkdirSync(path.join(DATA_DIR, 'ollama', 'models'), { recursive: true });
+    fs.mkdirSync(pwDir, { recursive: true });
     const env = {
       ...process.env,
-      APP_DATA_DIR:    DATA_DIR,
-      DATABASE_PATH:   path.join(DATA_DIR, 'app.db'),
-      REPORTS_DIR:     path.join(DATA_DIR, 'reports'),
-      CHANNELS_DIR:    channelsDir,
-      TEMP_DIR:        path.join(DATA_DIR, 'temp'),
+      APP_DATA_DIR: DATA_DIR,
+      DATABASE_PATH: path.join(DATA_DIR, 'app.db'),
+      REPORTS_DIR: path.join(DATA_DIR, 'reports'),
+      CHANNELS_DIR: channelsDir,
+      TEMP_DIR: tempDir,
+      XDG_CACHE_HOME: cacheDir,
+      TORCH_HOME: torchDir,
+      HF_HOME: hfDir,
+      TRANSFORMERS_CACHE: path.join(hfDir, 'hub'),
+      OLLAMA_MODELS: path.join(DATA_DIR, 'ollama', 'models'),
+      TEMP: tmpDir,
+      TMP: tmpDir,
+      PLAYWRIGHT_BROWSERS_PATH: pwDir,
       PYTHONUNBUFFERED: '1',
     };
+    if (app.isPackaged && fs.existsSync(FFMPEG_BIN_PACKAGED) && fs.existsSync(FFPROBE_BIN_PACKAGED)) {
+      env.FFMPEG_BIN = FFMPEG_BIN_PACKAGED;
+      env.FFPROBE_BIN = FFPROBE_BIN_PACKAGED;
+    }
 
     const proc = spawn(command, args, {
       cwd: BACKEND_DIR,

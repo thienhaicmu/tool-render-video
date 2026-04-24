@@ -6,7 +6,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist:win": "electron-builder --win portable",
+    "build": "electron-builder --dir",
+    "dist": "electron-builder --win nsis portable",
+    "dist:win": "npm run dist",
     "logerror": "node scripts/logerror.js"
   },
   "devDependencies": {
@@ -19,9 +21,9 @@
     "forceCodeSigning": false,
     "win": {
       "target": [
+        "nsis",
         "portable"
       ],
-      "icon": "build/icon.ico",
       "signAndEditExecutable": false
     },
     "directories": {
@@ -45,10 +47,18 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "ffmpeg-bin",
+        "to": "ffmpeg-bin",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "files": [
       "main.js",
+      "preload.js",
       "package.json"
     ]
   }
