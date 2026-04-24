@@ -454,6 +454,29 @@ function hideRenderCompletionBar() {
   if (summary) summary.textContent = '';
 }
 
+function deactivateRenderUiForEditorOpen() {
+  // Prevent stale "Render complete" handoff UI from leaking into a new editor session.
+  hideRenderCompletionBar();
+
+  // Stop any in-flight render progress channels.
+  if (typeof _stopJobWs === 'function') _stopJobWs();
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+
+  // Mark old terminal render jobs inactive for UI purposes while editor is open.
+  const monitorStatus = String(_renderMonitorLastJob?.status || lastStatus || '').toLowerCase();
+  if (!currentJobId || !monitorStatus || isTerminalRenderStatus(monitorStatus)) {
+    currentJobId = null;
+  }
+
+  // Clear stale monitor/stall hint state.
+  resetRenderMonitorHeartbeat();
+  updateRenderMonitorHeartbeat(null, null, []);
+  updateRenderMainState(null, null, []);
+
+  // Ensure the main action button returns to editor-open state.
+  setRenderActionBusy(false);
+}
+
 function backToEditorFromCompletion() {
   const sessionId = (_ev && _ev.sessionId) || null;
   if (!sessionId) {

@@ -783,6 +783,7 @@ function _evUpdateInfoStrip() {
 
 /* ── Open editor view ─────────────────────────────────────── */
 async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
+  if (typeof deactivateRenderUiForEditorOpen === 'function') deactivateRenderUiForEditorOpen();
   _evEnsureGuidedSections();
   qs('evSectionTextLayers')?.classList.add('isCollapsed');
   _ev.selectedObject = null;
@@ -856,6 +857,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
 
 /* ── Open editor with pre-downloaded YouTube session ──────── */
 function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
+  if (typeof deactivateRenderUiForEditorOpen === 'function') deactivateRenderUiForEditorOpen();
   _evEnsureGuidedSections();
   qs('evSectionTextLayers')?.classList.add('isCollapsed');
   _ev.selectedObject = null;
