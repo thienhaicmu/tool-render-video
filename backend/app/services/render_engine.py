@@ -455,10 +455,17 @@ def render_part(
             if af_parts:
                 cmd += ["-af", ",".join(af_parts)]
     cmd += [*codec_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
+    logger.info("render_part_smart: codec=%s preset=%s crf=%s input=%s output=%s",
+                resolved_codec, resolved_preset, video_crf,
+                Path(input_path).name, Path(output_path).name)
     try:
         _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
-    except Exception:
+    except Exception as _nvenc_err:
         if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
+            logger.warning(
+                "NVENC encode failed (%s), falling back to CPU encoder for %s",
+                _nvenc_err, Path(output_path).name,
+            )
             cpu_codec = "libx265" if str(video_codec).lower() == "h265" else "libx264"
             cpu_preset = _map_preset_for_encoder(video_preset, cpu_codec)
             cpu_flags = ["-c:v", cpu_codec, "-preset", cpu_preset,

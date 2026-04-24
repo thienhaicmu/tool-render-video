@@ -13,12 +13,16 @@ async function startRender(){
 
   if(outputMode === 'channel' && !channel){
     addEvent('Validation error: please select target channel first.', 'render');
+    showToast('Please select a target channel first', 'error');
     return;
   }
   if(!outputDir){
     addEvent(outputMode === 'channel'
       ? 'Validation error: cannot resolve output folder from channel. Please re-select channel.'
       : 'Validation error: please enter Manual Output Folder before running.', 'render');
+    showToast(outputMode === 'channel'
+      ? 'Please re-select the channel output folder'
+      : 'Please choose an output folder before rendering', 'error');
     return;
   }
 
@@ -30,6 +34,7 @@ async function startRender(){
     const baseNorm = basePath.replace(/\\/g, '/').toLowerCase();
     if(baseNorm && !outNorm.startsWith(baseNorm)){
       addEvent(`Validation error: output folder must be inside channel '${channel}' (example: ${_joinWinPath(root, channel, 'upload', 'video_output')}).`, 'render');
+      showToast(`Output folder must be inside channel '${channel}'`, 'error');
       return;
     }
     if(baseNorm){
@@ -66,6 +71,7 @@ async function startRender(){
   }
   if (sourceMode !== 'youtube' && !localVideoPath) {
     addEvent('Please choose a local video first.', 'render');
+    showToast('Please choose a local video first', 'error');
     return;
   }
 
@@ -173,7 +179,7 @@ async function startRender(){
         showToast('Download cancelled', 'info');
       } else {
         addEvent(`Download failed: ${err.message}`, 'render');
-        showToast(`Download failed: ${err.message}`, 'error');
+        showToast('Video could not be downloaded', 'error');
       }
       btn.disabled = false;
       btn.textContent = origText;
@@ -199,9 +205,25 @@ function cancelYtDownload() {
 
 async function resumeRender(){
   const jobId = (qs('resume_job_id').value || '').trim();
-  if(!jobId){ addEvent('Please provide job id to resume', 'render'); return; }
+  if(!jobId){
+    addEvent('Please provide job id to resume', 'render');
+    showToast('Please enter a job ID to resume', 'error');
+    return;
+  }
   const res = await fetch(`/api/render/resume/${jobId}`, { method:'POST' });
   const data = await res.json();
+  if(!res.ok){
+    const errMsg = (typeof friendlyRenderError === 'function')
+      ? friendlyRenderError(data.detail, 'Render could not start')
+      : 'Render could not start';
+    const detail = Array.isArray(data.detail)
+      ? data.detail.map((e) => e?.msg || JSON.stringify(e)).join(' | ')
+      : String(data.detail || 'unknown error');
+    addEvent(`Resume failed: ${detail}`, 'render');
+    showToast(errMsg, 'error');
+    setRenderFlowState('configure', 'Render could not start', { force: true });
+    return;
+  }
   currentJobId = data.job_id;
   activeJobStartedAt = Date.now();
   lastStage = '';
@@ -250,17 +272,23 @@ function _applyJobUpdate(job, parts, summary){
     _scheduleSmooth();
   }
   markRenderMonitorUpdate(job, s, parts, targetPercent);
+  if (typeof updateRenderProgressVisual === 'function') updateRenderProgressVisual(job);
 
   qs('job_stage_pill').textContent = stageLabelPlain(job.stage);
-  qs('job_title').textContent = job.status === 'queued' ? 'Queued job' : 'Processing video';
-  qs('job_meta_1').textContent = `Channel ${job.channel_code || '-'} | Source -`;
+  const sourceLabel = (typeof getRenderMonitorSourceText === 'function')
+    ? getRenderMonitorSourceText(job)
+    : 'Source unavailable';
+  qs('job_title').textContent = job.status === 'queued' ? `Queued · ${sourceLabel}` : sourceLabel;
+  qs('job_meta_1').textContent = `Channel ${job.channel_code || '-'} | ${sourceLabel}`;
   qs('job_message').textContent = friendlyJobMessage(job);
   setActionState(job);
   renderPipeline(job.stage, job.status);
   renderSteps(targetPercent);
   updateRenderFlowByJob(job, s, parts);
 
+  console.log('[DEBUG] parts:', (parts||[]).length, '| summary:', s?.total_parts, 'total,', s?.processing_parts, 'active,', s?.completed_parts, 'done');
   renderParts(parts, s);
+  renderPartFocus(parts, s);
   updateRenderMainState(job, s, parts);
   updateRenderMonitorHeartbeat(job, s, parts);
   updateStatusBar(job, s);
@@ -297,17 +325,19 @@ function _applyJobUpdate(job, parts, summary){
       fetch(`/api/jobs/${currentJobId}/logs?lines=1`)
         .then(r => r.json()).then(ldata => {
           const lf = ldata?.log_file || '';
-          if(lf) addEvent(`Failed. Dev log file: ${lf}`, 'render');
-          else addEvent('Failed. Please check channel log file for technical details.', 'render');
+          if(lf) addEvent(`Render failed. Diagnostics log: ${lf}`, 'render');
+          else addEvent('Render failed. Review clips first, then diagnostics if needed.', 'render');
           lastFailLogJobId = currentJobId;
-        }).catch(_=>{ addEvent('Failed. Please check channel log file for technical details.', 'render'); });
+        }).catch(_=>{ addEvent('Render failed. Review clips first, then diagnostics if needed.', 'render'); });
     }
     if (job.status === 'completed') {
       const handoff = buildCompletionHandoff(s, parts, job);
       showRenderCompletionBar(handoff.main, handoff.detail);
       setRenderFlowState('complete', `${doneCount} clips ready`);
+      if (typeof populateRenderOutputPanel === 'function') populateRenderOutputPanel(job, parts);
     } else {
       hideRenderCompletionBar();
+      if (typeof clearRenderOutputPanel === 'function') clearRenderOutputPanel();
     }
     addEvent(`Job ${job.status}`, 'render');
   }
@@ -357,7 +387,13 @@ function startPolling(){
     }
   };
 
-  ws.onclose = () => { jobWs = null; };
+  ws.onclose = () => {
+    jobWs = null;
+    const status = String(_renderMonitorLastJob?.status || lastStatus || '').toLowerCase();
+    const terminal = status === 'completed' || status === 'failed' || status === 'interrupted';
+    if (!currentJobId || terminal) return;
+    loadJobProgress();
+  };
 }
 
 async function loadJobs(){

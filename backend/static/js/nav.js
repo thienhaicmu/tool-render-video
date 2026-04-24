@@ -76,6 +76,17 @@ function setView(view){
   if (isDownload && typeof renderDownloadQueue === 'function') renderDownloadQueue();
   if (isHistory && typeof loadHistoryView === 'function') loadHistoryView();
   if (!isRender && !isEditor && typeof hideRenderCompletionBar === 'function') hideRenderCompletionBar();
+  // Output panel: hide when leaving render, restore visibility state when returning
+  if (typeof qs === 'function') {
+    const rop = qs('render_output_panel');
+    if (rop) {
+      if (!isRender) {
+        rop.classList.add('hiddenView');
+      } else if (rop.dataset.populated === '1') {
+        rop.classList.remove('hiddenView');
+      }
+    }
+  }
 
   // Bottom panel: auto-collapse when switching views with no active job.
   if (!currentJobId) _collapseBottomPanel(true);

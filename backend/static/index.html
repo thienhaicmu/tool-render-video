@@ -244,6 +244,7 @@
           <span style="font-size:11px;color:var(--text-muted)">Aspect ratio:</span>
           <span id="evAspectBadge" style="font-size:11px;font-weight:700;color:#60a5fa;background:rgba(59,130,246,.12);padding:2px 8px;border-radius:4px">9:16</span>
           <span style="font-size:11px;color:var(--text-muted);margin-left:4px">— preview crop matches output framing</span>
+          <button id="evGuideToggleBtn" class="evGuideToggle" onclick="evToggleGuides()">Guides</button>
         </div>
 
         <div class="evVideoBox" id="evVideoBox">
@@ -255,11 +256,15 @@
 
             <!-- Subtitle preview overlay — inside frame, % relative to frame height -->
             <div class="evSubOverlay" id="evSubOverlay" style="bottom:15%;display:none">
-              <div class="evSubInner" id="evSubInner">
+              <div class="evSubInner" id="evSubInner" onmousedown="evSubOverlayDragStart(event)">
                 <span style="font-family:'Bungee',sans-serif;font-size:clamp(12px,4cqw,46px);color:#FFFF00;-webkit-text-stroke:2px #000;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000">POV: </span><span style="font-family:'Bungee',sans-serif;font-size:clamp(12px,4cqw,46px);color:#FFF;-webkit-text-stroke:2px #000;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000">never gonna</span>
               </div>
             </div>
             <div class="evTextLayersOverlay" id="evTextLayersOverlay"></div>
+            <div class="evGuides"></div>
+            <div id="evSelLabel" class="evSelLabel"></div>
+            <div id="evSubDragLabel"></div>
+            <div id="evSubModeLabel" class="evSubModeLabel demo">Preview sample</div>
 
             <!-- Loading overlay -->
             <div class="evLoadingOverlay" id="evLoadingOverlay">
@@ -283,6 +288,7 @@
           <div class="evTimelineProgress" id="evTimelineProgress" style="width:0%"></div>
           <div class="evTrimRegion" id="evTrimRegion" style="left:0%;width:100%"></div>
           <div class="evTrimRegionLabel" id="evTrimRegionLabel">Trim: full video</div>
+          <div id="evTimelineLayers" class="evTimelineLayers"></div>
         </div>
         <span class="evTrimHelper">Use right panel to adjust trim range</span>
         <span class="evTimeText" id="evTotalTime">0:00:00</span>
@@ -365,6 +371,38 @@
         <div class="renderActiveActions hiddenView" id="render_active_actions">
           <button class="primaryButton" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
           <button class="ghostButton" type="button" onclick="setView('upload')">Go to Upload</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Render Output Panel — clips list, shown after render completes ── -->
+    <div id="render_output_panel" class="renderOutputPanel hiddenView">
+      <div class="renderOutputHeader">
+        <div class="renderOutputTitle">
+          <span id="render_output_panel_title">Generated Clips</span>
+          <span class="renderOutputBadge" id="render_output_badge">0</span>
+        </div>
+        <div class="renderOutputActions">
+          <button class="ghostButton renderOutputBtn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
+          <button class="ghostButton renderOutputBtn" type="button" onclick="setView('upload')">Upload</button>
+        </div>
+      </div>
+      <div id="render_output_path" class="renderOutputPath"></div>
+      <div id="render_output_list" class="renderOutputList">
+        <div class="renderOutputEmpty">Clips will appear here when render completes.</div>
+      </div>
+    </div>
+
+    <!-- ── Clip Preview Modal ── -->
+    <div id="clip_preview_modal" class="clipPreviewModal hiddenView" onclick="closeClipPreview(event)">
+      <div class="clipPreviewDialog">
+        <div class="clipPreviewTitleBar">
+          <span id="clip_preview_title" class="clipPreviewName"></span>
+          <button class="clipPreviewClose" type="button" onclick="closeClipPreview()">&#x2715;</button>
+        </div>
+        <video id="clip_preview_video" class="clipPreviewVideo" controls preload="metadata"></video>
+        <div class="clipPreviewFooter">
+          <button class="ghostButton" type="button" onclick="openCurrentClipFolder()">Open Folder</button>
         </div>
       </div>
     </div>
@@ -692,12 +730,17 @@
       <button class="ghostButton" style="font-size:12px;padding:5px 10px" onclick="cancelEditorView()">← Cancel</button>
     </div>
 
-    <!-- Scrollable body: editor tool sections + inspector sections -->
+    <!-- Scrollable body: 4-group inspector -->
     <div class="evRightScroll inspPaneBody">
 
-      <!-- ① Trim -->
-      <div class="evSection" data-section-type="trim">
-        <div class="evSectionTitle">✂️ Trim Video</div>
+      <!-- Context bar: shows selected object -->
+      <div id="inspContextBar" class="inspContextBar">Editor</div>
+
+      <!-- ══ BASIC ════════════════════════════════════════════ -->
+
+      <!-- Trim -->
+      <div class="evSection" id="evSectionTrim" data-section-type="trim">
+        <div class="evSectionTitle">✂️ Trim</div>
         <div class="evTrimBarWrap" id="evTrimBarWrap">
           <div class="evTrimTrack"></div>
           <div class="evTrimFill" id="evTrimFill" style="left:0%;width:100%"></div>
@@ -706,170 +749,79 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
           <label class="field">
-            <span class="fieldLabel">⏮ Start at (sec)</span>
+            <span class="fieldLabel">Start (sec)</span>
             <input class="fieldInput" type="number" id="evTrimInSec" min="0" step="1" value="0" oninput="evTrimSecChange()">
           </label>
           <label class="field">
-            <span class="fieldLabel">⏭ End at (sec)</span>
+            <span class="fieldLabel">End (sec)</span>
             <input class="fieldInput" type="number" id="evTrimOutSec" min="0" step="1" placeholder="full video" oninput="evTrimSecChange()">
           </label>
         </div>
-        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetTrimIn()">📍 Set IN at playhead</button>
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetTrimOut()">📍 Set OUT at playhead</button>
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evResetTrim()">↺ Reset</button>
-          <span id="evTrimInfo" style="margin-left:auto;font-size:11px;color:var(--text-muted)">Full video</span>
+        <div class="inspActions">
+          <button class="evTinyBtn" onclick="evSetTrimIn()">Set IN</button>
+          <button class="evTinyBtn" onclick="evSetTrimOut()">Set OUT</button>
+          <button class="evTinyBtn" onclick="evResetTrim()">↺ Reset</button>
+          <span id="evTrimInfo" class="inspMeta">Full video</span>
         </div>
       </div>
 
-      <!-- ② Audio / Volume -->
-      <div class="evSection" data-section-type="volume">
-        <div class="evSectionTitle">🔊 Volume</div>
-        <div style="display:flex;gap:10px;align-items:center">
-          <input type="range" id="evVolume" min="0" max="200" value="100" step="1" style="flex:1;accent-color:#3b82f6" oninput="evVolumeSliderChange()">
-          <input class="fieldInput" type="number" id="evVolumeNum" min="0" max="200" value="100" step="5" style="width:68px;text-align:center;padding:6px 8px" oninput="evVolumeNumChange()">
-          <span style="color:var(--text-muted);font-size:12px">%</span>
-        </div>
-        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(50)">50%</button>
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(80)">80%</button>
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(100)">100%</button>
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(120)">+20%</button>
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(150)">+50%</button>
-        </div>
-      </div>
-
-      <!-- ③ BGM -->
-      <div class="evSection" data-section-type="bgm">
-        <div class="evSectionTitle">🎵 Background Music (BGM)</div>
-        <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer;margin-bottom:10px">
-          <input type="checkbox" id="evBgmEnable" style="width:16px;height:16px;accent-color:#f59e0b" onchange="evToggleBgmFields()">
-          <span style="font-size:13px;color:var(--text)">Enable Background Music</span>
-        </label>
-        <div id="evBgmFields" style="display:none;flex-direction:column;gap:8px">
-          <div style="display:flex;gap:8px;align-items:center">
-            <input class="fieldInput" id="evBgmPath" placeholder="No BGM file selected" readonly style="flex:1">
-            <button class="ghostButton" style="white-space:nowrap" onclick="evPickBgmFile()">Choose BGM</button>
-          </div>
-          <input id="ev_bgm_file_picker" type="file" accept="audio/*" style="display:none" onchange="evOnBgmPicked(event)">
+      <!-- Output settings (pre-defined; JS skips recreating it) -->
+      <div class="evSection" id="evSectionBasic">
+        <div class="evSectionTitle">Output</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <label class="field">
-            <span class="fieldLabel">BGM Volume (0.01–1.0)</span>
-            <input class="fieldInput" type="number" id="evBgmGain" value="0.18" min="0.01" max="1.0" step="0.01">
-          </label>
-        </div>
-      </div>
-
-      <!-- ④ Transform & Enhance -->
-      <div class="evSection" data-section-type="transform">
-        <div class="evSectionTitle">🎨 Transform & Enhance</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-          <label class="field"><span class="fieldLabel">Transform Preset</span>
-            <select class="fieldInput" id="evTransformPreset">
-              <option value="slight" selected>Slightly Different</option>
-              <option value="strong">Strong Transform</option>
-            </select>
-          </label>
-          <label class="field"><span class="fieldLabel">Reframe Mode</span>
-            <select class="fieldInput" id="evReframeMode">
-              <option value="subject" selected>Subject (face/body tracking)</option>
-              <option value="motion">Motion (pixel diff)</option>
-            </select>
-          </label>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
-            <input type="checkbox" id="evAddSubtitle" checked style="width:16px;height:16px;accent-color:#3b82f6">
-            <span style="font-size:13px;color:var(--text)">💬 Auto subtitles (Whisper AI)</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
-            <input type="checkbox" id="evMotionCrop" checked style="width:16px;height:16px;accent-color:#3b82f6">
-            <span style="font-size:13px;color:var(--text)">🎯 Motion-aware crop (auto reframe)</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
-            <input type="checkbox" id="evReupMode" style="width:16px;height:16px;accent-color:#8b5cf6">
-            <span style="font-size:13px;color:var(--text)">🔄 Reup Mode (color + overlay enhance)</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
-            <input type="checkbox" id="evCleanupTemp" checked style="width:16px;height:16px;accent-color:#10b981">
-            <span style="font-size:13px;color:var(--text)">🗑️ Clean temporary files after completion</span>
-          </label>
-        </div>
-      </div>
-
-      <!-- ⑤ Render Settings -->
-      <div class="evSection" data-section-type="render-settings">
-        <div class="evSectionTitle">Render Settings</div>
-        <div class="evSettingsGrid">
-          <label class="field"><span class="fieldLabel">Aspect ratio</span>
+            <span class="fieldLabel">Aspect Ratio</span>
             <select class="fieldInput" id="evAspectRatio" onchange="evUpdateAspectRatio()">
               <option value="3:4" selected>3:4 Vertical</option>
-              <option value="9:16">9:16 TikTok Full</option>
+              <option value="9:16">9:16 TikTok</option>
               <option value="1:1">1:1 Square</option>
             </select>
           </label>
-          <label class="field"><span class="fieldLabel">Min clip (sec)</span>
-            <input class="fieldInput" type="number" id="evMinPart" value="70" min="20" max="600">
-          </label>
-          <label class="field"><span class="fieldLabel">Max clip (sec)</span>
-            <input class="fieldInput" type="number" id="evMaxPart" value="180" min="30" max="900">
-          </label>
-          <label class="field"><span class="fieldLabel">Render Profile</span>
+          <label class="field">
+            <span class="fieldLabel">Render Profile</span>
             <select class="fieldInput" id="evRenderProfile">
-              <option value="best">Best (slowest)</option>
+              <option value="best">Best (slow)</option>
               <option value="quality">Quality</option>
-              <option value="balanced" selected>Balanced (recommended)</option>
+              <option value="balanced" selected>Balanced</option>
               <option value="fast">Fast</option>
             </select>
           </label>
-          <label class="field"><span class="fieldLabel">Max clips</span>
-            <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
-            <span style="font-size:11px;color:var(--text-muted);margin-top:2px">0 = no limit</span>
+          <label class="field">
+            <span class="fieldLabel">Min clip (s)</span>
+            <input class="fieldInput" type="number" id="evMinPart" value="70" min="20" max="600">
           </label>
-          <details class="evAdvancedSettings">
-            <summary>Advanced render options</summary>
-            <div class="evSettingsGrid">
-              <label class="field"><span class="fieldLabel">Playback speed</span>
-                <select class="fieldInput" id="evPlaybackSpeed">
-                  <option value="1.0">1.0x (original)</option>
-                  <option value="1.05">1.05x</option>
-                  <option value="1.07" selected>1.07x (+7%)</option>
-                  <option value="1.1">1.1x (+10%)</option>
-                  <option value="1.15">1.15x (+15%)</option>
-                </select>
-              </label>
-              <label class="field"><span class="fieldLabel">Encoder</span>
-                <select class="fieldInput" id="evRenderDevice">
-                  <option value="auto" selected>Auto (detect GPU)</option>
-                  <option value="gpu">GPU (NVENC)</option>
-                  <option value="cpu">CPU only</option>
-                </select>
-              </label>
-              <label class="field"><span class="fieldLabel">Output FPS</span>
-                <select class="fieldInput" id="evOutputFps">
-                  <option value="30">30 fps</option>
-                  <option value="48">48 fps</option>
-                  <option value="60" selected>60 fps</option>
-                </select>
-              </label>
-              <label class="field"><span class="fieldLabel">Clip order</span>
-                <select class="fieldInput" id="evPartOrder">
-                  <option value="viral" selected>Best clips first</option>
-                  <option value="timeline">Timeline order</option>
-                </select>
-              </label>
-              <label class="field"><span class="fieldLabel">Scale Y (%)</span>
-                <input class="fieldInput" type="number" id="evFrameScaleY" value="106" min="80" max="130">
-                <span style="font-size:11px;color:var(--text-muted);margin-top:2px">Vertical zoom (100=original)</span>
-              </label>
-            </div>
-          </details>
+          <label class="field">
+            <span class="fieldLabel">Max clip (s)</span>
+            <input class="fieldInput" type="number" id="evMaxPart" value="180" min="30" max="900">
+          </label>
+          <label class="field">
+            <span class="fieldLabel">Max clips</span>
+            <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
+            <span class="inspHint">0 = no limit</span>
+          </label>
         </div>
       </div>
 
-      <!-- Subtitle Style — visible when no text layers exist -->
+      <!-- ══ SUBTITLE & TEXT ══════════════════════════════════ -->
+      <div class="inspGroupSep">Subtitle &amp; Text</div>
+
+      <!-- Subtitle Style -->
       <div class="evSection" id="inspSubtitlePane" data-section-type="subtitle">
-        <div class="evSectionTitle">💬 Subtitle Style (Live Preview)</div>
+        <div class="evSectionTitle">💬 Subtitle Style</div>
+        <div id="inspSubModeRow" class="inspSubModeRow demo">Preview sample · AI subtitle will be generated on render</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <label class="field" style="grid-column:1/-1">
+            <span class="fieldLabel">Style</span>
+            <select class="fieldInput" id="evSubStyle">
+              <option value="pro_karaoke" selected>Pro Karaoke (word highlight)</option>
+              <option value="viral_pop_anton">Viral Pop — Anton</option>
+              <option value="viral_clean_montserrat">Viral Clean — Montserrat</option>
+              <option value="viral_soft_poppins">Viral Soft — Poppins</option>
+              <option value="viral_compact_barlow">Viral Compact — Barlow</option>
+              <option value="clean_bold_01">Clean Bold</option>
+              <option value="story_clean_01">Story Clean</option>
+            </select>
+          </label>
           <label class="field">
             <span class="fieldLabel">Font</span>
             <select class="fieldInput" id="evSubFont" onchange="evUpdateSubPreview()">
@@ -879,7 +831,7 @@
               <option value="Oswald">Oswald (Compact)</option>
               <option value="Impact">Impact (Punchy)</option>
               <option value="Arial Black">Arial Black (Heavy)</option>
-              <option value="Segoe UI Black">Segoe UI Black (Clean Bold)</option>
+              <option value="Segoe UI Black">Segoe UI Black (Bold)</option>
               <option value="Archivo Black">Archivo Black (Viral)</option>
               <option value="Teko">Teko (Tall)</option>
               <option value="Luckiest Guy">Luckiest Guy (Fun)</option>
@@ -888,42 +840,41 @@
             </select>
           </label>
           <label class="field">
-            <span class="fieldLabel">Font size: <strong id="evSubSizeVal">46</strong>px</span>
+            <span class="fieldLabel">Size: <strong id="evSubSizeVal">46</strong>px</span>
             <input type="range" id="evSubSize" min="24" max="120" value="46" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
           </label>
           <label class="field">
-            <span class="fieldLabel">🎨 Primary text color</span>
-            <div style="display:flex;gap:8px;align-items:center">
-              <input type="color" id="evSubColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSubPreview()">
-              <span style="font-size:12px;color:var(--text-muted)">Default word color</span>
+            <span class="fieldLabel">Color / Highlight</span>
+            <div class="inspColorRow">
+              <input type="color" id="evSubColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSubPreview()" title="Text color">
+              <input type="color" id="evSubHighlight" value="#ffff00" class="evColorPicker" oninput="evUpdateSubPreview()" title="Highlight color">
+              <span style="font-size:10px;color:var(--text-muted)">Text / Highlight</span>
             </div>
           </label>
           <label class="field">
-            <span class="fieldLabel">✨ Highlight color</span>
-            <div style="display:flex;gap:8px;align-items:center">
-              <input type="color" id="evSubHighlight" value="#ffff00" class="evColorPicker" oninput="evUpdateSubPreview()">
-              <span style="font-size:12px;color:var(--text-muted)">Current spoken word</span>
-            </div>
-          </label>
-          <label class="field">
-            <span class="fieldLabel">📍 Y Position (% from bottom): <strong id="evSubPosVal">15</strong>%</span>
+            <span class="fieldLabel">Y Pos: <strong id="evSubPosVal">15</strong>%</span>
             <input type="range" id="evSubPos" min="5" max="60" value="15" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
           </label>
           <label class="field">
-            <span class="fieldLabel">◎ Outline: <strong id="evSubOutlineVal">3</strong>px</span>
+            <span class="fieldLabel">X Pos: <strong id="evSubPosXVal">50</strong>%</span>
+            <input type="range" id="evSubPosX" min="5" max="95" value="50" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evSubPosXChange()">
+          </label>
+          <label class="field">
+            <span class="fieldLabel">Outline: <strong id="evSubOutlineVal">3</strong>px</span>
             <input type="range" id="evSubOutline" min="0" max="8" value="3" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
           </label>
         </div>
-        <div style="margin-top:10px;padding:10px;background:#000;border-radius:8px;text-align:center;min-height:60px;display:flex;align-items:center;justify-content:center" id="evSubStaticPreview">
+        <div class="inspSubPreview" id="evSubStaticPreview">
           <span id="evSubStaticText" style="font-family:'Bungee';font-size:28px;color:#fff;-webkit-text-stroke:2px #000">Preview subtitle</span>
         </div>
       </div>
-      <!-- Text Overlay Layers — editor shown when a layer is selected (JS-managed) -->
-      <div class="evSection" data-section-type="text-layers">
-        <div class="evSectionTitle">📝 Text Overlay Layers</div>
+
+      <!-- Text Overlay Layers -->
+      <div class="evSection" id="evSectionTextLayers" data-section-type="text-layers">
+        <div class="evSectionTitle">📝 Text Layers</div>
         <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evAddTextLayer()">+ Add Text</button>
-          <span style="font-size:11px;color:var(--text-muted)">Max 8 layers. Top item renders above lower item.</span>
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evAddTextLayer()">+ Add Layer</button>
+          <span style="font-size:11px;color:var(--text-muted)">Max 8 layers.</span>
         </div>
         <div id="evTextLayerList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
         <div id="evTextLayerEditor" style="display:none">
@@ -932,11 +883,10 @@
             <span style="font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;flex:0 0 auto">Preset:</span>
             <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('default')">Default</button>
             <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('bold_white')">Bold White</button>
-            <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('yellow_sub')">Yellow Subtitle</button>
+            <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('yellow_sub')">Yellow Sub</button>
             <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('meme')">Meme</button>
           </div>
-          <!-- Group: Text -->
-          <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Text</div>
+          <div class="inspSubGroupLabel">Text</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
             <label class="field" style="grid-column:1 / -1">
               <span class="fieldLabel">Content</span>
@@ -951,7 +901,7 @@
                 <option value="Oswald">Oswald (Compact)</option>
                 <option value="Impact">Impact (Punchy)</option>
                 <option value="Arial Black">Arial Black (Heavy)</option>
-                <option value="Segoe UI Black">Segoe UI Black (Clean Bold)</option>
+                <option value="Segoe UI Black">Segoe UI Black (Bold)</option>
                 <option value="Archivo Black">Archivo Black (Viral)</option>
                 <option value="Teko">Teko (Tall)</option>
                 <option value="Luckiest Guy">Luckiest Guy (Fun)</option>
@@ -960,14 +910,14 @@
               </select>
             </label>
             <label class="field">
-              <span class="fieldLabel">Font size</span>
+              <span class="fieldLabel">Size</span>
               <input class="fieldInput" type="number" id="evTxtSize" min="12" max="300" value="48" oninput="evUpdateSelectedTextLayer()">
             </label>
             <label class="field">
               <span class="fieldLabel">Color</span>
               <input type="color" id="evTxtColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
             </label>
-            <div style="display:none"><!-- alignment field hidden: stored but has no render effect yet -->
+            <div style="display:none">
               <label class="field">
                 <span class="fieldLabel">Alignment</span>
                 <select class="fieldInput" id="evTxtAlign" onchange="evUpdateSelectedTextLayer()">
@@ -982,20 +932,18 @@
               <span style="font-size:12px;color:var(--text)">Bold</span>
             </label>
           </div>
-          <!-- Group: Timing -->
-          <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Timing</div>
+          <div class="inspSubGroupLabel">Timing</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
             <label class="field">
-              <span class="fieldLabel">Start time (s)</span>
+              <span class="fieldLabel">Start (s)</span>
               <input class="fieldInput" type="number" id="evTxtStartTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
             </label>
             <label class="field">
-              <span class="fieldLabel">End time (s, 0=full)</span>
+              <span class="fieldLabel">End (s, 0=full)</span>
               <input class="fieldInput" type="number" id="evTxtEndTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
             </label>
           </div>
-          <!-- Group: Position -->
-          <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Position</div>
+          <div class="inspSubGroupLabel">Position</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
             <label class="field">
               <span class="fieldLabel">Preset</span>
@@ -1025,8 +973,7 @@
               <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="evSetLayerX(95)">Right</button>
             </div>
           </div>
-          <!-- Group: Style -->
-          <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Style</div>
+          <div class="inspSubGroupLabel">Style</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <label style="display:flex;align-items:center;gap:8px">
               <input type="checkbox" id="evTxtOutlineEnabled" checked onchange="evUpdateSelectedTextLayer()">
@@ -1067,11 +1014,139 @@
           </div>
         </div>
       </div>
+
+      <!-- ══ AUDIO (collapsed) ════════════════════════════════ -->
+      <div class="inspCollapsedGroup">
+        <div class="inspGroupHdr" id="inspGroupAudioHdr" onclick="evToggleInspGroup('audio')">
+          <span>🔊 Audio</span>
+          <span id="inspGroupAudioArrow" class="inspGroupArrow">▸</span>
+        </div>
+        <div class="inspGroupBody" id="inspGroupAudioBody">
+          <div class="evSection" id="evSectionVolume" data-section-type="volume">
+            <div class="evSectionTitle">Volume</div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <input type="range" id="evVolume" min="0" max="200" value="100" step="1" style="flex:1;accent-color:#3b82f6" oninput="evVolumeSliderChange()">
+              <input class="fieldInput" type="number" id="evVolumeNum" min="0" max="200" value="100" step="5" style="width:68px;text-align:center;padding:6px 8px" oninput="evVolumeNumChange()">
+              <span style="color:var(--text-muted);font-size:12px">%</span>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(50)">50%</button>
+              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(80)">80%</button>
+              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(100)">100%</button>
+              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(120)">+20%</button>
+              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(150)">+50%</button>
+            </div>
+          </div>
+          <div class="evSection" data-section-type="bgm">
+            <div class="evSectionTitle">Background Music</div>
+            <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer;margin-bottom:10px">
+              <input type="checkbox" id="evBgmEnable" style="width:16px;height:16px;accent-color:#f59e0b" onchange="evToggleBgmFields()">
+              <span style="font-size:13px;color:var(--text)">Enable BGM</span>
+            </label>
+            <div id="evBgmFields" style="display:none;flex-direction:column;gap:8px">
+              <div style="display:flex;gap:8px;align-items:center">
+                <input class="fieldInput" id="evBgmPath" placeholder="No BGM file selected" readonly style="flex:1">
+                <button class="ghostButton" style="white-space:nowrap" onclick="evPickBgmFile()">Choose BGM</button>
+              </div>
+              <input id="ev_bgm_file_picker" type="file" accept="audio/*" style="display:none" onchange="evOnBgmPicked(event)">
+              <label class="field">
+                <span class="fieldLabel">BGM Volume (0.01–1.0)</span>
+                <input class="fieldInput" type="number" id="evBgmGain" value="0.18" min="0.01" max="1.0" step="0.01">
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ ADVANCED (collapsed) ═════════════════════════════ -->
+      <div class="inspCollapsedGroup">
+        <div class="inspGroupHdr" id="inspGroupAdvHdr" onclick="evToggleInspGroup('advanced')">
+          <span>⚙️ Advanced</span>
+          <span id="inspGroupAdvArrow" class="inspGroupArrow">▸</span>
+        </div>
+        <div class="inspGroupBody" id="inspGroupAdvBody">
+          <div class="evSection" data-section-type="transform">
+            <div class="evSectionTitle">Transform &amp; Enhance</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+              <label class="field"><span class="fieldLabel">Transform</span>
+                <select class="fieldInput" id="evTransformPreset">
+                  <option value="slight" selected>Slightly Different</option>
+                  <option value="strong">Strong Transform</option>
+                </select>
+              </label>
+              <label class="field"><span class="fieldLabel">Reframe</span>
+                <select class="fieldInput" id="evReframeMode">
+                  <option value="subject" selected>Subject (face/body)</option>
+                  <option value="motion">Motion (pixel diff)</option>
+                </select>
+              </label>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
+                <input type="checkbox" id="evAddSubtitle" checked style="width:16px;height:16px;accent-color:#3b82f6">
+                <span style="font-size:13px;color:var(--text)">💬 Auto subtitles (Whisper)</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
+                <input type="checkbox" id="evMotionCrop" checked style="width:16px;height:16px;accent-color:#3b82f6">
+                <span style="font-size:13px;color:var(--text)">🎯 Motion-aware crop</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
+                <input type="checkbox" id="evReupMode" style="width:16px;height:16px;accent-color:#8b5cf6">
+                <span style="font-size:13px;color:var(--text)">🔄 Reup Mode (color enhance)</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
+                <input type="checkbox" id="evCleanupTemp" checked style="width:16px;height:16px;accent-color:#10b981">
+                <span style="font-size:13px;color:var(--text)">🗑️ Clean temp files</span>
+              </label>
+            </div>
+          </div>
+          <div class="evSection" data-section-type="render-settings">
+            <div class="evSectionTitle">Render Options</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <label class="field"><span class="fieldLabel">Speed</span>
+                <select class="fieldInput" id="evPlaybackSpeed">
+                  <option value="1.0">1.0× (original)</option>
+                  <option value="1.05">1.05×</option>
+                  <option value="1.07" selected>1.07× (+7%)</option>
+                  <option value="1.1">1.1× (+10%)</option>
+                  <option value="1.15">1.15× (+15%)</option>
+                </select>
+              </label>
+              <label class="field"><span class="fieldLabel">Encoder</span>
+                <select class="fieldInput" id="evRenderDevice">
+                  <option value="auto" selected>Auto (GPU)</option>
+                  <option value="gpu">GPU (NVENC)</option>
+                  <option value="cpu">CPU only</option>
+                </select>
+              </label>
+              <label class="field"><span class="fieldLabel">FPS</span>
+                <select class="fieldInput" id="evOutputFps">
+                  <option value="30">30 fps</option>
+                  <option value="48">48 fps</option>
+                  <option value="60" selected>60 fps</option>
+                </select>
+              </label>
+              <label class="field"><span class="fieldLabel">Clip order</span>
+                <select class="fieldInput" id="evPartOrder">
+                  <option value="viral" selected>Best first</option>
+                  <option value="timeline">Timeline</option>
+                </select>
+              </label>
+              <label class="field"><span class="fieldLabel">Scale Y (%)</span>
+                <input class="fieldInput" type="number" id="evFrameScaleY" value="106" min="80" max="130">
+                <span class="inspHint">Vertical zoom (100=original)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div><!-- /evRightScroll.inspPaneBody -->
 
     <!-- Right panel footer -->
     <div class="evFooter">
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <div id="evReadinessBar" class="evReadinessBar"></div>
         <span id="evStatusLine" style="font-size:12px;color:var(--text-muted)">Preparing editor...</span>
         <span id="evStatusDetail" style="font-size:10px;color:var(--text-muted);opacity:.8"></span>
       </div>

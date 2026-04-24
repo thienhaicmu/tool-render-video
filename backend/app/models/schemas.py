@@ -155,6 +155,7 @@ class RenderRequest(BaseModel):
     sub_color: str = "#FFFFFF"
     sub_highlight: str = "#FFFF00"
     sub_outline: int = 3
+    sub_x_percent: float = 50.0
 
     # Frame / crop
     aspect_ratio: str = "3:4"

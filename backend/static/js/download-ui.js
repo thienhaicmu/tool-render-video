@@ -35,6 +35,15 @@ function getDownloadQueueItem(url) {
   return downloadQueueItems.find((item) => item.url === url) || null;
 }
 
+function getDownloadQueueItemById(id) {
+  return downloadQueueItems.find((item) => item.id === id) || null;
+}
+
+function _downloadFileName(pathValue) {
+  const clean = String(pathValue || '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || '';
+  return clean || String(pathValue || '').trim();
+}
+
 function parseDownloadLinks() {
   const raw = (qs('download_links_input')?.value || '');
   const lines = raw.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
@@ -150,6 +159,7 @@ function renderDownloadQueue() {
       const status = item.status || 'waiting';
       const retryDisabled = (status !== 'failed') || (currentDownloadJobStatus === 'running');
       const removeDisabled = status === 'downloading';
+      const canOpenInRender = status === 'done' && !!String(item.outputFile || '').trim();
       return `
         <div class="downloadQueueRow ${esc(status)}">
           <div class="downloadRowMain">
@@ -170,6 +180,7 @@ function renderDownloadQueue() {
             <div class="downloadRowUrl">${Math.round(Number(item.progressPercent || 0))}%</div>
           </div>
           <div class="downloadRowActions">
+            ${canOpenInRender ? `<button class="downloadActionBtn" type="button" onclick="openDownloadedVideoInRender('${encodeURIComponent(item.id)}')">Open in Render</button>` : ''}
             <button class="downloadActionBtn" type="button" onclick="retryDownloadItem('${encodeURIComponent(item.url)}')" ${retryDisabled ? 'disabled' : ''}>Retry</button>
             <button class="downloadActionBtn" type="button" onclick="removeDownloadItem('${encodeURIComponent(item.url)}')" ${removeDisabled ? 'disabled' : ''}>Remove</button>
           </div>
@@ -360,6 +371,42 @@ function removeDownloadItem(encodedUrl) {
   const url = decodeURIComponent(String(encodedUrl || ''));
   downloadQueueItems = downloadQueueItems.filter((item) => item.url !== url);
   renderDownloadQueue();
+}
+
+function openDownloadedVideoInRender(encodedItemId) {
+  const itemId = decodeURIComponent(String(encodedItemId || ''));
+  const item = getDownloadQueueItemById(itemId);
+  if (!item || String(item.status || '').toLowerCase() !== 'done') {
+    showToast('Downloaded file is not ready for rendering', 'info');
+    return;
+  }
+  const outputFile = String(item.outputFile || '').trim();
+  if (!outputFile) {
+    showToast('Downloaded file path is unavailable', 'error');
+    return;
+  }
+
+  const handoff = {
+    sourceType: 'local',
+    filePath: outputFile,
+    title: String(item.title || '').trim(),
+    origin: 'download',
+    sourceUrl: String(item.url || '').trim(),
+    timestamp: Date.now(),
+  };
+
+  setView('render');
+  if (qs('source_mode')) qs('source_mode').value = 'local';
+  if (typeof syncSourceModeUI === 'function') syncSourceModeUI();
+
+  _pendingLocalFile = null;
+  selectedLocalVideoPath = handoff.filePath;
+  if (qs('source_video_path')) qs('source_video_path').value = handoff.filePath;
+  if (qs('source_video_name')) qs('source_video_name').textContent = handoff.title || _downloadFileName(handoff.filePath) || 'Downloaded video';
+  if (typeof setRenderFlowState === 'function') setRenderFlowState('source', 'Downloaded video ready for rendering', { force: true });
+  if (typeof addEvent === 'function') addEvent(`Download -> Render ready: ${handoff.title || _downloadFileName(handoff.filePath)}`, 'render');
+  showToast('Downloaded video ready for rendering', 'success');
+  showToast('Select settings before starting render', 'info');
 }
 
 async function loadDownloadJobIntoQueue(jobId) {

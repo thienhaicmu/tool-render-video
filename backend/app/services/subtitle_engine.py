@@ -349,6 +349,7 @@ def srt_to_ass_bounce(
     highlight_per_word: bool = True,
     font_name: str = "Bungee",
     margin_v: int = 170,
+    x_percent: float = 50.0,
 ):
     ass_style, line_fx = _resolve_ass_style(
         subtitle_style,
@@ -357,6 +358,14 @@ def srt_to_ass_bounce(
         font_name=font_name,
         margin_v=margin_v,
     )
+    # Inject \pos(x,y) when subtitle is not centered (>0.5% off 50%).
+    # Uses PlayRes coordinates (1080×1440). libass scales to actual video size.
+    # Default x_percent=50 → no tag → backward-compatible with existing renders.
+    _pos_tag = ""
+    if abs(x_percent - 50.0) > 0.5:
+        _px = round(1080 * x_percent / 100)
+        _py = 1440 - margin_v
+        _pos_tag = "{\\pos(" + str(_px) + "," + str(_py) + ")}"
     header = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -383,7 +392,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         start_ass = _ass_time(parse_srt_timestamp(start_s))
         end_ass   = _ass_time(parse_srt_timestamp(end_s))
         text = " ".join(lines[2:]).replace("{", "(").replace("}", ")")
-        out.append(f"Dialogue: 0,{start_ass},{end_ass},Default,,0,0,0,,{line_fx}{text}\n")
+        out.append(f"Dialogue: 0,{start_ass},{end_ass},Default,,0,0,0,,{_pos_tag}{line_fx}{text}\n")
     Path(ass_path).write_text("".join(out), encoding="utf-8")
     return ass_path
 
@@ -416,6 +425,7 @@ def srt_to_ass_karaoke(
     back_color: str = "&H90000000",         # semi-transparent shadow
     outline_size: int = 3,
     shadow_size: int = 1,
+    x_percent: float = 50.0,
 ):
     """Pro karaoke-style subtitle.
 
@@ -459,6 +469,13 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
+    # Inject \pos(x,y) when subtitle is not centered. Default 50 → no tag.
+    _pos_tag = ""
+    if abs(x_percent - 50.0) > 0.5:
+        _px = round(1080 * x_percent / 100)
+        _py = 1440 - margin_v
+        _pos_tag = "{\\pos(" + str(_px) + "," + str(_py) + ")}"
+
     out = [header]
     for group in groups:
         g_start = group[0]["start"]
@@ -474,7 +491,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = " ".join(parts)
         out.append(
             f"Dialogue: 0,{_ass_time(g_start)},{_ass_time(g_end)},"
-            f"Default,,0,0,0,,{text}\n"
+            f"Default,,0,0,0,,{_pos_tag}{text}\n"
         )
 
     Path(ass_path).write_text("".join(out), encoding="utf-8")

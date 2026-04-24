@@ -6,6 +6,7 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from app.services.db import list_jobs, get_job, list_job_parts
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR
@@ -359,6 +360,18 @@ def _compute_progress_summary(parts: list) -> dict:
         "overall_progress_percent":  overall,
         "parts_percent":             overall,         # backward compat alias
     }
+
+
+@router.get("/{job_id}/parts/{part_no}/stream")
+def stream_part(job_id: str, part_no: int):
+    parts = list_job_parts(job_id)
+    part = next((p for p in parts if int(p.get("part_no", -1)) == part_no), None)
+    if not part or not part.get("output_file"):
+        raise HTTPException(status_code=404, detail="Part or output file not found")
+    path = Path(part["output_file"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Output file not found on disk")
+    return FileResponse(str(path), media_type="video/mp4", headers={"Accept-Ranges": "bytes"})
 
 
 @router.websocket("/{job_id}/ws")

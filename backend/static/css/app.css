@@ -325,7 +325,15 @@
     .evLoadingOverlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: rgba(0,0,0,.85); z-index: 5; }
     /* Subtitle overlay: positioned inside frame, so % is relative to output frame */
     .evSubOverlay { position: absolute; left: 0; right: 0; display: flex; justify-content: center; pointer-events: none; z-index: 4; transition: bottom .15s; }
-    .evSubInner { text-align: center; line-height: 1.15; max-width: 90%; }
+    .evSubInner { text-align: center; line-height: 1.15; max-width: 90%; pointer-events: auto; cursor: grab; user-select: none; -webkit-user-select: none; border-radius: 3px; }
+    .evSubInner:hover { outline: 1px dashed rgba(255,255,255,.4); outline-offset: 6px; }
+    .evSubDragging { transition: none !important; }
+    .evSubDragging .evSubInner { cursor: grabbing; outline: 1px solid rgba(255,255,255,.65); outline-offset: 6px; }
+    #evSubDragLabel { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.76); color: #e2e8f0; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 10px; pointer-events: none; z-index: 10; display: none; white-space: nowrap; letter-spacing: .3px; }
+    #evSubDragLabel.visible { display: block; }
+    .evSubModeLabel { position: absolute; top: 8px; left: 8px; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 8px; pointer-events: none; z-index: 10; white-space: nowrap; letter-spacing: .3px; opacity: .82; transition: opacity .3s ease; }
+    .evSubModeLabel.demo { background: rgba(0,0,0,.55); color: rgba(200,200,200,.8); }
+    .evSubModeLabel.real { background: rgba(16,185,129,.18); color: #34d399; border: 1px solid rgba(52,211,153,.3); }
     .evSubWord { display: inline; }
     .evTextLayersOverlay { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
     .evTextLayerPreview { position: absolute; max-width: 88%; white-space: pre-wrap; line-height: 1.2; pointer-events: auto; cursor: grab; user-select: none; -webkit-user-select: none; border-radius: 2px; transition: opacity .15s, filter .12s; }
@@ -1784,6 +1792,8 @@
       height: 100%;
       border-radius: inherit;
       background: linear-gradient(90deg,#3b82f6,#10b981);
+      position: relative;
+      overflow: hidden;
       transition: width .45s cubic-bezier(.2,.8,.2,1);
     }
     .renderActiveMeta {
@@ -1928,6 +1938,208 @@
     .renderHistoryActions button:disabled {
       opacity: .45;
       cursor: not-allowed;
+    }
+    /* ── Render Output Panel ── */
+    .renderOutputPanel {
+      background: linear-gradient(160deg,#131f35 0%,#0f1827 100%);
+      border: 1px solid var(--card-border);
+      border-top-color: #253550;
+      border-radius: var(--radius);
+      padding: 16px 18px 18px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+      margin-top: 14px;
+    }
+    .renderOutputHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+      margin-bottom: 10px;
+    }
+    .renderOutputTitle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .renderOutputBadge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: rgba(59,130,246,.22);
+      color: #60a5fa;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .renderOutputActions {
+      display: flex;
+      gap: 6px;
+    }
+    .renderOutputBtn {
+      padding: 5px 10px;
+      font-size: 11px;
+    }
+    .renderOutputPath {
+      margin-bottom: 10px;
+      color: var(--text-muted);
+      font-size: 11px;
+      word-break: break-all;
+    }
+    .renderOutputEmpty {
+      padding: 14px 0 6px;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .renderOutputList {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .renderClipItem {
+      display: grid;
+      grid-template-columns: auto minmax(0,1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border: 1px solid rgba(148,163,184,.12);
+      border-radius: 10px;
+      background: rgba(15,23,42,.42);
+      transition: border-color .15s ease, background .15s ease;
+    }
+    .renderClipItem:hover {
+      border-color: rgba(96,165,250,.32);
+      background: rgba(30,41,59,.52);
+    }
+    .renderClipItem.failed {
+      border-color: rgba(248,113,113,.18);
+      background: rgba(127,29,29,.12);
+    }
+    .renderClipNum {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(59,130,246,.15);
+      color: #60a5fa;
+      font-size: 11px;
+      font-weight: 800;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+    .renderClipItem.failed .renderClipNum {
+      background: rgba(248,113,113,.15);
+      color: #f87171;
+    }
+    .renderClipInfo { min-width: 0; }
+    .renderClipName {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .renderClipMeta {
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .renderClipActions {
+      display: flex;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .renderClipActions button {
+      padding: 4px 9px;
+      font-size: 11px;
+      border-radius: 7px;
+      border: 1px solid rgba(148,163,184,.2);
+      background: rgba(30,41,59,.6);
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: background .15s ease, border-color .15s ease, color .15s ease;
+    }
+    .renderClipActions button:hover {
+      border-color: rgba(96,165,250,.4);
+      background: rgba(59,130,246,.15);
+      color: #93c5fd;
+    }
+    /* ── Clip Preview Modal ── */
+    .clipPreviewModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.72);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9000;
+      backdrop-filter: blur(4px);
+    }
+    .clipPreviewModal.hiddenView { display: none; }
+    .clipPreviewDialog {
+      background: #0f172a;
+      border: 1px solid rgba(148,163,184,.18);
+      border-radius: 14px;
+      padding: 0;
+      width: min(92vw, 680px);
+      box-shadow: 0 24px 60px rgba(0,0,0,.7);
+      overflow: hidden;
+    }
+    .clipPreviewTitleBar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    .clipPreviewName {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .clipPreviewClose {
+      background: rgba(255,255,255,.06);
+      border: none;
+      border-radius: 6px;
+      color: var(--text-muted);
+      width: 26px;
+      height: 26px;
+      cursor: pointer;
+      font-size: 13px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      transition: background .15s ease, color .15s ease;
+    }
+    .clipPreviewClose:hover { background: rgba(255,255,255,.12); color: var(--text); }
+    .clipPreviewVideo {
+      width: 100%;
+      max-height: 60vh;
+      background: #000;
+      display: block;
+    }
+    .clipPreviewFooter {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 10px 16px;
+      border-top: 1px solid rgba(255,255,255,.07);
     }
     .historyList {
       display: flex;
@@ -2116,7 +2328,24 @@
     }
     .abpProgressBar .progressValue {
       border-radius: 999px;
+      position: relative;
+      overflow: hidden;
       transition: width .55s cubic-bezier(.2,.8,.2,1);
+    }
+    .abpProgressBar .progressValue.isWaitingActive::after,
+    .renderActiveProgress > div.isWaitingActive::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(110deg, transparent 0%, rgba(255,255,255,.08) 35%, rgba(255,255,255,.18) 50%, rgba(255,255,255,.08) 65%, transparent 100%);
+      transform: translateX(-120%);
+      animation: waitingBarSweep 1.8s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes waitingBarSweep {
+      0% { transform: translateX(-120%); opacity: .2; }
+      20% { opacity: .45; }
+      100% { transform: translateX(120%); opacity: .2; }
     }
     .abpPct { font-size: 13px; }
     #job_stage_pill {
@@ -2368,6 +2597,217 @@
     .evAdvancedSettings .evSettingsGrid {
       margin-top: 10px;
     }
+
+    /* ── Phase 5: Selection UX ─────────────────────────────────── */
+    .evSubOverlay.evSubSelected { transition: none; }
+    .evSubOverlay.evSubSelected .evSubInner {
+      outline: 1.5px solid rgba(96,165,250,.85);
+      outline-offset: 8px;
+      filter: drop-shadow(0 0 8px rgba(96,165,250,.45));
+    }
+    #evSelLabel {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,.72);
+      color: #e2e8f0;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 10px;
+      pointer-events: none;
+      z-index: 11;
+      white-space: nowrap;
+      letter-spacing: .3px;
+      display: none;
+      border: 1px solid rgba(96,165,250,.25);
+    }
+    #evSelLabel.visible { display: block; }
+
+    /* ── Phase 5: Safe-area guides ─────────────────────────────── */
+    .evGuides {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+      display: none;
+    }
+    .evVideoFrame.showGuides .evGuides { display: block; }
+    .evGuides::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 0; bottom: 0;
+      width: 1px;
+      background: rgba(255,255,255,.1);
+      transform: translateX(-50%);
+    }
+    .evGuides::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0;
+      bottom: 33.3%;
+      height: 1px;
+      background: rgba(96,165,250,.22);
+    }
+    .evGuideToggle {
+      background: transparent;
+      border: 1px solid rgba(148,163,184,.18);
+      border-radius: 5px;
+      color: var(--text-muted);
+      font-size: 10px;
+      padding: 1px 7px;
+      cursor: pointer;
+      margin-left: auto;
+      transition: background .12s, color .12s, border-color .12s;
+    }
+    .evGuideToggle:hover { background: rgba(255,255,255,.06); color: var(--text); }
+    .evVideoFrame.showGuides ~ * .evGuideToggle,
+    .evAspectBar .evGuideToggle.active { color: #60a5fa; border-color: rgba(96,165,250,.38); }
+
+    /* ── Phase 5: Timeline layer tracks ────────────────────────── */
+    .evTimelineLayers {
+      position: absolute;
+      bottom: 3px;
+      left: 0; right: 0;
+      height: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      pointer-events: none;
+    }
+    .evLayerTrack {
+      position: relative;
+      flex: 1;
+      border-radius: 2px;
+      background: rgba(10,14,24,.6);
+    }
+    .evLayerTrackBar {
+      position: absolute;
+      top: 0; height: 100%;
+      background: rgba(96,165,250,.4);
+      border-radius: 2px;
+      min-width: 2px;
+    }
+    .evLayerTrackBar.selected {
+      background: #60a5fa;
+      box-shadow: 0 0 3px rgba(96,165,250,.6);
+    }
+
+    /* ── Phase 5: Text layer list ──────────────────────────────── */
+    .evLayerItem { transition: background .12s ease, border-color .12s ease; }
+    .evLayerItem:hover { background: rgba(30,58,138,.2); border-color: rgba(59,130,246,.3); }
+    .evLayerItem.active { background: rgba(30,58,138,.22); }
+    .evLayerVis {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      letter-spacing: .02em;
+    }
+    .evLayerVis.on  { background: rgba(16,185,129,.15); color: #34d399; }
+    .evLayerVis.off { background: rgba(100,116,139,.1); color: #64748b; }
+
+    /* ── Phase 5: Readiness bar ────────────────────────────────── */
+    .evReadinessBar {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-bottom: 3px;
+      min-height: 0;
+    }
+    .evReadinessPill {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .evReadinessPill.ok   { background: rgba(16,185,129,.12); color: #34d399; }
+    .evReadinessPill.warn { background: rgba(245,158,11,.12); color: #fbbf24; }
+    .evReadinessPill.err  { background: rgba(239,68,68,.12);  color: #f87171; }
+
+    /* ── Phase 5: Subtitle inspector mode row ──────────────────── */
+    .inspSubModeRow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 9px;
+      border-radius: 7px;
+      margin-bottom: 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .inspSubModeRow.demo    { background: rgba(100,116,139,.1); color: #94a3b8; }
+    .inspSubModeRow.real    { background: rgba(16,185,129,.1);  color: #34d399; }
+    .inspSubModeRow.loading { background: rgba(59,130,246,.08); color: #60a5fa; }
+
+    /* ── Phase 5: Micro-interactions ───────────────────────────── */
+    .evTinyBtn:hover  { background: rgba(59,130,246,.15); border-color: rgba(59,130,246,.35); color: #93c5fd; }
+    .evTinyBtn:active { background: rgba(59,130,246,.25); }
+    .evSection:focus-within { border-color: rgba(59,130,246,.22); }
+    .fieldInput:focus { outline: none; border-color: rgba(96,165,250,.55); box-shadow: 0 0 0 2px rgba(59,130,246,.12); }
+    input[type=range]::-webkit-slider-thumb { transition: box-shadow .12s ease; }
+    input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(59,130,246,.2); }
+
+    /* ── Inspector panel restructure (Phase 5 UX) ─────────── */
+    .inspContextBar {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: #60a5fa;
+      padding: 6px 14px 5px;
+      background: rgba(59,130,246,.07);
+      border-bottom: 1px solid rgba(59,130,246,.14);
+    }
+    .inspGroupSep {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-dim);
+      padding: 10px 14px 0;
+      border-top: 1px solid rgba(255,255,255,.06);
+      margin-top: 2px;
+    }
+    .inspCollapsedGroup { border-top: 1px solid rgba(255,255,255,.06); }
+    .inspGroupHdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      transition: background .12s, color .12s;
+      user-select: none;
+    }
+    .inspGroupHdr:hover { background: rgba(255,255,255,.04); color: var(--text); }
+    .inspGroupHdr.open  { color: var(--text); }
+    .inspGroupArrow { font-size: 9px; transition: transform .15s; display: inline-block; }
+    .inspGroupHdr.open .inspGroupArrow { transform: rotate(90deg); }
+    .inspGroupBody { display: none; }
+    .inspGroupBody.open { display: block; }
+
+    .inspColorRow { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .inspHint { font-size: 10px; color: var(--text-muted); margin-top: 2px; display: block; }
+    .inspActions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+    .inspMeta { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+    .inspSubPreview {
+      margin-top: 10px; padding: 10px; background: #000;
+      border-radius: 8px; text-align: center; min-height: 60px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .inspSubGroupLabel {
+      font-size: 10px; font-weight: 600; color: var(--accent);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; margin-top: 4px;
+    }
+
     .appBottomPanel {
       min-height: 0;
     }

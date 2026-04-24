@@ -4,6 +4,10 @@ let _ev = {
   videoReady: false, subAnimTimer: null, subWordIdx: 0, bgmPath: null,
   textLayers: [], selectedTextLayer: 0,
   sourceMode: null, sourceUrl: null,
+  subXPercent: 50,
+  subtitleSegments: [],
+  subtitleMode: 'demo',
+  selectedObject: null,
 };
 const EV_MAX_TEXT_LAYERS = 8;
 const EV_TEXT_POS_TO_XY = {
@@ -17,6 +21,19 @@ const EV_TEXT_POS_TO_XY = {
 };
 let _evUiInitialized = false;
 let _evMoreCollapsed = true;
+
+// ── Aspect ratio helpers ──────────────────────────────────────────────────────
+function _evParseAspectRatio(value) {
+  const parts = String(value || '9:16').split(':').map(Number);
+  const w = parts[0] > 0 ? parts[0] : 9;
+  const h = parts[1] > 0 ? parts[1] : 16;
+  return [w, h];
+}
+
+function _evGetOutputHeight(aspectValue) {
+  const [w, h] = _evParseAspectRatio(aspectValue);
+  return Math.round(1080 * h / w);
+}
 
 function _evSetText(selector, text) {
   const el = document.querySelector(selector);
@@ -100,17 +117,10 @@ function _evEnsureGuidedSections() {
 
   const trimSec = pane.querySelector('[data-section-type="trim"]');
   const volSec = pane.querySelector('[data-section-type="volume"]');
-  const bgmSec = pane.querySelector('[data-section-type="bgm"]');
-  const fxSec = pane.querySelector('[data-section-type="transform"]');
-  const renderSec = pane.querySelector('[data-section-type="render-settings"]');
-  const subtitleSec = qs('inspSubtitlePane');
   const textSec = pane.querySelector('[data-section-type="text-layers"]');
 
   if (trimSec) trimSec.id = 'evSectionTrim';
   if (volSec) volSec.id = 'evSectionVolume';
-  if (bgmSec) bgmSec.classList.add('evMoreSettingItem');
-  if (fxSec) fxSec.classList.add('evMoreSettingItem');
-  if (renderSec) renderSec.classList.add('evMoreSettingItem');
 
   _evSetText('#evSectionTrim .evSectionTitle', 'Trim');
   _evSetText('#evSectionVolume .evSectionTitle', 'Volume');
@@ -126,54 +136,12 @@ function _evEnsureGuidedSections() {
   if (inLabel) inLabel.textContent = 'Start (sec)';
   if (outLabel) outLabel.textContent = 'End (sec)';
 
-  if (!qs('evSectionBasic')) {
-    const basic = document.createElement('div');
-    basic.id = 'evSectionBasic';
-    basic.className = 'evSection';
-    basic.innerHTML = `
-      <div class="evSectionTitle">Basic Render Settings</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <label class="field"><span class="fieldLabel">Aspect Ratio</span><select class="fieldInput" id="evAspectRatioQuick"></select></label>
-        <label class="field"><span class="fieldLabel">Render Profile</span><select class="fieldInput" id="evRenderProfileQuick"></select></label>
-      </div>`;
-    volSec?.insertAdjacentElement('afterend', basic);
-    const mainAspect = qs('evAspectRatio');
-    const mainProfile = qs('evRenderProfile');
-    const qAspect = qs('evAspectRatioQuick');
-    const qProfile = qs('evRenderProfileQuick');
-    if (mainAspect && qAspect) {
-      qAspect.innerHTML = mainAspect.innerHTML;
-      qAspect.value = mainAspect.value;
-      qAspect.addEventListener('change', () => evSyncQuickSetting('aspect'));
-      mainAspect.addEventListener('change', () => evSyncQuickSetting('aspect', 'main'));
-    }
-    if (mainProfile && qProfile) {
-      qProfile.innerHTML = mainProfile.innerHTML;
-      qProfile.value = mainProfile.value;
-      qProfile.addEventListener('change', () => evSyncQuickSetting('profile'));
-      mainProfile.addEventListener('change', () => evSyncQuickSetting('profile', 'main'));
-    }
-  }
-
-  if (!qs('evSectionMoreSettings')) {
-    const header = document.createElement('div');
-    header.id = 'evSectionMoreSettings';
-    header.className = 'evSection evSectionCollapsible isCollapsed';
-    header.innerHTML = `
-      <div class="evSectionTitle" style="cursor:pointer" onclick="evToggleMoreSettings()">More Settings</div>
-      <div class="evCollapseSummary" id="evSummaryMoreSettings">Optional settings</div>`;
-    qs('evSectionBasic')?.insertAdjacentElement('afterend', header);
-  }
-
-  _evEnsureSectionCollapse('inspSubtitlePane', 'evSummarySubtitle', 'Default subtitle style');
-  if (subtitleSec) subtitleSec.classList.add('isCollapsed');
   if (textSec) {
     textSec.id = 'evSectionTextLayers';
     _evEnsureSectionCollapse('evSectionTextLayers', 'evSummaryTextLayers', 'No text layers added');
     textSec.classList.add('isCollapsed');
   }
 
-  document.querySelectorAll('.evMoreSettingItem').forEach((el) => el.classList.add('hiddenView'));
   _evUiInitialized = true;
 }
 
@@ -238,6 +206,7 @@ function evSetLayerX(val) {
 function evSelectTextLayer(index) {
   if (index < 0 || index >= _ev.textLayers.length) return;
   _ev.selectedTextLayer = index;
+  _evSetSelectedObject('text_' + index);
   evRenderTextLayerList();
   evRenderTextLayerPreview();
   _evFlashSelectedLayer();
@@ -288,6 +257,7 @@ function evRenderTextLayerList() {
     return;
   }
   const selected = _ev.selectedTextLayer;
+  const _tlNow = Number(qs('evVideo')?.currentTime || 0);
   box.innerHTML = _ev.textLayers.map((layer, i) => {
     const name = String(layer.text || '').trim() || '(empty)';
     const pos = String(layer.position || 'bottom-center');
@@ -296,10 +266,13 @@ function evRenderTextLayerList() {
     const st = Number(layer.start_time || 0);
     const et = Number(layer.end_time || 0);
     const timing = et > 0 ? `${st.toFixed(1)}s→${et.toFixed(1)}s` : `${st.toFixed(1)}s→end`;
+    const isVis = _tlNow >= st && (et === 0 || _tlNow < et);
     return `<div class="evLayerItem ${selected===i?'active':''}">
+      <span class="evLayerVis ${isVis?'on':'off'}">${isVis?'VIS':'HID'}</span>
       <button class="evTinyBtn" onclick="evSelectTextLayer(${i})" style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i+1}. ${esc(name)} <span style="opacity:.7">• ${esc(pos)} (${xp.toFixed(0)}%,${yp.toFixed(0)}%) • ${timing}</span></button>
-      <button class="evTinyBtn" onclick="evMoveTextLayer(${i},-1)" title="Move forward (render on top)">↑ Forward</button>
-      <button class="evTinyBtn" onclick="evMoveTextLayer(${i},1)" title="Move behind (render below)">↓ Behind</button>
+      <button class="evTinyBtn" onclick="evDuplicateTextLayer(${i})" title="Duplicate">⧉</button>
+      <button class="evTinyBtn" onclick="evMoveTextLayer(${i},-1)" title="Move up">↑</button>
+      <button class="evTinyBtn" onclick="evMoveTextLayer(${i},1)" title="Move down">↓</button>
       <button class="evTinyBtn" onclick="evDeleteTextLayer(${i})">✕</button>
     </div>`;
   }).join('');
@@ -426,6 +399,7 @@ function evTextLayerDragStart(e, layerId) {
   if (layerIdx < 0) return;
   const layer = _ev.textLayers[layerIdx];
   _ev.selectedTextLayer = layerIdx;
+  _evSetSelectedObject('text_' + layerIdx);
   evRenderTextLayerList();
   evRenderTextLayerPreview();
   const overlay = qs('evTextLayersOverlay');
@@ -494,9 +468,9 @@ function _evUpdateInfoStrip() {
 /* ── Open editor view ─────────────────────────────────────── */
 async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   _evEnsureGuidedSections();
-  if (!_evMoreCollapsed) evToggleMoreSettings();
-  qs('inspSubtitlePane')?.classList.add('isCollapsed');
   qs('evSectionTextLayers')?.classList.add('isCollapsed');
+  _ev.selectedObject = null;
+  _evUpdateSelLabel();
   _evSyncQuickControlsFromMain();
   _ev.sessionId = null;
   _ev.exportDir = null;
@@ -505,6 +479,11 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   _ev.videoReady = false;
   _ev.sourceMode = sourceMode;
   _ev.sourceUrl = urlOrPath;
+  _ev.subXPercent = 50;
+  _ev.subtitleSegments = [];
+  _ev.subtitleMode = 'demo';
+  if (qs('evSubPosX'))    qs('evSubPosX').value       = 50;
+  if (qs('evSubPosXVal')) qs('evSubPosXVal').textContent = 50;
 
   // Init editor settings with defaults (editor is source of truth for all render params)
 
@@ -523,6 +502,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   _evUpdateInfoStrip();
   _evResetTrimUI();
   evUpdateSubPreview();
+  _evUpdateSubLabel();
   evInitTextLayers();
   evUpdateAspectRatio();  // apply aspect ratio frame from dropdown
 
@@ -543,6 +523,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
     if (pendingPayload) pendingPayload.edit_session_id = pd.session_id;
     _evSetDuration(_ev.duration);
     _evUpdateInfoStrip();
+    _evUpdateReadiness();
 
     // Always use backend preview endpoint (H.264 transcoded, range-supported)
     _evLoadVideo(`/api/render/preview-video/${pd.session_id}`);
@@ -559,9 +540,9 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
 /* ── Open editor with pre-downloaded YouTube session ──────── */
 function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   _evEnsureGuidedSections();
-  if (!_evMoreCollapsed) evToggleMoreSettings();
-  qs('inspSubtitlePane')?.classList.add('isCollapsed');
   qs('evSectionTextLayers')?.classList.add('isCollapsed');
+  _ev.selectedObject = null;
+  _evUpdateSelLabel();
   _evSyncQuickControlsFromMain();
   _ev.sessionId = pd.session_id;
   _ev.exportDir = pd.export_dir || null;
@@ -569,6 +550,11 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   _ev.pendingPayload = pendingPayload;
   _ev.videoReady = false;
   _ev.sourceMode = _ev.sourceMode || 'youtube';
+  _ev.subXPercent = 50;
+  _ev.subtitleSegments = [];
+  _ev.subtitleMode = 'demo';
+  if (qs('evSubPosX'))    qs('evSubPosX').value       = 50;
+  if (qs('evSubPosXVal')) qs('evSubPosXVal').textContent = 50;
   _ev.sourceUrl = _ev.sourceUrl || urlOrPath;
 
   setView('editor');
@@ -589,11 +575,13 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   _evUpdateInfoStrip();
   _evResetTrimUI();
   evUpdateSubPreview();
+  _evUpdateSubLabel();
   evInitTextLayers();
   evUpdateAspectRatio();
 
   if (pendingPayload) pendingPayload.edit_session_id = pd.session_id;
   _evSetDuration(_ev.duration);
+  _evUpdateReadiness();
   _evLoadVideo(`/api/render/preview-video/${pd.session_id}`);
 
   // Restore start button
@@ -615,8 +603,11 @@ function _evLoadVideo(src) {
     qs('evSubOverlay').style.display = 'flex';
     // Sync subtitle overlay and start animation
     _evSyncSubOverlay();
+    _evUpdateSubLabel();
     requestAnimationFrame(() => { _evStartSubAnim(); });
     video.addEventListener('timeupdate', _evOnTimeUpdate);
+    // Fetch real transcript in background — updates overlay once ready
+    if (_ev.sessionId) _evFetchTranscript(_ev.sessionId);
   };
   video.onerror = () => {
     qs('evLoadingText').textContent = 'Preview unavailable';
@@ -625,11 +616,12 @@ function _evLoadVideo(src) {
     qs('evStartBtn').disabled = false;
     qs('evStatusLine').textContent = 'Preview codec is unsupported, but render settings still work.';
     // Show subtitle preview even without video (over loading overlay)
-    qs('evSubOverlay').style.display = 'flex';
-    qs('evSubOverlay').style.left = '0';
-    qs('evSubOverlay').style.right = '0';
-    qs('evSubOverlay').style.bottom = '15%';
-    qs('evSubOverlay').style.zIndex = '6'; // above loading overlay
+    qs('evSubOverlay').style.display   = 'flex';
+    qs('evSubOverlay').style.left      = `${_ev.subXPercent || 50}%`;
+    qs('evSubOverlay').style.right     = 'auto';
+    qs('evSubOverlay').style.bottom    = '15%';
+    qs('evSubOverlay').style.transform = 'translateX(-50%)';
+    qs('evSubOverlay').style.zIndex    = '6'; // above loading overlay
     _evStartSubAnim();
   };
 }
@@ -641,6 +633,8 @@ function _evOnTimeUpdate() {
   qs('evTimelineProgress').style.width = `${pct}%`;
   qs('evCurTime').textContent = _fmtTime(video.currentTime);
   evRenderTextLayerPreview();
+  if (_ev.subtitleMode === 'real') _evSyncSubTime(video.currentTime);
+  if (_ev.textLayers.length) _evRenderTimelineLayers();
 }
 
 function evSeekClick(e) {
@@ -754,6 +748,86 @@ function evSetVolume(val) {
 /* ── Subtitle live preview ────────────────────────────────── */
 const _EV_DEMO_WORDS = ['POV:', 'never', 'gonna', 'give', 'you', 'up', '🔥'];
 
+function _evUpdateSubLabel() {
+  const label = qs('evSubModeLabel');
+  const modeRow = qs('inspSubModeRow');
+  if (label) {
+    if (_ev.subtitleMode === 'real') {
+      label.textContent = 'Real subtitle preview';
+      label.className = 'evSubModeLabel real';
+    } else {
+      label.textContent = 'Preview sample';
+      label.className = 'evSubModeLabel demo';
+    }
+  }
+  if (modeRow) {
+    if (_ev.subtitleMode === 'real') {
+      modeRow.textContent = 'Real subtitle preview · from Whisper transcript';
+      modeRow.className = 'inspSubModeRow real';
+    } else {
+      modeRow.textContent = 'Preview sample · AI subtitle will be generated on render';
+      modeRow.className = 'inspSubModeRow demo';
+    }
+  }
+  _evUpdateReadiness();
+}
+
+/* Build word spans for evSubInner using current subtitle style settings. */
+function _evBuildWordSpans(words, activeIdx, baseStyle, color, highlight) {
+  return words.map((w, i) =>
+    `<span style="${baseStyle};color:${i === activeIdx ? highlight : color}">${w} </span>`
+  ).join('');
+}
+
+/* Find the active subtitle segment for currentTime and render it. */
+function _evSyncSubTime(currentTime) {
+  if (!_ev.subtitleSegments.length) return;
+  const inner = qs('evSubInner');
+  if (!inner) return;
+
+  const font      = qs('evSubFont')?.value || 'Bungee';
+  const size      = Number(qs('evSubSize')?.value || 46);
+  const color     = qs('evSubColor')?.value || '#FFFFFF';
+  const highlight = qs('evSubHighlight')?.value || '#FFFF00';
+  const outline   = Number(qs('evSubOutline')?.value || 3);
+  const strokeCSS = `${outline}px`;
+  const shadowCSS = `-${outline}px -${outline}px 0 #000,${outline}px -${outline}px 0 #000,-${outline}px ${outline}px 0 #000,${outline}px ${outline}px 0 #000`;
+  const baseStyle = `font-family:'${font}',sans-serif;font-size:clamp(12px,3vw,${Math.round(size * 0.65)}px);-webkit-text-stroke:${strokeCSS} #000;text-shadow:${shadowCSS}`;
+
+  const seg = _ev.subtitleSegments.find(s => currentTime >= s.start && currentTime < s.end);
+  if (!seg) {
+    inner.innerHTML = '';
+    return;
+  }
+
+  const words = String(seg.text || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) { inner.innerHTML = ''; return; }
+
+  const dur = Math.max(0.01, seg.end - seg.start);
+  const wordIdx = Math.min(words.length - 1, Math.floor(((currentTime - seg.start) / dur) * words.length));
+  inner.innerHTML = _evBuildWordSpans(words, wordIdx, baseStyle, color, highlight);
+}
+
+/* Fetch transcript from backend after video loads. Non-blocking — falls back to demo on any error. */
+async function _evFetchTranscript(sessionId) {
+  if (!sessionId) return;
+  try {
+    const resp = await fetch(`/api/render/preview-transcript/${encodeURIComponent(sessionId)}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const segs = Array.isArray(data?.segments) ? data.segments.filter(s => s && s.text) : [];
+    if (!segs.length) return;
+    _ev.subtitleSegments = segs;
+    _ev.subtitleMode = 'real';
+    if (_ev.subAnimTimer) { clearInterval(_ev.subAnimTimer); _ev.subAnimTimer = null; }
+    _evUpdateSubLabel();
+    const vid = qs('evVideo');
+    if (vid) _evSyncSubTime(vid.currentTime || 0);
+  } catch (_) {
+    // silently ignore — demo fallback stays active
+  }
+}
+
 /* ── Sync subtitle overlay position ────────────────────────── */
 /* Overlay is inside .evVideoFrame which has exact aspect ratio  */
 /* so bottom: X% is relative to frame height == output height   */
@@ -761,9 +835,72 @@ function _evSyncSubOverlay() {
   const overlay = qs('evSubOverlay');
   if (!overlay) return;
   const posY = Number(qs('evSubPos')?.value || 15);
-  overlay.style.left   = '0';
-  overlay.style.right  = '0';
-  overlay.style.bottom = `${posY}%`;
+  const posX = Math.max(5, Math.min(95, Number(qs('evSubPosX')?.value ?? _ev.subXPercent ?? 50)));
+  _ev.subXPercent     = posX;
+  overlay.style.left      = `${posX}%`;
+  overlay.style.right     = 'auto';
+  overlay.style.bottom    = `${posY}%`;
+  overlay.style.transform = 'translateX(-50%)';
+}
+
+/* ── Subtitle overlay: 2D drag (vertical + horizontal) ───────── */
+function evSubOverlayDragStart(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  _evSetSelectedObject('subtitle');
+  const overlay   = qs('evSubOverlay');
+  const frame     = qs('evVideoFrame');
+  const sliderY   = qs('evSubPos');
+  const sliderX   = qs('evSubPosX');
+  const posValElY = qs('evSubPosVal');
+  const posValElX = qs('evSubPosXVal');
+  if (!overlay || !frame || !sliderY) return;
+
+  overlay.classList.add('evSubDragging');
+  const rect  = frame.getBoundingClientRect();
+  const yMin  = Number(sliderY.min || 5);
+  const yMax  = Number(sliderY.max || 60);
+  const X_MIN = 5, X_MAX = 95;
+
+  function onMove(me) {
+    const relX     = me.clientX - rect.left;
+    const relY     = me.clientY - rect.top;
+    const rawX     = Math.round((relX / rect.width)  * 100);
+    const rawY     = Math.round(((rect.height - relY) / rect.height) * 100);
+    const clampedX = Math.max(X_MIN, Math.min(X_MAX, rawX));
+    const clampedY = Math.max(yMin,  Math.min(yMax,  rawY));
+    _ev.subXPercent = clampedX;
+    if (sliderX)   sliderX.value         = clampedX;
+    if (posValElX) posValElX.textContent = clampedX;
+    sliderY.value         = clampedY;
+    if (posValElY) posValElY.textContent = clampedY;
+    overlay.style.left      = `${clampedX}%`;
+    overlay.style.right     = 'auto';
+    overlay.style.bottom    = `${clampedY}%`;
+    overlay.style.transform = 'translateX(-50%)';
+    const label = qs('evSubDragLabel');
+    if (label) { label.textContent = `Subtitle: ${clampedX}%, ${clampedY}%`; label.classList.add('visible'); }
+  }
+
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup',   onUp);
+    overlay.classList.remove('evSubDragging');
+    evUpdateSubPreview();
+    const label = qs('evSubDragLabel');
+    if (label) setTimeout(() => label.classList.remove('visible'), 800);
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup',   onUp);
+}
+
+function evSubPosXChange() {
+  const x = Math.max(5, Math.min(95, Number(qs('evSubPosX')?.value || 50)));
+  _ev.subXPercent = x;
+  const el = qs('evSubPosXVal');
+  if (el) el.textContent = x;
+  _evSyncSubOverlay();
 }
 
 /* ── Update aspect ratio frame when dropdown changes ─────────── */
@@ -796,37 +933,153 @@ function evUpdateSubPreview() {
   // Sync overlay position to actual video frame
   _evSyncSubOverlay();
 
-  // Rebuild demo words with current style
+  // Rebuild word spans with current style
   const strokeCSS = `${outline}px`;
   const shadowCSS = `-${outline}px -${outline}px 0 #000, ${outline}px -${outline}px 0 #000, -${outline}px ${outline}px 0 #000, ${outline}px ${outline}px 0 #000`;
   const baseStyle = `font-family:'${font}',sans-serif;font-size:clamp(12px,3vw,${Math.round(size*0.65)}px);-webkit-text-stroke:${strokeCSS} #000;text-shadow:${shadowCSS}`;
 
-  const words = _EV_DEMO_WORDS;
   const inner = qs('evSubInner');
-  inner.innerHTML = words.map((w, i) =>
-    `<span style="${baseStyle};color:${i === _ev.subWordIdx ? highlight : color}">${w} </span>`
-  ).join('');
+  if (_ev.subtitleMode === 'real') {
+    // Re-render current real subtitle with updated style settings
+    const vid = qs('evVideo');
+    if (vid) _evSyncSubTime(vid.currentTime || 0);
+  } else {
+    const words = _EV_DEMO_WORDS;
+    inner.innerHTML = _evBuildWordSpans(words, _ev.subWordIdx, baseStyle, color, highlight);
+  }
 
-  // Static preview box
+  // Static preview box — always uses demo words as a style reference sample
   const sp = qs('evSubStaticText');
   sp.style.fontFamily = `'${font}',sans-serif`;
   sp.style.fontSize = `${Math.round(size*0.6)}px`;
   sp.style.color = color;
   sp.style.webkitTextStroke = `${outline}px #000`;
   sp.style.textShadow = shadowCSS;
-  const half = Math.floor(words.length/2);
-  sp.innerHTML = words.map((w, i) =>
+  const demoWords = _EV_DEMO_WORDS;
+  const half = Math.floor(demoWords.length / 2);
+  sp.innerHTML = demoWords.map((w, i) =>
     `<span style="color:${i===half?highlight:color}">${w} </span>`
   ).join('');
 }
 
 function _evStartSubAnim() {
+  if (_ev.subtitleMode === 'real') return;
   if (_ev.subAnimTimer) clearInterval(_ev.subAnimTimer);
   _ev.subWordIdx = 0;
   _ev.subAnimTimer = setInterval(() => {
+    if (_ev.subtitleMode === 'real') {
+      clearInterval(_ev.subAnimTimer);
+      _ev.subAnimTimer = null;
+      return;
+    }
     _ev.subWordIdx = (_ev.subWordIdx + 1) % _EV_DEMO_WORDS.length;
     evUpdateSubPreview();
   }, 600);
+}
+
+/* ── Phase 5: Guide toggle ────────────────────────────────── */
+function evToggleGuides() {
+  const frame = qs('evVideoFrame');
+  const btn = qs('evGuideToggleBtn');
+  if (!frame) return;
+  frame.classList.toggle('showGuides');
+  if (btn) btn.classList.toggle('active', frame.classList.contains('showGuides'));
+}
+
+/* ── Phase 5: Selection system ───────────────────────────── */
+function _evSetSelectedObject(obj) {
+  _ev.selectedObject = obj;
+  const overlay = qs('evSubOverlay');
+  if (overlay) overlay.classList.toggle('evSubSelected', obj === 'subtitle');
+  _evUpdateSelLabel();
+}
+
+function _evUpdateSelLabel() {
+  const label = qs('evSelLabel');
+  const ctxBar = qs('inspContextBar');
+  if (!_ev.selectedObject) {
+    if (label) label.classList.remove('visible');
+    if (ctxBar) ctxBar.textContent = 'Editor';
+    return;
+  }
+  if (_ev.selectedObject === 'subtitle') {
+    if (label) label.textContent = 'Subtitle';
+    if (ctxBar) ctxBar.textContent = 'Editing: Subtitle';
+  } else if (String(_ev.selectedObject).startsWith('text_')) {
+    const idx = parseInt(_ev.selectedObject.replace('text_', ''), 10);
+    const layer = _ev.textLayers[idx];
+    const name = layer ? (String(layer.text || '').trim() || `Layer ${idx + 1}`) : `Layer ${idx + 1}`;
+    if (label) label.textContent = `Text: ${name.length > 18 ? name.slice(0, 18) + '…' : name}`;
+    if (ctxBar) ctxBar.textContent = `Editing: Text Layer ${idx + 1}`;
+  }
+  if (label) label.classList.add('visible');
+}
+
+/* ── Phase 5: Duplicate text layer ──────────────────────── */
+function evDuplicateTextLayer(index) {
+  if ((_ev.textLayers || []).length >= EV_MAX_TEXT_LAYERS) {
+    showToast(`Max text layers (${EV_MAX_TEXT_LAYERS}) reached`, 'info');
+    return;
+  }
+  const src = _ev.textLayers[index];
+  if (!src) return;
+  const copy = JSON.parse(JSON.stringify(src));
+  copy.id = `txt_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+  copy.x_percent = Math.min(100, Number(copy.x_percent || 50) + 3);
+  copy.y_percent = Math.min(100, Number(copy.y_percent || 90) + 3);
+  _ev.textLayers.splice(index + 1, 0, copy);
+  _ev.textLayers.forEach((l, i) => l.order = i);
+  _ev.selectedTextLayer = index + 1;
+  evRenderTextLayerList();
+  evRenderTextLayerPreview();
+}
+
+/* ── Phase 5: Timeline layer tracks ─────────────────────── */
+function _evRenderTimelineLayers() {
+  const container = qs('evTimelineLayers');
+  if (!container) return;
+  if (!_ev.textLayers.length || !_ev.duration) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = _ev.textLayers.map((l, i) => {
+    const dur = _ev.duration;
+    const st = Math.max(0, Number(l.start_time || 0));
+    const et = Number(l.end_time || 0);
+    const left = (st / dur) * 100;
+    const width = et > 0 ? Math.max(0.5, ((et - st) / dur) * 100) : (100 - left);
+    const isSel = i === _ev.selectedTextLayer;
+    return `<div class="evLayerTrack"><div class="evLayerTrackBar${isSel ? ' selected' : ''}" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%"></div></div>`;
+  }).join('');
+}
+
+/* ── Phase 5: Readiness bar ──────────────────────────────── */
+function _evUpdateReadiness() {
+  const bar = qs('evReadinessBar');
+  if (!bar) return;
+  const payload = _ev.pendingPayload;
+  const hasSource = !!(_ev.sourceMode && _ev.sourceUrl);
+  const hasSession = !!_ev.sessionId;
+  const hasOutput = !!(_ev.exportDir || payload?.output_dir);
+  const pills = [];
+  if (hasSource) pills.push('<span class="evReadinessPill ok">Source ✓</span>');
+  else pills.push('<span class="evReadinessPill warn">No source</span>');
+  if (hasSession) pills.push('<span class="evReadinessPill ok">Session ✓</span>');
+  else pills.push('<span class="evReadinessPill warn">Session…</span>');
+  if (hasOutput) pills.push('<span class="evReadinessPill ok">Output ✓</span>');
+  else pills.push('<span class="evReadinessPill err">No output</span>');
+  bar.innerHTML = pills.join('');
+}
+
+/* ── Inspector group collapse ────────────────────────────── */
+function evToggleInspGroup(group) {
+  const bodyId = group === 'audio' ? 'inspGroupAudioBody' : 'inspGroupAdvBody';
+  const hdrId  = group === 'audio' ? 'inspGroupAudioHdr'  : 'inspGroupAdvHdr';
+  const body = qs(bodyId);
+  const hdr  = qs(hdrId);
+  if (!body) return;
+  const isOpen = body.classList.toggle('open');
+  if (hdr) hdr.classList.toggle('open', isOpen);
 }
 
 /* ── Cancel / close ───────────────────────────────────────── */
@@ -891,8 +1144,14 @@ function evApplyStylePreset(name) {
 // ── RENDER SUBMIT ─────────────────────────────────────────────────────────────
 async function startRenderFromEditor() {
   const payload = _ev.pendingPayload;
-  setRenderFlowState('rendering', 'Submitting render request');
-  if (!payload) { addEvent('Missing render payload.', 'render'); return; }
+  setRenderFlowState('configure', 'Submitting render request', { force: true });
+  if (!payload) {
+    const msg = 'Render could not start';
+    addEvent('Missing render payload.', 'render');
+    if (typeof showToast === 'function') showToast(msg, 'error');
+    setRenderFlowState('configure', msg, { force: true });
+    return;
+  }
 
   // Pre-submit validation
   if (!_ev.sessionId) {
@@ -901,13 +1160,17 @@ async function startRenderFromEditor() {
     qs('evStatusLine').style.color = '#ef4444';
     addEvent(_noSessionMsg, 'render');
     if (typeof showToast === 'function') showToast(_noSessionMsg, 'error');
+    setRenderFlowState('configure', 'Render could not start', { force: true });
     return;
   }
   const invalidLayer = (_ev.textLayers || []).find(l => !String(l.text || '').trim());
   if (invalidLayer !== undefined) {
     const idx = (_ev.textLayers || []).indexOf(invalidLayer) + 1;
-    qs('evStatusLine').textContent = `Text layer #${idx} is empty. Add content or remove it.`;
+    const _layerMsg = `Text layer #${idx} is empty. Add content or remove it.`;
+    qs('evStatusLine').textContent = _layerMsg;
     qs('evStatusLine').style.color = '#ef4444';
+    if (typeof showToast === 'function') showToast(_layerMsg, 'error');
+    setRenderFlowState('configure', 'Render could not start', { force: true });
     return;
   }
 
@@ -931,8 +1194,10 @@ async function startRenderFromEditor() {
   payload.sub_highlight = qs('evSubHighlight').value;
   payload.sub_outline   = Number(qs('evSubOutline').value);
   const posY = Number(qs('evSubPos').value);
-  payload.sub_margin_v  = Math.round((posY / 100) * 1440 * 0.85);
-  payload.subtitle_style = 'pro_karaoke';
+  const _outputH = _evGetOutputHeight(qs('evAspectRatio')?.value);
+  payload.sub_margin_v   = Math.round((posY / 100) * _outputH);
+  payload.subtitle_style = qs('evSubStyle')?.value || 'pro_karaoke';
+  payload.sub_x_percent  = Math.max(5, Math.min(95, Number(qs('evSubPosX')?.value ?? _ev.subXPercent ?? 50)));
   // Editor mode: user expects subtitle on all exported parts.
   payload.subtitle_only_viral_high = false;
   payload.subtitle_viral_min_score = 0;
@@ -1020,9 +1285,12 @@ async function startRenderFromEditor() {
       raw = (_ev.exportDir || '').replace(/\\/g, '/').trim();
     }
     if (!raw) {
-      qs('evStatusLine').textContent = 'Output folder is not configured. Choose a channel or manual folder on the main screen, then re-open editor.';
+      const _outputMsg = 'Output folder is not configured. Choose a channel or manual folder on the main screen, then re-open editor.';
+      qs('evStatusLine').textContent = _outputMsg;
       qs('evStatusLine').style.color = '#ef4444';
       qs('evStartBtn').disabled = false;
+      if (typeof showToast === 'function') showToast('Please choose an output folder before rendering', 'error');
+      setRenderFlowState('configure', 'Render could not start', { force: true });
       return;
     }
     const leaf = raw.split('/').filter(Boolean).pop().toLowerCase();
@@ -1051,6 +1319,7 @@ async function startRenderFromEditor() {
     qs('evStartBtn').textContent = '▶ Start Render';
     addEvent(_missingFnMsg, 'render');
     if (typeof showToast === 'function') showToast(_missingFnMsg, 'error');
+    setRenderFlowState('configure', 'Render could not start', { force: true });
     return;
   }
   const _renderResult = await _submitRenderPayload(payload, false);
@@ -1067,6 +1336,9 @@ async function startRenderFromEditor() {
     evSetStatus('Render started. Tracking in process panel...');
   } else {
     const errMsg = (_renderResult && _renderResult.error) || 'Unable to submit render request.';
+    const friendlyMsg = (typeof friendlyRenderError === 'function')
+      ? friendlyRenderError(errMsg, 'Render could not start')
+      : 'Render could not start';
     const isSessionErr = /editor session|session.*expired|session.*not found|no active session/i.test(errMsg);
     const logHint = ' | Logs: %APPDATA%\\tool-render-video\\logs';
     if (isSessionErr) {
@@ -1077,14 +1349,17 @@ async function startRenderFromEditor() {
       if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'inline-flex';
       qs('evStartBtn').disabled = true;
       qs('evStartBtn').textContent = 'Start Render';
+      if (typeof showToast === 'function') showToast('Render could not start', 'error');
     } else {
-      evSetStatus('Render could not start.', `Technical details: ${errMsg}`, true);
+      evSetStatus(friendlyMsg, `Technical details: ${errMsg}`, true);
       qs('evStartBtn').disabled = false;
       qs('evStartBtn').textContent = 'Retry Render';
-      qs('evStatusLine').textContent = 'Render could not start.';
+      qs('evStatusLine').textContent = friendlyMsg;
       qs('evStatusLine').style.color = '#ef4444';
-      evSetStatus('Render could not start.', `Technical details: ${errMsg}`, true);
+      evSetStatus(friendlyMsg, `Technical details: ${errMsg}`, true);
+      if (typeof showToast === 'function') showToast(friendlyMsg, 'error');
     }
+    setRenderFlowState('configure', 'Render could not start', { force: true });
   }
 }
 

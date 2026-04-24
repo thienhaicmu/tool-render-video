@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from app.models.schemas import RenderRequest, DownloadHealthRequest, PrepareSourceRequest, QuickProcessRequest
 from app.services.db import upsert_job, get_job
-from app.services.job_manager import submit_job
+from app.services.job_manager import submit_job, is_running
 from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify, check_youtube_download_health
 from app.core.config import TEMP_DIR, CHANNELS_DIR, REQUEST_LOG
@@ -424,6 +424,48 @@ def preview_video(session_id: str):
     )
 
 
+@router.get("/preview-transcript/{session_id}")
+def preview_transcript(session_id: str):
+    """Return a Whisper-tiny transcript for the editor subtitle preview.
+    Result is cached in the session work_dir so repeat calls are instant."""
+    session = _load_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    work_dir = Path(session.get("work_dir", ""))
+    cache_path = work_dir / "preview_transcript.json"
+
+    if cache_path.exists():
+        try:
+            with cache_path.open("r", encoding="utf-8") as fh:
+                return {"segments": json.load(fh)}
+        except Exception:
+            pass
+
+    video_path = Path(session.get("preview_path") or session.get("video_path", ""))
+    if not video_path.exists():
+        raise HTTPException(status_code=404, detail="Video file not found")
+
+    try:
+        from app.services.subtitle_engine import get_whisper_model
+        model = get_whisper_model("tiny")
+        result = model.transcribe(str(video_path), fp16=False, verbose=False)
+        segments = [
+            {
+                "start": round(float(s["start"]), 3),
+                "end": round(float(s["end"]), 3),
+                "text": str(s.get("text", "")).strip(),
+            }
+            for s in result.get("segments", [])
+            if str(s.get("text", "")).strip()
+        ]
+        with cache_path.open("w", encoding="utf-8") as fh:
+            json.dump(segments, fh)
+        return {"segments": segments}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {exc}")
+
+
 def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = False):
     run_render_pipeline(
         job_id=job_id,
@@ -432,6 +474,48 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         load_session_fn=_load_session,
         cleanup_session_fn=_cleanup_preview_session,
     )
+
+
+def _queue_render_job(job_id: str, effective_channel: str, payload: RenderRequest, *, resume_mode: bool, queued_message: str):
+    if is_running(job_id):
+        raise HTTPException(status_code=409, detail="Render job is already running")
+    previous = get_job(job_id)
+    upsert_job(
+        job_id,
+        "render",
+        effective_channel,
+        "queued",
+        payload.model_dump(),
+        {},
+        stage=JobStage.QUEUED,
+        progress_percent=0,
+        message=queued_message,
+    )
+    submitted = submit_job(job_id, process_render, job_id, payload, resume_mode)
+    if submitted:
+        return
+
+    if previous:
+        try:
+            previous_payload = json.loads(previous.get("payload_json") or "{}")
+        except Exception:
+            previous_payload = {}
+        try:
+            previous_result = json.loads(previous.get("result_json") or "{}")
+        except Exception:
+            previous_result = {}
+        upsert_job(
+            job_id,
+            previous.get("kind") or "render",
+            previous.get("channel_code") or effective_channel,
+            previous.get("status") or "queued",
+            previous_payload,
+            previous_result,
+            stage=previous.get("stage") or JobStage.QUEUED,
+            progress_percent=int(previous.get("progress_percent") or 0),
+            message=previous.get("message") or "",
+        )
+    raise HTTPException(status_code=409, detail="Render job is already running")
 
 
 @router.post("/process")
@@ -447,8 +531,7 @@ def create_render_job(payload: RenderRequest):
     job_id = payload.resume_job_id or str(uuid.uuid4())
     existing = get_job(job_id) if payload.resume_job_id else None
     resume_mode = bool(existing) and payload.resume_from_last
-    upsert_job(job_id, "render", effective_channel, "queued", payload.model_dump(), {}, stage=JobStage.QUEUED, progress_percent=0, message="Job queued")
-    submit_job(job_id, process_render, job_id, payload, resume_mode)
+    _queue_render_job(job_id, effective_channel, payload, resume_mode=resume_mode, queued_message="Job queued")
     return {"job_id": job_id, "status": "queued", "resume_mode": resume_mode}
 
 
@@ -547,7 +630,9 @@ def create_render_batch(payload: RenderRequest):
                 message=f"Batch failed: {exc}",
             )
 
-    submit_job(batch_id, _run_batch)
+    submitted = submit_job(batch_id, _run_batch)
+    if not submitted:
+        raise HTTPException(status_code=409, detail="Render batch is already running")
     return {"batch_id": batch_id, "job_ids": child_job_ids, "count": len(urls), "status": "queued"}
 
 
@@ -913,10 +998,10 @@ def resume_render_job(job_id: str):
         raise HTTPException(status_code=400, detail=f"Cannot parse payload_json for job {job_id}: {e}") from e
 
     payload = RenderRequest(**payload_data)
+    payload.resume_from_last = True
     _validate_render_source(payload)
     effective_channel = (payload.channel_code or "").strip() or "manual"
-    upsert_job(job_id, "render", effective_channel, "queued", payload.model_dump(), {}, stage=JobStage.QUEUED, progress_percent=0, message="Resume job queued")
-    submit_job(job_id, process_render, job_id, payload, True)
+    _queue_render_job(job_id, effective_channel, payload, resume_mode=True, queued_message="Resume job queued")
     return {"job_id": job_id, "status": "queued", "resume_mode": True}
 
 

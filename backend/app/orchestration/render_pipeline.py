@@ -203,13 +203,13 @@ def _resolve_profile(payload: RenderRequest):
     profile = (payload.render_profile or "quality").lower()
     defaults = {
         # fast: quick turnaround, acceptable quality
-        "fast":     {"video_preset": "faster", "video_crf": 22, "whisper_model": "tiny",  "transition_sec": 0.12},
-        # balanced: good quality, reasonable speed
-        "balanced": {"video_preset": "slow",   "video_crf": 18, "whisper_model": "base",  "transition_sec": 0.25},
-        # quality: high quality, slower encode
-        "quality":  {"video_preset": "slower", "video_crf": 15, "whisper_model": "small", "transition_sec": 0.35},
+        "fast":     {"video_preset": "veryfast", "video_crf": 23, "whisper_model": "tiny",  "transition_sec": 0.12},
+        # balanced: good quality/speed tradeoff — medium is ~3-4x faster than slow with <5% quality delta
+        "balanced": {"video_preset": "medium",   "video_crf": 18, "whisper_model": "base",  "transition_sec": 0.25},
+        # quality: high quality — slow preset gives meaningful gains over medium for large screens
+        "quality":  {"video_preset": "slow",     "video_crf": 15, "whisper_model": "small", "transition_sec": 0.35},
         # best: maximum quality, slowest encode — use for final master output
-        "best":     {"video_preset": "veryslow","video_crf": 13, "whisper_model": "small", "transition_sec": 0.40},
+        "best":     {"video_preset": "slower",   "video_crf": 13, "whisper_model": "small", "transition_sec": 0.40},
     }
     picked = defaults.get(profile, defaults["quality"])
     whisper_model = payload.whisper_model
@@ -260,6 +260,20 @@ def _safe_unlink(path: Path):
         path.unlink(missing_ok=True)
     except Exception:
         pass
+
+
+def _failed_part_progress(job_id: str, part_no: int, fallback: int = 95) -> int:
+    try:
+        for part in list_job_parts(job_id):
+            if int(part.get("part_no") or 0) != int(part_no):
+                continue
+            current = int(part.get("progress_percent") or 0)
+            if current >= 100:
+                return min(99, fallback)
+            return max(0, min(99, current))
+    except Exception:
+        pass
+    return max(0, min(99, fallback))
 
 
 def _sanitize_channel_subdir(value: str | None) -> str:
@@ -356,10 +370,12 @@ def run_render_pipeline(
     tuned = _resolve_profile(payload)
     retry_count = max(0, min(5, int(payload.retry_count)))
     current_stage = JobStage.STARTING
+    current_progress = 1
 
     def _set_stage(stage: str, progress: int, message: str):
-        nonlocal current_stage
+        nonlocal current_stage, current_progress
         current_stage = stage
+        current_progress = max(0, min(99, int(progress)))
         update_job_progress(job_id, stage, progress, message)
         _job_log(effective_channel, job_id, f"[STAGE] {stage} | {message}")
         _emit_render_event(
@@ -669,7 +685,9 @@ def run_render_pipeline(
             message="Detecting scenes",
             step="render.scene.detect",
         )
+        _t_scene = time.perf_counter()
         scenes = detect_scenes(str(source_path)) if payload.auto_detect_scene else []
+        _scene_ms = int((time.perf_counter() - _t_scene) * 1000)
         _emit_render_event(
             channel_code=effective_channel,
             job_id=job_id,
@@ -677,9 +695,10 @@ def run_render_pipeline(
             level="INFO",
             message=f"Detected {len(scenes)} scenes",
             step="render.scene.detect",
-            context={"scene_count": len(scenes)},
+            context={"scene_count": len(scenes), "duration_ms": _scene_ms},
+            duration_ms=_scene_ms,
         )
-        _job_log(effective_channel, job_id, f"Scene detection done: {len(scenes)} scenes")
+        _job_log(effective_channel, job_id, f"Scene detection done: {len(scenes)} scenes in {_scene_ms}ms")
 
         _set_stage(JobStage.SEGMENT_BUILDING, 25, "Building smart segments")
         segments = build_segments_from_scenes(scenes, source["duration"], payload.min_part_sec, payload.max_part_sec)
@@ -736,8 +755,10 @@ def run_render_pipeline(
         if payload.add_subtitle and any(subtitle_enabled_by_idx.values()):
             _set_stage(JobStage.TRANSCRIBING_FULL, 28, "Transcribing full video once")
             if not (payload.resume_from_last and full_srt.exists() and full_srt.stat().st_size > 0):
+                _t_transcribe = time.perf_counter()
                 transcribe_to_srt(str(source_path), str(full_srt), model_name=tuned["whisper_model"], retry_count=retry_count, highlight_per_word=payload.highlight_per_word)
-                _job_log(effective_channel, job_id, f"Full transcription done with model={tuned['whisper_model']}")
+                _transcribe_ms = int((time.perf_counter() - _t_transcribe) * 1000)
+                _job_log(effective_channel, job_id, f"Full transcription done: model={tuned['whisper_model']} duration_ms={_transcribe_ms}")
             else:
                 _job_log(effective_channel, job_id, "Reuse existing full transcription", kind="debug")
 
@@ -807,6 +828,7 @@ def run_render_pipeline(
                             base_color=_hex_to_ass(getattr(payload, "sub_color", "#FFFFFF")),
                             highlight_color=_hex_to_ass(getattr(payload, "sub_highlight", "#FFFF00")),
                             outline_size=getattr(payload, "sub_outline", 3),
+                            x_percent=getattr(payload, "sub_x_percent", 50.0),
                         )
                     else:
                         srt_to_ass_bounce(
@@ -817,6 +839,7 @@ def run_render_pipeline(
                             highlight_per_word=payload.highlight_per_word,
                             font_name=getattr(payload, "sub_font", "Bungee"),
                             margin_v=getattr(payload, "sub_margin_v", 170),
+                            x_percent=getattr(payload, "sub_x_percent", 50.0),
                         )
                     _job_log(effective_channel, job_id, f"Part {idx} subtitle style rendered: {payload.subtitle_style}", kind="debug")
             else:
@@ -841,6 +864,7 @@ def run_render_pipeline(
                 name=f"progress-timer-{job_id[:8]}-p{idx}",
             )
             _encode_timer.start()
+            _t_encode = time.perf_counter()
             try:
                 render_part_smart(
                     str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if payload.add_title_overlay else "",
@@ -868,9 +892,11 @@ def run_render_pipeline(
                     text_layers=normalized_text_layers,
                 )
             finally:
-                # Signal and wait so the timer thread cannot write after DONE/100.
                 _encode_stop.set()
                 _encode_timer.join(timeout=5.0)
+            _encode_ms = int((time.perf_counter() - _t_encode) * 1000)
+            _part_dur = float(seg.get("duration") or 0)
+            _speed_ratio = round(_part_dur * 1000 / max(_encode_ms, 1), 2)
             if normalized_text_layers:
                 _job_log(
                     effective_channel,
@@ -878,7 +904,13 @@ def run_render_pipeline(
                     f"Applied {len(normalized_text_layers)} text layer(s) on part {idx}/{total_parts}",
                     kind="debug",
                 )
-            _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} done", kind="info")
+            _job_log(
+                effective_channel, job_id,
+                f"Part {idx}/{total_parts} done: encode_ms={_encode_ms} "
+                f"part_dur={_part_dur:.1f}s speed_ratio={_speed_ratio}x "
+                f"(>1 = faster than realtime)",
+                kind="info",
+            )
 
             upsert_job_part(job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Completed")
             row = [job_id, effective_channel, source["title"], idx, seg["start"], seg["end"], seg["duration"], seg["viral_score"], seg["priority_rank"], str(final_part)]
@@ -890,26 +922,37 @@ def run_render_pipeline(
 
         cpu_total = os.cpu_count() or 2
         gpu_ready = nvenc_available()
-        heavy_opts = sum([
-            bool(payload.motion_aware_crop),
-            bool(payload.add_subtitle),
-            bool(payload.reup_mode),
-            bool(payload.text_layers),
-        ])
 
-        # Adaptive hardware cap:
-        #  - GPU/NVENC: encode offloaded to GPU; CPU handles decode + filters only
-        #  - CPU-only: every ffmpeg thread is pure CPU — be more conservative
+        # Distinguish which options add TRUE CPU parallelism cost outside the ffmpeg vf chain.
+        # - add_subtitle / text_layers: run INSIDE ffmpeg's filter pipeline; they slow each
+        #   job but do not prevent N jobs from running in parallel (no extra process spawned).
+        # - motion_aware_crop: runs OpenCV optical-flow as a blocking CPU pre-pass BEFORE
+        #   ffmpeg; this competes directly with parallel workers on CPU.
+        # - reup_mode: BGM audio subprocess; moderate overhead on CPU.
         if gpu_ready:
+            # GPU handles encode; CPU cost per worker is low.
+            # Only penalise the pre-pass operations that stay on CPU.
+            cpu_extra = sum([
+                bool(payload.motion_aware_crop),
+                bool(payload.reup_mode),
+            ])
+            heavy_penalty = min(cpu_extra, 2)
             base = max(2, cpu_total // 3)
             hard_ceiling = 6
         else:
+            # CPU-only: libx264/libx265 uses -threads 0 (all cores per worker).
+            # Count all heavy opts but cap penalty at 2 (not 3) so higher core counts
+            # can still unlock a second parallel worker.
+            all_heavy = sum([
+                bool(payload.motion_aware_crop),
+                bool(payload.add_subtitle),
+                bool(payload.reup_mode),
+                bool(payload.text_layers),
+            ])
+            heavy_penalty = min(all_heavy, 2)
             base = max(1, cpu_total // 4)
             hard_ceiling = 4
 
-        # Each heavy option (motion-crop, subtitle, reup, text_layers) adds per-frame
-        # CPU cost; reduce cap by 1 per option, capped at 3 steps down.
-        heavy_penalty = min(heavy_opts, 3)
         hw_cap = max(1, min(base - heavy_penalty, hard_ceiling))
 
         # max_parallel_parts == 0 means "adaptive / let backend decide"
@@ -920,13 +963,19 @@ def run_render_pipeline(
         else:
             max_workers = hw_cap
 
+        from app.services.render_engine import _resolve_codec
+        _effective_codec = _resolve_codec(payload.video_codec, encoder_mode=payload.encoder_mode)
         _job_log(
             effective_channel, job_id,
-            f"Using max_workers={max_workers} (cpu={cpu_total}, gpu={gpu_ready}, heavy_opts={heavy_opts})",
+            f"Using max_workers={max_workers} "
+            f"(cpu={cpu_total}, gpu={gpu_ready}, heavy_penalty={heavy_penalty}, "
+            f"base={base}, hw_cap={hw_cap}, user_req={user_req}) | "
+            f"codec={_effective_codec} preset={tuned['video_preset']} crf={tuned['video_crf']}",
         )
         completed_parts = 0
         failed_parts = []
         _set_stage(JobStage.RENDERING_PARALLEL if max_workers > 1 else JobStage.RENDERING, 30, f"Rendering parts 0/{total_parts}")
+        _t_render_loop = time.perf_counter()
         _emit_render_event(
             channel_code=effective_channel,
             job_id=job_id,
@@ -962,7 +1011,7 @@ def run_render_pipeline(
                         idx,
                         f"{source['slug']}_part_{idx:03d}.mp4",
                         JobPartStage.FAILED,
-                        100,
+                        _failed_part_progress(job_id, idx),
                         seg["start"],
                         seg["end"],
                         seg["duration"],
@@ -998,7 +1047,7 @@ def run_render_pipeline(
                             idx,
                             f"{source['slug']}_part_{idx:03d}.mp4",
                             JobPartStage.FAILED,
-                            100,
+                            _failed_part_progress(job_id, idx),
                             seg["start"],
                             seg["end"],
                             seg["duration"],
@@ -1012,6 +1061,13 @@ def run_render_pipeline(
                     completed_parts += 1
                     progress = 30 + int((completed_parts / total_parts) * 60)
                     _set_stage(JobStage.RENDERING_PARALLEL, progress, f"Processed {completed_parts}/{total_parts} parts")
+
+        _render_loop_ms = int((time.perf_counter() - _t_render_loop) * 1000)
+        _job_log(
+            effective_channel, job_id,
+            f"Render loop done: {len(outputs)}/{total_parts} parts in {_render_loop_ms}ms "
+            f"({_render_loop_ms // 1000}s) with {max_workers} worker(s)",
+        )
 
         if failed_parts and not outputs:
             raise RuntimeError(f"All parts failed ({len(failed_parts)}/{total_parts})")
@@ -1105,7 +1161,7 @@ def run_render_pipeline(
             payload.model_dump(),
             {"error": str(e), "failed_step": current_stage},
             stage=JobStage.FAILED,
-            progress_percent=100,
+            progress_percent=max(0, min(99, int(current_progress))),
             message=fail_message,
         )
         return

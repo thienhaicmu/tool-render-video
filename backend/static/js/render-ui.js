@@ -34,6 +34,8 @@ function resetRenderSessionUi(){
   qs('job_percent').textContent = '0%';
   qs('job_message').textContent = 'Initializing';
   qs('job_bar').style.width = '0%';
+  qs('job_bar').classList.remove('isWaitingActive');
+  if (qs('render_active_bar')) qs('render_active_bar').classList.remove('isWaitingActive');
   qs('action_title').textContent = 'Waiting for job';
   qs('action_state').textContent = 'idle';
   if (qs('action_state')) qs('action_state').dataset.status = 'idle';
@@ -42,6 +44,7 @@ function resetRenderSessionUi(){
   renderPipeline('queued', 'queued');
   renderSteps(0);
   renderParts([]);
+  renderPartFocus([], null);
   if(RENDER_SESSION_ONLY && qs('jobs_out')){
     qs('jobs_out').innerHTML = '<div class="emptyState">Session mode: old jobs are hidden.</div>';
   }
@@ -225,9 +228,52 @@ function friendlyJobMessage(job){
   const status = String(job?.status || '').toLowerCase();
   const stage = String(job?.stage || '').toLowerCase();
   if (status === 'completed') return 'Render complete.';
-  if (status === 'failed') return 'Render failed. Check details below.';
+  if (status === 'failed') return friendlyRenderError(job?.message || '', 'Something went wrong during rendering');
   if (status === 'queued') return 'Waiting to start.';
   return stageLabel(stage);
+}
+
+function friendlyRenderError(detail, fallback = 'Render could not start') {
+  const raw = String(detail || '').trim();
+  const low = raw.toLowerCase();
+  if (!raw) return fallback;
+  if (low.includes('session') && (low.includes('expired') || low.includes('not found') || low.includes('re-open'))) {
+    return 'Render could not start';
+  }
+  if (low.includes('youtube') || low.includes('download') || low.includes('source') || low.includes('video')) {
+    return 'Video could not be processed';
+  }
+  if (low.includes('render') || low.includes('ffmpeg') || low.includes('subtitle') || low.includes('scene')) {
+    return 'Something went wrong during rendering';
+  }
+  return fallback;
+}
+
+function getRenderMonitorSourceText(job) {
+  const sourceText = getRenderWorkspaceSourceText(job);
+  return sourceText && sourceText !== 'No source selected' ? sourceText : 'Source unavailable';
+}
+function renderPendingClipsMessage(job) {
+  const status = String(job?.status || '').toLowerCase();
+  const stage = String(job?.stage || '').toLowerCase();
+  if (status === 'running' || status === 'queued') {
+    if (stage === 'scene_detection') return 'Analyzing video and selecting clips...';
+    if (stage === 'segment_building') return 'Preparing clips for rendering...';
+    if (stage === 'transcribing_full') return 'Generating subtitles...';
+    return 'Preparing clips...';
+  }
+  return 'Clips will appear here once rendering begins.';
+}
+function updateRenderProgressVisual(job) {
+  const status = String(job?.status || '').toLowerCase();
+  const stage = String(job?.stage || '').toLowerCase();
+  const staticMs = _renderMonitorLastProgressAt ? (Date.now() - _renderMonitorLastProgressAt) : 0;
+  const earlyStage = !['rendering', 'rendering_parallel'].includes(stage);
+  const isWaitingActive = !!currentJobId && status === 'running' && earlyStage && staticMs > 8000;
+  ['job_bar', 'render_active_bar'].forEach((id) => {
+    const el = qs(id);
+    if (el) el.classList.toggle('isWaitingActive', isWaitingActive);
+  });
 }
 function getCompletedClipCount(summary, parts){
   const items = Array.isArray(parts) ? parts : [];
@@ -362,7 +408,7 @@ function buildCompletionHandoff(summary, parts, job) {
     : `✓ Render complete - ${completed} clips ready`;
   const detailParts = [];
   if (totalLabel > 0) detailParts.push(`${totalLabel} total clips`);
-  detailParts.push(failed > 0 ? 'Review failed clips in the log' : 'Report generated successfully');
+  detailParts.push(failed > 0 ? 'Review clips below' : 'Check output folder or review clips below');
   detailParts.push(outputLabel);
   return { main, detail: detailParts.join(' · ') };
 }
@@ -859,6 +905,7 @@ function setRenderActionBusy(isBusy){
 
   // Expand bottom panel when job starts so pipeline/log are immediately visible.
   if (isBusy) {
+    clearRenderOutputPanel();
     _renderMonitorLastUpdateAt = 0;
     _renderMonitorLastProgressAt = Date.now();
     _renderMonitorLastSignature = '';
@@ -940,7 +987,10 @@ function renderSteps(progress){
 
 function renderParts(items, summary){
   const wrap = qs('parts_wrap');
-  if(!items || !items.length){ wrap.innerHTML = '<div class="emptyState">Clips will appear here once rendering begins.</div>'; return; }
+  if(!items || !items.length){
+    wrap.innerHTML = `<div class="emptyState">${esc(renderPendingClipsMessage(_renderMonitorLastJob))}</div>`;
+    return;
+  }
   const s = summary || computeProgressSummary(items);
   const activeStatuses = ['waiting', 'cutting', 'transcribing', 'rendering'];
   const statusRank = (p) => {
@@ -1224,4 +1274,143 @@ function updateStatusBar(job, summary) {
 
   if (pctEl) pctEl.textContent = (isRunning || isDone) ? pct + '%' : '';
   if (area)  area.style.cursor = currentJobId ? 'pointer' : 'default';
+}
+
+// ── Render Output Panel (Phase 3) ────────────────────────────────────────
+
+let _previewCurrentJobId = null;
+let _previewCurrentPartNo = null;
+let _previewCurrentOutputDir = null;
+
+function showRenderOutputPanel() {
+  const p = qs('render_output_panel');
+  if (!p) return;
+  p.dataset.populated = '1';
+  p.classList.remove('hiddenView');
+}
+
+function hideRenderOutputPanel() {
+  const p = qs('render_output_panel');
+  if (!p) return;
+  p.dataset.populated = '0';
+  p.classList.add('hiddenView');
+}
+
+function clearRenderOutputPanel() {
+  const list = qs('render_output_list');
+  if (list) list.innerHTML = '<div class="renderOutputEmpty">Clips will appear here when render completes.</div>';
+  const badge = qs('render_output_badge');
+  if (badge) badge.textContent = '0';
+  const path = qs('render_output_path');
+  if (path) path.textContent = '';
+  hideRenderOutputPanel();
+}
+
+function populateRenderOutputPanel(job, parts) {
+  const list = qs('render_output_list');
+  const badge = qs('render_output_badge');
+  const pathEl = qs('render_output_path');
+  if (!list) return;
+
+  const items = Array.isArray(parts) ? parts : [];
+  const done = items.filter((p) => String(p?.status || '').toLowerCase() === 'done');
+  const failed = items.filter((p) => String(p?.status || '').toLowerCase() === 'failed');
+  const all = [
+    ...done.sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0)),
+    ...failed.sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0)),
+  ];
+
+  if (badge) badge.textContent = String(done.length);
+
+  const outputDir = getCurrentJobOutputDir(job);
+  if (pathEl) pathEl.textContent = outputDir ? `Output folder: ${outputDir}` : '';
+
+  if (!all.length) {
+    list.innerHTML = '<div class="renderOutputEmpty">No completed clips found for this render.</div>';
+    showRenderOutputPanel();
+    return;
+  }
+
+  const jobId = String(job?.id || job?.job_id || currentJobId || '');
+  list.innerHTML = all.map((p) => {
+    const partNo = Number(p.part_no || 0);
+    const st = String(p?.status || '').toLowerCase();
+    const isFailed = st === 'failed';
+    const hasFile = !!p.output_file;
+    const name = p.part_name ? esc(p.part_name) : `Clip ${partNo}`;
+    const startSec = Number(p.start_sec || 0);
+    const endSec = Number(p.end_sec || 0);
+    const dur = Math.max(0, endSec - startSec).toFixed(1);
+    const meta = isFailed
+      ? `Failed · ${dur}s`
+      : hasFile
+        ? `${dur}s · ${startSec.toFixed(1)}s–${endSec.toFixed(1)}s`
+        : `${dur}s`;
+    const previewBtn = (!isFailed && hasFile && jobId)
+      ? `<button type="button" onclick="previewClip(${JSON.stringify(jobId)},${partNo})">Preview</button>`
+      : '';
+    const openBtn = hasFile
+      ? `<button type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Open</button>`
+      : '';
+    return `<div class="renderClipItem${isFailed ? ' failed' : ''}">
+      <div class="renderClipNum">${partNo}</div>
+      <div class="renderClipInfo">
+        <div class="renderClipName" title="${esc(p.output_file || '')}">${name}</div>
+        <div class="renderClipMeta">${meta}</div>
+      </div>
+      <div class="renderClipActions">${previewBtn}${openBtn}</div>
+    </div>`;
+  }).join('');
+
+  showRenderOutputPanel();
+  const panel = qs('render_output_panel');
+  if (panel) setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+}
+
+function previewClip(jobId, partNo) {
+  const modal = qs('clip_preview_modal');
+  const video = qs('clip_preview_video');
+  const title = qs('clip_preview_title');
+  if (!modal || !video) return;
+  _previewCurrentJobId = jobId;
+  _previewCurrentPartNo = partNo;
+  const src = `/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream`;
+  if (title) title.textContent = `Clip ${partNo}`;
+  video.src = src;
+  video.load();
+  modal.classList.remove('hiddenView');
+}
+
+function closeClipPreview(event) {
+  const modal = qs('clip_preview_modal');
+  if (!modal) return;
+  if (event && event.target !== modal) return;
+  const video = qs('clip_preview_video');
+  if (video) { video.pause(); video.src = ''; }
+  modal.classList.add('hiddenView');
+  _previewCurrentJobId = null;
+  _previewCurrentPartNo = null;
+}
+
+function openCurrentClipFolder() {
+  if (_previewCurrentOutputDir) {
+    openStoredOutputPath(_previewCurrentOutputDir);
+    return;
+  }
+  if (!currentJobId) return;
+  fetch(`/api/jobs/${encodeURIComponent(currentJobId)}`)
+    .then((r) => r.json())
+    .then((job) => {
+      const out = getCurrentJobOutputDir(job);
+      if (out) openStoredOutputPath(out);
+      else showToast('Output folder is unavailable', 'info');
+    })
+    .catch(() => showToast('Unable to load output folder path', 'error'));
+}
+
+function openClipFile(filePath) {
+  const p = String(filePath || '').trim();
+  if (!p) { showToast('File path is unavailable', 'info'); return; }
+  const dir = p.replace(/\\/g, '/').split('/').slice(0, -1).join('/');
+  openStoredOutputPath(dir || p);
 }
