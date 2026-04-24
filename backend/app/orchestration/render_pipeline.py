@@ -26,6 +26,9 @@ from app.core.config import TEMP_DIR, CHANNELS_DIR, LOGS_DIR
 from app.core.stage import JobStage, JobPartStage, STAGE_TO_EVENT
 from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin
 from app.services.text_overlay import normalize_text_layers, MAX_TEXT_LAYERS
+from app.services.tts_service import generate_narration_mp3
+from app.services.audio_mix_service import mix_narration_audio
+from app.services.translation_service import translate_srt_file
 
 logger = logging.getLogger("app.render")
 
@@ -123,6 +126,8 @@ def _render_error_code(step: str, message: str, exc: Exception | None = None) ->
         return "RN002"
     if "output" in text and ("invalid" in text or "permission" in text or "path" in text):
         return "RN003"
+    if "voice" in text or "tts" in text or "narration" in text:
+        return "VOICE001"
     if "ffmpeg" in text:
         return "RN004"
     if "scene" in text and ("detect" in text or "detection" in text):
@@ -236,6 +241,29 @@ def _probe_video_duration(video_path: Path) -> int:
         return max(0, int(float((r.stdout or "0").strip() or 0)))
     except Exception:
         return 0
+
+
+def extract_text_from_srt(srt_path: str) -> str:
+    import re
+    try:
+        text_lines = []
+        with open(srt_path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                if re.match(r"^\d+$", line):
+                    continue
+                if "-->" in line:
+                    continue
+                text_lines.append(line)
+        text = " ".join(text_lines)
+        text = re.sub(r" {2,}", " ", text).strip()
+        if text and text[-1] not in ".!?":
+            text += "."
+        return text
+    except Exception:
+        return ""
 
 
 def _reserve_source_path_in_dir(source_dir: Path, slug: str, ext: str = ".mp4") -> Path:
@@ -676,6 +704,63 @@ def run_render_pipeline(
                     _job_log(effective_channel, job_id, f"Source copied to: {keep_path}")
             source_path = keep_path
 
+        voice_audio_path = None
+        _voice_tts_failed = False
+        _voice_mix_ok = []
+        _voice_part_tts_attempts = []
+        _sub_translate_attempts = []
+        _sub_translate_clean = []
+        _sub_translate_partial = []
+        _sub_translate_failed_parts = []
+        if getattr(payload, "voice_enabled", False) and getattr(payload, "voice_source", "manual") == "manual":
+            try:
+                update_job_progress(job_id, current_stage, current_progress, "Generating AI voice...")
+                _job_log(effective_channel, job_id, "Generating AI narration audio")
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="voice_tts_started",
+                    level="INFO",
+                    message="Generating AI voice",
+                    step="voice.tts",
+                    context={"language": payload.voice_language, "gender": payload.voice_gender},
+                )
+                voice_audio_path = generate_narration_mp3(
+                    text=str(payload.voice_text or ""),
+                    language=payload.voice_language,
+                    gender=payload.voice_gender,
+                    rate=payload.voice_rate,
+                    job_id=job_id,
+                    voice_id=getattr(payload, "voice_id", None),
+                )
+                update_job_progress(job_id, current_stage, current_progress, "AI voice generated")
+                _job_log(effective_channel, job_id, f"AI narration audio ready: {voice_audio_path}")
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="voice_tts_completed",
+                    level="INFO",
+                    message="AI voice generated",
+                    step="voice.tts",
+                    context={"audio_path": str(voice_audio_path), "voice_text_length": len(str(payload.voice_text or ""))},
+                )
+            except Exception as voice_exc:
+                voice_audio_path = None
+                _voice_tts_failed = True
+                update_job_progress(job_id, current_stage, current_progress, "AI voice failed - continuing with original audio")
+                _job_log(effective_channel, job_id, f"AI voice generation failed: {voice_exc}", kind="error")
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="voice_failed",
+                    level="ERROR",
+                    message=f"AI voice generation failed: {voice_exc}",
+                    step="voice.tts",
+                    exception=voice_exc,
+                    traceback_text=traceback.format_exc(),
+                    context={"error_code": "VOICE001"},
+                )
+
         _set_stage(JobStage.SCENE_DETECTION, 15, "Detecting scenes")
         _emit_render_event(
             channel_code=effective_channel,
@@ -787,6 +872,8 @@ def run_render_pipeline(
             ass_part = work_dir / f"{source['slug']}_part_{idx:03d}.ass"
             final_part = output_dir / f"{source['slug']}_part_{idx:03d}.mp4"
             part_name = f"{source['slug']}_part_{idx:03d}.mp4"
+            _sub_target_lang = getattr(payload, "subtitle_target_language", "en")
+            translated_srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.{_sub_target_lang}.srt"
             _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} start", kind="debug")
 
             if payload.resume_from_last and final_part.exists() and final_part.stat().st_size > 0:
@@ -816,11 +903,59 @@ def run_render_pipeline(
                 if needs_srt:
                     slice_srt_by_time(str(full_srt), str(srt_part), seg["start"], seg["end"], rebase_to_zero=True)
                     _job_log(effective_channel, job_id, f"Part {idx} subtitle sliced from full transcript", kind="debug")
+                _ass_srt_source = srt_part
+                if getattr(payload, "subtitle_translate_enabled", False) and srt_part.exists() and srt_part.stat().st_size > 0:
+                    _needs_translated = not (payload.resume_from_last and translated_srt_part.exists() and translated_srt_part.stat().st_size > 0)
+                    if _needs_translated:
+                        _sub_translate_attempts.append(idx)
+                        try:
+                            _job_log(effective_channel, job_id, f"subtitle_translate_started part_no={idx} target={_sub_target_lang}", kind="debug")
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="subtitle_translate_started",
+                                level="INFO",
+                                message=f"Translating subtitle (part {idx})",
+                                step="subtitle.translate",
+                                context={"part_no": idx, "target": _sub_target_lang},
+                            )
+                            _, _block_failures = translate_srt_file(str(srt_part), str(translated_srt_part), target_language=_sub_target_lang)
+                            for _bfi in _block_failures:
+                                _job_log(effective_channel, job_id, f"subtitle_translate_block_failed part_no={idx} block={_bfi} target={_sub_target_lang}", kind="warning")
+                            if _block_failures:
+                                _sub_translate_partial.append(idx)
+                            else:
+                                _sub_translate_clean.append(idx)
+                            _job_log(effective_channel, job_id, f"subtitle_translate_completed part_no={idx} output={translated_srt_part}")
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="subtitle_translate_completed",
+                                level="INFO",
+                                message=f"Subtitle translated (part {idx})",
+                                step="subtitle.translate",
+                                context={"part_no": idx, "output": str(translated_srt_part), "block_failures": len(_block_failures)},
+                            )
+                            needs_ass = True
+                        except Exception as _trans_exc:
+                            _sub_translate_failed_parts.append(idx)
+                            _job_log(effective_channel, job_id, f"subtitle_translate_failed part_no={idx}: {_trans_exc}", kind="warning")
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="subtitle_translate_failed",
+                                level="WARNING",
+                                message=f"Subtitle translation failed (part {idx}): {_trans_exc}",
+                                step="subtitle.translate",
+                                context={"part_no": idx},
+                            )
+                    if translated_srt_part.exists() and translated_srt_part.stat().st_size > 0:
+                        _ass_srt_source = translated_srt_part
                 if needs_ass:
                     if payload.subtitle_style == "pro_karaoke":
                         from app.services.subtitle_engine import _hex_to_ass
                         srt_to_ass_karaoke(
-                            str(srt_part), str(ass_part),
+                            str(_ass_srt_source), str(ass_part),
                             scale_y=payload.frame_scale_y,
                             font_size=getattr(payload, "sub_font_size", 46),
                             font_name=getattr(payload, "sub_font", "Bungee"),
@@ -832,7 +967,7 @@ def run_render_pipeline(
                         )
                     else:
                         srt_to_ass_bounce(
-                            str(srt_part),
+                            str(_ass_srt_source),
                             str(ass_part),
                             subtitle_style=payload.subtitle_style,
                             scale_y=payload.frame_scale_y,
@@ -894,6 +1029,189 @@ def run_render_pipeline(
             finally:
                 _encode_stop.set()
                 _encode_timer.join(timeout=5.0)
+            _part_subtitle_voice_path = None
+            if (
+                getattr(payload, "voice_enabled", False)
+                and getattr(payload, "voice_source", "manual") == "subtitle"
+                and voice_audio_path is None
+            ):
+                _part_srt = srt_part if srt_part.exists() and srt_part.stat().st_size > 0 else None
+                if _part_srt is None and full_srt.exists() and full_srt.stat().st_size > 0:
+                    _slice_srt_tmp = work_dir / f"{source['slug']}_part_{idx:03d}_voice_tmp.srt"
+                    try:
+                        slice_srt_by_time(str(full_srt), str(_slice_srt_tmp), seg["start"], seg["end"], rebase_to_zero=True)
+                        _part_srt = _slice_srt_tmp
+                    except Exception:
+                        _part_srt = None
+                if _part_srt:
+                    _part_narration_text = extract_text_from_srt(str(_part_srt))
+                    if _part_narration_text.strip():
+                        _voice_part_tts_attempts.append(idx)
+                        _part_mp3 = str(TEMP_DIR / job_id / "voice" / f"part_{idx:03d}.mp3")
+                        try:
+                            _job_log(effective_channel, job_id, f"Generating AI narration for part {idx}/{total_parts} from subtitle", kind="debug")
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="voice_tts_started",
+                                level="INFO",
+                                message=f"Generating AI voice from subtitle (part {idx})",
+                                step="voice.tts",
+                                context={"part_no": idx, "language": payload.voice_language, "source": "subtitle"},
+                            )
+                            _part_subtitle_voice_path = generate_narration_mp3(
+                                text=_part_narration_text,
+                                language=payload.voice_language,
+                                gender=payload.voice_gender,
+                                rate=payload.voice_rate,
+                                job_id=job_id,
+                                voice_id=getattr(payload, "voice_id", None),
+                                output_path=_part_mp3,
+                            )
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="voice_tts_completed",
+                                level="INFO",
+                                message=f"AI voice from subtitle generated (part {idx})",
+                                step="voice.tts",
+                                context={"part_no": idx, "audio_path": _part_subtitle_voice_path, "voice_text_length": len(_part_narration_text)},
+                            )
+                        except Exception as _part_tts_exc:
+                            _part_subtitle_voice_path = None
+                            _job_log(effective_channel, job_id, f"voice_part_tts_failed part_no={idx}: {_part_tts_exc}", kind="error")
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="voice_failed",
+                                level="ERROR",
+                                message=f"AI voice (subtitle, part {idx}) failed: {_part_tts_exc}",
+                                step="voice.tts",
+                                exception=_part_tts_exc,
+                                traceback_text=traceback.format_exc(),
+                                context={"part_no": idx, "error_code": "VOICE001"},
+                            )
+                    else:
+                        _job_log(effective_channel, job_id, f"VOICE_SUBTITLE_EMPTY: part {idx} subtitle text empty; narration skipped", kind="warning")
+                else:
+                    _job_log(effective_channel, job_id, f"VOICE_SUBTITLE_MISSING: part {idx} SRT not available; narration skipped", kind="warning")
+            elif (
+                getattr(payload, "voice_enabled", False)
+                and getattr(payload, "voice_source", "manual") == "translated_subtitle"
+                and voice_audio_path is None
+            ):
+                _tgt_lang_voice = getattr(payload, "subtitle_target_language", "en")
+                if not payload.voice_language.lower().startswith(_tgt_lang_voice.lower()):
+                    _job_log(effective_channel, job_id, f"VOICE_LANGUAGE_TARGET_MISMATCH: voice_language={payload.voice_language} target={_tgt_lang_voice}", kind="warning")
+                _voice_srt = translated_srt_part if translated_srt_part.exists() and translated_srt_part.stat().st_size > 0 else None
+                if _voice_srt is None:
+                    _job_log(effective_channel, job_id, f"VOICE_TRANSLATED_SUBTITLE_MISSING: part {idx} translated SRT not found; falling back to original", kind="warning")
+                    _voice_srt = srt_part if srt_part.exists() and srt_part.stat().st_size > 0 else None
+                if _voice_srt is None and full_srt.exists() and full_srt.stat().st_size > 0:
+                    _vtrans_tmp = work_dir / f"{source['slug']}_part_{idx:03d}_vtrans_tmp.srt"
+                    try:
+                        slice_srt_by_time(str(full_srt), str(_vtrans_tmp), seg["start"], seg["end"], rebase_to_zero=True)
+                        _voice_srt = _vtrans_tmp
+                    except Exception:
+                        _voice_srt = None
+                if _voice_srt:
+                    _part_narration_text = extract_text_from_srt(str(_voice_srt))
+                    if _part_narration_text.strip():
+                        _voice_part_tts_attempts.append(idx)
+                        _part_mp3 = str(TEMP_DIR / job_id / "voice" / f"part_{idx:03d}.mp3")
+                        try:
+                            _job_log(effective_channel, job_id, f"voice_translated_subtitle_tts_started part_no={idx}", kind="debug")
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="voice_translated_subtitle_tts_started",
+                                level="INFO",
+                                message=f"Generating AI voice from translated subtitle (part {idx})",
+                                step="voice.tts",
+                                context={"part_no": idx, "language": payload.voice_language, "target": _tgt_lang_voice},
+                            )
+                            _part_subtitle_voice_path = generate_narration_mp3(
+                                text=_part_narration_text,
+                                language=payload.voice_language,
+                                gender=payload.voice_gender,
+                                rate=payload.voice_rate,
+                                job_id=job_id,
+                                voice_id=getattr(payload, "voice_id", None),
+                                output_path=_part_mp3,
+                            )
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="voice_translated_subtitle_tts_completed",
+                                level="INFO",
+                                message=f"AI voice from translated subtitle generated (part {idx})",
+                                step="voice.tts",
+                                context={"part_no": idx, "audio_path": _part_subtitle_voice_path, "voice_text_length": len(_part_narration_text)},
+                            )
+                        except Exception as _part_tts_exc:
+                            _part_subtitle_voice_path = None
+                            _job_log(effective_channel, job_id, f"voice_translated_subtitle_tts_failed part_no={idx}: {_part_tts_exc}", kind="error")
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="voice_failed",
+                                level="ERROR",
+                                message=f"AI voice (translated subtitle, part {idx}) failed: {_part_tts_exc}",
+                                step="voice.tts",
+                                exception=_part_tts_exc,
+                                traceback_text=traceback.format_exc(),
+                                context={"part_no": idx, "error_code": "VOICE001"},
+                            )
+                    else:
+                        _job_log(effective_channel, job_id, f"VOICE_SUBTITLE_EMPTY: part {idx} translated subtitle text empty; narration skipped", kind="warning")
+                else:
+                    _job_log(effective_channel, job_id, f"VOICE_SUBTITLE_MISSING: part {idx} no SRT available for translated narration; skipped", kind="warning")
+            _final_voice_path = voice_audio_path or _part_subtitle_voice_path
+            if _final_voice_path:
+                mixed_part = final_part.with_name(final_part.stem + ".voice_tmp.mp4")
+                try:
+                    _job_log(effective_channel, job_id, f"Mixing AI narration into part {idx}/{total_parts}", kind="debug")
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="voice_mix_started",
+                        level="INFO",
+                        message="Mixing narration audio",
+                        step="voice.mix",
+                        context={"part_no": idx, "mix_mode": payload.voice_mix_mode},
+                    )
+                    mix_narration_audio(
+                        video_path=str(final_part),
+                        narration_audio_path=str(_final_voice_path),
+                        mix_mode=payload.voice_mix_mode,
+                        output_path=str(mixed_part),
+                    )
+                    os.replace(str(mixed_part), str(final_part))
+                    _job_log(effective_channel, job_id, f"voice_mix_completed part_no={idx}/{total_parts}")
+                    _voice_mix_ok.append(idx)
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="voice_mix_completed",
+                        level="INFO",
+                        message="Voice narration completed",
+                        step="voice.mix",
+                        context={"part_no": idx, "output_file": str(final_part)},
+                    )
+                except Exception as mix_exc:
+                    _safe_unlink(mixed_part)
+                    _job_log(effective_channel, job_id, f"voice_mix_failed part_no={idx}: {mix_exc}", kind="error")
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="voice_failed",
+                        level="ERROR",
+                        message=f"voice_mix_failed part_no={idx}: {mix_exc}",
+                        step="voice.mix",
+                        context={"part_no": idx, "output_file": str(final_part), "error_code": "VOICE001"},
+                        exception=mix_exc,
+                        traceback_text=traceback.format_exc(),
+                    )
             _encode_ms = int((time.perf_counter() - _t_encode) * 1000)
             _part_dur = float(seg.get("duration") or 0)
             _speed_ratio = round(_part_dur * 1000 / max(_encode_ms, 1), 2)
@@ -1080,7 +1398,27 @@ def run_render_pipeline(
         report_path = output_dir / "render_report.xlsx"
         append_rows(report_path, ["job_id", "channel_code", "video_title", "part_no", "start", "end", "duration", "viral_score", "priority_rank", "output_file"], rows)
         _job_log(effective_channel, job_id, f"Report written: {report_path}")
-        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
+        if not getattr(payload, "voice_enabled", False):
+            _voice_summary = "not used"
+        elif _voice_tts_failed:
+            _voice_summary = "failed"
+        elif _voice_mix_ok:
+            _voice_summary = "applied"
+        elif _voice_part_tts_attempts and not _voice_mix_ok:
+            _voice_summary = "failed"
+        else:
+            _voice_summary = "not used"
+        if not getattr(payload, "subtitle_translate_enabled", False) or not _sub_translate_attempts:
+            _subtitle_translate_summary = "not used"
+        elif _sub_translate_clean and not _sub_translate_partial and not _sub_translate_failed_parts:
+            _subtitle_translate_summary = "applied"
+        elif _sub_translate_failed_parts and not _sub_translate_clean and not _sub_translate_partial:
+            _subtitle_translate_summary = "failed"
+        else:
+            _subtitle_translate_summary = "partial"
+        _job_log(effective_channel, job_id, f"Voice: {_voice_summary}")
+        _job_log(effective_channel, job_id, f"Subtitle translation: {_subtitle_translate_summary}")
+        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
         _job_log(effective_channel, job_id, f"Render completed with {len(outputs)}/{total_parts} outputs")
         _emit_render_event(
             channel_code=effective_channel,
@@ -1099,7 +1437,7 @@ def run_render_pipeline(
             message="Render success",
             step="render.complete",
             duration_ms=int((datetime.utcnow() - started_at).total_seconds() * 1000),
-            context={"outputs": len(outputs), "total_parts": total_parts},
+            context={"outputs": len(outputs), "total_parts": total_parts, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary},
         )
     except Exception as e:
         fail_message = f"Failed at step '{current_stage}': {e}"

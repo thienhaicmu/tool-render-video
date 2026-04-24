@@ -434,6 +434,322 @@ function evToggleBgmFields() {
   const el = qs('evBgmFields');
   if (el) el.style.display = qs('evBgmEnable').checked ? 'flex' : 'none';
 }
+window.RENDER_I18N = {
+  en: {
+    ui_language: 'UI language',
+    language_voice_section: 'Language & Voice',
+    subtitle_style: 'Subtitle Style',
+    auto_subtitles: 'Auto subtitles',
+    translate_subtitles: 'Translate subtitles',
+    target_language: 'Target language',
+    ai_narration: 'AI Narration',
+    enable_ai_narration: 'Enable AI narration',
+    narration_source: 'Narration source',
+    manual_text_option: 'Manual text',
+    use_subtitles_option: 'Use subtitles',
+    use_translated_subtitles_option: 'Use translated subtitles',
+    language: 'Language',
+    voice_preset: 'Voice preset',
+    speed: 'Speed',
+    speed_slow: 'Slow',
+    speed_normal: 'Normal',
+    speed_energetic: 'Energetic',
+    audio_mode: 'Audio mode',
+    audio_mode_replace: 'Replace original audio',
+    audio_mode_mix: 'Keep original audio low + add narration',
+    what_should_be_narrated: 'What should be narrated?',
+    voice_text_placeholder: 'e.g. "This short clip shows how to..."',
+    improve_narration_tone: '✨ Improve narration tone',
+    manual_text_reused_warning: '⚠️ This narration text will be used for all rendered clips.',
+    subtitle_source_hint: 'ℹ️ Each clip uses original subtitle text.',
+    translated_subtitle_source_hint: 'ℹ️ Each clip uses translated subtitle text.',
+    turn_on_translate_warning: '⚠️ Turn on Translate subtitles to use translated subtitle narration.',
+    start_render: '▶ Start Render',
+    char_count_one: 'character',
+    char_count_other: 'characters',
+    render_complete: 'Render complete',
+    voice: 'Voice',
+    subtitle_translation: 'Subtitle translation',
+    applied: 'applied',
+    failed: 'failed',
+    partial: 'partial',
+    not_used: 'not used',
+  },
+  vi: {
+    ui_language: 'Ngôn ngữ giao diện',
+    language_voice_section: 'Ngôn ngữ & Giọng đọc',
+    subtitle_style: 'Kiểu phụ đề',
+    auto_subtitles: 'Phụ đề tự động',
+    translate_subtitles: 'Dịch phụ đề',
+    target_language: 'Ngôn ngữ đích',
+    ai_narration: 'Thuyết minh AI',
+    enable_ai_narration: 'Bật thuyết minh AI',
+    narration_source: 'Nguồn thuyết minh',
+    manual_text_option: 'Nhập nội dung thủ công',
+    use_subtitles_option: 'Dùng phụ đề gốc',
+    use_translated_subtitles_option: 'Dùng phụ đề đã dịch',
+    language: 'Ngôn ngữ',
+    voice_preset: 'Mẫu giọng',
+    speed: 'Tốc độ',
+    speed_slow: 'Chậm',
+    speed_normal: 'Bình thường',
+    speed_energetic: 'Năng động',
+    audio_mode: 'Cách xử lý âm thanh',
+    audio_mode_replace: 'Thay thế âm thanh gốc',
+    audio_mode_mix: 'Giữ âm gốc nhỏ + thêm thuyết minh',
+    what_should_be_narrated: 'Nội dung cần thuyết minh là gì?',
+    voice_text_placeholder: 'Ví dụ: "Đoạn clip ngắn này cho thấy..."',
+    improve_narration_tone: '✨ Cải thiện giọng điệu thuyết minh',
+    manual_text_reused_warning: '⚠️ Nội dung thuyết minh này sẽ được dùng cho tất cả clip được render.',
+    subtitle_source_hint: 'ℹ️ Mỗi clip sẽ đọc theo nội dung phụ đề gốc.',
+    translated_subtitle_source_hint: 'ℹ️ Mỗi clip sẽ đọc theo nội dung phụ đề đã dịch.',
+    turn_on_translate_warning: '⚠️ Hãy bật Dịch phụ đề để dùng thuyết minh từ phụ đề đã dịch.',
+    start_render: '▶ Bắt đầu render',
+    char_count_one: 'ký tự',
+    char_count_other: 'ký tự',
+    render_complete: 'Render hoàn tất',
+    voice: 'Giọng đọc',
+    subtitle_translation: 'Dịch phụ đề',
+    applied: 'đã áp dụng',
+    failed: 'thất bại',
+    partial: 'một phần',
+    not_used: 'không dùng',
+  },
+};
+function getRenderUiLanguage() {
+  try {
+    const val = localStorage.getItem('render_ui_lang');
+    if (val !== 'en') localStorage.setItem('render_ui_lang', 'en');
+  } catch (_) {
+  }
+  return 'en';
+}
+function _renderI18nValue(key, lang = null) {
+  const activeLang = lang || getRenderUiLanguage();
+  const dict = window.RENDER_I18N?.[activeLang] || window.RENDER_I18N?.en || {};
+  return dict[key] || key;
+}
+function setRenderUiLanguage(lang) {
+  const next = lang === 'vi' ? 'vi' : 'en';
+  try { localStorage.setItem('render_ui_lang', next); } catch (_) {}
+  applyRenderLanguage(next);
+}
+function applyRenderLanguage(lang) {
+  const activeLang = lang === 'vi' ? 'vi' : 'en';
+  const picker = qs('evUiLanguage');
+  if (picker && picker.value !== activeLang) picker.value = activeLang;
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.getAttribute('data-i18n');
+    if (!key) return;
+    const text = _renderI18nValue(key, activeLang);
+    if (typeof text === 'string') el.textContent = text;
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (!key) return;
+    const text = _renderI18nValue(key, activeLang);
+    if ('placeholder' in el) el.placeholder = text;
+  });
+  evUpdateVoiceCharCount();
+}
+const _EV_VOICE_PRESETS = {
+  'vi-VN': [
+    { id: 'vi-VN-HoaiMyNeural',  label: 'HoaiMy',  gender: 'female', recommended_use: 'natural, storytelling' },
+    { id: 'vi-VN-NamMinhNeural', label: 'NamMinh', gender: 'male',   recommended_use: 'authoritative, news' },
+  ],
+  'ja-JP': [
+    { id: 'ja-JP-NanamiNeural', label: 'Nanami', gender: 'female', recommended_use: 'warm, conversational' },
+    { id: 'ja-JP-KeitaNeural',  label: 'Keita',  gender: 'male',   recommended_use: 'professional' },
+  ],
+  'en-US': [
+    { id: 'en-US-JennyNeural', label: 'Jenny', gender: 'female', recommended_use: 'friendly, conversational' },
+    { id: 'en-US-AriaNeural',  label: 'Aria',  gender: 'female', recommended_use: 'expressive, engaging' },
+    { id: 'en-US-GuyNeural',   label: 'Guy',   gender: 'male',   recommended_use: 'professional' },
+    { id: 'en-US-DavisNeural', label: 'Davis', gender: 'male',   recommended_use: 'podcast, documentary' },
+  ],
+  'en-GB': [
+    { id: 'en-GB-SoniaNeural',  label: 'Sonia',  gender: 'female', recommended_use: 'clear, authoritative' },
+    { id: 'en-GB-LibbyNeural',  label: 'Libby',  gender: 'female', recommended_use: 'casual, warm' },
+    { id: 'en-GB-RyanNeural',   label: 'Ryan',   gender: 'male',   recommended_use: 'documentary, narration' },
+    { id: 'en-GB-OliverNeural', label: 'Oliver', gender: 'male',   recommended_use: 'formal, professional' },
+  ],
+};
+
+function evPopulateVoicePresets(lang, selectedId) {
+  const sel = qs('evVoicePreset');
+  if (!sel) return;
+  const voices = _EV_VOICE_PRESETS[lang] || [];
+  sel.innerHTML = voices.map(v =>
+    `<option value="${v.id}">${v.label} — ${v.recommended_use}</option>`
+  ).join('');
+  if (selectedId && voices.find(v => v.id === selectedId)) {
+    sel.value = selectedId;
+  } else if (voices.length) {
+    sel.value = voices[0].id;
+  }
+}
+function evOnVoiceLanguageChange() {
+  evPopulateVoicePresets(qs('evVoiceLanguage')?.value || 'vi-VN');
+  evOnVoicePresetChange();
+}
+function evOnVoicePresetChange() {
+  const voiceId = qs('evVoicePreset')?.value || '';
+  const lang = qs('evVoiceLanguage')?.value || 'vi-VN';
+  const voices = _EV_VOICE_PRESETS[lang] || [];
+  const matched = voices.find(v => v.id === voiceId);
+  const genderEl = qs('evVoiceGender');
+  if (genderEl) genderEl.value = matched?.gender || 'female';
+}
+function evToggleVoiceFields() {
+  const el = qs('evVoiceFields');
+  if (el) el.style.display = qs('evVoiceEnable').checked ? 'flex' : 'none';
+  evUpdateVoiceCharCount();
+  evToggleVoiceSourceMode();
+}
+function evToggleVoiceSourceMode() {
+  const source = qs('evVoiceSource')?.value || 'manual';
+  const manualArea = qs('evVoiceManualArea');
+  const subtitleHint = qs('evVoiceSubtitleHint');
+  const translatedHint = qs('evVoiceTranslatedHint');
+  const translateOffWarn = qs('evVoiceTranslateOffWarn');
+  if (manualArea) manualArea.style.display = source === 'manual' ? 'flex' : 'none';
+  if (subtitleHint) subtitleHint.style.display = source === 'subtitle' ? 'block' : 'none';
+  const isTranslated = source === 'translated_subtitle';
+  if (translatedHint) translatedHint.style.display = isTranslated ? 'block' : 'none';
+  const translateOn = !!qs('evSubTranslate')?.checked;
+  if (translateOffWarn) translateOffWarn.style.display = isTranslated && !translateOn ? 'block' : 'none';
+}
+function evOnSubTranslateChange() {
+  const enabled = !!qs('evSubTranslate')?.checked;
+  const fields = qs('evSubTranslateFields');
+  if (fields) fields.style.display = enabled ? 'block' : 'none';
+  evToggleVoiceSourceMode();
+}
+function evUpdateVoiceCharCount() {
+  const count = String(qs('evVoiceText')?.value || '').length;
+  const el = qs('evVoiceCharCount');
+  const singular = _renderI18nValue('char_count_one');
+  const plural = _renderI18nValue('char_count_other');
+  if (el) el.textContent = `${count} ${count === 1 ? singular : plural}`;
+}
+
+function formatNarrationText(text) {
+  let t = String(text || '').trim();
+  if (!t) return '';
+
+  // Normalize internal whitespace
+  t = t.replace(/\s+/g, ' ');
+
+  // Fix missing space after sentence-ending punctuation before a letter
+  t = t.replace(/([.!?])([A-Za-z])/g, '$1 $2');
+
+  // Split into sentence chunks: keep punctuation attached to the sentence before it
+  const chunks = [];
+  const splitRe = /([.!?]+)\s+/g;
+  let last = 0;
+  let m;
+  while ((m = splitRe.exec(t)) !== null) {
+    chunks.push(t.slice(last, m.index + m[1].length));
+    last = m.index + m[0].length;
+  }
+  if (last < t.length) chunks.push(t.slice(last));
+
+  const CONTRAST = /^(But |However[, ]|And yet |Still[, ]|Yet[, ]|Now[, ]|Remember[, ])/i;
+  const trimmed = chunks.map(s => s.trim()).filter(Boolean);
+  const totalSentences = trimmed.length;
+
+  const processed = trimmed.map((chunk, i) => {
+    // Capitalize first letter of each sentence
+    if (chunk.length > 0) chunk = chunk.charAt(0).toUpperCase() + chunk.slice(1);
+
+    // Long chunk with no ending punctuation — try to break at the comma nearest the midpoint
+    if (chunk.length > 90 && !/[.!?]$/.test(chunk)) {
+      const mid = Math.floor(chunk.length / 2);
+      let bestIdx = -1;
+      let bestDist = Infinity;
+      for (let j = 0; j < chunk.length; j++) {
+        if (chunk[j] === ',') {
+          const d = Math.abs(j - mid);
+          if (d < bestDist && j > 15 && j < chunk.length - 15) {
+            bestDist = d;
+            bestIdx = j;
+          }
+        }
+      }
+      if (bestIdx !== -1) {
+        const before = chunk.slice(0, bestIdx).trim();
+        const after = chunk.slice(bestIdx + 1).trim();
+        if (after) chunk = before + '. ' + after.charAt(0).toUpperCase() + after.slice(1);
+      }
+    }
+
+    // Light pause before rhetorical contrast starters —
+    // only when not the first sentence, and only if the text has 3 or more sentences
+    if (i > 0 && totalSentences >= 3 && CONTRAST.test(chunk)) return '... ' + chunk;
+    return chunk;
+  });
+
+  t = processed.join(' ');
+
+  // Ensure sentence ends with punctuation
+  if (!/[.!?]$/.test(t)) t += '.';
+
+  // Tidy up
+  t = t.replace(/\s{2,}/g, ' ').trim();
+  t = t.replace(/\.{4,}/g, '...');
+  return t;
+}
+
+function evImproveNarrationText() {
+  const ta = qs('evVoiceText');
+  if (!ta) return;
+  if (!ta.value.trim()) {
+    showToast('Enter narration text first.', 'info');
+    return;
+  }
+  ta.value = formatNarrationText(ta.value);
+  evUpdateVoiceCharCount();
+  showToast('Narration text improved.', 'success');
+}
+
+function evVoiceSpeedToRate(value) {
+  const speed = String(value || 'normal').trim().toLowerCase();
+  if (speed === 'slow') return '-10%';
+  if (speed === 'energetic') return '+10%';
+  return '+0%';
+}
+function evVoiceSpeedFromRate(value) {
+  const rate = String(value || '+0%').trim();
+  if (rate === '-10%') return 'slow';
+  if (rate === '+10%') return 'energetic';
+  return 'normal';
+}
+function evInitVoiceFields(payload) {
+  const p = payload || {};
+  if (qs('evVoiceEnable')) qs('evVoiceEnable').checked = !!p.voice_enabled;
+  const lang = p.voice_language || 'vi-VN';
+  if (qs('evVoiceLanguage')) qs('evVoiceLanguage').value = lang;
+  if (qs('evVoiceSpeed')) qs('evVoiceSpeed').value = evVoiceSpeedFromRate(p.voice_rate || '+0%');
+  if (qs('evVoiceMixMode')) qs('evVoiceMixMode').value = p.voice_mix_mode || 'replace_original';
+  if (qs('evVoiceText')) qs('evVoiceText').value = p.voice_text || '';
+  if (qs('evVoiceSource')) qs('evVoiceSource').value = p.voice_source || 'manual';
+  const translateEnabled = !!p.subtitle_translate_enabled;
+  if (qs('evSubTranslate')) qs('evSubTranslate').checked = translateEnabled;
+  if (qs('evSubTranslateFields')) qs('evSubTranslateFields').style.display = translateEnabled ? 'block' : 'none';
+  if (qs('evSubTranslateTarget')) qs('evSubTranslateTarget').value = p.subtitle_target_language || 'en';
+  // Resolve which preset to select: explicit voice_id first, then gender fallback
+  let resolvedId = p.voice_id || null;
+  if (!resolvedId) {
+    const gender = p.voice_gender || 'female';
+    const voices = _EV_VOICE_PRESETS[lang] || [];
+    const match = voices.find(v => v.gender === gender);
+    if (match) resolvedId = match.id;
+  }
+  evPopulateVoicePresets(lang, resolvedId);
+  evOnVoicePresetChange();
+  evToggleVoiceFields();
+  applyRenderLanguage(getRenderUiLanguage());
+}
 function evPickBgmFile() { qs('ev_bgm_file_picker')?.click(); }
 async function evOnBgmPicked(ev) {
   const file = ev?.target?.files?.[0];
@@ -505,6 +821,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   _evUpdateSubLabel();
   evInitTextLayers();
   evUpdateAspectRatio();  // apply aspect ratio frame from dropdown
+  evInitVoiceFields(pendingPayload);
 
   try {
     const pr = await fetch('/api/render/prepare-source', {
@@ -578,6 +895,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   _evUpdateSubLabel();
   evInitTextLayers();
   evUpdateAspectRatio();
+  evInitVoiceFields(pendingPayload);
 
   if (pendingPayload) pendingPayload.edit_session_id = pd.session_id;
   _evSetDuration(_ev.duration);
@@ -1276,6 +1594,30 @@ async function startRenderFromEditor() {
   } else {
     payload.reup_bgm_path = null;
   }
+
+  const voiceEnabled = !!qs('evVoiceEnable')?.checked;
+  const voiceSource = qs('evVoiceSource')?.value || 'manual';
+  const voiceText = String(qs('evVoiceText')?.value || '').trim();
+  if (voiceEnabled && voiceSource === 'manual' && !voiceText) {
+    const _voiceMsg = 'Please enter narration text, or turn off AI narration.';
+    qs('evStatusLine').textContent = _voiceMsg;
+    qs('evStatusLine').style.color = '#ef4444';
+    qs('evStartBtn').disabled = false;
+    qs('evStartBtn').textContent = '▶ Start Render';
+    if (typeof showToast === 'function') showToast(_voiceMsg, 'error');
+    setRenderFlowState('configure', 'Render could not start', { force: true });
+    return;
+  }
+  payload.voice_enabled = voiceEnabled;
+  payload.voice_source = voiceSource;
+  payload.voice_language = qs('evVoiceLanguage')?.value || 'vi-VN';
+  payload.voice_gender = qs('evVoiceGender')?.value || 'female';
+  payload.voice_id = qs('evVoicePreset')?.value || null;
+  payload.voice_rate = evVoiceSpeedToRate(qs('evVoiceSpeed')?.value || 'normal');
+  payload.voice_mix_mode = qs('evVoiceMixMode')?.value || 'replace_original';
+  payload.voice_text = voiceEnabled ? voiceText : null;
+  payload.subtitle_translate_enabled = !!qs('evSubTranslate')?.checked;
+  payload.subtitle_target_language = qs('evSubTranslateTarget')?.value || 'en';
 
   // ── Output dir override (editor→render: bypass channel selection) ────────────
   {

@@ -802,12 +802,18 @@
         </div>
       </div>
 
-      <!-- ══ SUBTITLE & TEXT ══════════════════════════════════ -->
-      <div class="inspGroupSep">Subtitle &amp; Text</div>
+      <!-- ══ LANGUAGE & VOICE ══════════════════════════════════ -->
+      <div class="inspGroupSep"><span data-i18n="language_voice_section">Language &amp; Voice</span></div>
 
       <!-- Subtitle Style -->
       <div class="evSection" id="inspSubtitlePane" data-section-type="subtitle">
-        <div class="evSectionTitle">💬 Subtitle Style</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div class="evSectionTitle" style="margin-bottom:0">💬 <span data-i18n="subtitle_style">Subtitle Style</span></div>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer" title="Enable or disable auto subtitles">
+            <span style="font-size:11px;color:var(--text-muted)" data-i18n="auto_subtitles">Auto subtitles</span>
+            <input type="checkbox" id="evAddSubtitle" checked style="width:15px;height:15px;accent-color:#3b82f6">
+          </label>
+        </div>
         <div id="inspSubModeRow" class="inspSubModeRow demo">Preview sample · AI subtitle will be generated on render</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <label class="field" style="grid-column:1/-1">
@@ -866,6 +872,22 @@
         </div>
         <div class="inspSubPreview" id="evSubStaticPreview">
           <span id="evSubStaticText" style="font-family:'Bungee';font-size:28px;color:#fff;-webkit-text-stroke:2px #000">Preview subtitle</span>
+        </div>
+        <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
+            <input type="checkbox" id="evSubTranslate" style="width:14px;height:14px;accent-color:#8b5cf6" onchange="evOnSubTranslateChange()">
+            <span style="font-size:12px;color:var(--text)" data-i18n="translate_subtitles">Translate subtitles</span>
+          </label>
+          <div id="evSubTranslateFields" style="display:none">
+            <label class="field">
+              <span class="fieldLabel" data-i18n="target_language">Target language</span>
+              <select class="fieldInput" id="evSubTranslateTarget" onchange="evToggleVoiceSourceMode()">
+                <option value="vi">Vietnamese</option>
+                <option value="en" selected>English</option>
+                <option value="ja">Japanese</option>
+              </select>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -1015,6 +1037,75 @@
         </div>
       </div>
 
+      <!-- ══ AI NARRATION ══════════════════════════════════════ -->
+      <div class="evSection" id="evSectionVoice" data-section-type="voice-narration">
+        <div class="evSectionTitle">🎙️ <span data-i18n="ai_narration">AI Narration</span></div>
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer;margin-bottom:10px">
+          <input type="checkbox" id="evVoiceEnable" style="width:16px;height:16px;accent-color:#8b5cf6" onchange="evToggleVoiceFields()">
+          <span style="font-size:13px;color:var(--text)" data-i18n="enable_ai_narration">Enable AI narration</span>
+        </label>
+        <div id="evVoiceFields" style="display:none;flex-direction:column;gap:10px">
+          <label class="field">
+            <span class="fieldLabel" data-i18n="narration_source">Narration source</span>
+            <select class="fieldInput" id="evVoiceSource" onchange="evToggleVoiceSourceMode()">
+              <option value="manual" selected data-i18n="manual_text_option">Manual text</option>
+              <option value="subtitle" data-i18n="use_subtitles_option">Use subtitles</option>
+              <option value="translated_subtitle" data-i18n="use_translated_subtitles_option">Use translated subtitles</option>
+            </select>
+          </label>
+          <input type="hidden" id="evVoiceGender" value="female">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label class="field"><span class="fieldLabel" data-i18n="language">Language</span>
+              <select class="fieldInput" id="evVoiceLanguage" onchange="evOnVoiceLanguageChange()">
+                <option value="vi-VN" selected>Vietnamese</option>
+                <option value="ja-JP">Japanese</option>
+                <option value="en-US">English US</option>
+                <option value="en-GB">English UK</option>
+              </select>
+            </label>
+            <label class="field"><span class="fieldLabel" data-i18n="voice_preset">Voice preset</span>
+              <select class="fieldInput" id="evVoicePreset" onchange="evOnVoicePresetChange()">
+              </select>
+            </label>
+            <label class="field"><span class="fieldLabel" data-i18n="speed">Speed</span>
+              <select class="fieldInput" id="evVoiceSpeed">
+                <option value="slow" data-i18n="speed_slow">Slow</option>
+                <option value="normal" selected data-i18n="speed_normal">Normal</option>
+                <option value="energetic" data-i18n="speed_energetic">Energetic</option>
+              </select>
+            </label>
+            <label class="field"><span class="fieldLabel" data-i18n="audio_mode">Audio mode</span>
+              <select class="fieldInput" id="evVoiceMixMode">
+                <option value="replace_original" selected data-i18n="audio_mode_replace">Replace original audio</option>
+                <option value="keep_original_low" data-i18n="audio_mode_mix">Keep original audio low + add narration</option>
+              </select>
+            </label>
+          </div>
+          <div id="evVoiceManualArea" style="display:flex;flex-direction:column;gap:10px">
+            <label class="field">
+              <span class="fieldLabel" data-i18n="what_should_be_narrated">What should be narrated?</span>
+              <textarea class="fieldInput" id="evVoiceText" rows="5" data-i18n-placeholder="voice_text_placeholder" placeholder='e.g. "This short clip shows how to..."' oninput="evUpdateVoiceCharCount()"></textarea>
+            </label>
+            <div style="display:flex;justify-content:flex-end">
+              <button type="button" class="ghostButton" style="font-size:11px;padding:4px 10px" onclick="evImproveNarrationText()"><span data-i18n="improve_narration_tone">✨ Improve narration tone</span></button>
+            </div>
+            <div id="evVoiceReuseWarning" style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:6px;padding:6px 10px" data-i18n="manual_text_reused_warning">
+              ⚠️ This narration text will be used for all rendered clips.
+            </div>
+            <div id="evVoiceCharCount" style="font-size:11px;color:var(--text-muted);text-align:right">0 characters</div>
+          </div>
+          <div id="evVoiceSubtitleHint" style="display:none;font-size:11px;color:#60a5fa;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:6px;padding:6px 10px" data-i18n="subtitle_source_hint">
+            ℹ️ Each clip uses original subtitle text.
+          </div>
+          <div id="evVoiceTranslatedHint" style="display:none;font-size:11px;color:#a78bfa;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.25);border-radius:6px;padding:6px 10px" data-i18n="translated_subtitle_source_hint">
+            ℹ️ Each clip uses translated subtitle text.
+          </div>
+          <div id="evVoiceTranslateOffWarn" style="display:none;font-size:11px;color:#f59e0b;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:6px;padding:6px 10px" data-i18n="turn_on_translate_warning">
+            ⚠️ Turn on Translate subtitles to use translated subtitle narration.
+          </div>
+        </div>
+      </div>
+
       <!-- ══ AUDIO (collapsed) ════════════════════════════════ -->
       <div class="inspCollapsedGroup">
         <div class="inspGroupHdr" id="inspGroupAudioHdr" onclick="evToggleInspGroup('audio')">
@@ -1083,10 +1174,6 @@
             </div>
             <div style="display:flex;flex-direction:column;gap:8px">
               <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
-                <input type="checkbox" id="evAddSubtitle" checked style="width:16px;height:16px;accent-color:#3b82f6">
-                <span style="font-size:13px;color:var(--text)">💬 Auto subtitles (Whisper)</span>
-              </label>
-              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
                 <input type="checkbox" id="evMotionCrop" checked style="width:16px;height:16px;accent-color:#3b82f6">
                 <span style="font-size:13px;color:var(--text)">🎯 Motion-aware crop</span>
               </label>
@@ -1151,7 +1238,7 @@
         <span id="evStatusDetail" style="font-size:10px;color:var(--text-muted);opacity:.8"></span>
       </div>
       <button class="ghostButton" id="evReopenBtn" onclick="evReopenEditor()" style="display:none;font-size:12px;padding:5px 10px">↺ Re-open Editor</button>
-      <button class="primaryButton" id="evStartBtn" onclick="startRenderFromEditor()" disabled>▶ Start Render</button>
+      <button class="primaryButton" id="evStartBtn" onclick="startRenderFromEditor()" disabled data-i18n="start_render">▶ Start Render</button>
     </div>
   </aside>
   <!-- ═══════════════════════════════════════════════════════════════

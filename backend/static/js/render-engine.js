@@ -248,6 +248,12 @@ function _applyJobUpdate(job, parts, summary){
   const s = summary || computeProgressSummary(parts||[]);
   const jobProgress = Number(job.progress_percent || 0);
   const stage = (job.stage || '').toLowerCase();
+  const status = String(job.status || '').toLowerCase();
+  const isCompleted = status === 'completed' || status === 'done' || status === 'complete';
+  const isFailed = status === 'failed' || status === 'interrupted';
+  const isTerminal = typeof isTerminalRenderStatus === 'function'
+    ? isTerminalRenderStatus(status)
+    : (isCompleted || isFailed);
 
   // During rendering, derive finer progress from parts aggregate.
   // Rendering occupies 30–90 % of the overall bar.
@@ -257,11 +263,11 @@ function _applyJobUpdate(job, parts, summary){
     targetPercent = Math.min(90, Math.round(30 + (overallPct / 100) * 60));
   }
   // Snap to 100 immediately on terminal states
-  if(job.status === 'completed') targetPercent = 100;
+  if(isCompleted) targetPercent = 100;
 
   // Feed the smooth animation target; the RAF loop updates DOM for job bar
   _jobTargetPct = Math.max(_jobTargetPct, targetPercent);
-  if(job.status === 'completed' || job.status === 'failed'){
+  if(isTerminal){
     _jobTargetPct = targetPercent;
     _jobDisplayPct = targetPercent;
     const bar = document.getElementById('job_bar');
@@ -311,17 +317,17 @@ function _applyJobUpdate(job, parts, summary){
     lastStatus = job.status;
   }
   const bucket = Math.floor(targetPercent / 10);
-  if(job.status === 'running' && bucket !== lastProgressBucket){
+  if(status === 'running' && bucket !== lastProgressBucket){
     addEvent(`Running: ${stageLabelPlain(job.stage)} (${targetPercent}%)`, 'render');
     lastProgressBucket = bucket;
   }
 
-  if(job.status === 'completed' || job.status === 'failed'){
+  if(isTerminal){
     _stopJobWs();
     if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
     setRenderActionBusy(false);
     saveRenderHistoryEntry(job, s, parts);
-    if(job.status === 'failed' && currentJobId && lastFailLogJobId !== currentJobId){
+    if(isFailed && currentJobId && lastFailLogJobId !== currentJobId){
       fetch(`/api/jobs/${currentJobId}/logs?lines=1`)
         .then(r => r.json()).then(ldata => {
           const lf = ldata?.log_file || '';
@@ -330,7 +336,7 @@ function _applyJobUpdate(job, parts, summary){
           lastFailLogJobId = currentJobId;
         }).catch(_=>{ addEvent('Render failed. Review clips first, then diagnostics if needed.', 'render'); });
     }
-    if (job.status === 'completed') {
+    if (isCompleted) {
       const handoff = buildCompletionHandoff(s, parts, job);
       showRenderCompletionBar(handoff.main, handoff.detail);
       setRenderFlowState('complete', `${doneCount} clips ready`);
@@ -389,9 +395,7 @@ function startPolling(){
 
   ws.onclose = () => {
     jobWs = null;
-    const status = String(_renderMonitorLastJob?.status || lastStatus || '').toLowerCase();
-    const terminal = status === 'completed' || status === 'failed' || status === 'interrupted';
-    if (!currentJobId || terminal) return;
+    if (!currentJobId) return;
     loadJobProgress();
   };
 }

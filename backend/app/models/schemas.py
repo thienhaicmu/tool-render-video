@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 
 
@@ -144,7 +144,7 @@ class RenderRequest(BaseModel):
 
     # Subtitle
     add_subtitle: bool = True
-    subtitle_style: Optional[str] = "tiktok_bounce_v1"
+    subtitle_style: Optional[str] = "pro_karaoke"
     subtitle_viral_min_score: int = 0
     subtitle_viral_top_ratio: float = 1.0
     subtitle_only_viral_high: bool = False
@@ -190,6 +190,34 @@ class RenderRequest(BaseModel):
     edit_trim_out: float = 0
     edit_volume: float = 1.0
     text_layers: list[TextLayerConfig] = Field(default_factory=list)
+    voice_enabled: bool = False
+    voice_language: str = "vi-VN"
+    voice_gender: str = "female"
+    voice_rate: str = "+0%"
+    voice_mix_mode: str = "replace_original"
+    voice_text: Optional[str] = None
+    voice_source: str = "manual"
+    voice_id: Optional[str] = None
+    subtitle_translate_enabled: bool = False
+    subtitle_target_language: str = "en"
+
+    @model_validator(mode="after")
+    def validate_voice_settings(self):
+        if not self.voice_enabled:
+            return self
+        if self.voice_source not in {"manual", "subtitle", "translated_subtitle"}:
+            raise ValueError("voice_source must be 'manual', 'subtitle', or 'translated_subtitle'")
+        if self.voice_source == "manual" and not (self.voice_text or "").strip():
+            raise ValueError("voice_text is required when voice_enabled=true and voice_source=manual")
+        if self.subtitle_target_language not in {"vi", "en", "ja"}:
+            raise ValueError("subtitle_target_language must be one of vi, en, ja")
+        if self.voice_language not in {"vi-VN", "ja-JP", "en-US", "en-GB"}:
+            raise ValueError("voice_language must be one of vi-VN, ja-JP, en-US, en-GB")
+        if self.voice_gender not in {"female", "male"}:
+            raise ValueError("voice_gender must be 'female' or 'male'")
+        if self.voice_mix_mode not in {"replace_original", "keep_original_low"}:
+            raise ValueError("voice_mix_mode must be 'replace_original' or 'keep_original_low'")
+        return self
 
 
 # ── Upload ───────────────────────────────────────────────────────────────
