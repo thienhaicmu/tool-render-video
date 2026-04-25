@@ -166,3 +166,16 @@ function _fmtTime(sec) {
   const s = sec % 60;
   return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
+
+function _formatApiError(detail) {
+  if (!detail) return 'unknown error';
+  // Pydantic 422: detail is an array of {loc, msg, type} objects
+  if (Array.isArray(detail)) {
+    return detail.map(e => {
+      const field = Array.isArray(e.loc) ? e.loc.filter(x => x !== 'body').join('.') : '';
+      return field ? `${field}: ${e.msg}` : (e.msg || JSON.stringify(e));
+    }).join(' | ');
+  }
+  // HTTPException 400/500: detail is a plain string
+  return typeof detail === 'string' ? detail : JSON.stringify(detail);
+}

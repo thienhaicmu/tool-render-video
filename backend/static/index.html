@@ -13,6 +13,9 @@
 </head>
 <body>
 <div class="appShell">
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION: topbar
+  ════════════════════════════════════════════════════════════════ -->
   <header class="appTopBar">
     <div class="appTopBarBrand">
       <div class="brandBadge">NM</div>
@@ -35,7 +38,12 @@
       </button>
     </div>
   </header>
+  <!-- /SECTION: topbar -->
+
   <div class="rs-main">
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION: sidebar-source-setup
+  ════════════════════════════════════════════════════════════════ -->
   <nav class="sidebar rs-left-panel" id="sidebarPanel">
     <div class="sidebarHeader">
       <div class="sidebarTitle">Render Studio</div>
@@ -194,8 +202,13 @@
 
     </div><!-- /sidebarScrollable -->
   </nav>
+  <!-- /SECTION: sidebar-source-setup -->
 
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION: main-area
+  ════════════════════════════════════════════════════════════════ -->
   <main class="mainArea rs-center-panel" id="mainArea">
+    <!-- ── SECTION: render-flow-bar ─────────────────────────────── -->
     <section id="render_flow_bar" class="renderFlowBar hiddenView" aria-label="Render flow">
       <div class="renderFlowStep" data-flow-step="source">
         <div class="renderFlowNum">1</div>
@@ -229,12 +242,13 @@
         </div>
       </div>
     </section>
+    <!-- /SECTION: render-flow-bar -->
 
     <div class="rs-center-stage">
 
     <div class="rs-preview-stage">
     <!-- ═══════════════════════════════════════════════════════════════
-         EDITOR VIEW — in-layout center-stage editor (local/YouTube)
+         SECTION: editor-view — in-layout center-stage editor (local/YouTube)
     ════════════════════════════════════════════════════════════════ -->
     <div id="view_editor" class="evLayout hiddenView">
 
@@ -300,10 +314,13 @@
       </div>
 
     </div><!-- /view_editor -->
+    <!-- /SECTION: editor-view -->
     </div><!-- /rs-preview-stage -->
 
     <!-- ═══════════════════════════════════════════════════════════════
-         JOB MONITOR VIEW — full center-stage render progress
+         SECTION: monitor-view (DEAD — permanently hidden)
+         Ghost IDs below are still written by render-ui.js and render-engine.js.
+         Do not remove this block — remove the IDs from JS first.
     ════════════════════════════════════════════════════════════════ -->
     <!-- view_monitor: permanently hidden; remaining IDs silently updated by JS -->
     <div id="view_monitor" class="hiddenView" data-jm-status="idle" style="display:none">
@@ -315,30 +332,14 @@
       <div class="stepsGrid" id="steps_grid"></div>
       <div class="hiddenView" id="jobs_out"></div>
     </div>
+    <!-- /SECTION: monitor-view -->
 
-    <!-- ── Render home panel — idle dashboard, shown only in render view ── -->
-    <div id="render_home_panel" class="renderHomePanel hiddenView">
-      <div class="renderHomeCard">
-        <div class="renderHomeTitle">Pipeline Steps</div>
-        <div class="renderHomeRow"><span class="renderHomeStepNum">1</span>Paste YouTube URL or choose a local video in <strong>Source Setup</strong> below.</div>
-        <div class="renderHomeRow"><span class="renderHomeStepNum">2</span>Select an output channel (or manual folder) and configure render options.</div>
-        <div class="renderHomeRow"><span class="renderHomeStepNum">3</span>Open editor, adjust your clip, then start render.</div>
-        <div class="renderHomeRow"><span class="renderHomeStepNum">4</span>When done, clips and the report are saved to the output folder.</div>
-      </div>
-      <div class="renderHomeCard">
-        <div class="renderHomeTitle">System</div>
-        <div class="renderHomeRow"><span class="rhDot green"></span>ffmpeg — available</div>
-        <div class="renderHomeRow"><span class="rhDot green"></span>Whisper — available</div>
-        <div class="renderHomeRow"><span class="rhDot blue"></span>GPU auto-detect — enabled</div>
-      </div>
-      <div class="renderHomeCard renderHistoryCard">
-        <div class="renderHomeTitle">Recent Renders</div>
-        <div id="render_history_list" class="renderHistoryList">
-          <div class="renderHistoryEmpty">No recent renders yet</div>
-        </div>
-      </div>
-    </div>
+    <!-- ── SECTION: render-home-panel ──────────────────────────── -->
+    <!-- partial: partials/render-home.html -->
+    <div id="partial_render_home"></div>
+    <!-- /SECTION: render-home-panel -->
 
+    <!-- ── SECTION: render-active-panel ────────────────────────── -->
     <div id="render_active_panel" class="renderActivePanel hiddenView" aria-live="polite">
       <div class="renderActiveCard">
         <div class="renderActiveTop">
@@ -379,7 +380,9 @@
         </div>
       </div>
     </div>
+    <!-- /SECTION: render-active-panel -->
 
+    <!-- ── SECTION: render-output-panel ────────────────────────── -->
     <!-- ── Render Output Panel — clips list, shown after render completes ── -->
     <div id="render_output_panel" class="renderOutputPanel hiddenView">
       <div class="renderOutputHeader">
@@ -397,7 +400,9 @@
         <div class="renderOutputEmpty">Clips will appear here when render completes.</div>
       </div>
     </div>
+    <!-- /SECTION: render-output-panel -->
 
+    <!-- ── SECTION: clip-preview-modal ─────────────────────────── -->
     <!-- ── Clip Preview Modal ── -->
     <div id="clip_preview_modal" class="clipPreviewModal hiddenView" onclick="closeClipPreview(event)">
       <div class="clipPreviewDialog">
@@ -411,49 +416,23 @@
         </div>
       </div>
     </div>
+    <!-- /SECTION: clip-preview-modal -->
 
     </div><!-- /rs-center-stage -->
 
-    <section id="view_download" class="downloadWorkspace hiddenView" aria-live="polite">
-      <div class="downloadWorkspaceHeader">
-        <div>
-          <div class="downloadWorkspaceTitle">Batch Download</div>
-          <div class="downloadWorkspaceSub" id="download_summary_text">Paste public social video links to build a download queue.</div>
-        </div>
-        <div class="downloadWorkspaceMeta">
-          <div class="downloadBatchStatus" id="download_batch_status">Idle</div>
-          <div class="downloadBatchMeta" id="download_batch_meta">No active batch</div>
-        </div>
-      </div>
-      <div class="downloadQueuePanel">
-        <div class="downloadQueueHeader">
-          <div class="downloadQueueTitle">Download Queue</div>
-          <div class="downloadQueueMeta" id="download_queue_meta">0 items</div>
-        </div>
-        <div class="downloadQueueList" id="download_queue_list">
-          <div class="emptyState">Paste one or more public links, then click Parse Links.</div>
-        </div>
-      </div>
-    </section>
+    <!-- ── SECTION: download-view ──────────────────────────────── -->
+    <!-- partial: partials/download-view.html -->
+    <div id="partial_download_view"></div>
+    <!-- /SECTION: download-view -->
 
-    <section id="view_history" class="downloadWorkspace hiddenView" aria-live="polite">
-      <div class="downloadWorkspaceHeader">
-        <div>
-          <div class="downloadWorkspaceTitle">History</div>
-          <div class="downloadWorkspaceSub">Recent Download and Render activity</div>
-        </div>
-      </div>
-      <div class="downloadQueuePanel historyPanel">
-        <div class="downloadQueueHeader">
-          <div class="downloadQueueTitle">Recent activity</div>
-          <div class="downloadQueueMeta" id="history_status_text">Loading recent activity...</div>
-        </div>
-        <div class="historyList" id="history_list">
-          <div class="emptyState">Your recent Download and Render jobs will appear here.</div>
-        </div>
-      </div>
-    </section>
+    <!-- ── SECTION: history-view ────────────────────────────────── -->
+    <!-- partial: partials/history-view.html -->
+    <div id="partial_history_view"></div>
+    <!-- /SECTION: history-view -->
 
+    <!-- ═══════════════════════════════════════════════════════════════
+         SECTION: main-content-scroll — upload, channels, settings/reports
+    ════════════════════════════════════════════════════════════════ -->
     <!-- ── Normal page header + grid ─────────────────────────────── -->
     <div class="mainContentScroll">
     <header class="pageHeader">
@@ -472,6 +451,7 @@
 
       <div class="leftColumn" id="left_column">
 
+        <!-- ── SECTION: upload-card ─────────────────────────────── -->
         <section class="card" id="card_upload">
           <div class="sectionHeader">
             <div><div class="sectionTitle">Upload</div><div class="sectionSubtitle">Follow steps 1→4 to login and upload videos.</div></div>
@@ -644,9 +624,11 @@
             <div class="logBox" id="event_log_upload"></div>
           </div>
         </section>
+        <!-- /SECTION: upload-card -->
 
         <section class="card hiddenView" id="card_logs"></section>
 
+        <!-- ── SECTION: channels-card ───────────────────────────── -->
         <section class="card hiddenView" id="card_channels">
           <div class="sectionHeader">
             <div><div class="sectionTitle">Channel Management</div><div class="sectionSubtitle">Choose Root Folder -> Enter Channel Code -> Configure -> Create Channel.</div></div>
@@ -688,26 +670,12 @@
           </div>
           <input id="channels_root_picker" type="file" webkitdirectory directory class="hiddenView">
         </section>
+        <!-- /SECTION: channels-card -->
 
-        <section class="card hiddenView" id="card_reports">
-          <div class="sectionHeader">
-            <div><div class="sectionTitle">Reports</div><div class="sectionSubtitle">Summary of render and upload results.</div></div>
-          </div>
-          <div class="emptyState">Reports will be available here.</div>
-        </section>
-
-        <section class="card hiddenView" id="card_settings">
-          <div class="sectionHeader">
-            <div><div class="sectionTitle">System Settings</div><div class="sectionSubtitle">Manage maintenance and system options here.</div></div>
-          </div>
-          <div class="formGrid">
-            <label class="field"><span class="fieldLabel">Keep latest logs per channel</span><input class="fieldInput" id="cleanup_keep_last" type="number" min="1" value="30"></label>
-            <label class="field"><span class="fieldLabel">Delete logs older than (days)</span><input class="fieldInput" id="cleanup_older_days" type="number" min="1" value="10"></label>
-          </div>
-          <div class="actionsRow">
-            <button class="secondaryButton" onclick="cleanupLogs()">Clean old job logs</button>
-          </div>
-        </section>
+        <!-- ── SECTION: reports-card + settings-card ───────────── -->
+        <!-- partial: partials/settings-view.html -->
+        <div id="partial_settings_view"></div>
+        <!-- /SECTION: reports-card + settings-card -->
       </div>
 
       <div class="rightColumn" id="right_column">
@@ -717,7 +685,12 @@
       </div>
     </div>
     </div><!-- /mainContentScroll -->
+    <!-- /SECTION: main-content-scroll -->
+  <!-- /SECTION: main-area -->
   </main>
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION: inspector
+  ════════════════════════════════════════════════════════════════ -->
   <aside class="appInspector rs-right-panel" id="appInspector">
     <!-- Right panel header -->
     <div class="evRightHeader">
@@ -1273,9 +1246,10 @@
       <button class="primaryButton" id="evStartBtn" onclick="startRenderFromEditor()" disabled data-i18n="start_render">▶ Start Render</button>
     </div>
   </aside>
+  <!-- /SECTION: inspector -->
   </div><!-- /rs-main -->
   <!-- ═══════════════════════════════════════════════════════════════
-       BOTTOM PANEL — Process Timeline + Live Log + Source Setup
+       SECTION: bottom-panel — Process Timeline + Live Log + Source Setup
   ════════════════════════════════════════════════════════════════ -->
   <section class="appBottomPanel rs-bottom-panel" id="appBottomPanel">
 
@@ -1401,7 +1375,11 @@
     </div><!-- /rcBottom -->
 
   </section><!-- /appBottomPanel -->
+  <!-- /SECTION: bottom-panel -->
 
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION: status-bar
+  ════════════════════════════════════════════════════════════════ -->
   <footer class="appStatusBar" id="appStatusBar">
     <div class="statusBarLeft sbClickable" id="sbJobArea" onclick="focusBottomPanel()" title="Jump to process panel">
       <span class="statusDot statusDotReady" id="sbDot"></span>
@@ -1413,8 +1391,18 @@
       <span class="statusSystem">ffmpeg · Whisper · GPU auto</span>
     </div>
   </footer>
+  <!-- /SECTION: status-bar -->
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION: script-includes
+     !! DO NOT CHANGE SCRIPT ORDER !!
+     Each file depends on globals.js (position 1) and files before it.
+     init.js must be last — it calls init functions from every prior file.
+     _formatApiError() lives in utils.js (pos 4) — used by render-config,
+     render-engine, upload-engine, editor-view. partials-loader.js runs
+     before init.js and must define loadPartials() before the async IIFE.
+════════════════════════════════════════════════════════════════ -->
 <script src="/static/js/globals.js"></script>
 <script src="/static/js/warmup.js"></script>
 <script src="/static/js/smooth-progress.js"></script>
@@ -1425,13 +1413,14 @@
 <script src="/static/js/upload-config.js"></script>
 <script src="/static/js/render-ui.js"></script>
 <script src="/static/js/render-engine.js"></script>
-<script src="/static/js/editor-modal.js"></script>
 <script src="/static/js/upload-engine.js"></script>
 <script src="/static/js/channels.js"></script>
 <script src="/static/js/editor-view.js"></script>
 <script src="/static/js/download-ui.js"></script>
 <script src="/static/js/history-ui.js"></script>
+<script src="/static/js/partials-loader.js"></script>
 <script src="/static/js/init.js"></script>
+<!-- /SECTION: script-includes -->
 <!-- Toast notification container — populated by showToast() in log-utils.js -->
 <div id="toastRoot" class="toastRoot"></div>
 </body>

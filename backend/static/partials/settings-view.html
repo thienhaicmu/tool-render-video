@@ -1,0 +1,19 @@
+<section class="card hiddenView" id="card_reports">
+  <div class="sectionHeader">
+    <div><div class="sectionTitle">Reports</div><div class="sectionSubtitle">Summary of render and upload results.</div></div>
+  </div>
+  <div class="emptyState">Reports will be available here.</div>
+</section>
+
+<section class="card hiddenView" id="card_settings">
+  <div class="sectionHeader">
+    <div><div class="sectionTitle">System Settings</div><div class="sectionSubtitle">Manage maintenance and system options here.</div></div>
+  </div>
+  <div class="formGrid">
+    <label class="field"><span class="fieldLabel">Keep latest logs per channel</span><input class="fieldInput" id="cleanup_keep_last" type="number" min="1" value="30"></label>
+    <label class="field"><span class="fieldLabel">Delete logs older than (days)</span><input class="fieldInput" id="cleanup_older_days" type="number" min="1" value="10"></label>
+  </div>
+  <div class="actionsRow">
+    <button class="secondaryButton" onclick="cleanupLogs()">Clean old job logs</button>
+  </div>
+</section>
