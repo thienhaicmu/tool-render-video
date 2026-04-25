@@ -41,6 +41,26 @@ function resetRenderSessionUi(){
   if (qs('action_state')) qs('action_state').dataset.status = 'idle';
   qs('action_message').textContent = 'No active processing task.';
   qs('action_meta').textContent = 'Elapsed 00:00 | Updated -';
+  if (qs('abp_summary_primary')) qs('abp_summary_primary').textContent = 'Ready';
+  if (qs('abp_summary_progress')) qs('abp_summary_progress').textContent = '0%';
+  if (qs('abp_summary_meta')) qs('abp_summary_meta').textContent = 'No active render job.';
+  if (qs('abp_summary_stage')) qs('abp_summary_stage').textContent = 'Idle';
+  if (qs('abp_summary_parts')) qs('abp_summary_parts').textContent = '0 / 0 completed';
+  if (qs('abp_summary_active')) qs('abp_summary_active').textContent = 'No active clip';
+  if (qs('abp_summary_latest')) qs('abp_summary_latest').textContent = 'Waiting for a render job.';
+  if (qs('rc_status')) qs('rc_status').textContent = 'Ready';
+  if (qs('rc_status')) qs('rc_status').dataset.state = 'ready';
+  if (qs('rc_progress')) qs('rc_progress').textContent = '0%';
+  if (qs('rc_stage')) qs('rc_stage').textContent = 'Idle';
+  if (qs('rc_parts')) qs('rc_parts').textContent = '0 / 0 clips';
+  if (qs('rc_active')) qs('rc_active').textContent = 'No active clip';
+  if (qs('rc_latest')) qs('rc_latest').textContent = 'Waiting for render...';
+  if (qs('abp_output_text')) qs('abp_output_text').textContent = 'Output folder not set.';
+  if (qs('abp_output_meta')) qs('abp_output_meta').textContent = 'Latest file will appear here.';
+  if (qs('abp_error_text')) qs('abp_error_text').textContent = 'No blocking errors.';
+  if (qs('abp_error_block')) qs('abp_error_block').classList.add('hiddenView');
+  if (qs('abp_retry_btn')) qs('abp_retry_btn').classList.add('hiddenView');
+  if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = true;
   renderPipeline('queued', 'queued');
   renderSteps(0);
   renderParts([]);
@@ -54,6 +74,7 @@ function resetRenderSessionUi(){
   resetRenderMonitorHeartbeat();
   _renderLogsUserToggled = false;
   setRenderLogsCollapsed(false);
+  renderBottomActiveQueue(null, null, []);
   updateRenderMainState(null, null, []);
 }
 function fmtElapsed(ms){
@@ -205,6 +226,8 @@ function updateRenderMonitorHeartbeat(job, summary, parts = []){
   const primary = qs('render_monitor_primary');
   const secondary = qs('render_monitor_secondary');
   const heartbeat = qs('render_monitor_heartbeat');
+  const latestDetail = String(job?.message || '').trim();
+  const latestShort = latestDetail.length > 96 ? `${latestDetail.slice(0, 93)}...` : latestDetail;
   if (primary) {
     if (failed) primary.textContent = `Render failed · ${pctText}`;
     else if (completed) primary.textContent = `Render complete · ${pctText}`;
@@ -218,6 +241,11 @@ function updateRenderMonitorHeartbeat(job, summary, parts = []){
     else if (failed) secondary.textContent = `${clipLine} · Check diagnostics`;
     else secondary.textContent = running ? clipLine : 'No active render job.';
   }
+  if (secondary) {
+    const clipLine = renderMonitorClipSummary(summary, parts);
+    if (failed) secondary.textContent = `${clipLine} · ${latestShort || 'Check diagnostics'}`;
+    else if (running && latestShort) secondary.textContent = `${clipLine} · ${latestShort}`;
+  }
   if (heartbeat) {
     heartbeat.textContent = !currentJobId
       ? 'Idle'
@@ -229,6 +257,8 @@ function updateRenderMonitorHeartbeat(job, summary, parts = []){
       ? 'Render failed'
       : renderMonitorRelative(_renderMonitorLastUpdateAt);
   }
+  const pill = qs('job_stage_pill');
+  if (pill) pill.dataset.state = monitorState;
 }
 function friendlyJobMessage(job){
   const status = String(job?.status || '').toLowerCase();
@@ -419,6 +449,7 @@ function buildCompletionHandoff(summary, parts, job) {
     : (doneParts || Math.max(0, total - failed));
   const totalLabel = total || (completed + failed);
   const outputLabel = getRenderWorkspaceOutputLabel(job);
+  const hasFailure = status === 'failed' || status === 'interrupted';
   const main = failed > 0
     ? `${_t('render_complete', 'Render complete')} - ${completed} clips completed, ${failed} ${_t('failed', 'failed')}`
     : `✓ ${_t('render_complete', 'Render complete')} - ${completed} clips ready`;
@@ -555,6 +586,306 @@ function getRenderWorkspaceOutputLabel(job) {
   return 'Saved to output folder';
 }
 
+function rcPartVisualState(status) {
+  const st = String(status || '').toLowerCase();
+  if (['failed', 'error', 'interrupted'].includes(st)) return 'isFailed';
+  if (['completed', 'done'].includes(st)) return 'isCompleted';
+  if (['processing', 'running', 'rendering', 'transcribing', 'cutting', 'in_progress'].includes(st)) return 'isRendering';
+  return 'isWaiting';
+}
+
+function renderBottomControlCenter(job, summary, parts = []) {
+  const items = Array.isArray(parts) ? parts : [];
+  const s = summary || computeProgressSummary(items || []);
+  const status = String(job?.status || '').toLowerCase();
+  const terminal = isTerminalRenderStatus(status);
+  const done = getCompletedClipCount(s, items);
+  const total = Number(s?.total_parts || items.length || 0);
+  const active = Number(s?.processing_parts || 0);
+  const failed = Number(s?.failed_parts || 0);
+  const pct = Math.max(0, Math.min(100, Math.round(Number(job?.progress_percent ?? s?.overall_progress_percent ?? 0))));
+  const activeParts = Array.isArray(s?.active_parts) ? s.active_parts : [];
+  const activeText = activeParts.length === 1
+    ? `Clip ${Number(activeParts[0]?.part_no || 0)}`
+    : activeParts.length > 1
+    ? `${activeParts.length} clips active`
+    : 'No active clip';
+  const latest = String(job?.message || qs('rc_latest')?.textContent || qs('abp_summary_latest')?.textContent || 'Waiting for render...').trim();
+  const statusText = !job ? 'Ready' : status === 'failed' || status === 'interrupted' ? 'Failed' : terminal ? 'Completed' : 'Rendering';
+  const stageText = job ? stageLabel(job?.stage || 'queued') : 'Idle';
+  const waitingCount = Math.max(0, total - done - active - failed);
+  const queueSummary = [
+    `${done} completed`,
+    active > 0 ? `${active} rendering` : null,
+    waitingCount > 0 ? `${waitingCount} waiting` : null,
+    failed > 0 ? `${failed} failed` : null
+  ].filter(Boolean).join(' · ') || 'Waiting for render...';
+
+  if (qs('rc_status')) {
+    qs('rc_status').textContent = statusText;
+    qs('rc_status').dataset.state = !job ? 'ready' : (status === 'failed' || status === 'interrupted' ? 'failed' : terminal ? 'completed' : 'running');
+  }
+  if (qs('rc_progress')) qs('rc_progress').textContent = `${pct}%`;
+  if (qs('rc_stage')) qs('rc_stage').textContent = `Stage: ${stageText}`;
+  if (qs('rc_parts')) qs('rc_parts').textContent = `Clips: ${done}/${total || 0}${failed > 0 ? ` · ${failed} failed` : ''}`;
+  if (qs('rc_active')) qs('rc_active').textContent = activeText;
+  if (qs('rc_latest')) qs('rc_latest').textContent = latest || 'Waiting for render...';
+  if (qs('rc_queue_summary')) qs('rc_queue_summary').textContent = queueSummary;
+  if (qs('rc_retry_btn')) qs('rc_retry_btn').classList.toggle('hiddenView', !(status === 'failed' || status === 'interrupted') || !currentJobId);
+  if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !String(qs('abp_output_text')?.textContent || '').trim() || /not set|no output/i.test(String(qs('abp_output_text')?.textContent || ''));
+
+  const cardWrap = qs('rc_part_cards');
+  if (!cardWrap) return;
+  if (!items.length) {
+    cardWrap.innerHTML = `<div class="emptyState">${esc(renderPendingClipsMessage(job || _renderMonitorLastJob))}</div>`;
+    return;
+  }
+  const ordered = [...items].sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0));
+  cardWrap.innerHTML = ordered.map((p, idx) => {
+    const st = String(p?.status || '').toLowerCase();
+    const cls = rcPartVisualState(st);
+    const progress = Math.max(0, Math.min(100, Math.round(Number(p?.progress_percent || 0))));
+    const partNo = Number(p.part_no || idx + 1);
+    const partTitle = p.part_name ? esc(p.part_name) : `Clip ${partNo}`;
+    const stage = partStatusLabel(st);
+    const message = String(p?.message || '').trim() || (cls === 'isWaiting' ? 'Waiting in queue' : cls === 'isCompleted' ? 'Ready in output folder' : cls === 'isFailed' ? 'Needs review' : 'Processing');
+    const startSec = Number(p.start_sec || 0);
+    const endSec = Number(p.end_sec || 0);
+    const duration = Math.max(0, endSec - startSec);
+    const meta = p.output_file
+      ? `Output ready · ${esc(String(p.output_file).split(/[\\\\/]/).pop())}`
+      : duration > 0
+      ? `${duration.toFixed(1)}s · ${startSec.toFixed(1)}s–${endSec.toFixed(1)}s`
+      : '';
+    return `<article class="rcPartCard ${cls}" data-part-status="${esc(st || 'queued')}">
+      <div class="rcPartTop">
+        <div class="rcPartTitle">Clip ${partNo} · ${partTitle}</div>
+        <div class="rcPartStatus">${esc(partStatusLabel(st))}</div>
+      </div>
+      <div class="rcPartStage">Stage: ${esc(stage)}</div>
+      <div class="rcPartMessage">${esc(message)}</div>
+      <div class="rcMiniProgress" style="--progress:${progress}%"><span></span></div>
+      <div class="rcPartMeta">${progress}%${meta ? ` · ${meta}` : ''}</div>
+    </article>`;
+  }).join('');
+}
+
+function clampRcProgress(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function normalizeRcPartState(part) {
+  const raw = String(part?.status || '').toLowerCase();
+  const stage = String(part?.stage || '').toLowerCase();
+  if (['completed', 'done', 'success', 'complete'].includes(raw)) return 'completed';
+  if (['failed', 'error', 'interrupted'].includes(raw)) return 'failed';
+  if (
+    ['processing', 'running', 'rendering', 'transcribing', 'cutting', 'in_progress'].includes(raw) ||
+    ['processing', 'running', 'rendering', 'transcribing', 'cutting', 'in_progress'].includes(stage)
+  ) return 'rendering';
+  return 'waiting';
+}
+
+function rcStateLabel(state) {
+  if (state === 'completed') return 'Completed';
+  if (state === 'failed') return 'Failed';
+  if (state === 'rendering') return 'Rendering';
+  return 'Waiting';
+}
+
+function rcStateIcon(state) {
+  if (state === 'completed') return '✓';
+  if (state === 'failed') return '✕';
+  if (state === 'rendering') return '▶';
+  return '○';
+}
+
+function rcCap(s) {
+  const text = String(s || '');
+  return text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}` : '';
+}
+
+function rcPartStageText(part) {
+  const stage = String(part?.stage || part?.status || '').toLowerCase();
+  return stage ? stageLabelPlain(stage) : 'Waiting';
+}
+
+function rcPartMessage(part, fallback = '') {
+  return String(part?.message || part?.detail || part?.last_message || part?.note || fallback || '').trim();
+}
+
+function renderBottomActiveQueue(job, summary, parts = []) {
+  const items = Array.isArray(parts) ? parts : [];
+  const s = summary || computeProgressSummary(items || []);
+  const status = String(job?.status || '').toLowerCase();
+  const terminal = isTerminalRenderStatus(status);
+  const overallState = !job
+    ? 'ready'
+    : (status === 'failed' || status === 'interrupted')
+    ? 'failed'
+    : terminal
+    ? 'completed'
+    : 'running';
+  const total = Number(s?.total_parts || items.length || 0);
+  const completed = getCompletedClipCount(s, items);
+  const renderingParts = items.filter((part) => normalizeRcPartState(part) === 'rendering');
+  const failed = Number(s?.failed_parts || items.filter((part) => normalizeRcPartState(part) === 'failed').length || 0);
+  const waiting = Math.max(0, total - completed - renderingParts.length - failed);
+  const pct = clampRcProgress(job?.progress_percent ?? s?.overall_progress_percent ?? s?.parts_percent ?? 0);
+  const stageText = job ? stageLabel(job?.stage || 'queued') : 'Idle';
+  const latest = String(job?.message || qs('rc_latest')?.textContent || qs('abp_summary_latest')?.textContent || 'Waiting for render...').trim() || 'Waiting for render...';
+  const activePart = renderingParts.find((part) => normalizeRcPartState(part) === 'rendering') || null;
+  const activePartNo = Number(activePart?.part_no || 0);
+  const activeText = activePart
+    ? `Active: Clip ${activePartNo || '?'}`
+    : overallState === 'completed'
+    ? 'Active: None'
+    : overallState === 'failed'
+    ? 'Active: Failed'
+    : 'Active: Waiting';
+  const queueSummary = [
+    completed > 0 ? `${completed} completed` : null,
+    renderingParts.length > 0 ? `${renderingParts.length} rendering` : null,
+    waiting > 0 ? `${waiting} waiting` : null,
+    failed > 0 ? `${failed} failed` : null
+  ].filter(Boolean).join(' · ') || '0 waiting';
+  const statusLabel = overallState === 'failed'
+    ? 'Failed'
+    : overallState === 'completed'
+    ? 'Completed'
+    : overallState === 'running'
+    ? 'Rendering'
+    : 'Ready';
+
+  if (qs('rc_status')) {
+    qs('rc_status').textContent = statusLabel;
+    qs('rc_status').dataset.state = overallState;
+  }
+  if (qs('rc_progress')) qs('rc_progress').textContent = `${pct}%`;
+  if (qs('rc_stage')) qs('rc_stage').textContent = `Stage: ${stageText}`;
+  if (qs('rc_parts')) qs('rc_parts').textContent = `${completed}/${total || 0} completed${failed > 0 ? ` · ${failed} failed` : ''}`;
+  if (qs('rc_active')) qs('rc_active').textContent = activeText;
+  if (qs('rc_latest')) qs('rc_latest').textContent = latest;
+  if (qs('rc_queue_summary')) qs('rc_queue_summary').textContent = queueSummary;
+
+  const badge = qs('rc_active_badge');
+  const activeCard = qs('rc_active_card');
+  const activeTitle = qs('rc_active_title');
+  const activeSubtitle = qs('rc_active_subtitle');
+  const activePercent = qs('rc_active_percent');
+  const activeBar = qs('rc_active_bar');
+  const activeStage = qs('rc_active_stage');
+  const activeMessage = qs('rc_active_message');
+  if (badge) {
+    badge.textContent = activePart ? 'Rendering' : statusLabel;
+    badge.dataset.state = activePart ? 'rendering' : overallState === 'completed' ? 'completed' : overallState === 'failed' ? 'failed' : 'idle';
+  }
+  if (activeCard) {
+    activeCard.classList.remove('isIdle', 'isRendering', 'isCompleted', 'isFailed');
+    let activeCardState = 'isIdle';
+    let activeCardPct = pct;
+    let title = 'Waiting for next clip';
+    let subtitle = total ? `${completed}/${total} completed` : 'Waiting for render...';
+    let stageLine = total ? `Stage: ${stageText}` : 'Idle';
+    let message = latest || 'No activity yet.';
+
+    if (activePart) {
+      activeCardState = 'isRendering';
+      activeCardPct = clampRcProgress(activePart?.progress_percent ?? activePart?.progress ?? pct);
+      title = `Clip ${activePartNo || '?'}`;
+      subtitle = `${rcStateLabel('rendering')} · ${rcPartStageText(activePart)}`;
+      stageLine = `Stage: ${rcPartStageText(activePart)}`;
+      message = rcPartMessage(activePart, latest || 'Clip is currently rendering.');
+    } else if (overallState === 'completed') {
+      activeCardState = 'isCompleted';
+      activeCardPct = 100;
+      title = 'All clips completed';
+      subtitle = `${completed}/${total || 0} clips finished`;
+      stageLine = 'Stage: Complete';
+      message = latest || 'All clips finished successfully.';
+    } else if (overallState === 'failed') {
+      activeCardState = 'isFailed';
+      title = 'Render failed';
+      subtitle = `${completed}/${total || 0} completed${failed > 0 ? ` · ${failed} failed` : ''}`;
+      stageLine = `Stage: ${stageText}`;
+      message = latest || 'The render stopped before completion.';
+    }
+
+    activeCard.classList.add(activeCardState);
+    if (activeTitle) activeTitle.textContent = title;
+    if (activeSubtitle) activeSubtitle.textContent = subtitle;
+    if (activePercent) activePercent.textContent = `${activeCardPct}%`;
+    if (activeBar) activeBar.style.setProperty('--progress', `${activeCardPct}%`);
+    if (activeStage) activeStage.textContent = stageLine;
+    if (activeMessage) activeMessage.textContent = message;
+  }
+
+  const cardWrap = qs('rc_part_cards');
+  if (!cardWrap) return;
+  cardWrap.textContent = '';
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'emptyState';
+    empty.textContent = renderPendingClipsMessage(job || _renderMonitorLastJob);
+    cardWrap.appendChild(empty);
+    return;
+  }
+
+  const ordered = [...items].sort((a, b) => Number(a?.part_no || 0) - Number(b?.part_no || 0));
+  ordered.forEach((part, idx) => {
+    const state = normalizeRcPartState(part);
+    const progress = clampRcProgress(part?.progress_percent ?? part?.progress ?? part?.percent ?? 0);
+    const partNo = Number(part?.part_no || idx + 1);
+    const row = document.createElement('article');
+    row.className = `rcQueueRow is${rcCap(state)}`;
+
+    const top = document.createElement('div');
+    top.className = 'rcQueueRowTop';
+
+    const title = document.createElement('div');
+    title.className = 'rcQueueTitle';
+    title.textContent = `${rcStateIcon(state)} Clip ${partNo || '?'}`;
+
+    const statusNode = document.createElement('div');
+    statusNode.className = 'rcQueueStatus';
+    statusNode.textContent = `${rcStateLabel(state)} · ${progress}%`;
+
+    top.appendChild(title);
+    top.appendChild(statusNode);
+
+    const meta = document.createElement('div');
+    meta.className = 'rcQueueMeta';
+    meta.textContent = `Stage: ${rcPartStageText(part)}`;
+
+    const mini = document.createElement('div');
+    mini.className = 'rcQueueMiniBar';
+    const fill = document.createElement('span');
+    fill.style.setProperty('--progress', `${progress}%`);
+    mini.appendChild(fill);
+
+    const message = document.createElement('div');
+    message.className = 'rcQueueMessage';
+    message.textContent = rcPartMessage(
+      part,
+      state === 'completed'
+        ? 'Clip finished successfully.'
+        : state === 'failed'
+        ? 'Clip failed during processing.'
+        : state === 'rendering'
+        ? 'Clip is currently rendering.'
+        : 'Waiting for render slot.'
+    );
+
+    row.appendChild(top);
+    row.appendChild(meta);
+    row.appendChild(mini);
+    row.appendChild(message);
+    cardWrap.appendChild(row);
+  });
+}
+
 function updateRenderMainState(job, summary, parts = []) {
   const activePanel = qs('render_active_panel');
   const homePanel = qs('render_home_panel');
@@ -570,6 +901,7 @@ function updateRenderMainState(job, summary, parts = []) {
   if (!showActivePanel) return;
 
   const s = summary || computeProgressSummary(parts || []);
+  renderBottomActiveQueue(job, s, parts || []);
   const pct = Math.max(0, Math.min(100, Math.round(Number(job?.progress_percent || 0))));
   const title = terminal
     ? ((status === 'completed' || status === 'done' || status === 'complete') ? 'Render complete' : 'Render failed')
@@ -578,6 +910,21 @@ function updateRenderMainState(job, summary, parts = []) {
   const total = Number(s?.total_parts || parts.length || 0);
   const active = Number(s?.processing_parts || 0);
   const failed = Number(s?.failed_parts || 0);
+  const activeParts = Array.isArray(s?.active_parts) ? s.active_parts : [];
+  const activePartText = activeParts.length === 1
+    ? `Active clip ${Number(activeParts[0]?.part_no || 0)}`
+    : activeParts.length > 1
+    ? `${activeParts.length} clips active`
+    : '';
+  const latestDetail = String(job?.message || '').trim();
+  const latestShort = latestDetail.length > 120 ? `${latestDetail.slice(0, 117)}...` : latestDetail;
+  const failureSummary = (typeof friendlyRenderError === 'function')
+    ? friendlyRenderError(job?.message || '', 'Render failed')
+    : 'Render failed';
+  const hasFailure = status === 'failed' || status === 'interrupted';
+  const statusLabel = terminal
+    ? ((status === 'completed' || status === 'done' || status === 'complete') ? 'Completed' : 'Failed')
+    : 'Rendering';
   const sourceText = getRenderWorkspaceSourceText(job);
   const outputText = getRenderWorkspaceOutputText(job);
   const outputLabel = getRenderWorkspaceOutputLabel(job);
@@ -595,6 +942,7 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('render_active_title')) qs('render_active_title').textContent = title;
   if (qs('render_active_pct')) qs('render_active_pct').textContent = `${pct}%`;
   if (qs('render_active_bar')) qs('render_active_bar').style.width = `${pct}%`;
+  if (qs('render_active_panel')) qs('render_active_panel').dataset.renderState = failed > 0 && terminal ? 'failed' : terminal ? 'complete' : 'running';
   if (qs('render_active_meta')) {
     if (status === 'completed' || status === 'done' || status === 'complete') {
       qs('render_active_meta').textContent = failed > 0
@@ -626,6 +974,68 @@ function updateRenderMainState(job, summary, parts = []) {
       ? 'Preview is unavailable here, but the same source and destination context is preserved while you review progress below.'
       : 'Preview unavailable during render. This workspace remains tied to the same source and output destination you selected in the editor.';
   }
+  if (!terminal) {
+    const liveBits = [...clipBits];
+    if (activePartText) liveBits.push(activePartText);
+    if (latestShort) liveBits.push(latestShort);
+    if (qs('render_active_meta') && liveBits.length) {
+      qs('render_active_meta').textContent = `${liveBits.join(' | ')} | Clips will appear below as rendering progresses.`;
+    }
+    if (qs('render_workspace_stage')) {
+      qs('render_workspace_stage').textContent = [stageLabel(job?.stage || 'queued'), activePartText, latestShort].filter(Boolean).join(' · ');
+    }
+    if (qs('render_workspace_preview_text') && latestShort) {
+      qs('render_workspace_preview_text').textContent = `Latest update: ${latestShort}`;
+    }
+  } else if (status === 'failed' || status === 'interrupted') {
+    if (qs('render_active_meta')) {
+      qs('render_active_meta').textContent = clipBits.length
+        ? `${clipBits.join(' | ')} | ${failureSummary}. Review clips and diagnostics below.`
+        : `${failureSummary}. Review diagnostics below.`;
+    }
+    if (qs('render_workspace_preview_title')) qs('render_workspace_preview_title').textContent = 'Render failed';
+    if (qs('render_workspace_preview_text')) {
+      qs('render_workspace_preview_text').textContent = `Render failed: ${latestShort || failureSummary}`;
+    }
+  } else if (latestShort && qs('render_workspace_preview_text')) {
+    qs('render_workspace_preview_text').textContent = `Latest update: ${latestShort}`;
+  }
+  if (qs('abp_summary_primary')) qs('abp_summary_primary').textContent = statusLabel;
+  if (qs('abp_summary_progress')) qs('abp_summary_progress').textContent = `${pct}%`;
+  if (qs('abp_summary_meta')) qs('abp_summary_meta').textContent = terminal
+    ? ((status === 'completed' || status === 'done' || status === 'complete') ? 'Render complete.' : `${failureSummary}.`)
+    : (latestShort || 'Rendering in progress.');
+  if (qs('abp_summary_stage')) {
+    qs('abp_summary_stage').textContent = stageLabel(job?.stage || 'queued');
+  }
+  if (qs('abp_summary_parts')) {
+    const partBits = [`${done} / ${total || 0} completed`];
+    if (failed > 0) partBits.push(`${failed} failed`);
+    qs('abp_summary_parts').textContent = partBits.join(' · ');
+  }
+  if (qs('abp_summary_active')) {
+    qs('abp_summary_active').textContent = activePartText || (active > 0 ? `${active} clips active` : 'No active clip');
+  }
+  if (qs('abp_summary_latest')) {
+    qs('abp_summary_latest').textContent = latestShort || (terminal ? failureSummary : 'Waiting for the next render update.');
+  }
+  if (qs('abp_output_text')) qs('abp_output_text').textContent = outputText;
+  if (qs('abp_output_meta')) qs('abp_output_meta').textContent = outputLabel;
+  if (qs('rc_status')) qs('rc_status').textContent = statusLabel;
+  if (qs('rc_status')) qs('rc_status').dataset.state = hasFailure ? 'failed' : terminal ? 'completed' : 'running';
+  if (qs('rc_progress')) qs('rc_progress').textContent = `${pct}%`;
+  if (qs('rc_stage')) qs('rc_stage').textContent = stageLabel(job?.stage || 'queued');
+  if (qs('rc_parts')) qs('rc_parts').textContent = `${done}/${total || 0} clips${failed > 0 ? ` · ${failed} failed` : ''}`;
+  if (qs('rc_active')) qs('rc_active').textContent = activePartText || (active > 0 ? `${active} clips active` : 'No active clip');
+  if (qs('rc_latest')) qs('rc_latest').textContent = latestShort || (hasFailure ? failureSummary : 'Waiting for render...');
+  if (qs('abp_error_text')) {
+    qs('abp_error_text').textContent = hasFailure
+      ? `Error: ${latestShort || failureSummary}`
+      : 'No blocking errors.';
+  }
+  if (qs('abp_error_block')) qs('abp_error_block').classList.toggle('hiddenView', !hasFailure);
+  if (qs('abp_retry_btn')) qs('abp_retry_btn').classList.toggle('hiddenView', !(hasFailure && currentJobId));
+  if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !(status === 'completed' || status === 'done' || status === 'complete' || String(outputText || '').trim());
   if (qs('render_active_actions')) qs('render_active_actions').classList.toggle('hiddenView', !(status === 'completed' || status === 'done' || status === 'complete'));
 }
 
@@ -916,12 +1326,64 @@ function focusBottomPanel() {
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+function focusRenderLogPanel() {
+  const panel = qs('appBottomPanel');
+  const logBox = qs('event_log_render');
+  if (!panel || !logBox) return;
+  setRenderLogsCollapsed(false);
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  logBox.scrollTop = 0;
+}
+
+async function copyRenderDiagnostics() {
+  const lines = [];
+  const pushText = (label, id) => {
+    const value = String(qs(id)?.textContent || '').trim();
+    if (value) lines.push(`${label}: ${value}`);
+  };
+  pushText('Status', 'rc_status');
+  pushText('Progress', 'rc_progress');
+  pushText('Stage', 'rc_stage');
+  pushText('Parts', 'rc_parts');
+  pushText('Active', 'rc_active');
+  pushText('Latest', 'rc_latest');
+  pushText('Active card', 'rc_active_title');
+  pushText('Active detail', 'rc_active_subtitle');
+  pushText('Active stage', 'rc_active_stage');
+  pushText('Active message', 'rc_active_message');
+  pushText('Summary', 'abp_summary_meta');
+  pushText('Parts', 'abp_summary_parts');
+  pushText('Output', 'abp_output_text');
+  pushText('Output info', 'abp_output_meta');
+  pushText('Error', 'abp_error_text');
+  const logs = Array.from(qs('event_log_render')?.querySelectorAll('.logLine') || [])
+    .slice(0, 30)
+    .map((node) => String(node.textContent || '').trim())
+    .filter(Boolean);
+  if (logs.length) {
+    lines.push('');
+    lines.push('Logs:');
+    lines.push(...logs);
+  }
+  const payload = lines.join('\n').trim();
+  if (!payload) {
+    showToast('No diagnostics available yet', 'info');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(payload);
+    showToast('Diagnostics copied', 'success');
+  } catch (_) {
+    showToast('Could not copy diagnostics', 'error');
+  }
+}
+
 function setRenderLogsCollapsed(collapsed, options = {}) {
   const panel = qs('appBottomPanel');
   if (!panel) return;
   panel.classList.toggle('logsCollapsed', !!collapsed);
-  const btn = document.querySelector('.abpLogToggle');
-  if (btn) btn.textContent = collapsed ? 'Show logs' : 'Hide logs';
+  const btn = qs('rc_toggle_logs_btn') || document.querySelector('.abpLogToggle');
+  if (btn) btn.textContent = collapsed ? 'View logs' : 'Hide logs';
   if (options.fromUser) _renderLogsUserToggled = true;
 }
 
@@ -972,7 +1434,7 @@ function setRenderActionBusy(isBusy){
   if(!btn) return;
   btn.disabled = !!isBusy;
   btn.style.opacity = isBusy ? '0.75' : '1';
-  btn.textContent = isBusy ? 'Rendering...' : 'Open Editor';
+  btn.textContent = isBusy ? 'Render Running' : 'Open Editor';
 
   // Expand bottom panel when job starts so pipeline/log are immediately visible.
   if (isBusy) {
@@ -1203,8 +1665,10 @@ function renderParts(items, summary){
   renderProcessSummaryStrip(items, summary);
   renderPartTimeline(items);
   renderAbpActiveCard(items, summary);
+  renderBottomActiveQueue(_renderMonitorLastJob, summary || computeProgressSummary(items || []), items || []);
   const wrap = qs('parts_wrap');
   if(!items || !items.length){
+    if (qs('clips_section_label')) qs('clips_section_label').textContent = 'Clips';
     wrap.innerHTML = `<div class="emptyState">${esc(renderPendingClipsMessage(_renderMonitorLastJob))}</div>`;
     return;
   }
@@ -1230,6 +1694,7 @@ function renderParts(items, summary){
   const failed = Number(s.failed_parts || 0);
   const pending = Math.max(0, total - done - rendering - failed);
   const pct = Math.round(Number(s.overall_progress_percent ?? s.parts_percent ?? 0));
+  if (qs('clips_section_label')) qs('clips_section_label').textContent = `Clips · ${done}/${total || 0} completed`;
 
   // Parallel worker chips: show per-worker status when > 1 part active simultaneously
   const activeParts = s.active_parts || [];
@@ -1262,14 +1727,14 @@ function renderParts(items, summary){
     const errMsg  = st === 'failed' ? esc(p.message || '') : '';
     const errHtml = errMsg ? `<div class="partError">${errMsg}</div>` : '';
     const stuckHtml = isStuck ? `<div class="partStuckNote">${_stuckLabel(stuckMap.get(key))}</div>` : '';
-    const rowClass  = `${st || 'queued'}${isRun ? ' running' : ''}${isStuck ? ' stuck' : ''}`.trim();
+    const rowClass  = `${st || 'queued'}${isRun ? ' running isActive' : ''}${st === 'done' ? ' isDone' : ''}${st === 'failed' ? ' isFailed' : ''}${isStuck ? ' stuck' : ''}`.trim();
     const partNo = Number(p.part_no || idx + 1);
     const partName = p.part_name ? esc(p.part_name) : `Clip ${partNo}`;
     const startSec = Number(p.start_sec || 0);
     const endSec = Number(p.end_sec || 0);
     const duration = Math.max(0, endSec - startSec);
     return `
-    <div class="partRow ${rowClass}">
+    <div class="partRow ${rowClass}" data-part-status="${esc(st || 'queued')}">
       <div class="partLeft">
         <div class="rankBadge">C${partNo}</div>
         <div>
@@ -1541,8 +2006,12 @@ function populateRenderOutputPanel(job, parts) {
 
   const outputDir = getCurrentJobOutputDir(job);
   if (pathEl) pathEl.textContent = outputDir ? `Output folder: ${outputDir}` : '';
+  if (qs('abp_output_text')) qs('abp_output_text').textContent = outputDir ? `Output folder: ${outputDir}` : 'Output folder not set.';
+  if (qs('abp_output_meta')) qs('abp_output_meta').textContent = 'Latest file will appear here.';
+  if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !outputDir;
 
   if (!all.length) {
+    if (qs('abp_output_meta')) qs('abp_output_meta').textContent = 'Latest file will appear here.';
     list.innerHTML = '<div class="renderOutputEmpty">No completed clips found for this render.</div>';
     showRenderOutputPanel();
     return;
@@ -1553,6 +2022,8 @@ function populateRenderOutputPanel(job, parts) {
     const partNo = Number(p.part_no || 0);
     const st = String(p?.status || '').toLowerCase();
     const isFailed = st === 'failed';
+    const isDone = st === 'done';
+    const isActive = st === 'rendering' || st === 'transcribing' || st === 'cutting' || st === 'waiting';
     const hasFile = !!p.output_file;
     const name = p.part_name ? esc(p.part_name) : `Clip ${partNo}`;
     const startSec = Number(p.start_sec || 0);
@@ -1569,7 +2040,9 @@ function populateRenderOutputPanel(job, parts) {
     const openBtn = hasFile
       ? `<button type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Open</button>`
       : '';
-    return `<div class="renderClipItem${isFailed ? ' failed' : ''}">
+    if (qs('abp_output_meta') && hasFile) qs('abp_output_meta').textContent = `Latest file: ${String(p.output_file || '').split(/[\\\\/]/).pop()}`;
+    const itemClass = `renderClipItem${isFailed ? ' failed isFailed' : ''}${isDone ? ' isDone' : ''}${isActive ? ' isActive' : ''}`;
+    return `<div class="${itemClass}" data-clip-status="${esc(st || 'queued')}">
       <div class="renderClipNum">${partNo}</div>
       <div class="renderClipInfo">
         <div class="renderClipName" title="${esc(p.output_file || '')}">${name}</div>
@@ -1580,6 +2053,7 @@ function populateRenderOutputPanel(job, parts) {
   }).join('');
 
   showRenderOutputPanel();
+  renderBottomActiveQueue(job, computeProgressSummary(items), items);
   const panel = qs('render_output_panel');
   if (panel) setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
 }

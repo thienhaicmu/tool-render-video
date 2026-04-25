@@ -150,6 +150,25 @@ function evPresetToXY(position) {
   return EV_TEXT_POS_TO_XY[position] || EV_TEXT_POS_TO_XY['bottom-center'];
 }
 
+function _evIsCustomTextLayerPosition(layer) {
+  if (!layer) return false;
+  const defXY = evPresetToXY(layer.position || 'bottom-center');
+  const x = Number(layer.x_percent ?? defXY[0]);
+  const y = Number(layer.y_percent ?? defXY[1]);
+  return Math.abs(x - defXY[0]) > 0.5 || Math.abs(y - defXY[1]) > 0.5;
+}
+
+function _evTextLayerPositionLabel(layer) {
+  return _evIsCustomTextLayerPosition(layer) ? 'custom' : String(layer?.position || 'bottom-center');
+}
+
+function _evSyncTextLayerPositionUi(layer) {
+  const pos = qs('evTxtPos');
+  if (!pos) return;
+  const isCustom = _evIsCustomTextLayerPosition(layer);
+  pos.title = isCustom ? 'Custom position — X/Y values now override the preset anchor.' : '';
+}
+
 function _evNewTextLayer(order) {
   const duration = Number(_ev.duration || 0);
   return {
@@ -260,16 +279,24 @@ function evRenderTextLayerList() {
   const _tlNow = Number(qs('evVideo')?.currentTime || 0);
   box.innerHTML = _ev.textLayers.map((layer, i) => {
     const name = String(layer.text || '').trim() || '(empty)';
-    const pos = String(layer.position || 'bottom-center');
+    const pos = _evTextLayerPositionLabel(layer);
+    const isCustom = _evIsCustomTextLayerPosition(layer);
     const xp = Math.max(0, Math.min(100, Number(layer.x_percent ?? 50)));
     const yp = Math.max(0, Math.min(100, Number(layer.y_percent ?? 90)));
     const st = Number(layer.start_time || 0);
     const et = Number(layer.end_time || 0);
     const timing = et > 0 ? `${st.toFixed(1)}s→${et.toFixed(1)}s` : `${st.toFixed(1)}s→end`;
     const isVis = _tlNow >= st && (et === 0 || _tlNow < et);
-    return `<div class="evLayerItem ${selected===i?'active':''}">
+    return `<div class="evLayerItem ${selected===i?'active':''}" data-layer-state="${selected===i?'selected':'idle'}">
       <span class="evLayerVis ${isVis?'on':'off'}">${isVis?'VIS':'HID'}</span>
-      <button class="evTinyBtn" onclick="evSelectTextLayer(${i})" style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i+1}. ${esc(name)} <span style="opacity:.7">• ${esc(pos)} (${xp.toFixed(0)}%,${yp.toFixed(0)}%) • ${timing}</span></button>
+      <button class="evTinyBtn evLayerMainBtn" onclick="evSelectTextLayer(${i})" title="${esc(name)}">
+        <span class="evLayerMainTitle">${i+1}. ${esc(name)}</span>
+        <span class="evLayerMainMeta">
+          <span class="evLayerChip${isCustom ? ' isCustom' : ''}">${esc(pos)}</span>
+          <span class="evLayerCoords">${xp.toFixed(0)}%, ${yp.toFixed(0)}%</span>
+          <span class="evLayerTiming">${timing}</span>
+        </span>
+      </button>
       <button class="evTinyBtn" onclick="evDuplicateTextLayer(${i})" title="Duplicate">⧉</button>
       <button class="evTinyBtn" onclick="evMoveTextLayer(${i},-1)" title="Move up">↑</button>
       <button class="evTinyBtn" onclick="evMoveTextLayer(${i},1)" title="Move down">↓</button>
@@ -288,6 +315,7 @@ function evRenderTextLayerList() {
   qs('evTxtX').value = Math.max(0, Math.min(100, Number(cur.x_percent ?? evPresetToXY(cur.position || 'bottom-center')[0])));
   qs('evTxtY').value = Math.max(0, Math.min(100, Number(cur.y_percent ?? evPresetToXY(cur.position || 'bottom-center')[1])));
   qs('evTxtAlign').value = cur.alignment || 'center';
+  _evSyncTextLayerPositionUi(cur);
   qs('evTxtStartTime').value = Number(cur.start_time || 0);
   qs('evTxtEndTime').value = Number(cur.end_time || 0);
   qs('evTxtBold').checked = !!cur.bold;
@@ -338,6 +366,8 @@ function evUpdateSelectedTextLayer() {
     color: `${bgHex}99`,
     padding: Math.max(0, Math.min(64, Number(qs('evTxtBgPadding')?.value || 0))),
   };
+  _evSyncTextLayerPositionUi(layer);
+  evSetStatus('Text layer updated.', `${_evIsCustomTextLayerPosition(layer) ? 'Custom position' : 'Preset position'} · ${Math.round(layer.font_size)}px`);
   evRenderTextLayerList();
   evRenderTextLayerPreview();
 }
@@ -383,11 +413,11 @@ function evRenderTextLayerPreview() {
     if (l.shadow?.enabled) style.push(`text-shadow:${Number(l.shadow.offset_x||2)}px ${Number(l.shadow.offset_y||2)}px 4px rgba(0,0,0,.75)`);
     if (l.background?.enabled) {
       style.push(`background:${l.background.color || '#00000099'}`);
-      style.push(`padding:${Math.max(0, Number(l.background.padding || 0))}px`);
-      style.push('border-radius:6px');
+      style.push(`padding:${Math.max(0, Math.round(Number(l.background.padding || 0) * scale))}px`);
+      style.push('border-radius:8px');
     }
     const selClass = isSelected ? ' evTLSelected' : '';
-    return `<div class="evTextLayerPreview${selClass}" onmousedown="evTextLayerDragStart(event,'${l.id}')" style="${style.join(';')}">${esc(String(l.text || ''))}</div>`;
+    return `<div class="evTextLayerPreview${selClass}" data-layer-id="${esc(String(l.id || ''))}" onmousedown="evTextLayerDragStart(event,'${l.id}')" style="${style.join(';')}">${esc(String(l.text || ''))}</div>`;
   }).join('');
   overlay.classList.toggle('evHasSelection', !!overlay.querySelector('.evTLSelected'));
 }
@@ -404,6 +434,8 @@ function evTextLayerDragStart(e, layerId) {
   evRenderTextLayerPreview();
   const overlay = qs('evTextLayersOverlay');
   if (overlay) overlay.classList.add('evTLDragging');
+  const frame = qs('evVideoFrame');
+  if (frame) frame.classList.add('evDraggingObject');
   document.body.style.cursor = 'grabbing';
   const rect = overlay.getBoundingClientRect();
   const startClientX = e.clientX, startClientY = e.clientY;
@@ -423,7 +455,11 @@ function evTextLayerDragStart(e, layerId) {
     document.removeEventListener('mouseup', onUp);
     const dragOverlay = qs('evTextLayersOverlay');
     if (dragOverlay) dragOverlay.classList.remove('evTLDragging');
+    const dragFrame = qs('evVideoFrame');
+    if (dragFrame) dragFrame.classList.remove('evDraggingObject');
     document.body.style.cursor = '';
+    _evSyncTextLayerPositionUi(layer);
+    evSetStatus('Text layer position updated.', `Custom position: ${layer.x_percent.toFixed(1)}% x · ${layer.y_percent.toFixed(1)}% y`);
     evRenderTextLayerList();
   }
   document.addEventListener('mousemove', onMove);
@@ -849,8 +885,10 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
 
   } catch(err) {
     qs('evLoadingText').textContent = `Error: ${err.message}`;
-    qs('evStartBtn').disabled = false;
-    qs('evStatusLine').textContent = 'Could not prepare preview. You can still submit render.';
+    qs('evStartBtn').disabled = true;
+    qs('evStartBtn').textContent = 'Preview unavailable';
+    if (qs('evReopenBtn')) { qs('evReopenBtn').textContent = 'Retry Open Editor'; qs('evReopenBtn').style.display = 'inline-flex'; }
+    qs('evStatusLine').textContent = 'Could not prepare preview. Please retry opening the editor.';
     addEvent(`Editor prepare error: ${err.message}`, 'render');
     if (_ev.duration > 0) _evSetDuration(_ev.duration);
   }
@@ -890,7 +928,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   qs('evSubOverlay').style.display = 'none';
   qs('evStartBtn').disabled = true;
   qs('evStartBtn').textContent = '▶ Start Render';
-  if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'none';
+  if (qs('evReopenBtn')) { qs('evReopenBtn').textContent = 'Retry Open Editor'; qs('evReopenBtn').style.display = 'none'; }
   qs('evStatusLine').textContent = 'Loading video preview...';
   qs('evStatusLine').style.color = '';
   _evUpdateInfoStrip();
@@ -908,11 +946,12 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
 
   // Restore start button
   const btn = qs('start_render_btn');
-  if (btn) { btn.disabled = false; btn.textContent = 'Next: Edit and Render'; btn.style.opacity = '1'; }
+  if (btn) { btn.disabled = false; btn.textContent = 'Open Editor'; btn.style.opacity = '1'; }
 }
 
 function _evLoadVideo(src) {
   const video = qs('evVideo');
+  video.removeEventListener('timeupdate', _evOnTimeUpdate);
   video.src = src;
   video.onloadedmetadata = () => {
     _ev.duration = video.duration || _ev.duration;
@@ -927,6 +966,7 @@ function _evLoadVideo(src) {
     _evSyncSubOverlay();
     _evUpdateSubLabel();
     requestAnimationFrame(() => { _evStartSubAnim(); });
+    video.removeEventListener('timeupdate', _evOnTimeUpdate);
     video.addEventListener('timeupdate', _evOnTimeUpdate);
     // Fetch real transcript in background — updates overlay once ready
     if (_ev.sessionId) _evFetchTranscript(_ev.sessionId);
@@ -935,8 +975,10 @@ function _evLoadVideo(src) {
     qs('evLoadingText').textContent = 'Preview unavailable';
     qs('evLoadingOverlay').querySelector('div:last-child').textContent = 'Trim and subtitle preview are still available';
     qs('evLoadingOverlay').querySelector('.editorSpinner').style.display = 'none';
-    qs('evStartBtn').disabled = false;
-    qs('evStatusLine').textContent = 'Preview codec is unsupported, but render settings still work.';
+    qs('evStartBtn').disabled = true;
+    qs('evStartBtn').textContent = 'Preview unavailable';
+    if (qs('evReopenBtn')) { qs('evReopenBtn').textContent = 'Retry Open Editor'; qs('evReopenBtn').style.display = 'inline-flex'; }
+    qs('evStatusLine').textContent = 'Preview codec is unsupported. Please reopen the editor or load the source again.';
     // Show subtitle preview even without video (over loading overlay)
     qs('evSubOverlay').style.display   = 'flex';
     qs('evSubOverlay').style.left      = `${_ev.subXPercent || 50}%`;
@@ -1139,6 +1181,7 @@ async function _evFetchTranscript(sessionId) {
     const data = await resp.json();
     const segs = Array.isArray(data?.segments) ? data.segments.filter(s => s && s.text) : [];
     if (!segs.length) return;
+    if (_ev.sessionId !== sessionId) return;
     _ev.subtitleSegments = segs;
     _ev.subtitleMode = 'real';
     if (_ev.subAnimTimer) { clearInterval(_ev.subAnimTimer); _ev.subAnimTimer = null; }
@@ -1245,6 +1288,10 @@ function evUpdateSubPreview() {
   const highlight = qs('evSubHighlight').value;
   const posY      = Number(qs('evSubPos').value);
   const outline   = Number(qs('evSubOutline').value);
+  const frameWidth = Number(qs('evVideoFrame')?.getBoundingClientRect().width || 0);
+  const previewScale = frameWidth > 0 ? Math.max(0.45, Math.min(1.2, frameWidth / 1080)) : 1;
+  const previewFontPx = Math.max(12, Math.round(size * previewScale));
+  const sampleFontPx = Math.max(12, Math.round(size * Math.max(0.5, previewScale * 0.88)));
 
   qs('evSubSizeVal').textContent    = size;
   qs('evSubPosVal').textContent     = posY;
@@ -1258,7 +1305,7 @@ function evUpdateSubPreview() {
   // Rebuild word spans with current style
   const strokeCSS = `${outline}px`;
   const shadowCSS = `-${outline}px -${outline}px 0 #000, ${outline}px -${outline}px 0 #000, -${outline}px ${outline}px 0 #000, ${outline}px ${outline}px 0 #000`;
-  const baseStyle = `font-family:'${font}',sans-serif;font-size:clamp(12px,3vw,${Math.round(size*0.65)}px);-webkit-text-stroke:${strokeCSS} #000;text-shadow:${shadowCSS}`;
+  const baseStyle = `font-family:'${font}',sans-serif;font-size:${previewFontPx}px;-webkit-text-stroke:${strokeCSS} #000;text-shadow:${shadowCSS}`;
 
   const inner = qs('evSubInner');
   if (_ev.subtitleMode === 'real') {
@@ -1273,7 +1320,7 @@ function evUpdateSubPreview() {
   // Static preview box — always uses demo words as a style reference sample
   const sp = qs('evSubStaticText');
   sp.style.fontFamily = `'${font}',sans-serif`;
-  sp.style.fontSize = `${Math.round(size*0.6)}px`;
+  sp.style.fontSize = `${sampleFontPx}px`;
   sp.style.color = color;
   sp.style.webkitTextStroke = `${outline}px #000`;
   sp.style.textShadow = shadowCSS;
@@ -1428,7 +1475,12 @@ function evSetInspGroupOpen(group, open) {
 function cancelEditorView() {
   if (_ev.subAnimTimer) { clearInterval(_ev.subAnimTimer); _ev.subAnimTimer = null; }
   const video = qs('evVideo');
-  if (video) { video.pause(); video.src = ''; video.style.display = 'none'; }
+  if (video) {
+    video.removeEventListener('timeupdate', _evOnTimeUpdate);
+    video.pause();
+    video.src = '';
+    video.style.display = 'none';
+  }
   setView('render');
   setRenderActionBusy(false);
   addEvent('Editor view closed.', 'render');
@@ -1711,14 +1763,14 @@ async function startRenderFromEditor() {
       qs('evStatusLine').textContent = 'Session expired. Please re-open editor.' + logHint;
       qs('evStatusLine').style.color = '#ef4444';
       evSetStatus('Session expired. Re-open editor.', 'Technical details: %APPDATA%\\tool-render-video\\logs', true);
-      if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'inline-flex';
+      if (qs('evReopenBtn')) { qs('evReopenBtn').textContent = 'Retry Open Editor'; qs('evReopenBtn').style.display = 'inline-flex'; }
       qs('evStartBtn').disabled = true;
       qs('evStartBtn').textContent = 'Start Render';
       if (typeof showToast === 'function') showToast('Render could not start', 'error');
     } else {
       evSetStatus(friendlyMsg, `Technical details: ${errMsg}`, true);
       qs('evStartBtn').disabled = false;
-      qs('evStartBtn').textContent = 'Retry Render';
+      qs('evStartBtn').textContent = 'Retry Start Render';
       qs('evStatusLine').textContent = friendlyMsg;
       qs('evStatusLine').style.color = '#ef4444';
       evSetStatus(friendlyMsg, `Technical details: ${errMsg}`, true);

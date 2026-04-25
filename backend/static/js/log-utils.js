@@ -22,6 +22,31 @@ function _sanitizeEventText(text){
   return t;
 }
 
+function _setLogLineContent(node, message, count = 1) {
+  if (!node) return;
+  node.textContent = '';
+  const rawBase = String(message || '');
+  const raw = count > 1 ? `${rawBase} (x${count})` : rawBase;
+  const match = raw.match(/^(\[[^\]]+\]|\d{1,2}:\d{2}:\d{2}(?:\s?[AP]M)?)\s*(.*)$/i);
+
+  const timeEl = document.createElement('span');
+  timeEl.className = 'logTime';
+  timeEl.textContent = match
+    ? match[1].replace(/^\[|\]$/g, '')
+    : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  const msgEl = document.createElement('span');
+  msgEl.className = 'logMessage';
+  msgEl.textContent = match ? match[2] : raw;
+
+  node.appendChild(timeEl);
+  node.appendChild(msgEl);
+
+  const low = raw.toLowerCase();
+  node.classList.toggle('isError', /error|failed|exception|traceback|fatal/.test(low));
+  node.classList.toggle('isWarning', /warn|retry|stalled|timeout/.test(low));
+}
+
 function addEvent(text, scope = 'auto'){
   const normalized = _sanitizeEventText(String(text || '').trim());
   if(!normalized) return;
@@ -42,9 +67,17 @@ function addEvent(text, scope = 'auto'){
   const now = Date.now();
   const box = _getLogBox(resolvedScope);
   if (!box) return;
+  if (resolvedScope === 'render') {
+    const latest = qs('abp_summary_latest');
+    if (latest) latest.textContent = normalized;
+    const finalLatest = qs('abp_latest');
+    if (finalLatest) finalLatest.textContent = normalized;
+    const rcLatest = qs('rc_latest');
+    if (rcLatest) rcLatest.textContent = normalized;
+  }
   if (normalized === st.lastText && (now - st.lastAt) <= LOG_DEDUPE_WINDOW_MS && st.lastNode) {
     st.lastCount += 1;
-    st.lastNode.textContent = `[${new Date().toLocaleTimeString()}] ${normalized} (x${st.lastCount})`;
+    _setLogLineContent(st.lastNode, normalized, st.lastCount);
     st.lastAt = now;
     return;
   }
@@ -54,9 +87,11 @@ function addEvent(text, scope = 'auto'){
   if (/failed|error/i.test(normalized)) div.classList.add('important', 'error');
   else if (/render complete|job completed|complete/i.test(normalized)) div.classList.add('important', 'success');
   else if (/stage:|resume queued|render queued|download complete|downloading youtube/i.test(normalized)) div.classList.add('important');
-  div.textContent = `[${new Date().toLocaleTimeString()}] ${normalized}`;
+  if (/failed|error|exception|traceback|fatal/i.test(normalized)) div.classList.add('isError');
+  if (/warn|retry|stalled|timeout/i.test(normalized)) div.classList.add('isWarning');
+  _setLogLineContent(div, normalized, 1);
   box.prepend(div);
-  while (box.children.length > 28) box.removeChild(box.lastChild);
+  while (box.children.length > 40) box.removeChild(box.lastChild);
   st.lastText = normalized;
   st.lastAt = now;
   st.lastNode = div;

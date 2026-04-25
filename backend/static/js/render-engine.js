@@ -398,6 +398,7 @@ function startPolling(){
     if (isTerminalRenderStatus(lastStatus)) return;
     if (pollTimer) return;
     loadJobProgress();
+    pollTimer = setInterval(loadJobProgress, pollIntervalMs);
   };
 }
 

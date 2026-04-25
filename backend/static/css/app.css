@@ -315,9 +315,19 @@
       max-width: 100%;
       max-height: 100%;
       aspect-ratio: 9 / 16;   /* updated by JS on aspect ratio change */
-      background: #000;
+      background: radial-gradient(circle at 50% 18%, rgba(56,189,248,.08), transparent 42%), #020617;
       overflow: hidden;
-      box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 0 0 4px rgba(59,130,246,.1), 0 16px 48px rgba(0,0,0,.85);
+      border-radius: 16px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 0 0 4px rgba(59,130,246,.1), 0 18px 50px rgba(0,0,0,.35);
+    }
+    .evVideoFrame::after {
+      content: '';
+      position: absolute;
+      inset: 6%;
+      border: 1px dashed rgba(255,255,255,.18);
+      border-radius: 12px;
+      pointer-events: none;
+      z-index: 1;
     }
     /* Video fills the frame exactly — mimics render crop */
     .evVideo { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -325,7 +335,7 @@
     .evLoadingOverlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: rgba(0,0,0,.85); z-index: 5; }
     /* Subtitle overlay: positioned inside frame, so % is relative to output frame */
     .evSubOverlay { position: absolute; left: 0; right: 0; display: flex; justify-content: center; pointer-events: none; z-index: 4; transition: bottom .15s; }
-    .evSubInner { text-align: center; line-height: 1.15; max-width: 90%; pointer-events: auto; cursor: grab; user-select: none; -webkit-user-select: none; border-radius: 3px; }
+    .evSubInner { text-align: center; line-height: 1.15; max-width: 90%; pointer-events: auto; cursor: grab; user-select: none; -webkit-user-select: none; border-radius: 12px; padding: 6px 10px; background: linear-gradient(180deg, rgba(2,6,23,.08), rgba(2,6,23,.18)); backdrop-filter: blur(1px); }
     .evSubInner:hover { outline: 1px dashed rgba(255,255,255,.4); outline-offset: 6px; }
     .evSubDragging { transition: none !important; }
     .evSubDragging .evSubInner { cursor: grabbing; outline: 1px solid rgba(255,255,255,.65); outline-offset: 6px; }
@@ -336,20 +346,20 @@
     .evSubModeLabel.real { background: rgba(16,185,129,.18); color: #34d399; border: 1px solid rgba(52,211,153,.3); }
     .evSubWord { display: inline; }
     .evTextLayersOverlay { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
-    .evTextLayerPreview { position: absolute; max-width: 88%; white-space: pre-wrap; line-height: 1.2; pointer-events: auto; cursor: grab; user-select: none; -webkit-user-select: none; border-radius: 2px; transition: opacity .15s, filter .12s; }
+    .evTextLayerPreview { position: absolute; max-width: 88%; white-space: pre-wrap; line-height: 1.2; pointer-events: auto; cursor: grab; user-select: none; -webkit-user-select: none; border-radius: 10px; transition: opacity .15s, filter .12s, box-shadow .14s ease, transform .14s ease; }
     .evTextLayerPreview:hover:not(.evTLSelected) { outline: 1px solid rgba(148,163,184,.5); outline-offset: 5px; z-index: 5; filter: brightness(1.18); }
-    .evTextLayerPreview.evTLSelected { outline: none; z-index: 20; filter: drop-shadow(0 0 10px rgba(59,130,246,.65)); }
+    .evTextLayerPreview.evTLSelected { outline: 1px solid rgba(56,189,248,.9); outline-offset: 4px; z-index: 20; filter: drop-shadow(0 0 10px rgba(59,130,246,.65)); box-shadow: 0 0 0 4px rgba(56,189,248,.12); }
     .evTLSelected::before { content: ''; position: absolute; inset: -7px; border: 2px solid #60a5fa; border-radius: 3px; pointer-events: none; z-index: 1; }
     .evTLSelected::after { content: ''; position: absolute; inset: -7px; pointer-events: none; z-index: 1; background: radial-gradient(circle at 0% 0%, #60a5fa 5px, transparent 5px), radial-gradient(circle at 100% 0%, #60a5fa 5px, transparent 5px), radial-gradient(circle at 0% 100%, #60a5fa 5px, transparent 5px), radial-gradient(circle at 100% 100%, #60a5fa 5px, transparent 5px); }
     /* Dim non-selected layers when a layer is actively selected */
     .evHasSelection .evTextLayerPreview:not(.evTLSelected) { opacity: 0.5; filter: brightness(0.7); }
     /* Drag: grabbing cursor + stronger glow on dragged layer */
-    .evTLDragging .evTextLayerPreview.evTLSelected { cursor: grabbing; filter: drop-shadow(0 0 14px rgba(59,130,246,.9)); }
+    .evTLDragging .evTextLayerPreview.evTLSelected { cursor: grabbing; filter: drop-shadow(0 0 14px rgba(59,130,246,.9)); transform: scale(1.01); }
     /* Panel→canvas sync flash: brief brightness pulse on selection from list */
     @keyframes evTLFlash { 0% { filter: brightness(2) drop-shadow(0 0 18px rgba(255,255,255,.7)); } 100% { filter: drop-shadow(0 0 10px rgba(59,130,246,.65)); } }
     .evTLFlash { animation: evTLFlash .16s ease-out forwards; }
-    .evLayerItem { display:flex; align-items:center; gap:6px; justify-content:space-between; padding:6px 8px; border:1px solid var(--card-border); border-radius:8px; background:#0f172a66; }
-    .evLayerItem.active { border-color:#3b82f6; box-shadow:0 0 0 1px #3b82f655 inset; }
+    .evLayerItem { display:flex; align-items:center; gap:6px; justify-content:space-between; padding:8px 9px; border:1px solid var(--card-border); border-radius:10px; background:#0f172a66; }
+    .evLayerItem.active { border-color:#3b82f6; box-shadow:0 0 0 1px #3b82f655 inset, 0 8px 18px rgba(59,130,246,.16); }
     .evTinyBtn { font-size:11px; padding:3px 7px; border-radius:6px; border:1px solid var(--card-border); background:#0f172a; color:var(--text); cursor:pointer; }
     /* Timeline — full-width, anchored at editor bottom */
     .evTimeline { flex-shrink: 0; height: 72px; background: linear-gradient(180deg, #06090f 0%, #070a14 100%); border-top: 2px solid #1e3a5f; display: flex; align-items: center; padding: 0 20px; gap: 14px; overflow: hidden; }
@@ -2665,6 +2675,9 @@
     .evGuideToggle:hover { background: rgba(255,255,255,.06); color: var(--text); }
     .evVideoFrame.showGuides ~ * .evGuideToggle,
     .evAspectBar .evGuideToggle.active { color: #60a5fa; border-color: rgba(96,165,250,.38); }
+    .evVideoFrame.evDraggingObject {
+      box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 0 0 4px rgba(56,189,248,.16), 0 24px 58px rgba(8,145,178,.22);
+    }
 
     /* ── Phase 5: Timeline layer tracks ────────────────────────── */
     .evTimelineLayers {
@@ -2699,6 +2712,54 @@
     .evLayerItem { transition: background .12s ease, border-color .12s ease; }
     .evLayerItem:hover { background: rgba(30,58,138,.2); border-color: rgba(59,130,246,.3); }
     .evLayerItem.active { background: rgba(30,58,138,.22); }
+    .evLayerMainBtn {
+      display: grid;
+      gap: 4px;
+      flex: 1 1 auto;
+      min-width: 0;
+      text-align: left;
+      padding: 6px 8px;
+      background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
+    }
+    .evLayerMainTitle {
+      display: block;
+      min-width: 0;
+      font-size: 12px;
+      font-weight: 700;
+      color: #e2e8f0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .evLayerMainMeta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
+      font-size: 10px;
+      color: rgba(226,232,240,.72);
+    }
+    .evLayerChip {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,.18);
+      background: rgba(148,163,184,.08);
+      color: #cbd5e1;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .evLayerChip.isCustom {
+      border-color: rgba(56,189,248,.32);
+      background: rgba(56,189,248,.12);
+      color: #67e8f9;
+    }
+    .evLayerCoords,
+    .evLayerTiming {
+      white-space: nowrap;
+    }
     .evLayerVis {
       font-size: 9px;
       font-weight: 700;
@@ -3198,6 +3259,20 @@
       background: linear-gradient(160deg, #0c182b 0%, #090f1e 100%);
     }
     .renderActiveTitle { font-size: 18px; }
+    #render_active_panel[data-render-state="running"] .renderActiveCard,
+    .renderActivePanel[data-render-state="running"] .renderActiveCard {
+      box-shadow: 0 16px 38px rgba(14,116,144,.18);
+    }
+    #render_active_panel[data-render-state="complete"] .renderActiveCard,
+    .renderActivePanel[data-render-state="complete"] .renderActiveCard {
+      border-color: rgba(16,185,129,.26);
+      background: linear-gradient(160deg, rgba(6,95,70,.16) 0%, #09131f 100%);
+    }
+    #render_active_panel[data-render-state="failed"] .renderActiveCard,
+    .renderActivePanel[data-render-state="failed"] .renderActiveCard {
+      border-color: rgba(248,113,113,.3);
+      background: linear-gradient(160deg, rgba(127,29,29,.22) 0%, #140a10 100%);
+    }
 
     /* E10 — Responsive: 1366px minimum supported width */
     @media (max-width: 1400px) {
@@ -3882,420 +3957,1666 @@
       border-color: rgba(59,130,246,.25);
     }
 
-    /* Stage 3 — balanced 3-panel editor workspace */
-    .rs-main {
-      grid-template-columns: 260px minmax(600px, 900px) 360px;
-      justify-content: center;
-    }
-    .appShell.noInspector .rs-main {
-      grid-template-columns: 260px minmax(600px, 900px);
-    }
-    .rs-center-panel {
-      display: flex;
-      justify-content: center;
-      min-width: 0;
-    }
-    .rs-preview-stage {
-      width: 100%;
-      max-width: 900px;
-      min-width: 0;
-    }
-    .appInspector {
-      min-width: 320px;
+    /* Phase C — consolidated responsive layout + bottom dashboard */
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
     }
 
-    @media (max-width: 1439px) {
-      .rs-main {
-        grid-template-columns: 240px minmax(0, 1fr) 340px;
-        justify-content: stretch;
-      }
-      .appShell.noInspector .rs-main {
-        grid-template-columns: 240px minmax(0, 900px);
-      }
-      .rs-preview-stage {
-        max-width: 900px;
-      }
-      .appInspector {
-        min-width: 320px;
-      }
+    body {
+      min-height: 100vh;
     }
 
-    @media (max-width: 1280px) {
-      .rs-main {
-        grid-template-columns: 220px minmax(0, 1fr) 320px;
-      }
-      .appShell.noInspector .rs-main {
-        grid-template-columns: 220px minmax(0, 900px);
-      }
-      .appInspector {
-        min-width: 320px;
-      }
-    }
-
-    /* FINAL OVERRIDE — restore stable layout
-       Keep the newer DOM wrappers working, but neutralize the broad visual
-       redesign. The only intentional UI change retained here is a smaller,
-       centered editor preview. */
     .appShell {
-      grid-template-columns: 1fr !important;
-      grid-template-rows: 42px minmax(0, 1fr) clamp(280px, 34vh, 440px) 28px !important;
+      grid-template-columns: 1fr;
+      grid-template-rows: 42px minmax(0, 3fr) minmax(260px, 2fr) 28px;
+      height: 100vh;
+      min-height: 0;
+      overflow: hidden;
     }
+
     .appShell.abpCollapsed {
-      grid-template-rows: 42px minmax(0, 1fr) 160px 28px !important;
+      grid-template-rows: 42px minmax(0, 1fr) 140px 28px;
     }
 
     .rs-main {
       grid-row: 2;
       display: grid;
-      grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(320px, 420px) !important;
-      justify-content: stretch !important;
+      grid-template-columns:
+        minmax(240px, 0.85fr)
+        minmax(360px, 1.55fr)
+        minmax(260px, 0.95fr);
+      gap: 12px;
+      align-items: stretch;
       min-width: 0;
       min-height: 0;
       overflow: hidden;
     }
-    .appShell.noInspector .rs-main {
-      grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) !important;
-    }
-    .sidebar,
-    .mainArea,
-    .appInspector {
-      min-width: 0;
-    }
-    .rs-center-panel {
-      display: block !important;
-      justify-content: initial !important;
-    }
-    .rs-preview-stage {
-      width: 100% !important;
-      max-width: none !important;
-      min-width: 0;
-    }
-
-    .evVideoBox {
-      width: 100%;
-      max-width: 720px;
-      max-height: 70vh;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .evVideoFrame video,
-    #evVideo {
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-    }
-
-    .inspPaneBody::before {
-      content: none !important;
-      display: none !important;
-    }
-    .inspPaneBody [data-insp-panel]:not([data-insp-panel="_sep"]),
-    .inspPaneBody .evSection,
-    .inspPaneBody .inspCollapsedGroup {
-      display: block !important;
-    }
-    .inspPaneBody [data-insp-panel="_sep"] {
-      display: block !important;
-    }
-    .inspPaneBody .inspGroupBody {
-      display: block !important;
-    }
-    .inspPaneBody .inspGroupHdr {
-      cursor: pointer;
-      background: rgba(255,255,255,.02);
-    }
-    .inspPaneBody .inspGroupArrow {
-      display: inline-block !important;
-    }
-
-    .rsProcessOverview,
-    .rsProcessSummaryStrip,
-    .rs-bottom-panel #abp_active_card {
-      display: none !important;
-    }
-    .rs-bottom-panel #render_monitor_header {
-      display: flex !important;
-    }
-    .rs-bottom-panel .jmPartsSection {
-      display: flex !important;
-    }
-    .rs-bottom-panel #clips_section_label,
-    .rs-bottom-panel .abpPipelineLabel {
-      display: block !important;
-    }
-    .rs-bottom-panel #pipeline_wrap {
-      display: grid !important;
-    }
-    .rs-bottom-panel .abpBody {
-      grid-template-columns: 1fr 300px !important;
-    }
-
-    .rsPartChip.rsTimelineBlock {
-      width: 44px !important;
-      height: 26px !important;
-      padding: 0 !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      text-align: center !important;
-    }
-    .rsTimelineBlock .rsClipFill,
-    .rsTimelineBlock .rsClipStatus,
-    .rsTimelineBlock .rsClipDur,
-    .rsTimelineBlock .rsClipTop b {
-      display: none !important;
-    }
-    .rsTimelineBlock .rsClipTop {
-      display: block !important;
-      font-size: 11px !important;
-      font-weight: 800 !important;
-    }
-    .rs-bottom-panel .abpLogBox .logLine:nth-child(n+9) {
-      display: block;
-    }
-
-    @media (max-width: 1440px) {
-      .rs-main {
-        grid-template-columns: 264px minmax(0, 1fr) 340px !important;
-      }
-      .appShell.noInspector .rs-main {
-        grid-template-columns: 264px minmax(0, 1fr) !important;
-      }
-    }
-    @media (max-width: 1280px) {
-      .rs-main {
-        grid-template-columns: 248px minmax(0, 1fr) 320px !important;
-      }
-      .appShell.noInspector .rs-main {
-        grid-template-columns: 248px minmax(0, 1fr) !important;
-      }
-    }
-
-    .mainArea.editorMode .evVideoBox {
-      width: min(52vw, 520px) !important;
-      max-width: 520px !important;
-      max-height: 58vh !important;
-      margin: 0 auto !important;
-    }
-
-    .mainArea.editorMode .evVideoFrame {
-      width: 100% !important;
-      max-width: 520px !important;
-      max-height: 58vh !important;
-    }
-
-    .mainArea.editorMode #evVideo,
-    .mainArea.editorMode .evVideoFrame video {
-      width: 100% !important;
-      max-width: 520px !important;
-      max-height: 58vh !important;
-      object-fit: contain !important;
-    }
-
-    .mainArea.editorMode .evLayout {
-      max-width: 880px !important;
-      margin-left: auto !important;
-      margin-right: auto !important;
-    }
-
-    .mainArea.editorMode .evVideoBox {
-      max-width: 560px !important;
-      max-height: 60vh !important;
-      margin-left: auto !important;
-      margin-right: auto !important;
-    }
-
-    .mainArea.editorMode .evVideoFrame {
-      max-width: 560px !important;
-    }
-
-    .mainArea.editorMode #evVideo,
-    .mainArea.editorMode .evVideoFrame video {
-      max-width: 100% !important;
-      max-height: 100% !important;
-      object-fit: contain !important;
-    }
-
-    .mainArea.editorMode #render_flow_bar {
-      padding: 6px 10px !important;
-      margin: 0 auto 6px auto !important;
-      max-width: 880px !important;
-    }
-
-    .mainArea.editorMode .flowStep {
-      min-height: 42px !important;
-      padding: 6px 10px !important;
-      border-radius: 10px !important;
-    }
-
-    .mainArea.editorMode .flowStepTitle {
-      font-size: 12px !important;
-    }
-
-    .mainArea.editorMode .flowStepSub {
-      font-size: 10px !important;
-    }
-
-    .mainArea.editorMode .flowStepIcon,
-    .mainArea.editorMode .flowStepNumber {
-      width: 22px !important;
-      height: 22px !important;
-      font-size: 11px !important;
-    }
-
-    .rs-main {
-      grid-template-columns: 300px minmax(520px, 760px) 420px !important;
-      justify-content: center !important;
-    }
-
-    .appShell.noInspector .rs-main {
-      grid-template-columns: 300px minmax(520px, 760px) !important;
-    }
-
-    .mainArea,
-    .rs-center-panel {
-      max-width: 760px !important;
-      width: 100% !important;
-    }
-
-    .mainArea.editorMode .evLayout {
-      max-width: 720px !important;
-      width: 100% !important;
-      margin-left: auto !important;
-      margin-right: auto !important;
-    }
-
-    .mainArea.editorMode #render_flow_bar {
-      max-width: 720px !important;
-    }
-
-    /* FINAL OVERRIDE — responsive auto-scaling editor columns */
-    .rs-main {
-      display: grid;
-      grid-template-columns:
-        minmax(220px, 0.9fr)
-        minmax(420px, 2fr)
-        minmax(280px, 1.2fr) !important;
-      gap: 12px;
-      justify-content: stretch !important;
-    }
 
     .appShell.noInspector .rs-main {
       grid-template-columns:
-        minmax(220px, 0.9fr)
-        minmax(420px, 2fr) !important;
+        minmax(240px, 0.9fr)
+        minmax(420px, 1.6fr);
     }
 
-    .rs-center-panel {
-      min-width: 0;
-      display: flex;
-      justify-content: center;
-    }
-
-    .mainArea,
-    .rs-center-panel {
-      max-width: none !important;
-      width: auto !important;
-    }
-
-    .mainArea.editorMode .evLayout {
-      width: 100% !important;
-      max-width: 800px !important;
-      margin: 0 auto !important;
-    }
-
-    .appInspector {
-      min-width: 280px;
-    }
-
-    @media (max-width: 1366px) {
-      .rs-main {
-        grid-template-columns:
-          minmax(200px, 1fr)
-          minmax(360px, 1.8fr)
-          minmax(260px, 1fr) !important;
-      }
-      .appShell.noInspector .rs-main {
-        grid-template-columns:
-          minmax(200px, 1fr)
-          minmax(360px, 1.8fr) !important;
-      }
-    }
-
-    @media (max-width: 1280px) {
-      .rs-main {
-        grid-template-columns:
-          minmax(180px, 1fr)
-          minmax(320px, 1.6fr)
-          minmax(240px, 1fr) !important;
-      }
-      .appShell.noInspector .rs-main {
-        grid-template-columns:
-          minmax(180px, 1fr)
-          minmax(320px, 1.6fr) !important;
-      }
-    }
-
-    /* FINAL OVERRIDE — fluid inner editor content */
     .rs-left-panel,
     .rs-center-panel,
     .rs-right-panel,
     .sidebar,
     .mainArea,
+    .appInspector,
+    .rs-center-stage,
+    .rs-preview-stage,
+    .evLayout,
+    .evWorkspace,
+    .evLeft,
+    .evRight,
+    .abpBody,
+    .abpSummaryRail,
+    .abpLog,
+    .abpTimeline {
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .sidebar {
+      grid-column: 1;
+      grid-row: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .mainArea {
+      grid-column: 2;
+      grid-row: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 12px 16px;
+      overflow: hidden;
+    }
+
     .appInspector {
-      min-width: 0 !important;
+      grid-column: 3;
+      grid-row: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+      width: auto;
+      max-width: 100%;
+    }
+
+    .sidebarScrollable,
+    .evRightScroll,
+    .mainContentScroll {
+      min-width: 0;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .rs-center-panel {
+      display: flex;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .rs-center-stage,
+    .rs-preview-stage {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      width: 100%;
+      max-width: none;
+    }
+
+    #view_editor,
+    .evLayout {
+      flex: 1 1 auto;
+      width: 100%;
+      max-width: none;
+      overflow: hidden;
+    }
+
+    .mainArea.editorMode {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .mainArea.editorMode #render_flow_bar {
+      flex-shrink: 0;
+      margin: 0 0 8px;
+    }
+
+    .evVideoBox {
+      width: min(100%, 720px);
+      max-width: 100%;
+      max-height: 100%;
+      margin-inline: auto;
+      min-width: 0;
+    }
+
+    .evVideoFrame {
+      width: min(100%, 720px);
+      max-width: 100%;
+      max-height: 100%;
+      margin-inline: auto;
+      min-width: 0;
+    }
+
+    .mainArea.editorMode .evVideoBox,
+    .mainArea.editorMode .evVideoFrame {
+      width: min(100%, 720px);
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    .mainArea.editorMode #evVideo,
+    .mainArea.editorMode .evVideoFrame video,
+    .evVideoFrame video,
+    #evVideo {
+      width: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .sidebar .setupGroups,
+    .sidebar .setupGroup,
+    .sidebar .formGrid,
+    .sidebar .field,
+    .mainArea .renderHomePanel,
+    .mainArea .renderActivePanel,
+    .mainArea .renderActiveCard,
+    .mainArea .renderWorkspaceShell,
+    .mainArea .renderWorkspacePreview,
+    .mainArea .renderWorkspacePreviewInner,
+    .mainArea .renderWorkspaceInfo,
+    .mainArea .renderWorkspaceInfoRow,
+    .mainArea .renderOutputPanel,
+    .mainArea .renderOutputHeader,
+    .mainArea .renderOutputActions,
+    .mainArea .renderOutputList,
+    .mainArea .renderClipItem,
+    .mainArea .renderClipInfo,
+    .mainArea .renderClipActions,
+    .appInspector .evLayout,
+    .appInspector .evWorkspace,
+    .appInspector .evLeft,
+    .appInspector .evRight,
+    .appInspector .evRightHeader,
+    .appInspector .evRightScroll,
+    .appInspector .evSection,
+    .appInspector .evSettingsGrid,
+    .appInspector .evLayerItem,
+    .appInspector .evInfoRow,
+    .appInspector .field,
+    .appBottomPanel .abpToolbar,
+    .appBottomPanel .abpToolbarJob,
+    .appBottomPanel .abpToolbarProgress,
+    .appBottomPanel .abpToolbarRight,
+    .appBottomPanel .abpMonitorHeader,
+    .appBottomPanel .abpMonitorMain,
+    .appBottomPanel .monitorTextBlock,
+    .appBottomPanel .abpBody,
+    .appBottomPanel .abpSummaryRail,
+    .appBottomPanel .abpSummaryCard,
+    .appBottomPanel .abpMetricGrid,
+    .appBottomPanel .abpMetric,
+    .appBottomPanel .abpLog,
+    .appBottomPanel .abpTimeline,
+    .appBottomPanel .abpLogHeader,
+    .appBottomPanel .jmPartsSection,
+    .appBottomPanel .partRow,
+    .appBottomPanel .pipelineWrap,
+    .appBottomPanel .pipelineNode {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .sidebar .setupGroup,
+    .appInspector .evSection,
+    .mainArea .renderActiveCard,
+    .mainArea .renderOutputPanel {
+      min-height: 0;
+    }
+
+    .renderWorkspaceShell {
+      grid-template-columns: minmax(220px, 0.95fr) minmax(0, 1.15fr);
+      align-items: stretch;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .renderWorkspacePreview,
+    .renderWorkspacePreviewInner,
+    .renderWorkspaceInfo,
+    .renderWorkspaceInfoRow,
+    .renderActiveTop,
+    .renderActiveActions,
+    .renderOutputHeader,
+    .renderOutputActions {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .renderWorkspacePreviewText {
+      max-width: none;
+    }
+
+    .renderActiveTop,
+    .renderOutputHeader,
+    .renderOutputActions,
+    .evInfoRow,
+    .evLayerItem {
+      flex-wrap: wrap;
+    }
+
+    .renderActiveTitle,
+    .renderActivePct,
+    .renderActiveMeta,
+    .renderOutputPath,
+    .renderClipName,
+    .renderClipMeta,
+    .partName,
+    .partMeta,
+    .partError,
+    .partStuckNote,
+    .pipelineNode .nTitle,
+    .pipelineNode .nState {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .renderClipItem {
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+    }
+
+    .renderClipName {
+      overflow: visible;
+      text-overflow: clip;
+    }
+
+    .renderClipActions {
+      grid-column: 2;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .renderClipActions button {
+      max-width: 100%;
+    }
+
+    .evRight {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .evInfoRow {
+      align-items: flex-start;
+    }
+
+    .evInfoRow .evInfoVal {
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
+    .evLayerItem {
+      align-items: flex-start;
+    }
+
+    .evLayerItem button {
+      min-width: 0;
+      max-width: 100%;
+      white-space: normal;
+      text-align: left;
+    }
+
+    .actionsRow,
+    .resumeRow,
+    .setupActions,
+    .abpQuickActions {
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .actionsRow > *,
+    .resumeRow > *,
+    .setupActions > *,
+    .abpQuickActions > *,
+    .field,
+    .fieldInput,
+    .renderWorkspaceValue,
+    .abpJobMeta,
+    .abpJobMsg,
+    .abpSummaryMeta,
+    .abpSummaryLatest,
+    .abpSummaryError,
+    .monitorPrimary,
+    .monitorSecondary,
+    .monitorHeartbeat,
+    .renderClipName,
+    .renderClipMeta,
+    .actionMessage,
+    .actionMeta {
+      min-width: 0;
     }
 
     .sidebar input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]),
     .sidebar select,
     .sidebar textarea,
+    .sidebar button,
     .evRightScroll input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]),
     .evRightScroll select,
-    .evRightScroll textarea {
-      width: 100% !important;
-      max-width: 100% !important;
-      box-sizing: border-box !important;
+    .evRightScroll textarea,
+    .evRightScroll button {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
     }
 
-    .evRightScroll input[type="range"],
-    .sidebar input[type="range"] {
-      width: 100% !important;
-      max-width: 100% !important;
+    .sidebar .actionsRow .fieldInput,
+    .sidebar .resumeRow .fieldInput,
+    .sidebar .setupActions .fieldInput,
+    .evRightScroll .actionsRow .fieldInput {
+      flex: 1 1 180px;
+      width: auto;
     }
 
-    .evRightScroll .field,
-    .sidebar .field,
-    .evRightScroll .fieldInput,
-    .sidebar .fieldInput,
-    .evRightScroll .actionsRow,
-    .sidebar .actionsRow {
-      min-width: 0 !important;
-      max-width: 100% !important;
-      box-sizing: border-box !important;
+    .sidebar .actionsRow button,
+    .sidebar .resumeRow button,
+    .sidebar .setupActions button,
+    .evRightScroll .actionsRow button,
+    .abpQuickActions button,
+    .renderOutputActions button {
+      width: auto;
+      flex: 0 0 auto;
     }
 
-    .evRightScroll {
-      overflow-y: auto !important;
-      overflow-x: hidden !important;
+    .sidebar input[type="range"],
+    .evRightScroll input[type="range"] {
+      width: 100%;
+      max-width: 100%;
     }
 
-    .mainArea.editorMode .evVideoBox {
-      width: min(60%, 520px) !important;
-      max-width: 100% !important;
-      max-height: 60vh !important;
-      margin-left: auto !important;
-      margin-right: auto !important;
+    .renderWorkspaceValue,
+    .abpJobMeta,
+    .abpJobMsg,
+    .abpSummaryMeta,
+    .abpSummaryLatest,
+    .abpSummaryError,
+    .renderClipName,
+    .renderClipMeta,
+    .actionMessage,
+    .actionMeta,
+    .monitorPrimary,
+    .monitorSecondary,
+    .monitorHeartbeat,
+    .evSourceName,
+    .evInfoRow .evInfoVal {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
-    .mainArea.editorMode .evVideoFrame {
-      width: 100% !important;
-      max-width: 100% !important;
-      min-width: 0 !important;
+    .appBottomPanel,
+    .rs-bottom-panel {
+      grid-column: 1 / -1;
+      grid-row: 3;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
     }
 
-    .mainArea.editorMode #evVideo,
-    .mainArea.editorMode .evVideoFrame video {
-      max-width: 100% !important;
-      max-height: 100% !important;
-      object-fit: contain !important;
+    .rs-bottom-panel {
+      display: grid;
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+    }
+
+    .abpToolbar,
+    .abpMonitorHeader,
+    .renderCompletionBar {
+      min-width: 0;
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+
+    .abpToolbarJob,
+    .abpToolbarProgress,
+    .abpToolbarRight,
+    .abpMonitorMain,
+    .monitorTextBlock {
+      min-width: 0;
+      max-width: none;
+    }
+
+    .abpBody {
+      display: grid;
+      grid-template-columns:
+        minmax(260px, 0.85fr)
+        minmax(420px, 1.5fr)
+        minmax(300px, 1fr);
+      gap: 12px;
+      padding: 12px;
+      background: transparent;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .abpSummaryRail,
+    .abpLog,
+    .abpTimeline,
+    .rs-bottom-section {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .abpSummaryRail {
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(8,13,24,.94);
+      box-shadow: 0 12px 32px rgba(0,0,0,.18);
+    }
+
+    .abpSectionHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-width: 0;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      flex-shrink: 0;
+    }
+
+    .abpSectionTitle {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: rgba(226,232,240,.75);
+    }
+
+    .abpSectionLabel,
+    .abpSectionSubhead,
+    .abpBlockLabel {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: rgba(226,232,240,.64);
+    }
+
+    .abpSectionBody {
+      flex: 1 1 auto;
+      min-height: 0;
+      min-width: 0;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-top: 12px;
+      scrollbar-gutter: stable;
+    }
+
+    .abpSummaryCard {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+      min-height: 0;
+      padding: 0;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .abpSummaryPrimary {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .abpSummaryMeta,
+    .abpSummaryStat,
+    .abpSummaryLatest,
+    .abpSummaryError {
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--text-muted);
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .abpSummaryError {
+      color: #fecaca;
+    }
+
+    .abpMetricGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .abpMetric.isWide {
+      grid-column: 1 / -1;
+    }
+
+    .abpMetric {
+      display: grid;
+      gap: 4px;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.06);
+      background: rgba(255,255,255,.03);
+    }
+
+    .abpMetricValue {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .abpMetricLabel {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: rgba(226,232,240,.62);
+    }
+
+    .abpLatestBlock,
+    .abpOutputBlock,
+    .abpErrorBlock,
+    .abpTimelineSection {
+      min-width: 0;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.06);
+      background: rgba(255,255,255,.035);
+      overflow-wrap: anywhere;
+    }
+
+    .abpLatestBlock {
+      display: grid;
+      gap: 6px;
+    }
+
+    .abpErrorBlock {
+      border-color: rgba(255,90,90,.35);
+      background: rgba(255,90,90,.08);
+    }
+
+    .abpQuickActions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: auto;
+    }
+
+    .abpQuickActions button:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+
+    .abpLog,
+    .abpTimeline {
+      width: auto;
+      flex: 1 1 auto;
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(8,13,24,.94);
+      box-shadow: 0 12px 32px rgba(0,0,0,.18);
+    }
+
+    .abpLogHeader {
+      padding: 0 0 10px;
+    }
+
+    .abpLog .abpSectionBody,
+    .abpTimeline .abpSectionBody {
+      overflow: hidden;
+    }
+
+    .abpLogBox,
+    .logBox,
+    .jmLogBox {
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: none;
+      overflow-x: hidden;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 2px;
+    }
+
+    .abpTimeline {
+      border-right: none;
+    }
+
+    .abpTimelineBody {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .jmPartsSection {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+
+    #parts_wrap {
+      flex: 1 1 auto;
+      min-height: 120px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .pipelineWrap {
+      flex-shrink: 0;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+      gap: 8px;
+    }
+
+    .rsProcessOverview,
+    .rsProcessSummaryStrip,
+    #abp_active_card,
+    .abpPartChipRow {
+      display: none;
+    }
+
+    .rs-bottom-panel .abpLogBox .logLine:nth-child(n+9) {
+      display: grid;
+    }
+
+    .logLine {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      min-height: auto;
+      padding: 9px 10px;
+      line-height: 1.4;
+      white-space: normal;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      text-overflow: clip;
+      border: 1px solid rgba(255,255,255,.05);
+      border-radius: 10px;
+      background: rgba(255,255,255,.025);
+    }
+
+    .logTime {
+      white-space: nowrap;
+      color: rgba(226,232,240,.62);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .logMessage {
+      min-width: 0;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .logLine.error {
+      border-color: rgba(248,113,113,.28);
+      background: rgba(127,29,29,.12);
+    }
+
+    .logLine.important:not(.error):not(.success) {
+      border-color: rgba(96,165,250,.22);
+      background: rgba(37,99,235,.08);
+    }
+
+    .logLine.success {
+      border-color: rgba(52,211,153,.22);
+      background: rgba(6,78,59,.12);
+    }
+
+    .partRow {
+      grid-template-columns: minmax(0, 1.2fr) minmax(130px, 0.9fr) auto;
+      min-width: 0;
+      transition: transform .14s ease, border-color .14s ease, box-shadow .14s ease, background .14s ease, opacity .14s ease;
+    }
+
+    .partLeft,
+    .partProgressCell,
+    .partRight,
+    .pipelineNode {
+      min-width: 0;
+    }
+
+    .partRight {
+      justify-content: flex-start;
+    }
+    .partRow.isActive {
+      border-color: rgba(56,189,248,.45);
+      background: linear-gradient(180deg, rgba(56,189,248,.09), rgba(15,23,42,.52));
+      box-shadow: 0 10px 22px rgba(14,116,144,.16);
+      transform: translateY(-1px);
+    }
+    .partRow.isDone {
+      opacity: .76;
+      background: linear-gradient(180deg, rgba(16,185,129,.06), rgba(15,23,42,.46));
+    }
+    .partRow.isFailed {
+      border-color: rgba(255,90,90,.5);
+      background: linear-gradient(180deg, rgba(255,90,90,.1), rgba(69,10,10,.2));
+    }
+    .partProgressLabel {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: rgba(226,232,240,.72);
+    }
+    .partProgressPct {
+      font-weight: 800;
+      color: #e2e8f0;
+    }
+    .pipelineNode {
+      position: relative;
+      padding-top: 11px;
+      border-radius: 12px;
+    }
+    .pipelineNode::before {
+      content: '';
+      position: absolute;
+      inset: 0 auto auto 0;
+      width: 100%;
+      height: 3px;
+      border-radius: 999px 999px 0 0;
+      background: rgba(148,163,184,.18);
+    }
+    .pipelineNode.running::before { background: linear-gradient(90deg, #38bdf8, #60a5fa); }
+    .pipelineNode.done::before { background: linear-gradient(90deg, #34d399, #10b981); }
+    .pipelineNode.failed::before,
+    .pipelineNode.error::before { background: linear-gradient(90deg, #fb7185, #ef4444); }
+    .pipelineNode.running {
+      box-shadow: 0 8px 18px rgba(59,130,246,.18);
+    }
+    .pipelineNode.done {
+      opacity: .9;
+    }
+    .renderClipItem {
+      transition: border-color .14s ease, background .14s ease, box-shadow .14s ease, opacity .14s ease, transform .14s ease;
+    }
+    .renderClipItem.isActive {
+      border-color: rgba(56,189,248,.45);
+      background: rgba(56,189,248,.08);
+      box-shadow: 0 10px 20px rgba(14,116,144,.12);
+      transform: translateY(-1px);
+    }
+    .renderClipItem.isDone {
+      opacity: .75;
+    }
+    .renderClipItem.isFailed,
+    .renderClipItem.failed {
+      border-color: rgba(255,90,90,.5);
+      background: rgba(255,90,90,.08);
+    }
+    .renderCompletionBar {
+      border: 1px solid rgba(16,185,129,.22);
+      box-shadow: 0 14px 32px rgba(16,185,129,.08);
+    }
+    .abpErrorBlock:not(.hiddenView) {
+      box-shadow: 0 12px 24px rgba(127,29,29,.16);
+    }
+    #abp_retry_btn:not(.hiddenView) {
+      border-color: rgba(248,113,113,.34);
+      color: #fecaca;
+      background: rgba(127,29,29,.18);
+    }
+
+    @media (max-width: 1440px) {
+      .rs-main {
+        grid-template-columns:
+          minmax(228px, 0.82fr)
+          minmax(360px, 1.45fr)
+          minmax(250px, 0.9fr);
+      }
+
+      .abpBody {
+        grid-template-columns:
+          minmax(240px, 0.8fr)
+          minmax(390px, 1.4fr)
+          minmax(280px, 0.95fr);
+      }
+    }
+
+    @media (max-width: 1366px) {
+      .rs-main {
+        grid-template-columns:
+          minmax(210px, 0.8fr)
+          minmax(340px, 1.35fr)
+          minmax(236px, 0.86fr);
+      }
+
+      .abpBody {
+        grid-template-columns:
+          minmax(230px, 0.8fr)
+          minmax(360px, 1.35fr)
+          minmax(260px, 0.95fr);
+      }
+    }
+
+    @media (max-width: 1280px) {
+      .rs-main {
+        grid-template-columns:
+          minmax(230px, 0.85fr)
+          minmax(340px, 1.4fr);
+        grid-template-rows: minmax(0, 1fr) minmax(220px, auto);
+      }
+
+      .mainArea {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .appInspector {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        max-height: none;
+      }
+
+      .appShell.noInspector .rs-main {
+        grid-template-columns:
+          minmax(230px, 0.85fr)
+          minmax(340px, 1.4fr);
+      }
+
+      .renderWorkspaceShell {
+        grid-template-columns: 1fr;
+      }
+
+      .renderWorkspaceInfoRow {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      .abpBody {
+        grid-template-columns:
+          minmax(260px, 0.9fr)
+          minmax(360px, 1.1fr);
+      }
+
+      .abpSummaryRail { grid-column: 1; }
+      .abpTimeline { grid-column: 2; }
+      .abpLog {
+        grid-column: 1 / -1;
+        min-height: 220px;
+      }
+
+      .partRow {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .appInspector .evSettingsGrid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .appShell {
+        grid-template-rows: 42px minmax(0, 3fr) minmax(240px, 2fr) 28px;
+      }
+
+      .rs-main {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr) minmax(220px, auto);
+      }
+
+      .sidebar,
+      .mainArea,
+      .appInspector {
+        grid-column: 1;
+      }
+
+      .sidebar {
+        grid-row: 1;
+      }
+
+      .mainArea {
+        grid-row: 2;
+      }
+
+      .appInspector {
+        grid-row: 3;
+      }
+
+      .abpToolbar {
+        flex-wrap: wrap;
+        align-items: flex-start;
+      }
+
+      .abpToolbarProgress,
+      .abpToolbarJob,
+      .abpToolbarRight {
+        width: 100%;
+      }
+
+      .abpBody {
+        grid-template-columns: 1fr;
+      }
+
+      .abpSummaryRail,
+      .abpLog,
+      .abpTimeline {
+        grid-column: 1;
+      }
+
+      .abpQuickActions,
+      .abpMetricGrid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Phase D-final: calm logs-first bottom layout */
+    .appBottomPanel .abpToolbar,
+    .appBottomPanel .abpMonitorHeader,
+    .appBottomPanel .renderCompletionBar {
+      display: none !important;
+    }
+
+    .appBottomPanel,
+    .rs-bottom-panel {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .abpFinal {
+      height: 100%;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+      padding: 10px 12px;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    .abpStatusBar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+      padding: 8px 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(8,13,24,.92);
+    }
+
+    .abpStatusGroup {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .abpStatusPill {
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-weight: 800;
+      background: rgba(56,189,248,.14);
+      color: #67e8f9;
+    }
+    .abpStatusPill[data-state="ready"] {
+      background: rgba(148,163,184,.14);
+      color: #cbd5e1;
+    }
+    .abpStatusPill[data-state="completed"] {
+      background: rgba(16,185,129,.14);
+      color: #86efac;
+    }
+    .abpStatusPill[data-state="failed"] {
+      background: rgba(248,113,113,.16);
+      color: #fecaca;
+    }
+
+    .abpStatusMetric {
+      font-weight: 900;
+      font-size: 18px;
+      color: #f8fafc;
+    }
+
+    .abpStatusText {
+      min-width: 0;
+      color: rgba(226,232,240,.72);
+      overflow-wrap: anywhere;
+    }
+
+    .abpStatusActions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .abpStatusActions button,
+    .abpQuickActions button {
+      min-width: 0;
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .abpStatusActions button:disabled,
+    .abpQuickActions button:disabled {
+      opacity: .48;
+      cursor: not-allowed;
+    }
+
+    .abpFinalBody {
+      display: grid;
+      grid-template-columns: minmax(0, 1.7fr) minmax(300px, .9fr);
+      gap: 12px;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .abpFinalLogs,
+    .abpFinalDiagnostics {
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(8,13,24,.94);
+    }
+
+    .abpFinalLogs {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .abpFinalHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+
+    .abpFinalHeader span {
+      min-width: 0;
+      opacity: .7;
+      overflow-wrap: anywhere;
+    }
+
+    .abpFinalLogs .abpLogBox,
+    .abpFinalLogs .logBox,
+    .abpFinalLogs .jmLogBox {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .abpFinalDiagnostics {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .abpDiagCard,
+    .abpDiagDetails {
+      min-width: 0;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.06);
+      background: rgba(255,255,255,.035);
+      overflow-wrap: anywhere;
+    }
+
+    .abpDiagCard h4 {
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: rgba(226,232,240,.72);
+    }
+
+    .abpErrorCard {
+      border-color: rgba(255,80,80,.45);
+      background: rgba(255,80,80,.1);
+    }
+
+    .abpDiagDetails > summary {
+      cursor: pointer;
+      font-weight: 800;
+      list-style: none;
+    }
+
+    .abpDiagDetails > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .abpDiagDetails > div {
+      margin-top: 10px;
+      min-width: 0;
+    }
+
+    .abpDiagDetails:not([open]) > div {
+      display: none;
+    }
+
+    .abpQuickActions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 8px;
+    }
+
+    .appBottomPanel.logsCollapsed .abpFinalLogs {
+      display: none;
+    }
+
+    .appBottomPanel.logsCollapsed .abpFinalBody {
+      grid-template-columns: 1fr;
+    }
+
+    .abpFinal .logLine {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      padding: 8px 10px;
+      border-radius: 10px;
+      line-height: 1.4;
+      background: rgba(255,255,255,.025);
+    }
+
+    .abpFinal .logTime {
+      white-space: nowrap;
+      opacity: .65;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .abpFinal .logMessage {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    @media (max-width: 1280px) {
+      .abpFinalBody {
+        grid-template-columns: 1fr;
+      }
+
+      .abpFinalDiagnostics {
+        max-height: 180px;
+      }
+    }
+
+    /* Render Active Queue bottom layout */
+    .appBottomPanel .abpToolbar,
+    .appBottomPanel .abpMonitorHeader,
+    .appBottomPanel .renderCompletionBar,
+    .appBottomPanel .abpFinal {
+      display: none !important;
+    }
+
+    .appBottomPanel,
+    .rs-bottom-panel {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .rcBottom.rcActiveQueue {
+      height: 100%;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+      padding: 10px 12px;
+      overflow: hidden;
+    }
+
+    .rcStatusStrip {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr);
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(8,13,24,.95);
+      box-shadow: 0 10px 26px rgba(0,0,0,.22);
+    }
+
+    .rcStatusMain {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .rcStatusPill,
+    #rc_status {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-weight: 800;
+      background: rgba(56,189,248,.15);
+      color: #67e8f9;
+    }
+
+    #rc_status[data-state="ready"] {
+      background: rgba(148,163,184,.14);
+      color: #cbd5e1;
+    }
+
+    #rc_status[data-state="completed"] {
+      background: rgba(34,197,94,.14);
+      color: #86efac;
+    }
+
+    #rc_status[data-state="failed"] {
+      background: rgba(255,80,80,.18);
+      color: #fecaca;
+    }
+
+    .rcProgressText,
+    #rc_progress {
+      font-weight: 900;
+      font-size: 18px;
+      color: #f8fafc;
+    }
+
+    .rcStatusText,
+    #rc_stage,
+    #rc_parts,
+    #rc_active {
+      min-width: 0;
+      color: rgba(226,232,240,.72);
+      overflow-wrap: anywhere;
+    }
+
+    .rcLatest {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      color: rgba(226,232,240,.75);
+      opacity: .75;
+    }
+
+    .rcAQMain {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(340px, .9fr);
+      gap: 12px;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .rcActivePanel,
+    .rcQueuePanel {
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(8,13,24,.94);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .rcPanelHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+
+    .rcPanelBadge,
+    .rcPanelMeta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: rgba(148,163,184,.12);
+      color: rgba(226,232,240,.78);
+      font-size: 12px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    #rc_active_badge[data-state="rendering"] {
+      background: rgba(56,189,248,.14);
+      color: #67e8f9;
+    }
+
+    #rc_active_badge[data-state="completed"] {
+      background: rgba(34,197,94,.14);
+      color: #86efac;
+    }
+
+    #rc_active_badge[data-state="failed"] {
+      background: rgba(255,80,80,.18);
+      color: #fecaca;
+    }
+
+    .rcActiveCard {
+      margin: 12px;
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.035);
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .rcActiveCard.isRendering {
+      border-color: rgba(56,189,248,.45);
+      background:
+        radial-gradient(circle at 12% 18%, rgba(56,189,248,.15), transparent 35%),
+        rgba(56,189,248,.07);
+      box-shadow: 0 18px 48px rgba(14,116,144,.18);
+    }
+
+    .rcActiveCard.isCompleted {
+      border-color: rgba(34,197,94,.35);
+      background: rgba(34,197,94,.08);
+    }
+
+    .rcActiveCard.isFailed {
+      border-color: rgba(255,80,80,.55);
+      background: rgba(255,80,80,.1);
+      box-shadow: 0 18px 48px rgba(127,29,29,.2);
+    }
+
+    .rcActiveTop {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .rcActiveCopy {
+      min-width: 0;
+      display: grid;
+      gap: 6px;
+    }
+
+    .rcActiveTitle {
+      font-size: 18px;
+      font-weight: 900;
+      color: #f8fafc;
+      overflow-wrap: anywhere;
+    }
+
+    .rcActiveSubtitle,
+    .rcActiveStage,
+    .rcActiveMessage {
+      min-width: 0;
+      color: rgba(226,232,240,.68);
+      overflow-wrap: anywhere;
+    }
+
+    .rcActivePercent {
+      font-size: 28px;
+      font-weight: 900;
+      white-space: nowrap;
+      color: #f8fafc;
+    }
+
+    .rcActiveProgress {
+      height: 9px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255,255,255,.08);
+    }
+
+    .rcActiveProgress > span {
+      display: block;
+      height: 100%;
+      width: var(--progress, 0%);
+      border-radius: inherit;
+      background: linear-gradient(90deg, #38bdf8, #22c55e);
+    }
+
+    .rcLogStrip {
+      margin: 0 12px 12px;
+      min-height: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.07);
+      background: rgba(2,6,23,.32);
+    }
+
+    .rcLogStripHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+
+    .rcQueueList {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 10px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .rcQueueRow {
+      min-width: 0;
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.035);
+      display: grid;
+      gap: 8px;
+    }
+
+    .rcQueueRowTop {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .rcQueueTitle {
+      font-weight: 900;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      color: #f8fafc;
+    }
+
+    .rcQueueStatus {
+      white-space: nowrap;
+      font-size: 12px;
+      opacity: .8;
+      color: rgba(226,232,240,.82);
+    }
+
+    .rcQueueMeta,
+    .rcQueueMessage {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+      color: rgba(226,232,240,.68);
+    }
+
+    .rcQueueMiniBar {
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+      overflow: hidden;
+    }
+
+    .rcQueueMiniBar > span {
+      display: block;
+      height: 100%;
+      width: var(--progress, 0%);
+      border-radius: inherit;
+      background: rgba(56,189,248,.85);
+    }
+
+    .rcQueueRow.isWaiting {
+      opacity: .68;
+    }
+
+    .rcQueueRow.isRendering {
+      border-color: rgba(56,189,248,.5);
+      background: rgba(56,189,248,.1);
+      box-shadow: 0 12px 28px rgba(14,116,144,.18);
+    }
+
+    .rcQueueRow.isCompleted {
+      border-color: rgba(34,197,94,.35);
+      background: rgba(34,197,94,.07);
+    }
+
+    .rcQueueRow.isCompleted .rcQueueMiniBar > span {
+      background: rgba(34,197,94,.9);
+    }
+
+    .rcQueueRow.isFailed {
+      border-color: rgba(255,80,80,.5);
+      background: rgba(255,80,80,.1);
+    }
+
+    .rcQueueRow.isFailed .rcQueueMiniBar > span {
+      background: rgba(255,80,80,.9);
+    }
+
+    .rcLogList {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .rcLogList .logLine,
+    #event_log_render .logLine {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      min-height: auto;
+      height: auto;
+      padding: 8px 10px;
+      border-radius: 10px;
+      line-height: 1.4;
+      white-space: normal;
+      overflow: visible;
+      background: rgba(255,255,255,.025);
+    }
+
+    .rcLogList .logLine.isError,
+    #event_log_render .logLine.isError,
+    .rcLogList .logLine.error {
+      border: 1px solid rgba(255,80,80,.32);
+      background: rgba(255,80,80,.1);
+    }
+
+    .rcLogList .logLine.isWarning,
+    #event_log_render .logLine.isWarning {
+      border: 1px solid rgba(245,158,11,.28);
+      background: rgba(245,158,11,.08);
+    }
+
+    .rcLogList .logTime,
+    #event_log_render .logTime {
+      min-width: 0;
+      white-space: nowrap;
+      opacity: .62;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .rcLogList .logMessage,
+    #event_log_render .logMessage {
+      min-width: 0;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .rcCompatHidden {
+      display: none !important;
+    }
+
+    .appBottomPanel.logsCollapsed .rcLogStrip {
+      display: none;
+    }
+
+    @media (max-width: 1280px) {
+      .rcStatusStrip {
+        grid-template-columns: 1fr;
+      }
+
+      .rcAQMain {
+        grid-template-columns: 1fr;
+      }
+
+      .rcQueuePanel {
+        max-height: 240px;
+      }
     }

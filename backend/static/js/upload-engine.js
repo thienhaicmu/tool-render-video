@@ -29,7 +29,15 @@ function _startUploadWs(runId){
     }
   };
 
-  ws.onclose = () => { uploadWs = null; };
+  ws.onclose = () => {
+    uploadWs = null;
+    if(!currentUploadRunId) return;
+    const status = String(qs('upload_action_state')?.dataset.status || '').toLowerCase();
+    if(status === 'completed' || status === 'failed' || status === 'done') return;
+    if(uploadPollTimer) return;
+    pollUploadRun();
+    uploadPollTimer = setInterval(pollUploadRun, 2000);
+  };
 }
 
 async function pollUploadRun(){

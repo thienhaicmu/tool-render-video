@@ -314,7 +314,14 @@ function startDownloadPolling() {
       downloadPollTimer = setInterval(pollDownloadJob, 2000);
     }
   };
-  ws.onclose = () => { downloadWs = null; };
+  ws.onclose = () => {
+    downloadWs = null;
+    if (!currentDownloadJobId) return;
+    if (currentDownloadJobStatus === 'completed' || currentDownloadJobStatus === 'failed') return;
+    if (downloadPollTimer) return;
+    pollDownloadJob();
+    downloadPollTimer = setInterval(pollDownloadJob, 2000);
+  };
 }
 
 function _resetDownloadItemForRetry(item) {

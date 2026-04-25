@@ -1320,39 +1320,85 @@
       </div>
     </div>
 
-    <!-- Main body: process timeline | live log -->
-    <div class="abpBody">
-
-      <!-- Left: pipeline stages + parts timeline -->
-      <div class="abpTimeline">
-        <div class="rsProcessOverview" id="rs_process_overview"></div>
-        <!-- Compact part chip timeline — P01..Pn status chips, injected by renderPartTimeline() -->
-        <div class="abpPartChipRow" id="abp_part_chip_row">
-          <span class="abpPartChipLabel">Parts</span>
-          <div class="abpPartChips" id="rs_part_chips_wrap"></div>
+    <div class="rcBottom rcActiveQueue" id="rc_bottom">
+      <div class="rcStatusStrip">
+        <div class="rcStatusMain">
+          <span id="rc_status" class="rcStatusPill">Ready</span>
+          <strong id="rc_progress" class="rcProgressText">0%</strong>
+          <span id="rc_stage" class="rcStatusText">Idle</span>
+          <span id="rc_parts" class="rcStatusText">0/0 completed</span>
+          <span id="rc_active" class="rcStatusText">No active clip</span>
         </div>
-        <div class="rsProcessSummaryStrip" id="rs_process_summary_strip"></div>
-        <div class="abpActiveCard" id="abp_active_card"></div>
-        <div class="abpSectionLabel" id="clips_section_label" style="margin-top:6px">Clips</div>
-        <div class="jmPartsSection" style="border:none;padding:0;background:none">
-          <div class="partList jmPartList" id="parts_wrap">
+        <div id="rc_latest" class="rcLatest">Waiting for render...</div>
+      </div>
+
+      <div class="rcAQMain">
+        <section class="rcActivePanel">
+          <header class="rcPanelHeader">
+            <strong>Active Render</strong>
+            <span id="rc_active_badge" class="rcPanelBadge">Idle</span>
+          </header>
+
+          <div id="rc_active_card" class="rcActiveCard isIdle">
+            <div class="rcActiveTop">
+              <div class="rcActiveCopy">
+                <div id="rc_active_title" class="rcActiveTitle">No active clip</div>
+                <div id="rc_active_subtitle" class="rcActiveSubtitle">Waiting for render...</div>
+              </div>
+              <div id="rc_active_percent" class="rcActivePercent">0%</div>
+            </div>
+
+            <div class="rcActiveProgress">
+              <span id="rc_active_bar" style="--progress:0%"></span>
+            </div>
+
+            <div id="rc_active_stage" class="rcActiveStage">Idle</div>
+            <div id="rc_active_message" class="rcActiveMessage">No activity yet.</div>
+          </div>
+
+          <section class="rcLogStrip">
+            <header class="rcLogStripHeader">
+              <strong>Recent Activity</strong>
+              <button class="ghostButton" id="rc_toggle_logs_btn" type="button" onclick="toggleRenderLogs()">View logs</button>
+            </header>
+            <div id="event_log_render" class="rcLogList"></div>
+          </section>
+        </section>
+
+        <aside class="rcQueuePanel">
+          <header class="rcPanelHeader">
+            <strong>Render Process</strong>
+            <span id="rc_queue_summary" class="rcPanelMeta">0 waiting</span>
+          </header>
+
+          <div id="rc_part_cards" class="rcQueueList">
             <div class="emptyState">Clips will appear here once rendering begins.</div>
           </div>
-        </div>
-        <div class="abpSectionLabel abpPipelineLabel">Pipeline</div>
-        <div class="pipelineWrap" id="pipeline_wrap"></div>
+        </aside>
       </div>
 
-      <!-- Right: live log -->
-      <div class="abpLog">
-        <div class="abpLogHeader">
-          <div class="abpSectionLabel">Diagnostics</div>
-          <button class="abpLogToggle" type="button" onclick="toggleRenderLogs()">Hide logs</button>
+      <div class="rcCompatHidden" hidden aria-hidden="true">
+        <button id="rc_open_output_btn" type="button" onclick="openRenderOutputFolder()">Open Output</button>
+        <button id="rc_copy_diag_btn" type="button" onclick="copyRenderDiagnostics()">Copy Diagnostics</button>
+        <button id="rc_retry_btn" type="button" onclick="rerunRenderJob(currentJobId)">Retry</button>
+        <button id="abp_retry_btn" type="button" onclick="rerunRenderJob(currentJobId)">Retry</button>
+        <div id="parts_wrap"></div>
+        <div id="pipeline_wrap"></div>
+        <span id="clips_section_label"></span>
+        <div id="abp_output_text">No output yet</div>
+        <div id="abp_output_meta">Latest file will appear here.</div>
+        <div id="abp_error_block">
+          <div id="abp_error_text">No blocking errors.</div>
         </div>
-        <div class="logBox jmLogBox abpLogBox" id="event_log_render"></div>
+        <span id="abp_summary_primary"></span>
+        <span id="abp_summary_progress"></span>
+        <span id="abp_summary_meta"></span>
+        <span id="abp_summary_stage"></span>
+        <span id="abp_summary_parts"></span>
+        <span id="abp_summary_active"></span>
+        <span id="abp_summary_latest"></span>
       </div>
-
-    </div><!-- /abpBody -->
+    </div><!-- /rcBottom -->
 
   </section><!-- /appBottomPanel -->
 
