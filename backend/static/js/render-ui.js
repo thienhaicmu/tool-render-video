@@ -8,6 +8,7 @@ let _renderMonitorLastSummary = null;
 let _renderMonitorLastParts = [];
 let _renderMonitorHeartbeatTimer = null;
 let _renderLogsUserToggled = false;
+let _logAutoScroll = true;
 const RENDER_MONITOR_STALL_MS = 45000;
 
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
@@ -24,7 +25,10 @@ function resetRenderSessionUi(){
   lastProgressBucket = -1;
   _stopJobWs();
   if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
-  if(qs('event_log_render')) qs('event_log_render').innerHTML = '';
+  if(qs('event_log_render')) qs('event_log_render').innerHTML = '<div class="rcLogEmpty">No activity yet — logs will appear here during render.</div>';
+  _logAutoScroll = true;
+  const _asbtn = qs('rc_log_autoscroll_btn');
+  if (_asbtn) { _asbtn.classList.add('isActive'); _asbtn.title = 'Auto-scroll: On'; }
   setHeaderJob('No active job');
   qs('job_stage_pill').textContent = 'Idle';
   if (qs('job_stage_pill')) qs('job_stage_pill').dataset.stage = '';
@@ -878,10 +882,23 @@ function renderBottomActiveQueue(job, summary, parts = []) {
         : 'Waiting for render slot.'
     );
 
+    const score = part?.viral_score;
+    const badge = document.createElement('div');
+    badge.className = 'rcScoreBadge';
+    if (score != null && score !== '' && !isNaN(Number(score))) {
+      const val = parseFloat(score);
+      badge.textContent = `🔥 ${val.toFixed(1)}`;
+      badge.dataset.tier = val >= 8 ? 'hot' : val >= 6 ? 'good' : val >= 4 ? 'mid' : 'low';
+    } else {
+      badge.textContent = '…';
+      badge.dataset.tier = 'pending';
+    }
+
     row.appendChild(top);
     row.appendChild(meta);
     row.appendChild(mini);
     row.appendChild(message);
+    row.appendChild(badge);
     cardWrap.appendChild(row);
   });
 }
@@ -1397,6 +1414,30 @@ function toggleRenderLogs() {
   const panel = qs('appBottomPanel');
   if (!panel) return;
   setRenderLogsCollapsed(!panel.classList.contains('logsCollapsed'), { fromUser: true });
+}
+
+function toggleLogAutoScroll() {
+  _logAutoScroll = !_logAutoScroll;
+  const btn = qs('rc_log_autoscroll_btn');
+  if (btn) {
+    btn.classList.toggle('isActive', _logAutoScroll);
+    btn.title = _logAutoScroll ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+  }
+}
+
+function copyRenderLogs() {
+  const box = qs('event_log_render');
+  if (!box) return;
+  const lines = [...box.querySelectorAll('.logLine')].map(el => {
+    const t = el.querySelector('.logTime')?.textContent || '';
+    const m = el.querySelector('.logMessage')?.textContent || '';
+    return t ? `[${t}] ${m}` : m;
+  }).join('\n');
+  if (!lines.trim()) { showToast('No logs to copy', 'info'); return; }
+  navigator.clipboard.writeText(lines).then(
+    () => showToast('Logs copied', 'success'),
+    () => showToast('Copy failed', 'error')
+  );
 }
 function pipelineStateByStage(stage, status){
   const s = (stage || '').toLowerCase();

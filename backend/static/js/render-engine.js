@@ -669,3 +669,26 @@ function _stopUploadWs(){
   if(uploadWs){ try{ uploadWs.close(); }catch(_){} uploadWs = null; }
 }
 
+async function _submitRenderPayload(payload, isBatch) {
+  const endpoint = isBatch ? '/api/render/process/batch' : '/api/render/process';
+  const res  = await fetch(endpoint, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (!res.ok) {
+    const errMsg = _formatApiError(data.detail);
+    addEvent(`Start render failed: ${errMsg}`, 'render');
+    setRenderActionBusy(false);
+    return { ok: false, error: errMsg };
+  }
+  currentJobId = isBatch ? data.batch_id : data.job_id;
+  activeJobStartedAt = Date.now();
+  lastStage = ''; lastMessage = ''; lastStatus = ''; lastProgressBucket = -1;
+  _jobTargetPct = 0; _jobDisplayPct = 0;
+  for(const k of Object.keys(_partTarget)) delete _partTarget[k];
+  for(const k of Object.keys(_partDisplay)) delete _partDisplay[k];
+  setRenderActionBusy(true);
+  setHeaderJob('Render running');
+  addEvent(isBatch ? `Queued render batch (${data.count || '?'} links)` : 'Queued render job', 'render');
+  startPolling();
+  return { ok: true, error: null };
+}
+

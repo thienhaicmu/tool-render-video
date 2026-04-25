@@ -823,9 +823,9 @@
       gap: 4px;
     }
     .abpProgressBar {
-      height: 4px !important;
+      height: 8px !important;
       margin: 0 !important;
-      border-radius: 2px;
+      border-radius: 999px;
     }
     .abpJobMsg {
       font-size: 10px;
@@ -2331,10 +2331,10 @@
       transition: opacity .16s ease, color .16s ease;
     }
     .abpProgressBar {
-      height: 7px !important;
+      height: 8px !important;
       border-radius: 999px;
-      background: rgba(30,45,69,.85);
-      box-shadow: inset 0 1px 4px rgba(0,0,0,.45);
+      background: rgba(15,25,50,.9);
+      box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
     }
     .abpProgressBar .progressValue {
       border-radius: 999px;
@@ -3207,7 +3207,7 @@
     .abpJobTitle { font-size: 11px; }
     .abpJobMeta  { font-size: 10px; }
     .abpPct      { font-size: 13px; }
-    .abpProgressBar { height: 5px !important; }
+    .abpProgressBar { height: 8px !important; }
 
     .abpMonitorHeader {
       padding: 7px 14px;
@@ -5619,4 +5619,315 @@
       .rcQueuePanel {
         max-height: 240px;
       }
+    }
+
+    /* ── Premium Bottom Panel + Log Viewer Upgrade ──────────────────────────── */
+
+    /* Toolbar: deeper background, crisper border */
+    .abpToolbar {
+      background: linear-gradient(180deg, #070d1a 0%, #050810 100%);
+      border-bottom: 1px solid rgba(59,130,246,.13);
+    }
+
+    /* Progress value: default blue-indigo gradient */
+    .abpProgressBar .progressValue {
+      background: linear-gradient(90deg, #3b82f6, #6366f1);
+    }
+
+    /* State-aware progress value colors (CSS :has - supported in all modern browsers) */
+    .appBottomPanel:has(#render_monitor_header[data-monitor-state="complete"]) .abpProgressBar .progressValue {
+      background: linear-gradient(90deg, #10b981, #34d399) !important;
+    }
+    .appBottomPanel:has(#render_monitor_header[data-monitor-state="failed"]) .abpProgressBar .progressValue {
+      background: linear-gradient(90deg, #ef4444, #f87171) !important;
+    }
+    .appBottomPanel:has(#render_monitor_header[data-monitor-state="stalled"]) .abpProgressBar .progressValue {
+      background: linear-gradient(90deg, #f59e0b, #fbbf24) !important;
+    }
+
+    /* rcStatusStrip: tighter, cleaner */
+    .rcStatusStrip {
+      border-radius: 10px;
+      padding: 8px 12px;
+      background: rgba(5,9,20,.97);
+      border-color: rgba(59,130,246,.12);
+      box-shadow: none;
+    }
+
+    /* Log strip: professional console header */
+    .rcLogStripHeader {
+      background: rgba(4,7,17,.9);
+      border-bottom-color: rgba(255,255,255,.06);
+      padding: 7px 10px;
+      gap: 6px;
+    }
+    .rcLogStripHeader > strong {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(148,163,184,.9);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      flex: 1;
+    }
+
+    /* Log toolbar action buttons group */
+    .rcLogToolbarActions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+
+    /* Small icon-style log control buttons */
+    .rcLogBtn {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 6px;
+      background: rgba(255,255,255,.04);
+      color: rgba(226,232,240,.55);
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .14s, border-color .14s, color .14s;
+      white-space: nowrap;
+      letter-spacing: .01em;
+    }
+    .rcLogBtn:hover {
+      background: rgba(255,255,255,.08);
+      border-color: rgba(255,255,255,.16);
+      color: #e2e8f0;
+    }
+    .rcLogBtn.isActive {
+      background: rgba(59,130,246,.15);
+      border-color: rgba(59,130,246,.38);
+      color: #93c5fd;
+    }
+    .rcLogBtn.isActive:hover {
+      background: rgba(59,130,246,.22);
+    }
+
+    /* Log list: monospace console font */
+    .rcLogList {
+      font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    }
+    .rcLogList .logLine,
+    #event_log_render .logLine {
+      font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+      font-size: 11.5px;
+      padding: 5px 8px;
+      border-radius: 7px;
+      gap: 6px;
+      background: rgba(255,255,255,.022);
+    }
+    .rcLogList .logTime,
+    #event_log_render .logTime {
+      font-size: 10px;
+      opacity: .52;
+    }
+
+    /* Log empty state */
+    .rcLogEmpty {
+      padding: 20px 12px;
+      text-align: center;
+      color: rgba(148,163,184,.42);
+      font-size: 11px;
+      font-style: italic;
+      font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    }
+
+    /* Active render card: progress bar variants */
+    .rcActiveCard.isRendering .rcActiveProgress > span {
+      background: linear-gradient(90deg, #38bdf8, #6366f1);
+      animation: renderBarPulse 2.2s ease-in-out infinite;
+    }
+    .rcActiveCard.isFailed .rcActiveProgress > span {
+      background: linear-gradient(90deg, #ef4444, #f87171);
+    }
+    .rcActiveCard.isCompleted .rcActiveProgress > span {
+      background: linear-gradient(90deg, #10b981, #34d399);
+    }
+    @keyframes renderBarPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .72; }
+    }
+
+    /* Queue rows: colored title text per state */
+    .rcQueueRow.isFailed   .rcQueueTitle { color: #fca5a5; }
+    .rcQueueRow.isCompleted .rcQueueTitle { color: #6ee7b7; }
+    .rcQueueRow.isRendering .rcQueueTitle { color: #67e8f9; }
+
+    /* Panel headers: subtle left accent line */
+    .rcPanelHeader {
+      border-bottom-color: rgba(255,255,255,.06);
+      background: rgba(4,7,17,.7);
+    }
+    .rcPanelHeader > strong {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: rgba(148,163,184,.9);
+    }
+
+    /* ── Bottom Panel: 60/40 Split Layout ───────────────────────────────────── */
+
+    /* rcBottom stretches to fill panel height */
+    .rcBottom {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Horizontal flex split — left 60%, right 40% */
+    .rcAQMain {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: row;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    /* LEFT panel: queue (60% of space via flex proportion 3:2) */
+    .rcQueuePanel {
+      flex: 3 1 0;
+      min-width: 0;
+      border-radius: 0;
+      border: none;
+      border-right: 1px solid rgba(255,255,255,.06);
+      background: rgba(6,10,20,.96);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Part-cards grid: auto-fill with min 240px cards */
+    .rcQueueGrid {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 10px;
+      align-content: start;
+    }
+
+    /* Compact active-clip strip inside queue panel */
+    .rcQueuePanel .rcActiveCard {
+      flex-shrink: 0;
+      margin: 8px 10px 4px;
+      padding: 10px 14px;
+      gap: 6px;
+      border-radius: 12px;
+    }
+    .rcQueuePanel .rcActiveTitle   { font-size: 13px; font-weight: 800; }
+    .rcQueuePanel .rcActivePercent { font-size: 16px; font-weight: 900; }
+    .rcQueuePanel .rcActiveProgress { height: 8px; }
+    .rcQueuePanel .rcActiveStage,
+    .rcQueuePanel .rcActiveMessage { font-size: 11px; }
+
+    /* RIGHT panel: log (40% of space via flex proportion 2:3) */
+    .rcLogStrip.rcLogPanel {
+      flex: 2 1 0;
+      min-width: 260px;
+      margin: 0;
+      border-radius: 0;
+      border: none;
+      background: rgba(3,5,14,.97);
+    }
+
+    /* Responsive: stack vertically on narrow panels */
+    @media (max-width: 900px) {
+      .rcAQMain {
+        flex-direction: column;
+      }
+      .rcQueuePanel {
+        flex: 0 0 auto;
+        min-height: 220px;
+        border-right: none;
+        border-bottom: 1px solid rgba(255,255,255,.06);
+      }
+      .rcLogStrip.rcLogPanel {
+        flex: 0 0 160px;
+        min-width: 0;
+        border-left: none;
+      }
+    }
+
+    /* ── Viral Score Badge ───────────────────────────────────────────────────── */
+
+    /* Card needs position context for the absolute badge */
+    .rcQueueRow {
+      position: relative;
+      padding-right: 58px; /* reserve space so status text clears the badge */
+    }
+
+    .rcScoreBadge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      pointer-events: none;
+      background: rgba(255,255,255,.07);
+      color: rgba(148,163,184,.55);
+      letter-spacing: .01em;
+    }
+
+    /* Score tiers */
+    .rcScoreBadge[data-tier="hot"] {
+      background: rgba(245,158,11,.18);
+      color: #fbbf24;
+      box-shadow: 0 0 8px rgba(245,158,11,.18);
+    }
+    .rcScoreBadge[data-tier="good"] {
+      background: rgba(34,197,94,.14);
+      color: #86efac;
+    }
+    .rcScoreBadge[data-tier="mid"] {
+      background: rgba(96,165,250,.13);
+      color: #93c5fd;
+    }
+    .rcScoreBadge[data-tier="low"] {
+      background: rgba(148,163,184,.09);
+      color: rgba(148,163,184,.6);
+    }
+    .rcScoreBadge[data-tier="pending"] {
+      background: transparent;
+      color: rgba(148,163,184,.3);
+      font-size: 15px;
+      line-height: 1;
+      padding: 0 6px;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Phase I — Render Screen 60/40 Height Split
+       Scoped to Render screen only via :has(). Selector matches when
+       #render_flow_bar is visible (render + editor share it) but editor
+       mode is NOT active — leaving only the Render screen.
+       Upload / Download / History / Editor / Channels / Settings are
+       all unaffected.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* I1 — Override grid rows: top workspace 3fr (60%), bottom panel 2fr (40%) */
+    .appShell:has(#render_flow_bar:not(.hiddenView)):not(:has(.mainArea.editorMode)) {
+      grid-template-rows: 42px 3fr 2fr 28px;
+    }
+
+    /* I2 — Collapsed bottom: keep compact header, don't apply 40% when collapsed */
+    .appShell.abpCollapsed:has(#render_flow_bar:not(.hiddenView)):not(:has(.mainArea.editorMode)) {
+      grid-template-rows: 42px minmax(0, 1fr) 96px 28px;
+    }
+
+    /* I3 — Ensure bottom panel can shrink below its content height */
+    .appShell:has(#render_flow_bar:not(.hiddenView)):not(:has(.mainArea.editorMode)) > .appBottomPanel {
+      min-height: 0;
     }

@@ -90,8 +90,13 @@ function addEvent(text, scope = 'auto'){
   if (/failed|error|exception|traceback|fatal/i.test(normalized)) div.classList.add('isError');
   if (/warn|retry|stalled|timeout/i.test(normalized)) div.classList.add('isWarning');
   _setLogLineContent(div, normalized, 1);
+  const emptyNode = box.querySelector('.rcLogEmpty');
+  if (emptyNode) emptyNode.remove();
   box.prepend(div);
   while (box.children.length > 40) box.removeChild(box.lastChild);
+  if (typeof _logAutoScroll !== 'undefined' && _logAutoScroll && resolvedScope === 'render') {
+    box.scrollTop = 0;
+  }
   st.lastText = normalized;
   st.lastAt = now;
   st.lastNode = div;

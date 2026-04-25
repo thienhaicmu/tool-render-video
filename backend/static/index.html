@@ -1307,9 +1307,12 @@
       </div>
 
       <div class="rcAQMain">
-        <section class="rcActivePanel">
+
+        <!-- LEFT 60%: active strip + part-cards grid -->
+        <section class="rcQueuePanel">
           <header class="rcPanelHeader">
-            <strong>Active Render</strong>
+            <strong>Render Queue</strong>
+            <span id="rc_queue_summary" class="rcPanelMeta">0 waiting</span>
             <span id="rc_active_badge" class="rcPanelBadge">Idle</span>
           </header>
 
@@ -1321,34 +1324,33 @@
               </div>
               <div id="rc_active_percent" class="rcActivePercent">0%</div>
             </div>
-
             <div class="rcActiveProgress">
               <span id="rc_active_bar" style="--progress:0%"></span>
             </div>
-
             <div id="rc_active_stage" class="rcActiveStage">Idle</div>
             <div id="rc_active_message" class="rcActiveMessage">No activity yet.</div>
           </div>
 
-          <section class="rcLogStrip">
-            <header class="rcLogStripHeader">
-              <strong>Recent Activity</strong>
-              <button class="ghostButton" id="rc_toggle_logs_btn" type="button" onclick="toggleRenderLogs()">View logs</button>
-            </header>
-            <div id="event_log_render" class="rcLogList"></div>
-          </section>
-        </section>
-
-        <aside class="rcQueuePanel">
-          <header class="rcPanelHeader">
-            <strong>Render Process</strong>
-            <span id="rc_queue_summary" class="rcPanelMeta">0 waiting</span>
-          </header>
-
-          <div id="rc_part_cards" class="rcQueueList">
+          <div id="rc_part_cards" class="rcQueueGrid">
             <div class="emptyState">Clips will appear here once rendering begins.</div>
           </div>
-        </aside>
+        </section>
+
+        <!-- RIGHT 40%: log panel -->
+        <section class="rcLogStrip rcLogPanel">
+          <header class="rcLogStripHeader">
+            <strong>Recent Activity</strong>
+            <div class="rcLogToolbarActions">
+              <button class="rcLogBtn isActive" id="rc_log_autoscroll_btn" type="button" onclick="toggleLogAutoScroll()" title="Auto-scroll: On">↑ Auto</button>
+              <button class="rcLogBtn" id="rc_copy_logs_btn" type="button" onclick="copyRenderLogs()" title="Copy all log text">Copy</button>
+              <button class="rcLogBtn" id="rc_toggle_logs_btn" type="button" onclick="toggleRenderLogs()">View logs</button>
+            </div>
+          </header>
+          <div id="event_log_render" class="rcLogList">
+            <div class="rcLogEmpty">No activity yet — logs will appear here during render.</div>
+          </div>
+        </section>
+
       </div>
 
       <div class="rcCompatHidden" hidden aria-hidden="true">

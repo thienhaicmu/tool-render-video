@@ -1,6 +1,4 @@
-(async function () {
-  await loadPartials();
-
+function init() {
 bindNav();
 applyEnglishLabels();
 bindUploadRealtimeValidation();
@@ -123,5 +121,15 @@ addEvent('Dashboard ready');
 })();
 
 // No resize listener needed — overlay uses % inside fixed-aspect frame
+}
 
+(async function () {
+  try {
+    if (typeof loadPartials === 'function') {
+      await loadPartials();
+    }
+    init();
+  } catch (e) {
+    console.error('Init failed', e);
+  }
 })();
