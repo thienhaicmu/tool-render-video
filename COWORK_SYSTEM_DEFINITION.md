@@ -1,4 +1,8 @@
-﻿# COWORK System Definition (Render Studio)
+﻿> **DEPRECATED — root copy.**
+> The authoritative version of this file is [`cowork/COWORK_SYSTEM_DEFINITION.md`](cowork/COWORK_SYSTEM_DEFINITION.md).
+> This copy is kept for backward compatibility with any external links.
+
+# COWORK System Definition (Render Studio)
 
 ## Purpose
 This file defines how to work safely and effectively with AI coworkers (Claude Code, Codex) in this repository.

@@ -1,3 +1,7 @@
+> **DEPRECATED — root copy.**
+> The authoritative version of this file is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+> This copy is kept for backward compatibility with any external links.
+
 # ARCHITECTURE.md
 
 Architecture V2 — current state as of 2026-04.

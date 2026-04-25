@@ -109,5 +109,8 @@ See [docs/DESKTOP_APP.md](docs/DESKTOP_APP.md).
 | [docs/SUBTITLE_TRANSLATION.md](docs/SUBTITLE_TRANSLATION.md) | Whisper → SRT → ASS, translation states |
 | [docs/UI_BEHAVIOR.md](docs/UI_BEHAVIOR.md) | View system, editor flow, terminal states |
 | [docs/DESKTOP_APP.md](docs/DESKTOP_APP.md) | Electron bootstrap, offline packaging |
-| [COWORK_SYSTEM_DEFINITION.md](COWORK_SYSTEM_DEFINITION.md) | System definition for co-working teams |
-| [HUONG_DAN_SU_DUNG_COWORK.md](HUONG_DAN_SU_DUNG_COWORK.md) | Hướng dẫn sử dụng (Vietnamese) |
+| [cowork/README.md](cowork/README.md) | Cowork system entry point — Claude Code workflow rules |
+| [cowork/COMMANDS.md](cowork/COMMANDS.md) | Slash commands: /run /test /fix /error /status /log /commit /features |
+| [cowork/PROJECT_STATUS.md](cowork/PROJECT_STATUS.md) | Phase stability and safe next tasks |
+| [cowork/COWORK_SYSTEM_DEFINITION.md](cowork/COWORK_SYSTEM_DEFINITION.md) | System definition for co-working teams |
+| [cowork/HUONG_DAN_SU_DUNG_COWORK.md](cowork/HUONG_DAN_SU_DUNG_COWORK.md) | Hướng dẫn sử dụng (Vietnamese) |

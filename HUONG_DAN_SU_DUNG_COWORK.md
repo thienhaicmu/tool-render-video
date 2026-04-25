@@ -1,4 +1,8 @@
-﻿# Huong Dan Su Dung Cowork (Render Studio)
+﻿> **DEPRECATED — root copy.**
+> The authoritative version of this file is [`cowork/HUONG_DAN_SU_DUNG_COWORK.md`](cowork/HUONG_DAN_SU_DUNG_COWORK.md).
+> This copy is kept for backward compatibility with any external links.
+
+# Huong Dan Su Dung Cowork (Render Studio)
 
 ## Muc tieu
 Tai lieu nay huong dan nhanh cach dung AI cowork (Claude Code, Codex) de:
