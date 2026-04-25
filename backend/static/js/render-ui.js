@@ -45,6 +45,7 @@ function resetRenderSessionUi(){
   renderSteps(0);
   renderParts([]);
   renderPartFocus([], null);
+  renderActivePartCard([], null);
   if(RENDER_SESSION_ONLY && qs('jobs_out')){
     qs('jobs_out').innerHTML = '<div class="emptyState">Session mode: old jobs are hidden.</div>';
   }
@@ -298,7 +299,9 @@ function partStatusLabel(status){
     cutting: 'Cutting clip',
     transcribing: 'Generating subtitles',
     rendering: 'Rendering video',
+    completed: 'Completed',
     done: 'Completed',
+    error: 'Failed',
     failed: 'Failed'
   };
   return map[s] || s;
@@ -472,6 +475,7 @@ function deactivateRenderUiForEditorOpen() {
   resetRenderMonitorHeartbeat();
   updateRenderMonitorHeartbeat(null, null, []);
   updateRenderMainState(null, null, []);
+  renderParts([]);
 
   // Ensure the main action button returns to editor-open state.
   setRenderActionBusy(false);
@@ -1052,7 +1056,153 @@ function renderSteps(progress){
   }).join('');
 }
 
+function partTimelineStatus(status) {
+  const st = String(status || '').toLowerCase();
+  if (st === 'completed' || st === 'done') return 'completed';
+  if (st === 'failed' || st === 'error') return 'failed';
+  if (['waiting', 'cutting', 'transcribing', 'rendering'].includes(st)) return 'processing';
+  return 'pending';
+}
+
+function formatPartDuration(part) {
+  const startSec = Number(part?.start_sec || 0);
+  const endSec = Number(part?.end_sec || 0);
+  const duration = Math.max(0, Number(part?.duration_sec || 0) || (endSec - startSec));
+  return duration > 0 ? `${duration.toFixed(1)}s` : '';
+}
+
+function formatPartShortName(part) {
+  const raw = String(part?.part_name || part?.output_file || part?.output_path || part?.file_name || '').trim();
+  const leaf = raw ? raw.split(/[\\/]/).filter(Boolean).pop() : '';
+  return leaf || `Part ${Number(part?.part_no || 0) || '-'}`;
+}
+
+function renderProcessOverview(items, summary) {
+  const box = qs('rs_process_overview');
+  if (!box) return;
+
+  const parts = items || [];
+  if (!parts.length) {
+    box.innerHTML = '';
+    return;
+  }
+
+  const s = summary || computeProgressSummary(parts);
+  const total = Number(s.total_parts || parts.length || 0);
+  const done = Number(s.completed_parts || 0);
+  const processing = Number(s.processing_parts || 0);
+  const failed = Number(s.failed_parts || 0);
+  const pending = Math.max(0, Number(s.pending_parts ?? (total - done - processing - failed)));
+  const pct = Math.round(Number(s.overall_progress_percent ?? s.parts_percent ?? 0));
+  const stage = s.current_stage ? partStatusLabel(s.current_stage) : (processing > 0 ? 'Rendering clips' : (done >= total ? 'Complete' : 'Waiting'));
+
+  box.innerHTML = `
+    <div class="rsPoStage">
+      <span class="rsPoLabel">Stage</span>
+      <strong>${esc(stage)}</strong>
+    </div>
+    <div class="rsPoMetric">
+      <span class="rsPoLabel">Overall</span>
+      <strong>${pct}%</strong>
+    </div>
+    <div class="rsPoCounts">
+      <span class="rsPoCount done">${done} done</span>
+      <span class="rsPoCount active">${processing} active</span>
+      <span class="rsPoCount failed">${failed} failed</span>
+      <span class="rsPoCount pending">${pending} pending</span>
+    </div>
+  `;
+}
+
+function renderProcessSummaryStrip(items, summary) {
+  const box = qs('rs_process_summary_strip');
+  if (!box) return;
+
+  const parts = items || [];
+  if (!parts.length) {
+    box.innerHTML = '';
+    return;
+  }
+
+  const job = _renderMonitorLastJob || null;
+  const s = summary || computeProgressSummary(parts);
+  const outputDir = getCurrentJobOutputDir(job);
+  const done = Number(s.completed_parts || 0);
+  const failed = Number(s.failed_parts || 0);
+  const bits = [];
+
+  if (outputDir) {
+    const shortOutput = String(outputDir).replace(/\\/g, '/').split('/').filter(Boolean).slice(-2).join('/');
+    bits.push(`<span class="rsPssItem wide" title="${_renderHistoryAttr(outputDir)}"><b>Output</b>${esc(shortOutput || outputDir)}</span>`);
+  }
+  bits.push(`<span class="rsPssItem"><b>Ready</b>${done}</span>`);
+  bits.push(`<span class="rsPssItem ${failed > 0 ? 'failed' : ''}"><b>Failed</b>${failed}</span>`);
+
+  try {
+    const raw = job?.result_json;
+    const result = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+    const voiceSummary = String(result?.voice_summary || '').trim();
+    const subtitleSummary = String(result?.subtitle_translate_summary || '').trim();
+    if (voiceSummary) bits.push(`<span class="rsPssItem"><b>Voice</b>${esc(voiceSummary)}</span>`);
+    if (subtitleSummary && subtitleSummary !== 'not used') bits.push(`<span class="rsPssItem"><b>Subtitles</b>${esc(subtitleSummary)}</span>`);
+  } catch (_) {}
+
+  box.innerHTML = bits.join('');
+}
+
+function renderPartTimeline(parts) {
+  const wrap = qs('rs_part_chips_wrap');
+  const row  = qs('abp_part_chip_row');
+  if (!wrap) return;
+
+  if (!parts || !parts.length) {
+    wrap.innerHTML = '';
+    if (row) row.classList.remove('hasChips');
+    return;
+  }
+
+  const activeStatuses = ['waiting', 'cutting', 'transcribing', 'rendering'];
+  const ordered = [...parts].sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0));
+
+  const chips = ordered.map(p => {
+    const partNo  = Number(p.part_no || 0);
+    const label   = 'P' + String(partNo).padStart(2, '0');
+    const st      = String(p.status || '').toLowerCase();
+    const duration = formatPartDuration(p);
+    const pct = Math.max(0, Math.min(100, Math.round(Number(p.progress_percent || 0))));
+    const chipStatus = partTimelineStatus(st);
+    const statusText = partStatusLabel(st);
+    const chipTitle = `Part ${partNo} - ${statusText}${duration ? ` - ${duration}` : ''}`;
+    const progressHtml = chipStatus === 'processing'
+      ? `<div class="rsClipFill" style="width:${pct}%"></div>`
+      : '';
+    return `<div class="rsPartChip rsTimelineBlock" data-chip-status="${chipStatus}" data-part-no="${partNo}" title="${_renderHistoryAttr(chipTitle)}" onclick="console.log('Part chip: Part', ${partNo})">
+      ${progressHtml}
+      <div class="rsClipTop"><span>${esc(label)}</span>${chipStatus === 'processing' ? `<b>${pct}%</b>` : ''}</div>
+      <div class="rsClipStatus">${esc(statusText)}</div>
+      ${duration ? `<div class="rsClipDur">${esc(duration)}</div>` : ''}
+    </div>`;
+  });
+
+  wrap.innerHTML = chips.join('');
+  if (row) row.classList.add('hasChips');
+}
+
+function renderAbpActiveCard(items, summary) {
+  const card = qs('abp_active_card');
+  if (!card) return;
+  card.innerHTML = '';
+}
+
+function renderActivePartCard(items, summary) {
+  renderAbpActiveCard(items, summary);
+}
+
 function renderParts(items, summary){
+  renderProcessOverview(items, summary);
+  renderProcessSummaryStrip(items, summary);
+  renderPartTimeline(items);
+  renderAbpActiveCard(items, summary);
   const wrap = qs('parts_wrap');
   if(!items || !items.length){
     wrap.innerHTML = `<div class="emptyState">${esc(renderPendingClipsMessage(_renderMonitorLastJob))}</div>`;

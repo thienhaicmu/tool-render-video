@@ -184,8 +184,8 @@ async function startRender(){
       btn.disabled = false;
       btn.textContent = origText;
       btn.style.opacity = '1';
-      if (dlPanel) dlPanel.classList.add('hiddenView');
     } finally {
+      if (dlPanel) dlPanel.classList.add('hiddenView');
       clearInterval(_dlTimer);
       _ytDownloadAbortCtrl = null;
     }
@@ -292,7 +292,6 @@ function _applyJobUpdate(job, parts, summary){
   renderSteps(targetPercent);
   updateRenderFlowByJob(job, s, parts);
 
-  console.log('[DEBUG] parts:', (parts||[]).length, '| summary:', s?.total_parts, 'total,', s?.processing_parts, 'active,', s?.completed_parts, 'done');
   renderParts(parts, s);
   renderPartFocus(parts, s);
   updateRenderMainState(job, s, parts);
@@ -396,6 +395,8 @@ function startPolling(){
   ws.onclose = () => {
     jobWs = null;
     if (!currentJobId) return;
+    if (isTerminalRenderStatus(lastStatus)) return;
+    if (pollTimer) return;
     loadJobProgress();
   };
 }

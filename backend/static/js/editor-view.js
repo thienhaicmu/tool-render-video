@@ -805,6 +805,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   // Init editor settings with defaults (editor is source of truth for all render params)
 
   setView('editor');
+  setInspectorTab('mode');
   setRenderFlowState('configure', 'Preparing editor');
   qs('evSourceName').textContent = urlOrPath || '…';
   qs('evLoadingOverlay').style.display = 'flex';
@@ -877,6 +878,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   _ev.sourceUrl = _ev.sourceUrl || urlOrPath;
 
   setView('editor');
+  setInspectorTab('mode');
   setRenderFlowState('configure', 'Editing clip');
   qs('evSourceName').textContent = pd.title || urlOrPath || '…';
   if (qs('evTitleOverlayText') && !String(qs('evTitleOverlayText').value || '').trim()) {
@@ -1393,13 +1395,33 @@ function _evUpdateReadiness() {
 
 /* ── Inspector group collapse ────────────────────────────── */
 function evToggleInspGroup(group) {
-  const bodyId = group === 'audio' ? 'inspGroupAudioBody' : 'inspGroupAdvBody';
-  const hdrId  = group === 'audio' ? 'inspGroupAudioHdr'  : 'inspGroupAdvHdr';
-  const body = qs(bodyId);
-  const hdr  = qs(hdrId);
+  const groupMap = {
+    audio:       { body: 'inspGroupAudioBody', hdr: 'inspGroupAudioHdr' },
+    performance: { body: 'inspGroupPerfBody',  hdr: 'inspGroupPerfHdr' },
+    advanced:    { body: 'inspGroupAdvBody',   hdr: 'inspGroupAdvHdr' },
+  };
+  const ids = groupMap[group];
+  if (!ids) return;
+  const body = qs(ids.body);
+  const hdr  = qs(ids.hdr);
   if (!body) return;
   const isOpen = body.classList.toggle('open');
   if (hdr) hdr.classList.toggle('open', isOpen);
+}
+
+function evSetInspGroupOpen(group, open) {
+  const groupMap = {
+    audio:       { body: 'inspGroupAudioBody', hdr: 'inspGroupAudioHdr' },
+    performance: { body: 'inspGroupPerfBody',  hdr: 'inspGroupPerfHdr' },
+    advanced:    { body: 'inspGroupAdvBody',   hdr: 'inspGroupAdvHdr' },
+  };
+  const ids = groupMap[group];
+  if (!ids) return;
+  const body = qs(ids.body);
+  const hdr  = qs(ids.hdr);
+  if (!body) return;
+  body.classList.toggle('open', !!open);
+  if (hdr) hdr.classList.toggle('open', !!open);
 }
 
 /* ── Cancel / close ───────────────────────────────────────── */
@@ -1650,7 +1672,6 @@ async function startRenderFromEditor() {
   qs('evStartBtn').disabled = true;
   qs('evStartBtn').textContent = 'Sending...';
   evSetStatus('Submitting render request...');
-  qs('evStartBtn').textContent = 'Sending...';
   if (qs('evReopenBtn')) qs('evReopenBtn').style.display = 'none';
   qs('evStatusLine').textContent = 'Submitting render request...';
   qs('evStatusLine').style.color = '';
@@ -1751,5 +1772,39 @@ async function startRenderFromEditor() {
     document.addEventListener('mouseup',   _onUp);
   });
 })();
+
+// ── Inspector tab system ─────────────────────────────────────────────────────
+function setInspectorTab(tab) {
+  const validTabs = ['mode', 'subtitle', 'voice', 'text', 'audio', 'performance', 'advanced'];
+  const tabTitles = {
+    mode: 'Mode',
+    subtitle: 'Subtitle',
+    voice: 'Voice',
+    text: 'Text',
+    audio: 'Audio',
+    performance: 'Performance',
+    advanced: 'Advanced',
+  };
+  const activeTab = validTabs.includes(tab) ? tab : 'mode';
+  const insp = document.getElementById('appInspector');
+  if (insp) insp.classList.add('insp-tabs-init');
+  const pane = document.querySelector('.inspPaneBody');
+  if (pane) {
+    pane.setAttribute('data-active-insp-tab', activeTab);
+    pane.setAttribute('data-active-insp-title', tabTitles[activeTab] || 'Mode');
+  }
+  document.querySelectorAll('.insp-tab[data-insp-tab]').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-insp-tab') === activeTab);
+  });
+
+  document.querySelectorAll('[data-insp-panel]').forEach((el) => {
+    const panel = el.getAttribute('data-insp-panel');
+    el.classList.toggle('insp-panel-active', panel === activeTab);
+  });
+
+  if (['audio', 'performance', 'advanced'].includes(activeTab)) {
+    evSetInspGroupOpen(activeTab, true);
+  }
+}
 
 // ── Video Editor (old modal — kept for reference/batch) ─────────────────────

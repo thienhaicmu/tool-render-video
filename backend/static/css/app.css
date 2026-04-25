@@ -2944,3 +2944,1358 @@
         margin-left: 0;
       }
     }
+
+    /* ── Compact part chip timeline (CapCut-style bottom bar) ── */
+    .abpPartChipRow {
+      flex-shrink: 0;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px 5px;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+    .abpPartChipRow.hasChips { display: flex; }
+    .abpPartChipLabel {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      flex-shrink: 0;
+    }
+    .abpPartChips {
+      display: flex;
+      gap: 5px;
+      overflow-x: auto;
+      flex: 1;
+      min-width: 0;
+      padding-bottom: 3px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,.1) transparent;
+    }
+    .rsPartChip {
+      flex-shrink: 0;
+      width: 44px;
+      height: 26px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: opacity .18s, transform .15s;
+      user-select: none;
+      letter-spacing: .02em;
+    }
+    .rsPartChip:hover { opacity: .75; transform: scale(1.06); }
+    .rsPartChip[data-chip-status="pending"] {
+      background: rgba(100,116,139,.15);
+      color: #64748b;
+      border-color: rgba(100,116,139,.22);
+    }
+    .rsPartChip[data-chip-status="processing"] {
+      background: rgba(59,130,246,.18);
+      color: #60a5fa;
+      border-color: rgba(59,130,246,.38);
+      animation: rsChipPulse 1.6s ease-in-out infinite;
+    }
+    .rsPartChip[data-chip-status="completed"] {
+      background: rgba(16,185,129,.18);
+      color: #34d399;
+      border-color: rgba(16,185,129,.32);
+    }
+    .rsPartChip[data-chip-status="failed"] {
+      background: rgba(239,68,68,.18);
+      color: #f87171;
+      border-color: rgba(239,68,68,.32);
+    }
+    @keyframes rsChipPulse { 0%,100%{opacity:1} 50%{opacity:.55} }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Phase E — CapCut UI Polish
+       Targets: grid proportions, dark center stage, inspector hierarchy,
+       compact bottom panel, left sidebar CTA. No JS/API changes.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* E1 — Grid: tighter columns, shorter bottom panel */
+    .appShell {
+      grid-template-columns: 280px minmax(0, 1fr) 356px;
+      grid-template-rows: 42px minmax(0, 1fr) clamp(200px, 23vh, 252px) 28px;
+    }
+    .appShell.abpCollapsed {
+      grid-template-rows: 42px minmax(0, 1fr) 116px 28px;
+    }
+    .appShell.noInspector {
+      grid-template-columns: 280px minmax(0, 1fr);
+    }
+
+    /* E2 — Center mainArea: dark cinematic stage */
+    .mainArea {
+      background: #070a10;
+      padding: 0 !important;
+      overflow-y: auto;
+    }
+    /* Editor mode keeps its own rules (flex column, no overflow) */
+
+    /* Scrollable wrapper for non-editor views (upload / settings / history) */
+    .mainContentScroll {
+      padding: 14px 18px 18px;
+    }
+
+    /* Render view panels: own padding instead of inheriting mainArea's */
+    .renderHomePanel   { padding: 12px 16px 16px !important; }
+    .renderActivePanel { padding: 12px 16px 16px !important; }
+    .renderOutputPanel { padding: 14px 16px 16px !important; margin-top: 0 !important; }
+    #view_download,
+    #view_history      { padding: 12px 16px !important; }
+
+    /* E3 — Render flow bar: compact strip */
+    .renderFlowBar {
+      padding: 6px 14px;
+      gap: 6px;
+    }
+    .renderFlowStep { padding: 5px 8px; gap: 6px; }
+    .renderFlowTitle { font-size: 11px; }
+    .renderFlowSub   { font-size: 10px; }
+    .renderFlowNum   { width: 18px; height: 18px; font-size: 10px; }
+
+    /* E4 — Left sidebar: prominent full-width CTA */
+    .sidebar .setupActions {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .sidebar .resumeRow { order: 2; }
+    .sidebar #start_render_btn {
+      order: 1;
+      width: 100%;
+      justify-content: center;
+      padding: 11px 16px;
+      font-size: 13px;
+      letter-spacing: .01em;
+      background: linear-gradient(135deg, #1a44cc 0%, #5b21b6 100%);
+      box-shadow: 0 3px 16px rgba(59,130,246,.32), inset 0 1px 0 rgba(255,255,255,.07);
+      border-radius: 10px;
+    }
+    .sidebar #start_render_btn:hover {
+      box-shadow: 0 5px 24px rgba(59,130,246,.5), inset 0 1px 0 rgba(255,255,255,.1);
+      transform: translateY(-1px);
+    }
+    .sidebar #start_render_btn:active { transform: translateY(0); }
+    /* Download setup card also gets this treatment */
+    .sidebar #download_start_btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    /* E5 — Right inspector: CapCut-style properties panel */
+    .appInspector {
+      background: linear-gradient(180deg, #060910 0%, #070c18 100%);
+    }
+    .evRightHeader {
+      background: rgba(4,7,14,.96);
+      border-bottom: 1px solid rgba(59,130,246,.13);
+      padding: 10px 14px;
+    }
+    .evRightTitle  { font-size: 13px; }
+    .evSourceName  { font-size: 10px; }
+
+    /* Inspector scrollable body: tighter gap */
+    .evRightScroll { gap: 8px; padding: 10px 12px; }
+
+    /* Section separator: CapCut horizontal rule style */
+    .inspGroupSep {
+      margin: 4px 0 0;
+      padding: 6px 2px 0;
+      border-top: 1px solid rgba(59,130,246,.11);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      color: rgba(96,165,250,.5);
+      text-transform: uppercase;
+    }
+    /* Collapsible groups: card-like border */
+    .inspCollapsedGroup {
+      border: 1px solid rgba(255,255,255,.05) !important;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .inspGroupHdr {
+      padding: 8px 12px;
+      background: rgba(255,255,255,.02);
+    }
+    .inspGroupHdr:hover { background: rgba(255,255,255,.05); }
+    .inspGroupBody { padding: 0; }
+    .inspGroupBody.open { padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+
+    /* Footer: dark + blue border accent */
+    .evFooter {
+      background: linear-gradient(180deg, #050812 0%, #04060f 100%);
+      border-top: 1px solid rgba(59,130,246,.14);
+      padding: 10px 14px;
+    }
+
+    /* E6 — Bottom panel: compact monitor header + toolbar */
+    .abpToolbar {
+      min-height: 40px;
+      padding: 5px 14px;
+    }
+    .abpJobTitle { font-size: 11px; }
+    .abpJobMeta  { font-size: 10px; }
+    .abpPct      { font-size: 13px; }
+    .abpProgressBar { height: 5px !important; }
+
+    .abpMonitorHeader {
+      padding: 7px 14px;
+    }
+    .monitorPrimary   { font-size: 15px; }
+    .monitorSecondary { font-size: 11px; margin-top: 1px; }
+    .monitorHeartbeat { font-size: 11px; padding: 4px 9px; }
+
+    /* E7 — Part chip row: visual polish */
+    .abpPartChipRow {
+      background: rgba(0,0,0,.3);
+      padding: 5px 14px;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+    }
+    .abpPartChipLabel { color: #60a5fa; }
+    .rsPartChip:hover {
+      opacity: .85;
+      transform: scale(1.07);
+      box-shadow: 0 2px 8px rgba(0,0,0,.5);
+    }
+    .rsPartChip[data-chip-status="processing"] {
+      box-shadow: 0 0 8px rgba(59,130,246,.4);
+    }
+    .rsPartChip[data-chip-status="completed"] {
+      box-shadow: 0 0 6px rgba(16,185,129,.22);
+    }
+    .rsPartChip[data-chip-status="failed"] {
+      box-shadow: 0 0 6px rgba(239,68,68,.22);
+    }
+
+    /* E8 — Completion bar: brighter + compact */
+    .renderCompletionBar {
+      background: linear-gradient(90deg, rgba(16,185,129,.2) 0%, rgba(16,185,129,.09) 100%);
+      border-bottom-color: rgba(16,185,129,.34);
+      padding: 7px 14px;
+      min-height: unset;
+    }
+    .renderCompletionMsg { font-size: 13px; }
+    .renderCompletionActions .secondaryButton,
+    .renderCompletionActions .primaryButton,
+    .renderCompletionActions .ghostButton {
+      font-size: 12px;
+      padding: 6px 11px;
+    }
+
+    /* E9 — Render active card: stage feel */
+    .renderActiveCard {
+      border-color: rgba(59,130,246,.2);
+      background: linear-gradient(160deg, #0c182b 0%, #090f1e 100%);
+    }
+    .renderActiveTitle { font-size: 18px; }
+
+    /* E10 — Responsive: 1366px minimum supported width */
+    @media (max-width: 1400px) {
+      .appShell {
+        grid-template-columns: 264px minmax(0, 1fr) 340px;
+      }
+      .appShell.noInspector {
+        grid-template-columns: 264px minmax(0, 1fr);
+      }
+    }
+    @media (max-width: 1200px) {
+      .appShell {
+        grid-template-columns: 246px minmax(0, 1fr) 318px;
+      }
+      .appShell.noInspector {
+        grid-template-columns: 246px minmax(0, 1fr);
+      }
+    }
+
+    /* ════════════════════════════════════════════════════════════════
+       Phase G — Center Stage Structural Wrap
+    ════════════════════════════════════════════════════════════════ */
+
+    /* Transparent to layout — children behave as direct mainArea children
+       in both block (render) and flex-column (editorMode) contexts. */
+    .rs-center-stage { display: contents; }
+
+    /* ════════════════════════════════════════════════════════════════
+       Phase F — CapCut Workspace Panel Identity
+    ════════════════════════════════════════════════════════════════ */
+
+    /* Panel edge accents */
+    .rs-left-panel   { border-right: 1px solid rgba(59,130,246,.09) !important; }
+    .rs-center-panel { background: #050810 !important; }
+    .rs-right-panel  { border-left: 1px solid rgba(59,130,246,.09) !important; }
+    .rs-bottom-panel { border-top: 1px solid rgba(59,130,246,.13) !important; }
+
+    /* Left panel: section titles become CapCut-style blue labels */
+    .rs-left-panel .setupGroupTitle {
+      color: rgba(96,165,250,.65);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      padding-bottom: 5px;
+      border-bottom: 1px solid rgba(59,130,246,.1);
+      margin-bottom: 8px;
+    }
+
+    /* Left panel: sidebar header text */
+    .rs-left-panel .sidebarTitle {
+      color: rgba(96,165,250,.55);
+      letter-spacing: .14em;
+    }
+
+    /* Center stage: deeper dark when editor is live */
+    .rs-center-panel.editorMode { background: #030508 !important; }
+
+    /* Center stage: render panels edge-to-edge */
+    .rs-center-panel .renderHomePanel,
+    .rs-center-panel .renderActivePanel,
+    .rs-center-panel .renderOutputPanel { margin: 0; }
+
+    /* Right panel: evSection titles get a subtle underline */
+    .rs-right-panel .evSectionTitle {
+      color: #cbd5e1;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+    }
+
+    /* Right panel: group sep text slightly brighter */
+    .rs-right-panel .inspGroupSep { color: rgba(96,165,250,.65); }
+
+    /* Right panel: header eyebrow */
+    .rs-right-panel .evRightTitle {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #cbd5e1;
+    }
+
+    /* Bottom panel: section labels = timeline scrubber labels */
+    .rs-bottom-panel .abpSectionLabel {
+      color: rgba(96,165,250,.55);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+
+    /* Bottom panel: part chip label */
+    .rs-bottom-panel .abpPartChipLabel {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      color: rgba(96,165,250,.5);
+    }
+
+    /* Bottom panel: toolbar job title */
+    .rs-bottom-panel .abpJobTitle {
+      font-weight: 700;
+      color: #e2e8f0;
+    }
+
+    /* ════════════════════════════════════════════════════════════════
+       Phase H — FINAL: True CapCut Editor Stage
+       HTML: rs-preview-stage wraps #view_editor only.
+       CSS: dominant dark center, card inspector, timeline bottom.
+       JS: zero changes.
+    ════════════════════════════════════════════════════════════════ */
+
+    /* H1 — Grid: precise columns / fixed bottom timeline height */
+    .appShell {
+      grid-template-columns: 280px minmax(0, 1fr) 360px;
+      grid-template-rows: 42px minmax(0, 1fr) 220px 28px;
+    }
+    .appShell.abpCollapsed {
+      grid-template-rows: 42px minmax(0, 1fr) 96px 28px;
+    }
+    .appShell.noInspector {
+      grid-template-columns: 280px minmax(0, 1fr);
+    }
+
+    /* H2 — Center: true dark stage background in all modes */
+    .mainArea.rs-center-panel { background: #020617 !important; }
+
+    /* H3 — Preview stage: dark canvas, fills editor height */
+    .rs-preview-stage {
+      background: #020617;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    /* In editorMode: rs-center-stage is display:contents → rs-preview-stage
+       becomes a direct flex child of mainArea.editorMode and must fill it. */
+    .mainArea.editorMode .rs-preview-stage {
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* H4 — BUG-1 fix: mainContentScroll steals ~32px of editor height */
+    .mainArea.editorMode .mainContentScroll { display: none; }
+
+    /* H5 — Render panels: blend with dark stage, not floating light cards */
+    .rs-center-stage .renderHomeCard {
+      background: rgba(255,255,255,.025) !important;
+      border: 1px solid rgba(59,130,246,.1) !important;
+      box-shadow: none !important;
+    }
+    .rs-center-stage .renderActiveCard {
+      background: rgba(255,255,255,.03) !important;
+      border: 1px solid rgba(59,130,246,.14) !important;
+      box-shadow: 0 2px 18px rgba(0,0,0,.45) !important;
+    }
+
+    /* H6 — Right inspector: card-style section grouping */
+    .rs-right-panel .evRightScroll {
+      padding: 8px 0;
+      gap: 4px;
+    }
+    .rs-right-panel .evSection {
+      background: rgba(6,12,28,.85);
+      border: 1px solid rgba(59,130,246,.1);
+      border-radius: 8px;
+      margin: 0 8px 4px;
+      padding: 10px 12px;
+    }
+    .rs-right-panel .evSection:focus-within {
+      border-color: rgba(59,130,246,.28);
+      box-shadow: 0 0 0 3px rgba(59,130,246,.06);
+    }
+    .rs-right-panel .evSectionTitle {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: rgba(148,163,184,.6);
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+    }
+    .rs-right-panel .inspCollapsedGroup { margin: 0 8px 4px; }
+    .rs-right-panel .inspGroupSep       { margin: 6px 8px 2px; }
+
+    /* H7 — Left panel: source/output as distinct section cards */
+    .rs-left-panel .setupGroup {
+      background: rgba(255,255,255,.025);
+      border: 1px solid rgba(59,130,246,.08);
+      border-radius: 8px;
+      padding: 10px 10px 12px;
+      margin-bottom: 8px;
+    }
+
+    /* H8 — Bottom timeline: darker body, enhanced chip rail */
+    .rs-bottom-panel .abpToolbar  { background: #04060f; border-bottom: 1px solid rgba(59,130,246,.09); }
+    .rs-bottom-panel .abpBody     { background: #030712; }
+    .rs-bottom-panel .abpTimeline { border-right: 1px solid rgba(59,130,246,.07); }
+    .rsPartChip {
+      border-radius: 6px !important;
+      font-weight: 700 !important;
+      font-size: 10px !important;
+      letter-spacing: .04em !important;
+    }
+
+    /* H9 — Responsive breakpoints (Phase H, overridden by Phase I below) */
+    @media (max-width: 1440px) {
+      .appShell             { grid-template-columns: 264px minmax(0, 1fr) 340px; }
+      .appShell.noInspector { grid-template-columns: 264px minmax(0, 1fr); }
+    }
+    @media (max-width: 1280px) {
+      .appShell             { grid-template-columns: 248px minmax(0, 1fr) 320px; }
+      .appShell.noInspector { grid-template-columns: 248px minmax(0, 1fr); }
+    }
+
+    /* ════════════════════════════════════════════════════════════════
+       Phase I — STRUCTURAL WORKSPACE: rs-main 3-column container
+       HTML: rs-main wraps sidebar + mainArea + appInspector.
+       appShell becomes rows-only. rs-main owns the 3-column grid.
+       JS: zero changes — appShell class mutations still function.
+    ════════════════════════════════════════════════════════════════ */
+
+    /* I1 — appShell: rows-only stack. Columns live in rs-main now.
+       !important beats all prior phase overrides of grid-template-columns. */
+    .appShell {
+      grid-template-columns: 1fr !important;
+      grid-template-rows: 42px minmax(0,1fr) clamp(260px,40vh,420px) 28px;
+    }
+    .appShell.abpCollapsed {
+      grid-template-rows: 42px minmax(0,1fr) 120px 28px;
+    }
+    /* Prevent any prior noInspector rule from re-adding columns to appShell */
+    .appShell.noInspector {
+      grid-template-columns: 1fr !important;
+    }
+
+    /* I2 — rs-main: the real 3-column workspace */
+    .rs-main {
+      grid-row: 2;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 360px;
+      min-height: 0;
+      overflow: hidden;
+      background: #020617;
+    }
+
+    /* I3 — Column assignments for sidebar / mainArea / appInspector
+       in their new parent (rs-main, 1-row grid).
+       Override old grid-row:2 (was relative to appShell, wrong here). */
+    .sidebar      { grid-column: 1; grid-row: 1; }
+    .mainArea     { grid-column: 2; grid-row: 1; }
+    .appInspector { grid-column: 3; grid-row: 1; }
+
+    /* I4 — noInspector: JS adds this class to appShell.
+       Now it collapses the inspector column inside rs-main. */
+    .appShell.noInspector .rs-main {
+      grid-template-columns: 280px minmax(0, 1fr);
+    }
+    .appShell.noInspector .appInspector {
+      display: none;
+    }
+
+    /* I5 — Responsive: rs-main column widths at narrow viewports */
+    @media (max-width: 1440px) {
+      .rs-main                          { grid-template-columns: 264px minmax(0, 1fr) 340px; }
+      .appShell.noInspector .rs-main    { grid-template-columns: 264px minmax(0, 1fr); }
+    }
+    @media (max-width: 1280px) {
+      .rs-main                          { grid-template-columns: 248px minmax(0, 1fr) 320px; }
+      .appShell.noInspector .rs-main    { grid-template-columns: 248px minmax(0, 1fr); }
+    }
+
+    /* ════════════════════════════════════════════════════════════════
+       Phase J — INSPECTOR TABBAR + BOTTOM PANEL REDESIGN
+    ════════════════════════════════════════════════════════════════ */
+
+    /* J1 — Bottom panel: focused timeline workspace */
+    .rs-bottom-panel .abpBody {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 0;
+      overflow: hidden;
+    }
+    /* Hide noisy elements — IDs stay in DOM, JS writes still work */
+    .rs-bottom-panel #render_monitor_header { display: none; }
+    .rs-bottom-panel .jmPartsSection        { display: none; }
+    .rs-bottom-panel #clips_section_label   { display: none; }
+    .rs-bottom-panel .abpPipelineLabel      { display: none; }
+    .rs-bottom-panel #pipeline_wrap         { display: none; }
+    .rs-bottom-panel .abpTimeline {
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 4px 0 8px;
+    }
+    .rs-bottom-panel .abpLog {
+      width: auto;
+      flex: none;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-left: 1px solid rgba(59,130,246,.07);
+    }
+
+    /* J1b — Active Part Card */
+    .abpActiveCard {
+      margin: 6px 10px 4px;
+      border-radius: 8px;
+      background: rgba(15,23,42,.8);
+      border: 1px solid rgba(99,102,241,.2);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .abpActiveCard:empty { display: none; }
+    .abpAcHeader {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px 5px;
+      border-bottom: 1px solid rgba(99,102,241,.12);
+    }
+    .abpAcBadge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(99,102,241,.22);
+      color: #a5b4fc;
+      flex-shrink: 0;
+    }
+    .abpAcBadge.done    { background: rgba(16,185,129,.18); color: #6ee7b7; }
+    .abpAcBadge.failed  { background: rgba(239,68,68,.18);  color: #fca5a5; }
+    .abpAcBadge.running { background: rgba(59,130,246,.18); color: #93c5fd; }
+    .abpAcBadge.pending { background: rgba(100,116,139,.14); color: #64748b; }
+    .abpAcName {
+      font-size: 11px;
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    .abpAcStatus {
+      font-size: 10px;
+      color: #475569;
+      flex-shrink: 0;
+    }
+    .abpAcBody {
+      padding: 6px 10px 7px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .abpAcProgress {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .abpAcBar {
+      flex: 1;
+      height: 5px;
+      border-radius: 99px;
+      background: rgba(255,255,255,.06);
+      overflow: hidden;
+    }
+    .abpAcBarFill {
+      height: 100%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, #4f46e5, #818cf8);
+      transition: width .6s ease;
+    }
+    .abpAcBarFill.done   { background: linear-gradient(90deg, #059669, #34d399); }
+    .abpAcBarFill.failed { background: linear-gradient(90deg, #dc2626, #f87171); }
+    .abpAcPct {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      min-width: 30px;
+      text-align: right;
+    }
+    .abpAcMeta { font-size: 10px; color: #334155; }
+
+    /* J2 — Inspector tabbar */
+    .rs-insp-tabbar {
+      display: flex;
+      gap: 1px;
+      padding: 6px 8px 0;
+      background: #0a0f1e;
+      border-bottom: 1px solid #1e293b;
+      flex-shrink: 0;
+    }
+    .insp-tab {
+      flex: 1;
+      padding: 5px 2px 6px;
+      font-size: 10px;
+      font-weight: 500;
+      color: #475569;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+      letter-spacing: .02em;
+      transition: color .15s, border-color .15s;
+    }
+    .insp-tab:hover  { color: #94a3b8; }
+    .insp-tab.active { color: #c7d2fe; border-bottom-color: #6366f1; }
+
+    /* J3 — Separator always hidden; footer always visible; section flash */
+    [data-insp-panel="_sep"] { display: none !important; }
+    .evFooter { display: flex !important; }
+    @keyframes inspSectionFlash {
+      0%   { box-shadow: inset 0 0 0 2px rgba(99,102,241,.65); background-color: rgba(99,102,241,.09); }
+      100% { box-shadow: inset 0 0 0 1px rgba(99,102,241,0);   background-color: transparent; }
+    }
+    .insp-section-flash { animation: inspSectionFlash 1.5s ease forwards; }
+
+    /* Stage 2 — real inspector tabstrip + rich render timeline */
+    .inspPaneBody [data-insp-panel="_sep"] { display: none !important; }
+    .inspPaneBody [data-insp-panel]:not(.insp-panel-active):not([data-insp-panel="_sep"]) {
+      display: none !important;
+    }
+    .inspPaneBody [data-insp-panel].insp-panel-active {
+      display: block;
+    }
+    .inspPaneBody .evSection.insp-panel-active {
+      display: block;
+    }
+    .inspPaneBody .inspCollapsedGroup.insp-panel-active {
+      display: block;
+    }
+    .inspPaneBody {
+      overflow-y: auto;
+      min-height: 0;
+    }
+    .inspPaneBody::before {
+      content: attr(data-active-insp-title);
+      display: block;
+      margin: 0 8px 6px;
+      padding: 2px 0 8px;
+      border-bottom: 1px solid rgba(59,130,246,.12);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: rgba(191,219,254,.72);
+      flex: 0 0 auto;
+    }
+    .inspPaneBody .inspCollapsedGroup.insp-panel-active .inspGroupBody {
+      display: flex !important;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px;
+    }
+    .inspPaneBody .inspCollapsedGroup.insp-panel-active .inspGroupHdr {
+      cursor: default;
+      color: #cbd5e1;
+      background: rgba(59,130,246,.07);
+      border-bottom: 1px solid rgba(59,130,246,.12);
+    }
+    .inspPaneBody .inspCollapsedGroup.insp-panel-active .inspGroupArrow {
+      display: none;
+    }
+    .evFooter { display: flex !important; }
+
+    .rs-bottom-panel .abpBody {
+      grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr);
+    }
+    .rsProcessOverview {
+      display: grid;
+      grid-template-columns: minmax(120px, .8fr) 96px minmax(0, 1.8fr);
+      align-items: center;
+      gap: 8px;
+      margin: 6px 10px 4px;
+      padding: 8px 10px;
+      border: 1px solid rgba(59,130,246,.12);
+      border-radius: 8px;
+      background: rgba(2,6,23,.74);
+      min-height: 48px;
+      flex-shrink: 0;
+    }
+    .rsProcessOverview:empty { display: none; }
+    .rsPoStage,
+    .rsPoMetric {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .rsPoLabel {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: rgba(148,163,184,.55);
+    }
+    .rsPoStage strong,
+    .rsPoMetric strong {
+      font-size: 13px;
+      color: #dbeafe;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .rsPoMetric strong { font-size: 18px; color: #93c5fd; }
+    .rsPoCounts {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    .rsPoCount {
+      border-radius: 999px;
+      padding: 3px 7px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+      background: rgba(100,116,139,.12);
+      color: #94a3b8;
+      border: 1px solid rgba(100,116,139,.16);
+    }
+    .rsPoCount.done   { background: rgba(16,185,129,.14); color: #6ee7b7; border-color: rgba(16,185,129,.22); }
+    .rsPoCount.active { background: rgba(59,130,246,.14); color: #93c5fd; border-color: rgba(59,130,246,.24); }
+    .rsPoCount.failed { background: rgba(239,68,68,.14); color: #fca5a5; border-color: rgba(239,68,68,.24); }
+
+    .rs-bottom-panel .abpPartChipRow {
+      align-items: stretch;
+      gap: 10px;
+      padding: 8px 10px;
+      margin: 0 10px 4px;
+      border: 1px solid rgba(59,130,246,.1);
+      border-radius: 8px;
+      background: rgba(15,23,42,.54);
+    }
+    .rs-bottom-panel .abpPartChips {
+      gap: 8px;
+      padding: 1px 0 4px;
+    }
+    .rsProcessSummaryStrip {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 0 10px 6px;
+      padding: 7px 9px;
+      border-radius: 8px;
+      border: 1px solid rgba(148,163,184,.1);
+      background: rgba(2,6,23,.52);
+      min-height: 34px;
+      flex-shrink: 0;
+    }
+    .rsProcessSummaryStrip:empty { display: none; }
+    .rsPssItem {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      max-width: 220px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(59,130,246,.13);
+      background: rgba(15,23,42,.68);
+      color: rgba(203,213,225,.78);
+      font-size: 10px;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .rsPssItem.wide { max-width: 320px; }
+    .rsPssItem b {
+      color: rgba(147,197,253,.82);
+      font-size: 9px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      flex: 0 0 auto;
+    }
+    .rsPssItem.failed {
+      border-color: rgba(239,68,68,.25);
+      color: #fecaca;
+      background: rgba(127,29,29,.16);
+    }
+    .rsPartChip.rsTimelineBlock {
+      position: relative;
+      width: clamp(64px, 8vw, 90px);
+      height: 48px;
+      padding: 6px 7px;
+      align-items: stretch;
+      justify-content: flex-start;
+      flex-direction: column;
+      gap: 2px;
+      overflow: hidden;
+      text-align: left;
+      box-shadow: none;
+    }
+    .rsTimelineBlock .rsClipFill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0;
+      background: linear-gradient(90deg, rgba(59,130,246,.28), rgba(147,197,253,.16));
+      pointer-events: none;
+      transition: width .5s ease;
+    }
+    .rsTimelineBlock .rsClipTop,
+    .rsTimelineBlock .rsClipStatus,
+    .rsTimelineBlock .rsClipDur {
+      position: relative;
+      z-index: 1;
+    }
+    .rsTimelineBlock .rsClipTop {
+      display: flex;
+      justify-content: space-between;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #e2e8f0;
+    }
+    .rsTimelineBlock .rsClipTop b {
+      font-size: 9px;
+      color: #bfdbfe;
+    }
+    .rsTimelineBlock .rsClipStatus,
+    .rsTimelineBlock .rsClipDur {
+      font-size: 9px;
+      line-height: 1.15;
+      color: rgba(203,213,225,.64);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .rsTimelineBlock .rsClipDur { color: rgba(148,163,184,.58); }
+
+    .abpAcBadge.completed,
+    .abpAcBadge.done { background: rgba(16,185,129,.18); color: #6ee7b7; }
+    .abpAcBadge.processing,
+    .abpAcBadge.running { background: rgba(59,130,246,.18); color: #93c5fd; }
+    .abpAcBarFill.completed,
+    .abpAcBarFill.done { background: linear-gradient(90deg, #059669, #34d399); }
+    .abpAcBarFill.processing,
+    .abpAcBarFill.running { background: linear-gradient(90deg, #2563eb, #60a5fa); }
+    .rs-bottom-panel #abp_active_card {
+      display: none !important;
+    }
+
+    .rs-bottom-panel .abpLog {
+      background: rgba(2,6,23,.62);
+    }
+    .rs-bottom-panel .abpLogBox {
+      padding: 6px;
+      overflow: hidden;
+      min-height: 0;
+    }
+    .rs-bottom-panel .abpLogBox .logLine {
+      display: block;
+      padding: 4px 6px;
+      margin: 0 0 4px;
+      border-radius: 6px;
+      font-size: 10px;
+      line-height: 1.28;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      background: rgba(15,23,42,.62);
+    }
+    .rs-bottom-panel .abpLogBox .logLine:nth-child(n+9) {
+      display: none;
+    }
+    .rs-bottom-panel .abpLogBox .logLine.error {
+      color: #fecaca;
+      border-color: rgba(239,68,68,.35);
+      background: rgba(127,29,29,.2);
+    }
+    .rs-bottom-panel .abpLogBox .logLine.important:not(.error) {
+      color: #bfdbfe;
+      border-color: rgba(59,130,246,.25);
+    }
+
+    /* Stage 3 — balanced 3-panel editor workspace */
+    .rs-main {
+      grid-template-columns: 260px minmax(600px, 900px) 360px;
+      justify-content: center;
+    }
+    .appShell.noInspector .rs-main {
+      grid-template-columns: 260px minmax(600px, 900px);
+    }
+    .rs-center-panel {
+      display: flex;
+      justify-content: center;
+      min-width: 0;
+    }
+    .rs-preview-stage {
+      width: 100%;
+      max-width: 900px;
+      min-width: 0;
+    }
+    .appInspector {
+      min-width: 320px;
+    }
+
+    @media (max-width: 1439px) {
+      .rs-main {
+        grid-template-columns: 240px minmax(0, 1fr) 340px;
+        justify-content: stretch;
+      }
+      .appShell.noInspector .rs-main {
+        grid-template-columns: 240px minmax(0, 900px);
+      }
+      .rs-preview-stage {
+        max-width: 900px;
+      }
+      .appInspector {
+        min-width: 320px;
+      }
+    }
+
+    @media (max-width: 1280px) {
+      .rs-main {
+        grid-template-columns: 220px minmax(0, 1fr) 320px;
+      }
+      .appShell.noInspector .rs-main {
+        grid-template-columns: 220px minmax(0, 900px);
+      }
+      .appInspector {
+        min-width: 320px;
+      }
+    }
+
+    /* FINAL OVERRIDE — restore stable layout
+       Keep the newer DOM wrappers working, but neutralize the broad visual
+       redesign. The only intentional UI change retained here is a smaller,
+       centered editor preview. */
+    .appShell {
+      grid-template-columns: 1fr !important;
+      grid-template-rows: 42px minmax(0, 1fr) clamp(280px, 34vh, 440px) 28px !important;
+    }
+    .appShell.abpCollapsed {
+      grid-template-rows: 42px minmax(0, 1fr) 160px 28px !important;
+    }
+
+    .rs-main {
+      grid-row: 2;
+      display: grid;
+      grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(320px, 420px) !important;
+      justify-content: stretch !important;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .appShell.noInspector .rs-main {
+      grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) !important;
+    }
+    .sidebar,
+    .mainArea,
+    .appInspector {
+      min-width: 0;
+    }
+    .rs-center-panel {
+      display: block !important;
+      justify-content: initial !important;
+    }
+    .rs-preview-stage {
+      width: 100% !important;
+      max-width: none !important;
+      min-width: 0;
+    }
+
+    .evVideoBox {
+      width: 100%;
+      max-width: 720px;
+      max-height: 70vh;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .evVideoFrame video,
+    #evVideo {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .inspPaneBody::before {
+      content: none !important;
+      display: none !important;
+    }
+    .inspPaneBody [data-insp-panel]:not([data-insp-panel="_sep"]),
+    .inspPaneBody .evSection,
+    .inspPaneBody .inspCollapsedGroup {
+      display: block !important;
+    }
+    .inspPaneBody [data-insp-panel="_sep"] {
+      display: block !important;
+    }
+    .inspPaneBody .inspGroupBody {
+      display: block !important;
+    }
+    .inspPaneBody .inspGroupHdr {
+      cursor: pointer;
+      background: rgba(255,255,255,.02);
+    }
+    .inspPaneBody .inspGroupArrow {
+      display: inline-block !important;
+    }
+
+    .rsProcessOverview,
+    .rsProcessSummaryStrip,
+    .rs-bottom-panel #abp_active_card {
+      display: none !important;
+    }
+    .rs-bottom-panel #render_monitor_header {
+      display: flex !important;
+    }
+    .rs-bottom-panel .jmPartsSection {
+      display: flex !important;
+    }
+    .rs-bottom-panel #clips_section_label,
+    .rs-bottom-panel .abpPipelineLabel {
+      display: block !important;
+    }
+    .rs-bottom-panel #pipeline_wrap {
+      display: grid !important;
+    }
+    .rs-bottom-panel .abpBody {
+      grid-template-columns: 1fr 300px !important;
+    }
+
+    .rsPartChip.rsTimelineBlock {
+      width: 44px !important;
+      height: 26px !important;
+      padding: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      text-align: center !important;
+    }
+    .rsTimelineBlock .rsClipFill,
+    .rsTimelineBlock .rsClipStatus,
+    .rsTimelineBlock .rsClipDur,
+    .rsTimelineBlock .rsClipTop b {
+      display: none !important;
+    }
+    .rsTimelineBlock .rsClipTop {
+      display: block !important;
+      font-size: 11px !important;
+      font-weight: 800 !important;
+    }
+    .rs-bottom-panel .abpLogBox .logLine:nth-child(n+9) {
+      display: block;
+    }
+
+    @media (max-width: 1440px) {
+      .rs-main {
+        grid-template-columns: 264px minmax(0, 1fr) 340px !important;
+      }
+      .appShell.noInspector .rs-main {
+        grid-template-columns: 264px minmax(0, 1fr) !important;
+      }
+    }
+    @media (max-width: 1280px) {
+      .rs-main {
+        grid-template-columns: 248px minmax(0, 1fr) 320px !important;
+      }
+      .appShell.noInspector .rs-main {
+        grid-template-columns: 248px minmax(0, 1fr) !important;
+      }
+    }
+
+    .mainArea.editorMode .evVideoBox {
+      width: min(52vw, 520px) !important;
+      max-width: 520px !important;
+      max-height: 58vh !important;
+      margin: 0 auto !important;
+    }
+
+    .mainArea.editorMode .evVideoFrame {
+      width: 100% !important;
+      max-width: 520px !important;
+      max-height: 58vh !important;
+    }
+
+    .mainArea.editorMode #evVideo,
+    .mainArea.editorMode .evVideoFrame video {
+      width: 100% !important;
+      max-width: 520px !important;
+      max-height: 58vh !important;
+      object-fit: contain !important;
+    }
+
+    .mainArea.editorMode .evLayout {
+      max-width: 880px !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+
+    .mainArea.editorMode .evVideoBox {
+      max-width: 560px !important;
+      max-height: 60vh !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+
+    .mainArea.editorMode .evVideoFrame {
+      max-width: 560px !important;
+    }
+
+    .mainArea.editorMode #evVideo,
+    .mainArea.editorMode .evVideoFrame video {
+      max-width: 100% !important;
+      max-height: 100% !important;
+      object-fit: contain !important;
+    }
+
+    .mainArea.editorMode #render_flow_bar {
+      padding: 6px 10px !important;
+      margin: 0 auto 6px auto !important;
+      max-width: 880px !important;
+    }
+
+    .mainArea.editorMode .flowStep {
+      min-height: 42px !important;
+      padding: 6px 10px !important;
+      border-radius: 10px !important;
+    }
+
+    .mainArea.editorMode .flowStepTitle {
+      font-size: 12px !important;
+    }
+
+    .mainArea.editorMode .flowStepSub {
+      font-size: 10px !important;
+    }
+
+    .mainArea.editorMode .flowStepIcon,
+    .mainArea.editorMode .flowStepNumber {
+      width: 22px !important;
+      height: 22px !important;
+      font-size: 11px !important;
+    }
+
+    .rs-main {
+      grid-template-columns: 300px minmax(520px, 760px) 420px !important;
+      justify-content: center !important;
+    }
+
+    .appShell.noInspector .rs-main {
+      grid-template-columns: 300px minmax(520px, 760px) !important;
+    }
+
+    .mainArea,
+    .rs-center-panel {
+      max-width: 760px !important;
+      width: 100% !important;
+    }
+
+    .mainArea.editorMode .evLayout {
+      max-width: 720px !important;
+      width: 100% !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+
+    .mainArea.editorMode #render_flow_bar {
+      max-width: 720px !important;
+    }
+
+    /* FINAL OVERRIDE — responsive auto-scaling editor columns */
+    .rs-main {
+      display: grid;
+      grid-template-columns:
+        minmax(220px, 0.9fr)
+        minmax(420px, 2fr)
+        minmax(280px, 1.2fr) !important;
+      gap: 12px;
+      justify-content: stretch !important;
+    }
+
+    .appShell.noInspector .rs-main {
+      grid-template-columns:
+        minmax(220px, 0.9fr)
+        minmax(420px, 2fr) !important;
+    }
+
+    .rs-center-panel {
+      min-width: 0;
+      display: flex;
+      justify-content: center;
+    }
+
+    .mainArea,
+    .rs-center-panel {
+      max-width: none !important;
+      width: auto !important;
+    }
+
+    .mainArea.editorMode .evLayout {
+      width: 100% !important;
+      max-width: 800px !important;
+      margin: 0 auto !important;
+    }
+
+    .appInspector {
+      min-width: 280px;
+    }
+
+    @media (max-width: 1366px) {
+      .rs-main {
+        grid-template-columns:
+          minmax(200px, 1fr)
+          minmax(360px, 1.8fr)
+          minmax(260px, 1fr) !important;
+      }
+      .appShell.noInspector .rs-main {
+        grid-template-columns:
+          minmax(200px, 1fr)
+          minmax(360px, 1.8fr) !important;
+      }
+    }
+
+    @media (max-width: 1280px) {
+      .rs-main {
+        grid-template-columns:
+          minmax(180px, 1fr)
+          minmax(320px, 1.6fr)
+          minmax(240px, 1fr) !important;
+      }
+      .appShell.noInspector .rs-main {
+        grid-template-columns:
+          minmax(180px, 1fr)
+          minmax(320px, 1.6fr) !important;
+      }
+    }
+
+    /* FINAL OVERRIDE — fluid inner editor content */
+    .rs-left-panel,
+    .rs-center-panel,
+    .rs-right-panel,
+    .sidebar,
+    .mainArea,
+    .appInspector {
+      min-width: 0 !important;
+    }
+
+    .sidebar input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]),
+    .sidebar select,
+    .sidebar textarea,
+    .evRightScroll input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]),
+    .evRightScroll select,
+    .evRightScroll textarea {
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+    }
+
+    .evRightScroll input[type="range"],
+    .sidebar input[type="range"] {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+
+    .evRightScroll .field,
+    .sidebar .field,
+    .evRightScroll .fieldInput,
+    .sidebar .fieldInput,
+    .evRightScroll .actionsRow,
+    .sidebar .actionsRow {
+      min-width: 0 !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+    }
+
+    .evRightScroll {
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+    }
+
+    .mainArea.editorMode .evVideoBox {
+      width: min(60%, 520px) !important;
+      max-width: 100% !important;
+      max-height: 60vh !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+
+    .mainArea.editorMode .evVideoFrame {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+    }
+
+    .mainArea.editorMode #evVideo,
+    .mainArea.editorMode .evVideoFrame video {
+      max-width: 100% !important;
+      max-height: 100% !important;
+      object-fit: contain !important;
+    }
