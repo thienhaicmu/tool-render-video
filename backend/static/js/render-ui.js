@@ -842,26 +842,35 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     const state = normalizeRcPartState(part);
     const progress = clampRcProgress(part?.progress_percent ?? part?.progress ?? part?.percent ?? 0);
     const partNo = Number(part?.part_no || idx + 1);
+    const partName = String(part?.part_name || '').trim();
+    const msgText = rcPartMessage(
+      part,
+      state === 'completed' ? 'Clip finished successfully.'
+        : state === 'failed'  ? 'Clip failed during processing.'
+        : state === 'rendering' ? 'Clip is currently rendering.'
+        : 'Waiting for render slot.'
+    );
+    const msgLow = msgText.toLowerCase();
+    const isWarn = state === 'completed' && (msgLow.includes('warn') || msgLow.includes('narration'));
+    const visualClass = isWarn ? 'isWarning' : `is${rcCap(state)}`;
+
     const row = document.createElement('article');
-    row.className = `rcQueueRow is${rcCap(state)}`;
+    row.className = `rcQueueRow ${visualClass}`;
+    if (state === 'rendering') row.dataset.active = '1';
 
     const top = document.createElement('div');
     top.className = 'rcQueueRowTop';
 
     const title = document.createElement('div');
     title.className = 'rcQueueTitle';
-    title.textContent = `${rcStateIcon(state)} Clip ${partNo || '?'}`;
+    title.textContent = partName ? `Clip ${partNo} · ${partName}` : `Clip ${partNo}`;
 
     const statusNode = document.createElement('div');
     statusNode.className = 'rcQueueStatus';
-    statusNode.textContent = `${rcStateLabel(state)} · ${progress}%`;
+    statusNode.textContent = isWarn ? 'Warning' : rcStateLabel(state);
 
     top.appendChild(title);
     top.appendChild(statusNode);
-
-    const meta = document.createElement('div');
-    meta.className = 'rcQueueMeta';
-    meta.textContent = `Stage: ${rcPartStageText(part)}`;
 
     const mini = document.createElement('div');
     mini.className = 'rcQueueMiniBar';
@@ -869,34 +878,28 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     fill.style.setProperty('--progress', `${progress}%`);
     mini.appendChild(fill);
 
+    const meta = document.createElement('div');
+    meta.className = 'rcQueueMeta';
+    meta.textContent = `${rcPartStageText(part)} · ${progress}%`;
+
     const message = document.createElement('div');
     message.className = 'rcQueueMessage';
-    message.textContent = rcPartMessage(
-      part,
-      state === 'completed'
-        ? 'Clip finished successfully.'
-        : state === 'failed'
-        ? 'Clip failed during processing.'
-        : state === 'rendering'
-        ? 'Clip is currently rendering.'
-        : 'Waiting for render slot.'
-    );
+    message.textContent = msgText;
 
-    const score = part?.viral_score;
+    const rawScore = part?.viral_score ?? part?.score ?? part?.viralScore;
     const badge = document.createElement('div');
     badge.className = 'rcScoreBadge';
-    if (score != null && score !== '' && !isNaN(Number(score))) {
-      const val = parseFloat(score);
+    if (rawScore != null && rawScore !== '' && !isNaN(Number(rawScore))) {
+      const val = parseFloat(rawScore);
       badge.textContent = `🔥 ${val.toFixed(1)}`;
-      badge.dataset.tier = val >= 8 ? 'hot' : val >= 6 ? 'good' : val >= 4 ? 'mid' : 'low';
+      badge.dataset.tier = val >= 8 ? 'hot' : val >= 6 ? 'warm' : 'low';
     } else {
-      badge.textContent = '…';
       badge.dataset.tier = 'pending';
     }
 
     row.appendChild(top);
-    row.appendChild(meta);
     row.appendChild(mini);
+    row.appendChild(meta);
     row.appendChild(message);
     row.appendChild(badge);
     cardWrap.appendChild(row);

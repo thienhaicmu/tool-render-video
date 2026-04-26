@@ -5931,3 +5931,215 @@
     .appShell:has(#render_flow_bar:not(.hiddenView)):not(:has(.mainArea.editorMode)) > .appBottomPanel {
       min-height: 0;
     }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Phase J — Queue Card Premium Upgrade
+       Overrides earlier card rules from Phases G/H (lines 5462–5544,
+       5757–5759, 5865–5909). Append-only; originals stay for fallback.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* J1 — Card base: compact CapCut chip */
+    .rcQueueRow {
+      position: relative;
+      min-width: 230px;
+      padding: 10px 52px 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.07);
+      background: rgba(255,255,255,.03);
+      display: grid;
+      grid-template-rows: auto auto auto auto;
+      gap: 5px;
+      transition: box-shadow .18s ease, border-color .18s ease;
+    }
+
+    /* J2 — Header row */
+    .rcQueueRowTop {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    /* J3 — Title: bold, single-line truncate */
+    .rcQueueTitle {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: -.01em;
+      color: #e2e8f0;
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      overflow-wrap: normal;
+    }
+
+    /* J4 — Status: uppercase pill */
+    .rcQueueStatus {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 999px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      opacity: 1;
+      background: rgba(148,163,184,.12);
+      color: rgba(148,163,184,.7);
+    }
+
+    /* J5 — Progress bar: 8px with smooth fill */
+    .rcQueueMiniBar {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.07);
+      overflow: hidden;
+    }
+    .rcQueueMiniBar > span {
+      display: block;
+      height: 100%;
+      width: var(--progress, 0%);
+      border-radius: inherit;
+      background: rgba(148,163,184,.3);
+      transition: width .4s ease;
+    }
+
+    /* J6 — Meta: stage + percent, compact caps */
+    .rcQueueMeta {
+      font-size: 10px;
+      font-weight: 500;
+      color: rgba(148,163,184,.55);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* J7 — Message: 2-line clamp */
+    .rcQueueMessage {
+      font-size: 11px;
+      color: rgba(203,213,225,.6);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.4;
+      min-width: 0;
+    }
+
+    /* ── State variants ───────────────────────────────────────────── */
+
+    /* Waiting: dimmed, no accent */
+    .rcQueueRow.isWaiting {
+      opacity: .65;
+      border-color: rgba(255,255,255,.05);
+      background: rgba(255,255,255,.02);
+      box-shadow: none;
+    }
+
+    /* Rendering: blue accent + inner glow */
+    .rcQueueRow.isRendering {
+      opacity: 1;
+      border-color: rgba(56,189,248,.5);
+      background: rgba(56,189,248,.07);
+      box-shadow: 0 0 0 1px rgba(56,189,248,.15), 0 6px 20px rgba(14,116,144,.2);
+    }
+    .rcQueueRow.isRendering .rcQueueTitle {
+      color: #e0f2fe;
+    }
+    .rcQueueRow.isRendering .rcQueueStatus {
+      background: rgba(56,189,248,.2);
+      color: #7dd3fc;
+    }
+    .rcQueueRow.isRendering .rcQueueMiniBar > span {
+      background: linear-gradient(90deg, #38bdf8 0%, #818cf8 100%);
+      animation: renderBarPulse 2s ease-in-out infinite;
+    }
+
+    /* Completed: green, slightly subdued */
+    .rcQueueRow.isCompleted {
+      opacity: .9;
+      border-color: rgba(34,197,94,.28);
+      background: rgba(34,197,94,.05);
+      box-shadow: none;
+    }
+    .rcQueueRow.isCompleted .rcQueueTitle {
+      color: #d1fae5;
+    }
+    .rcQueueRow.isCompleted .rcQueueStatus {
+      background: rgba(34,197,94,.15);
+      color: #86efac;
+    }
+    .rcQueueRow.isCompleted .rcQueueMiniBar > span {
+      background: linear-gradient(90deg, #10b981, #34d399);
+    }
+
+    /* Failed: red accent */
+    .rcQueueRow.isFailed {
+      opacity: 1;
+      border-color: rgba(248,113,113,.45);
+      background: rgba(248,113,113,.07);
+      box-shadow: none;
+    }
+    .rcQueueRow.isFailed .rcQueueTitle {
+      color: #fee2e2;
+    }
+    .rcQueueRow.isFailed .rcQueueStatus {
+      background: rgba(248,113,113,.2);
+      color: #fca5a5;
+    }
+    .rcQueueRow.isFailed .rcQueueMiniBar > span {
+      background: linear-gradient(90deg, #ef4444, #f87171);
+    }
+
+    /* Warning: amber — completed with narration/warn in message */
+    .rcQueueRow.isWarning {
+      opacity: .95;
+      border-color: rgba(245,158,11,.35);
+      background: rgba(245,158,11,.06);
+      box-shadow: none;
+    }
+    .rcQueueRow.isWarning .rcQueueTitle {
+      color: #fef3c7;
+    }
+    .rcQueueRow.isWarning .rcQueueStatus {
+      background: rgba(245,158,11,.18);
+      color: #fcd34d;
+    }
+    .rcQueueRow.isWarning .rcQueueMiniBar > span {
+      background: linear-gradient(90deg, #f59e0b, #fbbf24);
+    }
+
+    /* ── Score badge (updated tiers) ─────────────────────────────── */
+    .rcScoreBadge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.5;
+      white-space: nowrap;
+      pointer-events: none;
+      letter-spacing: .01em;
+    }
+    .rcScoreBadge[data-tier="hot"] {
+      background: rgba(245,158,11,.22);
+      color: #fbbf24;
+      box-shadow: 0 0 6px rgba(245,158,11,.22);
+    }
+    .rcScoreBadge[data-tier="warm"] {
+      background: rgba(251,191,36,.14);
+      color: #fde68a;
+    }
+    .rcScoreBadge[data-tier="low"] {
+      background: rgba(148,163,184,.1);
+      color: rgba(148,163,184,.55);
+    }
+    .rcScoreBadge[data-tier="pending"] {
+      display: none;
+    }
