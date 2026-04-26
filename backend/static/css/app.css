@@ -6212,3 +6212,58 @@
     .rcQueueMessage {
       color: rgba(203,213,225,.7);
     }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Phase L — Queue Card Micro-animations
+       CSS-only. Tasks: entrance · active pulse · status transitions ·
+       reduced-motion. No layout, no DOM, no JS changes.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* L1 — Card entrance: soft fade-up on each DOM insertion */
+    @keyframes rcCardIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .rcQueueRow {
+      animation: rcCardIn 200ms ease-out both;
+      transition: border-color .3s ease, background .3s ease;
+    }
+
+    /* L2 — Active card: entrance sequenced into slow glow breathe */
+    @keyframes rcActivePulse {
+      0%, 100% {
+        box-shadow:
+          inset 3px 0 0 rgba(56,189,248,.75),
+          0 0 0 1px rgba(56,189,248,.22),
+          0 4px 22px rgba(14,116,144,.30),
+          inset 0 1px 0 rgba(56,189,248,.12);
+      }
+      50% {
+        box-shadow:
+          inset 3px 0 0 rgba(56,189,248,.90),
+          0 0 0 1px rgba(56,189,248,.38),
+          0 4px 28px rgba(14,116,144,.48),
+          inset 0 1px 0 rgba(56,189,248,.20);
+      }
+    }
+    .rcQueueRow.isRendering {
+      animation:
+        rcCardIn     200ms ease-out both,
+        rcActivePulse 3.2s ease-in-out 200ms infinite;
+    }
+
+    /* L3 — Accessibility: honour prefers-reduced-motion */
+    @media (prefers-reduced-motion: reduce) {
+      .rcQueueRow,
+      .rcQueueRow.isRendering {
+        animation: none !important;
+        transition: none !important;
+      }
+      .rcQueueMiniBar > span {
+        transition: none !important;
+      }
+      .rcQueueRow.isRendering .rcQueueMiniBar > span::after,
+      .rcScoreBadge[data-tier="hot"] {
+        animation: none !important;
+      }
+    }
