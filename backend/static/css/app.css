@@ -6143,3 +6143,72 @@
     .rcScoreBadge[data-tier="pending"] {
       display: none;
     }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Phase K — Queue Card Polish
+       CSS-only. Tasks: active highlight · smooth progress · viral
+       premium · micro-hierarchy. Layout (60/40) is untouched.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* K1 — Active card: inset left-accent + stronger outer glow */
+    .rcQueueRow.isRendering {
+      border-color: rgba(56,189,248,.62);
+      background: rgba(56,189,248,.09);
+      box-shadow:
+        inset 3px 0 0 rgba(56,189,248,.75),
+        0 0 0 1px rgba(56,189,248,.22),
+        0 4px 22px rgba(14,116,144,.3),
+        inset 0 1px 0 rgba(56,189,248,.12);
+    }
+
+    /* K2 — Smooth progress: better easing on all bars */
+    .rcQueueMiniBar > span {
+      transition: width .5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Rendering bar: shimmer sweep replaces opacity pulse */
+    .rcQueueRow.isRendering .rcQueueMiniBar > span {
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      animation: none;
+      position: relative;
+      overflow: hidden;
+    }
+    .rcQueueRow.isRendering .rcQueueMiniBar > span::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 60%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.28), transparent);
+      transform: translateX(-100%);
+      animation: rcShimmer 1.8s ease-in-out infinite;
+    }
+    @keyframes rcShimmer {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(250%); }
+    }
+
+    /* K3 — Hot viral badge: animated glow pulse + gradient bg */
+    .rcScoreBadge[data-tier="hot"] {
+      background: linear-gradient(135deg, rgba(245,158,11,.28), rgba(251,191,36,.18));
+      color: #fbbf24;
+      border: 1px solid rgba(245,158,11,.38);
+      animation: rcHotGlow 2.8s ease-in-out infinite;
+    }
+    @keyframes rcHotGlow {
+      0%, 100% { box-shadow: 0 0 6px rgba(245,158,11,.25); }
+      50%       { box-shadow: 0 0 14px rgba(245,158,11,.55); }
+    }
+
+    /* K4 — Micro hierarchy: title stronger, meta smaller, message readable */
+    .rcQueueTitle {
+      font-size: 13px;
+    }
+    .rcQueueMeta {
+      font-size: 9px;
+      color: rgba(148,163,184,.62);
+    }
+    .rcQueueMessage {
+      color: rgba(203,213,225,.7);
+    }
