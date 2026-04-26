@@ -6363,3 +6363,166 @@
       margin-left: 4px;
       flex-shrink: 0;
     }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Phase P — Final Premium Polish
+       Targeted fixes: hover, scrollbars, empty states, log density,
+       status pill definition, divider, consistency pass.
+       No layout changes. No new features.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* P1 — Card hover: subtle lift on idle/done/failed cards */
+    .rcQueueRow:not(.isRendering):hover {
+      border-color: rgba(255,255,255,.13);
+      background: rgba(255,255,255,.048);
+    }
+    .rcQueueRow.isCompleted:hover {
+      border-color: rgba(34,197,94,.38);
+      background: rgba(34,197,94,.075);
+    }
+    .rcQueueRow.isFailed:hover {
+      border-color: rgba(248,113,113,.52);
+      background: rgba(248,113,113,.09);
+    }
+    .rcQueueRow.rcBestPart:not(.isRendering):hover {
+      border-color: rgba(99,102,241,.6);
+      background: rgba(99,102,241,.09);
+    }
+
+    /* P2 — Status pill: add border for definition */
+    .rcQueueStatus {
+      border: 1px solid rgba(148,163,184,.12);
+    }
+    .rcQueueRow.isRendering .rcQueueStatus {
+      border-color: rgba(56,189,248,.25);
+    }
+    .rcQueueRow.isCompleted .rcQueueStatus {
+      border-color: rgba(34,197,94,.2);
+    }
+    .rcQueueRow.isFailed .rcQueueStatus {
+      border-color: rgba(248,113,113,.25);
+    }
+    .rcQueueRow.isWarning .rcQueueStatus {
+      border-color: rgba(245,158,11,.22);
+    }
+
+    /* P3 — Message text: slightly more readable, less debug-noise feel */
+    .rcQueueMessage {
+      font-size: 10.5px;
+      color: rgba(148,163,184,.68);
+      line-height: 1.45;
+    }
+
+    /* P4 — Score badge: warm tier cleaner, low tier quieter */
+    .rcScoreBadge[data-tier="warm"] {
+      background: rgba(251,191,36,.11);
+      color: #fcd34d;
+      border: 1px solid rgba(251,191,36,.2);
+    }
+    .rcScoreBadge[data-tier="low"] {
+      color: rgba(148,163,184,.45);
+    }
+
+    /* P5 — Log rows: denser console spacing, less air */
+    .rcLogList {
+      gap: 3px;
+      padding: 6px 8px;
+    }
+    .rcLogList .logLine,
+    #event_log_render .logLine {
+      padding: 4px 8px;
+      border-radius: 6px;
+      gap: 6px;
+      font-size: 11px;
+      background: transparent;
+    }
+    .rcLogList .logLine:hover,
+    #event_log_render .logLine:hover {
+      background: rgba(255,255,255,.03);
+    }
+    .rcLogList .logLine.isError,
+    #event_log_render .logLine.isError,
+    .rcLogList .logLine.error {
+      background: rgba(255,60,60,.07);
+    }
+    .rcLogList .logLine.isWarning,
+    #event_log_render .logLine.isWarning {
+      background: rgba(245,158,11,.06);
+    }
+    .rcLogList .logTime,
+    #event_log_render .logTime {
+      opacity: .44;
+      font-size: 10px;
+    }
+
+    /* P6 — Log empty state: clean, non-italic */
+    .rcLogEmpty {
+      font-style: normal;
+      color: rgba(100,116,139,.45);
+      font-size: 10.5px;
+      letter-spacing: .02em;
+      padding: 24px 12px;
+    }
+
+    /* P7 — Empty queue state: framed, not cheesy */
+    .rcQueueGrid .emptyState {
+      grid-column: 1 / -1;
+      padding: 32px 16px;
+      color: rgba(100,116,139,.5);
+      font-size: 12px;
+      border: 1px dashed rgba(255,255,255,.07);
+      border-radius: 12px;
+      background: rgba(255,255,255,.012);
+    }
+
+    /* P8 — Queue panel divider: remove right border when log is collapsed */
+    .appBottomPanel.logsCollapsed .rcQueuePanel {
+      border-right: none;
+    }
+
+    /* P9 — Thin custom scrollbars: queue grid + log list */
+    .rcQueueGrid::-webkit-scrollbar,
+    .rcLogList::-webkit-scrollbar {
+      width: 3px;
+    }
+    .rcQueueGrid::-webkit-scrollbar-track,
+    .rcLogList::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .rcQueueGrid::-webkit-scrollbar-thumb,
+    .rcLogList::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.1);
+      border-radius: 999px;
+    }
+    .rcQueueGrid::-webkit-scrollbar-thumb:hover,
+    .rcLogList::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,.18);
+    }
+
+    /* P10 — Panel header: tighter, stronger title */
+    .rcPanelHeader > strong {
+      font-weight: 800;
+      letter-spacing: .06em;
+    }
+    .rcPanelHeader {
+      padding: 8px 12px;
+    }
+
+    /* P11 — Active card in queue: consistent margins */
+    .rcQueuePanel .rcActiveCard {
+      margin: 8px 10px 6px;
+    }
+
+    /* P12 — Log strip header: tighter second row */
+    .rcLogFilterRow {
+      padding: 3px 0 3px;
+    }
+
+    /* P13 — Accessibility: disable P1 hover transitions if reduced-motion */
+    @media (prefers-reduced-motion: reduce) {
+      .rcQueueRow:not(.isRendering):hover,
+      .rcQueueRow.isCompleted:hover,
+      .rcQueueRow.isFailed:hover {
+        transition: none !important;
+      }
+    }
