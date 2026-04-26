@@ -1,3 +1,5 @@
+var _logActiveFilter = 'all';
+
 function _resolveLogScope(scope = 'auto'){
   const s = String(scope || 'auto').trim().toLowerCase();
   if(s && s !== 'auto' && ['render', 'upload', 'channels'].includes(s)) return s;
@@ -93,6 +95,14 @@ function addEvent(text, scope = 'auto'){
   const emptyNode = box.querySelector('.rcLogEmpty');
   if (emptyNode) emptyNode.remove();
   box.prepend(div);
+  if (resolvedScope === 'render' && _logActiveFilter !== 'all') {
+    const low2 = normalized.toLowerCase();
+    let vis = true;
+    if (_logActiveFilter === 'error')       vis = /error|fail/.test(low2);
+    else if (_logActiveFilter === 'ffmpeg') vis = low2.includes('ffmpeg');
+    else if (_logActiveFilter === 'system') vis = !(/error|fail/.test(low2)) && !low2.includes('ffmpeg');
+    if (!vis) div.style.display = 'none';
+  }
   while (box.children.length > 40) box.removeChild(box.lastChild);
   if (typeof _logAutoScroll !== 'undefined' && _logAutoScroll && resolvedScope === 'render') {
     box.scrollTop = 0;
@@ -101,6 +111,25 @@ function addEvent(text, scope = 'auto'){
   st.lastAt = now;
   st.lastNode = div;
   st.lastCount = 1;
+}
+
+// ── Log filter ──────────────────────────────────────────────────────────────
+function filterRenderLogs(cat) {
+  _logActiveFilter = cat || 'all';
+  const box = document.getElementById('event_log_render');
+  if (box) {
+    box.querySelectorAll('.logLine').forEach(line => {
+      const text = line.textContent.toLowerCase();
+      let show = true;
+      if (_logActiveFilter === 'error')       show = /error|fail/.test(text);
+      else if (_logActiveFilter === 'ffmpeg') show = text.includes('ffmpeg');
+      else if (_logActiveFilter === 'system') show = !(/error|fail/.test(text)) && !text.includes('ffmpeg');
+      line.style.display = show ? '' : 'none';
+    });
+  }
+  document.querySelectorAll('.rcLogFilterBtn').forEach(btn => {
+    btn.classList.toggle('isActive', btn.dataset.filter === _logActiveFilter);
+  });
 }
 
 // ── Toast notifications ─────────────────────────────────────────────────────

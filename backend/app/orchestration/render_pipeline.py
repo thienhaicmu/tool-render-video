@@ -18,7 +18,7 @@ from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes
-from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, has_audio_stream
+from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream
 from app.services.render_engine import cut_video, render_part_smart, nvenc_available
 from app.services.viral_scorer import score_segments
 from app.services.report_service import append_rows
@@ -1074,15 +1074,16 @@ def run_render_pipeline(
                 and voice_audio_path is None
             ):
                 _part_srt = srt_part if srt_part.exists() and srt_part.stat().st_size > 0 else None
+                _part_srt_inmem_text: str | None = None
                 if _part_srt is None and full_srt_available:
-                    _slice_srt_tmp = work_dir / f"{source['slug']}_part_{idx:03d}_voice_tmp.srt"
                     try:
-                        slice_srt_by_time(str(full_srt), str(_slice_srt_tmp), seg["start"], seg["end"], rebase_to_zero=True)
-                        _part_srt = _slice_srt_tmp
+                        _part_srt_inmem_text = slice_srt_to_text(str(full_srt), seg["start"], seg["end"])
+                        _part_srt = full_srt  # truthy sentinel: text loaded in-memory
+                        _job_log(effective_channel, job_id, f"voice.srt_in_memory part_no={idx} (no temp file written)", kind="debug")
                     except Exception:
                         _part_srt = None
                 if _part_srt:
-                    _part_narration_text = extract_text_from_srt(str(_part_srt))
+                    _part_narration_text = _part_srt_inmem_text if _part_srt_inmem_text is not None else extract_text_from_srt(str(_part_srt))
                     if _part_narration_text.strip():
                         _voice_part_tts_attempts.append(idx)
                         _part_mp3 = str(TEMP_DIR / job_id / "voice" / f"part_{idx:03d}.mp3")
@@ -1154,15 +1155,16 @@ def run_render_pipeline(
                 if _voice_srt is None:
                     _job_log(effective_channel, job_id, f"VOICE_TRANSLATED_SUBTITLE_MISSING: part {idx} translated SRT not found; falling back to original", kind="warning")
                     _voice_srt = srt_part if srt_part.exists() and srt_part.stat().st_size > 0 else None
+                _voice_srt_inmem_text: str | None = None
                 if _voice_srt is None and full_srt_available:
-                    _vtrans_tmp = work_dir / f"{source['slug']}_part_{idx:03d}_vtrans_tmp.srt"
                     try:
-                        slice_srt_by_time(str(full_srt), str(_vtrans_tmp), seg["start"], seg["end"], rebase_to_zero=True)
-                        _voice_srt = _vtrans_tmp
+                        _voice_srt_inmem_text = slice_srt_to_text(str(full_srt), seg["start"], seg["end"])
+                        _voice_srt = full_srt  # truthy sentinel: text loaded in-memory
+                        _job_log(effective_channel, job_id, f"voice.translated_srt_in_memory part_no={idx} (no temp file written)", kind="debug")
                     except Exception:
                         _voice_srt = None
                 if _voice_srt:
-                    _part_narration_text = extract_text_from_srt(str(_voice_srt))
+                    _part_narration_text = _voice_srt_inmem_text if _voice_srt_inmem_text is not None else extract_text_from_srt(str(_voice_srt))
                     if _part_narration_text.strip():
                         _voice_part_tts_attempts.append(idx)
                         _part_mp3 = str(TEMP_DIR / job_id / "voice" / f"part_{idx:03d}.mp3")

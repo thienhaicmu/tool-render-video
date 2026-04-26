@@ -9,6 +9,10 @@ let _renderMonitorLastParts = [];
 let _renderMonitorHeartbeatTimer = null;
 let _renderLogsUserToggled = false;
 let _logAutoScroll = true;
+let _rcLastActivePartNo = -1;
+let _rcScrollDebounceId = null;
+let _rcUserIsScrolling = false;
+let _rcUserScrollTimerId = null;
 const RENDER_MONITOR_STALL_MS = 45000;
 
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
@@ -720,6 +724,30 @@ function rcPartMessage(part, fallback = '') {
   return String(part?.message || part?.detail || part?.last_message || part?.note || fallback || '').trim();
 }
 
+function _rcInitScrollGuard(container) {
+  if (container._sgInit) return;
+  container._sgInit = true;
+  container.addEventListener('scroll', () => {
+    _rcUserIsScrolling = true;
+    clearTimeout(_rcUserScrollTimerId);
+    _rcUserScrollTimerId = setTimeout(() => { _rcUserIsScrolling = false; }, 1500);
+  }, { passive: true });
+}
+
+function _rcAutoScrollActive(container, activePartNo) {
+  _rcInitScrollGuard(container);
+  if (activePartNo === _rcLastActivePartNo) return;
+  _rcLastActivePartNo = activePartNo;
+  if (activePartNo === -1) return;
+  if (_rcUserIsScrolling) return;
+  clearTimeout(_rcScrollDebounceId);
+  _rcScrollDebounceId = setTimeout(() => {
+    if (_rcUserIsScrolling) return;
+    const el = container.querySelector('[data-active="1"]');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 120);
+}
+
 function renderBottomActiveQueue(job, summary, parts = []) {
   const items = Array.isArray(parts) ? parts : [];
   const s = summary || computeProgressSummary(items || []);
@@ -838,6 +866,20 @@ function renderBottomActiveQueue(job, summary, parts = []) {
   }
 
   const ordered = [...items].sort((a, b) => Number(a?.part_no || 0) - Number(b?.part_no || 0));
+
+  const _maxScore = items.reduce((max, p) => {
+    const s = p?.viral_score ?? p?.score ?? p?.viralScore;
+    if (s == null || s === '' || isNaN(Number(s))) return max;
+    return Math.max(max, parseFloat(s));
+  }, -Infinity);
+  const _bestIdx = _maxScore > -Infinity
+    ? ordered.findIndex(p => {
+        const s = p?.viral_score ?? p?.score ?? p?.viralScore;
+        return s != null && s !== '' && !isNaN(Number(s)) && parseFloat(s) === _maxScore;
+      })
+    : -1;
+
+  let _newActivePartNo = -1;
   ordered.forEach((part, idx) => {
     const state = normalizeRcPartState(part);
     const progress = clampRcProgress(part?.progress_percent ?? part?.progress ?? part?.percent ?? 0);
@@ -852,11 +894,12 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     );
     const msgLow = msgText.toLowerCase();
     const isWarn = state === 'completed' && (msgLow.includes('warn') || msgLow.includes('narration'));
+    const isBest = idx === _bestIdx;
     const visualClass = isWarn ? 'isWarning' : `is${rcCap(state)}`;
 
     const row = document.createElement('article');
-    row.className = `rcQueueRow ${visualClass}`;
-    if (state === 'rendering') row.dataset.active = '1';
+    row.className = `rcQueueRow ${visualClass}${isBest ? ' rcBestPart' : ''}`;
+    if (state === 'rendering') { row.dataset.active = '1'; _newActivePartNo = partNo; }
 
     const top = document.createElement('div');
     top.className = 'rcQueueRowTop';
@@ -871,6 +914,12 @@ function renderBottomActiveQueue(job, summary, parts = []) {
 
     top.appendChild(title);
     top.appendChild(statusNode);
+    if (isBest) {
+      const bestLabel = document.createElement('span');
+      bestLabel.className = 'rcBestLabel';
+      bestLabel.textContent = 'BEST';
+      top.appendChild(bestLabel);
+    }
 
     const mini = document.createElement('div');
     mini.className = 'rcQueueMiniBar';
@@ -904,6 +953,7 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     row.appendChild(badge);
     cardWrap.appendChild(row);
   });
+  _rcAutoScrollActive(cardWrap, _newActivePartNo);
 }
 
 function updateRenderMainState(job, summary, parts = []) {
@@ -1404,6 +1454,8 @@ function setRenderLogsCollapsed(collapsed, options = {}) {
   panel.classList.toggle('logsCollapsed', !!collapsed);
   const btn = qs('rc_toggle_logs_btn') || document.querySelector('.abpLogToggle');
   if (btn) btn.textContent = collapsed ? 'View logs' : 'Hide logs';
+  const toggleBtn = qs('rc_log_panel_btn');
+  if (toggleBtn) toggleBtn.textContent = collapsed ? 'Logs ›' : '‹ Logs';
   if (options.fromUser) _renderLogsUserToggled = true;
 }
 

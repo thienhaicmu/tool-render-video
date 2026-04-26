@@ -101,6 +101,18 @@ def slice_srt_by_time(
     return output_srt_path
 
 
+def slice_srt_to_text(source_srt_path: str, start_sec: float, end_sec: float) -> str:
+    """Slice a SRT by time range and return plain text — no temp file written."""
+    src_blocks = _parse_srt_blocks(source_srt_path)
+    start_sec = max(0.0, float(start_sec))
+    end_sec = max(start_sec, float(end_sec))
+    texts = [
+        b["text"] for b in src_blocks
+        if min(end_sec, b["end"]) > max(start_sec, b["start"])
+    ]
+    return " ".join(texts).strip()
+
+
 def _run_with_retry(command: list[str], retries: int = 2, wait_sec: float = 0.8):
     attempt = 0
     while True:
@@ -170,28 +182,24 @@ def transcribe_to_srt(
         "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audio_path
     ], retries=retry_count)
 
-    model = get_whisper_model(model_name)
-
-    if highlight_per_word:
-        try:
-            result = _transcribe_with_retry(model, audio_path, retries=retry_count, word_timestamps=True)
-            _write_word_level_srt(result, srt_path)
-            try:
-                Path(audio_path).unlink(missing_ok=True)
-            except Exception:
-                pass
-            return result
-        except Exception:
-            # Fallback to segment-level on failure
-            pass
-
-    result = _transcribe_with_retry(model, audio_path, retries=retry_count)
-    _write_segment_level_srt(result, srt_path)
     try:
+        model = get_whisper_model(model_name)
+
+        if highlight_per_word:
+            try:
+                result = _transcribe_with_retry(model, audio_path, retries=retry_count, word_timestamps=True)
+                _write_word_level_srt(result, srt_path)
+                return result
+            except Exception:
+                # Fallback to segment-level on failure
+                pass
+
+        result = _transcribe_with_retry(model, audio_path, retries=retry_count)
+        _write_segment_level_srt(result, srt_path)
+        return result
+    finally:
+        # Always remove extracted WAV — avoids orphan if Whisper fails mid-job
         Path(audio_path).unlink(missing_ok=True)
-    except Exception:
-        pass
-    return result
 
 
 def _write_word_level_srt(result: dict, srt_path: str):

@@ -6267,3 +6267,99 @@
         animation: none !important;
       }
     }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Phase M — Log filter controls
+       CSS-only. Filter row below log toolbar. No layout changes.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* M1 — Header wraps to two rows: title+actions row, filter row */
+    .rcLogStripHeader {
+      flex-wrap: wrap;
+    }
+
+    /* M2 — Filter pill row */
+    .rcLogFilterRow {
+      display: flex;
+      flex-basis: 100%;
+      gap: 4px;
+      padding: 4px 0 2px;
+    }
+
+    /* M3 — Filter pill buttons */
+    .rcLogFilterBtn {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 5px;
+      background: rgba(255,255,255,.03);
+      color: rgba(148,163,184,.55);
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      cursor: pointer;
+      transition: background .14s ease, border-color .14s ease, color .14s ease;
+      white-space: nowrap;
+    }
+    .rcLogFilterBtn:hover {
+      background: rgba(255,255,255,.07);
+      border-color: rgba(255,255,255,.14);
+      color: rgba(226,232,240,.8);
+    }
+    .rcLogFilterBtn.isActive {
+      background: rgba(56,189,248,.13);
+      border-color: rgba(56,189,248,.32);
+      color: #38bdf8;
+    }
+    .rcLogFilterBtn.isActive:hover {
+      background: rgba(56,189,248,.2);
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Phase O — Collapsible log panel
+       CSS-only. No layout changes outside the two rules below.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* O1 — Queue expands to full width when log is hidden */
+    .appBottomPanel.logsCollapsed .rcAQMain {
+      grid-template-columns: 1fr;
+    }
+
+    /* O2 — Toggle button: push to right edge of queue header */
+    .rcLogToggleBtn {
+      margin-left: auto;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Phase N — Best Part highlight
+       CSS-only. No layout changes. No glow spam.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* N1 — Best card: indigo left-accent + quiet border */
+    .rcQueueRow.rcBestPart {
+      border-color: rgba(99,102,241,.48);
+      background: rgba(99,102,241,.06);
+      box-shadow:
+        inset 3px 0 0 rgba(99,102,241,.65),
+        0 0 0 1px rgba(99,102,241,.16);
+    }
+
+    /* N2 — Best label pill: inline in the title row */
+    .rcBestLabel {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(99,102,241,.18);
+      border: 1px solid rgba(99,102,241,.35);
+      color: #a5b4fc;
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      margin-left: 4px;
+      flex-shrink: 0;
+    }

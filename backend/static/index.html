@@ -1314,6 +1314,7 @@
             <strong>Render Queue</strong>
             <span id="rc_queue_summary" class="rcPanelMeta">0 waiting</span>
             <span id="rc_active_badge" class="rcPanelBadge">Idle</span>
+            <button class="rcLogBtn rcLogToggleBtn" id="rc_log_panel_btn" type="button" onclick="toggleRenderLogs()" title="Toggle log panel">‹ Logs</button>
           </header>
 
           <div id="rc_active_card" class="rcActiveCard isIdle">
@@ -1344,6 +1345,12 @@
               <button class="rcLogBtn isActive" id="rc_log_autoscroll_btn" type="button" onclick="toggleLogAutoScroll()" title="Auto-scroll: On">↑ Auto</button>
               <button class="rcLogBtn" id="rc_copy_logs_btn" type="button" onclick="copyRenderLogs()" title="Copy all log text">Copy</button>
               <button class="rcLogBtn" id="rc_toggle_logs_btn" type="button" onclick="toggleRenderLogs()">View logs</button>
+            </div>
+            <div class="rcLogFilterRow">
+              <button class="rcLogFilterBtn isActive" data-filter="all"    type="button" onclick="filterRenderLogs('all')">All</button>
+              <button class="rcLogFilterBtn"          data-filter="error"  type="button" onclick="filterRenderLogs('error')">Error</button>
+              <button class="rcLogFilterBtn"          data-filter="ffmpeg" type="button" onclick="filterRenderLogs('ffmpeg')">FFmpeg</button>
+              <button class="rcLogFilterBtn"          data-filter="system" type="button" onclick="filterRenderLogs('system')">System</button>
             </div>
           </header>
           <div id="event_log_render" class="rcLogList">
