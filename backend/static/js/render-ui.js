@@ -834,7 +834,7 @@ function useTopClips() {
   window.topClipPaths = paths;
   console.log('[Market Viral] Selected clip paths:', paths);
   if (typeof showToast === 'function') {
-    showToast(`${paths.length} clip${paths.length === 1 ? '' : 's'} saved — ready for next step`, 'success');
+    showToast(`${paths.length} clip${paths.length === 1 ? '' : 's'} selected`, 'success');
   }
 }
 
@@ -1086,7 +1086,7 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     const bottom = document.createElement('div');
     bottom.className = 'rcQueueBottom';
     if (state === 'completed') {
-      bottom.textContent = isWarn ? `⚠ ${rcStateLabel(state)}` : '✓ Completed';
+      bottom.textContent = isWarn ? '⚠ Completed with warnings' : '✓ Completed';
     } else if (state === 'failed') {
       bottom.textContent = '✕ Failed';
     } else if (state === 'rendering') {

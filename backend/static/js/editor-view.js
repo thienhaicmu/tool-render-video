@@ -2119,7 +2119,11 @@ function mvCopyHook(el) {
 
 function mvApplyHook(el) {
   const hook = el.dataset.hook || '';
-  if (!hook || !_ev || !Array.isArray(_ev.subtitleSegments) || !_ev.subtitleSegments.length) return;
+  if (!hook) return;
+  if (!_ev || !Array.isArray(_ev.subtitleSegments) || !_ev.subtitleSegments.length) {
+    if (typeof showToast === 'function') showToast('Load a video first to preview hooks', 'info');
+    return;
+  }
 
   const vid = qs('evVideo');
   const t   = vid ? (vid.currentTime || 0) : 0;
