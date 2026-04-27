@@ -18,7 +18,7 @@ from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes
-from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream
+from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt
 from app.services.render_engine import cut_video, render_part_smart, nvenc_available
 from app.services.viral_scorer import score_segments
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
@@ -1014,6 +1014,12 @@ def run_render_pipeline(
                             )
                     if translated_srt_part.exists() and translated_srt_part.stat().st_size > 0:
                         _ass_srt_source = translated_srt_part
+                if _mv_cfg and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
+                    try:
+                        apply_market_line_break_to_srt(str(_ass_srt_source), _mv_cfg)
+                        needs_ass = True
+                    except Exception:
+                        pass
                 if needs_ass:
                     if payload.subtitle_style == "pro_karaoke":
                         from app.services.subtitle_engine import _hex_to_ass

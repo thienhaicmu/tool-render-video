@@ -563,4 +563,36 @@ def burn_subtitle_onto_video(
         output_path,
     ]
     _run_with_retry(cmd, retries=retry_count)
-    return output_path
+
+
+def apply_market_line_break_to_srt(srt_path: str, market_payload: dict) -> str:
+    """Re-wrap SRT subtitle lines to the market/tone word-count ceiling.
+
+    Called after subtitle text is finalized, before the SRT is consumed further.
+    Safe no-op when market_payload is falsy or any error occurs.
+    """
+    if not market_payload:
+        return srt_path
+    try:
+        from app.services.market_subtitle_policy import (
+            get_market_subtitle_policy,
+            break_text_by_words,
+        )
+        market = str(market_payload.get("target_market") or "US").upper()
+        tone   = str(market_payload.get("subtitle_tone")  or "clean").lower()
+        policy = get_market_subtitle_policy(market, tone)
+        max_w  = int(policy["max_words_per_line"])
+        blocks = _parse_srt_blocks(srt_path)
+        if not blocks:
+            return srt_path
+        with Path(srt_path).open("w", encoding="utf-8") as f:
+            for idx, b in enumerate(blocks, start=1):
+                broken = break_text_by_words(b["text"], max_w)
+                f.write(
+                    f"{idx}\n"
+                    f"{format_srt_timestamp(b['start'])} --> {format_srt_timestamp(b['end'])}\n"
+                    f"{broken}\n\n"
+                )
+    except Exception:
+        pass
+    return srt_path

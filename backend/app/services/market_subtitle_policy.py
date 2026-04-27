@@ -97,6 +97,19 @@ _VALID_MARKETS = frozenset(_POLICIES.keys())
 _VALID_TONES   = frozenset({"clean", "bold", "karaoke"})
 
 
+def break_text_by_words(text: str, max_words: int) -> str:
+    try:
+        words = str(text or "").split()
+        if not words or max_words < 1:
+            return str(text or "")
+        lines = []
+        for i in range(0, len(words), max_words):
+            lines.append(" ".join(words[i:i + max_words]))
+        return "\n".join(lines)
+    except Exception:
+        return text
+
+
 def get_market_subtitle_policy(market: str, subtitle_tone: str = "clean") -> Dict:
     """
     Return a subtitle rendering policy for the given market and tone.
