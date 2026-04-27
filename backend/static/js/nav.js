@@ -103,6 +103,8 @@ function setView(view){
   }
 
   syncRenderBottomPanelVisibility(view);
+  document.body.classList.toggle('is-upload-active', isUpload);
+  document.body.classList.toggle('is-history-active', isHistory);
 }
 
 function syncRenderBottomPanelVisibility(activeView) {

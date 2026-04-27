@@ -6939,3 +6939,353 @@
   overflow-y: auto;
   overflow-x: hidden;
 }
+
+/* ── Phase V — Upload / History workspace scope ───────────────────────────── */
+
+/* V1 — Hide render center stage content in upload/history views */
+body.is-history-active .rs-center-stage,
+body.is-upload-active  .rs-center-stage {
+  display: none !important;
+}
+
+/* V2 — Hide sidebar in upload/history: they are standalone workspaces */
+body.is-upload-active  #sidebarPanel,
+body.is-history-active #sidebarPanel {
+  display: none !important;
+}
+
+/* V3 — mainArea spans full rs-main width when sidebar is gone */
+body.is-upload-active  .mainArea,
+body.is-history-active .mainArea {
+  grid-column: 1 / -1 !important;
+}
+
+/* V4 — mainContentScroll fills mainArea height in upload view */
+body.is-upload-active .mainContentScroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+}
+
+/* V5 — history partial + view fill height, list scrolls */
+body.is-history-active #partial_history_view {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  width: 100% !important;
+}
+
+body.is-history-active #view_history {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+body.is-history-active #history_list {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+}
+
+/* ── Phase W — History workspace UI ──────────────────────────────────────── */
+
+/* W1 — Workspace shell: column flex, fills mainArea */
+.historyWorkspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* W2 — Header bar */
+.hwHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--card-border);
+  flex-shrink: 0;
+}
+.hwHeaderLeft { display: flex; flex-direction: column; gap: 3px; }
+.hwTitle {
+  font-size: 18px;
+  font-weight: 800;
+  color: #f1f5f9;
+  letter-spacing: -.01em;
+}
+.hwSub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.hwHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.hwMeta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.hwRefreshBtn {
+  padding: 5px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: var(--input-bg);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+  white-space: nowrap;
+}
+.hwRefreshBtn:hover { border-color: var(--accent); color: #60a5fa; }
+
+/* W3 — Filter pill row */
+.hwFilterBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(148,163,184,.08);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.hwFilterBtn {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+  white-space: nowrap;
+}
+.hwFilterBtn:hover { border-color: rgba(96,165,250,.4); color: var(--text-dim); }
+.hwFilterBtn.active {
+  border-color: rgba(59,130,246,.5);
+  background: rgba(59,130,246,.12);
+  color: #60a5fa;
+}
+
+/* W4 — Scrollable body */
+.hwBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 20px 20px;
+}
+
+/* W5 — historyList inside hwBody */
+.hwBody .historyList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* W6 — Job card */
+.hwCard {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,.12);
+  background: rgba(15,23,42,.48);
+  transition: border-color .15s, background .15s, transform .12s;
+  min-width: 0;
+}
+.hwCard:hover {
+  border-color: rgba(96,165,250,.28);
+  background: rgba(30,41,59,.52);
+  transform: translateY(-1px);
+}
+.hwCard.failed,
+.hwCard.interrupted { border-left: 3px solid rgba(239,68,68,.5); }
+.hwCard.completed   { border-left: 3px solid rgba(16,185,129,.4); }
+.hwCard.running,
+.hwCard.queued      { border-left: 3px solid rgba(59,130,246,.5); }
+
+/* W7 — Left: kind icon + badge */
+.hwCardLeft {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 52px;
+}
+.hwKindIcon {
+  font-size: 18px;
+  line-height: 1;
+  opacity: .85;
+}
+.hwKindBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.hwKindBadge.render   { background: rgba(59,130,246,.15); color: #93c5fd; }
+.hwKindBadge.download { background: rgba(16,185,129,.14); color: #6ee7b7; }
+
+/* W8 — Center: title + meta */
+.hwCardMain {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hwCardTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hwCardMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hwCardTime {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.hwCardSummary {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hwCardSource,
+.hwCardOutput {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* W9 — Right: status badge + actions */
+.hwCardRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.hwStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+.hwStatusBadge.completed              { background: rgba(16,185,129,.14); color: #6ee7b7; }
+.hwStatusBadge.partial                { background: rgba(245,158,11,.14); color: #fcd34d; }
+.hwStatusBadge.failed,
+.hwStatusBadge.interrupted            { background: rgba(239,68,68,.14);  color: #fca5a5; }
+.hwStatusBadge.running,
+.hwStatusBadge.queued                 { background: rgba(59,130,246,.14); color: #93c5fd; }
+
+.hwCardActions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.hwActionBtn {
+  padding: 4px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--card-border);
+  background: var(--input-bg);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s, color .15s;
+}
+.hwActionBtn:hover { border-color: var(--accent); color: #60a5fa; }
+.hwActionBtn.ghost { background: transparent; }
+
+/* W10 — Empty / loading / error states */
+.hwEmpty,
+.hwState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.hwEmptyIcon,
+.hwStateIcon {
+  font-size: 32px;
+  opacity: .5;
+  line-height: 1;
+}
+.hwEmptyTitle,
+.hwStateTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.hwEmptySub,
+.hwStateSub {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 340px;
+  line-height: 1.5;
+}
+.hwState.error .hwStateTitle { color: #fca5a5; }
+.hwState.error .hwStateIcon  { opacity: .7; }
+
+/* ── Phase X — Inspector panel visibility fix ────────────────────────────── */
+
+/* X1 — Ensure inactive panels are hidden regardless of inspHasLayers.
+        Specificity (1,1,0) + !important beats (1,2,0) without !important. */
+#appInspector [data-insp-panel] {
+  display: none !important;
+}
+
+/* X2 — Active panel always wins.
+        Specificity (1,2,0) + !important beats line-302 (1,2,0) no-!important,
+        and beats the inspHasLayers hide rule at line 302. */
+#appInspector [data-insp-panel].insp-panel-active {
+  display: block !important;
+}
+
+/* ── Phase Y — Editor mode: prevent partial wrappers stealing flex space ──── */
+
+/* Y1 — In editorMode, partial view wrappers must not take flex space.
+        Phase U gave #partial_history_view flex:1 unconditionally;
+        that causes rs-preview-stage (and thus the editor) to shrink.
+        Hiding them here is safe: their inner content is already hiddenView. */
+.mainArea.editorMode #partial_history_view,
+.mainArea.editorMode #partial_download_view {
+  display: none !important;
+}

@@ -1,6 +1,7 @@
 let historyItems = [];
 let historyLoading = false;
 let historyError = '';
+let historyFilter = 'all';
 
 function historyKindLabel(kind) {
   return kind === 'download' ? 'Download' : 'Render';
@@ -31,69 +32,117 @@ function historyRelativeTime(value) {
   return new Date(ts).toLocaleString();
 }
 
-function renderHistoryState(html, statusText = '') {
-  const list = qs('history_list');
-  if (!list) return;
-  list.innerHTML = html;
-  if (qs('history_status_text')) qs('history_status_text').textContent = statusText;
+function setHistoryFilter(filter) {
+  historyFilter = String(filter || 'all');
+  document.querySelectorAll('.hwFilterBtn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.filter === historyFilter);
+  });
+  renderHistoryView();
+}
+
+function _historySetStatus(text) {
+  const el = qs('history_status_text');
+  if (el) el.textContent = text;
 }
 
 function renderHistoryView() {
   const list = qs('history_list');
   if (!list) return;
+
   if (historyLoading) {
-    renderHistoryState('<div class="historyState">Loading recent activity...</div>', 'Loading...');
+    list.innerHTML = `
+      <div class="hwState">
+        <div class="hwStateIcon">&#8635;</div>
+        <div class="hwStateTitle">Loading&hellip;</div>
+      </div>`;
+    _historySetStatus('Loading…');
     return;
   }
+
   if (historyError) {
-    renderHistoryState(
-      '<div class="historyState error">Could not load History<div style="margin-top:10px"><button class="secondaryButton" type="button" onclick="loadHistoryView()">Retry</button></div></div>',
-      'Error'
-    );
+    list.innerHTML = `
+      <div class="hwState error">
+        <div class="hwStateIcon">&#9888;</div>
+        <div class="hwStateTitle">Could not load history</div>
+        <div class="hwStateSub">${esc(historyError)}</div>
+        <button class="secondaryButton" style="margin-top:12px" type="button" onclick="loadHistoryView()">Retry</button>
+      </div>`;
+    _historySetStatus('Error');
     return;
   }
-  if (!historyItems.length) {
-    renderHistoryState(
-      '<div class="historyState">No recent activity yet<div style="margin-top:4px">Your recent Download and Render jobs will appear here.</div></div>',
-      'No recent jobs'
-    );
-    return;
-  }
-  if (qs('history_status_text')) qs('history_status_text').textContent = `${historyItems.length} recent job${historyItems.length === 1 ? '' : 's'}`;
-  list.innerHTML = historyItems.map((item) => {
-    const kind = String(item.kind || 'render').toLowerCase();
+
+  const filtered = historyItems.filter((item) => {
+    const kind   = String(item.kind   || 'render').toLowerCase();
     const status = String(item.status || '').toLowerCase();
+    if (historyFilter === 'render')    return kind === 'render';
+    if (historyFilter === 'download')  return kind === 'download';
+    if (historyFilter === 'completed') return status === 'completed';
+    if (historyFilter === 'failed')    return status === 'failed' || status === 'interrupted';
+    return true;
+  });
+
+  if (!filtered.length) {
+    const emptyMsg = historyItems.length && historyFilter !== 'all'
+      ? 'No jobs match this filter.'
+      : 'No recent activity yet. Completed render, download, and upload jobs will appear here.';
+    list.innerHTML = `
+      <div class="hwEmpty">
+        <div class="hwEmptyIcon">&#128203;</div>
+        <div class="hwEmptyTitle">${historyItems.length ? 'No matches' : 'No history yet'}</div>
+        <div class="hwEmptySub">${emptyMsg}</div>
+      </div>`;
+    _historySetStatus(historyItems.length ? `${historyItems.length} jobs, none match filter` : 'No recent jobs');
+    return;
+  }
+
+  _historySetStatus(`${filtered.length} job${filtered.length === 1 ? '' : 's'}`);
+
+  list.innerHTML = filtered.map((item) => {
+    const kind   = String(item.kind   || 'render').toLowerCase();
+    const status = String(item.status || '').toLowerCase();
+
+    const kindIcon = kind === 'download' ? '&#11015;' : '&#127916;';
+
     const openBtn = item.can_open_folder
-      ? `<button class="ghostButton" type="button" onclick="openHistoryOutputFolder('${encodeURIComponent(item.job_id)}')">Open Output Folder</button>`
+      ? `<button class="hwActionBtn ghost" type="button" onclick="openHistoryOutputFolder('${encodeURIComponent(item.job_id)}')">Open Folder</button>`
       : '';
     const retryBtn = item.can_retry
-      ? `<button class="secondaryButton" type="button" onclick="retryHistoryDownload('${encodeURIComponent(item.job_id)}')">Retry Failed</button>`
+      ? `<button class="hwActionBtn" type="button" onclick="retryHistoryDownload('${encodeURIComponent(item.job_id)}')">Retry</button>`
       : '';
     const rerunBtn = item.can_rerun
-      ? `<button class="secondaryButton" type="button" onclick="rerunHistoryRender('${encodeURIComponent(item.job_id)}')">Rerun</button>`
+      ? `<button class="hwActionBtn" type="button" onclick="rerunHistoryRender('${encodeURIComponent(item.job_id)}')">Rerun</button>`
       : '';
-    const sourceHint = item.source_hint ? `<div class="historySourceHint">${esc(item.source_hint)}</div>` : '';
-    const outputHint = item.output_dir ? `<div class="historyOutputHint">Output: ${esc(item.output_dir)}</div>` : '';
+
+    const sourceHint = item.source_hint
+      ? `<div class="hwCardSource" title="${esc(item.source_hint)}">${esc(item.source_hint)}</div>`
+      : '';
+    const outputHint = item.output_dir
+      ? `<div class="hwCardOutput" title="${esc(item.output_dir)}">&#128193; ${esc(item.output_dir)}</div>`
+      : '';
+    const summary = item.summary_text
+      ? `<div class="hwCardSummary">${esc(item.summary_text)}</div>`
+      : '';
+
     return `
-      <div class="historyItem">
-        <div class="historyMain">
-          <div class="historyTop">
-            <span class="historyKindBadge ${esc(kind)}">${esc(historyKindLabel(kind))}</span>
-            <div class="historyTitle">${esc(item.title || 'Job')}</div>
-            <span class="historyStatusBadge ${esc(status)}">${esc(historyStatusLabel(status))}</span>
-            <span class="historyTime">${esc(historyRelativeTime(item.timestamp || item.updated_at || item.created_at))}</span>
+      <div class="hwCard ${esc(status)}">
+        <div class="hwCardLeft">
+          <span class="hwKindIcon" aria-hidden="true">${kindIcon}</span>
+          <span class="hwKindBadge ${esc(kind)}">${esc(historyKindLabel(kind))}</span>
+        </div>
+        <div class="hwCardMain">
+          <div class="hwCardTitle">${esc(item.title || 'Job')}</div>
+          <div class="hwCardMeta">
+            <span class="hwCardTime">${esc(historyRelativeTime(item.timestamp || item.updated_at || item.created_at))}</span>
+            ${summary}
           </div>
           ${sourceHint}
-          <div class="historySummary">${esc(item.summary_text || '')}</div>
           ${outputHint}
         </div>
-        <div class="historyActions">
-          ${openBtn}
-          ${retryBtn}
-          ${rerunBtn}
+        <div class="hwCardRight">
+          <span class="hwStatusBadge ${esc(status)}">${esc(historyStatusLabel(status))}</span>
+          <div class="hwCardActions">${openBtn}${retryBtn}${rerunBtn}</div>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 }
 

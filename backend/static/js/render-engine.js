@@ -1,4 +1,5 @@
 async function startRender(){
+  console.log('[EditorOpen] clicked');
   const outputMode = (qs('output_mode')?.value || 'channel').trim().toLowerCase();
   const channel = (qs('channel_code').value || '').trim();
   const sourceMode = (qs('source_mode').value || 'youtube').trim();

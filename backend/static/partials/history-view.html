@@ -1,17 +1,32 @@
-<section id="view_history" class="downloadWorkspace hiddenView" aria-live="polite">
-  <div class="downloadWorkspaceHeader">
-    <div>
-      <div class="downloadWorkspaceTitle">History</div>
-      <div class="downloadWorkspaceSub">Recent Download and Render activity</div>
+<section id="view_history" class="historyWorkspace hiddenView" aria-live="polite">
+
+  <div class="hwHeader">
+    <div class="hwHeaderLeft">
+      <div class="hwTitle">History</div>
+      <div class="hwSub">Review previous jobs and reopen outputs</div>
+    </div>
+    <div class="hwHeaderRight">
+      <span class="hwMeta" id="history_status_text"></span>
+      <button class="hwRefreshBtn" type="button" onclick="loadHistoryView()" title="Refresh">&#8635; Refresh</button>
     </div>
   </div>
-  <div class="downloadQueuePanel historyPanel">
-    <div class="downloadQueueHeader">
-      <div class="downloadQueueTitle">Recent activity</div>
-      <div class="downloadQueueMeta" id="history_status_text">Loading recent activity...</div>
-    </div>
+
+  <div class="hwFilterBar" id="history_filter_bar">
+    <button class="hwFilterBtn active" data-filter="all"       onclick="setHistoryFilter('all')">All</button>
+    <button class="hwFilterBtn"        data-filter="render"    onclick="setHistoryFilter('render')">Render</button>
+    <button class="hwFilterBtn"        data-filter="download"  onclick="setHistoryFilter('download')">Download</button>
+    <button class="hwFilterBtn"        data-filter="completed" onclick="setHistoryFilter('completed')">Completed</button>
+    <button class="hwFilterBtn"        data-filter="failed"    onclick="setHistoryFilter('failed')">Failed</button>
+  </div>
+
+  <div class="hwBody">
     <div class="historyList" id="history_list">
-      <div class="emptyState">Your recent Download and Render jobs will appear here.</div>
+      <div class="hwEmpty">
+        <div class="hwEmptyIcon">&#128203;</div>
+        <div class="hwEmptyTitle">No history yet</div>
+        <div class="hwEmptySub">Completed render, download, and upload jobs will appear here.</div>
+      </div>
     </div>
   </div>
+
 </section>
