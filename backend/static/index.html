@@ -721,6 +721,7 @@
       <button class="insp-tab"        data-insp-tab="audio"     onclick="setInspectorTab('audio')">Audio</button>
       <button class="insp-tab"        data-insp-tab="performance" onclick="setInspectorTab('performance')">Perf</button>
       <button class="insp-tab"        data-insp-tab="advanced"  onclick="setInspectorTab('advanced')">Advanced</button>
+      <button class="insp-tab"        data-insp-tab="market" data-ev-mode="market" onclick="setInspectorTab('market')">&#127758; Market</button>
     </div>
 
     <!-- Scrollable body: 4-group inspector -->
@@ -1230,6 +1231,65 @@
               </label>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- ══ MARKET VIRAL ════════════════════════════════════ -->
+      <div class="evSection mvPanel" id="evSectionMarket" data-insp-panel="market">
+        <div class="evSectionTitle">&#127758; Market Viral</div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <label class="field">
+            <span class="fieldLabel">Target Market</span>
+            <select class="fieldInput" id="mvMarket" onchange="mvHandleChange()">
+              <option value="US" selected>&#127482;&#127480; US</option>
+              <option value="EU">&#127466;&#127482; EU</option>
+              <option value="JP">&#127471;&#127477; JP</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="fieldLabel">Viral Style</span>
+            <select class="fieldInput" id="mvStyle" onchange="mvHandleChange()">
+              <option value="educational" selected>Educational</option>
+              <option value="drama">Drama</option>
+              <option value="product">Product</option>
+              <option value="trend">Trend</option>
+            </select>
+          </label>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <label class="field">
+            <span class="fieldLabel">Hook Strength</span>
+            <select class="fieldInput" id="mvHookStrength" onchange="mvHandleChange()">
+              <option value="soft">Soft</option>
+              <option value="medium" selected>Medium</option>
+              <option value="aggressive">Aggressive</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="fieldLabel">Subtitle Tone</span>
+            <select class="fieldInput" id="mvSubtitleTone" onchange="mvHandleChange()">
+              <option value="clean" selected>Clean</option>
+              <option value="bold">Bold</option>
+              <option value="karaoke">Karaoke</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="mvToggleGroup">
+          <label class="mvToggleRow">
+            <input type="checkbox" id="mvKeywordHighlight" onchange="mvHandleChange()">
+            <span class="mvToggleLabel">&#128273; Keyword Highlight</span>
+          </label>
+          <label class="mvToggleRow">
+            <input type="checkbox" id="mvHookBoost" onchange="mvHandleChange()">
+            <span class="mvToggleLabel">&#128640; Hook Boost</span>
+          </label>
+          <label class="mvToggleRow">
+            <input type="checkbox" id="mvBestClipScoring" checked onchange="mvHandleChange()">
+            <span class="mvToggleLabel">&#11088; Best Clip Scoring</span>
+          </label>
         </div>
       </div>
 

@@ -1704,6 +1704,20 @@ async function startRenderFromEditor() {
   payload.subtitle_translate_enabled = !!qs('evSubTranslate')?.checked;
   payload.subtitle_target_language = qs('evSubTranslateTarget')?.value || 'en';
 
+  // ── Market Viral ─────────────────────────────────────────────────────────
+  {
+    const mv = (typeof mvGetState === 'function') ? mvGetState() : {};
+    payload.market_viral = {
+      target_market:    mv.market          || 'US',
+      viral_style:      mv.style           || 'educational',
+      hook_strength:    mv.hookStrength    || 'medium',
+      subtitle_tone:    mv.subtitleTone    || 'clean',
+      keyword_highlight: !!mv.keywordHighlight,
+      hook_boost:        !!mv.hookBoost,
+      best_clip_scoring: mv.bestClipScoring !== false,
+    };
+  }
+
   // ── Output dir override (editor→render: bypass channel selection) ────────────
   {
     let raw = (payload.output_dir || '').replace(/\\/g, '/').trim();
@@ -1836,7 +1850,7 @@ async function startRenderFromEditor() {
 
 // ── Inspector tab system ─────────────────────────────────────────────────────
 function setInspectorTab(tab) {
-  const validTabs = ['mode', 'subtitle', 'voice', 'text', 'audio', 'performance', 'advanced'];
+  const validTabs = ['mode', 'subtitle', 'voice', 'text', 'audio', 'performance', 'advanced', 'market'];
   const tabTitles = {
     mode: 'Mode',
     subtitle: 'Subtitle',
@@ -1845,6 +1859,7 @@ function setInspectorTab(tab) {
     audio: 'Audio',
     performance: 'Performance',
     advanced: 'Advanced',
+    market: 'Market Viral',
   };
   const activeTab = validTabs.includes(tab) ? tab : 'mode';
   const insp = document.getElementById('appInspector');
@@ -1866,6 +1881,41 @@ function setInspectorTab(tab) {
   if (['audio', 'performance', 'advanced'].includes(activeTab)) {
     evSetInspGroupOpen(activeTab, true);
   }
+}
+
+// ── Market Viral — frontend state (no API calls) ─────────────────────────────
+const _mvState = {
+  market: 'US',
+  style: 'educational',
+  hookStrength: 'medium',
+  subtitleTone: 'clean',
+  keywordHighlight: false,
+  hookBoost: false,
+  bestClipScoring: true,
+};
+
+function mvHandleChange() {
+  const g = (id) => document.getElementById(id);
+  const el = {
+    market:           g('mvMarket'),
+    style:            g('mvStyle'),
+    hookStrength:     g('mvHookStrength'),
+    subtitleTone:     g('mvSubtitleTone'),
+    keywordHighlight: g('mvKeywordHighlight'),
+    hookBoost:        g('mvHookBoost'),
+    bestClipScoring:  g('mvBestClipScoring'),
+  };
+  if (el.market)           _mvState.market           = el.market.value;
+  if (el.style)            _mvState.style            = el.style.value;
+  if (el.hookStrength)     _mvState.hookStrength     = el.hookStrength.value;
+  if (el.subtitleTone)     _mvState.subtitleTone     = el.subtitleTone.value;
+  if (el.keywordHighlight) _mvState.keywordHighlight = el.keywordHighlight.checked;
+  if (el.hookBoost)        _mvState.hookBoost        = el.hookBoost.checked;
+  if (el.bestClipScoring)  _mvState.bestClipScoring  = el.bestClipScoring.checked;
+}
+
+function mvGetState() {
+  return { ..._mvState };
 }
 
 // ── Video Editor (old modal — kept for reference/batch) ─────────────────────

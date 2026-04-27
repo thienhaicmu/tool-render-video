@@ -16,6 +16,7 @@ from app.routes.upload import router as upload_router
 from app.routes.jobs import router as jobs_router
 from app.routes.devtools import router as devtools_router
 from app.routes.voice import router as voice_router
+from app.routes.viral import router as viral_router
 from app.services.job_manager import recover_pending_render_jobs, shutdown as shutdown_job_manager
 from app.services.warmup import start_warmup, get_status as warmup_status
 
@@ -96,6 +97,7 @@ app.include_router(upload_router)
 app.include_router(jobs_router)
 app.include_router(devtools_router)
 app.include_router(voice_router)
+app.include_router(viral_router)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 

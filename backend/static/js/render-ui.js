@@ -8,6 +8,7 @@ let _renderMonitorLastSummary = null;
 let _renderMonitorLastParts = [];
 let _renderMonitorHeartbeatTimer = null;
 let _renderLogsUserToggled = false;
+let _selectedClipPaths = new Set();
 let _logAutoScroll = true;
 let _rcLastActivePartNo = -1;
 let _rcScrollDebounceId = null;
@@ -748,6 +749,51 @@ function _rcAutoScrollActive(container, activePartNo) {
   }, 120);
 }
 
+// ── Market Viral score helpers ────────────────────────────────────────────────
+function _mvSegmentMap(job) {
+  const map = new Map();
+  try {
+    const raw = job?.result_json;
+    const result = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+    const segs = result?.segments;
+    if (!Array.isArray(segs)) return map;
+    segs.forEach((seg, i) => {
+      const score = seg?.mv_viral_score;
+      if (score == null) return;
+      map.set(i + 1, {
+        score:   Number(score),
+        tier:    String(seg.mv_viral_tier   || 'weak'),
+        market:  String(seg.mv_viral_market || 'US'),
+        reasons: Array.isArray(seg.mv_viral_reasons) ? seg.mv_viral_reasons : [],
+      });
+    });
+  } catch (_) {}
+  return map;
+}
+
+function _mvTop3Set(mvMap) {
+  if (!mvMap.size) return new Set();
+  const sorted = [...mvMap.entries()].sort((a, b) => b[1].score - a[1].score);
+  return new Set(sorted.slice(0, 3).map(([k]) => k));
+}
+
+function rcToggleClip(el) {
+  const path = el.dataset.path;
+  if (!path) return;
+  if (el.checked) _selectedClipPaths.add(path);
+  else _selectedClipPaths.delete(path);
+  el.closest('.renderClipItem, .rcQueueRow')?.classList.toggle('isSelected', el.checked);
+}
+
+function useTopClips() {
+  const paths = [..._selectedClipPaths];
+  window.topClipPaths = paths;
+  console.log('[Market Viral] Selected clip paths:', paths);
+  if (typeof showToast === 'function') {
+    showToast(`${paths.length} clip${paths.length === 1 ? '' : 's'} selected`, 'info');
+  }
+}
+
 function renderBottomActiveQueue(job, summary, parts = []) {
   const items = Array.isArray(parts) ? parts : [];
   const s = summary || computeProgressSummary(items || []);
@@ -900,6 +946,9 @@ function renderBottomActiveQueue(job, summary, parts = []) {
 
   const ordered = [...items].sort((a, b) => Number(a?.part_no || 0) - Number(b?.part_no || 0));
 
+  const _mvMap = _mvSegmentMap(job);
+  const _mvTop3 = terminal ? _mvTop3Set(_mvMap) : new Set();
+
   const _maxScore = items.reduce((max, p) => {
     const s = p?.viral_score ?? p?.score ?? p?.viralScore;
     if (s == null || s === '' || isNaN(Number(s))) return max;
@@ -928,10 +977,11 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     const msgLow = msgText.toLowerCase();
     const isWarn = state === 'completed' && (msgLow.includes('warn') || msgLow.includes('narration'));
     const isBest = idx === _bestIdx;
+    const isMvTop = _mvTop3.has(partNo);
     const visualClass = isWarn ? 'isWarning' : `is${rcCap(state)}`;
 
     const row = document.createElement('article');
-    row.className = `rcQueueRow ${visualClass}${isBest ? ' rcBestPart' : ''}`;
+    row.className = `rcQueueRow ${visualClass}${isBest ? ' rcBestPart' : ''}${isMvTop ? ' rcMvTop3' : ''}`;
     if (state === 'rendering') { row.dataset.active = '1'; _newActivePartNo = partNo; }
 
     const top = document.createElement('div');
@@ -968,15 +1018,25 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     message.className = 'rcQueueMessage';
     message.textContent = msgText;
 
-    const rawScore = part?.viral_score ?? part?.score ?? part?.viralScore;
+    const mvData = _mvMap.get(partNo);
     const badge = document.createElement('div');
     badge.className = 'rcScoreBadge';
-    if (rawScore != null && rawScore !== '' && !isNaN(Number(rawScore))) {
-      const val = parseFloat(rawScore);
-      badge.textContent = `🔥 ${val.toFixed(1)}`;
-      badge.dataset.tier = val >= 8 ? 'hot' : val >= 6 ? 'warm' : 'low';
+    if (mvData) {
+      const tierIcon = mvData.tier === 'hot' ? '🔥' : mvData.tier === 'warm' ? '🌡' : '🌍';
+      badge.textContent = `${tierIcon} ${mvData.score} ${mvData.market}`;
+      badge.dataset.tier = mvData.tier;
+      if (mvData.reasons.length) {
+        badge.title = mvData.reasons.slice(0, 2).join('\n');
+      }
     } else {
-      badge.dataset.tier = 'pending';
+      const rawScore = part?.viral_score ?? part?.score ?? part?.viralScore;
+      if (rawScore != null && rawScore !== '' && !isNaN(Number(rawScore))) {
+        const val = parseFloat(rawScore);
+        badge.textContent = `🔥 ${val.toFixed(1)}`;
+        badge.dataset.tier = val >= 8 ? 'hot' : val >= 6 ? 'warm' : 'low';
+      } else {
+        badge.dataset.tier = 'pending';
+      }
     }
 
     row.appendChild(top);
@@ -984,6 +1044,18 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     row.appendChild(meta);
     row.appendChild(message);
     row.appendChild(badge);
+
+    if (terminal && state === 'completed' && part.output_file) {
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'rcClipCheck';
+      chk.dataset.path = part.output_file;
+      chk.checked = _selectedClipPaths.has(part.output_file);
+      chk.addEventListener('change', () => rcToggleClip(chk));
+      row.classList.toggle('isSelected', chk.checked);
+      row.appendChild(chk);
+    }
+
     cardWrap.appendChild(row);
   });
   _rcAutoScrollActive(cardWrap, _newActivePartNo);
@@ -1817,6 +1889,10 @@ function renderParts(items, summary){
   });
   const stuckMap = _stuckPartsMap(summary, items);
   syncPartProgressTargets(ordered);
+  const _ptMvMap  = _mvSegmentMap(_renderMonitorLastJob);
+  const _ptStatus = String(_renderMonitorLastJob?.status || '').toLowerCase();
+  const _ptTerm   = isTerminalRenderStatus(_ptStatus);
+  const _ptTop3   = _ptTerm ? _mvTop3Set(_ptMvMap) : new Set();
   const total = Number(s.total_parts || items.length || 0);
   const done = Number(s.completed_parts || 0);
   const rendering = Number(s.processing_parts || 0);
@@ -1856,12 +1932,17 @@ function renderParts(items, summary){
     const errMsg  = st === 'failed' ? esc(p.message || '') : '';
     const errHtml = errMsg ? `<div class="partError">${errMsg}</div>` : '';
     const stuckHtml = isStuck ? `<div class="partStuckNote">${_stuckLabel(stuckMap.get(key))}</div>` : '';
-    const rowClass  = `${st || 'queued'}${isRun ? ' running isActive' : ''}${st === 'done' ? ' isDone' : ''}${st === 'failed' ? ' isFailed' : ''}${isStuck ? ' stuck' : ''}`.trim();
     const partNo = Number(p.part_no || idx + 1);
+    const isMvTop = _ptTop3.has(partNo);
+    const rowClass  = `${st || 'queued'}${isRun ? ' running isActive' : ''}${st === 'done' ? ' isDone' : ''}${st === 'failed' ? ' isFailed' : ''}${isStuck ? ' stuck' : ''}${isMvTop ? ' mvTop3' : ''}`.trim();
     const partName = p.part_name ? esc(p.part_name) : `Clip ${partNo}`;
     const startSec = Number(p.start_sec || 0);
     const endSec = Number(p.end_sec || 0);
     const duration = Math.max(0, endSec - startSec);
+    const mvRow = _ptMvMap.get(partNo);
+    const mvPillHtml = mvRow
+      ? `<span class="mvScorePill" data-mv-tier="${esc(mvRow.tier)}"${mvRow.reasons.length ? ` title="${esc(mvRow.reasons.slice(0,2).join(' | '))}"` : ''}>&#127758; ${mvRow.score} ${esc(mvRow.market)}</span>`
+      : '';
     return `
     <div class="partRow ${rowClass}" data-part-status="${esc(st || 'queued')}">
       <div class="partLeft">
@@ -1881,6 +1962,7 @@ function renderParts(items, summary){
       </div>
       <div class="partRight">
         <div class="statusBadge ${esc((p.status || '').toLowerCase())}">${partStatusLabel(p.status)}</div>
+        ${mvPillHtml}
       </div>
     </div>
   `}).join('');
@@ -2108,6 +2190,7 @@ function hideRenderOutputPanel() {
 }
 
 function clearRenderOutputPanel() {
+  _selectedClipPaths = new Set();
   const list = qs('render_output_list');
   if (list) list.innerHTML = '<div class="renderOutputEmpty">Clips will appear here when render completes.</div>';
   const badge = qs('render_output_badge');
@@ -2130,6 +2213,16 @@ function populateRenderOutputPanel(job, parts) {
     ...done.sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0)),
     ...failed.sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0)),
   ];
+
+  // Seed selection with top-3 market viral clips
+  _selectedClipPaths = new Set();
+  const _opMvMap = _mvSegmentMap(job);
+  const _opTop3  = _mvTop3Set(_opMvMap);
+  done.forEach((p) => {
+    if (_opTop3.has(Number(p.part_no)) && p.output_file) {
+      _selectedClipPaths.add(p.output_file);
+    }
+  });
 
   if (badge) badge.textContent = String(done.length);
 
@@ -2170,8 +2263,13 @@ function populateRenderOutputPanel(job, parts) {
       ? `<button type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Open</button>`
       : '';
     if (qs('abp_output_meta') && hasFile) qs('abp_output_meta').textContent = `Latest file: ${String(p.output_file || '').split(/[\\\\/]/).pop()}`;
-    const itemClass = `renderClipItem${isFailed ? ' failed isFailed' : ''}${isDone ? ' isDone' : ''}${isActive ? ' isActive' : ''}`;
+    const isSelected = isDone && hasFile && _selectedClipPaths.has(p.output_file);
+    const itemClass = `renderClipItem${isFailed ? ' failed isFailed' : ''}${isDone ? ' isDone' : ''}${isActive ? ' isActive' : ''}${isSelected ? ' isSelected' : ''}`;
+    const chkHtml = (isDone && hasFile)
+      ? `<input type="checkbox" class="renderClipCheck" data-path="${esc(p.output_file)}"${isSelected ? ' checked' : ''} onchange="rcToggleClip(this)">`
+      : '';
     return `<div class="${itemClass}" data-clip-status="${esc(st || 'queued')}">
+      ${chkHtml}
       <div class="renderClipNum">${partNo}</div>
       <div class="renderClipInfo">
         <div class="renderClipName" title="${esc(p.output_file || '')}">${name}</div>
@@ -2180,6 +2278,21 @@ function populateRenderOutputPanel(job, parts) {
       <div class="renderClipActions">${previewBtn}${openBtn}</div>
     </div>`;
   }).join('');
+
+  // Inject "Use Top Clips" button into panel header actions
+  const _opActionsEl = qs('render_output_panel')?.querySelector('.renderOutputActions');
+  if (_opActionsEl) {
+    const _existing = _opActionsEl.querySelector('.rcUseTopBtn');
+    if (_existing) _existing.remove();
+    if (done.length) {
+      const _useBtn = document.createElement('button');
+      _useBtn.type = 'button';
+      _useBtn.className = 'ghostButton renderOutputBtn rcUseTopBtn';
+      _useBtn.textContent = 'Use Top Clips';
+      _useBtn.onclick = useTopClips;
+      _opActionsEl.insertBefore(_useBtn, _opActionsEl.firstChild);
+    }
+  }
 
   showRenderOutputPanel();
   renderBottomActiveQueue(job, computeProgressSummary(items), items);

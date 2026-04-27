@@ -3687,6 +3687,27 @@
     .insp-tab:hover  { color: #94a3b8; }
     .insp-tab.active { color: #c7d2fe; border-bottom-color: #6366f1; }
 
+    /* J2b — Market Viral panel */
+    .mvPanel { display: none; }
+    .mvPanel.insp-panel-active { display: block; }
+    .mvToggleGroup { display: flex; flex-direction: column; gap: 6px; }
+    .mvToggleRow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 10px;
+      background: var(--input-bg);
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .mvToggleRow input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      accent-color: #6366f1;
+      flex-shrink: 0;
+    }
+    .mvToggleLabel { font-size: 12px; color: var(--text); user-select: none; }
+
     /* J3 — Separator always hidden; footer always visible; section flash */
     [data-insp-panel="_sep"] { display: none !important; }
     .evFooter { display: flex !important; }
@@ -5907,6 +5928,71 @@
       line-height: 1;
       padding: 0 6px;
     }
+    /* Market Viral tier aliases on rcScoreBadge */
+    .rcScoreBadge[data-tier="warm"]   { background: rgba(34,197,94,.14);   color: #86efac; }
+    .rcScoreBadge[data-tier="normal"] { background: rgba(96,165,250,.13);  color: #93c5fd; }
+    .rcScoreBadge[data-tier="weak"]   { background: rgba(148,163,184,.09); color: rgba(148,163,184,.6); }
+    /* Top-3 ring on rcQueueRow */
+    .rcQueueRow.rcMvTop3 { outline: 1px solid rgba(99,102,241,.45); outline-offset: -1px; }
+
+    /* Market Viral pill in partRow .partRight */
+    .mvScorePill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+      background: rgba(255,255,255,.06);
+      color: rgba(148,163,184,.55);
+      cursor: default;
+    }
+    .mvScorePill[data-mv-tier="hot"]    { background: rgba(245,158,11,.16); color: #fbbf24; }
+    .mvScorePill[data-mv-tier="warm"]   { background: rgba(34,197,94,.13);  color: #86efac; }
+    .mvScorePill[data-mv-tier="normal"] { background: rgba(96,165,250,.12); color: #93c5fd; }
+    .mvScorePill[data-mv-tier="weak"]   { background: rgba(148,163,184,.08); color: rgba(148,163,184,.5); }
+    /* Top-3 left accent on partRow */
+    .partRow.mvTop3 { border-left: 2px solid rgba(99,102,241,.55); }
+
+    /* Clip selection — queue cards */
+    .rcQueueRow { position: relative; }
+    .rcClipCheck {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 15px;
+      height: 15px;
+      accent-color: #6366f1;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .rcQueueRow.isSelected {
+      border-color: rgba(99,102,241,.55);
+      background: rgba(99,102,241,.06);
+    }
+
+    /* Clip selection — output list */
+    .renderClipItem { position: relative; }
+    .renderClipCheck {
+      position: absolute;
+      top: 50%;
+      left: 8px;
+      transform: translateY(-50%);
+      width: 15px;
+      height: 15px;
+      accent-color: #6366f1;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .renderClipItem .renderClipNum { margin-left: 24px; }
+    .renderClipItem.isSelected {
+      border-color: rgba(99,102,241,.5);
+      background: rgba(99,102,241,.07);
+    }
+
+    /* Use Top Clips button */
+    .rcUseTopBtn { font-weight: 600; }
 
     /* ══════════════════════════════════════════════════════════════════
        Phase I — Render Screen 60/40 Height Split

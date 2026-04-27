@@ -200,6 +200,7 @@ class RenderRequest(BaseModel):
     voice_id: Optional[str] = None
     subtitle_translate_enabled: bool = False
     subtitle_target_language: str = "en"
+    market_viral: Optional[dict] = None
 
     @model_validator(mode="after")
     def validate_voice_settings(self):

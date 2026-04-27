@@ -21,6 +21,7 @@ from app.services.segment_builder import build_segments_from_scenes
 from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream
 from app.services.render_engine import cut_video, render_part_smart, nvenc_available
 from app.services.viral_scorer import score_segments
+from app.services.viral_scoring import score_part_for_market as _mv_score_part
 from app.services.report_service import append_rows
 from app.core.config import TEMP_DIR, CHANNELS_DIR, LOGS_DIR
 from app.core.stage import JobStage, JobPartStage, STAGE_TO_EVENT
@@ -362,6 +363,12 @@ def run_render_pipeline(
     output_mode = (payload.output_mode or "channel").strip().lower()
     effective_channel = (payload.channel_code or "").strip() or "manual"
     started_at = datetime.utcnow()
+
+    # Market Viral — resolve target market once; used by all part workers via closure
+    _mv_cfg = getattr(payload, "market_viral", None) or {}
+    _mv_market = str((_mv_cfg.get("target_market") or "US") if isinstance(_mv_cfg, dict) else "US").upper()
+    if _mv_market not in {"US", "EU", "JP"}:
+        _mv_market = "US"
     if output_mode == "channel":
         ensure_channel(effective_channel)
         if not (payload.render_output_subdir or "").strip():
@@ -1305,6 +1312,20 @@ def run_render_pipeline(
                 f"(>1 = faster than realtime)",
                 kind="info",
             )
+
+            # ── Market Viral scoring — safe, never breaks render ──────────
+            try:
+                _mv_text = ""
+                if srt_part.exists() and srt_part.stat().st_size > 0:
+                    _mv_text = extract_text_from_srt(str(srt_part))
+                _mv_dur = float(seg.get("duration") or 0) or None
+                _mv_result = _mv_score_part(_mv_text, _mv_dur, _mv_market)
+                seg["mv_viral_score"]   = _mv_result.get("viral_score",  0)
+                seg["mv_viral_tier"]    = _mv_result.get("viral_tier",   "weak")
+                seg["mv_viral_market"]  = _mv_result.get("viral_market", _mv_market)
+                seg["mv_viral_reasons"] = _mv_result.get("reasons",      [])
+            except Exception:
+                pass
 
             upsert_job_part(job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Completed")
             row = [job_id, effective_channel, source["title"], idx, seg["start"], seg["end"], seg["duration"], seg["viral_score"], seg["priority_rank"], str(final_part)]
