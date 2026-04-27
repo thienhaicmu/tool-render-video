@@ -101,6 +101,12 @@ function setView(view){
     void mainArea.offsetWidth; // force reflow so browser registers the removal
     mainArea.classList.add('viewEntering');
   }
+
+  syncRenderBottomPanelVisibility(view);
+}
+
+function syncRenderBottomPanelVisibility(activeView) {
+  document.body.classList.toggle('is-render-studio-active', activeView === 'render' || activeView === 'editor');
 }
 
 // ── Bottom panel collapse helpers ──────────────────────────────────────────
