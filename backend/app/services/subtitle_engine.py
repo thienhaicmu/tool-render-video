@@ -577,21 +577,26 @@ def apply_market_line_break_to_srt(srt_path: str, market_payload: dict) -> str:
         from app.services.market_subtitle_policy import (
             get_market_subtitle_policy,
             break_text_by_words,
+            highlight_keywords_in_text,
         )
-        market = str(market_payload.get("target_market") or "US").upper()
-        tone   = str(market_payload.get("subtitle_tone")  or "clean").lower()
-        policy = get_market_subtitle_policy(market, tone)
-        max_w  = int(policy["max_words_per_line"])
+        market       = str(market_payload.get("target_market") or "US").upper()
+        tone         = str(market_payload.get("subtitle_tone")  or "clean").lower()
+        do_highlight = bool(market_payload.get("keyword_highlight", False))
+        policy   = get_market_subtitle_policy(market, tone)
+        max_w    = int(policy["max_words_per_line"])
+        keywords = policy["highlight_keywords"] if do_highlight else []
         blocks = _parse_srt_blocks(srt_path)
         if not blocks:
             return srt_path
         with Path(srt_path).open("w", encoding="utf-8") as f:
             for idx, b in enumerate(blocks, start=1):
-                broken = break_text_by_words(b["text"], max_w)
+                text = break_text_by_words(b["text"], max_w)
+                if do_highlight:
+                    text = highlight_keywords_in_text(text, keywords, market)
                 f.write(
                     f"{idx}\n"
                     f"{format_srt_timestamp(b['start'])} --> {format_srt_timestamp(b['end'])}\n"
-                    f"{broken}\n\n"
+                    f"{text}\n\n"
                 )
     except Exception:
         pass

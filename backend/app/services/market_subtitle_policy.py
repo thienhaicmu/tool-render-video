@@ -19,6 +19,7 @@ Usage:
 """
 from __future__ import annotations
 
+import re
 from typing import Dict, List
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -106,6 +107,26 @@ def break_text_by_words(text: str, max_words: int) -> str:
         for i in range(0, len(words), max_words):
             lines.append(" ".join(words[i:i + max_words]))
         return "\n".join(lines)
+    except Exception:
+        return text
+
+
+def highlight_keywords_in_text(text: str, keywords: list, market: str = "US") -> str:
+    """Uppercase whole-word keyword matches in subtitle text.
+
+    JP is skipped — UPPERCASE is not meaningful for CJK characters.
+    Multi-word keywords work as long as no line-break falls inside the phrase.
+    """
+    try:
+        if not text or not keywords:
+            return text
+        if str(market or "").upper() == "JP":
+            return text
+        result = text
+        for kw in keywords:
+            pattern = r'\b' + re.escape(kw) + r'\b'
+            result = re.sub(pattern, lambda m: m.group(0).upper(), result, flags=re.IGNORECASE)
+        return result
     except Exception:
         return text
 
