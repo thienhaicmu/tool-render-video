@@ -6592,7 +6592,7 @@
       font-size: 10.5px;
     }
 
-    /* Q9 — Active card idle state: soft, no chrome */
+    /* Q9a — Active card: base idle style (both no-job and analyzing) */
     .rcActiveCard.isIdle {
       background: rgba(255,255,255,.015);
       border-color: rgba(148,163,184,.08);
@@ -6608,16 +6608,54 @@
       font-size: 11px;
       line-height: 1.55;
     }
-    .rcActiveCard.isIdle .rcActivePercent,
-    .rcActiveCard.isIdle .rcActiveProgress,
-    .rcActiveCard.isIdle .rcActiveStage,
-    .rcActiveCard.isIdle .rcActiveMessage {
+
+    /* Q9b — No-job (isNoJob): pure empty state — hide all chrome */
+    .rcActiveCard.isIdle.isNoJob .rcActivePercent,
+    .rcActiveCard.isIdle.isNoJob .rcActiveProgress,
+    .rcActiveCard.isIdle.isNoJob .rcActiveStage,
+    .rcActiveCard.isIdle.isNoJob .rcActiveMessage {
       display: none;
     }
 
-    /* Q10 — Status strip: hide noise when no active job (data-state="ready") */
-    .rcStatusStrip:has(#rc_status[data-state="ready"]) .rcStatusText,
-    .rcStatusStrip:has(#rc_status[data-state="ready"]) .rcProgressText,
+    /* Q9c — Analyzing (job running, no active clip): show percent + message, hide stage */
+    .rcActiveCard.isIdle:not(.isNoJob) .rcActiveTitle {
+      color: rgba(226,232,240,.75);
+    }
+    .rcActiveCard.isIdle:not(.isNoJob) .rcActivePercent {
+      display: block;
+      color: rgba(148,163,184,.6);
+      font-size: 13px;
+    }
+    .rcActiveCard.isIdle:not(.isNoJob) .rcActiveProgress {
+      display: block;
+    }
+    .rcActiveCard.isIdle:not(.isNoJob) .rcActiveStage {
+      display: none;
+    }
+    .rcActiveCard.isIdle:not(.isNoJob) .rcActiveMessage {
+      display: block;
+      color: rgba(100,116,139,.52);
+      font-size: 10.5px;
+    }
+
+    /* Q10 — Status strip hierarchy: primary pill + secondary stage */
+    /* Hide the now-empty progress/parts/active elements */
+    #rc_progress, #rc_parts, #rc_active { display: none !important; }
+    /* Primary: "Ready" / "Rendering · 15%" */
+    .rcStatusPill {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .02em;
+    }
+    /* Secondary: stage or clip summary — muted */
+    #rc_stage {
+      font-size: 11px;
+      font-weight: 400;
+      color: rgba(148,163,184,.58);
+      letter-spacing: 0;
+    }
+    /* Hide secondary when idle (rc_status has data-state="ready") */
+    .rcStatusStrip:has(#rc_status[data-state="ready"]) #rc_stage,
     .rcStatusStrip:has(#rc_status[data-state="ready"]) .rcLatest {
       display: none;
     }
@@ -6651,4 +6689,86 @@
     .fieldRow input[type="text"],
     .fieldRow input[type="number"] {
       min-width: 0;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Phase R — Layout Hardening · Viral Calm · Output Folder Fix
+       Three targeted CSS fixes. No JS changes. No data-binding changes.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* R1 — Lock 40 % bottom panel on render screen regardless of
+       abpCollapsed. nav.js fires _collapseBottomPanel(true) on any
+       view-switch with no active job, which Phase I I2 would shrink to
+       96px. On the render screen the full 60/40 split must always hold. */
+    .appShell.abpCollapsed:has(#render_flow_bar:not(.hiddenView)):not(:has(.mainArea.editorMode)) {
+      grid-template-rows: 42px 3fr 2fr 28px;
+    }
+
+    /* R2 — Belt-and-suspenders: ensure appBottomPanel fills its grid row */
+    .appShell:has(#render_flow_bar:not(.hiddenView)):not(:has(.mainArea.editorMode)) > .appBottomPanel {
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* R3 — rcBestPart: kill ALL animations, static accent only.
+       rcCardIn (Phase L1) fires on every queue DOM re-render causing
+       per-poll jitter. rcActivePulse (Phase L2) causes the rendering
+       card to breathe. The shimmer ::after also moves on best cards. */
+    .rcQueueRow.rcBestPart,
+    .rcQueueRow.rcBestPart.isRendering {
+      animation: none !important;
+    }
+    .rcQueueRow.rcBestPart .rcQueueMiniBar > span::after {
+      animation: none !important;
+    }
+    .rcQueueRow.rcBestPart .rcScoreBadge {
+      animation: none !important;
+      box-shadow: none;
+    }
+
+    /* R4 — Manual output folder: allow the text input to flex-shrink.
+       .fieldInput has width:100% which fights flex:1 on the same element.
+       min-width:0 lets the browser shrink it below intrinsic content width.
+       width:auto hands sizing fully to the flex algorithm. */
+    #manual_output_dir {
+      min-width: 0;
+      width: auto;
+    }
+
+    /* R5 — prefers-reduced-motion catch-all for rcBestPart */
+    @media (prefers-reduced-motion: reduce) {
+      .rcQueueRow.rcBestPart,
+      .rcQueueRow.rcBestPart.isRendering {
+        animation: none !important;
+        transition: none !important;
+      }
+      .rcQueueRow.rcBestPart .rcQueueMiniBar > span::after,
+      .rcQueueRow.rcBestPart .rcScoreBadge {
+        animation: none !important;
+      }
+    }
+
+    /* ── Manual Output Folder: flex row fix ──────────────────────────────────
+       Root cause: .sidebar button { width:100%; max-width:100% } (line 4316)
+       forces every sidebar button full-width. The scoped ID+class selector
+       below overrides that for the output-folder row only.
+    ─────────────────────────────────────────────────────────────────────── */
+    #manual_output_folder.manualOutputRow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #manual_output_folder.manualOutputRow input {
+      flex: 1;
+      min-width: 0;
+      width: auto;
+    }
+
+    #manual_output_folder.manualOutputRow button {
+      flex: 0 0 auto;
+      width: auto !important;
+      max-width: none !important;
+      white-space: nowrap;
     }

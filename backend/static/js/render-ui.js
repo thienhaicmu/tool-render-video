@@ -29,7 +29,7 @@ function resetRenderSessionUi(){
   lastProgressBucket = -1;
   _stopJobWs();
   if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
-  if(qs('event_log_render')) qs('event_log_render').innerHTML = '<div class="rcLogEmpty">No activity yet — logs will appear here during render.</div>';
+  if(qs('event_log_render')) qs('event_log_render').innerHTML = '<div class="rcLogEmpty">Logs will appear here during render.</div>';
   _logAutoScroll = true;
   const _asbtn = qs('rc_log_autoscroll_btn');
   if (_asbtn) { _asbtn.classList.add('isActive'); _asbtn.title = 'Auto-scroll: On'; }
@@ -58,9 +58,9 @@ function resetRenderSessionUi(){
   if (qs('abp_summary_latest')) qs('abp_summary_latest').textContent = 'Waiting for a render job.';
   if (qs('rc_status')) qs('rc_status').textContent = 'Ready';
   if (qs('rc_status')) qs('rc_status').dataset.state = 'ready';
-  if (qs('rc_progress')) qs('rc_progress').textContent = '0%';
+  if (qs('rc_progress')) qs('rc_progress').textContent = '';
   if (qs('rc_stage')) qs('rc_stage').textContent = '';
-  if (qs('rc_parts')) qs('rc_parts').textContent = '0 / 0 clips';
+  if (qs('rc_parts')) qs('rc_parts').textContent = '';
   if (qs('rc_active')) qs('rc_active').textContent = '';
   if (qs('rc_latest')) qs('rc_latest').textContent = '';
   if (qs('abp_output_text')) qs('abp_output_text').textContent = 'Output folder not set.';
@@ -96,14 +96,14 @@ function fmtElapsed(ms){
 function stageLabel(stage){
   const map = {
     queued: 'Queued',
-    starting: 'Preparing render',
+    starting: 'Preparing',
     downloading: 'Preparing source',
-    scene_detection: 'Detecting scenes',
-    segment_building: 'Building smart segments',
-    transcribing_full: 'Generating subtitles',
-    rendering: 'Rendering clips',
-    rendering_parallel: 'Rendering clips',
-    writing_report: 'Writing report and outputs',
+    scene_detection: 'Scene detect',
+    segment_building: 'Building clips',
+    transcribing_full: 'Subtitles',
+    rendering: 'Rendering',
+    rendering_parallel: 'Rendering',
+    writing_report: 'Writing report',
     done: 'Complete',
     failed: 'Failed',
   };
@@ -111,14 +111,14 @@ function stageLabel(stage){
 }
 function stageLabelPlain(stage){
   const map = {
-    queued: 'Waiting',
+    queued: 'Queued',
     starting: 'Preparing',
     downloading: 'Preparing source',
-    scene_detection: 'Detecting scenes',
-    segment_building: 'Building segments',
-    transcribing_full: 'Generating subtitles',
-    rendering: 'Rendering clips',
-    rendering_parallel: 'Rendering clips',
+    scene_detection: 'Scene detect',
+    segment_building: 'Building clips',
+    transcribing_full: 'Subtitles',
+    rendering: 'Rendering',
+    rendering_parallel: 'Rendering',
     writing_report: 'Writing report',
     done: 'Done',
     failed: 'Failed',
@@ -697,10 +697,10 @@ function normalizeRcPartState(part) {
 }
 
 function rcStateLabel(state) {
-  if (state === 'completed') return 'Completed';
+  if (state === 'completed') return 'Done';
   if (state === 'failed') return 'Failed';
   if (state === 'rendering') return 'Rendering';
-  return 'Waiting';
+  return 'Queued';
 }
 
 function rcStateIcon(state) {
@@ -778,11 +778,11 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     ? 'Active: Failed'
     : 'Active: Waiting';
   const queueSummary = [
-    completed > 0 ? `${completed} completed` : null,
-    renderingParts.length > 0 ? `${renderingParts.length} rendering` : null,
-    waiting > 0 ? `${waiting} waiting` : null,
+    completed > 0 ? `${completed} done` : null,
+    renderingParts.length > 0 ? `${renderingParts.length} active` : null,
+    waiting > 0 ? `${waiting} queued` : null,
     failed > 0 ? `${failed} failed` : null
-  ].filter(Boolean).join(' · ') || '0 waiting';
+  ].filter(Boolean).join(' · ') || (job ? stageText : '');
   const statusLabel = overallState === 'failed'
     ? 'Failed'
     : overallState === 'completed'
@@ -791,15 +791,24 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     ? 'Rendering'
     : 'Ready';
 
+  // Header primary: "Ready" | "Rendering · 15%" | "Completed" | "Failed · 15%"
+  const headerPrimary = overallState === 'ready' ? 'Ready'
+    : overallState === 'completed' ? 'Completed'
+    : overallState === 'failed' ? `Failed · ${pct}%`
+    : `Rendering · ${pct}%`;
+  // Header secondary: clip summary when parts exist, else stage name
+  const headerSecondary = overallState === 'ready' ? ''
+    : total > 0 ? renderMonitorClipSummary(s, items)
+    : stageText !== 'Idle' ? stageText : '';
+
   if (qs('rc_status')) {
-    qs('rc_status').textContent = statusLabel;
+    qs('rc_status').textContent = headerPrimary;
     qs('rc_status').dataset.state = overallState;
   }
-  if (qs('rc_progress')) qs('rc_progress').textContent = `${pct}%`;
-  if (qs('rc_stage')) qs('rc_stage').textContent = `Stage: ${stageText}`;
-  if (qs('rc_parts')) qs('rc_parts').textContent = `${completed}/${total || 0} completed${failed > 0 ? ` · ${failed} failed` : ''}`;
-  if (qs('rc_active')) qs('rc_active').textContent = activeText;
-  if (qs('rc_latest')) qs('rc_latest').textContent = latest;
+  if (qs('rc_progress')) qs('rc_progress').textContent = '';
+  if (qs('rc_stage')) qs('rc_stage').textContent = headerSecondary;
+  if (qs('rc_parts')) qs('rc_parts').textContent = '';
+  if (qs('rc_active')) qs('rc_active').textContent = '';
   if (qs('rc_queue_summary')) qs('rc_queue_summary').textContent = queueSummary;
 
   const badge = qs('rc_active_badge');
@@ -818,34 +827,58 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     activeCard.classList.remove('isIdle', 'isRendering', 'isCompleted', 'isFailed');
     let activeCardState = 'isIdle';
     let activeCardPct = pct;
-    let title = 'Ready to render';
-    let subtitle = total ? `${completed}/${total} clips done` : 'Configure your video, then click Start Render.';
-    let stageLine = total ? `Stage: ${stageText}` : '';
-    let message = latest || 'No activity yet.';
+    let title, subtitle, stageLine, message;
+    message = latest || '';
 
     if (activePart) {
       activeCardState = 'isRendering';
       activeCardPct = clampRcProgress(activePart?.progress_percent ?? activePart?.progress ?? pct);
       title = `Clip ${activePartNo || '?'}`;
       subtitle = `${rcStateLabel('rendering')} · ${rcPartStageText(activePart)}`;
-      stageLine = `Stage: ${rcPartStageText(activePart)}`;
+      stageLine = rcPartStageText(activePart);
       message = rcPartMessage(activePart, latest || 'Clip is currently rendering.');
     } else if (overallState === 'completed') {
       activeCardState = 'isCompleted';
       activeCardPct = 100;
       title = 'All clips completed';
       subtitle = `${completed}/${total || 0} clips finished`;
-      stageLine = 'Stage: Complete';
+      stageLine = 'Complete';
       message = latest || 'All clips finished successfully.';
     } else if (overallState === 'failed') {
       activeCardState = 'isFailed';
       title = 'Render failed';
       subtitle = `${completed}/${total || 0} completed${failed > 0 ? ` · ${failed} failed` : ''}`;
-      stageLine = `Stage: ${stageText}`;
+      stageLine = stageText;
       message = latest || 'The render stopped before completion.';
+    } else if (!job) {
+      // No active job — idle/ready state
+      title = 'Ready to render';
+      subtitle = 'Configure your video, then click Start Render.';
+      stageLine = '';
+    } else {
+      // Job running but no active clip yet (scene detection, segment building, etc.)
+      const jobStage = String(job?.stage || '').toLowerCase();
+      if (jobStage === 'scene_detection') {
+        title = 'Analyzing video';
+        subtitle = 'Clip cards will appear once scene detection finishes.';
+      } else if (jobStage === 'segment_building') {
+        title = 'Building clips';
+        subtitle = total > 0 ? `${total} segments found · preparing…` : 'Selecting best segments…';
+      } else if (jobStage === 'transcribing_full') {
+        title = 'Generating subtitles';
+        subtitle = 'Subtitle generation in progress.';
+      } else if (total > 0) {
+        title = stageText;
+        subtitle = `${completed}/${total} clips done`;
+      } else {
+        title = stageText;
+        subtitle = 'Preparing…';
+      }
+      stageLine = stageText;
     }
 
     activeCard.classList.add(activeCardState);
+    activeCard.classList.toggle('isNoJob', !job);
     if (activeTitle) activeTitle.textContent = title;
     if (activeSubtitle) activeSubtitle.textContent = subtitle;
     if (activePercent) activePercent.textContent = `${activeCardPct}%`;
@@ -890,7 +923,7 @@ function renderBottomActiveQueue(job, summary, parts = []) {
       state === 'completed' ? 'Clip finished successfully.'
         : state === 'failed'  ? 'Clip failed during processing.'
         : state === 'rendering' ? 'Clip is currently rendering.'
-        : 'Waiting for render slot.'
+        : 'Waiting in queue.'
     );
     const msgLow = msgText.toLowerCase();
     const isWarn = state === 'completed' && (msgLow.includes('warn') || msgLow.includes('narration'));
@@ -1091,13 +1124,13 @@ function updateRenderMainState(job, summary, parts = []) {
   }
   if (qs('abp_output_text')) qs('abp_output_text').textContent = outputText;
   if (qs('abp_output_meta')) qs('abp_output_meta').textContent = outputLabel;
-  if (qs('rc_status')) qs('rc_status').textContent = statusLabel;
-  if (qs('rc_status')) qs('rc_status').dataset.state = hasFailure ? 'failed' : terminal ? 'completed' : 'running';
-  if (qs('rc_progress')) qs('rc_progress').textContent = `${pct}%`;
-  if (qs('rc_stage')) qs('rc_stage').textContent = stageLabel(job?.stage || 'queued');
-  if (qs('rc_parts')) qs('rc_parts').textContent = `${done}/${total || 0} clips${failed > 0 ? ` · ${failed} failed` : ''}`;
-  if (qs('rc_active')) qs('rc_active').textContent = activePartText || (active > 0 ? `${active} clips active` : 'No active clip');
-  if (qs('rc_latest')) qs('rc_latest').textContent = latestShort || (hasFailure ? failureSummary : 'Waiting for render...');
+  const _rcPrimary = hasFailure ? `Failed · ${pct}%` : terminal ? 'Completed' : `Rendering · ${pct}%`;
+  const _rcSecondary = total > 0 ? renderMonitorClipSummary(s, parts) : stageLabel(job?.stage || 'queued');
+  if (qs('rc_status')) { qs('rc_status').textContent = _rcPrimary; qs('rc_status').dataset.state = hasFailure ? 'failed' : terminal ? 'completed' : 'running'; }
+  if (qs('rc_progress')) qs('rc_progress').textContent = '';
+  if (qs('rc_stage')) qs('rc_stage').textContent = _rcSecondary;
+  if (qs('rc_parts')) qs('rc_parts').textContent = '';
+  if (qs('rc_active')) qs('rc_active').textContent = '';
   if (qs('abp_error_text')) {
     qs('abp_error_text').textContent = hasFailure
       ? `Error: ${latestShort || failureSummary}`

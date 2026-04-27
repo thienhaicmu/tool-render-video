@@ -303,6 +303,11 @@ function evRenderTextLayerList() {
       <button class="evTinyBtn" onclick="evDeleteTextLayer(${i})">✕</button>
     </div>`;
   }).join('');
+  box.insertAdjacentHTML('beforeend',
+    '<div style="font-size:10.5px;color:rgba(251,146,60,.8);margin-top:8px;padding:4px 8px;border-radius:6px;background:rgba(251,146,60,.07);border:1px solid rgba(251,146,60,.18);line-height:1.4">' +
+    '⚠ Long text may be clipped in final render' +
+    '</div>'
+  );
   const editor = qs('evTextLayerEditor');
   if (editor) editor.style.display = 'block';
   const cur = _ev.textLayers[selected];
@@ -1156,7 +1161,11 @@ function _evSyncSubTime(currentTime) {
   const outline   = Number(qs('evSubOutline')?.value || 3);
   const strokeCSS = `${outline}px`;
   const shadowCSS = `-${outline}px -${outline}px 0 #000,${outline}px -${outline}px 0 #000,-${outline}px ${outline}px 0 #000,${outline}px ${outline}px 0 #000`;
-  const baseStyle = `font-family:'${font}',sans-serif;font-size:clamp(12px,3vw,${Math.round(size * 0.65)}px);-webkit-text-stroke:${strokeCSS} #000;text-shadow:${shadowCSS}`;
+  // Same scale formula as demo mode (evUpdateSubPreview) — frameWidth / 1080, clamped
+  const _fW = Number(qs('evVideoFrame')?.getBoundingClientRect().width || 0);
+  const _fScale = _fW > 0 ? Math.max(0.45, Math.min(1.2, _fW / 1080)) : 1;
+  const _fontPx = Math.max(12, Math.round(size * _fScale));
+  const baseStyle = `font-family:'${font}',sans-serif;font-size:${_fontPx}px;-webkit-text-stroke:${strokeCSS} #000;text-shadow:${shadowCSS}`;
 
   const seg = _ev.subtitleSegments.find(s => currentTime >= s.start && currentTime < s.end);
   if (!seg) {
@@ -1588,8 +1597,8 @@ async function startRenderFromEditor() {
   payload.sub_highlight = qs('evSubHighlight').value;
   payload.sub_outline   = Number(qs('evSubOutline').value);
   const posY = Number(qs('evSubPos').value);
-  const _outputH = _evGetOutputHeight(qs('evAspectRatio')?.value);
-  payload.sub_margin_v   = Math.round((posY / 100) * _outputH);
+  // 1440 matches subtitle_engine.py PlayResY — not the actual video height
+  payload.sub_margin_v   = Math.round((posY / 100) * 1440);
   payload.subtitle_style = qs('evSubStyle')?.value || 'pro_karaoke';
   payload.sub_x_percent  = Math.max(5, Math.min(95, Number(qs('evSubPosX')?.value ?? _ev.subXPercent ?? 50)));
   // Editor mode: user expects subtitle on all exported parts.

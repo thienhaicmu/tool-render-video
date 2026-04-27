@@ -134,9 +134,9 @@
               </label>
               <label class="field fieldSpan2 hiddenView" id="field_manual_output_dir">
                 <span class="fieldLabel">Output Folder</span>
-                <div style="display:flex;gap:8px;align-items:center">
-                  <input class="fieldInput" id="manual_output_dir" placeholder="e.g. D:\videos\output" style="flex:1">
-                  <button type="button" id="btn_pick_output_dir" class="btn btnSecondary" style="white-space:nowrap;padding:0 14px;height:38px">📁 Choose</button>
+                <div id="manual_output_folder" class="manualOutputRow">
+                  <input class="fieldInput" id="manual_output_dir" placeholder="e.g. D:\videos\output">
+                  <button type="button" id="btn_pick_output_dir" class="btn btnSecondary" style="padding:0 14px;height:38px">📁 Choose</button>
                 </div>
                 <div class="sectionSubtitle" id="manual_output_dir_hint" style="margin-top:6px">All output saved here.</div>
               </label>
@@ -1354,7 +1354,7 @@
             </div>
           </header>
           <div id="event_log_render" class="rcLogList">
-            <div class="rcLogEmpty">No activity yet.</div>
+            <div class="rcLogEmpty">Logs will appear here during render.</div>
           </div>
         </section>
 

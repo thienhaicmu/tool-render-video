@@ -24,6 +24,22 @@ function _sanitizeEventText(text){
   return t;
 }
 
+function _cleanLogDisplay(text) {
+  let t = String(text || '');
+  // "Stage: X (Y%)" or "Stage: X - Y%" → "X · Y%"
+  t = t.replace(/^Stage:\s+(.+?)\s*[-–]\s*(\d+(?:\.\d+)?%?)\s*$/i, '$1 · $2');
+  t = t.replace(/^Stage:\s+(.+?)\s*\((\d+(?:\.\d+)?%?)\)\s*$/i, '$1 · $2');
+  // plain "Stage: X" → "X" (no percent)
+  t = t.replace(/^Stage:\s+(.+)$/i, '$1');
+  // "Running: X (Y%)" → "X · Y%"
+  t = t.replace(/^Running:\s+(.+?)\s*\((\d+(?:\.\d+)?%?)\)\s*$/i, '$1 · $2');
+  // plain "Running: X" → "X"
+  t = t.replace(/^Running:\s+(.+)$/i, '$1');
+  // "Action: X" → "X"
+  t = t.replace(/^Action:\s+(.+)$/i, '$1');
+  return t;
+}
+
 function _setLogLineContent(node, message, count = 1) {
   if (!node) return;
   node.textContent = '';
@@ -39,7 +55,7 @@ function _setLogLineContent(node, message, count = 1) {
 
   const msgEl = document.createElement('span');
   msgEl.className = 'logMessage';
-  msgEl.textContent = match ? match[2] : raw;
+  msgEl.textContent = _cleanLogDisplay(match ? match[2] : raw);
 
   node.appendChild(timeEl);
   node.appendChild(msgEl);
