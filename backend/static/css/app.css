@@ -3708,6 +3708,35 @@
     }
     .mvToggleLabel { font-size: 12px; color: var(--text); user-select: none; }
 
+    /* Market Viral preview hint card */
+    .mvPreviewHint {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: rgba(99,102,241,.06);
+      border: 1px solid rgba(99,102,241,.18);
+      border-radius: 8px;
+    }
+    .mvHintBullets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-bottom: 6px;
+    }
+    .mvHintTag {
+      font-size: 10px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(99,102,241,.13);
+      color: rgba(165,180,252,.9);
+      white-space: nowrap;
+    }
+    .mvHintToneRow {
+      font-size: 10px;
+      color: rgba(148,163,184,.6);
+      font-style: italic;
+    }
+
     /* J3 — Separator always hidden; footer always visible; section flash */
     [data-insp-panel="_sep"] { display: none !important; }
     .evFooter { display: flex !important; }

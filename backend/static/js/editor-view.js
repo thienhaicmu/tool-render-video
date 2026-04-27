@@ -943,6 +943,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   evInitTextLayers();
   evUpdateAspectRatio();
   evInitVoiceFields(pendingPayload);
+  if (typeof mvUpdatePreviewHint === 'function') mvUpdatePreviewHint();
 
   if (pendingPayload) pendingPayload.edit_session_id = pd.session_id;
   _evSetDuration(_ev.duration);
@@ -1912,10 +1913,36 @@ function mvHandleChange() {
   if (el.keywordHighlight) _mvState.keywordHighlight = el.keywordHighlight.checked;
   if (el.hookBoost)        _mvState.hookBoost        = el.hookBoost.checked;
   if (el.bestClipScoring)  _mvState.bestClipScoring  = el.bestClipScoring.checked;
+  mvUpdatePreviewHint();
 }
 
 function mvGetState() {
   return { ..._mvState };
+}
+
+function mvUpdatePreviewHint() {
+  const bulletsEl = document.getElementById('mvHintBullets');
+  const toneEl    = document.getElementById('mvHintToneRow');
+  if (!bulletsEl || !toneEl) return;
+
+  const MARKET_HINTS = {
+    US: ['Strong hooks', 'Bold keyword highlights', 'Short punchy subtitles'],
+    EU: ['Trust-based tone', 'Clean readable subtitles', 'Credibility/fact highlights'],
+    JP: ['Subtle curiosity', 'Very short captions', 'Soft emotional tone'],
+  };
+  const TONE_HINTS = {
+    clean:   'Readable, minimal emphasis',
+    bold:    'Stronger emphasis on key terms',
+    karaoke: 'Word-by-word energy feel',
+  };
+
+  const market   = _mvState.market       || 'US';
+  const tone     = _mvState.subtitleTone || 'clean';
+  const bullets  = MARKET_HINTS[market]  || MARKET_HINTS['US'];
+  const toneHint = TONE_HINTS[tone]      || TONE_HINTS['clean'];
+
+  bulletsEl.innerHTML = bullets.map(b => `<span class="mvHintTag">${b}</span>`).join('');
+  toneEl.textContent  = toneHint;
 }
 
 // ── Video Editor (old modal — kept for reference/batch) ─────────────────────
