@@ -1196,6 +1196,7 @@ async function _evFetchTranscript(sessionId) {
     _ev.subtitleMode = 'real';
     if (_ev.subAnimTimer) { clearInterval(_ev.subAnimTimer); _ev.subAnimTimer = null; }
     _evUpdateSubLabel();
+    mvUpdateHookQuality();
     const vid = qs('evVideo');
     if (vid) _evSyncSubTime(vid.currentTime || 0);
   } catch (_) {
@@ -1914,6 +1915,7 @@ function mvHandleChange() {
   if (el.hookBoost)        _mvState.hookBoost        = el.hookBoost.checked;
   if (el.bestClipScoring)  _mvState.bestClipScoring  = el.bestClipScoring.checked;
   mvUpdatePreviewHint();
+  mvUpdateHookQuality();
 }
 
 function mvGetState() {
@@ -1961,6 +1963,90 @@ function _mvGetSubtitleText() {
   const segs = (_ev && Array.isArray(_ev.subtitleSegments)) ? _ev.subtitleSegments : [];
   if (!segs.length) return '';
   return segs.slice(0, 8).map(s => (s.text || '')).join(' ').trim();
+}
+
+// Port of hook_optimizer.py — pure rule-based, no API call
+function _mvAnalyzeHook(text, market) {
+  const STRONG_VERBS = new Set([
+    'stop','start','make','avoid','discover','learn','find',
+    'get','try','use','build','create','do','take','need',
+    'watch','listen','think','know','see','grab','check',
+    'change','fix','beat','win','unlock','master',
+  ]);
+  const BENEFIT_WORDS = new Set([
+    'money','results','improve','faster','better','save','earn',
+    'profit','grow','success','win','free','proven','easy',
+    'effective','powerful','simple','quick','best','boost',
+    'transform','achieve','gain','impact','value','worth',
+  ]);
+  const PASSIVE_RE = /\b(is|are|was|were|been|being)\s+(done|made|used|shown|given|told|said|known|seen|found|created|built)\b/i;
+  const SUGGESTIONS = {
+    US: ['Stop doing this if you want real results...', 'This one thing will make you money...'],
+    EU: ["Here's a practical way to improve right now...", 'Based on real results, this actually works...'],
+    JP: ['実はこれだけで変わります', '知らないと損するかも'],
+  };
+
+  const m = (String(market || 'US')).toUpperCase();
+  const suggestions = SUGGESTIONS[m] || SUGGESTIONS['US'];
+
+  if (!text || !text.trim()) {
+    return { hook_score: 0, strength: 'weak', issues: ['No subtitle text available'], suggestion: suggestions[0] };
+  }
+
+  const clean = text.trim();
+  const words = clean.split(/\s+/);
+  const wordCount = words.length;
+  const lower = clean.toLowerCase();
+
+  const hasStrongVerb = [...STRONG_VERBS].some(v => new RegExp('\\b' + v + '\\b').test(lower));
+  const hasBenefit    = [...BENEFIT_WORDS].some(b => new RegExp('\\b' + b + '\\b').test(lower));
+  const hasPassive    = PASSIVE_RE.test(clean);
+
+  const issues = [];
+  let score = 40;
+
+  if (hasStrongVerb) { score += 25; }
+  else { issues.push('No strong action verb'); }
+
+  if (hasBenefit) { score += 20; }
+  else { issues.push('No clear benefit mentioned'); }
+
+  if (wordCount <= 8)      { score += 15; }
+  else if (wordCount > 12) { score -= 20; issues.push(`Too long (${wordCount} words)`); }
+
+  if (hasPassive) { score -= 15; issues.push('Passive voice detected'); }
+
+  score = Math.max(0, Math.min(100, score));
+  const strength = score >= 70 ? 'strong' : score >= 40 ? 'medium' : 'weak';
+  return { hook_score: score, strength, issues, suggestion: suggestions[0] };
+}
+
+function mvUpdateHookQuality() {
+  const card       = document.getElementById('mvHookCard');
+  const scoreEl    = document.getElementById('mvHookScore');
+  const strengthEl = document.getElementById('mvHookStrengthRow');
+  const issueEl    = document.getElementById('mvHookIssue');
+  const suggEl     = document.getElementById('mvHookSuggestion');
+  if (!card) return;
+
+  const text   = _mvGetSubtitleText();
+  const market = _mvState.market || 'US';
+
+  if (!text) {
+    card.removeAttribute('data-strength');
+    if (scoreEl)    scoreEl.textContent    = '—';
+    if (strengthEl) strengthEl.textContent = '';
+    if (issueEl)    issueEl.textContent    = '';
+    if (suggEl)     suggEl.textContent     = '';
+    return;
+  }
+
+  const r = _mvAnalyzeHook(text, market);
+  card.dataset.strength = r.strength;
+  if (scoreEl)    scoreEl.textContent    = String(r.hook_score);
+  if (strengthEl) strengthEl.textContent = r.strength.charAt(0).toUpperCase() + r.strength.slice(1);
+  if (issueEl)    issueEl.textContent    = r.issues[0] || '';
+  if (suggEl)     suggEl.textContent     = r.suggestion || '';
 }
 
 async function mvAnalyzeMarket() {
@@ -2012,6 +2098,7 @@ async function mvAnalyzeMarket() {
     resultEl.innerHTML = '<div class="mvRecMsg mvRecError">Analysis failed — try again.</div>';
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Analyze'; }
+    mvUpdateHookQuality();
   }
 }
 

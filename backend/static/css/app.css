@@ -3891,6 +3891,60 @@
     }
     .mvRecMsg.mvRecError { color: rgba(248,113,113,.6); font-style: normal; }
 
+    /* Hook Quality card */
+    .mvHookCard {
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      display: grid;
+      gap: 3px;
+    }
+    .mvHookHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+    .mvHookLabel {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted, #888);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .mvHookScore {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary, #e5e5e5);
+      transition: color 150ms ease;
+    }
+    .mvHookStrengthRow {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted, #888);
+      transition: color 150ms ease;
+    }
+    .mvHookCard[data-strength="strong"] .mvHookScore,
+    .mvHookCard[data-strength="strong"] .mvHookStrengthRow { color: #22c55e; }
+    .mvHookCard[data-strength="medium"] .mvHookScore,
+    .mvHookCard[data-strength="medium"] .mvHookStrengthRow { color: #f59e0b; }
+    .mvHookCard[data-strength="weak"]   .mvHookScore,
+    .mvHookCard[data-strength="weak"]   .mvHookStrengthRow { color: #ef4444; }
+    .mvHookIssue {
+      font-size: 10px;
+      color: rgba(248,113,113,.75);
+      margin-top: 1px;
+    }
+    .mvHookIssue:empty { display: none; }
+    .mvHookSuggestion {
+      font-size: 10px;
+      color: rgba(148,163,184,.6);
+      font-style: italic;
+    }
+    .mvHookSuggestion:empty { display: none; }
+
     /* J3 — Separator always hidden; footer always visible; section flash */
     [data-insp-panel="_sep"] { display: none !important; }
     .evFooter { display: flex !important; }
