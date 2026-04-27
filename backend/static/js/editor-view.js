@@ -2148,7 +2148,7 @@ function mvUpdateHookSuggestions(text, market, strength) {
 
   const hooks = mvGenerateHookSuggestions(text, market, strength);
   sec.classList.remove('hiddenView');
-  if (label) label.textContent = strength === 'strong' ? 'Try Alternatives' : 'Suggested Hooks';
+  if (label) label.textContent = strength === 'strong' ? 'Try Alternatives' : 'Preview hook ideas';
   list.innerHTML = hooks.map(h => {
     const safe = h.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
     return `<div class="mvHookChip">` +

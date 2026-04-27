@@ -3748,6 +3748,20 @@
     /* J2b — Market Viral panel */
     .mvPanel { display: none; }
     .mvPanel.insp-panel-active { display: block; }
+    .mvPanelDesc {
+      font-size: 10px;
+      color: rgba(148,163,184,.6);
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+    .mvPanelFooter {
+      font-size: 10px;
+      color: rgba(148,163,184,.4);
+      margin-top: 10px;
+      line-height: 1.4;
+      border-top: 1px solid rgba(255,255,255,.05);
+      padding-top: 8px;
+    }
     .mvToggleGroup { display: flex; flex-direction: column; gap: 6px; }
     .mvToggleRow {
       display: flex;

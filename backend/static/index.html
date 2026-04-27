@@ -1238,6 +1238,7 @@
       <!-- ══ MARKET VIRAL ════════════════════════════════════ -->
       <div class="evSection mvPanel" id="evSectionMarket" data-insp-panel="market">
         <div class="evSectionTitle">&#127758; Market Viral</div>
+        <div class="mvPanelDesc">Optimize subtitles, hook, and clip scoring for US / EU / JP markets.</div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <label class="field">
@@ -1301,7 +1302,7 @@
 
         <div class="mvHookCard" id="mvHookCard">
           <div class="mvHookHeader">
-            <span class="mvHookLabel">&#9889; Hook Quality</span>
+            <span class="mvHookLabel">&#9889; Hook strength</span>
             <span class="mvHookScore" id="mvHookScore">&#8212;</span>
           </div>
           <div class="mvHookStrengthRow" id="mvHookStrengthRow"></div>
@@ -1311,7 +1312,7 @@
 
         <div class="mvHookSuggestSec hiddenView" id="mvHookSuggestSec">
           <div class="mvHookSuggestHeader">
-            <span class="mvHookSuggestLabel" id="mvHookSuggestLabel">Suggested Hooks</span>
+            <span class="mvHookSuggestLabel" id="mvHookSuggestLabel">Preview hook ideas</span>
           </div>
           <div class="mvHookSuggestList" id="mvHookSuggestList"></div>
           <div class="mvHookSuggestNote">Preview only &#8212; final render still uses subtitle settings unless saved later.</div>
@@ -1319,11 +1320,12 @@
 
         <div class="mvRecommendCard">
           <div class="mvRecHeader">
-            <span class="mvRecLabel">&#128270; Market Recommendation</span>
+            <span class="mvRecLabel">&#128270; Analyze best market</span>
             <button type="button" class="mvRecBtn" id="mvAnalyzeBtn" onclick="mvAnalyzeMarket()">Analyze</button>
           </div>
           <div id="mvMarketRec" class="mvMarketRec"></div>
         </div>
+        <div class="mvPanelFooter">Final render uses the selected Market Viral settings. Hook previews are not applied unless saved later.</div>
       </div>
 
     </div><!-- /evRightScroll.inspPaneBody -->
