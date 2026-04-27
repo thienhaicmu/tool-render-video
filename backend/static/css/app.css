@@ -6538,6 +6538,134 @@
     }
 
     /* ══════════════════════════════════════════════════════════════════
+       Phase N — Clean card redesign
+       Compact 3-section layout; border-left state marker; no animations.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* N1 — Card shell */
+    .rcQueueRow {
+      display: flex !important;
+      flex-direction: column !important;
+      min-height: 48px;
+      padding: 6px 10px !important;
+      border-radius: 6px !important;
+      border-left: 3px solid transparent;
+      background: var(--rc-card-bg, #1a1a1a) !important;
+      box-shadow: none !important;
+      animation: none !important;
+      transition: background 120ms ease !important;
+      overflow: hidden;
+      gap: 3px;
+      position: relative;
+    }
+
+    /* N2 — State: left-border colours */
+    .rcQueueRow.isCompleted { border-left-color: #22c55e; }
+    .rcQueueRow.isRendering { border-left-color: #3b82f6; animation: none !important; }
+    .rcQueueRow.isFailed    { border-left-color: #ef4444; }
+    .rcQueueRow.isWarning   { border-left-color: #f59e0b; }
+    .rcQueueRow.isQueued,
+    .rcQueueRow.isPending   { border-left-color: #555; }
+    .rcQueueRow.rcMvTop3    { border-left-color: #f97316; }
+    .rcQueueRow.rcBestPart  { border-left-color: #a855f7; }
+
+    /* N3 — Top row */
+    .rcQueueTop {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .rcQueueLeft {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .rcClipLabel {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary, #e5e5e5);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .rcQueueRight {
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    /* N4 — Score badge: inline, not absolute */
+    .rcQueueRow .rcScoreBadge {
+      position: static !important;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    /* N5 — Progress bar (3px) */
+    .rcQueueBar {
+      height: 3px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .rcQueueBar > span {
+      display: block;
+      height: 100%;
+      width: var(--progress, 0%);
+      background: #3b82f6;
+      border-radius: 2px;
+      transition: width 300ms ease;
+    }
+    .rcQueueRow.isCompleted .rcQueueBar > span { background: #22c55e; }
+    .rcQueueRow.isFailed    .rcQueueBar > span { background: #ef4444; }
+
+    /* N6 — Bottom status line */
+    .rcQueueBottom {
+      font-size: 10px;
+      color: var(--text-muted, #888);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 0;
+    }
+    .rcQueueRow.isCompleted .rcQueueBottom { color: #22c55e; }
+    .rcQueueRow.isFailed    .rcQueueBottom { color: #ef4444; }
+    .rcQueueRow.isWarning   .rcQueueBottom { color: #f59e0b; }
+    .rcQueueRow.isRendering .rcQueueBottom { color: #60a5fa; }
+
+    /* N7 — Checkbox inline in left col */
+    .rcQueueRow .rcClipCheck {
+      position: static !important;
+      margin: 0;
+      cursor: pointer;
+      flex-shrink: 0;
+      width: 14px;
+      height: 14px;
+    }
+
+    /* N8 — Suppress old layout elements (safety net) */
+    .rcQueueRowTop,
+    .rcQueueTitle,
+    .rcQueueStatus,
+    .rcQueueMiniBar,
+    .rcQueueMeta,
+    .rcQueueMessage,
+    .rcBestLabel {
+      display: none !important;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
        Phase M — Log filter controls
        CSS-only. Filter row below log toolbar. No layout changes.
     ══════════════════════════════════════════════════════════════════ */

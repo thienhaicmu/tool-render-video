@@ -1024,39 +1024,30 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     row.className = `rcQueueRow ${visualClass}${isBest ? ' rcBestPart' : ''}${isMvTop ? ' rcMvTop3' : ''}`;
     if (state === 'rendering') { row.dataset.active = '1'; _newActivePartNo = partNo; }
 
-    const top = document.createElement('div');
-    top.className = 'rcQueueRowTop';
+    const topRow = document.createElement('div');
+    topRow.className = 'rcQueueTop';
 
-    const title = document.createElement('div');
-    title.className = 'rcQueueTitle';
-    title.textContent = partName ? `Clip ${partNo} · ${partName}` : `Clip ${partNo}`;
+    const leftCol = document.createElement('div');
+    leftCol.className = 'rcQueueLeft';
 
-    const statusNode = document.createElement('div');
-    statusNode.className = 'rcQueueStatus';
-    statusNode.textContent = isWarn ? 'Warning' : rcStateLabel(state);
-
-    top.appendChild(title);
-    top.appendChild(statusNode);
-    if (isBest) {
-      const bestLabel = document.createElement('span');
-      bestLabel.className = 'rcBestLabel';
-      bestLabel.textContent = 'BEST';
-      top.appendChild(bestLabel);
+    if (terminal && state === 'completed' && part.output_file) {
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'rcClipCheck';
+      chk.dataset.path = part.output_file;
+      chk.checked = _selectedClipPaths.has(part.output_file);
+      chk.addEventListener('change', () => rcToggleClip(chk));
+      row.classList.toggle('isSelected', chk.checked);
+      leftCol.appendChild(chk);
     }
 
-    const mini = document.createElement('div');
-    mini.className = 'rcQueueMiniBar';
-    const fill = document.createElement('span');
-    fill.style.setProperty('--progress', `${progress}%`);
-    mini.appendChild(fill);
+    const clipLabel = document.createElement('span');
+    clipLabel.className = 'rcClipLabel';
+    clipLabel.textContent = partName ? `Clip ${partNo} · ${partName}` : `Clip ${partNo}`;
+    leftCol.appendChild(clipLabel);
 
-    const meta = document.createElement('div');
-    meta.className = 'rcQueueMeta';
-    meta.textContent = `${rcPartStageText(part)} · ${progress}%`;
-
-    const message = document.createElement('div');
-    message.className = 'rcQueueMessage';
-    message.textContent = msgText;
+    const rightCol = document.createElement('div');
+    rightCol.className = 'rcQueueRight';
 
     const mvData = _mvMap.get(partNo);
     const badge = document.createElement('div');
@@ -1078,23 +1069,32 @@ function renderBottomActiveQueue(job, summary, parts = []) {
         badge.dataset.tier = 'pending';
       }
     }
+    rightCol.appendChild(badge);
 
-    row.appendChild(top);
-    row.appendChild(mini);
-    row.appendChild(meta);
-    row.appendChild(message);
-    row.appendChild(badge);
+    topRow.appendChild(leftCol);
+    topRow.appendChild(rightCol);
 
-    if (terminal && state === 'completed' && part.output_file) {
-      const chk = document.createElement('input');
-      chk.type = 'checkbox';
-      chk.className = 'rcClipCheck';
-      chk.dataset.path = part.output_file;
-      chk.checked = _selectedClipPaths.has(part.output_file);
-      chk.addEventListener('change', () => rcToggleClip(chk));
-      row.classList.toggle('isSelected', chk.checked);
-      row.appendChild(chk);
+    const bar = document.createElement('div');
+    bar.className = 'rcQueueBar';
+    const barFill = document.createElement('span');
+    barFill.style.setProperty('--progress', `${progress}%`);
+    bar.appendChild(barFill);
+
+    const bottom = document.createElement('div');
+    bottom.className = 'rcQueueBottom';
+    if (state === 'completed') {
+      bottom.textContent = isWarn ? `⚠ ${rcStateLabel(state)}` : '✓ Completed';
+    } else if (state === 'failed') {
+      bottom.textContent = '✕ Failed';
+    } else if (state === 'rendering') {
+      bottom.textContent = `Rendering · ${progress}%`;
+    } else {
+      bottom.textContent = 'Waiting…';
     }
+
+    row.appendChild(topRow);
+    row.appendChild(bar);
+    row.appendChild(bottom);
 
     cardWrap.appendChild(row);
   });
