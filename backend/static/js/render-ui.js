@@ -827,10 +827,14 @@ function rcToggleClip(el) {
 
 function useTopClips() {
   const paths = [..._selectedClipPaths];
+  if (!paths.length) {
+    if (typeof showToast === 'function') showToast('Select at least one clip', 'info');
+    return;
+  }
   window.topClipPaths = paths;
   console.log('[Market Viral] Selected clip paths:', paths);
   if (typeof showToast === 'function') {
-    showToast(`${paths.length} clip${paths.length === 1 ? '' : 's'} selected`, 'info');
+    showToast(`${paths.length} clip${paths.length === 1 ? '' : 's'} saved — ready for next step`, 'success');
   }
 }
 
@@ -1050,26 +1054,25 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     rightCol.className = 'rcQueueRight';
 
     const mvData = _mvMap.get(partNo);
-    const badge = document.createElement('div');
-    badge.className = 'rcScoreBadge';
-    if (mvData) {
-      const tierIcon = mvData.tier === 'hot' ? '🔥' : mvData.tier === 'warm' ? '🌡' : '🌍';
-      badge.textContent = `${tierIcon} ${mvData.score} ${mvData.market}`;
-      badge.dataset.tier = mvData.tier;
-      if (mvData.reasons.length) {
-        badge.title = mvData.reasons.slice(0, 2).join('\n');
-      }
-    } else {
-      const rawScore = part?.viral_score ?? part?.score ?? part?.viralScore;
-      if (rawScore != null && rawScore !== '' && !isNaN(Number(rawScore))) {
+    const rawScore = !mvData ? (part?.viral_score ?? part?.score ?? part?.viralScore) : null;
+    const hasBadge = mvData || (rawScore != null && rawScore !== '' && !isNaN(Number(rawScore)));
+    if (hasBadge) {
+      const badge = document.createElement('div');
+      badge.className = 'rcScoreBadge';
+      if (mvData) {
+        const tierIcon = mvData.tier === 'hot' ? '🔥' : mvData.tier === 'warm' ? '🌡' : '🌍';
+        badge.textContent = `${tierIcon} ${mvData.score} ${mvData.market}`;
+        badge.dataset.tier = mvData.tier;
+        if (mvData.reasons.length) {
+          badge.title = mvData.reasons.slice(0, 2).join('\n');
+        }
+      } else {
         const val = parseFloat(rawScore);
         badge.textContent = `🔥 ${val.toFixed(1)}`;
         badge.dataset.tier = val >= 8 ? 'hot' : val >= 6 ? 'warm' : 'low';
-      } else {
-        badge.dataset.tier = 'pending';
       }
+      rightCol.appendChild(badge);
     }
-    rightCol.appendChild(badge);
 
     topRow.appendChild(leftCol);
     topRow.appendChild(rightCol);
