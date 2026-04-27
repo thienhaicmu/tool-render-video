@@ -145,6 +145,7 @@ def init_db():
             "payload_json": "payload_json TEXT",
             "result_json": "result_json TEXT",
             "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
+            "priority": "priority INTEGER DEFAULT 0",
         },
     )
     _ensure_columns(
@@ -172,13 +173,13 @@ def _json_dumps(data: Any) -> str:
 
 def upsert_job(job_id: str, kind: str, channel_code: str, status: str,
                payload=None, result=None, stage: str = '', progress_percent: int = 0,
-               message: str = ''):
+               message: str = '', priority: int = 0):
     conn = get_conn()
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO jobs (job_id, kind, channel_code, status, stage, progress_percent, message, payload_json, result_json, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO jobs (job_id, kind, channel_code, status, stage, progress_percent, message, payload_json, result_json, priority, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(job_id) DO UPDATE SET
             kind=excluded.kind,
             channel_code=excluded.channel_code,
@@ -190,7 +191,7 @@ def upsert_job(job_id: str, kind: str, channel_code: str, status: str,
             result_json=excluded.result_json,
             updated_at=CURRENT_TIMESTAMP
         """,
-        (job_id, kind, channel_code, status, stage, progress_percent, message, _json_dumps(payload), _json_dumps(result))
+        (job_id, kind, channel_code, status, stage, progress_percent, message, _json_dumps(payload), _json_dumps(result), priority)
     )
     conn.commit()
     conn.close()

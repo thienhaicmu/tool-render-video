@@ -1,6 +1,7 @@
 
 import os
 import subprocess
+import threading
 import time
 import logging
 from functools import lru_cache
@@ -11,6 +12,15 @@ from app.services.text_overlay import append_text_layer_filters
 
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Resource semaphores
+# ---------------------------------------------------------------------------
+# Consumer NVIDIA GPUs support 3–5 concurrent NVENC sessions. Exceeding the
+# limit causes encode failures with "no NVENC capable devices found".
+# Override with NVENC_MAX_SESSIONS env var if your GPU supports more.
+_NVENC_SEM_VALUE: int = max(1, int(os.getenv("NVENC_MAX_SESSIONS", "3")))
+NVENC_SEMAPHORE = threading.Semaphore(_NVENC_SEM_VALUE)
 
 
 def _run_ffmpeg_with_retry(command: list[str], retry_count: int = 2, wait_sec: float = 0.8):
@@ -192,35 +202,81 @@ def _reup_audio_filter() -> str:
     )
 
 
+_FPS_CAP = 60  # hard ceiling — prevents encode overhead for HFR sources
+
+
+def _parse_fps_ratio(s: str) -> float:
+    """Parse a fraction string like '60/1' or '60000/1001' to a float. Returns 0.0 on failure."""
+    s = (s or "").strip()
+    if "/" in s:
+        try:
+            a, b = s.split("/", 1)
+            return float(a) / float(b) if float(b) else 0.0
+        except (ValueError, ZeroDivisionError):
+            return 0.0
+    try:
+        return float(s) if s else 0.0
+    except ValueError:
+        return 0.0
+
+
 def _probe_fps(input_path: str) -> float:
-    """Return source video FPS (0.0 on failure)."""
+    """Return source video fps via ffprobe. Returns 0.0 on any failure.
+
+    Probes both avg_frame_rate and r_frame_rate in one pass.
+    avg_frame_rate is preferred: it reflects the actual frame cadence and is
+    more accurate for VFR content and YouTube downloads.  r_frame_rate is the
+    container-declared max and can be an unrealistically high rational for
+    some encoders.  We use whichever lands in the sane range [1, 120] first.
+    """
     try:
         cmd = [
             get_ffprobe_bin(),
             "-v", "error",
             "-select_streams", "v:0",
-            "-show_entries", "stream=r_frame_rate",
-            "-of", "default=noprint_wrappers=1:nokey=1",
+            "-show_entries", "stream=avg_frame_rate,r_frame_rate",
+            "-of", "csv=p=0",
             str(input_path),
         ]
         r = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        out = (r.stdout or "").strip()
-        if "/" in out:
-            a, b = out.split("/", 1)
-            return float(a) / float(b) if float(b) else 0.0
-        return float(out) if out else 0.0
+        parts = (r.stdout or "").strip().split(",")
+        avg_fps = _parse_fps_ratio(parts[0]) if parts else 0.0
+        r_fps   = _parse_fps_ratio(parts[1]) if len(parts) > 1 else 0.0
+        for fps in (avg_fps, r_fps):
+            if 1.0 <= fps <= 120.0:
+                return fps
+        return 0.0
     except Exception:
         return 0.0
 
 
-def _smart_fps(input_path: str, requested_fps: int) -> int:
-    """Return output fps: never upscale beyond source, cap at requested."""
+def _resolve_fps(input_path: str, output_fps: int) -> tuple[int, str]:
+    """Determine output frame rate and return a log string.
+
+    Policy
+    ------
+    output_fps == 0  (auto / not set):
+        Preserve source fps, capped at _FPS_CAP.
+    output_fps  > 0  (user-specified):
+        Use min(user_fps, source_fps, _FPS_CAP).
+        Never upscale beyond source — avoids judder without minterpolate.
+
+    Returns (target_fps, policy_str).  Caller should log policy_str.
+    """
     src_fps = _probe_fps(input_path)
+
     if src_fps <= 0:
-        return max(1, min(60, requested_fps))
-    # Don't upscale: if source is 30fps and requested 60, output 30
-    src_rounded = int(round(src_fps))
-    return max(1, min(src_rounded, requested_fps))
+        target = max(1, min(_FPS_CAP, output_fps or _FPS_CAP))
+        return target, f"fps_policy=fallback(probe_failed) target={target}"
+
+    src_int = int(round(src_fps))
+
+    if not output_fps:
+        target = max(1, min(src_int, _FPS_CAP))
+        return target, f"fps_policy=auto src={src_fps:.3f} target={target}"
+
+    target = max(1, min(src_int, output_fps, _FPS_CAP))
+    return target, f"fps_policy=user({output_fps}) src={src_fps:.3f} target={target}"
 
 
 def _sanitize_speed(playback_speed: float | int | None) -> float:
@@ -401,9 +457,14 @@ def render_part(
     append_text_layer_filters(vf_parts, text_layers)
     speed = _sanitize_speed(playback_speed)
     if abs(speed - 1.0) > 1e-4:
+        # setpts must come BEFORE fps so the fps filter receives speed-adjusted
+        # timestamps and outputs a constant cadence at exactly target_fps.
         vf_parts.append(f"setpts=PTS/{speed:.4f}")
 
-    target_fps = _smart_fps(input_path, int(output_fps or 60))
+    # fps filter is always the last video filter — it guarantees CFR output
+    # regardless of what setpts or upstream filters did to the timestamps.
+    target_fps, fps_policy = _resolve_fps(input_path, int(output_fps or 0))
+    logger.info("render_part: %s | input=%s", fps_policy, Path(input_path).name)
     vf_parts.append(f"fps={target_fps}")
 
     resolved_codec = _resolve_codec(video_codec, encoder_mode=encoder_mode)
@@ -458,57 +519,64 @@ def render_part(
     logger.info("render_part_smart: codec=%s preset=%s crf=%s input=%s output=%s",
                 resolved_codec, resolved_preset, video_crf,
                 Path(input_path).name, Path(output_path).name)
-    try:
-        _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
-    except Exception as _nvenc_err:
-        if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
+    if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
+        # GPU encode: hold one NVENC session slot for the duration of the subprocess.
+        # NVENC_SEMAPHORE is released on any exit (success OR exception) before the
+        # CPU fallback runs — so the fallback never competes with other GPU sessions.
+        try:
+            with NVENC_SEMAPHORE:
+                _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
+            return
+        except Exception as _nvenc_err:
             logger.warning(
                 "NVENC encode failed (%s), falling back to CPU encoder for %s",
                 _nvenc_err, Path(output_path).name,
             )
-            cpu_codec = "libx265" if str(video_codec).lower() == "h265" else "libx264"
-            cpu_preset = _map_preset_for_encoder(video_preset, cpu_codec)
-            cpu_flags = ["-c:v", cpu_codec, "-preset", cpu_preset,
-                         *_codec_extra_flags(cpu_codec, int(video_crf), video_preset),
-                         "-threads", "0",
-                         "-pix_fmt", "yuv420p",
-                         "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
-                         "-movflags", "+faststart"]
-            cpu_cmd = [get_ffmpeg_bin(), "-y", "-i", input_path]
-            if bgm_ok:
-                cpu_cmd += ["-stream_loop", "-1", "-i", bgm_path]
-                if input_has_audio:
-                    a0_chain = "volume=1.0"
-                    a1_chain = f"volume={gain}"
-                    if abs(speed - 1.0) > 1e-4:
-                        a0_chain += f",atempo={speed:.4f}"
-                        a1_chain += f",atempo={speed:.4f}"
-                    fc = (f"[0:v]{vf_chain}[vout];"
-                          f"[0:a]{a0_chain}[a0];[1:a]{a1_chain}[a1];"
-                          f"[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]")
-                    cpu_cmd += ["-filter_complex", fc, "-map", "[vout]", "-map", "[aout]"]
-                else:
-                    fc = f"[0:v]{vf_chain}[vout]"
-                    af = f"volume={gain}"
-                    if abs(speed - 1.0) > 1e-4:
-                        af += f",atempo={speed:.4f}"
-                    cpu_cmd += ["-filter_complex", fc,
-                                "-map", "[vout]", "-map", "1:a:0",
-                                "-filter:a", af, "-shortest"]
+        # CPU fallback — NVENC_SEMAPHORE already released by the `with` block above.
+        cpu_codec = "libx265" if str(video_codec).lower() == "h265" else "libx264"
+        cpu_preset = _map_preset_for_encoder(video_preset, cpu_codec)
+        cpu_flags = ["-c:v", cpu_codec, "-preset", cpu_preset,
+                     *_codec_extra_flags(cpu_codec, int(video_crf), video_preset),
+                     "-threads", "0",
+                     "-pix_fmt", "yuv420p",
+                     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+                     "-movflags", "+faststart"]
+        cpu_cmd = [get_ffmpeg_bin(), "-y", "-i", input_path]
+        if bgm_ok:
+            cpu_cmd += ["-stream_loop", "-1", "-i", bgm_path]
+            if input_has_audio:
+                a0_chain = "volume=1.0"
+                a1_chain = f"volume={gain}"
+                if abs(speed - 1.0) > 1e-4:
+                    a0_chain += f",atempo={speed:.4f}"
+                    a1_chain += f",atempo={speed:.4f}"
+                fc = (f"[0:v]{vf_chain}[vout];"
+                      f"[0:a]{a0_chain}[a0];[1:a]{a1_chain}[a1];"
+                      f"[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]")
+                cpu_cmd += ["-filter_complex", fc, "-map", "[vout]", "-map", "[aout]"]
             else:
-                cpu_cmd += ["-vf", vf_chain]
-                if input_has_audio:
-                    af_parts = []
-                    if reup_mode:
-                        af_parts.append(_reup_audio_filter())
-                    if abs(speed - 1.0) > 1e-4:
-                        af_parts.append(f"atempo={speed:.4f}")
-                    if af_parts:
-                        cpu_cmd += ["-af", ",".join(af_parts)]
-            cpu_cmd += [*cpu_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
-            _run_ffmpeg_with_retry(cpu_cmd, retry_count=retry_count)
-            return
-        raise
+                fc = f"[0:v]{vf_chain}[vout]"
+                af = f"volume={gain}"
+                if abs(speed - 1.0) > 1e-4:
+                    af += f",atempo={speed:.4f}"
+                cpu_cmd += ["-filter_complex", fc,
+                            "-map", "[vout]", "-map", "1:a:0",
+                            "-filter:a", af, "-shortest"]
+        else:
+            cpu_cmd += ["-vf", vf_chain]
+            if input_has_audio:
+                af_parts = []
+                if reup_mode:
+                    af_parts.append(_reup_audio_filter())
+                if abs(speed - 1.0) > 1e-4:
+                    af_parts.append(f"atempo={speed:.4f}")
+                if af_parts:
+                    cpu_cmd += ["-af", ",".join(af_parts)]
+        cpu_cmd += [*cpu_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
+        _run_ffmpeg_with_retry(cpu_cmd, retry_count=retry_count)
+    else:
+        # CPU-only encode — no GPU semaphore needed.
+        _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
 
 
 
@@ -549,33 +617,44 @@ def render_part_smart(
                 scale_y_percent=float(scale_y),
                 reframe_mode=reframe_mode,
             )
-            return render_motion_aware_crop(
-                input_path=input_path,
-                output_path=output_path,
-                aspect_ratio=aspect_ratio,
-                scale_x_percent=float(scale_x),
-                scale_y_percent=float(scale_y),
-                subtitle_file=subtitle_ass if add_subtitle and subtitle_ass and Path(subtitle_ass).exists() else None,
-                title_text=title_text if add_title_overlay else None,
-                effect_preset=effect_preset,
-                transition_sec=transition_sec,
-                video_codec=video_codec,
-                video_crf=video_crf,
-                video_preset=video_preset,
-                audio_bitrate=audio_bitrate,
-                retry_count=retry_count,
-                encoder_mode=encoder_mode,
-                output_fps=output_fps,
-                reup_mode=reup_mode,
-                reup_overlay_enable=reup_overlay_enable,
-                reup_overlay_opacity=reup_overlay_opacity,
-                reup_bgm_enable=reup_bgm_enable,
-                reup_bgm_path=reup_bgm_path,
-                reup_bgm_gain=reup_bgm_gain,
-                playback_speed=playback_speed,
-                text_layers=text_layers,
-                cfg=crop_cfg,
-            )
+            # motion_crop.py has its own NVENC resolve logic; acquire the semaphore
+            # here (one level up) so the session slot is held for the full encode.
+            _crop_codec = _resolve_codec(video_codec, encoder_mode=encoder_mode)
+            _crop_ctx = NVENC_SEMAPHORE if _crop_codec in ("h264_nvenc", "hevc_nvenc") else None
+            if _crop_ctx is not None:
+                _crop_ctx.acquire()
+            try:
+                result = render_motion_aware_crop(
+                    input_path=input_path,
+                    output_path=output_path,
+                    aspect_ratio=aspect_ratio,
+                    scale_x_percent=float(scale_x),
+                    scale_y_percent=float(scale_y),
+                    subtitle_file=subtitle_ass if add_subtitle and subtitle_ass and Path(subtitle_ass).exists() else None,
+                    title_text=title_text if add_title_overlay else None,
+                    effect_preset=effect_preset,
+                    transition_sec=transition_sec,
+                    video_codec=video_codec,
+                    video_crf=video_crf,
+                    video_preset=video_preset,
+                    audio_bitrate=audio_bitrate,
+                    retry_count=retry_count,
+                    encoder_mode=encoder_mode,
+                    output_fps=output_fps,
+                    reup_mode=reup_mode,
+                    reup_overlay_enable=reup_overlay_enable,
+                    reup_overlay_opacity=reup_overlay_opacity,
+                    reup_bgm_enable=reup_bgm_enable,
+                    reup_bgm_path=reup_bgm_path,
+                    reup_bgm_gain=reup_bgm_gain,
+                    playback_speed=playback_speed,
+                    text_layers=text_layers,
+                    cfg=crop_cfg,
+                )
+            finally:
+                if _crop_ctx is not None:
+                    _crop_ctx.release()
+            return result
         except Exception as exc:
             logger.warning("Motion-aware crop failed, fallback to standard render: %s", exc)
             # Fallback to standard ffmpeg render path if motion-aware branch fails.

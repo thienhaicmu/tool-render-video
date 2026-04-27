@@ -259,6 +259,17 @@ def api_jobs_history(limit: int = 20):
     return {"items": [_normalize_history_item(row) for row in rows]}
 
 
+@router.get("/queue/status")
+def api_queue_status():
+    from app.services.job_manager import active_count, pending_count, MAX_CONCURRENT_JOBS
+    return {
+        "max_concurrent": MAX_CONCURRENT_JOBS,
+        "active": active_count(),
+        "pending": pending_count(),
+        "available_slots": max(0, MAX_CONCURRENT_JOBS - active_count()),
+    }
+
+
 @router.get("/{job_id}")
 def api_get_job(job_id: str):
     row = get_job(job_id)

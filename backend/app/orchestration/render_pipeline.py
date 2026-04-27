@@ -34,6 +34,18 @@ logger = logging.getLogger("app.render")
 
 _PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes to update progress
 
+# ---------------------------------------------------------------------------
+# Resource throttling
+# ---------------------------------------------------------------------------
+# JOB_SEMAPHORE caps how many render pipelines can be in the FFmpeg-encode
+# section simultaneously.  This prevents CPU saturation when multiple jobs
+# are dispatched by the scheduler at the same time.
+# Override with MAX_RENDER_JOBS env var (e.g. MAX_RENDER_JOBS=3 for 32-core).
+_JOB_SEM_VALUE: int = max(1, int(os.getenv("MAX_RENDER_JOBS", "2")))
+JOB_SEMAPHORE = threading.Semaphore(_JOB_SEM_VALUE)
+_render_active_lock = threading.Lock()
+_render_active_count: list[int] = [0]   # mutable int; guarded by _render_active_lock
+
 
 def _render_progress_timer(
     stop_event: threading.Event,
@@ -910,7 +922,13 @@ def run_render_pipeline(
             translated_srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.{_sub_target_lang}.srt"
             _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} start", kind="debug")
 
-            if payload.resume_from_last and final_part.exists() and final_part.stat().st_size > 0:
+            _existing_part_info = existing_parts.get(idx, {})
+            if (
+                payload.resume_from_last
+                and ((_existing_part_info.get("status") or "").lower() == "done")
+                and final_part.exists()
+                and final_part.stat().st_size > 0
+            ):
                 upsert_job_part(job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Skipped (already rendered)")
                 _job_log(effective_channel, job_id, f"Part {idx} skipped: final output already exists", kind="debug")
                 return {"idx": idx, "output": str(final_part), "row": None, "skipped": True}
@@ -1348,70 +1366,50 @@ def run_render_pipeline(
             f"base={base}, hw_cap={hw_cap}, user_req={user_req}) | "
             f"codec={_effective_codec} preset={tuned['video_preset']} crf={tuned['video_crf']}",
         )
-        completed_parts = 0
-        failed_parts = []
-        _set_stage(JobStage.RENDERING_PARALLEL if max_workers > 1 else JobStage.RENDERING, 30, f"Rendering parts 0/{total_parts}")
-        _t_render_loop = time.perf_counter()
-        _emit_render_event(
-            channel_code=effective_channel,
-            job_id=job_id,
-            event="render.ffmpeg.start",
-            level="INFO",
-            message="Running ffmpeg render",
-            step="render.ffmpeg",
-            context={"total_parts": total_parts, "workers": max_workers},
-        )
-        if normalized_text_layers:
+        # Acquire JOB_SEMAPHORE before entering the FFmpeg-encode section.
+        # Blocks until a slot opens when MAX_RENDER_JOBS pipelines are already active.
+        # Reduces per-job part parallelism proportionally under contention so that
+        # two simultaneous jobs share CPU rather than fighting at 100%.
+        JOB_SEMAPHORE.acquire()
+        with _render_active_lock:
+            _render_active_count[0] += 1
+            _render_slot = _render_active_count[0]
+        if _render_slot > 1:
+            max_workers = max(1, max_workers // _render_slot)
+            _job_log(
+                effective_channel, job_id,
+                f"Throttling to {max_workers} worker(s) — {_render_slot} concurrent render(s) active",
+                kind="info",
+            )
+        try:
+            completed_parts = 0
+            failed_parts = []
+            _set_stage(JobStage.RENDERING_PARALLEL if max_workers > 1 else JobStage.RENDERING, 30, f"Rendering parts 0/{total_parts}")
+            _t_render_loop = time.perf_counter()
             _emit_render_event(
                 channel_code=effective_channel,
                 job_id=job_id,
-                event="render.text_layers.apply",
+                event="render.ffmpeg.start",
                 level="INFO",
-                message="Applying text overlay layers during render",
-                step="render.text_layers",
-                context={"layer_count": len(normalized_text_layers), "total_parts": total_parts},
+                message="Running ffmpeg render",
+                step="render.ffmpeg",
+                context={"total_parts": total_parts, "workers": max_workers},
             )
+            if normalized_text_layers:
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="render.text_layers.apply",
+                    level="INFO",
+                    message="Applying text overlay layers during render",
+                    step="render.text_layers",
+                    context={"layer_count": len(normalized_text_layers), "total_parts": total_parts},
+                )
 
-        if max_workers == 1:
-            for idx, seg in enumerate(scored, start=1):
-                try:
-                    result = _process_one_part(idx, seg)
-                    if result["output"]:
-                        outputs.append(result["output"])
-                    if result["row"]:
-                        rows.append(result["row"])
-                except Exception as part_err:
-                    failed_parts.append((idx, str(part_err)))
-                    upsert_job_part(
-                        job_id,
-                        idx,
-                        f"{source['slug']}_part_{idx:03d}.mp4",
-                        JobPartStage.FAILED,
-                        _failed_part_progress(job_id, idx),
-                        seg["start"],
-                        seg["end"],
-                        seg["duration"],
-                        seg.get("viral_score", 0),
-                        seg.get("motion_score", 0),
-                        seg.get("hook_score", 0),
-                        "",
-                        f"Failed: {part_err}",
-                    )
-                    _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} failed: {part_err}")
-                completed_parts += 1
-                progress = 30 + int((completed_parts / total_parts) * 60)
-                _set_stage(JobStage.RENDERING, progress, f"Processed {completed_parts}/{total_parts} parts")
-        else:
-            future_map = {}
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            if max_workers == 1:
                 for idx, seg in enumerate(scored, start=1):
-                    future_map[executor.submit(_process_one_part, idx, seg)] = idx
-
-                for future in as_completed(future_map):
-                    idx = future_map[future]
-                    seg = scored[idx - 1]
                     try:
-                        result = future.result()
+                        result = _process_one_part(idx, seg)
                         if result["output"]:
                             outputs.append(result["output"])
                         if result["row"]:
@@ -1436,14 +1434,54 @@ def run_render_pipeline(
                         _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} failed: {part_err}")
                     completed_parts += 1
                     progress = 30 + int((completed_parts / total_parts) * 60)
-                    _set_stage(JobStage.RENDERING_PARALLEL, progress, f"Processed {completed_parts}/{total_parts} parts")
+                    _set_stage(JobStage.RENDERING, progress, f"Processed {completed_parts}/{total_parts} parts")
+            else:
+                future_map = {}
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    for idx, seg in enumerate(scored, start=1):
+                        future_map[executor.submit(_process_one_part, idx, seg)] = idx
 
-        _render_loop_ms = int((time.perf_counter() - _t_render_loop) * 1000)
-        _job_log(
-            effective_channel, job_id,
-            f"Render loop done: {len(outputs)}/{total_parts} parts in {_render_loop_ms}ms "
-            f"({_render_loop_ms // 1000}s) with {max_workers} worker(s)",
-        )
+                    for future in as_completed(future_map):
+                        idx = future_map[future]
+                        seg = scored[idx - 1]
+                        try:
+                            result = future.result()
+                            if result["output"]:
+                                outputs.append(result["output"])
+                            if result["row"]:
+                                rows.append(result["row"])
+                        except Exception as part_err:
+                            failed_parts.append((idx, str(part_err)))
+                            upsert_job_part(
+                                job_id,
+                                idx,
+                                f"{source['slug']}_part_{idx:03d}.mp4",
+                                JobPartStage.FAILED,
+                                _failed_part_progress(job_id, idx),
+                                seg["start"],
+                                seg["end"],
+                                seg["duration"],
+                                seg.get("viral_score", 0),
+                                seg.get("motion_score", 0),
+                                seg.get("hook_score", 0),
+                                "",
+                                f"Failed: {part_err}",
+                            )
+                            _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} failed: {part_err}")
+                        completed_parts += 1
+                        progress = 30 + int((completed_parts / total_parts) * 60)
+                        _set_stage(JobStage.RENDERING_PARALLEL, progress, f"Processed {completed_parts}/{total_parts} parts")
+
+            _render_loop_ms = int((time.perf_counter() - _t_render_loop) * 1000)
+            _job_log(
+                effective_channel, job_id,
+                f"Render loop done: {len(outputs)}/{total_parts} parts in {_render_loop_ms}ms "
+                f"({_render_loop_ms // 1000}s) with {max_workers} worker(s)",
+            )
+        finally:
+            with _render_active_lock:
+                _render_active_count[0] -= 1
+            JOB_SEMAPHORE.release()
 
         if failed_parts and not outputs:
             raise RuntimeError(f"All parts failed ({len(failed_parts)}/{total_parts})")

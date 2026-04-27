@@ -6526,3 +6526,129 @@
         transition: none !important;
       }
     }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Phase Q — UI Polish 4: badge · idle panel · card trim · strips
+       Append-only. Overrides K3 hot-glow, K4 title size, P7 emptyState.
+    ══════════════════════════════════════════════════════════════════ */
+
+    /* Q1 — Kill Phase K3 glow animation; shrink badge globally */
+    .rcScoreBadge {
+      animation: none !important;
+      font-size: 10px;
+      padding: 2px 5px;
+      letter-spacing: 0;
+      opacity: .9;
+    }
+
+    /* Q2 — Hot tier: soft orange, no glow */
+    .rcScoreBadge[data-tier="hot"] {
+      background: rgba(251,146,60,.1);
+      color: #fb923c;
+      border: 1px solid rgba(251,146,60,.22);
+      box-shadow: none;
+      text-shadow: none;
+    }
+
+    /* Q3 — Warm tier: muted amber */
+    .rcScoreBadge[data-tier="warm"] {
+      background: rgba(251,191,36,.08);
+      color: #fcd34d;
+      border: 1px solid rgba(251,191,36,.16);
+    }
+
+    /* Q4 — Low tier: quiet gray */
+    .rcScoreBadge[data-tier="low"] {
+      background: transparent;
+      color: rgba(148,163,184,.38);
+      border: 1px solid rgba(148,163,184,.1);
+    }
+
+    /* Q5 — Pending tier: hide entirely */
+    .rcScoreBadge[data-tier="pending"] {
+      display: none;
+    }
+
+    /* Q6 — Card: tighten to 12px padding, 8px gap */
+    .rcQueueRow {
+      padding: 12px;
+      gap: 8px;
+    }
+
+    /* Q7 — Title: clean 12px (overrides K4 13px) */
+    .rcQueueTitle {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .01em;
+    }
+
+    /* Q8 — Message: 1-line ellipsis */
+    .rcQueueMessage {
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      white-space: normal;
+      font-size: 10.5px;
+    }
+
+    /* Q9 — Active card idle state: soft, no chrome */
+    .rcActiveCard.isIdle {
+      background: rgba(255,255,255,.015);
+      border-color: rgba(148,163,184,.08);
+      box-shadow: none;
+    }
+    .rcActiveCard.isIdle .rcActiveTitle {
+      color: rgba(148,163,184,.68);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .rcActiveCard.isIdle .rcActiveSubtitle {
+      color: rgba(100,116,139,.55);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+    .rcActiveCard.isIdle .rcActivePercent,
+    .rcActiveCard.isIdle .rcActiveProgress,
+    .rcActiveCard.isIdle .rcActiveStage,
+    .rcActiveCard.isIdle .rcActiveMessage {
+      display: none;
+    }
+
+    /* Q10 — Status strip: hide noise when no active job (data-state="ready") */
+    .rcStatusStrip:has(#rc_status[data-state="ready"]) .rcStatusText,
+    .rcStatusStrip:has(#rc_status[data-state="ready"]) .rcProgressText,
+    .rcStatusStrip:has(#rc_status[data-state="ready"]) .rcLatest {
+      display: none;
+    }
+
+    /* Q11 — Panel badge: hide when idle */
+    .rcPanelBadge[data-state="idle"] {
+      display: none;
+    }
+
+    /* Q12 — Empty queue: cleaner short message */
+    .rcQueueGrid > .emptyState {
+      font-size: 11.5px;
+      color: rgba(100,116,139,.48);
+      padding: 28px 16px;
+      border: 1px dashed rgba(255,255,255,.065);
+      border-radius: 10px;
+      background: rgba(255,255,255,.01);
+    }
+
+    /* Q13 — Log empty state: tighter */
+    .rcLogEmpty {
+      padding: 18px 12px;
+      font-size: 11px;
+      color: rgba(100,116,139,.4);
+      font-style: normal;
+    }
+
+    /* Q14 — Inputs in flex rows: prevent text-overflow squeeze */
+    .formRow input[type="text"],
+    .formRow input[type="number"],
+    .fieldRow input[type="text"],
+    .fieldRow input[type="number"] {
+      min-width: 0;
+    }

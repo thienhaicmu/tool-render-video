@@ -59,10 +59,10 @@ function resetRenderSessionUi(){
   if (qs('rc_status')) qs('rc_status').textContent = 'Ready';
   if (qs('rc_status')) qs('rc_status').dataset.state = 'ready';
   if (qs('rc_progress')) qs('rc_progress').textContent = '0%';
-  if (qs('rc_stage')) qs('rc_stage').textContent = 'Idle';
+  if (qs('rc_stage')) qs('rc_stage').textContent = '';
   if (qs('rc_parts')) qs('rc_parts').textContent = '0 / 0 clips';
-  if (qs('rc_active')) qs('rc_active').textContent = 'No active clip';
-  if (qs('rc_latest')) qs('rc_latest').textContent = 'Waiting for render...';
+  if (qs('rc_active')) qs('rc_active').textContent = '';
+  if (qs('rc_latest')) qs('rc_latest').textContent = '';
   if (qs('abp_output_text')) qs('abp_output_text').textContent = 'Output folder not set.';
   if (qs('abp_output_meta')) qs('abp_output_meta').textContent = 'Latest file will appear here.';
   if (qs('abp_error_text')) qs('abp_error_text').textContent = 'No blocking errors.';
@@ -818,9 +818,9 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     activeCard.classList.remove('isIdle', 'isRendering', 'isCompleted', 'isFailed');
     let activeCardState = 'isIdle';
     let activeCardPct = pct;
-    let title = 'Waiting for next clip';
-    let subtitle = total ? `${completed}/${total} completed` : 'Waiting for render...';
-    let stageLine = total ? `Stage: ${stageText}` : 'Idle';
+    let title = 'Ready to render';
+    let subtitle = total ? `${completed}/${total} clips done` : 'Configure your video, then click Start Render.';
+    let stageLine = total ? `Stage: ${stageText}` : '';
     let message = latest || 'No activity yet.';
 
     if (activePart) {

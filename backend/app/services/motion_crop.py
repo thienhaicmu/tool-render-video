@@ -228,21 +228,41 @@ def _get_custom_fonts_dir() -> str | None:
 # ---------------------------------------------------------------------------
 
 def ffprobe_video_info(video_path: str) -> Tuple[int, int, float]:
+    """Return (width, height, fps) via ffprobe.
+
+    Probes avg_frame_rate (actual cadence) and r_frame_rate (container-declared
+    max).  avg_frame_rate is preferred for accuracy with VFR content.
+    Falls back to 30.0 if both probes fail or are out of the sane [1, 120] range.
+    """
+    def _parse(s: str) -> float:
+        s = (s or "").strip()
+        if "/" in s:
+            try:
+                a, b = s.split("/", 1)
+                return float(a) / float(b) if float(b) else 0.0
+            except (ValueError, ZeroDivisionError):
+                return 0.0
+        try:
+            return float(s) if s else 0.0
+        except ValueError:
+            return 0.0
+
     cmd = [
         get_ffprobe_bin(), "-v", "error", "-select_streams", "v:0",
-        "-show_entries", "stream=width,height,r_frame_rate",
+        "-show_entries", "stream=width,height,avg_frame_rate,r_frame_rate",
         "-of", "default=noprint_wrappers=1:nokey=1", video_path,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     lines = [x.strip() for x in result.stdout.splitlines() if x.strip()]
-    width = int(lines[0])
+    width  = int(lines[0])
     height = int(lines[1])
-    fps_raw = lines[2]
-    if "/" in fps_raw:
-        a, b = fps_raw.split("/")
-        fps = float(a) / float(b) if float(b) != 0 else 30.0
-    else:
-        fps = float(fps_raw or 30.0)
+    avg_fps = _parse(lines[2]) if len(lines) > 2 else 0.0
+    r_fps   = _parse(lines[3]) if len(lines) > 3 else 0.0
+    fps = 30.0
+    for candidate in (avg_fps, r_fps):
+        if 1.0 <= candidate <= 120.0:
+            fps = candidate
+            break
     return width, height, fps
 
 
@@ -782,7 +802,7 @@ def render_motion_aware_crop(
         logger.info("Applying %d text overlay layer(s) in motion-aware pipeline", layer_count)
     cfg = cfg or MotionCropConfig(scale_x_percent=scale_x_percent, scale_y_percent=scale_y_percent)
 
-    src_w, src_h, _ = ffprobe_video_info(input_path)
+    src_w, src_h, probe_fps = ffprobe_video_info(input_path)
 
     if aspect_ratio == "1:1":
         out_w, out_h = 1080, 1080
@@ -859,11 +879,24 @@ def render_motion_aware_crop(
 
     speed = _sanitize_speed(playback_speed)
     if abs(speed - 1.0) > 1e-4:
+        # setpts must come BEFORE fps so the fps filter receives speed-adjusted
+        # timestamps and produces a constant-rate output at exactly target_fps.
         vf_parts.append(f"setpts=PTS/{speed:.4f}")
 
-    src_fps = max(1.0, float(detected_fps or cfg.fps_fallback))
-    # Smart FPS: never upscale beyond source fps
-    target_fps = max(1, min(int(round(src_fps)), int(output_fps or 60)))
+    # Source fps: prefer ffprobe (probe_fps) over OpenCV (detected_fps).
+    # OpenCV CAP_PROP_FPS returns 0 for some MKV/TS containers; using it for
+    # the ffmpeg -r flag would declare the wrong input rate and cause truncated
+    # or jittery output.  ffprobe avg_frame_rate is always authoritative.
+    _FPS_CAP = 60
+    src_fps = max(1.0, float(probe_fps or detected_fps or cfg.fps_fallback))
+    if not output_fps:
+        target_fps = max(1, min(int(round(src_fps)), _FPS_CAP))
+        fps_policy = f"fps_policy=auto src={src_fps:.3f} target={target_fps}"
+    else:
+        target_fps = max(1, min(int(round(src_fps)), int(output_fps), _FPS_CAP))
+        fps_policy = f"fps_policy=user({output_fps}) src={src_fps:.3f} target={target_fps}"
+    logger.info("motion_crop: %s | input=%s", fps_policy, Path(input_path).name)
+    # fps filter is always the last video filter — guarantees CFR output.
     vf_parts.append(f"fps={target_fps}")
 
     resolved_codec = _resolve_encoder(video_codec, encoder_mode=encoder_mode)

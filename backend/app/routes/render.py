@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from app.models.schemas import RenderRequest, DownloadHealthRequest, PrepareSourceRequest, QuickProcessRequest
-from app.services.db import upsert_job, get_job
+from app.services.db import upsert_job, get_job, list_job_parts
 from app.services.job_manager import submit_job, is_running
 from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify, check_youtube_download_health
@@ -1042,6 +1042,42 @@ def resume_render_job(job_id: str):
     effective_channel = (payload.channel_code or "").strip() or "manual"
     _queue_render_job(job_id, effective_channel, payload, resume_mode=True, queued_message="Resume job queued")
     return {"job_id": job_id, "status": "queued", "resume_mode": True}
+
+
+@router.post("/retry/{job_id}")
+def retry_failed_parts(job_id: str):
+    """Re-run only the failed parts of a completed or partially-failed render job.
+
+    Done parts are preserved; only parts with status='failed' are re-processed.
+    Equivalent to resume, but validated to have at least one failed part.
+    """
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if (row.get("status") or "").lower() in ("running", "queued"):
+        raise HTTPException(status_code=409, detail="Job is already running or queued")
+
+    parts = list_job_parts(job_id)
+    failed = [p for p in parts if (p.get("status") or "").lower() == "failed"]
+    if not failed:
+        raise HTTPException(status_code=400, detail="No failed parts to retry")
+
+    payload_json = row.get("payload_json") or "{}"
+    try:
+        payload_data = json.loads(payload_json)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot parse payload for job {job_id}: {e}") from e
+
+    payload = RenderRequest(**payload_data)
+    payload.resume_from_last = True
+    _validate_render_source(payload)
+    effective_channel = (payload.channel_code or "").strip() or "manual"
+    _queue_render_job(
+        job_id, effective_channel, payload,
+        resume_mode=True,
+        queued_message=f"Retrying {len(failed)} failed part(s)",
+    )
+    return {"job_id": job_id, "status": "queued", "failed_parts_count": len(failed)}
 
 
 @router.get("/jobs/{job_id}")
