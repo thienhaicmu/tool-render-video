@@ -48,6 +48,68 @@ _render_active_lock = threading.Lock()
 _render_active_count: list[int] = [0]   # mutable int; guarded by _render_active_lock
 
 
+def _apply_subtitle_edits_to_srt(srt_path: str, edits: list) -> None:
+    """Patch specific SRT blocks in-place with user-supplied text.
+
+    Matches by index (0-based segment position in file).  For each edit,
+    verifies that the block's start-time is within 0.5 s of the stored value
+    to guard against offset drift.  On any mismatch or error the edit is
+    silently skipped and the original block is preserved.
+    """
+    import re as _re
+    if not edits:
+        return
+    edit_map = {}
+    for e in edits:
+        try:
+            edit_map[int(e['index'])] = e
+        except (KeyError, TypeError, ValueError):
+            pass
+    if not edit_map:
+        return
+
+    _srt_ts_re = _re.compile(
+        r'(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})'
+    )
+
+    def _ts_to_sec(h, m, s, ms):
+        return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000.0
+
+    try:
+        raw = Path(srt_path).read_text(encoding='utf-8', errors='replace')
+    except Exception:
+        return
+
+    blocks = _re.split(r'\n{2,}', raw.strip())
+    changed = False
+    out_blocks = []
+    for blk_idx, blk in enumerate(blocks):
+        lines = blk.strip().splitlines()
+        if blk_idx in edit_map and len(lines) >= 3:
+            edit = edit_map[blk_idx]
+            ts_match = _srt_ts_re.search(blk)
+            if ts_match:
+                blk_start = _ts_to_sec(*ts_match.groups()[:4])
+                try:
+                    expected_start = float(edit.get('start', blk_start))
+                except (TypeError, ValueError):
+                    expected_start = blk_start
+                if abs(blk_start - expected_start) <= 0.5:
+                    seq_line = lines[0]
+                    ts_line  = lines[1]
+                    new_blk  = f"{seq_line}\n{ts_line}\n{str(edit['text']).strip()}"
+                    out_blocks.append(new_blk)
+                    changed = True
+                    continue
+        out_blocks.append(blk)
+
+    if changed:
+        try:
+            Path(srt_path).write_text('\n\n'.join(out_blocks) + '\n', encoding='utf-8')
+        except Exception as exc:
+            logger.warning("subtitle_edits: failed to write patched SRT (%s): %s", srt_path, exc)
+
+
 def _render_progress_timer(
     stop_event: threading.Event,
     job_id: str,
@@ -1014,6 +1076,12 @@ def run_render_pipeline(
                             )
                     if translated_srt_part.exists() and translated_srt_part.stat().st_size > 0:
                         _ass_srt_source = translated_srt_part
+                _sub_edits = getattr(payload, 'subtitle_edits', None)
+                if _sub_edits and _ass_srt_source.exists():
+                    try:
+                        _apply_subtitle_edits_to_srt(str(_ass_srt_source), _sub_edits)
+                    except Exception as _se_exc:
+                        logger.warning("subtitle_edits: skipped due to error: %s", _se_exc)
                 if _mv_cfg and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
                     try:
                         apply_market_line_break_to_srt(str(_ass_srt_source), _mv_cfg)

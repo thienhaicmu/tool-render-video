@@ -6,6 +6,7 @@ let _ev = {
   sourceMode: null, sourceUrl: null,
   subXPercent: 50,
   subtitleSegments: [],
+  subtitleEdits: new Map(),
   subtitleMode: 'demo',
   selectedObject: null,
 };
@@ -839,6 +840,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   _ev.sourceUrl = urlOrPath;
   _ev.subXPercent = 50;
   _ev.subtitleSegments = [];
+  _ev.subtitleEdits = new Map();
   _ev.subtitleMode = 'demo';
   if (qs('evSubPosX'))    qs('evSubPosX').value       = 50;
   if (qs('evSubPosXVal')) qs('evSubPosXVal').textContent = 50;
@@ -915,6 +917,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   _ev.sourceMode = _ev.sourceMode || 'youtube';
   _ev.subXPercent = 50;
   _ev.subtitleSegments = [];
+  _ev.subtitleEdits = new Map();
   _ev.subtitleMode = 'demo';
   if (qs('evSubPosX'))    qs('evSubPosX').value       = 50;
   if (qs('evSubPosXVal')) qs('evSubPosXVal').textContent = 50;
@@ -1720,6 +1723,14 @@ async function startRenderFromEditor() {
     };
   }
 
+  // ── Subtitle edits (hook previews applied by user) ───────────────────────
+  {
+    const edits = (_ev.subtitleEdits instanceof Map && _ev.subtitleEdits.size > 0)
+      ? Array.from(_ev.subtitleEdits.values())
+      : null;
+    payload.subtitle_edits = edits;
+  }
+
   // ── Output dir override (editor→render: bypass channel selection) ────────────
   {
     let raw = (payload.output_dir || '').replace(/\\/g, '/').trim();
@@ -2127,16 +2138,33 @@ function mvApplyHook(el) {
 
   const vid = qs('evVideo');
   const t   = vid ? (vid.currentTime || 0) : 0;
-  const seg = _ev.subtitleSegments.find(s => t >= s.start && t < s.end) || _ev.subtitleSegments[0];
+  let idx = _ev.subtitleSegments.findIndex(s => t >= s.start && t < s.end);
+  if (idx < 0) idx = 0;
+  const seg = _ev.subtitleSegments[idx];
   if (!seg) return;
 
   seg.text = hook;
+  if (!(_ev.subtitleEdits instanceof Map)) _ev.subtitleEdits = new Map();
+  _ev.subtitleEdits.set(idx, { index: idx, start: seg.start, end: seg.end, text: hook });
   _evSyncSubTime(t);
   mvUpdateHookQuality();
+  mvUpdateSubEditsIndicator();
 
   el.textContent = '✓ Previewed';
   el.classList.add('isApplied');
   setTimeout(() => { el.textContent = 'Preview'; el.classList.remove('isApplied'); }, 1500);
+}
+
+function mvUpdateSubEditsIndicator() {
+  const el = document.getElementById('mvSubEditsIndicator');
+  if (!el) return;
+  const n = (_ev.subtitleEdits instanceof Map) ? _ev.subtitleEdits.size : 0;
+  if (n > 0) {
+    el.textContent = `Subtitle edits pending: ${n}`;
+    el.classList.remove('hiddenView');
+  } else {
+    el.classList.add('hiddenView');
+  }
 }
 
 function mvUpdateHookSuggestions(text, market, strength) {
