@@ -3945,6 +3945,93 @@
     }
     .mvHookSuggestion:empty { display: none; }
 
+    /* Suggested Hooks section */
+    .mvHookSuggestSec { margin-bottom: 10px; }
+    .mvHookSuggestHeader {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    .mvHookSuggestLabel {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted, #888);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .mvHookSuggestList {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .mvHookSuggestNote {
+      font-size: 10px;
+      color: rgba(148,163,184,.45);
+      margin-top: 5px;
+      line-height: 1.4;
+    }
+    .mvHookChip {
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 5px;
+      padding: 5px 6px 5px 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 30px;
+    }
+    .mvHookChipText {
+      flex: 1 1 auto;
+      font-size: 11px;
+      color: var(--text, #ccc);
+      line-height: 1.4;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .mvHookChipActions {
+      display: flex;
+      gap: 3px;
+      flex-shrink: 0;
+    }
+    .mvHookChipCopy,
+    .mvHookChipApply {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+    }
+    .mvHookChipCopy {
+      background: rgba(255,255,255,.06);
+      border-color: rgba(255,255,255,.1);
+      color: var(--text-muted, #888);
+    }
+    .mvHookChipCopy:hover { background: rgba(255,255,255,.12); color: #e5e5e5; }
+    .mvHookChipCopy.isCopied {
+      background: rgba(34,197,94,.12);
+      border-color: rgba(34,197,94,.3);
+      color: #22c55e;
+    }
+    .mvHookChipApply {
+      background: rgba(99,102,241,.12);
+      border-color: rgba(99,102,241,.25);
+      color: rgba(165,180,252,.9);
+    }
+    .mvHookChipApply:hover {
+      background: rgba(99,102,241,.25);
+      border-color: rgba(99,102,241,.5);
+      color: #e5e5e5;
+    }
+    .mvHookChipApply.isApplied {
+      background: rgba(34,197,94,.15);
+      border-color: rgba(34,197,94,.35);
+      color: #22c55e;
+    }
+
     /* J3 — Separator always hidden; footer always visible; section flash */
     [data-insp-panel="_sep"] { display: none !important; }
     .evFooter { display: flex !important; }

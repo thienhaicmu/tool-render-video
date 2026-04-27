@@ -2038,6 +2038,7 @@ function mvUpdateHookQuality() {
     if (strengthEl) strengthEl.textContent = '';
     if (issueEl)    issueEl.textContent    = '';
     if (suggEl)     suggEl.textContent     = '';
+    mvUpdateHookSuggestions('', market, '');
     return;
   }
 
@@ -2047,6 +2048,117 @@ function mvUpdateHookQuality() {
   if (strengthEl) strengthEl.textContent = r.strength.charAt(0).toUpperCase() + r.strength.slice(1);
   if (issueEl)    issueEl.textContent    = r.issues[0] || '';
   if (suggEl)     suggEl.textContent     = r.suggestion || '';
+  mvUpdateHookSuggestions(text, market, r.strength);
+}
+
+function mvGenerateHookSuggestions(text, market, strength) {
+  const m = (String(market || 'US')).toUpperCase();
+
+  const VERB_HOOKS = {
+    US: ['Stop doing this if you want real results...', 'Try this instead — it actually works...'],
+    EU: ['Here\'s a practical method that actually delivers...', 'Try this evidence-based approach instead...'],
+    JP: ['実はこれだけで変わります', 'こっちの方法を試してみてください'],
+  };
+  const BENEFIT_HOOKS = {
+    US: ['This will save you real time and money...', 'Most people miss this simple win...'],
+    EU: ['Here\'s what the evidence actually shows...', 'A more effective path to real results...'],
+    JP: ['知らないと損するかも', 'これで結果が変わります'],
+  };
+  const GENERAL_HOOKS = {
+    US: ['This one thing changes everything...', 'Most people get this completely wrong...', 'Here\'s what nobody tells you...'],
+    EU: ['The honest truth about what works...', 'Research points to a better approach...', 'A clear guide that actually delivers...'],
+    JP: ['ちょっと待って、これ大事です', 'これを見てから決めてください', '意外と簡単な方法があります'],
+  };
+  const ALT_HOOKS = {
+    US: ['What if you started with this instead?', 'One more angle worth trying...'],
+    EU: ['Another evidence-based alternative...', 'Worth knowing: a practical twist on this...'],
+    JP: ['もう一つの視点から見てみましょう', '別の方法も参考にしてみてください'],
+  };
+
+  const vPool = VERB_HOOKS[m]    || VERB_HOOKS['US'];
+  const bPool = BENEFIT_HOOKS[m] || BENEFIT_HOOKS['US'];
+  const gPool = GENERAL_HOOKS[m] || GENERAL_HOOKS['US'];
+  const aPool = ALT_HOOKS[m]     || ALT_HOOKS['US'];
+
+  if (strength === 'strong') return aPool.slice(0, 2);
+
+  const r     = _mvAnalyzeHook(text, m);
+  const limit = strength === 'weak' ? 3 : 2;
+  const picks = [];
+
+  if (r.issues.some(i => i.toLowerCase().includes('verb'))    && picks.length < limit) picks.push(vPool[0]);
+  if (r.issues.some(i => i.toLowerCase().includes('benefit')) && picks.length < limit) picks.push(bPool[0]);
+  for (const h of gPool) {
+    if (picks.length >= limit) break;
+    if (!picks.includes(h))   picks.push(h);
+  }
+  return picks.slice(0, limit);
+}
+
+function mvCopyHook(el) {
+  const hook = el.dataset.hook || '';
+  if (!hook) return;
+  const apply = () => {
+    el.textContent = '✓';
+    el.classList.add('isCopied');
+    setTimeout(() => { el.textContent = 'Copy'; el.classList.remove('isCopied'); }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(hook).then(apply).catch(apply);
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = hook;
+    ta.style.cssText = 'position:fixed;left:-9999px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    ta.remove();
+    apply();
+  }
+}
+
+function mvApplyHook(el) {
+  const hook = el.dataset.hook || '';
+  if (!hook || !_ev || !Array.isArray(_ev.subtitleSegments) || !_ev.subtitleSegments.length) return;
+
+  const vid = qs('evVideo');
+  const t   = vid ? (vid.currentTime || 0) : 0;
+  const seg = _ev.subtitleSegments.find(s => t >= s.start && t < s.end) || _ev.subtitleSegments[0];
+  if (!seg) return;
+
+  seg.text = hook;
+  _evSyncSubTime(t);
+  mvUpdateHookQuality();
+
+  el.textContent = '✓ Previewed';
+  el.classList.add('isApplied');
+  setTimeout(() => { el.textContent = 'Preview'; el.classList.remove('isApplied'); }, 1500);
+}
+
+function mvUpdateHookSuggestions(text, market, strength) {
+  const sec   = document.getElementById('mvHookSuggestSec');
+  const label = document.getElementById('mvHookSuggestLabel');
+  const list  = document.getElementById('mvHookSuggestList');
+  if (!sec || !list) return;
+
+  if (!text) {
+    sec.classList.add('hiddenView');
+    return;
+  }
+
+  const hooks = mvGenerateHookSuggestions(text, market, strength);
+  sec.classList.remove('hiddenView');
+  if (label) label.textContent = strength === 'strong' ? 'Try Alternatives' : 'Suggested Hooks';
+  list.innerHTML = hooks.map(h => {
+    const safe = h.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    return `<div class="mvHookChip">` +
+      `<span class="mvHookChipText">${safe}</span>` +
+      `<div class="mvHookChipActions">` +
+        `<button type="button" class="mvHookChipCopy" data-hook="${safe}" onclick="mvCopyHook(this)">Copy</button>` +
+        `<button type="button" class="mvHookChipApply" data-hook="${safe}" onclick="mvApplyHook(this)">Preview</button>` +
+      `</div>` +
+    `</div>`;
+  }).join('');
 }
 
 async function mvAnalyzeMarket() {
