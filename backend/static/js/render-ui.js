@@ -777,6 +777,46 @@ function _mvTop3Set(mvMap) {
   return new Set(sorted.slice(0, 3).map(([k]) => k));
 }
 
+function _renderMvSummary(job, mvMap) {
+  const el = qs('mvRenderSummary');
+  if (!el) return;
+  if (!mvMap || !mvMap.size) {
+    el.innerHTML = '';
+    el.hidden = true;
+    return;
+  }
+  const sorted = [...mvMap.entries()].sort((a, b) => b[1].score - a[1].score);
+  const best   = sorted[0][1];
+  const top3   = sorted.slice(0, 3);
+  const market = best.market || 'US';
+
+  // Deduplicate reasons across top-3 clips, ordered by frequency
+  const freq = new Map();
+  top3.forEach(([, v]) => {
+    (v.reasons || []).forEach(r => { if (r) freq.set(r, (freq.get(r) || 0) + 1); });
+  });
+  const reasons = [...freq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([r]) => r);
+
+  const TIER_LABEL = { hot: 'Hot', warm: 'Warm', normal: 'Normal', weak: 'Weak' };
+  const tier = best.tier || 'weak';
+  const reasonsHtml = reasons.length
+    ? `<div class="mvSumReasons">${reasons.map(r => `<span class="mvSumReason">${esc(r)}</span>`).join('')}</div>`
+    : '';
+
+  el.hidden = false;
+  el.innerHTML =
+    `<div class="mvSumTitle">&#127758; Market Viral Summary</div>` +
+    `<div class="mvSumRow">` +
+      `<div class="mvSumCell"><div class="mvSumLabel">Market</div><div class="mvSumValue">${esc(market)}</div></div>` +
+      `<div class="mvSumCell"><div class="mvSumLabel">Best Score</div><div class="mvSumValue">${best.score} <span class="mvSumTierBadge" data-tier="${esc(tier)}">${esc(TIER_LABEL[tier] || tier)}</span></div></div>` +
+      `<div class="mvSumCell"><div class="mvSumLabel">Top Clips</div><div class="mvSumValue">${top3.length} selected</div></div>` +
+    `</div>` +
+    reasonsHtml;
+}
+
 function rcToggleClip(el) {
   const path = el.dataset.path;
   if (!path) return;
@@ -2191,6 +2231,8 @@ function hideRenderOutputPanel() {
 
 function clearRenderOutputPanel() {
   _selectedClipPaths = new Set();
+  const _sumEl = qs('mvRenderSummary');
+  if (_sumEl) { _sumEl.innerHTML = ''; _sumEl.hidden = true; }
   const list = qs('render_output_list');
   if (list) list.innerHTML = '<div class="renderOutputEmpty">Clips will appear here when render completes.</div>';
   const badge = qs('render_output_badge');
@@ -2223,6 +2265,7 @@ function populateRenderOutputPanel(job, parts) {
       _selectedClipPaths.add(p.output_file);
     }
   });
+  _renderMvSummary(job, _opMvMap);
 
   if (badge) badge.textContent = String(done.length);
 

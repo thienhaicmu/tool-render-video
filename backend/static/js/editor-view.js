@@ -1923,6 +1923,7 @@ function mvGetState() {
 function mvUpdatePreviewHint() {
   const bulletsEl = document.getElementById('mvHintBullets');
   const toneEl    = document.getElementById('mvHintToneRow');
+  const hookEl    = document.getElementById('mvHintHookRow');
   if (!bulletsEl || !toneEl) return;
 
   const MARKET_HINTS = {
@@ -1935,6 +1936,11 @@ function mvUpdatePreviewHint() {
     bold:    'Stronger emphasis on key terms',
     karaoke: 'Word-by-word energy feel',
   };
+  const HOOK_EXAMPLES = {
+    US: '"Stop doing this if you want real results..."',
+    EU: '"Here\'s a practical way to improve right now..."',
+    JP: '"実はこれだけで変わります"',
+  };
 
   const market   = _mvState.market       || 'US';
   const tone     = _mvState.subtitleTone || 'clean';
@@ -1943,6 +1949,70 @@ function mvUpdatePreviewHint() {
 
   bulletsEl.innerHTML = bullets.map(b => `<span class="mvHintTag">${b}</span>`).join('');
   toneEl.textContent  = toneHint;
+
+  if (hookEl) {
+    const example = HOOK_EXAMPLES[market] || HOOK_EXAMPLES['US'];
+    hookEl.innerHTML =
+      `Hook example: <span class="mvHintHookExample">${example}</span>`;
+  }
+}
+
+function _mvGetSubtitleText() {
+  const segs = (_ev && Array.isArray(_ev.subtitleSegments)) ? _ev.subtitleSegments : [];
+  if (!segs.length) return '';
+  return segs.slice(0, 8).map(s => (s.text || '')).join(' ').trim();
+}
+
+async function mvAnalyzeMarket() {
+  const btn      = document.getElementById('mvAnalyzeBtn');
+  const resultEl = document.getElementById('mvMarketRec');
+  if (!resultEl) return;
+
+  const text = _mvGetSubtitleText();
+  if (!text) {
+    resultEl.innerHTML = '<div class="mvRecMsg">No subtitle text available — load a video first.</div>';
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Analyzing…'; }
+  resultEl.innerHTML = '<div class="mvRecMsg">Analyzing…</div>';
+
+  try {
+    const resp = await fetch('/api/viral/score/all', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ text }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    const MARKETS = ['US', 'EU', 'JP'];
+    let best = 'US', bestScore = -1;
+    MARKETS.forEach(m => {
+      const s = Number(data[m]?.viral_score ?? 0);
+      if (s > bestScore) { bestScore = s; best = m; }
+    });
+
+    const rowsHtml = MARKETS.map(m => {
+      const score = Number(data[m]?.viral_score ?? 0);
+      const tier  = String(data[m]?.viral_tier  ?? '');
+      const isBest = m === best;
+      return `<div class="mvRecRow${isBest ? ' mvRecBest' : ''}">` +
+        `<span class="mvRecRowLabel">${m}</span>` +
+        `<span class="mvRecRowScore">${score}</span>` +
+        `<span class="mvRecRowTier">${tier}</span>` +
+        `</div>`;
+    }).join('');
+
+    resultEl.innerHTML =
+      `<div class="mvRecTitle">Recommended: <span class="mvRecMarketName">${best}</span></div>` +
+      `<div class="mvRecScores">${rowsHtml}</div>`;
+
+  } catch (_) {
+    resultEl.innerHTML = '<div class="mvRecMsg mvRecError">Analysis failed — try again.</div>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Analyze'; }
+  }
 }
 
 // ── Video Editor (old modal — kept for reference/batch) ─────────────────────

@@ -2013,6 +2013,64 @@
       font-size: 12px;
       line-height: 1.45;
     }
+
+    /* Market Viral result summary card */
+    #mvRenderSummary {
+      margin: 6px 0 8px;
+      padding: 10px 12px;
+      background: rgba(99,102,241,.07);
+      border: 1px solid rgba(99,102,241,.2);
+      border-radius: 8px;
+    }
+    .mvSumTitle {
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(165,180,252,.75);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: 8px;
+    }
+    .mvSumRow {
+      display: flex;
+      gap: 18px;
+      margin-bottom: 7px;
+    }
+    .mvSumLabel {
+      font-size: 10px;
+      color: rgba(148,163,184,.5);
+      margin-bottom: 2px;
+    }
+    .mvSumValue {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .mvSumTierBadge {
+      font-size: 9px;
+      font-weight: 500;
+      padding: 1px 5px;
+      border-radius: 999px;
+      vertical-align: middle;
+      background: rgba(148,163,184,.12);
+      color: rgba(148,163,184,.65);
+    }
+    .mvSumTierBadge[data-tier="hot"]    { background: rgba(245,158,11,.18);  color: #fbbf24; }
+    .mvSumTierBadge[data-tier="warm"]   { background: rgba(34,197,94,.14);   color: #86efac; }
+    .mvSumTierBadge[data-tier="normal"] { background: rgba(96,165,250,.13);  color: #93c5fd; }
+    .mvSumReasons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .mvSumReason {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.05);
+      color: rgba(148,163,184,.65);
+      white-space: nowrap;
+    }
+
     .renderOutputList {
       display: flex;
       flex-direction: column;
@@ -3736,6 +3794,102 @@
       color: rgba(148,163,184,.6);
       font-style: italic;
     }
+    .mvHintHookRow {
+      margin-top: 7px;
+      padding-top: 7px;
+      border-top: 1px solid rgba(99,102,241,.12);
+      font-size: 10px;
+      color: rgba(148,163,184,.5);
+    }
+    .mvHintHookRow:empty { display: none; }
+    .mvHintHookExample {
+      margin-top: 3px;
+      font-style: italic;
+      color: rgba(165,180,252,.65);
+    }
+
+    /* Market Recommendation card */
+    .mvRecommendCard {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: rgba(15,23,42,.4);
+      border: 1px solid rgba(148,163,184,.1);
+      border-radius: 8px;
+    }
+    .mvRecHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .mvRecLabel {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .mvRecBtn {
+      font-size: 10px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(99,102,241,.4);
+      background: rgba(99,102,241,.1);
+      color: rgba(165,180,252,.9);
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .mvRecBtn:hover:not(:disabled) { background: rgba(99,102,241,.22); }
+    .mvRecBtn:disabled { opacity: .5; cursor: default; }
+    .mvMarketRec:empty { display: none; }
+    .mvRecTitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 7px;
+    }
+    .mvRecMarketName { font-weight: 700; color: rgba(165,180,252,.95); }
+    .mvRecScores {
+      display: flex;
+      gap: 6px;
+    }
+    .mvRecRow {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 6px 4px;
+      border-radius: 7px;
+      background: rgba(255,255,255,.03);
+      border: 1px solid transparent;
+    }
+    .mvRecRow.mvRecBest {
+      background: rgba(99,102,241,.12);
+      border-color: rgba(99,102,241,.35);
+    }
+    .mvRecRowLabel {
+      font-size: 10px;
+      font-weight: 500;
+      color: rgba(148,163,184,.6);
+    }
+    .mvRecBest .mvRecRowLabel { color: rgba(165,180,252,.8); }
+    .mvRecRowScore {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .mvRecBest .mvRecRowScore { color: #a5b4fc; }
+    .mvRecRowTier {
+      font-size: 9px;
+      color: rgba(148,163,184,.45);
+    }
+    .mvRecBest .mvRecRowTier { color: rgba(165,180,252,.55); }
+    .mvRecMsg {
+      font-size: 10px;
+      color: rgba(148,163,184,.5);
+      font-style: italic;
+      text-align: center;
+      padding: 4px 0;
+    }
+    .mvRecMsg.mvRecError { color: rgba(248,113,113,.6); font-style: normal; }
 
     /* J3 — Separator always hidden; footer always visible; section flash */
     [data-insp-panel="_sep"] { display: none !important; }

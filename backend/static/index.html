@@ -396,6 +396,7 @@
         </div>
       </div>
       <div id="render_output_path" class="renderOutputPath"></div>
+      <div id="mvRenderSummary" hidden></div>
       <div id="render_output_list" class="renderOutputList">
         <div class="renderOutputEmpty">Clips will appear here when render completes.</div>
       </div>
@@ -1295,6 +1296,15 @@
         <div id="mvPreviewHint" class="mvPreviewHint">
           <div class="mvHintBullets" id="mvHintBullets"></div>
           <div class="mvHintToneRow" id="mvHintToneRow"></div>
+          <div class="mvHintHookRow" id="mvHintHookRow"></div>
+        </div>
+
+        <div class="mvRecommendCard">
+          <div class="mvRecHeader">
+            <span class="mvRecLabel">&#128270; Market Recommendation</span>
+            <button type="button" class="mvRecBtn" id="mvAnalyzeBtn" onclick="mvAnalyzeMarket()">Analyze</button>
+          </div>
+          <div id="mvMarketRec" class="mvMarketRec"></div>
         </div>
       </div>
 
