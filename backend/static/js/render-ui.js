@@ -16,6 +16,8 @@ let _rcUserIsScrolling = false;
 let _rcUserScrollTimerId = null;
 let _rcPreviewJobId = '';
 let _rcPreviewPartNo = 0;
+let _rcCompareSelA = '';
+let _rcCompareSelB = '';
 let _rcBenchmark = { jobId: '', logsLoaded: false, totalElapsedMs: 0, sceneDetectionMs: null, sceneCount: null, transcriptionMs: null, transcriptionModel: null, transcriptionLiveSec: null, totalParts: 0, completedParts: 0, failedParts: 0, failedStage: '', outputSizes: [] };
 const RENDER_MONITOR_STALL_MS = 45000;
 
@@ -96,6 +98,8 @@ function resetRenderSessionUi(){
   if (qs('rc_output_preview')) qs('rc_output_preview').classList.add('hiddenView');
   _rcBenchmark = { jobId: '', logsLoaded: false, totalElapsedMs: 0, sceneDetectionMs: null, sceneCount: null, transcriptionMs: null, transcriptionModel: null, transcriptionLiveSec: null, totalParts: 0, completedParts: 0, failedParts: 0, failedStage: '', outputSizes: [] };
   if (qs('rc_benchmark_panel')) qs('rc_benchmark_panel').classList.add('hiddenView');
+  _rcCompareSelA = '';
+  _rcCompareSelB = '';
   renderBottomActiveQueue(null, null, []);
   updateRenderMainState(null, null, []);
 }
@@ -1917,6 +1921,10 @@ function buildRenderHistoryEntry(job, summary, parts) {
   const sourceValue = sourceType === 'local' ? _renderHistoryFileName(rawSource) : String(rawSource || '').trim();
   const outputDir = String(payload.output_dir || '').trim();
   const stamp = Date.parse(job?.completed_at || job?.updated_at || job?.created_at || '') || Date.now();
+  const doneParts = items
+    .filter((p) => String(p?.status || '').toLowerCase() === 'done' && p.output_file)
+    .sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0));
+  const firstPart = doneParts[0] || null;
   return {
     jobId: String(job?.id || job?.job_id || currentJobId || '').trim(),
     sourceType,
@@ -1928,6 +1936,12 @@ function buildRenderHistoryEntry(job, summary, parts) {
     timestamp: stamp,
     title: _renderHistoryTitle(sourceType, rawSource),
     status: _renderHistoryStatus(completed, failed),
+    profile: String(payload.render_profile || 'quality').trim(),
+    sourceQualityMode: String(payload.source_quality_mode || 'standard_1080').trim(),
+    reframeMode: payload.motion_aware_crop ? String(payload.reframe_mode || 'center').trim() : 'none',
+    firstPartNo: firstPart ? Number(firstPart.part_no) : null,
+    firstPartFile: firstPart ? String(firstPart.output_file || '') : null,
+    firstPartDurationSec: firstPart ? Math.max(0, Number(firstPart.end_sec || 0) - Number(firstPart.start_sec || 0)) : null,
   };
 }
 
@@ -1967,6 +1981,179 @@ function renderRenderHistory() {
       </div>
     </div>`;
   }).join('');
+  updateComparePanel();
+}
+
+// ── Compare Outputs (P2-4) ───────────────────────────────────────────────────
+
+function getCompareOutputCandidates() {
+  const history = _renderHistoryRead();
+  return history
+    .filter((e) => e.status !== 'failed' && e.jobId)
+    .map((e) => {
+      const partNo = e.firstPartNo ?? null;
+      const canPreview = partNo != null;
+      const previewUrl = canPreview ? `/api/jobs/${e.jobId}/parts/${partNo}/stream` : null;
+      const label = (e.totalParts > 1 && partNo != null)
+        ? `${e.title} · Part ${partNo}`
+        : e.title || 'Render';
+      return {
+        id: `${e.jobId}-${partNo ?? 'dir'}`,
+        label,
+        fileName: e.firstPartFile ? e.firstPartFile.replace(/\\/g, '/').split('/').pop() : '',
+        path: e.firstPartFile || e.outputDir || '',
+        previewUrl,
+        canPreview,
+        duration: e.firstPartDurationSec ?? null,
+        sizeBytes: null,
+        jobId: e.jobId,
+        partNo,
+        profile: e.profile || '',
+        sourceQualityMode: e.sourceQualityMode || '',
+        reframeMode: e.reframeMode || '',
+        status: e.status,
+        outputDir: e.outputDir || '',
+        timestamp: e.timestamp || 0,
+      };
+    })
+    .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
+}
+
+function _rcCompareSelectA(id) { _rcCompareSelA = String(id || ''); updateComparePanel(); }
+function _rcCompareSelectB(id) { _rcCompareSelB = String(id || ''); updateComparePanel(); }
+
+function _buildCompareMeta(c) {
+  const el = document.createElement('div');
+  el.className = 'rcCompareMeta';
+  const dash = '—';
+  const rows = [
+    { label: 'File',     value: c.fileName || dash },
+    { label: 'Duration', value: c.duration != null ? formatBenchDuration(c.duration * 1000) : dash },
+    { label: 'Size',     value: c.sizeBytes != null ? formatBenchBytes(c.sizeBytes) : dash },
+    { label: 'Profile',  value: c.profile || dash },
+    { label: 'Source',   value: c.sourceQualityMode || dash },
+    { label: 'Reframe',  value: c.reframeMode || dash },
+  ];
+  if (c.partNo != null) rows.push({ label: 'Part', value: `Part ${c.partNo}` });
+  rows.forEach(({ label, value }) => {
+    const lbl = document.createElement('span');
+    lbl.className = 'rcCompareLabel';
+    lbl.textContent = label;
+    const val = document.createElement('span');
+    val.className = 'rcCompareValue';
+    val.textContent = value;
+    el.appendChild(lbl);
+    el.appendChild(val);
+  });
+  return el;
+}
+
+function _renderCompareColumn(container, side, candidates, selectedId) {
+  if (!container) return;
+  if (container.dataset.candidateId === selectedId && container.dataset.candidateCount === String(candidates.length)) return;
+  container.dataset.candidateId = selectedId;
+  container.dataset.candidateCount = String(candidates.length);
+
+  const cand = candidates.find((c) => c.id === selectedId) || candidates[0];
+
+  const selectEl = document.createElement('select');
+  selectEl.className = 'rcCompareSelect';
+  selectEl.onchange = () => (side === 'a' ? _rcCompareSelectA : _rcCompareSelectB)(selectEl.value);
+  candidates.forEach((c) => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.label.length > 42 ? c.label.slice(0, 40) + '…' : c.label;
+    opt.selected = c.id === selectedId;
+    selectEl.appendChild(opt);
+  });
+
+  let mediaEl;
+  if (cand && cand.canPreview && cand.previewUrl) {
+    mediaEl = document.createElement('video');
+    mediaEl.className = 'rcCompareVideo';
+    mediaEl.controls = true;
+    mediaEl.preload = 'metadata';
+    mediaEl.src = cand.previewUrl;
+  } else {
+    mediaEl = document.createElement('div');
+    mediaEl.className = 'rcCompareVideoFallback';
+    const msg = document.createElement('span');
+    msg.textContent = 'Preview unavailable.';
+    mediaEl.appendChild(msg);
+    if (cand?.outputDir) {
+      const btn = document.createElement('button');
+      btn.className = 'rcPreviewOpenBtn';
+      btn.type = 'button';
+      btn.textContent = 'Open Folder';
+      btn.onclick = () => openStoredOutputPath(cand.outputDir);
+      mediaEl.appendChild(btn);
+    }
+  }
+
+  container.innerHTML = '';
+  container.appendChild(selectEl);
+  container.appendChild(mediaEl);
+  if (cand) container.appendChild(_buildCompareMeta(cand));
+}
+
+function _renderCompareDiff(container, a, b) {
+  if (!container) return;
+  if (!a || !b || a.id === b.id) { container.classList.add('hiddenView'); return; }
+  const diffs = [];
+  if (a.sizeBytes > 0 && b.sizeBytes > 0) {
+    const diff = b.sizeBytes - a.sizeBytes;
+    if (Math.abs(diff) > 1048576) diffs.push(`${diff > 0 ? 'B' : 'A'} is larger by ${formatBenchBytes(Math.abs(diff))}`);
+  }
+  if (a.duration != null && b.duration != null) {
+    const diff = b.duration - a.duration;
+    if (Math.abs(diff) > 0.5) diffs.push(`${diff > 0 ? 'B' : 'A'} is longer by ${Math.abs(diff).toFixed(1)}s`);
+  }
+  if (a.profile && b.profile && a.profile !== b.profile) diffs.push(`Profiles differ: ${a.profile} vs ${b.profile}`);
+  if (a.reframeMode && b.reframeMode && a.reframeMode !== b.reframeMode) diffs.push(`Reframe differs: ${a.reframeMode} vs ${b.reframeMode}`);
+  if (a.sourceQualityMode && b.sourceQualityMode && a.sourceQualityMode !== b.sourceQualityMode) diffs.push(`Source quality differs: ${a.sourceQualityMode} vs ${b.sourceQualityMode}`);
+  if (!diffs.length) { container.classList.add('hiddenView'); return; }
+  container.classList.remove('hiddenView');
+  container.textContent = diffs.join(' · ');
+}
+
+function updateComparePanel() {
+  const panel = qs('rc_compare_panel');
+  if (!panel) return;
+  const candidates = getCompareOutputCandidates();
+  const emptyEl = qs('rc_compare_empty');
+  const gridEl = qs('rc_compare_grid');
+  const diffEl = qs('rc_compare_diff');
+
+  if (candidates.length === 0) { panel.classList.add('hiddenView'); return; }
+  panel.classList.remove('hiddenView');
+
+  if (candidates.length < 2) {
+    if (emptyEl) emptyEl.classList.remove('hiddenView');
+    if (gridEl) gridEl.classList.add('hiddenView');
+    if (diffEl) diffEl.classList.add('hiddenView');
+    return;
+  }
+  if (emptyEl) emptyEl.classList.add('hiddenView');
+  if (gridEl) gridEl.classList.remove('hiddenView');
+
+  // Default: A = oldest available, B = newest
+  if (!_rcCompareSelA || !candidates.find((c) => c.id === _rcCompareSelA)) {
+    _rcCompareSelA = candidates[candidates.length - 1].id;
+  }
+  if (!_rcCompareSelB || !candidates.find((c) => c.id === _rcCompareSelB)) {
+    _rcCompareSelB = candidates[0].id;
+  }
+  if (_rcCompareSelA === _rcCompareSelB && candidates.length >= 2) {
+    _rcCompareSelA = candidates[candidates.length - 1].id;
+    _rcCompareSelB = candidates[0].id;
+  }
+
+  _renderCompareColumn(qs('rc_compare_col_a'), 'a', candidates, _rcCompareSelA);
+  _renderCompareColumn(qs('rc_compare_col_b'), 'b', candidates, _rcCompareSelB);
+
+  const candA = candidates.find((c) => c.id === _rcCompareSelA);
+  const candB = candidates.find((c) => c.id === _rcCompareSelB);
+  _renderCompareDiff(diffEl, candA, candB);
 }
 
 function openRenderHistoryOutput(jobId) {

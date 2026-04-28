@@ -8844,6 +8844,135 @@ body.is-history-active #history_list {
   line-height: 1.4;
 }
 
+/* ══ P2-4 — Compare Outputs Panel
+        Two-column A/B comparison using completed job history.
+        Side-by-side on desktop, stacked on narrow screens.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* CP1 — outer card */
+.rcComparePanel {
+  margin-top: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+/* CP2 — header */
+.rcCompareHeader {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.rcCompareTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text-muted, #94a3b8);
+}
+
+/* CP3 — empty / disabled state */
+.rcCompareEmpty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-muted, #94a3b8);
+  text-align: center;
+}
+
+/* CP4 — two-column grid */
+.rcCompareGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.04);
+}
+@media (max-width: 900px) {
+  .rcCompareGrid { grid-template-columns: 1fr; }
+}
+
+/* CP5 — single column */
+.rcCompareColumn {
+  background: rgba(14, 116, 144, 0.03);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* CP6 — candidate selector */
+.rcCompareSelect {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary, #f1f5f9);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* CP7 — video player */
+.rcCompareVideo {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  background: #000;
+  border-radius: 4px;
+  outline: none;
+}
+
+/* CP8 — unavailable fallback */
+.rcCompareVideoFallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 64px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-muted, #94a3b8);
+}
+
+/* CP9 — metadata grid (label | value pairs) */
+.rcCompareMeta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0;
+}
+.rcCompareLabel,
+.rcCompareValue {
+  padding: 2px 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.rcCompareLabel {
+  color: var(--text-muted, #94a3b8);
+  font-weight: 500;
+  white-space: nowrap;
+  padding-right: 8px;
+}
+.rcCompareValue {
+  color: var(--text-primary, #f1f5f9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* CP10 — diff hints row */
+.rcCompareDiff {
+  padding: 6px 12px 8px;
+  font-size: 11px;
+  color: #7dd3fc;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  line-height: 1.5;
+}
+
 /* ══ FINAL — inspector visibility lock (must remain last in file)
         Rule F0: noInspector guard — specificity (1,2,0)+!important beats any
           #appInspector{display:flex!important} rule that may be re-introduced.
