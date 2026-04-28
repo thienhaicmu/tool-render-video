@@ -1518,6 +1518,23 @@
           <div id="rc_part_cards" class="rcQueueGrid">
             <div class="emptyState">No clips queued yet.</div>
           </div>
+
+          <div id="rc_output_preview" class="rcOutputPreview hiddenView">
+            <div class="rcPreviewHeader">
+              <span class="rcPreviewTitle">Output Preview</span>
+              <div class="rcPreviewHeaderRight">
+                <select id="rc_preview_part_select" class="rcPreviewPartSelect hiddenView" onchange="_rcPreviewHandleSelectChange()"></select>
+                <button class="rcPreviewOpenBtn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
+              </div>
+            </div>
+            <video id="rc_preview_video" class="rcPreviewVideo" controls preload="metadata"></video>
+            <div id="rc_preview_unavailable" class="rcPreviewUnavailable hiddenView">Preview unavailable. Use Open Output Folder to access files.</div>
+            <div class="rcPreviewMeta">
+              <span id="rc_preview_filename" class="rcPreviewFilename"></span>
+              <span id="rc_preview_partno" class="rcPreviewPartNo"></span>
+              <span id="rc_preview_path" class="rcPreviewPath"></span>
+            </div>
+          </div>
         </section>
 
         <!-- RIGHT 40%: log panel -->

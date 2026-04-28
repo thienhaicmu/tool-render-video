@@ -14,6 +14,8 @@ let _rcLastActivePartNo = -1;
 let _rcScrollDebounceId = null;
 let _rcUserIsScrolling = false;
 let _rcUserScrollTimerId = null;
+let _rcPreviewJobId = '';
+let _rcPreviewPartNo = 0;
 const RENDER_MONITOR_STALL_MS = 45000;
 
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
@@ -86,6 +88,11 @@ function resetRenderSessionUi(){
   if (qs('rc_card_job_title')) qs('rc_card_job_title').textContent = '';
   if (qs('rc_card_status_badge')) { qs('rc_card_status_badge').textContent = 'Idle'; qs('rc_card_status_badge').dataset.state = 'idle'; }
   _updateStageTimeline('', '');
+  _rcPreviewJobId = '';
+  _rcPreviewPartNo = 0;
+  const _pvVid = qs('rc_preview_video');
+  if (_pvVid) { _pvVid.src = ''; _pvVid.dataset.previewSrc = ''; }
+  if (qs('rc_output_preview')) qs('rc_output_preview').classList.add('hiddenView');
   renderBottomActiveQueue(null, null, []);
   updateRenderMainState(null, null, []);
 }
@@ -841,6 +848,107 @@ function useTopClips() {
   }
 }
 
+function _rcPreviewHandleSelectChange() {
+  const sel = qs('rc_preview_part_select');
+  if (sel) _rcPreviewPartNo = Number(sel.value) || 0;
+  updateOutputPreview(_renderMonitorLastJob, _renderMonitorLastParts);
+}
+
+function updateOutputPreview(job, parts) {
+  const panel = qs('rc_output_preview');
+  if (!panel) return;
+
+  const status = String(job?.status || '').toLowerCase();
+  const isCompleted = status === 'completed' || status === 'done' || status === 'complete';
+
+  if (!isCompleted) {
+    panel.classList.add('hiddenView');
+    return;
+  }
+
+  const jobId = String(job?.id || job?.job_id || currentJobId || '').trim();
+  if (!jobId) { panel.classList.add('hiddenView'); return; }
+
+  const items = Array.isArray(parts) ? parts : [];
+  const doneParts = items
+    .filter((p) => {
+      const st = String(p?.status || '').toLowerCase();
+      return (st === 'done' || st === 'completed') && p.output_file;
+    })
+    .sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0));
+
+  const selectEl = qs('rc_preview_part_select');
+  if (jobId !== _rcPreviewJobId) {
+    _rcPreviewJobId = jobId;
+    _rcPreviewPartNo = doneParts.length ? Number(doneParts[0].part_no) : 0;
+    if (selectEl) {
+      selectEl.innerHTML = '';
+      if (doneParts.length > 1) {
+        doneParts.forEach((p) => {
+          const opt = document.createElement('option');
+          opt.value = String(p.part_no);
+          const lbl = p.part_name
+            ? `Clip ${p.part_no} · ${String(p.part_name).slice(0, 20)}`
+            : `Clip ${p.part_no}`;
+          opt.textContent = lbl;
+          selectEl.appendChild(opt);
+        });
+        selectEl.value = String(_rcPreviewPartNo);
+        selectEl.classList.remove('hiddenView');
+      } else {
+        selectEl.classList.add('hiddenView');
+      }
+    }
+  }
+
+  const targetPart = doneParts.find((p) => Number(p.part_no) === _rcPreviewPartNo) || doneParts[0] || null;
+  const videoEl = qs('rc_preview_video');
+  const filenameEl = qs('rc_preview_filename');
+  const pathEl = qs('rc_preview_path');
+  const partnoEl = qs('rc_preview_partno');
+  const unavailEl = qs('rc_preview_unavailable');
+
+  if (!targetPart) {
+    if (videoEl) { videoEl.src = ''; videoEl.classList.add('hiddenView'); }
+    if (unavailEl) {
+      unavailEl.textContent = 'No previewable output file found. Use Open Output Folder.';
+      unavailEl.classList.remove('hiddenView');
+    }
+    panel.classList.remove('hiddenView');
+    return;
+  }
+
+  const partNo = Number(targetPart.part_no);
+  const previewUrl = `/api/jobs/${jobId}/parts/${partNo}/stream`;
+  const outputFile = String(targetPart.output_file || '');
+  const fileName = outputFile.replace(/\\/g, '/').split('/').pop() || `clip-${partNo}.mp4`;
+  const outDir = outputFile.replace(/\\/g, '/').split('/').slice(0, -1).join('/');
+
+  if (videoEl) {
+    if (videoEl.dataset.previewSrc !== previewUrl) {
+      videoEl.dataset.previewSrc = previewUrl;
+      videoEl.src = previewUrl;
+      videoEl.load();
+    }
+    videoEl.classList.remove('hiddenView');
+  }
+  if (unavailEl) unavailEl.classList.add('hiddenView');
+  if (filenameEl) filenameEl.textContent = fileName;
+  if (pathEl) {
+    const shortDir = outDir.length > 52 ? '…' + outDir.slice(-49) : outDir;
+    pathEl.textContent = shortDir;
+    pathEl.title = outputFile;
+  }
+  if (partnoEl) {
+    const startSec = Number(targetPart.start_sec || 0);
+    const endSec = Number(targetPart.end_sec || 0);
+    const dur = endSec > startSec ? ` · ${(endSec - startSec).toFixed(1)}s` : '';
+    partnoEl.textContent = doneParts.length > 1 ? `Part ${partNo}${dur}` : dur.trim();
+  }
+
+  panel.classList.remove('hiddenView');
+}
+
 const RC_STAGE_STEPS = [
   { key: 'prepare',  label: 'Prepare',  stages: ['starting', 'queued'] },
   { key: 'source',   label: 'Source',   stages: ['downloading'] },
@@ -1051,6 +1159,8 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     }
     _updateStageTimeline(job?.stage || '', status);
   }
+
+  updateOutputPreview(job, items);
 
   const cardWrap = qs('rc_part_cards');
   if (!cardWrap) return;
