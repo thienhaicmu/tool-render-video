@@ -2050,6 +2050,7 @@ function mvUpdateHookQuality() {
     if (issueEl)    issueEl.textContent    = '';
     if (suggEl)     suggEl.textContent     = '';
     mvUpdateHookSuggestions('', market, '');
+    mvUpdateHookCompare();
     return;
   }
 
@@ -2060,6 +2061,7 @@ function mvUpdateHookQuality() {
   if (issueEl)    issueEl.textContent    = r.issues[0] || '';
   if (suggEl)     suggEl.textContent     = r.suggestion || '';
   mvUpdateHookSuggestions(text, market, r.strength);
+  mvUpdateHookCompare();
 }
 
 function mvGenerateHookSuggestions(text, market, strength) {
@@ -2164,6 +2166,94 @@ function mvUpdateSubEditsIndicator() {
     el.classList.remove('hiddenView');
   } else {
     el.classList.add('hiddenView');
+  }
+}
+
+let _mvCompareOrigText = '';
+let _mvCompareSugText = '';
+
+function mvUpdateHookCompare() {
+  const sec = document.getElementById('mvHookCompareSec');
+  if (!sec) return;
+
+  const segs = (_ev && Array.isArray(_ev.subtitleSegments)) ? _ev.subtitleSegments : [];
+  if (!segs.length) { sec.classList.add('hiddenView'); return; }
+
+  const market = _mvState.market || 'US';
+  const vid = qs('evVideo');
+  const t = vid ? (vid.currentTime || 0) : 0;
+  const origSeg = segs.find(s => t >= s.start && t < s.end) || segs[0];
+  const origText = (origSeg && origSeg.text) ? origSeg.text.trim() : '';
+  if (!origText) { sec.classList.add('hiddenView'); return; }
+
+  const origAnalysis = _mvAnalyzeHook(origText, market);
+  const suggestions  = mvGenerateHookSuggestions(origText, market, origAnalysis.strength);
+  if (!suggestions || !suggestions.length) { sec.classList.add('hiddenView'); return; }
+
+  const sugText    = suggestions[0];
+  const sugAnalysis = _mvAnalyzeHook(sugText, market);
+
+  _mvCompareOrigText = origText;
+  _mvCompareSugText  = sugText;
+
+  const origScoreEl = document.getElementById('mvHookCompareOrigScore');
+  const origStrEl   = document.getElementById('mvHookCompareOrigStrength');
+  const origTextEl  = document.getElementById('mvHookCompareOrigText');
+  const sugScoreEl  = document.getElementById('mvHookCompareSugScore');
+  const sugStrEl    = document.getElementById('mvHookCompareSugStrength');
+  const sugTextEl   = document.getElementById('mvHookCompareSugText');
+  const deltaEl     = document.getElementById('mvHookCompareDelta');
+  const origCard    = document.getElementById('mvHookCompareOrigCard');
+  const sugCard     = document.getElementById('mvHookCompareSugCard');
+
+  if (origScoreEl) origScoreEl.textContent = String(origAnalysis.hook_score);
+  if (origStrEl)   origStrEl.textContent   = origAnalysis.strength;
+  if (origTextEl)  origTextEl.textContent  = origText;
+  if (sugScoreEl)  sugScoreEl.textContent  = String(sugAnalysis.hook_score);
+  if (sugStrEl)    sugStrEl.textContent    = sugAnalysis.strength;
+  if (sugTextEl)   sugTextEl.textContent   = sugText;
+
+  const delta = sugAnalysis.hook_score - origAnalysis.hook_score;
+  if (deltaEl) {
+    if (delta > 0)      { deltaEl.textContent = `+${delta} ↑`; deltaEl.dataset.dir = 'up'; }
+    else if (delta < 0) { deltaEl.textContent = `${delta} ↓`;  deltaEl.dataset.dir = 'down'; }
+    else                { deltaEl.textContent = '';             deltaEl.dataset.dir = ''; }
+  }
+
+  if (origCard) origCard.classList.toggle('mvHookCompareWinner', origAnalysis.hook_score > sugAnalysis.hook_score);
+  if (sugCard)  sugCard.classList.toggle('mvHookCompareWinner', sugAnalysis.hook_score > origAnalysis.hook_score);
+
+  sec.classList.remove('hiddenView');
+}
+
+function mvCompareUse(which) {
+  const hook = which === 'orig' ? _mvCompareOrigText : _mvCompareSugText;
+  if (!hook) return;
+  if (!_ev || !Array.isArray(_ev.subtitleSegments) || !_ev.subtitleSegments.length) {
+    if (typeof showToast === 'function') showToast('Load a video first to preview hooks', 'info');
+    return;
+  }
+
+  const vid = qs('evVideo');
+  const t   = vid ? (vid.currentTime || 0) : 0;
+  let idx = _ev.subtitleSegments.findIndex(s => t >= s.start && t < s.end);
+  if (idx < 0) idx = 0;
+  const seg = _ev.subtitleSegments[idx];
+  if (!seg) return;
+
+  seg.text = hook;
+  if (!(_ev.subtitleEdits instanceof Map)) _ev.subtitleEdits = new Map();
+  _ev.subtitleEdits.set(idx, { index: idx, start: seg.start, end: seg.end, text: hook });
+  _evSyncSubTime(t);
+  mvUpdateHookQuality();
+  mvUpdateSubEditsIndicator();
+
+  const btnId = which === 'orig' ? 'mvHookCompareOrigUse' : 'mvHookCompareSugUse';
+  const btn = document.getElementById(btnId);
+  if (btn) {
+    btn.textContent = '✓ Applied';
+    btn.classList.add('isApplied');
+    setTimeout(() => { btn.textContent = which === 'orig' ? 'Use Original' : 'Use Suggested'; btn.classList.remove('isApplied'); }, 1500);
   }
 }
 

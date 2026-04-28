@@ -4056,6 +4056,93 @@
       color: #22c55e;
     }
 
+    /* Hook Compare section */
+    .mvHookCompareSec { margin-bottom: 10px; }
+    .mvHookCompareHeader { margin-bottom: 5px; }
+    .mvHookCompareLabel {
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(148,163,184,.55);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .mvHookCompareGrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .mvHookCompareCard {
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 6px;
+      padding: 6px 7px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .mvHookCompareCard.mvHookCompareWinner {
+      border-color: rgba(34,197,94,.35);
+      background: rgba(34,197,94,.05);
+    }
+    .mvHookCompareCardLabel {
+      font-size: 9px;
+      font-weight: 700;
+      color: rgba(148,163,184,.5);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .mvHookCompareCardScore {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .mvHookCompareScore {
+      font-size: 13px;
+      font-weight: 700;
+      color: #e2e8f0;
+    }
+    .mvHookCompareStrength {
+      font-size: 10px;
+      color: rgba(148,163,184,.6);
+    }
+    .mvHookCompareDelta {
+      font-size: 10px;
+      font-weight: 700;
+      margin-left: auto;
+    }
+    .mvHookCompareDelta[data-dir="up"]   { color: #22c55e; }
+    .mvHookCompareDelta[data-dir="down"] { color: #ef4444; }
+    .mvHookCompareText {
+      font-size: 10px;
+      color: rgba(226,232,240,.7);
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .mvHookCompareUse {
+      margin-top: 2px;
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid rgba(99,102,241,.25);
+      background: rgba(99,102,241,.12);
+      color: rgba(165,180,252,.9);
+      cursor: pointer;
+      align-self: flex-start;
+      transition: background 100ms ease, color 100ms ease;
+    }
+    .mvHookCompareUse:hover {
+      background: rgba(99,102,241,.25);
+      color: #e5e5e5;
+    }
+    .mvHookCompareUse.isApplied {
+      background: rgba(34,197,94,.15);
+      border-color: rgba(34,197,94,.35);
+      color: #22c55e;
+    }
+
     /* J3 — Separator always hidden; footer always visible; section flash */
     [data-insp-panel="_sep"] { display: none !important; }
     .evFooter { display: flex !important; }

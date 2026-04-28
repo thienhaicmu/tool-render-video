@@ -1318,6 +1318,33 @@
           <div class="mvHookSuggestList" id="mvHookSuggestList"></div>
         </div>
 
+        <div class="mvHookCompareSec hiddenView" id="mvHookCompareSec">
+          <div class="mvHookCompareHeader">
+            <span class="mvHookCompareLabel">&#9878; Compare Hook</span>
+          </div>
+          <div class="mvHookCompareGrid">
+            <div class="mvHookCompareCard" id="mvHookCompareOrigCard">
+              <div class="mvHookCompareCardLabel">Original</div>
+              <div class="mvHookCompareCardScore">
+                <span class="mvHookCompareScore" id="mvHookCompareOrigScore">&#8212;</span>
+                <span class="mvHookCompareStrength" id="mvHookCompareOrigStrength"></span>
+              </div>
+              <div class="mvHookCompareText" id="mvHookCompareOrigText"></div>
+              <button type="button" class="mvHookCompareUse" id="mvHookCompareOrigUse" onclick="mvCompareUse('orig')">Use Original</button>
+            </div>
+            <div class="mvHookCompareCard" id="mvHookCompareSugCard">
+              <div class="mvHookCompareCardLabel">Suggested</div>
+              <div class="mvHookCompareCardScore">
+                <span class="mvHookCompareScore" id="mvHookCompareSugScore">&#8212;</span>
+                <span class="mvHookCompareStrength" id="mvHookCompareSugStrength"></span>
+                <span class="mvHookCompareDelta" id="mvHookCompareDelta"></span>
+              </div>
+              <div class="mvHookCompareText" id="mvHookCompareSugText"></div>
+              <button type="button" class="mvHookCompareUse" id="mvHookCompareSugUse" onclick="mvCompareUse('sug')">Use Suggested</button>
+            </div>
+          </div>
+        </div>
+
         <div class="mvRecommendCard">
           <div class="mvRecHeader">
             <span class="mvRecLabel">&#128270; Analyze best market</span>
