@@ -6,6 +6,8 @@ import edge_tts
 from app.core.config import TEMP_DIR
 from app.services.voice_profiles import resolve_voice_profile
 
+TTS_TIMEOUT_SEC = 60
+
 
 def generate_narration_mp3(
     *,
@@ -29,7 +31,10 @@ def generate_narration_mp3(
 
     async def _run():
         communicate = edge_tts.Communicate(clean_text, profile["voice_id"], rate=str(rate or "+0%"))
-        await communicate.save(str(mp3_path))
+        try:
+            await asyncio.wait_for(communicate.save(str(mp3_path)), timeout=TTS_TIMEOUT_SEC)
+        except asyncio.TimeoutError:
+            raise RuntimeError(f"TTS timed out after {TTS_TIMEOUT_SEC}s")
 
     try:
         asyncio.run(_run())
