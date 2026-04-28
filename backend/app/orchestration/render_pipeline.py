@@ -25,7 +25,7 @@ from app.services.viral_scoring import score_part_for_market as _mv_score_part
 from app.services.report_service import append_rows
 from app.core.config import TEMP_DIR, CHANNELS_DIR, LOGS_DIR
 from app.core.stage import JobStage, JobPartStage, STAGE_TO_EVENT
-from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin
+from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin, _summarize_ffmpeg_stderr
 from app.services.text_overlay import normalize_text_layers, MAX_TEXT_LAYERS
 from app.services.tts_service import generate_narration_mp3
 from app.services.audio_mix_service import mix_narration_audio
@@ -861,7 +861,7 @@ def run_render_pipeline(
         trim_out = float(getattr(payload, "edit_trim_out", 0) or 0)
         edit_volume = float(getattr(payload, "edit_volume", 1.0) or 1.0)
         needs_trim = trim_in > 0.5 or (trim_out > 0.5 and trim_out < source["duration"] - 0.5)
-        needs_volume = abs(edit_volume - 1.0) > 0.02
+        needs_volume = abs(edit_volume - 1.0) > 0.005
         if needs_trim or needs_volume:
             edited_path = work_dir / f"edited_{source_path.stem}.mp4"
             cmd = [get_ffmpeg_bin(), "-y"]
@@ -877,7 +877,33 @@ def run_render_pipeline(
                 cmd += ["-c:v", "copy", "-c:a", "copy"]
             cmd += ["-avoid_negative_ts", "make_zero", str(edited_path)]
             _job_log(effective_channel, job_id, f"Applying edits: trim_in={trim_in:.1f}s trim_out={trim_out:.1f}s volume={edit_volume:.2f}")
-            subprocess.run(cmd, check=True, capture_output=True)
+            try:
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError as _preprocess_exc:
+                _pp_stderr = _preprocess_exc.stderr or ""
+                _pp_diag = _summarize_ffmpeg_stderr(_pp_stderr)
+                _pp_tail = _pp_stderr[-2000:].strip()
+                _job_log(
+                    effective_channel, job_id,
+                    f"FFmpeg preprocess failed exit={_preprocess_exc.returncode} diag={_pp_diag!r}",
+                    kind="warning",
+                )
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="render.ffmpeg.preprocess.error",
+                    level="ERROR",
+                    message=f"FFmpeg preprocess failed: {_pp_diag}",
+                    step="render.preprocess",
+                    context={
+                        "exit_code": _preprocess_exc.returncode,
+                        "diagnostic": _pp_diag,
+                        "stderr_tail": _pp_tail,
+                        "input_path": str(source_path),
+                        "output_path": str(edited_path),
+                    },
+                )
+                raise RuntimeError(f"FFmpeg preprocess failed: {_pp_diag}") from _preprocess_exc
             new_dur = _probe_video_duration(edited_path)
             source["duration"] = new_dur or max(1, source["duration"] - trim_in)
             source_path = edited_path

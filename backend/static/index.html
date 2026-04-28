@@ -1154,12 +1154,13 @@
         </div>
         <div class="inspGroupBody" id="inspGroupAudioBody">
           <div class="evSection" id="evSectionVolume" data-section-type="volume">
-            <div class="evSectionTitle">Volume</div>
+            <div class="evSectionTitle">Audio Volume</div>
             <div style="display:flex;gap:10px;align-items:center">
               <input type="range" id="evVolume" min="0" max="200" value="100" step="1" style="flex:1;accent-color:#3b82f6" oninput="evVolumeSliderChange()">
               <input class="fieldInput" type="number" id="evVolumeNum" min="0" max="200" value="100" step="5" style="width:68px;text-align:center;padding:6px 8px" oninput="evVolumeNumChange()">
               <span style="color:var(--text-muted);font-size:12px">%</span>
             </div>
+            <div class="inspHint" style="margin-top:4px">100% = original volume. Values above 100% re-encode audio.</div>
             <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
               <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(50)">50%</button>
               <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(80)">80%</button>
@@ -1199,7 +1200,7 @@
           <div class="evSection" data-section-type="render-settings">
             <div class="evSectionTitle">Render Options</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <label class="field"><span class="fieldLabel">Speed</span>
+              <label class="field"><span class="fieldLabel">Playback Speed</span>
                 <select class="fieldInput" id="evPlaybackSpeed">
                   <option value="1.0">1.0× (original)</option>
                   <option value="1.05">1.05×</option>
@@ -1207,6 +1208,7 @@
                   <option value="1.1">1.1× (+10%)</option>
                   <option value="1.15">1.15× (+15%)</option>
                 </select>
+                <span class="inspHint">Changes video/audio speed. Subtitles must stay synced.</span>
               </label>
               <label class="field"><span class="fieldLabel">Encoder</span>
                 <select class="fieldInput" id="evRenderDevice">
