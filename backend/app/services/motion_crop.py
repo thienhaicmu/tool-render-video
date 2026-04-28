@@ -796,6 +796,7 @@ def render_motion_aware_crop(
     playback_speed: float = 1.07,
     text_layers: list[dict] | None = None,
     loudnorm_enabled: bool = False,
+    ffmpeg_threads: int | None = None,
     cfg: MotionCropConfig | None = None,
 ) -> str:
     layer_count = len(text_layers or [])
@@ -919,11 +920,12 @@ def render_motion_aware_crop(
     if bgm_ok:
         ffmpeg_cmd += ["-stream_loop", "-1", "-i", bgm_path]
     vf_chain = ",".join(vf_parts) if vf_parts else ""
+    _threads = ffmpeg_threads if ffmpeg_threads is not None else max(1, min(8, (os.cpu_count() or 4) // 2))
     codec_flags = [
         "-c:v", resolved_codec,
         "-preset", resolved_preset,
         *_codec_flags(resolved_codec, int(video_crf), video_preset),
-        "-threads", "0",
+        "-threads", str(_threads),
         "-pix_fmt", "yuv420p",
         "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
         "-movflags", "+faststart",

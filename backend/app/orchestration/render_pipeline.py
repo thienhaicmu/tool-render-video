@@ -19,7 +19,7 @@ from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes
 from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt
-from app.services.render_engine import cut_video, render_part_smart, nvenc_available
+from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads
 from app.services.viral_scorer import score_segments
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
 from app.services.report_service import append_rows
@@ -1321,6 +1321,7 @@ def run_render_pipeline(
                     playback_speed=float(payload.playback_speed or 1.07),
                     text_layers=normalized_text_layers,
                     loudnorm_enabled=getattr(payload, "loudnorm_enabled", False),
+                    ffmpeg_threads=_ffmpeg_threads,
                 )
             finally:
                 _encode_stop.set()
@@ -1692,6 +1693,8 @@ def run_render_pipeline(
                 kind="info",
             )
         try:
+            _ffmpeg_threads = resolve_ffmpeg_threads(max_workers)
+            _job_log(effective_channel, job_id, f"ffmpeg_threads={_ffmpeg_threads} cpu_total={os.cpu_count() or 4} max_workers={max_workers}")
             completed_parts = 0
             failed_parts = []
             _set_stage(JobStage.RENDERING_PARALLEL if max_workers > 1 else JobStage.RENDERING, 30, f"Rendering parts 0/{total_parts}")

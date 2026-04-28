@@ -393,6 +393,12 @@ def cut_video(input_path: str, output_path: str, start_time: float, end_time: fl
 
 
 
+def resolve_ffmpeg_threads(max_parallel_parts: int | None = None) -> int:
+    cpu_total = os.cpu_count() or 4
+    workers = max(1, int(max_parallel_parts or 2))
+    return max(1, min(8, cpu_total // workers))
+
+
 def render_part(
     input_path: str,
     output_path: str,
@@ -421,6 +427,7 @@ def render_part(
     playback_speed: float = 1.07,
     text_layers: list[dict] | None = None,
     loudnorm_enabled: bool = False,
+    ffmpeg_threads: int | None = None,
 ):
     preset_low = (video_preset or "").lower()
     sws = "lanczos" if preset_low in ("slower", "veryslow") else "bicubic"
@@ -489,9 +496,10 @@ def render_part(
     input_has_audio = _has_audio_stream(input_path)
 
     vf_chain = ",".join(vf_parts)
+    _threads = ffmpeg_threads if ffmpeg_threads is not None else resolve_ffmpeg_threads()
     codec_flags = ["-c:v", resolved_codec, "-preset", resolved_preset,
                    *_codec_extra_flags(resolved_codec, int(video_crf), video_preset),
-                   "-threads", "0",
+                   "-threads", str(_threads),
                    "-pix_fmt", "yuv420p",
                    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
                    "-movflags", "+faststart"]
@@ -548,7 +556,7 @@ def render_part(
         cpu_preset = _map_preset_for_encoder(video_preset, cpu_codec)
         cpu_flags = ["-c:v", cpu_codec, "-preset", cpu_preset,
                      *_codec_extra_flags(cpu_codec, int(video_crf), video_preset),
-                     "-threads", "0",
+                     "-threads", str(_threads),
                      "-pix_fmt", "yuv420p",
                      "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
                      "-movflags", "+faststart"]
@@ -617,6 +625,7 @@ def render_part_smart(
     playback_speed: float = 1.07,
     text_layers: list[dict] | None = None,
     loudnorm_enabled: bool = False,
+    ffmpeg_threads: int | None = None,
 ):
     if motion_aware_crop:
         try:
@@ -658,6 +667,7 @@ def render_part_smart(
                     playback_speed=playback_speed,
                     text_layers=text_layers,
                     loudnorm_enabled=loudnorm_enabled,
+                    ffmpeg_threads=ffmpeg_threads,
                     cfg=crop_cfg,
                 )
             finally:
@@ -695,6 +705,7 @@ def render_part_smart(
                 playback_speed=playback_speed,
                 text_layers=text_layers,
                 loudnorm_enabled=loudnorm_enabled,
+                ffmpeg_threads=ffmpeg_threads,
             )
 
     return render_part(
