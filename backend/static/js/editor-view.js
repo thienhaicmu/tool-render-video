@@ -1722,8 +1722,9 @@ async function startRenderFromEditor() {
 
   // ── Toggles ──────────────────────────────────────────────────
   payload.add_subtitle    = qs('evAddSubtitle').checked;
-  payload.motion_aware_crop = qs('evMotionCrop').checked;
-  payload.reframe_mode    = qs('evReframeMode').value;
+  const _reframeStrategy = (document.getElementById('evReframeStrategy')?.value || 'fast_center');
+  payload.motion_aware_crop = _reframeStrategy !== 'fast_center';
+  payload.reframe_mode = _reframeStrategy === 'fast_center' ? 'center' : _reframeStrategy;
   payload.cleanup_temp_files = qs('evCleanupTemp').checked;
 
   // ── Reup Mode ────────────────────────────────────────────────

@@ -106,7 +106,7 @@ async function startRender(){
     max_export_parts: 0,
     frame_scale_x: 100,
     frame_scale_y: 106,
-    motion_aware_crop: true,
+    motion_aware_crop: false,
     whisper_model: 'auto',
     retry_count: 2,
     resume_job_id: null,

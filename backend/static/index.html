@@ -1259,18 +1259,17 @@
                   <option value="strong">Strong Transform</option>
                 </select>
               </label>
-              <label class="field"><span class="fieldLabel">Reframe</span>
-                <select class="fieldInput" id="evReframeMode">
-                  <option value="subject" selected>Subject (face/body)</option>
-                  <option value="motion">Motion (pixel diff)</option>
+              <label class="field" style="grid-column:1/-1">
+                <span class="fieldLabel">Reframe Mode</span>
+                <select class="fieldInput" id="evReframeStrategy">
+                  <option value="fast_center" selected>Fast Center Crop</option>
+                  <option value="motion">Motion Tracking</option>
+                  <option value="subject">Subject Tracking</option>
                 </select>
+                <span class="inspHint">Fast = fastest · Motion = slower · Subject = slowest (best for face/body)</span>
               </label>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px">
-              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
-                <input type="checkbox" id="evMotionCrop" checked style="width:16px;height:16px;accent-color:#3b82f6">
-                <span style="font-size:13px;color:var(--text)">🎯 Motion-aware crop</span>
-              </label>
               <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
                 <input type="checkbox" id="evReupMode" style="width:16px;height:16px;accent-color:#8b5cf6">
                 <span style="font-size:13px;color:var(--text)">🔄 Reup Mode (color enhance)</span>
