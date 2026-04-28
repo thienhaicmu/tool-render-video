@@ -97,7 +97,7 @@ async function startRender(){
     min_part_sec: 70,
     max_part_sec: 180,
     add_subtitle: true,
-    add_title_overlay: true,
+    add_title_overlay: false,
     title_overlay_text: '',
     auto_detect_scene: true,
     highlight_per_word: true,

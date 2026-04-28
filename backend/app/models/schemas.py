@@ -165,7 +165,7 @@ class RenderRequest(BaseModel):
     reframe_mode: str = "subject"
 
     # Overlay / effect
-    add_title_overlay: bool = True
+    add_title_overlay: bool = False
     title_overlay_text: Optional[str] = ""
     effect_preset: str = "slay_soft_01"
     loudnorm_enabled: bool = False
