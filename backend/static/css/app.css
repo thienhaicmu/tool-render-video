@@ -8522,6 +8522,132 @@ body.is-history-active #history_list {
   color: var(--text-primary, #f1f5f9);
 }
 
+/* ══ P2-1 — Active Card Header + Stage Timeline
+        AH — job title row + status badge at top of rc_active_card
+        ST — horizontal stage progress indicator below the progress bar
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* AH1 — header row: source title left, status badge right */
+.rcCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  min-width: 0;
+}
+.rcActiveCard.isIdle .rcCardHeader {
+  display: none;
+}
+.rcCardJobTitle {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted, #94a3b8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.rcCardStatusBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: background .2s, color .2s;
+}
+.rcCardStatusBadge[data-state="running"]   { background: rgba(56,189,248,.15);  color: #7dd3fc; }
+.rcCardStatusBadge[data-state="completed"] { background: rgba(34,197,94,.13);   color: #6ee7b7; }
+.rcCardStatusBadge[data-state="failed"]    { background: rgba(239,68,68,.13);   color: #fca5a5; }
+.rcCardStatusBadge[data-state="idle"],
+.rcCardStatusBadge[data-state="ready"]     { background: rgba(148,163,184,.07); color: rgba(148,163,184,.5); }
+
+/* ST1 — timeline container */
+.rcStageTimeline {
+  display: flex;
+  align-items: flex-start;
+  padding: 6px 0 2px;
+  overflow: hidden;
+}
+.rcActiveCard.isIdle .rcStageTimeline,
+.rcStageTimeline:empty {
+  display: none;
+}
+
+/* ST2 — stage item (dot + label stacked) */
+.rcStageItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* ST3 — stage dot */
+.rcStageDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  transition: background .2s, border-color .2s, box-shadow .2s;
+  flex-shrink: 0;
+}
+.rcStageDot[data-state="pending"] {
+  background: rgba(148,163,184,.12);
+  border-color: rgba(148,163,184,.2);
+}
+.rcStageDot[data-state="active"] {
+  background: rgba(56,189,248,.25);
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56,189,248,.18);
+}
+.rcStageDot[data-state="done"] {
+  background: #10b981;
+  border-color: #10b981;
+}
+.rcStageDot[data-state="failed"] {
+  background: #ef4444;
+  border-color: #ef4444;
+}
+
+/* ST4 — stage label */
+.rcStageLabel {
+  font-size: 9px;
+  font-weight: 500;
+  color: rgba(148,163,184,.45);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1;
+}
+.rcStageItem:has(.rcStageDot[data-state="active"]) .rcStageLabel {
+  color: #7dd3fc;
+  font-weight: 600;
+}
+.rcStageItem:has(.rcStageDot[data-state="done"]) .rcStageLabel {
+  color: rgba(110,231,183,.7);
+}
+.rcStageItem:has(.rcStageDot[data-state="failed"]) .rcStageLabel {
+  color: #fca5a5;
+}
+
+/* ST5 — connector line between stage items */
+.rcStageArrow {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 1px;
+  background: rgba(148,163,184,.18);
+  align-self: flex-start;
+  margin-top: 4px; /* align with dot vertical center */
+  flex-shrink: 0;
+}
+
 /* ══ FINAL — inspector visibility lock (must remain last in file)
         Rule F0: noInspector guard — specificity (1,2,0)+!important beats any
           #appInspector{display:flex!important} rule that may be re-introduced.

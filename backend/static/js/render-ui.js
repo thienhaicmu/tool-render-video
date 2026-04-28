@@ -83,6 +83,9 @@ function resetRenderSessionUi(){
   resetRenderMonitorHeartbeat();
   _renderLogsUserToggled = false;
   setRenderLogsCollapsed(false);
+  if (qs('rc_card_job_title')) qs('rc_card_job_title').textContent = '';
+  if (qs('rc_card_status_badge')) { qs('rc_card_status_badge').textContent = 'Idle'; qs('rc_card_status_badge').dataset.state = 'idle'; }
+  _updateStageTimeline('', '');
   renderBottomActiveQueue(null, null, []);
   updateRenderMainState(null, null, []);
 }
@@ -838,6 +841,64 @@ function useTopClips() {
   }
 }
 
+const RC_STAGE_STEPS = [
+  { key: 'prepare',  label: 'Prepare',  stages: ['starting', 'queued'] },
+  { key: 'source',   label: 'Source',   stages: ['downloading'] },
+  { key: 'scenes',   label: 'Scenes',   stages: ['scene_detection', 'segment_building'] },
+  { key: 'subtitle', label: 'Subtitle', stages: ['transcribing_full'] },
+  { key: 'render',   label: 'Render',   stages: ['rendering', 'rendering_parallel'] },
+  { key: 'validate', label: 'Validate', stages: ['writing_report'] },
+  { key: 'done',     label: 'Done',     stages: ['done', 'completed', 'complete'] },
+];
+
+function _updateStageTimeline(stage, status) {
+  const el = qs('rc_stage_timeline');
+  if (!el) return;
+  const stageNorm = String(stage || '').toLowerCase().trim();
+  const statusNorm = String(status || '').toLowerCase().trim();
+  const isDone = statusNorm === 'completed' || statusNorm === 'done' || statusNorm === 'complete';
+  const isFailed = statusNorm === 'failed' || statusNorm === 'interrupted';
+
+  if (!stage && !isDone && !isFailed) { el.innerHTML = ''; return; }
+
+  let activeIdx = -1;
+  for (let i = 0; i < RC_STAGE_STEPS.length; i++) {
+    if (RC_STAGE_STEPS[i].stages.includes(stageNorm)) { activeIdx = i; break; }
+  }
+  if (isDone) activeIdx = RC_STAGE_STEPS.length - 1;
+
+  el.innerHTML = '';
+  RC_STAGE_STEPS.forEach((step, i) => {
+    const dotState = i < activeIdx
+      ? 'done'
+      : i === activeIdx
+        ? (isFailed ? 'failed' : 'active')
+        : 'pending';
+
+    const item = document.createElement('span');
+    item.className = 'rcStageItem';
+
+    const dot = document.createElement('span');
+    dot.className = 'rcStageDot';
+    dot.dataset.state = dotState;
+    dot.title = step.label;
+
+    const label = document.createElement('span');
+    label.className = 'rcStageLabel';
+    label.textContent = step.label;
+
+    item.appendChild(dot);
+    item.appendChild(label);
+    el.appendChild(item);
+
+    if (i < RC_STAGE_STEPS.length - 1) {
+      const arrow = document.createElement('span');
+      arrow.className = 'rcStageArrow';
+      el.appendChild(arrow);
+    }
+  });
+}
+
 function renderBottomActiveQueue(job, summary, parts = []) {
   const items = Array.isArray(parts) ? parts : [];
   const s = summary || computeProgressSummary(items || []);
@@ -975,6 +1036,20 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     if (activeBar) activeBar.style.setProperty('--progress', `${activeCardPct}%`);
     if (activeStage) activeStage.textContent = stageLine;
     if (activeMessage) activeMessage.textContent = message;
+
+    const cardJobTitle = qs('rc_card_job_title');
+    const cardStatusBadge = qs('rc_card_status_badge');
+    if (cardJobTitle) {
+      const src = job ? getRenderWorkspaceSourceText(job) : '';
+      const srcText = (src && src !== 'No source selected') ? src : '';
+      cardJobTitle.textContent = srcText;
+      cardJobTitle.title = srcText;
+    }
+    if (cardStatusBadge) {
+      cardStatusBadge.textContent = statusLabel;
+      cardStatusBadge.dataset.state = overallState;
+    }
+    _updateStageTimeline(job?.stage || '', status);
   }
 
   const cardWrap = qs('rc_part_cards');
