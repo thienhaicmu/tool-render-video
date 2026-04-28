@@ -161,8 +161,8 @@ class RenderRequest(BaseModel):
     aspect_ratio: str = "3:4"
     frame_scale_x: int = 100
     frame_scale_y: int = 106
-    motion_aware_crop: bool = True
-    reframe_mode: str = "subject"
+    motion_aware_crop: bool = False
+    reframe_mode: str = "center"
 
     # Overlay / effect
     add_title_overlay: bool = False
