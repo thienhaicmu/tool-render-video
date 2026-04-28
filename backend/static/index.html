@@ -370,6 +370,11 @@
           <span class="rdPct" id="render_active_pct">0%</span>
           <span class="rdMetaSub" id="render_active_meta">Clips will appear below as they finish.</span>
         </div>
+        <div class="rdRenderModeLine" id="rd_render_mode_line" style="display:none">
+          <span class="rdRenderModeBadge" id="rd_render_mode_badge" data-mode="stable">Stable</span>
+          <span class="rdSkillSummary" id="rd_skill_summary"></span>
+          <span class="rdElapsedTime" id="rd_elapsed_time"></span>
+        </div>
         <div class="rdDoneActions hiddenView" id="render_active_actions">
           <button class="primaryButton" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
           <button class="ghostButton" type="button" onclick="setView('upload')">Go to Upload</button>
@@ -722,6 +727,7 @@
       <button class="insp-tab"        data-insp-tab="performance" onclick="setInspectorTab('performance')">Perf</button>
       <button class="insp-tab"        data-insp-tab="advanced"  onclick="setInspectorTab('advanced')">Advanced</button>
       <button class="insp-tab"        data-insp-tab="market" data-ev-mode="market" onclick="setInspectorTab('market')">&#127758; Market</button>
+      <button class="insp-tab"        data-insp-tab="skills"  onclick="setInspectorTab('skills')">⚡ Skills</button>
     </div>
 
     <!-- Scrollable body: 4-group inspector -->
@@ -1189,6 +1195,44 @@
           <span id="inspGroupPerfArrow" class="inspGroupArrow">▸</span>
         </div>
         <div class="inspGroupBody" id="inspGroupPerfBody">
+          <!-- ── Render Engine Selector ─────────────────────────────────── -->
+          <div class="evSection" id="evSectionRenderEngine" data-section-type="render-engine">
+            <div class="evSectionTitle">Render Engine</div>
+            <div id="evRenderEngineSelector">
+              <label class="evRenderModeOption" id="evRenderModeOptionStable">
+                <input type="radio" name="evRenderMode" id="evRenderModeStable" value="stable" checked onchange="evUpdateRenderEngineUI()">
+                <div class="evRenderModeCard">
+                  <span class="evRenderModeTitle">⚡ Stable</span>
+                  <span class="evRenderModeDesc">Current stable render pipeline.</span>
+                </div>
+              </label>
+              <label class="evRenderModeOption" id="evRenderModeOptionSkill">
+                <input type="radio" name="evRenderMode" id="evRenderModeSkill" value="skill_enhanced" onchange="evUpdateRenderEngineUI()">
+                <div class="evRenderModeCard">
+                  <span class="evRenderModeTitle">✨ Skill Enhanced</span>
+                  <span class="evRenderModeDesc">Uses optional skills for better audio, subtitles, crop, and quality. Falls back safely if unavailable.</span>
+                </div>
+              </label>
+            </div>
+            <!-- Skill Preview Summary -->
+            <div id="evSkillPreview" style="margin-top:10px">
+              <div id="evSkillPreviewStable" style="font-size:11.5px;color:var(--text-muted);padding:8px 10px;background:rgba(255,255,255,.04);border-radius:8px;line-height:1.5">
+                Stable mode — current behavior preserved, no experimental skills applied.
+              </div>
+              <div id="evSkillPreviewEnhanced" class="hiddenView" style="padding:8px 10px;background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.2);border-radius:8px">
+                <div style="font-size:11px;font-weight:600;color:#a5b4fc;margin-bottom:6px">Skills that will be applied:</div>
+                <div style="display:flex;flex-wrap:wrap;gap:5px">
+                  <span class="evSkillChip">🎵 Better Audio</span>
+                  <span class="evSkillChip">📝 Subtitle Readability</span>
+                  <span class="evSkillChip">🎬 Video Quality Preset</span>
+                  <span class="evSkillChip">🎯 Smart Crop</span>
+                  <span class="evSkillChip evSkillChipOptional">⚡ Fast Captions if available</span>
+                  <span class="evSkillChip evSkillChipOptional">🔍 Highlight Detection if available</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="evSection" data-section-type="render-settings">
             <div class="evSectionTitle">Render Options</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -1394,6 +1438,289 @@
         <div class="mvPanelFooter">Previewed hook edits are included when you start render.</div>
       </div>
 
+      <!-- ══ SKILL RUNNER ══════════════════════════════════════ -->
+      <div class="evSection" id="evSectionSkillRunner" data-insp-panel="skills">
+        <div class="evSectionTitle">⚡ Skill Runner</div>
+        <div class="srIntro">Apply post-processing skills to your video. Each enabled skill runs in order on the source file.</div>
+
+        <!-- ── Audio Pro Mix ────────────────────────────────────────── -->
+        <div class="srSkillItem" id="srSkill_audio_pro_mix">
+          <div class="srSkillHeader">
+            <label class="srSkillToggle">
+              <input type="checkbox" id="srCheck_audio_pro_mix" onchange="srToggleSkill('audio_pro_mix')">
+              <span class="srSkillLabel">🎵 Audio Pro Mix</span>
+            </label>
+            <span class="srSkillBadge srBadgeAvail">Available</span>
+          </div>
+          <div class="srSkillDesc">Balance and normalize audio for consistent loudness.</div>
+          <div class="srSkillConfig hiddenView" id="srConfig_audio_pro_mix">
+            <div class="srConfigGrid">
+              <label class="srConfigField">
+                <span class="srConfigLabel">Loudness Target</span>
+                <select class="fieldInput" id="srOpt_audio_pro_mix_loudness_target">
+                  <option value="-14 LUFS">-14 LUFS</option>
+                  <option value="-16 LUFS" selected>-16 LUFS (default)</option>
+                  <option value="-18 LUFS">-18 LUFS</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Background Ducking</span>
+                <select class="fieldInput" id="srOpt_audio_pro_mix_background_ducking">
+                  <option value="off" selected>Off</option>
+                  <option value="light">Light</option>
+                  <option value="medium">Medium</option>
+                  <option value="strong">Strong</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Voice Clarity</span>
+                <select class="fieldInput" id="srOpt_audio_pro_mix_voice_clarity">
+                  <option value="off" selected>Off</option>
+                  <option value="standard">Standard</option>
+                  <option value="strong">Strong</option>
+                </select>
+              </label>
+              <label class="srConfigField srConfigToggleRow">
+                <input type="checkbox" id="srOpt_audio_pro_mix_limiter" checked>
+                <span class="srConfigLabel">Limiter</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Subtitle Readability ──────────────────────────────────── -->
+        <div class="srSkillItem" id="srSkill_subtitle_readability">
+          <div class="srSkillHeader">
+            <label class="srSkillToggle">
+              <input type="checkbox" id="srCheck_subtitle_readability" onchange="srToggleSkill('subtitle_readability')">
+              <span class="srSkillLabel">📝 Subtitle Readability</span>
+            </label>
+            <span class="srSkillBadge srBadgeAvail">Available</span>
+          </div>
+          <div class="srSkillDesc">Apply a subtitle style preset to improve on-screen text readability.</div>
+          <div class="srSkillConfig hiddenView" id="srConfig_subtitle_readability">
+            <div class="srConfigGrid">
+              <label class="srConfigField">
+                <span class="srConfigLabel">Style Preset</span>
+                <select class="fieldInput" id="srOpt_subtitle_readability_style_preset">
+                  <option value="clean">Clean</option>
+                  <option value="bold social">Bold Social</option>
+                  <option value="karaoke">Karaoke</option>
+                  <option value="pro karaoke" selected>Pro Karaoke</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Font Size</span>
+                <select class="fieldInput" id="srOpt_subtitle_readability_font_size">
+                  <option value="small">Small</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="large">Large</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Position</span>
+                <select class="fieldInput" id="srOpt_subtitle_readability_position">
+                  <option value="bottom" selected>Bottom</option>
+                  <option value="middle">Middle</option>
+                  <option value="top">Top</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Outline Strength</span>
+                <select class="fieldInput" id="srOpt_subtitle_readability_outline_strength">
+                  <option value="light">Light</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="strong">Strong</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Video Quality Preset ──────────────────────────────────── -->
+        <div class="srSkillItem" id="srSkill_video_quality_preset">
+          <div class="srSkillHeader">
+            <label class="srSkillToggle">
+              <input type="checkbox" id="srCheck_video_quality_preset" onchange="srToggleSkill('video_quality_preset')">
+              <span class="srSkillLabel">🎬 Video Quality Preset</span>
+            </label>
+            <span class="srSkillBadge srBadgeAvail">Available</span>
+          </div>
+          <div class="srSkillDesc">Apply color grade and re-encode at selected quality level.</div>
+          <div class="srSkillConfig hiddenView" id="srConfig_video_quality_preset">
+            <div class="srConfigGrid">
+              <label class="srConfigField">
+                <span class="srConfigLabel">Preset</span>
+                <select class="fieldInput" id="srOpt_video_quality_preset_preset">
+                  <option value="none" selected>None</option>
+                  <option value="social bright">Social Bright</option>
+                  <option value="cinematic soft">Cinematic Soft</option>
+                  <option value="high contrast">High Contrast</option>
+                  <option value="clean business">Clean Business</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Quality Level</span>
+                <select class="fieldInput" id="srOpt_video_quality_preset_quality_level">
+                  <option value="balanced" selected>Balanced</option>
+                  <option value="high">High</option>
+                  <option value="max">Max</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Smart Crop / Auto Reframe ─────────────────────────────── -->
+        <div class="srSkillItem" id="srSkill_smart_crop">
+          <div class="srSkillHeader">
+            <label class="srSkillToggle">
+              <input type="checkbox" id="srCheck_smart_crop" onchange="srToggleSkill('smart_crop')">
+              <span class="srSkillLabel">🎯 Smart Crop / Auto Reframe</span>
+            </label>
+            <span class="srSkillBadge srBadgeAvail">Available</span>
+          </div>
+          <div class="srSkillDesc">Crop and scale to target aspect ratio with subject-aware framing.</div>
+          <div class="srSkillConfig hiddenView" id="srConfig_smart_crop">
+            <div class="srConfigGrid">
+              <label class="srConfigField">
+                <span class="srConfigLabel">Target Aspect</span>
+                <select class="fieldInput" id="srOpt_smart_crop_target_aspect">
+                  <option value="9:16" selected>9:16 (Vertical)</option>
+                  <option value="1:1">1:1 (Square)</option>
+                  <option value="4:5">4:5 (Portrait)</option>
+                  <option value="16:9">16:9 (Landscape)</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Subject Priority</span>
+                <select class="fieldInput" id="srOpt_smart_crop_subject_priority">
+                  <option value="face" selected>Face</option>
+                  <option value="person">Person</option>
+                  <option value="center">Center</option>
+                  <option value="motion">Motion</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Crop Smoothing</span>
+                <select class="fieldInput" id="srOpt_smart_crop_crop_smoothing">
+                  <option value="off">Off</option>
+                  <option value="light">Light</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="strong">Strong</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Fast Captions ─────────────────────────────────────────── -->
+        <div class="srSkillItem" id="srSkill_fast_captions">
+          <div class="srSkillHeader">
+            <label class="srSkillToggle">
+              <input type="checkbox" id="srCheck_fast_captions" onchange="srToggleSkill('fast_captions')">
+              <span class="srSkillLabel">⚡ Fast Captions</span>
+            </label>
+            <span class="srSkillBadge srBadgeAvail">Available</span>
+          </div>
+          <div class="srSkillDesc">Generate and burn-in captions using faster_whisper when available.</div>
+          <div class="srSkillConfig hiddenView" id="srConfig_fast_captions">
+            <div class="srConfigGrid">
+              <label class="srConfigField">
+                <span class="srConfigLabel">Engine</span>
+                <select class="fieldInput" id="srOpt_fast_captions_engine">
+                  <option value="default" selected>Default (whisper)</option>
+                  <option value="faster_whisper">faster_whisper (if available)</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Language</span>
+                <select class="fieldInput" id="srOpt_fast_captions_language">
+                  <option value="auto" selected>Auto-detect</option>
+                  <option value="en">English</option>
+                  <option value="vi">Vietnamese</option>
+                  <option value="ja">Japanese</option>
+                  <option value="fr">French</option>
+                  <option value="de">German</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Translate Subtitles</span>
+                <select class="fieldInput" id="srOpt_fast_captions_translate_subtitle">
+                  <option value="off" selected>Off</option>
+                  <option value="en">English</option>
+                  <option value="vi">Vietnamese</option>
+                  <option value="ja">Japanese</option>
+                  <option value="fr">French</option>
+                  <option value="de">German</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Highlight Detection ─────────────────────────────────── -->
+        <div class="srSkillItem" id="srSkill_highlight_detection">
+          <div class="srSkillHeader">
+            <label class="srSkillToggle">
+              <input type="checkbox" id="srCheck_highlight_detection" onchange="srToggleSkill('highlight_detection')">
+              <span class="srSkillLabel">🔍 Highlight Detection</span>
+            </label>
+            <span class="srSkillBadge srBadgeExp">Experimental</span>
+          </div>
+          <div class="srSkillDesc">Detect speech peaks, scene changes, or viral hooks and export highlights.</div>
+          <div class="srSkillConfig hiddenView" id="srConfig_highlight_detection">
+            <div class="srExpWarning">⚠ Experimental — output may vary. Always check the result.</div>
+            <div class="srConfigGrid">
+              <label class="srConfigField">
+                <span class="srConfigLabel">Mode</span>
+                <select class="fieldInput" id="srOpt_highlight_detection_mode">
+                  <option value="off">Off</option>
+                  <option value="audio speech" selected>Audio Speech</option>
+                  <option value="scene change">Scene Change</option>
+                  <option value="viral hook">Viral Hook</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Sensitivity</span>
+                <select class="fieldInput" id="srOpt_highlight_detection_sensitivity">
+                  <option value="low">Low</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+              <label class="srConfigField">
+                <span class="srConfigLabel">Max Highlights</span>
+                <select class="fieldInput" id="srOpt_highlight_detection_max_highlights">
+                  <option value="3">3</option>
+                  <option value="5" selected>5</option>
+                  <option value="10">10</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Duration config ──────────────────────────────────────── -->
+        <div class="srDurationRow">
+          <label class="srDurLabel">
+            <span>Min</span>
+            <input class="srDurInput" type="number" id="srMinDuration" value="70" min="1" max="3600" title="Minimum output duration in seconds (default 70 s for TikTok)">
+            <span class="srDurUnit">s</span>
+          </label>
+          <label class="srDurLabel">
+            <span>Max</span>
+            <input class="srDurInput" type="number" id="srMaxDuration" placeholder="none" min="1" max="3600" title="Maximum output duration in seconds — leave empty for no limit">
+            <span class="srDurUnit">s</span>
+          </label>
+          <span class="srDurHint" id="srDurHint"></span>
+        </div>
+
+        <!-- ── Selection summary ─────────────────────────────────────── -->
+        <div class="srSelectionSummary" id="srSelectionSummary">No skills selected</div>
+      </div>
+      <!-- /SKILL RUNNER -->
+
     </div><!-- /evRightScroll.inspPaneBody -->
 
     <!-- Right panel footer -->
@@ -1404,6 +1731,7 @@
         <span id="evStatusDetail" style="font-size:10px;color:var(--text-muted);opacity:.8"></span>
       </div>
       <button class="ghostButton" id="evReopenBtn" onclick="evReopenEditor()" style="display:none;font-size:12px;padding:5px 10px">↺ Re-open Editor</button>
+      <button class="secondaryButton" id="evRunSkillsBtn" onclick="runSkillsFromEditor()" disabled style="font-size:12px;padding:5px 12px">⚡ Run Skills</button>
       <button class="primaryButton" id="evStartBtn" onclick="startRenderFromEditor()" disabled data-i18n="start_render">▶ Start Render</button>
     </div>
   </aside>

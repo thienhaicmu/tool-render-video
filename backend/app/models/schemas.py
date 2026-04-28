@@ -204,6 +204,10 @@ class RenderRequest(BaseModel):
     market_viral: Optional[dict] = None
     subtitle_edits: Optional[list] = None
 
+    # Render engine mode — "stable" preserves existing behavior (default),
+    # "skill_enhanced" activates optional skill adapters with safe fallback.
+    render_mode: Optional[str] = "stable"
+
     @model_validator(mode="after")
     def validate_voice_settings(self):
         if not self.voice_enabled:

@@ -513,6 +513,130 @@ def run_render_pipeline(
         job_id,
         f"Render started | resume={resume_mode} | profile={payload.render_profile} | codec={payload.video_codec} | reup_mode={payload.reup_mode} | source_mode={payload.source_mode} | output_mode={output_mode}",
     )
+
+    # ── Render mode / skill dispatch ──────────────────────────────────────────
+    # Stable mode (default): payload and tuned are unchanged — full backward compat.
+    # Skill Enhanced mode: activate optional adapters; each skill falls back
+    # independently so a single failure never breaks the whole render.
+    _render_mode = str(getattr(payload, "render_mode", None) or "stable").strip().lower()
+    if _render_mode not in ("stable", "skill_enhanced"):
+        _render_mode = "stable"
+    _skill_enabled: list[str] = []
+    _skill_skipped: list[str] = []
+    _skill_fallback_count: int = 0
+
+    _emit_render_event(
+        channel_code=effective_channel,
+        job_id=job_id,
+        event="render_mode_selected",
+        level="INFO",
+        message=f"Render mode: {_render_mode}",
+        step="skill.init",
+        context={"render_mode": _render_mode},
+    )
+    _job_log(effective_channel, job_id, f"[SKILL] render_mode={_render_mode}")
+
+    if _render_mode == "skill_enhanced":
+        # Skill: Better Audio — enable loudnorm normalization
+        try:
+            if not payload.loudnorm_enabled:
+                payload.loudnorm_enabled = True
+            _skill_enabled.append("better_audio")
+            _job_log(effective_channel, job_id, "[SKILL] skill_enabled: better_audio (loudnorm)")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id, event="skill_enabled", level="INFO",
+                               message="Skill enabled: better_audio", step="skill.better_audio",
+                               context={"skill": "better_audio"})
+        except Exception as _se:
+            _skill_skipped.append("better_audio")
+            _skill_fallback_count += 1
+            _job_log(effective_channel, job_id, f"[SKILL] skill_failed_fallback: better_audio ({_se})")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id, event="skill_failed_fallback",
+                               level="WARNING", message=f"Skill fallback: better_audio", step="skill.better_audio",
+                               context={"skill": "better_audio", "error": str(_se)})
+
+        # Skill: Subtitle Readability — ensure a high-legibility subtitle style
+        try:
+            if payload.add_subtitle:
+                _sub_style_now = str(payload.subtitle_style or "").strip().lower()
+                if _sub_style_now not in ("pro_karaoke", "viral_pop_anton"):
+                    payload.subtitle_style = "pro_karaoke"
+                _skill_enabled.append("subtitle_readability")
+                _job_log(effective_channel, job_id, "[SKILL] skill_enabled: subtitle_readability")
+                _emit_render_event(channel_code=effective_channel, job_id=job_id, event="skill_enabled", level="INFO",
+                                   message="Skill enabled: subtitle_readability", step="skill.subtitle_readability",
+                                   context={"skill": "subtitle_readability"})
+            else:
+                _skill_skipped.append("subtitle_readability")
+                _job_log(effective_channel, job_id, "[SKILL] skill_skipped: subtitle_readability (subtitles off)")
+                _emit_render_event(channel_code=effective_channel, job_id=job_id, event="skill_skipped", level="INFO",
+                                   message="Skill skipped: subtitle_readability", step="skill.subtitle_readability",
+                                   context={"skill": "subtitle_readability", "reason": "subtitles_disabled"})
+        except Exception as _se:
+            _skill_skipped.append("subtitle_readability")
+            _skill_fallback_count += 1
+            _job_log(effective_channel, job_id, f"[SKILL] skill_failed_fallback: subtitle_readability ({_se})")
+
+        # Skill: Video Quality Preset — tighten CRF by 1 stop (better quality)
+        try:
+            _crf_now = int(tuned.get("video_crf", 18))
+            if _crf_now > 12:
+                tuned["video_crf"] = max(12, _crf_now - 1)
+                _job_log(effective_channel, job_id,
+                         f"[SKILL] skill_enabled: video_quality_preset (crf {_crf_now}→{tuned['video_crf']})")
+            _skill_enabled.append("video_quality_preset")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id, event="skill_enabled", level="INFO",
+                               message="Skill enabled: video_quality_preset", step="skill.video_quality_preset",
+                               context={"skill": "video_quality_preset",
+                                        "crf_before": _crf_now, "crf_after": tuned.get("video_crf")})
+        except Exception as _se:
+            _skill_skipped.append("video_quality_preset")
+            _skill_fallback_count += 1
+            _job_log(effective_channel, job_id, f"[SKILL] skill_failed_fallback: video_quality_preset ({_se})")
+
+        # Skill: Smart Crop / Auto Reframe — ensure motion-aware crop is active
+        try:
+            if not payload.motion_aware_crop:
+                payload.motion_aware_crop = True
+                _job_log(effective_channel, job_id, "[SKILL] skill_enabled: smart_crop (activated motion_aware_crop)")
+            _skill_enabled.append("smart_crop")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id, event="skill_enabled", level="INFO",
+                               message="Skill enabled: smart_crop", step="skill.smart_crop",
+                               context={"skill": "smart_crop"})
+        except Exception as _se:
+            _skill_skipped.append("smart_crop")
+            _skill_fallback_count += 1
+            _job_log(effective_channel, job_id, f"[SKILL] skill_failed_fallback: smart_crop ({_se})")
+
+        # Skill: Fast Captions — check if faster-whisper is installed
+        try:
+            import faster_whisper as _fwcheck  # noqa: F401
+            _skill_enabled.append("fast_captions")
+            _job_log(effective_channel, job_id, "[SKILL] skill_enabled: fast_captions (faster_whisper available)")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id, event="skill_enabled", level="INFO",
+                               message="Skill enabled: fast_captions", step="skill.fast_captions",
+                               context={"skill": "fast_captions"})
+        except ImportError:
+            _skill_skipped.append("fast_captions")
+            _job_log(effective_channel, job_id, "[SKILL] skill_skipped: fast_captions (faster_whisper not installed)")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id, event="skill_skipped", level="INFO",
+                               message="Skill skipped: fast_captions", step="skill.fast_captions",
+                               context={"skill": "fast_captions", "reason": "faster_whisper_missing"})
+
+        # Skill: Highlight Detection — viral scoring is always active; record it
+        try:
+            _skill_enabled.append("highlight_detection")
+            _job_log(effective_channel, job_id, "[SKILL] skill_enabled: highlight_detection (viral scoring active)")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id, event="skill_enabled", level="INFO",
+                               message="Skill enabled: highlight_detection", step="skill.highlight_detection",
+                               context={"skill": "highlight_detection"})
+        except Exception as _se:
+            _skill_skipped.append("highlight_detection")
+            _skill_fallback_count += 1
+            _job_log(effective_channel, job_id, f"[SKILL] skill_failed_fallback: highlight_detection ({_se})")
+
+        _job_log(effective_channel, job_id,
+                 f"[SKILL] summary | enabled={_skill_enabled} | skipped={_skill_skipped} | fallbacks={_skill_fallback_count}")
+
     try:
         normalized_text_layers = _validate_text_layers_or_400(payload)
     except Exception as layer_exc:
@@ -1625,7 +1749,16 @@ def run_render_pipeline(
             _subtitle_translate_summary = "partial"
         _job_log(effective_channel, job_id, f"Voice: {_voice_summary}")
         _job_log(effective_channel, job_id, f"Subtitle translation: {_subtitle_translate_summary}")
-        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
+        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {
+            "outputs": outputs,
+            "segments": scored,
+            "voice_summary": _voice_summary,
+            "subtitle_translate_summary": _subtitle_translate_summary,
+            "render_mode": _render_mode,
+            "skill_enabled": _skill_enabled,
+            "skill_skipped": _skill_skipped,
+            "skill_fallback_count": _skill_fallback_count,
+        }, stage=JobStage.DONE, progress_percent=100, message="Render completed")
         _job_log(effective_channel, job_id, f"Render completed with {len(outputs)}/{total_parts} outputs")
         _emit_render_event(
             channel_code=effective_channel,

@@ -394,6 +394,67 @@
     .evRightScroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
     .evSection { background: linear-gradient(180deg, #0f1b2e 0%, #0d1526 100%); border: 1px solid var(--card-border); border-top-color: #1e3050; border-radius: var(--radius-sm); padding: 12px 14px; }
     .evSectionTitle { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.05); }
+
+    /* ── Render Engine Selector ──────────────────────────────────────────── */
+    #evRenderEngineSelector { display: flex; flex-direction: column; gap: 6px; }
+    .evRenderModeOption { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.07); background: rgba(255,255,255,.03); transition: border-color .15s, background .15s; }
+    .evRenderModeOption:hover { border-color: rgba(99,102,241,.4); background: rgba(99,102,241,.06); }
+    .evRenderModeOption.isSelected { border-color: rgba(99,102,241,.55); background: rgba(99,102,241,.1); }
+    .evRenderModeOption input[type="radio"] { margin-top: 3px; flex-shrink: 0; accent-color: #818cf8; }
+    .evRenderModeCard { display: flex; flex-direction: column; gap: 2px; }
+    .evRenderModeTitle { font-size: 12.5px; font-weight: 700; color: var(--text); }
+    .evRenderModeDesc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+    .evSkillChip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: rgba(99,102,241,.15); border: 1px solid rgba(99,102,241,.3); color: #a5b4fc; white-space: nowrap; }
+    .evSkillChip.evSkillChipOptional { background: rgba(148,163,184,.08); border-color: rgba(148,163,184,.2); color: var(--text-muted); }
+
+    /* ── Render mode badge in active render card ─────────────────────────── */
+    .rdRenderModeLine { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; flex-wrap: wrap; }
+    .rdRenderModeBadge { padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; background: rgba(148,163,184,.12); color: var(--text-muted); border: 1px solid rgba(148,163,184,.2); }
+    .rdRenderModeBadge[data-mode="skill_enhanced"] { background: rgba(99,102,241,.15); color: #a5b4fc; border-color: rgba(99,102,241,.3); }
+    .rdSkillSummary { font-size: 11px; color: var(--text-muted); }
+
+    /* ── Render mode badge in history cards ─────────────────────────────── */
+    .renderHistoryModeBadge { padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; background: rgba(148,163,184,.1); color: var(--text-muted); border: 1px solid rgba(148,163,184,.15); }
+    .renderHistoryModeBadge.skill_enhanced { background: rgba(99,102,241,.12); color: #a5b4fc; border-color: rgba(99,102,241,.25); }
+    .renderHistorySkills { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; padding-left: 25px; }
+
+    /* ── Skill item chips (history + compare panel) ──────────────────────── */
+    .rhSkillItem { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 500; color: #a5b4fc; background: rgba(99,102,241,.1); border: 1px solid rgba(99,102,241,.2); white-space: nowrap; }
+
+    /* ── Skill confidence badge ──────────────────────────────────────────── */
+    .rhConfidenceBadge { padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border: 1px solid transparent; white-space: nowrap; }
+    .rhConfidenceBadge.high   { background: rgba(16,185,129,.1);  color: #34d399; border-color: rgba(16,185,129,.22); }
+    .rhConfidenceBadge.medium { background: rgba(245,158,11,.1);  color: #fbbf24; border-color: rgba(245,158,11,.22); }
+    .rhConfidenceBadge.low    { background: rgba(239,68,68,.1);   color: #f87171; border-color: rgba(239,68,68,.22); }
+
+    /* ── Render time ─────────────────────────────────────────────────────── */
+    .rhRenderTime { font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
+
+    /* ── Compare button ──────────────────────────────────────────────────── */
+    .rhCompareBtn { padding: 5px 10px; font-size: 11px; white-space: nowrap; }
+
+    /* ── Compare panel ───────────────────────────────────────────────────── */
+    .renderComparePanel { background: linear-gradient(160deg,#0d1828 0%,#091120 100%); border: 1px solid rgba(99,102,241,.28); border-radius: var(--radius); padding: 14px 16px 16px; margin-bottom: 10px; }
+    .rcPanelHeader { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .rcPanelTitle { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .07em; }
+    .rcPanelSource { font-size: 12px; color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rcCloseBtn { padding: 2px 9px; font-size: 12px; flex-shrink: 0; }
+    .renderCompareCards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .renderCompareSide { background: rgba(255,255,255,.03); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px 14px; }
+    .rcSideLabel { font-size: 11.5px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,.05); }
+    .rcSideLabel.skill_enhanced { color: #a5b4fc; }
+    .rcSideLabel.stable { color: #94a3b8; }
+    .rcSideEmpty { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+    .rcSideRow { display: flex; gap: 8px; margin-top: 6px; font-size: 11.5px; align-items: flex-start; }
+    .rcSideKey { color: var(--text-muted); flex: 0 0 68px; font-size: 10.5px; padding-top: 1px; }
+    .rcSideVal { color: var(--text); }
+    .rcSideSkills .rcSideVal { display: flex; flex-wrap: wrap; gap: 4px; }
+    .rcSkillList { display: flex; flex-wrap: wrap; gap: 4px; }
+    .rcOutputPath { font-size: 10px; color: var(--text-muted); word-break: break-all; }
+    .rcPanelNote { font-size: 11px; color: rgba(148,163,184,.6); margin-top: 12px; text-align: center; }
+
+    /* ── Elapsed time in active render card mode line ────────────────────── */
+    .rdElapsedTime { font-size: 10.5px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
     .evTrimBarWrap { position: relative; height: 32px; margin: 6px 0; }
     .evTrimTrack { position: absolute; top: 50%; left: 0; right: 0; height: 6px; background: #1e2d45; border-radius: 999px; transform: translateY(-50%); }
     .evTrimFill { position: absolute; top: 50%; height: 6px; background: linear-gradient(90deg,#3b82f6,#10b981); border-radius: 999px; transform: translateY(-50%); }
@@ -8521,6 +8582,366 @@ body.is-history-active #history_list {
   border-color: rgba(255,255,255,.18);
   color: var(--text-primary, #f1f5f9);
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   SKILL RUNNER UI
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Skills inspector tab panel */
+#evSectionSkillRunner { padding-bottom: 12px; }
+
+.srIntro {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 10px;
+  padding: 7px 10px;
+  background: rgba(255,255,255,.04);
+  border-radius: 7px;
+}
+
+/* ── Skill item card ──────────────────────────────────────────────── */
+.srSkillItem {
+  border: 1px solid var(--card-border, rgba(255,255,255,.08));
+  border-radius: 9px;
+  margin-bottom: 8px;
+  background: rgba(255,255,255,.025);
+  overflow: hidden;
+}
+.srSkillHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px 4px;
+}
+.srSkillToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  cursor: pointer;
+  min-width: 0;
+}
+.srSkillToggle input[type="checkbox"] {
+  width: 15px; height: 15px;
+  flex-shrink: 0;
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+.srSkillLabel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.srSkillDesc {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 12px 8px;
+  line-height: 1.4;
+}
+
+/* Status badges */
+.srSkillBadge {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+.srBadgeAvail   { background: rgba(16,185,129,.1);  color: #34d399; border-color: rgba(16,185,129,.2); }
+.srBadgeUnavail { background: rgba(100,116,139,.1); color: #94a3b8; border-color: rgba(100,116,139,.2); }
+.srBadgeExp     { background: rgba(245,158,11,.1);  color: #fbbf24; border-color: rgba(245,158,11,.2); }
+
+/* ── Per-skill config body ────────────────────────────────────────── */
+.srSkillConfig {
+  padding: 4px 12px 10px;
+  border-top: 1px solid rgba(255,255,255,.06);
+  background: rgba(0,0,0,.12);
+}
+.srConfigGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+.srConfigField {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.srConfigField .fieldInput {
+  font-size: 11.5px;
+  padding: 4px 8px;
+  height: 30px;
+}
+.srConfigLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.srConfigToggleRow {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+.srConfigToggleRow input[type="checkbox"] {
+  width: 14px; height: 14px;
+  accent-color: #6366f1;
+  flex-shrink: 0;
+}
+.srExpWarning {
+  font-size: 10.5px;
+  color: #fbbf24;
+  background: rgba(245,158,11,.08);
+  border: 1px solid rgba(245,158,11,.2);
+  border-radius: 6px;
+  padding: 5px 9px;
+  margin: 6px 0;
+}
+
+/* ── Selection summary ────────────────────────────────────────────── */
+/* Duration config row */
+.srDurationRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.srDurLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.srDurInput {
+  width: 62px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.35);
+  color: var(--text);
+  font-size: 11px;
+  text-align: right;
+  -moz-appearance: textfield;
+}
+.srDurInput::-webkit-outer-spin-button,
+.srDurInput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.srDurUnit { font-size: 10px; color: rgba(148,163,184,.5); }
+.srDurHint { font-size: 10px; color: #f87171; margin-left: auto; }
+
+.srSelectionSummary {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.06);
+  text-align: center;
+  margin-top: 4px;
+}
+.srSelectionSummary.srHasSelection {
+  color: #a5b4fc;
+  background: rgba(99,102,241,.07);
+  border-color: rgba(99,102,241,.2);
+}
+
+/* ── Run Skills footer button ─────────────────────────────────────── */
+#evRunSkillsBtn { white-space: nowrap; }
+
+/* ── Skill Job active monitor card ───────────────────────────────── */
+.srActiveCard {
+  position: relative;
+  flex-shrink: 0;
+  border: 1px solid rgba(99,102,241,.3);
+  border-radius: 10px;
+  background: rgba(99,102,241,.06);
+  padding: 10px 14px 10px;
+  margin: 8px 10px 4px;
+}
+.srActiveCard[data-status="completed"] { border-color: rgba(16,185,129,.3); background: rgba(16,185,129,.05); }
+.srActiveCard[data-status="failed"]    { border-color: rgba(239,68,68,.3);  background: rgba(239,68,68,.05); }
+
+.srActiveHeader { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+
+.srJobTypeBadge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #a5b4fc;
+  background: rgba(99,102,241,.15);
+  border: 1px solid rgba(99,102,241,.3);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.srJobStatusBadge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: rgba(100,116,139,.1);
+  color: #94a3b8;
+}
+.srJobStatusBadge[data-status="running"]   { background: rgba(99,102,241,.1);  color: #a5b4fc; border-color: rgba(99,102,241,.25); }
+.srJobStatusBadge[data-status="completed"] { background: rgba(16,185,129,.1);  color: #34d399; border-color: rgba(16,185,129,.2); }
+.srJobStatusBadge[data-status="failed"]    { background: rgba(239,68,68,.1);   color: #f87171; border-color: rgba(239,68,68,.2); }
+
+.srActiveProgress {
+  height: 3px;
+  background: rgba(255,255,255,.07);
+  border-radius: 2px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.srActiveProgressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  border-radius: 2px;
+  transition: width .4s ease;
+}
+
+.srSkillSteps { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 7px; }
+.srStep {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.srStepWait   { background: rgba(100,116,139,.08); color: #64748b; border-color: rgba(100,116,139,.15); }
+.srStepActive { background: rgba(99,102,241,.15); color: #a5b4fc; border-color: rgba(99,102,241,.3); font-weight: 600; }
+.srStepDone   { background: rgba(16,185,129,.1);  color: #34d399; border-color: rgba(16,185,129,.2); }
+.srStepFail   { background: rgba(239,68,68,.1);   color: #f87171; border-color: rgba(239,68,68,.25); cursor: help; }
+.srStepSkip   { background: rgba(100,116,139,.06); color: #475569; border-color: rgba(100,116,139,.1); text-decoration: line-through; opacity: .7; }
+
+.srJobMeta {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.srJobOutput { margin-top: 6px; font-size: 10.5px; color: var(--text-muted); }
+
+.srOutputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.srOutputName {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #a5b4fc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+.srOutputActions {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.srOutputBtn {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(99,102,241,.3);
+  background: rgba(99,102,241,.1);
+  color: #a5b4fc;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background .15s, border-color .15s;
+}
+.srOutputBtn:hover {
+  background: rgba(99,102,241,.22);
+  border-color: rgba(99,102,241,.5);
+  color: #c7d2fe;
+}
+
+/* TikTok 70 s duration badge */
+.srDurationBadge {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(251,191,36,.1);
+  border: 1px solid rgba(251,191,36,.25);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* Compact log timeline */
+.srJobLog {
+  margin-top: 6px;
+  border-top: 1px solid rgba(255,255,255,.05);
+  padding-top: 5px;
+  max-height: 88px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.srLogEntry {
+  display: flex;
+  gap: 6px;
+  font-size: 9.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  min-width: 0;
+}
+.srLogEntry[data-level="error"]   { color: #f87171; }
+.srLogEntry[data-level="warn"],
+.srLogEntry[data-level="warning"] { color: #fbbf24; }
+.srLogTs {
+  flex-shrink: 0;
+  color: rgba(148,163,184,.45);
+  font-variant-numeric: tabular-nums;
+  min-width: 54px;
+}
+.srLogMsg {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.srDismissBtn {
+  position: absolute;
+  top: 8px; right: 10px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 5px;
+  line-height: 1;
+  border-radius: 4px;
+}
+.srDismissBtn:hover { background: rgba(255,255,255,.08); color: var(--text); }
 
 /* ══ FINAL — inspector visibility lock (must remain last in file)
         Rule F0: noInspector guard — specificity (1,2,0)+!important beats any

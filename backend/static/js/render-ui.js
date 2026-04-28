@@ -16,6 +16,78 @@ let _rcUserIsScrolling = false;
 let _rcUserScrollTimerId = null;
 const RENDER_MONITOR_STALL_MS = 45000;
 
+// ── Skill metadata: user-visible descriptions (no raw key names shown) ────────
+const _SKILL_META = {
+  better_audio:         { label: 'Better Audio',    desc: 'Audio balanced & normalized' },
+  subtitle_readability: { label: 'Subtitles',       desc: 'Subtitles easier to read' },
+  video_quality_preset: { label: 'Video Quality',   desc: 'Video quality improved' },
+  smart_crop:           { label: 'Smart Crop',      desc: 'Smart framing applied' },
+  fast_captions:        { label: 'Fast Captions',   desc: 'Captions generated faster' },
+  // highlight_detection is excluded from "applied" display — viral scoring always
+  // runs; reporting it as a discrete skill improvement would mislead users.
+};
+
+function _getRenderModeFromJob(job) {
+  if (!job) return 'stable';
+  try {
+    const p = typeof job.payload_json === 'string' ? JSON.parse(job.payload_json) : (job.payload_json || {});
+    return String(p.render_mode || 'stable').toLowerCase();
+  } catch (_) { return 'stable'; }
+}
+
+function _getSkillDetails(job) {
+  try {
+    const r = typeof job?.result_json === 'string' ? JSON.parse(job.result_json) : (job?.result_json || {});
+    const enabledKeys = Array.isArray(r.skill_enabled) ? r.skill_enabled : [];
+    const skippedKeys = Array.isArray(r.skill_skipped) ? r.skill_skipped : [];
+    const fallbacks   = Number(r.skill_fallback_count || 0);
+    // applied = skills with real user-visible effects (highlight_detection excluded)
+    const applied = enabledKeys
+      .filter((k) => k !== 'highlight_detection' && _SKILL_META[k])
+      .map((k) => ({ key: k, label: _SKILL_META[k].label, desc: _SKILL_META[k].desc }));
+    // skipped = skills that were not applied; if highlight_detection is here it was
+    // genuinely unavailable, so keep it in the count
+    const skipped = skippedKeys.filter((k) => k !== 'highlight_detection');
+    const confidence     = fallbacks === 0 ? 'high' : fallbacks === 1 ? 'medium' : 'low';
+    const confidenceText = fallbacks === 0 ? 'High confidence' : fallbacks === 1 ? 'Medium confidence' : 'Low confidence';
+    return { applied, skipped, confidence, confidenceText, fallbacks };
+  } catch (_) {
+    return { applied: [], skipped: [], confidence: 'high', confidenceText: 'High confidence', fallbacks: 0 };
+  }
+}
+
+function _computeRenderDuration(job) {
+  try {
+    const _toMs = (s) => {
+      const t = String(s || '').trim();
+      if (!t) return 0;
+      return Date.parse(t.replace(' ', 'T') + (t.includes('Z') || t.includes('+') ? '' : 'Z'));
+    };
+    const created = _toMs(job?.created_at);
+    const updated = _toMs(job?.updated_at);
+    if (!created || !updated || updated <= created) return null;
+    return Math.round((updated - created) / 1000);
+  } catch (_) { return null; }
+}
+
+function _fmtRenderDuration(secs) {
+  if (!secs || secs < 1) return null;
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+// Kept for backward compat — used by active monitor skill summary line
+function _getRenderSkillSummaryFromJob(job) {
+  const d = _getSkillDetails(job);
+  const parts = d.applied.map((s) => s.desc);
+  if (d.skipped.length) parts.push(`${d.skipped.length} skipped`);
+  if (d.fallbacks > 0) parts.push(`${d.fallbacks} fallback${d.fallbacks > 1 ? 's' : ''}`);
+  return parts.join(' · ');
+}
+
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
 function resetRenderSessionUi(){
   _localEditorVideoSrc  = null;
@@ -1239,6 +1311,39 @@ function updateRenderMainState(job, summary, parts = []) {
   }
   if (qs('abp_output_text')) qs('abp_output_text').textContent = outputText;
   if (qs('abp_output_meta')) qs('abp_output_meta').textContent = outputLabel;
+
+  // Render Mode badge + skill summary + elapsed time
+  const _rdModeLine    = qs('rd_render_mode_line');
+  const _rdModeBadge   = qs('rd_render_mode_badge');
+  const _rdSkillSummary = qs('rd_skill_summary');
+  const _rdElapsed     = qs('rd_elapsed_time');
+  if (_rdModeLine && hasJob) {
+    const _jRenderMode = _getRenderModeFromJob(job);
+    _rdModeLine.style.display = 'flex';
+    if (_rdModeBadge) {
+      _rdModeBadge.textContent = _jRenderMode === 'skill_enhanced' ? 'Skill Enhanced' : 'Stable';
+      _rdModeBadge.dataset.mode = _jRenderMode;
+    }
+    if (_rdSkillSummary) {
+      if (_jRenderMode === 'skill_enhanced') {
+        const _d = _getSkillDetails(job);
+        const _descs = _d.applied.map((s) => s.desc);
+        const _confSuffix = _d.confidence !== 'high' ? ` · ${_d.confidenceText}` : '';
+        _rdSkillSummary.textContent = _descs.length
+          ? `${_descs.join(' · ')}${_confSuffix}`
+          : 'Skills activating…';
+      } else {
+        _rdSkillSummary.textContent = '';
+      }
+    }
+    if (_rdElapsed && activeJobStartedAt) {
+      _rdElapsed.textContent = fmtElapsed(Date.now() - activeJobStartedAt);
+    }
+  } else if (_rdModeLine && !hasJob) {
+    _rdModeLine.style.display = 'none';
+    if (_rdElapsed) _rdElapsed.textContent = '';
+  }
+
   const _rcPrimary = hasFailure ? `Failed · ${pct}%` : terminal ? 'Completed' : `Rendering · ${pct}%`;
   const _rcSecondary = total > 0 ? renderMonitorClipSummary(s, parts) : stageLabel(job?.stage || 'queued');
   if (qs('rc_status')) { qs('rc_status').textContent = _rcPrimary; qs('rc_status').dataset.state = hasFailure ? 'failed' : terminal ? 'completed' : 'running'; }
@@ -1536,6 +1641,10 @@ function buildRenderHistoryEntry(job, summary, parts) {
   const sourceValue = sourceType === 'local' ? _renderHistoryFileName(rawSource) : String(rawSource || '').trim();
   const outputDir = String(payload.output_dir || '').trim();
   const stamp = Date.parse(job?.completed_at || job?.updated_at || job?.created_at || '') || Date.now();
+  const renderMode   = _getRenderModeFromJob(job);
+  const skillDetails = renderMode === 'skill_enhanced' ? _getSkillDetails(job) : null;
+  const skillSummary = skillDetails ? skillDetails.applied.map((s) => s.desc).join(' · ') : '';
+  const renderTime   = _computeRenderDuration(job);
   return {
     jobId: String(job?.id || job?.job_id || currentJobId || '').trim(),
     sourceType,
@@ -1547,6 +1656,10 @@ function buildRenderHistoryEntry(job, summary, parts) {
     timestamp: stamp,
     title: _renderHistoryTitle(sourceType, rawSource),
     status: _renderHistoryStatus(completed, failed),
+    renderMode,
+    skillSummary,
+    skillDetails,
+    renderTime,
   };
 }
 
@@ -1567,10 +1680,50 @@ function renderRenderHistory() {
     box.innerHTML = '<div class="renderHistoryEmpty">No recent renders yet<div>Your completed renders will appear here.</div></div>';
     return;
   }
+
+  // Build compare index: sourceValue → { stable: jobId, skill: jobId }
+  const _cmpMap = {};
+  items.forEach((e) => {
+    const k = String(e.sourceValue || '').trim().toLowerCase();
+    if (!k) return;
+    if (!_cmpMap[k]) _cmpMap[k] = {};
+    if (e.renderMode === 'skill_enhanced') _cmpMap[k].skill = e.jobId;
+    else _cmpMap[k].stable = e.jobId;
+  });
+
   box.innerHTML = items.map((entry) => {
-    const status = _renderHistoryStatusText(entry.status);
-    const icon = entry.status === 'failed' ? '✕' : entry.status === 'partial' ? '⚠' : '✓';
+    const statusText  = _renderHistoryStatusText(entry.status);
+    const icon        = entry.status === 'failed' ? '✕' : entry.status === 'partial' ? '⚠' : '✓';
     const openDisabled = entry.outputDir ? '' : ' disabled';
+    const rmLabel = entry.renderMode === 'skill_enhanced' ? 'Skill Enhanced' : 'Stable';
+    const rmClass = entry.renderMode === 'skill_enhanced' ? 'skill_enhanced' : 'stable';
+
+    // Render time
+    const timeLabel = _fmtRenderDuration(entry.renderTime);
+    const timeHtml  = timeLabel ? ` · <span class="rhRenderTime">&#9201; ${esc(timeLabel)}</span>` : '';
+
+    // Skill block (skill_enhanced only)
+    let skillBlockHtml = '';
+    if (entry.renderMode === 'skill_enhanced') {
+      // Re-derive details if missing (old entries without skillDetails stored)
+      const details = entry.skillDetails || { applied: [], skipped: [], confidence: 'high', confidenceText: 'High confidence', fallbacks: 0 };
+      const chipHtml = details.applied.length
+        ? details.applied.map((s) => `<span class="rhSkillItem">${esc(s.desc)}</span>`).join('')
+        : '';
+      const confHtml = `<span class="rhConfidenceBadge ${esc(details.confidence)}">${esc(details.confidenceText)}</span>`;
+      if (chipHtml || details.applied.length === 0) {
+        skillBlockHtml = `<div class="renderHistorySkills">${chipHtml}${confHtml}</div>`;
+      }
+    }
+
+    // Compare button — only when this source has both stable and skill renders
+    const sourceKey  = String(entry.sourceValue || '').trim().toLowerCase();
+    const cmpEntry   = _cmpMap[sourceKey] || {};
+    const canCompare = cmpEntry.stable && cmpEntry.skill && cmpEntry.stable !== cmpEntry.skill;
+    const compareBtn = canCompare
+      ? `<button class="ghostButton rhCompareBtn" type="button" onclick="_showRenderCompare('${encodeURIComponent(cmpEntry.stable)}','${encodeURIComponent(cmpEntry.skill)}')">&#9654; Compare</button>`
+      : '';
+
     return `<div class="renderHistoryItem ${esc(entry.status || 'completed')}">
       <div class="renderHistoryMain">
         <div class="renderHistoryTop">
@@ -1578,14 +1731,76 @@ function renderRenderHistory() {
           <span class="renderHistoryTitle" title="${_renderHistoryAttr(entry.sourceValue)}">${esc(entry.title || 'Untitled render')}</span>
           <span class="renderHistoryTime">${_renderHistoryRelativeTime(entry.timestamp)}</span>
         </div>
-        <div class="renderHistoryMeta">${status} · ${esc(_renderHistoryClipSummary(entry))}</div>
+        <div class="renderHistoryMeta">
+          ${esc(statusText)} · ${esc(_renderHistoryClipSummary(entry))} · <span class="renderHistoryModeBadge ${esc(rmClass)}">${esc(rmLabel)}</span>${timeHtml}
+        </div>
+        ${skillBlockHtml}
       </div>
       <div class="renderHistoryActions">
-        <button class="ghostButton" type="button"${openDisabled} onclick="openRenderHistoryOutput('${encodeURIComponent(entry.jobId)}')">Open Output Folder</button>
+        ${compareBtn}
+        <button class="ghostButton" type="button"${openDisabled} onclick="openRenderHistoryOutput('${encodeURIComponent(entry.jobId)}')">Open Folder</button>
         <button class="secondaryButton" type="button" onclick="rerunRenderHistory('${encodeURIComponent(entry.jobId)}')">Rerun</button>
       </div>
     </div>`;
   }).join('');
+}
+
+function _showRenderCompare(encodedStableId, encodedSkillId) {
+  const stableId = decodeURIComponent(String(encodedStableId || ''));
+  const skillId  = decodeURIComponent(String(encodedSkillId  || ''));
+  const items    = _renderHistoryRead();
+  const sEntry   = items.find((e) => e.jobId === stableId);
+  const kEntry   = items.find((e) => e.jobId === skillId);
+  if (!sEntry && !kEntry) { showToast('Cannot find both renders to compare', 'info'); return; }
+
+  function _sideHtml(entry, modeLabel, modeClass) {
+    if (!entry) return `<div class="renderCompareSide"><div class="rcSideLabel ${esc(modeClass)}">${esc(modeLabel)}</div><div class="rcSideEmpty">No data</div></div>`;
+    const timeLabel  = _fmtRenderDuration(entry.renderTime);
+    const statusText = _renderHistoryStatusText(entry.status);
+    const clips      = _renderHistoryClipSummary(entry);
+    const details    = (entry.skillDetails && entry.renderMode === 'skill_enhanced') ? entry.skillDetails : null;
+    const chipsHtml  = details && details.applied.length
+      ? details.applied.map((s) => `<span class="rhSkillItem">${esc(s.desc)}</span>`).join('')
+      : '';
+    const confHtml   = details ? `<span class="rhConfidenceBadge ${esc(details.confidence)}">${esc(details.confidenceText)}</span>` : '';
+    const skillsRow  = (chipsHtml || confHtml)
+      ? `<div class="rcSideRow rcSideSkills"><span class="rcSideKey">Skills</span><div class="rcSideVal rcSkillList">${chipsHtml}${confHtml}</div></div>`
+      : '';
+    const timeRow    = timeLabel
+      ? `<div class="rcSideRow"><span class="rcSideKey">Time</span><span class="rcSideVal">${esc(timeLabel)}</span></div>`
+      : '';
+    return `<div class="renderCompareSide">
+      <div class="rcSideLabel ${esc(modeClass)}">${esc(modeLabel)}</div>
+      <div class="rcSideRow"><span class="rcSideKey">Status</span><span class="rcSideVal">${esc(statusText)}</span></div>
+      <div class="rcSideRow"><span class="rcSideKey">Clips</span><span class="rcSideVal">${esc(clips)}</span></div>
+      ${timeRow}
+      ${skillsRow}
+      <div class="rcSideRow"><span class="rcSideKey">Output</span><span class="rcSideVal rcOutputPath" title="${_renderHistoryAttr(entry.outputDir)}">${esc(entry.outputDir || '—')}</span></div>
+    </div>`;
+  }
+
+  const title = sEntry?.title || kEntry?.title || 'Render comparison';
+  const panelHtml = `<div class="renderComparePanel" id="renderComparePanel">
+    <div class="rcPanelHeader">
+      <span class="rcPanelTitle">&#9654; Compare</span>
+      <span class="rcPanelSource">${esc(title)}</span>
+      <button class="ghostButton rcCloseBtn" type="button" onclick="_closeRenderCompare()">&#10005;</button>
+    </div>
+    <div class="renderCompareCards">
+      ${_sideHtml(sEntry, '⚡ Stable', 'stable')}
+      ${_sideHtml(kEntry, '✨ Skill Enhanced', 'skill_enhanced')}
+    </div>
+    <div class="rcPanelNote">Open both output folders to compare clips side by side.</div>
+  </div>`;
+
+  _closeRenderCompare();
+  const box = qs('render_history_list');
+  if (box) box.insertAdjacentHTML('beforebegin', panelHtml);
+  document.getElementById('renderComparePanel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function _closeRenderCompare() {
+  document.getElementById('renderComparePanel')?.remove();
 }
 
 function openRenderHistoryOutput(jobId) {
@@ -2524,4 +2739,275 @@ function openClipFile(filePath) {
   if (!p) { showToast('File path is unavailable', 'info'); return; }
   const dir = p.replace(/\\/g, '/').split('/').slice(0, -1).join('/');
   openStoredOutputPath(dir || p);
+}
+
+// ── Skill Job Monitor ─────────────────────────────────────────────────────────
+//
+// Separate from the render job monitor so skill jobs never conflict with
+// the normal render pipeline display.  Uses its own polling loop and injects
+// a dedicated card into the queue panel.
+
+let _srJobId        = null;
+let _srJobSkills    = [];
+let _srJobPollTimer = null;
+// Transition-tracking for console logs — reset on each new job
+let _srPrevCurrentSkill = null;
+let _srPrevApplied      = [];
+let _srPrevFailed       = [];
+let _srPrevStatus       = null;
+
+function startSkillJobMonitor(jobId, selectedSkills) {
+  console.log('[SKILL JOB START]', jobId, selectedSkills);
+  _stopSkillJobMonitor();
+  _srJobId     = jobId;
+  _srJobSkills = Array.isArray(selectedSkills) ? selectedSkills : [];
+
+  // Expand bottom panel — collapse is controlled via abpCollapsed on .appShell
+  if (typeof _collapseBottomPanel === 'function') {
+    _collapseBottomPanel(false);
+  }
+  // Ensure render-studio body class is set (panel requires is-render-studio-active)
+  document.body.classList.add('is-render-studio-active');
+
+  _ensureSkillJobCard();
+  _pollSkillJob(); // immediate first poll
+  _srJobPollTimer = setInterval(_pollSkillJob, 1200);
+}
+
+function _stopSkillJobMonitor() {
+  if (_srJobPollTimer) { clearInterval(_srJobPollTimer); _srJobPollTimer = null; }
+  _srPrevCurrentSkill = null;
+  _srPrevApplied      = [];
+  _srPrevFailed       = [];
+  _srPrevStatus       = null;
+}
+
+function _ensureSkillJobCard() {
+  document.getElementById('sr_active_card')?.remove();
+
+  const html = `
+<div id="sr_active_card" class="srActiveCard" data-status="queued">
+  <div class="srActiveHeader">
+    <span class="srJobTypeBadge">⚡ Skill Job</span>
+    <span class="srJobStatusBadge" id="sr_status_badge" data-status="queued">Queued</span>
+    <span class="srDurationBadge hiddenView" id="sr_duration_badge" title="Video looped to meet TikTok 70 s minimum">⏱ 70 s min</span>
+  </div>
+  <div class="srActiveProgress"><div class="srActiveProgressFill" id="sr_progress_fill" style="width:0%"></div></div>
+  <div class="srSkillSteps" id="sr_skill_steps"></div>
+  <div class="srJobMeta" id="sr_job_meta">Waiting to start…</div>
+  <div class="srJobLog hiddenView" id="sr_job_log"></div>
+  <div class="srJobOutput hiddenView" id="sr_job_output"></div>
+  <button class="srDismissBtn" onclick="_dismissSkillJobCard()" title="Dismiss">✕</button>
+</div>`;
+
+  // Insert at the top of rcQueuePanel (after its header) — always visible regardless of render state
+  const queuePanel = document.querySelector('.rcQueuePanel');
+  if (queuePanel) {
+    const header = queuePanel.querySelector('.rcPanelHeader');
+    if (header) {
+      header.insertAdjacentHTML('afterend', html);
+    } else {
+      queuePanel.insertAdjacentHTML('afterbegin', html);
+    }
+    console.log('[SKILL JOB CARD] inserted into rcQueuePanel');
+    return;
+  }
+  // Fallback: insert before rc_part_cards
+  const fallback = document.getElementById('rc_part_cards');
+  if (fallback) {
+    fallback.insertAdjacentHTML('beforebegin', html);
+    console.log('[SKILL JOB CARD] inserted via fallback anchor');
+  } else {
+    console.warn('[SKILL JOB CARD] no anchor found — card not inserted');
+  }
+}
+
+async function _pollSkillJob() {
+  if (!_srJobId) return;
+  try {
+    const resp = await fetch(`/api/skills/jobs/${encodeURIComponent(_srJobId)}`);
+    if (!resp.ok) return;
+    const job = await resp.json();
+    _renderSkillJobCard(job);
+    const st = String(job.status || '').toLowerCase();
+    if (st === 'completed' || st === 'failed') _stopSkillJobMonitor();
+  } catch (_) {}
+}
+
+function _renderSkillJobCard(job) {
+  const card = document.getElementById('sr_active_card');
+  if (!card) return;
+
+  const result      = _srParseJson(job.result_json);
+  const status      = String(job.status || '').toLowerCase();
+  const terminal    = status === 'completed' || status === 'failed';
+  const appliedList = Array.isArray(result.applied_skills) ? result.applied_skills : [];
+  const skippedList = Array.isArray(result.skipped_skills) ? result.skipped_skills : [];
+  const failedList  = Array.isArray(result.failed_skills)  ? result.failed_skills  : [];
+  const stepErrors  = (result.step_errors && typeof result.step_errors === 'object') ? result.step_errors : {};
+  const currentSk   = result.current_skill || null;
+  const outputPath  = String(result.output_path || '');
+  const pct         = Math.min(100, Math.max(0, Math.round(Number(job.progress_percent || 0))));
+
+  card.dataset.status = status;
+
+  // ── Console log transitions ────────────────────────────────────────────────
+  if (currentSk && currentSk !== _srPrevCurrentSkill) {
+    console.log('[SKILL STEP START]', currentSk);
+  }
+  appliedList.forEach((id) => {
+    if (!_srPrevApplied.includes(id)) console.log('[SKILL STEP DONE]', id);
+  });
+  failedList.forEach((id) => {
+    if (!_srPrevFailed.includes(id)) console.log('[SKILL STEP FAIL]', id, stepErrors[id] || '');
+  });
+  if (terminal && _srPrevStatus !== status) {
+    console.log('[SKILL JOB DONE]', status,
+      'applied:', appliedList.length, 'failed:', failedList.length, 'skipped:', skippedList.length);
+  }
+  _srPrevCurrentSkill = currentSk;
+  _srPrevApplied      = [...appliedList];
+  _srPrevFailed       = [...failedList];
+  _srPrevStatus       = status;
+
+  // ── Status badge ──────────────────────────────────────────────────────────
+  const badgeEl = document.getElementById('sr_status_badge');
+  if (badgeEl) {
+    const labels = { queued: '○ Queued', running: '● Running', completed: '✓ Done', failed: '✕ Failed' };
+    badgeEl.textContent = labels[status] || status;
+    badgeEl.dataset.status = status;
+  }
+
+  // ── Duration badge (TikTok 70 s min) ─────────────────────────────────────
+  const durBadge = document.getElementById('sr_duration_badge');
+  if (durBadge) durBadge.classList.toggle('hiddenView', !result.duration_extended);
+
+  // ── Progress fill ─────────────────────────────────────────────────────────
+  const fillEl = document.getElementById('sr_progress_fill');
+  if (fillEl) fillEl.style.width = `${pct}%`;
+
+  // ── Skill step chips (duration_prepare + selected skills + finalize) ───────
+  const stepsEl = document.getElementById('sr_skill_steps');
+  if (stepsEl) {
+    const chips = [];
+
+    // duration_prepare chip — only shown if extension was applied
+    if (result.duration_extended) {
+      const durCtx   = result.duration_context || {};
+      const durLabel = durCtx.original_duration != null
+        ? `${durCtx.original_duration}s → ${durCtx.final_duration}s`
+        : '70 s min';
+      chips.push(`<span class="srStep srStepDone" title="Video looped to reach 70 s">⏱ ${_srEsc(durLabel)}</span>`);
+    }
+
+    // selected skill chips
+    _srJobSkills.forEach((skillId) => {
+      const done    = appliedList.includes(skillId);
+      const fail    = failedList.includes(skillId);
+      const skipped = skippedList.includes(skillId);
+      const active  = !terminal && currentSk === skillId;
+      const cls  = done ? 'srStepDone' : fail ? 'srStepFail' : skipped ? 'srStepSkip' : active ? 'srStepActive' : 'srStepWait';
+      const icon = done ? '✓'         : fail ? '✗'          : skipped ? '—'          : active ? '●'            : '○';
+      const label  = (_SKILL_META[skillId]?.label || skillId.replace(/_/g, ' '));
+      const errTip = fail && stepErrors[skillId] ? ` title="${_srEsc(stepErrors[skillId])}"` : '';
+      chips.push(`<span class="srStep ${cls}"${errTip}>${icon} ${label}</span>`);
+    });
+
+    // finalize chip — shown once we know whether it ran
+    if (status === 'completed') {
+      chips.push(`<span class="srStep srStepDone">✓ Finalize</span>`);
+    } else if (status === 'failed') {
+      chips.push(`<span class="srStep srStepSkip">— Finalize</span>`);
+    } else if (pct >= 93) {
+      chips.push(`<span class="srStep srStepActive">● Finalize</span>`);
+    }
+
+    stepsEl.innerHTML = chips.join('');
+  }
+
+  // ── Meta summary line ─────────────────────────────────────────────────────
+  const metaEl = document.getElementById('sr_job_meta');
+  if (metaEl) {
+    const bits = [];
+    if (pct > 0 && !terminal)   bits.push(`${pct}%`);
+    if (appliedList.length)      bits.push(`${appliedList.length} applied`);
+    if (failedList.length)       bits.push(`${failedList.length} failed`);
+    if (skippedList.length)      bits.push(`${skippedList.length} skipped`);
+    const msg = String(job.message || '').trim();
+    if (msg && !terminal)        bits.push(msg);
+    metaEl.textContent = bits.length
+      ? bits.join(' · ')
+      : (terminal ? (status === 'completed' ? 'Completed' : 'Failed') : 'Running…');
+  }
+
+  // ── Log timeline (last 8 events) ──────────────────────────────────────────
+  _renderSkillJobLog(Array.isArray(result.events) ? result.events : []);
+
+  // ── Output row on completion ──────────────────────────────────────────────
+  const outEl = document.getElementById('sr_job_output');
+  if (outEl) {
+    if (terminal && outputPath) {
+      outEl.classList.remove('hiddenView');
+      const normalized = outputPath.replace(/\\/g, '/');
+      const shortName  = normalized.split('/').pop();
+      const folderPath = normalized.includes('/') ? normalized.split('/').slice(0, -1).join('/') : normalized;
+      outEl.innerHTML = `
+<div class="srOutputRow">
+  <span class="srOutputName" title="${_srEsc(outputPath)}">${_srEsc(shortName)}</span>
+  <div class="srOutputActions">
+    <button class="srOutputBtn" data-path="${_srEsc(outputPath)}" onclick="_srOpenPath(this)" title="Open output file">Open Output</button>
+    <button class="srOutputBtn" data-path="${_srEsc(folderPath)}" onclick="_srOpenPath(this)" title="Open containing folder">Open Folder</button>
+  </div>
+</div>`;
+    } else {
+      outEl.classList.add('hiddenView');
+    }
+  }
+}
+
+function _renderSkillJobLog(events) {
+  const logEl = document.getElementById('sr_job_log');
+  if (!logEl) return;
+  const visible = events.length > 0;
+  logEl.classList.toggle('hiddenView', !visible);
+  if (!visible) return;
+
+  logEl.innerHTML = events.slice(-8).map((ev) => {
+    const ts  = ev.timestamp
+      ? new Date(ev.timestamp).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+      : '';
+    const lvl = String(ev.level || 'info').toLowerCase();
+    const msg = ev.message || ev.event || '';
+    return `<div class="srLogEntry" data-level="${lvl}">`
+      + (ts ? `<span class="srLogTs">${_srEsc(ts)}</span>` : '')
+      + `<span class="srLogMsg">${_srEsc(msg)}</span></div>`;
+  }).join('');
+}
+
+function _srOpenPath(btn) {
+  const p = (btn && btn.dataset && btn.dataset.path) ? btn.dataset.path.trim() : '';
+  if (!p) return;
+  if (typeof openStoredOutputPath === 'function') {
+    openStoredOutputPath(p);
+  } else {
+    // Electron not available — copy path to clipboard as fallback
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(p).catch(() => {});
+    }
+    if (typeof showToast === 'function') showToast(`Path: ${p}`, 'info');
+  }
+}
+
+function _dismissSkillJobCard() {
+  _stopSkillJobMonitor();
+  document.getElementById('sr_active_card')?.remove();
+  _srJobId = null;
+}
+
+function _srParseJson(raw) {
+  try { return (raw && typeof raw === 'string') ? JSON.parse(raw) : (raw || {}); } catch (_) { return {}; }
+}
+
+function _srEsc(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

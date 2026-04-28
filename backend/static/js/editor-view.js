@@ -476,6 +476,20 @@ function evToggleBgmFields() {
   const el = qs('evBgmFields');
   if (el) el.style.display = qs('evBgmEnable').checked ? 'flex' : 'none';
 }
+
+function evUpdateRenderEngineUI() {
+  const rmEl = document.querySelector('input[name="evRenderMode"]:checked');
+  const mode = rmEl ? rmEl.value : 'stable';
+  const stablePreview = qs('evSkillPreviewStable');
+  const enhancedPreview = qs('evSkillPreviewEnhanced');
+  if (stablePreview) stablePreview.classList.toggle('hiddenView', mode !== 'stable');
+  if (enhancedPreview) enhancedPreview.classList.toggle('hiddenView', mode !== 'skill_enhanced');
+  // Update radio card visual state
+  const optStable = qs('evRenderModeOptionStable');
+  const optSkill = qs('evRenderModeOptionSkill');
+  if (optStable) optStable.classList.toggle('isSelected', mode === 'stable');
+  if (optSkill) optSkill.classList.toggle('isSelected', mode === 'skill_enhanced');
+}
 window.RENDER_I18N = {
   en: {
     ui_language: 'UI language',
@@ -936,6 +950,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   qs('evSubOverlay').style.display = 'none';
   qs('evStartBtn').disabled = true;
   qs('evStartBtn').textContent = '▶ Start Render';
+  if (qs('evRunSkillsBtn')) qs('evRunSkillsBtn').disabled = true;
   if (qs('evReopenBtn')) { qs('evReopenBtn').textContent = 'Retry Open Editor'; qs('evReopenBtn').style.display = 'none'; }
   qs('evStatusLine').textContent = 'Loading video preview...';
   qs('evStatusLine').style.color = '';
@@ -969,6 +984,7 @@ function _evLoadVideo(src) {
     video.style.display = 'block';
     _ev.videoReady = true;
     qs('evStartBtn').disabled = false;
+    if (qs('evRunSkillsBtn')) qs('evRunSkillsBtn').disabled = false;
     qs('evStatusLine').textContent = 'Video is ready. Adjust settings and click Start Render.';
     qs('evSubOverlay').style.display = 'flex';
     // Sync subtitle overlay and start animation
@@ -1718,6 +1734,10 @@ async function startRenderFromEditor() {
   // 0 = adaptive: backend selects safe workers based on cpu_count, encoder mode, pipeline type
   payload.max_parallel_parts = 0;
 
+  // Render Engine selector
+  const _rmChecked = document.querySelector('input[name="evRenderMode"]:checked');
+  payload.render_mode = _rmChecked ? _rmChecked.value : 'stable';
+
   // ── Toggles ──────────────────────────────────────────────────
   payload.add_subtitle    = qs('evAddSubtitle').checked;
   payload.motion_aware_crop = qs('evMotionCrop').checked;
@@ -1886,6 +1906,152 @@ async function startRenderFromEditor() {
   }
 }
 
+// ── Skill Runner ──────────────────────────────────────────────────────────────
+
+// Ordered list of skill IDs drives payload collection and defaults
+const SR_SKILL_IDS = [
+  'audio_pro_mix',
+  'subtitle_readability',
+  'video_quality_preset',
+  'smart_crop',
+  'fast_captions',
+  'highlight_detection',
+];
+
+// Per-skill option keys that map to select/checkbox element IDs
+const SR_SKILL_OPTS = {
+  audio_pro_mix:         ['loudness_target', 'background_ducking', 'voice_clarity', 'limiter'],
+  subtitle_readability:  ['style_preset', 'font_size', 'position', 'outline_strength'],
+  video_quality_preset:  ['preset', 'quality_level'],
+  smart_crop:            ['target_aspect', 'subject_priority', 'crop_smoothing'],
+  fast_captions:         ['engine', 'language', 'translate_subtitle'],
+  highlight_detection:   ['mode', 'sensitivity', 'max_highlights'],
+};
+
+// Which options are checkboxes (boolean) rather than selects
+const SR_BOOL_OPTS = new Set(['audio_pro_mix:limiter']);
+
+function srToggleSkill(skillId) {
+  const checked = document.getElementById(`srCheck_${skillId}`)?.checked;
+  const config  = document.getElementById(`srConfig_${skillId}`);
+  if (config) config.classList.toggle('hiddenView', !checked);
+  srUpdateSelectionSummary();
+}
+
+function srUpdateSelectionSummary() {
+  const selected = SR_SKILL_IDS.filter((id) => document.getElementById(`srCheck_${id}`)?.checked);
+  const el = document.getElementById('srSelectionSummary');
+  if (!el) return;
+  if (!selected.length) {
+    el.textContent = 'No skills selected';
+    el.classList.remove('srHasSelection');
+  } else {
+    el.textContent = `${selected.length} skill${selected.length > 1 ? 's' : ''} selected: ${selected.map((id) => id.replace(/_/g, ' ')).join(', ')}`;
+    el.classList.add('srHasSelection');
+  }
+}
+
+function srCollectSkillPayload() {
+  const selectedSkills = [];
+  const skillOptions   = {};
+
+  for (const skillId of SR_SKILL_IDS) {
+    const chk = document.getElementById(`srCheck_${skillId}`);
+    if (!chk?.checked) continue;
+    selectedSkills.push(skillId);
+
+    const opts = {};
+    for (const optKey of (SR_SKILL_OPTS[skillId] || [])) {
+      const elId = `srOpt_${skillId}_${optKey}`;
+      const el = document.getElementById(elId);
+      if (!el) continue;
+      const optPath = `${skillId}:${optKey}`;
+      if (SR_BOOL_OPTS.has(optPath)) {
+        opts[optKey] = el.checked;
+      } else {
+        // Numeric if max_highlights
+        const val = el.value;
+        opts[optKey] = isNaN(Number(val)) || val === '' ? val : (String(val).includes('.') ? parseFloat(val) : (Number.isInteger(+val) && optKey === 'max_highlights' ? parseInt(val, 10) : val));
+      }
+    }
+    skillOptions[skillId] = opts;
+  }
+  return { selectedSkills, skillOptions };
+}
+
+async function runSkillsFromEditor() {
+  const payload = _ev.pendingPayload;
+  const { selectedSkills, skillOptions } = srCollectSkillPayload();
+
+  if (!selectedSkills.length) {
+    if (typeof showToast === 'function') showToast('Select at least one skill first.', 'info');
+    setInspectorTab('skills');
+    return;
+  }
+  if (!_ev.sessionId) {
+    if (typeof showToast === 'function') showToast('No editor session — open source first.', 'error');
+    return;
+  }
+
+  const outputDir = (payload?.output_dir || '').trim();
+  if (!outputDir) {
+    if (typeof showToast === 'function') showToast('Output folder is required before running skills.', 'error');
+    return;
+  }
+
+  // ── Duration config ─────────────────────────────────────────────────────
+  const minRaw = parseInt(document.getElementById('srMinDuration')?.value || '70', 10);
+  const maxRaw = document.getElementById('srMaxDuration')?.value?.trim();
+  const minDur = isNaN(minRaw) || minRaw < 1 ? 70 : minRaw;
+  const maxDur = maxRaw && !isNaN(parseInt(maxRaw, 10)) ? parseInt(maxRaw, 10) : null;
+
+  const hintEl = document.getElementById('srDurHint');
+  if (maxDur !== null && maxDur < minDur) {
+    if (hintEl) hintEl.textContent = 'Max must be ≥ min';
+    if (typeof showToast === 'function') showToast('Max duration must be ≥ min duration.', 'error');
+    return;
+  }
+  if (hintEl) hintEl.textContent = '';
+
+  const btn = qs('evRunSkillsBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Queueing…'; }
+
+  try {
+    const resp = await fetch('/api/skills/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id:               _ev.sessionId,
+        output_dir:               outputDir,
+        selected_skills:          selectedSkills,
+        skill_options:            skillOptions,
+        skill_min_duration_sec:   minDur,
+        skill_max_duration_sec:   maxDur,
+      }),
+    });
+
+    if (!resp.ok) {
+      let errMsg = `HTTP ${resp.status}`;
+      try { const d = await resp.json(); errMsg = d.detail || JSON.stringify(d); } catch (_) {}
+      throw new Error(errMsg);
+    }
+
+    const data = await resp.json();
+    const jobId = data.job_id;
+
+    if (typeof showToast === 'function') showToast(`Skill job queued — ${selectedSkills.length} skills`, 'success');
+    if (typeof addEvent === 'function') addEvent(`Skill job ${jobId.slice(0, 8)} queued — ${selectedSkills.join(', ')}`, 'render');
+
+    // Activate skill job monitor in bottom panel
+    if (typeof startSkillJobMonitor === 'function') startSkillJobMonitor(jobId, selectedSkills);
+
+  } catch (err) {
+    if (typeof showToast === 'function') showToast(`Skill job failed: ${err.message}`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ Run Skills'; }
+  }
+}
+
 // ── Resizable divider (preview ↔ controls) ────────────────────────────────
 // mousedown on #evDivider only. mousemove/mouseup go on document during drag
 // and are removed immediately on release. No interference with text-layer drag
@@ -1933,7 +2099,7 @@ async function startRenderFromEditor() {
 
 // ── Inspector tab system ─────────────────────────────────────────────────────
 function setInspectorTab(tab) {
-  const validTabs = ['mode', 'subtitle', 'voice', 'text', 'audio', 'performance', 'advanced', 'market'];
+  const validTabs = ['mode', 'subtitle', 'voice', 'text', 'audio', 'performance', 'advanced', 'market', 'skills'];
   const tabTitles = {
     mode: 'Mode',
     subtitle: 'Subtitle',
@@ -1943,6 +2109,7 @@ function setInspectorTab(tab) {
     performance: 'Performance',
     advanced: 'Advanced',
     market: 'Market Viral',
+    skills: 'Skills',
   };
   const activeTab = validTabs.includes(tab) ? tab : 'mode';
   const insp = document.getElementById('appInspector');
