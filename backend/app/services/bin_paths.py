@@ -70,3 +70,22 @@ def ensure_ffmpeg_available() -> str:
             "(Windows: winget install -e --id Gyan.FFmpeg)."
         )
     return ffmpeg_bin
+
+
+def _summarize_ffmpeg_stderr(stderr: str) -> str:
+    lower = stderr.lower()
+    if "no space left on device" in lower:
+        return "Disk is full or temp/output drive has no free space."
+    if "permission denied" in lower:
+        return "Permission denied while reading input or writing output."
+    if "invalid data found" in lower or "moov atom not found" in lower:
+        return "Input video appears corrupt or unsupported."
+    if "no such file or directory" in lower:
+        return "Input or output path does not exist."
+    if "could not write header" in lower:
+        return "FFmpeg could not write the output file/header."
+    if "encoder" in lower and ("not found" in lower or "unknown encoder" in lower):
+        return "Requested encoder is unavailable."
+    if "error while opening encoder" in lower:
+        return "FFmpeg failed to open the encoder with the selected settings."
+    return "FFmpeg failed. See stderr tail for details."

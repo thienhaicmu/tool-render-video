@@ -7,7 +7,7 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 from app.services.motion_crop import render_motion_aware_crop, MotionCropConfig
-from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
+from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin, _summarize_ffmpeg_stderr
 from app.services.text_overlay import append_text_layer_filters
 
 
@@ -28,7 +28,17 @@ def _run_ffmpeg_with_retry(command: list[str], retry_count: int = 2, wait_sec: f
     while True:
         attempt += 1
         try:
-            return subprocess.run(command, check=True)
+            return subprocess.run(command, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as exc:
+            if attempt > retry_count:
+                stderr = exc.stderr or ""
+                diag = _summarize_ffmpeg_stderr(stderr)
+                stderr_tail = stderr[-2000:].strip()
+                raise RuntimeError(
+                    f"FFmpeg render failed: {diag} (exit={exc.returncode})"
+                    + (f"\n{stderr_tail}" if stderr_tail else "")
+                ) from exc
+            time.sleep(wait_sec * attempt)
         except Exception:
             if attempt > retry_count:
                 raise

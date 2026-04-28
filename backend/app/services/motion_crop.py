@@ -13,7 +13,7 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
-from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
+from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin, _summarize_ffmpeg_stderr
 from app.services.text_overlay import append_text_layer_filters
 
 logger = logging.getLogger(__name__)
@@ -1029,7 +1029,11 @@ def render_motion_aware_crop(
                         err_tail = raw.decode(errors="ignore")[-2000:].strip()
                 except Exception:
                     err_tail = ""
-                raise RuntimeError(f"ffmpeg exited with code {rc}: {err_tail}" if err_tail else f"ffmpeg exited with code {rc}")
+                diag = _summarize_ffmpeg_stderr(err_tail)
+                raise RuntimeError(
+                    f"FFmpeg render failed: {diag} (exit={rc})"
+                    + (f"\n{err_tail}" if err_tail else "")
+                )
             cap.release()
             break
         except BrokenPipeError:
@@ -1047,7 +1051,11 @@ def render_motion_aware_crop(
             except Exception:
                 pass
             if attempt > retry_count:
-                raise RuntimeError(f"ffmpeg broken pipe: {err_tail}" if err_tail else "ffmpeg broken pipe")
+                diag = _summarize_ffmpeg_stderr(err_tail)
+                raise RuntimeError(
+                    f"FFmpeg render failed (broken pipe): {diag}"
+                    + (f"\n{err_tail}" if err_tail else "")
+                )
             time.sleep(0.8 * attempt)
             continue
         except Exception:
