@@ -390,6 +390,104 @@ def _failed_part_progress(job_id: str, part_no: int, fallback: int = 95) -> int:
     return max(0, min(99, fallback))
 
 
+def _validate_render_output(
+    output_path: Path,
+    expected_duration: float | None = None,
+    expect_audio: bool | None = None,
+) -> dict:
+    """Validate a rendered output file before marking its part as DONE.
+
+    Returns a dict:
+        ok           – True only when all hard checks pass
+        warnings     – non-fatal issues (e.g. audio missing when not confirmed required)
+        error        – human-readable failure reason when ok=False
+        metadata     – {size_bytes, duration, has_video, has_audio}
+
+    Never raises; callers convert a non-ok result into a part failure.
+    """
+    result: dict = {
+        "ok": False,
+        "warnings": [],
+        "error": None,
+        "metadata": {"size_bytes": 0, "duration": 0.0, "has_video": False, "has_audio": False},
+    }
+
+    # 1. File existence
+    if not output_path.exists():
+        result["error"] = "output file does not exist"
+        return result
+
+    # 2. Size — 10 KB floor catches zero-byte and near-empty files while
+    #    allowing extremely short test clips (~1 s h264 is ~40 KB).
+    size = output_path.stat().st_size
+    result["metadata"]["size_bytes"] = size
+    if size < 10_240:
+        result["error"] = f"output file too small: {size} bytes (minimum 10 KB)"
+        return result
+
+    # 3. ffprobe readability — single pass for all stream/format data
+    try:
+        cmd = [
+            get_ffprobe_bin(),
+            "-v", "error",
+            "-print_format", "json",
+            "-show_format",
+            "-show_streams",
+            str(output_path),
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if proc.returncode != 0:
+            result["error"] = (
+                f"ffprobe could not read output "
+                f"(exit {proc.returncode}): {(proc.stderr or '').strip()[:200]}"
+            )
+            return result
+        probe = json.loads(proc.stdout or "{}")
+    except subprocess.TimeoutExpired:
+        result["error"] = "ffprobe timed out reading output"
+        return result
+    except Exception as exc:
+        result["error"] = f"ffprobe error: {exc}"
+        return result
+
+    # 4. Stream presence
+    streams = probe.get("streams", [])
+    has_video = any(s.get("codec_type") == "video" for s in streams)
+    has_audio = any(s.get("codec_type") == "audio" for s in streams)
+    result["metadata"]["has_video"] = has_video
+    result["metadata"]["has_audio"] = has_audio
+
+    if not has_video:
+        result["error"] = "output contains no video stream"
+        return result
+
+    # 5. Duration sanity
+    fmt = probe.get("format", {})
+    duration = float(fmt.get("duration") or 0)
+    result["metadata"]["duration"] = duration
+
+    if duration <= 0:
+        result["error"] = "output duration is zero"
+        return result
+
+    if expected_duration and expected_duration > 0:
+        tolerance = max(1.0, expected_duration * 0.15)
+        if abs(duration - expected_duration) > tolerance:
+            result["error"] = (
+                f"duration mismatch: output {duration:.2f}s vs "
+                f"expected ~{expected_duration:.2f}s "
+                f"(tolerance ±{tolerance:.2f}s)"
+            )
+            return result
+
+    # 6. Audio sanity — warn-only unless caller is confident audio is required
+    if expect_audio is True and not has_audio:
+        result["warnings"].append("audio stream expected but missing from output")
+
+    result["ok"] = True
+    return result
+
+
 def _sanitize_channel_subdir(value: str | None) -> str:
     raw = (value or "Video").strip().replace("\\", "/")
     raw = raw.strip("/")
@@ -1416,6 +1514,62 @@ def run_render_pipeline(
                 seg["mv_viral_reasons"] = _mv_result.get("reasons",      [])
             except Exception:
                 pass
+
+            # ── Post-render output validation ─────────────────────────────
+            _expect_audio: bool | None = None
+            if getattr(payload, "voice_enabled", False):
+                _expect_audio = True
+            elif (getattr(payload, "reup_bgm_enable", False)
+                  and bool(str(getattr(payload, "reup_bgm_path", None) or "").strip())):
+                _expect_audio = True
+            _qa = _validate_render_output(
+                final_part,
+                expected_duration=_part_dur if _part_dur > 0 else None,
+                expect_audio=_expect_audio,
+            )
+            if not _qa["ok"]:
+                _job_log(effective_channel, job_id,
+                         f"Part {idx} output_validation_failed: {_qa['error']} | "
+                         f"meta={_qa['metadata']}", kind="error")
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="output_validation_failed",
+                    level="ERROR",
+                    message=f"Part {idx} output validation failed: {_qa['error']}",
+                    step="render.output.validate",
+                    context={"part_no": idx, "output_file": str(final_part), **_qa["metadata"]},
+                )
+                raise RuntimeError(f"output_validation_failed: {_qa['error']}")
+            if _qa["warnings"]:
+                _job_log(effective_channel, job_id,
+                         f"Part {idx} output_validation_warning: {'; '.join(_qa['warnings'])} | "
+                         f"meta={_qa['metadata']}", kind="warning")
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="output_validation_warning",
+                    level="WARNING",
+                    message=f"Part {idx} output validation passed with warnings: {'; '.join(_qa['warnings'])}",
+                    step="render.output.validate",
+                    context={"part_no": idx, "output_file": str(final_part), **_qa["metadata"]},
+                )
+            else:
+                _job_log(effective_channel, job_id,
+                         f"Part {idx} output_validation_passed: "
+                         f"dur={_qa['metadata']['duration']:.2f}s "
+                         f"size={_qa['metadata']['size_bytes']} "
+                         f"has_video={_qa['metadata']['has_video']} "
+                         f"has_audio={_qa['metadata']['has_audio']}")
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="output_validation_passed",
+                    level="INFO",
+                    message=f"Part {idx} output validation passed",
+                    step="render.output.validate",
+                    context={"part_no": idx, "output_file": str(final_part), **_qa["metadata"]},
+                )
 
             upsert_job_part(job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Completed")
             row = [job_id, effective_channel, source["title"], idx, seg["start"], seg["end"], seg["duration"], seg["viral_score"], seg["priority_rank"], str(final_part)]
