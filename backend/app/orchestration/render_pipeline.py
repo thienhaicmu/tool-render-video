@@ -294,7 +294,7 @@ def _resolve_profile(payload: RenderRequest):
     profile = (payload.render_profile or "quality").lower()
     defaults = {
         # fast: quick turnaround, acceptable quality
-        "fast":     {"video_preset": "veryfast", "video_crf": 23, "whisper_model": "tiny",  "transition_sec": 0.12},
+        "fast":     {"video_preset": "veryfast", "video_crf": 23, "whisper_model": "tiny",  "transition_sec": 0.10},
         # balanced: good quality/speed tradeoff — medium is ~3-4x faster than slow with <5% quality delta
         "balanced": {"video_preset": "medium",   "video_crf": 18, "whisper_model": "base",  "transition_sec": 0.25},
         # quality: high quality — slow preset gives meaningful gains over medium for large screens
@@ -303,6 +303,10 @@ def _resolve_profile(payload: RenderRequest):
         "best":     {"video_preset": "slower",   "video_crf": 13, "whisper_model": "small", "transition_sec": 0.40},
     }
     picked = defaults.get(profile, defaults["quality"])
+    if payload.video_preset:
+        logger.info("profile_override_used: video_preset=%s (profile=%s default=%s)", payload.video_preset, profile, picked["video_preset"])
+    if payload.video_crf is not None:
+        logger.info("profile_override_used: video_crf=%s (profile=%s default=%s)", payload.video_crf, profile, picked["video_crf"])
     whisper_model = payload.whisper_model
     if (whisper_model or "auto").lower() == "auto":
         whisper_model = picked["whisper_model"]
@@ -611,6 +615,14 @@ def run_render_pipeline(
         job_id,
         f"Render started | resume={resume_mode} | profile={payload.render_profile} | codec={payload.video_codec} | reup_mode={payload.reup_mode} | source_mode={payload.source_mode} | output_mode={output_mode}",
     )
+    _job_log(
+        effective_channel, job_id,
+        f"profile_resolved | render_profile={payload.render_profile} | preset={tuned['video_preset']} crf={tuned['video_crf']} whisper={tuned['whisper_model']} trans={tuned['transition_sec']:.2f}",
+    )
+    if payload.video_preset:
+        _job_log(effective_channel, job_id, f"profile_override_used video_preset={payload.video_preset}", kind="warning")
+    if payload.video_crf is not None:
+        _job_log(effective_channel, job_id, f"profile_override_used video_crf={payload.video_crf}", kind="warning")
     try:
         normalized_text_layers = _validate_text_layers_or_400(payload)
     except Exception as layer_exc:
