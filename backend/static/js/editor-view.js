@@ -1704,8 +1704,10 @@ async function startRenderFromEditor() {
   payload.max_export_parts = Number(qs('evMaxExportParts').value || 0);
   payload.part_order     = qs('evPartOrder').value;
   payload.frame_scale_y  = Math.max(80, Math.min(130, Number(qs('evFrameScaleY').value || 106)));
-  payload.title_overlay_text = '';
-  payload.add_title_overlay = false;
+  const _addTitleOverlay = !!document.getElementById('evAddTitleOverlay')?.checked;
+  const _titleText = (document.getElementById('evTitleOverlayText')?.value || '').trim();
+  payload.add_title_overlay = _addTitleOverlay && !!_titleText;
+  payload.title_overlay_text = payload.add_title_overlay ? _titleText : '';
 
   const evDev = qs('evRenderDevice').value;
   payload.encoder_mode = evDev === 'gpu' ? 'nvenc' : (evDev === 'cpu' ? 'cpu' : 'auto');

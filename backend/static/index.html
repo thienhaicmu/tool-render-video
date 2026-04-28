@@ -832,6 +832,13 @@
             <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
             <span class="inspHint">0 = no limit</span>
           </label>
+          <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
+            <input type="checkbox" id="evAddTitleOverlay" style="width:15px;height:15px;accent-color:#3b82f6;flex-shrink:0" onchange="var ti=document.getElementById('evTitleOverlayText');if(ti)ti.disabled=!this.checked;">
+            <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Title Overlay</span>
+          </label>
+          <label class="field" style="grid-column:1/-1">
+            <input class="fieldInput" type="text" id="evTitleOverlayText" placeholder="Overlay title text…" disabled>
+          </label>
         </div>
       </div>
 
