@@ -1051,25 +1051,70 @@ def run_render_pipeline(
                         context={"source_path": str(source_path)},
                     )
                 else:
+                    _whisper_model = tuned["whisper_model"]
+                    _src_name = Path(source_path).name
                     _t_transcribe = time.perf_counter()
+                    _hb_stop = threading.Event()
+
+                    def _hb_thread_fn(_stop=_hb_stop, _m=_whisper_model, _s=_src_name):
+                        _pct = 29
+                        while not _stop.wait(12):
+                            _elapsed = round(time.perf_counter() - _t_transcribe)
+                            update_job_progress(job_id, JobStage.TRANSCRIBING_FULL, _pct, f"Still transcribing… ({_elapsed}s)")
+                            _job_log(effective_channel, job_id, f"subtitle_transcription_progress elapsed_sec={_elapsed} model={_m} source={_s}")
+                            _emit_render_event(
+                                channel_code=effective_channel, job_id=job_id,
+                                event="subtitle_transcription_progress",
+                                level="INFO",
+                                message=f"Still transcribing… elapsed={_elapsed}s",
+                                step="subtitle.transcribe",
+                                context={"elapsed_sec": _elapsed, "whisper_model": _m, "source": _s},
+                            )
+                            _pct = _pct + 1 if _pct < 34 else (33 if _pct == 34 else 34)
+
+                    _job_log(effective_channel, job_id, f"subtitle_transcription_started model={_whisper_model} source={_src_name}")
+                    _emit_render_event(
+                        channel_code=effective_channel, job_id=job_id,
+                        event="subtitle_transcription_started",
+                        level="INFO",
+                        message=f"Transcription started: model={_whisper_model}",
+                        step="subtitle.transcribe",
+                        context={"whisper_model": _whisper_model, "source": _src_name},
+                    )
+                    _hb = threading.Thread(target=_hb_thread_fn, daemon=True, name=f"transcribe_hb_{job_id[:8]}")
+                    _hb.start()
                     try:
-                        transcribe_to_srt(str(source_path), str(full_srt), model_name=tuned["whisper_model"], retry_count=retry_count, highlight_per_word=payload.highlight_per_word)
+                        transcribe_to_srt(str(source_path), str(full_srt), model_name=_whisper_model, retry_count=retry_count, highlight_per_word=payload.highlight_per_word)
                         full_srt_available = bool(full_srt.exists() and full_srt.stat().st_size > 0)
                         _transcribe_ms = int((time.perf_counter() - _t_transcribe) * 1000)
-                        _job_log(effective_channel, job_id, f"Full transcription done: model={tuned['whisper_model']} duration_ms={_transcribe_ms}")
+                        _srt_size = full_srt.stat().st_size if full_srt_available else 0
+                        _job_log(effective_channel, job_id, f"subtitle_transcription_completed model={_whisper_model} elapsed_ms={_transcribe_ms} srt_exists={full_srt_available} size_bytes={_srt_size}")
+                        _emit_render_event(
+                            channel_code=effective_channel, job_id=job_id,
+                            event="subtitle_transcription_completed",
+                            level="INFO",
+                            message=f"Transcription complete: model={_whisper_model} elapsed={_transcribe_ms}ms",
+                            step="subtitle.transcribe",
+                            context={"whisper_model": _whisper_model, "elapsed_ms": _transcribe_ms, "srt_path": str(full_srt), "file_exists": full_srt_available, "size_bytes": _srt_size},
+                        )
                     except Exception as transcribe_exc:
                         full_srt_available = False
                         _safe_unlink(full_srt)
-                        _job_log(effective_channel, job_id, f"subtitle.audio_extract_failed source={source_path}: {transcribe_exc}", kind="warning")
+                        _transcribe_ms = int((time.perf_counter() - _t_transcribe) * 1000)
+                        _job_log(effective_channel, job_id, f"subtitle_transcription_failed source={source_path} model={_whisper_model} elapsed_ms={_transcribe_ms}: {transcribe_exc}", kind="warning")
                         _emit_render_event(
                             channel_code=effective_channel,
                             job_id=job_id,
-                            event="subtitle.audio_extract_failed",
+                            event="subtitle_transcription_failed",
                             level="WARNING",
-                            message=f"Subtitle transcription skipped after audio extraction failed: {transcribe_exc}",
+                            message=f"Subtitle transcription failed: {transcribe_exc}",
                             step="subtitle.transcribe",
-                            context={"source_path": str(source_path)},
+                            context={"source_path": str(source_path), "whisper_model": _whisper_model, "elapsed_ms": _transcribe_ms},
+                            exception=transcribe_exc,
                         )
+                    finally:
+                        _hb_stop.set()
+                        _hb.join(timeout=2)
 
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
