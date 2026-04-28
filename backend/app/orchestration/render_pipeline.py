@@ -801,9 +801,9 @@ def run_render_pipeline(
                 level="INFO",
                 message="Downloading source from YouTube",
                 step="render.download",
-                context={"url": yt_url},
+                context={"url": yt_url, "source_quality_mode": payload.source_quality_mode},
             )
-            source = download_youtube(yt_url, work_dir)
+            source = download_youtube(yt_url, work_dir, quality_mode=payload.source_quality_mode)
             _emit_render_event(
                 channel_code=effective_channel,
                 job_id=job_id,

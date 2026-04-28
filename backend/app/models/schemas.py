@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional
 
 
@@ -108,6 +108,7 @@ class TextLayerConfig(BaseModel):
 class RenderRequest(BaseModel):
     # Source
     source_mode: Optional[str] = "youtube"
+    source_quality_mode: str = "standard_1080"
     youtube_url: Optional[str] = ""
     youtube_urls: Optional[list[str]] = Field(default_factory=list)
     source_video_path: Optional[str] = ""
@@ -203,6 +204,14 @@ class RenderRequest(BaseModel):
     subtitle_target_language: str = "en"
     market_viral: Optional[dict] = None
     subtitle_edits: Optional[list] = None
+
+    @field_validator("source_quality_mode")
+    @classmethod
+    def _validate_source_quality_mode(cls, v: str) -> str:
+        allowed = {"standard_1080", "high_1440", "best_available"}
+        if v not in allowed:
+            raise ValueError(f"source_quality_mode must be one of {sorted(allowed)!r}, got {v!r}")
+        return v
 
     @model_validator(mode="after")
     def validate_voice_settings(self):

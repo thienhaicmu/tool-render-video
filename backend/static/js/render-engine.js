@@ -99,6 +99,7 @@ async function startRender(){
     add_subtitle: true,
     add_title_overlay: false,
     title_overlay_text: '',
+    source_quality_mode: 'standard_1080',
     auto_detect_scene: true,
     highlight_per_word: true,
     effect_preset: 'story_clean_01',

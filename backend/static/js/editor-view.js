@@ -1726,6 +1726,7 @@ async function startRenderFromEditor() {
   payload.motion_aware_crop = _reframeStrategy !== 'fast_center';
   payload.reframe_mode = _reframeStrategy === 'fast_center' ? 'center' : _reframeStrategy;
   payload.cleanup_temp_files = qs('evCleanupTemp').checked;
+  payload.source_quality_mode = document.getElementById('evSourceQualityMode')?.value || 'standard_1080';
 
   // ── Reup Mode ────────────────────────────────────────────────
   const reupEnabled = qs('evReupMode').checked;

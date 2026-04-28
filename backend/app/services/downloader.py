@@ -236,6 +236,25 @@ _IOS = {"extractor_args": {"youtube": {"player_client": ["ios"]}}}
 _ANDROID = {"extractor_args": {"youtube": {"player_client": ["android"]}}}
 _TV = {"extractor_args": {"youtube": {"player_client": ["tv_embedded"]}}}
 
+# (primary_fmt, uncapped_fallback_fmt, progressive_fmt)
+_QUALITY_FORMATS: dict[str, tuple[str, str, str]] = {
+    "standard_1080": (
+        "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b",
+        "bv*+ba/b",
+        "b[height<=1080]/b",
+    ),
+    "high_1440": (
+        "bv*[height<=1440]+ba/b[height<=1440]/bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b",
+        "bv*[height<=1440]+ba/b[height<=1440]/bv*+ba/b",
+        "b[height<=1440]/b[height<=1080]/b",
+    ),
+    "best_available": (
+        "bv*+ba/b",
+        "bv*+ba/b",
+        "b",
+    ),
+}
+
 
 def check_youtube_download_health(url: str) -> dict:
     """
@@ -307,7 +326,7 @@ def check_youtube_download_health(url: str) -> dict:
     return last_payload
 
 
-def download_youtube(url: str, temp_dir: Path, context: str = "render", progress_callback=None) -> dict:
+def download_youtube(url: str, temp_dir: Path, context: str = "render", progress_callback=None, quality_mode: str = "standard_1080") -> dict:
     """
     Download a YouTube video at the highest available resolution.
 
@@ -326,17 +345,20 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
     temp_dir.mkdir(parents=True, exist_ok=True)
     ffmpeg_bin = _ensure_ffmpeg_on_path()
     proxy_val = _resolve_ytdlp_proxy(context)
+    _qmode = (quality_mode or "standard_1080").strip().lower()
+    _fmt = _QUALITY_FORMATS.get(_qmode, _QUALITY_FORMATS["standard_1080"])
+    logger.info("download.ytdlp.quality_mode context=%s mode=%s", context, _qmode)
     attempts = [
-        (_IOS, "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
-        (_IOS, "bv*+ba/b"),
-        (_ANDROID, "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
-        (_ANDROID, "bv*+ba/b"),
-        (_TV, "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
-        (_TV, "bv*+ba/b"),
-        ({}, "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
-        ({}, "bv*+ba/b"),
-        ({}, "b[height<=1080]/b"),
-        ({}, "best"),
+        (_IOS,     _fmt[0]),
+        (_IOS,     _fmt[1]),
+        (_ANDROID, _fmt[0]),
+        (_ANDROID, _fmt[1]),
+        (_TV,      _fmt[0]),
+        (_TV,      _fmt[1]),
+        ({},       _fmt[0]),
+        ({},       _fmt[1]),
+        ({},       _fmt[2]),
+        ({},       "best"),
     ]
 
     common = {
