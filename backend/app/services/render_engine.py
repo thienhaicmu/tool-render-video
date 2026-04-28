@@ -170,15 +170,17 @@ def _map_preset_for_encoder(video_preset: str, resolved_codec: str):
 
 
 def _effect_filter(effect_preset: str):
-    # unsharp: lx:ly:luma_amount:cx:cy:chroma_amount
-    # Positive luma_amount = sharpen, positive chroma = slight color pop
     preset = (effect_preset or "slay_soft_01").lower()
     if preset == "slay_pop_01":
-        # High-energy TikTok look: punchy color + crisp sharpening
         return "eq=contrast=1.08:saturation=1.18:brightness=0.01:gamma=1.02,unsharp=5:5:1.2:3:3:0.5"
     if preset == "story_clean_01":
-        # Clean minimal look: subtle enhancement
         return "eq=contrast=1.03:saturation=1.05:brightness=0.0,unsharp=3:3:0.6:3:3:0.15"
+    if preset == "social_bright":
+        return "eq=contrast=1.06:saturation=1.22:brightness=0.02:gamma=0.98,unsharp=5:5:1.0:3:3:0.4"
+    if preset == "cinematic_soft":
+        return "eq=contrast=1.04:saturation=0.92:brightness=-0.01:gamma=1.04,unsharp=3:3:0.5:3:3:0.1,hqdn3d=1.5:1.5:6:6"
+    if preset == "high_contrast":
+        return "eq=contrast=1.15:saturation=1.10:brightness=-0.02:gamma=1.0,unsharp=7:7:1.5:5:5:0.6"
     # slay_soft_01 (default): natural cinematic look with light sharpening
     return "eq=contrast=1.05:saturation=1.10:brightness=0.0:gamma=1.01,unsharp=5:5:0.9:3:3:0.35"
 
@@ -200,6 +202,18 @@ def _reup_audio_filter() -> str:
         "acompressor=threshold=-16dB:ratio=2.2:attack=20:release=200:makeup=2,"
         "alimiter=limit=0.95"
     )
+
+
+def _build_audio_filter(loudnorm_enabled: bool, reup_mode: bool, speed: float) -> str | None:
+    """Return a comma-joined -af filter string, or None when no audio processing is needed."""
+    parts = []
+    if loudnorm_enabled and not reup_mode:
+        parts.append("loudnorm=I=-16:LRA=11:TP=-1.5")
+    if reup_mode:
+        parts.append(_reup_audio_filter())
+    if abs(speed - 1.0) > 1e-4:
+        parts.append(f"atempo={speed:.4f}")
+    return ",".join(parts) if parts else None
 
 
 _FPS_CAP = 60  # hard ceiling — prevents encode overhead for HFR sources
@@ -406,6 +420,7 @@ def render_part(
     reup_bgm_gain: float = 0.18,
     playback_speed: float = 1.07,
     text_layers: list[dict] | None = None,
+    loudnorm_enabled: bool = False,
 ):
     preset_low = (video_preset or "").lower()
     sws = "lanczos" if preset_low in ("slower", "veryslow") else "bicubic"
@@ -447,7 +462,7 @@ def render_part(
         fontfile = _detect_windows_fontfile()
         safe_title = title_text.replace("\\", "\\\\").replace(":", r"\:").replace("'", r"\'")[:120]
         # Escape comma in ffmpeg expression to avoid splitting into another filter.
-        drawtext = f"drawtext=text='{safe_title}':fontcolor=white:fontsize=34:x=(w-text_w)/2:y=50:enable='lt(t\\,3)'"
+        drawtext = f"drawtext=text='{safe_title}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=50:enable='lt(t\\,3)'"
         if fontfile:
             drawtext += f":fontfile='{_safe_filter_path(fontfile)}'"
         vf_parts.append(drawtext)
@@ -508,16 +523,12 @@ def render_part(
     else:
         cmd += ["-vf", vf_chain]
         if input_has_audio:
-            af_parts = []
-            if reup_mode:
-                af_parts.append(_reup_audio_filter())
-            if abs(speed - 1.0) > 1e-4:
-                af_parts.append(f"atempo={speed:.4f}")
-            if af_parts:
-                cmd += ["-af", ",".join(af_parts)]
+            af = _build_audio_filter(loudnorm_enabled, reup_mode, speed)
+            if af:
+                cmd += ["-af", af]
     cmd += [*codec_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
-    logger.info("render_part_smart: codec=%s preset=%s crf=%s input=%s output=%s",
-                resolved_codec, resolved_preset, video_crf,
+    logger.info("render_part: codec=%s preset=%s crf=%s effect=%s loudnorm=%s input=%s output=%s",
+                resolved_codec, resolved_preset, video_crf, effect_preset, loudnorm_enabled,
                 Path(input_path).name, Path(output_path).name)
     if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
         # GPU encode: hold one NVENC session slot for the duration of the subprocess.
@@ -565,13 +576,9 @@ def render_part(
         else:
             cpu_cmd += ["-vf", vf_chain]
             if input_has_audio:
-                af_parts = []
-                if reup_mode:
-                    af_parts.append(_reup_audio_filter())
-                if abs(speed - 1.0) > 1e-4:
-                    af_parts.append(f"atempo={speed:.4f}")
-                if af_parts:
-                    cpu_cmd += ["-af", ",".join(af_parts)]
+                af = _build_audio_filter(loudnorm_enabled, reup_mode, speed)
+                if af:
+                    cpu_cmd += ["-af", af]
         cpu_cmd += [*cpu_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
         _run_ffmpeg_with_retry(cpu_cmd, retry_count=retry_count)
     else:
@@ -609,6 +616,7 @@ def render_part_smart(
     reup_bgm_gain: float = 0.18,
     playback_speed: float = 1.07,
     text_layers: list[dict] | None = None,
+    loudnorm_enabled: bool = False,
 ):
     if motion_aware_crop:
         try:
@@ -685,6 +693,7 @@ def render_part_smart(
                 reup_bgm_gain=reup_bgm_gain,
                 playback_speed=playback_speed,
                 text_layers=text_layers,
+                loudnorm_enabled=loudnorm_enabled,
             )
 
     return render_part(
@@ -714,4 +723,5 @@ def render_part_smart(
         reup_bgm_gain=reup_bgm_gain,
         playback_speed=playback_speed,
         text_layers=text_layers,
+        loudnorm_enabled=loudnorm_enabled,
     )

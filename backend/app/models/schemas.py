@@ -168,6 +168,7 @@ class RenderRequest(BaseModel):
     add_title_overlay: bool = True
     title_overlay_text: Optional[str] = ""
     effect_preset: str = "slay_soft_01"
+    loudnorm_enabled: bool = False
 
     # Reup mode
     reup_mode: bool = False

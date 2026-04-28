@@ -1,8 +1,11 @@
 import subprocess
 import os
+import logging
 from pathlib import Path
 import time
 import whisper
+
+logger = logging.getLogger(__name__)
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
 
 _MODEL_CACHE = {}
@@ -284,7 +287,7 @@ def _resolve_ass_style(
     scale_y: int = 106,
     highlight_per_word: bool = True,
     font_name: str = "Bungee",
-    margin_v: int = 170,
+    margin_v: int = 180,
 ):
     """Return (style_line, line_fx) for the requested subtitle style.
 
@@ -324,24 +327,24 @@ def _resolve_ass_style(
         )
     if style == "clean_bold_01":
         return (
-            f"Style: Default,{safe_font},34,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,165,1",
+            f"Style: Default,{safe_font},34,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             BOUNCE_FX if highlight_per_word else "",
         )
     if style == "story_clean_01":
         return (
-            f"Style: Default,{safe_font},32,&H00F6F6F6,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,2,0,2,40,40,165,1",
+            f"Style: Default,{safe_font},32,&H00F6F6F6,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,0,2,40,40,{margin_v},1",
             BOUNCE_FX if highlight_per_word else "",
         )
 
     # Default / tiktok_bounce_v1 — Bungee font, word-by-word bounce
     if highlight_per_word:
         return (
-            f"Style: Default,{safe_font},38,&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,175,1",
+            f"Style: Default,{safe_font},38,&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             BOUNCE_FX,
         )
     # Segment mode
     return (
-        f"Style: Default,{safe_font},34,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,165,1",
+        f"Style: Default,{safe_font},34,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
         "",
     )
 
@@ -373,7 +376,8 @@ def srt_to_ass_bounce(
     scale_y: int = 106,
     highlight_per_word: bool = True,
     font_name: str = "Bungee",
-    margin_v: int = 170,
+    margin_v: int = 180,
+    play_res_y: int = 1440,
     x_percent: float = 50.0,
 ):
     ass_style, line_fx = _resolve_ass_style(
@@ -384,27 +388,27 @@ def srt_to_ass_bounce(
         margin_v=margin_v,
     )
     # Inject \pos(x,y) when subtitle is not centered (>0.5% off 50%).
-    # Uses PlayRes coordinates (1080×1440). libass scales to actual video size.
+    # Uses PlayRes coordinates — libass scales to actual video size.
     # Default x_percent=50 → no tag → backward-compatible with existing renders.
     _pos_tag = ""
     if abs(x_percent - 50.0) > 0.5:
         _px = round(1080 * x_percent / 100)
-        _py = 1440 - margin_v
+        _py = play_res_y - margin_v
         _pos_tag = "{\\pos(" + str(_px) + "," + str(_py) + ")}"
-    header = """[Script Info]
+    header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
-PlayResY: 1440
+PlayResY: {play_res_y}
 WrapStyle: 0
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-{style_line}
+{ass_style}
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-""".format(style_line=ass_style)
+"""
     out = [header]
     for block in Path(srt_path).read_text(encoding="utf-8").split("\n\n"):
         lines = [x.strip() for x in block.splitlines() if x.strip()]
@@ -419,6 +423,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = " ".join(lines[2:]).replace("{", "(").replace("}", ")")
         out.append(f"Dialogue: 0,{start_ass},{end_ass},Default,,0,0,0,,{_pos_tag}{line_fx}{text}\n")
     Path(ass_path).write_text("".join(out), encoding="utf-8")
+    logger.info("srt_to_ass_bounce: style=%s play_res_y=%d margin_v=%d -> %s", subtitle_style, play_res_y, margin_v, ass_path)
     return ass_path
 
 
@@ -443,7 +448,8 @@ def srt_to_ass_karaoke(
     scale_y: int = 106,
     font_size: int = 46,
     font_name: str = "Bungee",
-    margin_v: int = 170,
+    margin_v: int = 180,
+    play_res_y: int = 1440,
     highlight_color: str = "&H0000FFFF",   # yellow (ASS BGR: 00FFFF = yellow)
     base_color: str = "&H00FFFFFF",         # white
     outline_color: str = "&H00000000",      # black outline
@@ -461,7 +467,7 @@ def srt_to_ass_karaoke(
     """
     blocks = _parse_srt_blocks(srt_path)
     if not blocks:
-        return srt_to_ass_bounce(srt_path, ass_path, scale_y=scale_y)
+        return srt_to_ass_bounce(srt_path, ass_path, scale_y=scale_y, margin_v=margin_v, play_res_y=play_res_y)
 
     # Group words into chunks
     groups: list[list[dict]] = []
@@ -482,7 +488,7 @@ def srt_to_ass_karaoke(
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
-PlayResY: 1440
+PlayResY: {play_res_y}
 WrapStyle: 0
 ScaledBorderAndShadow: yes
 
@@ -498,7 +504,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     _pos_tag = ""
     if abs(x_percent - 50.0) > 0.5:
         _px = round(1080 * x_percent / 100)
-        _py = 1440 - margin_v
+        _py = play_res_y - margin_v
         _pos_tag = "{\\pos(" + str(_px) + "," + str(_py) + ")}"
 
     out = [header]
@@ -520,6 +526,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         )
 
     Path(ass_path).write_text("".join(out), encoding="utf-8")
+    logger.info("srt_to_ass_karaoke: play_res_y=%d margin_v=%d words_per_group=%d -> %s", play_res_y, margin_v, words_per_group, ass_path)
     return ass_path
 
 

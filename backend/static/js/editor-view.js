@@ -1548,6 +1548,75 @@ function evApplyStylePreset(name) {
   evRenderTextLayerPreview();
 }
 
+/* ── Render presets ───────────────────────────────────────── */
+const _EV_PRESETS = {
+  tiktok: {
+    aspect_ratio: '9:16', render_profile: 'balanced',
+    min_part_sec: 30, max_part_sec: 90,
+    subtitle_style: 'pro_karaoke', sub_font: 'Bungee',
+    sub_size: 52, sub_color: '#ffffff', sub_highlight: '#ffff00',
+    sub_outline: 3, sub_pos: 12,
+    effect_preset: 'social_bright', loudnorm: true,
+  },
+  podcast: {
+    aspect_ratio: '1:1', render_profile: 'balanced',
+    min_part_sec: 60, max_part_sec: 180,
+    subtitle_style: 'clean_bold_01', sub_font: 'Montserrat',
+    sub_size: 38, sub_color: '#ffffff', sub_highlight: '#60a5fa',
+    sub_outline: 2, sub_pos: 18,
+    effect_preset: 'slay_soft_01', loudnorm: true,
+  },
+  business: {
+    aspect_ratio: '3:4', render_profile: 'quality',
+    min_part_sec: 60, max_part_sec: 180,
+    subtitle_style: 'story_clean_01', sub_font: 'Montserrat',
+    sub_size: 36, sub_color: '#f6f6f6', sub_highlight: '#60a5fa',
+    sub_outline: 3, sub_pos: 18,
+    effect_preset: 'story_clean_01', loudnorm: false,
+  },
+  hq: {
+    render_profile: 'best',
+    min_part_sec: 60, max_part_sec: 240,
+    subtitle_style: 'pro_karaoke', sub_font: 'Bungee',
+    sub_size: 46, sub_color: '#ffffff', sub_highlight: '#ffff00',
+    sub_outline: 3, sub_pos: 15,
+    effect_preset: 'slay_soft_01', loudnorm: false,
+  },
+};
+
+function evApplyPreset(preset) {
+  const cfg = _EV_PRESETS[preset];
+  if (!cfg) return;
+
+  document.querySelectorAll('.evPresetCard').forEach(btn => {
+    btn.classList.toggle('isActive', btn.dataset.preset === preset);
+  });
+
+  const setVal = (id, val) => { const el = qs(id); if (el && val !== undefined) el.value = val; };
+  const setNum = (id, displayId, val) => {
+    if (val === undefined) return;
+    setVal(id, val);
+    const d = qs(displayId); if (d) d.textContent = val;
+  };
+
+  if (cfg.aspect_ratio) { setVal('evAspectRatio', cfg.aspect_ratio); evUpdateAspectRatio(); }
+  setVal('evRenderProfile', cfg.render_profile);
+  setVal('evMinPart', cfg.min_part_sec);
+  setVal('evMaxPart', cfg.max_part_sec);
+  setVal('evSubStyle', cfg.subtitle_style);
+  setVal('evSubFont', cfg.sub_font);
+  setNum('evSubSize', 'evSubSizeVal', cfg.sub_size);
+  setVal('evSubColor', cfg.sub_color);
+  setVal('evSubHighlight', cfg.sub_highlight);
+  setNum('evSubOutline', 'evSubOutlineVal', cfg.sub_outline);
+  setNum('evSubPos', 'evSubPosVal', cfg.sub_pos);
+
+  setVal('evEffectPreset', cfg.effect_preset || '');
+  setVal('evLoudnormEnabled', cfg.loudnorm ? '1' : '0');
+
+  evUpdateSubPreview();
+}
+
 /* ── Start render from editor ─────────────────────────────── */
 // ── RENDER SUBMIT ─────────────────────────────────────────────────────────────
 async function startRenderFromEditor() {
@@ -1670,10 +1739,11 @@ async function startRenderFromEditor() {
     payload.transition_sec   = 0.20;
     payload.reup_overlay_opacity = 0.06;
   } else {
-    payload.effect_preset    = 'story_clean_01';
+    payload.effect_preset    = qs('evEffectPreset')?.value || 'story_clean_01';
     payload.transition_sec   = 0.25;
     payload.reup_overlay_opacity = 0.08;
   }
+  payload.loudnorm_enabled = qs('evLoudnormEnabled')?.value === '1';
 
   // ── BGM ──────────────────────────────────────────────────────
   const bgmEnabled = qs('evBgmEnable').checked;
@@ -1882,11 +1952,12 @@ function setInspectorTab(tab) {
     pane.setAttribute('data-active-insp-tab', activeTab);
     pane.setAttribute('data-active-insp-title', tabTitles[activeTab] || 'Mode');
   }
-  document.querySelectorAll('.insp-tab[data-insp-tab]').forEach((btn) => {
+  const tabRoot = insp || document;
+  tabRoot.querySelectorAll('.insp-tab[data-insp-tab]').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-insp-tab') === activeTab);
   });
 
-  document.querySelectorAll('[data-insp-panel]').forEach((el) => {
+  tabRoot.querySelectorAll('[data-insp-panel]').forEach((el) => {
     const panel = el.getAttribute('data-insp-panel');
     el.classList.toggle('insp-panel-active', panel === activeTab);
   });
@@ -2130,35 +2201,38 @@ function mvCopyHook(el) {
   }
 }
 
-function mvApplyHook(el) {
-  const hook = el.dataset.hook || '';
-  if (!hook) return;
+function _mvApplyHookCore(hook, btn, doneText, revertText) {
   if (!_ev || !Array.isArray(_ev.subtitleSegments) || !_ev.subtitleSegments.length) {
     if (typeof showToast === 'function') showToast('Load a video first to preview hooks', 'info');
     return;
   }
-
   const vid = qs('evVideo');
   const t   = vid ? (vid.currentTime || 0) : 0;
   let idx = _ev.subtitleSegments.findIndex(s => t >= s.start && t < s.end);
   if (idx < 0) idx = 0;
   const seg = _ev.subtitleSegments[idx];
   if (!seg) return;
-
   seg.text = hook;
   if (!(_ev.subtitleEdits instanceof Map)) _ev.subtitleEdits = new Map();
   _ev.subtitleEdits.set(idx, { index: idx, start: seg.start, end: seg.end, text: hook });
   _evSyncSubTime(t);
   mvUpdateHookQuality();
   mvUpdateSubEditsIndicator();
+  if (btn) {
+    btn.textContent = doneText;
+    btn.classList.add('isApplied');
+    setTimeout(() => { btn.textContent = revertText; btn.classList.remove('isApplied'); }, 1500);
+  }
+}
 
-  el.textContent = '✓ Previewed';
-  el.classList.add('isApplied');
-  setTimeout(() => { el.textContent = 'Preview'; el.classList.remove('isApplied'); }, 1500);
+function mvApplyHook(el) {
+  const hook = el.dataset.hook || '';
+  if (!hook) return;
+  _mvApplyHookCore(hook, el, '✓ Previewed', 'Preview');
 }
 
 function mvUpdateSubEditsIndicator() {
-  const el = document.getElementById('mvSubEditsIndicator');
+  const el = qs('mvSubEditsIndicator');
   if (!el) return;
   const n = (_ev.subtitleEdits instanceof Map) ? _ev.subtitleEdits.size : 0;
   if (n > 0) {
@@ -2169,19 +2243,16 @@ function mvUpdateSubEditsIndicator() {
   }
 }
 
-let _mvCompareOrigText = '';
-let _mvCompareSugText = '';
-
 function mvUpdateHookCompare() {
-  const sec = document.getElementById('mvHookCompareSec');
+  const sec = qs('mvHookCompareSec');
   if (!sec) return;
 
   const segs = (_ev && Array.isArray(_ev.subtitleSegments)) ? _ev.subtitleSegments : [];
   if (!segs.length) { sec.classList.add('hiddenView'); return; }
 
-  const market = _mvState.market || 'US';
-  const vid = qs('evVideo');
-  const t = vid ? (vid.currentTime || 0) : 0;
+  const market  = _mvState.market || 'US';
+  const vid     = qs('evVideo');
+  const t       = vid ? (vid.currentTime || 0) : 0;
   const origSeg = segs.find(s => t >= s.start && t < s.end) || segs[0];
   const origText = (origSeg && origSeg.text) ? origSeg.text.trim() : '';
   if (!origText) { sec.classList.add('hiddenView'); return; }
@@ -2190,21 +2261,23 @@ function mvUpdateHookCompare() {
   const suggestions  = mvGenerateHookSuggestions(origText, market, origAnalysis.strength);
   if (!suggestions || !suggestions.length) { sec.classList.add('hiddenView'); return; }
 
-  const sugText    = suggestions[0];
+  const sugText     = suggestions[0];
   const sugAnalysis = _mvAnalyzeHook(sugText, market);
 
-  _mvCompareOrigText = origText;
-  _mvCompareSugText  = sugText;
+  const origBtn = qs('mvHookCompareOrigUse');
+  const sugBtn  = qs('mvHookCompareSugUse');
+  if (origBtn) origBtn.dataset.hook = origText;
+  if (sugBtn)  sugBtn.dataset.hook  = sugText;
 
-  const origScoreEl = document.getElementById('mvHookCompareOrigScore');
-  const origStrEl   = document.getElementById('mvHookCompareOrigStrength');
-  const origTextEl  = document.getElementById('mvHookCompareOrigText');
-  const sugScoreEl  = document.getElementById('mvHookCompareSugScore');
-  const sugStrEl    = document.getElementById('mvHookCompareSugStrength');
-  const sugTextEl   = document.getElementById('mvHookCompareSugText');
-  const deltaEl     = document.getElementById('mvHookCompareDelta');
-  const origCard    = document.getElementById('mvHookCompareOrigCard');
-  const sugCard     = document.getElementById('mvHookCompareSugCard');
+  const origScoreEl = qs('mvHookCompareOrigScore');
+  const origStrEl   = qs('mvHookCompareOrigStrength');
+  const origTextEl  = qs('mvHookCompareOrigText');
+  const sugScoreEl  = qs('mvHookCompareSugScore');
+  const sugStrEl    = qs('mvHookCompareSugStrength');
+  const sugTextEl   = qs('mvHookCompareSugText');
+  const deltaEl     = qs('mvHookCompareDelta');
+  const origCard    = qs('mvHookCompareOrigCard');
+  const sugCard     = qs('mvHookCompareSugCard');
 
   if (origScoreEl) origScoreEl.textContent = String(origAnalysis.hook_score);
   if (origStrEl)   origStrEl.textContent   = origAnalysis.strength;
@@ -2226,35 +2299,10 @@ function mvUpdateHookCompare() {
   sec.classList.remove('hiddenView');
 }
 
-function mvCompareUse(which) {
-  const hook = which === 'orig' ? _mvCompareOrigText : _mvCompareSugText;
+function mvCompareUse(el) {
+  const hook = el.dataset.hook || '';
   if (!hook) return;
-  if (!_ev || !Array.isArray(_ev.subtitleSegments) || !_ev.subtitleSegments.length) {
-    if (typeof showToast === 'function') showToast('Load a video first to preview hooks', 'info');
-    return;
-  }
-
-  const vid = qs('evVideo');
-  const t   = vid ? (vid.currentTime || 0) : 0;
-  let idx = _ev.subtitleSegments.findIndex(s => t >= s.start && t < s.end);
-  if (idx < 0) idx = 0;
-  const seg = _ev.subtitleSegments[idx];
-  if (!seg) return;
-
-  seg.text = hook;
-  if (!(_ev.subtitleEdits instanceof Map)) _ev.subtitleEdits = new Map();
-  _ev.subtitleEdits.set(idx, { index: idx, start: seg.start, end: seg.end, text: hook });
-  _evSyncSubTime(t);
-  mvUpdateHookQuality();
-  mvUpdateSubEditsIndicator();
-
-  const btnId = which === 'orig' ? 'mvHookCompareOrigUse' : 'mvHookCompareSugUse';
-  const btn = document.getElementById(btnId);
-  if (btn) {
-    btn.textContent = '✓ Applied';
-    btn.classList.add('isApplied');
-    setTimeout(() => { btn.textContent = which === 'orig' ? 'Use Original' : 'Use Suggested'; btn.classList.remove('isApplied'); }, 1500);
-  }
+  _mvApplyHookCore(hook, el, '✓ Applied', el.dataset.label || 'Use This');
 }
 
 function mvUpdateHookSuggestions(text, market, strength) {

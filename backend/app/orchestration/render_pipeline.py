@@ -33,6 +33,17 @@ from app.services.translation_service import translate_srt_file
 
 logger = logging.getLogger("app.render")
 
+
+_PLAY_RES_Y_MAP = {"9:16": 1920, "1:1": 1080, "3:4": 1440, "4:5": 1440, "16:9": 1080}
+
+def _aspect_play_res_y(aspect_ratio: str) -> int:
+    ar = (aspect_ratio or "").strip()
+    val = _PLAY_RES_Y_MAP.get(ar)
+    if val is None:
+        logger.warning("_aspect_play_res_y: unrecognised aspect_ratio=%r, defaulting to 1440", ar)
+        return 1440
+    return val
+
 _PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes to update progress
 
 # ---------------------------------------------------------------------------
@@ -1089,6 +1100,8 @@ def run_render_pipeline(
                     except Exception:
                         pass
                 if needs_ass:
+                    _play_res_y = _aspect_play_res_y(payload.aspect_ratio)
+                    _margin_v = getattr(payload, "sub_margin_v", 180)
                     if payload.subtitle_style == "pro_karaoke":
                         from app.services.subtitle_engine import _hex_to_ass
                         srt_to_ass_karaoke(
@@ -1096,7 +1109,8 @@ def run_render_pipeline(
                             scale_y=payload.frame_scale_y,
                             font_size=getattr(payload, "sub_font_size", 46),
                             font_name=getattr(payload, "sub_font", "Bungee"),
-                            margin_v=getattr(payload, "sub_margin_v", 170),
+                            margin_v=_margin_v,
+                            play_res_y=_play_res_y,
                             base_color=_hex_to_ass(getattr(payload, "sub_color", "#FFFFFF")),
                             highlight_color=_hex_to_ass(getattr(payload, "sub_highlight", "#FFFF00")),
                             outline_size=getattr(payload, "sub_outline", 3),
@@ -1110,10 +1124,11 @@ def run_render_pipeline(
                             scale_y=payload.frame_scale_y,
                             highlight_per_word=payload.highlight_per_word,
                             font_name=getattr(payload, "sub_font", "Bungee"),
-                            margin_v=getattr(payload, "sub_margin_v", 170),
+                            margin_v=_margin_v,
+                            play_res_y=_play_res_y,
                             x_percent=getattr(payload, "sub_x_percent", 50.0),
                         )
-                    _job_log(effective_channel, job_id, f"Part {idx} subtitle style rendered: {payload.subtitle_style}", kind="debug")
+                    _job_log(effective_channel, job_id, f"Part {idx} subtitle: style={payload.subtitle_style} play_res_y={_play_res_y} margin_v={_margin_v} aspect={payload.aspect_ratio}", kind="info")
             else:
                 _job_log(effective_channel, job_id, f"Part {idx} subtitle disabled", kind="debug")
 
@@ -1162,6 +1177,7 @@ def run_render_pipeline(
                     reup_bgm_gain=payload.reup_bgm_gain,
                     playback_speed=float(payload.playback_speed or 1.07),
                     text_layers=normalized_text_layers,
+                    loudnorm_enabled=getattr(payload, "loudnorm_enabled", False),
                 )
             finally:
                 _encode_stop.set()

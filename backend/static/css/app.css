@@ -1120,6 +1120,55 @@
       white-space: nowrap;
     }
 
+    /* ── ev-panel-card system (base, no !important — scoped overrides in Z-block) ── */
+    .ev-panel-card {
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      height: auto;
+      min-height: 0;
+      box-sizing: border-box;
+    }
+    .ev-panel-card-body {
+      position: relative;
+      display: block;
+      width: 100%;
+      min-width: 0;
+      height: auto;
+      min-height: 0;
+      overflow: visible;
+      box-sizing: border-box;
+    }
+
+    /* ── Render preset cards + reusable ev-option system ── */
+    .evPresetGrid, .ev-option-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .evPresetCard, .ev-option-card {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 8px;
+      border: 1px solid var(--card-border); background: var(--input-bg);
+      color: var(--text); cursor: pointer; text-align: left;
+      transition: border-color .15s, background .15s;
+      position: relative; min-width: 0; max-width: 100%;
+      width: auto; height: auto; min-height: 50px;
+      box-sizing: border-box; overflow: hidden;
+      transform: none; z-index: auto;
+    }
+    .evPresetCard:hover, .ev-option-card:hover { border-color: rgba(59,130,246,.4); background: rgba(59,130,246,.06); }
+    .evPresetCard.isActive, .ev-option-card.isActive { border-color: var(--accent); background: rgba(59,130,246,.12); }
+    .evPresetIcon { font-size: 18px; flex: 0 0 22px; line-height: 1; }
+    .evPresetText { min-width: 0; flex: 1 1 0; overflow: hidden; }
+    .evPresetName { font-size: 11px; font-weight: 700; color: var(--text); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .evPresetDesc { font-size: 10px; color: var(--text-muted); margin-top: 2px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ev-option-panel { position: relative; display: block; width: auto; height: auto; min-height: 0; overflow: visible; }
+
     .evSectionCollapsible .evSectionTitle::after {
       content: ' ▾';
       color: var(--text-muted);
@@ -7635,6 +7684,14 @@ body.is-history-active #history_list {
   overflow-y: auto !important;
 }
 
+/* V6 — Download view: rs-center-stage holds render panels (hidden via
+        hiddenView) but its display:flex still allocates space, squeezing
+        #partial_download_view. nav.js sets no body class for download,
+        so scope via :has() (Chromium 105+, already used in this file). */
+.mainArea:has(#view_download:not(.hiddenView)) .rs-center-stage {
+  display: none !important;
+}
+
 /* ── Phase W — History workspace UI ──────────────────────────────────────── */
 
 /* W1 — Workspace shell: column flex, fills mainArea */
@@ -7937,4 +7994,278 @@ body.is-history-active #history_list {
 .mainArea.editorMode #partial_history_view,
 .mainArea.editorMode #partial_download_view {
   display: none !important;
+}
+
+/* Y2 — In editorMode, hide render workspace panels inside rs-center-stage.
+        JS hides these via hiddenView but a race condition exists when the
+        render-home partial loads after setView('editor') runs. */
+.mainArea.editorMode #partial_render_home,
+.mainArea.editorMode #render_active_panel,
+.mainArea.editorMode #render_output_panel,
+.mainArea.editorMode #clip_preview_modal {
+  display: none !important;
+}
+
+/* ══ Z — EV OPTION PANEL SYSTEM (final cascade, beats all prior phases)
+        Scoped to #appInspector so these rules only fire inside the VIDEO EDITOR
+        right panel. Every property is !important to win any phase A–X conflict.
+
+        Layout math at narrowest supported viewport (1280px):
+          rs-main col-3 = 320px  (Phase I5 @media max-width:1280px)
+          evSection margin 0 8px → -16px horizontal
+          evSection padding 10px 12px → -24px horizontal
+          Grid content box = 320 - 16 - 24 = 280px
+          Two equal columns: (280 - 8gap) / 2 = 136px each  ✓ readable
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Z1 — option panel wrapper: normal flow geometry only.
+        display is NOT set here — Phase X1/X2 owns show/hide via [data-insp-panel].
+        Setting display:block !important here would tie with X1's specificity (1,1,0)
+        and win by source order, forcing the section visible on every tab. */
+#appInspector .ev-option-panel,
+#evPresetSection {
+  position: relative !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  transform: none !important;
+}
+
+/* Z2 — option grid: strict 2-col, no minimum that collapses, full width */
+#appInspector .ev-option-grid,
+#evQuickStartPreset {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  grid-template-rows: auto !important;
+  grid-auto-rows: auto !important;
+  gap: 8px !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  box-sizing: border-box !important;
+  transform: none !important;
+  z-index: auto !important;
+}
+
+/* Z3 — option card: neutralise evRightScroll button{width:100%}, no overlap */
+#appInspector .ev-option-card,
+#appInspector .ev-option-grid .ev-option-card,
+#evQuickStartPreset .evPresetCard,
+#evQuickStartPreset .ev-option-card {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: auto !important;           /* beats .evRightScroll button{width:100%} */
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: auto !important;
+  min-height: 50px !important;
+  margin: 0 !important;
+  padding: 8px !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  z-index: auto !important;
+  flex-shrink: 1 !important;
+  border-radius: 8px !important;
+}
+
+/* Z4 — card text: never overflow the card */
+#appInspector .ev-option-grid .evPresetText,
+#evQuickStartPreset .evPresetText {
+  min-width: 0 !important;
+  flex: 1 1 0 !important;
+  overflow: hidden !important;
+}
+
+#appInspector .ev-option-grid .evPresetName,
+#evQuickStartPreset .evPresetName {
+  display: block !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+#appInspector .ev-option-grid .evPresetDesc,
+#evQuickStartPreset .evPresetDesc {
+  display: block !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Z5 — ev-panel-card geometry (scoped to #appInspector).
+        IMPORTANT: do NOT set display on .ev-panel-card here.
+        .ev-panel-card IS the [data-insp-panel] element.
+        Phase X1 (#appInspector [data-insp-panel]) has specificity (1,1,0)+!important.
+        Any display:!important rule here with the same specificity would win by
+        source-order and break the tab show/hide system (see prior Z1 bug).
+        Let Phase X1/X2 own display; we only own geometry. */
+#appInspector .ev-panel-card {
+  position: relative !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* .ev-panel-card-body has NO [data-insp-panel] so display:block !important is safe */
+#appInspector .ev-panel-card-body {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  box-sizing: border-box !important;
+}
+
+/* ══ W — VIDEO EDITOR inspector: comprehensive layout architecture
+        Covers all 8 inspector tabs. Fixes: correct flex containment,
+        bottom scroll clearance, grid/card button width, section overflow.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* W1 — Inspector root: overflow clipped, min-height=0 for flex-child collapse.
+        display/flex-direction are NOT !important here — Phase C already sets
+        them without !important, so .appShell.noInspector .appInspector{display:none}
+        can still hide the inspector in non-editor views (Download/Upload/History). */
+#appInspector {
+  overflow: hidden !important;
+  min-height: 0 !important;
+}
+
+/* W2 — Fixed zones are size-stable (header, tabbar, footer) */
+#appInspector > .evRightHeader,
+#appInspector > .rs-insp-tabbar,
+#appInspector > .evFooter {
+  flex: 0 0 auto !important;
+}
+
+/* W3 — Scroll body fills remaining height; padding-bottom ensures the
+        last control scrolls fully into view above the action bar. */
+#appInspector > .evRightScroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-bottom: 80px !important;
+  scroll-padding-bottom: 80px !important;
+}
+
+/* W4 — Every section/group: natural height, no y-clipping, no horizontal overflow */
+#appInspector .evSection,
+#appInspector .inspCollapsedGroup {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  min-height: 40px !important;
+  height: auto !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+}
+
+/* W5 — Buttons inside grid cells: reset .evRightScroll button{width:100%}.
+        Targets class-based grids (ev-option-grid, mvHookCompareGrid) and
+        inline-style grids (Market form grids, preset section).
+        Also covers Market flex-row action headers where full-width is wrong. */
+#appInspector .ev-option-grid button,
+#appInspector .mvHookCompareGrid button,
+#appInspector [style*="grid-template-columns"] button,
+#appInspector .mvRecHeader button,
+#appInspector .mvHookSuggestHeader button {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* ══ R — APP WORKSPACE ISOLATION + RENDER VIEW SCROLL
+        Root causes fixed here:
+        (A) .rs-preview-stage{flex:1 1 auto} steals all .rs-center-stage height
+            in render view (view_editor is hiddenView but stage still grows).
+        (B) .rs-center-stage{flex:1 1 auto} steals all mainArea height in
+            channels/settings/reports/upload, pushing .mainContentScroll off-screen.
+        (C) Render panels (#partial_render_home etc.) had no fill/scroll rules.
+        (D) Download partial had no fill rule.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* R1 — rs-preview-stage is empty in non-editor views (view_editor is hiddenView).
+        Its flex:1 1 auto still grows to fill ALL rs-center-stage height, leaving
+        render panels with 0px. Hide it so render panels can use the stage. */
+.mainArea:not(.editorMode) > .rs-center-stage > .rs-preview-stage {
+  display: none !important;
+}
+
+/* R2 — Render home panel: fill center stage (single scroll point).
+        In editorMode, Y2 hides this with display:none !important.
+        In channels/upload/history, parent rs-center-stage is hidden (R4/V1/V6). */
+#partial_render_home {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* R3 — Active and output panels: fill stage and scroll when shown.
+        display:none from hiddenView/Y2 overrides flex when panels are inactive. */
+#render_active_panel,
+#render_output_panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* R4 — Upload/Channels/Reports/Settings: layout_grid is visible.
+        rs-center-stage (flex:1 1 auto) takes ALL mainArea space, pushing
+        .mainContentScroll off-screen. Hide the stage; give content the fill role.
+        :has() is safe — Chromium 105+, already used in this file at line 297. */
+.mainArea:has(#layout_grid:not(.hiddenView)) > .rs-center-stage {
+  display: none !important;
+}
+.mainArea:has(#layout_grid:not(.hiddenView)) > .mainContentScroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+}
+
+/* R5 — Download view: partial_download_view is a direct mainArea flex child.
+        V6 already hides rs-center-stage; this gives the partial fill height. */
+.mainArea:has(#view_download:not(.hiddenView)) > #partial_download_view {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+}
+
+/* ══ FINAL — inspector visibility lock (must remain last in file)
+        Rule F0: noInspector guard — specificity (1,2,0)+!important beats any
+          #appInspector{display:flex!important} rule that may be re-introduced.
+        Rules F1/F2: panel show/hide lock — duplicate Phase X so Phase W and
+          any future phase cannot silently override via source order.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* F0 — App-level inspector hide: beats any (1,0,0)+!important on #appInspector */
+.appShell.noInspector #appInspector {
+  display: none !important;
+}
+
+/* F1 — Inactive inspector panels: hidden regardless of any prior phase */
+#appInspector [data-insp-panel] {
+  display: none !important;
+}
+/* F2 — Active inspector panel: shown, not compressible, natural height, no nested scroll.
+        flex-shrink:0 prevents inspPaneBody (flex column) from compressing the panel
+        instead of scrolling — the root cause of clipped inspector content. */
+#appInspector [data-insp-panel].insp-panel-active {
+  display: block !important;
+  flex-shrink: 0 !important;
+  height: auto !important;
+  overflow: visible !important;
+  width: 100% !important;
+  min-width: 0 !important;
 }

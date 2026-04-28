@@ -760,6 +760,45 @@
         </div>
       </div>
 
+      <!-- Quick Start Presets -->
+      <div class="evSection evPresetSection ev-panel-card ev-option-panel insp-panel-active" id="evPresetSection" data-insp-panel="mode">
+        <div class="evSectionTitle ev-panel-card-head">Quick Start Preset</div>
+        <div class="ev-panel-card-body">
+          <div class="evPresetGrid ev-option-grid" id="evQuickStartPreset" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%">
+            <button type="button" class="evPresetCard ev-option-card" data-preset="tiktok" onclick="evApplyPreset('tiktok')">
+              <span class="evPresetIcon">📱</span>
+              <div class="evPresetText">
+                <div class="evPresetName">TikTok / Reels</div>
+                <div class="evPresetDesc">9:16 vertical · big subtitles · loud</div>
+              </div>
+            </button>
+            <button type="button" class="evPresetCard ev-option-card" data-preset="podcast" onclick="evApplyPreset('podcast')">
+              <span class="evPresetIcon">🎙️</span>
+              <div class="evPresetText">
+                <div class="evPresetName">Podcast Clip</div>
+                <div class="evPresetDesc">Clear text · balanced audio</div>
+              </div>
+            </button>
+            <button type="button" class="evPresetCard ev-option-card" data-preset="business" onclick="evApplyPreset('business')">
+              <span class="evPresetIcon">💼</span>
+              <div class="evPresetText">
+                <div class="evPresetName">Clean Business</div>
+                <div class="evPresetDesc">Professional look · calm styling</div>
+              </div>
+            </button>
+            <button type="button" class="evPresetCard ev-option-card" data-preset="hq" onclick="evApplyPreset('hq')">
+              <span class="evPresetIcon">⬆️</span>
+              <div class="evPresetText">
+                <div class="evPresetName">High Quality</div>
+                <div class="evPresetDesc">Slower render · maximum detail</div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <input type="hidden" id="evEffectPreset" value="">
+        <input type="hidden" id="evLoudnormEnabled" value="0">
+      </div>
+
       <!-- Output settings (pre-defined; JS skips recreating it) -->
       <div class="evSection insp-panel-active" id="evSectionBasic" data-insp-panel="mode">
         <div class="evSectionTitle">Output</div>
@@ -1330,7 +1369,7 @@
                 <span class="mvHookCompareStrength" id="mvHookCompareOrigStrength"></span>
               </div>
               <div class="mvHookCompareText" id="mvHookCompareOrigText"></div>
-              <button type="button" class="mvHookCompareUse" id="mvHookCompareOrigUse" onclick="mvCompareUse('orig')">Use Original</button>
+              <button type="button" class="mvHookCompareUse" id="mvHookCompareOrigUse" data-label="Use Original" onclick="mvCompareUse(this)">Use Original</button>
             </div>
             <div class="mvHookCompareCard" id="mvHookCompareSugCard">
               <div class="mvHookCompareCardLabel">Suggested</div>
@@ -1340,7 +1379,7 @@
                 <span class="mvHookCompareDelta" id="mvHookCompareDelta"></span>
               </div>
               <div class="mvHookCompareText" id="mvHookCompareSugText"></div>
-              <button type="button" class="mvHookCompareUse" id="mvHookCompareSugUse" onclick="mvCompareUse('sug')">Use Suggested</button>
+              <button type="button" class="mvHookCompareUse" id="mvHookCompareSugUse" data-label="Use Suggested" onclick="mvCompareUse(this)">Use Suggested</button>
             </div>
           </div>
         </div>
