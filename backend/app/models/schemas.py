@@ -205,6 +205,16 @@ class RenderRequest(BaseModel):
     market_viral: Optional[dict] = None
     subtitle_edits: Optional[list] = None
 
+    @field_validator("render_profile")
+    @classmethod
+    def _validate_render_profile(cls, v: Optional[str]) -> str:
+        if v is None:
+            return "quality"
+        allowed = {"fast", "balanced", "quality", "best"}
+        if v not in allowed:
+            raise ValueError(f"render_profile must be one of {sorted(allowed)!r}, got {v!r}")
+        return v
+
     @field_validator("source_quality_mode")
     @classmethod
     def _validate_source_quality_mode(cls, v: str) -> str:
