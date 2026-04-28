@@ -248,15 +248,16 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
                       and float(s.get("end", seg.get("start", 0))) <= seg.get("end", 0)]
         scene_density = len(seg_scenes) / duration
         motion_score = min(100, int(scene_density * 1100))
-        hook_score = round(features["starts_at_cut"] * 40 + features["position_score"] * 40
-                           + features["duration_score"] * 20, 1)
+        hook_timing_score = round(features["starts_at_cut"] * 40 + features["position_score"] * 40
+                                  + features["duration_score"] * 20, 1)
 
         scored.append({
             **seg,
             "duration": round(duration, 2),
             "viral_score": int(viral_score),
             "motion_score": motion_score,
-            "hook_score": hook_score,
+            "hook_timing_score": hook_timing_score,
+            "hook_score": hook_timing_score,  # DB backward-compat alias
             "scene_quality_score": round(float(seg.get("scene_quality_avg", 55.0)), 2),
             "speech_density_score": min(100, 45 + len(seg_scenes) * 3),
             "scene_change_score": min(100, len(seg_scenes) * 6),

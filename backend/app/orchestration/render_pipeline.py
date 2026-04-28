@@ -1623,6 +1623,24 @@ def run_render_pipeline(
                 seg["mv_viral_tier"]    = _mv_result.get("viral_tier",   "weak")
                 seg["mv_viral_market"]  = _mv_result.get("viral_market", _mv_market)
                 seg["mv_viral_reasons"] = _mv_result.get("reasons",      [])
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="market_viral_scored",
+                    level="INFO",
+                    message=(
+                        f"Part {idx} market viral: {seg['mv_viral_score']} "
+                        f"{seg['mv_viral_tier']} ({seg['mv_viral_market']})"
+                    ),
+                    step="render.market_viral",
+                    context={
+                        "part_no":              idx,
+                        "market_viral_score":   seg["mv_viral_score"],
+                        "market_viral_tier":    seg["mv_viral_tier"],
+                        "market_viral_market":  seg["mv_viral_market"],
+                        "market_viral_reasons": seg["mv_viral_reasons"][:2],
+                    },
+                )
             except Exception:
                 pass
 
@@ -1892,7 +1910,18 @@ def run_render_pipeline(
             _subtitle_translate_summary = "partial"
         _job_log(effective_channel, job_id, f"Voice: {_voice_summary}")
         _job_log(effective_channel, job_id, f"Subtitle translation: {_subtitle_translate_summary}")
-        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
+        _mv_parts = [
+            {
+                "part_no":              _i + 1,
+                "market_viral_score":   _s.get("mv_viral_score",  0),
+                "market_viral_tier":    _s.get("mv_viral_tier",   ""),
+                "market_viral_market":  _s.get("mv_viral_market", _mv_market),
+                "market_viral_reasons": _s.get("mv_viral_reasons", []),
+            }
+            for _i, _s in enumerate(scored)
+            if "mv_viral_score" in _s
+        ]
+        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored, "market_viral_parts": _mv_parts, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
         _job_log(effective_channel, job_id, f"Render completed with {len(outputs)}/{total_parts} outputs")
         _emit_render_event(
             channel_code=effective_channel,

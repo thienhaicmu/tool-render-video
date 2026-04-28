@@ -1305,26 +1305,6 @@
             </select>
           </label>
           <label class="field">
-            <span class="fieldLabel">Viral Style</span>
-            <select class="fieldInput" id="mvStyle" onchange="mvHandleChange()">
-              <option value="educational" selected>Educational</option>
-              <option value="drama">Drama</option>
-              <option value="product">Product</option>
-              <option value="trend">Trend</option>
-            </select>
-          </label>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-          <label class="field">
-            <span class="fieldLabel">Hook Strength</span>
-            <select class="fieldInput" id="mvHookStrength" onchange="mvHandleChange()">
-              <option value="soft">Soft</option>
-              <option value="medium" selected>Medium</option>
-              <option value="aggressive">Aggressive</option>
-            </select>
-          </label>
-          <label class="field">
             <span class="fieldLabel">Subtitle Tone</span>
             <select class="fieldInput" id="mvSubtitleTone" onchange="mvHandleChange()">
               <option value="clean" selected>Clean</option>
@@ -1339,14 +1319,6 @@
             <input type="checkbox" id="mvKeywordHighlight" onchange="mvHandleChange()">
             <span class="mvToggleLabel">&#128273; Keyword Highlight</span>
           </label>
-          <label class="mvToggleRow">
-            <input type="checkbox" id="mvHookBoost" onchange="mvHandleChange()">
-            <span class="mvToggleLabel">&#128640; Hook Boost</span>
-          </label>
-          <label class="mvToggleRow">
-            <input type="checkbox" id="mvBestClipScoring" checked onchange="mvHandleChange()">
-            <span class="mvToggleLabel">&#11088; Best Clip Scoring</span>
-          </label>
         </div>
 
         <div id="mvPreviewHint" class="mvPreviewHint">
@@ -1357,13 +1329,13 @@
 
         <div class="mvHookCard" id="mvHookCard">
           <div class="mvHookHeader">
-            <span class="mvHookLabel">&#9889; Hook strength</span>
+            <span class="mvHookLabel">&#9889; Hook (Text)</span>
             <span class="mvHookScore" id="mvHookScore">&#8212;</span>
           </div>
           <div class="mvHookStrengthRow" id="mvHookStrengthRow"></div>
           <div class="mvHookIssue" id="mvHookIssue"></div>
           <div class="mvHookSuggestion" id="mvHookSuggestion"></div>
-          <div class="mvHookScoreMeta">Based on first 8 subtitle segments</div>
+          <div class="mvHookScoreMeta" id="mvHookScoreMeta">Analyzing hook excerpt</div>
         </div>
 
         <div class="mvHookSuggestSec hiddenView" id="mvHookSuggestSec">

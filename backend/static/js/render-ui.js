@@ -1020,6 +1020,13 @@ function renderBenchmarkPanel(job, parts) {
     rows.push({ label: 'Output', value: b.outputSizes.length > 1 ? `avg ${formatBenchBytes(avg)} · max ${formatBenchBytes(max)}` : formatBenchBytes(avg) });
   }
 
+  const _bmMvMap = _mvSegmentMap(job);
+  if (_bmMvMap.size > 0) {
+    const _bmBest = [..._bmMvMap.values()].reduce((a, b) => (b.score > a.score ? b : a));
+    const _bmTier = { hot: 'Hot', warm: 'Warm', normal: 'Normal', weak: 'Weak' };
+    rows.push({ label: 'Market Viral', value: `${_bmBest.score} · ${_bmBest.market} · ${_bmTier[_bmBest.tier] || _bmBest.tier}` });
+  }
+
   if (grid) {
     const sig = rows.map((r) => r.label + '=' + r.value).join('|');
     if (grid.dataset.sig !== sig) {

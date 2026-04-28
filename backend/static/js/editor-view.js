@@ -1787,13 +1787,9 @@ async function startRenderFromEditor() {
   {
     const mv = (typeof mvGetState === 'function') ? mvGetState() : {};
     payload.market_viral = {
-      target_market:    mv.market          || 'US',
-      viral_style:      mv.style           || 'educational',
-      hook_strength:    mv.hookStrength    || 'medium',
-      subtitle_tone:    mv.subtitleTone    || 'clean',
+      target_market:     mv.market          || 'US',
+      subtitle_tone:     mv.subtitleTone    || 'clean',
       keyword_highlight: !!mv.keywordHighlight,
-      hook_boost:        !!mv.hookBoost,
-      best_clip_scoring: mv.bestClipScoring !== false,
     };
   }
 
@@ -1974,32 +1970,20 @@ function setInspectorTab(tab) {
 // ── Market Viral — frontend state (no API calls) ─────────────────────────────
 const _mvState = {
   market: 'US',
-  style: 'educational',
-  hookStrength: 'medium',
   subtitleTone: 'clean',
   keywordHighlight: false,
-  hookBoost: false,
-  bestClipScoring: true,
 };
 
 function mvHandleChange() {
   const g = (id) => document.getElementById(id);
   const el = {
     market:           g('mvMarket'),
-    style:            g('mvStyle'),
-    hookStrength:     g('mvHookStrength'),
     subtitleTone:     g('mvSubtitleTone'),
     keywordHighlight: g('mvKeywordHighlight'),
-    hookBoost:        g('mvHookBoost'),
-    bestClipScoring:  g('mvBestClipScoring'),
   };
   if (el.market)           _mvState.market           = el.market.value;
-  if (el.style)            _mvState.style            = el.style.value;
-  if (el.hookStrength)     _mvState.hookStrength     = el.hookStrength.value;
   if (el.subtitleTone)     _mvState.subtitleTone     = el.subtitleTone.value;
   if (el.keywordHighlight) _mvState.keywordHighlight = el.keywordHighlight.checked;
-  if (el.hookBoost)        _mvState.hookBoost        = el.hookBoost.checked;
-  if (el.bestClipScoring)  _mvState.bestClipScoring  = el.bestClipScoring.checked;
   mvUpdatePreviewHint();
   mvUpdateHookQuality();
 }
@@ -2051,6 +2035,24 @@ function _mvGetSubtitleText() {
   return segs.slice(0, 8).map(s => (s.text || '')).join(' ').trim();
 }
 
+// Returns first 1-2 meaningful subtitle lines as a true hook excerpt.
+// If the video is seeked past the opening, uses the segment at current time.
+function _mvGetHookText() {
+  const segs = (_ev && Array.isArray(_ev.subtitleSegments)) ? _ev.subtitleSegments : [];
+  if (!segs.length) return '';
+  const vid = qs('evVideo');
+  const t   = vid ? (vid.currentTime || 0) : 0;
+  if (t > 0) {
+    const idx = segs.findIndex(s => t >= (s.start || 0) && t < (s.end != null ? s.end : (s.start || 0) + 1));
+    if (idx >= 0) {
+      const ctx = segs.slice(idx, idx + 2).filter(s => (s.text || '').trim());
+      if (ctx.length) return ctx.map(s => s.text.trim()).join(' ').slice(0, 200).trim();
+    }
+  }
+  const meaningful = segs.filter(s => (s.text || '').trim());
+  return meaningful.slice(0, 2).map(s => s.text.trim()).join(' ').slice(0, 200).trim();
+}
+
 // Port of hook_optimizer.py — pure rule-based, no API call
 function _mvAnalyzeHook(text, market) {
   const STRONG_VERBS = new Set([
@@ -2076,7 +2078,7 @@ function _mvAnalyzeHook(text, market) {
   const suggestions = SUGGESTIONS[m] || SUGGESTIONS['US'];
 
   if (!text || !text.trim()) {
-    return { hook_score: 0, strength: 'weak', issues: ['No subtitle text available'], suggestion: suggestions[0] };
+    return { hook_text_score: 0, strength: 'weak', issues: ['No subtitle text available'], suggestion: suggestions[0] };
   }
 
   const clean = text.trim();
@@ -2104,7 +2106,7 @@ function _mvAnalyzeHook(text, market) {
 
   score = Math.max(0, Math.min(100, score));
   const strength = score >= 70 ? 'strong' : score >= 40 ? 'medium' : 'weak';
-  return { hook_score: score, strength, issues, suggestion: suggestions[0] };
+  return { hook_text_score: score, strength, issues, suggestion: suggestions[0] };
 }
 
 function mvUpdateHookQuality() {
@@ -2113,9 +2115,10 @@ function mvUpdateHookQuality() {
   const strengthEl = document.getElementById('mvHookStrengthRow');
   const issueEl    = document.getElementById('mvHookIssue');
   const suggEl     = document.getElementById('mvHookSuggestion');
+  const metaEl     = document.getElementById('mvHookScoreMeta');
   if (!card) return;
 
-  const text   = _mvGetSubtitleText();
+  const text   = _mvGetHookText();
   const market = _mvState.market || 'US';
 
   if (!text) {
@@ -2124,6 +2127,7 @@ function mvUpdateHookQuality() {
     if (strengthEl) strengthEl.textContent = '';
     if (issueEl)    issueEl.textContent    = '';
     if (suggEl)     suggEl.textContent     = '';
+    if (metaEl)     metaEl.textContent     = 'Analyzing hook excerpt';
     mvUpdateHookSuggestions('', market, '');
     mvUpdateHookCompare();
     return;
@@ -2131,10 +2135,14 @@ function mvUpdateHookQuality() {
 
   const r = _mvAnalyzeHook(text, market);
   card.dataset.strength = r.strength;
-  if (scoreEl)    scoreEl.textContent    = String(r.hook_score);
+  if (scoreEl)    scoreEl.textContent    = String(r.hook_text_score);
   if (strengthEl) strengthEl.textContent = r.strength.charAt(0).toUpperCase() + r.strength.slice(1);
   if (issueEl)    issueEl.textContent    = r.issues[0] || '';
   if (suggEl)     suggEl.textContent     = r.suggestion || '';
+  if (metaEl) {
+    const preview = text.length > 60 ? text.slice(0, 60) + '…' : text;
+    metaEl.textContent = `Analyzing hook excerpt: “${preview}”`;
+  }
   mvUpdateHookSuggestions(text, market, r.strength);
   mvUpdateHookCompare();
 }
@@ -2283,22 +2291,22 @@ function mvUpdateHookCompare() {
   const origCard    = qs('mvHookCompareOrigCard');
   const sugCard     = qs('mvHookCompareSugCard');
 
-  if (origScoreEl) origScoreEl.textContent = String(origAnalysis.hook_score);
+  if (origScoreEl) origScoreEl.textContent = String(origAnalysis.hook_text_score);
   if (origStrEl)   origStrEl.textContent   = origAnalysis.strength;
   if (origTextEl)  origTextEl.textContent  = origText;
-  if (sugScoreEl)  sugScoreEl.textContent  = String(sugAnalysis.hook_score);
+  if (sugScoreEl)  sugScoreEl.textContent  = String(sugAnalysis.hook_text_score);
   if (sugStrEl)    sugStrEl.textContent    = sugAnalysis.strength;
   if (sugTextEl)   sugTextEl.textContent   = sugText;
 
-  const delta = sugAnalysis.hook_score - origAnalysis.hook_score;
+  const delta = sugAnalysis.hook_text_score - origAnalysis.hook_text_score;
   if (deltaEl) {
     if (delta > 0)      { deltaEl.textContent = `+${delta} ↑`; deltaEl.dataset.dir = 'up'; }
     else if (delta < 0) { deltaEl.textContent = `${delta} ↓`;  deltaEl.dataset.dir = 'down'; }
     else                { deltaEl.textContent = '';             deltaEl.dataset.dir = ''; }
   }
 
-  if (origCard) origCard.classList.toggle('mvHookCompareWinner', origAnalysis.hook_score > sugAnalysis.hook_score);
-  if (sugCard)  sugCard.classList.toggle('mvHookCompareWinner', sugAnalysis.hook_score > origAnalysis.hook_score);
+  if (origCard) origCard.classList.toggle('mvHookCompareWinner', origAnalysis.hook_text_score > sugAnalysis.hook_text_score);
+  if (sugCard)  sugCard.classList.toggle('mvHookCompareWinner', sugAnalysis.hook_text_score > origAnalysis.hook_text_score);
 
   sec.classList.remove('hiddenView');
 }

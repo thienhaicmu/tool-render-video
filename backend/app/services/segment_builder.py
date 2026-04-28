@@ -114,11 +114,11 @@ def _score_candidate(scene_window: List[Dict], min_len: float, max_len: float) -
     scene_qualities = [float(s["scene_quality"]) for s in scene_window]
     scene_durs      = [max(0.01, float(s["end"]) - float(s["start"])) for s in scene_window]
 
-    # ── hook_strength ────────────────────────────────────────────────────────
+    # ── hook_opening_score ───────────────────────────────────────────────────
     first       = scene_window[0]
     first_q     = float(first["scene_quality"])
     first_trans = _clamp(float(first.get("transition_score", 1.0)) * 60.0, 20.0, 100.0)
-    hook_strength = _clamp((first_q + first_trans) / 2.0, 0.0, 100.0)
+    hook_opening_score = _clamp((first_q + first_trans) / 2.0, 0.0, 100.0)
 
     # ── avg_scene_quality ────────────────────────────────────────────────────
     avg_scene_quality = sum(scene_qualities) / len(scene_qualities)
@@ -147,7 +147,7 @@ def _score_candidate(scene_window: List[Dict], min_len: float, max_len: float) -
     gap_penalty  = _clamp(gap_ratio * 100.0, 0.0, 100.0)
 
     # ── penalties ────────────────────────────────────────────────────────────
-    weak_open_penalty = 1.0 if hook_strength < 40.0 else 0.0
+    weak_open_penalty = 1.0 if hook_opening_score < 40.0 else 0.0
     overlong_penalty  = (
         _clamp((duration - max_len) / max(max_len, 1.0) * 100.0, 0.0, 100.0)
         if duration > max_len else 0.0
@@ -161,7 +161,7 @@ def _score_candidate(scene_window: List[Dict], min_len: float, max_len: float) -
 
     # ── viral_score [0,100] ──────────────────────────────────────────────────
     raw_score = (
-        hook_strength     * 0.25
+        hook_opening_score * 0.25
         + avg_scene_quality * 0.20
         + scene_density     * 0.15
         + pacing_stability  * 0.10
@@ -180,7 +180,7 @@ def _score_candidate(scene_window: List[Dict], min_len: float, max_len: float) -
         "duration_hint":     round(duration, 3),
         "scene_count":       len(scene_window),
         "scene_quality_avg": round(avg_scene_quality, 3),
-        "hook_score":        round(hook_strength, 3),
+        "hook_opening_score": round(hook_opening_score, 3),
         "momentum_score":    round(scene_density, 3),
         "payoff_score":      round(ending_strength, 3),
         "retention_score":   round(retention_score, 3),
@@ -199,14 +199,14 @@ def _select_non_overlapping(
 ) -> List[Dict]:
     """Greedy selection of best non-overlapping candidates.
 
-    Sort descending by (viral_score, hook_score, scene_quality_avg).
+    Sort descending by (viral_score, hook_opening_score, scene_quality_avg).
     Accept a candidate only when its overlap with every already-selected
     segment is below max_overlap_ratio (= overlap / shorter segment duration).
     Returns segments sorted by start time.
     """
     sorted_cands = sorted(
         scored_candidates,
-        key=lambda x: (x["viral_score"], x["hook_score"], x["scene_quality_avg"]),
+        key=lambda x: (x["viral_score"], x["hook_opening_score"], x["scene_quality_avg"]),
         reverse=True,
     )
 
@@ -237,7 +237,7 @@ def _select_non_overlapping(
 _FALLBACK_FIELDS = {
     "scene_count":       1,
     "scene_quality_avg": 50.0,
-    "hook_score":        50.0,
+    "hook_opening_score": 50.0,
     "momentum_score":    50.0,
     "payoff_score":      50.0,
     "retention_score":   50.0,
