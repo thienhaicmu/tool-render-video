@@ -795,6 +795,7 @@ def render_motion_aware_crop(
     reup_bgm_gain: float = 0.18,
     playback_speed: float = 1.07,
     text_layers: list[dict] | None = None,
+    loudnorm_enabled: bool = False,
     cfg: MotionCropConfig | None = None,
 ) -> str:
     layer_count = len(text_layers or [])
@@ -903,7 +904,7 @@ def render_motion_aware_crop(
     resolved_preset = _map_preset_for_encoder(video_preset, resolved_codec)
 
     bgm_path = str(reup_bgm_path or "").strip()
-    bgm_ok = reup_mode and reup_bgm_enable and bgm_path and Path(bgm_path).is_file()
+    bgm_ok = reup_bgm_enable and bgm_path and Path(bgm_path).is_file()
     input_has_audio = has_audio_stream(input_path)
 
     ffmpeg_cmd = [
@@ -934,7 +935,9 @@ def render_motion_aware_crop(
             fc_parts = []
             if vf_chain:
                 fc_parts.append(f"[0:v]{vf_chain}[vout]")
-            a0_chain = "volume=1.0"
+            # Prepend loudnorm to the original audio chain when requested (not in reup mode).
+            a0_chain = ("loudnorm=I=-16:LRA=11:TP=-1.5,volume=1.0"
+                        if (loudnorm_enabled and not reup_mode) else "volume=1.0")
             a1_chain = f"volume={gain}"
             if abs(speed - 1.0) > 1e-4:
                 a0_chain += f",atempo={speed:.4f}"
@@ -964,6 +967,8 @@ def render_motion_aware_crop(
         ffmpeg_cmd += ["-map", "0:v:0", "-map", "1:a?"]
         if input_has_audio:
             af_parts = []
+            if loudnorm_enabled and not reup_mode:
+                af_parts.append("loudnorm=I=-16:LRA=11:TP=-1.5")
             if reup_mode:
                 af_parts.append(_reup_audio_filter())
             if abs(speed - 1.0) > 1e-4:

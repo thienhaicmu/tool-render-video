@@ -1711,9 +1711,9 @@ async function startRenderFromEditor() {
   payload.encoder_mode = evDev === 'gpu' ? 'nvenc' : (evDev === 'cpu' ? 'cpu' : 'auto');
 
   const profile = qs('evRenderProfile').value;
-  const presetByProfile = { fast:'faster', balanced:'slow', quality:'slower', best:'veryslow' };
   payload.render_profile = profile;
-  payload.video_preset   = presetByProfile[profile] || 'slow';
+  // video_preset and video_crf are intentionally omitted — backend _resolve_profile()
+  // selects the correct preset and CRF from the render_profile name.
 
   // 0 = adaptive: backend selects safe workers based on cpu_count, encoder mode, pipeline type
   payload.max_parallel_parts = 0;

@@ -485,7 +485,7 @@ def render_part(
     resolved_codec = _resolve_codec(video_codec, encoder_mode=encoder_mode)
     resolved_preset = _map_preset_for_encoder(video_preset, resolved_codec)
     bgm_path = str(reup_bgm_path or "").strip()
-    bgm_ok = reup_mode and reup_bgm_enable and bgm_path and Path(bgm_path).is_file()
+    bgm_ok = reup_bgm_enable and bgm_path and Path(bgm_path).is_file()
     input_has_audio = _has_audio_stream(input_path)
 
     vf_chain = ",".join(vf_parts)
@@ -657,6 +657,7 @@ def render_part_smart(
                     reup_bgm_gain=reup_bgm_gain,
                     playback_speed=playback_speed,
                     text_layers=text_layers,
+                    loudnorm_enabled=loudnorm_enabled,
                     cfg=crop_cfg,
                 )
             finally:
