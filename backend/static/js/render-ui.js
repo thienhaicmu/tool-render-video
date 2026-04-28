@@ -16,6 +16,7 @@ let _rcUserIsScrolling = false;
 let _rcUserScrollTimerId = null;
 let _rcPreviewJobId = '';
 let _rcPreviewPartNo = 0;
+let _rcBenchmark = { jobId: '', logsLoaded: false, totalElapsedMs: 0, sceneDetectionMs: null, sceneCount: null, transcriptionMs: null, transcriptionModel: null, transcriptionLiveSec: null, totalParts: 0, completedParts: 0, failedParts: 0, failedStage: '', outputSizes: [] };
 const RENDER_MONITOR_STALL_MS = 45000;
 
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
@@ -93,6 +94,8 @@ function resetRenderSessionUi(){
   const _pvVid = qs('rc_preview_video');
   if (_pvVid) { _pvVid.src = ''; _pvVid.dataset.previewSrc = ''; }
   if (qs('rc_output_preview')) qs('rc_output_preview').classList.add('hiddenView');
+  _rcBenchmark = { jobId: '', logsLoaded: false, totalElapsedMs: 0, sceneDetectionMs: null, sceneCount: null, transcriptionMs: null, transcriptionModel: null, transcriptionLiveSec: null, totalParts: 0, completedParts: 0, failedParts: 0, failedStage: '', outputSizes: [] };
+  if (qs('rc_benchmark_panel')) qs('rc_benchmark_panel').classList.add('hiddenView');
   renderBottomActiveQueue(null, null, []);
   updateRenderMainState(null, null, []);
 }
@@ -848,6 +851,198 @@ function useTopClips() {
   }
 }
 
+// ── Benchmark helpers ────────────────────────────────────────────────────────
+
+function _parseSqliteUtc(str) {
+  if (!str) return 0;
+  const s = String(str).trim();
+  const cleaned = s.replace(' ', 'T') + (s.includes('+') || s.includes('Z') ? '' : 'Z');
+  const ms = Date.parse(cleaned);
+  return isNaN(ms) ? 0 : ms;
+}
+
+function formatBenchDuration(ms) {
+  if (ms == null || isNaN(ms) || ms < 0) return '—';
+  const totalSec = Math.round(ms / 1000);
+  if (totalSec < 60) return `${(ms / 1000).toFixed(1)}s`;
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${s}s`;
+}
+
+function formatBenchBytes(bytes) {
+  if (bytes == null || isNaN(bytes) || bytes <= 0) return '—';
+  if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(1)} GB`;
+  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
+}
+
+function _parseBenchmarkLogs(lines) {
+  const result = { sceneDetectionMs: null, sceneCount: null, transcriptionMs: null, transcriptionModel: null, outputSizes: [] };
+  for (const line of lines) {
+    if (!line) continue;
+    try {
+      const entry = JSON.parse(line);
+      const event = entry?.event || '';
+      const ctx = entry?.context || {};
+      if (event === 'render.scene.detect.success') {
+        if (ctx.duration_ms != null) result.sceneDetectionMs = Number(ctx.duration_ms);
+        if (ctx.scene_count != null) result.sceneCount = Number(ctx.scene_count);
+      } else if (event === 'subtitle_transcription_completed') {
+        if (ctx.elapsed_ms != null) result.transcriptionMs = Number(ctx.elapsed_ms);
+        if (ctx.whisper_model) result.transcriptionModel = String(ctx.whisper_model);
+      } else if (event === 'output_validation_passed') {
+        if (ctx.size_bytes != null && Number(ctx.size_bytes) > 0) result.outputSizes.push(Number(ctx.size_bytes));
+      }
+      continue;
+    } catch (_) {}
+    const m1 = line.match(/scene detection done:\s*(\d+)\s*scenes?\s+in\s+(\d+)ms/i);
+    if (m1) { result.sceneCount = Number(m1[1]); result.sceneDetectionMs = Number(m1[2]); }
+    const m2 = line.match(/subtitle_transcription_completed\s+model=(\S+)\s+elapsed_ms=(\d+)/i);
+    if (m2) { result.transcriptionModel = m2[1]; result.transcriptionMs = Number(m2[2]); }
+  }
+  return result;
+}
+
+function _updateBenchmark(job, parts) {
+  const jobId = String(job?.id || job?.job_id || currentJobId || '');
+  if (!jobId) return;
+  if (jobId !== _rcBenchmark.jobId) {
+    _rcBenchmark = { jobId, logsLoaded: false, totalElapsedMs: 0, sceneDetectionMs: null, sceneCount: null, transcriptionMs: null, transcriptionModel: null, transcriptionLiveSec: null, totalParts: 0, completedParts: 0, failedParts: 0, failedStage: '', outputSizes: [] };
+  }
+  const items = Array.isArray(parts) ? parts : [];
+  const status = String(job?.status || '').toLowerCase();
+  const isTerminal = ['completed', 'done', 'complete', 'failed', 'interrupted'].includes(status);
+  const isFailed = status === 'failed' || status === 'interrupted';
+
+  const startMs = _parseSqliteUtc(job?.created_at);
+  const endMs = isTerminal ? _parseSqliteUtc(job?.updated_at) : Date.now();
+  _rcBenchmark.totalElapsedMs = (startMs > 0 && endMs > startMs) ? (endMs - startMs) : 0;
+  _rcBenchmark.totalParts = items.length || 0;
+  _rcBenchmark.completedParts = items.filter((p) => String(p?.status || '').toLowerCase() === 'done').length;
+  _rcBenchmark.failedParts = items.filter((p) => String(p?.status || '').toLowerCase() === 'failed').length;
+  if (isFailed && job?.stage) _rcBenchmark.failedStage = String(job.stage);
+
+  if (job?.message) {
+    const msg = String(job.message);
+    const m = msg.match(/transcribing[….\s]*\((\d+)s\)/i) || msg.match(/elapsed=(\d+)s/i);
+    if (m) _rcBenchmark.transcriptionLiveSec = Number(m[1]);
+  }
+
+  if (isTerminal && !_rcBenchmark.logsLoaded) {
+    _rcBenchmark.logsLoaded = true;
+    fetch(`/api/jobs/${jobId}/logs?lines=400`)
+      .then((r) => r.json())
+      .then((data) => {
+        const lines = Array.isArray(data?.items) ? data.items : [];
+        const parsed = _parseBenchmarkLogs(lines);
+        if (parsed.sceneDetectionMs != null) _rcBenchmark.sceneDetectionMs = parsed.sceneDetectionMs;
+        if (parsed.sceneCount != null) _rcBenchmark.sceneCount = parsed.sceneCount;
+        if (parsed.transcriptionMs != null) _rcBenchmark.transcriptionMs = parsed.transcriptionMs;
+        if (parsed.transcriptionModel) _rcBenchmark.transcriptionModel = parsed.transcriptionModel;
+        if (parsed.outputSizes.length) _rcBenchmark.outputSizes = parsed.outputSizes;
+        renderBenchmarkPanel(_renderMonitorLastJob, _renderMonitorLastParts);
+      })
+      .catch(() => {});
+  }
+}
+
+function _benchBottleneck(b, status) {
+  const isFailed = status === 'failed' || status === 'interrupted';
+  if (isFailed) {
+    const stageName = b.failedStage ? stageLabel(b.failedStage) : '';
+    return stageName ? `Render failed at: ${stageName}` : 'Render did not complete';
+  }
+  if (b.failedParts > 0) return `${b.failedParts} part${b.failedParts > 1 ? 's' : ''} failed validation`;
+  const candidates = [
+    { name: 'Transcription', ms: b.transcriptionMs },
+    { name: 'Scene detection', ms: b.sceneDetectionMs },
+  ].filter((c) => c.ms != null && c.ms > 0);
+  if (candidates.length && b.totalElapsedMs > 0) {
+    candidates.sort((a, c) => c.ms - a.ms);
+    const top = candidates[0];
+    if (top.ms / b.totalElapsedMs > 0.25) return `${top.name} dominated this job`;
+  }
+  if (b.completedParts > 0 && b.failedParts === 0 && b.completedParts === b.totalParts) {
+    return `All ${b.completedParts} part${b.completedParts > 1 ? 's' : ''} validated successfully`;
+  }
+  return '';
+}
+
+function renderBenchmarkPanel(job, parts) {
+  const panel = qs('rc_benchmark_panel');
+  if (!panel) return;
+  if (!job) { panel.classList.add('hiddenView'); return; }
+
+  const status = String(job?.status || '').toLowerCase();
+  const isTerminal = ['completed', 'done', 'complete', 'failed', 'interrupted'].includes(status);
+
+  _updateBenchmark(job, parts);
+  const b = _rcBenchmark;
+  const grid = qs('rc_benchmark_grid');
+  const insightEl = qs('rc_benchmark_insight');
+  const badge = qs('rc_benchmark_badge');
+
+  if (badge) { badge.textContent = isTerminal ? 'Done' : 'Live'; badge.dataset.state = isTerminal ? 'done' : 'live'; }
+
+  const rows = [];
+  if (b.totalElapsedMs > 0) rows.push({ label: 'Total', value: formatBenchDuration(b.totalElapsedMs) });
+
+  if (b.sceneDetectionMs != null) {
+    const extra = b.sceneCount != null ? ` · ${b.sceneCount.toLocaleString()} scenes` : '';
+    rows.push({ label: 'Scenes', value: formatBenchDuration(b.sceneDetectionMs) + extra });
+  }
+
+  const txMs = b.transcriptionMs != null ? b.transcriptionMs : (b.transcriptionLiveSec != null ? b.transcriptionLiveSec * 1000 : null);
+  if (txMs != null) {
+    const model = b.transcriptionModel ? ` · ${b.transcriptionModel}` : '';
+    const live = (b.transcriptionMs == null && b.transcriptionLiveSec != null) ? ' ⏱' : '';
+    rows.push({ label: 'Transcription', value: `${formatBenchDuration(txMs)}${model}${live}` });
+  } else if (String(job?.stage || '').includes('transcrib')) {
+    rows.push({ label: 'Transcription', value: 'In progress…' });
+  }
+
+  if (b.totalParts > 0) {
+    const failBit = b.failedParts > 0 ? ` · ${b.failedParts} failed` : '';
+    rows.push({ label: 'Parts', value: `${b.completedParts} / ${b.totalParts}${failBit}` });
+  }
+
+  if (b.outputSizes.length > 0) {
+    const avg = Math.round(b.outputSizes.reduce((a, x) => a + x, 0) / b.outputSizes.length);
+    const max = Math.max(...b.outputSizes);
+    rows.push({ label: 'Output', value: b.outputSizes.length > 1 ? `avg ${formatBenchBytes(avg)} · max ${formatBenchBytes(max)}` : formatBenchBytes(avg) });
+  }
+
+  if (grid) {
+    const sig = rows.map((r) => r.label + '=' + r.value).join('|');
+    if (grid.dataset.sig !== sig) {
+      grid.dataset.sig = sig;
+      grid.innerHTML = '';
+      rows.forEach(({ label, value }) => {
+        const lbl = document.createElement('span');
+        lbl.className = 'rcBenchmarkLabel';
+        lbl.textContent = label;
+        const val = document.createElement('span');
+        val.className = 'rcBenchmarkValue';
+        val.textContent = value;
+        grid.appendChild(lbl);
+        grid.appendChild(val);
+      });
+    }
+  }
+
+  const insightText = _benchBottleneck(b, status);
+  if (insightEl) {
+    if (insightEl.textContent !== insightText) insightEl.textContent = insightText;
+    insightEl.classList.toggle('hiddenView', !insightText);
+  }
+
+  panel.classList.toggle('hiddenView', rows.length === 0);
+}
+
 function _rcPreviewHandleSelectChange() {
   const sel = qs('rc_preview_part_select');
   if (sel) _rcPreviewPartNo = Number(sel.value) || 0;
@@ -1161,6 +1356,7 @@ function renderBottomActiveQueue(job, summary, parts = []) {
   }
 
   updateOutputPreview(job, items);
+  renderBenchmarkPanel(job, items);
 
   const cardWrap = qs('rc_part_cards');
   if (!cardWrap) return;

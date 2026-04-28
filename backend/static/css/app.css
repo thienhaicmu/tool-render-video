@@ -8768,6 +8768,82 @@ body.is-history-active #history_list {
   min-width: 0;
 }
 
+/* ══ P2-3 — Benchmark / Insights Panel
+        Compact key-value grid showing stage durations, part counts,
+        output sizes, and a bottleneck hint. Scoped to .rcBenchmarkPanel.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* BM1 — outer card */
+.rcBenchmarkPanel {
+  margin-top: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+/* BM2 — header row */
+.rcBenchmarkHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 12px 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.rcBenchmarkTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text-muted, #94a3b8);
+}
+.rcBenchmarkBadge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.rcBenchmarkBadge[data-state="live"] { background: rgba(56, 189, 248, .12); color: #7dd3fc; }
+.rcBenchmarkBadge[data-state="done"] { background: rgba(34, 197, 94, .12);  color: #6ee7b7; }
+
+/* BM3 — two-column grid: label | value */
+.rcBenchmarkGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  padding: 5px 0;
+}
+.rcBenchmarkLabel,
+.rcBenchmarkValue {
+  padding: 3px 12px;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+.rcBenchmarkLabel {
+  color: var(--text-muted, #94a3b8);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rcBenchmarkValue {
+  color: var(--text-primary, #f1f5f9);
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* BM4 — bottleneck / insight row */
+.rcBenchmarkInsight {
+  padding: 5px 12px 8px;
+  font-size: 11px;
+  color: #7dd3fc;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  line-height: 1.4;
+}
+
 /* ══ FINAL — inspector visibility lock (must remain last in file)
         Rule F0: noInspector guard — specificity (1,2,0)+!important beats any
           #appInspector{display:flex!important} rule that may be re-introduced.
