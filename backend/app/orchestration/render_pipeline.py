@@ -1218,8 +1218,35 @@ def run_render_pipeline(
                 needs_srt = not (payload.resume_from_last and srt_part.exists() and srt_part.stat().st_size > 0)
                 needs_ass = not (payload.resume_from_last and ass_part.exists() and ass_part.stat().st_size > 0)
                 if needs_srt:
-                    slice_srt_by_time(str(full_srt), str(srt_part), seg["start"], seg["end"], rebase_to_zero=True)
-                    _job_log(effective_channel, job_id, f"Part {idx} subtitle sliced from full transcript", kind="debug")
+                    _eff_speed = max(0.5, min(1.5, float(payload.playback_speed or 1.0)))
+                    _srt_meta = slice_srt_by_time(str(full_srt), str(srt_part), seg["start"], seg["end"], rebase_to_zero=True, playback_speed=_eff_speed)
+                    _srt_count = _srt_meta.get("subtitle_count", 0)
+                    _job_log(
+                        effective_channel, job_id,
+                        f"subtitle_part_sync part_no={idx} start={seg['start']:.1f}s end={seg['end']:.1f}s speed={_eff_speed} count={_srt_count}"
+                        + (f" first={_srt_meta['first_start']:.3f}s last={_srt_meta['last_start']:.3f}s" if _srt_count > 0 else " (no speech)"),
+                        kind="debug" if _srt_count > 0 else "warning",
+                    )
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="subtitle_part_sync",
+                        level="INFO" if _srt_count > 0 else "WARNING",
+                        message=f"Subtitle sliced for part {idx}: {_srt_count} entries",
+                        step="subtitle.slice",
+                        context={
+                            "part_no": idx,
+                            "part_start": seg["start"],
+                            "part_end": seg["end"],
+                            "playback_speed": _eff_speed,
+                            "subtitle_count": _srt_count,
+                            "first_sub_start": _srt_meta.get("first_start"),
+                            "first_sub_end": _srt_meta.get("first_end"),
+                            "last_sub_start": _srt_meta.get("last_start"),
+                            "last_sub_end": _srt_meta.get("last_end"),
+                            "part_srt_path": str(srt_part),
+                        },
+                    )
                 _ass_srt_source = srt_part
                 if getattr(payload, "subtitle_translate_enabled", False) and srt_part.exists() and srt_part.stat().st_size > 0:
                     _needs_translated = not (payload.resume_from_last and translated_srt_part.exists() and translated_srt_part.stat().st_size > 0)
