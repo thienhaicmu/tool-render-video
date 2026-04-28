@@ -341,44 +341,43 @@
 
     <!-- ── SECTION: render-active-panel ────────────────────────── -->
     <div id="render_active_panel" class="renderActivePanel hiddenView" aria-live="polite">
-      <div class="renderActiveCard">
-        <div class="renderActiveTop">
-          <div>
-            <div class="renderActiveEyebrow" id="render_active_state">Current Render</div>
-            <div class="renderActiveTitle" id="render_active_title">Preparing render</div>
-          </div>
-          <div class="renderActivePct" id="render_active_pct">0%</div>
+      <!-- Ghost IDs: updateRenderMainState still writes to these; hidden from view -->
+      <div hidden>
+        <span id="render_active_state"></span>
+        <span id="render_active_bar"></span>
+        <span id="render_workspace_source"></span>
+        <span id="render_workspace_output"></span>
+        <span id="render_workspace_stage"></span>
+        <div id="render_workspace_preview">
+          <span id="render_workspace_preview_badge"></span>
+          <span id="render_workspace_preview_title"></span>
+          <span id="render_workspace_preview_text"></span>
         </div>
-        <div class="renderWorkspaceShell">
-          <div class="renderWorkspacePreview" id="render_workspace_preview" data-preview-state="idle">
-            <div class="renderWorkspacePreviewInner">
-              <div class="renderWorkspacePreviewBadge" id="render_workspace_preview_badge">Preview</div>
-              <div class="renderWorkspacePreviewTitle" id="render_workspace_preview_title">Render workspace</div>
-              <div class="renderWorkspacePreviewText" id="render_workspace_preview_text">Source preview will remain represented here during render.</div>
-            </div>
+      </div>
+
+      <!-- Dominant active render card -->
+      <div class="rdCard" id="rd_card" data-state="idle">
+        <div class="rdCardHead">
+          <div class="rdHeadLeft">
+            <div class="rdBadge" id="rd_badge" data-state="running">&#9679; Running</div>
+            <div class="rdTitle" id="rd_title">Preparing render…</div>
           </div>
-          <div class="renderWorkspaceInfo">
-            <div class="renderWorkspaceInfoRow">
-              <span class="renderWorkspaceLabel">Source</span>
-              <span class="renderWorkspaceValue" id="render_workspace_source">No source selected</span>
-            </div>
-            <div class="renderWorkspaceInfoRow">
-              <span class="renderWorkspaceLabel">Destination</span>
-              <span class="renderWorkspaceValue" id="render_workspace_output">Output folder not set</span>
-            </div>
-            <div class="renderWorkspaceInfoRow">
-              <span class="renderWorkspaceLabel">Current step</span>
-              <span class="renderWorkspaceValue" id="render_workspace_stage">Open editor to start a render</span>
-            </div>
-          </div>
+          <button class="rdLogBtn" type="button" onclick="_collapseBottomPanel(false)">View Logs</button>
         </div>
-        <div class="renderActiveProgress"><div id="render_active_bar"></div></div>
-        <div class="renderActiveMeta" id="render_active_meta">Clips will appear in the output panel below.</div>
-        <div class="renderActiveActions hiddenView" id="render_active_actions">
+        <div class="rdStep" id="render_active_title">Initializing…</div>
+        <div class="rdSegBar" id="rd_seg_bar"></div>
+        <div class="rdMeta">
+          <span class="rdPct" id="render_active_pct">0%</span>
+          <span class="rdMetaSub" id="render_active_meta">Clips will appear below as they finish.</span>
+        </div>
+        <div class="rdDoneActions hiddenView" id="render_active_actions">
           <button class="primaryButton" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
           <button class="ghostButton" type="button" onclick="setView('upload')">Go to Upload</button>
         </div>
       </div>
+
+      <!-- Per-clip queue rows, built by renderRdClipQueue() -->
+      <div class="rdQueue" id="rd_clip_queue"></div>
     </div>
     <!-- /SECTION: render-active-panel -->
 

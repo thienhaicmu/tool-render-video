@@ -1255,6 +1255,138 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('abp_retry_btn')) qs('abp_retry_btn').classList.toggle('hiddenView', !(hasFailure && currentJobId));
   if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !(status === 'completed' || status === 'done' || status === 'complete' || String(outputText || '').trim());
   if (qs('render_active_actions')) qs('render_active_actions').classList.toggle('hiddenView', !(status === 'completed' || status === 'done' || status === 'complete'));
+  updateRdCard(job, s, parts || []);
+}
+
+// ── RD — Dominant Active Render Card helpers ──────────────────────────────────
+
+function _rdBadgeConfig(job, terminal, status, failed, total) {
+  if (!job) return { text: '○ Idle', state: 'idle' };
+  if (status === 'queued' || status === 'pending') return { text: '○ Queued', state: 'queued' };
+  if (terminal) {
+    if (status === 'completed' || status === 'done' || status === 'complete') {
+      return failed > 0 && total > 0
+        ? { text: '⚠ Partial', state: 'partial' }
+        : { text: '✓ Done', state: 'completed' };
+    }
+    return { text: '✕ Failed', state: 'failed' };
+  }
+  return { text: '● Running', state: 'running' };
+}
+
+function renderSegmentedBar(container, parts) {
+  if (!container) return;
+  const items = Array.isArray(parts) ? parts : [];
+  if (items.length === 0) {
+    container.innerHTML = '<div class="rdSegItem rdSegItem--waiting" style="flex:1"></div>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  items.forEach((part, i) => {
+    const state = normalizeRcPartState(part);
+    const seg = document.createElement('div');
+    seg.className = `rdSegItem rdSegItem--${state}`;
+    seg.title = String(part.part_name || `Clip ${part.part_no || i + 1}`);
+    frag.appendChild(seg);
+  });
+  container.replaceChildren(frag);
+}
+
+function renderRdClipQueue(container, parts, job) {
+  if (!container) return;
+  const items = Array.isArray(parts) ? parts : [];
+  if (items.length === 0) { container.innerHTML = ''; return; }
+  const frag = document.createDocumentFragment();
+  items.forEach((part, i) => {
+    const state = normalizeRcPartState(part);
+    const name = String(part.part_name || `Clip ${part.part_no || i + 1}`);
+    const row = document.createElement('div');
+    row.className = `rdQueueRow rdQueueRow--${state}`;
+
+    const head = document.createElement('div');
+    head.className = 'rdQueueRowHead';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'rdQueueRowName';
+    nameEl.textContent = name;
+    const badge = document.createElement('div');
+    badge.className = 'rdQueueRowBadge';
+    if (state === 'completed') { badge.textContent = '✓ Done'; badge.dataset.state = 'completed'; }
+    else if (state === 'failed') { badge.textContent = '✕ Failed'; badge.dataset.state = 'failed'; }
+    else if (state === 'rendering') { badge.textContent = '● Rendering'; badge.dataset.state = 'rendering'; }
+    else { badge.textContent = '○ Queued'; badge.dataset.state = 'waiting'; }
+    head.appendChild(nameEl);
+    head.appendChild(badge);
+    row.appendChild(head);
+
+    if (state === 'completed' && part.output_file) {
+      const pathParts = String(part.output_file).replace(/\\/g, '/').split('/');
+      const pathEl = document.createElement('div');
+      pathEl.className = 'rdQueueRowPath';
+      pathEl.textContent = pathParts.slice(-2).join('/');
+      pathEl.title = part.output_file;
+      row.appendChild(pathEl);
+      const acts = document.createElement('div');
+      acts.className = 'rdQueueRowActions';
+      const outDir = pathParts.slice(0, -1).join('/') || part.output_file;
+      const openBtn = document.createElement('button');
+      openBtn.className = 'rdQueueBtn';
+      openBtn.textContent = 'Open Folder';
+      openBtn.onclick = () => openStoredOutputPath(outDir);
+      const upBtn = document.createElement('button');
+      upBtn.className = 'rdQueueBtn';
+      upBtn.textContent = 'Upload';
+      upBtn.onclick = () => setView('upload');
+      acts.appendChild(openBtn);
+      acts.appendChild(upBtn);
+      row.appendChild(acts);
+    } else if (state === 'failed') {
+      const errEl = document.createElement('div');
+      errEl.className = 'rdQueueRowError';
+      errEl.textContent = friendlyRenderError(rcPartMessage(part), `Clip ${part.part_no || i + 1} failed`);
+      row.appendChild(errEl);
+    } else if (state === 'rendering') {
+      const pct = clampRcProgress(part.progress_percent);
+      if (pct > 0) {
+        const progEl = document.createElement('div');
+        progEl.className = 'rdQueueRowProg';
+        progEl.textContent = `${pct}%`;
+        row.appendChild(progEl);
+      }
+    }
+    frag.appendChild(row);
+  });
+  container.replaceChildren(frag);
+}
+
+function updateRdCard(job, summary, parts) {
+  const s = summary || computeProgressSummary(Array.isArray(parts) ? parts : []);
+  const status = String(job?.status || '').toLowerCase();
+  const terminal = isTerminalRenderStatus(status);
+  const failed = Number(s?.failed_parts || 0);
+  const total = Number(s?.total_parts || (Array.isArray(parts) ? parts.length : 0));
+
+  const badgeEl = qs('rd_badge');
+  if (badgeEl) {
+    const { text, state } = _rdBadgeConfig(job, terminal, status, failed, total);
+    badgeEl.textContent = text;
+    badgeEl.dataset.state = state;
+  }
+
+  const cardEl = qs('rd_card');
+  if (cardEl) {
+    cardEl.dataset.state = !job ? 'idle'
+      : terminal ? ((status === 'failed' || status === 'interrupted') ? 'failed' : (failed > 0 ? 'partial' : 'completed'))
+      : 'running';
+  }
+
+  const titleEl = qs('rd_title');
+  if (titleEl) {
+    const src = getRenderWorkspaceSourceText(job);
+    titleEl.textContent = src && src !== 'No source selected' ? src : (job ? 'Render in progress' : 'No active render');
+  }
+
+  renderSegmentedBar(qs('rd_seg_bar'), Array.isArray(parts) ? parts : []);
+  renderRdClipQueue(qs('rd_clip_queue'), Array.isArray(parts) ? parts : [], job);
 }
 
 function getCurrentJobOutputDir(job) {

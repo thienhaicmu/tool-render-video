@@ -8242,6 +8242,286 @@ body.is-history-active #history_list {
   min-height: 0 !important;
 }
 
+/* ══ RD — Dominant Active Render Card
+        Replaces the old renderActiveCard workspace shell with a focused,
+        production-grade active card + per-clip queue rows.
+        Scoped to .rdCard / .rdQueue / .rdQueueRow — no global side-effects.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* RD1 — Outer card shell */
+.rdCard {
+  background: rgba(14, 116, 144, 0.05);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-radius: 10px;
+  padding: 18px 20px 14px;
+  margin-bottom: 10px;
+  transition: border-color .25s, background .25s, box-shadow .25s;
+}
+.rdCard[data-state="running"] {
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.08), 0 10px 28px rgba(14, 116, 144, 0.14);
+}
+.rdCard[data-state="completed"] {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.04);
+}
+.rdCard[data-state="partial"] {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.04);
+}
+.rdCard[data-state="failed"] {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+/* RD2 — Card header row */
+.rdCardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.rdHeadLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* RD3 — Status badge */
+.rdBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  width: fit-content;
+  transition: background .2s, color .2s;
+}
+.rdBadge[data-state="running"]   { background: rgba(56,189,248,.15);  color: #7dd3fc; }
+.rdBadge[data-state="queued"]    { background: rgba(148,163,184,.1);  color: rgba(148,163,184,.8); }
+.rdBadge[data-state="completed"] { background: rgba(34,197,94,.13);   color: #6ee7b7; }
+.rdBadge[data-state="partial"]   { background: rgba(245,158,11,.13);  color: #fcd34d; }
+.rdBadge[data-state="failed"]    { background: rgba(239,68,68,.13);   color: #fca5a5; }
+.rdBadge[data-state="idle"]      { background: rgba(148,163,184,.07); color: rgba(148,163,184,.5); }
+
+/* RD4 — Job title (source name) */
+.rdTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary, #f1f5f9);
+  line-height: 1.3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* RD5 — View Logs button */
+.rdLogBtn {
+  flex-shrink: 0;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.1);
+  color: var(--text-muted, #94a3b8);
+  border-radius: 6px;
+  padding: 4px 11px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.rdLogBtn:hover {
+  background: rgba(255,255,255,.1);
+  border-color: rgba(255,255,255,.18);
+  color: var(--text-dim, #e2e8f0);
+}
+
+/* RD6 — Step label (stageLabel output) */
+.rdStep {
+  font-size: 12px;
+  color: var(--text-dim, #cbd5e1);
+  margin-bottom: 12px;
+  line-height: 1.4;
+  min-height: 16px;
+}
+
+/* RD7 — Segmented progress bar */
+.rdSegBar {
+  display: flex;
+  gap: 3px;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+  background: rgba(255,255,255,.04);
+}
+.rdSegItem {
+  flex: 1;
+  border-radius: 2px;
+  min-width: 4px;
+  transition: background .35s ease;
+}
+.rdSegItem--completed { background: #10b981; }
+.rdSegItem--rendering {
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  animation: rdSegPulse 2s ease-in-out infinite;
+}
+.rdSegItem--failed    { background: #ef4444; }
+.rdSegItem--waiting   { background: rgba(255,255,255,.09); }
+@keyframes rdSegPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rdSegItem--rendering { animation: none; }
+}
+
+/* RD8 — Pct + meta row */
+.rdMeta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.rdPct {
+  font-size: 14px;
+  font-weight: 700;
+  color: #60a5fa;
+  flex-shrink: 0;
+}
+.rdMetaSub {
+  font-size: 12px;
+  color: var(--text-muted, #94a3b8);
+  line-height: 1.5;
+  min-width: 0;
+}
+
+/* RD9 — Completion action buttons */
+.rdDoneActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+/* RD10 — Clip queue container */
+.rdQueue {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* RD11 — Per-clip queue row */
+.rdQueueRow {
+  background: rgba(255,255,255,.025);
+  border: 1px solid rgba(255,255,255,.07);
+  border-left: 3px solid transparent;
+  border-radius: 8px;
+  padding: 10px 14px;
+  transition: border-color .2s, background .2s;
+}
+.rdQueueRow--completed {
+  border-left-color: #10b981;
+  background: rgba(16,185,129,.04);
+}
+.rdQueueRow--rendering {
+  border-left-color: #38bdf8;
+  background: rgba(56,189,248,.05);
+}
+.rdQueueRow--failed {
+  border-left-color: #ef4444;
+  background: rgba(239,68,68,.05);
+}
+.rdQueueRow--waiting {
+  opacity: .6;
+}
+
+/* RD12 — Row header (name + badge) */
+.rdQueueRowHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.rdQueueRowName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rdQueueRowBadge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.rdQueueRowBadge[data-state="completed"] { background: rgba(34,197,94,.14); color: #6ee7b7; }
+.rdQueueRowBadge[data-state="rendering"] { background: rgba(56,189,248,.14); color: #7dd3fc; }
+.rdQueueRowBadge[data-state="failed"]    { background: rgba(239,68,68,.12);  color: #fca5a5; }
+.rdQueueRowBadge[data-state="waiting"]   { background: rgba(148,163,184,.08); color: rgba(148,163,184,.65); }
+
+/* RD13 — Output path (completed rows) */
+.rdQueueRowPath {
+  font-size: 11px;
+  color: var(--text-muted, #94a3b8);
+  font-family: ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 6px;
+}
+
+/* RD14 — Error message (failed rows) */
+.rdQueueRowError {
+  font-size: 11px;
+  color: #fca5a5;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+/* RD15 — Rendering progress text */
+.rdQueueRowProg {
+  font-size: 11px;
+  color: #7dd3fc;
+  margin-top: 2px;
+}
+
+/* RD16 — Inline action buttons (open folder, upload) */
+.rdQueueRowActions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.rdQueueBtn {
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.09);
+  color: var(--text-dim, #cbd5e1);
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.rdQueueBtn:hover {
+  background: rgba(255,255,255,.1);
+  border-color: rgba(255,255,255,.18);
+  color: var(--text-primary, #f1f5f9);
+}
+
 /* ══ FINAL — inspector visibility lock (must remain last in file)
         Rule F0: noInspector guard — specificity (1,2,0)+!important beats any
           #appInspector{display:flex!important} rule that may be re-introduced.
