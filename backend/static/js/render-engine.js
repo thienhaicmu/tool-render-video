@@ -253,7 +253,8 @@ function _applyJobUpdate(job, parts, summary){
   const jobProgress = Number(job.progress_percent || 0);
   const stage = (job.stage || '').toLowerCase();
   const status = String(job.status || '').toLowerCase();
-  const isCompleted = status === 'completed' || status === 'done' || status === 'complete';
+  const isPartial = status === 'completed_with_errors' || status === 'partial_failed';
+  const isCompleted = status === 'completed' || status === 'done' || status === 'complete' || isPartial;
   const isFailed = status === 'failed' || status === 'interrupted';
   const isTerminal = typeof isTerminalRenderStatus === 'function'
     ? isTerminalRenderStatus(status)
@@ -342,7 +343,7 @@ function _applyJobUpdate(job, parts, summary){
     if (isCompleted) {
       const handoff = buildCompletionHandoff(s, parts, job);
       showRenderCompletionBar(handoff.main, handoff.detail);
-      setRenderFlowState('complete', `${doneCount} clips ready`);
+      setRenderFlowState('complete', isPartial ? `${doneCount} clips ready with errors` : `${doneCount} clips ready`);
       if (typeof populateRenderOutputPanel === 'function') {
         populateRenderOutputPanel(job, parts);
         augmentRenderOutputRanking(job);

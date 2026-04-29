@@ -146,12 +146,23 @@ function stageLabelPlain(stage){
 
 function isTerminalRenderStatus(status){
   const st = String(status || '').toLowerCase();
-  return st === 'completed' || st === 'failed' || st === 'interrupted' || st === 'done' || st === 'complete';
+  return st === 'completed' || st === 'completed_with_errors' || st === 'partial_failed' || st === 'failed' || st === 'interrupted' || st === 'done' || st === 'complete';
+}
+
+function isPartialRenderStatus(status){
+  const st = String(status || '').toLowerCase();
+  return st === 'completed_with_errors' || st === 'partial_failed';
+}
+
+function isCompletedRenderStatus(status){
+  const st = String(status || '').toLowerCase();
+  return st === 'completed' || st === 'done' || st === 'complete';
 }
 
 function renderMonitorStageLabel(stage, status, summary = null){
   const st = String(status || '').toLowerCase();
-  if (st === 'completed' || st === 'done' || st === 'complete') return 'Render complete';
+  if (isPartialRenderStatus(st)) return 'Completed with errors';
+  if (isCompletedRenderStatus(st)) return 'Render complete';
   if (st === 'failed' || st === 'interrupted') return 'Render failed';
   const s = String(stage || '').toLowerCase();
   if ((s === 'rendering' || s === 'rendering_parallel') && summary) {
@@ -235,7 +246,8 @@ function updateRenderMonitorHeartbeat(job, summary, parts = []){
   parts = parts && parts.length ? parts : (_renderMonitorLastParts || []);
   const status = String(job?.status || lastStatus || '').toLowerCase();
   const running = currentJobId && !isTerminalRenderStatus(status);
-  const completed = status === 'completed' || status === 'done' || status === 'complete';
+  const partial = isPartialRenderStatus(status);
+  const completed = isCompletedRenderStatus(status) || partial;
   const failed = status === 'failed' || status === 'interrupted';
   const now = Date.now();
   const noProgressMs = _renderMonitorLastProgressAt ? now - _renderMonitorLastProgressAt : 0;
@@ -243,7 +255,7 @@ function updateRenderMonitorHeartbeat(job, summary, parts = []){
 
   let monitorState = 'idle';
   if (running) monitorState = stalled ? 'stalled' : 'running';
-  if (completed) monitorState = 'complete';
+  if (completed) monitorState = partial ? 'failed' : 'complete';
   if (failed) monitorState = 'failed';
   header.dataset.monitorState = monitorState;
 
@@ -255,6 +267,9 @@ function updateRenderMonitorHeartbeat(job, summary, parts = []){
   const latestDetail = String(job?.message || '').trim();
   const latestShort = latestDetail.length > 96 ? `${latestDetail.slice(0, 93)}...` : latestDetail;
   if (primary) {
+    if (partial) {
+      primary.textContent = `Completed with errors · ${pctText}`;
+    } else
     if (failed) primary.textContent = `Render failed · ${pctText}`;
     else if (completed) primary.textContent = `Render complete · ${pctText}`;
     else if (running) primary.textContent = `${stageText} · ${pctText}`;
@@ -262,7 +277,8 @@ function updateRenderMonitorHeartbeat(job, summary, parts = []){
   }
   if (secondary) {
     const clipLine = renderMonitorClipSummary(summary, parts);
-    if (stalled) secondary.textContent = clipLine;
+    if (partial) secondary.textContent = `${clipLine} · Review failed clips`;
+    else if (stalled) secondary.textContent = clipLine;
     else if (completed) secondary.textContent = `${clipLine} · Final clips saved below`;
     else if (failed) secondary.textContent = `${clipLine} · Check diagnostics`;
     else secondary.textContent = running ? clipLine : 'No active render job.';
@@ -289,6 +305,7 @@ function updateRenderMonitorHeartbeat(job, summary, parts = []){
 function friendlyJobMessage(job){
   const status = String(job?.status || '').toLowerCase();
   const stage = String(job?.stage || '').toLowerCase();
+  if (isPartialRenderStatus(status)) return 'Completed with errors.';
   if (status === 'completed' || status === 'done' || status === 'complete') return 'Render complete.';
   if (status === 'failed' || status === 'interrupted') return friendlyRenderError(job?.message || '', 'Something went wrong during rendering');
   if (status === 'queued') return 'Waiting to start.';
@@ -436,6 +453,10 @@ function setRenderFlowState(activeStep, subtitle, overrides = {}) {
 function updateRenderFlowByJob(job, summary, parts = []) {
   const stage = String(job?.stage || '').toLowerCase();
   const status = String(job?.status || '').toLowerCase();
+  if (isPartialRenderStatus(status)) {
+    setRenderFlowState('complete', `${getCompletedClipCount(summary, parts)} clips ready with errors`);
+    return;
+  }
   if (status === 'completed' || status === 'done' || status === 'complete') {
     setRenderFlowState('complete', `${getCompletedClipCount(summary, parts)} clips ready`);
     return;
@@ -942,7 +963,7 @@ function _updateBenchmark(job, parts) {
   }
   const items = Array.isArray(parts) ? parts : [];
   const status = String(job?.status || '').toLowerCase();
-  const isTerminal = ['completed', 'done', 'complete', 'failed', 'interrupted'].includes(status);
+  const isTerminal = isTerminalRenderStatus(status);
   const isFailed = status === 'failed' || status === 'interrupted';
 
   const startMs = _parseSqliteUtc(job?.created_at);
@@ -1005,7 +1026,7 @@ function renderBenchmarkPanel(job, parts) {
   if (!job) { panel.classList.add('hiddenView'); return; }
 
   const status = String(job?.status || '').toLowerCase();
-  const isTerminal = ['completed', 'done', 'complete', 'failed', 'interrupted'].includes(status);
+  const isTerminal = isTerminalRenderStatus(status);
 
   _updateBenchmark(job, parts);
   const b = _rcBenchmark;
@@ -1108,7 +1129,7 @@ function updateOutputPreview(job, parts) {
   if (!panel) return;
 
   const status = String(job?.status || '').toLowerCase();
-  const isCompleted = status === 'completed' || status === 'done' || status === 'complete';
+  const isCompleted = isCompletedRenderStatus(status) || isPartialRenderStatus(status);
 
   if (!isCompleted) {
     panel.classList.add('hiddenView');
@@ -1213,7 +1234,7 @@ function _updateStageTimeline(stage, status) {
   if (!el) return;
   const stageNorm = String(stage || '').toLowerCase().trim();
   const statusNorm = String(status || '').toLowerCase().trim();
-  const isDone = statusNorm === 'completed' || statusNorm === 'done' || statusNorm === 'complete';
+  const isDone = isCompletedRenderStatus(statusNorm) || isPartialRenderStatus(statusNorm);
   const isFailed = statusNorm === 'failed' || statusNorm === 'interrupted';
 
   if (!stage && !isDone && !isFailed) { el.innerHTML = ''; return; }
@@ -1590,7 +1611,7 @@ function updateRenderMainState(job, summary, parts = []) {
   renderBottomActiveQueue(job, s, parts || []);
   const pct = Math.max(0, Math.min(100, Math.round(Number(job?.progress_percent || 0))));
   const title = terminal
-    ? ((status === 'completed' || status === 'done' || status === 'complete') ? 'Render complete' : 'Render failed')
+    ? (partialStatus ? 'Completed with errors' : (completedStatus ? 'Render complete' : 'Render failed'))
     : stageLabel(job?.stage || 'queued');
   const done = getCompletedClipCount(s, parts);
   const total = Number(s?.total_parts || parts.length || 0);
@@ -1607,15 +1628,15 @@ function updateRenderMainState(job, summary, parts = []) {
   const failureSummary = (typeof friendlyRenderError === 'function')
     ? friendlyRenderError(job?.message || '', 'Render failed')
     : 'Render failed';
-  const hasFailure = status === 'failed' || status === 'interrupted';
+  const hasFailure = status === 'failed' || status === 'interrupted' || partialStatus || failed > 0;
   const statusLabel = terminal
-    ? ((status === 'completed' || status === 'done' || status === 'complete') ? 'Completed' : 'Failed')
+    ? (partialStatus ? 'Completed with errors' : (completedStatus ? 'Completed' : 'Failed'))
     : 'Rendering';
   const sourceText = getRenderWorkspaceSourceText(job);
   const outputText = getRenderWorkspaceOutputText(job);
   const outputLabel = getRenderWorkspaceOutputLabel(job);
   const workspaceStage = terminal
-    ? ((status === 'completed' || status === 'done' || status === 'complete')
+    ? (completedStatus
       ? (failed > 0 ? 'Render finished with some clip failures' : 'Render completed successfully')
       : 'Render failed before all clips finished')
     : `${stageLabel(job?.stage || 'queued')}. This render is using the same source workspace you just configured.`;
@@ -1624,13 +1645,13 @@ function updateRenderMainState(job, summary, parts = []) {
   if (active > 0) clipBits.push(`${active} rendering`);
   if (failed > 0) clipBits.push(`${failed} failed`);
 
-  if (qs('render_active_state')) qs('render_active_state').textContent = terminal ? 'Render Complete' : 'Current Render';
+  if (qs('render_active_state')) qs('render_active_state').textContent = terminal ? (partialStatus ? 'Completed With Errors' : 'Render Complete') : 'Current Render';
   if (qs('render_active_title')) qs('render_active_title').textContent = title;
   if (qs('render_active_pct')) qs('render_active_pct').textContent = `${pct}%`;
   if (qs('render_active_bar')) qs('render_active_bar').style.width = `${pct}%`;
   if (qs('render_active_panel')) qs('render_active_panel').dataset.renderState = failed > 0 && terminal ? 'failed' : terminal ? 'complete' : 'running';
   if (qs('render_active_meta')) {
-    if (status === 'completed' || status === 'done' || status === 'complete') {
+    if (completedStatus) {
       qs('render_active_meta').textContent = failed > 0
         ? `${outputLabel}. ${done} clips are ready and ${failed} need review. View clips below.`
         : `${outputLabel}. All completed clips are listed below.`;
@@ -1643,18 +1664,18 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('render_workspace_source')) qs('render_workspace_source').textContent = sourceText;
   if (qs('render_workspace_output')) qs('render_workspace_output').textContent = outputText;
   if (qs('render_workspace_stage')) qs('render_workspace_stage').textContent = workspaceStage;
-  const previewState = (status === 'failed' || status === 'interrupted') ? 'failed' : (status === 'completed' || status === 'done' || status === 'complete') ? 'complete' : 'active';
+  const previewState = (status === 'failed' || status === 'interrupted' || partialStatus) ? 'failed' : completedStatus ? 'complete' : 'active';
   if (qs('render_workspace_preview')) qs('render_workspace_preview').dataset.previewState = previewState;
-  if (qs('render_workspace_preview_badge')) qs('render_workspace_preview_badge').textContent = (status === 'completed' || status === 'done' || status === 'complete') ? 'Results' : (status === 'failed' || status === 'interrupted') ? 'Attention' : 'Rendering';
+  if (qs('render_workspace_preview_badge')) qs('render_workspace_preview_badge').textContent = completedStatus ? (partialStatus ? 'Attention' : 'Results') : (status === 'failed' || status === 'interrupted') ? 'Attention' : 'Rendering';
   if (qs('render_workspace_preview_title')) {
-    qs('render_workspace_preview_title').textContent = (status === 'completed' || status === 'done' || status === 'complete')
+    qs('render_workspace_preview_title').textContent = completedStatus
       ? (failed > 0 ? 'Render finished with review items' : 'Results are ready')
       : (status === 'failed' || status === 'interrupted')
       ? 'Render stopped before completion'
       : 'Rendering in progress';
   }
   if (qs('render_workspace_preview_text')) {
-    qs('render_workspace_preview_text').textContent = (status === 'completed' || status === 'done' || status === 'complete')
+    qs('render_workspace_preview_text').textContent = completedStatus
       ? 'This workspace stays tied to the same source and destination so you can confirm where outputs were saved.'
       : (status === 'failed' || status === 'interrupted')
       ? 'Preview is unavailable here, but the same source and destination context is preserved while you review progress below.'
@@ -1689,7 +1710,7 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('abp_summary_primary')) qs('abp_summary_primary').textContent = statusLabel;
   if (qs('abp_summary_progress')) qs('abp_summary_progress').textContent = `${pct}%`;
   if (qs('abp_summary_meta')) qs('abp_summary_meta').textContent = terminal
-    ? ((status === 'completed' || status === 'done' || status === 'complete') ? 'Render complete.' : `${failureSummary}.`)
+    ? (partialStatus ? 'Completed with errors.' : (completedStatus ? 'Render complete.' : `${failureSummary}.`))
     : (latestShort || 'Rendering in progress.');
   if (qs('abp_summary_stage')) {
     qs('abp_summary_stage').textContent = stageLabel(job?.stage || 'queued');
@@ -1707,7 +1728,7 @@ function updateRenderMainState(job, summary, parts = []) {
   }
   if (qs('abp_output_text')) qs('abp_output_text').textContent = outputText;
   if (qs('abp_output_meta')) qs('abp_output_meta').textContent = outputLabel;
-  const _rcPrimary = hasFailure ? `Failed · ${pct}%` : terminal ? 'Completed' : `Rendering · ${pct}%`;
+  const _rcPrimary = partialStatus ? `Completed with errors · ${pct}%` : hasFailure ? `Failed · ${pct}%` : terminal ? 'Completed' : `Rendering · ${pct}%`;
   const _rcSecondary = total > 0 ? renderMonitorClipSummary(s, parts) : stageLabel(job?.stage || 'queued');
   if (qs('rc_status')) { qs('rc_status').textContent = _rcPrimary; qs('rc_status').dataset.state = hasFailure ? 'failed' : terminal ? 'completed' : 'running'; }
   if (qs('rc_progress')) qs('rc_progress').textContent = '';
@@ -1721,8 +1742,8 @@ function updateRenderMainState(job, summary, parts = []) {
   }
   if (qs('abp_error_block')) qs('abp_error_block').classList.toggle('hiddenView', !hasFailure);
   if (qs('abp_retry_btn')) qs('abp_retry_btn').classList.toggle('hiddenView', !(hasFailure && currentJobId));
-  if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !(status === 'completed' || status === 'done' || status === 'complete' || String(outputText || '').trim());
-  if (qs('render_active_actions')) qs('render_active_actions').classList.toggle('hiddenView', !(status === 'completed' || status === 'done' || status === 'complete'));
+  if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !(completedStatus || String(outputText || '').trim());
+  if (qs('render_active_actions')) qs('render_active_actions').classList.toggle('hiddenView', !completedStatus);
   updateRdCard(job, s, parts || []);
 }
 
@@ -1732,6 +1753,9 @@ function _rdBadgeConfig(job, terminal, status, failed, total) {
   if (!job) return { text: '○ Idle', state: 'idle' };
   if (status === 'queued' || status === 'pending') return { text: '○ Queued', state: 'queued' };
   if (terminal) {
+    if (isPartialRenderStatus(status)) {
+      return { text: 'Completed with errors', state: 'partial' };
+    }
     if (status === 'completed' || status === 'done' || status === 'complete') {
       return failed > 0 && total > 0
         ? { text: '⚠ Partial', state: 'partial' }
@@ -2984,11 +3008,12 @@ function updateStatusBar(job, summary) {
   const stage     = (job.stage   || '').toLowerCase();
   const pct       = Math.round(Number(job.progress_percent || 0));
   const isRunning = !isTerminalRenderStatus(status) && !!status;
-  const isDone    = status === 'completed' || status === 'done' || status === 'complete';
-  const isFailed  = status === 'failed' || status === 'interrupted';
+  const isPartial = isPartialRenderStatus(status);
+  const isDone    = isCompletedRenderStatus(status) || isPartial;
+  const isFailed  = status === 'failed' || status === 'interrupted' || isPartial;
 
   dot.className = 'statusDot ' + (isFailed ? 'statusDotFailed' : isRunning ? 'statusDotRunning' : 'statusDotReady');
-  label.textContent = isDone ? 'Done' : isFailed ? 'Failed' : isRunning ? stageLabelPlain(stage) : 'Idle';
+  label.textContent = isPartial ? 'Completed with errors' : isDone ? 'Done' : isFailed ? 'Failed' : isRunning ? stageLabelPlain(stage) : 'Idle';
 
   if (sumEl) {
     if (summary && summary.total_parts > 0) {

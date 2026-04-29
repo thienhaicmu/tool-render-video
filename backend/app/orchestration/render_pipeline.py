@@ -422,11 +422,12 @@ def _emit_render_event(
     exception: Exception | None = None,
     traceback_text: str = "",
     duration_ms: int | None = None,
+    error_code: str = "",
 ):
     lvl = (level or "INFO").upper()
-    err_code = ""
+    err_code = str(error_code or "")
     if lvl in {"ERROR", "CRITICAL", "FATAL"} or event.endswith(".error"):
-        err_code = _render_error_code(step, message, exc=exception)
+        err_code = err_code or _render_error_code(step, message, exc=exception)
     entry = {
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "level": lvl,
@@ -600,12 +601,15 @@ def _validate_render_output(
         "ok": False,
         "warnings": [],
         "error": None,
+        "code": "",
+        "phase": "validation",
         "metadata": {"size_bytes": 0, "duration": 0.0, "has_video": False, "has_audio": False},
     }
 
     # 1. File existence
     if not output_path.exists():
         result["error"] = "output file does not exist"
+        result["code"] = "RN001"
         return result
 
     # 2. Size — 10 KB floor catches zero-byte and near-empty files while
@@ -614,6 +618,7 @@ def _validate_render_output(
     result["metadata"]["size_bytes"] = size
     if size < 10_240:
         result["error"] = f"output file too small: {size} bytes (minimum 10 KB)"
+        result["code"] = "RN001"
         return result
 
     # 3. ffprobe readability — single pass for all stream/format data
@@ -632,13 +637,16 @@ def _validate_render_output(
                 f"ffprobe could not read output "
                 f"(exit {proc.returncode}): {(proc.stderr or '').strip()[:200]}"
             )
+            result["code"] = "RN001"
             return result
         probe = json.loads(proc.stdout or "{}")
     except subprocess.TimeoutExpired:
         result["error"] = "ffprobe timed out reading output"
+        result["code"] = "RN001"
         return result
     except Exception as exc:
         result["error"] = f"ffprobe error: {exc}"
+        result["code"] = "RN001"
         return result
 
     # 4. Stream presence
@@ -650,6 +658,7 @@ def _validate_render_output(
 
     if not has_video:
         result["error"] = "output contains no video stream"
+        result["code"] = "RN001"
         return result
 
     # 5. Duration sanity
@@ -659,16 +668,20 @@ def _validate_render_output(
 
     if duration <= 0:
         result["error"] = "output duration is zero"
+        result["code"] = "RN001"
         return result
 
     if expected_duration and expected_duration > 0:
         tolerance = max(1.0, expected_duration * 0.15)
+        result["metadata"]["expected_duration"] = float(expected_duration)
+        result["metadata"]["duration_tolerance"] = float(tolerance)
         if abs(duration - expected_duration) > tolerance:
             result["error"] = (
                 f"duration mismatch: output {duration:.2f}s vs "
                 f"expected ~{expected_duration:.2f}s "
                 f"(tolerance ±{tolerance:.2f}s)"
             )
+            result["code"] = "RN001"
             return result
 
     # 6. Audio sanity — warn-only unless caller is confident audio is required
@@ -677,6 +690,17 @@ def _validate_render_output(
 
     result["ok"] = True
     return result
+
+
+def _render_part_failure_detail(part_no: int, error: Exception | str) -> dict:
+    message = str(error)
+    is_validation = "output_validation_failed" in message or "duration mismatch" in message
+    return {
+        "part_no": int(part_no),
+        "error": message,
+        "code": "RN001" if is_validation else "RN004",
+        "phase": "validation" if is_validation else "render",
+    }
 
 
 def _sanitize_channel_subdir(value: str | None) -> str:
@@ -2215,9 +2239,10 @@ def run_render_pipeline(
                 expect_audio=_expect_audio,
             )
             if not _qa["ok"]:
+                _qa_code = str(_qa.get("code") or "RN001")
                 _job_log(effective_channel, job_id,
                          f"Part {idx} output_validation_failed: {_qa['error']} | "
-                         f"meta={_qa['metadata']}", kind="error")
+                         f"code={_qa_code} output={final_part} meta={_qa['metadata']}", kind="error")
                 _emit_render_event(
                     channel_code=effective_channel,
                     job_id=job_id,
@@ -2225,9 +2250,15 @@ def run_render_pipeline(
                     level="ERROR",
                     message=f"Part {idx} output validation failed: {_qa['error']}",
                     step="render.output.validate",
-                    context={"part_no": idx, "output_file": str(final_part), **_qa["metadata"]},
+                    error_code=_qa_code,
+                    context={
+                        "part_no": idx,
+                        "output_file": str(final_part),
+                        "validation_code": _qa_code,
+                        **_qa["metadata"],
+                    },
                 )
-                raise RuntimeError(f"output_validation_failed: {_qa['error']}")
+                raise RuntimeError(f"output_validation_failed[{_qa_code}]: {_qa['error']}")
             if _qa["warnings"]:
                 _job_log(effective_channel, job_id,
                          f"Part {idx} output_validation_warning: {'; '.join(_qa['warnings'])} | "
@@ -2369,7 +2400,8 @@ def run_render_pipeline(
                         if result["row"]:
                             rows.append(result["row"])
                     except Exception as part_err:
-                        failed_parts.append((idx, str(part_err)))
+                        failure_detail = _render_part_failure_detail(idx, part_err)
+                        failed_parts.append(failure_detail)
                         upsert_job_part(
                             job_id,
                             idx,
@@ -2385,7 +2417,13 @@ def run_render_pipeline(
                             "",
                             f"Failed: {part_err}",
                         )
-                        _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} failed: {part_err}")
+                        _job_log(
+                            effective_channel,
+                            job_id,
+                            f"Part {idx}/{total_parts} failed: "
+                            f"phase={failure_detail['phase']} code={failure_detail['code']} error={part_err}",
+                            kind="error",
+                        )
                     completed_parts += 1
                     progress = 30 + int((completed_parts / total_parts) * 60)
                     _set_stage(JobStage.RENDERING, progress, f"Processed {completed_parts}/{total_parts} parts")
@@ -2405,7 +2443,8 @@ def run_render_pipeline(
                             if result["row"]:
                                 rows.append(result["row"])
                         except Exception as part_err:
-                            failed_parts.append((idx, str(part_err)))
+                            failure_detail = _render_part_failure_detail(idx, part_err)
+                            failed_parts.append(failure_detail)
                             upsert_job_part(
                                 job_id,
                                 idx,
@@ -2421,7 +2460,13 @@ def run_render_pipeline(
                                 "",
                                 f"Failed: {part_err}",
                             )
-                            _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} failed: {part_err}")
+                            _job_log(
+                                effective_channel,
+                                job_id,
+                                f"Part {idx}/{total_parts} failed: "
+                                f"phase={failure_detail['phase']} code={failure_detail['code']} error={part_err}",
+                                kind="error",
+                            )
                         completed_parts += 1
                         progress = 30 + int((completed_parts / total_parts) * 60)
                         _set_stage(JobStage.RENDERING_PARALLEL, progress, f"Processed {completed_parts}/{total_parts} parts")
@@ -2481,7 +2526,7 @@ def run_render_pipeline(
         ]
 
         # ── P5-1 Output Ranking ───────────────────────────────────────────────
-        _failed_idx_set = {f[0] for f in failed_parts}
+        _failed_idx_set = {int(f.get("part_no", 0)) for f in failed_parts}
         _rank_entries: list[dict] = []
         for _r_idx, _r_seg in enumerate(scored, start=1):
             if _r_idx in _failed_idx_set:
@@ -2521,6 +2566,16 @@ def run_render_pipeline(
             _seg["ranking_reason"] = _re["ranking_reason"]
         _rank_entries_ordered = sorted(_rank_entries, key=lambda x: x["part_no"])
         _best_rank_entry = _rank_entries[0] if _rank_entries else None
+        _partial_warning = (
+            f"{len(failed_parts)} of {total_parts} selected part(s) failed; "
+            "ranking includes successful outputs only."
+            if failed_parts else ""
+        )
+        if _partial_warning:
+            for _re in _rank_entries_ordered:
+                _re["partial_failure_warning"] = _partial_warning
+            if _best_rank_entry:
+                _best_rank_entry["partial_failure_warning"] = _partial_warning
         if _best_rank_entry:
             _job_log(
                 effective_channel,
@@ -2542,6 +2597,8 @@ def run_render_pipeline(
                 step="render.output_rank",
                 context={
                     "total_outputs":   len(_rank_entries),
+                    "failed_outputs":  len(failed_parts),
+                    "warning":         _partial_warning,
                     "best_part_no":    _best_rank_entry["part_no"],
                     "best_score":      _best_rank_entry["output_score"],
                     "best_reason":     _best_rank_entry["ranking_reason"],
@@ -2616,26 +2673,70 @@ def run_render_pipeline(
                     context={"reason": "no_ranked_outputs"},
                 )
 
-        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored, "market_viral_parts": _mv_parts, "output_ranking": _rank_entries_ordered, "best_clip": _best_rank_entry, "best_exports": _best_exports_list, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
-        _job_log(effective_channel, job_id, f"Render completed with {len(outputs)}/{total_parts} outputs")
-        _emit_render_event(
-            channel_code=effective_channel,
-            job_id=job_id,
-            event="render.ffmpeg.success",
-            level="INFO",
-            message="FFmpeg render completed",
-            step="render.ffmpeg",
-            context={"outputs": len(outputs), "total_parts": total_parts},
+        _is_partial_success = bool(failed_parts)
+        _final_status = "completed_with_errors" if _is_partial_success else "completed"
+        _final_message = "Render completed with errors" if _is_partial_success else "Render completed"
+        _result_payload = {
+            "outputs": outputs,
+            "segments": scored,
+            "market_viral_parts": _mv_parts,
+            "output_ranking": _rank_entries_ordered,
+            "output_ranking_warning": _partial_warning,
+            "best_clip": _best_rank_entry,
+            "best_exports": _best_exports_list,
+            "voice_summary": _voice_summary,
+            "subtitle_translate_summary": _subtitle_translate_summary,
+            "failed_parts": [int(f["part_no"]) for f in failed_parts],
+            "failed_parts_detail": failed_parts,
+            "selected_segments_count": total_parts,
+            "successful_outputs_count": len(outputs),
+            "failed_outputs_count": len(failed_parts),
+            "is_partial_success": _is_partial_success,
+        }
+        upsert_job(
+            job_id,
+            "render",
+            effective_channel,
+            _final_status,
+            payload.model_dump(),
+            _result_payload,
+            stage=JobStage.DONE,
+            progress_percent=100,
+            message=_final_message,
+        )
+        _job_log(
+            effective_channel,
+            job_id,
+            f"Render final summary: status={_final_status} "
+            f"successful_outputs={len(outputs)} failed_outputs={len(failed_parts)} "
+            f"selected_segments={total_parts}",
+            kind="warning" if _is_partial_success else "info",
         )
         _emit_render_event(
             channel_code=effective_channel,
             job_id=job_id,
-            event="render.complete",
-            level="INFO",
-            message="Render success",
+            event="render.ffmpeg.success",
+            level="WARNING" if _is_partial_success else "INFO",
+            message="FFmpeg render completed with errors" if _is_partial_success else "FFmpeg render completed",
+            step="render.ffmpeg",
+            context={"outputs": len(outputs), "failed_outputs": len(failed_parts), "total_parts": total_parts},
+        )
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.complete_with_errors" if _is_partial_success else "render.complete",
+            level="WARNING" if _is_partial_success else "INFO",
+            message=_final_message,
             step="render.complete",
             duration_ms=int((datetime.utcnow() - started_at).total_seconds() * 1000),
-            context={"outputs": len(outputs), "total_parts": total_parts, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary},
+            context={
+                "outputs": len(outputs),
+                "failed_outputs": len(failed_parts),
+                "total_parts": total_parts,
+                "is_partial_success": _is_partial_success,
+                "voice_summary": _voice_summary,
+                "subtitle_translate_summary": _subtitle_translate_summary,
+            },
         )
     except Exception as e:
         fail_message = f"Failed at step '{current_stage}': {e}"
