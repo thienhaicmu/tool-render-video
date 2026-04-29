@@ -778,10 +778,11 @@ function _mvSegmentMap(job) {
       const score = seg?.mv_viral_score;
       if (score == null) return;
       map.set(i + 1, {
-        score:   Number(score),
-        tier:    String(seg.mv_viral_tier   || 'weak'),
-        market:  String(seg.mv_viral_market || 'US'),
-        reasons: Array.isArray(seg.mv_viral_reasons) ? seg.mv_viral_reasons : [],
+        score:    Number(score),
+        tier:     String(seg.mv_viral_tier   || 'weak'),
+        market:   String(seg.mv_viral_market || 'US'),
+        reasons:  Array.isArray(seg.mv_viral_reasons) ? seg.mv_viral_reasons : [],
+        combined: seg?.combined_score != null ? Number(seg.combined_score) : null,
       });
     });
   } catch (_) {}
@@ -1464,6 +1465,12 @@ function renderBottomActiveQueue(job, summary, parts = []) {
         badge.dataset.tier = val >= 8 ? 'hot' : val >= 6 ? 'warm' : 'low';
       }
       rightCol.appendChild(badge);
+      if (mvData?.combined != null) {
+        const cs = document.createElement('div');
+        cs.style.cssText = 'font-size:10px;color:rgba(148,163,184,.45);margin-top:2px;text-align:right;';
+        cs.textContent = `Combined: ${mvData.combined}`;
+        rightCol.appendChild(cs);
+      }
     }
 
     topRow.appendChild(leftCol);
@@ -2690,8 +2697,9 @@ function renderParts(items, summary){
     const endSec = Number(p.end_sec || 0);
     const duration = Math.max(0, endSec - startSec);
     const mvRow = _ptMvMap.get(partNo);
+    const _mvCsPill = mvRow?.combined != null ? `<span style="font-size:10px;color:rgba(148,163,184,.4);margin-left:4px;">Combined: ${mvRow.combined}</span>` : '';
     const mvPillHtml = mvRow
-      ? `<span class="mvScorePill" data-mv-tier="${esc(mvRow.tier)}"${mvRow.reasons.length ? ` title="${esc(mvRow.reasons.slice(0,2).join(' | '))}"` : ''}>&#127758; ${mvRow.score} ${esc(mvRow.market)}</span>`
+      ? `<span class="mvScorePill" data-mv-tier="${esc(mvRow.tier)}"${mvRow.reasons.length ? ` title="${esc(mvRow.reasons.slice(0,2).join(' | '))}"` : ''}>&#127758; ${mvRow.score} ${esc(mvRow.market)}</span>${_mvCsPill}`
       : '';
     return `
     <div class="partRow ${rowClass}" data-part-status="${esc(st || 'queued')}">

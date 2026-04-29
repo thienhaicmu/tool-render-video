@@ -1791,6 +1791,7 @@ async function startRenderFromEditor() {
       subtitle_tone:     mv.subtitleTone    || 'clean',
       keyword_highlight: !!mv.keywordHighlight,
     };
+    payload.combined_scoring_enabled = !!mv.combinedScoring;
   }
 
   // ── Subtitle edits (hook previews applied by user) ───────────────────────
@@ -1972,6 +1973,7 @@ const _mvState = {
   market: 'US',
   subtitleTone: 'clean',
   keywordHighlight: false,
+  combinedScoring: false,
 };
 
 function mvHandleChange() {
@@ -1980,10 +1982,12 @@ function mvHandleChange() {
     market:           g('mvMarket'),
     subtitleTone:     g('mvSubtitleTone'),
     keywordHighlight: g('mvKeywordHighlight'),
+    combinedScoring:  g('mvCombinedScoring'),
   };
   if (el.market)           _mvState.market           = el.market.value;
   if (el.subtitleTone)     _mvState.subtitleTone     = el.subtitleTone.value;
   if (el.keywordHighlight) _mvState.keywordHighlight = el.keywordHighlight.checked;
+  if (el.combinedScoring)  _mvState.combinedScoring  = el.combinedScoring.checked;
   mvUpdatePreviewHint();
   mvUpdateHookQuality();
 }

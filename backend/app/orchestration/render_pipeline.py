@@ -1025,14 +1025,27 @@ def run_render_pipeline(
         if len(high_motion) >= HIGH_MOTION_MIN_KEEP:
             scored = high_motion
         # Sort by viral/motion score first for selection (top N), then re-order for output numbering
-        scored.sort(key=lambda x: (int(x.get("motion_score", 0)), int(x.get("viral_score", 0))), reverse=True)
+        _combined_enabled = bool(getattr(payload, "combined_scoring_enabled", False))
+        if _combined_enabled:
+            def _provisional_combined(s):
+                vs = float(s.get("viral_score", 0) or 0)
+                hs = float(s.get("hook_text_score") or s.get("hook_timing_score") or
+                           s.get("hook_opening_score") or s.get("hook_score") or 0)
+                # mv not yet computed; fallback = vs → vs*0.50 + vs*0.30 + hs*0.20 = vs*0.80 + hs*0.20
+                return vs * 0.80 + hs * 0.20
+            scored.sort(key=_provisional_combined, reverse=True)
+        else:
+            scored.sort(key=lambda x: (int(x.get("motion_score", 0)), int(x.get("viral_score", 0))), reverse=True)
         if payload.max_export_parts and payload.max_export_parts > 0:
             scored = scored[:payload.max_export_parts]
-        # Re-order for output numbering: timeline = chronological, viral = by score
+        # Re-order for output numbering: timeline = chronological, viral/combined = by score
         part_order = str(getattr(payload, "part_order", "viral") or "viral").strip().lower()
         if part_order == "timeline":
             scored.sort(key=lambda x: float(x.get("start", 0)))
             _job_log(effective_channel, job_id, f"Part order: timeline (chronological)")
+        elif _combined_enabled:
+            scored.sort(key=_provisional_combined, reverse=True)
+            _job_log(effective_channel, job_id, "Part order: combined score (viral+hook, experimental)")
         else:
             _job_log(effective_channel, job_id, f"Part order: viral score (highest first)")
 
@@ -1639,6 +1652,37 @@ def run_render_pipeline(
                         "market_viral_tier":    seg["mv_viral_tier"],
                         "market_viral_market":  seg["mv_viral_market"],
                         "market_viral_reasons": seg["mv_viral_reasons"][:2],
+                    },
+                )
+            except Exception:
+                pass
+
+            # ── Combined Score computation ─────────────────────────────────
+            try:
+                _cs_enabled = bool(getattr(payload, "combined_scoring_enabled", False))
+                _cs_viral   = float(seg.get("viral_score", 0) or 0)
+                _cs_mv_raw  = seg.get("mv_viral_score")
+                _cs_mv      = float(_cs_mv_raw) if _cs_mv_raw is not None else _cs_viral
+                _cs_hook    = float(
+                    seg.get("hook_text_score") or seg.get("hook_timing_score") or
+                    seg.get("hook_opening_score") or seg.get("hook_score") or 0
+                )
+                _cs_raw     = _cs_viral * 0.50 + _cs_mv * 0.30 + _cs_hook * 0.20
+                seg["combined_score"] = round(max(0.0, min(100.0, _cs_raw)), 1)
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="combined_score_computed",
+                    level="INFO",
+                    message=f"Part {idx} combined_score={seg['combined_score']}",
+                    step="render.combined_score",
+                    context={
+                        "part_no":                  idx,
+                        "viral_score":              _cs_viral,
+                        "market_viral_score":       _cs_mv,
+                        "hook_score_component":     _cs_hook,
+                        "combined_score":           seg["combined_score"],
+                        "combined_scoring_enabled": _cs_enabled,
                     },
                 )
             except Exception:

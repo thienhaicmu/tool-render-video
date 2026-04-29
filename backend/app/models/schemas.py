@@ -204,6 +204,7 @@ class RenderRequest(BaseModel):
     subtitle_target_language: str = "en"
     market_viral: Optional[dict] = None
     subtitle_edits: Optional[list] = None
+    combined_scoring_enabled: bool = False
 
     @field_validator("render_profile")
     @classmethod
