@@ -1861,6 +1861,12 @@ async function startRenderFromEditor() {
     setRenderFlowState('configure', 'Render could not start', { force: true });
     return;
   }
+
+  // P6-2: Batch mode — payload is fully built; delegate to multi-URL submitter
+  if (document.getElementById('evBatchMode')?.checked) {
+    return startBatchRender(payload);
+  }
+
   const _renderResult = await _submitRenderPayload(payload, false);
   if (_renderResult && _renderResult.ok) {
     evSetStatus('Render started. Tracking in process panel...');
@@ -2203,6 +2209,105 @@ function evMarkPresetCustomOnManualChange() {
     if (e.target && WATCHED.has(e.target.id)) evMarkPresetCustomOnManualChange();
   }, true);
 }());
+
+// ── P6-2 Batch Mode ───────────────────────────────────────────────────────────
+
+function evToggleBatchMode() {
+  const on   = !!document.getElementById('evBatchMode')?.checked;
+  const body = document.getElementById('evBatchBody');
+  if (body) body.style.display = on ? 'flex' : 'none';
+  if (!on) {
+    const s = document.getElementById('evBatchStatus');
+    if (s) s.textContent = '';
+  }
+}
+
+async function startBatchRender(basePayload) {
+  const MAX_BATCH  = 10;
+  const YT_RE      = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i;
+  const urlsRaw    = document.getElementById('evBatchUrls')?.value || '';
+  const deduped    = [...new Set(urlsRaw.split('\n').map(u => u.trim()).filter(Boolean))];
+  const validUrls  = deduped.filter(u => YT_RE.test(u));
+
+  const statusEl   = document.getElementById('evBatchStatus');
+  const setMsg     = (msg, color) => {
+    if (qs('evStatusLine')) { qs('evStatusLine').textContent = msg; if (color) qs('evStatusLine').style.color = color; }
+    if (statusEl) statusEl.textContent = msg;
+  };
+  const resetBtn   = () => { if (qs('evStartBtn')) { qs('evStartBtn').disabled = false; qs('evStartBtn').textContent = '▶ Start Render'; } };
+
+  if (!validUrls.length) {
+    setMsg('No valid YouTube URLs. Add one URL per line.', '#ef4444');
+    resetBtn();
+    if (typeof showToast === 'function') showToast('No valid YouTube URLs', 'error');
+    return;
+  }
+
+  const usedUrls = validUrls.slice(0, MAX_BATCH);
+  if (validUrls.length > MAX_BATCH && typeof showToast === 'function') {
+    showToast(`Batch capped at ${MAX_BATCH} URLs (${validUrls.length} provided)`, 'warning');
+  }
+
+  // Strip session-specific fields — each batch job downloads its own source
+  const batchBase = {
+    ...basePayload,
+    source_mode:       'youtube',
+    source_video_path: null,
+    edit_session_id:   null,
+    edit_trim_in:      0,
+    edit_trim_out:     0,
+  };
+
+  let queued = 0;
+  const failedList = [];
+  let lastJobId    = null;
+
+  for (let i = 0; i < usedUrls.length; i++) {
+    const url         = usedUrls[i];
+    const progressMsg = `Creating job ${i + 1}/${usedUrls.length}…`;
+    setMsg(progressMsg, '');
+
+    try {
+      const res  = await fetch('/api/render/process', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ...batchBase, youtube_url: url }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const err = typeof _formatApiError === 'function' ? _formatApiError(data.detail) : String(data.detail || 'Failed');
+        failedList.push({ url, error: err });
+        addEvent(`Batch job failed (${url}): ${err}`, 'render');
+      } else {
+        queued++;
+        lastJobId = data.job_id || lastJobId;
+        addEvent(`Batch job queued: ${url}`, 'render');
+      }
+    } catch (e) {
+      failedList.push({ url, error: String(e) });
+      addEvent(`Batch job error (${url}): ${e}`, 'render');
+    }
+
+    if (i < usedUrls.length - 1) await new Promise(r => setTimeout(r, 300));
+  }
+
+  const doneMsg = failedList.length
+    ? `Batch: ${queued} queued, ${failedList.length} failed`
+    : `Batch: ${queued} job${queued !== 1 ? 's' : ''} queued`;
+  setMsg(doneMsg, failedList.length && !queued ? '#ef4444' : failedList.length ? '#f97316' : 'var(--success)');
+  if (typeof showToast === 'function') showToast(doneMsg, failedList.length && !queued ? 'error' : 'success');
+  resetBtn();
+
+  if (queued > 0 && lastJobId) {
+    if (typeof currentJobId          !== 'undefined') currentJobId       = lastJobId;
+    if (typeof activeJobStartedAt    !== 'undefined') activeJobStartedAt = Date.now();
+    if (typeof setRenderActionBusy   === 'function')  setRenderActionBusy(true);
+    if (typeof setHeaderJob          === 'function')  setHeaderJob('Batch running');
+    if (typeof startPolling          === 'function')  startPolling();
+    setView('render');
+    if (typeof focusBottomPanel      === 'function')  focusBottomPanel();
+  }
+}
 
 function mvUpdatePreviewHint() {
   const bulletsEl = document.getElementById('mvHintBullets');
