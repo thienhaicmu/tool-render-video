@@ -1,0 +1,88 @@
+{
+  "matrix": [
+    {
+      "speed": 0.95,
+      "part_no": 1,
+      "intended_raw_duration": 14.248,
+      "raw_duration": 14.271,
+      "expected_final_duration": 14.998,
+      "final_duration": 15.033,
+      "width": 1080,
+      "height": 1920,
+      "validation_ok": true,
+      "validation_error": null
+    },
+    {
+      "speed": 0.95,
+      "part_no": 2,
+      "intended_raw_duration": 12.262,
+      "raw_duration": 12.262,
+      "expected_final_duration": 12.907,
+      "final_duration": 12.923,
+      "width": 1080,
+      "height": 1920,
+      "validation_ok": true,
+      "validation_error": null
+    },
+    {
+      "speed": 0.95,
+      "part_no": 3,
+      "intended_raw_duration": 12.496,
+      "raw_duration": 12.512,
+      "expected_final_duration": 13.154,
+      "final_duration": 13.167,
+      "width": 1080,
+      "height": 1920,
+      "validation_ok": true,
+      "validation_error": null
+    },
+    {
+      "speed": 1.07,
+      "part_no": 1,
+      "intended_raw_duration": 14.248,
+      "raw_duration": 14.271,
+      "expected_final_duration": 13.316,
+      "final_duration": 13.335,
+      "width": 1080,
+      "height": 1920,
+      "validation_ok": true,
+      "validation_error": null
+    },
+    {
+      "speed": 1.07,
+      "part_no": 2,
+      "intended_raw_duration": 12.262,
+      "raw_duration": 12.262,
+      "expected_final_duration": 11.46,
+      "final_duration": 11.49,
+      "width": 1080,
+      "height": 1920,
+      "validation_ok": true,
+      "validation_error": null
+    },
+    {
+      "speed": 1.07,
+      "part_no": 3,
+      "intended_raw_duration": 12.496,
+      "raw_duration": 12.512,
+      "expected_final_duration": 11.679,
+      "final_duration": 11.701,
+      "width": 1080,
+      "height": 1920,
+      "validation_ok": true,
+      "validation_error": null
+    }
+  ],
+  "fast_center_34": {
+    "width": 1080,
+    "height": 1440,
+    "stream_duration": 14.233333,
+    "format_duration": 14.266341
+  },
+  "motion_crop_916_control": {
+    "width": 1080,
+    "height": 1920,
+    "stream_duration": 14.233333,
+    "format_duration": 14.233333
+  }
+}

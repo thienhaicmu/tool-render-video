@@ -1,0 +1,176 @@
+{
+  "cases": [
+    {
+      "name": "long_center_60",
+      "bbox": {
+        "x_min": 48,
+        "x_max": 1029,
+        "y_min": 850,
+        "y_max": 1068,
+        "width": 982,
+        "height": 219
+      },
+      "textfile_exists": true,
+      "filter_has_textfile": true,
+      "image": "D:\\tool-render-video\\tmp_verify_output\\text_overlay_textfile_fix\\long_center_60.png",
+      "line_count": 3,
+      "content_preview": "This is a very long overlay\nheadline that should wrap\nlike the preview"
+    },
+    {
+      "name": "explicit_newline",
+      "bbox": {
+        "x_min": 389,
+        "x_max": 690,
+        "y_min": 893,
+        "y_max": 1025,
+        "width": 302,
+        "height": 133
+      },
+      "textfile_exists": true,
+      "filter_has_textfile": true,
+      "image": "D:\\tool-render-video\\tmp_verify_output\\text_overlay_textfile_fix\\explicit_newline.png",
+      "line_count": 2,
+      "content_preview": "Line one\nLine two"
+    },
+    {
+      "name": "special_chars",
+      "bbox": {
+        "x_min": 84,
+        "x_max": 995,
+        "y_min": 849,
+        "y_max": 1069,
+        "width": 912,
+        "height": 221
+      },
+      "textfile_exists": true,
+      "filter_has_textfile": true,
+      "image": "D:\\tool-render-video\\tmp_verify_output\\text_overlay_textfile_fix\\special_chars.png",
+      "line_count": 3,
+      "content_preview": "Quote \"hello\", colon:\nvalue, apostrophe's test,\nemoji 🚀"
+    },
+    {
+      "name": "font_size_38",
+      "bbox": {
+        "x_min": 62,
+        "x_max": 1017,
+        "y_min": 916,
+        "y_max": 1002,
+        "width": 956,
+        "height": 87
+      },
+      "textfile_exists": true,
+      "filter_has_textfile": true,
+      "image": "D:\\tool-render-video\\tmp_verify_output\\text_overlay_textfile_fix\\font_size_38.png",
+      "line_count": 2,
+      "content_preview": "This is a very long overlay headline that\nshould wrap like the preview"
+    },
+    {
+      "name": "font_size_60",
+      "bbox": {
+        "x_min": 48,
+        "x_max": 1029,
+        "y_min": 850,
+        "y_max": 1068,
+        "width": 982,
+        "height": 219
+      },
+      "textfile_exists": true,
+      "filter_has_textfile": true,
+      "image": "D:\\tool-render-video\\tmp_verify_output\\text_overlay_textfile_fix\\font_size_60.png",
+      "line_count": 3,
+      "content_preview": "This is a very long overlay\nheadline that should wrap\nlike the preview"
+    },
+    {
+      "name": "font_size_100",
+      "bbox": {
+        "x_min": 19,
+        "x_max": 1057,
+        "y_min": 713,
+        "y_max": 1206,
+        "width": 1039,
+        "height": 494
+      },
+      "textfile_exists": true,
+      "filter_has_textfile": true,
+      "image": "D:\\tool-render-video\\tmp_verify_output\\text_overlay_textfile_fix\\font_size_100.png",
+      "line_count": 4,
+      "content_preview": "This is a very\nlong overlay\nheadline that\nshould wrap like"
+    },
+    {
+      "name": "pos_top-center",
+      "bbox": {
+        "x_min": 48,
+        "x_max": 1029,
+        "y_min": 169,
+        "y_max": 387,
+        "width": 982,
+        "height": 219
+      },
+      "textfile_exists": true,
+      "filter_has_textfile": true,
+      "image": "D:\\tool-render-video\\tmp_verify_output\\text_overlay_textfile_fix\\pos_top-center.png",
+      "line_count": 3,
+      "content_preview": "This is a very long overlay\nheadline that should wrap\nlike the preview"
+    },
+    {
+      "name": "pos_center",
+      "bbox": {
+        "x_min": 48,
+        "x_max": 1029,
+        "y_min": 850,
+        "y_max": 1068,
+        "width": 982,
+        "height": 219
+      },
+      "textfile_exists": true,
+      "filter_has_textfile": true,
+      "image": "D:\\tool-render-video\\tmp_verify_output\\text_overlay_textfile_fix\\pos_center.png",
+      "line_count": 3,
+      "content_preview": "This is a very long overlay\nheadline that should wrap\nlike the preview"
+    },
+    {
+      "name": "pos_bottom-center",
+      "bbox": {
+        "x_min": 48,
+        "x_max": 1029,
+        "y_min": 1530,
+        "y_max": 1748,
+        "width": 982,
+        "height": 219
+      },
+      "textfile_exists": true,
+      "filter_has_textfile": true,
+      "image": "D:\\tool-render-video\\tmp_verify_output\\text_overlay_textfile_fix\\pos_bottom-center.png",
+      "line_count": 3,
+      "content_preview": "This is a very long overlay\nheadline that should wrap\nlike the preview"
+    },
+    {
+      "name": "bottom_subtitle_safe",
+      "bbox": {
+        "x_min": 48,
+        "x_max": 1029,
+        "y_min": 1280,
+        "y_max": 1498,
+        "width": 982,
+        "height": 219
+      },
+      "textfile_exists": true,
+      "filter_has_textfile": true,
+      "image": "D:\\tool-render-video\\tmp_verify_output\\text_overlay_textfile_fix\\bottom_subtitle_safe.png",
+      "line_count": 3,
+      "content_preview": "This is a very long overlay\nheadline that should wrap\nlike the preview"
+    }
+  ],
+  "wrap_line_counts_by_size": {
+    "38": 2,
+    "60": 3,
+    "100": 4
+  },
+  "explicit_newline_preserved": true,
+  "special_chars_preserved": true,
+  "long_text_not_clipped": true,
+  "bottom_safe_y_max": 1498,
+  "bottom_safe_limit": 1500,
+  "special_chars_file": "D:\\tool-render-video\\data\\temp\\text_overlays\\special_586dda584deaed16.txt",
+  "special_chars_textfile_content": "Quote \"hello\", colon:\nvalue, apostrophe's test,\nemoji 🚀"
+}
