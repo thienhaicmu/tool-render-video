@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import re
+import hashlib
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +69,34 @@ def _safe_text(text: str) -> str:
         .replace("'", r"\'")
         .replace("\n", r"\n")
     )
+
+
+def _text_overlay_temp_dir() -> Path:
+    here = Path(__file__).resolve()
+    project_temp = here.parents[3] / "data" / "temp" / "text_overlays"
+    try:
+        project_temp.mkdir(parents=True, exist_ok=True)
+        return project_temp
+    except Exception:
+        fallback = Path(tempfile.gettempdir()) / "tool-render-video" / "text_overlays"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
+def _write_textfile_for_drawtext(layer: dict[str, Any], wrapped_text: str) -> Path:
+    layer_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(layer.get("id") or "layer"))[:64] or "layer"
+    digest_src = "\n".join(
+        [
+            str(layer.get("id") or ""),
+            str(layer.get("order") or ""),
+            str(layer.get("font_size") or ""),
+            wrapped_text,
+        ]
+    )
+    digest = hashlib.sha1(digest_src.encode("utf-8", errors="replace")).hexdigest()[:16]
+    path = _text_overlay_temp_dir() / f"{layer_id}_{digest}.txt"
+    path.write_text(wrapped_text, encoding="utf-8", newline="\n")
+    return path
 
 
 def _ensure_hex_color(value: str, fallback: str) -> str:
@@ -178,14 +208,14 @@ def _fontfile_for_family(font_family: str, bold: bool = False) -> str | None:
 
 def _char_width(ch: str, font_size: int) -> float:
     if ch == " ":
-        return font_size * 0.28
+        return font_size * 0.34
     if ch in _NARROW_CHARS:
-        return font_size * 0.36
+        return font_size * 0.44
     if ch in _WIDE_CHARS:
-        return font_size * 0.82
+        return font_size * 0.98
     if ch.isupper():
-        return font_size * 0.65
-    return font_size * 0.55
+        return font_size * 0.78
+    return font_size * 0.67
 
 
 def _approx_line_width(line: str, font_size: int) -> float:
@@ -195,8 +225,8 @@ def _approx_line_width(line: str, font_size: int) -> float:
 def _wrap_text_for_drawtext(text: str, font_size: int, max_width_px: float) -> str:
     """Word-wrap text to fit max_width_px using visual-width estimation.
 
-    Preserves user-entered newlines. Returns text with \\n as the line
-    separator (ffmpeg drawtext format). Hard-capped at 4 lines.
+    Preserves user-entered newlines. Returns text with literal newlines as
+    line separators. Hard-capped at 4 lines.
     """
     raw_lines = str(text or "").split("\n")
     result_lines: list[str] = []
@@ -367,7 +397,7 @@ def append_text_layer_filters(
             y_expr = (
                 f"min((h-text_h)*{y_percent:.3f}/100,"
                 f"h-text_h-{int(subtitle_zone_height_px)})"
-            )
+            ).replace(",", r"\,")
         else:
             x_expr = f"(w-text_w)*{x_percent:.3f}/100"
             y_expr = f"(h-text_h)*{y_percent:.3f}/100"
@@ -379,11 +409,11 @@ def append_text_layer_filters(
         max_width_px = 1080.0 * max_width_percent / 100.0
         wrapped_text = _wrap_text_for_drawtext(str(layer.get("text") or ""), font_size, max_width_px)
         line_count = len(wrapped_text.split("\n"))
-        text = _safe_text(wrapped_text)
+        textfile_path = _write_textfile_for_drawtext(layer, wrapped_text)
 
         draw = [
             "drawtext",
-            f"text='{text}'",
+            f"textfile='{safe_filter_path(str(textfile_path))}'",
             f"fontsize={font_size}",
             f"fontcolor={_hex_to_ffmpeg_color(str(layer.get('color') or '#FFFFFF'))}",
             f"x={x_expr}",
@@ -414,7 +444,7 @@ def append_text_layer_filters(
 
         logger.info(
             "text_overlay: id=%s order=%s font=%s size=%d file=%s bold=%s "
-            "max_w=%.0f%% lines=%d x=%.1f%% y=%.1f%%",
+            "max_w=%.0f%% lines=%d text_mode=textfile textfile=%s x=%.1f%% y=%.1f%%",
             layer.get("id", "?"),
             layer.get("order", "?"),
             family,
@@ -423,6 +453,7 @@ def append_text_layer_filters(
             is_bold,
             max_width_percent,
             line_count,
+            textfile_path.name,
             x_percent,
             y_percent,
         )
