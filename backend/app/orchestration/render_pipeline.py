@@ -845,8 +845,11 @@ def run_render_pipeline(
         job_id,
         f"Market Viral hook | market={_mv_market} | hook_apply_enabled={_hook_apply_enabled} | hook_score={_hook_score}",
     )
-    _preset_id = str(getattr(payload, "render_preset_id", None) or getattr(payload, "render_preset", None) or "").strip()
-    _preset_label = str(getattr(payload, "render_preset_label", None) or _preset_id or "").strip()
+    _preset_name = str(getattr(payload, "render_preset", None) or "").strip() or "custom"
+    _preset_id = str(getattr(payload, "render_preset_id", None) or _preset_name or "").strip() or "custom"
+    _preset_label = str(getattr(payload, "render_preset_label", None) or "").strip()
+    if not _preset_label:
+        _preset_label = "Custom" if _preset_id.lower() == "custom" else _preset_id
     if _preset_id and _preset_id.lower() != "custom":
         _job_log(
             effective_channel,
@@ -2693,6 +2696,9 @@ def run_render_pipeline(
         _final_message = "Render completed with errors" if _is_partial_success else "Render completed"
         _result_payload = {
             "outputs": outputs,
+            "render_preset": _preset_name,
+            "render_preset_id": _preset_id,
+            "render_preset_label": _preset_label,
             "segments": scored,
             "market_viral_parts": _mv_parts,
             "output_ranking": _rank_entries_ordered,
