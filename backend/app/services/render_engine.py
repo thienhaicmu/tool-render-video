@@ -371,10 +371,19 @@ def _get_custom_fonts_dir() -> str | None:
 
 
 def cut_video(input_path: str, output_path: str, start_time: float, end_time: float, retry_count: int = 2):
+    intended_duration = max(0.0, float(end_time) - float(start_time))
+    duration_tolerance = max(0.35, intended_duration * 0.03) if intended_duration > 0 else 0.35
     base = [
         get_ffmpeg_bin(), "-hide_banner", "-loglevel", "error",
-        "-y", "-ss", str(start_time), "-to", str(end_time), "-i", input_path,
+        "-y", "-ss", str(start_time), "-t", str(intended_duration), "-i", input_path,
     ]
+
+    def _probe_cut_duration() -> float | None:
+        return _probe_duration(output_path)
+
+    def _duration_ok(duration: float | None) -> bool:
+        return duration is not None and abs(float(duration) - intended_duration) <= duration_tolerance
+
     # Stream-copy first: fastest, lossless, no re-encode
     copy_cmd = [
         *base,
@@ -383,15 +392,27 @@ def cut_video(input_path: str, output_path: str, start_time: float, end_time: fl
         "-movflags", "+faststart",
         output_path,
     ]
+    copy_error = None
     try:
         _run_ffmpeg_with_retry(copy_cmd, retry_count=retry_count)
-        return
-    except Exception:
-        pass
+        raw_duration = _probe_cut_duration()
+        if _duration_ok(raw_duration):
+            logger.info(
+                "cut_video: cut_mode=copy intended_duration=%.3f raw_duration=%.3f tolerance=%.3f output=%s",
+                intended_duration, float(raw_duration or 0.0), duration_tolerance, Path(output_path).name,
+            )
+            return
+        copy_error = (
+            f"duration_mismatch intended={intended_duration:.3f}s "
+            f"raw={float(raw_duration or 0.0):.3f}s tolerance={duration_tolerance:.3f}s"
+        )
+    except Exception as exc:
+        copy_error = str(exc)
 
     # Re-encode fallback: handles corrupted keyframes or muxing issues
     fallback_cmd = [
-        *base,
+        get_ffmpeg_bin(), "-hide_banner", "-loglevel", "error",
+        "-y", "-i", input_path, "-ss", str(start_time), "-t", str(intended_duration),
         "-map", "0:v:0", "-map", "0:a?",
         "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         "-pix_fmt", "yuv420p",
@@ -399,7 +420,16 @@ def cut_video(input_path: str, output_path: str, start_time: float, end_time: fl
         "-movflags", "+faststart",
         output_path,
     ]
+    logger.warning(
+        "cut_video: cut_mode=accurate intended_duration=%.3f fallback_reason=%s output=%s",
+        intended_duration, copy_error or "copy_failed", Path(output_path).name,
+    )
     _run_ffmpeg_with_retry(fallback_cmd, retry_count=retry_count)
+    raw_duration = _probe_cut_duration()
+    logger.info(
+        "cut_video: cut_mode=accurate intended_duration=%.3f raw_duration=%.3f tolerance=%.3f output=%s",
+        intended_duration, float(raw_duration or 0.0), duration_tolerance, Path(output_path).name,
+    )
 
 
 def detect_silence_trim_offset(
@@ -645,16 +675,28 @@ def render_part(
     preset_low = (video_preset or "").lower()
     sws = "lanczos" if preset_low in ("slower", "veryslow") else "bicubic"
     if aspect_ratio == "1:1":
-        scale_crop = f"scale=1080:1080:force_original_aspect_ratio=increase:flags={sws},crop=1080:1080"
+        target_w, target_h = 1080, 1080
     elif aspect_ratio == "9:16":
-        scale_crop = f"scale=1080:1920:force_original_aspect_ratio=increase:flags={sws},crop=1080:1920"
+        target_w, target_h = 1080, 1920
     else:
-        scale_crop = f"scale=1080:1440:force_original_aspect_ratio=increase:flags={sws},crop=1080:1440"
+        target_w, target_h = 1080, 1440
+    scale_crop = (
+        f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase:flags={sws},"
+        f"crop={target_w}:{target_h}"
+    )
+    zoom_scale = (
+        f"scale=trunc(iw*{scale_x}/100/2)*2:trunc(ih*{scale_y}/100/2)*2:flags={sws}"
+    )
+    fixed_canvas = (
+        f"pad=w=max(iw\\,{target_w}):h=max(ih\\,{target_h}):"
+        f"x=(ow-iw)/2:y=(oh-ih)/2,"
+        f"crop={target_w}:{target_h}"
+    )
 
     vf_parts = [
         scale_crop,
-        f"scale=trunc(iw*{scale_x}/100/2)*2:trunc(ih*{scale_y}/100/2)*2:flags={sws}",
-        "crop=iw:ih",
+        zoom_scale,
+        fixed_canvas,
     ]
     # hqdn3d denoiser only for slower/veryslow (quality mode)
     if preset_low in ("slower", "veryslow"):

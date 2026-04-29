@@ -2036,6 +2036,7 @@ def run_render_pipeline(
 
             # P4-4: Micro pacing — compress mid-clip silences (all output clips)
             _micro_pacing_applied = False
+            _micro_pacing_trim_sec = 0.0
             if final_part.exists() and final_part.stat().st_size > 0:
                 _paced_part = work_dir / f"{source['slug']}_part_{idx:03d}_paced.mp4"
                 try:
@@ -2043,6 +2044,7 @@ def run_render_pipeline(
                     if _pacing["applied"] and _paced_part.exists() and _paced_part.stat().st_size > 0:
                         os.replace(str(_paced_part), str(final_part))
                         _micro_pacing_applied = True
+                        _micro_pacing_trim_sec = max(0.0, float(_pacing.get("total_trim_ms") or 0) / 1000.0)
                         _job_log(
                             effective_channel, job_id,
                             f"Part {idx} micro pacing: {_pacing['segments_trimmed']} segments, "
@@ -2105,12 +2107,15 @@ def run_render_pipeline(
                     "subtitle_count": _srt_count,
                     "hook_subtitle_formatted": _hook_subtitle_formatted,
                     "micro_pacing_applied": _micro_pacing_applied,
+                    "micro_pacing_trim_sec": _micro_pacing_trim_sec,
                 },
             )
 
             _encode_ms = int((time.perf_counter() - _t_encode) * 1000)
-            _part_dur = float(seg.get("duration") or 0)
-            _speed_ratio = round(_part_dur * 1000 / max(_encode_ms, 1), 2)
+            _effective_duration = max(0.0, float(seg["end"]) - float(_effective_start))
+            _render_speed = max(0.5, min(1.5, float(payload.playback_speed or 1.0)))
+            _expected_final_duration = max(0.0, (_effective_duration / _render_speed) - _micro_pacing_trim_sec)
+            _speed_ratio = round(_expected_final_duration * 1000 / max(_encode_ms, 1), 2)
             if normalized_text_layers:
                 _job_log(
                     effective_channel,
@@ -2121,7 +2126,7 @@ def run_render_pipeline(
             _job_log(
                 effective_channel, job_id,
                 f"Part {idx}/{total_parts} done: encode_ms={_encode_ms} "
-                f"part_dur={_part_dur:.1f}s speed_ratio={_speed_ratio}x "
+                f"expected_final_duration={_expected_final_duration:.2f}s speed_ratio={_speed_ratio}x "
                 f"(>1 = faster than realtime)",
                 kind="info",
             )
@@ -2235,8 +2240,18 @@ def run_render_pipeline(
                 _expect_audio = True
             _qa = _validate_render_output(
                 final_part,
-                expected_duration=_part_dur if _part_dur > 0 else None,
+                expected_duration=_expected_final_duration if _expected_final_duration > 0 else None,
                 expect_audio=_expect_audio,
+            )
+            _actual_final_duration = float((_qa.get("metadata") or {}).get("duration") or 0.0)
+            _job_log(
+                effective_channel,
+                job_id,
+                f"Part {idx} duration validation: expected_final_duration={_expected_final_duration:.3f}s "
+                f"actual_final_duration={_actual_final_duration:.3f}s "
+                f"effective_start={float(_effective_start):.3f}s segment_end={float(seg['end']):.3f}s "
+                f"playback_speed={_render_speed:.4f}",
+                kind="debug",
             )
             if not _qa["ok"]:
                 _qa_code = str(_qa.get("code") or "RN001")
