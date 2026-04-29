@@ -1292,8 +1292,12 @@
 
       <!-- ══ MARKET VIRAL ════════════════════════════════════ -->
       <div class="evSection mvPanel" id="evSectionMarket" data-insp-panel="market">
-        <div class="evSectionTitle">&#127758; Market Viral</div>
-        <div class="mvPanelDesc">Optimize subtitles, hook, and clip scoring for US / EU / JP markets.</div>
+        <div class="evSectionTitle">&#127758; Market Viral (All Clips)</div>
+        <div class="mvPanelDesc">Applies market scoring, subtitle tone, and hook optimization to every exported clip.</div>
+        <div style="display:inline-flex;align-items:center;gap:5px;margin:2px 0 8px;font-size:10px;color:rgba(94,234,212,.6);letter-spacing:.04em">
+          <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:rgba(94,234,212,.5)"></span>
+          Scope: All Outputs
+        </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <label class="field">
@@ -1317,9 +1321,9 @@
         <div class="mvToggleGroup">
           <label class="mvToggleRow mvAutoBestRow" id="mvAutoBestRow">
             <input type="checkbox" id="mvAutoBestClips" onchange="mvHandleAutoBestClips()">
-            <span class="mvToggleLabel">&#10024; Auto Best Clips</span>
+            <span class="mvToggleLabel">&#10024; Auto Best Clips (All Clips)</span>
           </label>
-          <div style="font-size:11px;color:rgba(148,163,184,.45);margin:-2px 0 4px 22px">Automatically ranks clips using motion, market viral score, and hook strength.</div>
+          <div style="font-size:11px;color:rgba(148,163,184,.45);margin:-2px 0 4px 22px">Ranks and optimizes every output clip using motion, market, and hook scoring.</div>
           <div class="mvAutoBestDivider"></div>
           <label class="mvToggleRow">
             <input type="checkbox" id="mvKeywordHighlight" onchange="mvHandleChange()">
@@ -1329,12 +1333,12 @@
             <input type="checkbox" id="mvCombinedScoring" onchange="mvHandleChange()">
             <span class="mvToggleLabel">&#9889; Use Combined Ranking</span>
           </label>
-          <div style="font-size:11px;color:rgba(148,163,184,.45);margin:-2px 0 4px 22px">Ranks clips using motion + market viral + hook score. Experimental.</div>
+          <div style="font-size:11px;color:rgba(148,163,184,.45);margin:-2px 0 4px 22px">Uses combined scoring for all clips, not just the first one. Experimental.</div>
           <label class="mvToggleRow" id="mvAdaptiveRow" style="opacity:0.38;pointer-events:none">
             <input type="checkbox" id="mvAdaptiveScoring" onchange="mvHandleChange()" disabled>
             <span class="mvToggleLabel">&#128200; Adaptive Weights</span>
           </label>
-          <div id="mvAdaptiveHint" style="font-size:11px;color:rgba(148,163,184,.3);margin:-2px 0 0 22px">Automatically adjusts combined ranking weights by market, hook, and duration.</div>
+          <div id="mvAdaptiveHint" style="font-size:11px;color:rgba(148,163,184,.3);margin:-2px 0 0 22px">Automatically adjusts scoring weights per clip based on market and content.</div>
         </div>
 
         <div id="mvPreviewHint" class="mvPreviewHint">
@@ -1533,7 +1537,7 @@
             <div id="rc_benchmark_insight" class="rcBenchmarkInsight hiddenView"></div>
           </div>
 
-          <div id="rc_compare_panel" class="rcComparePanel hiddenView">
+          <div id="rc_compare_panel" class="rcComparePanel hiddenView" hidden>
             <div class="rcCompareHeader">
               <span class="rcCompareTitle">Compare Outputs</span>
             </div>

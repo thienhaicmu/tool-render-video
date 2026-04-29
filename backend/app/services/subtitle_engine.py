@@ -1,5 +1,6 @@
 import subprocess
 import os
+import re
 import logging
 from pathlib import Path
 import time
@@ -621,3 +622,77 @@ def apply_market_line_break_to_srt(srt_path: str, market_payload: dict) -> str:
     except Exception:
         pass
     return srt_path
+
+
+# ---------------------------------------------------------------------------
+# P4-2 — Hook subtitle impact formatting
+# ---------------------------------------------------------------------------
+
+_HOOK_EMPHASIS_WORDS = frozenset({
+    "never", "crazy", "craziest", "crazier", "shocking", "shocked",
+    "wait", "look", "watch", "insane", "insanely", "unbelievable",
+    "incredible", "impossible", "secret", "truth", "stop", "listen",
+    "serious", "seriously", "honest", "honestly", "real", "actually",
+    "worst", "best", "only", "first", "last", "ever", "always",
+    "believe", "imagine", "realize", "understand", "see", "need", "want",
+    "love", "hate", "find", "know", "show", "get", "take", "make",
+    "try", "change", "win", "lose", "fail", "break", "run", "fight",
+})
+
+
+def format_hook_subtitle(text: str) -> str:
+    """Format one subtitle block for hook/first-clip visual impact.
+
+    - Normalises whitespace and collapses newlines to one line
+    - Returns original unchanged when text < 20 chars
+    - For short segments (≤ 4 words): uppercases detected emphasis words in place
+    - For longer segments: splits into max 2 lines and uppercases the leading phrase
+    """
+    text = re.sub(r"\s+", " ", text.replace("\n", " ").strip())
+    if len(text) < 20:
+        return text
+
+    words = text.split()
+    total = len(words)
+
+    def _is_emphasis(w: str) -> bool:
+        return re.sub(r"[^\w]", "", w).lower() in _HOOK_EMPHASIS_WORDS
+
+    if total <= 4:
+        return " ".join(w.upper() if _is_emphasis(w) else w for w in words)
+
+    # Find emphasis anchor in first 6 words to set the split point for line 1
+    split_at = min(4, total - 2)  # default: ~4 words on line 1, ≥2 on line 2
+    for i in range(min(6, total - 1)):
+        if _is_emphasis(words[i]):
+            split_at = i + 1
+
+    # Clamp: line 1 = 2–6 words, line 2 always has ≥ 1 word
+    split_at = max(2, min(split_at, 6, total - 1))
+
+    line1 = " ".join(words[:split_at]).upper()
+    line2 = " ".join(words[split_at:])
+    return f"{line1}\n{line2}"
+
+
+def apply_hook_subtitle_format(srt_path: str) -> int:
+    """Apply hook-impact formatting to every block in the SRT file (in-place).
+
+    Returns the number of blocks processed on success, 0 on empty file or error.
+    Safe no-op on any exception — original file is left untouched if writing fails.
+    """
+    try:
+        blocks = _parse_srt_blocks(srt_path)
+        if not blocks:
+            return 0
+        with Path(srt_path).open("w", encoding="utf-8") as f:
+            for i, b in enumerate(blocks, start=1):
+                text = format_hook_subtitle(b["text"])
+                f.write(
+                    f"{i}\n"
+                    f"{format_srt_timestamp(b['start'])} --> {format_srt_timestamp(b['end'])}\n"
+                    f"{text}\n\n"
+                )
+        return len(blocks)
+    except Exception:
+        return 0

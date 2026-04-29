@@ -1955,7 +1955,7 @@ function setInspectorTab(tab) {
     audio: 'Audio',
     performance: 'Performance',
     advanced: 'Advanced',
-    market: 'Market Viral',
+    market: 'Market Viral — All Clips',
   };
   const activeTab = validTabs.includes(tab) ? tab : 'mode';
   const insp = document.getElementById('appInspector');

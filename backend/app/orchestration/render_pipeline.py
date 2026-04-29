@@ -18,8 +18,8 @@ from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes
-from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt
-from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads
+from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt, apply_hook_subtitle_format
+from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing
 from app.services.viral_scorer import score_segments
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
 from app.services.report_service import append_rows
@@ -1128,11 +1128,67 @@ def run_render_pipeline(
         if part_order == "timeline":
             scored.sort(key=lambda x: float(x.get("start", 0)))
             _job_log(effective_channel, job_id, f"Part order: timeline (chronological)")
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="hook_first_skipped",
+                level="INFO",
+                message="Hook-first skipped: timeline mode",
+                step="render.hook_first",
+                context={"reason": "timeline_mode", "total_clips": len(scored)},
+            )
+        elif part_order == "viral" and _combined_enabled:
+            # P4-1: Hook-first sequencing — strongest hook at index 0
+            def _hook_score(c):
+                return (
+                    c.get("combined_score")
+                    or c.get("market_viral_score")
+                    or c.get("viral_score")
+                    or 0
+                )
+            _sorted = sorted(scored, key=_hook_score, reverse=True)
+            _best = _sorted[0]
+            _best_score = _hook_score(_best)
+            _used_combined = bool(_best.get("combined_score"))
+            scored = [_best] + [c for c in _sorted if c is not _best]
+            _job_log(effective_channel, job_id, f"Part order: hook-first (combined+viral, best_score={_best_score})")
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="hook_first_applied",
+                level="INFO",
+                message=f"Hook-first applied: best_part_no=1 score={_best_score} total={len(scored)}",
+                step="render.hook_first",
+                context={
+                    "best_part_no": 1,
+                    "best_score": _best_score,
+                    "used_combined_score": _used_combined,
+                    "total_clips": len(scored),
+                },
+            )
         elif _combined_enabled:
             scored.sort(key=_provisional_combined, reverse=True)
             _job_log(effective_channel, job_id, "Part order: combined score (viral+hook, experimental)")
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="hook_first_skipped",
+                level="INFO",
+                message="Hook-first skipped: part_order is not viral",
+                step="render.hook_first",
+                context={"reason": "part_order_not_viral", "part_order": part_order, "total_clips": len(scored)},
+            )
         else:
             _job_log(effective_channel, job_id, f"Part order: viral score (highest first)")
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="hook_first_skipped",
+                level="INFO",
+                message="Hook-first skipped: combined scoring disabled",
+                step="render.hook_first",
+                context={"reason": "combined_disabled", "total_clips": len(scored)},
+            )
 
         if not scored:
             raise RuntimeError("No exportable segments were created")
@@ -1296,9 +1352,44 @@ def run_render_pipeline(
             # the UI can distinguish "queued but not yet started" from "claimed by a thread".
             upsert_job_part(job_id, idx, part_name, JobPartStage.WAITING, 5, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), "", "Waiting for worker")
 
+            # P4-3: Silence trim — detect and skip leading dead air (first clip only)
+            _trim_offset = 0.0
+            if idx == 1:
+                try:
+                    _trim_offset = detect_silence_trim_offset(str(source_path), seg["start"], seg["end"])
+                except Exception:
+                    _trim_offset = 0.0
+                if _trim_offset > 0:
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="silence_trim_applied",
+                        level="INFO",
+                        message=f"Silence trim: {_trim_offset:.3f}s removed from part {idx} start",
+                        step="render.silence_trim",
+                        context={
+                            "part_no": idx,
+                            "trim_offset_sec": _trim_offset,
+                            "original_start": seg["start"],
+                            "effective_start": seg["start"] + _trim_offset,
+                        },
+                    )
+                    _job_log(effective_channel, job_id, f"Part {idx} silence trim: {_trim_offset:.3f}s offset applied")
+                else:
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="silence_trim_skipped",
+                        level="INFO",
+                        message=f"Silence trim: no leading silence detected for part {idx}",
+                        step="render.silence_trim",
+                        context={"part_no": idx},
+                    )
+            _effective_start = seg["start"] + _trim_offset
+
             upsert_job_part(job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
             if not (payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
-                cut_video(str(source_path), str(raw_part), seg["start"], seg["end"], retry_count=retry_count)
+                cut_video(str(source_path), str(raw_part), _effective_start, seg["end"], retry_count=retry_count)
                 _job_log(effective_channel, job_id, f"Part {idx} cut done", kind="debug")
             else:
                 _job_log(effective_channel, job_id, f"Part {idx} cut skipped (raw exists)", kind="debug")
@@ -1317,7 +1408,7 @@ def run_render_pipeline(
                 needs_ass = not (payload.resume_from_last and ass_part.exists() and ass_part.stat().st_size > 0)
                 if needs_srt:
                     _eff_speed = max(0.5, min(1.5, float(payload.playback_speed or 1.0)))
-                    _srt_meta = slice_srt_by_time(str(full_srt), str(srt_part), seg["start"], seg["end"], rebase_to_zero=True, playback_speed=_eff_speed)
+                    _srt_meta = slice_srt_by_time(str(full_srt), str(srt_part), _effective_start, seg["end"], rebase_to_zero=True, playback_speed=_eff_speed)
                     _srt_count = _srt_meta.get("subtitle_count", 0)
                     _job_log(
                         effective_channel, job_id,
@@ -1405,6 +1496,36 @@ def run_render_pipeline(
                         needs_ass = True
                     except Exception:
                         pass
+                # P4-2: Hook subtitle impact — apply only to the first (hook) clip
+                if idx == 1 and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
+                    _hook_orig_len = _ass_srt_source.stat().st_size
+                    _hook_blocks = apply_hook_subtitle_format(str(_ass_srt_source))
+                    if _hook_blocks > 0:
+                        needs_ass = True
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="subtitle_hook_format_applied",
+                            level="INFO",
+                            message=f"Hook subtitle impact applied: {_hook_blocks} blocks",
+                            step="subtitle.hook_format",
+                            context={
+                                "part_no": idx,
+                                "original_length": _hook_orig_len,
+                                "new_length": _ass_srt_source.stat().st_size,
+                                "lines_count": _hook_blocks,
+                            },
+                        )
+                    else:
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="subtitle_hook_format_skipped",
+                            level="INFO",
+                            message="Hook subtitle format skipped: empty SRT or error",
+                            step="subtitle.hook_format",
+                            context={"part_no": idx},
+                        )
                 if needs_ass:
                     _play_res_y = _aspect_play_res_y(payload.aspect_ratio)
                     _margin_v = getattr(payload, "sub_margin_v", 180)
@@ -1692,6 +1813,55 @@ def run_render_pipeline(
                         exception=mix_exc,
                         traceback_text=traceback.format_exc(),
                     )
+
+            # P4-4: Micro pacing — compress mid-clip silences (first clip only)
+            if idx == 1 and final_part.exists() and final_part.stat().st_size > 0:
+                _paced_part = work_dir / f"{source['slug']}_part_{idx:03d}_paced.mp4"
+                try:
+                    _pacing = apply_micro_pacing(str(final_part), str(_paced_part))
+                    if _pacing["applied"] and _paced_part.exists() and _paced_part.stat().st_size > 0:
+                        os.replace(str(_paced_part), str(final_part))
+                        _job_log(
+                            effective_channel, job_id,
+                            f"Part {idx} micro pacing: {_pacing['segments_trimmed']} segments, "
+                            f"{_pacing['total_trim_ms']}ms trimmed",
+                        )
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="micro_pacing_applied",
+                            level="INFO",
+                            message=(
+                                f"Micro pacing applied: {_pacing['segments_trimmed']} segments, "
+                                f"{_pacing['total_trim_ms']}ms removed"
+                            ),
+                            step="render.micro_pacing",
+                            context={
+                                "part_no": idx,
+                                "segments_trimmed": _pacing["segments_trimmed"],
+                                "total_trim_ms": _pacing["total_trim_ms"],
+                                "method": _pacing["method"],
+                            },
+                        )
+                    else:
+                        _safe_unlink(_paced_part)
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="micro_pacing_skipped",
+                            level="INFO",
+                            message="Micro pacing skipped: no qualifying silence segments",
+                            step="render.micro_pacing",
+                            context={"part_no": idx},
+                        )
+                except Exception as _pace_exc:
+                    _safe_unlink(_paced_part)
+                    _job_log(
+                        effective_channel, job_id,
+                        f"micro_pacing_failed part_no={idx}: {_pace_exc}",
+                        kind="warning",
+                    )
+
             _encode_ms = int((time.perf_counter() - _t_encode) * 1000)
             _part_dur = float(seg.get("duration") or 0)
             _speed_ratio = round(_part_dur * 1000 / max(_encode_ms, 1), 2)

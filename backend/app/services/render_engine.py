@@ -402,6 +402,209 @@ def cut_video(input_path: str, output_path: str, start_time: float, end_time: fl
     _run_ffmpeg_with_retry(fallback_cmd, retry_count=retry_count)
 
 
+def detect_silence_trim_offset(
+    input_path: str,
+    start_sec: float,
+    end_sec: float,
+    max_trim: float = 1.5,
+    min_trim: float = 0.2,
+    noise_db: float = -30.0,
+    silence_min_dur: float = 0.1,
+) -> float:
+    """Return the seconds of leading silence at the start of a clip.
+
+    Probes a short window at the clip start using ffmpeg silencedetect.
+    Returns 0.0 when detection fails, no silence is found, or the
+    silence_end falls outside [min_trim, max_trim].
+    """
+    clip_dur = end_sec - start_sec
+    probe_dur = min(max_trim + 0.5, clip_dur)
+    if probe_dur <= 0:
+        return 0.0
+    cmd = [
+        get_ffmpeg_bin(), "-hide_banner",
+        "-ss", str(start_sec),
+        "-t", str(probe_dur),
+        "-i", input_path,
+        "-af", f"silencedetect=noise={noise_db}dB:d={silence_min_dur}",
+        "-f", "null", "-",
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        for line in result.stderr.splitlines():
+            if "silence_end:" in line:
+                # "silence_end: 0.858333 | silence_duration: 0.858333"
+                raw = line.split("silence_end:", 1)[1].split("|")[0].strip()
+                silence_end = float(raw)
+                offset = min(silence_end, max_trim)
+                return offset if offset >= min_trim else 0.0
+    except Exception:
+        pass
+    return 0.0
+
+
+def _probe_duration(input_path: str) -> float | None:
+    """Return video duration in seconds via ffprobe, or None on error."""
+    try:
+        cmd = [
+            get_ffprobe_bin(), "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            input_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        return float(result.stdout.strip())
+    except Exception:
+        return None
+
+
+def _detect_silence_segments(
+    input_path: str,
+    noise_db: float = -30.0,
+    min_dur: float = 0.3,
+) -> list[tuple[float, float]]:
+    """Return (start, end) pairs of silence regions detected inside input_path."""
+    cmd = [
+        get_ffmpeg_bin(), "-hide_banner",
+        "-i", input_path,
+        "-af", f"silencedetect=noise={noise_db}dB:d={min_dur}",
+        "-f", "null", "-",
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        segments: list[tuple[float, float]] = []
+        pending_start: float | None = None
+        for line in result.stderr.splitlines():
+            if "silence_start:" in line:
+                try:
+                    pending_start = float(line.split("silence_start:", 1)[1].strip())
+                except ValueError:
+                    pass
+            elif "silence_end:" in line and pending_start is not None:
+                try:
+                    end = float(line.split("silence_end:", 1)[1].split("|")[0].strip())
+                    segments.append((pending_start, end))
+                    pending_start = None
+                except ValueError:
+                    pass
+        return segments
+    except Exception:
+        return []
+
+
+def apply_micro_pacing(
+    input_path: str,
+    output_path: str,
+    noise_db: float = -30.0,
+    min_silence_dur: float = 0.3,
+    max_total_trim: float = 2.0,
+    min_clip_dur: float = 5.0,
+) -> dict:
+    """Compress mid-clip silences to improve pacing without altering speech.
+
+    Detects silence regions inside the clip (ignoring the first/last 0.5s),
+    trims each region down to a minimal breathing pause, and stitches the
+    result via a single FFmpeg filter_complex pass.
+
+    Returns {"applied": bool, "segments_trimmed": int, "total_trim_ms": int, "method": str}.
+    Raises on FFmpeg error so the caller can fall back to the original file.
+    """
+    _NO_OP: dict = {"applied": False, "segments_trimmed": 0, "total_trim_ms": 0, "method": "audio"}
+
+    clip_dur = _probe_duration(input_path)
+    if clip_dur is None or clip_dur < min_clip_dur:
+        return _NO_OP
+
+    silences = _detect_silence_segments(input_path, noise_db=noise_db, min_dur=min_silence_dur)
+    # Only consider mid-clip silences — leave boundaries intact
+    silences = [(s, e) for s, e in silences if s >= 0.5 and e <= clip_dur - 0.3]
+    if not silences:
+        return _NO_OP
+
+    def _target_dur(dur: float) -> float:
+        if dur <= 0.7:
+            return 0.15
+        elif dur <= 1.2:
+            return 0.25
+        return 0.4
+
+    # Build a list of (keep_start, keep_end) timeline segments
+    keeps: list[tuple[float, float]] = []
+    prev_end = 0.0
+    total_trim = 0.0
+    segments_trimmed = 0
+
+    for s_start, s_end in silences:
+        s_dur = s_end - s_start
+        trim = s_dur - _target_dur(s_dur)
+        remaining = max_total_trim - total_trim
+        if remaining <= 0 or trim <= 0:
+            continue
+        trim = min(trim, remaining)
+        # Keep speech up to the silence, plus the kept portion of the silence
+        keep_end = s_start + (s_dur - trim)
+        if keep_end > prev_end:
+            keeps.append((prev_end, keep_end))
+        prev_end = s_end
+        total_trim += trim
+        segments_trimmed += 1
+
+    if prev_end < clip_dur:
+        keeps.append((prev_end, clip_dur))
+
+    if segments_trimmed == 0 or len(keeps) <= 1:
+        return _NO_OP
+
+    has_audio = _has_audio_stream(input_path)
+    n = len(keeps)
+
+    # Build a filter_complex that splices the keeps together
+    fc: list[str] = []
+    fc.append(f"[0:v]split={n}" + "".join(f"[vs{i}]" for i in range(n)))
+    if has_audio:
+        fc.append(f"[0:a]asplit={n}" + "".join(f"[as{i}]" for i in range(n)))
+
+    for i, (seg_s, seg_e) in enumerate(keeps):
+        fc.append(
+            f"[vs{i}]trim=start={seg_s:.6f}:end={seg_e:.6f},"
+            f"setpts=PTS-STARTPTS[v{i}]"
+        )
+        if has_audio:
+            fc.append(
+                f"[as{i}]atrim=start={seg_s:.6f}:end={seg_e:.6f},"
+                f"asetpts=PTS-STARTPTS[a{i}]"
+            )
+
+    v_cat = "".join(f"[v{i}]" for i in range(n))
+    fc.append(f"{v_cat}concat=n={n}:v=1:a=0[vout]")
+    if has_audio:
+        a_cat = "".join(f"[a{i}]" for i in range(n))
+        fc.append(f"{a_cat}concat=n={n}:v=0:a=1[aout]")
+
+    filter_complex = ";".join(fc)
+    map_args = ["-map", "[vout]", "-map", "[aout]"] if has_audio else ["-map", "[vout]"]
+    audio_args = ["-c:a", "aac", "-b:a", "192k"] if has_audio else []
+
+    cmd = [
+        get_ffmpeg_bin(), "-hide_banner", "-y",
+        "-i", input_path,
+        "-filter_complex", filter_complex,
+        *map_args,
+        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        *audio_args,
+        output_path,
+    ]
+    subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=True)
+
+    return {
+        "applied": True,
+        "segments_trimmed": segments_trimmed,
+        "total_trim_ms": int(total_trim * 1000),
+        "method": "audio",
+    }
+
 
 def resolve_ffmpeg_threads(max_parallel_parts: int | None = None) -> int:
     cpu_total = os.cpu_count() or 4
