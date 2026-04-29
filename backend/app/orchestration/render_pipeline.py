@@ -1541,8 +1541,16 @@ def run_render_pipeline(
                             margin_v=_margin_v,
                             play_res_y=_play_res_y,
                             x_percent=getattr(payload, "sub_x_percent", 50.0),
+                            font_size=getattr(payload, "sub_font_size", 0),
                         )
-                    _job_log(effective_channel, job_id, f"Part {idx} subtitle: style={payload.subtitle_style} play_res_y={_play_res_y} margin_v={_margin_v} aspect={payload.aspect_ratio}", kind="info")
+                    _job_log(
+                        effective_channel, job_id,
+                        f"Part {idx} subtitle: style={payload.subtitle_style} "
+                        f"font_size={getattr(payload, 'sub_font_size', 0)} "
+                        f"margin_v={_margin_v} x_pct={getattr(payload, 'sub_x_percent', 50.0):.1f} "
+                        f"play_res_y={_play_res_y} aspect={payload.aspect_ratio}",
+                        kind="info",
+                    )
             else:
                 _job_log(effective_channel, job_id, f"Part {idx} subtitle disabled", kind="debug")
 

@@ -302,6 +302,16 @@ def ema(prev: float, new: float, alpha: float) -> float:
     return prev * (1.0 - alpha) + new * alpha
 
 
+def _smoothstep(t: float) -> float:
+    """Classic cubic smoothstep: slow-in → fast-mid → slow-out, result in [0, 1].
+
+    t is clamped to [0, 1] before evaluation so callers don't need to pre-clamp.
+    Used for cinematic camera easing — no overshoot, C1-continuous at both ends.
+    """
+    t = clamp(t, 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
 def _gaussian_smooth_1d(arr: np.ndarray, window: int) -> np.ndarray:
     """Apply Gaussian smoothing to a 1D array using convolution."""
     if window < 3 or len(arr) < 3:
@@ -510,9 +520,15 @@ def _apply_velocity_limiter(
     crop_h: int,
     cfg: MotionCropConfig,
 ) -> List[Tuple[int, int]]:
-    """
-    Convert (cx, cy) float centers → (x, y) integer top-left crop coords,
-    applying velocity + acceleration limits for smooth cinematic panning.
+    """Convert (cx, cy) float centers → (x, y) integer top-left crop coords.
+
+    Applies velocity + acceleration limits with smoothstep easing for
+    cinematic panning: full speed when far from target, graceful deceleration
+    when close — no snap, no overshoot.
+
+    Also enforces subtitle_safe_bottom_ratio so the velocity limiter cannot
+    push the crop into the subtitle zone even if the input path is at the
+    boundary.
     """
     if not centers_xy:
         return []
@@ -520,17 +536,28 @@ def _apply_velocity_limiter(
     max_v = max(1.0, src_w * cfg.max_pan_speed_ratio)
     max_a = max(0.5, src_w * cfg.max_pan_accel_ratio)
 
+    # Subtitle-safe ceiling for crop center Y — same formula as EMA loop.
+    max_cy = src_h - crop_h / 2.0
+    if cfg.subtitle_safe_bottom_ratio > 0:
+        max_cy -= src_h * cfg.subtitle_safe_bottom_ratio * 0.35
+    max_cy = max(crop_h / 2.0, max_cy)
+
     result: List[Tuple[int, int]] = []
     px, py = centers_xy[0]
     pvx, pvy = 0.0, 0.0
 
     for tx, ty in centers_xy:
-        dvx = clamp(tx - px, -max_v, max_v)
-        dvy = clamp(ty - py, -max_v, max_v)
+        dist = math.hypot(tx - px, ty - py)
+        # Smoothstep easing: t=0 near target (decelerate), t=1 far from target (full speed).
+        # Minimum 0.12 so the camera always creeps toward target even when very close.
+        t = clamp(dist / max(1.0, max_v * 8.0), 0.0, 1.0)
+        ease = clamp(_smoothstep(t), 0.12, 1.0)
+        dvx = clamp((tx - px) * ease, -max_v, max_v)
+        dvy = clamp((ty - py) * ease, -max_v, max_v)
         vx = clamp(dvx, pvx - max_a, pvx + max_a)
         vy = clamp(dvy, pvy - max_a, pvy + max_a)
         nx = clamp(px + vx, crop_w / 2.0, src_w - crop_w / 2.0)
-        ny = clamp(py + vy, crop_h / 2.0, src_h - crop_h / 2.0)
+        ny = clamp(py + vy, crop_h / 2.0, max_cy)   # subtitle-safe ceiling
 
         # Convert center → top-left
         ix = int(clamp(round(nx - crop_w / 2.0), 0, src_w - crop_w))
@@ -750,6 +777,7 @@ def build_subject_path_scene(
         pending_subject: Optional[Tuple[int, int, int, int]] = None
         pending_count = 0
         switch_count = 0
+        switch_cooldown = 0   # frames remaining in post-switch easing window
         lost_frames = 0
         last_good_center = (default_cx, default_cy)
         raw_centers: List[Tuple[float, float]] = []
@@ -825,6 +853,9 @@ def build_subject_path_scene(
                                 lost_frames = 0
                                 pending_subject = None
                                 pending_count = 0
+                                # Activate easing window: camera pans toward new subject
+                                # without dead-zone suppression for ~0.5 s.
+                                switch_cooldown = max(4, int(fps * 0.5))
                         else:
                             pending_subject = None
                             pending_count = 0
@@ -854,9 +885,12 @@ def build_subject_path_scene(
             elif lost_frames <= cfg.lost_subject_hold_frames:
                 target_cx, target_cy = last_good_center
             else:
-                return_alpha = min(1.0, (lost_frames - cfg.lost_subject_hold_frames) / max(1.0, fps * 0.75))
-                target_cx = ema(last_good_center[0], default_cx, return_alpha * 0.08)
-                target_cy = ema(last_good_center[1], default_cy, return_alpha * 0.08)
+                # Smoothstep return: slow start → faster mid → soft landing at center.
+                # Ramps over 1.0 s instead of 0.75 s to feel less abrupt.
+                t_return = min(1.0, (lost_frames - cfg.lost_subject_hold_frames) / max(1.0, fps * 1.0))
+                return_alpha = _smoothstep(t_return) * 0.10  # max alpha 0.10
+                target_cx = ema(last_good_center[0], default_cx, return_alpha)
+                target_cy = ema(last_good_center[1], default_cy, return_alpha)
                 last_good_center = (target_cx, target_cy)
 
             movement = math.hypot(target_cx - smooth_cx, target_cy - smooth_cy)
@@ -877,10 +911,19 @@ def build_subject_path_scene(
                     alpha *= 1.15
             alpha = clamp(alpha, 0.03, 0.50)
 
-            if abs(target_cx - smooth_cx) > dead_zone_x:
+            # During post-switch cooldown: bypass dead-zone so the camera
+            # actively pans toward the new subject without hesitation.
+            # Alpha is floored at ema_alpha_normal to maintain responsiveness.
+            if switch_cooldown > 0:
+                switch_cooldown -= 1
+                alpha = max(alpha, cfg.ema_alpha_normal)
                 smooth_cx = ema(smooth_cx, target_cx, alpha)
-            if abs(target_cy - smooth_cy) > dead_zone_y:
                 smooth_cy = ema(smooth_cy, target_cy, alpha)
+            else:
+                if abs(target_cx - smooth_cx) > dead_zone_x:
+                    smooth_cx = ema(smooth_cx, target_cx, alpha)
+                if abs(target_cy - smooth_cy) > dead_zone_y:
+                    smooth_cy = ema(smooth_cy, target_cy, alpha)
 
             smooth_cx = clamp(smooth_cx, crop_w / 2.0, src_w - crop_w / 2.0)
             max_cy = src_h - crop_h / 2.0
@@ -916,23 +959,37 @@ def build_subject_path_scene(
                 looked.append((sx / weight_total, sy / weight_total))
             raw_centers = looked
 
-        window = max(3, cfg.temporal_smooth_window | 1)
+        avg_motion = motion_total / max(1, motion_samples)
+
+        # Adaptive Gaussian window: micro-jitter cleanup only.
+        # High-motion scenes need maximum responsiveness (window=5);
+        # static/talking-head scenes benefit from a slightly wider smooth (window=9).
+        # Hard cap at 9 — EMA already handled coarse smoothing frame-by-frame.
+        if avg_motion > 2.0:
+            scene_gaussian_window = 5
+        elif avg_motion > 0.5:
+            scene_gaussian_window = 7
+        else:
+            scene_gaussian_window = 9
+        scene_gaussian_window = max(3, min(scene_gaussian_window, 9) | 1)
+
         xs = np.array([c[0] for c in raw_centers], dtype=float)
         ys = np.array([c[1] for c in raw_centers], dtype=float)
-        xs = _gaussian_smooth_1d(xs, window)
-        ys = _gaussian_smooth_1d(ys, window)
+        xs = _gaussian_smooth_1d(xs, scene_gaussian_window)
+        ys = _gaussian_smooth_1d(ys, scene_gaussian_window)
         smoothed = list(zip(xs.tolist(), ys.tolist()))
 
-        avg_motion = motion_total / max(1, motion_samples)
         strategy = "subject_lock" if locked_subject is not None else "center_hold"
         logger.info(
-            "motion_crop scene=%d strategy=%s locked_subject=%s switches=%d avg_motion=%.2f fallback=%s",
+            "motion_crop scene=%d strategy=%s locked=%s switches=%d "
+            "avg_motion=%.2f gauss_window=%d subtitle_safe=%.3f",
             scene_index,
             strategy,
             bool(locked_subject),
             switch_count,
             avg_motion,
-            False,
+            scene_gaussian_window,
+            cfg.subtitle_safe_bottom_ratio,
         )
 
         return _apply_velocity_limiter(smoothed, src_w, src_h, crop_w, crop_h, cfg), fps
@@ -1198,11 +1255,14 @@ def render_motion_aware_crop(
     loudnorm_enabled: bool = False,
     ffmpeg_threads: int | None = None,
     cfg: MotionCropConfig | None = None,
+    subtitle_safe_bottom_ratio: float | None = None,
 ) -> str:
     layer_count = len(text_layers or [])
     if layer_count:
         logger.info("Applying %d text overlay layer(s) in motion-aware pipeline", layer_count)
     cfg = cfg or MotionCropConfig(scale_x_percent=scale_x_percent, scale_y_percent=scale_y_percent)
+    if subtitle_safe_bottom_ratio is not None:
+        cfg.subtitle_safe_bottom_ratio = max(0.0, min(0.35, float(subtitle_safe_bottom_ratio)))
 
     src_w, src_h, probe_fps = ffprobe_video_info(input_path)
 

@@ -302,8 +302,12 @@ def _resolve_ass_style(
     highlight_per_word: bool = True,
     font_name: str = "Bungee",
     margin_v: int = 180,
+    font_size: int = 0,
 ):
     """Return (style_line, line_fx) for the requested subtitle style.
+
+    font_size: explicit ASS Fontsize to use.  0 = use per-style default.
+    Clamped to [12, 120] when non-zero so the UI value maps 1:1 to ASS output.
 
     line_fx is prepended to each Dialogue text field (ASS override tags).
     For word-by-word mode, line_fx includes a pop-in bounce animation.
@@ -315,50 +319,56 @@ def _resolve_ass_style(
 
     safe_font = (font_name or "Bungee").replace(",", " ").strip() or "Bungee"
 
+    def _fsize(style_default: int) -> int:
+        """Return user-requested size when provided, else fall back to style default."""
+        if font_size and font_size > 0:
+            return max(12, min(120, int(font_size)))
+        return style_default
+
     if style == "viral_clean_montserrat":
         line_fx = BOUNCE_FX if highlight_per_word else ""
         return (
-            f"Style: Default,{safe_font},34,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "viral_soft_poppins":
         line_fx = BOUNCE_FX if highlight_per_word else ""
         return (
-            f"Style: Default,{safe_font},32,&H00F0F0F0,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(32)},&H00F0F0F0,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "viral_pop_anton":
         line_fx = BOUNCE_FX if highlight_per_word else r"{\bord3\fscx100\fscy108}"
         return (
-            f"Style: Default,{safe_font},40,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(40)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "viral_compact_barlow":
         line_fx = BOUNCE_FX if highlight_per_word else ""
         return (
-            f"Style: Default,{safe_font},36,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(36)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "clean_bold_01":
         return (
-            f"Style: Default,{safe_font},34,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             BOUNCE_FX if highlight_per_word else "",
         )
     if style == "story_clean_01":
         return (
-            f"Style: Default,{safe_font},32,&H00F6F6F6,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,0,2,40,40,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(32)},&H00F6F6F6,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,0,2,40,40,{margin_v},1",
             BOUNCE_FX if highlight_per_word else "",
         )
 
     # Default / tiktok_bounce_v1 — Bungee font, word-by-word bounce
     if highlight_per_word:
         return (
-            f"Style: Default,{safe_font},38,&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(38)},&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
             BOUNCE_FX,
         )
     # Segment mode
     return (
-        f"Style: Default,{safe_font},34,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+        f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
         "",
     )
 
@@ -379,6 +389,68 @@ def _ass_time(seconds: float) -> str:
     return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
+def _ass_escape_text(text: str) -> str:
+    """Escape a plain-text string for safe embedding in an ASS Dialogue Text field.
+
+    ASS treats `{...}` as override-tag blocks and `\\N` / `\\n` as hard newlines.
+    Literal braces must be replaced; literal backslashes must be escaped first.
+    Python `\\n` newlines are converted to ASS soft-wrap (`\\N`).
+    """
+    text = text.replace("\\", "\\\\ ")   # escape existing backslashes
+    text = text.replace("{", "(").replace("}", ")")   # braces → parens (ASS override guard)
+    text = text.replace("\n", r"\N")     # Python newline → ASS hard-newline
+    return text
+
+
+_WIDE_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&Wm")
+_NARROW_CHARS = frozenset("fijlrt!|,.'\":;-")
+
+
+def _approx_visual_width(text: str) -> float:
+    """Estimate rendered character-width in em units for line-break decisions.
+
+    Uppercase and wide glyphs are counted as 1.3, narrow glyphs as 0.6, rest 1.0.
+    This avoids purely word-count-based breaks that under-count wide uppercase text.
+    """
+    total = 0.0
+    for ch in text:
+        if ch in _WIDE_CHARS:
+            total += 1.3
+        elif ch in _NARROW_CHARS:
+            total += 0.6
+        elif ch == " ":
+            total += 0.45
+        else:
+            total += 1.0
+    return total
+
+
+def _break_by_visual_width(text: str, max_em: float = 18.0) -> str:
+    """Insert a newline when a line's visual width exceeds max_em.
+
+    Operates word by word; never breaks a single-word line.
+    Returns text unchanged when it already contains a newline.
+    """
+    if "\n" in text or _approx_visual_width(text) <= max_em:
+        return text
+    words = text.split()
+    lines: list[str] = []
+    current: list[str] = []
+    current_w = 0.0
+    for word in words:
+        ww = _approx_visual_width(word + " ")
+        if current and current_w + ww > max_em:
+            lines.append(" ".join(current))
+            current = [word]
+            current_w = ww
+        else:
+            current.append(word)
+            current_w += ww
+    if current:
+        lines.append(" ".join(current))
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # SRT → ASS conversion
 # ---------------------------------------------------------------------------
@@ -393,22 +465,38 @@ def srt_to_ass_bounce(
     margin_v: int = 180,
     play_res_y: int = 1440,
     x_percent: float = 50.0,
+    text_overlay_margin_v: int | None = None,
+    font_size: int = 0,
 ):
+    """Convert an SRT file to an ASS subtitle file using the given bounce/viral style.
+
+    font_size: explicit Fontsize to embed in the ASS Style.
+               0 (default) uses the per-style built-in size so existing renders
+               are unchanged when this param is omitted.
+               Clamped to [12, 120] when non-zero.
+    """
+    # When text overlays occupy the bottom zone, push subtitles above them.
+    effective_margin_v = text_overlay_margin_v if text_overlay_margin_v is not None else margin_v
+
     ass_style, line_fx = _resolve_ass_style(
         subtitle_style,
         scale_y,
         highlight_per_word,
         font_name=font_name,
-        margin_v=margin_v,
+        margin_v=effective_margin_v,
+        font_size=font_size,
     )
-    # Inject \pos(x,y) when subtitle is not centered (>0.5% off 50%).
-    # Uses PlayRes coordinates — libass scales to actual video size.
-    # Default x_percent=50 → no tag → backward-compatible with existing renders.
+
+    # Position mode: centred default uses Alignment=2 + MarginV (no \pos tag).
+    # Any explicit x or y offset injects a \pos(x,y) that overrides both axes.
     _pos_tag = ""
+    position_mode = "margin"
     if abs(x_percent - 50.0) > 0.5:
         _px = round(1080 * x_percent / 100)
-        _py = play_res_y - margin_v
+        _py = play_res_y - effective_margin_v
         _pos_tag = "{\\pos(" + str(_px) + "," + str(_py) + ")}"
+        position_mode = "pos"
+
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -434,10 +522,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         start_s, end_s = time_line.split(" --> ", 1)
         start_ass = _ass_time(parse_srt_timestamp(start_s))
         end_ass   = _ass_time(parse_srt_timestamp(end_s))
-        text = " ".join(lines[2:]).replace("{", "(").replace("}", ")")
+        raw_text = " ".join(lines[2:])
+        text = _ass_escape_text(_break_by_visual_width(raw_text))
         out.append(f"Dialogue: 0,{start_ass},{end_ass},Default,,0,0,0,,{_pos_tag}{line_fx}{text}\n")
     Path(ass_path).write_text("".join(out), encoding="utf-8")
-    logger.info("srt_to_ass_bounce: style=%s play_res_y=%d margin_v=%d -> %s", subtitle_style, play_res_y, margin_v, ass_path)
+
+    _resolved_fsize = max(12, min(120, int(font_size))) if font_size > 0 else 0
+    logger.info(
+        "srt_to_ass_bounce: style=%s font_size=%s x_percent=%.1f margin_v=%d "
+        "play_res_y=%d position_mode=%s -> %s",
+        subtitle_style,
+        _resolved_fsize if _resolved_fsize else "style_default",
+        x_percent,
+        effective_margin_v,
+        play_res_y,
+        position_mode,
+        ass_path,
+    )
     return ass_path
 
 
@@ -471,6 +572,7 @@ def srt_to_ass_karaoke(
     outline_size: int = 3,
     shadow_size: int = 1,
     x_percent: float = 50.0,
+    text_overlay_margin_v: int | None = None,
 ):
     """Pro karaoke-style subtitle.
 
@@ -479,9 +581,11 @@ def srt_to_ass_karaoke(
 
     Yêu cầu: srt_path là word-level SRT (mỗi entry = 1 từ).
     """
+    effective_margin_v = text_overlay_margin_v if text_overlay_margin_v is not None else margin_v
+
     blocks = _parse_srt_blocks(srt_path)
     if not blocks:
-        return srt_to_ass_bounce(srt_path, ass_path, scale_y=scale_y, margin_v=margin_v, play_res_y=play_res_y)
+        return srt_to_ass_bounce(srt_path, ass_path, scale_y=scale_y, margin_v=effective_margin_v, play_res_y=play_res_y)
 
     # Group words into chunks
     groups: list[list[dict]] = []
@@ -496,7 +600,7 @@ def srt_to_ass_karaoke(
         f"{base_color},{highlight_color},"
         f"{outline_color},{back_color},"
         f"0,0,0,0,100,{scale_y},0,0,1,{outline_size},{shadow_size},"
-        f"2,30,30,{margin_v},1"
+        f"2,30,30,{effective_margin_v},1"
     )
 
     header = f"""[Script Info]
@@ -518,7 +622,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     _pos_tag = ""
     if abs(x_percent - 50.0) > 0.5:
         _px = round(1080 * x_percent / 100)
-        _py = play_res_y - margin_v
+        _py = play_res_y - effective_margin_v
         _pos_tag = "{\\pos(" + str(_px) + "," + str(_py) + ")}"
 
     out = [header]
@@ -530,7 +634,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         parts = []
         for w in group:
             dur_cs = max(1, int(round((w["end"] - w["start"]) * 100)))
-            word = w["text"].replace("{", "(").replace("}", ")")
+            # Use _ass_escape_text to guard braces/backslashes; karaoke {\k} tags
+            # are inserted around the escaped word so they survive as ASS overrides.
+            word = _ass_escape_text(w["text"])
             parts.append(f"{{\\k{dur_cs}}}{word}")
 
         text = " ".join(parts)
@@ -540,7 +646,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         )
 
     Path(ass_path).write_text("".join(out), encoding="utf-8")
-    logger.info("srt_to_ass_karaoke: play_res_y=%d margin_v=%d words_per_group=%d -> %s", play_res_y, margin_v, words_per_group, ass_path)
+    logger.info("srt_to_ass_karaoke: play_res_y=%d margin_v=%d words_per_group=%d -> %s", play_res_y, effective_margin_v, words_per_group, ass_path)
     return ass_path
 
 
