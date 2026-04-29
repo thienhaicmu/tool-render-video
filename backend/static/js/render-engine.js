@@ -340,7 +340,10 @@ function _applyJobUpdate(job, parts, summary){
       const handoff = buildCompletionHandoff(s, parts, job);
       showRenderCompletionBar(handoff.main, handoff.detail);
       setRenderFlowState('complete', `${doneCount} clips ready`);
-      if (typeof populateRenderOutputPanel === 'function') populateRenderOutputPanel(job, parts);
+      if (typeof populateRenderOutputPanel === 'function') {
+        populateRenderOutputPanel(job, parts);
+        augmentRenderOutputRanking(job);
+      }
     } else {
       hideRenderCompletionBar();
       if (typeof clearRenderOutputPanel === 'function') clearRenderOutputPanel();
@@ -691,5 +694,58 @@ async function _submitRenderPayload(payload, isBatch) {
   addEvent(isBatch ? `Queued render batch (${data.count || '?'} links)` : 'Queued render job', 'render');
   startPolling();
   return { ok: true, error: null };
+}
+
+function _renderJobRankingMap(job) {
+  const map = new Map();
+  try {
+    const raw = job?.result_json;
+    const result = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+    const ranking = Array.isArray(result?.output_ranking) ? result.output_ranking : [];
+    for (const r of ranking) {
+      const partNo = Number(r?.part_no || 0);
+      if (!partNo) continue;
+      map.set(partNo, {
+        rank: Number(r.output_rank || 0),
+        score: Number(r.output_score ?? r.output_rank_score ?? 0),
+        isBest: !!(r.is_best_clip ?? r.is_best_output),
+        reason: String(r.ranking_reason || '').trim(),
+      });
+    }
+  } catch (_) {}
+  return map;
+}
+
+function augmentRenderOutputRanking(job) {
+  const list = qs('render_output_list');
+  if (!list) return;
+  const ranking = _renderJobRankingMap(job);
+  if (!ranking.size) return;
+
+  list.querySelectorAll('.renderClipItem').forEach((item) => {
+    const partNo = Number(item.querySelector('.renderClipNum')?.textContent || 0);
+    const data = ranking.get(partNo);
+    if (!data) return;
+
+    item.classList.toggle('isBestClip', data.isBest);
+    item.querySelectorAll('.renderClipRanking, .renderClipBestBadge').forEach((el) => el.remove());
+
+    const nameEl = item.querySelector('.renderClipName');
+    if (nameEl && data.isBest) {
+      const badge = document.createElement('span');
+      badge.className = 'renderClipBestBadge';
+      badge.textContent = 'Best Clip';
+      badge.style.cssText = 'display:inline-flex;margin-left:8px;padding:2px 6px;border-radius:999px;background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.35);color:#86efac;font-size:10px;font-weight:700;vertical-align:middle;';
+      nameEl.appendChild(badge);
+    }
+
+    const infoEl = item.querySelector('.renderClipInfo');
+    if (!infoEl) return;
+    const row = document.createElement('div');
+    row.className = 'renderClipRanking';
+    row.textContent = `Rank #${data.rank || '-'} · Score ${Number(data.score || 0).toFixed(1)}${data.reason ? ` · ${data.reason}` : ''}`;
+    row.style.cssText = 'margin-top:3px;font-size:11px;color:rgba(148,163,184,.72);line-height:1.35;';
+    infoEl.appendChild(row);
+  });
 }
 

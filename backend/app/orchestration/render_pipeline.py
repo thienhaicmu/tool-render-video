@@ -129,6 +129,108 @@ def resolve_combined_score_weights(
     }
 
 
+def _score_component(value, default: float = 50.0) -> float:
+    """Return a clamped 0-100 score, using neutral default only when missing."""
+    if value is None or value == "":
+        return default
+    try:
+        return max(0.0, min(100.0, float(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _first_score(seg: dict, names: list[str], default: float = 50.0) -> float:
+    for name in names:
+        if name in seg and seg.get(name) not in (None, ""):
+            return _score_component(seg.get(name), default=default)
+    return default
+
+
+def _output_ranking_reason(components: dict) -> str:
+    reasons: list[str] = []
+
+    if components["hook_score"] >= 70:
+        reasons.append("Strong hook")
+    elif components["hook_score"] < 40:
+        reasons.append("Weak hook")
+
+    if components["retention_score"] >= 70:
+        reasons.append("High retention")
+    elif components.get("continuity_score", 50.0) >= 70:
+        reasons.append("Stable pacing")
+
+    if components["speech_density_score"] >= 60:
+        reasons.append("Speech-heavy segment")
+    elif components["speech_density_score"] < 25:
+        reasons.append("Low speech density")
+
+    if components["market_score"] >= 65:
+        reasons.append("Good market match")
+
+    if components["duration_fit_score"] >= 75 and len(reasons) < 3:
+        reasons.append("Good duration fit")
+
+    if not reasons:
+        reasons.append("Balanced clip signals")
+
+    return ", ".join(reasons[:3])
+
+
+def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, payload_hook_score=None) -> dict:
+    segment_viral_score = _first_score(seg, ["viral_score"], default=50.0)
+    hook_score = _first_score(
+        seg,
+        ["hook_text_score", "hook_timing_score", "hook_score", "hook_opening_score"],
+        default=_score_component(payload_hook_score, default=50.0),
+    )
+    retention_score = _first_score(seg, ["retention_score"], default=50.0)
+    speech_density_score = _first_score(seg, ["speech_density_score"], default=50.0)
+    market_score = _first_score(seg, ["mv_viral_score", "market_viral_score"], default=50.0)
+    duration_fit_score = _first_score(seg, ["duration_fit_score"], default=50.0)
+    continuity_score = _first_score(seg, ["continuity_score"], default=50.0)
+
+    raw_score = (
+        segment_viral_score * 0.35
+        + hook_score * 0.20
+        + retention_score * 0.20
+        + speech_density_score * 0.10
+        + market_score * 0.10
+        + duration_fit_score * 0.05
+    )
+    output_score = round(max(0.0, min(100.0, raw_score)), 1)
+    components = {
+        "segment_viral_score": round(segment_viral_score, 1),
+        "hook_score": round(hook_score, 1),
+        "retention_score": round(retention_score, 1),
+        "speech_density_score": round(speech_density_score, 1),
+        "market_score": round(market_score, 1),
+        "duration_fit_score": round(duration_fit_score, 1),
+        "continuity_score": round(continuity_score, 1),
+    }
+
+    return {
+        "part_no": part_no,
+        "output_file": output_file,
+        "output_rank": 0,
+        "output_score": output_score,
+        "is_best_clip": False,
+        "ranking_reason": _output_ranking_reason(components),
+        "ranking_components": components,
+        "selection_reason": seg.get("selection_reason", ""),
+        # Backward-compatible aliases consumed by existing render UI.
+        "output_rank_score": output_score,
+        "is_best_output": False,
+        "reasons": [
+            f"segment_viral={components['segment_viral_score']}",
+            f"hook={components['hook_score']}",
+            f"retention={components['retention_score']}",
+            f"speech_density={components['speech_density_score']}",
+            f"market={components['market_score']}",
+            f"duration_fit={components['duration_fit_score']}",
+        ],
+    }
+
+
 _PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes to update progress
 
 # ---------------------------------------------------------------------------
@@ -2376,53 +2478,50 @@ def run_render_pipeline(
         for _r_idx, _r_seg in enumerate(scored, start=1):
             if _r_idx in _failed_idx_set:
                 continue
-            _r_combined = float(_r_seg.get("combined_score") or _r_seg.get("viral_score") or 0)
-            _r_mv       = float(_r_seg.get("mv_viral_score") or 0)
-            _r_hook_raw = (
-                _r_seg.get("hook_text_score") or _r_seg.get("hook_timing_score") or
-                _r_seg.get("hook_opening_score") or _r_seg.get("hook_score") or 0
-            )
-            _r_hook     = float(_r_hook_raw or 0)
-            _r_qbonus   = 100.0  # all non-failed parts passed output validation
-            _r_raw      = _r_combined * 0.70 + _r_mv * 0.15 + _r_hook * 0.10 + _r_qbonus * 0.05
-            _r_score    = round(max(0.0, min(100.0, _r_raw)), 1)
             _r_output   = str(output_dir / f"{source['slug']}_part_{_r_idx:03d}.mp4")
-            _rank_entries.append({
-                "part_no":              _r_idx,
-                "output_file":          _r_output,
-                "output_rank_score":    _r_score,
-                "output_rank":          0,
-                "is_best_output":       False,
-                "reasons": [
-                    f"combined={_r_combined}",
-                    f"market_viral={_r_mv}",
-                    f"hook={_r_hook}",
-                    f"quality_bonus={_r_qbonus}",
-                ],
-            })
+            _rank_entry = _compute_output_ranking_entry(
+                _r_idx,
+                _r_seg,
+                _r_output,
+                payload_hook_score=_hook_score,
+            )
+            _rank_entries.append(_rank_entry)
             _emit_render_event(
                 channel_code=effective_channel,
                 job_id=job_id,
                 event="output_rank_computed",
                 level="INFO",
-                message=f"Part {_r_idx} output_rank_score={_r_score}",
+                message=f"Part {_r_idx} output_score={_rank_entry['output_score']}",
                 step="render.output_rank",
                 context={
-                    "part_no":              _r_idx,
-                    "output_rank_score":    _r_score,
-                    "combined_score":       _r_combined,
-                    "market_viral_score":   _r_mv,
-                    "hook_score_component": _r_hook,
-                    "output_quality_bonus": _r_qbonus,
+                    "part_no": _r_idx,
+                    "output_score": _rank_entry["output_score"],
+                    "output_rank_score": _rank_entry["output_rank_score"],
+                    "ranking_reason": _rank_entry["ranking_reason"],
+                    "ranking_components": _rank_entry["ranking_components"],
                 },
             )
-        _rank_entries.sort(key=lambda x: x["output_rank_score"], reverse=True)
+        _rank_entries.sort(key=lambda x: x["output_score"], reverse=True)
         for _ri, _re in enumerate(_rank_entries, start=1):
             _re["output_rank"]    = _ri
+            _re["is_best_clip"]   = (_ri == 1)
             _re["is_best_output"] = (_ri == 1)
+            _seg = scored[_re["part_no"] - 1]
+            _seg["output_rank"] = _re["output_rank"]
+            _seg["output_score"] = _re["output_score"]
+            _seg["is_best_clip"] = _re["is_best_clip"]
+            _seg["ranking_reason"] = _re["ranking_reason"]
         _rank_entries_ordered = sorted(_rank_entries, key=lambda x: x["part_no"])
         _best_rank_entry = _rank_entries[0] if _rank_entries else None
         if _best_rank_entry:
+            _job_log(
+                effective_channel,
+                job_id,
+                f"Output ranking: ranked={len(_rank_entries)} "
+                f"best_part_no={_best_rank_entry['part_no']} "
+                f"best_output_score={_best_rank_entry['output_score']} "
+                f"reason={_best_rank_entry['ranking_reason']}",
+            )
             _emit_render_event(
                 channel_code=effective_channel,
                 job_id=job_id,
@@ -2430,15 +2529,21 @@ def run_render_pipeline(
                 level="INFO",
                 message=(
                     f"Output ranking: best=part_{_best_rank_entry['part_no']:03d} "
-                    f"score={_best_rank_entry['output_rank_score']} total={len(_rank_entries)}"
+                    f"score={_best_rank_entry['output_score']} total={len(_rank_entries)}"
                 ),
                 step="render.output_rank",
                 context={
                     "total_outputs":   len(_rank_entries),
                     "best_part_no":    _best_rank_entry["part_no"],
-                    "best_score":      _best_rank_entry["output_rank_score"],
+                    "best_score":      _best_rank_entry["output_score"],
+                    "best_reason":     _best_rank_entry["ranking_reason"],
                     "ranking_summary": [
-                        {"part_no": e["part_no"], "rank": e["output_rank"], "score": e["output_rank_score"]}
+                        {
+                            "part_no": e["part_no"],
+                            "rank": e["output_rank"],
+                            "score": e["output_score"],
+                            "reason": e["ranking_reason"],
+                        }
                         for e in _rank_entries[:5]
                     ],
                 },
@@ -2463,7 +2568,9 @@ def run_render_pipeline(
                                 "part_no":           _abe["part_no"],
                                 "source_file":       str(_abe_src),
                                 "best_file":         str(_abe_dst),
+                                "output_score":      _abe["output_score"],
                                 "output_rank_score": _abe["output_rank_score"],
+                                "ranking_reason":    _abe["ranking_reason"],
                             })
                         except Exception as _abe_copy_err:
                             _job_log(
@@ -2501,7 +2608,7 @@ def run_render_pipeline(
                     context={"reason": "no_ranked_outputs"},
                 )
 
-        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored, "market_viral_parts": _mv_parts, "output_ranking": _rank_entries_ordered, "best_exports": _best_exports_list, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
+        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored, "market_viral_parts": _mv_parts, "output_ranking": _rank_entries_ordered, "best_clip": _best_rank_entry, "best_exports": _best_exports_list, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
         _job_log(effective_channel, job_id, f"Render completed with {len(outputs)}/{total_parts} outputs")
         _emit_render_event(
             channel_code=effective_channel,
