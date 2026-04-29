@@ -801,6 +801,17 @@
       <!-- Output settings (pre-defined; JS skips recreating it) -->
       <div class="evSection insp-panel-active" id="evSectionBasic" data-insp-panel="mode">
         <div class="evSectionTitle">Output</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:7px 10px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid rgba(148,163,184,.12)">
+          <span style="font-size:12px;color:rgba(148,163,184,.6);white-space:nowrap;flex-shrink:0">Output Preset</span>
+          <select id="evOutputPreset" class="fieldInput" style="flex:1;margin-bottom:0;font-size:12px" onchange="evApplyOutputPreset(this.value)">
+            <option value="custom" selected>Manual / Custom</option>
+            <option value="tiktok_us_viral">TikTok US Viral</option>
+            <option value="youtube_shorts_clean">YouTube Shorts Clean</option>
+            <option value="jp_subtle_story">JP Subtle Story</option>
+            <option value="fast_draft">Fast Draft</option>
+          </select>
+          <span id="evPresetHint" style="font-size:11px;color:rgba(94,234,212,.6);white-space:nowrap;min-width:0"></span>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <label class="field">
             <span class="fieldLabel">Aspect Ratio</span>

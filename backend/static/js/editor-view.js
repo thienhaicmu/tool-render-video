@@ -1714,6 +1714,7 @@ async function startRenderFromEditor() {
 
   const profile = qs('evRenderProfile').value;
   payload.render_profile = profile;
+  payload.render_preset  = document.getElementById('evOutputPreset')?.value || 'custom';
   // video_preset and video_crf are intentionally omitted — backend _resolve_profile()
   // selects the correct preset and CRF from the render_profile name.
 
@@ -2084,6 +2085,124 @@ function mvHandleAutoBestClips() {
 function mvGetState() {
   return { ..._mvState };
 }
+
+// ── P6-1 Output Preset System ─────────────────────────────────────────────────
+
+const EV_OUTPUT_PRESETS = {
+  custom: null,
+  tiktok_us_viral: {
+    market: 'US', subtitleTone: 'bold', keywordHighlight: true,
+    renderProfile: 'quality', sourceQuality: 'high_1440', reframeStrategy: 'fast_center',
+    combinedScoring: true, adaptiveScoring: true,
+    autoBestClips: true, bestExportEnabled: true, bestExportCount: 3,
+    partOrder: 'viral', maxExportParts: 5,
+  },
+  youtube_shorts_clean: {
+    market: 'US', subtitleTone: 'clean', keywordHighlight: false,
+    renderProfile: 'balanced', sourceQuality: 'standard_1080', reframeStrategy: 'fast_center',
+    combinedScoring: true, adaptiveScoring: false,
+    autoBestClips: true, bestExportEnabled: true, bestExportCount: 3,
+    partOrder: 'viral', maxExportParts: 5,
+  },
+  jp_subtle_story: {
+    market: 'JP', subtitleTone: 'clean', keywordHighlight: false,
+    renderProfile: 'quality', sourceQuality: 'high_1440', reframeStrategy: 'fast_center',
+    combinedScoring: true, adaptiveScoring: true,
+    autoBestClips: true, bestExportEnabled: true, bestExportCount: 3,
+    partOrder: 'viral', maxExportParts: 5,
+  },
+  fast_draft: {
+    renderProfile: 'fast', sourceQuality: 'standard_1080', reframeStrategy: 'fast_center',
+    combinedScoring: false, adaptiveScoring: false,
+    autoBestClips: false, bestExportEnabled: false,
+    partOrder: null, maxExportParts: 3,
+  },
+};
+
+let _evApplyingPreset = false;
+
+const _EV_PRESET_LABELS = {
+  tiktok_us_viral:      'TikTok US Viral',
+  youtube_shorts_clean: 'YouTube Shorts Clean',
+  jp_subtle_story:      'JP Subtle Story',
+  fast_draft:           'Fast Draft',
+};
+
+function evApplyOutputPreset(presetId) {
+  const cfg = EV_OUTPUT_PRESETS[presetId];
+  const hint = document.getElementById('evPresetHint');
+  if (!cfg) {
+    if (hint) hint.textContent = '';
+    return;
+  }
+  _evApplyingPreset = true;
+  try {
+    const g = (id) => document.getElementById(id);
+    const set = (id, val) => { if (val == null) return; const el = g(id); if (el) el.value = val; };
+    const chk = (id, val) => { if (val == null) return; const el = g(id); if (el) el.checked = !!val; };
+
+    // ── Render / output controls ──────────────────────────────────────────────
+    set('evRenderProfile',    cfg.renderProfile);
+    set('evSourceQualityMode', cfg.sourceQuality);
+    set('evReframeStrategy',  cfg.reframeStrategy);
+    if (cfg.partOrder != null) set('evPartOrder', cfg.partOrder);
+    if (cfg.maxExportParts != null) {
+      const mp = g('evMaxExportParts');
+      if (mp && Number(mp.value) === 0) mp.value = cfg.maxExportParts;
+    }
+
+    // ── Market Viral controls ─────────────────────────────────────────────────
+    set('mvMarket',      cfg.market);
+    set('mvSubtitleTone', cfg.subtitleTone);
+    chk('mvKeywordHighlight', cfg.keywordHighlight);
+    chk('mvCombinedScoring',  cfg.combinedScoring);
+    chk('mvAdaptiveScoring',  cfg.adaptiveScoring);
+
+    // ── Auto Best Clips (sync visual accent on the row) ───────────────────────
+    if (cfg.autoBestClips != null) {
+      chk('mvAutoBestClips', cfg.autoBestClips);
+      _mvState.autoBestClips = !!cfg.autoBestClips;
+      const abRow = g('mvAutoBestRow');
+      if (abRow) {
+        if (cfg.autoBestClips) abRow.dataset.active = '1';
+        else delete abRow.dataset.active;
+      }
+    }
+
+    // ── Best Export ───────────────────────────────────────────────────────────
+    chk('mvBestExportEnabled', cfg.bestExportEnabled);
+    if (cfg.bestExportCount != null) { const el = g('mvBestExportCount'); if (el) el.value = cfg.bestExportCount; }
+
+    // ── Sync all derived MV state (adaptive row visibility, export count gate) ─
+    if (typeof mvHandleChange === 'function') mvHandleChange();
+
+    if (hint) hint.textContent = `Preset applied: ${_EV_PRESET_LABELS[presetId] || presetId}`;
+  } finally {
+    _evApplyingPreset = false;
+  }
+}
+
+function evMarkPresetCustomOnManualChange() {
+  if (_evApplyingPreset) return;
+  const sel = document.getElementById('evOutputPreset');
+  if (!sel || sel.value === 'custom') return;
+  sel.value = 'custom';
+  const hint = document.getElementById('evPresetHint');
+  if (hint) hint.textContent = 'Custom settings';
+}
+
+// Delegated listener — fires evMarkPresetCustomOnManualChange when any watched
+// control changes while a preset is active (not during preset application).
+(function _evPresetWatcherSetup() {
+  const WATCHED = new Set([
+    'evRenderProfile', 'evSourceQualityMode', 'evReframeStrategy', 'evPartOrder', 'evMaxExportParts',
+    'mvMarket', 'mvSubtitleTone', 'mvKeywordHighlight', 'mvCombinedScoring', 'mvAdaptiveScoring',
+    'mvAutoBestClips', 'mvBestExportEnabled', 'mvBestExportCount',
+  ]);
+  document.addEventListener('change', function(e) {
+    if (e.target && WATCHED.has(e.target.id)) evMarkPresetCustomOnManualChange();
+  }, true);
+}());
 
 function mvUpdatePreviewHint() {
   const bulletsEl = document.getElementById('mvHintBullets');
