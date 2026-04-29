@@ -821,6 +821,14 @@ def run_render_pipeline(
         job_id,
         f"Market Viral hook | market={_mv_market} | hook_apply_enabled={_hook_apply_enabled} | hook_score={_hook_score}",
     )
+    _preset_id = str(getattr(payload, "render_preset_id", None) or getattr(payload, "render_preset", None) or "").strip()
+    _preset_label = str(getattr(payload, "render_preset_label", None) or _preset_id or "").strip()
+    if _preset_id and _preset_id.lower() != "custom":
+        _job_log(
+            effective_channel,
+            job_id,
+            f"Render preset applied | id={_preset_id} | label={_preset_label}",
+        )
     _job_log(
         effective_channel, job_id,
         f"profile_resolved | render_profile={payload.render_profile} | preset={tuned['video_preset']} crf={tuned['video_crf']} whisper={tuned['whisper_model']} trans={tuned['transition_sec']:.2f}",

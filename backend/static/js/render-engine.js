@@ -88,6 +88,9 @@ async function startRender(){
     // Defaults (will be overridden by editor UI before submit)
     aspect_ratio: '3:4',
     render_profile: 'balanced',
+    render_preset: 'custom',
+    render_preset_id: null,
+    render_preset_label: null,
     video_codec: 'h264',
     audio_bitrate: '256k',
     transition_sec: 0.25,

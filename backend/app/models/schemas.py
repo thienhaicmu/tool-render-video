@@ -127,6 +127,9 @@ class RenderRequest(BaseModel):
 
     # Profile / quality
     render_profile: Optional[str] = "quality"
+    render_preset: Optional[str] = "custom"
+    render_preset_id: Optional[str] = None
+    render_preset_label: Optional[str] = None
     video_preset: Optional[str] = None
     video_crf: Optional[int] = None
     video_codec: Optional[str] = "h264"
