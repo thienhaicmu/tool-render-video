@@ -1315,6 +1315,12 @@
         </div>
 
         <div class="mvToggleGroup">
+          <label class="mvToggleRow mvAutoBestRow" id="mvAutoBestRow">
+            <input type="checkbox" id="mvAutoBestClips" onchange="mvHandleAutoBestClips()">
+            <span class="mvToggleLabel">&#10024; Auto Best Clips</span>
+          </label>
+          <div style="font-size:11px;color:rgba(148,163,184,.45);margin:-2px 0 4px 22px">Automatically ranks clips using motion, market viral score, and hook strength.</div>
+          <div class="mvAutoBestDivider"></div>
           <label class="mvToggleRow">
             <input type="checkbox" id="mvKeywordHighlight" onchange="mvHandleChange()">
             <span class="mvToggleLabel">&#128273; Keyword Highlight</span>

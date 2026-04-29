@@ -1795,6 +1795,17 @@ async function startRenderFromEditor() {
     payload.adaptive_scoring_enabled = !!mv.adaptiveScoring;
   }
 
+  // ── Auto Best Clips mode override ─────────────────────────────────────────
+  // Applied after individual field reads so user-explicit values are visible
+  // first. Only max_export_parts gets a fallback (5); part_order and scoring
+  // flags are always forced when the mode is ON.
+  if ((typeof mvGetState === 'function') && mvGetState().autoBestClips) {
+    payload.combined_scoring_enabled = true;
+    payload.adaptive_scoring_enabled = true;
+    payload.part_order               = 'viral';
+    if (!payload.max_export_parts)   payload.max_export_parts = 5;
+  }
+
   // ── Subtitle edits (hook previews applied by user) ───────────────────────
   {
     const edits = (_ev.subtitleEdits instanceof Map && _ev.subtitleEdits.size > 0)
@@ -1976,6 +1987,7 @@ const _mvState = {
   keywordHighlight: false,
   combinedScoring: false,
   adaptiveScoring: false,
+  autoBestClips: false,
 };
 
 function mvHandleChange() {
@@ -2007,6 +2019,39 @@ function mvHandleChange() {
     el.adaptiveScoring.disabled = !combinedOn;
     if (!combinedOn) el.adaptiveScoring.checked = false;
     _mvState.adaptiveScoring = combinedOn && el.adaptiveScoring.checked;
+  }
+
+  mvUpdatePreviewHint();
+  mvUpdateHookQuality();
+}
+
+function mvHandleAutoBestClips() {
+  const g = (id) => document.getElementById(id);
+  const cb = g('mvAutoBestClips');
+  if (!cb) return;
+  _mvState.autoBestClips = cb.checked;
+
+  const row = g('mvAutoBestRow');
+  if (cb.checked) {
+    // Set combined ON (if not already)
+    const cbCombined = g('mvCombinedScoring');
+    if (cbCombined) { cbCombined.checked = true; _mvState.combinedScoring = true; }
+
+    // Enable adaptive row and set adaptive ON
+    const adaptiveRow  = g('mvAdaptiveRow');
+    const adaptiveHint = g('mvAdaptiveHint');
+    const cbAdaptive   = g('mvAdaptiveScoring');
+    if (adaptiveRow) { adaptiveRow.style.opacity = '1'; adaptiveRow.style.pointerEvents = ''; }
+    if (adaptiveHint) adaptiveHint.style.color = 'rgba(148,163,184,.45)';
+    if (cbAdaptive) { cbAdaptive.disabled = false; cbAdaptive.checked = true; _mvState.adaptiveScoring = true; }
+
+    // Visual accent on the Auto Best row
+    if (row) row.dataset.active = '1';
+  } else {
+    // Remove active accent; restore gate logic for adaptive via normal handler
+    if (row) delete row.dataset.active;
+    mvHandleChange();
+    return;
   }
 
   mvUpdatePreviewHint();
