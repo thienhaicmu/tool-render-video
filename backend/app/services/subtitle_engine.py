@@ -734,6 +734,83 @@ def apply_market_line_break_to_srt(srt_path: str, market_payload: dict) -> str:
 # P4-2 — Hook subtitle impact formatting
 # ---------------------------------------------------------------------------
 
+def apply_market_hook_text_to_srt(
+    srt_path: str,
+    hook_text: str,
+    max_hook_blocks: int = 1,
+    max_hook_seconds: float = 5.0,
+) -> dict:
+    """Replace the opening subtitle hook zone with user-selected hook text.
+
+    This only changes text in the first subtitle block by default. Timestamps,
+    ordering, and non-hook blocks are preserved. Safe no-op on missing subtitles,
+    blank hook text, parse errors, or write errors.
+    """
+    result = {
+        "applied": False,
+        "affected_count": 0,
+        "original_hook_text": "",
+        "applied_hook_text": str(hook_text or "").strip(),
+    }
+    if not result["applied_hook_text"]:
+        return result
+    try:
+        max_blocks = max(1, min(2, int(max_hook_blocks or 1)))
+    except Exception:
+        max_blocks = 1
+    try:
+        max_seconds = max(3.0, min(5.0, float(max_hook_seconds or 5.0)))
+    except Exception:
+        max_seconds = 5.0
+
+    try:
+        blocks = _parse_srt_blocks(srt_path)
+        if not blocks:
+            return result
+
+        target_indexes = []
+        for i, b in enumerate(blocks):
+            if len(target_indexes) >= max_blocks:
+                break
+            if not str(b.get("text") or "").strip():
+                continue
+            if float(b.get("start") or 0.0) <= max_seconds:
+                target_indexes.append(i)
+
+        if not target_indexes:
+            first_text_idx = next(
+                (i for i, b in enumerate(blocks) if str(b.get("text") or "").strip()),
+                None,
+            )
+            if first_text_idx is not None:
+                target_indexes.append(first_text_idx)
+
+        if not target_indexes:
+            return result
+
+        target_set = set(target_indexes)
+        result["original_hook_text"] = " ".join(
+            str(blocks[i].get("text") or "").strip()
+            for i in target_indexes
+            if str(blocks[i].get("text") or "").strip()
+        ).strip()
+
+        with Path(srt_path).open("w", encoding="utf-8") as f:
+            for idx, b in enumerate(blocks, start=1):
+                text = result["applied_hook_text"] if (idx - 1) in target_set else b["text"]
+                f.write(
+                    f"{idx}\n"
+                    f"{format_srt_timestamp(b['start'])} --> {format_srt_timestamp(b['end'])}\n"
+                    f"{text}\n\n"
+                )
+
+        result["applied"] = True
+        result["affected_count"] = len(target_indexes)
+        return result
+    except Exception:
+        return result
+
+
 _HOOK_EMPHASIS_WORDS = frozenset({
     "never", "crazy", "craziest", "crazier", "shocking", "shocked",
     "wait", "look", "watch", "insane", "insanely", "unbelievable",

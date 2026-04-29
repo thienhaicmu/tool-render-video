@@ -18,7 +18,7 @@ from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes
-from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt, apply_hook_subtitle_format
+from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt, apply_market_hook_text_to_srt, apply_hook_subtitle_format
 from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing
 from app.services.viral_scorer import score_segments
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
@@ -626,9 +626,23 @@ def run_render_pipeline(
 
     # Market Viral — resolve target market once; used by all part workers via closure
     _mv_cfg = getattr(payload, "market_viral", None) or {}
-    _mv_market = str((_mv_cfg.get("target_market") or "US") if isinstance(_mv_cfg, dict) else "US").upper()
+    _mv_cfg_enabled = isinstance(_mv_cfg, dict) and bool(_mv_cfg)
+    _mv_payload_market = getattr(payload, "viral_market", None)
+    _mv_market = str(
+        _mv_payload_market
+        or ((_mv_cfg.get("target_market") or "US") if isinstance(_mv_cfg, dict) else "US")
+    ).upper()
     if _mv_market not in {"US", "EU", "JP"}:
         _mv_market = "US"
+    if _mv_cfg_enabled:
+        _mv_cfg = {**_mv_cfg, "target_market": _mv_market}
+    else:
+        _mv_cfg = {}
+    _hook_apply_enabled = bool(getattr(payload, "hook_apply_enabled", False))
+    _hook_applied_text = str(getattr(payload, "hook_applied_text", None) or "").strip()
+    _hook_score = getattr(payload, "hook_score", None)
+    if not _hook_applied_text:
+        _hook_apply_enabled = False
     if output_mode == "channel":
         ensure_channel(effective_channel)
         if not (payload.render_output_subdir or "").strip():
@@ -699,6 +713,11 @@ def run_render_pipeline(
         effective_channel,
         job_id,
         f"Render started | resume={resume_mode} | profile={payload.render_profile} | codec={payload.video_codec} | reup_mode={payload.reup_mode} | source_mode={payload.source_mode} | output_mode={output_mode}",
+    )
+    _job_log(
+        effective_channel,
+        job_id,
+        f"Market Viral hook | market={_mv_market} | hook_apply_enabled={_hook_apply_enabled} | hook_score={_hook_score}",
     )
     _job_log(
         effective_channel, job_id,
@@ -1486,6 +1505,60 @@ def run_render_pipeline(
                         _apply_subtitle_edits_to_srt(str(_ass_srt_source), _sub_edits)
                     except Exception as _se_exc:
                         logger.warning("subtitle_edits: skipped due to error: %s", _se_exc)
+                if _hook_apply_enabled and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
+                    try:
+                        _hook_apply_meta = apply_market_hook_text_to_srt(
+                            str(_ass_srt_source),
+                            _hook_applied_text,
+                            max_hook_blocks=1,
+                            max_hook_seconds=5.0,
+                        )
+                        _hook_affected = int(_hook_apply_meta.get("affected_count") or 0)
+                        if _hook_apply_meta.get("applied"):
+                            needs_ass = True
+                        _job_log(
+                            effective_channel,
+                            job_id,
+                            "market_viral_hook_apply "
+                            f"part_no={idx} market={_mv_market} "
+                            f"hook_apply_enabled={_hook_apply_enabled} "
+                            f"hook_score={_hook_score} "
+                            f"subtitle_blocks_affected={_hook_affected} "
+                            f"original_hook_text={_hook_apply_meta.get('original_hook_text', '')!r} "
+                            f"applied_hook_text={_hook_apply_meta.get('applied_hook_text', '')!r}",
+                        )
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="market_viral_hook_applied",
+                            level="INFO",
+                            message=f"Market Viral hook applied to {_hook_affected} subtitle block(s) (part {idx})",
+                            step="subtitle.market_hook",
+                            context={
+                                "part_no": idx,
+                                "market": _mv_market,
+                                "hook_apply_enabled": _hook_apply_enabled,
+                                "hook_score": _hook_score,
+                                "subtitle_blocks_affected": _hook_affected,
+                                "original_hook_text": _hook_apply_meta.get("original_hook_text", ""),
+                                "applied_hook_text": _hook_apply_meta.get("applied_hook_text", ""),
+                            },
+                        )
+                    except Exception as _hook_exc:
+                        logger.warning("market_viral_hook_apply: skipped due to error: %s", _hook_exc)
+                elif _hook_apply_enabled:
+                    _job_log(
+                        effective_channel,
+                        job_id,
+                        "market_viral_hook_apply "
+                        f"part_no={idx} market={_mv_market} "
+                        f"hook_apply_enabled={_hook_apply_enabled} "
+                        f"hook_score={_hook_score} "
+                        "subtitle_blocks_affected=0 "
+                        "original_hook_text='' "
+                        f"applied_hook_text={_hook_applied_text!r}",
+                        kind="warning",
+                    )
                 if _mv_cfg and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
                     try:
                         apply_market_line_break_to_srt(str(_ass_srt_source), _mv_cfg)

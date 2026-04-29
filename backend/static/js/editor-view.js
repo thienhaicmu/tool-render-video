@@ -6,6 +6,7 @@ let _ev = {
   sourceMode: null, sourceUrl: null,
   subXPercent: 50,
   subtitleSegments: [],
+  subtitleOriginalSegments: [],
   subtitleEdits: new Map(),
   subtitleMode: 'demo',
   selectedObject: null,
@@ -840,8 +841,10 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   _ev.sourceUrl = urlOrPath;
   _ev.subXPercent = 50;
   _ev.subtitleSegments = [];
+  _ev.subtitleOriginalSegments = [];
   _ev.subtitleEdits = new Map();
   _ev.subtitleMode = 'demo';
+  if (typeof _mvResetHookRenderState === 'function') _mvResetHookRenderState();
   if (qs('evSubPosX'))    qs('evSubPosX').value       = 50;
   if (qs('evSubPosXVal')) qs('evSubPosXVal').textContent = 50;
 
@@ -917,8 +920,10 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   _ev.sourceMode = _ev.sourceMode || 'youtube';
   _ev.subXPercent = 50;
   _ev.subtitleSegments = [];
+  _ev.subtitleOriginalSegments = [];
   _ev.subtitleEdits = new Map();
   _ev.subtitleMode = 'demo';
+  if (typeof _mvResetHookRenderState === 'function') _mvResetHookRenderState();
   if (qs('evSubPosX'))    qs('evSubPosX').value       = 50;
   if (qs('evSubPosXVal')) qs('evSubPosXVal').textContent = 50;
   _ev.sourceUrl = _ev.sourceUrl || urlOrPath;
@@ -1195,7 +1200,9 @@ async function _evFetchTranscript(sessionId) {
     const segs = Array.isArray(data?.segments) ? data.segments.filter(s => s && s.text) : [];
     if (!segs.length) return;
     if (_ev.sessionId !== sessionId) return;
-    _ev.subtitleSegments = segs;
+    _ev.subtitleSegments = segs.map(s => ({ ...s }));
+    _ev.subtitleOriginalSegments = segs.map(s => ({ ...s }));
+    if (typeof _mvResetHookRenderState === 'function') _mvResetHookRenderState();
     _ev.subtitleMode = 'real';
     if (_ev.subAnimTimer) { clearInterval(_ev.subAnimTimer); _ev.subAnimTimer = null; }
     _evUpdateSubLabel();
@@ -1792,6 +1799,10 @@ async function startRenderFromEditor() {
       subtitle_tone:     mv.subtitleTone    || 'clean',
       keyword_highlight: !!mv.keywordHighlight,
     };
+    payload.viral_market = mv.market || 'US';
+    payload.hook_apply_enabled = !!mv.hookApplyEnabled && !!String(mv.hookAppliedText || '').trim();
+    payload.hook_applied_text = payload.hook_apply_enabled ? String(mv.hookAppliedText || '').trim() : '';
+    payload.hook_score = Number.isFinite(Number(mv.hookScore)) ? Number(mv.hookScore) : null;
     payload.combined_scoring_enabled  = !!mv.combinedScoring;
     payload.adaptive_scoring_enabled  = !!mv.adaptiveScoring;
     payload.auto_best_export_enabled  = !!mv.bestExportEnabled;
@@ -1999,7 +2010,18 @@ const _mvState = {
   autoBestClips: false,
   bestExportEnabled: false,
   bestExportCount: 3,
+  hookApplyEnabled: false,
+  hookAppliedText: '',
+  hookOriginalText: '',
+  hookScore: null,
 };
+
+function _mvResetHookRenderState() {
+  _mvState.hookApplyEnabled = false;
+  _mvState.hookAppliedText = '';
+  _mvState.hookOriginalText = '';
+  _mvState.hookScore = null;
+}
 
 function mvHandleChange() {
   const g = (id) => document.getElementById(id);
@@ -2049,6 +2071,11 @@ function mvHandleChange() {
       _mvState.bestExportCount = Math.max(1, Math.min(10, isNaN(raw) ? 3 : raw));
       el.bestExportCount.value = _mvState.bestExportCount;
     }
+  }
+
+  if (_mvState.hookApplyEnabled && _mvState.hookAppliedText) {
+    const hookAnalysis = _mvAnalyzeHook(_mvState.hookAppliedText, _mvState.market || 'US');
+    _mvState.hookScore = hookAnalysis.hook_text_score;
   }
 
   mvUpdatePreviewHint();
@@ -2352,22 +2379,44 @@ function _mvGetSubtitleText() {
   return segs.slice(0, 8).map(s => (s.text || '')).join(' ').trim();
 }
 
-// Returns first 1-2 meaningful subtitle lines as a true hook excerpt.
-// If the video is seeked past the opening, uses the segment at current time.
-function _mvGetHookText() {
-  const segs = (_ev && Array.isArray(_ev.subtitleSegments)) ? _ev.subtitleSegments : [];
-  if (!segs.length) return '';
-  const vid = qs('evVideo');
-  const t   = vid ? (vid.currentTime || 0) : 0;
-  if (t > 0) {
-    const idx = segs.findIndex(s => t >= (s.start || 0) && t < (s.end != null ? s.end : (s.start || 0) + 1));
-    if (idx >= 0) {
-      const ctx = segs.slice(idx, idx + 2).filter(s => (s.text || '').trim());
-      if (ctx.length) return ctx.map(s => s.text.trim()).join(' ').slice(0, 200).trim();
-    }
+function _mvSubtitleSource(useOriginal) {
+  if (useOriginal && _ev && Array.isArray(_ev.subtitleOriginalSegments) && _ev.subtitleOriginalSegments.length) {
+    return _ev.subtitleOriginalSegments;
   }
-  const meaningful = segs.filter(s => (s.text || '').trim());
-  return meaningful.slice(0, 2).map(s => s.text.trim()).join(' ').slice(0, 200).trim();
+  return (_ev && Array.isArray(_ev.subtitleSegments)) ? _ev.subtitleSegments : [];
+}
+
+function _mvGetHookZoneIndexes(maxBlocks = 2, maxSeconds = 5) {
+  const segs = _mvSubtitleSource(false);
+  if (!segs.length) return [];
+  const indexes = [];
+  for (let i = 0; i < segs.length && indexes.length < maxBlocks; i++) {
+    const s = segs[i];
+    if (!(s && String(s.text || '').trim())) continue;
+    const start = Number(s.start || 0);
+    if (start <= maxSeconds) indexes.push(i);
+  }
+  if (!indexes.length) {
+    const first = segs.findIndex(s => s && String(s.text || '').trim());
+    if (first >= 0) indexes.push(first);
+  }
+  return indexes;
+}
+
+function _mvGetHookZoneText(useOriginal = false) {
+  const segs = _mvSubtitleSource(useOriginal);
+  const indexes = _mvGetHookZoneIndexes(2, 5);
+  return indexes
+    .map(i => (segs[i] && segs[i].text ? String(segs[i].text).trim() : ''))
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 200)
+    .trim();
+}
+
+// Returns the opening subtitle hook zone only.
+function _mvGetHookText() {
+  return _mvGetHookZoneText(false);
 }
 
 // Port of hook_optimizer.py — pure rule-based, no API call
@@ -2530,20 +2579,43 @@ function mvCopyHook(el) {
   }
 }
 
+function _mvRestoreOriginalHookZone() {
+  const indexes = _mvGetHookZoneIndexes(2, 5);
+  const origs = _mvSubtitleSource(true);
+  const segs = _mvSubtitleSource(false);
+  if (!indexes.length || !segs.length) return 0;
+  let restored = 0;
+  if (!(_ev.subtitleEdits instanceof Map)) _ev.subtitleEdits = new Map();
+  for (const idx of indexes) {
+    if (!segs[idx] || !origs[idx]) continue;
+    segs[idx].text = origs[idx].text;
+    _ev.subtitleEdits.delete(idx);
+    restored++;
+  }
+  return restored;
+}
+
 function _mvApplyHookCore(hook, btn, doneText, revertText) {
   if (!_ev || !Array.isArray(_ev.subtitleSegments) || !_ev.subtitleSegments.length) {
     if (typeof showToast === 'function') showToast('Load a video first to preview hooks', 'info');
     return;
   }
-  const vid = qs('evVideo');
-  const t   = vid ? (vid.currentTime || 0) : 0;
-  let idx = _ev.subtitleSegments.findIndex(s => t >= s.start && t < s.end);
-  if (idx < 0) idx = 0;
+  const indexes = _mvGetHookZoneIndexes(1, 5);
+  const idx = indexes.length ? indexes[0] : 0;
   const seg = _ev.subtitleSegments[idx];
   if (!seg) return;
+  const market = _mvState.market || 'US';
+  const originalText = _mvGetHookZoneText(true) || _mvGetHookZoneText(false);
+  const hookAnalysis = _mvAnalyzeHook(hook, market);
   seg.text = hook;
   if (!(_ev.subtitleEdits instanceof Map)) _ev.subtitleEdits = new Map();
   _ev.subtitleEdits.set(idx, { index: idx, start: seg.start, end: seg.end, text: hook });
+  _mvState.hookApplyEnabled = true;
+  _mvState.hookAppliedText = String(hook || '').trim();
+  _mvState.hookOriginalText = originalText;
+  _mvState.hookScore = hookAnalysis.hook_text_score;
+  const vid = qs('evVideo');
+  const t = vid ? (vid.currentTime || 0) : 0;
   _evSyncSubTime(t);
   mvUpdateHookQuality();
   mvUpdateSubEditsIndicator();
@@ -2580,10 +2652,7 @@ function mvUpdateHookCompare() {
   if (!segs.length) { sec.classList.add('hiddenView'); return; }
 
   const market  = _mvState.market || 'US';
-  const vid     = qs('evVideo');
-  const t       = vid ? (vid.currentTime || 0) : 0;
-  const origSeg = segs.find(s => t >= s.start && t < s.end) || segs[0];
-  const origText = (origSeg && origSeg.text) ? origSeg.text.trim() : '';
+  const origText = _mvGetHookZoneText(true) || _mvGetHookZoneText(false);
   if (!origText) { sec.classList.add('hiddenView'); return; }
 
   const origAnalysis = _mvAnalyzeHook(origText, market);
@@ -2631,6 +2700,19 @@ function mvUpdateHookCompare() {
 function mvCompareUse(el) {
   const hook = el.dataset.hook || '';
   if (!hook) return;
+  const label = String(el.dataset.label || '');
+  if (/original/i.test(label)) {
+    _mvRestoreOriginalHookZone();
+    _mvResetHookRenderState();
+    const vid = qs('evVideo');
+    if (vid) _evSyncSubTime(vid.currentTime || 0);
+    mvUpdateHookQuality();
+    mvUpdateSubEditsIndicator();
+    el.textContent = 'Original Active';
+    el.classList.add('isApplied');
+    setTimeout(() => { el.textContent = label || 'Use Original'; el.classList.remove('isApplied'); }, 1500);
+    return;
+  }
   _mvApplyHookCore(hook, el, '✓ Applied', el.dataset.label || 'Use This');
 }
 

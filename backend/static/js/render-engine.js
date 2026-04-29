@@ -124,6 +124,10 @@ async function startRender(){
     subtitle_viral_top_ratio: 0.6,
     max_parallel_parts: 0,
     part_order: 'viral',
+    viral_market: 'US',
+    hook_apply_enabled: false,
+    hook_applied_text: '',
+    hook_score: null,
     text_layers: [],
   };
 
