@@ -205,6 +205,7 @@ class RenderRequest(BaseModel):
     market_viral: Optional[dict] = None
     subtitle_edits: Optional[list] = None
     combined_scoring_enabled: bool = False
+    adaptive_scoring_enabled: bool = False
 
     @field_validator("render_profile")
     @classmethod

@@ -782,7 +782,8 @@ function _mvSegmentMap(job) {
         tier:     String(seg.mv_viral_tier   || 'weak'),
         market:   String(seg.mv_viral_market || 'US'),
         reasons:  Array.isArray(seg.mv_viral_reasons) ? seg.mv_viral_reasons : [],
-        combined: seg?.combined_score != null ? Number(seg.combined_score) : null,
+        combined: seg?.combined_score  != null ? Number(seg.combined_score)  : null,
+        weights:  seg?.combined_weights ?? null,
       });
     });
   } catch (_) {}
@@ -1470,6 +1471,16 @@ function renderBottomActiveQueue(job, summary, parts = []) {
         cs.style.cssText = 'font-size:10px;color:rgba(148,163,184,.45);margin-top:2px;text-align:right;';
         cs.textContent = `Combined: ${mvData.combined}`;
         rightCol.appendChild(cs);
+        if (mvData.weights) {
+          const wl = document.createElement('div');
+          wl.style.cssText = 'font-size:9px;color:rgba(148,163,184,.3);text-align:right;';
+          const w = mvData.weights;
+          const isAdaptive = w.reason && w.reason !== 'fixed';
+          wl.textContent = isAdaptive
+            ? `Adaptive: ${w.reason.split(';')[0]}`
+            : `M${Math.round((w.market_weight || 0) * 100)} V${Math.round((w.viral_weight || 0) * 100)} H${Math.round((w.hook_weight || 0) * 100)}`;
+          rightCol.appendChild(wl);
+        }
       }
     }
 
@@ -2697,7 +2708,16 @@ function renderParts(items, summary){
     const endSec = Number(p.end_sec || 0);
     const duration = Math.max(0, endSec - startSec);
     const mvRow = _ptMvMap.get(partNo);
-    const _mvCsPill = mvRow?.combined != null ? `<span style="font-size:10px;color:rgba(148,163,184,.4);margin-left:4px;">Combined: ${mvRow.combined}</span>` : '';
+    const _mvWtLabel = (() => {
+      if (!mvRow?.weights) return '';
+      const w = mvRow.weights;
+      return w.reason && w.reason !== 'fixed'
+        ? `Adaptive`
+        : `M${Math.round((w.market_weight || 0) * 100)} V${Math.round((w.viral_weight || 0) * 100)} H${Math.round((w.hook_weight || 0) * 100)}`;
+    })();
+    const _mvCsPill = mvRow?.combined != null
+      ? `<span style="font-size:10px;color:rgba(148,163,184,.4);margin-left:4px;">${_mvWtLabel ? `${_mvWtLabel} · ` : ''}Combined: ${mvRow.combined}</span>`
+      : '';
     const mvPillHtml = mvRow
       ? `<span class="mvScorePill" data-mv-tier="${esc(mvRow.tier)}"${mvRow.reasons.length ? ` title="${esc(mvRow.reasons.slice(0,2).join(' | '))}"` : ''}>&#127758; ${mvRow.score} ${esc(mvRow.market)}</span>${_mvCsPill}`
       : '';

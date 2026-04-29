@@ -1323,7 +1323,12 @@
             <input type="checkbox" id="mvCombinedScoring" onchange="mvHandleChange()">
             <span class="mvToggleLabel">&#9889; Use Combined Ranking</span>
           </label>
-          <div style="font-size:11px;color:rgba(148,163,184,.45);margin:-2px 0 0 22px">Ranks clips using motion + market viral + hook score. Experimental.</div>
+          <div style="font-size:11px;color:rgba(148,163,184,.45);margin:-2px 0 4px 22px">Ranks clips using motion + market viral + hook score. Experimental.</div>
+          <label class="mvToggleRow" id="mvAdaptiveRow" style="opacity:0.38;pointer-events:none">
+            <input type="checkbox" id="mvAdaptiveScoring" onchange="mvHandleChange()" disabled>
+            <span class="mvToggleLabel">&#128200; Adaptive Weights</span>
+          </label>
+          <div id="mvAdaptiveHint" style="font-size:11px;color:rgba(148,163,184,.3);margin:-2px 0 0 22px">Automatically adjusts combined ranking weights by market, hook, and duration.</div>
         </div>
 
         <div id="mvPreviewHint" class="mvPreviewHint">

@@ -1792,6 +1792,7 @@ async function startRenderFromEditor() {
       keyword_highlight: !!mv.keywordHighlight,
     };
     payload.combined_scoring_enabled = !!mv.combinedScoring;
+    payload.adaptive_scoring_enabled = !!mv.adaptiveScoring;
   }
 
   // ── Subtitle edits (hook previews applied by user) ───────────────────────
@@ -1974,6 +1975,7 @@ const _mvState = {
   subtitleTone: 'clean',
   keywordHighlight: false,
   combinedScoring: false,
+  adaptiveScoring: false,
 };
 
 function mvHandleChange() {
@@ -1983,11 +1985,30 @@ function mvHandleChange() {
     subtitleTone:     g('mvSubtitleTone'),
     keywordHighlight: g('mvKeywordHighlight'),
     combinedScoring:  g('mvCombinedScoring'),
+    adaptiveScoring:  g('mvAdaptiveScoring'),
   };
   if (el.market)           _mvState.market           = el.market.value;
   if (el.subtitleTone)     _mvState.subtitleTone     = el.subtitleTone.value;
   if (el.keywordHighlight) _mvState.keywordHighlight = el.keywordHighlight.checked;
   if (el.combinedScoring)  _mvState.combinedScoring  = el.combinedScoring.checked;
+
+  // Adaptive toggle is only active when combined scoring is on
+  const combinedOn   = _mvState.combinedScoring;
+  const adaptiveRow  = g('mvAdaptiveRow');
+  const adaptiveHint = g('mvAdaptiveHint');
+  if (adaptiveRow) {
+    adaptiveRow.style.opacity      = combinedOn ? '1' : '0.38';
+    adaptiveRow.style.pointerEvents = combinedOn ? '' : 'none';
+  }
+  if (adaptiveHint) {
+    adaptiveHint.style.color = combinedOn ? 'rgba(148,163,184,.45)' : 'rgba(148,163,184,.3)';
+  }
+  if (el.adaptiveScoring) {
+    el.adaptiveScoring.disabled = !combinedOn;
+    if (!combinedOn) el.adaptiveScoring.checked = false;
+    _mvState.adaptiveScoring = combinedOn && el.adaptiveScoring.checked;
+  }
+
   mvUpdatePreviewHint();
   mvUpdateHookQuality();
 }

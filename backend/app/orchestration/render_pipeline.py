@@ -44,6 +44,91 @@ def _aspect_play_res_y(aspect_ratio: str) -> int:
         return 1440
     return val
 
+def resolve_combined_score_weights(
+    target_market: "str | None",
+    has_market_score: bool,
+    has_hook_score: bool,
+    duration: "float | None",
+    adaptive_enabled: bool,
+) -> dict:
+    """Return combined-score weights that always sum to 1.0.
+
+    When adaptive_enabled=False returns fixed P3-2 defaults.
+    When True applies market/availability/duration adjustments then normalizes.
+    """
+    BASE_VIRAL  = 0.50
+    BASE_MARKET = 0.30
+    BASE_HOOK   = 0.20
+
+    if not adaptive_enabled:
+        return {
+            "viral_weight":  BASE_VIRAL,
+            "market_weight": BASE_MARKET,
+            "hook_weight":   BASE_HOOK,
+            "reason":        "fixed",
+        }
+
+    w_v = BASE_VIRAL
+    w_m = BASE_MARKET
+    w_h = BASE_HOOK
+    reasons: list[str] = []
+
+    # ── Market adjustment ──────────────────────────────────────────────────
+    market = (target_market or "US").upper()
+    if market == "US":
+        w_h += 0.05; w_v += 0.05; w_m -= 0.10
+        reasons.append("US:hook+viral")
+    elif market == "EU":
+        w_m += 0.10; w_h -= 0.05; w_v -= 0.05
+        reasons.append("EU:market+")
+    elif market == "JP":
+        w_m += 0.05; w_h += 0.05; w_v -= 0.10
+        reasons.append("JP:market+hook")
+
+    # ── Missing score redistribution ───────────────────────────────────────
+    if not has_market_score:
+        half = w_m / 2.0
+        w_v += half; w_h += half; w_m = 0.0
+        reasons.append("no_mv:redistribute")
+
+    if not has_hook_score:
+        half = w_h / 2.0
+        w_v += half; w_m += half; w_h = 0.0
+        reasons.append("no_hook:redistribute")
+
+    # ── Duration adjustment ────────────────────────────────────────────────
+    dur = float(duration or 0)
+    if dur > 90:
+        w_v += 0.05; w_h -= 0.05
+        reasons.append("long:viral+")
+    elif 0 < dur < 10:
+        w_h += 0.05; w_m -= 0.05
+        reasons.append("short:hook+")
+    # 10–90 s: no change
+
+    # ── Clamp each active weight to [0.10, 0.70] ──────────────────────────
+    W_MIN, W_MAX = 0.10, 0.70
+    w_v = max(W_MIN, min(W_MAX, w_v))
+    if has_market_score and w_m > 0:
+        w_m = max(W_MIN, min(W_MAX, w_m))
+    if has_hook_score and w_h > 0:
+        w_h = max(W_MIN, min(W_MAX, w_h))
+
+    # ── Normalize → sum = 1.0 ─────────────────────────────────────────────
+    total = w_v + w_m + w_h
+    if total > 0:
+        w_v /= total; w_m /= total; w_h /= total
+    else:
+        w_v, w_m, w_h = 1.0, 0.0, 0.0
+
+    return {
+        "viral_weight":  round(w_v, 4),
+        "market_weight": round(w_m, 4),
+        "hook_weight":   round(w_h, 4),
+        "reason":        ";".join(reasons) or "adaptive_default",
+    }
+
+
 _PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes to update progress
 
 # ---------------------------------------------------------------------------
@@ -1659,15 +1744,49 @@ def run_render_pipeline(
 
             # ── Combined Score computation ─────────────────────────────────
             try:
-                _cs_enabled = bool(getattr(payload, "combined_scoring_enabled", False))
-                _cs_viral   = float(seg.get("viral_score", 0) or 0)
-                _cs_mv_raw  = seg.get("mv_viral_score")
-                _cs_mv      = float(_cs_mv_raw) if _cs_mv_raw is not None else _cs_viral
-                _cs_hook    = float(
-                    seg.get("hook_text_score") or seg.get("hook_timing_score") or
-                    seg.get("hook_opening_score") or seg.get("hook_score") or 0
+                _cs_enabled  = bool(getattr(payload, "combined_scoring_enabled", False))
+                _cs_adaptive = bool(getattr(payload, "adaptive_scoring_enabled", False))
+                _cs_viral    = float(seg.get("viral_score", 0) or 0)
+                _cs_mv_raw   = seg.get("mv_viral_score")
+                _cs_mv       = float(_cs_mv_raw) if _cs_mv_raw is not None else _cs_viral
+                _cs_hook_raw = (seg.get("hook_text_score") or seg.get("hook_timing_score") or
+                                seg.get("hook_opening_score") or seg.get("hook_score"))
+                _cs_hook     = float(_cs_hook_raw or 0)
+                _cs_dur      = float(seg.get("duration") or 0) or None
+
+                _cs_weights = resolve_combined_score_weights(
+                    target_market=_mv_market,
+                    has_market_score=(_cs_mv_raw is not None),
+                    has_hook_score=(_cs_hook_raw is not None and float(_cs_hook_raw) > 0),
+                    duration=_cs_dur,
+                    adaptive_enabled=_cs_adaptive,
                 )
-                _cs_raw     = _cs_viral * 0.50 + _cs_mv * 0.30 + _cs_hook * 0.20
+                seg["combined_weights"] = _cs_weights
+
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="adaptive_score_weights_resolved",
+                    level="INFO",
+                    message=f"Part {idx} weights v={_cs_weights['viral_weight']} m={_cs_weights['market_weight']} h={_cs_weights['hook_weight']} reason={_cs_weights['reason']}",
+                    step="render.combined_score",
+                    context={
+                        "part_no":                  idx,
+                        "adaptive_scoring_enabled": _cs_adaptive,
+                        "target_market":            _mv_market,
+                        "duration":                 _cs_dur,
+                        "viral_weight":             _cs_weights["viral_weight"],
+                        "market_weight":            _cs_weights["market_weight"],
+                        "hook_weight":              _cs_weights["hook_weight"],
+                        "reason":                   _cs_weights["reason"],
+                    },
+                )
+
+                _cs_raw = (
+                    _cs_viral * _cs_weights["viral_weight"] +
+                    _cs_mv    * _cs_weights["market_weight"] +
+                    _cs_hook  * _cs_weights["hook_weight"]
+                )
                 seg["combined_score"] = round(max(0.0, min(100.0, _cs_raw)), 1)
                 _emit_render_event(
                     channel_code=effective_channel,
@@ -1683,6 +1802,9 @@ def run_render_pipeline(
                         "hook_score_component":     _cs_hook,
                         "combined_score":           seg["combined_score"],
                         "combined_scoring_enabled": _cs_enabled,
+                        "viral_weight":             _cs_weights["viral_weight"],
+                        "market_weight":            _cs_weights["market_weight"],
+                        "hook_weight":              _cs_weights["hook_weight"],
                     },
                 )
             except Exception:
