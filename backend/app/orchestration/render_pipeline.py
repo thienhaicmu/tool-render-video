@@ -1352,39 +1352,35 @@ def run_render_pipeline(
             # the UI can distinguish "queued but not yet started" from "claimed by a thread".
             upsert_job_part(job_id, idx, part_name, JobPartStage.WAITING, 5, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), "", "Waiting for worker")
 
-            # P4-3: Silence trim — detect and skip leading dead air (first clip only)
+            # P4 per-output opening optimization state
             _trim_offset = 0.0
-            if idx == 1:
-                try:
-                    _trim_offset = detect_silence_trim_offset(str(source_path), seg["start"], seg["end"])
-                except Exception:
-                    _trim_offset = 0.0
-                if _trim_offset > 0:
-                    _emit_render_event(
-                        channel_code=effective_channel,
-                        job_id=job_id,
-                        event="silence_trim_applied",
-                        level="INFO",
-                        message=f"Silence trim: {_trim_offset:.3f}s removed from part {idx} start",
-                        step="render.silence_trim",
-                        context={
-                            "part_no": idx,
-                            "trim_offset_sec": _trim_offset,
-                            "original_start": seg["start"],
-                            "effective_start": seg["start"] + _trim_offset,
-                        },
-                    )
-                    _job_log(effective_channel, job_id, f"Part {idx} silence trim: {_trim_offset:.3f}s offset applied")
-                else:
-                    _emit_render_event(
-                        channel_code=effective_channel,
-                        job_id=job_id,
-                        event="silence_trim_skipped",
-                        level="INFO",
-                        message=f"Silence trim: no leading silence detected for part {idx}",
-                        step="render.silence_trim",
-                        context={"part_no": idx},
-                    )
+            _hook_subtitle_formatted = False
+            _srt_count = 0
+
+            # P4-3: Start silence trim — detect and skip leading dead air (all output clips)
+            try:
+                _trim_offset = detect_silence_trim_offset(str(source_path), seg["start"], seg["end"])
+            except Exception:
+                _trim_offset = 0.0
+            # Safety: don't trim if effective clip would be shorter than 3 seconds
+            if _trim_offset > 0 and (seg["end"] - seg["start"] - _trim_offset) < 3.0:
+                _trim_offset = 0.0
+            if _trim_offset > 0:
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="silence_trim_applied",
+                    level="INFO",
+                    message=f"Silence trim: {_trim_offset:.3f}s removed from part {idx} start",
+                    step="render.silence_trim",
+                    context={
+                        "part_no": idx,
+                        "trim_offset_sec": _trim_offset,
+                        "original_start": seg["start"],
+                        "effective_start": seg["start"] + _trim_offset,
+                    },
+                )
+                _job_log(effective_channel, job_id, f"Part {idx} silence trim: {_trim_offset:.3f}s offset applied")
             _effective_start = seg["start"] + _trim_offset
 
             upsert_job_part(job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
@@ -1496,18 +1492,19 @@ def run_render_pipeline(
                         needs_ass = True
                     except Exception:
                         pass
-                # P4-2: Hook subtitle impact — apply only to the first (hook) clip
-                if idx == 1 and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
+                # P4-2: Hook subtitle impact — opening lines of every output clip
+                if _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
                     _hook_orig_len = _ass_srt_source.stat().st_size
                     _hook_blocks = apply_hook_subtitle_format(str(_ass_srt_source))
                     if _hook_blocks > 0:
                         needs_ass = True
+                        _hook_subtitle_formatted = True
                         _emit_render_event(
                             channel_code=effective_channel,
                             job_id=job_id,
                             event="subtitle_hook_format_applied",
                             level="INFO",
-                            message=f"Hook subtitle impact applied: {_hook_blocks} blocks",
+                            message=f"Hook subtitle impact applied: {_hook_blocks} blocks (part {idx})",
                             step="subtitle.hook_format",
                             context={
                                 "part_no": idx,
@@ -1515,16 +1512,6 @@ def run_render_pipeline(
                                 "new_length": _ass_srt_source.stat().st_size,
                                 "lines_count": _hook_blocks,
                             },
-                        )
-                    else:
-                        _emit_render_event(
-                            channel_code=effective_channel,
-                            job_id=job_id,
-                            event="subtitle_hook_format_skipped",
-                            level="INFO",
-                            message="Hook subtitle format skipped: empty SRT or error",
-                            step="subtitle.hook_format",
-                            context={"part_no": idx},
                         )
                 if needs_ass:
                     _play_res_y = _aspect_play_res_y(payload.aspect_ratio)
@@ -1814,13 +1801,15 @@ def run_render_pipeline(
                         traceback_text=traceback.format_exc(),
                     )
 
-            # P4-4: Micro pacing — compress mid-clip silences (first clip only)
-            if idx == 1 and final_part.exists() and final_part.stat().st_size > 0:
+            # P4-4: Micro pacing — compress mid-clip silences (all output clips)
+            _micro_pacing_applied = False
+            if final_part.exists() and final_part.stat().st_size > 0:
                 _paced_part = work_dir / f"{source['slug']}_part_{idx:03d}_paced.mp4"
                 try:
                     _pacing = apply_micro_pacing(str(final_part), str(_paced_part))
                     if _pacing["applied"] and _paced_part.exists() and _paced_part.stat().st_size > 0:
                         os.replace(str(_paced_part), str(final_part))
+                        _micro_pacing_applied = True
                         _job_log(
                             effective_channel, job_id,
                             f"Part {idx} micro pacing: {_pacing['segments_trimmed']} segments, "
@@ -1861,6 +1850,30 @@ def run_render_pipeline(
                         f"micro_pacing_failed part_no={idx}: {_pace_exc}",
                         kind="warning",
                     )
+
+            # P4 combined opening optimization summary — emitted for every output part
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="p4_output_opening_optimized",
+                level="INFO",
+                message=(
+                    f"P4 opening: part {idx} trim={_trim_offset:.3f}s "
+                    f"hook={_hook_subtitle_formatted} pacing={_micro_pacing_applied}"
+                ),
+                step="render.p4_opening",
+                context={
+                    "part_no": idx,
+                    "original_start": seg["start"],
+                    "effective_start": _effective_start,
+                    "trim_offset": _trim_offset,
+                    "original_duration": seg["end"] - seg["start"],
+                    "effective_duration": seg["end"] - _effective_start,
+                    "subtitle_count": _srt_count,
+                    "hook_subtitle_formatted": _hook_subtitle_formatted,
+                    "micro_pacing_applied": _micro_pacing_applied,
+                },
+            )
 
             _encode_ms = int((time.perf_counter() - _t_encode) * 1000)
             _part_dur = float(seg.get("duration") or 0)

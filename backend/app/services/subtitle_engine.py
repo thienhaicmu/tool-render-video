@@ -675,24 +675,31 @@ def format_hook_subtitle(text: str) -> str:
     return f"{line1}\n{line2}"
 
 
-def apply_hook_subtitle_format(srt_path: str) -> int:
-    """Apply hook-impact formatting to every block in the SRT file (in-place).
+def apply_hook_subtitle_format(srt_path: str, max_hook_blocks: int = 2) -> int:
+    """Apply hook-impact formatting to the opening blocks of an SRT file (in-place).
 
-    Returns the number of blocks processed on success, 0 on empty file or error.
+    Only the first `max_hook_blocks` entries receive impact formatting; the rest
+    are written back unchanged.  Returns the number of formatted blocks on success,
+    0 on empty file or error.
     Safe no-op on any exception — original file is left untouched if writing fails.
     """
     try:
         blocks = _parse_srt_blocks(srt_path)
         if not blocks:
             return 0
+        formatted = 0
         with Path(srt_path).open("w", encoding="utf-8") as f:
             for i, b in enumerate(blocks, start=1):
-                text = format_hook_subtitle(b["text"])
+                if i <= max_hook_blocks:
+                    text = format_hook_subtitle(b["text"])
+                    formatted += 1
+                else:
+                    text = b["text"]
                 f.write(
                     f"{i}\n"
                     f"{format_srt_timestamp(b['start'])} --> {format_srt_timestamp(b['end'])}\n"
                     f"{text}\n\n"
                 )
-        return len(blocks)
+        return formatted
     except Exception:
         return 0
