@@ -4,12 +4,15 @@ import re
 import logging
 from pathlib import Path
 import time
+import threading
 import whisper
 
 logger = logging.getLogger(__name__)
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
 
 _MODEL_CACHE = {}
+_MODEL_CACHE_LOCK = threading.Lock()
+_MODEL_TRANSCRIBE_LOCKS = {}
 WORD_MIN_GAP_SEC = 0.02
 WORD_MIN_DURATION_SEC = 0.12
 WORD_MERGE_SHORTER_THAN_SEC = 0.11
@@ -20,11 +23,21 @@ _WHISPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_whisper_model(model_name: str = "base"):
-    model = _MODEL_CACHE.get(model_name)
-    if model is None:
-        model = whisper.load_model(model_name, download_root=str(_WHISPER_CACHE_DIR))
-        _MODEL_CACHE[model_name] = model
-    return model
+    with _MODEL_CACHE_LOCK:
+        model = _MODEL_CACHE.get(model_name)
+        if model is None:
+            model = whisper.load_model(model_name, download_root=str(_WHISPER_CACHE_DIR))
+            _MODEL_CACHE[model_name] = model
+        return model
+
+
+def _get_transcribe_lock(model_name: str):
+    with _MODEL_CACHE_LOCK:
+        lock = _MODEL_TRANSCRIBE_LOCKS.get(model_name)
+        if lock is None:
+            lock = threading.Lock()
+            _MODEL_TRANSCRIBE_LOCKS[model_name] = lock
+        return lock
 
 
 def format_srt_timestamp(seconds: float) -> str:
@@ -146,12 +159,15 @@ def _run_with_retry(command: list[str], retries: int = 2, wait_sec: float = 0.8)
             time.sleep(wait_sec * attempt)
 
 
-def _transcribe_with_retry(model, audio_path: str, retries: int = 2, wait_sec: float = 0.8, **kwargs):
+def _transcribe_with_retry(model, audio_path: str, retries: int = 2, wait_sec: float = 0.8, transcribe_lock=None, **kwargs):
     attempt = 0
     while True:
         attempt += 1
         try:
-            return model.transcribe(audio_path, fp16=False, **kwargs)
+            if transcribe_lock is None:
+                return model.transcribe(audio_path, fp16=False, **kwargs)
+            with transcribe_lock:
+                return model.transcribe(audio_path, fp16=False, **kwargs)
         except Exception:
             if attempt > retries:
                 raise
@@ -205,17 +221,22 @@ def transcribe_to_srt(
 
     try:
         model = get_whisper_model(model_name)
+        transcribe_lock = _get_transcribe_lock(model_name)
 
         if highlight_per_word:
             try:
-                result = _transcribe_with_retry(model, audio_path, retries=retry_count, word_timestamps=True)
+                result = _transcribe_with_retry(model, audio_path, retries=retry_count, transcribe_lock=transcribe_lock, word_timestamps=True)
                 _write_word_level_srt(result, srt_path)
                 return result
-            except Exception:
-                # Fallback to segment-level on failure
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "word_level_transcription_failed model=%s audio=%s error=%s fallback=segment_level",
+                    model_name,
+                    Path(audio_path).name,
+                    exc,
+                )
 
-        result = _transcribe_with_retry(model, audio_path, retries=retry_count)
+        result = _transcribe_with_retry(model, audio_path, retries=retry_count, transcribe_lock=transcribe_lock)
         _write_segment_level_srt(result, srt_path)
         return result
     finally:
