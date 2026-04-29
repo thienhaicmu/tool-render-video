@@ -206,6 +206,8 @@ class RenderRequest(BaseModel):
     subtitle_edits: Optional[list] = None
     combined_scoring_enabled: bool = False
     adaptive_scoring_enabled: bool = False
+    auto_best_export_enabled: bool = False
+    auto_best_export_count: int = 3
 
     @field_validator("render_profile")
     @classmethod

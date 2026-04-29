@@ -2345,7 +2345,64 @@ def run_render_pipeline(
                 },
             )
 
-        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored, "market_viral_parts": _mv_parts, "output_ranking": _rank_entries_ordered, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
+        # ── P5-2 Auto Best Export ─────────────────────────────────────────────
+        _best_exports_list: list[dict] = []
+        if getattr(payload, "auto_best_export_enabled", False):
+            if _rank_entries:
+                _abe_count = max(1, min(10, int(getattr(payload, "auto_best_export_count", 3) or 3)))
+                _abe_top   = _rank_entries[:_abe_count]  # already sorted desc by score
+                _best_dir  = output_dir / "best"
+                try:
+                    _best_dir.mkdir(parents=True, exist_ok=True)
+                    for _abe in _abe_top:
+                        _abe_src = Path(_abe["output_file"])
+                        _abe_dst = _best_dir / f"rank_{_abe['output_rank']:02d}_part_{_abe['part_no']:03d}.mp4"
+                        try:
+                            shutil.copy2(str(_abe_src), str(_abe_dst))
+                            _best_exports_list.append({
+                                "rank":              _abe["output_rank"],
+                                "part_no":           _abe["part_no"],
+                                "source_file":       str(_abe_src),
+                                "best_file":         str(_abe_dst),
+                                "output_rank_score": _abe["output_rank_score"],
+                            })
+                        except Exception as _abe_copy_err:
+                            _job_log(
+                                effective_channel, job_id,
+                                f"best_export copy failed part_{_abe['part_no']:03d}: {_abe_copy_err}",
+                                kind="warning",
+                            )
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="best_export_completed",
+                        level="INFO",
+                        message=f"Best export: {len(_best_exports_list)}/{len(_abe_top)} files → {_best_dir}",
+                        step="render.best_export",
+                        context={
+                            "count":          len(_best_exports_list),
+                            "best_dir":       str(_best_dir),
+                            "exported_files": [e["best_file"] for e in _best_exports_list],
+                        },
+                    )
+                except Exception as _abe_err:
+                    _job_log(
+                        effective_channel, job_id,
+                        f"best_export_failed: {_abe_err}",
+                        kind="warning",
+                    )
+            else:
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="best_export_skipped",
+                    level="INFO",
+                    message="Best export skipped: no ranked outputs available",
+                    step="render.best_export",
+                    context={"reason": "no_ranked_outputs"},
+                )
+
+        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored, "market_viral_parts": _mv_parts, "output_ranking": _rank_entries_ordered, "best_exports": _best_exports_list, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
         _job_log(effective_channel, job_id, f"Render completed with {len(outputs)}/{total_parts} outputs")
         _emit_render_event(
             channel_code=effective_channel,

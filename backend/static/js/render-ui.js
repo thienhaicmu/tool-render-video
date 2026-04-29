@@ -1059,6 +1059,17 @@ function renderBenchmarkPanel(job, parts) {
     }
   }
 
+  try {
+    const _bmRaw = job?.result_json;
+    const _bmResult = _bmRaw ? (typeof _bmRaw === 'string' ? JSON.parse(_bmRaw) : _bmRaw) : {};
+    const _bmExports = _bmResult?.best_exports;
+    if (Array.isArray(_bmExports) && _bmExports.length > 0) {
+      const _bmBestDir = String(_bmExports[0]?.best_file || '').replace(/\\/g, '/').split('/').slice(0, -1).join('/');
+      const _bmDirShort = _bmBestDir ? _bmBestDir.split('/').slice(-2).join('/') : '';
+      rows.push({ label: 'Best Exports', value: `${_bmExports.length} file${_bmExports.length !== 1 ? 's' : ''}${_bmDirShort ? ` · …/${_bmDirShort}` : ''}` });
+    }
+  } catch (_) {}
+
   if (grid) {
     const sig = rows.map((r) => r.label + '=' + r.value).join('|');
     if (grid.dataset.sig !== sig) {

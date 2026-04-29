@@ -1791,8 +1791,10 @@ async function startRenderFromEditor() {
       subtitle_tone:     mv.subtitleTone    || 'clean',
       keyword_highlight: !!mv.keywordHighlight,
     };
-    payload.combined_scoring_enabled = !!mv.combinedScoring;
-    payload.adaptive_scoring_enabled = !!mv.adaptiveScoring;
+    payload.combined_scoring_enabled  = !!mv.combinedScoring;
+    payload.adaptive_scoring_enabled  = !!mv.adaptiveScoring;
+    payload.auto_best_export_enabled  = !!mv.bestExportEnabled;
+    payload.auto_best_export_count    = Math.max(1, Math.min(10, parseInt(mv.bestExportCount, 10) || 3));
   }
 
   // ── Auto Best Clips mode override ─────────────────────────────────────────
@@ -1988,16 +1990,20 @@ const _mvState = {
   combinedScoring: false,
   adaptiveScoring: false,
   autoBestClips: false,
+  bestExportEnabled: false,
+  bestExportCount: 3,
 };
 
 function mvHandleChange() {
   const g = (id) => document.getElementById(id);
   const el = {
-    market:           g('mvMarket'),
-    subtitleTone:     g('mvSubtitleTone'),
-    keywordHighlight: g('mvKeywordHighlight'),
-    combinedScoring:  g('mvCombinedScoring'),
-    adaptiveScoring:  g('mvAdaptiveScoring'),
+    market:            g('mvMarket'),
+    subtitleTone:      g('mvSubtitleTone'),
+    keywordHighlight:  g('mvKeywordHighlight'),
+    combinedScoring:   g('mvCombinedScoring'),
+    adaptiveScoring:   g('mvAdaptiveScoring'),
+    bestExportEnabled: g('mvBestExportEnabled'),
+    bestExportCount:   g('mvBestExportCount'),
   };
   if (el.market)           _mvState.market           = el.market.value;
   if (el.subtitleTone)     _mvState.subtitleTone     = el.subtitleTone.value;
@@ -2019,6 +2025,23 @@ function mvHandleChange() {
     el.adaptiveScoring.disabled = !combinedOn;
     if (!combinedOn) el.adaptiveScoring.checked = false;
     _mvState.adaptiveScoring = combinedOn && el.adaptiveScoring.checked;
+  }
+
+  // Best Export — count input enabled only when export toggle is on
+  if (el.bestExportEnabled) _mvState.bestExportEnabled = el.bestExportEnabled.checked;
+  const exportOn       = _mvState.bestExportEnabled;
+  const exportCountRow = g('mvBestExportCountRow');
+  if (exportCountRow) {
+    exportCountRow.style.opacity      = exportOn ? '1' : '0.38';
+    exportCountRow.style.pointerEvents = exportOn ? '' : 'none';
+  }
+  if (el.bestExportCount) {
+    el.bestExportCount.disabled = !exportOn;
+    if (exportOn) {
+      const raw = parseInt(el.bestExportCount.value, 10);
+      _mvState.bestExportCount = Math.max(1, Math.min(10, isNaN(raw) ? 3 : raw));
+      el.bestExportCount.value = _mvState.bestExportCount;
+    }
   }
 
   mvUpdatePreviewHint();
