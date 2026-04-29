@@ -17,6 +17,7 @@ from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin, _summarize_f
 from app.services.text_overlay import append_text_layer_filters
 
 logger = logging.getLogger(__name__)
+_TRACKER_CAPABILITY_LOGGED = False
 
 # ---------------------------------------------------------------------------
 # Config
@@ -343,15 +344,23 @@ def _load_cascade(filename: str) -> Optional[cv2.CascadeClassifier]:
 
 def _create_tracker():
     """Create fast available OpenCV tracker (KCF > CSRT > MOSSE)."""
-    for factory in (
-        lambda: cv2.TrackerKCF_create(),
-        lambda: cv2.TrackerCSRT_create(),
-        lambda: cv2.TrackerMOSSE_create(),
+    global _TRACKER_CAPABILITY_LOGGED
+    for tracker_name, factory in (
+        ("KCF", lambda: cv2.TrackerKCF_create()),
+        ("CSRT", lambda: cv2.TrackerCSRT_create()),
+        ("MOSSE", lambda: cv2.TrackerMOSSE_create()),
     ):
         try:
-            return factory()
+            tracker = factory()
+            if not _TRACKER_CAPABILITY_LOGGED:
+                logger.info("motion_crop tracker_available=%s tracker=%s", True, tracker_name)
+                _TRACKER_CAPABILITY_LOGGED = True
+            return tracker
         except AttributeError:
             continue
+    if not _TRACKER_CAPABILITY_LOGGED:
+        logger.warning("motion_crop tracker_available=%s tracker=none subject_mode=detection_only", False)
+        _TRACKER_CAPABILITY_LOGGED = True
     return None
 
 
@@ -361,6 +370,107 @@ def _sanitize_speed(playback_speed: float | int | None) -> float:
     except Exception:
         v = 1.0
     return max(0.5, min(1.5, v))
+
+
+def _subject_area_ratio(subject: Tuple[int, int, int, int], frame_w: int, frame_h: int) -> float:
+    _, _, w, h = subject
+    return (w * h) / max(1.0, float(frame_w * frame_h))
+
+
+def _subject_edge_overlap_ratio(
+    subject: Tuple[int, int, int, int],
+    frame_w: int,
+    edge_ratio: float = 0.10,
+) -> float:
+    x, _, w, _ = subject
+    if w <= 0:
+        return 1.0
+    left_band = frame_w * edge_ratio
+    right_band = frame_w * (1.0 - edge_ratio)
+    left_overlap = max(0.0, min(x + w, left_band) - max(0.0, x))
+    right_overlap = max(0.0, min(x + w, frame_w) - max(right_band, x))
+    return (left_overlap + right_overlap) / max(1.0, float(w))
+
+
+def _required_lock_confirm_frames(cfg: MotionCropConfig, tracker_available: bool) -> int:
+    if tracker_available:
+        return 1
+    return max(2, int(cfg.subject_switch_confirm_frames or 0))
+
+
+def _untracked_hold_frames(cfg: MotionCropConfig, detect_interval: int) -> int:
+    return max(4, min(cfg.lost_subject_hold_frames, max(6, detect_interval // 2)))
+
+
+def _is_plausible_subject(
+    subject: Tuple[int, int, int, int],
+    frame_w: int,
+    frame_h: int,
+    subject_kind: str = "face",
+    previous_subject: Optional[Tuple[int, int, int, int]] = None,
+) -> bool:
+    x, y, w, h = subject
+    if w <= 0 or h <= 0:
+        return False
+
+    cx, cy = _subject_center(subject)
+    area_ratio = _subject_area_ratio(subject, frame_w, frame_h)
+    aspect = w / max(1.0, float(h))
+    center_y_ratio = cy / max(1.0, float(frame_h))
+    center_offset_ratio = abs(cx - frame_w / 2.0) / max(1.0, float(frame_w))
+    edge_overlap = _subject_edge_overlap_ratio(subject, frame_w)
+    same_as_previous = previous_subject is not None and _same_subject(previous_subject, subject)
+
+    if subject_kind == "face":
+        if area_ratio < 0.0012:
+            return False
+        if aspect < 0.55 or aspect > 1.65:
+            return False
+        if center_y_ratio > 0.82:
+            return False
+        if same_as_previous:
+            return True
+        if edge_overlap > 0.45 and area_ratio < 0.040:
+            return False
+        if center_y_ratio > 0.72 and area_ratio > 0.030 and center_offset_ratio > 0.10:
+            return False
+        if center_y_ratio > 0.67 and area_ratio > 0.025 and (
+            x < frame_w * 0.30 or (x + w) > frame_w * 0.70
+        ):
+            return False
+        return True
+
+    if subject_kind == "body":
+        if area_ratio < 0.015:
+            return False
+        if aspect < 0.24 or aspect > 1.05:
+            return False
+        if same_as_previous:
+            return True
+        if w < frame_w * 0.09 and area_ratio < 0.030:
+            return False
+        if edge_overlap > 0.40 and area_ratio < 0.050:
+            return False
+        return True
+
+    return True
+
+
+def _filter_subject_candidates(
+    subjects: List[Tuple[int, int, int, int]],
+    frame_w: int,
+    frame_h: int,
+    subject_kind: str = "face",
+    previous_subject: Optional[Tuple[int, int, int, int]] = None,
+) -> Tuple[List[Tuple[int, int, int, int]], int]:
+    filtered: List[Tuple[int, int, int, int]] = []
+    rejected = 0
+    for subject in subjects:
+        if _is_plausible_subject(subject, frame_w, frame_h, subject_kind, previous_subject):
+            filtered.append(subject)
+        else:
+            rejected += 1
+    return filtered, rejected
 
 
 def _detect_subjects_in_frame(
@@ -651,6 +761,7 @@ def build_subject_path(
     default_cy = src_h / 2.0
 
     tracker = _create_tracker()
+    tracker_available = tracker is not None
     tracking = False
     last_subject: Optional[Tuple[int, int, int, int]] = None
     subjects_found_total = 0
@@ -658,6 +769,9 @@ def build_subject_path(
     raw_centers: List[Tuple[float, float]] = []
     frame_idx = 0
     detect_interval = max(1, cfg.subject_detect_interval)
+    required_lock_confirm = _required_lock_confirm_frames(cfg, tracker_available)
+    pending_subject: Optional[Tuple[int, int, int, int]] = None
+    pending_count = 0
 
     while True:
         ok, frame = cap.read()
@@ -687,17 +801,29 @@ def build_subject_path(
             detected, _kind = _detect_subjects_in_frame(
                 gray_small, face_cascade, body_cascade, detect_scale
             )
-            best = _pick_best_subject(detected, src_w, src_h)
+            detected, _ = _filter_subject_candidates(detected, src_w, src_h, _kind, last_subject)
+            best = _pick_best_subject(detected, src_w, src_h, last_subject)
 
             if best is not None:
-                subjects_found_total += 1
-                # Re-init tracker on detected subject
-                if tracker is not None:
-                    bx, by, bw, bh = best
-                    tracker.init(frame, (bx, by, bw, bh))
-                    tracking = True
-                subject = best
-                last_subject = best
+                if last_subject is None and not tracker_available:
+                    if _same_subject(pending_subject, best):
+                        pending_count += 1
+                    else:
+                        pending_subject = best
+                        pending_count = 1
+                    if pending_count < required_lock_confirm:
+                        best = None
+                    else:
+                        pending_subject = None
+                        pending_count = 0
+                if best is not None:
+                    subjects_found_total += 1
+                    if tracker is not None:
+                        bx, by, bw, bh = best
+                        tracker.init(frame, (bx, by, bw, bh))
+                        tracking = True
+                    subject = best
+                    last_subject = best
 
         # --- Step 3: compute crop center ---
         if subject is not None:
@@ -771,10 +897,12 @@ def build_subject_path_scene(
         default_cy = src_h / 2.0
 
         tracker = _create_tracker()
+        tracker_available = tracker is not None
         tracking = False
         locked_subject: Optional[Tuple[int, int, int, int]] = None
         locked_kind = "none"
         pending_subject: Optional[Tuple[int, int, int, int]] = None
+        pending_kind = "none"
         pending_count = 0
         switch_count = 0
         switch_cooldown = 0   # frames remaining in post-switch easing window
@@ -782,6 +910,8 @@ def build_subject_path_scene(
         last_good_center = (default_cx, default_cy)
         raw_centers: List[Tuple[float, float]] = []
         detect_interval = max(1, cfg.subject_detect_interval)
+        required_lock_confirm = _required_lock_confirm_frames(cfg, tracker_available)
+        untracked_hold_frames = _untracked_hold_frames(cfg, detect_interval)
         dead_zone_x = crop_w * cfg.dead_zone_ratio
         dead_zone_y = crop_h * cfg.dead_zone_ratio
         smooth_cx = default_cx
@@ -789,6 +919,10 @@ def build_subject_path_scene(
         frame_idx = start_frame
         motion_total = 0.0
         motion_samples = 0
+        detections_rejected = 0
+        lock_confirmed = 0
+        detect_miss_intervals = 0
+        fallback_reason = "none"
 
         while frame_idx < end_frame:
             ok, frame = cap.read()
@@ -812,29 +946,59 @@ def build_subject_path_scene(
 
             scene_frame_idx = frame_idx - start_frame
             should_detect = scene_frame_idx % detect_interval == 0 or not tracking
+            detection_confirmed = False
             if should_detect:
                 small = cv2.resize(frame, None, fx=detect_scale, fy=detect_scale)
                 gray_small = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
                 detected, detected_kind = _detect_subjects_in_frame(
                     gray_small, face_cascade, body_cascade, detect_scale
                 )
+                detected, rejected = _filter_subject_candidates(
+                    detected, src_w, src_h, detected_kind, locked_subject
+                )
+                detections_rejected += rejected
                 best = _pick_best_subject(detected, src_w, src_h, locked_subject)
 
                 if best is not None:
                     if locked_subject is None:
-                        locked_subject = best
-                        locked_kind = detected_kind
-                        subject = best
-                        lost_frames = 0
-                        pending_subject = None
-                        pending_count = 0
+                        if tracker_available:
+                            locked_subject = best
+                            locked_kind = detected_kind
+                            subject = best
+                            lost_frames = 0
+                            pending_subject = None
+                            pending_kind = "none"
+                            pending_count = 0
+                            lock_confirmed += 1
+                            detection_confirmed = True
+                        else:
+                            if _same_subject(pending_subject, best):
+                                pending_count += 1
+                            else:
+                                pending_subject = best
+                                pending_kind = detected_kind
+                                pending_count = 1
+                            fallback_reason = "await_initial_confirmation"
+                            if pending_count >= required_lock_confirm:
+                                locked_subject = best
+                                locked_kind = pending_kind or detected_kind
+                                subject = best
+                                lost_frames = 0
+                                pending_subject = None
+                                pending_kind = "none"
+                                pending_count = 0
+                                lock_confirmed += 1
+                                detection_confirmed = True
+                                fallback_reason = "none"
                     elif _same_subject(locked_subject, best):
                         locked_subject = best
                         locked_kind = detected_kind
                         subject = best
                         lost_frames = 0
                         pending_subject = None
+                        pending_kind = "none"
                         pending_count = 0
+                        detection_confirmed = True
                     else:
                         current_score = _score_subject_candidate(locked_subject, src_w, src_h, locked_subject)
                         new_score = _score_subject_candidate(best, src_w, src_h, locked_subject)
@@ -843,21 +1007,28 @@ def build_subject_path_scene(
                                 pending_count += 1
                             else:
                                 pending_subject = best
+                                pending_kind = detected_kind
                                 pending_count = 1
 
-                            if pending_count >= max(1, cfg.subject_switch_confirm_frames):
+                            fallback_reason = "await_switch_confirmation"
+                            if pending_count >= required_lock_confirm:
                                 locked_subject = best
-                                locked_kind = detected_kind
+                                locked_kind = pending_kind or detected_kind
                                 subject = best
                                 switch_count += 1
                                 lost_frames = 0
                                 pending_subject = None
+                                pending_kind = "none"
                                 pending_count = 0
+                                lock_confirmed += 1
+                                detection_confirmed = True
+                                fallback_reason = "none"
                                 # Activate easing window: camera pans toward new subject
                                 # without dead-zone suppression for ~0.5 s.
                                 switch_cooldown = max(4, int(fps * 0.5))
                         else:
                             pending_subject = None
+                            pending_kind = "none"
                             pending_count = 0
 
                     if subject is None and tracking:
@@ -869,25 +1040,41 @@ def build_subject_path_scene(
                         if tracker is not None:
                             tracker.init(frame, (bx, by, bw, bh))
                             tracking = True
+                if detection_confirmed:
+                    detect_miss_intervals = 0
+                elif locked_subject is not None and not tracking:
+                    detect_miss_intervals += 1
 
             if subject is None and locked_subject is not None:
                 if tracking:
                     subject = locked_subject
                 else:
                     lost_frames += 1
+                    if (
+                        not tracker_available
+                        and detect_miss_intervals >= 1
+                        and lost_frames >= untracked_hold_frames
+                    ):
+                        locked_subject = None
+                        locked_kind = "none"
+                        pending_subject = None
+                        pending_kind = "none"
+                        pending_count = 0
+                        fallback_reason = "stale_untracked_lock"
 
+            hold_frames = cfg.lost_subject_hold_frames if tracker_available else untracked_hold_frames
             if subject is not None:
                 target_cx, target_cy = _subject_to_crop_center(
                     subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding,
                     cfg.subtitle_safe_bottom_ratio, locked_kind
                 )
                 last_good_center = (target_cx, target_cy)
-            elif lost_frames <= cfg.lost_subject_hold_frames:
+            elif locked_subject is not None and lost_frames <= hold_frames:
                 target_cx, target_cy = last_good_center
             else:
                 # Smoothstep return: slow start → faster mid → soft landing at center.
                 # Ramps over 1.0 s instead of 0.75 s to feel less abrupt.
-                t_return = min(1.0, (lost_frames - cfg.lost_subject_hold_frames) / max(1.0, fps * 1.0))
+                t_return = min(1.0, (lost_frames - hold_frames) / max(1.0, fps * 1.0))
                 return_alpha = _smoothstep(t_return) * 0.10  # max alpha 0.10
                 target_cx = ema(last_good_center[0], default_cx, return_alpha)
                 target_cy = ema(last_good_center[1], default_cy, return_alpha)
@@ -914,8 +1101,13 @@ def build_subject_path_scene(
             # During post-switch cooldown: bypass dead-zone so the camera
             # actively pans toward the new subject without hesitation.
             # Alpha is floored at ema_alpha_normal to maintain responsiveness.
+            force_recenter = not tracker_available and locked_subject is None and lost_frames > 0
             if switch_cooldown > 0:
                 switch_cooldown -= 1
+                alpha = max(alpha, cfg.ema_alpha_normal)
+                smooth_cx = ema(smooth_cx, target_cx, alpha)
+                smooth_cy = ema(smooth_cy, target_cy, alpha)
+            elif force_recenter:
                 alpha = max(alpha, cfg.ema_alpha_normal)
                 smooth_cx = ema(smooth_cx, target_cx, alpha)
                 smooth_cy = ema(smooth_cy, target_cy, alpha)
@@ -981,11 +1173,16 @@ def build_subject_path_scene(
 
         strategy = "subject_lock" if locked_subject is not None else "center_hold"
         logger.info(
-            "motion_crop scene=%d strategy=%s locked=%s switches=%d "
+            "motion_crop scene=%d strategy=%s tracker_available=%s locked=%s "
+            "lock_confirmed=%d detections_rejected=%d fallback=%s switches=%d "
             "avg_motion=%.2f gauss_window=%d subtitle_safe=%.3f",
             scene_index,
             strategy,
+            tracker_available,
             bool(locked_subject),
+            lock_confirmed,
+            detections_rejected,
+            fallback_reason,
             switch_count,
             avg_motion,
             scene_gaussian_window,
