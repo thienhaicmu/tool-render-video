@@ -47,6 +47,18 @@ class MotionCropConfig:
     # Fall back to legacy motion mode when no subject found at all
     motion_fallback: bool = True
 
+    # Reset subject tracking and smoothing across detected scene cuts
+    scene_aware_tracking: bool = True
+    scene_cut_threshold: float = 30.0
+    subtitle_safe_bottom_ratio: float = 0.12
+    subject_switch_margin: float = 1.25
+    subject_switch_confirm_frames: int = 2
+    ema_alpha_slow: float = 0.08
+    ema_alpha_normal: float = 0.18
+    ema_alpha_fast: float = 0.35
+    lookahead_frames: int = 4
+    lost_subject_hold_frames: int = 18
+
     # --- Smoothing ---
     # Gaussian window size for the crop path (larger = smoother, less reactive)
     temporal_smooth_window: int = 31
@@ -381,6 +393,7 @@ def _pick_best_subject(
     subjects: List[Tuple[int, int, int, int]],
     frame_w: int,
     frame_h: int,
+    previous_subject: Optional[Tuple[int, int, int, int]] = None,
 ) -> Optional[Tuple[int, int, int, int]]:
     """
     Choose the most prominent subject: largest area with slight
@@ -388,19 +401,62 @@ def _pick_best_subject(
     """
     if not subjects:
         return None
-    cx_f, cy_f = frame_w / 2.0, frame_h / 2.0
-    max_dist = math.hypot(cx_f, cy_f)
     best, best_score = None, -1.0
-    for (x, y, w, h) in subjects:
-        area = float(w * h)
-        cx, cy = x + w / 2.0, y + h / 2.0
-        dist = math.hypot(cx - cx_f, cy - cy_f)
-        center_factor = 1.0 - (dist / max_dist) * 0.25
-        score = area * center_factor
+    for subject in subjects:
+        score = _score_subject_candidate(subject, frame_w, frame_h, previous_subject)
         if score > best_score:
             best_score = score
-            best = (x, y, w, h)
+            best = subject
     return best
+
+
+def _subject_center(subject: Tuple[int, int, int, int]) -> Tuple[float, float]:
+    x, y, w, h = subject
+    return x + w / 2.0, y + h / 2.0
+
+
+def _score_subject_candidate(
+    subject: Tuple[int, int, int, int],
+    frame_w: int,
+    frame_h: int,
+    previous_subject: Optional[Tuple[int, int, int, int]] = None,
+) -> float:
+    x, y, w, h = subject
+    frame_area = max(1.0, float(frame_w * frame_h))
+    area_score = min(1.0, (w * h) / frame_area * 10.0)
+
+    cx, cy = _subject_center(subject)
+    center_x, center_y = frame_w / 2.0, frame_h / 2.0
+    max_dist = max(1.0, math.hypot(center_x, center_y))
+    center_score = 1.0 - min(1.0, math.hypot(cx - center_x, cy - center_y) / max_dist)
+
+    edge_margin = frame_w * 0.12
+    edge_score = 1.0
+    if cx < edge_margin:
+        edge_score = max(0.0, cx / max(1.0, edge_margin))
+    elif cx > frame_w - edge_margin:
+        edge_score = max(0.0, (frame_w - cx) / max(1.0, edge_margin))
+
+    stability_score = 0.5
+    if previous_subject is not None:
+        pcx, pcy = _subject_center(previous_subject)
+        stability_score = 1.0 - min(1.0, math.hypot(cx - pcx, cy - pcy) / max_dist)
+
+    return area_score * 1.2 + center_score * 0.9 + edge_score * 0.6 + stability_score * 1.0
+
+
+def _same_subject(
+    a: Optional[Tuple[int, int, int, int]],
+    b: Optional[Tuple[int, int, int, int]],
+) -> bool:
+    if a is None or b is None:
+        return False
+    acx, acy = _subject_center(a)
+    bcx, bcy = _subject_center(b)
+    _, _, aw, ah = a
+    _, _, bw, bh = b
+    threshold = max(24.0, max(aw, ah, bw, bh) * 0.75)
+    return math.hypot(acx - bcx, acy - bcy) <= threshold
 
 
 def _subject_to_crop_center(
@@ -410,6 +466,8 @@ def _subject_to_crop_center(
     frame_w: int,
     frame_h: int,
     padding: float,
+    subtitle_safe_ratio: float = 0.0,
+    subject_kind: str = "face",
 ) -> Tuple[float, float]:
     """
     Convert a subject bounding box to the desired crop-window center.
@@ -419,14 +477,28 @@ def _subject_to_crop_center(
     x, y, w, h = subject
     # Face: focus on center-top; body: focus on full center
     cx = x + w / 2.0
-    cy = y + h * 0.38  # Slightly above subject center (head-room bias)
+    if subject_kind == "body":
+        cy = y + h * 0.34
+    else:
+        cy = y + h * 0.34
+
+    subject_ratio = (w * h) / max(1.0, float(frame_w * frame_h))
+    if subject_ratio > 0.18:
+        cx = cx * 0.55 + (frame_w / 2.0) * 0.45
+        cy = cy * 0.70 + (frame_h * 0.42) * 0.30
+    elif subject_ratio < 0.035:
+        cy = min(cy, y + h * 0.42)
 
     # Apply padding: zoom the crop window out around the subject
     # (padding > 0 means we follow a larger region, feels less claustrophobic)
     # Already handled by subject_padding in the caller's crop_w/crop_h—
     # here we just clamp so the crop stays inside the frame.
     cx = clamp(cx, crop_w / 2.0, frame_w - crop_w / 2.0)
-    cy = clamp(cy, crop_h / 2.0, frame_h - crop_h / 2.0)
+    max_cy = frame_h - crop_h / 2.0
+    if subtitle_safe_ratio > 0:
+        max_cy -= frame_h * subtitle_safe_ratio * 0.35
+    max_cy = max(crop_h / 2.0, max_cy)
+    cy = clamp(cy, crop_h / 2.0, max_cy)
     return cx, cy
 
 
@@ -476,6 +548,7 @@ def build_subject_path(
     crop_w: int,
     crop_h: int,
     cfg: MotionCropConfig,
+    _scene_ranges=None,
 ) -> Tuple[List[Tuple[int, int]], float]:
     """
     CapCut Auto Reframe equivalent.
@@ -490,6 +563,48 @@ def build_subject_path(
     Falls back to legacy motion mode if no subject is ever detected and
     `cfg.motion_fallback` is True.
     """
+    if _scene_ranges and len(_scene_ranges) > 1:
+        all_centers: List[Tuple[int, int]] = []
+        fps = cfg.fps_fallback
+
+        for index, (start_sec, end_sec) in enumerate(_scene_ranges):
+            fallback_used = False
+            try:
+                scene_centers, fps = build_subject_path_scene(
+                    video_path, crop_w, crop_h, cfg, start_sec, end_sec, scene_index=index
+                )
+            except Exception:
+                fallback_used = True
+                scene_fps = fps or cfg.fps_fallback
+                cap = cv2.VideoCapture(video_path)
+                if cap.isOpened():
+                    src_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    fps = cap.get(cv2.CAP_PROP_FPS) or scene_fps
+                    scene_fps = fps
+                    cap.release()
+                else:
+                    src_w = crop_w
+                    src_h = crop_h
+                frame_total = max(1, int(round(max(0.0, end_sec - start_sec) * scene_fps)))
+                center_x = int(clamp(round(src_w / 2.0 - crop_w / 2.0), 0, max(0, src_w - crop_w)))
+                center_y = int(clamp(round(src_h / 2.0 - crop_h / 2.0), 0, max(0, src_h - crop_h)))
+                scene_centers = [(center_x, center_y)] * frame_total
+
+            if fallback_used:
+                logger.info(
+                    "motion_crop scene=%d strategy=%s locked_subject=%s switches=%d avg_motion=%.2f fallback=%s",
+                    index,
+                    "center_fallback",
+                    False,
+                    0,
+                    0.0,
+                    True,
+                )
+            all_centers.extend(scene_centers)
+
+        return all_centers, fps
+
     face_cascade = _load_cascade("haarcascade_frontalface_default.xml")
     body_cascade = _load_cascade("haarcascade_fullbody.xml") if cfg.use_body_fallback else None
 
@@ -560,12 +675,14 @@ def build_subject_path(
         # --- Step 3: compute crop center ---
         if subject is not None:
             cx, cy = _subject_to_crop_center(
-                subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding
+                subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding,
+                cfg.subtitle_safe_bottom_ratio
             )
         elif last_subject is not None:
             # Hold last known subject position (subject momentarily occluded)
             cx, cy = _subject_to_crop_center(
-                last_subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding
+                last_subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding,
+                cfg.subtitle_safe_bottom_ratio
             )
         else:
             cx, cy = default_cx, default_cy
@@ -596,6 +713,231 @@ def build_subject_path(
     centers = _apply_velocity_limiter(smoothed, src_w, src_h, crop_w, crop_h, cfg)
 
     return centers, fps
+
+
+def build_subject_path_scene(
+    video_path: str,
+    crop_w: int,
+    crop_h: int,
+    cfg: MotionCropConfig,
+    start_sec: float,
+    end_sec: float,
+    scene_index: int = 0,
+) -> Tuple[List[Tuple[int, int]], float]:
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open video: {video_path}")
+
+    try:
+        face_cascade = _load_cascade("haarcascade_frontalface_default.xml")
+        body_cascade = _load_cascade("haarcascade_fullbody.xml") if cfg.use_body_fallback else None
+
+        src_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS) or cfg.fps_fallback
+        start_frame = max(0, int(round(start_sec * fps)))
+        end_frame = max(start_frame, int(round(end_sec * fps)))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
+        detect_scale = 0.30
+        default_cx = src_w / 2.0
+        default_cy = src_h / 2.0
+
+        tracker = _create_tracker()
+        tracking = False
+        locked_subject: Optional[Tuple[int, int, int, int]] = None
+        locked_kind = "none"
+        pending_subject: Optional[Tuple[int, int, int, int]] = None
+        pending_count = 0
+        switch_count = 0
+        lost_frames = 0
+        last_good_center = (default_cx, default_cy)
+        raw_centers: List[Tuple[float, float]] = []
+        detect_interval = max(1, cfg.subject_detect_interval)
+        dead_zone_x = crop_w * cfg.dead_zone_ratio
+        dead_zone_y = crop_h * cfg.dead_zone_ratio
+        smooth_cx = default_cx
+        smooth_cy = default_cy
+        frame_idx = start_frame
+        motion_total = 0.0
+        motion_samples = 0
+
+        while frame_idx < end_frame:
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                break
+
+            subject: Optional[Tuple[int, int, int, int]] = None
+
+            if tracking and tracker is not None:
+                ok_track, bbox = tracker.update(frame)
+                if ok_track:
+                    x, y, w, h = [int(v) for v in bbox]
+                    if w > 4 and h > 4 and x >= 0 and y >= 0:
+                        subject = (x, y, w, h)
+                        locked_subject = subject
+                        lost_frames = 0
+                    else:
+                        tracking = False
+                else:
+                    tracking = False
+
+            scene_frame_idx = frame_idx - start_frame
+            should_detect = scene_frame_idx % detect_interval == 0 or not tracking
+            if should_detect:
+                small = cv2.resize(frame, None, fx=detect_scale, fy=detect_scale)
+                gray_small = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+                detected, detected_kind = _detect_subjects_in_frame(
+                    gray_small, face_cascade, body_cascade, detect_scale
+                )
+                best = _pick_best_subject(detected, src_w, src_h, locked_subject)
+
+                if best is not None:
+                    if locked_subject is None:
+                        locked_subject = best
+                        locked_kind = detected_kind
+                        subject = best
+                        lost_frames = 0
+                        pending_subject = None
+                        pending_count = 0
+                    elif _same_subject(locked_subject, best):
+                        locked_subject = best
+                        locked_kind = detected_kind
+                        subject = best
+                        lost_frames = 0
+                        pending_subject = None
+                        pending_count = 0
+                    else:
+                        current_score = _score_subject_candidate(locked_subject, src_w, src_h, locked_subject)
+                        new_score = _score_subject_candidate(best, src_w, src_h, locked_subject)
+                        if new_score >= current_score * cfg.subject_switch_margin:
+                            if _same_subject(pending_subject, best):
+                                pending_count += 1
+                            else:
+                                pending_subject = best
+                                pending_count = 1
+
+                            if pending_count >= max(1, cfg.subject_switch_confirm_frames):
+                                locked_subject = best
+                                locked_kind = detected_kind
+                                subject = best
+                                switch_count += 1
+                                lost_frames = 0
+                                pending_subject = None
+                                pending_count = 0
+                        else:
+                            pending_subject = None
+                            pending_count = 0
+
+                    if subject is None and tracking:
+                        subject = locked_subject
+
+                    if subject is not None and tracker is not None:
+                        bx, by, bw, bh = subject
+                        tracker = _create_tracker()
+                        if tracker is not None:
+                            tracker.init(frame, (bx, by, bw, bh))
+                            tracking = True
+
+            if subject is None and locked_subject is not None:
+                if tracking:
+                    subject = locked_subject
+                else:
+                    lost_frames += 1
+
+            if subject is not None:
+                target_cx, target_cy = _subject_to_crop_center(
+                    subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding,
+                    cfg.subtitle_safe_bottom_ratio, locked_kind
+                )
+                last_good_center = (target_cx, target_cy)
+            elif lost_frames <= cfg.lost_subject_hold_frames:
+                target_cx, target_cy = last_good_center
+            else:
+                return_alpha = min(1.0, (lost_frames - cfg.lost_subject_hold_frames) / max(1.0, fps * 0.75))
+                target_cx = ema(last_good_center[0], default_cx, return_alpha * 0.08)
+                target_cy = ema(last_good_center[1], default_cy, return_alpha * 0.08)
+                last_good_center = (target_cx, target_cy)
+
+            movement = math.hypot(target_cx - smooth_cx, target_cy - smooth_cy)
+            if movement < min(crop_w, crop_h) * 0.025:
+                alpha = cfg.ema_alpha_slow
+            elif movement < min(crop_w, crop_h) * 0.12:
+                alpha = cfg.ema_alpha_normal
+            else:
+                alpha = cfg.ema_alpha_fast
+
+            active_subject = subject or locked_subject
+            if active_subject is not None:
+                _, _, sw, sh = active_subject
+                subject_ratio = (sw * sh) / max(1.0, float(src_w * src_h))
+                if subject_ratio > 0.18:
+                    alpha *= 0.65
+                elif subject_ratio < 0.035:
+                    alpha *= 1.15
+            alpha = clamp(alpha, 0.03, 0.50)
+
+            if abs(target_cx - smooth_cx) > dead_zone_x:
+                smooth_cx = ema(smooth_cx, target_cx, alpha)
+            if abs(target_cy - smooth_cy) > dead_zone_y:
+                smooth_cy = ema(smooth_cy, target_cy, alpha)
+
+            smooth_cx = clamp(smooth_cx, crop_w / 2.0, src_w - crop_w / 2.0)
+            max_cy = src_h - crop_h / 2.0
+            if cfg.subtitle_safe_bottom_ratio > 0:
+                max_cy -= src_h * cfg.subtitle_safe_bottom_ratio * 0.35
+            max_cy = max(crop_h / 2.0, max_cy)
+            smooth_cy = clamp(smooth_cy, crop_h / 2.0, max_cy)
+
+            if raw_centers:
+                motion_total += math.hypot(smooth_cx - raw_centers[-1][0], smooth_cy - raw_centers[-1][1])
+                motion_samples += 1
+            raw_centers.append((smooth_cx, smooth_cy))
+            frame_idx += 1
+
+        expected_frames = max(1, end_frame - start_frame)
+        default = (default_cx, default_cy)
+        while len(raw_centers) < expected_frames:
+            raw_centers.append(raw_centers[-1] if raw_centers else default)
+
+        lookahead = max(0, int(cfg.lookahead_frames))
+        if lookahead > 0 and len(raw_centers) > 2:
+            looked: List[Tuple[float, float]] = []
+            for i, center in enumerate(raw_centers):
+                hi = min(len(raw_centers), i + lookahead + 1)
+                span = raw_centers[i:hi]
+                weight_total = 1.0
+                sx, sy = center
+                for offset, future in enumerate(span[1:], start=1):
+                    weight = 0.28 / offset
+                    sx += future[0] * weight
+                    sy += future[1] * weight
+                    weight_total += weight
+                looked.append((sx / weight_total, sy / weight_total))
+            raw_centers = looked
+
+        window = max(3, cfg.temporal_smooth_window | 1)
+        xs = np.array([c[0] for c in raw_centers], dtype=float)
+        ys = np.array([c[1] for c in raw_centers], dtype=float)
+        xs = _gaussian_smooth_1d(xs, window)
+        ys = _gaussian_smooth_1d(ys, window)
+        smoothed = list(zip(xs.tolist(), ys.tolist()))
+
+        avg_motion = motion_total / max(1, motion_samples)
+        strategy = "subject_lock" if locked_subject is not None else "center_hold"
+        logger.info(
+            "motion_crop scene=%d strategy=%s locked_subject=%s switches=%d avg_motion=%.2f fallback=%s",
+            scene_index,
+            strategy,
+            bool(locked_subject),
+            switch_count,
+            avg_motion,
+            False,
+        )
+
+        return _apply_velocity_limiter(smoothed, src_w, src_h, crop_w, crop_h, cfg), fps
+    finally:
+        cap.release()
 
 
 # ---------------------------------------------------------------------------
@@ -745,6 +1087,63 @@ def _build_motion_path_legacy(
     return centers, fps
 
 
+def _detect_scene_ranges_in_clip(video_path: str, cfg: MotionCropConfig):
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return [(0.0, 0.0)]
+
+    try:
+        fps = cap.get(cv2.CAP_PROP_FPS) or cfg.fps_fallback
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = frame_count / fps if fps > 0 and frame_count > 0 else 0.0
+
+        prev_gray = None
+        cuts: List[float] = []
+        frame_idx = 0
+        sample_every = max(1, int(round(fps / 6.0)))
+
+        while True:
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                break
+
+            if frame_idx % sample_every != 0:
+                frame_idx += 1
+                continue
+
+            small = cv2.resize(frame, (160, 90), interpolation=cv2.INTER_AREA)
+            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+            if prev_gray is not None:
+                diff = float(np.mean(cv2.absdiff(prev_gray, gray)))
+                if diff >= cfg.scene_cut_threshold:
+                    t = frame_idx / fps if fps > 0 else 0.0
+                    if not cuts or t - cuts[-1] > 0.35:
+                        cuts.append(t)
+            prev_gray = gray
+            frame_idx += 1
+
+        if duration <= 0.0 and fps > 0:
+            duration = frame_idx / fps
+
+        ranges: List[Tuple[float, float]] = []
+        start = 0.0
+        for cut in cuts:
+            cut = clamp(cut, 0.0, duration)
+            if cut > start:
+                ranges.append((start, cut))
+                start = cut
+        if duration > start:
+            ranges.append((start, duration))
+        return ranges or [(0.0, duration)]
+    except Exception:
+        fps = cap.get(cv2.CAP_PROP_FPS) or cfg.fps_fallback
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = frame_count / fps if fps > 0 and frame_count > 0 else 0.0
+        return [(0.0, duration)]
+    finally:
+        cap.release()
+
+
 # ---------------------------------------------------------------------------
 # Public entry point (called by render_engine / render_motion_aware_crop)
 # ---------------------------------------------------------------------------
@@ -754,6 +1153,7 @@ def build_motion_path(
     crop_w: int,
     crop_h: int,
     cfg: MotionCropConfig,
+    _scene_ranges=None,
 ) -> Tuple[List[Tuple[int, int]], float]:
     """
     Route to the appropriate tracking algorithm based on cfg.reframe_mode.
@@ -762,7 +1162,7 @@ def build_motion_path(
     - "motion":            legacy pixel-diff motion tracking
     """
     if cfg.reframe_mode == "subject":
-        return build_subject_path(video_path, crop_w, crop_h, cfg)
+        return build_subject_path(video_path, crop_w, crop_h, cfg, _scene_ranges=_scene_ranges)
     return _build_motion_path_legacy(video_path, crop_w, crop_h, cfg)
 
 
@@ -835,7 +1235,21 @@ def render_motion_aware_crop(
     crop_h_src = min(crop_h_src, src_h)
 
     # Build crop path (subject-tracking or legacy motion)
-    centers, detected_fps = build_motion_path(input_path, crop_w_src, crop_h_src, cfg)
+    scene_ranges = None
+    if cfg.scene_aware_tracking:
+        scene_ranges = _detect_scene_ranges_in_clip(input_path, cfg)
+        if not scene_ranges or len(scene_ranges) <= 1:
+            scene_ranges = None
+        else:
+            logger.info("scene-aware scenes=%d", len(scene_ranges))
+
+    centers, detected_fps = build_motion_path(
+        input_path,
+        crop_w_src,
+        crop_h_src,
+        cfg,
+        _scene_ranges=scene_ranges,
+    )
 
     # Build ffmpeg video filter chain
     vf_parts = []
