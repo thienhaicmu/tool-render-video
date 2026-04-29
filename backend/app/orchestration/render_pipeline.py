@@ -2270,7 +2270,82 @@ def run_render_pipeline(
             for _i, _s in enumerate(scored)
             if "mv_viral_score" in _s
         ]
-        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored, "market_viral_parts": _mv_parts, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
+
+        # ── P5-1 Output Ranking ───────────────────────────────────────────────
+        _failed_idx_set = {f[0] for f in failed_parts}
+        _rank_entries: list[dict] = []
+        for _r_idx, _r_seg in enumerate(scored, start=1):
+            if _r_idx in _failed_idx_set:
+                continue
+            _r_combined = float(_r_seg.get("combined_score") or _r_seg.get("viral_score") or 0)
+            _r_mv       = float(_r_seg.get("mv_viral_score") or 0)
+            _r_hook_raw = (
+                _r_seg.get("hook_text_score") or _r_seg.get("hook_timing_score") or
+                _r_seg.get("hook_opening_score") or _r_seg.get("hook_score") or 0
+            )
+            _r_hook     = float(_r_hook_raw or 0)
+            _r_qbonus   = 100.0  # all non-failed parts passed output validation
+            _r_raw      = _r_combined * 0.70 + _r_mv * 0.15 + _r_hook * 0.10 + _r_qbonus * 0.05
+            _r_score    = round(max(0.0, min(100.0, _r_raw)), 1)
+            _r_output   = str(output_dir / f"{source['slug']}_part_{_r_idx:03d}.mp4")
+            _rank_entries.append({
+                "part_no":              _r_idx,
+                "output_file":          _r_output,
+                "output_rank_score":    _r_score,
+                "output_rank":          0,
+                "is_best_output":       False,
+                "reasons": [
+                    f"combined={_r_combined}",
+                    f"market_viral={_r_mv}",
+                    f"hook={_r_hook}",
+                    f"quality_bonus={_r_qbonus}",
+                ],
+            })
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="output_rank_computed",
+                level="INFO",
+                message=f"Part {_r_idx} output_rank_score={_r_score}",
+                step="render.output_rank",
+                context={
+                    "part_no":              _r_idx,
+                    "output_rank_score":    _r_score,
+                    "combined_score":       _r_combined,
+                    "market_viral_score":   _r_mv,
+                    "hook_score_component": _r_hook,
+                    "output_quality_bonus": _r_qbonus,
+                },
+            )
+        _rank_entries.sort(key=lambda x: x["output_rank_score"], reverse=True)
+        for _ri, _re in enumerate(_rank_entries, start=1):
+            _re["output_rank"]    = _ri
+            _re["is_best_output"] = (_ri == 1)
+        _rank_entries_ordered = sorted(_rank_entries, key=lambda x: x["part_no"])
+        _best_rank_entry = _rank_entries[0] if _rank_entries else None
+        if _best_rank_entry:
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="output_ranking_completed",
+                level="INFO",
+                message=(
+                    f"Output ranking: best=part_{_best_rank_entry['part_no']:03d} "
+                    f"score={_best_rank_entry['output_rank_score']} total={len(_rank_entries)}"
+                ),
+                step="render.output_rank",
+                context={
+                    "total_outputs":   len(_rank_entries),
+                    "best_part_no":    _best_rank_entry["part_no"],
+                    "best_score":      _best_rank_entry["output_rank_score"],
+                    "ranking_summary": [
+                        {"part_no": e["part_no"], "rank": e["output_rank"], "score": e["output_rank_score"]}
+                        for e in _rank_entries[:5]
+                    ],
+                },
+            )
+
+        upsert_job(job_id, "render", effective_channel, "completed", payload.model_dump(), {"outputs": outputs, "segments": scored, "market_viral_parts": _mv_parts, "output_ranking": _rank_entries_ordered, "voice_summary": _voice_summary, "subtitle_translate_summary": _subtitle_translate_summary}, stage=JobStage.DONE, progress_percent=100, message="Render completed")
         _job_log(effective_channel, job_id, f"Render completed with {len(outputs)}/{total_parts} outputs")
         _emit_render_event(
             channel_code=effective_channel,

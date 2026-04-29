@@ -766,6 +766,27 @@ function _rcAutoScrollActive(container, activePartNo) {
   }, 120);
 }
 
+// ── Output Ranking helpers ────────────────────────────────────────────────────
+function _rankMap(job) {
+  const map = new Map();
+  try {
+    const raw = job?.result_json;
+    const result = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+    const ranking = result?.output_ranking;
+    if (!Array.isArray(ranking)) return map;
+    ranking.forEach(r => {
+      if (r?.part_no != null) {
+        map.set(Number(r.part_no), {
+          rank:   Number(r.output_rank || 0),
+          score:  Number(r.output_rank_score || 0),
+          isBest: !!r.is_best_output,
+        });
+      }
+    });
+  } catch (_) {}
+  return map;
+}
+
 // ── Market Viral score helpers ────────────────────────────────────────────────
 function _mvSegmentMap(job) {
   const map = new Map();
@@ -1027,6 +1048,15 @@ function renderBenchmarkPanel(job, parts) {
     const _bmBest = [..._bmMvMap.values()].reduce((a, b) => (b.score > a.score ? b : a));
     const _bmTier = { hot: 'Hot', warm: 'Warm', normal: 'Normal', weak: 'Weak' };
     rows.push({ label: 'Market Viral', value: `${_bmBest.score} · ${_bmBest.market} · ${_bmTier[_bmBest.tier] || _bmBest.tier}` });
+  }
+
+  const _bmRkMap = _rankMap(job);
+  if (_bmRkMap.size > 0) {
+    const _bmBestRk = [..._bmRkMap.values()].find(r => r.isBest);
+    if (_bmBestRk) {
+      const _bmBestPart = [..._bmRkMap.entries()].find(([, r]) => r.isBest)?.[0];
+      rows.push({ label: 'Best Output', value: `part_${String(_bmBestPart).padStart(3, '0')} · ${_bmBestRk.score}` });
+    }
   }
 
   if (grid) {
@@ -1386,6 +1416,8 @@ function renderBottomActiveQueue(job, summary, parts = []) {
 
   const _mvMap = _mvSegmentMap(job);
   const _mvTop3 = terminal ? _mvTop3Set(_mvMap) : new Set();
+  const _rkMap = _rankMap(job);
+  const _hasRanking = _rkMap.size > 0;
 
   const _maxScore = items.reduce((max, p) => {
     const s = p?.viral_score ?? p?.score ?? p?.viralScore;
@@ -1414,7 +1446,8 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     );
     const msgLow = msgText.toLowerCase();
     const isWarn = state === 'completed' && (msgLow.includes('warn') || msgLow.includes('narration'));
-    const isBest = idx === _bestIdx;
+    const rkData = _rkMap.get(partNo);
+    const isBest = _hasRanking ? (rkData?.isBest === true) : (idx === _bestIdx);
     const isMvTop = _mvTop3.has(partNo);
     const visualClass = isWarn ? 'isWarning' : `is${rcCap(state)}`;
 
@@ -1443,6 +1476,13 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     clipLabel.className = 'rcClipLabel';
     clipLabel.textContent = partName ? `Clip ${partNo} · ${partName}` : `Clip ${partNo}`;
     leftCol.appendChild(clipLabel);
+
+    if (_hasRanking && rkData && state === 'completed') {
+      const rkChip = document.createElement('span');
+      rkChip.className = `rcRankChip${rkData.isBest ? ' rcRankBest' : ''}`;
+      rkChip.textContent = rkData.isBest ? '★ Best Output' : `#${rkData.rank}`;
+      leftCol.appendChild(rkChip);
+    }
 
     const rightCol = document.createElement('div');
     rightCol.className = 'rcQueueRight';
@@ -1482,6 +1522,13 @@ function renderBottomActiveQueue(job, summary, parts = []) {
           rightCol.appendChild(wl);
         }
       }
+    }
+
+    if (_hasRanking && rkData && state === 'completed') {
+      const rkScore = document.createElement('div');
+      rkScore.style.cssText = 'font-size:10px;color:rgba(148,163,184,.4);margin-top:3px;text-align:right;';
+      rkScore.textContent = `Rank Score: ${rkData.score}`;
+      rightCol.appendChild(rkScore);
     }
 
     topRow.appendChild(leftCol);

@@ -6434,6 +6434,25 @@
     /* Top-3 ring on rcQueueRow */
     .rcQueueRow.rcMvTop3 { outline: 1px solid rgba(99,102,241,.45); outline-offset: -1px; }
 
+    /* P5-1 Output Rank chip (inline next to clip label) */
+    .rcRankChip {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+      vertical-align: middle;
+      background: rgba(148,163,184,.1);
+      color: rgba(148,163,184,.55);
+      letter-spacing: .01em;
+    }
+    .rcRankChip.rcRankBest {
+      background: rgba(168,85,247,.18);
+      color: #d8b4fe;
+    }
+
     /* Market Viral pill in partRow .partRight */
     .mvScorePill {
       display: inline-flex;
