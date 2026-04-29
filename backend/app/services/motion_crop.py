@@ -392,14 +392,142 @@ def _subject_edge_overlap_ratio(
     return (left_overlap + right_overlap) / max(1.0, float(w))
 
 
-def _required_lock_confirm_frames(cfg: MotionCropConfig, tracker_available: bool) -> int:
+def _required_lock_confirm_frames(
+    cfg: MotionCropConfig,
+    tracker_available: bool,
+    confidence_score: float | None = None,
+    offcenter_ratio: float = 0.0,
+) -> int:
     if tracker_available:
         return 1
-    return max(2, int(cfg.subject_switch_confirm_frames or 0))
+    base = max(2, int(cfg.subject_switch_confirm_frames or 0))
+    if confidence_score is None:
+        return base
+    if confidence_score < 0.55 or offcenter_ratio > 0.35:
+        return max(3, base + 1)
+    if confidence_score < 0.72:
+        return max(2, base)
+    return base
 
 
 def _untracked_hold_frames(cfg: MotionCropConfig, detect_interval: int) -> int:
     return max(4, min(cfg.lost_subject_hold_frames, max(6, detect_interval // 2)))
+
+
+def _trackerless_offcenter_ratio(
+    subject: Tuple[int, int, int, int],
+    frame_w: int,
+    crop_w: int,
+) -> float:
+    cx, _ = _subject_center(subject)
+    pan_half_range = max(1.0, float(frame_w - crop_w) / 2.0)
+    return abs(cx - frame_w / 2.0) / pan_half_range
+
+
+def _trackerless_detection_confidence(
+    subject: Tuple[int, int, int, int],
+    frame_w: int,
+    frame_h: int,
+    crop_w: int,
+    subject_kind: str = "face",
+    previous_subject: Optional[Tuple[int, int, int, int]] = None,
+    confirm_count: int = 1,
+) -> float:
+    area_ratio = _subject_area_ratio(subject, frame_w, frame_h)
+    edge_overlap = _subject_edge_overlap_ratio(subject, frame_w)
+    offcenter_ratio = _trackerless_offcenter_ratio(subject, frame_w, crop_w)
+
+    if subject_kind == "face":
+        score = 0.25
+    elif subject_kind == "body":
+        score = 0.18
+    else:
+        score = 0.15
+
+    score += 0.25 * clamp(confirm_count / 3.0, 0.0, 1.0)
+
+    if 0.02 <= area_ratio <= 0.12:
+        score += 0.18
+    elif 0.010 <= area_ratio < 0.02 or 0.12 < area_ratio <= 0.18:
+        score += 0.10
+    else:
+        score += 0.04
+
+    score += 0.15 * clamp(1.0 - offcenter_ratio, 0.0, 1.0)
+    score += 0.10 * clamp(1.0 - edge_overlap, 0.0, 1.0)
+
+    if previous_subject is not None and _same_subject(previous_subject, subject):
+        score += 0.07
+
+    if offcenter_ratio > 0.35:
+        score -= 0.12
+    if edge_overlap > 0.30:
+        score -= 0.08
+
+    return clamp(score, 0.0, 1.0)
+
+
+def _trackerless_hold_frames_for_confidence(base_hold_frames: int, confidence_score: float) -> int:
+    if confidence_score < 0.55:
+        return max(3, base_hold_frames - 4)
+    if confidence_score < 0.78:
+        return max(4, base_hold_frames - 2)
+    return base_hold_frames
+
+
+def _trackerless_crop_side_fill_ratio(
+    target_cx: float,
+    frame_w: int,
+    crop_w: int,
+    band_ratio: float = 0.28,
+) -> float:
+    crop_left = clamp(target_cx - crop_w / 2.0, 0.0, frame_w - crop_w)
+    crop_right = crop_left + crop_w
+    left_band = frame_w * band_ratio
+    right_band = frame_w * (1.0 - band_ratio)
+    left_overlap = max(0.0, min(crop_right, left_band) - crop_left)
+    right_overlap = max(0.0, crop_right - max(crop_left, right_band))
+    return max(left_overlap, right_overlap) / max(1.0, float(crop_w))
+
+
+def _apply_trackerless_center_guard(
+    target_cx: float,
+    default_cx: float,
+    frame_w: int,
+    crop_w: int,
+    confidence_score: float,
+    stable_count: int,
+) -> Tuple[float, bool, str]:
+    if confidence_score >= 0.82 and stable_count >= 3:
+        return target_cx, False, "none"
+
+    side_fill_ratio = _trackerless_crop_side_fill_ratio(target_cx, frame_w, crop_w)
+    if confidence_score < 0.55:
+        max_offset = crop_w * 0.18
+        if side_fill_ratio > 0.18:
+            max_offset = min(max_offset, crop_w * 0.14)
+        reason = "weak_trackerless_guard"
+    elif confidence_score < 0.78:
+        max_offset = crop_w * 0.28
+        if side_fill_ratio > 0.22:
+            max_offset = min(max_offset, crop_w * 0.22)
+            reason = "edge_fill_guard"
+        else:
+            reason = "medium_trackerless_guard"
+    else:
+        max_offset = crop_w * (0.32 + min(0.10, stable_count * 0.02))
+        if side_fill_ratio > 0.24:
+            max_offset = min(max_offset, crop_w * 0.26)
+            reason = "edge_fill_guard"
+        else:
+            reason = "none"
+
+    dx = target_cx - default_cx
+    if abs(dx) <= max_offset:
+        return target_cx, False, "none" if side_fill_ratio <= 0.22 else reason
+
+    guarded_cx = default_cx + math.copysign(max_offset, dx)
+    return guarded_cx, True, reason
 
 
 def _is_plausible_subject(
@@ -772,6 +900,8 @@ def build_subject_path(
     required_lock_confirm = _required_lock_confirm_frames(cfg, tracker_available)
     pending_subject: Optional[Tuple[int, int, int, int]] = None
     pending_count = 0
+    trackerless_confidence = 0.0
+    trackerless_confirm_streak = 0
 
     while True:
         ok, frame = cap.read()
@@ -795,7 +925,7 @@ def build_subject_path(
                 tracking = False
 
         # --- Step 2: re-detect every N frames (or when tracker lost) ---
-        if frame_idx % detect_interval == 0 or not tracking:
+        if frame_idx % detect_interval == 0 or (tracker_available and not tracking):
             small = cv2.resize(frame, None, fx=detect_scale, fy=detect_scale)
             gray_small = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
             detected, _kind = _detect_subjects_in_frame(
@@ -806,16 +936,35 @@ def build_subject_path(
 
             if best is not None:
                 if last_subject is None and not tracker_available:
+                    candidate_count = pending_count + 1 if _same_subject(pending_subject, best) else 1
+                    candidate_confidence = _trackerless_detection_confidence(
+                        best,
+                        src_w,
+                        src_h,
+                        crop_w,
+                        _kind,
+                        pending_subject,
+                        candidate_count,
+                    )
+                    candidate_offcenter = _trackerless_offcenter_ratio(best, src_w, crop_w)
+                    confirm_needed = _required_lock_confirm_frames(
+                        cfg,
+                        tracker_available,
+                        candidate_confidence,
+                        candidate_offcenter,
+                    )
                     if _same_subject(pending_subject, best):
-                        pending_count += 1
+                        pending_count = candidate_count
                     else:
                         pending_subject = best
-                        pending_count = 1
-                    if pending_count < required_lock_confirm:
+                        pending_count = candidate_count
+                    if pending_count < confirm_needed:
                         best = None
                     else:
                         pending_subject = None
                         pending_count = 0
+                        trackerless_confidence = candidate_confidence
+                        trackerless_confirm_streak = confirm_needed
                 if best is not None:
                     subjects_found_total += 1
                     if tracker is not None:
@@ -823,6 +972,17 @@ def build_subject_path(
                         tracker.init(frame, (bx, by, bw, bh))
                         tracking = True
                     subject = best
+                    if not tracker_available:
+                        trackerless_confirm_streak = min(max(1, trackerless_confirm_streak) + 1, 6)
+                        trackerless_confidence = _trackerless_detection_confidence(
+                            best,
+                            src_w,
+                            src_h,
+                            crop_w,
+                            _kind,
+                            last_subject,
+                            trackerless_confirm_streak,
+                        )
                     last_subject = best
 
         # --- Step 3: compute crop center ---
@@ -831,12 +991,30 @@ def build_subject_path(
                 subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding,
                 cfg.subtitle_safe_bottom_ratio
             )
+            if not tracker_available:
+                cx, _, _ = _apply_trackerless_center_guard(
+                    cx,
+                    default_cx,
+                    src_w,
+                    crop_w,
+                    trackerless_confidence,
+                    trackerless_confirm_streak,
+                )
         elif last_subject is not None:
             # Hold last known subject position (subject momentarily occluded)
             cx, cy = _subject_to_crop_center(
                 last_subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding,
                 cfg.subtitle_safe_bottom_ratio
             )
+            if not tracker_available:
+                cx, _, _ = _apply_trackerless_center_guard(
+                    cx,
+                    default_cx,
+                    src_w,
+                    crop_w,
+                    trackerless_confidence,
+                    trackerless_confirm_streak,
+                )
         else:
             cx, cy = default_cx, default_cy
 
@@ -923,6 +1101,10 @@ def build_subject_path_scene(
         lock_confirmed = 0
         detect_miss_intervals = 0
         fallback_reason = "none"
+        scene_fallback_reason = "none"
+        trackerless_confidence = 0.0
+        trackerless_confirm_streak = 0
+        center_guard_active = False
 
         while frame_idx < end_frame:
             ok, frame = cap.read()
@@ -945,7 +1127,10 @@ def build_subject_path_scene(
                     tracking = False
 
             scene_frame_idx = frame_idx - start_frame
-            should_detect = scene_frame_idx % detect_interval == 0 or not tracking
+            if tracker_available:
+                should_detect = scene_frame_idx % detect_interval == 0 or not tracking
+            else:
+                should_detect = scene_frame_idx % detect_interval == 0
             detection_confirmed = False
             if should_detect:
                 small = cv2.resize(frame, None, fx=detect_scale, fy=detect_scale)
@@ -972,14 +1157,32 @@ def build_subject_path_scene(
                             lock_confirmed += 1
                             detection_confirmed = True
                         else:
+                            candidate_count = pending_count + 1 if _same_subject(pending_subject, best) else 1
+                            candidate_confidence = _trackerless_detection_confidence(
+                                best,
+                                src_w,
+                                src_h,
+                                crop_w,
+                                detected_kind,
+                                pending_subject,
+                                candidate_count,
+                            )
+                            candidate_offcenter = _trackerless_offcenter_ratio(best, src_w, crop_w)
+                            confirm_needed = _required_lock_confirm_frames(
+                                cfg,
+                                tracker_available,
+                                candidate_confidence,
+                                candidate_offcenter,
+                            )
                             if _same_subject(pending_subject, best):
-                                pending_count += 1
+                                pending_count = candidate_count
                             else:
                                 pending_subject = best
                                 pending_kind = detected_kind
-                                pending_count = 1
+                                pending_count = candidate_count
                             fallback_reason = "await_initial_confirmation"
-                            if pending_count >= required_lock_confirm:
+                            scene_fallback_reason = fallback_reason
+                            if pending_count >= confirm_needed:
                                 locked_subject = best
                                 locked_kind = pending_kind or detected_kind
                                 subject = best
@@ -990,7 +1193,20 @@ def build_subject_path_scene(
                                 lock_confirmed += 1
                                 detection_confirmed = True
                                 fallback_reason = "none"
+                                trackerless_confidence = candidate_confidence
+                                trackerless_confirm_streak = confirm_needed
                     elif _same_subject(locked_subject, best):
+                        if not tracker_available:
+                            trackerless_confirm_streak = min(max(1, trackerless_confirm_streak) + 1, 6)
+                            trackerless_confidence = _trackerless_detection_confidence(
+                                best,
+                                src_w,
+                                src_h,
+                                crop_w,
+                                detected_kind,
+                                locked_subject,
+                                trackerless_confirm_streak,
+                            )
                         locked_subject = best
                         locked_kind = detected_kind
                         subject = best
@@ -1003,15 +1219,33 @@ def build_subject_path_scene(
                         current_score = _score_subject_candidate(locked_subject, src_w, src_h, locked_subject)
                         new_score = _score_subject_candidate(best, src_w, src_h, locked_subject)
                         if new_score >= current_score * cfg.subject_switch_margin:
+                            candidate_count = pending_count + 1 if _same_subject(pending_subject, best) else 1
+                            candidate_confidence = _trackerless_detection_confidence(
+                                best,
+                                src_w,
+                                src_h,
+                                crop_w,
+                                detected_kind,
+                                locked_subject,
+                                candidate_count,
+                            )
+                            candidate_offcenter = _trackerless_offcenter_ratio(best, src_w, crop_w)
+                            confirm_needed = _required_lock_confirm_frames(
+                                cfg,
+                                tracker_available,
+                                candidate_confidence if not tracker_available else None,
+                                candidate_offcenter if not tracker_available else 0.0,
+                            )
                             if _same_subject(pending_subject, best):
-                                pending_count += 1
+                                pending_count = candidate_count
                             else:
                                 pending_subject = best
                                 pending_kind = detected_kind
-                                pending_count = 1
+                                pending_count = candidate_count
 
                             fallback_reason = "await_switch_confirmation"
-                            if pending_count >= required_lock_confirm:
+                            scene_fallback_reason = fallback_reason
+                            if pending_count >= confirm_needed:
                                 locked_subject = best
                                 locked_kind = pending_kind or detected_kind
                                 subject = best
@@ -1023,6 +1257,8 @@ def build_subject_path_scene(
                                 lock_confirmed += 1
                                 detection_confirmed = True
                                 fallback_reason = "none"
+                                trackerless_confidence = candidate_confidence
+                                trackerless_confirm_streak = confirm_needed
                                 # Activate easing window: camera pans toward new subject
                                 # without dead-zone suppression for ~0.5 s.
                                 switch_cooldown = max(4, int(fps * 0.5))
@@ -1045,6 +1281,11 @@ def build_subject_path_scene(
                 elif locked_subject is not None and not tracking:
                     detect_miss_intervals += 1
 
+            trackerless_hold_frames = _trackerless_hold_frames_for_confidence(
+                untracked_hold_frames,
+                trackerless_confidence,
+            ) if not tracker_available else untracked_hold_frames
+
             if subject is None and locked_subject is not None:
                 if tracking:
                     subject = locked_subject
@@ -1053,7 +1294,7 @@ def build_subject_path_scene(
                     if (
                         not tracker_available
                         and detect_miss_intervals >= 1
-                        and lost_frames >= untracked_hold_frames
+                        and lost_frames >= trackerless_hold_frames
                     ):
                         locked_subject = None
                         locked_kind = "none"
@@ -1061,13 +1302,26 @@ def build_subject_path_scene(
                         pending_kind = "none"
                         pending_count = 0
                         fallback_reason = "stale_untracked_lock"
+                        scene_fallback_reason = fallback_reason
 
-            hold_frames = cfg.lost_subject_hold_frames if tracker_available else untracked_hold_frames
+            hold_frames = cfg.lost_subject_hold_frames if tracker_available else trackerless_hold_frames
             if subject is not None:
                 target_cx, target_cy = _subject_to_crop_center(
                     subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding,
                     cfg.subtitle_safe_bottom_ratio, locked_kind
                 )
+                if not tracker_available:
+                    target_cx, guard_hit, guard_reason = _apply_trackerless_center_guard(
+                        target_cx,
+                        default_cx,
+                        src_w,
+                        crop_w,
+                        trackerless_confidence,
+                        trackerless_confirm_streak,
+                    )
+                    center_guard_active = center_guard_active or guard_hit
+                    if guard_reason != "none":
+                        scene_fallback_reason = guard_reason
                 last_good_center = (target_cx, target_cy)
             elif locked_subject is not None and lost_frames <= hold_frames:
                 target_cx, target_cy = last_good_center
@@ -1075,7 +1329,8 @@ def build_subject_path_scene(
                 # Smoothstep return: slow start → faster mid → soft landing at center.
                 # Ramps over 1.0 s instead of 0.75 s to feel less abrupt.
                 t_return = min(1.0, (lost_frames - hold_frames) / max(1.0, fps * 1.0))
-                return_alpha = _smoothstep(t_return) * 0.10  # max alpha 0.10
+                return_alpha_cap = 0.16 if (not tracker_available and trackerless_confidence < 0.78) else 0.10
+                return_alpha = _smoothstep(t_return) * return_alpha_cap
                 target_cx = ema(last_good_center[0], default_cx, return_alpha)
                 target_cy = ema(last_good_center[1], default_cy, return_alpha)
                 last_good_center = (target_cx, target_cy)
@@ -1108,7 +1363,8 @@ def build_subject_path_scene(
                 smooth_cx = ema(smooth_cx, target_cx, alpha)
                 smooth_cy = ema(smooth_cy, target_cy, alpha)
             elif force_recenter:
-                alpha = max(alpha, cfg.ema_alpha_normal)
+                recenter_floor = cfg.ema_alpha_fast if trackerless_confidence < 0.78 else cfg.ema_alpha_normal
+                alpha = max(alpha, recenter_floor)
                 smooth_cx = ema(smooth_cx, target_cx, alpha)
                 smooth_cy = ema(smooth_cy, target_cy, alpha)
             else:
@@ -1170,26 +1426,33 @@ def build_subject_path_scene(
         xs = _gaussian_smooth_1d(xs, scene_gaussian_window)
         ys = _gaussian_smooth_1d(ys, scene_gaussian_window)
         smoothed = list(zip(xs.tolist(), ys.tolist()))
+        final_centers = _apply_velocity_limiter(smoothed, src_w, src_h, crop_w, crop_h, cfg)
+        crop_x_values = [xy[0] for xy in final_centers] if final_centers else [int(default_cx - crop_w / 2.0)]
 
         strategy = "subject_lock" if locked_subject is not None else "center_hold"
         logger.info(
             "motion_crop scene=%d strategy=%s tracker_available=%s locked=%s "
+            "trackerless_confidence=%.2f center_guard_active=%s crop_x_range=%d-%d "
             "lock_confirmed=%d detections_rejected=%d fallback=%s switches=%d "
             "avg_motion=%.2f gauss_window=%d subtitle_safe=%.3f",
             scene_index,
             strategy,
             tracker_available,
             bool(locked_subject),
+            trackerless_confidence,
+            center_guard_active,
+            min(crop_x_values),
+            max(crop_x_values),
             lock_confirmed,
             detections_rejected,
-            fallback_reason,
+            scene_fallback_reason if scene_fallback_reason != "none" else fallback_reason,
             switch_count,
             avg_motion,
             scene_gaussian_window,
             cfg.subtitle_safe_bottom_ratio,
         )
 
-        return _apply_velocity_limiter(smoothed, src_w, src_h, crop_w, crop_h, cfg), fps
+        return final_centers, fps
     finally:
         cap.release()
 
