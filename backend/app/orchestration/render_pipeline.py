@@ -1423,12 +1423,27 @@ def run_render_pipeline(
                 needs_ass = not (payload.resume_from_last and ass_part.exists() and ass_part.stat().st_size > 0)
                 if needs_srt:
                     _eff_speed = max(0.5, min(1.5, float(payload.playback_speed or 1.0)))
-                    _srt_meta = slice_srt_by_time(str(full_srt), str(srt_part), _effective_start, seg["end"], rebase_to_zero=True, playback_speed=_eff_speed)
+                    _visual_apply_speed = False
+                    _srt_meta = slice_srt_by_time(
+                        str(full_srt),
+                        str(srt_part),
+                        _effective_start,
+                        seg["end"],
+                        rebase_to_zero=True,
+                        playback_speed=_eff_speed,
+                        apply_playback_speed=_visual_apply_speed,
+                    )
                     _srt_count = _srt_meta.get("subtitle_count", 0)
                     _job_log(
                         effective_channel, job_id,
-                        f"subtitle_part_sync part_no={idx} start={seg['start']:.1f}s end={seg['end']:.1f}s speed={_eff_speed} count={_srt_count}"
-                        + (f" first={_srt_meta['first_start']:.3f}s last={_srt_meta['last_start']:.3f}s" if _srt_count > 0 else " (no speech)"),
+                        f"subtitle_part_sync part_no={idx} subtitle_slice_mode=visual_burn_in "
+                        f"start={seg['start']:.1f}s effective_start={_effective_start:.1f}s end={seg['end']:.1f}s "
+                        f"playback_speed={_eff_speed} apply_playback_speed={_visual_apply_speed} count={_srt_count}"
+                        + (
+                            f" first={_srt_meta['first_start']:.3f}->{_srt_meta['first_end']:.3f}s"
+                            f" last={_srt_meta['last_start']:.3f}->{_srt_meta['last_end']:.3f}s"
+                            if _srt_count > 0 else " (no speech)"
+                        ),
                         kind="debug" if _srt_count > 0 else "warning",
                     )
                     _emit_render_event(
@@ -1442,7 +1457,10 @@ def run_render_pipeline(
                             "part_no": idx,
                             "part_start": seg["start"],
                             "part_end": seg["end"],
+                            "effective_start": _effective_start,
+                            "subtitle_slice_mode": "visual_burn_in",
                             "playback_speed": _eff_speed,
+                            "apply_playback_speed": _visual_apply_speed,
                             "subtitle_count": _srt_count,
                             "first_sub_start": _srt_meta.get("first_start"),
                             "first_sub_end": _srt_meta.get("first_end"),

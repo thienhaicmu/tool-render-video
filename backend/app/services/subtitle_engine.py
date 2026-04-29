@@ -77,6 +77,7 @@ def slice_srt_by_time(
     end_sec: float,
     rebase_to_zero: bool = True,
     playback_speed: float = 1.0,
+    apply_playback_speed: bool = True,
 ) -> dict:
     src_blocks = _parse_srt_blocks(source_srt_path)
     start_sec = max(0.0, float(start_sec))
@@ -85,6 +86,7 @@ def slice_srt_by_time(
         speed = max(0.5, min(1.5, float(playback_speed or 1.0)))
     except Exception:
         speed = 1.0
+    time_scale = speed if apply_playback_speed else 1.0
     selected = []
 
     for b in src_blocks:
@@ -93,11 +95,11 @@ def slice_srt_by_time(
         if ov_end <= ov_start:
             continue
         if rebase_to_zero:
-            out_start = (ov_start - start_sec) / speed
-            out_end = (ov_end - start_sec) / speed
+            out_start = (ov_start - start_sec) / time_scale
+            out_end = (ov_end - start_sec) / time_scale
         else:
-            out_start = ov_start / speed
-            out_end = ov_end / speed
+            out_start = ov_start / time_scale
+            out_end = ov_end / time_scale
         if out_end <= out_start:
             continue
         selected.append({"start": out_start, "end": out_end, "text": b["text"]})
@@ -115,6 +117,8 @@ def slice_srt_by_time(
         "first_end": selected[0]["end"] if selected else None,
         "last_start": selected[-1]["start"] if selected else None,
         "last_end": selected[-1]["end"] if selected else None,
+        "playback_speed": speed,
+        "apply_playback_speed": bool(apply_playback_speed),
     }
 
 
