@@ -96,6 +96,62 @@ _POLICIES: Dict[str, Dict] = {
 
 _VALID_MARKETS = frozenset(_POLICIES.keys())
 _VALID_TONES   = frozenset({"clean", "bold", "karaoke"})
+_HL_OPEN = "\ue100"
+_HL_CLOSE = "\ue101"
+_STOPWORDS = frozenset({
+    "the", "a", "an", "and", "or", "but", "so", "to", "of", "in", "on", "for",
+    "with", "is", "are", "was", "were", "be", "been", "it", "this", "that",
+    "i", "you", "we", "they", "he", "she", "my", "your", "our", "their",
+    "just", "like", "really", "very", "there", "here", "now", "then",
+})
+
+
+def _split_phrases(words: list[str], max_words: int) -> list[list[str]]:
+    phrases: list[list[str]] = []
+    cur: list[str] = []
+    conjunctions = {"and", "but", "so"}
+    for w in words:
+        clean = re.sub(r"[^\w']", "", w).lower()
+        cur.append(w)
+        if bool(re.search(r"[,.!?;:]$", w)) or (clean in conjunctions and len(cur) >= 2) or len(cur) >= max_words:
+            phrases.append(cur)
+            cur = []
+    if cur:
+        phrases.append(cur)
+    return phrases
+
+
+def _shape_two_lines(words: list[str], max_words: int) -> list[str]:
+    if len(words) <= max_words:
+        return [" ".join(words)]
+    total = len(words)
+    target = max(2, round(total * 0.42))
+    candidates: set[int] = set()
+    conjunctions = {"and", "but", "so"}
+    for idx, word in enumerate(words[:-1], start=1):
+        clean = re.sub(r"[^\w']", "", word).lower()
+        if re.search(r"[,.!?;:]$", word):
+            candidates.add(idx)
+        if clean in conjunctions and idx > 1:
+            candidates.add(idx - 1)
+        if idx % max_words == 0:
+            candidates.add(idx)
+    valid = [c for c in candidates if 1 <= c < total and c <= (total - c)]
+    if valid:
+        split = min(
+            valid,
+            key=lambda c: (
+                re.sub(r"[^\w']", "", words[c - 1]).lower() in conjunctions,
+                abs(c - target),
+                c,
+            ),
+        )
+    else:
+        split = min(target, max_words, total - 1)
+        if total - split < split:
+            split = max(1, split - 1)
+    left, right = words[:split], words[split:]
+    return [" ".join(left), " ".join(right)] if right else [" ".join(left)]
 
 
 def break_text_by_words(text: str, max_words: int) -> str:
@@ -103,12 +159,37 @@ def break_text_by_words(text: str, max_words: int) -> str:
         words = str(text or "").split()
         if not words or max_words < 1:
             return str(text or "")
-        lines = []
-        for i in range(0, len(words), max_words):
-            lines.append(" ".join(words[i:i + max_words]))
-        return "\n".join(lines)
+        return "\n".join(_shape_two_lines(words, max(2, int(max_words))))
     except Exception:
         return text
+
+
+def select_subtitle_keywords(text: str, keywords: list, market: str = "US", max_terms: int = 2) -> list[str]:
+    try:
+        if str(market or "").upper() == "EU":
+            max_terms = min(max_terms, 1)
+        words = re.findall(r"\b[\w']+\b", str(text or ""), flags=re.UNICODE)
+        low_text = str(text or "").lower()
+        picked: list[str] = []
+        for kw in keywords or []:
+            if len(picked) >= max_terms:
+                break
+            if str(kw).lower() in low_text:
+                picked.append(str(kw))
+        if len(picked) < max_terms:
+            candidates = [
+                w for w in words
+                if len(w) >= 5 and w.lower() not in _STOPWORDS and not w.isdigit()
+            ]
+            candidates.sort(key=lambda w: (len(w), words.index(w)), reverse=True)
+            for w in candidates:
+                if len(picked) >= max_terms:
+                    break
+                if not any(w.lower() == p.lower() for p in picked):
+                    picked.append(w)
+        return picked[:max_terms]
+    except Exception:
+        return []
 
 
 def highlight_keywords_in_text(text: str, keywords: list, market: str = "US") -> str:
@@ -120,12 +201,20 @@ def highlight_keywords_in_text(text: str, keywords: list, market: str = "US") ->
     try:
         if not text or not keywords:
             return text
-        if str(market or "").upper() == "JP":
+        selected = select_subtitle_keywords(text, keywords, market, 2)
+        if not selected:
             return text
         result = text
-        for kw in keywords:
+        marker_market = str(market or "US").upper()
+        for kw in selected:
             pattern = r'\b' + re.escape(kw) + r'\b'
-            result = re.sub(pattern, lambda m: m.group(0).upper(), result, flags=re.IGNORECASE)
+            result = re.sub(
+                pattern,
+                lambda m: f"{_HL_OPEN}{marker_market}:{m.group(0)}{_HL_CLOSE}",
+                result,
+                count=1,
+                flags=re.IGNORECASE,
+            )
         return result
     except Exception:
         return text

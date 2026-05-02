@@ -16,6 +16,8 @@ _MODEL_TRANSCRIBE_LOCKS = {}
 WORD_MIN_GAP_SEC = 0.02
 WORD_MIN_DURATION_SEC = 0.12
 WORD_MERGE_SHORTER_THAN_SEC = 0.11
+_HL_OPEN = "\ue100"
+_HL_CLOSE = "\ue101"
 
 # Whisper model cache — redirect to project dir so models stay on D: not C:
 _WHISPER_CACHE_DIR: Path = Path(__file__).resolve().parents[3] / "data" / "whisper_cache"
@@ -424,7 +426,23 @@ def _ass_escape_text(text: str) -> str:
     text = text.replace("\\", "\\\\ ")   # escape existing backslashes
     text = text.replace("{", "(").replace("}", ")")   # braces → parens (ASS override guard)
     text = text.replace("\n", r"\N")     # Python newline → ASS hard-newline
+    text = re.sub(
+        f"{_HL_OPEN}([A-Z]{{2}}):(.*?){_HL_CLOSE}",
+        lambda m: f"{_ass_highlight_tags(m.group(1))[0]}{m.group(2)}{_ass_highlight_tags(m.group(1))[1]}",
+        text,
+    )
+    text = text.replace(_HL_OPEN, "").replace(_HL_CLOSE, "")
     return text
+
+
+def _ass_highlight_tags(market: str) -> tuple[str, str]:
+    """Return market-specific inline ASS tags for selected subtitle keywords."""
+    m = str(market or "US").upper()
+    if m == "EU":
+        return r"{\b1\c&H00FFFF&}", r"{\b0\c&HFFFFFF&}"
+    if m == "JP":
+        return r"{\b1\fscx104\fscy104\c&H66FFCC&}", r"{\b0\fscx100\fscy100\c&HFFFFFF&}"
+    return r"{\b1\fscx112\fscy112\c&H00FFFF&}", r"{\b0\fscx100\fscy100\c&HFFFFFF&}"
 
 
 _WIDE_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&Wm")
@@ -547,7 +565,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         start_s, end_s = time_line.split(" --> ", 1)
         start_ass = _ass_time(parse_srt_timestamp(start_s))
         end_ass   = _ass_time(parse_srt_timestamp(end_s))
-        raw_text = " ".join(lines[2:])
+        raw_text = "\n".join(lines[2:])
         text = _ass_escape_text(_break_by_visual_width(raw_text))
         out.append(f"Dialogue: 0,{start_ass},{end_ass},Default,,0,0,0,,{_pos_tag}{line_fx}{text}\n")
     Path(ass_path).write_text("".join(out), encoding="utf-8")
@@ -730,6 +748,7 @@ def apply_market_line_break_to_srt(srt_path: str, market_payload: dict) -> str:
             get_market_subtitle_policy,
             break_text_by_words,
             highlight_keywords_in_text,
+            select_subtitle_keywords,
         )
         market       = str(market_payload.get("target_market") or "US").upper()
         tone         = str(market_payload.get("subtitle_tone")  or "clean").lower()
@@ -740,18 +759,58 @@ def apply_market_line_break_to_srt(srt_path: str, market_payload: dict) -> str:
         blocks = _parse_srt_blocks(srt_path)
         if not blocks:
             return srt_path
+        avg_words = sum(len(str(b["text"]).split()) for b in blocks) / max(1, len(blocks))
+        word_level_like = len(blocks) >= 6 and avg_words <= 1.5
+        total_lines = 0
+        highlighted_terms: list[str] = []
+        timing_adjusted = 0
         with Path(srt_path).open("w", encoding="utf-8") as f:
             for idx, b in enumerate(blocks, start=1):
                 text = break_text_by_words(b["text"], max_w)
-                if do_highlight:
+                total_lines += max(1, len(text.splitlines()))
+                if do_highlight and not word_level_like:
+                    highlighted_terms.extend(select_subtitle_keywords(text, keywords, market, 2))
                     text = highlight_keywords_in_text(text, keywords, market)
+                start = b["start"]
+                end = b["end"]
+                if not word_level_like:
+                    start = max(0.0, start - 0.10)
+                    extend = 0.20 if (b["end"] - b["start"]) < 1.2 else 0.12
+                    end = b["end"] + extend
+                    end_cap = None
+                    if idx < len(blocks):
+                        next_start = max(0.0, blocks[idx]["start"] - 0.10)
+                        end_cap = next_start - 0.02
+                        end = min(end, end_cap)
+                    if end <= start + 0.08:
+                        if end_cap is not None and end_cap > start:
+                            end = end_cap
+                        elif end_cap is not None:
+                            start = max(0.0, end_cap - 0.08)
+                            end = max(start, end_cap)
+                        else:
+                            end = max(start + 0.08, b["end"])
+                    if abs(start - b["start"]) > 0.001 or abs(end - b["end"]) > 0.001:
+                        timing_adjusted += 1
                 f.write(
                     f"{idx}\n"
-                    f"{format_srt_timestamp(b['start'])} --> {format_srt_timestamp(b['end'])}\n"
+                    f"{format_srt_timestamp(start)} --> {format_srt_timestamp(end)}\n"
                     f"{text}\n\n"
                 )
+        logger.info(
+            "subtitle_v2_market_format: path=%s market=%s tone=%s blocks=%d lines=%d "
+            "highlight_words=%s timing_adjusted=%d word_level_like=%s",
+            srt_path,
+            policy["market"],
+            tone,
+            len(blocks),
+            total_lines,
+            sorted({w.lower() for w in highlighted_terms})[:12],
+            timing_adjusted,
+            word_level_like,
+        )
     except Exception:
-        pass
+        logger.exception("subtitle_v2_market_format_failed path=%s", srt_path)
     return srt_path
 
 
