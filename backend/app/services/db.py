@@ -176,6 +176,27 @@ def init_db():
         )
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS upload_videos (
+            video_id TEXT PRIMARY KEY,
+            video_path TEXT NOT NULL,
+            file_name TEXT DEFAULT '',
+            platform TEXT NOT NULL DEFAULT 'tiktok',
+            source_type TEXT NOT NULL DEFAULT 'manual_file',
+            status TEXT NOT NULL DEFAULT 'ready',
+            caption TEXT DEFAULT '',
+            hashtags_json TEXT DEFAULT '[]',
+            cover_path TEXT DEFAULT '',
+            note TEXT DEFAULT '',
+            duration_sec REAL DEFAULT 0,
+            file_size INTEGER DEFAULT 0,
+            metadata_json TEXT DEFAULT '{}',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     # Lightweight schema migration for existing local DBs created by old versions.
     def _ensure_columns(table: str, required: dict[str, str]):
         existing_rows = cur.execute(f"PRAGMA table_info({table})").fetchall()
@@ -254,6 +275,25 @@ def init_db():
             "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
         },
     )
+    _ensure_columns(
+        "upload_videos",
+        {
+            "video_path": "video_path TEXT NOT NULL DEFAULT ''",
+            "file_name": "file_name TEXT DEFAULT ''",
+            "platform": "platform TEXT NOT NULL DEFAULT 'tiktok'",
+            "source_type": "source_type TEXT NOT NULL DEFAULT 'manual_file'",
+            "status": "status TEXT NOT NULL DEFAULT 'ready'",
+            "caption": "caption TEXT DEFAULT ''",
+            "hashtags_json": "hashtags_json TEXT DEFAULT '[]'",
+            "cover_path": "cover_path TEXT DEFAULT ''",
+            "note": "note TEXT DEFAULT ''",
+            "duration_sec": "duration_sec REAL DEFAULT 0",
+            "file_size": "file_size INTEGER DEFAULT 0",
+            "metadata_json": "metadata_json TEXT DEFAULT '{}'",
+            "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
+            "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
+        },
+    )
     conn.commit()
     conn.close()
 
@@ -284,6 +324,27 @@ def _normalize_upload_account_row(row: sqlite3.Row | dict | None):
             data[key] = int(data.get(key) or 0)
         except Exception:
             data[key] = 0
+    return data
+
+
+def _normalize_upload_video_row(row: sqlite3.Row | dict | None):
+    if not row:
+        return None
+    data = dict(row)
+    data["hashtags"] = _json_loads(data.pop("hashtags_json", "[]"), default=[])
+    if not isinstance(data["hashtags"], list):
+        data["hashtags"] = []
+    data["metadata"] = _json_loads(data.pop("metadata_json", "{}"), default={})
+    if not isinstance(data["metadata"], dict):
+        data["metadata"] = {}
+    try:
+        data["duration_sec"] = float(data.get("duration_sec") or 0)
+    except Exception:
+        data["duration_sec"] = 0
+    try:
+        data["file_size"] = int(data.get("file_size") or 0)
+    except Exception:
+        data["file_size"] = 0
     return data
 
 
@@ -400,6 +461,123 @@ def update_upload_account_row(account_id: str, changes: dict):
 
 def disable_upload_account_row(account_id: str):
     return update_upload_account_row(account_id, {"status": "disabled"})
+
+
+def create_upload_video_row(data: dict):
+    video_id = str(data.get("video_id") or uuid.uuid4()).strip() or str(uuid.uuid4())
+    payload = {
+        "video_id": video_id,
+        "video_path": str(data.get("video_path") or "").strip(),
+        "file_name": str(data.get("file_name") or "").strip(),
+        "platform": str(data.get("platform") or "tiktok").strip().lower() or "tiktok",
+        "source_type": str(data.get("source_type") or "manual_file").strip().lower(),
+        "status": str(data.get("status") or "ready").strip().lower(),
+        "caption": str(data.get("caption") or "").strip(),
+        "hashtags_json": json.dumps(data.get("hashtags") or [], ensure_ascii=False),
+        "cover_path": str(data.get("cover_path") or "").strip(),
+        "note": str(data.get("note") or "").strip(),
+        "duration_sec": float(data.get("duration_sec") or 0),
+        "file_size": int(data.get("file_size") or 0),
+        "metadata_json": _json_dumps(data.get("metadata") or {}),
+    }
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO upload_videos (
+            video_id, video_path, file_name, platform, source_type, status,
+            caption, hashtags_json, cover_path, note, duration_sec, file_size,
+            metadata_json, created_at, updated_at
+        )
+        VALUES (
+            :video_id, :video_path, :file_name, :platform, :source_type, :status,
+            :caption, :hashtags_json, :cover_path, :note, :duration_sec, :file_size,
+            :metadata_json, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        """,
+        payload,
+    )
+    conn.commit()
+    row = cur.execute("SELECT * FROM upload_videos WHERE video_id = ?", (video_id,)).fetchone()
+    conn.close()
+    return _normalize_upload_video_row(row)
+
+
+def list_upload_video_rows(
+    *,
+    platform: str = "",
+    status: str = "",
+    source_type: str = "",
+    limit: int = 100,
+):
+    safe_limit = max(1, min(int(limit or 100), 500))
+    clauses = []
+    params: list[Any] = []
+    if platform:
+        clauses.append("platform = ?")
+        params.append(platform)
+    if status:
+        clauses.append("status = ?")
+        params.append(status)
+    if source_type:
+        clauses.append("source_type = ?")
+        params.append(source_type)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    conn = get_conn()
+    rows = conn.execute(
+        f"""
+        SELECT * FROM upload_videos
+        {where}
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT ?
+        """,
+        (*params, safe_limit),
+    ).fetchall()
+    conn.close()
+    return [_normalize_upload_video_row(r) for r in rows]
+
+
+def get_upload_video_row(video_id: str):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM upload_videos WHERE video_id = ?", (video_id,)).fetchone()
+    conn.close()
+    return _normalize_upload_video_row(row)
+
+
+def update_upload_video_row(video_id: str, changes: dict):
+    allowed = {"caption", "hashtags", "cover_path", "note", "status", "metadata"}
+    values: dict[str, Any] = {}
+    for key, value in changes.items():
+        if key not in allowed:
+            continue
+        if key == "hashtags":
+            values["hashtags_json"] = json.dumps(value or [], ensure_ascii=False)
+        elif key == "metadata":
+            values["metadata_json"] = _json_dumps(value or {})
+        else:
+            values[key] = str(value or "").strip()
+    if not values:
+        return get_upload_video_row(video_id)
+    assignments = ", ".join([f"{key} = :{key}" for key in values])
+    values["video_id"] = video_id
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        UPDATE upload_videos
+        SET {assignments}, updated_at = CURRENT_TIMESTAMP
+        WHERE video_id = :video_id
+        """,
+        values,
+    )
+    conn.commit()
+    row = cur.execute("SELECT * FROM upload_videos WHERE video_id = ?", (video_id,)).fetchone()
+    conn.close()
+    return _normalize_upload_video_row(row)
+
+
+def disable_upload_video_row(video_id: str):
+    return update_upload_video_row(video_id, {"status": "disabled"})
 
 
 def upsert_job(job_id: str, kind: str, channel_code: str, status: str,

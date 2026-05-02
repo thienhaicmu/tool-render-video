@@ -317,6 +317,8 @@ class UploadQueueAddRequest(BaseModel):
 
 UPLOAD_ACCOUNT_STATUSES = {"active", "warming", "limited", "banned", "disabled", "login_required"}
 UPLOAD_LOGIN_STATES = {"unknown", "logged_in", "logged_out", "challenge", "expired"}
+UPLOAD_VIDEO_SOURCE_TYPES = {"manual_file", "import_folder", "render_export_later"}
+UPLOAD_VIDEO_STATUSES = {"ready", "queued", "uploaded", "failed", "disabled"}
 
 
 class UploadAccountBase(BaseModel):
@@ -406,3 +408,67 @@ class UploadAccountUpdate(BaseModel):
         if v is None:
             return None
         return max(0, int(v or 0))
+
+
+class AddUploadVideoRequest(BaseModel):
+    video_path: str
+    platform: Optional[str] = "tiktok"
+    source_type: Optional[str] = "manual_file"
+    caption: Optional[str] = ""
+    hashtags: list[str] = Field(default_factory=list)
+    cover_path: Optional[str] = ""
+    note: Optional[str] = ""
+    metadata: Optional[dict] = Field(default_factory=dict)
+
+    @field_validator("video_path")
+    @classmethod
+    def _validate_video_path(cls, v: str) -> str:
+        value = str(v or "").strip()
+        if not value:
+            raise ValueError("video_path is required")
+        return value
+
+    @field_validator("source_type")
+    @classmethod
+    def _validate_source_type(cls, v: Optional[str]) -> str:
+        value = (v or "manual_file").strip().lower()
+        if value not in UPLOAD_VIDEO_SOURCE_TYPES:
+            raise ValueError(f"source_type must be one of {sorted(UPLOAD_VIDEO_SOURCE_TYPES)!r}")
+        return value
+
+
+class UpdateUploadVideoRequest(BaseModel):
+    caption: Optional[str] = None
+    hashtags: Optional[list[str]] = None
+    cover_path: Optional[str] = None
+    note: Optional[str] = None
+    status: Optional[str] = None
+    metadata: Optional[dict] = None
+
+    @field_validator("status")
+    @classmethod
+    def _validate_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        value = v.strip().lower()
+        if value not in UPLOAD_VIDEO_STATUSES:
+            raise ValueError(f"status must be one of {sorted(UPLOAD_VIDEO_STATUSES)!r}")
+        return value
+
+
+class UploadVideoResponse(BaseModel):
+    video_id: str
+    video_path: str
+    file_name: str = ""
+    platform: str = "tiktok"
+    source_type: str = "manual_file"
+    status: str = "ready"
+    caption: str = ""
+    hashtags: list[str] = Field(default_factory=list)
+    cover_path: str = ""
+    note: str = ""
+    duration_sec: float = 0
+    file_size: int = 0
+    metadata: dict = Field(default_factory=dict)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None

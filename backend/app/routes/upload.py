@@ -5,20 +5,32 @@ import re
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
-from app.models.schemas import UploadAccountCreate, UploadAccountUpdate, UploadQueueAddRequest, UploadRequest
+from app.models.schemas import (
+    AddUploadVideoRequest,
+    UpdateUploadVideoRequest,
+    UploadAccountCreate,
+    UploadAccountUpdate,
+    UploadQueueAddRequest,
+    UploadRequest,
+)
 from app.services.db import (
     add_upload_queue_item,
     cancel_upload_queue_item,
     create_upload_account_row,
+    create_upload_video_row,
+    disable_upload_video_row,
     disable_upload_account_row,
     get_upload_account_row,
     get_upload_queue_item,
+    get_upload_video_row,
     list_upload_account_rows,
     list_upload_queue,
+    list_upload_video_rows,
     mark_upload_queue_failed,
     mark_upload_queue_success,
     mark_upload_queue_uploading,
     update_upload_account_row,
+    update_upload_video_row,
 )
 from app.services.upload_engine import (
     upload_schedule,
@@ -104,6 +116,20 @@ def _resolve_upload_overrides(payload: UploadRequest) -> dict:
     return base
 
 
+def _probe_upload_video_path(video_path: str) -> tuple[str, int]:
+    path_text = str(video_path or "").strip()
+    file_name = Path(path_text).name or path_text.replace("\\", "/").split("/")[-1]
+    file_size = 0
+    try:
+        p = Path(path_text)
+        if p.exists() and p.is_file():
+            file_size = p.stat().st_size
+            file_name = p.name or file_name
+    except Exception:
+        pass
+    return file_name, file_size
+
+
 @router.get("/accounts")
 def list_upload_account_manager_accounts(include_disabled: bool = True):
     items = list_upload_account_rows(include_disabled=include_disabled)
@@ -142,6 +168,74 @@ def disable_upload_account_manager_account(account_id: str):
     account = disable_upload_account_row(account_id)
     logger.info("upload_account_disable account_id=%s", account_id)
     return {"status": "ok", "item": account}
+
+
+@router.post("/videos/add")
+def add_upload_video_library_item(payload: AddUploadVideoRequest):
+    video_path = str(payload.video_path or "").strip()
+    if not video_path:
+        raise HTTPException(status_code=400, detail="video_path is required")
+    file_name, file_size = _probe_upload_video_path(video_path)
+    item = create_upload_video_row(
+        {
+            "video_path": video_path,
+            "file_name": file_name,
+            "platform": payload.platform or "tiktok",
+            "source_type": payload.source_type or "manual_file",
+            "status": "ready",
+            "caption": payload.caption or "",
+            "hashtags": payload.hashtags or [],
+            "cover_path": payload.cover_path or "",
+            "note": payload.note or "",
+            "duration_sec": 0,
+            "file_size": file_size,
+            "metadata": payload.metadata or {},
+        }
+    )
+    logger.info(
+        "upload_video_add video_id=%s platform=%s source_type=%s video_path=%s",
+        item.get("video_id"),
+        item.get("platform"),
+        item.get("source_type"),
+        video_path,
+    )
+    return {"status": "ok", "item": item}
+
+
+@router.get("/videos")
+def list_upload_video_library_items(
+    platform: str = "",
+    status: str = "",
+    source_type: str = "",
+    limit: int = 100,
+):
+    items = list_upload_video_rows(
+        platform=str(platform or "").strip().lower(),
+        status=str(status or "").strip().lower(),
+        source_type=str(source_type or "").strip().lower(),
+        limit=limit,
+    )
+    return {"status": "ok", "count": len(items), "items": items}
+
+
+@router.patch("/videos/{video_id}")
+def update_upload_video_library_item(video_id: str, payload: UpdateUploadVideoRequest):
+    current = get_upload_video_row(video_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Upload video not found")
+    changes = payload.model_dump(exclude_unset=True)
+    item = update_upload_video_row(video_id, changes)
+    return {"status": "ok", "item": item}
+
+
+@router.delete("/videos/{video_id}")
+def disable_upload_video_library_item(video_id: str):
+    current = get_upload_video_row(video_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Upload video not found")
+    item = disable_upload_video_row(video_id)
+    logger.info("upload_video_disable video_id=%s", video_id)
+    return {"status": "ok", "item": item}
 
 
 @router.post("/queue/add")
@@ -488,6 +582,10 @@ def save_upload_config(payload: UploadRequest):
 
 @router.get("/videos/{channel_code}")
 def get_upload_videos(channel_code: str, max_items: int = 0, root_path: str = "", account_key: str = "default"):
+    library_item = get_upload_video_row(channel_code)
+    if library_item:
+        return {"status": "ok", "item": library_item}
+
     # Custom root path mode (for desktop folder chooser workflow)
     rp = Path(str(root_path or "").strip()) if str(root_path or "").strip() else None
     if rp and rp.is_dir():

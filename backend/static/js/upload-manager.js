@@ -1,4 +1,5 @@
 let uploadAccountManagerItems = [];
+let uploadVideoLibraryItems = [];
 
 function enforceRenderUploadIndependence(){
   window.addRenderClipToUploadQueue = function(){
@@ -24,11 +25,15 @@ function enforceRenderUploadIndependence(){
 function initUploadAccountManager(){
   enforceRenderUploadIndependence();
   loadUploadAccounts();
+  loadUploadVideoLibrary();
   if(typeof window.setView === 'function' && !window._uploadAccountManagerSetViewWrapped){
     const originalSetView = window.setView;
     window.setView = function(view){
       const result = originalSetView.apply(this, arguments);
-      if(view === 'upload') loadUploadAccounts();
+      if(view === 'upload'){
+        loadUploadAccounts();
+        loadUploadVideoLibrary();
+      }
       return result;
     };
     window._uploadAccountManagerSetViewWrapped = true;
@@ -241,5 +246,185 @@ async function checkUploadAccountLogin(accountId){
       await loadUploadAccounts();
     }catch(_){}
     showToast(`Login check failed: ${e.message || e}`, 'error');
+  }
+}
+
+function _uvlValue(id){
+  return String(qs(id)?.value || '').trim();
+}
+
+function _uvlParseHashtags(raw){
+  return String(raw || '')
+    .split(',')
+    .map((x) => x.trim().replace(/^#+/, ''))
+    .filter(Boolean);
+}
+
+function _uvlHashtagText(tags){
+  if(!Array.isArray(tags) || !tags.length) return '';
+  return tags.map((tag) => `#${String(tag || '').replace(/^#+/, '')}`).join(', ');
+}
+
+function _uvlFormatSize(bytes){
+  const n = Number(bytes || 0);
+  if(!n) return '-';
+  if(n < 1024) return `${n} B`;
+  if(n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if(n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function _uvlFormatDuration(sec){
+  const n = Number(sec || 0);
+  if(!n) return '-';
+  const minutes = Math.floor(n / 60);
+  const seconds = Math.round(n % 60);
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function collectUploadVideoForm(){
+  return {
+    video_path: _uvlValue('uvl_video_path'),
+    platform: _uvlValue('uvl_platform') || 'tiktok',
+    source_type: _uvlValue('uvl_source_type') || 'manual_file',
+    status: _uvlValue('uvl_status') || 'ready',
+    caption: _uvlValue('uvl_caption'),
+    hashtags: _uvlParseHashtags(_uvlValue('uvl_hashtags')),
+    cover_path: _uvlValue('uvl_cover_path'),
+    note: _uvlValue('uvl_note'),
+  };
+}
+
+function resetUploadVideoForm(){
+  ['uvl_video_id', 'uvl_video_path', 'uvl_caption', 'uvl_hashtags', 'uvl_note', 'uvl_cover_path'].forEach((id) => {
+    if(qs(id)) qs(id).value = '';
+  });
+  if(qs('uvl_platform')) qs('uvl_platform').value = 'tiktok';
+  if(qs('uvl_source_type')) qs('uvl_source_type').value = 'manual_file';
+  if(qs('uvl_status')) qs('uvl_status').value = 'ready';
+  ['uvl_video_path', 'uvl_platform', 'uvl_source_type'].forEach((id) => {
+    if(qs(id)) qs(id).disabled = false;
+  });
+  if(qs('uvl_save_btn')) qs('uvl_save_btn').textContent = 'Add Video';
+}
+
+function fillUploadVideoForm(videoId){
+  const item = uploadVideoLibraryItems.find((x) => x.video_id === videoId);
+  if(!item) return;
+  if(qs('uvl_video_id')) qs('uvl_video_id').value = item.video_id || '';
+  if(qs('uvl_video_path')) qs('uvl_video_path').value = item.video_path || '';
+  if(qs('uvl_platform')) qs('uvl_platform').value = item.platform || 'tiktok';
+  if(qs('uvl_source_type')) qs('uvl_source_type').value = item.source_type || 'manual_file';
+  if(qs('uvl_status')) qs('uvl_status').value = item.status || 'ready';
+  if(qs('uvl_caption')) qs('uvl_caption').value = item.caption || '';
+  if(qs('uvl_hashtags')) qs('uvl_hashtags').value = _uvlHashtagText(item.hashtags || []);
+  if(qs('uvl_note')) qs('uvl_note').value = item.note || '';
+  if(qs('uvl_cover_path')) qs('uvl_cover_path').value = item.cover_path || '';
+  ['uvl_video_path', 'uvl_platform', 'uvl_source_type'].forEach((id) => {
+    if(qs(id)) qs(id).disabled = true;
+  });
+  if(qs('uvl_save_btn')) qs('uvl_save_btn').textContent = 'Save Video';
+}
+
+function renderUploadVideoLibrary(items){
+  const tbody = qs('upload_videos_tbody');
+  if(!tbody) return;
+  if(!items || !items.length){
+    tbody.innerHTML = '<tr><td colspan="8" class="uvlEmpty">No upload videos yet. Add a file to start building your library.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map((item) => {
+    const disabled = String(item.status || '').toLowerCase() === 'disabled';
+    const caption = String(item.caption || '').trim();
+    const note = String(item.note || '').trim();
+    return `
+      <tr class="${disabled ? 'isDisabled' : ''}">
+        <td>
+          <div class="uvlFileName">${esc(item.file_name || item.video_path || '-')}</div>
+          <div class="uvlSub" title="${esc(item.video_path || '')}">${esc(_uamShortPath(item.video_path || ''))}</div>
+        </td>
+        <td>${_uamBadge(item.status, 'status')}</td>
+        <td>${esc(item.platform || 'tiktok')}</td>
+        <td>
+          <div class="uvlClipText">${esc(caption || '-')}</div>
+          ${note ? `<div class="uvlSub">${esc(note)}</div>` : ''}
+        </td>
+        <td><div class="uvlClipText">${esc(_uvlHashtagText(item.hashtags || []) || '-')}</div></td>
+        <td>${esc(_uvlFormatDuration(item.duration_sec))}<div class="uvlSub">${esc(_uvlFormatSize(item.file_size))}</div></td>
+        <td>${esc(String(item.source_type || 'manual_file').replace(/_/g, ' '))}</td>
+        <td>
+          <div class="uvlActions">
+            <button class="ghostButton" type="button" onclick="fillUploadVideoForm('${esc(item.video_id)}')">Edit</button>
+            <button class="ghostButton" type="button" onclick="disableUploadVideo('${esc(item.video_id)}')" ${disabled ? 'disabled' : ''}>Disable</button>
+            <button class="ghostButton" type="button" disabled title="Queue in next phase">Queue in next phase</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function loadUploadVideoLibrary(){
+  const tbody = qs('upload_videos_tbody');
+  if(tbody) tbody.innerHTML = '<tr><td colspan="8" class="uvlEmpty">Loading videos...</td></tr>';
+  const params = new URLSearchParams();
+  const status = _uvlValue('uvl_filter_status');
+  if(status) params.set('status', status);
+  params.set('limit', '100');
+  try{
+    const res = await fetch(`/api/upload/videos?${params.toString()}`);
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    uploadVideoLibraryItems = Array.isArray(data.items) ? data.items : [];
+    renderUploadVideoLibrary(uploadVideoLibraryItems);
+  }catch(e){
+    if(tbody) tbody.innerHTML = `<tr><td colspan="8" class="uvlEmpty">Load failed: ${esc(e.message || e)}</td></tr>`;
+    addEvent(`Upload video library load failed: ${e.message || e}`, 'upload');
+  }
+}
+
+async function saveUploadVideo(event){
+  if(event) event.preventDefault();
+  const videoId = _uvlValue('uvl_video_id');
+  const payload = collectUploadVideoForm();
+  if(!videoId && !payload.video_path){
+    showToast('Video path is required', 'error');
+    return;
+  }
+  const body = videoId
+    ? {
+        caption: payload.caption,
+        hashtags: payload.hashtags,
+        cover_path: payload.cover_path,
+        note: payload.note,
+        status: payload.status,
+      }
+    : payload;
+  try{
+    const res = await fetch(videoId ? `/api/upload/videos/${encodeURIComponent(videoId)}` : '/api/upload/videos/add', {
+      method: videoId ? 'PATCH' : 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    resetUploadVideoForm();
+    await loadUploadVideoLibrary();
+    showToast(videoId ? 'Upload video updated' : 'Upload video added', 'success');
+  }catch(e){
+    showToast(`Video save failed: ${e.message || e}`, 'error');
+  }
+}
+
+async function disableUploadVideo(videoId){
+  if(!videoId) return;
+  try{
+    const res = await fetch(`/api/upload/videos/${encodeURIComponent(videoId)}`, {method: 'DELETE'});
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    await loadUploadVideoLibrary();
+    showToast('Upload video disabled', 'success');
+  }catch(e){
+    showToast(`Disable failed: ${e.message || e}`, 'error');
   }
 }

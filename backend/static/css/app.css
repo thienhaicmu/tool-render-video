@@ -9564,12 +9564,15 @@ body.is-history-active #history_list {
 }
 
 .uamBadge[data-state="active"],
+.uamBadge[data-state="ready"],
+.uamBadge[data-state="uploaded"],
 .uamBadge[data-state="logged_in"] {
   background: rgba(16, 185, 129, .14);
   color: #6ee7b7;
 }
 
 .uamBadge[data-state="warming"],
+.uamBadge[data-state="queued"],
 .uamBadge[data-state="challenge"] {
   background: rgba(245, 158, 11, .16);
   color: #fcd34d;
@@ -9584,6 +9587,7 @@ body.is-history-active #history_list {
 }
 
 .uamBadge[data-state="banned"],
+.uamBadge[data-state="failed"],
 .uamBadge[data-state="disabled"] {
   background: rgba(239, 68, 68, .14);
   color: #fca5a5;
@@ -9622,5 +9626,156 @@ body.is-history-active #history_list {
   }
   .uamHeader {
     flex-direction: column;
+  }
+}
+
+/* Upload Video Library */
+.uploadVideoLibrary {
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: rgba(13, 21, 38, .58);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.uvlHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.uvlHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uvlHeaderActions .fieldInput {
+  min-width: 150px;
+  min-height: 36px;
+}
+
+.uvlTitle {
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.uvlForm {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, .16);
+}
+
+.uvlForm .fieldSpan2 {
+  grid-column: span 2;
+}
+
+.uvlFormActions {
+  grid-column: span 2;
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+
+.uvlTableWrap {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.uvlTable {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: collapse;
+}
+
+.uvlTable th,
+.uvlTable td {
+  padding: 10px 9px;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+  text-align: left;
+  vertical-align: top;
+  font-size: 12px;
+}
+
+.uvlTable th {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.uvlTable tr.isDisabled {
+  opacity: .52;
+}
+
+.uvlFileName {
+  color: #f1f5f9;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.uvlSub {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.uvlClipText {
+  max-width: 260px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uvlActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.uvlActions .ghostButton {
+  padding: 6px 9px;
+  font-size: 11px;
+}
+
+.uvlActions .ghostButton:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
+.uvlEmpty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 18px !important;
+}
+
+@media (max-width: 1200px) {
+  .uvlForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .uvlForm {
+    grid-template-columns: 1fr;
+  }
+  .uvlForm .fieldSpan2,
+  .uvlFormActions {
+    grid-column: span 1;
+  }
+  .uvlHeader,
+  .uvlHeaderActions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
   }
 }

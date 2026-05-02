@@ -503,6 +503,61 @@
               </table>
             </div>
           </div>
+          <div class="uploadVideoLibrary" id="upload_video_library">
+            <div class="uvlHeader">
+              <div>
+                <div class="uvlTitle">TikTok Video Library</div>
+                <div class="sectionSubtitle">Manual upload-ready files only. Nothing is imported from render outputs.</div>
+              </div>
+              <div class="uvlHeaderActions">
+                <select class="fieldInput" id="uvl_filter_status" onchange="loadUploadVideoLibrary()" title="Status filter">
+                  <option value="">All Status</option>
+                  <option value="ready">Ready</option>
+                  <option value="queued">Queued</option>
+                  <option value="uploaded">Uploaded</option>
+                  <option value="failed">Failed</option>
+                  <option value="disabled">Disabled</option>
+                </select>
+                <button class="ghostButton" type="button" onclick="loadUploadVideoLibrary()">Refresh</button>
+              </div>
+            </div>
+            <form class="uvlForm" id="upload_video_form" onsubmit="saveUploadVideo(event)">
+              <input type="hidden" id="uvl_video_id">
+              <label class="field fieldSpan2"><span class="fieldLabel">Add Video File Path</span><input class="fieldInput" id="uvl_video_path" placeholder="D:\videos\upload-ready\clip.mp4"></label>
+              <label class="field fieldSpan2"><span class="fieldLabel">Import Folder</span><input class="fieldInput" id="uvl_import_folder" placeholder="Folder import will be added later" disabled></label>
+              <label class="field"><span class="fieldLabel">Platform</span><input class="fieldInput" id="uvl_platform" value="tiktok"></label>
+              <label class="field"><span class="fieldLabel">Source Type</span><select class="fieldInput" id="uvl_source_type"><option value="manual_file">Manual File</option><option value="import_folder">Import Folder</option><option value="render_export_later">Render Export Later</option></select></label>
+              <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uvl_status"><option value="ready">Ready</option><option value="queued">Queued</option><option value="uploaded">Uploaded</option><option value="failed">Failed</option><option value="disabled">Disabled</option></select></label>
+              <div></div>
+              <label class="field fieldSpan2"><span class="fieldLabel">Caption</span><input class="fieldInput" id="uvl_caption" placeholder="Caption for this video"></label>
+              <label class="field fieldSpan2"><span class="fieldLabel">Hashtags</span><input class="fieldInput" id="uvl_hashtags" placeholder="tag1, tag2, #tag3"></label>
+              <label class="field fieldSpan2"><span class="fieldLabel">Note</span><input class="fieldInput" id="uvl_note" placeholder="Internal note"></label>
+              <label class="field fieldSpan2"><span class="fieldLabel">Cover Path</span><input class="fieldInput" id="uvl_cover_path" placeholder="Optional cover image path"></label>
+              <div class="uvlFormActions">
+                <button class="primaryButton" type="submit" id="uvl_save_btn">Add Video</button>
+                <button class="ghostButton" type="button" onclick="resetUploadVideoForm()">Clear</button>
+              </div>
+            </form>
+            <div class="uvlTableWrap">
+              <table class="uvlTable">
+                <thead>
+                  <tr>
+                    <th>File</th>
+                    <th>Status</th>
+                    <th>Platform</th>
+                    <th>Caption</th>
+                    <th>Hashtags</th>
+                    <th>Details</th>
+                    <th>Source</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="upload_videos_tbody">
+                  <tr><td colspan="8" class="uvlEmpty">No upload videos yet. Add a file to start building your library.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
           <!-- Step wizard indicator — 4 sequential steps replace flat 5-cluster layout -->
           <div id="upload_step_bar" class="uploadStepBar">
             <div class="uploadStepItem stepActive" id="upload_step_1" onclick="setUploadWizardStep(1)" title="Step 1: Select Channel">1 · Channel</div>
