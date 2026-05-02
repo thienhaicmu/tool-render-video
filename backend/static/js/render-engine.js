@@ -245,30 +245,25 @@ async function resumeRender(){
   setHeaderJob('Render resumed');
   setRenderFlowState('rendering', 'Resumed render', { force: true });
   addEvent('Resume queued', 'render');
-  startPolling();
+  startPolling(currentJobId);
 }
 
 function _applyJobUpdate(job, parts, summary){
   const s = summary || computeProgressSummary(parts||[]);
-  const jobProgress = Number(job.progress_percent || 0);
-  const stage = (job.stage || '').toLowerCase();
-  const status = String(job.status || '').toLowerCase();
-  const isPartial = status === 'completed_with_errors' || status === 'partial_failed';
-  const isCompleted = status === 'completed' || status === 'done' || status === 'complete' || isPartial;
-  const isFailed = status === 'failed' || status === 'interrupted';
+  const stage = (typeof normalizeRenderStage === 'function') ? normalizeRenderStage(job.stage, job.status) : (job.stage || '').toLowerCase();
+  const status = (typeof normalizeRenderStatus === 'function') ? normalizeRenderStatus(job.status, stage) : String(job.status || '').toLowerCase();
+  const isPartial = typeof isPartialRenderStatus === 'function' ? isPartialRenderStatus(status) : (status === 'completed_with_errors' || status === 'partial_failed');
+  const isCompleted = typeof isCompletedRenderStatus === 'function' ? (isCompletedRenderStatus(status) || isPartial) : (status === 'completed' || status === 'done' || status === 'complete' || isPartial);
+  const isFailed = status === 'failed';
   const isTerminal = typeof isTerminalRenderStatus === 'function'
     ? isTerminalRenderStatus(status)
     : (isCompleted || isFailed);
 
   // During rendering, derive finer progress from parts aggregate.
   // Rendering occupies 30–90 % of the overall bar.
-  const overallPct = s.overall_progress_percent ?? s.parts_percent ?? 0;
-  let targetPercent = jobProgress;
-  if((stage === 'rendering' || stage === 'rendering_parallel') && s.total_parts > 0 && overallPct > 0){
-    targetPercent = Math.min(90, Math.round(30 + (overallPct / 100) * 60));
-  }
-  // Snap to 100 immediately on terminal states
-  if(isCompleted) targetPercent = 100;
+  const targetPercent = (typeof deriveRenderProgress === 'function')
+    ? deriveRenderProgress(job, s, parts || [])
+    : Math.max(0, Math.min(100, Math.round(Number(job.progress_percent || 0))));
 
   // Feed the smooth animation target; the RAF loop updates DOM for job bar
   _jobTargetPct = Math.max(_jobTargetPct, targetPercent);
@@ -285,15 +280,15 @@ function _applyJobUpdate(job, parts, summary){
   markRenderMonitorUpdate(job, s, parts, targetPercent);
   if (typeof updateRenderProgressVisual === 'function') updateRenderProgressVisual(job);
 
-  qs('job_stage_pill').textContent = stageLabelPlain(job.stage);
+  qs('job_stage_pill').textContent = stageLabelPlain(stage);
   const sourceLabel = (typeof getRenderMonitorSourceText === 'function')
     ? getRenderMonitorSourceText(job)
     : 'Source unavailable';
-  qs('job_title').textContent = job.status === 'queued' ? `Queued · ${sourceLabel}` : sourceLabel;
+  qs('job_title').textContent = status === 'pending' ? `Queued · ${sourceLabel}` : sourceLabel;
   qs('job_meta_1').textContent = `Channel ${job.channel_code || '-'} | ${sourceLabel}`;
   qs('job_message').textContent = friendlyJobMessage(job);
   setActionState(job);
-  renderPipeline(job.stage, job.status);
+  renderPipeline(stage, status);
   renderSteps(targetPercent);
   updateRenderFlowByJob(job, s, parts);
 
@@ -305,11 +300,11 @@ function _applyJobUpdate(job, parts, summary){
   const doneCount = getCompletedClipCount(s, parts);
   const totalCount = s.total_parts || parts.length;
   const parallelNote = s.processing_parts > 1 ? ` | ${s.processing_parts} parallel` : '';
-  qs('job_meta_2').textContent = `${doneCount}/${totalCount} clips done | ${stageLabelPlain(job.stage)}${parallelNote}`;
+  qs('job_meta_2').textContent = `${doneCount}/${totalCount} clips done | ${stageLabelPlain(stage)}${parallelNote}`;
 
   if(job.stage && job.stage !== lastStage){
     if(lastStage) addEvent(`Finished step: ${stageLabelPlain(lastStage)}`, 'render');
-    addEvent(`Stage: ${stageLabelPlain(job.stage)} (${targetPercent}%)`, 'render');
+    addEvent(`Stage: ${stageLabelPlain(stage)} (${targetPercent}%)`, 'render');
     lastStage = job.stage;
   }
   if(job.message && job.message !== lastMessage){
@@ -321,8 +316,8 @@ function _applyJobUpdate(job, parts, summary){
     lastStatus = job.status;
   }
   const bucket = Math.floor(targetPercent / 10);
-  if(status === 'running' && bucket !== lastProgressBucket){
-    addEvent(`Running: ${stageLabelPlain(job.stage)} (${targetPercent}%)`, 'render');
+  if(!isTerminal && bucket !== lastProgressBucket){
+    addEvent(`Running: ${stageLabelPlain(stage)} (${targetPercent}%)`, 'render');
     lastProgressBucket = bucket;
   }
 
@@ -374,10 +369,14 @@ function _stopJobWs(){
   if(jobWs){ try{ jobWs.close(); }catch(_){} jobWs = null; }
 }
 
-function startPolling(){
+function startPolling(jobId = null){
+  if (jobId) currentJobId = jobId;
+  if (!currentJobId) return;
   // Try WebSocket first; fall back to HTTP polling on error
   _stopJobWs();
   if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+  loadJobProgress();
+  pollTimer = setInterval(loadJobProgress, pollIntervalMs);
 
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${proto}//${location.host}/api/jobs/${currentJobId}/ws`);
@@ -394,19 +393,16 @@ function startPolling(){
   ws.onerror = () => {
     // WebSocket failed — degrade gracefully to polling
     jobWs = null;
-    if(!pollTimer){
-      loadJobProgress();
-      pollTimer = setInterval(loadJobProgress, pollIntervalMs);
-    }
   };
 
   ws.onclose = () => {
     jobWs = null;
     if (!currentJobId) return;
     if (isTerminalRenderStatus(lastStatus)) return;
-    if (pollTimer) return;
-    loadJobProgress();
-    pollTimer = setInterval(loadJobProgress, pollIntervalMs);
+    if (!pollTimer) {
+      loadJobProgress();
+      pollTimer = setInterval(loadJobProgress, pollIntervalMs);
+    }
   };
 }
 
@@ -696,7 +692,7 @@ async function _submitRenderPayload(payload, isBatch) {
   setRenderActionBusy(true);
   setHeaderJob('Render running');
   addEvent(isBatch ? `Queued render batch (${data.count || '?'} links)` : 'Queued render job', 'render');
-  startPolling();
+  startPolling(currentJobId);
   return { ok: true, error: null };
 }
 

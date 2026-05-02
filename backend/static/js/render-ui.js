@@ -129,9 +129,12 @@ function stageLabel(stage){
 }
 function stageLabelPlain(stage){
   const map = {
+    pending: 'Queued',
     queued: 'Queued',
+    preparing: 'Preparing',
     starting: 'Preparing',
     downloading: 'Preparing source',
+    scene_detecting: 'Scene detect',
     scene_detection: 'Scene detect',
     segment_building: 'Building clips',
     transcribing_full: 'Subtitles',
@@ -144,27 +147,89 @@ function stageLabelPlain(stage){
   return map[(stage || '').toLowerCase()] || (stage || '-');
 }
 
+function normalizeRenderStatus(status, stage = ''){
+  const st = String(status || '').toLowerCase().trim();
+  const sg = String(stage || '').toLowerCase().trim();
+  if (st === 'pending' || st === 'queued') return 'pending';
+  if (st === 'preparing' || st === 'starting') return 'preparing';
+  if (st === 'scene_detecting') return 'scene_detecting';
+  if (st === 'rendering') return 'rendering';
+  if (st === 'completed' || st === 'done' || st === 'complete') return 'completed';
+  if (st === 'completed_with_errors' || st === 'partial_failed') return 'completed_with_errors';
+  if (st === 'failed' || st === 'interrupted') return 'failed';
+  if (st === 'running') {
+    if (sg === 'scene_detection' || sg === 'scene_detecting') return 'scene_detecting';
+    if (sg === 'rendering' || sg === 'rendering_parallel') return 'rendering';
+    if (sg === 'queued') return 'pending';
+    if (sg === 'starting' || sg === 'downloading' || sg === 'render.prepare_source') return 'preparing';
+  }
+  return st || (sg ? 'preparing' : '');
+}
+
+function normalizeRenderStage(stage, status = ''){
+  const s = String(stage || '').toLowerCase().trim();
+  const st = String(status || '').toLowerCase().trim();
+  if (s === 'pending') return 'queued';
+  if (s === 'preparing') return 'starting';
+  if (s === 'scene_detecting') return 'scene_detection';
+  if (!s && st === 'scene_detecting') return 'scene_detection';
+  if (!s && st === 'rendering') return 'rendering';
+  return s;
+}
+
 function isTerminalRenderStatus(status){
-  const st = String(status || '').toLowerCase();
+  const st = normalizeRenderStatus(status);
   return st === 'completed' || st === 'completed_with_errors' || st === 'partial_failed' || st === 'failed' || st === 'interrupted' || st === 'done' || st === 'complete';
 }
 
 function isPartialRenderStatus(status){
-  const st = String(status || '').toLowerCase();
-  return st === 'completed_with_errors' || st === 'partial_failed';
+  const st = normalizeRenderStatus(status);
+  return st === 'completed_with_errors';
 }
 
 function isCompletedRenderStatus(status){
-  const st = String(status || '').toLowerCase();
-  return st === 'completed' || st === 'done' || st === 'complete';
+  const st = normalizeRenderStatus(status);
+  return st === 'completed';
+}
+
+function clampRenderProgress(value){
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function deriveRenderProgress(job, summary = null, parts = []){
+  const items = Array.isArray(parts) ? parts : [];
+  const s = summary || computeProgressSummary(items);
+  const stage = normalizeRenderStage(job?.stage, job?.status);
+  const status = normalizeRenderStatus(job?.status, stage);
+  const backendPct = clampRenderProgress(job?.progress_percent);
+  const partsPct = clampRenderProgress(s?.overall_progress_percent ?? s?.parts_percent);
+  let derived = backendPct;
+
+  if (status === 'completed' || status === 'completed_with_errors') return 100;
+  if (status === 'rendering' || stage === 'rendering' || stage === 'rendering_parallel') {
+    if (partsPct > 0) derived = Math.max(derived, Math.min(90, Math.round(30 + (partsPct / 100) * 60)));
+    else if (Number(s?.total_parts || items.length || 0) > 0) {
+      const total = Number(s?.total_parts || items.length || 0);
+      const completed = Number(s?.completed_parts || 0);
+      const failed = Number(s?.failed_parts || 0);
+      derived = Math.max(derived, Math.min(90, Math.round(30 + ((completed + failed) / total) * 60)));
+    }
+  } else if (status === 'scene_detecting' || stage === 'scene_detection') {
+    derived = Math.max(derived, backendPct);
+  } else if ((status === 'preparing' || stage === 'starting' || stage === 'downloading') && !derived) {
+    derived = 5;
+  }
+  return clampRenderProgress(derived);
 }
 
 function renderMonitorStageLabel(stage, status, summary = null){
-  const st = String(status || '').toLowerCase();
+  const st = normalizeRenderStatus(status, stage);
   if (isPartialRenderStatus(st)) return 'Completed with errors';
   if (isCompletedRenderStatus(st)) return 'Render complete';
-  if (st === 'failed' || st === 'interrupted') return 'Render failed';
-  const s = String(stage || '').toLowerCase();
+  if (st === 'failed') return 'Render failed';
+  const s = normalizeRenderStage(stage, status);
   if ((s === 'rendering' || s === 'rendering_parallel') && summary) {
     const active = Number(summary.processing_parts || 0);
     if (active > 1) return `Rendering ${active} clips in parallel`;
@@ -303,12 +368,12 @@ function updateRenderMonitorHeartbeat(job, summary, parts = []){
   if (pill) pill.dataset.state = monitorState;
 }
 function friendlyJobMessage(job){
-  const status = String(job?.status || '').toLowerCase();
-  const stage = String(job?.stage || '').toLowerCase();
+  const stage = normalizeRenderStage(job?.stage, job?.status);
+  const status = normalizeRenderStatus(job?.status, stage);
   if (isPartialRenderStatus(status)) return 'Completed with errors.';
   if (status === 'completed' || status === 'done' || status === 'complete') return 'Render complete.';
-  if (status === 'failed' || status === 'interrupted') return friendlyRenderError(job?.message || '', 'Something went wrong during rendering');
-  if (status === 'queued') return 'Waiting to start.';
+  if (status === 'failed') return friendlyRenderError(job?.message || '', 'Something went wrong during rendering');
+  if (status === 'pending') return 'Waiting to start.';
   return stageLabel(stage);
 }
 
@@ -333,9 +398,9 @@ function getRenderMonitorSourceText(job) {
   return sourceText && sourceText !== 'No source selected' ? sourceText : 'Source unavailable';
 }
 function renderPendingClipsMessage(job) {
-  const status = String(job?.status || '').toLowerCase();
-  const stage = String(job?.stage || '').toLowerCase();
-  if (status === 'running' || status === 'queued') {
+  const stage = normalizeRenderStage(job?.stage, job?.status);
+  const status = normalizeRenderStatus(job?.status, stage);
+  if (!isTerminalRenderStatus(status)) {
     if (stage === 'scene_detection') return 'Analyzing video and selecting clips...';
     if (stage === 'segment_building') return 'Preparing clips for rendering...';
     if (stage === 'transcribing_full') return 'Generating subtitles...';
@@ -344,11 +409,11 @@ function renderPendingClipsMessage(job) {
   return 'Clips will appear here once rendering begins.';
 }
 function updateRenderProgressVisual(job) {
-  const status = String(job?.status || '').toLowerCase();
-  const stage = String(job?.stage || '').toLowerCase();
+  const stage = normalizeRenderStage(job?.stage, job?.status);
+  const status = normalizeRenderStatus(job?.status, stage);
   const staticMs = _renderMonitorLastProgressAt ? (Date.now() - _renderMonitorLastProgressAt) : 0;
   const earlyStage = !['rendering', 'rendering_parallel'].includes(stage);
-  const isWaitingActive = !!currentJobId && status === 'running' && earlyStage && staticMs > 8000;
+  const isWaitingActive = !!currentJobId && !isTerminalRenderStatus(status) && earlyStage && staticMs > 8000;
   ['job_bar', 'render_active_bar'].forEach((id) => {
     const el = qs(id);
     if (el) el.classList.toggle('isWaitingActive', isWaitingActive);
@@ -380,8 +445,8 @@ function partStatusLabel(status){
   return map[s] || s;
 }
 function setActionState(job){
-  const stage = (job.stage || '').toLowerCase();
-  const status = (job.status || '').toLowerCase();
+  const stage = normalizeRenderStage(job.stage, job.status);
+  const status = normalizeRenderStatus(job.status, stage);
   const running = !isTerminalRenderStatus(status);
   if (running && !activeJobStartedAt) activeJobStartedAt = Date.now();
   if (!running && !activeJobStartedAt) activeJobStartedAt = Date.now();
@@ -451,8 +516,8 @@ function setRenderFlowState(activeStep, subtitle, overrides = {}) {
 }
 
 function updateRenderFlowByJob(job, summary, parts = []) {
-  const stage = String(job?.stage || '').toLowerCase();
-  const status = String(job?.status || '').toLowerCase();
+  const stage = normalizeRenderStage(job?.stage, job?.status);
+  const status = normalizeRenderStatus(job?.status, stage);
   if (isPartialRenderStatus(status)) {
     setRenderFlowState('complete', `${getCompletedClipCount(summary, parts)} clips ready with errors`);
     return;
@@ -461,8 +526,8 @@ function updateRenderFlowByJob(job, summary, parts = []) {
     setRenderFlowState('complete', `${getCompletedClipCount(summary, parts)} clips ready`);
     return;
   }
-  if (status === 'failed' || status === 'interrupted') {
-    setRenderFlowState('complete', status === 'interrupted' ? 'Interrupted' : 'Failed', {
+  if (status === 'failed') {
+    setRenderFlowState('complete', String(job?.status || '').toLowerCase() === 'interrupted' ? 'Interrupted' : 'Failed', {
       source: 'done',
       configure: 'done',
       rendering: 'done',
@@ -476,7 +541,7 @@ function updateRenderFlowByJob(job, summary, parts = []) {
     return;
   }
   if (stage === 'scene_detection' || stage === 'segment_building' || stage === 'transcribing_full' || stage === 'rendering' || stage === 'rendering_parallel' || stage === 'writing_report') {
-    const pct = Math.round(Number(job?.progress_percent || 0));
+    const pct = deriveRenderProgress(job, summary, parts);
     setRenderFlowState('rendering', `${stageLabelPlain(stage)} - ${pct}%`);
     return;
   }
@@ -496,6 +561,7 @@ function buildCompletionHandoff(summary, parts, job) {
     : (doneParts || Math.max(0, total - failed));
   const totalLabel = total || (completed + failed);
   const outputLabel = getRenderWorkspaceOutputLabel(job);
+  const status = normalizeRenderStatus(job?.status, job?.stage);
   const hasFailure = status === 'failed' || status === 'interrupted';
   const main = failed > 0
     ? `${_t('render_complete', 'Render complete')} - ${completed} clips completed, ${failed} ${_t('failed', 'failed')}`
@@ -644,13 +710,13 @@ function rcPartVisualState(status) {
 function renderBottomControlCenter(job, summary, parts = []) {
   const items = Array.isArray(parts) ? parts : [];
   const s = summary || computeProgressSummary(items || []);
-  const status = String(job?.status || '').toLowerCase();
+  const status = normalizeRenderStatus(job?.status, job?.stage);
   const terminal = isTerminalRenderStatus(status);
   const done = getCompletedClipCount(s, items);
   const total = Number(s?.total_parts || items.length || 0);
   const active = Number(s?.processing_parts || 0);
   const failed = Number(s?.failed_parts || 0);
-  const pct = Math.max(0, Math.min(100, Math.round(Number(job?.progress_percent ?? s?.overall_progress_percent ?? 0))));
+  const pct = deriveRenderProgress(job, s, items);
   const activeParts = Array.isArray(s?.active_parts) ? s.active_parts : [];
   const activeText = activeParts.length === 1
     ? `Clip ${Number(activeParts[0]?.part_no || 0)}`
@@ -658,7 +724,7 @@ function renderBottomControlCenter(job, summary, parts = []) {
     ? `${activeParts.length} clips active`
     : 'No active clip';
   const latest = String(job?.message || qs('rc_latest')?.textContent || qs('abp_summary_latest')?.textContent || 'Waiting for render...').trim();
-  const statusText = !job ? 'Ready' : status === 'failed' || status === 'interrupted' ? 'Failed' : terminal ? 'Completed' : 'Rendering';
+  const statusText = !job ? 'Ready' : status === 'failed' ? 'Failed' : terminal ? 'Completed' : 'Rendering';
   const stageText = job ? stageLabel(job?.stage || 'queued') : 'Idle';
   const waitingCount = Math.max(0, total - done - active - failed);
   const queueSummary = [
@@ -670,7 +736,7 @@ function renderBottomControlCenter(job, summary, parts = []) {
 
   if (qs('rc_status')) {
     qs('rc_status').textContent = statusText;
-    qs('rc_status').dataset.state = !job ? 'ready' : (status === 'failed' || status === 'interrupted' ? 'failed' : terminal ? 'completed' : 'running');
+    qs('rc_status').dataset.state = !job ? 'ready' : (status === 'failed' ? 'failed' : terminal ? 'completed' : 'running');
   }
   if (qs('rc_progress')) qs('rc_progress').textContent = `${pct}%`;
   if (qs('rc_stage')) qs('rc_stage').textContent = `Stage: ${stageText}`;
@@ -1280,7 +1346,7 @@ function _updateStageTimeline(stage, status) {
 function renderBottomActiveQueue(job, summary, parts = []) {
   const items = Array.isArray(parts) ? parts : [];
   const s = summary || computeProgressSummary(items || []);
-  const status = String(job?.status || '').toLowerCase();
+  const status = normalizeRenderStatus(job?.status, job?.stage);
   const terminal = isTerminalRenderStatus(status);
   const overallState = !job
     ? 'ready'
@@ -1294,7 +1360,7 @@ function renderBottomActiveQueue(job, summary, parts = []) {
   const renderingParts = items.filter((part) => normalizeRcPartState(part) === 'rendering');
   const failed = Number(s?.failed_parts || items.filter((part) => normalizeRcPartState(part) === 'failed').length || 0);
   const waiting = Math.max(0, total - completed - renderingParts.length - failed);
-  const pct = clampRcProgress(job?.progress_percent ?? s?.overall_progress_percent ?? s?.parts_percent ?? 0);
+  const pct = clampRcProgress(deriveRenderProgress(job, s, items));
   const stageText = job ? stageLabel(job?.stage || 'queued') : 'Idle';
   const latest = String(job?.message || qs('rc_latest')?.textContent || qs('abp_summary_latest')?.textContent || 'Waiting for render...').trim() || 'Waiting for render...';
   const activePart = renderingParts.find((part) => normalizeRcPartState(part) === 'rendering') || null;
@@ -1386,7 +1452,7 @@ function renderBottomActiveQueue(job, summary, parts = []) {
       stageLine = '';
     } else {
       // Job running but no active clip yet (scene detection, segment building, etc.)
-      const jobStage = String(job?.stage || '').toLowerCase();
+      const jobStage = normalizeRenderStage(job?.stage, job?.status);
       if (jobStage === 'scene_detection') {
         title = 'Analyzing video';
         subtitle = 'Clip cards will appear once scene detection finishes.';
@@ -1598,9 +1664,11 @@ function updateRenderMainState(job, summary, parts = []) {
   const homePanel = qs('render_home_panel');
   if (!activePanel || !homePanel) return;
 
-  const status = String(job?.status || '').toLowerCase();
+  const status = normalizeRenderStatus(job?.status, job?.stage);
   const hasJob = !!job && !!currentJobId;
   const terminal = isTerminalRenderStatus(status);
+  const partialStatus = isPartialRenderStatus(status);
+  const completedStatus = isCompletedRenderStatus(status) || partialStatus;
   const showActivePanel = hasJob && currentView === 'render';
 
   homePanel.classList.toggle('hiddenView', !((currentView === 'render') && !showActivePanel));
@@ -1609,7 +1677,7 @@ function updateRenderMainState(job, summary, parts = []) {
 
   const s = summary || computeProgressSummary(parts || []);
   renderBottomActiveQueue(job, s, parts || []);
-  const pct = Math.max(0, Math.min(100, Math.round(Number(job?.progress_percent || 0))));
+  const pct = deriveRenderProgress(job, s, parts || []);
   const title = terminal
     ? (partialStatus ? 'Completed with errors' : (completedStatus ? 'Render complete' : 'Render failed'))
     : stageLabel(job?.stage || 'queued');
@@ -1628,7 +1696,7 @@ function updateRenderMainState(job, summary, parts = []) {
   const failureSummary = (typeof friendlyRenderError === 'function')
     ? friendlyRenderError(job?.message || '', 'Render failed')
     : 'Render failed';
-  const hasFailure = status === 'failed' || status === 'interrupted' || partialStatus || failed > 0;
+  const hasFailure = status === 'failed' || failed > 0;
   const statusLabel = terminal
     ? (partialStatus ? 'Completed with errors' : (completedStatus ? 'Completed' : 'Failed'))
     : 'Rendering';
@@ -1645,11 +1713,11 @@ function updateRenderMainState(job, summary, parts = []) {
   if (active > 0) clipBits.push(`${active} rendering`);
   if (failed > 0) clipBits.push(`${failed} failed`);
 
-  if (qs('render_active_state')) qs('render_active_state').textContent = terminal ? (partialStatus ? 'Completed With Errors' : 'Render Complete') : 'Current Render';
+  if (qs('render_active_state')) qs('render_active_state').textContent = terminal ? (partialStatus ? 'Completed With Errors' : (status === 'failed' ? 'Render Failed' : 'Render Complete')) : 'Current Render';
   if (qs('render_active_title')) qs('render_active_title').textContent = title;
   if (qs('render_active_pct')) qs('render_active_pct').textContent = `${pct}%`;
   if (qs('render_active_bar')) qs('render_active_bar').style.width = `${pct}%`;
-  if (qs('render_active_panel')) qs('render_active_panel').dataset.renderState = failed > 0 && terminal ? 'failed' : terminal ? 'complete' : 'running';
+  if (qs('render_active_panel')) qs('render_active_panel').dataset.renderState = status === 'failed' ? 'failed' : terminal ? 'complete' : 'running';
   if (qs('render_active_meta')) {
     if (completedStatus) {
       qs('render_active_meta').textContent = failed > 0
@@ -1664,9 +1732,9 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('render_workspace_source')) qs('render_workspace_source').textContent = sourceText;
   if (qs('render_workspace_output')) qs('render_workspace_output').textContent = outputText;
   if (qs('render_workspace_stage')) qs('render_workspace_stage').textContent = workspaceStage;
-  const previewState = (status === 'failed' || status === 'interrupted' || partialStatus) ? 'failed' : completedStatus ? 'complete' : 'active';
+  const previewState = status === 'failed' ? 'failed' : completedStatus ? 'complete' : 'active';
   if (qs('render_workspace_preview')) qs('render_workspace_preview').dataset.previewState = previewState;
-  if (qs('render_workspace_preview_badge')) qs('render_workspace_preview_badge').textContent = completedStatus ? (partialStatus ? 'Attention' : 'Results') : (status === 'failed' || status === 'interrupted') ? 'Attention' : 'Rendering';
+  if (qs('render_workspace_preview_badge')) qs('render_workspace_preview_badge').textContent = completedStatus ? (partialStatus ? 'Attention' : 'Results') : status === 'failed' ? 'Attention' : 'Rendering';
   if (qs('render_workspace_preview_title')) {
     qs('render_workspace_preview_title').textContent = completedStatus
       ? (failed > 0 ? 'Render finished with review items' : 'Results are ready')
@@ -1730,7 +1798,7 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('abp_output_meta')) qs('abp_output_meta').textContent = outputLabel;
   const _rcPrimary = partialStatus ? `Completed with errors · ${pct}%` : hasFailure ? `Failed · ${pct}%` : terminal ? 'Completed' : `Rendering · ${pct}%`;
   const _rcSecondary = total > 0 ? renderMonitorClipSummary(s, parts) : stageLabel(job?.stage || 'queued');
-  if (qs('rc_status')) { qs('rc_status').textContent = _rcPrimary; qs('rc_status').dataset.state = hasFailure ? 'failed' : terminal ? 'completed' : 'running'; }
+  if (qs('rc_status')) { qs('rc_status').textContent = _rcPrimary; qs('rc_status').dataset.state = status === 'failed' ? 'failed' : terminal ? 'completed' : 'running'; }
   if (qs('rc_progress')) qs('rc_progress').textContent = '';
   if (qs('rc_stage')) qs('rc_stage').textContent = _rcSecondary;
   if (qs('rc_parts')) qs('rc_parts').textContent = '';
@@ -2450,14 +2518,14 @@ function copyRenderLogs() {
   );
 }
 function pipelineStateByStage(stage, status){
-  const s = (stage || '').toLowerCase();
-  const st = (status || '').toLowerCase();
+  const s = normalizeRenderStage(stage, status);
+  const st = normalizeRenderStatus(status, s);
   const idx = pipeline.findIndex(node => node.stages.includes(s));
   return pipeline.map((n, i) => {
     if (idx < 0) return { ...n, state: 'pending' };
     if (st === 'failed' && i === idx) return { ...n, state: 'failed' };
     if (i < idx) return { ...n, state: 'done' };
-    if (i === idx) return { ...n, state: st === 'completed' ? 'done' : 'running' };
+    if (i === idx) return { ...n, state: (st === 'completed' || st === 'completed_with_errors') ? 'done' : 'running' };
     return { ...n, state: 'pending' };
   });
 }
@@ -2890,10 +2958,10 @@ function computeProgressSummary(parts){
     overall_progress_percent:0, parts_percent:0,
   };
   if(!total) return empty;
-  const _active = ['waiting','cutting','transcribing','rendering'];
-  const done    = parts.filter(p=>(p.status||'')==='done').length;
-  const failed  = parts.filter(p=>(p.status||'')==='failed').length;
-  const inProg  = parts.filter(p=>_active.includes(p.status||''));
+  const _active = ['waiting','pending','cutting','transcribing','rendering','processing','running','in_progress'];
+  const done    = parts.filter(p=>['done','completed','complete'].includes(String(p.status||'').toLowerCase())).length;
+  const failed  = parts.filter(p=>['failed','error'].includes(String(p.status||'').toLowerCase())).length;
+  const inProg  = parts.filter(p=>_active.includes(String(p.status||'').toLowerCase()));
   const pending = Math.max(0, total - done - failed - inProg.length);
   const pSum    = parts.reduce((s,p)=>s+Number(p.progress_percent||0),0);
   const overall = total>0 ? Math.round(pSum/total*10)/10 : 0;
@@ -2901,7 +2969,8 @@ function computeProgressSummary(parts){
   const activeParts = [];
   const stuckParts  = [];
   inProg.forEach(p => {
-    activeParts.push({ part_no: p.part_no, status: p.status, progress_percent: Number(p.progress_percent||0) });
+    const partStatus = String(p.status || '').toLowerCase();
+    activeParts.push({ part_no: p.part_no, status: partStatus, progress_percent: Number(p.progress_percent||0) });
     const ts = _parseUpdatedAt(p.updated_at);
     if (ts > 0 && (now - ts) > _STUCK_THRESHOLD_S)
       stuckParts.push({ part_no: p.part_no, status: p.status, stuck_seconds: Math.round(now - ts) });
@@ -3004,13 +3073,13 @@ function updateStatusBar(job, summary) {
   const area  = qs('sbJobArea');
   if (!dot || !label) return;
 
-  const status    = (job.status  || '').toLowerCase();
-  const stage     = (job.stage   || '').toLowerCase();
-  const pct       = Math.round(Number(job.progress_percent || 0));
+  const stage     = normalizeRenderStage(job.stage, job.status);
+  const status    = normalizeRenderStatus(job.status, stage);
+  const pct       = deriveRenderProgress(job, summary, _renderMonitorLastParts || []);
   const isRunning = !isTerminalRenderStatus(status) && !!status;
   const isPartial = isPartialRenderStatus(status);
   const isDone    = isCompletedRenderStatus(status) || isPartial;
-  const isFailed  = status === 'failed' || status === 'interrupted' || isPartial;
+  const isFailed  = status === 'failed';
 
   dot.className = 'statusDot ' + (isFailed ? 'statusDotFailed' : isRunning ? 'statusDotRunning' : 'statusDotReady');
   label.textContent = isPartial ? 'Completed with errors' : isDone ? 'Done' : isFailed ? 'Failed' : isRunning ? stageLabelPlain(stage) : 'Idle';
