@@ -1801,6 +1801,11 @@ async function startRenderFromEditor() {
       target_market:     mv.market          || 'US',
       subtitle_tone:     mv.subtitleTone    || 'clean',
       keyword_highlight: !!mv.keywordHighlight,
+      hook_engine_v2: {
+        best_hook: String(mv.hookBest || mv.hookAppliedText || '').trim(),
+        variants: Array.isArray(mv.hookVariants) ? mv.hookVariants : [],
+        scores: Array.isArray(mv.hookScores) ? mv.hookScores : [],
+      },
     };
     payload.viral_market = mv.market || 'US';
     payload.hook_apply_enabled = !!mv.hookApplyEnabled && !!String(mv.hookAppliedText || '').trim();
@@ -2017,6 +2022,10 @@ const _mvState = {
   hookAppliedText: '',
   hookOriginalText: '',
   hookScore: null,
+  hookBest: '',
+  hookVariants: [],
+  hookScores: [],
+  hookVariantLogSig: '',
 };
 
 function _mvResetHookRenderState() {
@@ -2024,6 +2033,10 @@ function _mvResetHookRenderState() {
   _mvState.hookAppliedText = '';
   _mvState.hookOriginalText = '';
   _mvState.hookScore = null;
+  _mvState.hookBest = '';
+  _mvState.hookVariants = [];
+  _mvState.hookScores = [];
+  _mvState.hookVariantLogSig = '';
 }
 
 function mvHandleChange() {
@@ -2663,6 +2676,208 @@ function mvGenerateHookSuggestions(text, market, strength) {
   return picks.slice(0, limit);
 }
 
+// Hook Engine v2 - deterministic multi-variant, market-aware hook optimizer.
+const MV_HOOK_PATTERNS = {
+  US: {
+    names: ['shock_bold_claim', 'you_wont_believe', 'result_first'],
+    templates: [
+      (c) => `You won't believe ${c.core}`,
+      (c) => `This went sideways fast: ${c.core}`,
+      (c) => `The result starts here: ${c.core}`,
+      (c) => `Nobody expected ${c.core}`,
+      (c) => `Watch what happens when ${c.core}`,
+    ],
+    patternRe: [/\byou won't believe\b/i, /\bwent sideways\b/i, /\bresult starts\b/i, /\bnobody expected\b/i, /\bwatch what happens\b/i],
+  },
+  EU: {
+    names: ['trust_info', 'structured_phrasing', 'lower_hype'],
+    templates: [
+      (c) => `Here is what happened: ${c.core}`,
+      (c) => `The key detail is ${c.core}`,
+      (c) => `A clear look at ${c.core}`,
+      (c) => `Why this moment matters: ${c.core}`,
+      (c) => `What this shows about ${c.core}`,
+    ],
+    patternRe: [/\bhere is what happened\b/i, /\bkey detail\b/i, /\bclear look\b/i, /\bwhy this moment matters\b/i, /\bwhat this shows\b/i],
+  },
+  JP: {
+    names: ['curiosity', 'soft_tension', 'storytelling'],
+    templates: [
+      (c) => `At first, it looks simple: ${c.core}`,
+      (c) => `Then this small moment changes things`,
+      (c) => `The quiet detail is ${c.core}`,
+      (c) => `There is more to this moment than it seems`,
+      (c) => `This starts like a normal story, then ${c.core}`,
+    ],
+    patternRe: [/\bat first\b/i, /\bsmall moment changes\b/i, /\bquiet detail\b/i, /\bmore to this moment\b/i, /\bnormal story\b/i],
+  },
+};
+
+const MV_HOOK_STOPWORDS = new Set([
+  'the','a','an','and','or','but','to','of','in','on','for','with','is','are','was','were','be','been',
+  'it','this','that','these','those','i','you','we','they','he','she','my','your','our','their','so',
+  'just','like','kind','gonna','going','really','very','there','here','what','when','then','now',
+]);
+
+function _mvCleanHookText(text) {
+  return String(text || '').replace(/\s+/g, ' ').replace(/[“”]/g, '"').replace(/[‘’]/g, "'").trim();
+}
+
+function _mvHookWords(text) {
+  return _mvCleanHookText(text).toLowerCase().match(/[a-z0-9']+/g) || [];
+}
+
+function _mvHookContext(text) {
+  const clean = _mvCleanHookText(text);
+  const words = _mvHookWords(clean);
+  const content = words.filter(w => w.length > 2 && !MV_HOOK_STOPWORDS.has(w));
+  let coreWords = content.slice(0, 6);
+  if (coreWords.length < 3) coreWords = words.filter(w => w.length > 1).slice(0, 6);
+  let core = coreWords.join(' ');
+  if (!core) core = clean.split(/\s+/).slice(0, 7).join(' ');
+  if (core.length > 52) core = core.slice(0, 49).trim() + '...';
+  return { clean, words, content, core: core || 'this moment' };
+}
+
+function _mvClampHookScore(n) {
+  return Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+}
+
+function _mvScoreHookVariant(hook, sourceText, market) {
+  const m = MV_HOOK_PATTERNS[String(market || '').toUpperCase()] ? String(market || '').toUpperCase() : 'US';
+  const cfg = MV_HOOK_PATTERNS[m];
+  const clean = _mvCleanHookText(hook);
+  const lower = clean.toLowerCase();
+  const words = _mvHookWords(clean);
+  const wordCount = words.length;
+  const sourceWords = new Set(_mvHookWords(sourceText).filter(w => !MV_HOOK_STOPWORDS.has(w)));
+  const hookContent = words.filter(w => !MV_HOOK_STOPWORDS.has(w));
+  const overlap = hookContent.filter(w => sourceWords.has(w)).length;
+  const alignment = hookContent.length ? overlap / hookContent.length : 0;
+
+  const curiosity_score = _mvClampHookScore(
+    (/[?]/.test(clean) ? 18 : 0) +
+    (/\b(why|what|how|watch|believe|expected|moment|detail|then|first)\b/i.test(clean) ? 62 : 28) +
+    (alignment >= 0.25 ? 16 : 0)
+  );
+  const emotion_score = _mvClampHookScore(
+    (/\b(won't believe|sideways|nobody|expected|changes|matters|normal story|quiet|small moment)\b/i.test(clean) ? 70 : 38) +
+    (m === 'US' && /\b(fast|believe|nobody|watch)\b/i.test(clean) ? 15 : 0) +
+    (m !== 'US' && /\b(clear|detail|quiet|moment)\b/i.test(clean) ? 12 : 0)
+  );
+  const clarity_score = _mvClampHookScore((alignment >= 0.45 ? 86 : alignment >= 0.25 ? 72 : alignment > 0 ? 58 : 28) - (wordCount > 14 ? 14 : 0));
+  const pattern_score = _mvClampHookScore(cfg.patternRe.some(re => re.test(clean)) ? 92 : 48);
+  const market_fit_score = _mvClampHookScore(
+    pattern_score * 0.72 +
+    (m === 'US' ? (/\b(won't believe|watch|nobody|fast)\b/i.test(clean) ? 22 : 8) : 0) +
+    (m === 'EU' ? (/\b(clear|key detail|shows|happened)\b/i.test(clean) ? 22 : 8) : 0) +
+    (m === 'JP' ? (/\b(at first|small moment|quiet|story|seems)\b/i.test(clean) ? 22 : 8) : 0)
+  );
+  let length_score = 100;
+  if (wordCount < 4) length_score = 58;
+  else if (wordCount <= 10) length_score = 96;
+  else if (wordCount <= 14) length_score = 78;
+  else length_score = Math.max(35, 78 - (wordCount - 14) * 7);
+
+  const unsupportedClaims = ['money', 'profit', 'earn', 'million', 'secret', 'guaranteed']
+    .filter(w => lower.includes(w) && !sourceWords.has(w));
+  const alignmentPenalty = alignment === 0 ? 18 : alignment < 0.2 ? 8 : 0;
+  const claimPenalty = unsupportedClaims.length * 12;
+  const hypePenalty = (m !== 'US' && /\b(won't believe|nobody expected|shocking|insane)\b/i.test(clean)) ? 10 : 0;
+  const hook_score = _mvClampHookScore(
+    curiosity_score * 0.20 +
+    emotion_score * 0.16 +
+    clarity_score * 0.22 +
+    pattern_score * 0.16 +
+    market_fit_score * 0.16 +
+    length_score * 0.10 -
+    alignmentPenalty -
+    claimPenalty -
+    hypePenalty
+  );
+
+  const issues = [];
+  if (alignment < 0.2) issues.push('Low content alignment');
+  if (unsupportedClaims.length) issues.push(`Unsupported claim: ${unsupportedClaims.join(', ')}`);
+  if (wordCount > 14) issues.push(`Too long (${wordCount} words)`);
+  if (!issues.length && hook_score >= 70) issues.push('Aligned hook candidate');
+
+  return {
+    hook: clean,
+    hook_score,
+    hook_text_score: hook_score,
+    strength: hook_score >= 72 ? 'strong' : hook_score >= 48 ? 'medium' : 'weak',
+    curiosity_score,
+    emotion_score,
+    clarity_score,
+    pattern_score,
+    market_fit_score,
+    length_score: _mvClampHookScore(length_score),
+    alignment_score: _mvClampHookScore(alignment * 100),
+    issues,
+    formula: '0.20 curiosity + 0.16 emotion + 0.22 clarity + 0.16 pattern + 0.16 market_fit + 0.10 length - penalties',
+  };
+}
+
+function mvGenerateHookVariants(text, market) {
+  const m = MV_HOOK_PATTERNS[String(market || '').toUpperCase()] ? String(market || '').toUpperCase() : 'US';
+  const ctx = _mvHookContext(text);
+  if (!ctx.clean) return { best_hook: '', variants: [], scores: [], market: m, patterns: MV_HOOK_PATTERNS[m].names, source_excerpt: '' };
+  const seen = new Set();
+  const variants = [];
+  for (const tmpl of MV_HOOK_PATTERNS[m].templates) {
+    const hook = _mvCleanHookText(tmpl(ctx)).replace(/\s+([:,.?!])/g, '$1');
+    const key = hook.toLowerCase();
+    if (!hook || seen.has(key)) continue;
+    seen.add(key);
+    variants.push(hook);
+    if (variants.length >= 5) break;
+  }
+  while (variants.length < 3 && ctx.clean) {
+    const fallback = variants.length === 0 ? ctx.clean : `${ctx.core}...`;
+    if (!seen.has(fallback.toLowerCase())) variants.push(fallback);
+    else break;
+  }
+  const scores = variants
+    .map(hook => _mvScoreHookVariant(hook, ctx.clean, m))
+    .sort((a, b) => b.hook_score - a.hook_score);
+  return {
+    best_hook: scores[0]?.hook || variants[0] || '',
+    variants: scores.map(s => s.hook),
+    scores,
+    market: m,
+    patterns: MV_HOOK_PATTERNS[m].names,
+    source_excerpt: ctx.clean,
+  };
+}
+
+function _mvRememberHookVariants(result) {
+  _mvState.hookBest = result.best_hook || '';
+  _mvState.hookVariants = result.variants || [];
+  _mvState.hookScores = result.scores || [];
+  const sig = JSON.stringify({ market: result.market, best: result.best_hook, scores: (result.scores || []).map(s => [s.hook, s.hook_score]) });
+  if (sig && sig !== _mvState.hookVariantLogSig) {
+    _mvState.hookVariantLogSig = sig;
+    const compact = (result.scores || []).map(s => `${s.hook_score}:${s.hook}`).join(' | ');
+    if (typeof addEvent === 'function') addEvent(`Hook v2 ${result.market}: selected "${result.best_hook}" | variants ${compact}`, 'render');
+    console.info('[HookEngineV2]', result);
+  }
+}
+
+function _mvAnalyzeHook(text, market) {
+  const result = mvGenerateHookVariants(text, market);
+  _mvRememberHookVariants(result);
+  const best = result.scores?.[0];
+  if (!best) return { hook_text_score: 0, strength: 'weak', issues: ['No subtitle text available'], suggestion: '' };
+  return { ...best, suggestion: result.best_hook, all_variants: result.variants, scores: result.scores };
+}
+
+function mvGenerateHookSuggestions(text, market, strength) {
+  const result = mvGenerateHookVariants(text, market);
+  _mvRememberHookVariants(result);
+  return result.variants || [];
+}
+
 function mvCopyHook(el) {
   const hook = el.dataset.hook || '';
   if (!hook) return;
@@ -2712,7 +2927,7 @@ function _mvApplyHookCore(hook, btn, doneText, revertText) {
   if (!seg) return;
   const market = _mvState.market || 'US';
   const originalText = _mvGetHookZoneText(true) || _mvGetHookZoneText(false);
-  const hookAnalysis = _mvAnalyzeHook(hook, market);
+  const hookAnalysis = _mvScoreHookVariant(hook, originalText, market);
   seg.text = hook;
   if (!(_ev.subtitleEdits instanceof Map)) _ev.subtitleEdits = new Map();
   _ev.subtitleEdits.set(idx, { index: idx, start: seg.start, end: seg.end, text: hook });
@@ -2761,12 +2976,12 @@ function mvUpdateHookCompare() {
   const origText = _mvGetHookZoneText(true) || _mvGetHookZoneText(false);
   if (!origText) { sec.classList.add('hiddenView'); return; }
 
-  const origAnalysis = _mvAnalyzeHook(origText, market);
+  const origAnalysis = _mvScoreHookVariant(origText, origText, market);
   const suggestions  = mvGenerateHookSuggestions(origText, market, origAnalysis.strength);
   if (!suggestions || !suggestions.length) { sec.classList.add('hiddenView'); return; }
 
   const sugText     = suggestions[0];
-  const sugAnalysis = _mvAnalyzeHook(sugText, market);
+  const sugAnalysis = (_mvState.hookScores || []).find(s => s.hook === sugText) || _mvScoreHookVariant(sugText, origText, market);
 
   const origBtn = qs('mvHookCompareOrigUse');
   const sugBtn  = qs('mvHookCompareSugUse');
@@ -2835,11 +3050,13 @@ function mvUpdateHookSuggestions(text, market, strength) {
 
   const hooks = mvGenerateHookSuggestions(text, market, strength);
   sec.classList.remove('hiddenView');
-  if (label) label.textContent = strength === 'strong' ? 'Try Alternatives' : 'Preview hook ideas';
+  if (label) label.textContent = 'Hook variants';
   list.innerHTML = hooks.map(h => {
     const safe = h.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    const scored = (_mvState.hookScores || []).find(s => s.hook === h);
+    const score = scored ? ` <span class="mvHookChipScore">${scored.hook_score}</span>` : '';
     return `<div class="mvHookChip">` +
-      `<span class="mvHookChipText">${safe}</span>` +
+      `<span class="mvHookChipText">${safe}${score}</span>` +
       `<div class="mvHookChipActions">` +
         `<button type="button" class="mvHookChipCopy" data-hook="${safe}" onclick="mvCopyHook(this)">Copy</button>` +
         `<button type="button" class="mvHookChipApply" data-hook="${safe}" onclick="mvApplyHook(this)">Preview</button>` +
