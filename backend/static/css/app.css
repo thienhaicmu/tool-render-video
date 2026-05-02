@@ -10366,3 +10366,187 @@ body.is-history-active #history_list {
     grid-template-columns: 1fr;
   }
 }
+
+.uploadSchedulerBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, .12);
+  border-radius: 8px;
+  background: rgba(8, 15, 28, .38);
+  margin-bottom: 10px;
+}
+
+.uploadSchedulerStatus {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uploadSchedulerMeta,
+.uploadSchedulerBlocked {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.uploadSchedulerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.uploadSchedulerBlocked {
+  margin: 0 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 959px) {
+  .uploadSchedulerBar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .uploadSchedulerActions {
+    justify-content: flex-start;
+  }
+}
+
+.uploadAccountWorkspaceShell {
+  border: 1px solid rgba(148, 163, 184, .12);
+  border-radius: 10px;
+  background: rgba(8, 15, 28, .42);
+  padding: 12px;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+
+.uploadAccountWorkspaceHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.uploadAccountWorkspaceActions,
+.accountWorkspaceQueues,
+.accountLogHeaderRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.uploadAccountWorkspaceMeta,
+.accountWorkspaceStats,
+.accountLogPanel {
+  min-width: 0;
+}
+
+.accountWorkspaceStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.accountWorkspaceStat {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, .1);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .34);
+  padding: 10px;
+}
+
+.accountWorkspaceStatWide {
+  grid-column: span 2;
+}
+
+.accountWorkspaceStatLabel,
+.accountLogMuted {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.accountWorkspaceStatValue {
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountWorkspaceQueues {
+  margin-top: 10px;
+}
+
+.accountWorkspaceChip {
+  border: 1px solid rgba(96, 165, 250, .18);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 11px;
+  color: #cbd5e1;
+  background: rgba(30, 41, 59, .48);
+}
+
+.accountLogPanel {
+  display: grid;
+  gap: 8px;
+}
+
+.accountLogItem {
+  border: 1px solid rgba(148, 163, 184, .1);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .28);
+  padding: 8px 10px;
+}
+
+.accountLogTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.accountLogSub {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountLogDivider {
+  height: 1px;
+  background: rgba(148, 163, 184, .12);
+  margin: 2px 0;
+}
+
+@media (max-width: 1279px) {
+  .accountWorkspaceStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 959px) {
+  .uploadAccountWorkspaceHeader {
+    flex-direction: column;
+  }
+
+  .accountWorkspaceStats {
+    grid-template-columns: 1fr;
+  }
+
+  .accountWorkspaceStatWide {
+    grid-column: span 1;
+  }
+}

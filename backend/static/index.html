@@ -534,9 +534,25 @@
             </div>
 
             <div class="uploadManagerColumn uploadManagerColumnCenter">
+              <div class="uploadAccountWorkspaceShell" id="upload_account_workspace_shell">
+                <div class="uploadAccountWorkspaceHeader">
+                  <div>
+                    <div class="uvlTitle" id="upload_account_workspace_title">Account Workspace</div>
+                    <div class="sectionSubtitle" id="upload_account_workspace_hint">Select an account to manage its upload flow.</div>
+                  </div>
+                  <div class="uploadAccountWorkspaceActions">
+                    <button class="primaryButton" type="button" id="upload_run_account_btn" onclick="runSelectedAccountQueue()">Run Account</button>
+                    <button class="ghostButton" type="button" id="upload_stop_account_btn" onclick="stopSelectedAccountQueue()">Stop Account</button>
+                    <button class="ghostButton" type="button" id="upload_check_login_btn" onclick="checkSelectedAccountLogin()">Check Login</button>
+                  </div>
+                </div>
+                <div class="uploadAccountWorkspaceMeta" id="upload_account_workspace_meta">
+                  <div class="uploadInspectorPlaceholder">Choose an account on the left to see its current upload activity.</div>
+                </div>
+              </div>
               <div class="uploadManagerTabs" role="tablist" aria-label="Upload manager lists">
                 <button class="uploadManagerTab active" type="button" id="upload_tab_videos" onclick="setUploadManagerTab('videos')">Video Library</button>
-                <button class="uploadManagerTab" type="button" id="upload_tab_queue" onclick="setUploadManagerTab('queue')">Upload Queue</button>
+                <button class="uploadManagerTab" type="button" id="upload_tab_queue" onclick="setUploadManagerTab('queue')">Account Uploads</button>
               </div>
               <div class="uploadVideoLibrary uploadManagerTabPanel active" id="upload_video_library" data-tab-panel="videos">
                 <div class="uvlHeader">
@@ -600,11 +616,11 @@
               </div>
 
               <div class="uploadQueueManager uploadManagerTabPanel" id="upload_queue_manager" data-tab-panel="queue">
-                <div class="uqmHeader">
-                  <div>
-                    <div class="uqmTitle">Upload Queue</div>
-                    <div class="sectionSubtitle">Build runs from Video Library and Account Manager. Manual worker stays explicit.</div>
-                  </div>
+                  <div class="uqmHeader">
+                    <div>
+                    <div class="uqmTitle">Account Uploads</div>
+                    <div class="sectionSubtitle" id="uqm_account_workspace_hint">Select an account to see its upload items and run them safely.</div>
+                    </div>
                   <div class="uqmHeaderActions">
                     <select class="fieldInput" id="uqm_filter_status" onchange="loadUploadQueueManager()" title="Queue status filter">
                       <option value="">All Queue</option>
@@ -616,17 +632,29 @@
                       <option value="held">Held</option>
                       <option value="cancelled">Cancelled</option>
                     </select>
-                    <button class="primaryButton uploadPrimaryAction" type="button" onclick="openUploadEditor('queue')">Add to Queue</button>
-                    <button class="ghostButton" type="button" onclick="loadUploadQueueManager()">Refresh Queue</button>
+                    <button class="primaryButton uploadPrimaryAction" type="button" id="uqm_add_to_account_btn" onclick="openSelectedAccountQueueFlow()">Add Video to this Account</button>
+                    <button class="ghostButton" type="button" onclick="loadUploadQueueManager()">Refresh Account Uploads</button>
                   </div>
                 </div>
+                <div class="uploadSchedulerBar" id="upload_scheduler_bar">
+                  <div class="uploadSchedulerStatus">
+                    <span class="uamBadge" id="upload_scheduler_status_badge" data-state="stopped">stopped</span>
+                    <span class="uploadSchedulerMeta" id="upload_scheduler_meta">Eligible 0 · Running 0</span>
+                  </div>
+                  <div class="uploadSchedulerActions">
+                    <button class="primaryButton" type="button" onclick="startUploadScheduler()">Start Scheduler</button>
+                    <button class="ghostButton" type="button" onclick="stopUploadScheduler()">Stop</button>
+                    <button class="ghostButton" type="button" onclick="runUploadSchedulerTick()">Run Tick Now</button>
+                  </div>
+                </div>
+                <div class="uploadSchedulerBlocked" id="upload_scheduler_blocked">Blocked reasons will appear here.</div>
                 <details class="uploadEditorSection" id="uqm_editor">
-                  <summary>Queue Form</summary>
+                  <summary>Account Upload Form</summary>
                   <form class="uqmForm" id="upload_queue_form" onsubmit="saveUploadQueueItem(event)">
                     <input type="hidden" id="uqm_queue_id">
                     <label class="field fieldSpan2"><span class="fieldLabel">Video</span><select class="fieldInput" id="uqm_video_id"><option value="">Select video</option></select></label>
                     <label class="field fieldSpan2"><span class="fieldLabel">Account</span><select class="fieldInput" id="uqm_account_id"><option value="">Select account</option></select></label>
-                    <div class="uploadInlineHint" id="uqm_form_hint">Select account + video first.</div>
+                    <div class="uploadInlineHint" id="uqm_form_hint">Select an account, then choose the next video for it.</div>
                     <details class="uploadAdvancedFields fieldSpan2">
                       <summary>Advanced</summary>
                       <div class="uploadAdvancedGrid">
@@ -638,7 +666,7 @@
                       </div>
                     </details>
                     <div class="uqmFormActions">
-                      <button class="primaryButton" type="submit" id="uqm_save_btn">Add to Queue</button>
+                      <button class="primaryButton" type="submit" id="uqm_save_btn">Add Video to this Account</button>
                       <button class="ghostButton" type="button" onclick="resetUploadQueueForm()">Clear</button>
                       <button class="ghostButton" type="button" disabled title="Run in next phase">Run in next phase</button>
                     </div>
@@ -648,8 +676,8 @@
                   <table class="uqmTable">
                     <thead>
                       <tr>
-                        <th>Clip</th>
-                        <th>Account</th>
+                        <th>Video</th>
+                        <th>Activity</th>
                         <th>Status</th>
                         <th>Attempts</th>
                         <th>Scheduled</th>
@@ -657,7 +685,7 @@
                       </tr>
                     </thead>
                     <tbody id="upload_queue_manager_tbody">
-                      <tr><td colspan="6" class="uqmEmpty">No queue items yet. Select a video and account to create one.</td></tr>
+                      <tr><td colspan="6" class="uqmEmpty">Select an account to see its upload items.</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -681,13 +709,13 @@
               <div class="uqmHistoryPanel" id="upload_queue_history_panel">
                 <div class="uqmHistoryHeader">
                   <div>
-                    <div class="uqmHistoryTitle">Attempt History</div>
-                    <div class="sectionSubtitle" id="uqm_history_hint">Select a queue item to view attempts.</div>
+                    <div class="uqmHistoryTitle">Account History</div>
+                    <div class="sectionSubtitle" id="uqm_history_hint">Select an account to view its recent upload attempts.</div>
                   </div>
-                  <button class="ghostButton" type="button" onclick="loadSelectedUploadQueueHistory()">Refresh History</button>
+                  <button class="ghostButton" type="button" onclick="loadSelectedAccountHistory()">Refresh History</button>
                 </div>
                 <div class="uqmHistoryList" id="upload_queue_history_list">
-                  <div class="uqmEmpty">No queue item selected.</div>
+                  <div class="uqmEmpty">Select an account to view its upload attempts.</div>
                 </div>
               </div>
 
@@ -707,8 +735,8 @@
               </div>
 
               <div class="actionRowBlock uploadSidebarPanel" id="upload_log_row" style="margin-top:12px">
-                <div class="actionRowTitle">Upload Live Log</div>
-                <div class="logBox" id="event_log_upload"></div>
+                <div class="actionRowTitle">Account Log</div>
+                <div class="logBox" id="event_log_upload"><div class="uqmEmpty">Select an account to view its recent upload log.</div></div>
               </div>
             </div>
           </div>
