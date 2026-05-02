@@ -2194,6 +2194,79 @@
       background: rgba(59,130,246,.15);
       color: #93c5fd;
     }
+    .renderClipActionLink {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 9px;
+      font-size: 11px;
+      border-radius: 7px;
+      border: 1px solid rgba(148,163,184,.2);
+      background: rgba(30,41,59,.6);
+      color: var(--text-dim);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .renderClipActionLink:hover {
+      border-color: rgba(96,165,250,.4);
+      background: rgba(59,130,246,.15);
+      color: #93c5fd;
+    }
+    .renderClipItem.isBestClip {
+      border-color: rgba(34,197,94,.45);
+      background: rgba(20,83,45,.18);
+    }
+    .renderClipItem.skipped {
+      border-color: rgba(148,163,184,.15);
+      opacity: .78;
+    }
+    .renderClipBestBadge {
+      display: inline-flex;
+      margin-left: 8px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(34,197,94,.14);
+      border: 1px solid rgba(34,197,94,.35);
+      color: #86efac;
+      font-size: 10px;
+      font-weight: 800;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .renderClipRanking {
+      margin-top: 5px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 11px;
+      color: rgba(203,213,225,.72);
+      line-height: 1.35;
+    }
+    .renderClipRanking span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .renderClipRanking.muted {
+      color: rgba(148,163,184,.52);
+    }
+    .renderClipReason {
+      flex-basis: 100%;
+      color: rgba(226,232,240,.72);
+    }
+    .renderClipStatus {
+      display: inline-flex;
+      margin-right: 6px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      background: rgba(148,163,184,.14);
+      color: #cbd5e1;
+    }
+    .renderClipStatus.completed { background: rgba(34,197,94,.14); color: #86efac; }
+    .renderClipStatus.failed { background: rgba(239,68,68,.15); color: #fca5a5; }
+    .renderClipStatus.skipped { background: rgba(148,163,184,.12); color: #94a3b8; }
     /* ── Clip Preview Modal ── */
     .clipPreviewModal {
       position: fixed;
@@ -9091,4 +9164,133 @@ body.is-history-active #history_list {
 }
 .rcQueuePanel::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, .32);
+}
+
+/* Render UI final polish: clearer three-column bottom panel and static states */
+.appBottomPanel,
+.rs-bottom-panel {
+  overflow: hidden !important;
+}
+
+.rcAQMain {
+  grid-template-columns: minmax(260px, .85fr) minmax(420px, 1.35fr) minmax(300px, .8fr) !important;
+  grid-template-areas: "active progress logs";
+  gap: 12px;
+  overflow: hidden;
+}
+
+.rcQueuePanel {
+  grid-area: active;
+  min-width: 0;
+}
+
+@media (min-width: 1281px) {
+  .rcQueuePanel {
+    display: grid !important;
+    grid-template-columns: minmax(260px, .85fr) minmax(360px, 1.15fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 10px;
+    overflow: hidden;
+  }
+  .rcQueuePanel > .rcPanelHeader {
+    grid-column: 1 / -1;
+  }
+  .rcQueuePanel > .rcActiveCard {
+    grid-column: 1;
+    overflow: hidden;
+    align-self: start;
+  }
+  .rcQueuePanel > .rcQueueGrid,
+  .rcQueuePanel > .rcOutputPreview,
+  .rcQueuePanel > .rcBenchmarkPanel,
+  .rcQueuePanel > .rcComparePanel {
+    grid-column: 2;
+    min-width: 0;
+  }
+  .rcQueuePanel > .rcQueueGrid {
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+  }
+}
+
+.rcLogStrip {
+  grid-area: logs;
+  min-width: 0;
+  margin: 0 !important;
+  max-height: 100%;
+}
+
+.rcLogList {
+  min-height: 96px;
+  max-height: 100%;
+  overscroll-behavior: contain;
+}
+
+.rcLogEmpty,
+.renderOutputEmpty {
+  display: grid;
+  place-items: center;
+  min-height: 72px;
+  border: 1px dashed rgba(148,163,184,.18);
+  border-radius: 10px;
+  color: rgba(203,213,225,.62);
+  background: rgba(15,23,42,.28);
+}
+
+#rc_active_badge[data-state="warning"],
+.rcCardStatusBadge[data-state="warning"],
+#rc_status[data-state="warning"] {
+  background: rgba(245,158,11,.16);
+  color: #fcd34d;
+}
+
+.rcActiveCard.isCompleted:has(.rcCardStatusBadge[data-state="warning"]) {
+  border-color: rgba(245,158,11,.42);
+  background: rgba(120,53,15,.18);
+}
+
+.abpProgressBar .progressValue.isWaitingActive::after,
+.renderActiveProgress > div.isWaitingActive::after,
+.renderStartPulse,
+#job_stage_pill.stageChanged,
+.flowStepChanged,
+.flowSubChanging,
+.rs-bottom-panel .partProgressCard,
+.rs-bottom-panel .activePartChip .chipDot,
+.rs-bottom-panel .pipelineNode.running,
+.rs-bottom-panel .monitorLiveDot,
+.rs-bottom-panel .progressValue,
+.rs-bottom-panel .rcScoreBadge,
+.rs-bottom-panel .rdSegItem,
+.statusDotRunning {
+  animation: none !important;
+}
+
+@media (max-width: 1440px) {
+  .rcAQMain {
+    grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr) !important;
+    grid-template-areas:
+      "active logs";
+  }
+  .rcQueuePanel {
+    grid-area: active;
+  }
+  .renderClipItem {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .renderClipActions {
+    grid-column: 2;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 1280px) {
+  .rcAQMain {
+    grid-template-columns: 1fr !important;
+    grid-template-areas:
+      "active"
+      "logs";
+  }
 }

@@ -280,13 +280,13 @@ function _applyJobUpdate(job, parts, summary){
   markRenderMonitorUpdate(job, s, parts, targetPercent);
   if (typeof updateRenderProgressVisual === 'function') updateRenderProgressVisual(job);
 
-  qs('job_stage_pill').textContent = stageLabelPlain(stage);
+  qs('job_stage_pill').textContent = typeof renderUxStageLabel === 'function' ? renderUxStageLabel(job, s, parts || []) : stageLabelPlain(stage);
   const sourceLabel = (typeof getRenderMonitorSourceText === 'function')
     ? getRenderMonitorSourceText(job)
     : 'Source unavailable';
   qs('job_title').textContent = status === 'pending' ? `Queued · ${sourceLabel}` : sourceLabel;
   qs('job_meta_1').textContent = `Channel ${job.channel_code || '-'} | ${sourceLabel}`;
-  qs('job_message').textContent = friendlyJobMessage(job);
+  qs('job_message').textContent = String(job.message || '').trim() || friendlyJobMessage(job);
   setActionState(job);
   renderPipeline(stage, status);
   renderSteps(targetPercent);
@@ -300,7 +300,7 @@ function _applyJobUpdate(job, parts, summary){
   const doneCount = getCompletedClipCount(s, parts);
   const totalCount = s.total_parts || parts.length;
   const parallelNote = s.processing_parts > 1 ? ` | ${s.processing_parts} parallel` : '';
-  qs('job_meta_2').textContent = `${doneCount}/${totalCount} clips done | ${stageLabelPlain(stage)}${parallelNote}`;
+  qs('job_meta_2').textContent = `${doneCount}/${totalCount} clips done | ${(typeof renderUxStageLabel === 'function' ? renderUxStageLabel(job, s, parts || []) : stageLabelPlain(stage))}${parallelNote}`;
 
   if(job.stage && job.stage !== lastStage){
     if(lastStage) addEvent(`Finished step: ${stageLabelPlain(lastStage)}`, 'render');
@@ -709,7 +709,7 @@ function _renderJobRankingMap(job) {
         rank: Number(r.output_rank || 0),
         score: Number(r.output_score ?? r.output_rank_score ?? 0),
         isBest: !!(r.is_best_clip ?? r.is_best_output),
-        reason: String(r.ranking_reason || '').trim(),
+        reason: String(r.ranking_reason || r.reasons || '').trim(),
       });
     }
   } catch (_) {}

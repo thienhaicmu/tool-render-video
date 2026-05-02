@@ -23,6 +23,7 @@ const RENDER_MONITOR_STALL_MS = 45000;
 
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
 function resetRenderSessionUi(){
+  initRenderLogScrollBehavior();
   _localEditorVideoSrc  = null;
   _localEditorDuration  = 0;
   _localEditorSessionId = null;
@@ -35,7 +36,7 @@ function resetRenderSessionUi(){
   lastProgressBucket = -1;
   _stopJobWs();
   if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
-  if(qs('event_log_render')) qs('event_log_render').innerHTML = '<div class="rcLogEmpty">Logs will appear here during render.</div>';
+  if(qs('event_log_render')) qs('event_log_render').innerHTML = '<div class="rcLogEmpty">No logs yet</div>';
   _logAutoScroll = true;
   const _asbtn = qs('rc_log_autoscroll_btn');
   if (_asbtn) { _asbtn.classList.add('isActive'); _asbtn.title = 'Auto-scroll: On'; }
@@ -116,13 +117,13 @@ function stageLabel(stage){
     queued: 'Queued',
     starting: 'Preparing',
     downloading: 'Preparing source',
-    scene_detection: 'Scene detect',
-    segment_building: 'Building clips',
+    scene_detection: 'Scene Detection',
+    segment_building: 'Segment Selection',
     transcribing_full: 'Subtitles',
-    rendering: 'Rendering',
-    rendering_parallel: 'Rendering',
-    writing_report: 'Writing report',
-    done: 'Complete',
+    rendering: 'Rendering Clips',
+    rendering_parallel: 'Rendering Clips',
+    writing_report: 'Finalizing',
+    done: 'Completed',
     failed: 'Failed',
   };
   return map[stage] || 'Processing';
@@ -134,17 +135,21 @@ function stageLabelPlain(stage){
     preparing: 'Preparing',
     starting: 'Preparing',
     downloading: 'Preparing source',
-    scene_detecting: 'Scene detect',
-    scene_detection: 'Scene detect',
-    segment_building: 'Building clips',
+    scene_detecting: 'Scene Detection',
+    scene_detection: 'Scene Detection',
+    segment_building: 'Segment Selection',
     transcribing_full: 'Subtitles',
-    rendering: 'Rendering',
-    rendering_parallel: 'Rendering',
+    rendering: 'Rendering Clips',
+    rendering_parallel: 'Rendering Clips',
     writing_report: 'Writing report',
-    done: 'Done',
+    finalizing: 'Finalizing',
+    done: 'Completed',
+    completed: 'Completed',
+    completed_with_errors: 'Completed with Errors',
     failed: 'Failed',
+    working: 'Working...',
   };
-  return map[(stage || '').toLowerCase()] || (stage || '-');
+  return map[(stage || '').toLowerCase()] || (stage ? 'Working...' : '-');
 }
 
 function normalizeRenderStatus(status, stage = ''){
@@ -159,11 +164,13 @@ function normalizeRenderStatus(status, stage = ''){
   if (st === 'failed' || st === 'interrupted') return 'failed';
   if (st === 'running') {
     if (sg === 'scene_detection' || sg === 'scene_detecting') return 'scene_detecting';
+    if (sg === 'segment_building') return 'preparing';
     if (sg === 'rendering' || sg === 'rendering_parallel') return 'rendering';
+    if (sg === 'writing_report' || sg === 'finalizing') return 'preparing';
     if (sg === 'queued') return 'pending';
     if (sg === 'starting' || sg === 'downloading' || sg === 'render.prepare_source') return 'preparing';
   }
-  return st || (sg ? 'preparing' : '');
+  return st || (sg ? 'working' : '');
 }
 
 function normalizeRenderStage(stage, status = ''){
@@ -172,8 +179,12 @@ function normalizeRenderStage(stage, status = ''){
   if (s === 'pending') return 'queued';
   if (s === 'preparing') return 'starting';
   if (s === 'scene_detecting') return 'scene_detection';
+  if (s === 'finalizing') return 'writing_report';
   if (!s && st === 'scene_detecting') return 'scene_detection';
   if (!s && st === 'rendering') return 'rendering';
+  if (!s && st === 'completed') return 'done';
+  if (!s && st === 'completed_with_errors') return 'done';
+  if (!s && st && !['pending', 'preparing', 'failed'].includes(st)) return 'working';
   return s;
 }
 
@@ -218,10 +229,41 @@ function deriveRenderProgress(job, summary = null, parts = []){
     }
   } else if (status === 'scene_detecting' || stage === 'scene_detection') {
     derived = Math.max(derived, backendPct);
+  } else if (stage === 'segment_building') {
+    derived = Math.max(derived, backendPct || 25);
+  } else if (stage === 'writing_report') {
+    derived = Math.max(derived, backendPct || 92);
   } else if ((status === 'preparing' || stage === 'starting' || stage === 'downloading') && !derived) {
     derived = 5;
   }
   return clampRenderProgress(derived);
+}
+
+function renderUxStageLabel(job, summary = null, parts = []) {
+  const stage = normalizeRenderStage(job?.stage, job?.status);
+  const status = normalizeRenderStatus(job?.status, stage);
+  if (status === 'completed') return 'Completed';
+  if (status === 'completed_with_errors') return 'Completed with Errors';
+  if (status === 'failed') return 'Failed';
+  if (stage === 'scene_detection' || status === 'scene_detecting') return 'Scene Detection';
+  if (stage === 'segment_building') return 'Segment Selection';
+  if (stage === 'rendering' || stage === 'rendering_parallel' || status === 'rendering') return 'Rendering Clips';
+  if (stage === 'writing_report') return 'Finalizing';
+  if (status === 'pending' || stage === 'queued') return 'Preparing';
+  if (status === 'preparing' || stage === 'starting' || stage === 'downloading') return 'Preparing';
+  return job ? 'Working...' : 'Idle';
+}
+
+function renderJobShortId(job) {
+  const id = String(job?.id || job?.job_id || currentJobId || '').trim();
+  if (!id) return 'Job -';
+  return `Job ${id.length > 10 ? `${id.slice(0, 6)}...${id.slice(-4)}` : id}`;
+}
+
+function renderElapsedLabel(job) {
+  const started = activeJobStartedAt || Date.parse(job?.created_at || job?.started_at || '');
+  if (!started || Number.isNaN(started)) return '';
+  return `Elapsed ${fmtElapsed(Date.now() - started)}`;
 }
 
 function renderMonitorStageLabel(stage, status, summary = null){
@@ -404,9 +446,9 @@ function renderPendingClipsMessage(job) {
     if (stage === 'scene_detection') return 'Analyzing video and selecting clips...';
     if (stage === 'segment_building') return 'Preparing clips for rendering...';
     if (stage === 'transcribing_full') return 'Generating subtitles...';
-    return 'Preparing clips...';
+    return 'Clips will appear here when rendering starts';
   }
-  return 'Clips will appear here once rendering begins.';
+  return 'Clips will appear here when rendering starts';
 }
 function updateRenderProgressVisual(job) {
   const stage = normalizeRenderStage(job?.stage, job?.status);
@@ -725,7 +767,7 @@ function renderBottomControlCenter(job, summary, parts = []) {
     : 'No active clip';
   const latest = String(job?.message || qs('rc_latest')?.textContent || qs('abp_summary_latest')?.textContent || 'Waiting for render...').trim();
   const statusText = !job ? 'Ready' : status === 'failed' ? 'Failed' : terminal ? 'Completed' : 'Rendering';
-  const stageText = job ? stageLabel(job?.stage || 'queued') : 'Idle';
+  const stageText = job ? renderUxStageLabel(job, s, items) : 'Idle';
   const waitingCount = Math.max(0, total - done - active - failed);
   const queueSummary = [
     `${done} completed`,
@@ -857,21 +899,70 @@ function _rcAutoScrollActive(container, activePartNo) {
 function _rankMap(job) {
   const map = new Map();
   try {
-    const raw = job?.result_json;
-    const result = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+    const result = parseRenderResult(job);
     const ranking = result?.output_ranking;
     if (!Array.isArray(ranking)) return map;
     ranking.forEach(r => {
       if (r?.part_no != null) {
         map.set(Number(r.part_no), {
           rank:   Number(r.output_rank || 0),
-          score:  Number(r.output_rank_score || 0),
-          isBest: !!r.is_best_output,
+          score:  Number(r.output_score ?? r.output_rank_score ?? 0),
+          isBest: !!(r.is_best_clip ?? r.is_best_output),
+          reason: String(r.ranking_reason || r.reasons || '').trim(),
         });
       }
     });
   } catch (_) {}
   return map;
+}
+
+function parseRenderResult(job) {
+  try {
+    const raw = job?.result_json;
+    return raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function renderFailureDetails(job, summary = null) {
+  const result = parseRenderResult(job);
+  const details = result.failed_parts_detail || result.failed_part_details || job?.failed_parts_detail || [];
+  const warning = result.ranking_warning || job?.ranking_warning || '';
+  const count = Number(result.failed_parts ?? job?.failed_parts ?? summary?.failed_parts ?? 0);
+  return {
+    count,
+    details: Array.isArray(details) ? details : (details ? [details] : []),
+    warning: String(warning || '').trim(),
+  };
+}
+
+function normalizeOutputPart(raw, idx = 0) {
+  const p = raw || {};
+  const outputFile = p.output_file || p.output_path || p.file_path || p.path || '';
+  const status = String(p.status || (outputFile ? 'done' : 'skipped')).toLowerCase();
+  return {
+    ...p,
+    part_no: Number(p.part_no || p.part || p.clip_no || idx + 1),
+    part_name: p.part_name || p.name || p.title || '',
+    status: status === 'completed' || status === 'complete' ? 'done' : status,
+    output_file: outputFile,
+    start_sec: Number(p.start_sec || p.start || 0),
+    end_sec: Number(p.end_sec || p.end || 0),
+  };
+}
+
+function collectRenderOutputItems(job, parts = []) {
+  const fromParts = Array.isArray(parts) ? parts : [];
+  const result = parseRenderResult(job);
+  const outputs = Array.isArray(result.outputs) ? result.outputs : [];
+  const merged = new Map();
+  fromParts.forEach((p, idx) => merged.set(Number(p?.part_no || idx + 1), normalizeOutputPart(p, idx)));
+  outputs.forEach((p, idx) => {
+    const item = normalizeOutputPart(p, idx);
+    merged.set(Number(item.part_no || idx + 1), { ...(merged.get(Number(item.part_no)) || {}), ...item });
+  });
+  return [...merged.values()];
 }
 
 // ── Market Viral score helpers ────────────────────────────────────────────────
@@ -1023,6 +1114,7 @@ function _parseBenchmarkLogs(lines) {
 
 function _updateBenchmark(job, parts) {
   const jobId = String(job?.id || job?.job_id || currentJobId || '');
+  const ranking = _rankMap(job);
   if (!jobId) return;
   if (jobId !== _rcBenchmark.jobId) {
     _rcBenchmark = { jobId, logsLoaded: false, totalElapsedMs: 0, sceneDetectionMs: null, sceneCount: null, transcriptionMs: null, transcriptionModel: null, transcriptionLiveSec: null, totalParts: 0, completedParts: 0, failedParts: 0, failedStage: '', outputSizes: [] };
@@ -1286,13 +1378,12 @@ function updateOutputPreview(job, parts) {
 }
 
 const RC_STAGE_STEPS = [
-  { key: 'prepare',  label: 'Prepare',  stages: ['starting', 'queued'] },
-  { key: 'source',   label: 'Source',   stages: ['downloading'] },
-  { key: 'scenes',   label: 'Scenes',   stages: ['scene_detection', 'segment_building'] },
-  { key: 'subtitle', label: 'Subtitle', stages: ['transcribing_full'] },
-  { key: 'render',   label: 'Render',   stages: ['rendering', 'rendering_parallel'] },
-  { key: 'validate', label: 'Validate', stages: ['writing_report'] },
-  { key: 'done',     label: 'Done',     stages: ['done', 'completed', 'complete'] },
+  { key: 'prepare',  label: 'Preparing', stages: ['starting', 'queued', 'downloading'] },
+  { key: 'scenes',   label: 'Scene Detection', stages: ['scene_detection'] },
+  { key: 'segment',  label: 'Segment Selection', stages: ['segment_building', 'transcribing_full'] },
+  { key: 'render',   label: 'Rendering Clips', stages: ['rendering', 'rendering_parallel'] },
+  { key: 'finalize', label: 'Finalizing', stages: ['writing_report'] },
+  { key: 'done',     label: 'Completed', stages: ['done', 'completed', 'complete'] },
 ];
 
 function _updateStageTimeline(stage, status) {
@@ -1381,16 +1472,16 @@ function renderBottomActiveQueue(job, summary, parts = []) {
   const statusLabel = overallState === 'failed'
     ? 'Failed'
     : overallState === 'completed'
-    ? 'Completed'
+    ? (status === 'completed_with_errors' ? 'Completed with Errors' : 'Completed')
     : overallState === 'running'
-    ? 'Rendering'
+    ? stageText
     : 'Ready';
 
   // Header primary: "Ready" | "Rendering · 15%" | "Completed" | "Failed · 15%"
   const headerPrimary = overallState === 'ready' ? 'Ready'
-    : overallState === 'completed' ? 'Completed'
+    : overallState === 'completed' ? (status === 'completed_with_errors' ? `Completed with Errors · ${pct}%` : 'Completed')
     : overallState === 'failed' ? `Failed · ${pct}%`
-    : `Rendering · ${pct}%`;
+    : `${stageText} · ${pct}%`;
   // Header secondary: clip summary when parts exist, else stage name
   const headerSecondary = overallState === 'ready' ? ''
     : total > 0 ? renderMonitorClipSummary(s, items)
@@ -1415,8 +1506,8 @@ function renderBottomActiveQueue(job, summary, parts = []) {
   const activeStage = qs('rc_active_stage');
   const activeMessage = qs('rc_active_message');
   if (badge) {
-    badge.textContent = activePart ? 'Rendering' : statusLabel;
-    badge.dataset.state = activePart ? 'rendering' : overallState === 'completed' ? 'completed' : overallState === 'failed' ? 'failed' : 'idle';
+    badge.textContent = activePart ? 'Rendering Clips' : statusLabel;
+    badge.dataset.state = activePart ? 'rendering' : status === 'completed_with_errors' ? 'warning' : overallState === 'completed' ? 'completed' : overallState === 'failed' ? 'failed' : 'idle';
   }
   if (activeCard) {
     activeCard.classList.remove('isIdle', 'isRendering', 'isCompleted', 'isFailed');
@@ -1435,10 +1526,11 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     } else if (overallState === 'completed') {
       activeCardState = 'isCompleted';
       activeCardPct = 100;
-      title = 'All clips completed';
-      subtitle = `${completed}/${total || 0} clips finished`;
-      stageLine = 'Complete';
-      message = latest || 'All clips finished successfully.';
+      const partial = status === 'completed_with_errors';
+      title = partial ? 'Completed with errors' : 'All clips completed';
+      subtitle = `${completed}/${total || 0} clips finished${failed > 0 ? ` · ${failed} failed` : ''}`;
+      stageLine = partial ? 'Completed with Errors' : 'Completed';
+      message = latest || (partial ? 'Some clips need review. Successful outputs remain available.' : 'All clips finished successfully.');
     } else if (overallState === 'failed') {
       activeCardState = 'isFailed';
       title = 'Render failed';
@@ -1467,7 +1559,7 @@ function renderBottomActiveQueue(job, summary, parts = []) {
         subtitle = `${completed}/${total} clips done`;
       } else {
         title = stageText;
-        subtitle = 'Preparing…';
+        subtitle = latest || 'Preparing...';
       }
       stageLine = stageText;
     }
@@ -1486,12 +1578,13 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     if (cardJobTitle) {
       const src = job ? getRenderWorkspaceSourceText(job) : '';
       const srcText = (src && src !== 'No source selected') ? src : '';
-      cardJobTitle.textContent = srcText;
+      const jobBits = job ? [renderJobShortId(job), renderElapsedLabel(job), total ? `${completed}/${total} clips` : ''].filter(Boolean) : [];
+      cardJobTitle.textContent = jobBits.length ? jobBits.join(' · ') : srcText;
       cardJobTitle.title = srcText;
     }
     if (cardStatusBadge) {
       cardStatusBadge.textContent = statusLabel;
-      cardStatusBadge.dataset.state = overallState;
+      cardStatusBadge.dataset.state = status === 'completed_with_errors' ? 'warning' : overallState;
     }
     _updateStageTimeline(job?.stage || '', status);
   }
@@ -1693,10 +1786,11 @@ function updateRenderMainState(job, summary, parts = []) {
     : '';
   const latestDetail = String(job?.message || '').trim();
   const latestShort = latestDetail.length > 120 ? `${latestDetail.slice(0, 117)}...` : latestDetail;
+  const failureInfo = renderFailureDetails(job, s);
   const failureSummary = (typeof friendlyRenderError === 'function')
     ? friendlyRenderError(job?.message || '', 'Render failed')
     : 'Render failed';
-  const hasFailure = status === 'failed' || failed > 0;
+  const hasFailure = status === 'failed' || failed > 0 || status === 'completed_with_errors' || failureInfo.count > 0;
   const statusLabel = terminal
     ? (partialStatus ? 'Completed with errors' : (completedStatus ? 'Completed' : 'Failed'))
     : 'Rendering';
@@ -1798,14 +1892,20 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('abp_output_meta')) qs('abp_output_meta').textContent = outputLabel;
   const _rcPrimary = partialStatus ? `Completed with errors · ${pct}%` : hasFailure ? `Failed · ${pct}%` : terminal ? 'Completed' : `Rendering · ${pct}%`;
   const _rcSecondary = total > 0 ? renderMonitorClipSummary(s, parts) : stageLabel(job?.stage || 'queued');
-  if (qs('rc_status')) { qs('rc_status').textContent = _rcPrimary; qs('rc_status').dataset.state = status === 'failed' ? 'failed' : terminal ? 'completed' : 'running'; }
+  if (qs('rc_status')) { qs('rc_status').textContent = _rcPrimary; qs('rc_status').dataset.state = status === 'failed' ? 'failed' : partialStatus ? 'warning' : terminal ? 'completed' : 'running'; }
   if (qs('rc_progress')) qs('rc_progress').textContent = '';
   if (qs('rc_stage')) qs('rc_stage').textContent = _rcSecondary;
   if (qs('rc_parts')) qs('rc_parts').textContent = '';
   if (qs('rc_active')) qs('rc_active').textContent = '';
   if (qs('abp_error_text')) {
+    const detailText = [
+      failureInfo.count > 0 ? `${failureInfo.count} failed part${failureInfo.count === 1 ? '' : 's'}` : '',
+      failureInfo.warning,
+      ...failureInfo.details.slice(0, 3).map((d) => typeof d === 'string' ? d : JSON.stringify(d)),
+      latestShort,
+    ].filter(Boolean).join(' | ');
     qs('abp_error_text').textContent = hasFailure
-      ? `Error: ${latestShort || failureSummary}`
+      ? (status === 'completed_with_errors' ? `Warning: ${detailText || 'Completed with errors.'}` : `Error: ${detailText || failureSummary}`)
       : 'No blocking errors.';
   }
   if (qs('abp_error_block')) qs('abp_error_block').classList.toggle('hiddenView', !hasFailure);
@@ -2517,6 +2617,37 @@ function copyRenderLogs() {
     () => showToast('Copy failed', 'error')
   );
 }
+
+function initRenderLogScrollBehavior() {
+  const box = qs('event_log_render');
+  if (!box || box.dataset.scrollBehaviorInit === '1') return;
+  box.dataset.scrollBehaviorInit = '1';
+  box.addEventListener('scroll', () => {
+    if (!_logAutoScroll) return;
+    if (box.scrollTop > 32) {
+      _logAutoScroll = false;
+      const btn = qs('rc_log_autoscroll_btn');
+      if (btn) {
+        btn.classList.remove('isActive');
+        btn.title = 'Auto-scroll: Off';
+      }
+    }
+  }, { passive: true });
+}
+
+if (typeof window !== 'undefined' && typeof window.addEvent === 'function' && !window.addEvent._renderUxWrapped) {
+  const _renderUxOriginalAddEvent = window.addEvent;
+  window.addEvent = function renderUxAddEvent(text, scope = 'auto') {
+    const resolved = scope === 'render' || (scope === 'auto' && typeof currentView !== 'undefined' && currentView === 'render');
+    const box = resolved ? qs('event_log_render') : null;
+    const autoWanted = _logAutoScroll;
+    const nearLatest = !box || box.scrollTop <= 32;
+    if (resolved && autoWanted && !nearLatest) _logAutoScroll = false;
+    _renderUxOriginalAddEvent(text, scope);
+    if (resolved && autoWanted && !nearLatest) _logAutoScroll = true;
+  };
+  window.addEvent._renderUxWrapped = true;
+}
 function pipelineStateByStage(stage, status){
   const s = normalizeRenderStage(stage, status);
   const st = normalizeRenderStatus(status, s);
@@ -2549,6 +2680,7 @@ function renderPipeline(stage, status){
   `).join('');
 }
 function setRenderActionBusy(isBusy){
+  initRenderLogScrollBehavior();
   const btn = qs('start_render_btn');
   if(!btn) return;
   btn.disabled = !!isBusy;
@@ -3124,7 +3256,7 @@ function clearRenderOutputPanel() {
   const _sumEl = qs('mvRenderSummary');
   if (_sumEl) { _sumEl.innerHTML = ''; _sumEl.hidden = true; }
   const list = qs('render_output_list');
-  if (list) list.innerHTML = '<div class="renderOutputEmpty">Clips will appear here when render completes.</div>';
+  if (list) list.innerHTML = '<div class="renderOutputEmpty">Clips will appear here when rendering starts</div>';
   const badge = qs('render_output_badge');
   if (badge) badge.textContent = '0';
   const path = qs('render_output_path');
@@ -3138,12 +3270,14 @@ function populateRenderOutputPanel(job, parts) {
   const pathEl = qs('render_output_path');
   if (!list) return;
 
-  const items = Array.isArray(parts) ? parts : [];
-  const done = items.filter((p) => String(p?.status || '').toLowerCase() === 'done');
-  const failed = items.filter((p) => String(p?.status || '').toLowerCase() === 'failed');
+  const items = collectRenderOutputItems(job, parts);
+  const done = items.filter((p) => ['done', 'completed', 'complete'].includes(String(p?.status || '').toLowerCase()));
+  const failed = items.filter((p) => ['failed', 'error'].includes(String(p?.status || '').toLowerCase()));
+  const skipped = items.filter((p) => String(p?.status || '').toLowerCase() === 'skipped');
   const all = [
     ...done.sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0)),
     ...failed.sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0)),
+    ...skipped.sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0)),
   ];
 
   // Seed selection with top-3 market viral clips
@@ -3164,10 +3298,19 @@ function populateRenderOutputPanel(job, parts) {
   if (qs('abp_output_text')) qs('abp_output_text').textContent = outputDir ? `Output folder: ${outputDir}` : 'Output folder not set.';
   if (qs('abp_output_meta')) qs('abp_output_meta').textContent = 'Latest file will appear here.';
   if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !outputDir;
+  const failureInfo = renderFailureDetails(job, computeProgressSummary(items));
+  if ((failureInfo.count > 0 || failureInfo.warning) && pathEl) {
+    const warningText = [
+      failureInfo.count > 0 ? `${failureInfo.count} failed part${failureInfo.count === 1 ? '' : 's'}` : '',
+      failureInfo.warning,
+      ...failureInfo.details.slice(0, 3).map((d) => typeof d === 'string' ? d : JSON.stringify(d)),
+    ].filter(Boolean).join(' · ');
+    pathEl.textContent = warningText ? `Completed with errors: ${warningText}` : pathEl.textContent;
+  }
 
   if (!all.length) {
     if (qs('abp_output_meta')) qs('abp_output_meta').textContent = 'Latest file will appear here.';
-    list.innerHTML = '<div class="renderOutputEmpty">No completed clips found for this render.</div>';
+    list.innerHTML = '<div class="renderOutputEmpty">Clips will appear here when rendering starts</div>';
     showRenderOutputPanel();
     return;
   }
@@ -3176,39 +3319,56 @@ function populateRenderOutputPanel(job, parts) {
   list.innerHTML = all.map((p) => {
     const partNo = Number(p.part_no || 0);
     const st = String(p?.status || '').toLowerCase();
-    const isFailed = st === 'failed';
-    const isDone = st === 'done';
+    const isFailed = st === 'failed' || st === 'error';
+    const isSkipped = st === 'skipped';
+    const isDone = st === 'done' || st === 'completed' || st === 'complete';
     const isActive = st === 'rendering' || st === 'transcribing' || st === 'cutting' || st === 'waiting';
     const hasFile = !!p.output_file;
     const name = p.part_name ? esc(p.part_name) : `Clip ${partNo}`;
     const startSec = Number(p.start_sec || 0);
     const endSec = Number(p.end_sec || 0);
     const dur = Math.max(0, endSec - startSec).toFixed(1);
+    const rk = ranking.get(partNo) || {};
+    const statusText = isFailed ? 'failed' : isSkipped ? 'skipped' : isDone ? 'completed' : (st || 'pending');
     const meta = isFailed
       ? `Failed · ${dur}s`
+      : isSkipped
+        ? `Skipped · ${dur}s`
       : hasFile
-        ? `${dur}s · ${startSec.toFixed(1)}s–${endSec.toFixed(1)}s`
+        ? `${dur}s · ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s`
         : `${dur}s`;
     const previewBtn = (!isFailed && hasFile && jobId)
-      ? `<button type="button" onclick="previewClip(${JSON.stringify(jobId)},${partNo})">Preview</button>`
+      ? `<button type="button" onclick="previewClip(${JSON.stringify(jobId)},${partNo})">Preview/Open</button>`
+      : '';
+    const downloadBtn = (!isFailed && hasFile && jobId)
+      ? `<a class="renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download>Download</a>`
       : '';
     const openBtn = hasFile
-      ? `<button type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Open</button>`
+      ? `<button type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Open Folder</button>`
       : '';
     if (qs('abp_output_meta') && hasFile) qs('abp_output_meta').textContent = `Latest file: ${String(p.output_file || '').split(/[\\\\/]/).pop()}`;
     const isSelected = isDone && hasFile && _selectedClipPaths.has(p.output_file);
-    const itemClass = `renderClipItem${isFailed ? ' failed isFailed' : ''}${isDone ? ' isDone' : ''}${isActive ? ' isActive' : ''}${isSelected ? ' isSelected' : ''}`;
+    const itemClass = `renderClipItem${isFailed ? ' failed isFailed' : ''}${isSkipped ? ' skipped isSkipped' : ''}${isDone ? ' isDone' : ''}${isActive ? ' isActive' : ''}${isSelected ? ' isSelected' : ''}${rk.isBest ? ' isBestClip' : ''}`;
     const chkHtml = (isDone && hasFile)
       ? `<input type="checkbox" class="renderClipCheck" data-path="${esc(p.output_file)}"${isSelected ? ' checked' : ''} onchange="rcToggleClip(this)">`
       : '';
+    const bestHtml = rk.isBest ? '<span class="renderClipBestBadge">Best Clip</span>' : '';
+    const rankHtml = (rk.rank || rk.score || rk.reason)
+      ? `<div class="renderClipRanking">
+          <span>Rank ${rk.rank ? `#${esc(rk.rank)}` : '-'}</span>
+          <span>Score ${Number(rk.score || 0).toFixed(1)}</span>
+          ${rk.reason ? `<span class="renderClipReason">${esc(rk.reason)}</span>` : ''}
+        </div>`
+      : '<div class="renderClipRanking muted"><span>Rank -</span><span>Score -</span></div>';
     return `<div class="${itemClass}" data-clip-status="${esc(st || 'queued')}">
       ${chkHtml}
       <div class="renderClipNum">${partNo}</div>
       <div class="renderClipInfo">
-        <div class="renderClipName" title="${esc(p.output_file || '')}">${name}</div>
-        <div class="renderClipMeta">${meta}</div>
+        <div class="renderClipName" title="${esc(p.output_file || '')}">${name}${bestHtml}</div>
+        <div class="renderClipMeta"><span class="renderClipStatus ${esc(statusText)}">${esc(statusText)}</span><span>${meta}</span></div>
+        ${rankHtml}
       </div>
-      <div class="renderClipActions">${previewBtn}${openBtn}</div>
+      <div class="renderClipActions">${previewBtn}${downloadBtn}${openBtn}</div>
     </div>`;
   }).join('');
 
