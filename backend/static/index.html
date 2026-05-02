@@ -457,173 +457,263 @@
             <div><div class="sectionTitle">Upload</div><div class="sectionSubtitle">Manage upload accounts independently from render outputs and upload runs.</div></div>
             <button class="ghostButton" onclick="setView('render')">Back to Main</button>
           </div>
-          <div class="uploadAccountManager" id="upload_account_manager">
-            <div class="uamHeader">
-              <div>
-                <div class="uamTitle">Upload Account Manager</div>
-                <div class="sectionSubtitle">GPM-lite account registry. Accounts persist here; no upload queue or worker is started from this panel.</div>
-              </div>
-              <button class="ghostButton" type="button" onclick="loadUploadAccounts()">Refresh</button>
+          <div class="uploadWorkflowGuide" id="upload_workflow_guide">
+            <div class="uploadWorkflowStep isActive" id="upload_workflow_step_1">
+              <div class="uploadWorkflowStepLabel">Step 1</div>
+              <div class="uploadWorkflowStepTitle">Add Account</div>
             </div>
-            <form class="uamForm" id="upload_account_form" onsubmit="saveUploadAccount(event)">
-              <input type="hidden" id="uam_account_id">
-              <label class="field"><span class="fieldLabel">Platform</span><input class="fieldInput" id="uam_platform" value="tiktok"></label>
-              <label class="field"><span class="fieldLabel">Channel Code</span><input class="fieldInput" id="uam_channel_code" placeholder="T1"></label>
-              <label class="field"><span class="fieldLabel">Account Key</span><input class="fieldInput" id="uam_account_key" value="default"></label>
-              <label class="field"><span class="fieldLabel">Display Name</span><input class="fieldInput" id="uam_display_name" placeholder="Main TikTok account"></label>
-              <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uam_status"><option value="active">Active</option><option value="warming">Warming</option><option value="limited">Limited</option><option value="banned">Banned</option><option value="disabled">Disabled</option><option value="login_required">Login Required</option></select></label>
-              <label class="field"><span class="fieldLabel">Login State</span><select class="fieldInput" id="uam_login_state"><option value="unknown">Unknown</option><option value="logged_in">Logged In</option><option value="logged_out">Logged Out</option><option value="challenge">Challenge</option><option value="expired">Expired</option></select></label>
-              <label class="field"><span class="fieldLabel">Daily Limit</span><input class="fieldInput" id="uam_daily_limit" type="number" min="0" value="0"></label>
-              <label class="field"><span class="fieldLabel">Cooldown Minutes</span><input class="fieldInput" id="uam_cooldown_minutes" type="number" min="0" value="0"></label>
-              <label class="field"><span class="fieldLabel">Today Count</span><input class="fieldInput" id="uam_today_count" type="number" min="0" value="0"></label>
-              <label class="field"><span class="fieldLabel">Proxy ID</span><input class="fieldInput" id="uam_proxy_id" placeholder="proxy-01"></label>
-              <label class="field fieldSpan2"><span class="fieldLabel">Profile Path</span><input class="fieldInput" id="uam_profile_path" placeholder="D:\channels\T1\account\profiles\default\browser-profile"></label>
-              <div class="uamFormActions">
-                <button class="primaryButton" type="submit" id="uam_save_btn">Create Account</button>
-                <button class="ghostButton" type="button" onclick="resetUploadAccountForm()">Clear</button>
-              </div>
-            </form>
-            <div class="uamTableWrap">
-              <table class="uamTable">
-                <thead>
-                  <tr>
-                    <th>Account</th>
-                    <th>Status</th>
-                    <th>Login</th>
-                    <th>Profile Lock</th>
-                    <th>Usage</th>
-                    <th>Cooldown</th>
-                    <th>Profile</th>
-                    <th>Proxy</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="upload_accounts_tbody">
-                  <tr><td colspan="9" class="uamEmpty">No accounts loaded.</td></tr>
-                </tbody>
-              </table>
+            <div class="uploadWorkflowStep" id="upload_workflow_step_2">
+              <div class="uploadWorkflowStepLabel">Step 2</div>
+              <div class="uploadWorkflowStepTitle">Add Video</div>
+            </div>
+            <div class="uploadWorkflowStep" id="upload_workflow_step_3">
+              <div class="uploadWorkflowStepLabel">Step 3</div>
+              <div class="uploadWorkflowStepTitle">Add to Queue</div>
+            </div>
+            <div class="uploadWorkflowStep" id="upload_workflow_step_4">
+              <div class="uploadWorkflowStepLabel">Step 4</div>
+              <div class="uploadWorkflowStepTitle">Run Upload</div>
             </div>
           </div>
-          <div class="uploadVideoLibrary" id="upload_video_library">
-            <div class="uvlHeader">
-              <div>
-                <div class="uvlTitle">TikTok Video Library</div>
-                <div class="sectionSubtitle">Manual upload-ready files only. Nothing is imported from render outputs.</div>
-              </div>
-              <div class="uvlHeaderActions">
-                <select class="fieldInput" id="uvl_filter_status" onchange="loadUploadVideoLibrary()" title="Status filter">
-                  <option value="">All Status</option>
-                  <option value="ready">Ready</option>
-                  <option value="queued">Queued</option>
-                  <option value="uploaded">Uploaded</option>
-                  <option value="failed">Failed</option>
-                  <option value="disabled">Disabled</option>
-                </select>
-                <button class="ghostButton" type="button" onclick="loadUploadVideoLibrary()">Refresh</button>
-              </div>
-            </div>
-            <form class="uvlForm" id="upload_video_form" onsubmit="saveUploadVideo(event)">
-              <input type="hidden" id="uvl_video_id">
-              <label class="field fieldSpan2"><span class="fieldLabel">Add Video File Path</span><input class="fieldInput" id="uvl_video_path" placeholder="D:\videos\upload-ready\clip.mp4"></label>
-              <label class="field fieldSpan2"><span class="fieldLabel">Import Folder</span><input class="fieldInput" id="uvl_import_folder" placeholder="Folder import will be added later" disabled></label>
-              <label class="field"><span class="fieldLabel">Platform</span><input class="fieldInput" id="uvl_platform" value="tiktok"></label>
-              <label class="field"><span class="fieldLabel">Source Type</span><select class="fieldInput" id="uvl_source_type"><option value="manual_file">Manual File</option><option value="import_folder">Import Folder</option><option value="render_export_later">Render Export Later</option></select></label>
-              <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uvl_status"><option value="ready">Ready</option><option value="queued">Queued</option><option value="uploaded">Uploaded</option><option value="failed">Failed</option><option value="disabled">Disabled</option></select></label>
-              <div></div>
-              <label class="field fieldSpan2"><span class="fieldLabel">Caption</span><input class="fieldInput" id="uvl_caption" placeholder="Caption for this video"></label>
-              <label class="field fieldSpan2"><span class="fieldLabel">Hashtags</span><input class="fieldInput" id="uvl_hashtags" placeholder="tag1, tag2, #tag3"></label>
-              <label class="field fieldSpan2"><span class="fieldLabel">Note</span><input class="fieldInput" id="uvl_note" placeholder="Internal note"></label>
-              <label class="field fieldSpan2"><span class="fieldLabel">Cover Path</span><input class="fieldInput" id="uvl_cover_path" placeholder="Optional cover image path"></label>
-              <div class="uvlFormActions">
-                <button class="primaryButton" type="submit" id="uvl_save_btn">Add Video</button>
-                <button class="ghostButton" type="button" onclick="resetUploadVideoForm()">Clear</button>
-              </div>
-            </form>
-            <div class="uvlTableWrap">
-              <table class="uvlTable">
-                <thead>
-                  <tr>
-                    <th>File</th>
-                    <th>Status</th>
-                    <th>Platform</th>
-                    <th>Caption</th>
-                    <th>Hashtags</th>
-                    <th>Details</th>
-                    <th>Source</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="upload_videos_tbody">
-                  <tr><td colspan="8" class="uvlEmpty">No upload videos yet. Add a file to start building your library.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="uploadQueueManager" id="upload_queue_manager">
-            <div class="uqmHeader">
-              <div>
-                <div class="uqmTitle">Upload Queue</div>
-                <div class="sectionSubtitle">Create queue items from Video Library and Account Manager. Execution is disabled until the next phase.</div>
-              </div>
-              <div class="uqmHeaderActions">
-                <select class="fieldInput" id="uqm_filter_status" onchange="loadUploadQueueManager()" title="Queue status filter">
-                  <option value="">All Queue</option>
-                  <option value="pending">Pending</option>
-                  <option value="scheduled">Scheduled</option>
-                  <option value="held">Held</option>
-                  <option value="failed">Failed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-                <button class="ghostButton" type="button" onclick="loadUploadQueueManager()">Refresh Queue</button>
-              </div>
-            </div>
-            <form class="uqmForm" id="upload_queue_form" onsubmit="saveUploadQueueItem(event)">
-              <input type="hidden" id="uqm_queue_id">
-              <label class="field fieldSpan2"><span class="fieldLabel">Video</span><select class="fieldInput" id="uqm_video_id"><option value="">Select video</option></select></label>
-              <label class="field fieldSpan2"><span class="fieldLabel">Account</span><select class="fieldInput" id="uqm_account_id"><option value="">Select account</option></select></label>
-              <label class="field fieldSpan2"><span class="fieldLabel">Caption Override</span><input class="fieldInput" id="uqm_caption" placeholder="Leave empty to inherit video caption"></label>
-              <label class="field fieldSpan2"><span class="fieldLabel">Hashtags Override</span><input class="fieldInput" id="uqm_hashtags" placeholder="Leave empty to inherit video hashtags"></label>
-              <label class="field"><span class="fieldLabel">Schedule Time</span><input class="fieldInput" id="uqm_scheduled_at" placeholder="Optional ISO/local text"></label>
-              <label class="field"><span class="fieldLabel">Priority</span><input class="fieldInput" id="uqm_priority" type="number" value="0"></label>
-              <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uqm_status"><option value="pending">Pending</option><option value="scheduled">Scheduled</option><option value="held">Held</option></select></label>
-              <div class="uqmFormActions">
-                <button class="primaryButton" type="submit" id="uqm_save_btn">Add to Queue</button>
-                <button class="ghostButton" type="button" onclick="resetUploadQueueForm()">Clear</button>
-                <button class="ghostButton" type="button" disabled title="Run in next phase">Run in next phase</button>
-              </div>
-            </form>
-            <div class="uqmTableWrap">
-              <table class="uqmTable">
-                <thead>
-                  <tr>
-                    <th>Clip</th>
-                    <th>Account</th>
-                    <th>Status</th>
-                    <th>Platform</th>
-                    <th>Scheduled</th>
-                    <th>Priority</th>
-                    <th>Attempts</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="upload_queue_manager_tbody">
-                  <tr><td colspan="8" class="uqmEmpty">No queue items yet. Select a video and account to create one.</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="uqmHistoryPanel" id="upload_queue_history_panel">
-              <div class="uqmHistoryHeader">
-                <div>
-                  <div class="uqmHistoryTitle">Attempt History</div>
-                  <div class="sectionSubtitle" id="uqm_history_hint">Select a queue item to view attempts.</div>
+          <div class="uploadWorkflowHint" id="upload_workflow_hint">Start by creating an upload account.</div>
+          <div class="uploadManagerWorkspace" id="upload_manager_workspace">
+            <div class="uploadManagerColumn uploadManagerColumnLeft">
+              <div class="uploadAccountManager" id="upload_account_manager">
+                <div class="uamHeader">
+                  <div>
+                    <div class="uamTitle">Accounts</div>
+                    <div class="sectionSubtitle">Isolated upload identities, login state, and profile safety.</div>
+                  </div>
+                  <div class="uvlHeaderActions">
+                    <button class="primaryButton uploadPrimaryAction" type="button" onclick="openUploadEditor('account')">Add Account</button>
+                    <button class="ghostButton" type="button" onclick="loadUploadAccounts()">Refresh</button>
+                  </div>
                 </div>
-                <button class="ghostButton" type="button" onclick="loadSelectedUploadQueueHistory()">Refresh History</button>
+                <details class="uploadEditorSection" id="uam_editor">
+                  <summary>Account Form</summary>
+                  <form class="uamForm" id="upload_account_form" onsubmit="saveUploadAccount(event)">
+                    <input type="hidden" id="uam_account_id">
+                    <label class="field"><span class="fieldLabel">Platform</span><input class="fieldInput" id="uam_platform" value="tiktok"></label>
+                    <label class="field"><span class="fieldLabel">Account Key</span><input class="fieldInput" id="uam_account_key" value="default"></label>
+                    <label class="field"><span class="fieldLabel">Display Name</span><input class="fieldInput" id="uam_display_name" placeholder="Main TikTok account"></label>
+                    <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uam_status"><option value="active">Active</option><option value="warming">Warming</option><option value="limited">Limited</option><option value="banned">Banned</option><option value="disabled">Disabled</option><option value="login_required">Login Required</option></select></label>
+                    <details class="uploadAdvancedFields fieldSpan2">
+                      <summary>Advanced</summary>
+                      <div class="uploadAdvancedGrid">
+                        <label class="field"><span class="fieldLabel">Channel Code</span><input class="fieldInput" id="uam_channel_code" placeholder="T1"></label>
+                        <label class="field"><span class="fieldLabel">Login State</span><select class="fieldInput" id="uam_login_state"><option value="unknown">Unknown</option><option value="logged_in">Logged In</option><option value="logged_out">Logged Out</option><option value="challenge">Challenge</option><option value="expired">Expired</option></select></label>
+                        <label class="field"><span class="fieldLabel">Daily Limit</span><input class="fieldInput" id="uam_daily_limit" type="number" min="0" value="0"></label>
+                        <label class="field"><span class="fieldLabel">Cooldown Minutes</span><input class="fieldInput" id="uam_cooldown_minutes" type="number" min="0" value="0"></label>
+                        <label class="field"><span class="fieldLabel">Today Count</span><input class="fieldInput" id="uam_today_count" type="number" min="0" value="0"></label>
+                        <label class="field"><span class="fieldLabel">Proxy ID</span><input class="fieldInput" id="uam_proxy_id" placeholder="proxy-01"></label>
+                        <label class="field fieldSpan2"><span class="fieldLabel">Profile Path</span><input class="fieldInput" id="uam_profile_path" placeholder="D:\channels\T1\account\profiles\default\browser-profile"></label>
+                      </div>
+                    </details>
+                    <div class="uamFormActions">
+                      <button class="primaryButton" type="submit" id="uam_save_btn">Create Account</button>
+                      <button class="ghostButton" type="button" onclick="resetUploadAccountForm()">Clear</button>
+                    </div>
+                  </form>
+                </details>
+                <div class="uamTableWrap">
+                  <table class="uamTable">
+                    <thead>
+                      <tr>
+                        <th>Account</th>
+                        <th>Status</th>
+                        <th>Login</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="upload_accounts_tbody">
+                      <tr><td colspan="4" class="uamEmpty">No accounts loaded.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div class="uqmHistoryList" id="upload_queue_history_list">
-                <div class="uqmEmpty">No queue item selected.</div>
+            </div>
+
+            <div class="uploadManagerColumn uploadManagerColumnCenter">
+              <div class="uploadManagerTabs" role="tablist" aria-label="Upload manager lists">
+                <button class="uploadManagerTab active" type="button" id="upload_tab_videos" onclick="setUploadManagerTab('videos')">Video Library</button>
+                <button class="uploadManagerTab" type="button" id="upload_tab_queue" onclick="setUploadManagerTab('queue')">Upload Queue</button>
+              </div>
+              <div class="uploadVideoLibrary uploadManagerTabPanel active" id="upload_video_library" data-tab-panel="videos">
+                <div class="uvlHeader">
+                  <div>
+                    <div class="uvlTitle">Video Library</div>
+                    <div class="sectionSubtitle">Manual upload-ready files only. Nothing is imported from render outputs.</div>
+                  </div>
+                  <div class="uvlHeaderActions">
+                    <select class="fieldInput" id="uvl_filter_status" onchange="loadUploadVideoLibrary()" title="Status filter">
+                      <option value="">All Status</option>
+                      <option value="ready">Ready</option>
+                      <option value="queued">Queued</option>
+                      <option value="uploaded">Uploaded</option>
+                      <option value="failed">Failed</option>
+                      <option value="disabled">Disabled</option>
+                    </select>
+                    <button class="primaryButton uploadPrimaryAction" type="button" onclick="openUploadEditor('video')">Add Video</button>
+                    <button class="ghostButton" type="button" onclick="loadUploadVideoLibrary()">Refresh</button>
+                  </div>
+                </div>
+                <details class="uploadEditorSection" id="uvl_editor">
+                  <summary>Video Form</summary>
+                  <form class="uvlForm" id="upload_video_form" onsubmit="saveUploadVideo(event)">
+                    <input type="hidden" id="uvl_video_id">
+                    <label class="field fieldSpan2"><span class="fieldLabel">Add Video File Path</span><input class="fieldInput" id="uvl_video_path" placeholder="D:\videos\upload-ready\clip.mp4"></label>
+                    <label class="field"><span class="fieldLabel">Platform</span><input class="fieldInput" id="uvl_platform" value="tiktok"></label>
+                    <label class="field fieldSpan2"><span class="fieldLabel">Caption</span><input class="fieldInput" id="uvl_caption" placeholder="Caption for this video"></label>
+                    <label class="field fieldSpan2"><span class="fieldLabel">Hashtags</span><input class="fieldInput" id="uvl_hashtags" placeholder="tag1, tag2, #tag3"></label>
+                    <details class="uploadAdvancedFields fieldSpan2">
+                      <summary>Advanced</summary>
+                      <div class="uploadAdvancedGrid">
+                        <label class="field"><span class="fieldLabel">Source Type</span><select class="fieldInput" id="uvl_source_type"><option value="manual_file">Manual File</option><option value="import_folder">Import Folder</option><option value="render_export_later">Render Export Later</option></select></label>
+                        <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uvl_status"><option value="ready">Ready</option><option value="queued">Queued</option><option value="uploaded">Uploaded</option><option value="failed">Failed</option><option value="disabled">Disabled</option></select></label>
+                        <label class="field fieldSpan2"><span class="fieldLabel">Import Folder</span><input class="fieldInput" id="uvl_import_folder" placeholder="Folder import will be added later" disabled></label>
+                        <label class="field fieldSpan2"><span class="fieldLabel">Note</span><input class="fieldInput" id="uvl_note" placeholder="Internal note"></label>
+                        <label class="field fieldSpan2"><span class="fieldLabel">Cover Path</span><input class="fieldInput" id="uvl_cover_path" placeholder="Optional cover image path"></label>
+                      </div>
+                    </details>
+                    <div class="uvlFormActions">
+                      <button class="primaryButton" type="submit" id="uvl_save_btn">Add Video</button>
+                      <button class="ghostButton" type="button" onclick="resetUploadVideoForm()">Clear</button>
+                    </div>
+                  </form>
+                </details>
+                <div class="uvlTableWrap">
+                  <table class="uvlTable">
+                    <thead>
+                      <tr>
+                        <th>File</th>
+                        <th>Status</th>
+                        <th>Caption</th>
+                        <th>Tags</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="upload_videos_tbody">
+                      <tr><td colspan="5" class="uvlEmpty">No upload videos yet. Add a file to start building your library.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="uploadQueueManager uploadManagerTabPanel" id="upload_queue_manager" data-tab-panel="queue">
+                <div class="uqmHeader">
+                  <div>
+                    <div class="uqmTitle">Upload Queue</div>
+                    <div class="sectionSubtitle">Build runs from Video Library and Account Manager. Manual worker stays explicit.</div>
+                  </div>
+                  <div class="uqmHeaderActions">
+                    <select class="fieldInput" id="uqm_filter_status" onchange="loadUploadQueueManager()" title="Queue status filter">
+                      <option value="">All Queue</option>
+                      <option value="pending">Pending</option>
+                      <option value="scheduled">Scheduled</option>
+                      <option value="uploading">Uploading</option>
+                      <option value="success">Success</option>
+                      <option value="failed">Failed</option>
+                      <option value="held">Held</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                    <button class="primaryButton uploadPrimaryAction" type="button" onclick="openUploadEditor('queue')">Add to Queue</button>
+                    <button class="ghostButton" type="button" onclick="loadUploadQueueManager()">Refresh Queue</button>
+                  </div>
+                </div>
+                <details class="uploadEditorSection" id="uqm_editor">
+                  <summary>Queue Form</summary>
+                  <form class="uqmForm" id="upload_queue_form" onsubmit="saveUploadQueueItem(event)">
+                    <input type="hidden" id="uqm_queue_id">
+                    <label class="field fieldSpan2"><span class="fieldLabel">Video</span><select class="fieldInput" id="uqm_video_id"><option value="">Select video</option></select></label>
+                    <label class="field fieldSpan2"><span class="fieldLabel">Account</span><select class="fieldInput" id="uqm_account_id"><option value="">Select account</option></select></label>
+                    <div class="uploadInlineHint" id="uqm_form_hint">Select account + video first.</div>
+                    <details class="uploadAdvancedFields fieldSpan2">
+                      <summary>Advanced</summary>
+                      <div class="uploadAdvancedGrid">
+                        <label class="field fieldSpan2"><span class="fieldLabel">Caption Override</span><input class="fieldInput" id="uqm_caption" placeholder="Leave empty to inherit video caption"></label>
+                        <label class="field fieldSpan2"><span class="fieldLabel">Hashtags Override</span><input class="fieldInput" id="uqm_hashtags" placeholder="Leave empty to inherit video hashtags"></label>
+                        <label class="field"><span class="fieldLabel">Schedule Time</span><input class="fieldInput" id="uqm_scheduled_at" placeholder="Optional ISO/local text"></label>
+                        <label class="field"><span class="fieldLabel">Priority</span><input class="fieldInput" id="uqm_priority" type="number" value="0"></label>
+                        <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uqm_status"><option value="pending">Pending</option><option value="scheduled">Scheduled</option><option value="held">Held</option></select></label>
+                      </div>
+                    </details>
+                    <div class="uqmFormActions">
+                      <button class="primaryButton" type="submit" id="uqm_save_btn">Add to Queue</button>
+                      <button class="ghostButton" type="button" onclick="resetUploadQueueForm()">Clear</button>
+                      <button class="ghostButton" type="button" disabled title="Run in next phase">Run in next phase</button>
+                    </div>
+                  </form>
+                </details>
+                <div class="uqmTableWrap">
+                  <table class="uqmTable">
+                    <thead>
+                      <tr>
+                        <th>Clip</th>
+                        <th>Account</th>
+                        <th>Status</th>
+                        <th>Attempts</th>
+                        <th>Scheduled</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="upload_queue_manager_tbody">
+                      <tr><td colspan="6" class="uqmEmpty">No queue items yet. Select a video and account to create one.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="uploadManagerColumn uploadManagerColumnRight">
+              <div class="uploadInspectorPanel">
+                <div class="uqmHistoryHeader">
+                  <div>
+                    <div class="uqmHistoryTitle" id="upload_detail_title">Selection Details</div>
+                    <div class="sectionSubtitle" id="upload_detail_hint">Select an account, video, or queue item to inspect details.</div>
+                    <div class="uploadDetailBreadcrumb" id="upload_detail_breadcrumb">Nothing selected</div>
+                  </div>
+                </div>
+                <div class="uploadInspectorBody" id="upload_detail_body">
+                  <div class="uploadInspectorPlaceholder">Select an account, video, or queue item to inspect details.</div>
+                </div>
+              </div>
+
+              <div class="uqmHistoryPanel" id="upload_queue_history_panel">
+                <div class="uqmHistoryHeader">
+                  <div>
+                    <div class="uqmHistoryTitle">Attempt History</div>
+                    <div class="sectionSubtitle" id="uqm_history_hint">Select a queue item to view attempts.</div>
+                  </div>
+                  <button class="ghostButton" type="button" onclick="loadSelectedUploadQueueHistory()">Refresh History</button>
+                </div>
+                <div class="uqmHistoryList" id="upload_queue_history_list">
+                  <div class="uqmEmpty">No queue item selected.</div>
+                </div>
+              </div>
+
+              <div class="actionCenter uploadSidebarPanel" id="upload_status_panel" style="margin-top:12px">
+                <div class="actionTop">
+                  <div>
+                    <div class="actionTitle" id="upload_action_title">Upload run idle</div>
+                    <div class="actionHint">Track login/upload pipeline in realtime.</div>
+                  </div>
+                  <div class="actionState" id="upload_action_state">idle</div>
+                </div>
+                <div class="actionMessage" id="upload_action_message">No active upload run.</div>
+                <div class="actionMeta" id="upload_action_meta">Run ID -</div>
+                <div class="progressBar"><div class="progressValue" id="upload_progress_bar"></div></div>
+                <div class="uploadActionSteps" id="upload_action_steps"></div>
+                <div class="partList" id="upload_items_box" style="max-height:180px"><div class="emptyState">No upload items yet.</div></div>
+              </div>
+
+              <div class="actionRowBlock uploadSidebarPanel" id="upload_log_row" style="margin-top:12px">
+                <div class="actionRowTitle">Upload Live Log</div>
+                <div class="logBox" id="event_log_upload"></div>
               </div>
             </div>
           </div>
+          <details class="uploadLegacySection" id="upload_legacy_section">
+            <summary>Legacy Upload Wizard</summary>
           <!-- Step wizard indicator — 4 sequential steps replace flat 5-cluster layout -->
           <div id="upload_step_bar" class="uploadStepBar">
             <div class="uploadStepItem stepActive" id="upload_step_1" onclick="setUploadWizardStep(1)" title="Step 1: Select Channel">1 · Channel</div>
@@ -770,21 +860,6 @@
               <button class="primaryButton" id="run_upload_btn" onclick="scheduleUpload()">Run Upload Plan</button>
             </div>
           </div>
-          <!-- Status panel (Step 4) -->
-          <div class="actionCenter" id="upload_status_panel" style="margin-top:12px">
-            <div class="actionTop">
-              <div>
-                <div class="actionTitle" id="upload_action_title">Upload run idle</div>
-                <div class="actionHint">Track login/upload pipeline in realtime.</div>
-              </div>
-              <div class="actionState" id="upload_action_state">idle</div>
-            </div>
-            <div class="actionMessage" id="upload_action_message">No active upload run.</div>
-            <div class="actionMeta" id="upload_action_meta">Run ID -</div>
-            <div class="progressBar"><div class="progressValue" id="upload_progress_bar"></div></div>
-            <div class="uploadActionSteps" id="upload_action_steps"></div>
-            <div class="partList" id="upload_items_box" style="max-height:180px"><div class="emptyState">No upload items yet.</div></div>
-          </div>
           <div class="actionRowBlock" id="upload_queue_panel" style="margin-top:12px">
             <div class="actionRowTitle">Upload Queue</div>
             <div class="actionsRow" style="margin-top:0">
@@ -792,11 +867,7 @@
             </div>
             <div class="partList" id="upload_queue_items_box" style="max-height:180px"><div class="emptyState">No queued clips yet.</div></div>
           </div>
-          <!-- Live log (Step 4) -->
-          <div class="actionRowBlock" id="upload_log_row" style="margin-top:12px">
-            <div class="actionRowTitle">Upload Live Log</div>
-            <div class="logBox" id="event_log_upload"></div>
-          </div>
+          </details>
         </section>
         <!-- /SECTION: upload-card -->
 
