@@ -320,6 +320,7 @@ class UploadQueueAddRequest(BaseModel):
 
 UPLOAD_ACCOUNT_STATUSES = {"active", "warming", "limited", "banned", "disabled", "login_required"}
 UPLOAD_LOGIN_STATES = {"unknown", "logged_in", "logged_out", "challenge", "expired"}
+UPLOAD_PROFILE_LOCK_STATES = {"idle", "locked", "stale_recovered", "conflict"}
 UPLOAD_VIDEO_SOURCE_TYPES = {"manual_file", "import_folder", "render_export_later"}
 UPLOAD_VIDEO_STATUSES = {"ready", "queued", "uploaded", "failed", "disabled"}
 UPLOAD_QUEUE_STATUSES = {"pending", "scheduled", "uploading", "success", "failed", "held", "cancelled"}
@@ -334,12 +335,14 @@ class UploadAccountBase(BaseModel):
     status: Optional[str] = "active"
     profile_path: Optional[str] = ""
     proxy_id: Optional[str] = ""
+    proxy_config: Optional[dict] = Field(default_factory=dict)
     daily_limit: Optional[int] = 0
     cooldown_minutes: Optional[int] = 0
     today_count: Optional[int] = 0
     last_upload_at: Optional[str] = None
     last_login_check_at: Optional[str] = None
     login_state: Optional[str] = "unknown"
+    profile_lock_state: Optional[str] = "idle"
     health_json: Optional[dict] = Field(default_factory=dict)
     metadata_json: Optional[dict] = Field(default_factory=dict)
 
@@ -357,6 +360,14 @@ class UploadAccountBase(BaseModel):
         value = (v or "unknown").strip().lower()
         if value not in UPLOAD_LOGIN_STATES:
             raise ValueError(f"login_state must be one of {sorted(UPLOAD_LOGIN_STATES)!r}")
+        return value
+
+    @field_validator("profile_lock_state")
+    @classmethod
+    def _validate_profile_lock_state(cls, v: Optional[str]) -> str:
+        value = (v or "idle").strip().lower()
+        if value not in UPLOAD_PROFILE_LOCK_STATES:
+            raise ValueError(f"profile_lock_state must be one of {sorted(UPLOAD_PROFILE_LOCK_STATES)!r}")
         return value
 
     @field_validator("daily_limit", "cooldown_minutes", "today_count")
@@ -378,12 +389,14 @@ class UploadAccountUpdate(BaseModel):
     status: Optional[str] = None
     profile_path: Optional[str] = None
     proxy_id: Optional[str] = None
+    proxy_config: Optional[dict] = None
     daily_limit: Optional[int] = None
     cooldown_minutes: Optional[int] = None
     today_count: Optional[int] = None
     last_upload_at: Optional[str] = None
     last_login_check_at: Optional[str] = None
     login_state: Optional[str] = None
+    profile_lock_state: Optional[str] = None
     health_json: Optional[dict] = None
     metadata_json: Optional[dict] = None
 
@@ -405,6 +418,16 @@ class UploadAccountUpdate(BaseModel):
         value = v.strip().lower()
         if value not in UPLOAD_LOGIN_STATES:
             raise ValueError(f"login_state must be one of {sorted(UPLOAD_LOGIN_STATES)!r}")
+        return value
+
+    @field_validator("profile_lock_state")
+    @classmethod
+    def _validate_profile_lock_state(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        value = v.strip().lower()
+        if value not in UPLOAD_PROFILE_LOCK_STATES:
+            raise ValueError(f"profile_lock_state must be one of {sorted(UPLOAD_PROFILE_LOCK_STATES)!r}")
         return value
 
     @field_validator("daily_limit", "cooldown_minutes", "today_count")

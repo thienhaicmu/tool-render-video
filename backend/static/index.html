@@ -490,6 +490,7 @@
                     <th>Account</th>
                     <th>Status</th>
                     <th>Login</th>
+                    <th>Profile Lock</th>
                     <th>Usage</th>
                     <th>Cooldown</th>
                     <th>Profile</th>
@@ -498,7 +499,7 @@
                   </tr>
                 </thead>
                 <tbody id="upload_accounts_tbody">
-                  <tr><td colspan="8" class="uamEmpty">No accounts loaded.</td></tr>
+                  <tr><td colspan="9" class="uamEmpty">No accounts loaded.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -609,6 +610,18 @@
                   <tr><td colspan="8" class="uqmEmpty">No queue items yet. Select a video and account to create one.</td></tr>
                 </tbody>
               </table>
+            </div>
+            <div class="uqmHistoryPanel" id="upload_queue_history_panel">
+              <div class="uqmHistoryHeader">
+                <div>
+                  <div class="uqmHistoryTitle">Attempt History</div>
+                  <div class="sectionSubtitle" id="uqm_history_hint">Select a queue item to view attempts.</div>
+                </div>
+                <button class="ghostButton" type="button" onclick="loadSelectedUploadQueueHistory()">Refresh History</button>
+              </div>
+              <div class="uqmHistoryList" id="upload_queue_history_list">
+                <div class="uqmEmpty">No queue item selected.</div>
+              </div>
             </div>
           </div>
           <!-- Step wizard indicator — 4 sequential steps replace flat 5-cluster layout -->

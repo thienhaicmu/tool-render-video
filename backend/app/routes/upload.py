@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
 from app.models.schemas import (
@@ -14,18 +15,30 @@ from app.models.schemas import (
     UploadRequest,
 )
 from app.services.db import (
+    UPLOAD_PROFILE_LOCK_TTL_MINUTES,
     add_upload_queue_item,
+    acquire_upload_runtime_lock,
+    build_default_upload_profile_path,
     cancel_upload_queue_item,
     create_upload_account_row,
     create_upload_video_row,
     disable_upload_video_row,
     disable_upload_account_row,
+    find_upload_account_profile_conflict,
     get_upload_account_row,
     get_upload_queue_item,
     get_upload_video_row,
+    normalize_profile_path_value,
+    release_upload_runtime_locks_for_queue,
+    set_upload_queue_last_error,
+    insert_upload_history,
     list_upload_account_rows,
+    list_upload_history,
     list_upload_queue,
     list_upload_video_rows,
+    mark_upload_queue_failed,
+    mark_upload_queue_success,
+    mark_upload_queue_uploading,
     update_upload_account_row,
     update_upload_queue_item,
     update_upload_video_row,
@@ -44,6 +57,7 @@ from app.services.upload_engine import (
     get_upload_run,
     load_upload_settings,
     save_upload_settings,
+    upload_one_video,
 )
 from app.services.channel_service import ensure_channel
 
@@ -127,6 +141,81 @@ def _probe_upload_video_path(video_path: str) -> tuple[str, int]:
     return file_name, file_size
 
 
+def _utc_now_iso() -> str:
+    return datetime.utcnow().isoformat() + "Z"
+
+
+def _caption_with_hashtags(caption: str, hashtags: list[str] | None) -> str:
+    base = str(caption or "").strip()
+    tags = []
+    for tag in hashtags or []:
+        text = str(tag or "").strip()
+        if not text:
+            continue
+        tags.append(text if text.startswith("#") else f"#{text}")
+    if tags:
+        merged = f"{base} {' '.join(tags)}".strip()
+        return merged[:2200]
+    return base[:2200]
+
+
+def _build_queue_upload_cfg(account: dict, queue_item: dict) -> tuple[str, str, dict]:
+    channel_code = str(account.get("channel_code") or queue_item.get("channel_code") or "").strip()
+    account_key = str(account.get("account_key") or "default").strip() or "default"
+    if not channel_code:
+        raise RuntimeError("Upload account is missing channel_code; cannot resolve upload profile.")
+    overrides = {}
+    profile_path = str(account.get("profile_path") or "").strip()
+    if profile_path:
+        overrides["user_data_dir"] = profile_path
+    proxy_id = str(account.get("proxy_id") or "").strip()
+    if proxy_id:
+        overrides["proxy_id"] = proxy_id
+    proxy_config = account.get("proxy_config") or {}
+    if isinstance(proxy_config, dict):
+        for key in ("network_mode", "proxy_server", "proxy_username", "proxy_password", "proxy_bypass"):
+            value = str(proxy_config.get(key) or "").strip()
+            if value:
+                overrides[key] = value
+    cfg = load_channel_config(channel_code, account_key=account_key, overrides=overrides)
+    return channel_code, account_key, cfg
+
+
+def _account_profile_path(account: dict) -> str:
+    explicit = str(account.get("profile_path") or "").strip()
+    if explicit:
+        return normalize_profile_path_value(explicit)
+    return normalize_profile_path_value(
+        build_default_upload_profile_path(
+            str(account.get("platform") or "tiktok"),
+            str(account.get("account_key") or "default"),
+        )
+    )
+
+
+def _validate_account_profile_isolation(account_payload: dict, exclude_account_id: str = "") -> dict:
+    profile_path = _account_profile_path(account_payload)
+    account_payload["profile_path"] = profile_path
+    conflict = find_upload_account_profile_conflict(
+        normalized_profile_path=profile_path,
+        exclude_account_id=exclude_account_id,
+    )
+    status = str(account_payload.get("status") or "active").strip().lower()
+    if conflict and status in {"active", "warming"}:
+        logger.warning(
+            "profile_conflict account_id=%s profile_path=%s conflict_account_id=%s",
+            exclude_account_id or "",
+            profile_path,
+            conflict.get("account_id") or "",
+        )
+        conflict_name = conflict.get("display_name") or conflict.get("account_key") or conflict.get("account_id") or "unknown"
+        raise HTTPException(
+            status_code=409,
+            detail=f"profile_path already used by active account {conflict_name}",
+        )
+    return account_payload
+
+
 @router.get("/accounts")
 def list_upload_account_manager_accounts(include_disabled: bool = True):
     items = list_upload_account_rows(include_disabled=include_disabled)
@@ -135,7 +224,7 @@ def list_upload_account_manager_accounts(include_disabled: bool = True):
 
 @router.post("/accounts")
 def create_upload_account_manager_account(payload: UploadAccountCreate):
-    data = payload.model_dump()
+    data = _validate_account_profile_isolation(payload.model_dump())
     account = create_upload_account_row(data)
     logger.info(
         "upload_account_create account_id=%s platform=%s channel_code=%s account_key=%s",
@@ -152,7 +241,7 @@ def update_upload_account_manager_account(account_id: str, payload: UploadAccoun
     current = get_upload_account_row(account_id)
     if not current:
         raise HTTPException(status_code=404, detail="Upload account not found")
-    changes = payload.model_dump(exclude_unset=True)
+    changes = _validate_account_profile_isolation({**current, **payload.model_dump(exclude_unset=True)}, exclude_account_id=account_id)
     account = update_upload_account_row(account_id, changes)
     return {"status": "ok", "item": account}
 
@@ -165,6 +254,76 @@ def disable_upload_account_manager_account(account_id: str):
     account = disable_upload_account_row(account_id)
     logger.info("upload_account_disable account_id=%s", account_id)
     return {"status": "ok", "item": account}
+
+
+@router.post("/accounts/{account_id}/login-check")
+def check_upload_account_login_state(account_id: str):
+    account = get_upload_account_row(account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Upload account not found")
+    channel_code = str(account.get("channel_code") or "").strip()
+    account_key = str(account.get("account_key") or "default").strip() or "default"
+    profile_path = _account_profile_path(account)
+    if not channel_code:
+        response = {
+            "status": "not_implemented",
+            "account_id": account_id,
+            "message": "not implemented for this adapter: account is missing channel_code",
+        }
+        update_upload_account_row(
+            account_id,
+            {
+                "login_state": "unknown",
+                "last_login_check_at": _utc_now_iso(),
+                "health_json": response,
+            },
+        )
+        return response
+    try:
+        result = check_login_with_persistent_profile(
+            channel_code,
+            account_key=account_key,
+            overrides={"user_data_dir": profile_path},
+        )
+    except Exception as exc:
+        error_result = {
+            "status": "error",
+            "account_id": account_id,
+            "message": str(exc),
+        }
+        updated = update_upload_account_row(
+            account_id,
+            {
+                "profile_path": profile_path,
+                "login_state": "unknown",
+                "last_login_check_at": _utc_now_iso(),
+                "health_json": error_result,
+            },
+        )
+        logger.warning(
+            "login_check_result account_id=%s profile_path=%s login_state=unknown error=%s",
+            account_id,
+            profile_path,
+            str(exc),
+        )
+        raise HTTPException(status_code=400, detail=str(exc))
+    login_state = "logged_in" if result.get("logged_in") else "logged_out"
+    updated = update_upload_account_row(
+        account_id,
+        {
+            "profile_path": profile_path,
+            "login_state": login_state,
+            "last_login_check_at": _utc_now_iso(),
+            "health_json": result,
+        },
+    )
+    logger.info(
+        "login_check_result account_id=%s profile_path=%s login_state=%s",
+        account_id,
+        profile_path,
+        login_state,
+    )
+    return {"status": "ok", "item": updated, "result": result}
 
 
 @router.post("/videos/add")
@@ -298,12 +457,27 @@ def get_upload_queue(status: str = "", account_id: str = "", platform: str = "",
     return {"status": "ok", "count": len(items), "items": items}
 
 
+@router.get("/history")
+def get_upload_history(queue_id: str = "", limit: int = 50):
+    items = list_upload_history(queue_id=str(queue_id or "").strip() or None, limit=limit)
+    return {"status": "ok", "count": len(items), "items": items}
+
+
 @router.get("/queue/{queue_id}")
 def get_upload_queue_detail(queue_id: str):
     row = get_upload_queue_item(queue_id)
     if not row:
         raise HTTPException(status_code=404, detail="Upload queue item not found")
     return {"status": "ok", "item": row}
+
+
+@router.get("/queue/{queue_id}/history")
+def get_upload_queue_history(queue_id: str, limit: int = 50):
+    row = get_upload_queue_item(queue_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Upload queue item not found")
+    items = list_upload_history(queue_id=queue_id, limit=limit)
+    return {"status": "ok", "queue_id": queue_id, "count": len(items), "items": items}
 
 
 @router.patch("/queue/{queue_id}")
@@ -357,7 +531,202 @@ def run_upload_queue_item(queue_id: str):
     row = get_upload_queue_item(queue_id)
     if not row:
         raise HTTPException(status_code=404, detail="Upload queue item not found")
-    raise HTTPException(status_code=409, detail="Upload execution is disabled in this phase")
+
+    current_status = str(row.get("status") or "").lower()
+    if current_status == "uploading":
+        raise HTTPException(status_code=409, detail="Upload queue item is already uploading")
+    if current_status not in {"pending", "failed", "held", "scheduled"}:
+        raise HTTPException(status_code=409, detail=f"Upload queue item cannot run from status '{current_status}'")
+
+    account_id = str(row.get("account_id") or "").strip()
+    if not account_id:
+        raise HTTPException(status_code=400, detail="Upload queue item is missing account_id")
+    account = get_upload_account_row(account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Upload account not found")
+    profile_path = _account_profile_path(account)
+    account_status = str(account.get("status") or "").lower()
+    if account_status in {"banned", "disabled", "limited"}:
+        raise HTTPException(status_code=400, detail=f"Upload account status '{account_status}' cannot run uploads")
+    login_state = str(account.get("login_state") or "unknown").lower()
+    if login_state in {"logged_out", "expired", "challenge"}:
+        raise HTTPException(status_code=400, detail=f"Upload account login_state '{login_state}' requires login check/login before upload")
+
+    video_id = str(row.get("video_id") or "").strip()
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Upload queue item is missing video_id")
+    video = get_upload_video_row(video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Upload video not found")
+    if str(video.get("status") or "").lower() == "disabled":
+        raise HTTPException(status_code=400, detail="Disabled video cannot be uploaded")
+
+    account_lock = acquire_upload_runtime_lock(
+        lock_type="account_id",
+        resource_key=account_id,
+        account_id=account_id,
+        queue_id=queue_id,
+        profile_path=profile_path,
+        metadata={"queue_id": queue_id, "video_id": video_id},
+    )
+    if not account_lock.get("acquired"):
+        reason = "account/profile already busy"
+        set_upload_queue_last_error(queue_id, reason)
+        raise HTTPException(status_code=409, detail=reason)
+    logger.info(
+        "lock_acquired account_id=%s profile_path=%s queue_id=%s lock_type=account_id stale=%s",
+        account_id,
+        profile_path,
+        queue_id,
+        account_lock.get("stale_recovered"),
+    )
+    profile_lock = acquire_upload_runtime_lock(
+        lock_type="profile_path",
+        resource_key=profile_path,
+        account_id=account_id,
+        queue_id=queue_id,
+        profile_path=profile_path,
+        metadata={"queue_id": queue_id, "video_id": video_id},
+    )
+    if not profile_lock.get("acquired"):
+        release_upload_runtime_locks_for_queue(queue_id)
+        reason = "account/profile already busy"
+        set_upload_queue_last_error(queue_id, reason)
+        raise HTTPException(status_code=409, detail=reason)
+    logger.info(
+        "lock_acquired account_id=%s profile_path=%s queue_id=%s lock_type=profile_path stale=%s",
+        account_id,
+        profile_path,
+        queue_id,
+        profile_lock.get("stale_recovered"),
+    )
+
+    locked_row, acquired = mark_upload_queue_uploading(queue_id)
+    if not locked_row:
+        release_upload_runtime_locks_for_queue(queue_id)
+        raise HTTPException(status_code=404, detail="Upload queue item not found")
+    if not acquired:
+        release_upload_runtime_locks_for_queue(queue_id)
+        locked_status = str(locked_row.get("status") or "").lower()
+        raise HTTPException(status_code=409, detail=f"Upload queue item is already {locked_status}")
+
+    attempt_no = int(locked_row.get("attempt_count") or 0)
+    video_path = Path(str(locked_row.get("video_path") or video.get("video_path") or "").strip())
+    platform = str(locked_row.get("platform") or account.get("platform") or video.get("platform") or "tiktok").strip().lower()
+    started_at = _utc_now_iso()
+    started_dt = datetime.utcnow()
+
+    logger.info(
+        "upload_queue_run_start queue_id=%s video_path=%s account_id=%s platform=%s attempt_no=%s",
+        queue_id,
+        str(video_path),
+        account_id,
+        platform,
+        attempt_no,
+    )
+
+    def _finish_failed(error: str, adapter_result: dict | None = None):
+        finished_dt = datetime.utcnow()
+        finished_at = finished_dt.isoformat() + "Z"
+        duration = max(0.0, (finished_dt - started_dt).total_seconds())
+        final = mark_upload_queue_failed(queue_id, error)
+        history = insert_upload_history(
+            queue_id=queue_id,
+            account_id=account_id,
+            video_id=video_id,
+            platform=platform,
+            video_path=str(video_path),
+            status="failed",
+            attempt_no=attempt_no,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=duration,
+            error=error,
+            adapter_result=adapter_result or {},
+            metadata={"phase": "manual_worker"},
+        )
+        logger.error(
+            "upload_queue_run_failed queue_id=%s video_path=%s account_id=%s platform=%s attempt_no=%s error=%s",
+            queue_id,
+            str(video_path),
+            account_id,
+            platform,
+            attempt_no,
+            error,
+        )
+        return {"status": "failed", "queue_id": queue_id, "item": final, "history": history, "error": error}
+
+    if not video_path.exists() or not video_path.is_file():
+        try:
+            return _finish_failed(f"Video file not found: {video_path}")
+        finally:
+            released = release_upload_runtime_locks_for_queue(queue_id)
+            for item in released:
+                logger.info(
+                    "lock_released account_id=%s profile_path=%s queue_id=%s lock_type=%s",
+                    item.get("account_id") or "",
+                    item.get("profile_path") or "",
+                    queue_id,
+                    item.get("lock_type") or "",
+                )
+
+    try:
+        _, _, cfg = _build_queue_upload_cfg(account, locked_row)
+        caption = _caption_with_hashtags(str(locked_row.get("caption") or ""), locked_row.get("hashtags") or [])
+        adapter_attempts, detail = upload_one_video(
+            cfg=cfg,
+            video_path=video_path,
+            scheduled_iso=datetime.now().astimezone().isoformat(),
+            caption=caption,
+            use_schedule=False,
+            retry_count=0,
+            headless=False,
+        )
+        result = {
+            "adapter": "upload_one_video",
+            "adapter_attempts": adapter_attempts,
+            "detail": detail,
+            "uploaded_at": _utc_now_iso(),
+        }
+        final = mark_upload_queue_success(queue_id, result)
+        finished_dt = datetime.utcnow()
+        finished_at = finished_dt.isoformat() + "Z"
+        history = insert_upload_history(
+            queue_id=queue_id,
+            account_id=account_id,
+            video_id=video_id,
+            platform=platform,
+            video_path=str(video_path),
+            status="success",
+            attempt_no=attempt_no,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=max(0.0, (finished_dt - started_dt).total_seconds()),
+            error="",
+            adapter_result=result,
+            metadata={"phase": "manual_worker"},
+        )
+        logger.info(
+            "upload_queue_run_success queue_id=%s video_path=%s account_id=%s platform=%s attempt_no=%s",
+            queue_id,
+            str(video_path),
+            account_id,
+            platform,
+            attempt_no,
+        )
+        return {"status": "success", "queue_id": queue_id, "item": final, "history": history}
+    except Exception as exc:
+        return _finish_failed(str(exc) or "Upload failed", {"adapter": "upload_one_video"})
+    finally:
+        released = release_upload_runtime_locks_for_queue(queue_id)
+        for item in released:
+            logger.info(
+                "lock_released account_id=%s profile_path=%s queue_id=%s lock_type=%s",
+                item.get("account_id") or "",
+                item.get("profile_path") or "",
+                queue_id,
+                item.get("lock_type") or "",
+            )
 
 
 @router.post("/queue/{queue_id}/cancel")

@@ -9549,6 +9549,13 @@ body.is-history-active #history_list {
   margin-top: 3px;
 }
 
+.uamWarn {
+  color: #fdba74;
+  font-size: 11px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
 .uamBadge {
   display: inline-flex;
   align-items: center;
@@ -9578,12 +9585,24 @@ body.is-history-active #history_list {
   color: #fcd34d;
 }
 
+.uamBadge[data-state="locked"],
+.uamBadge[data-state="stale_recovered"] {
+  background: rgba(59, 130, 246, .16);
+  color: #93c5fd;
+}
+
 .uamBadge[data-state="limited"],
 .uamBadge[data-state="login_required"],
 .uamBadge[data-state="expired"],
-.uamBadge[data-state="logged_out"] {
+.uamBadge[data-state="logged_out"],
+.uamBadge[data-state="conflict"] {
   background: rgba(249, 115, 22, .16);
   color: #fdba74;
+}
+
+.uamBadge[data-state="idle"] {
+  background: rgba(148, 163, 184, .14);
+  color: #cbd5e1;
 }
 
 .uamBadge[data-state="banned"],
@@ -9875,10 +9894,69 @@ body.is-history-active #history_list {
   cursor: not-allowed;
 }
 
+.uqmError,
+.uqmHistoryError {
+  color: #fca5a5;
+  font-size: 11px;
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+
 .uqmEmpty {
   color: var(--text-muted);
   text-align: center;
   padding: 18px !important;
+}
+
+.uqmHistoryPanel {
+  margin-top: 12px;
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .46);
+  padding: 12px;
+}
+
+.uqmHistoryHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.uqmHistoryTitle {
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.uqmHistoryList {
+  display: grid;
+  gap: 8px;
+}
+
+.uqmHistoryItem {
+  border: 1px solid rgba(148, 163, 184, .13);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: rgba(2, 6, 23, .24);
+}
+
+.uqmHistoryItem.success {
+  border-color: rgba(16, 185, 129, .28);
+}
+
+.uqmHistoryItem.failed {
+  border-color: rgba(239, 68, 68, .24);
+}
+
+.uqmHistoryTop {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 11px;
 }
 
 @media (max-width: 1200px) {
@@ -9901,7 +9979,8 @@ body.is-history-active #history_list {
   .uvlHeader,
   .uvlHeaderActions,
   .uqmHeader,
-  .uqmHeaderActions {
+  .uqmHeaderActions,
+  .uqmHistoryHeader {
     align-items: stretch;
     flex-direction: column;
     width: 100%;
