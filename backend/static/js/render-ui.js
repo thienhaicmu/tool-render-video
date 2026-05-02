@@ -2662,7 +2662,7 @@ async function addRenderClipToUploadQueue(item) {
   }
 }
 
-async function loadUploadQueue() {
+async function loadUploadQueueLegacy() {
   const box = qs('upload_queue_items_box');
   if (!box) return;
   box.innerHTML = '<div class="emptyState">Loading upload queue...</div>';
@@ -2688,6 +2688,89 @@ async function loadUploadQueue() {
     }).join('');
   } catch (e) {
     box.innerHTML = `<div class="emptyState">Upload queue unavailable: ${esc(e.message || e)}</div>`;
+  }
+}
+
+async function loadUploadQueue() {
+  const box = qs('upload_queue_items_box');
+  if (!box) return;
+  box.innerHTML = '<div class="emptyState">Loading upload queue...</div>';
+  try {
+    const res = await fetch('/api/upload/queue');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Load queue failed');
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+      box.innerHTML = '<div class="emptyState">No queued clips yet.</div>';
+      return;
+    }
+    box.innerHTML = items.map((item) => {
+      const queueId = String(item.queue_id || '');
+      const name = String(item.video_path || '').split(/[\\/]/).pop() || 'Clip';
+      const status = String(item.status || 'pending');
+      const account = String(item.account_id || '-');
+      const err = String(item.last_error || '').trim();
+      const canRun = status === 'pending' || status === 'failed';
+      const canCancel = status === 'pending';
+      const statusText = status === 'uploading'
+        ? 'Uploading...'
+        : status === 'success'
+          ? 'Success'
+          : status === 'failed'
+            ? 'Failed'
+            : status;
+      const runLabel = status === 'failed' ? 'Retry' : 'Run';
+      const actions = [
+        canRun ? `<button type="button" class="ghostButton" onclick="runUploadQueueItem(${JSON.stringify(queueId)})">${runLabel}</button>` : '',
+        canCancel ? `<button type="button" class="ghostButton" onclick="cancelUploadQueueItem(${JSON.stringify(queueId)})">Cancel</button>` : '',
+      ].filter(Boolean).join('');
+      return `<div class="partItem">
+        <div class="partInfo">
+          <div class="partTitle">${esc(name)}</div>
+          <div class="partMeta">Status: ${esc(statusText)} - Account: ${esc(account)}</div>
+          ${err && status === 'failed' ? `<div class="partMeta">Error: ${esc(err)}</div>` : ''}
+        </div>
+        ${actions ? `<div class="partActions">${actions}</div>` : ''}
+      </div>`;
+    }).join('');
+  } catch (e) {
+    box.innerHTML = `<div class="emptyState">Upload queue unavailable: ${esc(e.message || e)}</div>`;
+  }
+}
+
+async function runUploadQueueItem(queueId) {
+  const id = String(queueId || '').trim();
+  if (!id) return;
+  showToast('Starting queued upload', 'info');
+  setTimeout(() => loadUploadQueue(), 300);
+  try {
+    const res = await fetch(`/api/upload/queue/${encodeURIComponent(id)}/run`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || data.error || 'Run upload failed');
+    if (data.status === 'success') {
+      showToast('Upload queue item succeeded', 'success');
+    } else {
+      showToast(`Upload queue item failed: ${data.error || 'see queue error'}`, 'error');
+    }
+  } catch (e) {
+    showToast(`Run upload failed: ${e.message || e}`, 'error');
+  } finally {
+    loadUploadQueue();
+  }
+}
+
+async function cancelUploadQueueItem(queueId) {
+  const id = String(queueId || '').trim();
+  if (!id) return;
+  try {
+    const res = await fetch(`/api/upload/queue/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Cancel failed');
+    showToast('Upload queue item cancelled', 'success');
+  } catch (e) {
+    showToast(`Cancel failed: ${e.message || e}`, 'error');
+  } finally {
+    loadUploadQueue();
   }
 }
 

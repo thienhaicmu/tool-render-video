@@ -9294,3 +9294,175 @@ body.is-history-active #history_list {
       "logs";
   }
 }
+
+/* Bottom render queue layout repair: keep clips readable before logs expand. */
+.rs-bottom-panel .rcAQMain {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, clamp(360px, 28vw, 420px)) !important;
+  grid-template-areas: "active logs" !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.rs-bottom-panel.logsCollapsed .rcAQMain {
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-areas: "active" !important;
+}
+
+.rs-bottom-panel .rcQueuePanel {
+  grid-area: active !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+  min-height: 260px !important;
+  max-height: none !important;
+  overflow: hidden !important;
+}
+
+.rs-bottom-panel .rcQueuePanel > .rcPanelHeader {
+  flex: 0 0 auto !important;
+  position: static !important;
+  min-width: 0 !important;
+}
+
+.rs-bottom-panel .rcQueuePanel > .rcActiveCard,
+.rs-bottom-panel .rcQueuePanel > .rcOutputPreview,
+.rs-bottom-panel .rcQueuePanel > .rcBenchmarkPanel,
+.rs-bottom-panel .rcQueuePanel > .rcComparePanel {
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.rs-bottom-panel .rcQueuePanel > .rcQueueGrid {
+  flex: 1 1 auto !important;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)) !important;
+  align-content: start !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  min-height: 180px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: 10px !important;
+}
+
+.rs-bottom-panel .rcQueueGrid > .emptyState,
+.rs-bottom-panel .renderOutputList > .renderOutputEmpty {
+  grid-column: 1 / -1 !important;
+  position: static !important;
+  min-height: 120px !important;
+  width: 100% !important;
+  pointer-events: none !important;
+}
+
+.rs-bottom-panel .rcPartCard,
+.rs-bottom-panel .renderClipItem {
+  min-width: 0 !important;
+  width: 100% !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+.rs-bottom-panel .rcPartTop,
+.rs-bottom-panel .renderClipMeta,
+.rs-bottom-panel .renderClipRanking {
+  min-width: 0 !important;
+  flex-wrap: wrap !important;
+}
+
+.rs-bottom-panel .rcPartTitle,
+.rs-bottom-panel .rcPartStage,
+.rs-bottom-panel .rcPartMessage,
+.rs-bottom-panel .rcPartMeta,
+.rs-bottom-panel .renderClipName,
+.rs-bottom-panel .renderClipReason {
+  min-width: 0 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere !important;
+}
+
+.rs-bottom-panel .renderClipItem {
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: start !important;
+}
+
+.rs-bottom-panel .renderClipInfo,
+.rs-bottom-panel .renderClipActions {
+  min-width: 0 !important;
+}
+
+.rs-bottom-panel .renderClipActions {
+  flex-wrap: wrap !important;
+  justify-content: flex-end !important;
+  max-width: 100% !important;
+}
+
+.rs-bottom-panel .renderClipActions button,
+.rs-bottom-panel .renderClipActionLink {
+  white-space: nowrap !important;
+}
+
+.rs-bottom-panel .rcLogStrip.rcLogPanel {
+  grid-area: logs !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+  max-width: 420px !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+}
+
+.rs-bottom-panel .rcLogStripHeader {
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+}
+
+.rs-bottom-panel .rcLogList,
+.rs-bottom-panel #event_log_render {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+@media (max-width: 1400px) {
+  .rs-bottom-panel .rcAQMain {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 360px) !important;
+  }
+
+  .rs-bottom-panel .rcQueuePanel > .rcQueueGrid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  .rs-bottom-panel .rcAQMain {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-areas:
+      "active"
+      "logs" !important;
+    grid-template-rows: minmax(260px, 1fr) minmax(130px, 0.45fr) !important;
+  }
+
+  .rs-bottom-panel .rcLogStrip.rcLogPanel {
+    max-width: none !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .rs-bottom-panel .renderClipItem {
+    grid-template-columns: auto minmax(0, 1fr) !important;
+  }
+
+  .rs-bottom-panel .renderClipActions {
+    grid-column: 2 !important;
+    justify-content: flex-start !important;
+  }
+}

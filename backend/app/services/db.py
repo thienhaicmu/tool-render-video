@@ -159,6 +159,7 @@ def init_db():
             attempt_count INTEGER DEFAULT 0,
             max_attempts INTEGER DEFAULT 3,
             last_error TEXT,
+            result_json TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
@@ -226,6 +227,7 @@ def init_db():
             "attempt_count": "attempt_count INTEGER DEFAULT 0",
             "max_attempts": "max_attempts INTEGER DEFAULT 3",
             "last_error": "last_error TEXT",
+            "result_json": "result_json TEXT",
             "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
             "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
         },
@@ -374,13 +376,13 @@ def add_upload_queue_item(
 
 
 def list_upload_queue(limit: int = 50):
-    allowed = ('pending', 'uploading', 'success', 'failed')
+    allowed = ('pending', 'uploading', 'success', 'failed', 'cancelled')
     safe_limit = max(1, min(int(limit or 50), 50))
     conn = get_conn()
     rows = conn.execute(
         """
         SELECT * FROM upload_queue
-        WHERE status IN (?, ?, ?, ?)
+        WHERE status IN (?, ?, ?, ?, ?)
         ORDER BY created_at DESC
         LIMIT ?
         """,
@@ -388,3 +390,95 @@ def list_upload_queue(limit: int = 50):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_upload_queue_item(queue_id: str):
+    conn = get_conn()
+    row = conn.execute('SELECT * FROM upload_queue WHERE queue_id = ?', (queue_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_upload_queue_status(
+    queue_id: str,
+    status: str,
+    last_error: str | None = None,
+    attempt_count_delta: int = 0,
+    result: dict | None = None,
+):
+    allowed = {'pending', 'uploading', 'success', 'failed', 'cancelled'}
+    if status not in allowed:
+        raise ValueError(f"invalid upload queue status: {status}")
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE upload_queue
+        SET status = ?,
+            last_error = CASE WHEN ? IS NULL THEN last_error ELSE ? END,
+            attempt_count = attempt_count + ?,
+            result_json = CASE WHEN ? IS NULL THEN result_json ELSE ? END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE queue_id = ?
+        """,
+        (
+            status,
+            last_error,
+            last_error,
+            int(attempt_count_delta or 0),
+            None if result is None else _json_dumps(result),
+            None if result is None else _json_dumps(result),
+            queue_id,
+        ),
+    )
+    conn.commit()
+    row = cur.execute('SELECT * FROM upload_queue WHERE queue_id = ?', (queue_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def mark_upload_queue_uploading(queue_id: str):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE upload_queue
+        SET status = 'uploading',
+            last_error = '',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE queue_id = ? AND status IN ('pending', 'failed')
+        """,
+        (queue_id,),
+    )
+    changed = cur.rowcount
+    conn.commit()
+    row = cur.execute('SELECT * FROM upload_queue WHERE queue_id = ?', (queue_id,)).fetchone()
+    conn.close()
+    return (dict(row) if row else None), changed > 0
+
+
+def mark_upload_queue_success(queue_id: str, result: dict | None = None):
+    return update_upload_queue_status(queue_id, 'success', last_error='', result=result or {})
+
+
+def mark_upload_queue_failed(queue_id: str, error: str):
+    return update_upload_queue_status(queue_id, 'failed', last_error=error or 'Upload failed', attempt_count_delta=1)
+
+
+def cancel_upload_queue_item(queue_id: str):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE upload_queue
+        SET status = 'cancelled',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE queue_id = ? AND status IN ('pending', 'failed')
+        """,
+        (queue_id,),
+    )
+    changed = cur.rowcount
+    conn.commit()
+    row = cur.execute('SELECT * FROM upload_queue WHERE queue_id = ?', (queue_id,)).fetchone()
+    conn.close()
+    return (dict(row) if row else None), changed > 0
