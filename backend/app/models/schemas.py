@@ -302,3 +302,14 @@ class UploadRequest(BaseModel):
     user_data_dir: Optional[str] = ""
     video_input_dir: Optional[str] = ""
     retry_count: int = 2
+
+
+class UploadQueueAddRequest(BaseModel):
+    video_path: str
+    render_job_id: Optional[str] = ""
+    part_no: int = 0
+    channel_code: str
+    account_id: Optional[str] = None
+    platform: Optional[str] = "tiktok"
+    caption: Optional[str] = ""
+    hashtags: list[str] = Field(default_factory=list)

@@ -1996,8 +1996,18 @@ function renderRdClipQueue(container, parts, job) {
       upBtn.className = 'rdQueueBtn';
       upBtn.textContent = 'Upload';
       upBtn.onclick = () => setView('upload');
+      const queueBtn = document.createElement('button');
+      queueBtn.className = 'rdQueueBtn';
+      queueBtn.textContent = '+ Add to Queue';
+      queueBtn.onclick = () => addRenderClipToUploadQueue({
+        video_path: part.output_file,
+        render_job_id: String(job?.job_id || job?.id || currentJobId || ''),
+        part_no: Number(part.part_no || i + 1),
+        channel_code: String(job?.channel_code || getCurrentJobPayload(job)?.channel_code || '').trim(),
+      });
       acts.appendChild(openBtn);
       acts.appendChild(upBtn);
+      acts.appendChild(queueBtn);
       row.appendChild(acts);
     } else if (state === 'failed') {
       const errEl = document.createElement('div');
@@ -2616,6 +2626,69 @@ function copyRenderLogs() {
     () => showToast('Logs copied', 'success'),
     () => showToast('Copy failed', 'error')
   );
+}
+
+async function addRenderClipToUploadQueue(item) {
+  const payload = {
+    video_path: String(item?.video_path || '').trim(),
+    render_job_id: String(item?.render_job_id || currentJobId || '').trim(),
+    part_no: Number(item?.part_no || 0),
+    channel_code: String(item?.channel_code || '').trim(),
+    account_id: String(item?.account_id || '').trim(),
+    caption: String(item?.caption || ''),
+    hashtags: Array.isArray(item?.hashtags) ? item.hashtags : [],
+  };
+  if (!payload.video_path) {
+    showToast('Clip path is unavailable', 'error');
+    return;
+  }
+  if (!payload.channel_code) {
+    showToast('Channel is unavailable for this clip', 'error');
+    return;
+  }
+  try {
+    const res = await fetch('/api/upload/queue/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Add to queue failed');
+    showToast('Added to upload queue', 'success');
+    addEvent(`Added to upload queue: ${payload.video_path}`, 'upload');
+    if (typeof loadUploadQueue === 'function') loadUploadQueue();
+  } catch (e) {
+    showToast(`Add to queue failed: ${e.message || e}`, 'error');
+  }
+}
+
+async function loadUploadQueue() {
+  const box = qs('upload_queue_items_box');
+  if (!box) return;
+  box.innerHTML = '<div class="emptyState">Loading upload queue...</div>';
+  try {
+    const res = await fetch('/api/upload/queue');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Load queue failed');
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+      box.innerHTML = '<div class="emptyState">No queued clips yet.</div>';
+      return;
+    }
+    box.innerHTML = items.map((item) => {
+      const name = String(item.video_path || '').split(/[\\/]/).pop() || 'Clip';
+      const status = String(item.status || 'pending');
+      const account = String(item.account_id || '-');
+      return `<div class="partItem">
+        <div class="partInfo">
+          <div class="partTitle">${esc(name)}</div>
+          <div class="partMeta">Status: ${esc(status)} · Account: ${esc(account)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    box.innerHTML = `<div class="emptyState">Upload queue unavailable: ${esc(e.message || e)}</div>`;
+  }
 }
 
 function initRenderLogScrollBehavior() {
@@ -3316,6 +3389,9 @@ function populateRenderOutputPanel(job, parts) {
   }
 
   const jobId = String(job?.id || job?.job_id || currentJobId || '');
+  const jobPayload = getCurrentJobPayload(job);
+  const channelCode = String(job?.channel_code || jobPayload.channel_code || '').trim();
+  const ranking = _rankMap(job);
   list.innerHTML = all.map((p) => {
     const partNo = Number(p.part_no || 0);
     const st = String(p?.status || '').toLowerCase();
@@ -3346,6 +3422,9 @@ function populateRenderOutputPanel(job, parts) {
     const openBtn = hasFile
       ? `<button type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Open Folder</button>`
       : '';
+    const queueBtn = (isDone && hasFile && channelCode)
+      ? `<button type="button" onclick="addRenderClipToUploadQueue({video_path:${JSON.stringify(p.output_file)},render_job_id:${JSON.stringify(jobId)},part_no:${partNo},channel_code:${JSON.stringify(channelCode)}})">+ Add to Queue</button>`
+      : '';
     if (qs('abp_output_meta') && hasFile) qs('abp_output_meta').textContent = `Latest file: ${String(p.output_file || '').split(/[\\\\/]/).pop()}`;
     const isSelected = isDone && hasFile && _selectedClipPaths.has(p.output_file);
     const itemClass = `renderClipItem${isFailed ? ' failed isFailed' : ''}${isSkipped ? ' skipped isSkipped' : ''}${isDone ? ' isDone' : ''}${isActive ? ' isActive' : ''}${isSelected ? ' isSelected' : ''}${rk.isBest ? ' isBestClip' : ''}`;
@@ -3368,7 +3447,7 @@ function populateRenderOutputPanel(job, parts) {
         <div class="renderClipMeta"><span class="renderClipStatus ${esc(statusText)}">${esc(statusText)}</span><span>${meta}</span></div>
         ${rankHtml}
       </div>
-      <div class="renderClipActions">${previewBtn}${downloadBtn}${openBtn}</div>
+      <div class="renderClipActions">${previewBtn}${downloadBtn}${openBtn}${queueBtn}</div>
     </div>`;
   }).join('');
 

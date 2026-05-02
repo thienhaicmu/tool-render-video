@@ -618,6 +618,13 @@
             <div class="uploadActionSteps" id="upload_action_steps"></div>
             <div class="partList" id="upload_items_box" style="max-height:180px"><div class="emptyState">No upload items yet.</div></div>
           </div>
+          <div class="actionRowBlock" id="upload_queue_panel" style="margin-top:12px">
+            <div class="actionRowTitle">Upload Queue</div>
+            <div class="actionsRow" style="margin-top:0">
+              <button class="ghostButton" type="button" onclick="loadUploadQueue()">Refresh Queue</button>
+            </div>
+            <div class="partList" id="upload_queue_items_box" style="max-height:180px"><div class="emptyState">No queued clips yet.</div></div>
+          </div>
           <!-- Live log (Step 4) -->
           <div class="actionRowBlock" id="upload_log_row" style="margin-top:12px">
             <div class="actionRowTitle">Upload Live Log</div>

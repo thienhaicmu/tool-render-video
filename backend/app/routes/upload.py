@@ -1,9 +1,11 @@
 import asyncio
 import json
+import logging
 import re
 from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
-from app.models.schemas import UploadRequest
+from app.models.schemas import UploadQueueAddRequest, UploadRequest
+from app.services.db import add_upload_queue_item, list_upload_queue
 from app.services.upload_engine import (
     upload_schedule,
     login_with_persistent_profile,
@@ -22,6 +24,7 @@ from app.services.upload_engine import (
 from app.services.channel_service import ensure_channel
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
+logger = logging.getLogger("app.upload")
 
 
 def _safe_account_key(raw: str) -> str:
@@ -84,6 +87,40 @@ def _resolve_upload_overrides(payload: UploadRequest) -> dict:
             out[k] = v
         return out
     return base
+
+
+@router.post("/queue/add")
+def add_to_upload_queue(payload: UploadQueueAddRequest):
+    video_path = str(payload.video_path or "").strip()
+    channel_code = str(payload.channel_code or "").strip()
+    if not video_path:
+        raise HTTPException(status_code=400, detail="video_path is required")
+    if not channel_code:
+        raise HTTPException(status_code=400, detail="channel_code is required")
+    platform = str(payload.platform or "tiktok").strip().lower() or "tiktok"
+    row = add_upload_queue_item(
+        video_path=video_path,
+        render_job_id=str(payload.render_job_id or "").strip(),
+        part_no=int(payload.part_no or 0),
+        channel_code=channel_code,
+        account_id=str(payload.account_id or "").strip(),
+        platform=platform,
+        caption=str(payload.caption or ""),
+        hashtags=payload.hashtags or [],
+    )
+    logger.info(
+        "upload_queue_add queue_id=%s video_path=%s channel_code=%s",
+        row.get("queue_id"),
+        video_path,
+        channel_code,
+    )
+    return {"status": "ok", "queue_id": row.get("queue_id"), "item": row}
+
+
+@router.get("/queue")
+def get_upload_queue():
+    items = list_upload_queue(limit=50)
+    return {"status": "ok", "count": len(items), "items": items}
 
 
 @router.post("/schedule")

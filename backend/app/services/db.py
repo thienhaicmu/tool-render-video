@@ -4,6 +4,7 @@ import logging
 import os
 import sqlite3
 import threading
+import uuid
 from pathlib import Path
 from typing import Any
 from app.core.config import DATABASE_PATH
@@ -128,6 +129,41 @@ def init_db():
         )
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS upload_accounts (
+            account_id TEXT PRIMARY KEY,
+            channel_code TEXT,
+            platform TEXT,
+            account_key TEXT,
+            status TEXT DEFAULT 'active',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS upload_queue (
+            queue_id TEXT PRIMARY KEY,
+            video_path TEXT,
+            render_job_id TEXT,
+            part_no INTEGER,
+            account_id TEXT,
+            platform TEXT DEFAULT 'tiktok',
+            channel_code TEXT,
+            caption TEXT,
+            hashtags_json TEXT,
+            status TEXT DEFAULT 'pending',
+            priority INTEGER DEFAULT 0,
+            attempt_count INTEGER DEFAULT 0,
+            max_attempts INTEGER DEFAULT 3,
+            last_error TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     # Lightweight schema migration for existing local DBs created by old versions.
     def _ensure_columns(table: str, required: dict[str, str]):
         existing_rows = cur.execute(f"PRAGMA table_info({table})").fetchall()
@@ -160,6 +196,37 @@ def init_db():
             "hook_score": "hook_score REAL DEFAULT 0",
             "output_file": "output_file TEXT DEFAULT ''",
             "message": "message TEXT DEFAULT ''",
+            "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
+        },
+    )
+    _ensure_columns(
+        "upload_accounts",
+        {
+            "channel_code": "channel_code TEXT",
+            "platform": "platform TEXT",
+            "account_key": "account_key TEXT",
+            "status": "status TEXT DEFAULT 'active'",
+            "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
+            "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
+        },
+    )
+    _ensure_columns(
+        "upload_queue",
+        {
+            "video_path": "video_path TEXT",
+            "render_job_id": "render_job_id TEXT",
+            "part_no": "part_no INTEGER",
+            "account_id": "account_id TEXT",
+            "platform": "platform TEXT DEFAULT 'tiktok'",
+            "channel_code": "channel_code TEXT",
+            "caption": "caption TEXT",
+            "hashtags_json": "hashtags_json TEXT",
+            "status": "status TEXT DEFAULT 'pending'",
+            "priority": "priority INTEGER DEFAULT 0",
+            "attempt_count": "attempt_count INTEGER DEFAULT 0",
+            "max_attempts": "max_attempts INTEGER DEFAULT 3",
+            "last_error": "last_error TEXT",
+            "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
             "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
         },
     )
@@ -261,5 +328,63 @@ def list_jobs():
 def list_job_parts(job_id: str):
     conn = get_conn()
     rows = conn.execute('SELECT * FROM job_parts WHERE job_id = ? ORDER BY part_no ASC', (job_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def add_upload_queue_item(
+    *,
+    video_path: str,
+    render_job_id: str = '',
+    part_no: int = 0,
+    channel_code: str = '',
+    account_id: str = '',
+    platform: str = 'tiktok',
+    caption: str = '',
+    hashtags: list[str] | None = None,
+):
+    queue_id = str(uuid.uuid4())
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO upload_queue (
+            queue_id, video_path, render_job_id, part_no, account_id, platform,
+            channel_code, caption, hashtags_json, status, priority,
+            attempt_count, max_attempts, last_error, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, 0, 3, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """,
+        (
+            queue_id,
+            video_path,
+            render_job_id,
+            int(part_no or 0),
+            account_id or None,
+            platform or 'tiktok',
+            channel_code,
+            caption or '',
+            json.dumps(hashtags or [], ensure_ascii=False),
+        ),
+    )
+    conn.commit()
+    row = cur.execute('SELECT * FROM upload_queue WHERE queue_id = ?', (queue_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def list_upload_queue(limit: int = 50):
+    allowed = ('pending', 'uploading', 'success', 'failed')
+    safe_limit = max(1, min(int(limit or 50), 50))
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT * FROM upload_queue
+        WHERE status IN (?, ?, ?, ?)
+        ORDER BY created_at DESC
+        LIMIT ?
+        """,
+        (*allowed, safe_limit),
+    ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
