@@ -454,8 +454,54 @@
         <!-- ── SECTION: upload-card ─────────────────────────────── -->
         <section class="card" id="card_upload">
           <div class="sectionHeader">
-            <div><div class="sectionTitle">Upload</div><div class="sectionSubtitle">Follow steps 1→4 to login and upload videos.</div></div>
+            <div><div class="sectionTitle">Upload</div><div class="sectionSubtitle">Manage upload accounts independently from render outputs and upload runs.</div></div>
             <button class="ghostButton" onclick="setView('render')">Back to Main</button>
+          </div>
+          <div class="uploadAccountManager" id="upload_account_manager">
+            <div class="uamHeader">
+              <div>
+                <div class="uamTitle">Upload Account Manager</div>
+                <div class="sectionSubtitle">GPM-lite account registry. Accounts persist here; no upload queue or worker is started from this panel.</div>
+              </div>
+              <button class="ghostButton" type="button" onclick="loadUploadAccounts()">Refresh</button>
+            </div>
+            <form class="uamForm" id="upload_account_form" onsubmit="saveUploadAccount(event)">
+              <input type="hidden" id="uam_account_id">
+              <label class="field"><span class="fieldLabel">Platform</span><input class="fieldInput" id="uam_platform" value="tiktok"></label>
+              <label class="field"><span class="fieldLabel">Channel Code</span><input class="fieldInput" id="uam_channel_code" placeholder="T1"></label>
+              <label class="field"><span class="fieldLabel">Account Key</span><input class="fieldInput" id="uam_account_key" value="default"></label>
+              <label class="field"><span class="fieldLabel">Display Name</span><input class="fieldInput" id="uam_display_name" placeholder="Main TikTok account"></label>
+              <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uam_status"><option value="active">Active</option><option value="warming">Warming</option><option value="limited">Limited</option><option value="banned">Banned</option><option value="disabled">Disabled</option><option value="login_required">Login Required</option></select></label>
+              <label class="field"><span class="fieldLabel">Login State</span><select class="fieldInput" id="uam_login_state"><option value="unknown">Unknown</option><option value="logged_in">Logged In</option><option value="logged_out">Logged Out</option><option value="challenge">Challenge</option><option value="expired">Expired</option></select></label>
+              <label class="field"><span class="fieldLabel">Daily Limit</span><input class="fieldInput" id="uam_daily_limit" type="number" min="0" value="0"></label>
+              <label class="field"><span class="fieldLabel">Cooldown Minutes</span><input class="fieldInput" id="uam_cooldown_minutes" type="number" min="0" value="0"></label>
+              <label class="field"><span class="fieldLabel">Today Count</span><input class="fieldInput" id="uam_today_count" type="number" min="0" value="0"></label>
+              <label class="field"><span class="fieldLabel">Proxy ID</span><input class="fieldInput" id="uam_proxy_id" placeholder="proxy-01"></label>
+              <label class="field fieldSpan2"><span class="fieldLabel">Profile Path</span><input class="fieldInput" id="uam_profile_path" placeholder="D:\channels\T1\account\profiles\default\browser-profile"></label>
+              <div class="uamFormActions">
+                <button class="primaryButton" type="submit" id="uam_save_btn">Create Account</button>
+                <button class="ghostButton" type="button" onclick="resetUploadAccountForm()">Clear</button>
+              </div>
+            </form>
+            <div class="uamTableWrap">
+              <table class="uamTable">
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Status</th>
+                    <th>Login</th>
+                    <th>Usage</th>
+                    <th>Cooldown</th>
+                    <th>Profile</th>
+                    <th>Proxy</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="upload_accounts_tbody">
+                  <tr><td colspan="8" class="uamEmpty">No accounts loaded.</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <!-- Step wizard indicator — 4 sequential steps replace flat 5-cluster layout -->
           <div id="upload_step_bar" class="uploadStepBar">
@@ -1679,6 +1725,7 @@
 <script src="/static/js/nav.js"></script>
 <script src="/static/js/render-config.js"></script>
 <script src="/static/js/upload-config.js"></script>
+<script src="/static/js/upload-manager.js"></script>
 <script src="/static/js/render-ui.js"></script>
 <script src="/static/js/render-engine.js"></script>
 <script src="/static/js/upload-engine.js"></script>

@@ -133,10 +133,21 @@ def init_db():
         """
         CREATE TABLE IF NOT EXISTS upload_accounts (
             account_id TEXT PRIMARY KEY,
-            channel_code TEXT,
             platform TEXT,
+            channel_code TEXT,
             account_key TEXT,
+            display_name TEXT DEFAULT '',
             status TEXT DEFAULT 'active',
+            profile_path TEXT DEFAULT '',
+            proxy_id TEXT DEFAULT '',
+            daily_limit INTEGER DEFAULT 0,
+            cooldown_minutes INTEGER DEFAULT 0,
+            today_count INTEGER DEFAULT 0,
+            last_upload_at TEXT,
+            last_login_check_at TEXT,
+            login_state TEXT DEFAULT 'unknown',
+            health_json TEXT,
+            metadata_json TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
@@ -203,10 +214,21 @@ def init_db():
     _ensure_columns(
         "upload_accounts",
         {
-            "channel_code": "channel_code TEXT",
             "platform": "platform TEXT",
+            "channel_code": "channel_code TEXT",
             "account_key": "account_key TEXT",
+            "display_name": "display_name TEXT DEFAULT ''",
             "status": "status TEXT DEFAULT 'active'",
+            "profile_path": "profile_path TEXT DEFAULT ''",
+            "proxy_id": "proxy_id TEXT DEFAULT ''",
+            "daily_limit": "daily_limit INTEGER DEFAULT 0",
+            "cooldown_minutes": "cooldown_minutes INTEGER DEFAULT 0",
+            "today_count": "today_count INTEGER DEFAULT 0",
+            "last_upload_at": "last_upload_at TEXT",
+            "last_login_check_at": "last_login_check_at TEXT",
+            "login_state": "login_state TEXT DEFAULT 'unknown'",
+            "health_json": "health_json TEXT",
+            "metadata_json": "metadata_json TEXT",
             "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
             "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
         },
@@ -238,6 +260,146 @@ def init_db():
 
 def _json_dumps(data: Any) -> str:
     return json.dumps(data or {}, ensure_ascii=False)
+
+
+def _json_loads(raw: Any, default: Any = None) -> Any:
+    if raw is None or raw == "":
+        return {} if default is None else default
+    if isinstance(raw, (dict, list)):
+        return raw
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {} if default is None else default
+
+
+def _normalize_upload_account_row(row: sqlite3.Row | dict | None):
+    if not row:
+        return None
+    data = dict(row)
+    data["health_json"] = _json_loads(data.get("health_json"))
+    data["metadata_json"] = _json_loads(data.get("metadata_json"))
+    for key in ("daily_limit", "cooldown_minutes", "today_count"):
+        try:
+            data[key] = int(data.get(key) or 0)
+        except Exception:
+            data[key] = 0
+    return data
+
+
+def list_upload_account_rows(include_disabled: bool = True):
+    conn = get_conn()
+    if include_disabled:
+        rows = conn.execute(
+            """
+            SELECT * FROM upload_accounts
+            ORDER BY updated_at DESC, created_at DESC
+            """
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT * FROM upload_accounts
+            WHERE COALESCE(status, 'active') != 'disabled'
+            ORDER BY updated_at DESC, created_at DESC
+            """
+        ).fetchall()
+    conn.close()
+    return [_normalize_upload_account_row(r) for r in rows]
+
+
+def get_upload_account_row(account_id: str):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM upload_accounts WHERE account_id = ?", (account_id,)).fetchone()
+    conn.close()
+    return _normalize_upload_account_row(row)
+
+
+def create_upload_account_row(data: dict):
+    account_id = str(data.get("account_id") or uuid.uuid4()).strip() or str(uuid.uuid4())
+    payload = {
+        "account_id": account_id,
+        "platform": str(data.get("platform") or "tiktok").strip().lower() or "tiktok",
+        "channel_code": str(data.get("channel_code") or "").strip(),
+        "account_key": str(data.get("account_key") or "default").strip() or "default",
+        "display_name": str(data.get("display_name") or "").strip(),
+        "status": str(data.get("status") or "active").strip().lower(),
+        "profile_path": str(data.get("profile_path") or "").strip(),
+        "proxy_id": str(data.get("proxy_id") or "").strip(),
+        "daily_limit": int(data.get("daily_limit") or 0),
+        "cooldown_minutes": int(data.get("cooldown_minutes") or 0),
+        "today_count": int(data.get("today_count") or 0),
+        "last_upload_at": data.get("last_upload_at"),
+        "last_login_check_at": data.get("last_login_check_at"),
+        "login_state": str(data.get("login_state") or "unknown").strip().lower(),
+        "health_json": _json_dumps(data.get("health_json") or {}),
+        "metadata_json": _json_dumps(data.get("metadata_json") or {}),
+    }
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO upload_accounts (
+            account_id, platform, channel_code, account_key, display_name, status,
+            profile_path, proxy_id, daily_limit, cooldown_minutes, today_count,
+            last_upload_at, last_login_check_at, login_state, health_json,
+            metadata_json, created_at, updated_at
+        )
+        VALUES (
+            :account_id, :platform, :channel_code, :account_key, :display_name, :status,
+            :profile_path, :proxy_id, :daily_limit, :cooldown_minutes, :today_count,
+            :last_upload_at, :last_login_check_at, :login_state, :health_json,
+            :metadata_json, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        """,
+        payload,
+    )
+    conn.commit()
+    row = cur.execute("SELECT * FROM upload_accounts WHERE account_id = ?", (account_id,)).fetchone()
+    conn.close()
+    return _normalize_upload_account_row(row)
+
+
+def update_upload_account_row(account_id: str, changes: dict):
+    allowed = {
+        "platform", "channel_code", "account_key", "display_name", "status",
+        "profile_path", "proxy_id", "daily_limit", "cooldown_minutes", "today_count",
+        "last_upload_at", "last_login_check_at", "login_state", "health_json", "metadata_json",
+    }
+    values: dict[str, Any] = {}
+    for key, value in changes.items():
+        if key not in allowed:
+            continue
+        if key in {"health_json", "metadata_json"}:
+            values[key] = _json_dumps(value or {})
+        elif key in {"daily_limit", "cooldown_minutes", "today_count"}:
+            values[key] = int(value or 0)
+        elif value is None and key in {"last_upload_at", "last_login_check_at"}:
+            values[key] = None
+        else:
+            values[key] = str(value or "").strip()
+    if not values:
+        return get_upload_account_row(account_id)
+    assignments = ", ".join([f"{key} = :{key}" for key in values])
+    values["account_id"] = account_id
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        UPDATE upload_accounts
+        SET {assignments}, updated_at = CURRENT_TIMESTAMP
+        WHERE account_id = :account_id
+        """,
+        values,
+    )
+    conn.commit()
+    row = cur.execute("SELECT * FROM upload_accounts WHERE account_id = ?", (account_id,)).fetchone()
+    conn.close()
+    return _normalize_upload_account_row(row)
+
+
+def disable_upload_account_row(account_id: str):
+    return update_upload_account_row(account_id, {"status": "disabled"})
 
 
 def upsert_job(job_id: str, kind: str, channel_code: str, status: str,

@@ -9393,7 +9393,7 @@ body.is-history-active #history_list {
 }
 
 .rs-bottom-panel .renderClipInfo,
-.rs-bottom-panel .renderClipActions {
+  .rs-bottom-panel .renderClipActions {
   min-width: 0 !important;
 }
 
@@ -9461,8 +9461,166 @@ body.is-history-active #history_list {
     grid-template-columns: auto minmax(0, 1fr) !important;
   }
 
-  .rs-bottom-panel .renderClipActions {
+.rs-bottom-panel .renderClipActions {
     grid-column: 2 !important;
     justify-content: flex-start !important;
+  }
+}
+
+/* Upload Account Manager */
+.uploadAccountManager {
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: rgba(13, 21, 38, .72);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.uamHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.uamTitle {
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.uamForm {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, .16);
+}
+
+.uamForm .fieldSpan2 {
+  grid-column: span 2;
+}
+
+.uamFormActions {
+  grid-column: span 2;
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+
+.uamTableWrap {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.uamTable {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.uamTable th,
+.uamTable td {
+  padding: 10px 9px;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+  text-align: left;
+  vertical-align: top;
+  font-size: 12px;
+}
+
+.uamTable th {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.uamAccountName {
+  color: #f1f5f9;
+  font-weight: 700;
+}
+
+.uamSub {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.uamBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, .14);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.uamBadge[data-state="active"],
+.uamBadge[data-state="logged_in"] {
+  background: rgba(16, 185, 129, .14);
+  color: #6ee7b7;
+}
+
+.uamBadge[data-state="warming"],
+.uamBadge[data-state="challenge"] {
+  background: rgba(245, 158, 11, .16);
+  color: #fcd34d;
+}
+
+.uamBadge[data-state="limited"],
+.uamBadge[data-state="login_required"],
+.uamBadge[data-state="expired"],
+.uamBadge[data-state="logged_out"] {
+  background: rgba(249, 115, 22, .16);
+  color: #fdba74;
+}
+
+.uamBadge[data-state="banned"],
+.uamBadge[data-state="disabled"] {
+  background: rgba(239, 68, 68, .14);
+  color: #fca5a5;
+}
+
+.uamActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.uamActions .ghostButton {
+  padding: 6px 9px;
+  font-size: 11px;
+}
+
+.uamEmpty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 18px !important;
+}
+
+@media (max-width: 1200px) {
+  .uamForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .uamForm {
+    grid-template-columns: 1fr;
+  }
+  .uamForm .fieldSpan2,
+  .uamFormActions {
+    grid-column: span 1;
+  }
+  .uamHeader {
+    flex-direction: column;
   }
 }

@@ -313,3 +313,96 @@ class UploadQueueAddRequest(BaseModel):
     platform: Optional[str] = "tiktok"
     caption: Optional[str] = ""
     hashtags: list[str] = Field(default_factory=list)
+
+
+UPLOAD_ACCOUNT_STATUSES = {"active", "warming", "limited", "banned", "disabled", "login_required"}
+UPLOAD_LOGIN_STATES = {"unknown", "logged_in", "logged_out", "challenge", "expired"}
+
+
+class UploadAccountBase(BaseModel):
+    platform: Optional[str] = "tiktok"
+    channel_code: Optional[str] = ""
+    account_key: Optional[str] = ""
+    display_name: Optional[str] = ""
+    status: Optional[str] = "active"
+    profile_path: Optional[str] = ""
+    proxy_id: Optional[str] = ""
+    daily_limit: Optional[int] = 0
+    cooldown_minutes: Optional[int] = 0
+    today_count: Optional[int] = 0
+    last_upload_at: Optional[str] = None
+    last_login_check_at: Optional[str] = None
+    login_state: Optional[str] = "unknown"
+    health_json: Optional[dict] = Field(default_factory=dict)
+    metadata_json: Optional[dict] = Field(default_factory=dict)
+
+    @field_validator("status")
+    @classmethod
+    def _validate_status(cls, v: Optional[str]) -> str:
+        value = (v or "active").strip().lower()
+        if value not in UPLOAD_ACCOUNT_STATUSES:
+            raise ValueError(f"status must be one of {sorted(UPLOAD_ACCOUNT_STATUSES)!r}")
+        return value
+
+    @field_validator("login_state")
+    @classmethod
+    def _validate_login_state(cls, v: Optional[str]) -> str:
+        value = (v or "unknown").strip().lower()
+        if value not in UPLOAD_LOGIN_STATES:
+            raise ValueError(f"login_state must be one of {sorted(UPLOAD_LOGIN_STATES)!r}")
+        return value
+
+    @field_validator("daily_limit", "cooldown_minutes", "today_count")
+    @classmethod
+    def _validate_non_negative(cls, v: Optional[int]) -> int:
+        return max(0, int(v or 0))
+
+
+class UploadAccountCreate(UploadAccountBase):
+    account_id: Optional[str] = None
+    account_key: Optional[str] = "default"
+
+
+class UploadAccountUpdate(BaseModel):
+    platform: Optional[str] = None
+    channel_code: Optional[str] = None
+    account_key: Optional[str] = None
+    display_name: Optional[str] = None
+    status: Optional[str] = None
+    profile_path: Optional[str] = None
+    proxy_id: Optional[str] = None
+    daily_limit: Optional[int] = None
+    cooldown_minutes: Optional[int] = None
+    today_count: Optional[int] = None
+    last_upload_at: Optional[str] = None
+    last_login_check_at: Optional[str] = None
+    login_state: Optional[str] = None
+    health_json: Optional[dict] = None
+    metadata_json: Optional[dict] = None
+
+    @field_validator("status")
+    @classmethod
+    def _validate_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        value = v.strip().lower()
+        if value not in UPLOAD_ACCOUNT_STATUSES:
+            raise ValueError(f"status must be one of {sorted(UPLOAD_ACCOUNT_STATUSES)!r}")
+        return value
+
+    @field_validator("login_state")
+    @classmethod
+    def _validate_login_state(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        value = v.strip().lower()
+        if value not in UPLOAD_LOGIN_STATES:
+            raise ValueError(f"login_state must be one of {sorted(UPLOAD_LOGIN_STATES)!r}")
+        return value
+
+    @field_validator("daily_limit", "cooldown_minutes", "today_count")
+    @classmethod
+    def _validate_non_negative(cls, v: Optional[int]) -> Optional[int]:
+        if v is None:
+            return None
+        return max(0, int(v or 0))

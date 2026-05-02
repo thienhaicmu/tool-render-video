@@ -5,15 +5,20 @@ import re
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
-from app.models.schemas import UploadQueueAddRequest, UploadRequest
+from app.models.schemas import UploadAccountCreate, UploadAccountUpdate, UploadQueueAddRequest, UploadRequest
 from app.services.db import (
     add_upload_queue_item,
     cancel_upload_queue_item,
+    create_upload_account_row,
+    disable_upload_account_row,
+    get_upload_account_row,
     get_upload_queue_item,
+    list_upload_account_rows,
     list_upload_queue,
     mark_upload_queue_failed,
     mark_upload_queue_success,
     mark_upload_queue_uploading,
+    update_upload_account_row,
 )
 from app.services.upload_engine import (
     upload_schedule,
@@ -97,6 +102,46 @@ def _resolve_upload_overrides(payload: UploadRequest) -> dict:
             out[k] = v
         return out
     return base
+
+
+@router.get("/accounts")
+def list_upload_account_manager_accounts(include_disabled: bool = True):
+    items = list_upload_account_rows(include_disabled=include_disabled)
+    return {"status": "ok", "count": len(items), "items": items}
+
+
+@router.post("/accounts")
+def create_upload_account_manager_account(payload: UploadAccountCreate):
+    data = payload.model_dump()
+    account = create_upload_account_row(data)
+    logger.info(
+        "upload_account_create account_id=%s platform=%s channel_code=%s account_key=%s",
+        account.get("account_id"),
+        account.get("platform"),
+        account.get("channel_code"),
+        account.get("account_key"),
+    )
+    return {"status": "ok", "item": account}
+
+
+@router.patch("/accounts/{account_id}")
+def update_upload_account_manager_account(account_id: str, payload: UploadAccountUpdate):
+    current = get_upload_account_row(account_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Upload account not found")
+    changes = payload.model_dump(exclude_unset=True)
+    account = update_upload_account_row(account_id, changes)
+    return {"status": "ok", "item": account}
+
+
+@router.delete("/accounts/{account_id}")
+def disable_upload_account_manager_account(account_id: str):
+    current = get_upload_account_row(account_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Upload account not found")
+    account = disable_upload_account_row(account_id)
+    logger.info("upload_account_disable account_id=%s", account_id)
+    return {"status": "ok", "item": account}
 
 
 @router.post("/queue/add")
@@ -344,6 +389,9 @@ def login_check(payload: UploadRequest):
 
 @router.get("/accounts/{channel_code}")
 def get_upload_accounts(channel_code: str):
+    account = get_upload_account_row(channel_code)
+    if account:
+        return {"status": "ok", "item": account}
     ensure_channel(channel_code)
     items = list_upload_accounts(channel_code)
     return {"channel_code": channel_code, "items": items}
