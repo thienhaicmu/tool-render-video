@@ -157,19 +157,22 @@ def init_db():
         """
         CREATE TABLE IF NOT EXISTS upload_queue (
             queue_id TEXT PRIMARY KEY,
-            video_path TEXT,
+            video_id TEXT,
+            video_path TEXT NOT NULL,
             render_job_id TEXT,
             part_no INTEGER,
             account_id TEXT,
-            platform TEXT DEFAULT 'tiktok',
+            platform TEXT NOT NULL DEFAULT 'tiktok',
             channel_code TEXT,
-            caption TEXT,
-            hashtags_json TEXT,
-            status TEXT DEFAULT 'pending',
+            caption TEXT DEFAULT '',
+            hashtags_json TEXT DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT 'pending',
             priority INTEGER DEFAULT 0,
+            scheduled_at TEXT DEFAULT '',
             attempt_count INTEGER DEFAULT 0,
             max_attempts INTEGER DEFAULT 3,
-            last_error TEXT,
+            last_error TEXT DEFAULT '',
+            metadata_json TEXT DEFAULT '{}',
             result_json TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -257,19 +260,22 @@ def init_db():
     _ensure_columns(
         "upload_queue",
         {
-            "video_path": "video_path TEXT",
+            "video_id": "video_id TEXT",
+            "video_path": "video_path TEXT NOT NULL DEFAULT ''",
             "render_job_id": "render_job_id TEXT",
             "part_no": "part_no INTEGER",
             "account_id": "account_id TEXT",
-            "platform": "platform TEXT DEFAULT 'tiktok'",
+            "platform": "platform TEXT NOT NULL DEFAULT 'tiktok'",
             "channel_code": "channel_code TEXT",
-            "caption": "caption TEXT",
-            "hashtags_json": "hashtags_json TEXT",
-            "status": "status TEXT DEFAULT 'pending'",
+            "caption": "caption TEXT DEFAULT ''",
+            "hashtags_json": "hashtags_json TEXT DEFAULT '[]'",
+            "status": "status TEXT NOT NULL DEFAULT 'pending'",
             "priority": "priority INTEGER DEFAULT 0",
+            "scheduled_at": "scheduled_at TEXT DEFAULT ''",
             "attempt_count": "attempt_count INTEGER DEFAULT 0",
             "max_attempts": "max_attempts INTEGER DEFAULT 3",
-            "last_error": "last_error TEXT",
+            "last_error": "last_error TEXT DEFAULT ''",
+            "metadata_json": "metadata_json TEXT DEFAULT '{}'",
             "result_json": "result_json TEXT",
             "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
             "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
@@ -345,6 +351,27 @@ def _normalize_upload_video_row(row: sqlite3.Row | dict | None):
         data["file_size"] = int(data.get("file_size") or 0)
     except Exception:
         data["file_size"] = 0
+    return data
+
+
+def _normalize_upload_queue_row(row: sqlite3.Row | dict | None):
+    if not row:
+        return None
+    data = dict(row)
+    data["hashtags"] = _json_loads(data.pop("hashtags_json", "[]"), default=[])
+    if not isinstance(data["hashtags"], list):
+        data["hashtags"] = []
+    data["metadata"] = _json_loads(data.pop("metadata_json", "{}"), default={})
+    if not isinstance(data["metadata"], dict):
+        data["metadata"] = {}
+    for key in ("priority", "attempt_count", "max_attempts", "part_no"):
+        try:
+            data[key] = int(data.get(key) or 0)
+        except Exception:
+            data[key] = 0
+    data.setdefault("video_file_name", "")
+    data.setdefault("account_display_name", "")
+    data.setdefault("account_key", "")
     return data
 
 
@@ -677,6 +704,7 @@ def list_job_parts(job_id: str):
 def add_upload_queue_item(
     *,
     video_path: str,
+    video_id: str = '',
     render_job_id: str = '',
     part_no: int = 0,
     channel_code: str = '',
@@ -684,21 +712,27 @@ def add_upload_queue_item(
     platform: str = 'tiktok',
     caption: str = '',
     hashtags: list[str] | None = None,
+    scheduled_at: str = '',
+    priority: int = 0,
+    status: str | None = None,
+    metadata: dict | None = None,
 ):
     queue_id = str(uuid.uuid4())
+    final_status = status or ('scheduled' if str(scheduled_at or '').strip() else 'pending')
     conn = get_conn()
     cur = conn.cursor()
     cur.execute(
         """
         INSERT INTO upload_queue (
-            queue_id, video_path, render_job_id, part_no, account_id, platform,
-            channel_code, caption, hashtags_json, status, priority,
-            attempt_count, max_attempts, last_error, created_at, updated_at
+            queue_id, video_id, video_path, render_job_id, part_no, account_id, platform,
+            channel_code, caption, hashtags_json, status, priority, scheduled_at,
+            attempt_count, max_attempts, last_error, metadata_json, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, 0, 3, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 3, '', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """,
         (
             queue_id,
+            video_id or None,
             video_path,
             render_job_id,
             int(part_no or 0),
@@ -707,36 +741,106 @@ def add_upload_queue_item(
             channel_code,
             caption or '',
             json.dumps(hashtags or [], ensure_ascii=False),
+            final_status,
+            int(priority or 0),
+            str(scheduled_at or '').strip(),
+            _json_dumps(metadata or {}),
         ),
     )
     conn.commit()
     row = cur.execute('SELECT * FROM upload_queue WHERE queue_id = ?', (queue_id,)).fetchone()
     conn.close()
-    return dict(row)
+    return _normalize_upload_queue_row(row)
 
 
-def list_upload_queue(limit: int = 50):
-    allowed = ('pending', 'uploading', 'success', 'failed', 'cancelled')
-    safe_limit = max(1, min(int(limit or 50), 50))
+def list_upload_queue(limit: int = 100, status: str = '', account_id: str = '', platform: str = ''):
+    safe_limit = max(1, min(int(limit or 100), 500))
+    clauses = []
+    params: list[Any] = []
+    if status:
+        clauses.append("q.status = ?")
+        params.append(status)
+    if account_id:
+        clauses.append("q.account_id = ?")
+        params.append(account_id)
+    if platform:
+        clauses.append("q.platform = ?")
+        params.append(platform)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     conn = get_conn()
     rows = conn.execute(
-        """
-        SELECT * FROM upload_queue
-        WHERE status IN (?, ?, ?, ?, ?)
-        ORDER BY created_at DESC
+        f"""
+        SELECT
+            q.*,
+            COALESCE(v.file_name, '') AS video_file_name,
+            COALESCE(a.display_name, '') AS account_display_name,
+            COALESCE(a.account_key, '') AS account_key
+        FROM upload_queue q
+        LEFT JOIN upload_videos v ON v.video_id = q.video_id
+        LEFT JOIN upload_accounts a ON a.account_id = q.account_id
+        {where}
+        ORDER BY q.priority DESC, q.created_at DESC
         LIMIT ?
         """,
-        (*allowed, safe_limit),
+        (*params, safe_limit),
     ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return [_normalize_upload_queue_row(r) for r in rows]
 
 
 def get_upload_queue_item(queue_id: str):
     conn = get_conn()
-    row = conn.execute('SELECT * FROM upload_queue WHERE queue_id = ?', (queue_id,)).fetchone()
+    row = conn.execute(
+        """
+        SELECT
+            q.*,
+            COALESCE(v.file_name, '') AS video_file_name,
+            COALESCE(a.display_name, '') AS account_display_name,
+            COALESCE(a.account_key, '') AS account_key
+        FROM upload_queue q
+        LEFT JOIN upload_videos v ON v.video_id = q.video_id
+        LEFT JOIN upload_accounts a ON a.account_id = q.account_id
+        WHERE q.queue_id = ?
+        """,
+        (queue_id,),
+    ).fetchone()
     conn.close()
-    return dict(row) if row else None
+    return _normalize_upload_queue_row(row)
+
+
+def update_upload_queue_item(queue_id: str, changes: dict):
+    allowed = {"account_id", "caption", "hashtags", "priority", "scheduled_at", "status"}
+    values: dict[str, Any] = {}
+    for key, value in changes.items():
+        if key not in allowed:
+            continue
+        if key == "hashtags":
+            values["hashtags_json"] = json.dumps(value or [], ensure_ascii=False)
+        elif key == "priority":
+            values[key] = int(value or 0)
+        else:
+            values[key] = str(value or "").strip()
+    if "scheduled_at" in values and "status" not in values:
+        current = get_upload_queue_item(queue_id)
+        if current and current.get("status") in {"pending", "scheduled"}:
+            values["status"] = "scheduled" if values["scheduled_at"] else "pending"
+    if not values:
+        return get_upload_queue_item(queue_id)
+    assignments = ", ".join([f"{key} = :{key}" for key in values])
+    values["queue_id"] = queue_id
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        UPDATE upload_queue
+        SET {assignments}, updated_at = CURRENT_TIMESTAMP
+        WHERE queue_id = :queue_id
+        """,
+        values,
+    )
+    conn.commit()
+    conn.close()
+    return get_upload_queue_item(queue_id)
 
 
 def update_upload_queue_status(
@@ -746,7 +850,7 @@ def update_upload_queue_status(
     attempt_count_delta: int = 0,
     result: dict | None = None,
 ):
-    allowed = {'pending', 'uploading', 'success', 'failed', 'cancelled'}
+    allowed = {'pending', 'scheduled', 'uploading', 'success', 'failed', 'held', 'cancelled'}
     if status not in allowed:
         raise ValueError(f"invalid upload queue status: {status}")
     conn = get_conn()
@@ -772,9 +876,8 @@ def update_upload_queue_status(
         ),
     )
     conn.commit()
-    row = cur.execute('SELECT * FROM upload_queue WHERE queue_id = ?', (queue_id,)).fetchone()
     conn.close()
-    return dict(row) if row else None
+    return get_upload_queue_item(queue_id)
 
 
 def mark_upload_queue_uploading(queue_id: str):
@@ -786,15 +889,14 @@ def mark_upload_queue_uploading(queue_id: str):
         SET status = 'uploading',
             last_error = '',
             updated_at = CURRENT_TIMESTAMP
-        WHERE queue_id = ? AND status IN ('pending', 'failed')
+        WHERE queue_id = ? AND status IN ('pending', 'scheduled', 'failed')
         """,
         (queue_id,),
     )
     changed = cur.rowcount
     conn.commit()
-    row = cur.execute('SELECT * FROM upload_queue WHERE queue_id = ?', (queue_id,)).fetchone()
     conn.close()
-    return (dict(row) if row else None), changed > 0
+    return get_upload_queue_item(queue_id), changed > 0
 
 
 def mark_upload_queue_success(queue_id: str, result: dict | None = None):
@@ -813,12 +915,11 @@ def cancel_upload_queue_item(queue_id: str):
         UPDATE upload_queue
         SET status = 'cancelled',
             updated_at = CURRENT_TIMESTAMP
-        WHERE queue_id = ? AND status IN ('pending', 'failed')
+        WHERE queue_id = ? AND status IN ('pending', 'scheduled', 'held', 'failed')
         """,
         (queue_id,),
     )
     changed = cur.rowcount
     conn.commit()
-    row = cur.execute('SELECT * FROM upload_queue WHERE queue_id = ?', (queue_id,)).fetchone()
     conn.close()
-    return (dict(row) if row else None), changed > 0
+    return get_upload_queue_item(queue_id), changed > 0

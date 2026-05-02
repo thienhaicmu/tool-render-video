@@ -305,20 +305,25 @@ class UploadRequest(BaseModel):
 
 
 class UploadQueueAddRequest(BaseModel):
-    video_path: str
+    video_id: Optional[str] = ""
+    video_path: Optional[str] = ""
     render_job_id: Optional[str] = ""
     part_no: int = 0
-    channel_code: str
-    account_id: Optional[str] = None
+    channel_code: Optional[str] = ""
+    account_id: Optional[str] = ""
     platform: Optional[str] = "tiktok"
     caption: Optional[str] = ""
-    hashtags: list[str] = Field(default_factory=list)
+    hashtags: Optional[list[str]] = None
+    scheduled_at: Optional[str] = ""
+    priority: int = 0
 
 
 UPLOAD_ACCOUNT_STATUSES = {"active", "warming", "limited", "banned", "disabled", "login_required"}
 UPLOAD_LOGIN_STATES = {"unknown", "logged_in", "logged_out", "challenge", "expired"}
 UPLOAD_VIDEO_SOURCE_TYPES = {"manual_file", "import_folder", "render_export_later"}
 UPLOAD_VIDEO_STATUSES = {"ready", "queued", "uploaded", "failed", "disabled"}
+UPLOAD_QUEUE_STATUSES = {"pending", "scheduled", "uploading", "success", "failed", "held", "cancelled"}
+UPLOAD_QUEUE_SAFE_UPDATE_STATUSES = {"pending", "scheduled", "held"}
 
 
 class UploadAccountBase(BaseModel):
@@ -470,5 +475,46 @@ class UploadVideoResponse(BaseModel):
     duration_sec: float = 0
     file_size: int = 0
     metadata: dict = Field(default_factory=dict)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class UploadQueueUpdateRequest(BaseModel):
+    account_id: Optional[str] = None
+    caption: Optional[str] = None
+    hashtags: Optional[list[str]] = None
+    priority: Optional[int] = None
+    scheduled_at: Optional[str] = None
+    status: Optional[str] = None
+
+    @field_validator("status")
+    @classmethod
+    def _validate_queue_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        value = v.strip().lower()
+        if value not in UPLOAD_QUEUE_SAFE_UPDATE_STATUSES:
+            raise ValueError(f"status can only be one of {sorted(UPLOAD_QUEUE_SAFE_UPDATE_STATUSES)!r}")
+        return value
+
+
+class UploadQueueResponse(BaseModel):
+    queue_id: str
+    video_id: Optional[str] = ""
+    video_path: str
+    account_id: Optional[str] = ""
+    platform: str = "tiktok"
+    caption: str = ""
+    hashtags: list[str] = Field(default_factory=list)
+    status: str = "pending"
+    priority: int = 0
+    scheduled_at: str = ""
+    attempt_count: int = 0
+    max_attempts: int = 3
+    last_error: str = ""
+    metadata: dict = Field(default_factory=dict)
+    video_file_name: str = ""
+    account_display_name: str = ""
+    account_key: str = ""
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

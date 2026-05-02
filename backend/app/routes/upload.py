@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import re
-from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
 from app.models.schemas import (
@@ -11,6 +10,7 @@ from app.models.schemas import (
     UploadAccountCreate,
     UploadAccountUpdate,
     UploadQueueAddRequest,
+    UploadQueueUpdateRequest,
     UploadRequest,
 )
 from app.services.db import (
@@ -26,10 +26,8 @@ from app.services.db import (
     list_upload_account_rows,
     list_upload_queue,
     list_upload_video_rows,
-    mark_upload_queue_failed,
-    mark_upload_queue_success,
-    mark_upload_queue_uploading,
     update_upload_account_row,
+    update_upload_queue_item,
     update_upload_video_row,
 )
 from app.services.upload_engine import (
@@ -46,7 +44,6 @@ from app.services.upload_engine import (
     get_upload_run,
     load_upload_settings,
     save_upload_settings,
-    upload_one_video,
 )
 from app.services.channel_service import ensure_channel
 
@@ -240,36 +237,114 @@ def disable_upload_video_library_item(video_id: str):
 
 @router.post("/queue/add")
 def add_to_upload_queue(payload: UploadQueueAddRequest):
-    video_path = str(payload.video_path or "").strip()
-    channel_code = str(payload.channel_code or "").strip()
-    if not video_path:
-        raise HTTPException(status_code=400, detail="video_path is required")
-    if not channel_code:
-        raise HTTPException(status_code=400, detail="channel_code is required")
-    platform = str(payload.platform or "tiktok").strip().lower() or "tiktok"
+    video_id = str(payload.video_id or "").strip()
+    account_id = str(payload.account_id or "").strip()
+    video = get_upload_video_row(video_id) if video_id else None
+    account = get_upload_account_row(account_id) if account_id else None
+
+    if video_id and not video:
+        raise HTTPException(status_code=404, detail="Upload video not found")
+    if account_id and not account:
+        raise HTTPException(status_code=404, detail="Upload account not found")
+    if video and str(video.get("status") or "").lower() == "disabled":
+        raise HTTPException(status_code=400, detail="Disabled video cannot be queued")
+    if account and str(account.get("status") or "").lower() == "disabled":
+        raise HTTPException(status_code=400, detail="Disabled account cannot be queued")
+    if not video and not str(payload.video_path or "").strip():
+        raise HTTPException(status_code=400, detail="video_id is required")
+    if video and not account:
+        raise HTTPException(status_code=400, detail="account_id is required")
+
+    video_path = str((video or {}).get("video_path") or payload.video_path or "").strip()
+    platform = str((account or {}).get("platform") or (video or {}).get("platform") or payload.platform or "tiktok").strip().lower() or "tiktok"
+    caption_override = str(payload.caption or "").strip()
+    hashtags_override = payload.hashtags if payload.hashtags else None
+    caption = caption_override if caption_override else str((video or {}).get("caption") or "")
+    hashtags = hashtags_override if hashtags_override is not None else ((video or {}).get("hashtags") or [])
+    scheduled_at = str(payload.scheduled_at or "").strip()
     row = add_upload_queue_item(
+        video_id=video_id,
         video_path=video_path,
         render_job_id=str(payload.render_job_id or "").strip(),
         part_no=int(payload.part_no or 0),
-        channel_code=channel_code,
-        account_id=str(payload.account_id or "").strip(),
+        channel_code=str(payload.channel_code or "").strip(),
+        account_id=account_id,
         platform=platform,
-        caption=str(payload.caption or ""),
-        hashtags=payload.hashtags or [],
+        caption=caption,
+        hashtags=hashtags,
+        scheduled_at=scheduled_at,
+        priority=int(payload.priority or 0),
+        status='scheduled' if scheduled_at else 'pending',
+        metadata={"source": "video_library" if video else "legacy"},
     )
     logger.info(
-        "upload_queue_add queue_id=%s video_path=%s channel_code=%s",
+        "upload_queue_add queue_id=%s video_id=%s account_id=%s video_path=%s",
         row.get("queue_id"),
+        video_id,
+        account_id,
         video_path,
-        channel_code,
     )
     return {"status": "ok", "queue_id": row.get("queue_id"), "item": row}
 
 
 @router.get("/queue")
-def get_upload_queue():
-    items = list_upload_queue(limit=50)
+def get_upload_queue(status: str = "", account_id: str = "", platform: str = "", limit: int = 100):
+    items = list_upload_queue(
+        limit=limit,
+        status=str(status or "").strip().lower(),
+        account_id=str(account_id or "").strip(),
+        platform=str(platform or "").strip().lower(),
+    )
     return {"status": "ok", "count": len(items), "items": items}
+
+
+@router.get("/queue/{queue_id}")
+def get_upload_queue_detail(queue_id: str):
+    row = get_upload_queue_item(queue_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Upload queue item not found")
+    return {"status": "ok", "item": row}
+
+
+@router.patch("/queue/{queue_id}")
+def update_upload_queue_detail(queue_id: str, payload: UploadQueueUpdateRequest):
+    current = get_upload_queue_item(queue_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Upload queue item not found")
+    if str(current.get("status") or "").lower() not in {"pending", "scheduled", "held"}:
+        raise HTTPException(status_code=409, detail=f"Upload queue item cannot be edited from status '{current.get('status')}'")
+    changes = payload.model_dump(exclude_unset=True)
+    if "account_id" in changes and changes["account_id"]:
+        account = get_upload_account_row(str(changes["account_id"]).strip())
+        if not account:
+            raise HTTPException(status_code=404, detail="Upload account not found")
+        if str(account.get("status") or "").lower() == "disabled":
+            raise HTTPException(status_code=400, detail="Disabled account cannot be assigned")
+    row = update_upload_queue_item(queue_id, changes)
+    return {"status": "ok", "item": row}
+
+
+@router.post("/queue/{queue_id}/hold")
+def hold_upload_queue(queue_id: str):
+    row = get_upload_queue_item(queue_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Upload queue item not found")
+    if str(row.get("status") or "").lower() not in {"pending", "scheduled", "failed"}:
+        raise HTTPException(status_code=409, detail=f"Upload queue item cannot be held from status '{row.get('status')}'")
+    final = update_upload_queue_item(queue_id, {"status": "held"})
+    return {"status": "held", "queue_id": queue_id, "item": final}
+
+
+@router.post("/queue/{queue_id}/resume")
+def resume_upload_queue(queue_id: str):
+    row = get_upload_queue_item(queue_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Upload queue item not found")
+    if str(row.get("status") or "").lower() != "held":
+        raise HTTPException(status_code=409, detail=f"Upload queue item cannot be resumed from status '{row.get('status')}'")
+    next_status = "scheduled" if str(row.get("scheduled_at") or "").strip() else "pending"
+    final = update_upload_queue_item(queue_id, {"status": next_status})
+    return {"status": next_status, "queue_id": queue_id, "item": final}
 
 
 def _queue_account_key(row: dict) -> str:
@@ -282,82 +357,7 @@ def run_upload_queue_item(queue_id: str):
     row = get_upload_queue_item(queue_id)
     if not row:
         raise HTTPException(status_code=404, detail="Upload queue item not found")
-
-    current_status = str(row.get("status") or "").lower()
-    if current_status == "uploading":
-        raise HTTPException(status_code=409, detail="Upload queue item is already uploading")
-    if current_status not in {"pending", "failed"}:
-        raise HTTPException(status_code=409, detail=f"Upload queue item cannot run from status '{current_status}'")
-
-    video_path = Path(str(row.get("video_path") or "").strip())
-    if not video_path.exists() or not video_path.is_file():
-        error = f"Video file not found: {video_path}"
-        mark_upload_queue_failed(queue_id, error)
-        raise HTTPException(status_code=400, detail=error)
-
-    locked_row, acquired = mark_upload_queue_uploading(queue_id)
-    if not locked_row:
-        raise HTTPException(status_code=404, detail="Upload queue item not found")
-    if not acquired:
-        locked_status = str(locked_row.get("status") or "").lower()
-        raise HTTPException(status_code=409, detail=f"Upload queue item is already {locked_status}")
-
-    channel_code = str(locked_row.get("channel_code") or "").strip()
-    account_key = _queue_account_key(locked_row)
-    logger.info(
-        "upload_queue_run_start queue_id=%s video_path=%s account_id=%s channel_code=%s",
-        queue_id,
-        str(video_path),
-        locked_row.get("account_id") or "",
-        channel_code,
-    )
-
-    try:
-        if not channel_code:
-            raise RuntimeError("channel_code is required")
-        platform = str(locked_row.get("platform") or "tiktok").strip().lower()
-        if platform != "tiktok":
-            raise RuntimeError(f"platform '{platform}' is not supported by the manual queue worker yet")
-        ensure_channel(channel_code)
-        cfg = load_channel_config(channel_code, account_key=account_key)
-        try:
-            login_check = check_login_with_persistent_profile(channel_code, account_key=account_key)
-        except Exception as login_exc:
-            raise RuntimeError(f"account/login not ready: {login_exc}") from login_exc
-        if not login_check.get("logged_in"):
-            raise RuntimeError("account/login not ready")
-
-        caption = str(locked_row.get("caption") or "").strip()
-        if not caption:
-            caption = video_path.stem.replace("_", " ").replace("-", " ").strip()
-        scheduled_iso = datetime.now().astimezone().isoformat()
-        attempts, detail = upload_one_video(
-            cfg=cfg,
-            video_path=video_path,
-            scheduled_iso=scheduled_iso,
-            caption=caption,
-            use_schedule=False,
-            retry_count=0,
-            headless=False,
-        )
-        result = {
-            "attempts": attempts,
-            "detail": detail,
-            "uploaded_at": datetime.utcnow().isoformat() + "Z",
-        }
-        final = mark_upload_queue_success(queue_id, result)
-        logger.info("upload_queue_run_success queue_id=%s video_path=%s", queue_id, str(video_path))
-        return {"status": "success", "queue_id": queue_id, "item": final}
-    except Exception as exc:
-        error = str(exc) or "Upload failed"
-        final = mark_upload_queue_failed(queue_id, error)
-        logger.error(
-            "upload_queue_run_failed queue_id=%s video_path=%s error=%s",
-            queue_id,
-            str(video_path),
-            error,
-        )
-        return {"status": "failed", "queue_id": queue_id, "item": final, "error": error}
+    raise HTTPException(status_code=409, detail="Upload execution is disabled in this phase")
 
 
 @router.post("/queue/{queue_id}/cancel")

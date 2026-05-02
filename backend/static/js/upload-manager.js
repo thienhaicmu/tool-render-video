@@ -1,5 +1,6 @@
 let uploadAccountManagerItems = [];
 let uploadVideoLibraryItems = [];
+let uploadQueueManagerItems = [];
 
 function enforceRenderUploadIndependence(){
   window.addRenderClipToUploadQueue = function(){
@@ -26,6 +27,7 @@ function initUploadAccountManager(){
   enforceRenderUploadIndependence();
   loadUploadAccounts();
   loadUploadVideoLibrary();
+  loadUploadQueueManager();
   if(typeof window.setView === 'function' && !window._uploadAccountManagerSetViewWrapped){
     const originalSetView = window.setView;
     window.setView = function(view){
@@ -33,6 +35,7 @@ function initUploadAccountManager(){
       if(view === 'upload'){
         loadUploadAccounts();
         loadUploadVideoLibrary();
+        loadUploadQueueManager();
       }
       return result;
     };
@@ -160,6 +163,7 @@ async function loadUploadAccounts(){
     if(!res.ok) throw new Error(_formatApiError(data.detail));
     uploadAccountManagerItems = Array.isArray(data.items) ? data.items : [];
     renderUploadAccounts(uploadAccountManagerItems);
+    renderUploadQueueSelectors();
   }catch(e){
     if(tbody) tbody.innerHTML = `<tr><td colspan="8" class="uamEmpty">Load failed: ${esc(e.message || e)}</td></tr>`;
     addEvent(`Upload account load failed: ${e.message || e}`, 'upload');
@@ -356,7 +360,7 @@ function renderUploadVideoLibrary(items){
           <div class="uvlActions">
             <button class="ghostButton" type="button" onclick="fillUploadVideoForm('${esc(item.video_id)}')">Edit</button>
             <button class="ghostButton" type="button" onclick="disableUploadVideo('${esc(item.video_id)}')" ${disabled ? 'disabled' : ''}>Disable</button>
-            <button class="ghostButton" type="button" disabled title="Queue in next phase">Queue in next phase</button>
+            <button class="ghostButton" type="button" onclick="selectVideoForQueue('${esc(item.video_id)}')" ${disabled || String(item.status || '').toLowerCase() !== 'ready' ? 'disabled' : ''}>Add to Queue</button>
           </div>
         </td>
       </tr>
@@ -377,6 +381,7 @@ async function loadUploadVideoLibrary(){
     if(!res.ok) throw new Error(_formatApiError(data.detail));
     uploadVideoLibraryItems = Array.isArray(data.items) ? data.items : [];
     renderUploadVideoLibrary(uploadVideoLibraryItems);
+    renderUploadQueueSelectors();
   }catch(e){
     if(tbody) tbody.innerHTML = `<tr><td colspan="8" class="uvlEmpty">Load failed: ${esc(e.message || e)}</td></tr>`;
     addEvent(`Upload video library load failed: ${e.message || e}`, 'upload');
@@ -428,3 +433,199 @@ async function disableUploadVideo(videoId){
     showToast(`Disable failed: ${e.message || e}`, 'error');
   }
 }
+
+function renderUploadQueueSelectors(){
+  const videoSelect = qs('uqm_video_id');
+  const accountSelect = qs('uqm_account_id');
+  if(videoSelect){
+    const current = videoSelect.value;
+    const options = uploadVideoLibraryItems
+      .filter((item) => String(item.status || '').toLowerCase() !== 'disabled')
+      .map((item) => `<option value="${esc(item.video_id)}">${esc(item.file_name || item.video_path || item.video_id)}</option>`)
+      .join('');
+    videoSelect.innerHTML = `<option value="">Select video</option>${options}`;
+    if(current) videoSelect.value = current;
+  }
+  if(accountSelect){
+    const current = accountSelect.value;
+    const options = uploadAccountManagerItems
+      .filter((item) => String(item.status || '').toLowerCase() !== 'disabled')
+      .map((item) => {
+        const name = item.display_name || item.account_key || item.account_id;
+        return `<option value="${esc(item.account_id)}">${esc(name)} (${esc(item.platform || 'tiktok')})</option>`;
+      })
+      .join('');
+    accountSelect.innerHTML = `<option value="">Select account</option>${options}`;
+    if(current) accountSelect.value = current;
+  }
+}
+
+function selectVideoForQueue(videoId){
+  const item = uploadVideoLibraryItems.find((x) => x.video_id === videoId);
+  if(!item) return;
+  if(String(item.status || '').toLowerCase() === 'disabled'){
+    showToast('Disabled video cannot be queued', 'error');
+    return;
+  }
+  renderUploadQueueSelectors();
+  if(qs('uqm_video_id')) qs('uqm_video_id').value = videoId;
+  if(qs('uqm_caption')) qs('uqm_caption').value = item.caption || '';
+  if(qs('uqm_hashtags')) qs('uqm_hashtags').value = _uvlHashtagText(item.hashtags || []);
+  const panel = qs('upload_queue_manager');
+  if(panel) panel.scrollIntoView({behavior: 'smooth', block: 'start'});
+  showToast('Video selected for queue form', 'info');
+}
+
+function _uqmValue(id){
+  return String(qs(id)?.value || '').trim();
+}
+
+function collectUploadQueueForm(){
+  return {
+    video_id: _uqmValue('uqm_video_id'),
+    account_id: _uqmValue('uqm_account_id'),
+    caption: _uqmValue('uqm_caption'),
+    hashtags: _uvlParseHashtags(_uqmValue('uqm_hashtags')),
+    scheduled_at: _uqmValue('uqm_scheduled_at'),
+    priority: Number(qs('uqm_priority')?.value || 0) || 0,
+    status: _uqmValue('uqm_status') || 'pending',
+  };
+}
+
+function resetUploadQueueForm(){
+  ['uqm_queue_id', 'uqm_caption', 'uqm_hashtags', 'uqm_scheduled_at'].forEach((id) => {
+    if(qs(id)) qs(id).value = '';
+  });
+  if(qs('uqm_video_id')) qs('uqm_video_id').value = '';
+  if(qs('uqm_account_id')) qs('uqm_account_id').value = '';
+  if(qs('uqm_priority')) qs('uqm_priority').value = '0';
+  if(qs('uqm_status')) qs('uqm_status').value = 'pending';
+  ['uqm_video_id'].forEach((id) => { if(qs(id)) qs(id).disabled = false; });
+  if(qs('uqm_save_btn')) qs('uqm_save_btn').textContent = 'Add to Queue';
+}
+
+function fillUploadQueueForm(queueId){
+  const item = uploadQueueManagerItems.find((x) => x.queue_id === queueId);
+  if(!item) return;
+  renderUploadQueueSelectors();
+  if(qs('uqm_queue_id')) qs('uqm_queue_id').value = item.queue_id || '';
+  if(qs('uqm_video_id')) qs('uqm_video_id').value = item.video_id || '';
+  if(qs('uqm_account_id')) qs('uqm_account_id').value = item.account_id || '';
+  if(qs('uqm_caption')) qs('uqm_caption').value = item.caption || '';
+  if(qs('uqm_hashtags')) qs('uqm_hashtags').value = _uvlHashtagText(item.hashtags || []);
+  if(qs('uqm_scheduled_at')) qs('uqm_scheduled_at').value = item.scheduled_at || '';
+  if(qs('uqm_priority')) qs('uqm_priority').value = Number(item.priority || 0);
+  if(qs('uqm_status')) qs('uqm_status').value = ['pending', 'scheduled', 'held'].includes(String(item.status || '')) ? item.status : 'pending';
+  if(qs('uqm_video_id')) qs('uqm_video_id').disabled = true;
+  if(qs('uqm_save_btn')) qs('uqm_save_btn').textContent = 'Save Queue Item';
+}
+
+function renderUploadQueueManager(items){
+  const tbody = qs('upload_queue_manager_tbody');
+  if(!tbody) return;
+  if(!items || !items.length){
+    tbody.innerHTML = '<tr><td colspan="8" class="uqmEmpty">No queue items yet. Select a video and account to create one.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map((item) => {
+    const status = String(item.status || 'pending').toLowerCase();
+    const muted = ['held', 'cancelled'].includes(status);
+    const accountName = item.account_display_name || item.account_key || item.account_id || '-';
+    const clipName = item.video_file_name || String(item.video_path || '').split(/[\\/]/).pop() || '-';
+    return `
+      <tr class="${muted ? 'isMuted' : ''}">
+        <td>
+          <div class="uqmClipName">${esc(clipName)}</div>
+          <div class="uqmSub" title="${esc(item.video_path || '')}">${esc(_uamShortPath(item.video_path || ''))}</div>
+        </td>
+        <td>${esc(accountName)}</td>
+        <td>${_uamBadge(status, 'status')}</td>
+        <td>${esc(item.platform || 'tiktok')}</td>
+        <td>${esc(item.scheduled_at || '-')}</td>
+        <td>${Number(item.priority || 0)}</td>
+        <td>${Number(item.attempt_count || 0)} / ${Number(item.max_attempts || 3)}</td>
+        <td>
+          <div class="uqmActions">
+            <button class="ghostButton" type="button" onclick="fillUploadQueueForm('${esc(item.queue_id)}')" ${['cancelled', 'uploading', 'success'].includes(status) ? 'disabled' : ''}>Edit</button>
+            <button class="ghostButton" type="button" onclick="holdUploadQueueItem('${esc(item.queue_id)}')" ${!['pending', 'scheduled', 'failed'].includes(status) ? 'disabled' : ''}>Hold</button>
+            <button class="ghostButton" type="button" onclick="resumeUploadQueueItem('${esc(item.queue_id)}')" ${status !== 'held' ? 'disabled' : ''}>Resume</button>
+            <button class="ghostButton" type="button" onclick="cancelUploadQueueItemUi('${esc(item.queue_id)}')" ${!['pending', 'scheduled', 'held', 'failed'].includes(status) ? 'disabled' : ''}>Cancel</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function loadUploadQueueManager(){
+  const tbody = qs('upload_queue_manager_tbody');
+  if(tbody) tbody.innerHTML = '<tr><td colspan="8" class="uqmEmpty">Loading queue...</td></tr>';
+  const params = new URLSearchParams();
+  const status = _uqmValue('uqm_filter_status');
+  if(status) params.set('status', status);
+  params.set('limit', '100');
+  try{
+    const res = await fetch(`/api/upload/queue?${params.toString()}`);
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    uploadQueueManagerItems = Array.isArray(data.items) ? data.items : [];
+    renderUploadQueueManager(uploadQueueManagerItems);
+  }catch(e){
+    if(tbody) tbody.innerHTML = `<tr><td colspan="8" class="uqmEmpty">Load failed: ${esc(e.message || e)}</td></tr>`;
+    addEvent(`Upload queue load failed: ${e.message || e}`, 'upload');
+  }
+}
+
+async function saveUploadQueueItem(event){
+  if(event) event.preventDefault();
+  const queueId = _uqmValue('uqm_queue_id');
+  const payload = collectUploadQueueForm();
+  if(!queueId && !payload.video_id){
+    showToast('Missing video: select a video first', 'error');
+    return;
+  }
+  if(!payload.account_id){
+    showToast('Missing account: select an account first', 'error');
+    return;
+  }
+  const body = queueId
+    ? {
+        account_id: payload.account_id,
+        caption: payload.caption,
+        hashtags: payload.hashtags,
+        priority: payload.priority,
+        scheduled_at: payload.scheduled_at,
+        status: payload.status,
+      }
+    : payload;
+  try{
+    const res = await fetch(queueId ? `/api/upload/queue/${encodeURIComponent(queueId)}` : '/api/upload/queue/add', {
+      method: queueId ? 'PATCH' : 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    resetUploadQueueForm();
+    await loadUploadQueueManager();
+    showToast(queueId ? 'Queue item updated' : 'Queue item created', 'success');
+  }catch(e){
+    showToast(`Queue save failed: ${e.message || e}`, 'error');
+  }
+}
+
+async function _queueAction(queueId, action){
+  try{
+    const res = await fetch(`/api/upload/queue/${encodeURIComponent(queueId)}/${action}`, {method: 'POST'});
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    await loadUploadQueueManager();
+    showToast(`Queue item ${action} ok`, 'success');
+  }catch(e){
+    showToast(`Queue ${action} failed: ${e.message || e}`, 'error');
+  }
+}
+
+function holdUploadQueueItem(queueId){ _queueAction(queueId, 'hold'); }
+function resumeUploadQueueItem(queueId){ _queueAction(queueId, 'resume'); }
+function cancelUploadQueueItemUi(queueId){ _queueAction(queueId, 'cancel'); }

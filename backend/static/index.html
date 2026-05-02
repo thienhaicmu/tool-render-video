@@ -558,6 +558,59 @@
               </table>
             </div>
           </div>
+          <div class="uploadQueueManager" id="upload_queue_manager">
+            <div class="uqmHeader">
+              <div>
+                <div class="uqmTitle">Upload Queue</div>
+                <div class="sectionSubtitle">Create queue items from Video Library and Account Manager. Execution is disabled until the next phase.</div>
+              </div>
+              <div class="uqmHeaderActions">
+                <select class="fieldInput" id="uqm_filter_status" onchange="loadUploadQueueManager()" title="Queue status filter">
+                  <option value="">All Queue</option>
+                  <option value="pending">Pending</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="held">Held</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <button class="ghostButton" type="button" onclick="loadUploadQueueManager()">Refresh Queue</button>
+              </div>
+            </div>
+            <form class="uqmForm" id="upload_queue_form" onsubmit="saveUploadQueueItem(event)">
+              <input type="hidden" id="uqm_queue_id">
+              <label class="field fieldSpan2"><span class="fieldLabel">Video</span><select class="fieldInput" id="uqm_video_id"><option value="">Select video</option></select></label>
+              <label class="field fieldSpan2"><span class="fieldLabel">Account</span><select class="fieldInput" id="uqm_account_id"><option value="">Select account</option></select></label>
+              <label class="field fieldSpan2"><span class="fieldLabel">Caption Override</span><input class="fieldInput" id="uqm_caption" placeholder="Leave empty to inherit video caption"></label>
+              <label class="field fieldSpan2"><span class="fieldLabel">Hashtags Override</span><input class="fieldInput" id="uqm_hashtags" placeholder="Leave empty to inherit video hashtags"></label>
+              <label class="field"><span class="fieldLabel">Schedule Time</span><input class="fieldInput" id="uqm_scheduled_at" placeholder="Optional ISO/local text"></label>
+              <label class="field"><span class="fieldLabel">Priority</span><input class="fieldInput" id="uqm_priority" type="number" value="0"></label>
+              <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uqm_status"><option value="pending">Pending</option><option value="scheduled">Scheduled</option><option value="held">Held</option></select></label>
+              <div class="uqmFormActions">
+                <button class="primaryButton" type="submit" id="uqm_save_btn">Add to Queue</button>
+                <button class="ghostButton" type="button" onclick="resetUploadQueueForm()">Clear</button>
+                <button class="ghostButton" type="button" disabled title="Run in next phase">Run in next phase</button>
+              </div>
+            </form>
+            <div class="uqmTableWrap">
+              <table class="uqmTable">
+                <thead>
+                  <tr>
+                    <th>Clip</th>
+                    <th>Account</th>
+                    <th>Status</th>
+                    <th>Platform</th>
+                    <th>Scheduled</th>
+                    <th>Priority</th>
+                    <th>Attempts</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="upload_queue_manager_tbody">
+                  <tr><td colspan="8" class="uqmEmpty">No queue items yet. Select a video and account to create one.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
           <!-- Step wizard indicator — 4 sequential steps replace flat 5-cluster layout -->
           <div id="upload_step_bar" class="uploadStepBar">
             <div class="uploadStepItem stepActive" id="upload_step_1" onclick="setUploadWizardStep(1)" title="Step 1: Select Channel">1 · Channel</div>
