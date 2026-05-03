@@ -476,6 +476,22 @@
             </div>
           </div>
           <div class="uploadWorkflowHint" id="upload_workflow_hint">Start by creating an upload account.</div>
+          <div class="uploadManagerTopBar">
+            <div class="uploadManagerTopBarTitle">
+              <div class="sectionTitle">Upload Manager</div>
+              <div class="sectionSubtitle">Choose an account, assign videos, then start uploads safely.</div>
+            </div>
+            <div class="uploadManagerTopBarControls">
+              <div class="uploadSchedulerStatus">
+                <span class="uamBadge" id="upload_scheduler_status_badge_top" data-state="stopped">stopped</span>
+                <span class="uploadSchedulerMeta" id="upload_scheduler_meta_top">Eligible 0 · Running 0</span>
+              </div>
+              <button class="primaryButton" type="button" onclick="startUploadScheduler()">Start Scheduler</button>
+              <button class="ghostButton" type="button" onclick="stopUploadScheduler()">Stop Scheduler</button>
+              <button class="ghostButton" type="button" onclick="runUploadSchedulerTick()">Tick Now</button>
+              <button class="ghostButton" type="button" onclick="refreshUploadWorkspace()">Refresh</button>
+            </div>
+          </div>
           <div class="uploadManagerWorkspace" id="upload_manager_workspace">
             <div class="uploadManagerColumn uploadManagerColumnLeft">
               <div class="uploadAccountManager" id="upload_account_manager">
@@ -537,28 +553,32 @@
               <div class="uploadAccountWorkspaceShell" id="upload_account_workspace_shell">
                 <div class="uploadAccountWorkspaceHeader">
                   <div>
-                    <div class="uvlTitle" id="upload_account_workspace_title">Account Workspace</div>
+                    <div class="uvlTitle" id="upload_account_workspace_title">Account Workspace: Select an account</div>
                     <div class="sectionSubtitle" id="upload_account_workspace_hint">Select an account to manage its upload flow.</div>
                   </div>
                   <div class="uploadAccountWorkspaceActions">
-                    <button class="primaryButton" type="button" id="upload_run_account_btn" onclick="runSelectedAccountQueue()">Run Account</button>
-                    <button class="ghostButton" type="button" id="upload_stop_account_btn" onclick="stopSelectedAccountQueue()">Stop Account</button>
+                    <button class="primaryButton" type="button" id="upload_run_account_btn" onclick="runSelectedAccountQueue()">Start Upload</button>
+                    <button class="ghostButton" type="button" id="upload_stop_account_btn" onclick="stopSelectedAccountQueue()">Hold Pending</button>
                     <button class="ghostButton" type="button" id="upload_check_login_btn" onclick="checkSelectedAccountLogin()">Check Login</button>
                   </div>
                 </div>
                 <div class="uploadAccountWorkspaceMeta" id="upload_account_workspace_meta">
-                  <div class="uploadInspectorPlaceholder">Choose an account on the left to see its current upload activity.</div>
+                  <div class="uploadWorkspaceEmptyState">
+                    <div class="uploadWorkspaceEmptyTitle">Select an account to manage uploads</div>
+                    <div class="uploadWorkspaceEmptyCopy">Accounts are isolated with their own browser profile.</div>
+                  </div>
                 </div>
               </div>
               <div class="uploadManagerTabs" role="tablist" aria-label="Upload manager lists">
-                <button class="uploadManagerTab active" type="button" id="upload_tab_videos" onclick="setUploadManagerTab('videos')">Video Library</button>
-                <button class="uploadManagerTab" type="button" id="upload_tab_queue" onclick="setUploadManagerTab('queue')">Account Uploads</button>
+                <button class="uploadManagerTab active" type="button" id="upload_tab_videos" onclick="setUploadManagerTab('videos')">Videos</button>
+                <button class="uploadManagerTab" type="button" id="upload_tab_queue" onclick="setUploadManagerTab('queue')">Uploads</button>
+                <button class="uploadManagerTab" type="button" id="upload_tab_settings" onclick="setUploadManagerTab('settings')">Settings</button>
               </div>
               <div class="uploadVideoLibrary uploadManagerTabPanel active" id="upload_video_library" data-tab-panel="videos">
                 <div class="uvlHeader">
                   <div>
-                    <div class="uvlTitle">Video Library</div>
-                    <div class="sectionSubtitle">Manual upload-ready files only. Nothing is imported from render outputs.</div>
+                    <div class="uvlTitle">Videos</div>
+                    <div class="sectionSubtitle">Upload-ready files you can assign to the selected account.</div>
                   </div>
                   <div class="uvlHeaderActions">
                     <select class="fieldInput" id="uvl_filter_status" onchange="loadUploadVideoLibrary()" title="Status filter">
@@ -569,7 +589,7 @@
                       <option value="failed">Failed</option>
                       <option value="disabled">Disabled</option>
                     </select>
-                    <button class="primaryButton uploadPrimaryAction" type="button" onclick="openUploadEditor('video')">Add Video</button>
+                    <button class="primaryButton uploadPrimaryAction" type="button" id="uvl_add_video_btn" onclick="openUploadEditor('video')">Add Video</button>
                     <button class="ghostButton" type="button" onclick="loadUploadVideoLibrary()">Refresh</button>
                   </div>
                 </div>
@@ -618,7 +638,7 @@
               <div class="uploadQueueManager uploadManagerTabPanel" id="upload_queue_manager" data-tab-panel="queue">
                   <div class="uqmHeader">
                     <div>
-                    <div class="uqmTitle">Account Uploads</div>
+                    <div class="uqmTitle" id="uqm_uploads_title">Uploads for this account</div>
                     <div class="sectionSubtitle" id="uqm_account_workspace_hint">Select an account to see its upload items and run them safely.</div>
                     </div>
                   <div class="uqmHeaderActions">
@@ -632,11 +652,11 @@
                       <option value="held">Held</option>
                       <option value="cancelled">Cancelled</option>
                     </select>
-                    <button class="primaryButton uploadPrimaryAction" type="button" id="uqm_add_to_account_btn" onclick="openSelectedAccountQueueFlow()">Add Video to this Account</button>
-                    <button class="ghostButton" type="button" onclick="loadUploadQueueManager()">Refresh Account Uploads</button>
+                    <button class="primaryButton uploadPrimaryAction" type="button" id="uqm_add_to_account_btn" onclick="openSelectedAccountQueueFlow()">Assign to Account</button>
+                    <button class="ghostButton" type="button" onclick="loadUploadQueueManager()">Refresh Uploads</button>
                   </div>
                 </div>
-                <div class="uploadSchedulerBar" id="upload_scheduler_bar">
+                <div class="uploadSchedulerBar uploadSchedulerBarSecondary" id="upload_scheduler_bar">
                   <div class="uploadSchedulerStatus">
                     <span class="uamBadge" id="upload_scheduler_status_badge" data-state="stopped">stopped</span>
                     <span class="uploadSchedulerMeta" id="upload_scheduler_meta">Eligible 0 · Running 0</span>
@@ -649,7 +669,7 @@
                 </div>
                 <div class="uploadSchedulerBlocked" id="upload_scheduler_blocked">Blocked reasons will appear here.</div>
                 <details class="uploadEditorSection" id="uqm_editor">
-                  <summary>Account Upload Form</summary>
+                  <summary>Assign Video to Account</summary>
                   <form class="uqmForm" id="upload_queue_form" onsubmit="saveUploadQueueItem(event)">
                     <input type="hidden" id="uqm_queue_id">
                     <label class="field fieldSpan2"><span class="fieldLabel">Video</span><select class="fieldInput" id="uqm_video_id"><option value="">Select video</option></select></label>
@@ -666,9 +686,8 @@
                       </div>
                     </details>
                     <div class="uqmFormActions">
-                      <button class="primaryButton" type="submit" id="uqm_save_btn">Add Video to this Account</button>
+                      <button class="primaryButton" type="submit" id="uqm_save_btn">Assign to Account</button>
                       <button class="ghostButton" type="button" onclick="resetUploadQueueForm()">Clear</button>
-                      <button class="ghostButton" type="button" disabled title="Run in next phase">Run in next phase</button>
                     </div>
                   </form>
                 </details>
@@ -677,7 +696,7 @@
                     <thead>
                       <tr>
                         <th>Video</th>
-                        <th>Activity</th>
+                        <th>State</th>
                         <th>Status</th>
                         <th>Attempts</th>
                         <th>Scheduled</th>
@@ -688,6 +707,18 @@
                       <tr><td colspan="6" class="uqmEmpty">Select an account to see its upload items.</td></tr>
                     </tbody>
                   </table>
+                </div>
+              </div>
+
+              <div class="uploadSettingsPanel uploadManagerTabPanel" id="upload_settings_panel" data-tab-panel="settings">
+                <div class="uvlHeader">
+                  <div>
+                    <div class="uvlTitle">Settings</div>
+                    <div class="sectionSubtitle">Account upload settings and isolation details.</div>
+                  </div>
+                </div>
+                <div class="uploadSettingsBody" id="upload_settings_body">
+                  <div class="uploadInspectorPlaceholder">Select an account to view upload settings.</div>
                 </div>
               </div>
             </div>

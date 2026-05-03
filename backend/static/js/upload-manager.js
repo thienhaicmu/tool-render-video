@@ -1098,6 +1098,617 @@ async function loadUploadQueueHistory(queueId){
   }
 }
 
+function refreshUploadWorkspace(){
+  loadUploadAccounts();
+  loadUploadVideoLibrary();
+  loadUploadQueueManager();
+  loadUploadSchedulerStatus();
+}
+
+function _defaultAccountTab(account){
+  if(!account) return 'videos';
+  const hasActionable = uploadQueueManagerItems.some((item) => String(item.account_id || '') === String(account.account_id || '') && ['pending', 'scheduled', 'uploading', 'failed'].includes(String(item.status || '').toLowerCase()));
+  return hasActionable ? 'queue' : 'videos';
+}
+
+function setUploadManagerTab(tab){
+  uploadManagerActiveTab = ['videos', 'queue', 'settings'].includes(tab) ? tab : 'videos';
+  document.querySelectorAll('.uploadManagerTab').forEach((btn) => {
+    btn.classList.toggle('active', btn.id === `upload_tab_${uploadManagerActiveTab}`);
+  });
+  document.querySelectorAll('.uploadManagerTabPanel').forEach((panel) => {
+    panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === uploadManagerActiveTab);
+  });
+}
+
+function _disabledRunReasonForAccount(account){
+  if(!account) return 'Select an account first';
+  const status = String(account.status || '').toLowerCase();
+  const loginState = String(account.login_state || '').toLowerCase();
+  const items = _accountWorkspaceQueueItems(account.account_id);
+  if(status === 'disabled' || status === 'banned') return 'Account disabled';
+  if(loginState === 'logged_out' || loginState === 'challenge' || loginState === 'expired') return 'Account not logged in';
+  if(items.some((item) => String(item.blocked_reason || '') === 'profile busy')) return 'Profile busy';
+  if(items.some((item) => String(item.blocked_reason || '') === 'daily limit')) return 'Daily limit reached';
+  if(items.some((item) => String(item.blocked_reason || '') === 'cooldown')) return 'Cooldown active';
+  if(!items.length) return 'No videos assigned';
+  return 'No eligible upload item for this account';
+}
+
+function _renderActiveUploadCard(account){
+  const activity = _accountWorkspaceActivity(account.account_id);
+  const items = _accountWorkspaceQueueItems(account.account_id);
+  const uploading = items.find((item) => String(item.status || '').toLowerCase() === 'uploading');
+  if(uploading){
+    return `
+      <div class="accountWorkspaceStat accountWorkspaceStatWide">
+        <div class="accountWorkspaceStatLabel">Uploading now</div>
+        <div class="accountWorkspaceStatValue">${esc(uploading.video_file_name || String(uploading.video_path || '').split(/[\\\\/]/).pop() || '-')}</div>
+        <div class="uamSub">Attempt ${Number(uploading.attempt_count || 0)} / ${Number(uploading.max_attempts || 3)} · ${esc(String(uploading.status || 'uploading').replace(/_/g, ' '))}</div>
+        <div class="uamSub">${esc(uploading.last_error || uploading.blocked_reason || 'Running')}</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="accountWorkspaceStat accountWorkspaceStatWide">
+      <div class="accountWorkspaceStatLabel">Account idle</div>
+      <div class="accountWorkspaceStatValue">Add videos to this account or run the scheduler.</div>
+      <div class="uamSub">${esc(activity.lastError || 'No active upload right now.')}</div>
+    </div>
+  `;
+}
+
+function _renderAccountSettingsPanel(account){
+  const body = qs('upload_settings_body');
+  if(!body) return;
+  if(!account){
+    body.innerHTML = '<div class="uploadInspectorPlaceholder">Select an account to view upload settings.</div>';
+    return;
+  }
+  const proxySummary = account.proxy_id || (account.proxy_config ? _historySummary(account.proxy_config) : '') || '-';
+  body.innerHTML = `
+    <div class="uploadSettingsGrid">
+      ${_detailSection('Profile Path', account.profile_path || '-', false)}
+      ${_detailSection('Proxy', proxySummary, false)}
+      ${_detailSection('Daily Limit', String(Number(account.daily_limit || 0)), false)}
+      ${_detailSection('Cooldown Minutes', String(Number(account.cooldown_minutes || 0)), false)}
+      ${_detailSection('Login State', String(account.login_state || 'unknown').replace(/_/g, ' '), false)}
+      ${_detailSection('Profile Lock', String(account.profile_lock_state || 'idle').replace(/_/g, ' '), false)}
+      ${_detailSection('Last Upload', account.last_upload_at || '-', false)}
+      ${_detailSection('Last Login Check', account.last_login_check_at || '-', false)}
+    </div>
+    ${_detailSection('Health Summary', _prettyJson(account.health_json || {}), true)}
+  `;
+}
+
+function _renderAccountWorkspaceSummary(){
+  const account = _selectedAccountWorkspaceItem();
+  const titleEl = qs('upload_account_workspace_title');
+  const hintEl = qs('upload_account_workspace_hint');
+  const metaEl = qs('upload_account_workspace_meta');
+  const addBtn = qs('uqm_add_to_account_btn');
+  const runBtn = qs('upload_run_account_btn');
+  const stopBtn = qs('upload_stop_account_btn');
+  const checkBtn = qs('upload_check_login_btn');
+  const queueHint = qs('uqm_account_workspace_hint');
+  const formHint = qs('uqm_form_hint');
+  const videosBtn = qs('uvl_add_video_btn');
+  const accountName = account ? (account.display_name || account.account_key || 'this account') : 'Select an account';
+  const items = account ? _accountWorkspaceQueueItems(account.account_id) : [];
+  const nextItem = account ? _findRunnableAccountQueueItem(account.account_id) : null;
+  const counts = account ? _accountWorkspaceCounts(account.account_id) : {pending:0,scheduled:0,uploading:0,success:0,failed:0};
+  if(titleEl) titleEl.textContent = `Account Workspace: ${accountName}`;
+  if(hintEl) hintEl.textContent = account ? `${account.platform || 'tiktok'} · ${String(account.login_state || 'unknown').replace(/_/g, ' ')} · Today ${Number(account.today_count || 0)}/${Number(account.daily_limit || 0) || '-'}` : 'Select an account to manage its upload flow.';
+  if(queueHint) queueHint.textContent = account ? `Uploads for ${accountName}` : 'Select an account to see its upload items and run them safely.';
+  if(addBtn){
+    addBtn.textContent = account ? `Add Video to ${accountName}` : 'Select Account First';
+    addBtn.disabled = !account;
+    addBtn.title = account ? `Assign a video to ${accountName}` : 'Select an account first';
+  }
+  if(videosBtn){
+    videosBtn.textContent = account ? `Add Video to ${accountName}` : 'Add Video';
+  }
+  if(runBtn){
+    runBtn.textContent = account ? `Start Upload for ${accountName}` : 'Start Upload';
+    runBtn.disabled = !account || !nextItem;
+    runBtn.title = nextItem ? `Start the next eligible upload for ${accountName}` : _disabledRunReasonForAccount(account);
+  }
+  if(stopBtn){
+    const stoppable = items.some((item) => ['pending', 'scheduled', 'failed'].includes(String(item.status || '').toLowerCase()));
+    stopBtn.disabled = !account || !stoppable;
+    stopBtn.title = !account ? 'Select an account first' : (stoppable ? `Hold pending uploads for ${accountName}` : 'No pending uploads to hold');
+  }
+  if(checkBtn){
+    checkBtn.disabled = !account || ['disabled', 'banned'].includes(String(account?.status || '').toLowerCase());
+  }
+  if(formHint){
+    formHint.textContent = account ? `Selected account: ${accountName}. Choose the next video for it.` : 'Select an account, then choose the next video for it.';
+  }
+  if(!metaEl) return;
+  if(!account){
+    metaEl.innerHTML = `
+      <div class="uploadWorkspaceEmptyState">
+        <div class="uploadWorkspaceEmptyTitle">Select an account to manage uploads</div>
+        <div class="uploadWorkspaceEmptyCopy">Accounts are isolated with their own browser profile.</div>
+      </div>
+    `;
+    _renderAccountSettingsPanel(null);
+    return;
+  }
+  metaEl.innerHTML = `
+    <div class="accountWorkspaceStats">
+      <div class="accountWorkspaceStat"><div class="accountWorkspaceStatLabel">Current activity</div><div class="accountWorkspaceStatValue">${esc(_accountWorkspaceActivity(account.account_id).label)}</div></div>
+      <div class="accountWorkspaceStat"><div class="accountWorkspaceStatLabel">Assigned uploads</div><div class="accountWorkspaceStatValue">${items.length}</div></div>
+      <div class="accountWorkspaceStat"><div class="accountWorkspaceStatLabel">Pending uploads</div><div class="accountWorkspaceStatValue">${counts.pending + counts.scheduled}</div></div>
+      <div class="accountWorkspaceStat"><div class="accountWorkspaceStatLabel">Login state</div><div class="accountWorkspaceStatValue">${esc(String(account.login_state || 'unknown').replace(/_/g, ' '))}</div></div>
+      ${_renderActiveUploadCard(account)}
+    </div>
+  `;
+  _renderAccountSettingsPanel(account);
+}
+
+function renderUploadWorkflowGuide(){
+  const selected = _selectedAccountWorkspaceItem();
+  const hasVideos = uploadVideoLibraryItems.length > 0;
+  const selectedUploads = selected ? _accountWorkspaceQueueItems(selected.account_id) : [];
+  let step = 1;
+  let hint = 'Step 1: select an account.';
+  if(selected && !hasVideos){
+    step = 2;
+    hint = 'Step 2: add a video file.';
+  } else if(selected && hasVideos && !selectedUploads.length){
+    step = 3;
+    hint = 'Step 3: assign a video to this account.';
+  } else if(selected && selectedUploads.some((item) => ['pending', 'scheduled', 'uploading', 'failed'].includes(String(item.status || '').toLowerCase()))){
+    step = 4;
+    hint = 'Step 4: start upload for this account.';
+  }
+  [1,2,3,4].forEach((idx) => {
+    const el = qs(`upload_workflow_step_${idx}`);
+    if(!el) return;
+    el.classList.toggle('isActive', idx === step);
+    el.classList.toggle('isComplete', idx < step);
+  });
+  if(qs('upload_workflow_hint')) qs('upload_workflow_hint').textContent = hint;
+}
+
+function renderUploadSchedulerStatus(data){
+  const running = !!(data && (data.running || data.scheduler_enabled));
+  const stateText = running ? 'running' : 'stopped';
+  ['upload_scheduler_status_badge', 'upload_scheduler_status_badge_top'].forEach((id) => {
+    const badge = qs(id);
+    if(badge){
+      badge.textContent = stateText;
+      badge.dataset.state = stateText;
+    }
+  });
+  ['upload_scheduler_meta', 'upload_scheduler_meta_top'].forEach((id) => {
+    const meta = qs(id);
+    if(meta){
+      meta.textContent = `Eligible ${Number(data?.next_eligible_count || 0)} · Running ${Number(data?.running_count || 0)}`;
+    }
+  });
+  if(qs('upload_scheduler_blocked')) qs('upload_scheduler_blocked').textContent = _schedulerBlockedSummary(data?.blocked_counts || {});
+}
+
+function renderUploadAccounts(items){
+  const tbody = qs('upload_accounts_tbody');
+  if(!tbody) return;
+  if(!items || !items.length){
+    tbody.innerHTML = '<tr><td colspan="4" class="uamEmpty">No accounts yet. Add an account to start.</td></tr>';
+    return;
+  }
+  const activeId = _accountWorkspaceSelectedId();
+  tbody.innerHTML = items.map((item) => {
+    const accountId = String(item.account_id || '');
+    const status = String(item.status || '').toLowerCase();
+    const selected = activeId === accountId;
+    const activity = _accountWorkspaceActivity(accountId);
+    const muted = ['banned', 'disabled'].includes(status);
+    return `
+      <tr class="${selected ? 'isSelected accountRowActive' : ''} ${muted ? 'isMuted' : ''}" onclick="_selectUploadEntity('account', '${esc(accountId)}')">
+        <td>
+          <div class="uamAccountName">${esc(item.display_name || item.account_key || accountId)}</div>
+          <div class="uamSub">${esc(item.platform || 'TikTok')}</div>
+          <div class="uamSub">Today ${Number(item.today_count || 0)} / ${Number(item.daily_limit || 0) || '-'}</div>
+        </td>
+        <td>
+          ${_uamBadge(item.status, 'status')}
+          <div class="uamSub">${_uamBadge(activity.state || 'idle', 'lock')}</div>
+        </td>
+        <td>${_uamBadge(item.login_state, 'login')}</td>
+        <td>
+          <div class="uamActions">
+            <button class="ghostButton" type="button" onclick="event.stopPropagation(); checkUploadAccountLogin('${esc(accountId)}')" ${muted ? 'disabled' : ''}>Check Login</button>
+            <button class="ghostButton" type="button" onclick="event.stopPropagation(); fillUploadAccountForm('${esc(accountId)}')">Edit</button>
+            ${_rowMoreMenu('More', `<button class="ghostButton" type="button" onclick="disableUploadAccount('${esc(accountId)}')" ${muted ? 'disabled' : ''}>Disable</button>`)}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderUploadVideoLibrary(items){
+  const tbody = qs('upload_videos_tbody');
+  if(!tbody) return;
+  const account = _selectedAccountWorkspaceItem();
+  if(!items || !items.length){
+    tbody.innerHTML = '<tr><td colspan="5" class="uvlEmpty">No videos yet. Add a video file to upload with this account.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map((item) => {
+    const selected = _selectedUploadId('video') === String(item.video_id || '');
+    const disabled = String(item.status || '').toLowerCase() === 'disabled';
+    return `
+      <tr class="${selected ? 'isSelected' : ''} ${disabled ? 'isDisabled' : ''}" onclick="_selectUploadEntity('video', '${esc(item.video_id)}')">
+        <td><div class="uvlFileName">${esc(item.file_name || item.video_path || '-')}</div></td>
+        <td><div class="uvlClipText">${esc(String(item.caption || '').trim() || '-')}</div></td>
+        <td><div class="uvlClipText">${esc(_uvlHashtagText(item.hashtags || []) || '-')}</div></td>
+        <td>${_uamBadge(item.status, 'status')}</td>
+        <td>
+          <div class="uvlActions">
+            <button class="ghostButton" type="button" onclick="event.stopPropagation(); selectVideoForQueue('${esc(item.video_id)}')" ${(!account || disabled) ? 'disabled' : ''} title="${esc(account ? `Assign this video to ${account.display_name || account.account_key || 'this account'}` : 'Select an account first')}">Assign to Account</button>
+            <button class="ghostButton" type="button" onclick="event.stopPropagation(); fillUploadVideoForm('${esc(item.video_id)}')">Edit</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderUploadQueueManager(items){
+  const tbody = qs('upload_queue_manager_tbody');
+  const title = qs('uqm_uploads_title');
+  const account = _selectedAccountWorkspaceItem();
+  if(title) title.textContent = account ? `Uploads for ${account.display_name || account.account_key || 'this account'}` : 'Uploads for this account';
+  if(!tbody) return;
+  if(!account){
+    tbody.innerHTML = '<tr><td colspan="6" class="uqmEmpty">Select an account to see its upload items.</td></tr>';
+    return;
+  }
+  const filtered = (items || []).filter((item) => String(item.account_id || '') === String(account.account_id || ''));
+  if(!filtered.length){
+    tbody.innerHTML = '<tr><td colspan="6" class="uqmEmpty">No uploads assigned to this account yet.<br>Go to Videos and click Assign to Account.</td></tr>';
+    return;
+  }
+  const ordered = [
+    ...filtered.filter((item) => String(item.status || '').toLowerCase() === 'uploading'),
+    ...filtered.filter((item) => ['pending', 'scheduled'].includes(String(item.status || '').toLowerCase())),
+    ...filtered.filter((item) => String(item.status || '').toLowerCase() === 'failed'),
+    ...filtered.filter((item) => ['success', 'cancelled', 'held'].includes(String(item.status || '').toLowerCase())),
+  ];
+  tbody.innerHTML = ordered.map((item) => {
+    const status = String(item.status || 'pending').toLowerCase();
+    const selected = _selectedUploadId('queue') === String(item.queue_id || '');
+    const blocked = String(item.blocked_reason || '').trim();
+    const canRun = ['pending', 'scheduled', 'held', 'failed'].includes(status) && !blocked;
+    const label = status === 'failed' ? 'Retry' : 'Run';
+    return `
+      <tr class="${selected ? 'isSelected' : ''} ${['success', 'cancelled'].includes(status) ? 'isMuted' : ''}" onclick="_selectUploadEntity('queue', '${esc(item.queue_id)}')">
+        <td><div class="uqmClipName">${esc(item.video_file_name || String(item.video_path || '').split(/[\\\\/]/).pop() || '-')}</div></td>
+        <td><div class="uvlClipText">${esc(blocked || item.last_error || (status === 'uploading' ? 'Uploading now' : 'Ready'))}</div></td>
+        <td>${_uamBadge(status, 'status')}</td>
+        <td>${Number(item.attempt_count || 0)} / ${Number(item.max_attempts || 3)}</td>
+        <td><div class="uvlClipText">${esc(item.scheduled_at || '-')}</div></td>
+        <td>
+          <div class="uqmActions">
+            <button class="ghostButton" type="button" onclick="event.stopPropagation(); runUploadQueueItem('${esc(item.queue_id)}')" ${canRun ? '' : 'disabled'} title="${esc(canRun ? `Start upload for ${account.display_name || account.account_key || 'this account'}` : (blocked || 'This upload cannot run right now'))}">${esc(label)}</button>
+            <button class="ghostButton" type="button" onclick="event.stopPropagation(); fillUploadQueueForm('${esc(item.queue_id)}')" ${['cancelled', 'uploading', 'success'].includes(status) ? 'disabled' : ''}>Edit</button>
+            ${_rowMoreMenu('More', `
+              <button class="ghostButton" type="button" onclick="holdUploadQueueItem('${esc(item.queue_id)}')" ${!['pending', 'scheduled', 'failed'].includes(status) ? 'disabled' : ''}>Hold</button>
+              <button class="ghostButton" type="button" onclick="resumeUploadQueueItem('${esc(item.queue_id)}')" ${status !== 'held' ? 'disabled' : ''}>Resume</button>
+              <button class="ghostButton" type="button" onclick="cancelUploadQueueItemUi('${esc(item.queue_id)}')" ${!['pending', 'scheduled', 'held', 'failed'].includes(status) ? 'disabled' : ''}>Cancel</button>
+            `)}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function _selectUploadEntity(type, id){
+  selectedUploadEntity = {type: String(type || ''), id: String(id || '')};
+  if(type === 'account'){
+    selectedUploadAccountWorkspaceId = String(id || '');
+    const account = _selectedAccountWorkspaceItem();
+    setUploadManagerTab(_defaultAccountTab(account));
+  } else if(type === 'video'){
+    setUploadManagerTab('videos');
+  } else if(type === 'queue'){
+    selectedUploadQueueId = String(id || '');
+    const row = uploadQueueManagerItems.find((item) => String(item.queue_id || '') === selectedUploadQueueId);
+    if(row && row.account_id) selectedUploadAccountWorkspaceId = String(row.account_id || '');
+    setUploadManagerTab('queue');
+    loadUploadQueueHistory(selectedUploadQueueId);
+  }
+  renderUploadAccounts(uploadAccountManagerItems);
+  renderUploadVideoLibrary(uploadVideoLibraryItems);
+  renderUploadQueueManager(uploadQueueManagerItems);
+  _renderAccountWorkspaceSummary();
+  renderUploadInspector();
+  renderUploadWorkflowGuide();
+  loadSelectedAccountHistory();
+}
+
+function selectVideoForQueue(videoId){
+  const account = _selectedAccountWorkspaceItem();
+  const item = uploadVideoLibraryItems.find((x) => String(x.video_id || '') === String(videoId || ''));
+  if(!account){
+    showToast('Select an account first', 'info');
+    return;
+  }
+  if(!item) return;
+  _selectUploadEntity('video', videoId);
+  resetUploadQueueForm();
+  if(qs('uqm_account_id')) qs('uqm_account_id').value = account.account_id || '';
+  if(qs('uqm_video_id')) qs('uqm_video_id').value = item.video_id || '';
+  if(qs('uqm_caption')) qs('uqm_caption').value = item.caption || '';
+  if(qs('uqm_hashtags')) qs('uqm_hashtags').value = _uvlHashtagText(item.hashtags || []);
+  _setEditorOpen('uqm_editor', true);
+  setUploadManagerTab('queue');
+}
+
+async function saveUploadQueueItem(event){
+  if(event) event.preventDefault();
+  const queueId = _uqmValue('uqm_queue_id');
+  const payload = collectUploadQueueForm();
+  if(!queueId && !payload.video_id){
+    showToast('Select a video first', 'error');
+    return;
+  }
+  if(!payload.account_id){
+    showToast('Select an account first', 'error');
+    return;
+  }
+  const body = queueId ? {account_id: payload.account_id, caption: payload.caption, hashtags: payload.hashtags, priority: payload.priority, scheduled_at: payload.scheduled_at, status: payload.status} : payload;
+  try{
+    const res = await fetch(queueId ? `/api/upload/queue/${encodeURIComponent(queueId)}` : '/api/upload/queue/add', {
+      method: queueId ? 'PATCH' : 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    selectedUploadQueueId = queueId || data.queue_id || data.item?.queue_id || '';
+    setUploadManagerTab('queue');
+    await loadUploadQueueManager();
+    await loadSelectedAccountHistory();
+    showToast(queueId ? 'Upload updated' : 'Assigned to account', 'success');
+  }catch(e){
+    showToast(`Assign failed: ${e.message || e}`, 'error');
+  }
+}
+
+async function loadUploadAccounts(){
+  const tbody = qs('upload_accounts_tbody');
+  if(tbody) tbody.innerHTML = '<tr><td colspan="4" class="uamEmpty">Loading accounts...</td></tr>';
+  try{
+    const res = await fetch('/api/upload/accounts');
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    uploadAccountManagerItems = Array.isArray(data.items) ? data.items : [];
+    renderUploadAccounts(uploadAccountManagerItems);
+    _renderAccountWorkspaceSummary();
+    renderUploadInspector();
+    renderUploadWorkflowGuide();
+  }catch(e){
+    if(tbody) tbody.innerHTML = `<tr><td colspan="4" class="uamEmpty">Load failed: ${esc(e.message || e)}</td></tr>`;
+  }
+}
+
+async function loadUploadVideoLibrary(){
+  const tbody = qs('upload_videos_tbody');
+  if(tbody) tbody.innerHTML = '<tr><td colspan="5" class="uvlEmpty">Loading videos...</td></tr>';
+  const params = new URLSearchParams();
+  const status = _uvlValue('uvl_filter_status');
+  if(status) params.set('status', status);
+  params.set('limit', '100');
+  try{
+    const res = await fetch(`/api/upload/videos?${params.toString()}`);
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    uploadVideoLibraryItems = Array.isArray(data.items) ? data.items : [];
+    renderUploadVideoLibrary(uploadVideoLibraryItems);
+    renderUploadWorkflowGuide();
+  }catch(e){
+    if(tbody) tbody.innerHTML = `<tr><td colspan="5" class="uvlEmpty">Load failed: ${esc(e.message || e)}</td></tr>`;
+  }
+}
+
+async function loadUploadQueueManager(){
+  const tbody = qs('upload_queue_manager_tbody');
+  if(tbody) tbody.innerHTML = '<tr><td colspan="6" class="uqmEmpty">Loading uploads...</td></tr>';
+  const params = new URLSearchParams();
+  const status = _uqmValue('uqm_filter_status');
+  if(status) params.set('status', status);
+  params.set('limit', '100');
+  try{
+    const res = await fetch(`/api/upload/queue?${params.toString()}`);
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    uploadQueueManagerItems = Array.isArray(data.items) ? data.items : [];
+    renderUploadQueueManager(uploadQueueManagerItems);
+    _renderAccountWorkspaceSummary();
+    renderUploadInspector();
+    renderUploadWorkflowGuide();
+    if(selectedUploadQueueId) loadUploadQueueHistory(selectedUploadQueueId);
+  }catch(e){
+    if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="uqmEmpty">Load failed: ${esc(e.message || e)}</td></tr>`;
+  }
+}
+
+function _accountWorkspaceActivity(accountId){
+  const items = uploadQueueManagerItems.filter((item) => String(item.account_id || '') === String(accountId || ''));
+  const uploading = items.find((item) => String(item.status || '').toLowerCase() === 'uploading');
+  if(uploading) return {state: 'running', label: 'Uploading', currentVideo: uploading.video_file_name || '', lastError: uploading.last_error || ''};
+  const busy = items.find((item) => String(item.blocked_reason || '') === 'profile busy');
+  if(busy) return {state: 'busy', label: 'Busy', currentVideo: '', lastError: busy.blocked_reason || ''};
+  const cooldown = items.find((item) => String(item.blocked_reason || '') === 'cooldown');
+  if(cooldown) return {state: 'cooldown', label: 'Cooldown', currentVideo: '', lastError: cooldown.blocked_reason || ''};
+  const failed = items.find((item) => String(item.status || '').toLowerCase() === 'failed');
+  if(failed) return {state: 'error', label: 'Error', currentVideo: '', lastError: failed.last_error || ''};
+  return {state: 'idle', label: 'Idle', currentVideo: '', lastError: ''};
+}
+
+function _renderAccountWorkspaceSummary(){
+  const account = _selectedAccountWorkspaceItem ? _selectedAccountWorkspaceItem() : null;
+  const titleEl = qs('upload_account_workspace_title');
+  const hintEl = qs('upload_account_workspace_hint');
+  const metaEl = qs('upload_account_workspace_meta');
+  const addBtn = qs('uqm_add_to_account_btn');
+  const runBtn = qs('upload_run_account_btn');
+  const stopBtn = qs('upload_stop_account_btn');
+  const checkBtn = qs('upload_check_login_btn');
+  const queueHint = qs('uqm_account_workspace_hint');
+  const formHint = qs('uqm_form_hint');
+  const accountName = account ? (account.display_name || account.account_key || 'this account') : 'Select an account';
+  const queueItems = account ? _accountWorkspaceQueueItems(account.account_id) : [];
+  const nextItem = account ? _findRunnableAccountQueueItem(account.account_id) : null;
+  const hasAnyQueue = queueItems.length > 0;
+  const activity = account ? _accountWorkspaceActivity(account.account_id) : {label: 'idle', currentVideo: '', lastError: ''};
+  const counts = account ? _accountWorkspaceCounts(account.account_id) : {pending: 0, scheduled: 0, uploading: 0, success: 0, failed: 0};
+
+  if(titleEl) titleEl.textContent = `Account Workspace: ${accountName}`;
+  if(hintEl) hintEl.textContent = !account
+    ? 'Select an account to manage its upload flow.'
+    : (!hasAnyQueue ? 'Select a video and add it to this account to start uploading.' : `Manage uploads for ${accountName}.`);
+  if(queueHint) queueHint.textContent = account
+    ? `Uploads for this account: ${accountName}`
+    : 'Select an account to see its upload items and run them safely.';
+
+  if(addBtn){
+    addBtn.textContent = account ? `Add Video to ${accountName}` : 'Select Account First';
+    addBtn.disabled = !account;
+    addBtn.title = account ? `Assign a video to ${accountName}` : 'Select an account first';
+  }
+  if(runBtn){
+    runBtn.textContent = account ? `Start Upload for ${accountName}` : 'Start Upload';
+    runBtn.disabled = !account || !nextItem;
+    runBtn.title = !account
+      ? 'Select an account first'
+      : (!hasAnyQueue ? 'Add video to this account first' : (nextItem ? `Start the next eligible upload for ${accountName}` : 'No eligible upload item for this account'));
+  }
+  if(stopBtn){
+    const stoppable = queueItems.some((item) => ['pending', 'scheduled', 'failed'].includes(String(item.status || '').toLowerCase()));
+    stopBtn.disabled = !account || !stoppable;
+    stopBtn.title = !account ? 'Select an account first' : (stoppable ? `Hold pending uploads for ${accountName}` : 'No pending uploads to stop');
+  }
+  if(checkBtn){
+    checkBtn.disabled = !account || String(account?.status || '').toLowerCase() === 'disabled';
+    checkBtn.title = !account ? 'Select an account first' : `Check login for ${accountName}`;
+  }
+  if(formHint){
+    formHint.textContent = account
+      ? `Selected account: ${accountName}. Choose the next video for it.`
+      : 'Select an account, then choose the next video for it.';
+  }
+  if(qs('uqm_account_id') && account && !qs('uqm_queue_id')?.value){
+    qs('uqm_account_id').value = account.account_id || '';
+  }
+  if(!metaEl) return;
+  if(!account){
+    metaEl.innerHTML = '<div class="uploadInspectorPlaceholder">Choose an account on the left to see its current upload activity.</div>';
+    return;
+  }
+  metaEl.innerHTML = `
+    <div class="accountWorkspaceStats">
+      <div class="accountWorkspaceStat"><div class="accountWorkspaceStatLabel">Current activity</div><div class="accountWorkspaceStatValue">${esc(activity.label || 'idle')}</div></div>
+      <div class="accountWorkspaceStat"><div class="accountWorkspaceStatLabel">Current video</div><div class="accountWorkspaceStatValue">${esc(activity.currentVideo || '-')}</div></div>
+      <div class="accountWorkspaceStat"><div class="accountWorkspaceStatLabel">Today count</div><div class="accountWorkspaceStatValue">${Number(account.today_count || 0)} / ${Number(account.daily_limit || 0) || '-'}</div></div>
+      <div class="accountWorkspaceStat"><div class="accountWorkspaceStatLabel">Login state</div><div class="accountWorkspaceStatValue">${esc(String(account.login_state || 'unknown').replace(/_/g, ' '))}</div></div>
+      <div class="accountWorkspaceStat accountWorkspaceStatWide"><div class="accountWorkspaceStatLabel">Last error</div><div class="accountWorkspaceStatValue">${esc(activity.lastError || 'No recent error')}</div></div>
+    </div>
+    <div class="accountWorkspaceQueues">
+      <span class="accountWorkspaceChip">Pending ${counts.pending || 0}</span>
+      <span class="accountWorkspaceChip">Scheduled ${counts.scheduled || 0}</span>
+      <span class="accountWorkspaceChip">Uploading ${counts.uploading || 0}</span>
+      <span class="accountWorkspaceChip">Success ${counts.success || 0}</span>
+      <span class="accountWorkspaceChip">Failed ${counts.failed || 0}</span>
+    </div>
+  `;
+}
+
+function renderUploadAccounts(items){
+  const tbody = qs('upload_accounts_tbody');
+  if(!tbody) return;
+  if(!items || !items.length){
+    tbody.innerHTML = '<tr><td colspan="4" class="uamEmpty">No accounts yet. Create one to start uploading.</td></tr>';
+    return;
+  }
+  const activeAccountId = _accountWorkspaceSelectedId ? _accountWorkspaceSelectedId() : '';
+  tbody.innerHTML = items.map((item) => {
+    const accountId = String(item.account_id || '');
+    const selected = activeAccountId === accountId;
+    const activity = _accountWorkspaceActivity ? _accountWorkspaceActivity(accountId) : {state: 'idle'};
+    const disabled = String(item.status || '').toLowerCase() === 'disabled';
+    return `
+      <tr class="${selected ? 'isSelected accountRowActive' : ''}" onclick="_selectUploadEntity('account', '${esc(accountId)}')">
+        <td>
+          <div class="uamAccountName">${esc(item.display_name || item.account_key || accountId)}</div>
+          <div class="uamSub">${esc(item.platform || 'tiktok')} · ${esc(item.account_key || 'default')}</div>
+          <div class="uamSub">Today ${Number(item.today_count || 0)} / ${Number(item.daily_limit || 0) || '-'}</div>
+        </td>
+        <td>
+          ${_uamBadge(activity.state || 'idle', 'lock')}
+          <div class="uamSub">${_uamBadge(item.status, 'status')}</div>
+        </td>
+        <td>${_uamBadge(item.login_state, 'login')}</td>
+        <td>
+          <div class="uamActions">
+            <button class="ghostButton" type="button" onclick="event.stopPropagation(); fillUploadAccountForm('${esc(accountId)}')">Edit</button>
+            <button class="ghostButton" type="button" onclick="event.stopPropagation(); checkUploadAccountLogin('${esc(accountId)}')" ${disabled ? 'disabled' : ''}>Check Login</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderUploadQueueManager(items){
+  const tbody = qs('upload_queue_manager_tbody');
+  if(!tbody) return;
+  const account = _selectedAccountWorkspaceItem ? _selectedAccountWorkspaceItem() : null;
+  if(!account){
+    tbody.innerHTML = '<tr><td colspan="6" class="uqmEmpty">Select an account to see its upload items.</td></tr>';
+    _renderAccountWorkspaceSummary();
+    return;
+  }
+  const filtered = (items || []).filter((item) => String(item.account_id || '') === String(account.account_id || ''));
+  if(!filtered.length){
+    tbody.innerHTML = '<tr><td colspan="6" class="uqmEmpty">Select a video and add it to this account to start uploading.</td></tr>';
+    _renderAccountWorkspaceSummary();
+    return;
+  }
+  tbody.innerHTML = filtered.map((item) => {
+    const status = String(item.status || 'pending').toLowerCase();
+    const selected = _selectedUploadId('queue') === String(item.queue_id || '');
+    const blocked = String(item.blocked_reason || '').trim();
+    const canRun = ['pending', 'scheduled', 'held', 'failed'].includes(status) && !blocked;
+    const actionLabel = status === 'failed' ? 'Retry' : 'Run';
+    return `
+      <tr class="${selected ? 'isSelected' : ''} ${['held', 'cancelled'].includes(status) ? 'isMuted' : ''}" onclick="_selectUploadEntity('queue', '${esc(item.queue_id)}')">
+        <td>
+          <div class="uqmClipName">${esc(item.video_file_name || String(item.video_path || '').split(/[\\\\/]/).pop() || '-')}</div>
+        </td>
+        <td>
+          <div class="uqmClipText">${esc(blocked || item.last_error || (status === 'uploading' ? 'Uploading now' : 'Ready'))}</div>
+        </td>
+        <td>${_uamBadge(status, 'status')}</td>
+        <td>${Number(item.attempt_count || 0)} / ${Number(item.max_attempts || 3)}</td>
+        <td>${esc(item.scheduled_at || '-')}</td>
+        <td>
+          <div class="uqmActions">
+            <button class="ghostButton" type="button" onclick="event.stopPropagation(); runUploadQueueItem('${esc(item.queue_id)}')" ${canRun ? '' : 'disabled'} title="${esc(canRun ? `Run upload for ${account.display_name || account.account_key || 'this account'}` : (blocked || 'This upload cannot run right now'))}">${esc(actionLabel)}</button>
+            <button class="ghostButton" type="button" onclick="event.stopPropagation(); fillUploadQueueForm('${esc(item.queue_id)}')" ${['cancelled', 'uploading', 'success'].includes(status) ? 'disabled' : ''}>Edit</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  _renderAccountWorkspaceSummary();
+}
+
 let selectedUploadAccountWorkspaceId = '';
 let currentSelectedAccountHistoryItems = [];
 
