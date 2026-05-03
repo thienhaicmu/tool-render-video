@@ -454,7 +454,7 @@
         <!-- ── SECTION: upload-card ─────────────────────────────── -->
         <section class="card" id="card_upload">
           <div class="sectionHeader">
-            <div><div class="sectionTitle">Upload</div><div class="sectionSubtitle">Manage upload accounts independently from render outputs and upload runs.</div></div>
+            <div><div class="sectionTitle">Upload Studio</div><div class="sectionSubtitle">Manage TikTok accounts, videos, schedules, and upload history.</div></div>
             <button class="ghostButton" onclick="setView('render')">Back to Main</button>
           </div>
           <div class="uploadWorkflowGuide" id="upload_workflow_guide">
@@ -497,54 +497,16 @@
               <div class="uploadAccountManager" id="upload_account_manager">
                 <div class="uamHeader">
                   <div>
-                    <div class="uamTitle">Accounts</div>
-                    <div class="sectionSubtitle">Isolated upload identities, login state, and profile safety.</div>
+                    <div class="uamTitle">Account Manager</div>
+                    <div class="sectionSubtitle">Isolated TikTok profiles, login, proxy, safety.</div>
                   </div>
                   <div class="uvlHeaderActions">
-                    <button class="primaryButton uploadPrimaryAction" type="button" onclick="openUploadEditor('account')">Add Account</button>
+                    <button class="primaryButton uploadPrimaryAction" type="button" onclick="openUploadEditor('account')">+ New Account</button>
                     <button class="ghostButton" type="button" onclick="loadUploadAccounts()">Refresh</button>
                   </div>
                 </div>
-                <details class="uploadEditorSection" id="uam_editor">
-                  <summary>Account Form</summary>
-                  <form class="uamForm" id="upload_account_form" onsubmit="saveUploadAccount(event)">
-                    <input type="hidden" id="uam_account_id">
-                    <label class="field"><span class="fieldLabel">Platform</span><input class="fieldInput" id="uam_platform" value="tiktok"></label>
-                    <label class="field"><span class="fieldLabel">Account Key</span><input class="fieldInput" id="uam_account_key" value="default"></label>
-                    <label class="field"><span class="fieldLabel">Display Name</span><input class="fieldInput" id="uam_display_name" placeholder="Main TikTok account"></label>
-                    <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uam_status"><option value="active">Active</option><option value="warming">Warming</option><option value="limited">Limited</option><option value="banned">Banned</option><option value="disabled">Disabled</option><option value="login_required">Login Required</option></select></label>
-                    <details class="uploadAdvancedFields fieldSpan2">
-                      <summary>Advanced</summary>
-                      <div class="uploadAdvancedGrid">
-                        <label class="field"><span class="fieldLabel">Channel Code</span><input class="fieldInput" id="uam_channel_code" placeholder="T1"></label>
-                        <label class="field"><span class="fieldLabel">Login State</span><select class="fieldInput" id="uam_login_state"><option value="unknown">Unknown</option><option value="logged_in">Logged In</option><option value="logged_out">Logged Out</option><option value="challenge">Challenge</option><option value="expired">Expired</option></select></label>
-                        <label class="field"><span class="fieldLabel">Daily Limit</span><input class="fieldInput" id="uam_daily_limit" type="number" min="0" value="0"></label>
-                        <label class="field"><span class="fieldLabel">Cooldown Minutes</span><input class="fieldInput" id="uam_cooldown_minutes" type="number" min="0" value="0"></label>
-                        <label class="field"><span class="fieldLabel">Today Count</span><input class="fieldInput" id="uam_today_count" type="number" min="0" value="0"></label>
-                        <label class="field"><span class="fieldLabel">Proxy ID</span><input class="fieldInput" id="uam_proxy_id" placeholder="proxy-01"></label>
-                        <label class="field fieldSpan2"><span class="fieldLabel">Profile Path</span><input class="fieldInput" id="uam_profile_path" placeholder="D:\channels\T1\account\profiles\default\browser-profile"></label>
-                      </div>
-                    </details>
-                    <div class="uamFormActions">
-                      <button class="primaryButton" type="submit" id="uam_save_btn">Create Account</button>
-                      <button class="ghostButton" type="button" onclick="resetUploadAccountForm()">Clear</button>
-                    </div>
-                  </form>
-                </details>
-                <div class="uamTableWrap">
-                  <table class="uamTable">
-                    <thead>
-                      <tr>
-                        <th>Account</th>
-                        <th>Status</th>
-                        <th>Login</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="upload_accounts_tbody">
-                      <tr><td colspan="4" class="uamEmpty">No accounts loaded.</td></tr>
-                    </tbody>
-                  </table>
+                <div class="uamAccountList" id="upload_accounts_list">
+                  <div class="uamEmpty">No upload accounts yet.<br>Create a TikTok account profile before uploading.<br><button class="primaryButton" type="button" onclick="openUploadEditor('account')">+ Create First Account</button></div>
                 </div>
               </div>
             </div>
@@ -578,7 +540,7 @@
                 <div class="uvlHeader">
                   <div>
                     <div class="uvlTitle">Videos</div>
-                    <div class="sectionSubtitle">Upload-ready files you can assign to the selected account.</div>
+                    <div class="sectionSubtitle" id="uvl_account_workspace_hint">Upload-ready files you can assign to the selected account.</div>
                   </div>
                   <div class="uvlHeaderActions">
                     <select class="fieldInput" id="uvl_filter_status" onchange="loadUploadVideoLibrary()" title="Status filter">
@@ -594,7 +556,7 @@
                   </div>
                 </div>
                 <details class="uploadEditorSection" id="uvl_editor">
-                  <summary>Video Form</summary>
+                  <summary>Add Video</summary>
                   <form class="uvlForm" id="upload_video_form" onsubmit="saveUploadVideo(event)">
                     <input type="hidden" id="uvl_video_id">
                     <label class="field fieldSpan2"><span class="fieldLabel">Add Video File Path</span><input class="fieldInput" id="uvl_video_path" placeholder="D:\videos\upload-ready\clip.mp4"></label>
@@ -618,7 +580,7 @@
                   </form>
                 </details>
                 <div class="uvlTableWrap">
-                  <table class="uvlTable">
+                  <table class="uvlTable uploadDataTable">
                     <thead>
                       <tr>
                         <th>File</th>
@@ -692,14 +654,14 @@
                   </form>
                 </details>
                 <div class="uqmTableWrap">
-                  <table class="uqmTable">
+                  <table class="uqmTable uploadDataTable">
                     <thead>
                       <tr>
                         <th>Video</th>
-                        <th>State</th>
+                        <th>Account</th>
                         <th>Status</th>
-                        <th>Attempts</th>
                         <th>Scheduled</th>
+                        <th>Attempts</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
@@ -740,7 +702,7 @@
               <div class="uqmHistoryPanel" id="upload_queue_history_panel">
                 <div class="uqmHistoryHeader">
                   <div>
-                    <div class="uqmHistoryTitle">Account History</div>
+                    <div class="uqmHistoryTitle">Upload History</div>
                     <div class="sectionSubtitle" id="uqm_history_hint">Select an account to view its recent upload attempts.</div>
                   </div>
                   <button class="ghostButton" type="button" onclick="loadSelectedAccountHistory()">Refresh History</button>
@@ -771,6 +733,51 @@
               </div>
             </div>
           </div>
+          <!-- ── Account Form Modal ─────────────────────────────── -->
+          <div id="upload_account_form_modal" class="uploadModal" hidden>
+            <div class="uploadModalBackdrop" onclick="closeUploadAccountEditor()"></div>
+            <div class="uploadModalPanel">
+              <div class="uploadModalHeader">
+                <div class="uploadModalTitle" id="uam_modal_title">New Account</div>
+                <button class="ghostButton uploadModalClose" type="button" onclick="closeUploadAccountEditor()">×</button>
+              </div>
+              <form class="uamForm" id="upload_account_form" onsubmit="saveUploadAccount(event)">
+                <input type="hidden" id="uam_account_id">
+                <label class="field"><span class="fieldLabel">Account Key</span><input class="fieldInput" id="uam_account_key" value="default"></label>
+                <label class="field"><span class="fieldLabel">Display Name</span><input class="fieldInput" id="uam_display_name" placeholder="Main TikTok account"></label>
+                <label class="field"><span class="fieldLabel">Platform</span><input class="fieldInput" id="uam_platform" value="tiktok"></label>
+                <label class="field"><span class="fieldLabel">Channel Code</span><input class="fieldInput" id="uam_channel_code" placeholder="T1"></label>
+                <details class="uploadAdvancedFields fieldSpan2" open>
+                  <summary>Profile</summary>
+                  <div class="uploadAdvancedGrid">
+                    <label class="field fieldSpan2"><span class="fieldLabel">Profile Path</span><input class="fieldInput" id="uam_profile_path" placeholder="D:\channels\T1\account\profiles\default\browser-profile"></label>
+                    <label class="field"><span class="fieldLabel">Proxy ID</span><input class="fieldInput" id="uam_proxy_id" placeholder="proxy-01"></label>
+                    <label class="field fieldSpan2"><span class="fieldLabel">Proxy Config</span><input class="fieldInput" id="uam_proxy_config_text" placeholder='{"host":"127.0.0.1","port":9000}'></label>
+                  </div>
+                </details>
+                <details class="uploadAdvancedFields fieldSpan2">
+                  <summary>Limits</summary>
+                  <div class="uploadAdvancedGrid">
+                    <label class="field"><span class="fieldLabel">Daily Limit</span><input class="fieldInput" id="uam_daily_limit" type="number" min="0" value="0"></label>
+                    <label class="field"><span class="fieldLabel">Cooldown Minutes</span><input class="fieldInput" id="uam_cooldown_minutes" type="number" min="0" value="0"></label>
+                  </div>
+                </details>
+                <details class="uploadAdvancedFields fieldSpan2">
+                  <summary>Status</summary>
+                  <div class="uploadAdvancedGrid">
+                    <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uam_status"><option value="active">Active</option><option value="warming">Warming</option><option value="limited">Limited</option><option value="banned">Banned</option><option value="disabled">Disabled</option><option value="login_required">Login Required</option></select></label>
+                    <label class="field"><span class="fieldLabel">Login State</span><select class="fieldInput" id="uam_login_state"><option value="unknown">Unknown</option><option value="logged_in">Logged In</option><option value="logged_out">Logged Out</option><option value="challenge">Challenge</option><option value="expired">Expired</option></select></label>
+                    <label class="field"><span class="fieldLabel">Today Count</span><input class="fieldInput" id="uam_today_count" type="number" min="0" value="0"></label>
+                  </div>
+                </details>
+                <div class="uamFormActions">
+                  <button class="primaryButton" type="submit" id="uam_save_btn">Save Account</button>
+                  <button class="ghostButton" type="button" onclick="closeUploadAccountEditor()">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
           <details class="uploadLegacySection" id="upload_legacy_section">
             <summary>Legacy Upload Wizard</summary>
           <!-- Step wizard indicator — 4 sequential steps replace flat 5-cluster layout -->

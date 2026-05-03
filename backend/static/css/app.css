@@ -10540,6 +10540,486 @@ body.is-history-active #history_list {
   color: #eff6ff;
 }
 
+/* Upload Studio Pro layout overrides */
+#card_upload {
+  padding-bottom: 12px;
+}
+
+#card_upload > .sectionHeader {
+  margin-bottom: 10px;
+}
+
+.uploadWorkflowGuide {
+  grid-template-columns: repeat(4, minmax(0, max-content));
+  justify-content: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.uploadWorkflowStep {
+  padding: 7px 10px;
+  border-radius: 999px;
+}
+
+.uploadWorkflowStepTitle {
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.uploadWorkflowStepLabel {
+  font-size: 9px;
+}
+
+.uploadWorkflowHint {
+  margin-bottom: 10px;
+}
+
+.uploadManagerTopBar {
+  padding: 10px 12px;
+}
+
+.uploadManagerWorkspace {
+  grid-template-columns: 320px minmax(0, 1fr) 380px;
+  gap: 12px;
+  min-height: 760px;
+  height: calc(100vh - 235px);
+  max-height: 1100px;
+}
+
+.uploadManagerColumnLeft,
+.uploadManagerColumnCenter,
+.uploadManagerColumnRight,
+.uploadAccountManager,
+.uploadVideoLibrary,
+.uploadQueueManager,
+.uploadSettingsPanel,
+.uploadInspectorPanel,
+.uqmHistoryPanel,
+.uploadSidebarPanel {
+  min-width: 0;
+}
+
+.uploadManagerColumnLeft,
+.uploadManagerColumnCenter,
+.uploadManagerColumnRight {
+  overflow: hidden;
+}
+
+.uploadManagerColumnLeft {
+  padding-right: 2px;
+}
+
+.uploadAccountManager {
+  height: 100%;
+  padding: 12px;
+}
+
+.uamTableWrap {
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.uamTable,
+.uvlTable,
+.uqmTable {
+  table-layout: fixed;
+}
+
+.uamTable tbody,
+.uvlTable tbody,
+.uqmTable tbody {
+  vertical-align: top;
+}
+
+.uamTable td,
+.uvlTable td,
+.uqmTable td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.uamActions,
+.uvlActions,
+.uqmActions,
+.uploadAccountWorkspaceActions,
+.uploadManagerTopBarControls {
+  flex-wrap: wrap;
+}
+
+.uploadAccountWorkspaceShell,
+.uploadVideoLibrary,
+.uploadQueueManager,
+.uploadSettingsPanel {
+  border-radius: 10px;
+}
+
+.uploadAccountWorkspaceMeta {
+  overflow: auto;
+}
+
+.accountWorkspaceStats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.accountWorkspaceStatWide {
+  min-height: 88px;
+}
+
+.uploadManagerTabs {
+  width: fit-content;
+  margin-bottom: 0;
+}
+
+.uploadManagerTabPanel {
+  display: none;
+}
+
+.uploadManagerTabPanel.active {
+  display: flex;
+}
+
+.uploadVideoLibrary,
+.uploadQueueManager,
+.uploadSettingsPanel {
+  flex: 1 1 auto;
+}
+
+.uploadQueueManager .uqmTableWrap,
+.uploadVideoLibrary .uvlTableWrap {
+  overflow: auto;
+}
+
+.uploadSchedulerBarSecondary {
+  display: none;
+}
+
+.uploadSettingsBody .detailSection {
+  margin: 0;
+}
+
+.uploadSettingsGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.uploadInspectorPanel,
+.uqmHistoryPanel,
+.uploadSidebarPanel {
+  padding: 12px;
+}
+
+.uploadManagerColumnRight {
+  gap: 12px;
+  overflow: hidden auto;
+}
+
+.uploadInspectorBody,
+.uqmHistoryList,
+#event_log_upload {
+  overflow: auto;
+}
+
+.uploadLegacySection {
+  margin-top: 12px;
+  opacity: .9;
+}
+
+.uploadLegacySection > summary {
+  font-size: 12px;
+}
+
+@media (max-width: 1439px) {
+  .uploadManagerWorkspace {
+    grid-template-columns: 300px minmax(0, 1fr) 340px;
+  }
+}
+
+@media (max-width: 1279px) {
+  .uploadManagerWorkspace {
+    grid-template-columns: 300px minmax(0, 1fr);
+    height: auto;
+    max-height: none;
+  }
+
+  .uploadManagerColumnRight {
+    grid-column: 1 / -1;
+    overflow: visible;
+  }
+
+  .uploadInspectorPanel,
+  .uqmHistoryPanel,
+  .uploadSidebarPanel {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 999px) {
+  .uploadManagerWorkspace {
+    grid-template-columns: 1fr;
+  }
+
+  .uploadWorkflowGuide {
+    grid-template-columns: repeat(2, minmax(0, max-content));
+  }
+
+  .accountWorkspaceStats,
+  .uploadSettingsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Upload Studio density cleanup */
+.uamTableWrap,
+.uvlTableWrap {
+  overflow-x: hidden;
+}
+
+.uamTable thead,
+.uvlTable thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(13, 21, 38, .96);
+}
+
+.uamTable thead th,
+.uvlTable thead th {
+  white-space: nowrap;
+}
+
+.uamTable th,
+.uamTable td {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.uamTable thead tr {
+  display: none;
+}
+
+.uamCardRow td {
+  border-bottom: 0;
+  padding: 0 0 10px;
+}
+
+.uamCardCell {
+  display: block;
+  min-height: 94px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, .12);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, .34);
+  overflow: hidden;
+}
+
+.uamCardTop,
+.uamCardStats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.uamCardTitleWrap,
+.uamCardMeta {
+  min-width: 0;
+}
+
+.uamCardMeta,
+.uamCardStat,
+.uvlPathLine {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uamCardMeta {
+  margin-top: 7px;
+}
+
+.uamCardStats {
+  justify-content: flex-start;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.uamCardActions {
+  margin-top: 10px;
+}
+
+.uamCardActions .ghostButton,
+.uvlActions .ghostButton {
+  padding-inline: 8px;
+  min-width: 0;
+}
+
+.uvlTable th:nth-child(1) { width: 36%; }
+.uvlTable th:nth-child(2) { width: 12%; }
+.uvlTable th:nth-child(3) { width: 24%; }
+.uvlTable th:nth-child(4) { width: 18%; }
+.uvlTable th:nth-child(5) { width: 10%; }
+
+.uvlTable td {
+  vertical-align: middle;
+}
+
+.uvlFileName {
+  font-weight: 700;
+  color: #e5edf8;
+}
+
+.uvlPathLine {
+  margin-top: 4px;
+}
+
+.uvlClipText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uvlActions {
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.rowActionMenu > summary {
+  padding: 6px 8px;
+}
+
+.uploadManagerColumnLeft,
+.uploadAccountManager,
+.uamTableWrap,
+.uamCardCell,
+.uploadManagerColumnCenter,
+.uploadVideoLibrary,
+.uvlTableWrap {
+  min-width: 0;
+}
+
+@media (max-width: 1439px) {
+  .uamCardTop {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 999px) {
+  .uamCardTop,
+  .uamCardStats {
+    flex-wrap: wrap;
+  }
+}
+
+/* Final account card stability */
+.uamCardCell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 90px;
+  overflow: hidden;
+}
+
+.uamCardHeaderRow,
+.uamCardStatsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.uamCardName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #e5edf8;
+}
+
+.uamCardBadge {
+  flex-shrink: 0;
+  max-width: 46%;
+}
+
+.uamCardBadge .uamBadge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.uamCardMetaRow {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #a9b8cc;
+}
+
+.uamCardStatText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #c3d0e0;
+}
+
+.uamCardActionRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.uamCardActionRow .ghostButton {
+  padding: 5px 8px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.uamCardCell .uamAccountName,
+.uamCardCell .uamCardTop,
+.uamCardCell .uamCardMeta,
+.uamCardCell .uamCardStats,
+.uamCardCell .uamActions,
+.uamCardCell .uamSub,
+.uamCardCell .uamWarn {
+  display: none !important;
+}
+
+.uamTableWrap {
+  overflow-x: hidden;
+}
+
+.uploadManagerColumnLeft,
+.uploadAccountManager,
+.uamTableWrap,
+.uamTable,
+.uamTable tbody,
+.uamCardRow,
+.uamCardCell {
+  min-width: 0;
+}
+
+@media (max-width: 1366px) {
+  .uamCardBadge {
+    max-width: 48%;
+  }
+
+  .uamCardActionRow .ghostButton {
+    padding-inline: 7px;
+  }
+}
+
 .uploadManagerTopBar {
   display: flex;
   align-items: center;
@@ -10599,6 +11079,37 @@ body.is-history-active #history_list {
   gap: 12px;
 }
 
+.uamHeader .sectionSubtitle,
+.uamTitle {
+  max-width: 100%;
+}
+
+.uamTableWrap .uamEmpty .primaryButton {
+  margin-top: 10px;
+}
+
+.uploadEditorSection[open] {
+  box-shadow: 0 12px 30px rgba(2, 6, 23, .24);
+}
+
+.accountRowActive::after {
+  content: "Selected";
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #dbeafe;
+  background: rgba(59, 130, 246, .22);
+  border: 1px solid rgba(96, 165, 250, .28);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.uamTable tbody tr {
+  position: relative;
+}
+
 .uploadSettingsGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -10636,4 +11147,1042 @@ body.is-history-active #history_list {
   .uploadSettingsGrid {
     grid-template-columns: 1fr;
   }
+}
+
+/* =============================================================================
+   Upload Manager Phase 0 UI Polish
+   Overrides stale density-cleanup rules; must stay at end of file.
+   ============================================================================= */
+
+/* --- 1. Restore account table header (hidden by prior density cleanup) --- */
+.uamTable thead tr {
+  display: table-row;
+}
+
+.uamTable th,
+.uamTable td {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.uamTable thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(13, 21, 38, .96);
+}
+
+.uamTable thead th {
+  white-space: nowrap;
+}
+
+/* --- 2. Account table: 9-column widths --- */
+.uamTable th:nth-child(1) { width: 22%; }
+.uamTable th:nth-child(2) { width: 10%; }
+.uamTable th:nth-child(3) { width: 10%; }
+.uamTable th:nth-child(4) { width:  8%; }
+.uamTable th:nth-child(5) { width:  8%; }
+.uamTable th:nth-child(6) { width:  8%; }
+.uamTable th:nth-child(7) { width: 14%; }
+.uamTable th:nth-child(8) { width:  8%; }
+.uamTable th:nth-child(9) { width: 12%; }
+
+/* --- 3. Queue table: 8-column widths --- */
+.uqmTable th:nth-child(1) { width: 24%; }
+.uqmTable th:nth-child(2) { width: 16%; }
+.uqmTable th:nth-child(3) { width: 10%; }
+.uqmTable th:nth-child(4) { width:  9%; }
+.uqmTable th:nth-child(5) { width: 12%; }
+.uqmTable th:nth-child(6) { width:  7%; }
+.uqmTable th:nth-child(7) { width:  9%; }
+.uqmTable th:nth-child(8) { width: 13%; }
+
+/* Sticky thead on queue table */
+.uqmTableWrap {
+  overflow-x: hidden;
+}
+
+.uqmTable thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(13, 21, 38, .96);
+}
+
+.uqmTable thead th {
+  white-space: nowrap;
+}
+
+/* --- 4. Queue row status colors --- */
+.uqmTable tbody tr.isRunning {
+  background: rgba(59, 130, 246, .11) !important;
+  box-shadow: inset 3px 0 0 rgba(96, 165, 250, .9);
+}
+
+.uqmTable tbody tr.isRunning .uqmClipName {
+  color: #dbeafe;
+}
+
+.uqmTable tbody tr.isFailed {
+  background: rgba(239, 68, 68, .08) !important;
+  box-shadow: inset 3px 0 0 rgba(239, 68, 68, .7);
+}
+
+.uqmTable tbody tr.isFailed .uqmClipName {
+  color: #fecaca;
+}
+
+.uqmTable tbody tr.isSuccess {
+  background: rgba(16, 185, 129, .06) !important;
+  box-shadow: inset 3px 0 0 rgba(16, 185, 129, .5);
+  opacity: .82;
+}
+
+/* isSelected always wins over status color */
+.uqmTable tbody tr.isSelected {
+  background: rgba(59, 130, 246, .18) !important;
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, .3), inset 3px 0 0 rgba(96, 165, 250, .9) !important;
+  opacity: 1 !important;
+}
+
+/* --- 5. Compact action buttons --- */
+.uamActions,
+.uvlActions,
+.uqmActions {
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.uamActions .ghostButton,
+.uvlActions .ghostButton,
+.uqmActions .ghostButton {
+  padding: 4px 7px;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  min-height: 0;
+}
+
+/* --- 6. Right panel: compact inspector --- */
+.uploadInspectorBody {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.uploadDetailGrid {
+  gap: 8px;
+}
+
+.uploadDetailSection {
+  padding: 8px 10px;
+}
+
+.uploadDetailLabel {
+  font-size: 10px;
+  margin-bottom: 2px;
+}
+
+.uploadDetailValue {
+  font-size: 11px;
+}
+
+#event_log_upload {
+  min-height: 80px;
+  max-height: 200px;
+}
+
+/* --- 7. Reduce visual noise --- */
+.uamSub,
+.uvlSub,
+.uqmSub {
+  color: rgba(148, 163, 184, .55);
+  font-size: 10px;
+}
+
+.uqmError {
+  font-size: 10px;
+  margin-bottom: 4px;
+}
+
+.uamTable td,
+.uvlTable td,
+.uqmTable td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* --- 8. Text overflow safety --- */
+.uamAccountName,
+.uvlFileName,
+.uqmClipName {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uamSub,
+.uvlSub,
+.uqmSub,
+.uqmError {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* === Upload Workspace Hard UI Reset Phase 2.5 ===
+   This block is authoritative. It wins over all earlier upload rules.
+   Do not add upload table/column rules above this block.
+   ================================================= */
+
+/* ---- Typography scale ---- */
+.uamTable, .uvlTable, .uqmTable,
+.uamTable th, .uamTable td,
+.uvlTable th, .uvlTable td,
+.uqmTable th, .uqmTable td {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.uamTable th, .uvlTable th, .uqmTable th {
+  font-size: 11px;
+}
+
+.uamSub, .uvlSub, .uqmSub, .uqmError,
+.uamBadge {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+/* ---- Spacing reset ---- */
+.uamTable th, .uamTable td,
+.uvlTable th, .uvlTable td,
+.uqmTable th, .uqmTable td {
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
+/* ---- Table layout: fixed, no horizontal scroll ---- */
+.uamTable, .uvlTable, .uqmTable {
+  width: 100%;
+  table-layout: fixed;
+  min-width: 0;
+  border-collapse: collapse;
+}
+
+.uamTableWrap, .uvlTableWrap, .uqmTableWrap {
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* ---- Sticky headers with solid background ---- */
+.uamTable thead,
+.uvlTable thead,
+.uqmTable thead {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: rgba(13, 21, 38, .97);
+}
+
+/* Force account thead row to show (overrides density-cleanup hide) */
+.uamTable thead tr {
+  display: table-row !important;
+}
+
+.uamTable thead th,
+.uvlTable thead th,
+.uqmTable thead th {
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-muted);
+}
+
+/* ---- Account table: 4 columns ---- */
+.uamTable th:nth-child(1), .uamTable td:nth-child(1) { width: 44%; }   /* Account */
+.uamTable th:nth-child(2), .uamTable td:nth-child(2) { width: 16%; }   /* Status  */
+.uamTable th:nth-child(3), .uamTable td:nth-child(3) { width: 16%; }   /* Usage   */
+.uamTable th:nth-child(4), .uamTable td:nth-child(4) { width: 24%; }   /* Actions */
+
+/* Override stale zero-padding on account table cells */
+.uamTable th { padding-left: 10px; padding-right: 10px; }
+.uamTable td { padding-left: 10px; padding-right: 10px; }
+
+/* ---- Video table: 5 columns ---- */
+.uvlTable th:nth-child(1), .uvlTable td:nth-child(1) { width: 28%; }   /* Video   */
+.uvlTable th:nth-child(2), .uvlTable td:nth-child(2) { width: 12%; }   /* Status  */
+.uvlTable th:nth-child(3), .uvlTable td:nth-child(3) { width: 24%; }   /* Caption */
+.uvlTable th:nth-child(4), .uvlTable td:nth-child(4) { width: 18%; }   /* Tags    */
+.uvlTable th:nth-child(5), .uvlTable td:nth-child(5) { width: 18%; }   /* Actions */
+
+/* ---- Queue table: 6 columns ---- */
+.uqmTable th:nth-child(1), .uqmTable td:nth-child(1) { width: 28%; }   /* Video     */
+.uqmTable th:nth-child(2), .uqmTable td:nth-child(2) { width: 18%; }   /* Account   */
+.uqmTable th:nth-child(3), .uqmTable td:nth-child(3) { width: 12%; }   /* Status    */
+.uqmTable th:nth-child(4), .uqmTable td:nth-child(4) { width: 14%; }   /* Scheduled */
+.uqmTable th:nth-child(5), .uqmTable td:nth-child(5) { width: 10%; }   /* Attempts  */
+.uqmTable th:nth-child(6), .uqmTable td:nth-child(6) { width: 18%; }   /* Actions   */
+
+/* ---- Name/text cells: never bust out of column ---- */
+.uamAccountName, .uvlFileName, .uqmClipName {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.uamSub, .uvlSub, .uqmSub {
+  font-size: 11px;
+  color: rgba(148, 163, 184, .58);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  margin-top: 2px;
+}
+
+.uqmError {
+  font-size: 11px;
+  color: #fca5a5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  margin-bottom: 4px;
+}
+
+.uvlClipText {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* ---- Status badge: sits on its own line, never overflows ---- */
+.uamBadge {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.uamBadgeStack {
+  margin-top: 4px;
+}
+
+/* ---- Usage line in account col 3 ---- */
+.uamUsageLine {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+  line-height: 1.25;
+}
+
+/* ---- Action buttons: wrap, never overflow ---- */
+.uamActions, .uvlActions, .uqmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.uamActions .ghostButton,
+.uvlActions .ghostButton,
+.uqmActions .ghostButton {
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+/* ---- Row states ---- */
+.uamTable tbody tr.isSelected,
+.uvlTable tbody tr.isSelected,
+.uqmTable tbody tr.isSelected {
+  background: rgba(59, 130, 246, .16) !important;
+  box-shadow: inset 3px 0 0 rgba(96, 165, 250, .9);
+  opacity: 1 !important;
+}
+
+.uqmTable tbody tr.isRunning {
+  background: rgba(59, 130, 246, .1) !important;
+  box-shadow: inset 3px 0 0 rgba(96, 165, 250, .85);
+}
+
+.uqmTable tbody tr.isFailed {
+  background: rgba(239, 68, 68, .08) !important;
+  box-shadow: inset 3px 0 0 rgba(239, 68, 68, .7);
+}
+
+.uqmTable tbody tr.isSuccess {
+  opacity: .72;
+}
+
+.uvlTable tr.isDisabled,
+.uqmTable tr.isMuted {
+  opacity: .54;
+}
+
+/* ---- Right panel safety ---- */
+.uploadInspectorBody {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+#event_log_upload {
+  min-height: 64px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* ---- Responsive: shrink gracefully at 1279px ---- */
+@media (max-width: 1279px) {
+  .uamTable th:nth-child(1), .uamTable td:nth-child(1) { width: 48%; }
+  .uamTable th:nth-child(4), .uamTable td:nth-child(4) { width: 20%; }
+}
+
+/* === Account Manager 4-column hard fix ===
+   Authoritative. Wins over all earlier account table rules.
+   ============================================ */
+
+.uamTable {
+  width: 100%;
+  table-layout: fixed;
+  min-width: 0;
+  border-collapse: collapse;
+}
+
+.uamTable th,
+.uamTable td {
+  padding: 8px 10px;
+  vertical-align: middle;
+  overflow: hidden;
+}
+
+/* Force header row visible (overrides density-cleanup display:none) */
+.uamTable thead tr {
+  display: table-row !important;
+}
+
+.uamTable th:nth-child(1), .uamTable td:nth-child(1) { width: 42%; }
+.uamTable th:nth-child(2), .uamTable td:nth-child(2) { width: 18%; }
+.uamTable th:nth-child(3), .uamTable td:nth-child(3) { width: 20%; }
+.uamTable th:nth-child(4), .uamTable td:nth-child(4) { width: 20%; }
+
+/* Account cell */
+.uamAccountMain {
+  min-width: 0;
+}
+
+.uamName {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(235, 242, 255, .95);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+/* Status cell */
+.uamBadgeStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* Usage cell */
+.uamUsageMain {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(235, 242, 255, .95);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+/* Sub-text in account/usage cells */
+.uamAccountCell .uamSub,
+.uamUsageCell .uamSub {
+  font-size: 10px;
+  color: rgba(160, 174, 195, .72);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+/* Actions cell */
+.uamActionsCell .uamActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.uamActionsCell .uamActions .ghostButton {
+  min-width: 44px;
+  padding: 4px 7px;
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+/* Badge sizing inside stack */
+.uamStatusCell .uamBadge {
+  font-size: 10px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* === Phase 2.6 Account Manager Width Fix ===
+   Overrides all earlier nth-child width rules for the account table.
+   ============================================ */
+
+.uamTable th:nth-child(1),
+.uamTable td:nth-child(1) { width: 36%; }
+
+.uamTable th:nth-child(2),
+.uamTable td:nth-child(2) { width: 22%; }
+
+.uamTable th:nth-child(3),
+.uamTable td:nth-child(3) { width: 22%; }
+
+.uamTable th:nth-child(4),
+.uamTable td:nth-child(4) { width: 20%; }
+
+.uamStatusCell .uamBadge {
+  font-size: 11px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uamBadgeStack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  width: 100%;
+}
+
+.uamUsageCell {
+  white-space: normal;
+}
+
+.uamActionsCell .uamActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.uamName,
+.uamUsageMain {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* =============================================================================
+   Upload Workspace Unified Layout v1
+   Authoritative final block. Overrides all prior upload workspace CSS.
+   Covers: 3-zone grid, account card list, video/queue tables, right inspector.
+   Do not add upload-specific rules above this block.
+   ============================================================================= */
+
+/* ---- 1. Workspace grid: 280 / flex / 320 ---- */
+.uploadManagerWorkspace {
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  gap: 14px;
+  min-height: 720px;
+  height: calc(100vh - 230px);
+  max-height: 1080px;
+}
+
+@media (max-width: 1439px) {
+  .uploadManagerWorkspace {
+    grid-template-columns: 260px minmax(0, 1fr) 300px;
+  }
+}
+
+@media (max-width: 1279px) {
+  .uploadManagerWorkspace {
+    grid-template-columns: 260px minmax(0, 1fr);
+    height: auto;
+    max-height: none;
+  }
+  .uploadManagerColumnRight {
+    grid-column: 1 / -1;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 999px) {
+  .uploadManagerWorkspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- 2. Left column: flex column so list fills remaining height ---- */
+.uploadAccountManager {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ---- 3. Account card list ---- */
+.uamAccountList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 2px 1px;
+}
+
+.uamAccountItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 11px;
+  border: 1px solid rgba(148, 163, 184, .12);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .28);
+  cursor: pointer;
+  min-width: 0;
+  transition: background .1s;
+  flex-shrink: 0;
+}
+
+.uamAccountItem:hover {
+  background: rgba(28, 42, 68, .42);
+  border-color: rgba(148, 163, 184, .2);
+}
+
+.uamAccountItem.isSelected {
+  background: rgba(59, 130, 246, .14) !important;
+  border-color: rgba(96, 165, 250, .40);
+  box-shadow: inset 3px 0 0 rgba(96, 165, 250, .85);
+}
+
+.uamAccountItem.isDisabled {
+  opacity: .54;
+}
+
+.uamAccountItemTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.uamAccountItemName {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(235, 242, 255, .95);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+  line-height: 1.3;
+}
+
+.uamAccountItemBadges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: 48%;
+}
+
+.uamAccountItemBadges .uamBadge {
+  font-size: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uamAccountItemMeta,
+.uamAccountItemUsage {
+  font-size: 11px;
+  color: rgba(148, 163, 184, .68);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.uamAccountItemWarn {
+  font-size: 11px;
+  color: #fca5a5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.uamAccountItemActions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+}
+
+.uamAccountItemActions .ghostButton {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  min-height: 0;
+  white-space: nowrap;
+}
+
+/* ---- 4. Data tables: video and queue (class uploadDataTable) ---- */
+.uploadDataTable {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  min-width: 0;
+}
+
+.uploadDataTable th,
+.uploadDataTable td {
+  padding: 8px 10px;
+  vertical-align: middle;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.uploadDataTable thead {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: rgba(13, 21, 38, .97);
+}
+
+.uploadDataTable thead th {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Video table: 28 / 12 / 24 / 18 / 18 */
+.uvlTable.uploadDataTable th:nth-child(1),
+.uvlTable.uploadDataTable td:nth-child(1) { width: 28%; }
+.uvlTable.uploadDataTable th:nth-child(2),
+.uvlTable.uploadDataTable td:nth-child(2) { width: 12%; }
+.uvlTable.uploadDataTable th:nth-child(3),
+.uvlTable.uploadDataTable td:nth-child(3) { width: 24%; }
+.uvlTable.uploadDataTable th:nth-child(4),
+.uvlTable.uploadDataTable td:nth-child(4) { width: 18%; }
+.uvlTable.uploadDataTable th:nth-child(5),
+.uvlTable.uploadDataTable td:nth-child(5) { width: 18%; }
+
+/* Queue table: 28 / 18 / 12 / 14 / 10 / 18 */
+.uqmTable.uploadDataTable th:nth-child(1),
+.uqmTable.uploadDataTable td:nth-child(1) { width: 28%; }
+.uqmTable.uploadDataTable th:nth-child(2),
+.uqmTable.uploadDataTable td:nth-child(2) { width: 18%; }
+.uqmTable.uploadDataTable th:nth-child(3),
+.uqmTable.uploadDataTable td:nth-child(3) { width: 12%; }
+.uqmTable.uploadDataTable th:nth-child(4),
+.uqmTable.uploadDataTable td:nth-child(4) { width: 14%; }
+.uqmTable.uploadDataTable th:nth-child(5),
+.uqmTable.uploadDataTable td:nth-child(5) { width: 10%; }
+.uqmTable.uploadDataTable th:nth-child(6),
+.uqmTable.uploadDataTable td:nth-child(6) { width: 18%; }
+
+/* ---- 5. Table cell text: never bust out ---- */
+.uvlFileName,
+.uqmClipName {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(235, 242, 255, .95);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.uvlSub,
+.uqmSub {
+  font-size: 11px;
+  color: rgba(148, 163, 184, .62);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+.uqmError {
+  font-size: 11px;
+  color: #fca5a5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+.uvlClipText {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* ---- 6. Action buttons in tables ---- */
+.uvlActions,
+.uqmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.uvlActions .ghostButton,
+.uqmActions .ghostButton {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+/* ---- 7. Table wrap: no horizontal scroll ---- */
+.uvlTableWrap,
+.uqmTableWrap {
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+/* ---- 8. Row state highlights (queue) ---- */
+.uqmTable tbody tr.isSelected {
+  background: rgba(59, 130, 246, .16) !important;
+  box-shadow: inset 3px 0 0 rgba(96, 165, 250, .9);
+  opacity: 1 !important;
+}
+
+.uqmTable tbody tr.isRunning {
+  background: rgba(59, 130, 246, .10) !important;
+  box-shadow: inset 3px 0 0 rgba(96, 165, 250, .85);
+}
+
+.uqmTable tbody tr.isFailed {
+  background: rgba(239, 68, 68, .08) !important;
+  box-shadow: inset 3px 0 0 rgba(239, 68, 68, .70);
+}
+
+.uqmTable tbody tr.isSuccess {
+  opacity: .72;
+}
+
+.uvlTable tbody tr.isSelected {
+  background: rgba(59, 130, 246, .14) !important;
+  box-shadow: inset 3px 0 0 rgba(96, 165, 250, .9);
+}
+
+.uvlTable tbody tr.isDisabled,
+.uqmTable tbody tr.isMuted {
+  opacity: .52;
+}
+
+/* ---- 9. Right panel: bounded inspector, no overflow ---- */
+.uploadInspectorBody {
+  max-height: 320px;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.uploadDetailSection {
+  padding: 8px 10px;
+}
+
+.uploadDetailLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+
+.uploadDetailValue {
+  font-size: 12px;
+  color: #e2e8f0;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.4;
+}
+
+.uploadDetailValuePre {
+  font-size: 11px;
+  color: #94a3b8;
+  max-height: 120px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, .22);
+  border-radius: 6px;
+}
+
+#event_log_upload {
+  min-height: 64px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.uqmHistoryList {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+/* === Upload Account Form Modal ===
+   Fixed-position overlay. Sidebar is unaffected.
+   ========================================= */
+
+.uploadModal[hidden] {
+  display: none !important;
+}
+
+.uploadModal {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.uploadModalBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 23, .72);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.uploadModalPanel {
+  position: relative;
+  width: min(680px, calc(100vw - 32px));
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #0f172a;
+  border: 1px solid rgba(96, 165, 250, .22);
+  border-radius: 14px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, .50);
+  padding: 20px 24px 24px;
+}
+
+.uploadModalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+}
+
+.uploadModalTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #e2e8f0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadModalClose {
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 8px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.uploadModalClose:hover {
+  color: #e2e8f0;
+}
+
+.uploadModalPanel .uamForm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+}
+
+.uploadModalPanel .uamForm .fieldSpan2 {
+  grid-column: 1 / -1;
+}
+
+.uploadModalPanel .uamFormActions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, .10);
+}
+
+.uploadModalPanel .uploadAdvancedFields {
+  grid-column: 1 / -1;
+}
+
+.uploadModalPanel .uploadAdvancedGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  margin-top: 8px;
+}
+
+.uploadModalPanel .uploadAdvancedGrid .fieldSpan2 {
+  grid-column: 1 / -1;
 }
