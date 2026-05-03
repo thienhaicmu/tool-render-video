@@ -12,6 +12,12 @@ let currentUploadQueueHistoryItems = [];
 let currentUploadWorkflowStep = 1;
 let __uploadRefreshing = false;
 let _cachedSchedulerData = null;
+let selectedUploadVideoIds = new Set();
+let _batchModalStep = 'configure';
+let _batchPreviewData = null;
+let _batchSelectedAccountIds = new Set();
+let _batchMode = 'smart';
+let _batchSpaceMinutes = 30;
 
 // --- UPLOAD STORE ---
 const UploadStore = {
@@ -435,7 +441,8 @@ function renderUploadVideoLibrary(items){
   const tbody = qs('upload_videos_tbody');
   if(!tbody) return;
   if(!items || !items.length){
-    tbody.innerHTML = '<tr><td colspan="5" class="uvlEmpty">No upload videos yet. Add a file to start building your library.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="uvlEmpty">No upload videos yet. Add a file to start building your library.</td></tr>';
+    _updateBatchAssignButton();
     return;
   }
   tbody.innerHTML = items.map((item) => {
@@ -443,10 +450,20 @@ function renderUploadVideoLibrary(items){
     const disabled = status === 'disabled';
     const caption = String(item.caption || '').trim();
     const selected = _selectedUploadId('video') === String(item.video_id || '');
+    const isBatchSelectable = status === 'ready' && !!item.video_path;
+    const isBatchSelected = selectedUploadVideoIds.has(String(item.video_id || ''));
     const queueTitle = disabled ? 'Video disabled' : (status !== 'ready' ? `Video status is ${status}` : 'Select this video for the queue form');
+    const chkTitle = isBatchSelectable ? 'Select for batch assign' : (disabled ? 'Video disabled' : (!item.video_path ? 'No video path' : `Status: ${status}`));
     const rowCls = [disabled ? 'isDisabled' : '', selected ? 'isSelected' : ''].filter(Boolean).join(' ');
     return `
       <tr class="${rowCls}" onclick="_selectUploadEntity('video', '${esc(item.video_id)}')">
+        <td class="uvlColCheck" onclick="event.stopPropagation()">
+          <input type="checkbox" class="uvlSelectChk"
+            ${isBatchSelectable ? '' : 'disabled'}
+            ${isBatchSelected ? 'checked' : ''}
+            title="${esc(chkTitle)}"
+            onchange="toggleUploadVideoSelection('${esc(item.video_id)}', this.checked)">
+        </td>
         <td class="uvlColVideo">
           <div class="uvlFileName">${esc(item.file_name || item.video_path || '-')}</div>
           <div class="uvlSub" title="${esc(item.video_path || '')}">${esc(_uamShortPath(item.video_path || ''))}</div>
@@ -464,6 +481,8 @@ function renderUploadVideoLibrary(items){
       </tr>
     `;
   }).join('');
+  _updateBatchAssignButton();
+  _syncSelectAllCheckbox();
 }
 
 // =============================================================================
@@ -1603,4 +1622,411 @@ if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', initUploadManagerUxFlow);
 }else{
   initUploadManagerUxFlow();
+}
+
+// =============================================================================
+// BATCH ASSIGN — Phase 3
+// =============================================================================
+
+function _isBatchEligibleAccount(account){
+  if(!account) return {eligible: false, reason: 'No account'};
+  const status = String(account.status || '').toLowerCase();
+  const loginState = String(account.login_state || '').toLowerCase();
+  if(status === 'banned') return {eligible: false, reason: 'Banned'};
+  if(status === 'disabled') return {eligible: false, reason: 'Disabled'};
+  if(['logged_out', 'challenge', 'expired'].includes(loginState)) return {eligible: false, reason: 'Login required'};
+  const dailyLimit = Number(account.daily_limit || 0);
+  const todayCount = Number(account.today_count || 0);
+  if(dailyLimit > 0 && todayCount >= dailyLimit) return {eligible: false, reason: 'Daily limit reached'};
+  return {eligible: true, reason: ''};
+}
+
+function toggleUploadVideoSelection(videoId, checked){
+  if(checked){
+    selectedUploadVideoIds.add(String(videoId));
+  }else{
+    selectedUploadVideoIds.delete(String(videoId));
+  }
+  _updateBatchAssignButton();
+  _syncSelectAllCheckbox();
+}
+
+function toggleSelectAllVideos(checked){
+  if(checked){
+    uploadVideoLibraryItems.forEach((item) => {
+      if(String(item.status || '').toLowerCase() === 'ready' && item.video_path){
+        selectedUploadVideoIds.add(String(item.video_id));
+      }
+    });
+  }else{
+    selectedUploadVideoIds.clear();
+  }
+  renderUploadVideoLibrary(uploadVideoLibraryItems);
+}
+
+function _syncSelectAllCheckbox(){
+  const allChk = qs('uvl_select_all');
+  if(!allChk) return;
+  const eligible = uploadVideoLibraryItems.filter(
+    (item) => String(item.status || '').toLowerCase() === 'ready' && !!item.video_path
+  );
+  if(!eligible.length){ allChk.checked = false; allChk.indeterminate = false; return; }
+  const selectedCount = eligible.filter((item) => selectedUploadVideoIds.has(String(item.video_id))).length;
+  if(selectedCount === 0){ allChk.checked = false; allChk.indeterminate = false; }
+  else if(selectedCount === eligible.length){ allChk.checked = true; allChk.indeterminate = false; }
+  else { allChk.checked = false; allChk.indeterminate = true; }
+}
+
+function _updateBatchAssignButton(){
+  const btn = qs('uvl_batch_assign_btn');
+  const countEl = qs('uvl_batch_count');
+  if(!btn) return;
+  const count = selectedUploadVideoIds.size;
+  btn.disabled = count === 0;
+  if(countEl) countEl.textContent = count > 0 ? `(${count})` : '';
+}
+
+function openBatchAssignModal(){
+  if(!selectedUploadVideoIds.size){ showToast('Select at least one ready video first', 'info'); return; }
+  _batchModalStep = 'configure';
+  _batchSelectedAccountIds = new Set();
+  _batchMode = 'smart';
+  _batchSpaceMinutes = 30;
+  _batchPreviewData = null;
+  const modal = document.getElementById('batch_assign_modal');
+  if(modal) modal.hidden = false;
+  _renderBatchModalContent();
+}
+
+function closeBatchAssignModal(){
+  const modal = document.getElementById('batch_assign_modal');
+  if(modal) modal.hidden = true;
+  _batchPreviewData = null;
+}
+
+function _renderBatchModalContent(){
+  const panel = qs('batch_assign_modal_panel');
+  if(!panel) return;
+  panel.innerHTML = _batchModalStep === 'configure'
+    ? _buildBatchConfigHtml()
+    : _buildBatchPreviewHtml(_batchPreviewData);
+  if(_batchModalStep === 'configure'){
+    _batchSelectedAccountIds.forEach((id) => {
+      const chk = panel.querySelector(`[data-account-id="${CSS.escape(id)}"]`);
+      if(chk) chk.checked = true;
+    });
+    const modeEl = panel.querySelector(`input[name="batch_mode"][value="${_batchMode}"]`);
+    if(modeEl) modeEl.checked = true;
+    const spaceEl = qs('batch_space_minutes');
+    if(spaceEl) spaceEl.value = _batchSpaceMinutes;
+  }
+}
+
+function _buildBatchConfigHtml(){
+  const videoCount = selectedUploadVideoIds.size;
+  const accountRows = uploadAccountManagerItems.map((acc) => {
+    const {eligible, reason} = _isBatchEligibleAccount(acc);
+    const dailyLimit = Number(acc.daily_limit || 0);
+    const todayCount = Number(acc.today_count || 0);
+    const usageLine = dailyLimit > 0 ? `Today ${todayCount}/${dailyLimit}` : 'No daily limit';
+    const cooldownMin = Number(acc.cooldown_minutes || 0);
+    const cooldownLine = cooldownMin > 0 ? `Cooldown ${cooldownMin}m` : 'No cooldown';
+    const name = esc(acc.display_name || acc.account_key || acc.account_id);
+    return `
+      <label class="batchAccountRow${eligible ? '' : ' batchAccountRowDisabled'}" title="${eligible ? '' : esc(reason)}">
+        <input type="checkbox" class="batchAccountChk" data-account-id="${esc(acc.account_id)}"
+          ${eligible ? '' : 'disabled'}
+          onchange="_onBatchAccountToggle(this)">
+        <div class="batchAccountInfo">
+          <div class="batchAccountName">${name}</div>
+          <div class="batchAccountMeta">${esc(usageLine)} · ${esc(cooldownLine)}</div>
+          ${!eligible ? `<div class="batchAccountDisabledReason">${esc(reason)}</div>` : ''}
+        </div>
+      </label>
+    `;
+  }).join('');
+
+  return `
+    <div class="uploadModalHeader">
+      <div class="uploadModalTitle">Batch Assign Videos</div>
+      <button class="ghostButton uploadModalClose" type="button" onclick="closeBatchAssignModal()">×</button>
+    </div>
+    <div class="batchModalBody">
+      <div class="batchSelectedCount">Selected: <strong>${videoCount}</strong> video${videoCount !== 1 ? 's' : ''}</div>
+      <div class="batchSection">
+        <div class="batchSectionTitle">Accounts</div>
+        <div class="batchAccountList" id="batch_account_list">
+          ${accountRows || '<div class="batchNoAccounts">No accounts available. Create an account first.</div>'}
+        </div>
+      </div>
+      <div class="batchSection">
+        <div class="batchSectionTitle">Distribution Mode</div>
+        <label class="batchRadioRow"><input type="radio" name="batch_mode" value="smart" checked> Smart distribute across selected accounts</label>
+        <label class="batchRadioRow"><input type="radio" name="batch_mode" value="all_to_one"> All videos to first selected account</label>
+      </div>
+      <div class="batchSection">
+        <div class="batchSectionTitle">Schedule</div>
+        <label class="batchRadioRow">
+          <input type="radio" name="batch_schedule" value="auto_space" checked>
+          Auto-space every <input type="number" class="batchInlineInput" id="batch_space_minutes" value="30" min="1" max="480"> minutes
+        </label>
+        <label class="batchRadioRow"><input type="radio" name="batch_schedule" value="next_available"> Next available (no spacing)</label>
+      </div>
+    </div>
+    <div class="batchModalFooter">
+      <button class="ghostButton" type="button" onclick="closeBatchAssignModal()">Cancel</button>
+      <button class="primaryButton" type="button" onclick="previewBatchAssign()">Preview</button>
+    </div>
+  `;
+}
+
+function _onBatchAccountToggle(chk){
+  const id = chk.dataset.accountId;
+  if(!id) return;
+  if(chk.checked){ _batchSelectedAccountIds.add(id); }else{ _batchSelectedAccountIds.delete(id); }
+}
+
+function previewBatchAssign(){
+  const panel = qs('batch_assign_modal_panel');
+  if(!panel) return;
+  _batchSelectedAccountIds = new Set();
+  panel.querySelectorAll('.batchAccountChk:checked').forEach((chk) => {
+    if(chk.dataset.accountId) _batchSelectedAccountIds.add(chk.dataset.accountId);
+  });
+  const modeEl = panel.querySelector('input[name="batch_mode"]:checked');
+  _batchMode = modeEl ? modeEl.value : 'smart';
+  const scheduleEl = panel.querySelector('input[name="batch_schedule"]:checked');
+  const useSpacing = !scheduleEl || scheduleEl.value === 'auto_space';
+  const spaceEl = qs('batch_space_minutes');
+  _batchSpaceMinutes = useSpacing ? (parseInt(spaceEl ? spaceEl.value : '30', 10) || 30) : 0;
+  if(!_batchSelectedAccountIds.size){ showToast('Select at least one account', 'info'); return; }
+  const result = computeBatchAssignments(
+    Array.from(selectedUploadVideoIds),
+    Array.from(_batchSelectedAccountIds),
+    {mode: _batchMode, spaceMinutes: _batchSpaceMinutes}
+  );
+  _batchPreviewData = result;
+  _batchModalStep = 'preview';
+  _renderBatchModalContent();
+}
+
+function goBackBatchConfig(){
+  _batchModalStep = 'configure';
+  _renderBatchModalContent();
+}
+
+function computeBatchAssignments(videoIds, accountIds, options){
+  const mode = options.mode || 'smart';
+  const spaceMinutes = Number(options.spaceMinutes) || 0;
+  const assignments = [];
+  const skipped = [];
+  const warnings = [];
+  const now = Date.now();
+
+  const videos = videoIds
+    .map((id) => uploadVideoLibraryItems.find((v) => String(v.video_id) === String(id)))
+    .filter(Boolean);
+  const accounts = accountIds
+    .map((id) => uploadAccountManagerItems.find((a) => String(a.account_id) === String(id)))
+    .filter(Boolean);
+
+  if(!accounts.length){
+    videos.forEach((v) => skipped.push({video_id: v.video_id, reason: 'no eligible account'}));
+    return {assignments, skipped, warnings};
+  }
+
+  const accountState = {};
+  for(const acc of accounts){
+    const dailyLimit = Number(acc.daily_limit || 0);
+    const todayCount = Number(acc.today_count || 0);
+    const remaining = dailyLimit > 0 ? Math.max(0, dailyLimit - todayCount) : Infinity;
+    const cooldownMs = Number(acc.cooldown_minutes || 0) * 60 * 1000;
+    accountState[acc.account_id] = {
+      remaining,
+      nextMs: now + cooldownMs,
+      assigned: 0,
+    };
+  }
+
+  const existingPairs = new Set(
+    uploadQueueManagerItems
+      .filter((q) => !['cancelled', 'success'].includes(String(q.status || '').toLowerCase()))
+      .map((q) => `${q.video_id}|${q.account_id}`)
+  );
+
+  function tryAssign(video, acc){
+    const state = accountState[acc.account_id];
+    if(existingPairs.has(`${video.video_id}|${acc.account_id}`)) return 'duplicate';
+    if(state.remaining !== Infinity && state.assigned >= state.remaining) return 'quota';
+    const scheduledAt = new Date(state.nextMs).toISOString();
+    if(spaceMinutes > 0) state.nextMs += spaceMinutes * 60 * 1000;
+    state.assigned++;
+    assignments.push({video_id: video.video_id, account_id: acc.account_id, scheduled_at: scheduledAt, priority: 0, reason: 'assigned'});
+    return 'ok';
+  }
+
+  if(mode === 'all_to_one'){
+    const acc = accounts[0];
+    for(const video of videos){
+      const r = tryAssign(video, acc);
+      if(r === 'duplicate') skipped.push({video_id: video.video_id, reason: 'already queued'});
+      else if(r === 'quota') skipped.push({video_id: video.video_id, reason: 'daily limit reached'});
+    }
+  }else{
+    const sorted = [...accounts].sort((a, b) => {
+      const rA = accountState[a.account_id].remaining === Infinity ? 9999 : accountState[a.account_id].remaining;
+      const rB = accountState[b.account_id].remaining === Infinity ? 9999 : accountState[b.account_id].remaining;
+      return rB - rA;
+    });
+    let idx = 0;
+    for(const video of videos){
+      let assigned = false;
+      for(let attempt = 0; attempt < sorted.length; attempt++){
+        const acc = sorted[(idx + attempt) % sorted.length];
+        if(tryAssign(video, acc) === 'ok'){ idx = (idx + 1) % sorted.length; assigned = true; break; }
+      }
+      if(!assigned){
+        const allDup = accounts.every((a) => existingPairs.has(`${video.video_id}|${a.account_id}`));
+        const allFull = accounts.every((a) => {
+          const s = accountState[a.account_id];
+          return s.remaining !== Infinity && s.assigned >= s.remaining;
+        });
+        skipped.push({video_id: video.video_id, reason: allDup ? 'already queued' : (allFull ? 'no remaining quota' : 'no eligible account')});
+      }
+    }
+  }
+
+  for(const acc of accounts){
+    const s = accountState[acc.account_id];
+    if(s.remaining !== Infinity && s.remaining - s.assigned <= 1 && s.assigned > 0){
+      warnings.push(`${acc.display_name || acc.account_key} is near daily limit`);
+    }
+  }
+  return {assignments, skipped, warnings};
+}
+
+function _buildBatchPreviewHtml(result){
+  if(!result) return '<div class="batchModalBody"><div class="batchNoAccounts">No preview data.</div></div>';
+  const {assignments, skipped, warnings} = result;
+
+  const byAccount = {};
+  for(const a of assignments){
+    if(!byAccount[a.account_id]) byAccount[a.account_id] = [];
+    byAccount[a.account_id].push(a);
+  }
+
+  const groupHtml = Object.entries(byAccount).map(([accountId, items]) => {
+    const acc = uploadAccountManagerItems.find((a) => String(a.account_id) === String(accountId));
+    const accName = acc ? (acc.display_name || acc.account_key || accountId) : accountId;
+    const rows = items.map((item) => {
+      const video = uploadVideoLibraryItems.find((v) => String(v.video_id) === String(item.video_id));
+      const videoName = video ? (video.file_name || String(video.video_path || '').split(/[\\/]/).pop() || item.video_id) : item.video_id;
+      const timeStr = item.scheduled_at ? item.scheduled_at.replace('T', ' ').slice(0, 16) : 'ASAP';
+      return `<div class="batchPreviewItem"><span class="batchPreviewItemName">${esc(videoName)}</span><span class="batchPreviewItemTime">${esc(timeStr)}</span></div>`;
+    }).join('');
+    return `<div class="batchPreviewGroup"><div class="batchPreviewGroupTitle">${esc(accName)}</div>${rows}</div>`;
+  }).join('');
+
+  const skippedHtml = skipped.length ? `
+    <div class="batchSection">
+      <div class="batchSectionTitle batchSectionTitleWarn">Skipped (${skipped.length})</div>
+      <div class="batchSkippedList">
+        ${skipped.map((s) => {
+          const video = uploadVideoLibraryItems.find((v) => String(v.video_id) === String(s.video_id));
+          const name = video ? (video.file_name || String(video.video_path || '').split(/[\\/]/).pop() || s.video_id) : s.video_id;
+          return `<div class="batchSkippedItem"><span>${esc(name)}</span><span class="batchSkipReason">${esc(s.reason)}</span></div>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  const warningsHtml = warnings.length ? `
+    <div class="batchSection">
+      <div class="batchSectionTitle batchSectionTitleWarn">Warnings (${warnings.length})</div>
+      ${warnings.map((w) => `<div class="batchWarningItem">${esc(w)}</div>`).join('')}
+    </div>` : '';
+
+  return `
+    <div class="uploadModalHeader">
+      <div class="uploadModalTitle">Batch Assign — Preview</div>
+      <button class="ghostButton uploadModalClose" type="button" onclick="closeBatchAssignModal()">×</button>
+    </div>
+    <div class="batchModalBody">
+      <div class="batchPreviewSummary">
+        <div class="batchPreviewStat batchPreviewStatOk">Ready to enqueue: <strong>${assignments.length}</strong></div>
+        ${skipped.length ? `<div class="batchPreviewStat batchPreviewStatSkip">Skipped: <strong>${skipped.length}</strong></div>` : ''}
+        ${warnings.length ? `<div class="batchPreviewStat batchPreviewStatWarn">Warnings: <strong>${warnings.length}</strong></div>` : ''}
+      </div>
+      ${assignments.length ? `
+        <div class="batchSection">
+          <div class="batchSectionTitle">Assignments by Account</div>
+          <div class="batchPreviewGroups">${groupHtml}</div>
+        </div>` : '<div class="batchNoAccounts">No valid assignments. Check accounts and quotas.</div>'}
+      ${skippedHtml}
+      ${warningsHtml}
+    </div>
+    <div class="batchModalFooter">
+      <button class="ghostButton" type="button" onclick="goBackBatchConfig()">Back</button>
+      <button class="primaryButton" type="button" id="batch_enqueue_btn"
+        onclick="executeBatchEnqueue()" ${assignments.length === 0 ? 'disabled' : ''}>
+        Enqueue ${assignments.length} Video${assignments.length !== 1 ? 's' : ''}
+      </button>
+    </div>
+  `;
+}
+
+async function createQueueItemFromAssignment(assignment){
+  const video = uploadVideoLibraryItems.find((v) => String(v.video_id) === String(assignment.video_id));
+  const payload = {
+    video_id: String(assignment.video_id),
+    account_id: String(assignment.account_id),
+    scheduled_at: assignment.scheduled_at || '',
+    priority: Number(assignment.priority) || 0,
+    status: 'scheduled',
+    caption: video ? (video.caption || '') : '',
+    hashtags: video ? (video.hashtags || []) : [],
+  };
+  const res = await fetch('/api/upload/queue/add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error(_formatApiError(data.detail));
+  return data;
+}
+
+async function executeBatchEnqueue(){
+  const btn = qs('batch_enqueue_btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Enqueuing…'; }
+  if(!_batchPreviewData || !_batchPreviewData.assignments.length){
+    showToast('Nothing to enqueue', 'info');
+    if(btn){ btn.disabled = false; }
+    return;
+  }
+  const {assignments, skipped} = _batchPreviewData;
+  const results = [];
+  for(const assignment of assignments){
+    try{
+      await createQueueItemFromAssignment(assignment);
+      results.push({ok: true, assignment});
+    }catch(err){
+      results.push({ok: false, assignment, error: err.message || String(err)});
+    }
+  }
+  const succeeded = results.filter((r) => r.ok).length;
+  const failed = results.filter((r) => !r.ok).length;
+  const totalSkipped = skipped.length;
+  closeBatchAssignModal();
+  selectedUploadVideoIds.clear();
+  _updateBatchAssignButton();
+  await loadUploadVideoLibrary();
+  await loadUploadQueueManager();
+  refreshUploadWorkspace('batch_enqueued');
+  setUploadManagerTab('queue');
+  if(failed === 0){
+    showToast(`${succeeded} video${succeeded !== 1 ? 's' : ''} added to queue.${totalSkipped > 0 ? ` ${totalSkipped} skipped.` : ''}`, 'success');
+  }else{
+    showToast(`${succeeded} queued, ${failed} failed. See console for details.`, 'error');
+    console.warn('[BatchAssign] Failed items:', results.filter((r) => !r.ok));
+  }
 }

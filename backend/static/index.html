@@ -553,6 +553,7 @@
                     </select>
                     <button class="primaryButton uploadPrimaryAction" type="button" id="uvl_add_video_btn" onclick="openUploadEditor('video')">Add Video</button>
                     <button class="ghostButton" type="button" onclick="loadUploadVideoLibrary()">Refresh</button>
+                    <button class="secondaryButton" type="button" id="uvl_batch_assign_btn" onclick="openBatchAssignModal()" disabled title="Select ready videos to batch assign">Batch Assign <span id="uvl_batch_count"></span></button>
                   </div>
                 </div>
                 <details class="uploadEditorSection" id="uvl_editor">
@@ -583,6 +584,7 @@
                   <table class="uvlTable uploadDataTable">
                     <thead>
                       <tr>
+                        <th class="uvlColCheck"><input type="checkbox" id="uvl_select_all" title="Select all ready videos" onchange="toggleSelectAllVideos(this.checked)"></th>
                         <th>File</th>
                         <th>Status</th>
                         <th>Caption</th>
@@ -591,7 +593,7 @@
                       </tr>
                     </thead>
                     <tbody id="upload_videos_tbody">
-                      <tr><td colspan="5" class="uvlEmpty">No upload videos yet. Add a file to start building your library.</td></tr>
+                      <tr><td colspan="6" class="uvlEmpty">No upload videos yet. Add a file to start building your library.</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -731,6 +733,13 @@
                 <div class="actionRowTitle">Account Log</div>
                 <div class="logBox" id="event_log_upload"><div class="uqmEmpty">Select an account to view its recent upload log.</div></div>
               </div>
+            </div>
+          </div>
+          <!-- ── Batch Assign Modal ────────────────────────────── -->
+          <div id="batch_assign_modal" class="uploadModal" hidden>
+            <div class="uploadModalBackdrop" onclick="closeBatchAssignModal()"></div>
+            <div class="uploadModalPanel batchAssignPanel" id="batch_assign_modal_panel">
+              <!-- Rendered by _renderBatchModalContent() -->
             </div>
           </div>
           <!-- ── Account Form Modal ─────────────────────────────── -->
