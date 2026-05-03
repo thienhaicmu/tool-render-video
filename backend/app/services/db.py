@@ -14,6 +14,7 @@ logger = logging.getLogger("app.db")
 _DB_PATH_LOCK = threading.Lock()
 _ACTIVE_DB_PATH: Path | None = None
 UPLOAD_PROFILE_LOCK_TTL_MINUTES = 30
+UPLOAD_SCHEDULER_STATE_ID = "main"
 
 
 def _default_fallback_db_path() -> Path:
@@ -243,6 +244,22 @@ def init_db():
         )
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS upload_scheduler_state (
+            state_id TEXT PRIMARY KEY,
+            scheduler_enabled INTEGER DEFAULT 0,
+            max_concurrent_uploads INTEGER DEFAULT 1,
+            tick_interval_seconds INTEGER DEFAULT 30,
+            last_tick_at TEXT DEFAULT '',
+            running_count INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'stopped',
+            metadata_json TEXT DEFAULT '{}',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     # Lightweight schema migration for existing local DBs created by old versions.
     def _ensure_columns(table: str, required: dict[str, str]):
         existing_rows = cur.execute(f"PRAGMA table_info({table})").fetchall()
@@ -378,6 +395,31 @@ def init_db():
             "released_at": "released_at TEXT DEFAULT ''",
             "active": "active INTEGER DEFAULT 1",
         },
+    )
+    _ensure_columns(
+        "upload_scheduler_state",
+        {
+            "scheduler_enabled": "scheduler_enabled INTEGER DEFAULT 0",
+            "max_concurrent_uploads": "max_concurrent_uploads INTEGER DEFAULT 1",
+            "tick_interval_seconds": "tick_interval_seconds INTEGER DEFAULT 30",
+            "last_tick_at": "last_tick_at TEXT DEFAULT ''",
+            "running_count": "running_count INTEGER DEFAULT 0",
+            "status": "status TEXT DEFAULT 'stopped'",
+            "metadata_json": "metadata_json TEXT DEFAULT '{}'",
+            "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
+            "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
+        },
+    )
+    cur.execute(
+        """
+        INSERT INTO upload_scheduler_state (
+            state_id, scheduler_enabled, max_concurrent_uploads, tick_interval_seconds,
+            last_tick_at, running_count, status, metadata_json, created_at, updated_at
+        )
+        VALUES (?, 0, 1, 30, '', 0, 'stopped', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(state_id) DO NOTHING
+        """,
+        (UPLOAD_SCHEDULER_STATE_ID,),
     )
     conn.commit()
     conn.close()
@@ -528,6 +570,37 @@ def _normalize_upload_history_row(row: sqlite3.Row | dict | None):
         data["duration_seconds"] = float(data.get("duration_seconds") or 0)
     except Exception:
         data["duration_seconds"] = 0
+    return data
+
+
+def _normalize_upload_scheduler_state_row(row: sqlite3.Row | dict | None):
+    if not row:
+        return {
+            "state_id": UPLOAD_SCHEDULER_STATE_ID,
+            "scheduler_enabled": False,
+            "max_concurrent_uploads": 1,
+            "tick_interval_seconds": 30,
+            "last_tick_at": "",
+            "running_count": 0,
+            "status": "stopped",
+            "metadata": {},
+        }
+    data = dict(row)
+    data["scheduler_enabled"] = bool(int(data.get("scheduler_enabled") or 0))
+    try:
+        data["max_concurrent_uploads"] = max(1, int(data.get("max_concurrent_uploads") or 1))
+    except Exception:
+        data["max_concurrent_uploads"] = 1
+    try:
+        data["tick_interval_seconds"] = max(5, int(data.get("tick_interval_seconds") or 30))
+    except Exception:
+        data["tick_interval_seconds"] = 30
+    try:
+        data["running_count"] = max(0, int(data.get("running_count") or 0))
+    except Exception:
+        data["running_count"] = 0
+    data["status"] = str(data.get("status") or "stopped").strip().lower() or "stopped"
+    data["metadata"] = _json_loads(data.pop("metadata_json", "{}"), default={})
     return data
 
 
@@ -916,6 +989,83 @@ def update_upload_account_row(account_id: str, changes: dict):
 
 def disable_upload_account_row(account_id: str):
     return update_upload_account_row(account_id, {"status": "disabled"})
+
+
+def get_upload_scheduler_state():
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM upload_scheduler_state WHERE state_id = ?",
+        (UPLOAD_SCHEDULER_STATE_ID,),
+    ).fetchone()
+    conn.close()
+    return _normalize_upload_scheduler_state_row(row)
+
+
+def update_upload_scheduler_state(changes: dict | None = None):
+    allowed = {
+        "scheduler_enabled",
+        "max_concurrent_uploads",
+        "tick_interval_seconds",
+        "last_tick_at",
+        "running_count",
+        "status",
+        "metadata",
+    }
+    values: dict[str, Any] = {}
+    for key, value in (changes or {}).items():
+        if key not in allowed:
+            continue
+        if key == "scheduler_enabled":
+            values[key] = 1 if value else 0
+        elif key in {"max_concurrent_uploads", "tick_interval_seconds", "running_count"}:
+            minimum = 1 if key in {"max_concurrent_uploads", "tick_interval_seconds"} else 0
+            values[key] = max(minimum, int(value or 0))
+        elif key == "metadata":
+            values["metadata_json"] = _json_dumps(value or {})
+        else:
+            values[key] = str(value or "").strip()
+    if not values:
+        return get_upload_scheduler_state()
+    assignments = ", ".join([f"{key} = :{key}" for key in values])
+    values["state_id"] = UPLOAD_SCHEDULER_STATE_ID
+    conn = get_conn()
+    conn.execute(
+        f"""
+        UPDATE upload_scheduler_state
+        SET {assignments}, updated_at = CURRENT_TIMESTAMP
+        WHERE state_id = :state_id
+        """,
+        values,
+    )
+    conn.commit()
+    conn.close()
+    return get_upload_scheduler_state()
+
+
+def increment_upload_scheduler_running_count(delta: int):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT running_count FROM upload_scheduler_state WHERE state_id = ?",
+        (UPLOAD_SCHEDULER_STATE_ID,),
+    ).fetchone()
+    current = 0
+    if row:
+        try:
+            current = max(0, int(row["running_count"] or 0))
+        except Exception:
+            current = 0
+    next_value = max(0, current + int(delta or 0))
+    conn.execute(
+        """
+        UPDATE upload_scheduler_state
+        SET running_count = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE state_id = ?
+        """,
+        (next_value, UPLOAD_SCHEDULER_STATE_ID),
+    )
+    conn.commit()
+    conn.close()
+    return get_upload_scheduler_state()
 
 
 def create_upload_video_row(data: dict):

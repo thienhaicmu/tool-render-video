@@ -325,6 +325,7 @@ UPLOAD_VIDEO_SOURCE_TYPES = {"manual_file", "import_folder", "render_export_late
 UPLOAD_VIDEO_STATUSES = {"ready", "queued", "uploaded", "failed", "disabled"}
 UPLOAD_QUEUE_STATUSES = {"pending", "scheduled", "uploading", "success", "failed", "held", "cancelled"}
 UPLOAD_QUEUE_SAFE_UPDATE_STATUSES = {"pending", "scheduled", "held"}
+UPLOAD_SCHEDULER_STATUSES = {"stopped", "running"}
 
 
 class UploadAccountBase(BaseModel):
@@ -541,3 +542,22 @@ class UploadQueueResponse(BaseModel):
     account_key: str = ""
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+class UploadSchedulerStatusResponse(BaseModel):
+    scheduler_enabled: bool = False
+    max_concurrent_uploads: int = 1
+    tick_interval_seconds: int = 30
+    last_tick_at: str = ""
+    running_count: int = 0
+    status: str = "stopped"
+    next_eligible_count: int = 0
+    blocked_counts: dict = Field(default_factory=dict)
+
+    @field_validator("status")
+    @classmethod
+    def _validate_scheduler_status(cls, v: Optional[str]) -> str:
+        value = (v or "stopped").strip().lower()
+        if value not in UPLOAD_SCHEDULER_STATUSES:
+            raise ValueError(f"status must be one of {sorted(UPLOAD_SCHEDULER_STATUSES)!r}")
+        return value

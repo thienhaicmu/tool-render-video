@@ -2,7 +2,9 @@ import asyncio
 import json
 import logging
 import re
-from datetime import datetime
+import threading
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
 from app.models.schemas import (
@@ -39,6 +41,10 @@ from app.services.db import (
     mark_upload_queue_failed,
     mark_upload_queue_success,
     mark_upload_queue_uploading,
+    get_upload_scheduler_state,
+    increment_upload_scheduler_running_count,
+    list_active_runtime_locks,
+    update_upload_scheduler_state,
     update_upload_account_row,
     update_upload_queue_item,
     update_upload_video_row,
@@ -63,6 +69,9 @@ from app.services.channel_service import ensure_channel
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 logger = logging.getLogger("app.upload")
+_SCHEDULER_THREAD: threading.Thread | None = None
+_SCHEDULER_THREAD_LOCK = threading.Lock()
+_SCHEDULER_STOP_EVENT = threading.Event()
 
 
 def _safe_account_key(raw: str) -> str:
@@ -143,6 +152,168 @@ def _probe_upload_video_path(video_path: str) -> tuple[str, int]:
 
 def _utc_now_iso() -> str:
     return datetime.utcnow().isoformat() + "Z"
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    normalized = text.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        local_tz = datetime.now().astimezone().tzinfo or timezone.utc
+        dt = dt.replace(tzinfo=local_tz)
+    return dt.astimezone(timezone.utc)
+
+
+def _effective_today_count(account: dict, now_utc: datetime | None = None) -> int:
+    now_utc = now_utc or _utc_now()
+    last_upload = _parse_datetime(account.get("last_upload_at"))
+    try:
+        current = max(0, int(account.get("today_count") or 0))
+    except Exception:
+        current = 0
+    if not last_upload:
+        return current
+    return current if last_upload.date() == now_utc.date() else 0
+
+
+def _blocked_reason_label(reason: str) -> str:
+    return {
+        "status_not_runnable": "status not runnable",
+        "scheduled_later": "scheduled later",
+        "account_missing": "account missing",
+        "account_disabled": "account disabled",
+        "account_limited": "account limited/banned",
+        "login_required": "login required",
+        "daily_limit": "daily limit",
+        "cooldown": "cooldown",
+        "profile_busy": "profile busy",
+        "video_missing": "video missing",
+        "video_disabled": "video disabled",
+        "file_missing": "file missing",
+        "attempts_exhausted": "attempts exhausted",
+    }.get(reason, reason.replace("_", " "))
+
+
+def _queue_block_reason(
+    row: dict,
+    *,
+    now_utc: datetime | None = None,
+    account_cache: dict[str, dict] | None = None,
+    video_cache: dict[str, dict] | None = None,
+    active_locks: list[dict] | None = None,
+) -> tuple[bool, str]:
+    now_utc = now_utc or _utc_now()
+    status = str(row.get("status") or "").strip().lower()
+    if status not in {"pending", "scheduled"}:
+        return False, "status_not_runnable"
+    scheduled_at = _parse_datetime(row.get("scheduled_at"))
+    if scheduled_at and scheduled_at > now_utc:
+        return False, "scheduled_later"
+
+    account_id = str(row.get("account_id") or "").strip()
+    account = (account_cache or {}).get(account_id) if account_cache is not None else get_upload_account_row(account_id)
+    if not account:
+        return False, "account_missing"
+    account_status = str(account.get("status") or "").strip().lower()
+    if account_status == "disabled":
+        return False, "account_disabled"
+    if account_status not in {"active", "warming"}:
+        return False, "account_limited"
+    login_state = str(account.get("login_state") or "unknown").strip().lower()
+    if login_state not in {"logged_in", "unknown"}:
+        return False, "login_required"
+
+    effective_today_count = _effective_today_count(account, now_utc=now_utc)
+    daily_limit = max(0, int(account.get("daily_limit") or 0))
+    if daily_limit > 0 and effective_today_count >= daily_limit:
+        return False, "daily_limit"
+
+    cooldown_minutes = max(0, int(account.get("cooldown_minutes") or 0))
+    if cooldown_minutes > 0:
+        last_upload = _parse_datetime(account.get("last_upload_at"))
+        if last_upload and now_utc < (last_upload + timedelta(minutes=cooldown_minutes)):
+            return False, "cooldown"
+
+    profile_path = _account_profile_path(account)
+    normalized_profile = normalize_profile_path_value(profile_path)
+    for lock in (active_locks or list_active_runtime_locks()):
+        lock_type = str(lock.get("lock_type") or "").strip()
+        resource_key = str(lock.get("resource_key") or "").strip()
+        if lock_type == "account_id" and resource_key == account_id:
+            return False, "profile_busy"
+        if lock_type == "profile_path" and resource_key == normalized_profile:
+            return False, "profile_busy"
+
+    video_id = str(row.get("video_id") or "").strip()
+    video = (video_cache or {}).get(video_id) if video_cache is not None else get_upload_video_row(video_id)
+    if not video:
+        return False, "video_missing"
+    if str(video.get("status") or "").strip().lower() == "disabled":
+        return False, "video_disabled"
+    video_path = Path(str(row.get("video_path") or video.get("video_path") or "").strip())
+    if not video_path.exists() or not video_path.is_file():
+        return False, "file_missing"
+
+    attempt_count = max(0, int(row.get("attempt_count") or 0))
+    max_attempts = max(1, int(row.get("max_attempts") or 3))
+    if attempt_count >= max_attempts:
+        return False, "attempts_exhausted"
+    return True, ""
+
+
+def _scheduler_queue_snapshot(limit: int = 500):
+    now_utc = _utc_now()
+    state = get_upload_scheduler_state()
+    queue_items = list_upload_queue(limit=limit)
+    account_rows = list_upload_account_rows(include_disabled=True)
+    account_cache = {str(item.get("account_id") or ""): item for item in account_rows}
+    video_rows = list_upload_video_rows(limit=limit)
+    video_cache = {str(item.get("video_id") or ""): item for item in video_rows}
+    active_locks = list_active_runtime_locks()
+    eligible: list[dict] = []
+    blocked_counts: dict[str, int] = {}
+    annotated_items: list[dict] = []
+    for item in queue_items:
+        cloned = dict(item)
+        status = str(cloned.get("status") or "").strip().lower()
+        is_eligible, reason = _queue_block_reason(
+            cloned,
+            now_utc=now_utc,
+            account_cache=account_cache,
+            video_cache=video_cache,
+            active_locks=active_locks,
+        )
+        cloned["blocked_reason"] = "" if is_eligible else _blocked_reason_label(reason)
+        cloned["eligible"] = is_eligible
+        annotated_items.append(cloned)
+        if is_eligible:
+            eligible.append(cloned)
+        elif reason and status in {"pending", "scheduled"}:
+            blocked_counts[_blocked_reason_label(reason)] = blocked_counts.get(_blocked_reason_label(reason), 0) + 1
+    eligible.sort(
+        key=lambda item: (
+            0 if str(item.get("scheduled_at") or "").strip() else 1,
+            str(item.get("scheduled_at") or ""),
+            -int(item.get("priority") or 0),
+            str(item.get("created_at") or ""),
+        )
+    )
+    return {
+        "state": state,
+        "now_utc": now_utc,
+        "items": annotated_items,
+        "eligible_items": eligible,
+        "blocked_counts": blocked_counts,
+    }
 
 
 def _caption_with_hashtags(caption: str, hashtags: list[str] | None) -> str:
@@ -448,12 +619,18 @@ def add_to_upload_queue(payload: UploadQueueAddRequest):
 
 @router.get("/queue")
 def get_upload_queue(status: str = "", account_id: str = "", platform: str = "", limit: int = 100):
-    items = list_upload_queue(
-        limit=limit,
-        status=str(status or "").strip().lower(),
-        account_id=str(account_id or "").strip(),
-        platform=str(platform or "").strip().lower(),
-    )
+    snapshot = _scheduler_queue_snapshot(limit=max(limit, 500))
+    items = snapshot["items"]
+    status_filter = str(status or "").strip().lower()
+    account_filter = str(account_id or "").strip()
+    platform_filter = str(platform or "").strip().lower()
+    if status_filter:
+        items = [item for item in items if str(item.get("status") or "").strip().lower() == status_filter]
+    if account_filter:
+        items = [item for item in items if str(item.get("account_id") or "").strip() == account_filter]
+    if platform_filter:
+        items = [item for item in items if str(item.get("platform") or "").strip().lower() == platform_filter]
+    items = items[: max(1, min(int(limit or 100), 500))]
     return {"status": "ok", "count": len(items), "items": items}
 
 
@@ -468,6 +645,9 @@ def get_upload_queue_detail(queue_id: str):
     row = get_upload_queue_item(queue_id)
     if not row:
         raise HTTPException(status_code=404, detail="Upload queue item not found")
+    is_eligible, reason = _queue_block_reason(row)
+    row["blocked_reason"] = "" if is_eligible else _blocked_reason_label(reason)
+    row["eligible"] = is_eligible
     return {"status": "ok", "item": row}
 
 
@@ -526,8 +706,54 @@ def _queue_account_key(row: dict) -> str:
     return _safe_account_key(row.get("account_id") or "default")
 
 
-@router.post("/queue/{queue_id}/run")
-def run_upload_queue_item(queue_id: str):
+def _update_account_after_success(account: dict, finished_at_iso: str, result: dict | None = None):
+    now_utc = _parse_datetime(finished_at_iso) or _utc_now()
+    next_today_count = _effective_today_count(account, now_utc=now_utc) + 1
+    health = dict(account.get("health_json") or {})
+    health["last_upload_result"] = "success"
+    health["last_upload_at"] = finished_at_iso
+    if result:
+        detail = result.get("detail") if isinstance(result, dict) else None
+        if isinstance(detail, dict):
+            health["last_upload_summary"] = (
+                detail.get("upload_message")
+                or detail.get("upload_state")
+                or result.get("adapter", "upload_one_video")
+            )
+        else:
+            health["last_upload_summary"] = result.get("adapter", "upload_one_video")
+    update_upload_account_row(
+        str(account.get("account_id") or ""),
+        {
+            "today_count": next_today_count,
+            "last_upload_at": finished_at_iso,
+            "health_json": health,
+        },
+    )
+
+
+def _update_account_after_failure(account: dict, error: str):
+    text = str(error or "").strip()
+    if not text:
+        return
+    login_state = None
+    lowered = text.lower()
+    if "challenge" in lowered:
+        login_state = "challenge"
+    elif "expired" in lowered:
+        login_state = "expired"
+    elif "login" in lowered or "logged out" in lowered or "session" in lowered:
+        login_state = "logged_out"
+    health = dict(account.get("health_json") or {})
+    health["last_upload_result"] = "failed"
+    health["last_upload_error"] = text
+    changes = {"health_json": health}
+    if login_state:
+        changes["login_state"] = login_state
+    update_upload_account_row(str(account.get("account_id") or ""), changes)
+
+
+def _run_upload_queue_item_internal(queue_id: str, source: str = "manual"):
     row = get_upload_queue_item(queue_id)
     if not row:
         raise HTTPException(status_code=404, detail="Upload queue item not found")
@@ -617,12 +843,13 @@ def run_upload_queue_item(queue_id: str):
     started_dt = datetime.utcnow()
 
     logger.info(
-        "upload_queue_run_start queue_id=%s video_path=%s account_id=%s platform=%s attempt_no=%s",
+        "upload_queue_run_start queue_id=%s video_path=%s account_id=%s platform=%s attempt_no=%s source=%s",
         queue_id,
         str(video_path),
         account_id,
         platform,
         attempt_no,
+        source,
     )
 
     def _finish_failed(error: str, adapter_result: dict | None = None):
@@ -643,16 +870,18 @@ def run_upload_queue_item(queue_id: str):
             duration_seconds=duration,
             error=error,
             adapter_result=adapter_result or {},
-            metadata={"phase": "manual_worker"},
+            metadata={"phase": source},
         )
+        _update_account_after_failure(account, error)
         logger.error(
-            "upload_queue_run_failed queue_id=%s video_path=%s account_id=%s platform=%s attempt_no=%s error=%s",
+            "upload_queue_run_failed queue_id=%s video_path=%s account_id=%s platform=%s attempt_no=%s error=%s source=%s",
             queue_id,
             str(video_path),
             account_id,
             platform,
             attempt_no,
             error,
+            source,
         )
         return {"status": "failed", "queue_id": queue_id, "item": final, "history": history, "error": error}
 
@@ -691,6 +920,7 @@ def run_upload_queue_item(queue_id: str):
         final = mark_upload_queue_success(queue_id, result)
         finished_dt = datetime.utcnow()
         finished_at = finished_dt.isoformat() + "Z"
+        _update_account_after_success(account, finished_at, result=result)
         history = insert_upload_history(
             queue_id=queue_id,
             account_id=account_id,
@@ -704,15 +934,16 @@ def run_upload_queue_item(queue_id: str):
             duration_seconds=max(0.0, (finished_dt - started_dt).total_seconds()),
             error="",
             adapter_result=result,
-            metadata={"phase": "manual_worker"},
+            metadata={"phase": source},
         )
         logger.info(
-            "upload_queue_run_success queue_id=%s video_path=%s account_id=%s platform=%s attempt_no=%s",
+            "upload_queue_run_success queue_id=%s video_path=%s account_id=%s platform=%s attempt_no=%s source=%s",
             queue_id,
             str(video_path),
             account_id,
             platform,
             attempt_no,
+            source,
         )
         return {"status": "success", "queue_id": queue_id, "item": final, "history": history}
     except Exception as exc:
@@ -727,6 +958,137 @@ def run_upload_queue_item(queue_id: str):
                 queue_id,
                 item.get("lock_type") or "",
             )
+
+
+@router.post("/queue/{queue_id}/run")
+def run_upload_queue_item(queue_id: str):
+    return _run_upload_queue_item_internal(queue_id, source="manual")
+
+
+def _scheduler_worker(queue_id: str, source: str = "scheduler"):
+    increment_upload_scheduler_running_count(1)
+    try:
+        result = _run_upload_queue_item_internal(queue_id, source=source)
+        logger.info("scheduler_run_%s queue_id=%s", result.get("status") or "done", queue_id)
+    except Exception as exc:
+        logger.exception("scheduler_run_failed queue_id=%s error=%s", queue_id, str(exc))
+    finally:
+        increment_upload_scheduler_running_count(-1)
+
+
+def _scheduler_tick_internal(source: str = "scheduler", dispatch_async: bool = True):
+    snapshot = _scheduler_queue_snapshot(limit=500)
+    state = snapshot["state"]
+    update_upload_scheduler_state({"last_tick_at": _utc_now_iso()})
+    active_slots = max(0, int(state.get("max_concurrent_uploads") or 1) - int(state.get("running_count") or 0))
+    eligible_items = snapshot["eligible_items"][:active_slots]
+    logger.info(
+        "scheduler_tick source=%s eligible_count=%s blocked_counts=%s available_slots=%s",
+        source,
+        len(snapshot["eligible_items"]),
+        json.dumps(snapshot["blocked_counts"], ensure_ascii=False),
+        active_slots,
+    )
+    picked_ids: list[str] = []
+    for item in eligible_items:
+        queue_id = str(item.get("queue_id") or "")
+        if not queue_id:
+            continue
+        picked_ids.append(queue_id)
+        logger.info("picked_queue_id queue_id=%s source=%s", queue_id, source)
+        if dispatch_async:
+            worker = threading.Thread(
+                target=_scheduler_worker,
+                args=(queue_id, source),
+                daemon=True,
+                name=f"upload-scheduler-run-{queue_id[:8]}",
+            )
+            worker.start()
+        else:
+            _scheduler_worker(queue_id, source=source)
+    return {
+        "status": "ok",
+        "source": source,
+        "picked_queue_ids": picked_ids,
+        "eligible_count": len(snapshot["eligible_items"]),
+        "blocked_counts": snapshot["blocked_counts"],
+        "running_count": get_upload_scheduler_state().get("running_count", 0),
+    }
+
+
+def _scheduler_loop():
+    try:
+        while not _SCHEDULER_STOP_EVENT.is_set():
+            state = get_upload_scheduler_state()
+            if not state.get("scheduler_enabled"):
+                break
+            update_upload_scheduler_state({"status": "running"})
+            try:
+                _scheduler_tick_internal(source="scheduler_loop", dispatch_async=True)
+            except Exception as exc:
+                logger.exception("scheduler_tick_error error=%s", str(exc))
+            interval = max(5, int(get_upload_scheduler_state().get("tick_interval_seconds") or 30))
+            if _SCHEDULER_STOP_EVENT.wait(interval):
+                break
+    finally:
+        update_upload_scheduler_state({"status": "stopped"})
+
+
+def _ensure_scheduler_thread():
+    global _SCHEDULER_THREAD
+    with _SCHEDULER_THREAD_LOCK:
+        if _SCHEDULER_THREAD and _SCHEDULER_THREAD.is_alive():
+            return False
+        _SCHEDULER_STOP_EVENT.clear()
+        _SCHEDULER_THREAD = threading.Thread(
+            target=_scheduler_loop,
+            daemon=True,
+            name="upload-scheduler-loop",
+        )
+        _SCHEDULER_THREAD.start()
+        return True
+
+
+@router.post("/scheduler/start")
+def start_upload_scheduler():
+    state = update_upload_scheduler_state({"scheduler_enabled": True, "status": "running"})
+    started = _ensure_scheduler_thread()
+    logger.info("scheduler_start started=%s", started)
+    return {"status": "ok", "started": started, "state": get_upload_scheduler_state()}
+
+
+@router.post("/scheduler/stop")
+def stop_upload_scheduler():
+    _SCHEDULER_STOP_EVENT.set()
+    state = update_upload_scheduler_state({"scheduler_enabled": False, "status": "stopped"})
+    logger.info("scheduler_stop")
+    return {"status": "ok", "state": state}
+
+
+@router.get("/scheduler/status")
+def get_scheduler_status():
+    snapshot = _scheduler_queue_snapshot(limit=500)
+    state = get_upload_scheduler_state()
+    return {
+        "status": "ok",
+        "scheduler_enabled": state.get("scheduler_enabled", False),
+        "running": bool((_SCHEDULER_THREAD and _SCHEDULER_THREAD.is_alive()) or state.get("running_count", 0)),
+        "last_tick_at": state.get("last_tick_at", ""),
+        "running_count": state.get("running_count", 0),
+        "max_concurrent_uploads": state.get("max_concurrent_uploads", 1),
+        "tick_interval_seconds": state.get("tick_interval_seconds", 30),
+        "scheduler_status": state.get("status", "stopped"),
+        "next_eligible_count": len(snapshot["eligible_items"]),
+        "blocked_counts": snapshot["blocked_counts"],
+    }
+
+
+@router.post("/scheduler/tick")
+def run_scheduler_tick():
+    state = get_upload_scheduler_state()
+    if not state.get("scheduler_enabled"):
+        update_upload_scheduler_state({"scheduler_enabled": False, "status": "stopped"})
+    return _scheduler_tick_internal(source="scheduler_tick_api", dispatch_async=True)
 
 
 @router.post("/queue/{queue_id}/cancel")
