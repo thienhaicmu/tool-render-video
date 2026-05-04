@@ -493,7 +493,7 @@
               <button class="ghostButton" type="button" onclick="refreshUploadWorkspace()">Refresh</button>
             </div>
           </div>
-          <div class="uploadManagerWorkspace" id="upload_manager_workspace">
+          <div class="uploadManagerWorkspace uploadSoloMode" id="upload_manager_workspace">
             <div class="uploadManagerColumn uploadManagerColumnLeft">
               <div class="uploadAccountManager" id="upload_account_manager">
                 <div class="uamHeader uamPanelHeader">
@@ -531,6 +531,14 @@
                     <button class="ghostButton" type="button" id="upload_check_login_btn" onclick="checkSelectedAccountLogin()">Check Login</button>
                   </div>
                 </div>
+                <div id="uploadWorkspaceActionBar" class="uwActionBar">
+                  <button id="uwOpenProfileBtn" class="uwBtnPrimary" type="button">Open Profile</button>
+                  <button id="uwLoginCheckBtn" class="uwBtn" type="button">Check Login</button>
+                  <button id="uwAddVideoBtn" class="uwBtn" type="button">Add Video</button>
+                  <button id="uwAutoPlanBtn" class="uwBtn" type="button">Auto Plan</button>
+                  <button id="uwStartBtn" class="uwBtnPrimary" type="button">Start</button>
+                </div>
+                <div id="uwContextPanel" class="uwContextPanel"></div>
                 <div class="uploadAccountWorkspaceMeta" id="upload_account_workspace_meta">
                   <div class="uploadWorkspaceEmptyState">
                     <div class="uploadWorkspaceEmptyTitle">Select an account to manage uploads</div>
@@ -538,6 +546,20 @@
                   </div>
                 </div>
               </div>
+              <div id="uploadSimplePanel" class="uploadSimplePanel uploadHero">
+                <div class="uploadQuickActions">
+                  <button id="spAddAccount" type="button">+ Add Account</button>
+                  <button id="spOpenProfile" type="button">Open Profile</button>
+                  <button id="spCheckLogin" type="button">Check Login</button>
+                  <button id="spAddVideo" type="button">Add Video</button>
+                  <button id="spAutoPlan" type="button">Auto Plan</button>
+                  <button id="spStartUpload" class="primary" type="button">Start Upload</button>
+                </div>
+                <div id="spSummary" class="uploadSummary"></div>
+                <div id="spNextStep" class="uploadNextStep"></div>
+                <div id="spStats" class="uploadTodayStats"></div>
+              </div>
+
               <div class="uploadManagerTabs" role="tablist" aria-label="Upload manager lists">
                 <button class="uploadManagerTab active" type="button" id="upload_tab_videos" onclick="setUploadManagerTab('videos')">Videos</button>
                 <button class="uploadManagerTab" type="button" id="upload_tab_queue" onclick="setUploadManagerTab('queue')">Uploads</button>
@@ -708,6 +730,9 @@
                     <div class="autoDashCard"><div class="autoDashLabel">Risky Excluded</div><div class="autoDashValue" id="auto_dash_risky" data-state="none">–</div></div>
                     <div class="autoDashCard"><div class="autoDashLabel">Next Slot</div><div class="autoDashValueSm" id="auto_dash_next" data-state="none">–</div></div>
                     <div class="autoDashCard"><div class="autoDashLabel">Quota Remaining</div><div class="autoDashValue" id="auto_dash_quota" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">Rotation</div><div class="autoDashValueSm" id="auto_dash_rotation" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">Top Acct Load</div><div class="autoDashValue" id="auto_dash_topload" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">Accts Used</div><div class="autoDashValue" id="auto_dash_accs_used" data-state="none">–</div></div>
                   </div>
                   <!-- Proxy pool health row -->
                   <div class="proxyPoolDashboard">
@@ -735,6 +760,24 @@
                   <div class="marketPresetNote" id="market_preset_note">Timezone preset stored for reference; current scheduling uses local machine time.</div>
                 </div>
                 <!-- Settings -->
+                <!-- Account Rotation -->
+                <div class="autoSettingsSection">
+                  <div class="autoSettingsTitle">Account Rotation</div>
+                  <div class="autoToggleGroup">
+                    <label class="autoToggleRow">
+                      <input type="radio" name="auto_rotation_mode" value="balanced" id="auto_rot_balanced" onchange="saveAutomationSettings()">
+                      Balanced <span class="fieldOptional">— spread across accounts, prefer healthy</span>
+                    </label>
+                    <label class="autoToggleRow">
+                      <input type="radio" name="auto_rotation_mode" value="score_first" id="auto_rot_score_first" onchange="saveAutomationSettings()">
+                      Score-first <span class="fieldOptional">— prioritize highest-scoring accounts</span>
+                    </label>
+                    <label class="autoToggleRow">
+                      <input type="radio" name="auto_rotation_mode" value="conservative" id="auto_rot_conservative" onchange="saveAutomationSettings()">
+                      Conservative <span class="fieldOptional">— healthy accounts only, strongest spacing</span>
+                    </label>
+                  </div>
+                </div>
                 <div class="autoSettingsSection">
                   <div class="autoSettingsTitle">Behavior</div>
                   <div class="autoToggleGroup">

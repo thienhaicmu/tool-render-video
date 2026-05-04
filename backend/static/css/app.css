@@ -13598,3 +13598,718 @@ body.is-history-active #history_list {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ==========================================================================
+   PHASE 9 F5: SMART ACCOUNT ROTATION
+   ========================================================================== */
+
+/* Radio inputs inside autoToggleRow */
+.autoToggleRow input[type="radio"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* Rotation mode badge in auto plan preview */
+.autoPlanRotBadge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(96,165,250,.12);
+  color: #93c5fd;
+  border: 1px solid rgba(96,165,250,.25);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+/* Penalty line shown under group header when rotation penalised this account */
+.autoPlanRotPenalty {
+  font-size: 11px;
+  color: #fbbf24;
+  padding: 2px 10px 5px;
+  line-height: 1.4;
+}
+
+/* Adjusted score shown on each plan item row */
+.autoPlanItemScore {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* ==========================================================================
+   PHASE 10: BROWSER RUNTIME + LOGIN FLOW
+   ========================================================================== */
+
+.profileLoginGuide {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+}
+
+.profileLoginGuideTitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.profileLoginGuideSteps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.profileLoginGuideSteps li {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.4;
+  padding: 2px 0;
+}
+
+.profileLoginGuideSteps li.stepDone {
+  color: #6ee7b7;
+}
+.profileLoginGuideSteps li.stepDone::marker {
+  color: #10b981;
+}
+
+.profileLoginGuideSteps li.stepPending {
+  color: #cbd5e1;
+}
+
+.profileLoginGuideSteps li.stepLocked {
+  color: var(--text-muted);
+  opacity: .6;
+}
+
+.stepNote {
+  font-size: 10px;
+  color: #f59e0b;
+  font-weight: 500;
+}
+
+.profileLoginGuideOk {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6ee7b7;
+  padding: 4px 6px;
+  background: rgba(16,185,129,.08);
+  border: 1px solid rgba(16,185,129,.25);
+  border-radius: 5px;
+}
+
+/* ── Global Upload Workspace Layout Fix ── */
+/* Tab panels must fill the center column and scroll internally */
+.uploadManagerTabPanel.active {
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* All inner panels must yield to flex constraints */
+.uploadVideoLibrary,
+.uploadQueueManager,
+.uploadSettingsPanel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Automation panel: flex child, not fixed height */
+.uploadAutomationPanel {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+/* Table wraps must scroll within their panel */
+.uvlTableWrap,
+.uqmTableWrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Inspector panel: flex column so body can scroll independently */
+.uploadInspectorPanel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.uploadInspectorBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: 48vh;
+}
+
+/* Account workspace shell stays compact — does not stretch */
+.uploadAccountWorkspaceShell {
+  flex: 0 0 auto;
+}
+
+/* === GPM ACCOUNT CARD === */
+
+.uamAccountCard {
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(20,25,40,0.6);
+  border: 1px solid rgba(255,255,255,0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s;
+  cursor: pointer;
+}
+
+.uamAccountCard:hover {
+  border-color: rgba(120,160,255,0.4);
+}
+
+.uamAccountCard.active {
+  border-color: rgba(59,130,246,0.55);
+  background: rgba(30,50,90,0.55);
+}
+
+.uamAccountCard.isDisabled {
+  opacity: 0.5;
+}
+
+.uamCardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.uamCardName {
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.uamHealthBadge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  flex: 0 0 auto;
+  text-transform: capitalize;
+}
+
+.uamHealthBadge.healthy { background: #1f8f4d; color: #d1fae5; }
+.uamHealthBadge.warning { background: #b38a00; color: #fef3c7; }
+.uamHealthBadge.risky   { background: #a33;    color: #fee2e2; }
+
+.uamCardMeta {
+  font-size: 12px;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uamCardActions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.uamBtnPrimary {
+  background: #4f7cff;
+  color: #fff;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.uamBtnPrimary:hover {
+  background: #3a68e8;
+}
+
+.uamBtn {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.uamBtn:hover {
+  border-color: rgba(255,255,255,0.25);
+  color: var(--text);
+}
+
+.uamBtn:disabled,
+.uamBtnPrimary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.uamCardStats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+/* === WORKSPACE ACTION BAR === */
+
+.uwActionBar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+.uwBtnPrimary {
+  background: #4f7cff;
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.uwBtnPrimary:hover {
+  background: #3a68e8;
+}
+
+.uwBtn {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.uwBtn:hover {
+  border-color: rgba(255,255,255,0.25);
+  color: var(--text);
+}
+
+.uwContextPanel {
+  padding: 10px 12px;
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+
+.uwHint {
+  opacity: 0.7;
+}
+
+.uwWarning {
+  color: #ffb347;
+}
+
+.uwSuccess {
+  color: #6be675;
+}
+
+/* === GPM QUEUE VISUAL === */
+
+.uqmStatusCell {
+  vertical-align: top;
+  padding: 6px 8px;
+}
+
+.uqmStatusBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.uqmStatusMain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.uqmIcon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.uqmStatusBlock.wait { color: #e6c15a; }
+.uqmStatusBlock.run  { color: #6aa9ff; }
+.uqmStatusBlock.ok   { color: #6be675; }
+.uqmStatusBlock.fail { color: #ff6b6b; }
+
+.uqmReason {
+  opacity: 0.7;
+  font-size: 11px;
+  max-width: 180px;
+  word-break: break-word;
+}
+
+.uqmRetry {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+/* === UPLOAD SIMPLE PANEL === */
+
+.uploadSimplePanel {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex: 0 0 auto;
+}
+
+.uploadQuickActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.uploadQuickActions button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.uploadQuickActions button:hover {
+  border-color: rgba(255,255,255,0.25);
+  color: var(--text);
+}
+
+.uploadQuickActions .primary {
+  background: #4f7cff;
+  color: #fff;
+  border-color: transparent;
+}
+
+.uploadQuickActions .primary:hover {
+  background: #3a68e8;
+}
+
+.uploadSummary {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.uploadNextStep {
+  margin-top: 6px;
+  color: #ffb347;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.uploadTodayStats {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* === LOGIN CHECK HINT === */
+
+.loginCheckError {
+  color: #ffb347;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.loginCheckSetupHint {
+  font-size: 12px;
+  color: #94a3b8;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+
+.loginCheckSetupHint code {
+  color: #6be675;
+  font-family: monospace;
+}
+
+.loginCheckFallback {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.loginCheckFallback ol {
+  margin: 4px 0 0 16px;
+  padding: 0;
+}
+
+.loginCheckFallback b {
+  color: var(--text);
+}
+
+/* ======================================================
+   FINAL POLISH — GPM Solo UI
+   ====================================================== */
+
+/* TASK 2 — Hero wrapper */
+.uploadHero {
+  margin: 12px 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    rgba(18, 28, 48, 0.9),
+    rgba(10, 16, 30, 0.85)
+  );
+  border: 1px solid rgba(100,140,220,0.2);
+}
+
+/* TASK 3 — Uniform button system */
+.uploadQuickActions button {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.uploadQuickActions button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(120,160,255,0.5);
+  color: var(--text);
+}
+
+.uploadQuickActions .primary {
+  background: linear-gradient(135deg, #4f7cff, #6a5cff);
+  border: none;
+  color: #fff;
+  font-weight: 500;
+}
+
+.uploadQuickActions .primary:hover {
+  background: linear-gradient(135deg, #3a68e8, #5a4ae8);
+  transform: translateY(-1px);
+}
+
+/* TASK 4 — Next Step CTA */
+.uploadNextStep {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255,180,0,0.08);
+  border: 1px solid rgba(255,180,0,0.2);
+  color: #ffb347;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.uploadNextStep:empty {
+  display: none;
+}
+
+/* TASK 5 — Summary */
+.uploadSummary {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.9;
+}
+
+.uploadSummary:empty {
+  display: none;
+}
+
+/* TASK 6 — Today stats */
+.uploadTodayStats {
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.6;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.uploadTodayStats:empty {
+  display: none;
+}
+
+/* TASK 7 — Solo mode: hide heavy panels */
+.uploadSoloMode .automationDashboard,
+.uploadSoloMode .uploadAnalyticsPanel,
+.uploadSoloMode .proxyPoolDashboard,
+.uploadSoloMode .auditLogPanel {
+  display: none !important;
+}
+
+/* TASK 8 — Account card polish */
+.uamAccountCard {
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.uamAccountCard:hover {
+  transform: translateY(-2px);
+  border-color: rgba(120,160,255,0.4);
+}
+
+.uamAccountCard.active {
+  border-color: #4f7cff;
+  box-shadow: 0 0 0 1px rgba(79,124,255,0.4);
+}
+
+/* TASK 9 — Empty states */
+.uamEmpty,
+.uploadWorkspaceEmptyState,
+.uamEmptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.uamEmpty button,
+.uamEmptyState button {
+  margin-top: 12px;
+}
+
+/* TASK 10 — Consistent spacing */
+.uploadHero,
+.uploadSimplePanel,
+.uploadManagerTabPanel {
+  margin-bottom: 12px;
+}
+
+/* ======================================================
+   SOLO MODE — Selector-Verified Polish
+   All rules scoped to .uploadSoloMode which lives on
+   #upload_manager_workspace in index.html
+   ====================================================== */
+
+/* Step 4 — Hide real duplicate noise */
+.uploadSoloMode .uploadAccountWorkspaceActions,
+.uploadSoloMode #uploadWorkspaceActionBar,
+.uploadSoloMode .uwActionBar {
+  display: none !important;
+}
+
+/* Hide heavy panels inside automation tab */
+.uploadSoloMode .autoDashboard {
+  display: none !important;
+}
+
+/* Step 5 — Hero panel: #uploadSimplePanel now carries uploadHero class */
+.uploadSoloMode #uploadSimplePanel.uploadHero,
+.uploadSoloMode .uploadSimplePanel.uploadHero {
+  margin: 12px 0 14px !important;
+  padding: 16px !important;
+  border-radius: 14px !important;
+  background: linear-gradient(180deg, rgba(18,28,48,.94), rgba(10,16,30,.9)) !important;
+  border: 1px solid rgba(100,140,220,.28) !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,.22) !important;
+}
+
+.uploadSoloMode .uploadQuickActions {
+  display: flex !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+}
+
+.uploadSoloMode .uploadQuickActions button {
+  height: 36px !important;
+  min-width: 104px !important;
+  padding: 0 14px !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  cursor: pointer !important;
+}
+
+.uploadSoloMode .uploadQuickActions button.primary,
+.uploadSoloMode .uploadQuickActions .primary {
+  background: linear-gradient(135deg, #4f7cff, #6a5cff) !important;
+  border: none !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+
+.uploadSoloMode #spNextStep,
+.uploadSoloMode .uploadNextStep {
+  margin-top: 12px !important;
+  padding: 10px 12px !important;
+  border-radius: 10px !important;
+  background: rgba(255,180,0,.09) !important;
+  border: 1px solid rgba(255,180,0,.25) !important;
+  color: #ffd38a !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+}
+
+.uploadSoloMode #spSummary,
+.uploadSoloMode .uploadSummary {
+  margin-top: 10px !important;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+  color: rgba(235,241,255,.9) !important;
+}
+
+.uploadSoloMode #spStats,
+.uploadSoloMode .uploadTodayStats {
+  margin-top: 10px !important;
+  display: flex !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+  font-size: 12px !important;
+  color: rgba(235,241,255,.65) !important;
+}
+
+/* Step 6 — Account card polish */
+.uploadSoloMode .uamAccountCard {
+  border-radius: 12px !important;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease !important;
+}
+
+.uploadSoloMode .uamAccountCard:hover {
+  transform: translateY(-2px) !important;
+  border-color: rgba(120,160,255,.45) !important;
+}
+
+.uploadSoloMode .uamAccountCard.active {
+  border-color: #4f7cff !important;
+  box-shadow: 0 0 0 1px rgba(79,124,255,.45), 0 10px 24px rgba(0,0,0,.18) !important;
+}

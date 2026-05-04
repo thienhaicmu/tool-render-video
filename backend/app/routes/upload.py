@@ -576,27 +576,54 @@ def check_upload_account_login_state(account_id: str):
             overrides={"user_data_dir": profile_path},
         )
     except Exception as exc:
-        error_result = {
-            "status": "error",
-            "account_id": account_id,
-            "message": str(exc),
-        }
-        updated = update_upload_account_row(
-            account_id,
-            {
-                "profile_path": profile_path,
-                "login_state": "unknown",
-                "last_login_check_at": _utc_now_iso(),
-                "health_json": error_result,
-            },
-        )
+        err_str = str(exc).lower()
+        # Classify error so the frontend can give a friendly message
+        if "executable doesn't exist" in err_str or "playwright install" in err_str:
+            error_code = "PLAYWRIGHT_BROWSER_MISSING"
+            friendly_msg = (
+                r"Playwright browser is not installed. "
+                r"Run: .\.venv\Scripts\playwright install chromium"
+            )
+            # Setup failure — do NOT change login_state
+            update_upload_account_row(account_id, {"last_login_check_at": _utc_now_iso()})
+        elif any(k in err_str for k in [
+            "processsingleton",
+            "user data directory is already in use",
+            "profile is already in use",
+            "target page, context or browser has been closed",
+        ]):
+            error_code = "PROFILE_IN_USE"
+            friendly_msg = "Close the opened profile browser, then click Check Login again."
+            # Profile busy — do NOT change login_state
+            update_upload_account_row(account_id, {"last_login_check_at": _utc_now_iso()})
+        else:
+            error_code = "LOGIN_CHECK_FAILED"
+            raw = str(exc)
+            friendly_msg = raw[:200] if len(raw) <= 200 else raw[:197] + "..."
+            update_upload_account_row(
+                account_id,
+                {
+                    "profile_path": profile_path,
+                    "login_state": "unknown",
+                    "last_login_check_at": _utc_now_iso(),
+                    "health_json": {"status": "error", "error_code": error_code, "message": friendly_msg},
+                },
+            )
         logger.warning(
-            "login_check_result account_id=%s profile_path=%s login_state=unknown error=%s",
+            "login_check_result account_id=%s profile_path=%s error_code=%s error=%s",
             account_id,
             profile_path,
-            str(exc),
+            error_code,
+            str(exc)[:300],
         )
-        raise HTTPException(status_code=400, detail=str(exc))
+        item = get_upload_account_row(account_id) or {}
+        return {
+            "ok": False,
+            "logged_in": False,
+            "error_code": error_code,
+            "message": friendly_msg,
+            "item": item,
+        }
     login_state = "logged_in" if result.get("logged_in") else "logged_out"
     updated = update_upload_account_row(
         account_id,
@@ -1532,3 +1559,40 @@ def get_upload_videos(channel_code: str, max_items: int = 0, root_path: str = ""
         "input_dir": str(input_dir),
         "items": [p.name for p in files],
     }
+
+# =============================================================================
+# WORKER NODE ORCHESTRATION (optional, additive — does not affect existing pipeline)
+# =============================================================================
+
+WORKER_NODES: dict = {}
+
+
+@router.post("/workers/register")
+async def register_worker(payload: dict):
+    wid = payload.get("worker_id")
+    if not wid:
+        raise HTTPException(status_code=400, detail="worker_id required")
+    WORKER_NODES[wid] = {
+        "last_seen": time.time(),
+        "capacity": payload.get("capacity", 1),
+        "active_jobs": 0,
+    }
+    return {"ok": True}
+
+
+@router.get("/workers/next-job")
+async def get_next_job():
+    pending = list_upload_queue(limit=500, status="pending")
+    if not pending:
+        return {"job": None}
+    return {"job": pending[0]}
+
+
+@router.post("/workers/complete")
+async def complete_job(payload: dict):
+    job_id = payload.get("job_id")
+    status = payload.get("status")
+    if not job_id or not status:
+        raise HTTPException(status_code=400, detail="job_id and status required")
+    update_upload_queue_item(job_id, {"status": status})
+    return {"ok": True}

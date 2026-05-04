@@ -267,10 +267,29 @@ function _inspectorHealthPanelHtml(account){
   const rotateBtn = `<button class="ghostButton" style="font-size:11px;padding:2px 8px;min-height:0" type="button"
     onclick="openProxyRotateModal('${id}')"
     ${rotateElig.ok ? '' : `disabled title="${esc(rotateElig.reason || 'Cannot rotate')}"`}>Rotate Proxy</button>`;
+  const hasProfile = !!(account.profile_path || '').trim();
+  const hasElectron = typeof window !== 'undefined' && !!window.electronAPI?.openBrowserProfile;
+  const openProfileDisabled = !hasProfile;
+  const openProfileTitle = !hasProfile ? 'Profile path required — set in Account Settings' :
+                           !hasElectron ? 'Desktop app required' : '';
+
   return `
     <div class="uploadHealthPanel">
       <div class="uploadHealthPanelTitle">Account Health</div>
       ${_healthRowHtml('Login', loginLabel, loginState)}
+      <div class="uploadHealthRow">
+        <span class="uploadHealthRowLabel">Login Actions</span>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+          <button class="ghostButton" style="font-size:11px;padding:2px 8px;min-height:0" type="button"
+            data-open-profile="${id}"
+            ${openProfileDisabled ? `disabled title="${esc(openProfileTitle)}"` : `title="${esc(openProfileTitle)}"`}
+            onclick="openAccountProfile('${id}')">Open Profile</button>
+          <button class="ghostButton" style="font-size:11px;padding:2px 8px;min-height:0" type="button"
+            onclick="checkUploadAccountLogin('${id}')">Check Login</button>
+          <button class="ghostButton" style="font-size:11px;padding:2px 8px;min-height:0" type="button"
+            onclick="markAccountLoggedIn('${id}')">Mark Logged In</button>
+        </div>
+      </div>
       ${_healthRowHtml('Proxy', proxyLabel, proxyState)}
       <div class="uploadHealthRow">
         <span class="uploadHealthRowLabel">Proxy Actions</span>
@@ -286,6 +305,7 @@ function _inspectorHealthPanelHtml(account){
       ${h.proxy_status === 'failed' && isProxyRelatedFailure(h.reasons.join(' ')) ? '<div class="proxyIssueHint">⚠ Proxy failure detected — rotate proxy to recover.</div>' : ''}
       ${h.status === 'risky' ? '<div class="uploadHealthWarning">⚠ This account may fail uploads</div>' : ''}
     </div>
+    ${_profileLoginGuideHtml(account)}
   `;
 }
 
@@ -317,6 +337,145 @@ function isProxyRelatedFailure(reasonOrError){
   const s = String(reasonOrError || '').toLowerCase();
   return ['proxy','timeout','connection','network','tunnel','socks','dns','econn','etimedout']
     .some((token) => s.includes(token));
+}
+
+// =============================================================================
+// PHASE 10: BROWSER RUNTIME + LOGIN FLOW
+// =============================================================================
+
+function _resolveProxyServerForAccount(account){
+  // Prefer manual proxy_config.proxy_server; fall back to pool proxy
+  const cfg = account.proxy_config;
+  if(cfg && cfg.proxy_server) return String(cfg.proxy_server);
+  if(account.proxy_id){
+    const p = _proxyPool.find((px) => px.id === String(account.proxy_id));
+    if(p && p.host){
+      const proto = p.type || 'http';
+      const port  = p.port ? `:${p.port}` : '';
+      return `${proto}://${p.host}${port}`;
+    }
+  }
+  return '';
+}
+
+function _warnIfProfilePathConflict(profilePath, excludeAccountId){
+  const norm = normalizeProfilePath(profilePath);
+  if(!norm) return null;
+  const conflict = uploadAccountManagerItems.find((a) =>
+    String(a.account_id) !== String(excludeAccountId) &&
+    normalizeProfilePath(String(a.profile_path || '')) === norm
+  );
+  return conflict ? (conflict.display_name || conflict.account_key || conflict.account_id) : null;
+}
+
+async function openAccountProfile(accountId){
+  const acc = uploadAccountManagerItems.find((a) => String(a.account_id) === String(accountId));
+  if(!acc){ showToast('Account not found', 'error'); return; }
+  if(!guardRapidAction()) return;
+
+  const profilePath = String(acc.profile_path || '').trim();
+  if(!profilePath){
+    showToast('Profile path is required. Set it in Account Settings.', 'error');
+    return;
+  }
+
+  const conflict = _warnIfProfilePathConflict(profilePath, accountId);
+  if(conflict){
+    if(!confirm(`Warning: profile path is also used by "${conflict}".\n\nSharing profiles breaks account isolation. Continue anyway?`)) return;
+  }
+
+  if(!window.electronAPI?.openBrowserProfile){
+    // Web / non-Electron fallback: try to open the profile folder
+    if(window.electronAPI?.openPath){
+      await window.electronAPI.openPath(profilePath);
+      showToast('Desktop runtime required to open browser with profile. Opened profile folder instead.', 'info');
+    }else{
+      showToast('Open Profile requires the desktop app. Run the Electron shell.', 'error');
+    }
+    return;
+  }
+
+  const proxyServer = _resolveProxyServerForAccount(acc);
+  const env = resolveAccountRuntimeEnv(acc);
+  const btn = document.querySelector(`button[data-open-profile="${esc(accountId)}"]`);
+  if(btn){ btn.disabled = true; btn.textContent = 'Opening…'; }
+
+  try{
+    await randomizeBehaviorDelay();
+    const result = await window.electronAPI.openBrowserProfile({
+      profilePath,
+      proxyServer,
+      timezone: env.timezone,
+      locale: env.locale,
+    });
+    if(!result || !result.ok){
+      showToast(`Failed to open browser: ${result?.error || 'unknown error'}`, 'error');
+      return;
+    }
+    const browserName = result.browser || 'Browser';
+    showToast(`${browserName} opened with profile for "${acc.display_name || acc.account_key}". Log in, then click Check Login.`, 'success');
+    _auditLog('profile_opened', `Opened profile for ${acc.display_name || acc.account_key || accountId}`);
+  }catch(e){
+    showToast(`Profile open failed: ${e.message || e}`, 'error');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = 'Open Profile'; }
+  }
+}
+
+async function markAccountLoggedIn(accountId){
+  const acc = uploadAccountManagerItems.find((a) => String(a.account_id) === String(accountId));
+  if(!acc){ showToast('Account not found', 'error'); return; }
+  const name = acc.display_name || acc.account_key || accountId;
+
+  if(!confirm(`Mark "${name}" as Logged In?\n\nOnly confirm if you have already signed in inside the browser profile.`)){
+    return;
+  }
+
+  try{
+    const res = await fetch(`/api/upload/accounts/${encodeURIComponent(accountId)}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({login_state: 'logged_in'}),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    await loadUploadAccounts();
+    showToast(`"${name}" marked as Logged In.`, 'success');
+    _auditLog('login_checked', `Login marked for ${name}`);
+  }catch(e){
+    showToast(`Mark failed: ${e.message || e}`, 'error');
+  }
+}
+
+function _profileLoginGuideHtml(account){
+  const hasProfile = !!(account.profile_path || '').trim();
+  const loginState = String(account.login_state || 'unknown').toLowerCase();
+  const isLoggedIn  = loginState === 'logged_in';
+  const id = esc(String(account.account_id));
+
+  const step1Done = hasProfile;
+  const step3Done = isLoggedIn;
+
+  return `
+    <div class="profileLoginGuide">
+      <div class="profileLoginGuideTitle">Login Flow</div>
+      <ol class="profileLoginGuideSteps">
+        <li class="${step1Done ? 'stepDone' : 'stepPending'}">
+          Set a <strong>Profile Path</strong> in Account Settings
+          ${!hasProfile ? '<span class="stepNote">— required before opening browser</span>' : ''}
+        </li>
+        <li class="${step1Done ? 'stepPending' : 'stepLocked'}">
+          Click <strong>Open Profile</strong> — browser opens with isolated profile + proxy
+        </li>
+        <li class="${step1Done ? 'stepPending' : 'stepLocked'}">
+          Log in to <strong>${esc(account.platform || 'TikTok')}</strong> inside the browser window
+        </li>
+        <li class="${step3Done ? 'stepDone' : (step1Done ? 'stepPending' : 'stepLocked')}">
+          Return here and click <strong>Check Login</strong> to verify session
+        </li>
+      </ol>
+      ${isLoggedIn ? '<div class="profileLoginGuideOk">✓ Session active — scheduler can use this account.</div>' : ''}
+    </div>`;
 }
 
 // =============================================================================
@@ -553,29 +712,28 @@ function renderUploadAccounts(items){
     const loginDisabledTitle = disabled ? 'Account disabled' : 'Check current login state for this account';
     const disableTitle = disabled ? 'Account already disabled' : 'Soft-disable this account';
     return `
-      <div class="uamAccountItem${selected ? ' isSelected' : ''}${disabled ? ' isDisabled' : ''}"
+      <div class="uamAccountCard${selected ? ' active' : ''}${disabled ? ' isDisabled' : ''}"
+           data-id="${esc(item.account_id)}"
            data-health="${esc(health.status)}"
            onclick="_selectUploadEntity('account', '${esc(item.account_id)}')">
-        <div class="uamAccountItemTop">
-          <div class="uamAccountItemName" title="${esc(name)}">${esc(name)}</div>
-          <div class="uamAccountItemBadges">
-            ${_healthBadgeHtml(health)}
-            ${_uamBadge(item.status, 'status')}
-            ${_uamBadge(item.login_state, 'login')}
-          </div>
+        <div class="uamCardTop">
+          <div class="uamCardName" title="${esc(name)}">${esc(name)}</div>
+          <div class="uamHealthBadge ${esc(health.status)}">${esc(health.status)}</div>
         </div>
-        <div class="uamAccountItemMeta">${metaLine}</div>
-        <div class="uamAccountItemUsage">${esc(usageLine)} · ${esc(cooldownLine)}</div>
+        <div class="uamCardMeta">${metaLine}</div>
         ${item.profile_conflict ? `<div class="uamAccountItemWarn">${esc(_uamConflictText(item))}</div>` : ''}
-        <div class="uamAccountItemActions">
-          <button class="ghostButton" type="button" title="${esc(loginDisabledTitle)}"
+        <div class="uamCardActions">
+          <button class="uamBtnPrimary" type="button"
+                  onclick="event.stopPropagation(); openAccountProfile('${esc(item.account_id)}')">Open</button>
+          <button class="uamBtn" type="button"
                   onclick="event.stopPropagation(); checkUploadAccountLogin('${esc(item.account_id)}')"
-                  ${disabled ? 'disabled' : ''}>Check</button>
-          <button class="ghostButton" type="button" title="Edit account"
-                  onclick="event.stopPropagation(); fillUploadAccountForm('${esc(item.account_id)}')">Edit</button>
-          <button class="ghostButton" type="button" title="${esc(disableTitle)}"
-                  onclick="event.stopPropagation(); disableUploadAccount('${esc(item.account_id)}')"
-                  ${disabled ? 'disabled' : ''}>Disable</button>
+                  ${disabled ? 'disabled' : ''}>Login</button>
+          <button class="uamBtn" type="button"
+                  onclick="event.stopPropagation(); console.warn('queueUploadForAccount not implemented')">Upload</button>
+        </div>
+        <div class="uamCardStats">
+          <span>${esc(usageLine)}</span>
+          <span>${esc(cooldownLine)}</span>
         </div>
       </div>
     `;
@@ -685,6 +843,37 @@ function _tierBadgeHtml(tier, label){
 // Phase 0: global queue view; account-filtered view is Phase 1.
 // =============================================================================
 
+function _queueStatusMeta(status){
+  const map = {
+    pending:   { icon: '⏳', label: 'Waiting',   cls: 'wait' },
+    scheduled: { icon: '⏳', label: 'Scheduled',  cls: 'wait' },
+    held:      { icon: '⏸', label: 'Held',        cls: 'wait' },
+    running:   { icon: '▶',  label: 'Uploading',  cls: 'run'  },
+    uploading: { icon: '▶',  label: 'Uploading',  cls: 'run'  },
+    success:   { icon: '🟢', label: 'Done',        cls: 'ok'   },
+    failed:    { icon: '🔴', label: 'Failed',      cls: 'fail' },
+    cancelled: { icon: '⛔', label: 'Cancelled',   cls: 'fail' },
+  };
+  return map[status] || map.pending;
+}
+
+if(!window.__uqmRetryCountdownStarted){
+  window.__uqmRetryCountdownStarted = true;
+  setInterval(() => {
+    document.querySelectorAll('.uqmRetry').forEach((el) => {
+      const txt = el.textContent;
+      if(!txt.includes('Retry in')) return;
+      const match = txt.match(/(\d+)m (\d+)s/);
+      if(!match) return;
+      let m = parseInt(match[1], 10);
+      let s = parseInt(match[2], 10);
+      if(s > 0) s--;
+      else if(m > 0){ m--; s = 59; }
+      el.textContent = `Retry in ${m}m ${s}s`;
+    });
+  }, 1000);
+}
+
 function renderUploadQueueManager(items){
   const tbody = qs('upload_queue_manager_tbody');
   if(!tbody) return;
@@ -745,6 +934,18 @@ function renderUploadQueueManager(items){
     const showBlockedLine = blockedReason && ['pending', 'scheduled', 'failed'].includes(status);
     const tierBadge = (status === 'failed' && tier) ? _tierBadgeHtml(tier, tier === 'wait' ? 'wait' : tier === 'action' ? 'action req.' : 'fatal') : '';
 
+    const qMeta = _queueStatusMeta(status);
+    const qReason = String(item.blocked_reason || item.last_error || '').trim();
+    const qRetryAt = item.next_retry_at;
+    let qRetryText = '';
+    if(qRetryAt){
+      const qDiff = Math.max(0, new Date(qRetryAt).getTime() - Date.now());
+      const qm = Math.floor(qDiff / 60000);
+      const qs2 = Math.floor((qDiff % 60000) / 1000);
+      qRetryText = `Retry in ${qm}m ${qs2}s`;
+    }
+    const statusHtml = `<div class="uqmStatusBlock ${qMeta.cls}"><div class="uqmStatusMain"><span class="uqmIcon">${qMeta.icon}</span><span>${qMeta.label}</span></div>${qReason ? `<div class="uqmReason">${esc(qReason)}</div>` : ''}${qRetryText ? `<div class="uqmRetry">${qRetryText}</div>` : ''}</div>`;
+
     return `
       <tr class="${rowCls}" onclick="_selectUploadEntity('queue', '${esc(item.queue_id)}')">
         <td class="uqmColVideo">
@@ -755,7 +956,7 @@ function renderUploadQueueManager(items){
           ${status === 'failed' && isProxyRelatedFailure(item.last_error || blockedReason) ? `<div class="proxyIssueHint">Proxy issue — rotate proxy in account health</div>` : ''}
         </td>
         <td class="uqmColAccount">${esc(accountName)}</td>
-        <td class="uqmColStatus">${_uamBadge(status, 'status')}${tierBadge}</td>
+        <td class="uqmStatusCell">${statusHtml}</td>
         <td class="uqmColScheduled">${esc(item.scheduled_at || '–')}</td>
         <td class="uqmColAttempts">${Number(item.attempt_count || 0)} / ${Number(item.max_attempts || 3)}</td>
         <td class="uqmColActions">
@@ -1890,6 +2091,124 @@ async function loadUploadQueueManager(){
   }
 }
 
+function _getSelectedAccount(){
+  const id = _accountWorkspaceSelectedId();
+  return uploadAccountManagerItems.find((a) => String(a.account_id) === String(id || '')) || null;
+}
+
+function bindSimpleActions(){
+  const acc = _getSelectedAccount();
+  const sp = qs('spAddAccount');
+  if(!sp) return; // panel not in DOM
+  qs('spAddAccount').onclick = () => openUploadEditor('account');
+  qs('spAddVideo').onclick   = () => openUploadEditor('video');
+  qs('spOpenProfile').onclick = () => {
+    if(!acc?.profile_path) return;
+    openAccountProfile(acc.account_id);
+  };
+  qs('spCheckLogin').onclick = () => {
+    if(!acc) return;
+    checkUploadAccountLogin(acc.account_id);
+  };
+  qs('spAutoPlan').onclick   = () => autoPlanReadyVideos?.();
+  qs('spStartUpload').onclick = () => startUploadScheduler?.();
+}
+
+function renderSimpleSummary(){
+  const acc  = _getSelectedAccount();
+  const el   = qs('spSummary');
+  const next = qs('spNextStep');
+  if(!el || !next) return;
+  if(!acc){
+    el.innerHTML   = 'No account yet';
+    next.innerHTML = '→ Click + Add Account to start.';
+    return;
+  }
+  el.innerHTML = `
+    <b>${esc(acc.display_name || acc.account_key || acc.account_id)}</b><br>
+    Login: ${esc(acc.login_state || 'unknown')}<br>
+    Proxy: ${acc.proxy_id ? 'OK' : 'None'}<br>
+    Today: ${Number(acc.today_count || 0)} / ${Number(acc.daily_limit || 0) || '–'}
+  `;
+  if(!acc.profile_path){
+    next.innerHTML = 'Next: Set profile path';
+  }else if(acc.login_state !== 'logged_in'){
+    next.innerHTML = 'Next: Open Profile → Login';
+  }else if(!uploadVideoLibraryItems.length){
+    next.innerHTML = '→ Add a video to begin.';
+  }else{
+    next.innerHTML = 'Ready: Auto Plan or Start Upload';
+  }
+}
+
+function renderSimpleStats(){
+  const el = qs('spStats');
+  if(!el) return;
+  const ready   = uploadVideoLibraryItems.length;
+  const queued  = uploadQueueManagerItems.length;
+  const running = uploadQueueManagerItems.filter((i) => i.status === 'running' || i.status === 'uploading').length;
+  const failed  = uploadQueueManagerItems.filter((i) => i.status === 'failed').length;
+  el.innerHTML = `Ready: ${ready} | Queued: ${queued} | Running: ${running} | Failed: ${failed}`;
+}
+
+function _bindWorkspaceActions(){
+  const acc = _getSelectedAccount();
+  const openBtn  = qs('uwOpenProfileBtn');
+  const loginBtn = qs('uwLoginCheckBtn');
+  const addBtn   = qs('uwAddVideoBtn');
+  const autoBtn  = qs('uwAutoPlanBtn');
+  const startBtn = qs('uwStartBtn');
+  if(openBtn)  openBtn.onclick  = acc ? () => openAccountProfile(acc.account_id) : null;
+  if(loginBtn) loginBtn.onclick = acc ? () => checkUploadAccountLogin(acc.account_id) : null;
+  if(addBtn)   addBtn.onclick   = () => openUploadEditor('video');
+  if(autoBtn)  autoBtn.onclick  = () => autoPlanReadyVideos?.();
+  if(startBtn) startBtn.onclick = () => startUploadScheduler?.();
+}
+
+function renderWorkspaceContext(){
+  const acc = _getSelectedAccount();
+  const el = qs('uwContextPanel');
+  if(!el) return;
+
+  // Show login-check hint for the current account if one is active
+  if(__loginCheckHint && acc && __loginCheckHint.accountId === String(acc.account_id)){
+    const isBrowserMissing = __loginCheckHint.errorCode === 'PLAYWRIGHT_BROWSER_MISSING';
+    const isInUse          = __loginCheckHint.errorCode === 'PROFILE_IN_USE';
+    let html = `<div class="loginCheckError">${esc(__loginCheckHint.message)}</div>`;
+    if(isBrowserMissing){
+      html += `<div class="loginCheckSetupHint">Setup: run <code>.venv\\Scripts\\playwright install chromium</code></div>`;
+    }
+    if(isBrowserMissing || isInUse){
+      html += `<div class="loginCheckFallback"><b>Alternative manual flow:</b><ol>
+        <li>Click <b>Open Profile</b></li>
+        <li>Log in manually in the browser</li>
+        <li>Close the browser window</li>
+        <li>Click <b>Mark Logged In</b></li>
+      </ol></div>`;
+    }
+    el.innerHTML = html;
+    return;
+  }
+
+  if(!acc){
+    el.innerHTML = '<div class="uwHint">Select an account to begin</div>';
+    return;
+  }
+  if(!acc.profile_path){
+    el.innerHTML = '<div class="uwWarning">Profile not set. Configure account first.</div>';
+    return;
+  }
+  if(acc.login_state !== 'logged_in'){
+    el.innerHTML = '<div class="uwWarning">Not logged in → Click <b>Open Profile</b> → login → then <b>Check Login</b></div>';
+    return;
+  }
+  if(!uploadVideoLibraryItems.length){
+    el.innerHTML = '<div class="uwHint">No videos → Click <b>Add Video</b> to continue</div>';
+    return;
+  }
+  el.innerHTML = '<div class="uwSuccess">Ready to upload → Use Auto Plan or Start Scheduler</div>';
+}
+
 function refreshUploadWorkspace(reason = 'manual'){
   if(__uploadRefreshing) return;
   __uploadRefreshing = true;
@@ -1899,6 +2218,13 @@ function refreshUploadWorkspace(reason = 'manual'){
     _renderAccountWorkspaceSummary();
     renderUploadSchedulerStatus(_cachedSchedulerData);
     renderAutomationDashboard();
+    _bindWorkspaceActions();
+    renderWorkspaceContext();
+    const _wsAcc = _getSelectedAccount();
+    if(_wsAcc) detectEnvMismatch(_wsAcc);
+    bindSimpleActions();
+    renderSimpleSummary();
+    renderSimpleStats();
   }finally{
     __uploadRefreshing = false;
   }
@@ -2006,17 +2332,44 @@ async function disableUploadAccount(accountId){
   }
 }
 
+let __loginCheckHint = null; // { accountId, errorCode, message }
+
+function _showLoginCheckHint(accountId, errorCode, message){
+  __loginCheckHint = errorCode ? {accountId, errorCode, message} : null;
+}
+
 async function checkUploadAccountLogin(accountId){
   const item = uploadAccountManagerItems.find((x) => x.account_id === accountId);
   if(!item) return;
+  if(!guardRapidAction()) return;
   try{
     const res = await fetch(`/api/upload/accounts/${encodeURIComponent(accountId)}/login-check`, {method: 'POST'});
     const data = await res.json();
+
+    // Structured error: backend returned error_code on a 200 response
+    if(data?.error_code){
+      const errorMsgs = {
+        PLAYWRIGHT_BROWSER_MISSING: 'Login check tool is not installed. Run: playwright install chromium.',
+        PROFILE_IN_USE:             'Close the browser profile, then check again.',
+        LOGIN_CHECK_FAILED:         'Login check failed. You can still use Mark Logged In if you confirmed manually.',
+      };
+      const msg = errorMsgs[data.error_code] || data.message || 'Login check failed.';
+      // Setup/config errors are not fatal — use info, not error toast
+      const toastKind = data.error_code === 'LOGIN_CHECK_FAILED' ? 'error' : 'info';
+      showToast(msg, toastKind);
+      _showLoginCheckHint(accountId, data.error_code, msg);
+      await loadUploadAccounts();
+      return;
+    }
+
+    // HTTP error fallback (unexpected server error)
     if(!res.ok) throw new Error(_formatApiError(data.detail || data.message));
+
     await loadUploadAccounts();
     const loginState = data?.item?.login_state || (data?.result?.logged_in ? 'logged_in' : 'logged_out');
     const loginMsgs = {logged_in: 'Login OK', logged_out: 'Session Expired', challenge: 'Captcha Required', expired: 'Session Expired', unknown: 'Login state unknown'};
     const toastType = loginState === 'logged_in' ? 'success' : (loginState === 'unknown' ? 'info' : 'error');
+    if(loginState === 'logged_in') _showLoginCheckHint(accountId, null, null); // clear hint on confirmed success
     showToast(loginMsgs[loginState] || data.message || 'Login check completed', toastType);
   }catch(e){
     showToast(`Login check failed: ${e.message || e}`, 'error');
@@ -2161,6 +2514,7 @@ async function loadUploadSchedulerStatus(){
 }
 
 async function startUploadScheduler(){
+  if(!guardRapidAction()) return;
   try{
     const res = await fetch('/api/upload/scheduler/start', {method: 'POST'});
     const data = await res.json();
@@ -2693,8 +3047,26 @@ async function executeBatchEnqueue(){
       return;
     }
   }
+  await randomizeBehaviorDelay();
   const results = [];
   for(const assignment of assignments){
+    const _sgAcc = uploadAccountManagerItems.find((a) => String(a.account_id) === String(assignment.account_id));
+    if(_sgAcc && !safeAllowAssignment(assignment, _sgAcc)){
+      skipped.push({video_id: assignment.video_id, reason: 'safety_filter'});
+      continue;
+    }
+    if(_sgAcc && !allowByTrust(_sgAcc)){
+      skipped.push({video_id: assignment.video_id, reason: 'low_trust'});
+      continue;
+    }
+    if(_sgAcc && !isGoodPostingTime(_sgAcc)){
+      skipped.push({video_id: assignment.video_id, reason: 'bad_time'});
+      continue;
+    }
+    if(__workerMode){
+      const sent = await dispatchToWorker(assignment);
+      if(sent){ results.push({ok: true, assignment}); continue; }
+    }
     try{
       await createQueueItemFromAssignment(assignment);
       results.push({ok: true, assignment});
@@ -2741,6 +3113,7 @@ const _AUTO_DEFAULTS = {
   postingWindowEnd: '23:00',
   marketStrategy: 'custom',
   marketTimezone: '',
+  rotationMode: 'balanced',
 };
 let _autoSettings = {..._AUTO_DEFAULTS};
 let _autoPlanData = null;
@@ -2775,6 +3148,9 @@ function _applyAutoSettingsToUi(){
   _setVal('auto_set_window_start',       _autoSettings.postingWindowStart);
   _setVal('auto_set_window_end',         _autoSettings.postingWindowEnd);
   _setVal('auto_set_market',             _autoSettings.marketStrategy || 'custom');
+  const rotMode = _autoSettings.rotationMode || 'balanced';
+  const rotRadio = document.querySelector(`input[name="auto_rotation_mode"][value="${rotMode}"]`);
+  if(rotRadio) rotRadio.checked = true;
 }
 
 function _readAutoSettingsFromUi(){
@@ -2791,6 +3167,8 @@ function _readAutoSettingsFromUi(){
   _autoSettings.postingWindowStart    = _getVal('auto_set_window_start') || '08:00';
   _autoSettings.postingWindowEnd      = _getVal('auto_set_window_end')   || '23:00';
   _autoSettings.marketStrategy        = _getVal('auto_set_market')       || 'custom';
+  const rotSelected = document.querySelector('input[name="auto_rotation_mode"]:checked');
+  _autoSettings.rotationMode          = rotSelected ? rotSelected.value : 'balanced';
 }
 
 function _getChk(id){ const el = qs(id); return el ? el.checked : false; }
@@ -2891,6 +3269,90 @@ function _autoReadyVideos(){
 
 // --- FEATURE 4: SAFE SCHEDULING + SCORING ---
 
+// --- PHASE 9 FEATURE 5: ROTATION-AWARE ACCOUNT PICKER ---
+
+function pickAccountForAutoAssignment(video, candidates, context){
+  const {rotationMode, baseScores, assignedCounts, previousAccountId, accountState, existingPairs} = context;
+
+  const scored = [];
+  for(const acc of candidates){
+    const aid = String(acc.account_id);
+    const state = accountState[aid];
+
+    // Hard gates: quota exhausted or already queued for this video
+    if(existingPairs.has(`${video.video_id}|${aid}`)) continue;
+    if(state.remaining !== Infinity && state.assigned >= state.remaining) continue;
+
+    const base = baseScores[aid] || {score: 0, reasons: []};
+    let adj = base.score;
+    const adjReasons = [];
+
+    // --- Rotation penalties ---
+    const inPlanCount = assignedCounts[aid] || 0;
+
+    // Assigned-count penalty — balanced applies strongly, score_first weakly
+    if(inPlanCount > 0){
+      const p = rotationMode === 'score_first' ? inPlanCount * 4 :
+                rotationMode === 'conservative' ? inPlanCount * 12 :
+                inPlanCount * 8;
+      adj -= p;
+      adjReasons.push(`-${p} already assigned ${inPlanCount} in plan`);
+    }
+
+    // Consecutive same-account penalty
+    if(previousAccountId === aid){
+      const p = rotationMode === 'score_first' ? 3 : 10;
+      adj -= p;
+      adjReasons.push(`-${p} consecutive slot`);
+    }
+
+    // Recently used account (last upload within 2 hours)
+    const lastUpAt = acc.last_upload_at;
+    if(lastUpAt){
+      const minsAgo = (Date.now() - new Date(lastUpAt).getTime()) / 60000;
+      if(minsAgo >= 0 && minsAgo < 120){
+        adj -= 15;
+        adjReasons.push('-15 recently used');
+      }
+    }
+
+    // High today_count penalty (>50% of daily limit used)
+    const dl = Number(acc.daily_limit || 0);
+    const tc = Number(acc.today_count || 0);
+    if(dl > 0 && tc > dl * 0.5){
+      const p = rotationMode === 'conservative' ? 20 : rotationMode === 'score_first' ? 5 : 10;
+      adj -= p;
+      adjReasons.push(`-${p} high usage today`);
+    }
+
+    // Conservative: extra penalty for warning-health accounts when healthy ones exist
+    if(rotationMode === 'conservative'){
+      const health = _computeAccountHealth(acc);
+      if(health.status === 'warning'){
+        adj -= 30;
+        adjReasons.push('-30 warning account (conservative)');
+      }
+    }
+
+    // Analytics integration: use cached failure data if available
+    if(__uploadAnalyticsCache && Array.isArray(__uploadAnalyticsCache.accounts)){
+      const aData = __uploadAnalyticsCache.accounts.find((a) => String(a.account_id) === aid);
+      if(aData && aData.failed > 0){
+        const p = Math.min(20, aData.failed * 5);
+        adj -= p;
+        adjReasons.push(`-${p} recent failures (analytics)`);
+      }
+    }
+
+    scored.push({acc, aid, score: adj, reasons: [...base.reasons, ...adjReasons]});
+  }
+
+  if(!scored.length) return null;
+  scored.sort((a, b) => b.score - a.score);
+  const w = scored[0];
+  return {account: w.acc, score: w.score, reasons: w.reasons};
+}
+
 function computeAutoAssignments(){
   const accounts = _autoEligibleAccounts();
   const videos = _autoReadyVideos();
@@ -2905,22 +3367,96 @@ function computeAutoAssignments(){
     };
   }
 
-  const scores = {};
-  accounts.forEach((acc) => { scores[acc.account_id] = scoreUploadAccount(acc); });
-  const sortedIds = [...accounts]
-    .sort((a, b) => scores[b.account_id].score - scores[a.account_id].score)
-    .map((a) => a.account_id);
+  const rotationMode = _autoSettings.rotationMode || 'balanced';
 
-  const videoIds = videos.map((v) => v.video_id);
-  const result = computeBatchAssignments(videoIds, sortedIds, {
-    mode: 'smart',
-    spaceMinutes: _autoSettings.baseSpacingMinutes,
-    ignoreCooldown: !_autoSettings.respectCooldown,
-  });
+  // Precompute base scores once (without rotation adjustments)
+  const baseScores = {};
+  accounts.forEach((acc) => { baseScores[acc.account_id] = scoreUploadAccount(acc); });
 
+  // Per-account state: quota remaining and next available time slot
+  const now = Date.now();
+  const accountState = {};
+  for(const acc of accounts){
+    const dl = Number(acc.daily_limit || 0);
+    const tc = Number(acc.today_count || 0);
+    const cooldownMs = _autoSettings.respectCooldown ? Number(acc.cooldown_minutes || 0) * 60 * 1000 : 0;
+    accountState[acc.account_id] = {
+      remaining: dl > 0 ? Math.max(0, dl - tc) : Infinity,
+      nextMs:    now + cooldownMs,
+      assigned:  0,
+    };
+  }
+
+  // Pairs already in queue (de-duplicate check)
+  const existingPairs = new Set(
+    uploadQueueManagerItems
+      .filter((q) => !['cancelled', 'success'].includes(String(q.status || '').toLowerCase()))
+      .map((q) => `${q.video_id}|${q.account_id}`)
+  );
+
+  const assignments = [];
+  const skipped     = [];
+  const warnings    = [];
+  const assignedCounts    = {};   // account_id → count assigned in this plan
+  const assignmentReasons = {};   // `video_id|account_id` → {score, reasons, rotationMode}
+  let previousAccountId   = null;
+
+  const context = {
+    rotationMode, baseScores, assignedCounts,
+    get previousAccountId(){ return previousAccountId; },
+    accountState, existingPairs,
+  };
+
+  const spaceMs = _autoSettings.baseSpacingMinutes * 60 * 1000;
+
+  for(const video of videos){
+    const pick = pickAccountForAutoAssignment(video, accounts, context);
+
+    if(!pick){
+      const allDup  = accounts.every((a) => existingPairs.has(`${video.video_id}|${a.account_id}`));
+      const allFull = accounts.every((a) => {
+        const s = accountState[a.account_id];
+        return s.remaining !== Infinity && s.assigned >= s.remaining;
+      });
+      skipped.push({video_id: video.video_id,
+        reason: allDup ? 'already queued' : allFull ? 'no remaining quota' : 'no eligible account'});
+      continue;
+    }
+
+    const {account: acc, score, reasons} = pick;
+    const state  = accountState[acc.account_id];
+    const schedAt = new Date(state.nextMs).toISOString();
+
+    state.nextMs += spaceMs;
+    state.assigned++;
+    assignedCounts[acc.account_id] = (assignedCounts[acc.account_id] || 0) + 1;
+    existingPairs.add(`${video.video_id}|${acc.account_id}`);
+    previousAccountId = acc.account_id;
+
+    const key = `${video.video_id}|${acc.account_id}`;
+    assignmentReasons[key] = {score, reasons, rotationMode};
+
+    assignments.push({
+      video_id:     video.video_id,
+      account_id:   acc.account_id,
+      scheduled_at: schedAt,
+      priority:     0,
+      reason:       'rotation_assigned',
+    });
+  }
+
+  // Near-limit warnings
+  for(const acc of accounts){
+    const s = accountState[acc.account_id];
+    if(s.remaining !== Infinity && s.remaining - s.assigned <= 1 && s.assigned > 0){
+      warnings.push(`${acc.display_name || acc.account_key} is near daily limit`);
+    }
+  }
+
+  // Jitter
   if(_autoSettings.jitterEnabled && _autoSettings.jitterMinutes > 0){
     const jMs = _autoSettings.jitterMinutes * 60 * 1000;
-    result.assignments.forEach((a) => {
+    assignments.forEach((a) => {
       if(a.scheduled_at){
         const t = new Date(a.scheduled_at).getTime();
         const offset = Math.round((Math.random() * 2 - 1) * jMs);
@@ -2929,9 +3465,10 @@ function computeAutoAssignments(){
     });
   }
 
+  // Posting window
   if(_autoSettings.postingWindowEnabled){
     const tzWarnings = new Set();
-    result.assignments.forEach((a) => {
+    assignments.forEach((a) => {
       if(a.scheduled_at){
         const {date, warning} = applyPostingWindowForTimezone(
           new Date(a.scheduled_at),
@@ -2943,20 +3480,21 @@ function computeAutoAssignments(){
         if(warning) tzWarnings.add(warning);
       }
     });
-    tzWarnings.forEach((w) => result.warnings.push(w));
+    tzWarnings.forEach((w) => warnings.push(w));
     if(_autoSettings.marketTimezone && _isValidTimezone(_autoSettings.marketTimezone)){
       _auditLog('timezone_schedule_applied', _autoSettings.marketTimezone);
     }
   }
 
+  // Cooldown bypass notices
   if(!_autoSettings.respectCooldown){
-    const cooldownAccounts = accounts.filter((a) => Number(a.cooldown_minutes || 0) > 0);
-    cooldownAccounts.forEach((a) => {
-      result.warnings.push(`Cooldown ignored for @${a.display_name || a.account_key || a.account_id}`);
+    accounts.filter((a) => Number(a.cooldown_minutes || 0) > 0).forEach((a) => {
+      warnings.push(`Cooldown ignored for @${a.display_name || a.account_key || a.account_id}`);
     });
   }
 
-  return {...result, scores};
+  // scores kept for backward-compatible preview (base scores, not rotation-adjusted)
+  return {assignments, skipped, warnings, scores: baseScores, assignedCounts, assignmentReasons, rotationMode};
 }
 
 // --- FEATURE 7: SAFETY WARNINGS ---
@@ -3068,6 +3606,45 @@ function _autoSafetyWarnings(assignments, accounts){
   if(highLatencyAccounts.length) warnings.push(`${highLatencyAccounts.length} account(s) have high-latency proxies (>1000ms).`);
 
   warnings.push(..._batchAggressiveWarning(assignments));
+
+  // --- Rotation-mode safety checks ---
+  const rotationMode = _autoSettings.rotationMode || 'balanced';
+  if(assignments.length > 0){
+    // >50% concentration in one account
+    const byAcct = {};
+    assignments.forEach((a) => { byAcct[a.account_id] = (byAcct[a.account_id] || 0) + 1; });
+    const top = Math.max(...Object.values(byAcct));
+    const pct = Math.round((top / assignments.length) * 100);
+    if(pct > 50){
+      const topAcc = uploadAccountManagerItems.find((a) =>
+        String(a.account_id) === String(Object.keys(byAcct).find((k) => byAcct[k] === top) || ''));
+      const name = topAcc ? (topAcc.display_name || topAcc.account_key) : 'one account';
+      warnings.push(`${pct}% of planned uploads assigned to "${name}" — consider Balanced mode to spread load.`);
+    }
+
+    // Conservative: warn if no healthy accounts in plan
+    if(rotationMode === 'conservative'){
+      const planAcctIds = new Set(assignments.map((a) => String(a.account_id)));
+      const planAccts = accounts.filter((a) => planAcctIds.has(String(a.account_id)));
+      const healthyInPlan = planAccts.filter((a) => _computeAccountHealth(a).status === 'healthy').length;
+      if(healthyInPlan === 0) critical.push('Conservative mode: no healthy accounts in plan — all eligible accounts are warning/risky.');
+    }
+
+    // Balanced: warn if consecutive same-account assignments were unavoidable
+    if(rotationMode === 'balanced'){
+      let consecutiveSame = 0;
+      for(let i = 1; i < assignments.length; i++){
+        if(assignments[i].account_id === assignments[i - 1].account_id) consecutiveSame++;
+      }
+      if(consecutiveSame > 0) warnings.push(`Balanced mode: ${consecutiveSame} consecutive same-account slot${consecutiveSame > 1 ? 's' : ''} — add more eligible accounts to improve spread.`);
+    }
+
+    // Score-first: inform that load concentration is intentional
+    if(rotationMode === 'score_first' && pct > 40){
+      warnings.push(`Score-first mode: load concentrated on highest-scoring accounts (${pct}% to one account) — this is intentional.`);
+    }
+  }
+
   return {critical, warnings};
 }
 
@@ -3107,6 +3684,19 @@ function renderAutomationDashboard(){
   _setEl('auto_dash_risky',    String(riskyExcluded),   riskyExcluded > 0 ? 'warn' : 'ok');
   _setEl('auto_dash_next',     nextSlotStr,             eligible.length > 0 ? 'ok' : 'none');
   _setEl('auto_dash_quota',    String(isFinite(totalQuota) ? totalQuota : '∞'), totalQuota > 0 ? 'ok' : 'none');
+
+  const rotMode = _autoSettings.rotationMode || 'balanced';
+  const rotLabel = rotMode === 'score_first' ? 'Score-first' : rotMode === 'conservative' ? 'Conservative' : 'Balanced';
+  _setEl('auto_dash_rotation', rotLabel, 'ok');
+
+  // Last-plan load distribution (if a plan exists)
+  if(_autoPlanData && _autoPlanData.assignedCounts){
+    const counts = Object.values(_autoPlanData.assignedCounts);
+    const topLoad = counts.length ? Math.max(...counts) : 0;
+    const accsUsed = counts.filter((c) => c > 0).length;
+    _setEl('auto_dash_topload',  String(topLoad),   topLoad > 0  ? 'ok'  : 'none');
+    _setEl('auto_dash_accs_used', String(accsUsed), accsUsed > 0 ? 'ok'  : 'none');
+  }
 }
 
 // --- FEATURE 2: AUTO PLAN READY VIDEOS ---
@@ -3157,7 +3747,8 @@ function _renderAutoPlanModal(){
 
 function _buildAutoPlanPreviewHtml(result){
   if(!result) return '';
-  const {assignments = [], skipped = [], safetyWarnings = [], scores = {}} = result;
+  const {assignments = [], skipped = [], safetyWarnings = [], scores = {},
+         assignmentReasons = {}, rotationMode = 'balanced', assignedCounts = {}} = result;
 
   const activeAssignments = assignments.filter((a) => !_autoPlanExcluded.has(`${a.video_id}|${a.account_id}`));
 
@@ -3186,12 +3777,24 @@ function _buildAutoPlanPreviewHtml(result){
     const marketMatch = activeMarket && activeMarket !== 'CUSTOM' && proxyMarket === activeMarket;
     const marketMismatch = activeMarket && activeMarket !== 'CUSTOM' && proxyMarket && proxyMarket !== activeMarket;
 
+    const inPlanCount = assignedCounts[accountId] || items.length;
+    const rotModeLabel = rotationMode === 'score_first' ? 'Score-first' : rotationMode === 'conservative' ? 'Conservative' : 'Balanced';
+
+    // Collect rotation reasons from the first assignment for this account
+    const firstKey = items.length ? `${items[0].video_id}|${items[0].account_id}` : null;
+    const firstReason = firstKey && assignmentReasons[firstKey] ? assignmentReasons[firstKey] : null;
+    const rotReasonText = firstReason
+      ? firstReason.reasons.filter((r) => r.startsWith('-')).slice(0, 3).join('; ')
+      : '';
+
     const rows = items.map((item) => {
       const video = uploadVideoLibraryItems.find((v) => String(v.video_id) === String(item.video_id));
       const vname = video ? (video.file_name || String(video.video_path || '').split(/[\\/]/).pop() || item.video_id) : item.video_id;
       const tStr = item.scheduled_at ? item.scheduled_at.replace('T', ' ').slice(0, 16) : 'ASAP';
       const key = `${item.video_id}|${item.account_id}`;
       const excluded = _autoPlanExcluded.has(key);
+      const itemReason = assignmentReasons[key];
+      const itemScore = itemReason ? itemReason.score : null;
       return `
         <div class="autoPlanExcludeRow${excluded ? ' autoPlanExcluded' : ''}">
           <input type="checkbox" class="autoPlanExcludeChk" title="Include in enqueue"
@@ -3199,6 +3802,7 @@ function _buildAutoPlanPreviewHtml(result){
             onchange="toggleAutoPlanExclude('${esc(key)}', this.checked)">
           <span class="batchPreviewItemName">${esc(vname)}</span>
           <span class="batchPreviewItemTime">${esc(tStr)}</span>
+          ${itemScore !== null ? `<span class="autoPlanItemScore" title="${esc(itemReason.reasons.join(', '))}">adj.${itemScore}</span>` : ''}
         </div>`;
     }).join('');
 
@@ -3207,11 +3811,14 @@ function _buildAutoPlanPreviewHtml(result){
         <div class="batchPreviewGroupTitle">
           ${esc(accName)}
           <span class="autoScoreBadge" data-tier="${esc(scoreTier)}" title="${esc(scoreTooltip)}">Score ${esc(String(scoreNum))}</span>
+          <span class="autoPlanRotBadge">${esc(rotModeLabel)}</span>
+          <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:4px">${inPlanCount} assigned</span>
           <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:6px">${slotsLeft === '∞' ? 'unlimited' : `${slotsLeft} slot${slotsLeft !== 1 ? 's' : ''} left`}</span>
           ${marketMatch ? `<span style="color:#6ee7b7;font-size:10px;font-weight:700;margin-left:6px">${esc(activeMarket)} match</span>` : ''}
           ${marketMismatch ? `<span style="color:#fcd34d;font-size:10px;font-weight:700;margin-left:6px">market mismatch</span>` : ''}
           <span style="color:var(--text-muted);font-size:10px;margin-left:6px">${proxyLabel}</span>
         </div>
+        ${rotReasonText ? `<div class="autoPlanRotPenalty">Penalty: ${esc(rotReasonText)}</div>` : ''}
         ${rows}
       </div>`;
   }).join('');
@@ -3248,6 +3855,7 @@ function _buildAutoPlanPreviewHtml(result){
       <div class="autoPlanPreviewNote">Review the auto-generated plan. Uncheck any item to exclude it from the queue. Click Confirm to enqueue.</div>
       <div class="batchPreviewSummary" style="margin-top:8px">
         <div class="batchPreviewStat batchPreviewStatOk">To enqueue: <strong>${confirmCount}</strong></div>
+        <div class="batchPreviewStat" style="color:var(--text-muted)">Rotation: <strong>${esc(rotationMode === 'score_first' ? 'Score-first' : rotationMode === 'conservative' ? 'Conservative' : 'Balanced')}</strong></div>
         ${skipped.length ? `<div class="batchPreviewStat batchPreviewStatSkip">Skipped: <strong>${skipped.length}</strong></div>` : ''}
         ${totalWarnCount ? `<div class="batchPreviewStat batchPreviewStatWarn">Warnings: <strong>${totalWarnCount}</strong>${swCritical.length ? ` (${swCritical.length} critical)` : ''}</div>` : ''}
       </div>
@@ -3278,6 +3886,19 @@ async function executeAutoPlanEnqueue(){
   const active = (_autoPlanData.assignments || []).filter((a) => !_autoPlanExcluded.has(`${a.video_id}|${a.account_id}`));
   const results = [];
   for(const assignment of active){
+    const _sgAcc = uploadAccountManagerItems.find((a) => String(a.account_id) === String(assignment.account_id));
+    if(_sgAcc && !safeAllowAssignment(assignment, _sgAcc)){
+      results.push({ok: false, error: 'safety_filter'});
+      continue;
+    }
+    if(_sgAcc && !allowByTrust(_sgAcc)){
+      results.push({ok: false, error: 'low_trust'});
+      continue;
+    }
+    if(_sgAcc && !isGoodPostingTime(_sgAcc)){
+      results.push({ok: false, error: 'bad_time'});
+      continue;
+    }
     try{
       await createQueueItemFromAssignment(assignment);
       results.push({ok: true});
@@ -4422,6 +5043,352 @@ if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', initAutomationPanel);
 }else{
   initAutomationPanel();
+}
+
+// --- MARKET BEHAVIOR ENGINE ---
+
+const __MARKET_WINDOWS = {
+  US: [{ start: 17, end: 22 }],
+  JP: [{ start: 18, end: 23 }],
+  EU: [{ start: 17, end: 21 }],
+};
+
+function isWithinMarketWindow(acc){
+  const market = acc.market || 'US';
+  const hour = new Date().getHours();
+  const windows = __MARKET_WINDOWS[market] || [];
+  return windows.some((w) => hour >= w.start && hour <= w.end);
+}
+
+function pickLeastLoadedAccount(accounts){
+  return [...accounts].sort((a, b) => {
+    const qa = (uploadQueueManagerItems || []).filter((i) => i.account_id === a.account_id).length;
+    const qb = (uploadQueueManagerItems || []).filter((i) => i.account_id === b.account_id).length;
+    return qa - qb;
+  })[0];
+}
+
+function detectProxyMarketMismatch(acc){
+  if(!acc.proxy_id) return false;
+  const proxy = (_proxyPool || []).find((p) => p.id === acc.proxy_id);
+  if(!proxy) return false;
+  if(!proxy.market || !acc.market) return false;
+  if(proxy.market !== acc.market){
+    console.warn('Proxy-market mismatch:', acc.display_name);
+    return true;
+  }
+  return false;
+}
+
+function randomizeBehaviorDelay(){
+  const delay = Math.random() * 2000 + 500; // 0.5–2.5s
+  return new Promise((res) => setTimeout(res, delay));
+}
+
+function simulateHumanIdle(){
+  const chance = Math.random();
+  if(chance < 0.1){
+    console.log('Simulating idle pause');
+  }
+}
+
+if(!window.__marketBehaviorStarted){
+  window.__marketBehaviorStarted = true;
+  setInterval(simulateHumanIdle, 150000);
+}
+
+// --- PRODUCTION INTELLIGENCE ---
+
+function computeAccountTrust(acc){
+  let score = 100;
+  if(acc.login_state !== 'logged_in') score -= 40;
+  const fails = (uploadQueueManagerItems || []).filter((i) =>
+    i.account_id === acc.account_id && i.status === 'failed'
+  ).length;
+  score -= Math.min(30, fails * 10);
+  if(isProxyQuarantined?.(acc.proxy_id)) score -= 30;
+  return Math.max(0, score);
+}
+
+function allowByTrust(acc){
+  const score = computeAccountTrust(acc);
+  if(score < 40){
+    console.warn('Blocked by low trust:', acc.display_name, score);
+    return false;
+  }
+  return true;
+}
+
+function maybeRotateProxy(acc){
+  if(!acc.proxy_id) return;
+  const fails = (uploadQueueManagerItems || []).filter((i) =>
+    i.account_id === acc.account_id &&
+    i.status === 'failed' &&
+    (i.error || '').toLowerCase().includes('proxy')
+  ).length;
+  if(fails >= 2){
+    console.warn('Suggest proxy rotation for:', acc.display_name);
+  }
+}
+
+function shouldRetry(item){
+  if(item.status !== 'failed') return false;
+  const attempts = item.attempt_count || 0;
+  if(attempts >= (item.max_attempts || 3)) return false;
+  const delayMap = [5, 15, 45]; // minutes
+  const suggested = delayMap[Math.min(attempts, delayMap.length - 1)];
+  console.log('Retry allowed with delay suggestion:', suggested);
+  return true;
+}
+
+function isGoodPostingTime(acc){
+  const hour = new Date().getHours();
+  if(hour >= 1 && hour <= 6){
+    console.warn('Bad posting time (night):', acc.display_name);
+    return false;
+  }
+  return true;
+}
+
+function detectSystemRisk(){
+  const failed = (uploadQueueManagerItems || []).filter((i) => i.status === 'failed');
+  if(failed.length >= 5){
+    console.error('High failure rate detected — consider stopping scheduler');
+  }
+}
+
+if(!window.__productionIntelStarted){
+  window.__productionIntelStarted = true;
+  setInterval(detectSystemRisk, 60000);
+}
+
+// --- ANTI-DETECT LITE ---
+
+const __MARKET_TZ = {
+  US: 'America/New_York',
+  JP: 'Asia/Tokyo',
+  EU: 'Europe/Berlin',
+};
+
+const __MARKET_LOCALE = {
+  US: 'en-US',
+  JP: 'ja-JP',
+  EU: 'de-DE',
+};
+
+function resolveAccountRuntimeEnv(acc){
+  const market = acc.market || acc.target_market || 'US';
+  return {
+    timezone: __MARKET_TZ[market] || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    locale:   __MARKET_LOCALE[market] || navigator.language,
+  };
+}
+
+function applyHumanJitter(ts){
+  const base = new Date(ts).getTime();
+  const offset = (Math.random() * 6 + 1) * 60 * 1000; // 1–7 minutes
+  const dir = Math.random() > 0.5 ? 1 : -1;
+  return new Date(base + dir * offset).toISOString();
+}
+
+let __lastActionTs = 0;
+
+function guardRapidAction(minGapMs = 3000){
+  const now = Date.now();
+  if(now - __lastActionTs < minGapMs){
+    console.warn('Action too fast — blocked');
+    return false;
+  }
+  __lastActionTs = now;
+  return true;
+}
+
+function detectEnvMismatch(acc){
+  const env = resolveAccountRuntimeEnv(acc);
+  const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if(env.timezone !== localTz){
+    console.warn('Timezone mismatch:', acc.display_name, env.timezone, localTz);
+  }
+}
+
+function detectFastUploadPattern(){
+  const now = Date.now();
+  const recent = (uploadQueueManagerItems || []).filter((i) => {
+    const t = new Date(i.created_at || 0).getTime();
+    return now - t < 5 * 60 * 1000;
+  });
+  if(recent.length >= 3){
+    console.warn('Rapid upload pattern detected:', recent.length);
+  }
+}
+
+if(!window.__antiDetectStarted){
+  window.__antiDetectStarted = true;
+  setInterval(detectFastUploadPattern, 60000);
+}
+
+// --- STABILITY LAYER ---
+
+const __proxyQuarantine = new Map(); // proxyId -> untilTs
+
+function isProxyQuarantined(proxyId){
+  const t = __proxyQuarantine.get(proxyId);
+  return t && t > Date.now();
+}
+
+function quarantineProxy(proxyId, minutes = 30){
+  if(!proxyId) return;
+  const until = Date.now() + minutes * 60 * 1000;
+  __proxyQuarantine.set(proxyId, until);
+  console.warn('Proxy quarantined:', proxyId, 'until', new Date(until).toISOString());
+}
+
+function detectProxyFailuresAndQuarantine(){
+  (uploadQueueManagerItems || []).forEach((i) => {
+    if(i.status !== 'failed') return;
+    const err = (i.error || i.blocked_reason || '').toLowerCase();
+    if(!err) return;
+    const isProxy = err.includes('proxy') || err.includes('timeout') ||
+                    err.includes('connection') || err.includes('network') ||
+                    err.includes('dns') || err.includes('tunnel');
+    if(!isProxy) return;
+    const acc = (uploadAccountManagerItems || []).find((a) => a.account_id === i.account_id);
+    const proxyId = acc?.proxy_id;
+    if(proxyId) quarantineProxy(proxyId, 30);
+  });
+}
+
+function getWarmupLimit(acc){
+  const created = new Date(acc.created_at || Date.now()).getTime();
+  const ageDays = Math.floor((Date.now() - created) / (24 * 60 * 60 * 1000));
+  if(ageDays < 1) return 1;
+  if(ageDays < 3) return 2;
+  if(ageDays < 7) return 3;
+  return acc.daily_limit || 5;
+}
+
+function safeAllowAssignment(assignment, acc){
+  if(isProxyQuarantined(acc.proxy_id)){
+    console.warn('Skip (proxy quarantined):', acc.display_name);
+    return false;
+  }
+  const warmLimit = getWarmupLimit(acc);
+  if((acc.today_count || 0) >= warmLimit){
+    console.warn('Skip (warm-up limit):', acc.display_name);
+    return false;
+  }
+  const now = Date.now();
+  const near = (uploadQueueManagerItems || []).some((i) => {
+    if(i.account_id !== acc.account_id) return false;
+    const t = new Date(i.scheduled_at || 0).getTime();
+    return Math.abs(t - now) < (15 * 60 * 1000);
+  });
+  if(near){
+    console.warn('Skip (too dense):', acc.display_name);
+    return false;
+  }
+  if(!isWithinMarketWindow(acc)){
+    console.warn('Skip (outside market window):', acc.display_name);
+    return false;
+  }
+  if(detectProxyMarketMismatch(acc)){
+    console.warn('Skip (proxy mismatch):', acc.display_name);
+    return false;
+  }
+  return true;
+}
+
+function getSuggestedBackoff(attempt){
+  const map = [5, 15, 45]; // minutes
+  return map[Math.min(attempt || 0, map.length - 1)];
+}
+
+if(!window.__stabilityLayerStarted){
+  window.__stabilityLayerStarted = true;
+  setInterval(detectProxyFailuresAndQuarantine, 60000);
+}
+
+// --- SMART SYSTEM BEHAVIOR ---
+
+async function autoDetectLoginState(){
+  for(const acc of uploadAccountManagerItems || []){
+    if(!acc.profile_path) continue;
+    try{
+      const res = await fetch(`/api/upload/accounts/${acc.account_id}/login-check`);
+      const data = await res.json();
+      if(data?.logged_in && acc.login_state !== 'logged_in'){
+        acc.login_state = 'logged_in';
+      }
+      if(!data?.logged_in && acc.login_state === 'logged_in'){
+        acc.login_state = 'expired';
+      }
+    }catch(e){
+      console.warn('auto login detect failed', acc.account_id);
+    }
+  }
+  UploadStore.setAccounts([...uploadAccountManagerItems]);
+}
+
+function smartRetryFailed(){
+  const retryable = (uploadQueueManagerItems || []).filter((i) => shouldRetry(i));
+  if(!retryable.length) return;
+  retryable.forEach((i) => {
+    const acc = uploadAccountManagerItems.find((a) => a.account_id === i.account_id);
+    if(acc) maybeRotateProxy(acc);
+  });
+  console.log('Smart retry triggered:', retryable.length);
+  retryFailedUploads?.();
+}
+
+function suggestProxyRotation(){
+  const problematic = uploadQueueManagerItems.filter((i) =>
+    i.status === 'failed' && (i.error || '').toLowerCase().includes('proxy')
+  );
+  if(!problematic.length) return;
+  console.warn('Proxy issues detected, suggest rotation');
+}
+
+function detectAggressiveSchedule(){
+  const now = Date.now();
+  const near = uploadQueueManagerItems.filter((i) => {
+    const t = new Date(i.scheduled_at || 0).getTime();
+    return t > now && t < now + (2 * 60 * 60 * 1000);
+  });
+  if(near.length >= 5){
+    console.warn('High density upload detected:', near.length);
+  }
+}
+
+if(!window.__smartBehaviorStarted){
+  window.__smartBehaviorStarted = true;
+  setInterval(autoDetectLoginState,    60000);
+  setInterval(smartRetryFailed,        45000);
+  setInterval(suggestProxyRotation,    90000);
+  setInterval(detectAggressiveSchedule, 60000);
+}
+
+// --- WORKER NODE ORCHESTRATION ---
+
+let __workerMode = false;
+
+function toggleWorkerMode(){
+  __workerMode = !__workerMode;
+  console.log('Worker mode:', __workerMode);
+}
+
+async function dispatchToWorker(job){
+  if(!__workerMode) return false;
+  try{
+    await fetch('/api/upload/workers/dispatch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(job),
+    });
+    return true;
+  }catch(e){
+    console.warn('Dispatch failed');
+    return false;
+  }
 }
 
 // --- PHASE 7: DEBUG STATE HELPER ---

@@ -361,6 +361,69 @@ ipcMain.handle('shell:openPath', async (_event, targetPath) => {
   if (!p) return 'Missing path';
   return shell.openPath(p);
 });
+
+// ---------------------------------------------------------------------------
+// open-browser-profile: launch Chrome/Edge with isolated profile + proxy
+// ---------------------------------------------------------------------------
+const CHROME_CANDIDATES = [
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+];
+
+function findBrowserExe() {
+  for (const p of CHROME_CANDIDATES) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+ipcMain.handle('open-browser-profile', async (_event, opts) => {
+  const profilePath = String((opts && opts.profilePath) || '').trim();
+  if (!profilePath) {
+    return { ok: false, error: 'profilePath is required' };
+  }
+
+  const browserExe = findBrowserExe();
+  if (!browserExe) {
+    return {
+      ok: false,
+      error: 'Chrome or Edge not found. Install Google Chrome and retry.',
+    };
+  }
+
+  // Ensure profile directory exists (Chrome will populate it on first run)
+  try {
+    fs.mkdirSync(profilePath, { recursive: true });
+  } catch (_) {}
+
+  const args = [
+    `--user-data-dir=${profilePath}`,
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-sync',
+    '--disable-translate',
+  ];
+
+  const proxyServer = String((opts && opts.proxyServer) || '').trim();
+  if (proxyServer) {
+    args.push(`--proxy-server=${proxyServer}`);
+  }
+
+  if (opts && opts.timezone) {
+    args.push(`--lang=${String(opts.locale || 'en-US')}`);
+  }
+
+  try {
+    const child = spawn(browserExe, args, { detached: true, stdio: 'ignore' });
+    child.unref();
+    appendBootstrapLog(`[profile] Opened browser profile: ${profilePath} (proxy: ${proxyServer || 'none'})`);
+    return { ok: true, browser: path.basename(browserExe) };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
 app.on('window-all-closed', () => {
   if (backendProc && !backendProc.killed) {
     try { backendProc.kill(); } catch (_) {}

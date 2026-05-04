@@ -31,5 +31,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return e?.message || String(e || 'Unable to open path');
     }
   },
+  openBrowserProfile: async (opts) => {
+    try {
+      return await ipcRenderer.invoke('open-browser-profile', opts || {});
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e || 'IPC error') };
+    }
+  },
 });
 
