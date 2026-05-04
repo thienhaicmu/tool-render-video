@@ -714,6 +714,20 @@ def get_upload_queue_history(queue_id: str, limit: int = 50):
     return {"status": "ok", "queue_id": queue_id, "count": len(items), "items": items}
 
 
+@router.post("/queue/retry-failed")
+def retry_failed_queue_items():
+    """Reset all failed non-exhausted queue items back to pending."""
+    all_failed = list_upload_queue(limit=500, status="failed")
+    reset_ids = []
+    for item in all_failed:
+        attempt_count = int(item.get("attempt_count") or 0)
+        max_attempts = int(item.get("max_attempts") or 3)
+        if attempt_count < max_attempts:
+            update_upload_queue_item(item["queue_id"], {"status": "pending"})
+            reset_ids.append(item["queue_id"])
+    return {"status": "ok", "reset_count": len(reset_ids), "reset_ids": reset_ids}
+
+
 @router.patch("/queue/{queue_id}")
 def update_upload_queue_detail(queue_id: str, payload: UploadQueueUpdateRequest):
     current = get_upload_queue_item(queue_id)
