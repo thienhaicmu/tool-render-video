@@ -1812,7 +1812,7 @@ async function loadUploadAccounts(){
 
 async function loadUploadVideoLibrary(){
   const tbody = qs('upload_videos_tbody');
-  if(tbody) tbody.innerHTML = '<tr><td colspan="5" class="uvlEmpty">Loading videos...</td></tr>';
+  if(tbody) tbody.innerHTML = '<tr><td colspan="6" class="uvlEmpty">Loading videos...</td></tr>';
   const params = new URLSearchParams();
   const status = _uvlValue('uvl_filter_status');
   if(status) params.set('status', status);
@@ -1822,11 +1822,14 @@ async function loadUploadVideoLibrary(){
     const data = await res.json();
     if(!res.ok) throw new Error(_formatApiError(data.detail));
     uploadVideoLibraryItems = Array.isArray(data.items) ? data.items : [];
+    // Prune stale batch selections: remove IDs that are no longer ready+valid after refresh
+    const _readyIds = new Set(uploadVideoLibraryItems.filter((v) => String(v.status || '').toLowerCase() === 'ready' && !!v.video_path).map((v) => String(v.video_id)));
+    for(const id of [...selectedUploadVideoIds]){ if(!_readyIds.has(id)) selectedUploadVideoIds.delete(id); }
     renderUploadVideoLibrary(uploadVideoLibraryItems);
     renderUploadQueueSelectors();
     renderUploadInspector();
   }catch(e){
-    if(tbody) tbody.innerHTML = `<tr><td colspan="5" class="uvlEmpty">Load failed: ${esc(e.message || e)}</td></tr>`;
+    if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="uvlEmpty">Load failed: ${esc(e.message || e)}</td></tr>`;
     addEvent(`Upload video library load failed: ${e.message || e}`, 'upload');
   }
 }
@@ -2165,6 +2168,8 @@ async function retryFailedUploads(){
     await loadUploadSchedulerStatus();
   }catch(e){
     showToast(`Retry failed: ${e.message || e}`, 'error');
+    // Restore button state since loadUploadSchedulerStatus (which normally does this) wasn't reached
+    renderUploadSchedulerStatus(_cachedSchedulerData);
   }finally{
     ['retry_failed_btn', 'retry_failed_btn_top'].forEach((id) => {
       const btn = qs(id);
