@@ -495,15 +495,21 @@
           <div class="uploadManagerWorkspace" id="upload_manager_workspace">
             <div class="uploadManagerColumn uploadManagerColumnLeft">
               <div class="uploadAccountManager" id="upload_account_manager">
-                <div class="uamHeader">
-                  <div>
+                <div class="uamHeader uamPanelHeader">
+                  <div class="uamPanelTitle">
                     <div class="uamTitle">Account Manager</div>
                     <div class="sectionSubtitle">Isolated TikTok profiles, login, proxy, safety.</div>
                   </div>
-                  <div class="uvlHeaderActions">
+                  <div class="uamPanelActions">
                     <button class="primaryButton uploadPrimaryAction" type="button" onclick="openUploadEditor('account')">+ New Account</button>
                     <button class="ghostButton" type="button" onclick="loadUploadAccounts()">Refresh</button>
                   </div>
+                </div>
+                <div class="uamHealthFilter" id="uam_health_filter">
+                  <button class="uamHealthFilterBtn active" data-filter="all" onclick="setUploadAccountHealthFilter('all')">All</button>
+                  <button class="uamHealthFilterBtn" data-filter="healthy" onclick="setUploadAccountHealthFilter('healthy')">🟢 Healthy</button>
+                  <button class="uamHealthFilterBtn" data-filter="warning" onclick="setUploadAccountHealthFilter('warning')">🟡 Warning</button>
+                  <button class="uamHealthFilterBtn" data-filter="risky" onclick="setUploadAccountHealthFilter('risky')">🔴 Risky</button>
                 </div>
                 <div class="uamAccountList" id="upload_accounts_list">
                   <div class="uamEmpty">No upload accounts yet.<br>Create a TikTok account profile before uploading.<br><button class="primaryButton" type="button" onclick="openUploadEditor('account')">+ Create First Account</button></div>
@@ -537,12 +543,12 @@
                 <button class="uploadManagerTab" type="button" id="upload_tab_settings" onclick="setUploadManagerTab('settings')">Settings</button>
               </div>
               <div class="uploadVideoLibrary uploadManagerTabPanel active" id="upload_video_library" data-tab-panel="videos">
-                <div class="uvlHeader">
-                  <div>
+                <div class="uvlHeader uvlPanelHeader">
+                  <div class="uvlPanelTitle">
                     <div class="uvlTitle">Videos</div>
                     <div class="sectionSubtitle" id="uvl_account_workspace_hint">Upload-ready files you can assign to the selected account.</div>
                   </div>
-                  <div class="uvlHeaderActions">
+                  <div class="uvlHeaderActions uvlPanelActions">
                     <select class="fieldInput" id="uvl_filter_status" onchange="loadUploadVideoLibrary()" title="Status filter">
                       <option value="">All Status</option>
                       <option value="ready">Ready</option>
@@ -597,15 +603,16 @@
                     </tbody>
                   </table>
                 </div>
+                <div class="uvlSelectHint" id="uvl_select_hint" hidden>Select videos to start batch assign</div>
               </div>
 
               <div class="uploadQueueManager uploadManagerTabPanel" id="upload_queue_manager" data-tab-panel="queue">
-                  <div class="uqmHeader">
-                    <div>
+                  <div class="uqmHeader uqmPanelHeader">
+                    <div class="uqmPanelTitle">
                     <div class="uqmTitle" id="uqm_uploads_title">Uploads for this account</div>
                     <div class="sectionSubtitle" id="uqm_account_workspace_hint">Select an account to see its upload items and run them safely.</div>
                     </div>
-                  <div class="uqmHeaderActions">
+                  <div class="uqmHeaderActions uqmPanelActions">
                     <select class="fieldInput" id="uqm_filter_status" onchange="loadUploadQueueManager()" title="Queue status filter">
                       <option value="">All Queue</option>
                       <option value="pending">Pending</option>
@@ -752,35 +759,159 @@
               </div>
               <form class="uamForm" id="upload_account_form" onsubmit="saveUploadAccount(event)">
                 <input type="hidden" id="uam_account_id">
-                <label class="field"><span class="fieldLabel">Account Key</span><input class="fieldInput" id="uam_account_key" value="default"></label>
-                <label class="field"><span class="fieldLabel">Display Name</span><input class="fieldInput" id="uam_display_name" placeholder="Main TikTok account"></label>
-                <label class="field"><span class="fieldLabel">Platform</span><input class="fieldInput" id="uam_platform" value="tiktok"></label>
-                <label class="field"><span class="fieldLabel">Channel Code</span><input class="fieldInput" id="uam_channel_code" placeholder="T1"></label>
-                <details class="uploadAdvancedFields fieldSpan2" open>
-                  <summary>Profile</summary>
+
+                <!-- ── Section 1: Basic Info ── -->
+                <div class="uamFormSection fieldSpan2">
+                  <div class="uamFormSectionTitle">Basic Info</div>
                   <div class="uploadAdvancedGrid">
-                    <label class="field fieldSpan2"><span class="fieldLabel">Profile Path</span><input class="fieldInput" id="uam_profile_path" placeholder="D:\channels\T1\account\profiles\default\browser-profile"></label>
-                    <label class="field"><span class="fieldLabel">Proxy ID</span><input class="fieldInput" id="uam_proxy_id" placeholder="proxy-01"></label>
-                    <label class="field fieldSpan2"><span class="fieldLabel">Proxy Config</span><input class="fieldInput" id="uam_proxy_config_text" placeholder='{"host":"127.0.0.1","port":9000}'></label>
+                    <label class="field fieldSpan2">
+                      <span class="fieldLabel">Account Name</span>
+                      <input class="fieldInput" id="uam_display_name" placeholder="Main TikTok US">
+                      <span class="fieldHint">Shown in the account list.</span>
+                    </label>
+                    <label class="field">
+                      <span class="fieldLabel">Platform</span>
+                      <select class="fieldInput" id="uam_platform">
+                        <option value="tiktok">TikTok</option>
+                        <option value="youtube">YouTube</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span class="fieldLabel">Channel Code <span class="fieldOptional">optional</span></span>
+                      <input class="fieldInput" id="uam_channel_code" placeholder="Auto-generated if empty">
+                      <span class="fieldHint">Short identifier for this channel.</span>
+                    </label>
                   </div>
-                </details>
+                </div>
+
+                <!-- ── Advanced: Account Key ── -->
                 <details class="uploadAdvancedFields fieldSpan2">
-                  <summary>Limits</summary>
+                  <summary>Advanced Identifiers</summary>
                   <div class="uploadAdvancedGrid">
-                    <label class="field"><span class="fieldLabel">Daily Limit</span><input class="fieldInput" id="uam_daily_limit" type="number" min="0" value="0"></label>
-                    <label class="field"><span class="fieldLabel">Cooldown Minutes</span><input class="fieldInput" id="uam_cooldown_minutes" type="number" min="0" value="0"></label>
+                    <label class="field fieldSpan2">
+                      <span class="fieldLabel">Account Key</span>
+                      <input class="fieldInput" id="uam_account_key" placeholder="Auto-generated if empty">
+                      <span class="fieldHint">Internal ID. Auto-generated from Account Name if empty.</span>
+                    </label>
                   </div>
                 </details>
+
+                <!-- ── Section 2: Browser Profile ── -->
+                <div class="uamFormSection fieldSpan2">
+                  <div class="uamFormSectionTitle">Browser Profile</div>
+                  <div class="uploadAdvancedGrid">
+                    <label class="field fieldSpan2">
+                      <span class="fieldLabel">Profile Folder</span>
+                      <div class="actionsRow uamProfilePathRow" style="margin-top:0">
+                        <input class="fieldInput" id="uam_profile_path" placeholder="D:\channels\<channel>\profiles\<key>" oninput="updateProfilePathStatus()">
+                        <button type="button" class="secondaryButton" id="uam_choose_folder_btn" onclick="pickProfileFolder()">Choose</button>
+                        <button type="button" class="ghostButton" id="uam_auto_create_btn" onclick="autoCreateProfilePath()">Auto Create</button>
+                      </div>
+                      <div id="uam_profile_path_status" class="uamProfileStatus"></div>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- ── Section 3: Proxy ── -->
+                <div class="uamFormSection fieldSpan2">
+                  <div class="uamFormSectionTitle">Proxy <span class="fieldOptional">optional</span></div>
+                  <div class="uploadAdvancedGrid">
+                    <label class="field">
+                      <span class="fieldLabel">Proxy Type</span>
+                      <select class="fieldInput" id="uam_proxy_type">
+                        <option value="">No Proxy</option>
+                        <option value="http">HTTP</option>
+                        <option value="socks5">SOCKS5</option>
+                      </select>
+                    </label>
+                    <div></div>
+                    <label class="field">
+                      <span class="fieldLabel">Host</span>
+                      <input class="fieldInput" id="uam_proxy_host" placeholder="127.0.0.1">
+                    </label>
+                    <label class="field">
+                      <span class="fieldLabel">Port</span>
+                      <input class="fieldInput" id="uam_proxy_port" type="number" min="1" max="65535" placeholder="9000">
+                    </label>
+                    <label class="field">
+                      <span class="fieldLabel">Username <span class="fieldOptional">optional</span></span>
+                      <input class="fieldInput" id="uam_proxy_username" placeholder="Optional">
+                    </label>
+                    <label class="field">
+                      <span class="fieldLabel">Password <span class="fieldOptional">optional</span></span>
+                      <input class="fieldInput" id="uam_proxy_password" type="password" placeholder="Optional">
+                    </label>
+                    <div class="uamProxyTestRow fieldSpan2">
+                      <button type="button" class="ghostButton" id="uam_proxy_test_btn" onclick="testProxyConfig()">Test Proxy</button>
+                      <span class="uamProxyTestResult" id="uam_proxy_test_result"></span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ── Advanced: Proxy ID ── -->
                 <details class="uploadAdvancedFields fieldSpan2">
-                  <summary>Status</summary>
+                  <summary>Proxy Advanced</summary>
                   <div class="uploadAdvancedGrid">
-                    <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uam_status"><option value="active">Active</option><option value="warming">Warming</option><option value="limited">Limited</option><option value="banned">Banned</option><option value="disabled">Disabled</option><option value="login_required">Login Required</option></select></label>
-                    <label class="field"><span class="fieldLabel">Login State</span><select class="fieldInput" id="uam_login_state"><option value="unknown">Unknown</option><option value="logged_in">Logged In</option><option value="logged_out">Logged Out</option><option value="challenge">Challenge</option><option value="expired">Expired</option></select></label>
-                    <label class="field"><span class="fieldLabel">Today Count</span><input class="fieldInput" id="uam_today_count" type="number" min="0" value="0"></label>
+                    <label class="field fieldSpan2">
+                      <span class="fieldLabel">Proxy ID</span>
+                      <input class="fieldInput" id="uam_proxy_id" placeholder="proxy-01">
+                      <span class="fieldHint">Named proxy reference (overrides friendly fields above if set).</span>
+                    </label>
                   </div>
                 </details>
+
+                <!-- ── Section 4: Upload Limits ── -->
+                <div class="uamFormSection fieldSpan2">
+                  <div class="uamFormSectionTitle">Upload Limits</div>
+                  <div class="uploadAdvancedGrid">
+                    <label class="field">
+                      <span class="fieldLabel">Daily Upload Limit</span>
+                      <input class="fieldInput" id="uam_daily_limit" type="number" min="0" value="5">
+                      <span class="fieldHint">Max uploads this account can run per day.</span>
+                    </label>
+                    <label class="field">
+                      <span class="fieldLabel">Cooldown Between Uploads</span>
+                      <input class="fieldInput" id="uam_cooldown_minutes" type="number" min="0" value="30">
+                      <span class="fieldHint">Minutes to wait between uploads.</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- ── Section 5: Diagnostics (edit mode only) ── -->
+                <details class="uploadAdvancedFields fieldSpan2" id="uam_diagnostics_section" hidden>
+                  <summary>Diagnostics</summary>
+                  <div class="uploadAdvancedGrid">
+                    <label class="field">
+                      <span class="fieldLabel">Account Status</span>
+                      <select class="fieldInput" id="uam_status">
+                        <option value="active">Active</option>
+                        <option value="warming">Warming</option>
+                        <option value="limited">Limited</option>
+                        <option value="banned">Banned</option>
+                        <option value="disabled">Disabled</option>
+                        <option value="login_required">Login Required</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span class="fieldLabel">Login State</span>
+                      <select class="fieldInput" id="uam_login_state">
+                        <option value="unknown">Unknown</option>
+                        <option value="logged_in">Logged In</option>
+                        <option value="logged_out">Logged Out</option>
+                        <option value="challenge">Challenge</option>
+                        <option value="expired">Expired</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span class="fieldLabel">Today Count</span>
+                      <input class="fieldInput" id="uam_today_count" type="number" readonly style="opacity:.6">
+                      <span class="fieldHint">Runtime stat — not editable.</span>
+                    </label>
+                  </div>
+                </details>
+
                 <div class="uamFormActions">
-                  <button class="primaryButton" type="submit" id="uam_save_btn">Save Account</button>
+                  <button class="primaryButton" type="submit" id="uam_save_btn">Create Account</button>
                   <button class="ghostButton" type="button" onclick="closeUploadAccountEditor()">Cancel</button>
                 </div>
               </form>

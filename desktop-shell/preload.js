@@ -9,6 +9,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return '';
     }
   },
+  openFolderPicker: async () => {
+    try {
+      const picked = await ipcRenderer.invoke('open-folder-picker');
+      return picked || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  pathExists: async (targetPath) => {
+    try {
+      return await ipcRenderer.invoke('path:exists', String(targetPath || ''));
+    } catch (_) {
+      return null;
+    }
+  },
   openPath: async (targetPath) => {
     try {
       return await ipcRenderer.invoke('shell:openPath', String(targetPath || ''));

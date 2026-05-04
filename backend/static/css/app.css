@@ -9623,6 +9623,7 @@ body.is-history-active #history_list {
 .uqmHeaderActions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -11106,6 +11107,74 @@ body.is-history-active #history_list {
   padding: 2px 8px;
 }
 
+/* === Upload Workspace Panel Header System === */
+
+.uploadPanelHeader,
+.uamPanelHeader,
+.uvlPanelHeader,
+.uqmPanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.uploadPanelTitle,
+.uamPanelTitle,
+.uvlPanelTitle,
+.uqmPanelTitle {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.uploadPanelTitle h3,
+.uamPanelTitle h3,
+.uvlPanelTitle h3,
+.uqmPanelTitle h3 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uploadPanelActions,
+.uamPanelActions,
+.uvlPanelActions,
+.uqmPanelActions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.uploadPanelActions button,
+.uamPanelActions button,
+.uvlPanelActions button,
+.uqmPanelActions button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Narrow Account Manager sidebar: stack title above actions, buttons stretch full-width */
+.uploadAccountManager .uamPanelHeader {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.uploadAccountManager .uamPanelActions {
+  justify-content: stretch;
+}
+
+.uploadAccountManager .uamPanelActions button {
+  flex: 1 1 auto;
+}
+
 .uamTable tbody tr {
   position: relative;
 }
@@ -11508,6 +11577,84 @@ body.is-history-active #history_list {
   white-space: nowrap;
   min-height: 0;
   flex-shrink: 0;
+}
+
+/* ── Upload Empty State System ────────────────────────────────────────────── */
+
+.uamEmptyState {
+  text-align: center;
+  padding: 48px 20px;
+  opacity: 0.85;
+}
+.uamEmptyState h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin: 0 0 8px;
+}
+.uamEmptyState p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.uamEmptyState button {
+  margin-top: 12px;
+}
+
+/* Get Started block — center workspace when no accounts exist */
+.uamGetStarted {
+  text-align: center;
+  padding: 40px 24px;
+}
+.uamGetStartedTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin-bottom: 20px;
+}
+.uamGetStartedSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 auto 24px;
+  max-width: 320px;
+  text-align: left;
+}
+.uamGetStartedStep {
+  font-size: 14px;
+  color: #e2e8f0;
+  padding: 10px 14px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .3);
+}
+.uamGetStartedStepMuted {
+  color: var(--text-muted);
+  opacity: 0.65;
+}
+
+/* CASE 1: No accounts — hide tabs, panels, and account list area */
+[data-upload-state="no-accounts"] .uploadManagerTabs,
+[data-upload-state="no-accounts"] .uploadManagerTabPanel {
+  display: none !important;
+}
+[data-upload-state="no-accounts"] #upload_accounts_list {
+  display: none;
+}
+
+/* CASE 2: No videos — hide table header and batch assign button */
+#upload_video_library[data-upload-videos="empty"] thead,
+#upload_video_library[data-upload-videos="empty"] #uvl_batch_assign_btn {
+  display: none !important;
+}
+
+/* Batch selection hint shown below video table when videos exist */
+.uvlSelectHint {
+  text-align: center;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.75;
 }
 
 /* ---- Row states ---- */
@@ -12187,6 +12334,84 @@ body.is-history-active #history_list {
   grid-column: 1 / -1;
 }
 
+/* === Account Form Sections === */
+
+.uamFormSection {
+  border: 1px solid rgba(148, 163, 184, .10);
+  border-radius: 8px;
+  background: rgba(8, 15, 28, .32);
+  padding: 12px 14px 14px;
+}
+
+.uamFormSectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.fieldHint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.fieldOptional {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+
+.uamProfilePathRow {
+  gap: 6px;
+}
+
+.uamProxyTestRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.uamProxyTestResult {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.uamProxyTestResult.ok {
+  color: var(--success);
+}
+
+.uamProxyTestResult.warn {
+  color: var(--warn);
+}
+
+.uamProxyTestResult.fail {
+  color: var(--danger);
+}
+
+/* Widen the modal panel slightly for the sectioned account form */
+#upload_account_form_modal .uploadModalPanel {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.uamProfileStatus {
+  margin-top: 6px;
+  font-size: 11px;
+  min-height: 14px;
+  line-height: 1.4;
+}
+
+.uamProfileStatus.isOk { color: #22c55e; }
+.uamProfileStatus.isWarn { color: #f59e0b; }
+.uamProfileStatus.isError { color: #ef4444; }
+
 /* ── Batch Assign — Phase 3 ─────────────────────────────────── */
 
 /* Checkbox column in video table */
@@ -12472,3 +12697,119 @@ body.is-history-active #history_list {
   padding: 14px;
   text-align: center;
 }
+
+/* ── Phase 4: Account Health / Risk / Proxy ───────────────────────────────── */
+
+/* Health filter bar */
+.uamHealthFilter {
+  display: flex;
+  gap: 4px;
+  padding: 6px 0 4px;
+  flex-wrap: wrap;
+}
+.uamHealthFilterBtn {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid rgba(148, 163, 184, .2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.uamHealthFilterBtn:hover { border-color: rgba(148, 163, 184, .4); color: #e2e8f0; }
+.uamHealthFilterBtn.active { background: rgba(59, 130, 246, .18); border-color: rgba(96, 165, 250, .5); color: #dbeafe; }
+
+/* Health badge on account cards */
+.uamHealthBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  letter-spacing: .03em;
+  vertical-align: middle;
+}
+.uamHealthBadge[data-health="healthy"] { background: rgba(16, 185, 129, .15); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, .3); }
+.uamHealthBadge[data-health="warning"] { background: rgba(245, 158, 11, .15); color: #fcd34d; border: 1px solid rgba(245, 158, 11, .3); }
+.uamHealthBadge[data-health="risky"]   { background: rgba(239,  68,  68, .15); color: #fca5a5; border: 1px solid rgba(239,  68,  68, .3); }
+.uamHealthBadge[data-health="unknown"] { background: rgba(148, 163, 184, .1); color: var(--text-muted); border: 1px solid rgba(148, 163, 184, .2); }
+
+/* Account card health borders */
+.uamAccountItem[data-health="warning"] {
+  border-color: rgba(245, 158, 11, .35) !important;
+  box-shadow: inset 3px 0 0 rgba(245, 158, 11, .6);
+}
+.uamAccountItem[data-health="risky"] {
+  border-color: rgba(239, 68, 68, .4) !important;
+  box-shadow: inset 3px 0 0 rgba(239, 68, 68, .85);
+}
+
+/* Inspector health panel */
+.uploadHealthPanel {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .3);
+}
+.uploadHealthPanelTitle {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.uploadHealthRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 12px;
+  min-height: 24px;
+}
+.uploadHealthRowLabel { color: var(--text-muted); }
+.uploadHealthRowValue { font-weight: 600; }
+.uploadHealthRowValue[data-state="ok"]      { color: #6ee7b7; }
+.uploadHealthRowValue[data-state="warning"] { color: #fcd34d; }
+.uploadHealthRowValue[data-state="risky"]   { color: #fca5a5; }
+.uploadHealthRowValue[data-state="unknown"] { color: var(--text-muted); }
+.uploadHealthWarning {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, .12);
+  border: 1px solid rgba(239, 68, 68, .25);
+  color: #fca5a5;
+  font-size: 12px;
+}
+.uploadProxyTestResult {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.uploadProxyTestResult[data-ok="true"]  { background: rgba(16, 185, 129, .1); color: #6ee7b7; }
+.uploadProxyTestResult[data-ok="false"] { background: rgba(239, 68, 68, .1); color: #fca5a5; }
+
+/* Batch modal: risky toggle */
+.batchSectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.batchRiskyToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-left: auto;
+}
+.batchRiskyToggle input { cursor: pointer; }

@@ -439,6 +439,14 @@ class UploadAccountUpdate(BaseModel):
         return max(0, int(v or 0))
 
 
+class ProxyTestRequest(BaseModel):
+    type: Optional[str] = "http"
+    host: str = ""
+    port: Optional[int] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+
 class AddUploadVideoRequest(BaseModel):
     video_path: str
     platform: Optional[str] = "tiktok"

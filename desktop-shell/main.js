@@ -326,6 +326,26 @@ async function bootstrap() {
 
 app.whenReady().then(bootstrap);
 
+ipcMain.handle('path:exists', (_event, targetPath) => {
+  const p = String(targetPath || '').trim();
+  return p ? fs.existsSync(p) : false;
+});
+
+ipcMain.handle('open-folder-picker', async () => {
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null;
+  try {
+    const result = await dialog.showOpenDialog(win || undefined, {
+      title: 'Choose Profile Folder',
+      properties: ['openDirectory'],
+    });
+    if (result.canceled || !result.filePaths || !result.filePaths.length) return null;
+    return String(result.filePaths[0] || '');
+  } catch (err) {
+    console.error('[FolderPicker] error:', err);
+    return null;
+  }
+});
+
 ipcMain.handle('dialog:pickDirectory', async () => {
   const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null;
   const result = await dialog.showOpenDialog(win || undefined, {

@@ -19,6 +19,11 @@ let _batchSelectedAccountIds = new Set();
 let _batchMode = 'smart';
 let _batchSpaceMinutes = 30;
 
+// --- HEALTH LAYER GLOBALS ---
+let _uploadAccountHealthFilter = 'all';
+let _batchIncludeRisky = false;
+const _proxyTestCache = {};
+
 // --- UPLOAD STORE ---
 const UploadStore = {
   _accounts: [],
@@ -182,6 +187,113 @@ function _historySummary(result){
     return result.detail.upload_message || result.detail.upload_state || JSON.stringify(result.detail).slice(0, 140);
   }
   return result.uploaded_at || result.adapter || '';
+}
+
+// =============================================================================
+// ACCOUNT HEALTH MODEL
+// =============================================================================
+
+function _computeAccountHealth(account){
+  if(!account) return {status: 'unknown', login_state: 'unknown', proxy_status: 'none', last_upload_result: null, fail_count_24h: 0, reasons: []};
+  const loginState = String(account.login_state || 'unknown').toLowerCase();
+  const accountStatus = String(account.status || 'active').toLowerCase();
+  const proxyId = String(account.proxy_id || '').trim();
+  const cached = _proxyTestCache[String(account.account_id || '')];
+  const proxyStatus = cached ? (cached.ok ? 'ok' : 'failed') : (proxyId ? 'untested' : 'none');
+  let loginHealth = 'ok';
+  if(['logged_out', 'expired', 'challenge'].includes(loginState)) loginHealth = loginState;
+  else if(loginState === 'unknown') loginHealth = 'unknown';
+  const queueItems = uploadQueueManagerItems.filter((q) => String(q.account_id || '') === String(account.account_id || ''));
+  const failCount = queueItems.filter((q) => String(q.status || '').toLowerCase() === 'failed').length;
+  const hasSuccess = queueItems.some((q) => String(q.status || '').toLowerCase() === 'success');
+  const hasFail = failCount > 0;
+  let status = 'healthy';
+  const reasons = [];
+  if(['disabled', 'banned'].includes(accountStatus)){
+    status = 'risky'; reasons.push('Account disabled');
+  } else if(['logged_out', 'expired', 'challenge'].includes(loginState)){
+    status = 'risky'; reasons.push(`Login: ${loginState.replace(/_/g, ' ')}`);
+  } else if(cached && !cached.ok){
+    status = 'risky'; reasons.push('Proxy failed');
+  } else if(failCount >= 3){
+    status = 'risky'; reasons.push(`${failCount} recent failures`);
+  } else if(loginState === 'unknown'){
+    status = 'warning'; reasons.push('Login unknown');
+  } else if(proxyId && proxyStatus === 'untested'){
+    status = 'warning'; reasons.push('Proxy untested');
+  } else if(hasFail){
+    status = 'warning'; reasons.push(`${failCount} recent failure(s)`);
+  }
+  return {status, login_state: loginHealth, proxy_status: proxyStatus, last_upload_result: hasFail ? 'fail' : (hasSuccess ? 'success' : null), last_upload_at: account.last_upload_at || null, fail_count_24h: failCount, reasons};
+}
+
+function _healthBadgeHtml(health){
+  const icons = {healthy: '🟢', warning: '🟡', risky: '🔴'};
+  const labels = {healthy: 'Healthy', warning: 'Warning', risky: 'Risky'};
+  const s = health.status || 'unknown';
+  const tooltip = health.reasons && health.reasons.length ? health.reasons.join(', ') : (labels[s] || s);
+  return `<span class="uamHealthBadge" data-health="${esc(s)}" title="${esc(tooltip)}">${icons[s] || '⬜'} ${esc(labels[s] || s)}</span>`;
+}
+
+function _healthRowHtml(label, value, state){
+  return `<div class="uploadHealthRow"><span class="uploadHealthRowLabel">${esc(label)}</span><span class="uploadHealthRowValue" data-state="${esc(state)}">${esc(String(value))}</span></div>`;
+}
+
+function _inspectorHealthPanelHtml(account){
+  const h = _computeAccountHealth(account);
+  const loginLabels = {ok: 'OK', logged_out: 'Logged Out', expired: 'Session Expired', challenge: 'Captcha Required', unknown: 'Unknown'};
+  const loginLabel = loginLabels[h.login_state] || h.login_state;
+  const loginState = ['logged_out', 'expired', 'challenge'].includes(h.login_state) ? 'risky' : (h.login_state === 'ok' ? 'ok' : 'warning');
+  const proxyLabels = {ok: 'OK', failed: 'Failed', untested: 'Untested', none: 'None (no proxy)'};
+  const proxyLabel = proxyLabels[h.proxy_status] || h.proxy_status;
+  const proxyState = h.proxy_status === 'ok' ? 'ok' : (h.proxy_status === 'failed' ? 'risky' : 'warning');
+  const lastLabel = h.last_upload_result === 'success' ? 'Success' : (h.last_upload_result === 'fail' ? 'Failed' : 'No data');
+  const lastState = h.last_upload_result === 'success' ? 'ok' : (h.last_upload_result === 'fail' ? 'risky' : 'unknown');
+  const failState = h.fail_count_24h >= 3 ? 'risky' : (h.fail_count_24h > 0 ? 'warning' : 'ok');
+  const cached = _proxyTestCache[String(account.account_id || '')];
+  const proxyResultHtml = cached
+    ? `<div class="uploadProxyTestResult" data-ok="${cached.ok}">${cached.ok ? `OK · ${Number(cached.latency || 0)}ms` : `Failed: ${esc(String(cached.error || 'error'))}`}</div>` : '';
+  const id = esc(String(account.account_id || ''));
+  return `
+    <div class="uploadHealthPanel">
+      <div class="uploadHealthPanelTitle">Account Health</div>
+      ${_healthRowHtml('Login', loginLabel, loginState)}
+      ${_healthRowHtml('Proxy', proxyLabel, proxyState)}
+      <div class="uploadHealthRow">
+        <span class="uploadHealthRowLabel">Proxy Test</span>
+        <button class="ghostButton" style="font-size:11px;padding:2px 8px;min-height:0" type="button"
+          onclick="testUploadAccountProxy('${id}')">Test Proxy</button>
+      </div>
+      ${proxyResultHtml}
+      ${_healthRowHtml('Last Upload', lastLabel, lastState)}
+      ${_healthRowHtml('Failures (24h)', String(h.fail_count_24h), failState)}
+      ${h.status === 'risky' ? '<div class="uploadHealthWarning">⚠ This account may fail uploads</div>' : ''}
+    </div>
+  `;
+}
+
+function setUploadAccountHealthFilter(filter){
+  _uploadAccountHealthFilter = filter || 'all';
+  document.querySelectorAll('.uamHealthFilterBtn').forEach((btn) => {
+    btn.classList.toggle('active', (btn.dataset.filter || '') === _uploadAccountHealthFilter);
+  });
+  renderUploadAccounts(uploadAccountManagerItems);
+}
+
+async function testUploadAccountProxy(accountId){
+  showToast('Testing proxy…', 'info');
+  try{
+    const res = await fetch(`/api/upload/accounts/${encodeURIComponent(accountId)}/test-proxy`, {method: 'POST'});
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail || data.message));
+    _proxyTestCache[accountId] = {ok: !!data.ok, latency: Number(data.latency || 0), error: data.error || '', tested_at: Date.now()};
+    showToast(data.ok ? `Proxy OK · ${Number(data.latency || 0)}ms` : `Proxy failed: ${data.error || 'timeout'}`, data.ok ? 'success' : 'error');
+  }catch(e){
+    _proxyTestCache[accountId] = {ok: false, latency: 0, error: e.message || String(e), tested_at: Date.now()};
+    showToast(`Proxy test: ${e.message || e}`, 'info');
+  }
+  renderUploadInspector();
+  renderUploadAccounts(uploadAccountManagerItems);
 }
 
 // =============================================================================
@@ -390,12 +502,23 @@ function setUploadManagerTab(tab){
 
 function renderUploadAccounts(items){
   const list = qs('upload_accounts_list') || qs('upload_accounts_tbody');
+  const workspace = document.getElementById('upload_manager_workspace');
+  if(workspace) workspace.dataset.uploadState = (items && items.length) ? 'has-accounts' : 'no-accounts';
   if(!list) return;
   if(!items || !items.length){
-    list.innerHTML = '<div class="uamEmpty">No upload accounts yet. <button class="primaryButton" type="button" onclick="openUploadEditor(\'account\')">+ Create First Account</button></div>';
+    list.innerHTML = '';
     return;
   }
-  list.innerHTML = items.map((item) => {
+  // Apply health filter
+  const filtered = _uploadAccountHealthFilter === 'all'
+    ? items
+    : items.filter((item) => _computeAccountHealth(item).status === _uploadAccountHealthFilter);
+  if(!filtered.length){
+    list.innerHTML = `<div class="uamEmpty">No ${esc(_uploadAccountHealthFilter)} accounts.</div>`;
+    return;
+  }
+  list.innerHTML = filtered.map((item) => {
+    const health = _computeAccountHealth(item);
     const name = item.display_name || item.account_key || item.account_id;
     const disabled = String(item.status || '').toLowerCase() === 'disabled';
     const selected = _accountWorkspaceSelectedId() === String(item.account_id || '');
@@ -407,10 +530,12 @@ function renderUploadAccounts(items){
     const disableTitle = disabled ? 'Account already disabled' : 'Soft-disable this account';
     return `
       <div class="uamAccountItem${selected ? ' isSelected' : ''}${disabled ? ' isDisabled' : ''}"
+           data-health="${esc(health.status)}"
            onclick="_selectUploadEntity('account', '${esc(item.account_id)}')">
         <div class="uamAccountItemTop">
           <div class="uamAccountItemName" title="${esc(name)}">${esc(name)}</div>
           <div class="uamAccountItemBadges">
+            ${_healthBadgeHtml(health)}
             ${_uamBadge(item.status, 'status')}
             ${_uamBadge(item.login_state, 'login')}
           </div>
@@ -439,9 +564,20 @@ function renderUploadAccounts(items){
 
 function renderUploadVideoLibrary(items){
   const tbody = qs('upload_videos_tbody');
+  const panel = document.getElementById('upload_video_library');
   if(!tbody) return;
-  if(!items || !items.length){
-    tbody.innerHTML = '<tr><td colspan="6" class="uvlEmpty">No upload videos yet. Add a file to start building your library.</td></tr>';
+  const isEmpty = !items || !items.length;
+  if(panel) panel.dataset.uploadVideos = isEmpty ? 'empty' : 'loaded';
+  if(isEmpty){
+    tbody.innerHTML = `
+      <tr><td colspan="6">
+        <div class="uamEmptyState">
+          <h3>No videos yet</h3>
+          <p>Add videos to start building your upload queue</p>
+          <button class="primaryButton" type="button" onclick="openUploadEditor('video')">Add Video</button>
+        </div>
+      </td></tr>
+    `;
     _updateBatchAssignButton();
     return;
   }
@@ -494,7 +630,14 @@ function renderUploadQueueManager(items){
   const tbody = qs('upload_queue_manager_tbody');
   if(!tbody) return;
   if(!items || !items.length){
-    tbody.innerHTML = '<tr><td colspan="6" class="uqmEmpty">No queue items yet. Select a video and account to create one.</td></tr>';
+    tbody.innerHTML = `
+      <tr><td colspan="6">
+        <div class="uamEmptyState">
+          <h3>No uploads yet</h3>
+          <p>Assign videos to create your upload queue</p>
+        </div>
+      </td></tr>
+    `;
     return;
   }
   tbody.innerHTML = items.map((item) => {
@@ -596,7 +739,9 @@ function renderUploadInspector(){
         ${_detailSection('Cooldown', `${Number(item.cooldown_minutes || 0)} min`, false)}
         ${_detailSection('Proxy ID', item.proxy_id || '-', false)}
       </div>
+      ${_inspectorHealthPanelHtml(item)}
       ${_detailSection('Profile Path', item.profile_path || '-', false)}
+      ${_detailSection('Profile', accountHasActiveUpload(item.account_id) ? 'Locked' : (item.profile_conflict ? 'Conflict' : 'Isolated'), false)}
       ${item.profile_conflict ? _detailSection('Profile Conflict', _uamConflictText(item), false) : ''}
       ${_detailSection('Health JSON', _prettyJson(item.health_json || {}), true)}
     `;
@@ -776,6 +921,34 @@ function _renderAccountWorkspaceSummary(){
   const queueHint = qs('uqm_account_workspace_hint');
   const formHint = qs('uqm_form_hint');
   const videosBtn = qs('uvl_add_video_btn');
+
+  // CASE 1: No accounts exist at all — show Get Started
+  if(!uploadAccountManagerItems.length){
+    if(titleEl) titleEl.textContent = 'Account Workspace: Get Started';
+    if(hintEl) hintEl.textContent = 'Create your first account to begin uploading.';
+    if(queueHint) queueHint.textContent = 'Create an account to manage uploads.';
+    if(formHint) formHint.textContent = 'Create an account first.';
+    [addBtn, runBtn, stopBtn, checkBtn].forEach((btn) => { if(btn) btn.disabled = true; });
+    if(addBtn) { addBtn.textContent = 'Select Account First'; addBtn.title = 'Create an account first'; }
+    if(videosBtn) { videosBtn.textContent = 'Add Video'; }
+    if(runBtn) { runBtn.textContent = 'Start Upload'; runBtn.title = 'Create an account first'; }
+    if(stopBtn) stopBtn.title = 'Create an account first';
+    if(checkBtn) checkBtn.title = 'Create an account first';
+    if(metaEl) metaEl.innerHTML = `
+      <div class="uamGetStarted">
+        <div class="uamGetStartedTitle">🚀 Get Started with Upload</div>
+        <div class="uamGetStartedSteps">
+          <div class="uamGetStartedStep">Step 1: Create your first account</div>
+          <div class="uamGetStartedStep uamGetStartedStepMuted">Step 2: Add videos</div>
+          <div class="uamGetStartedStep uamGetStartedStepMuted">Step 3: Assign and upload</div>
+        </div>
+        <button class="primaryButton" type="button" onclick="openUploadEditor('account')">+ Create First Account</button>
+      </div>
+    `;
+    _renderSettingsTab(null);
+    return;
+  }
+
   const accountName = account ? (account.display_name || account.account_key || 'this account') : 'Select an account';
   const items = account ? _accountWorkspaceQueueItems(account.account_id) : [];
   const nextItem = account ? _findRunnableAccountQueueItem(account.account_id) : null;
@@ -921,59 +1094,323 @@ function _selectedUploadId(type){
 }
 
 // =============================================================================
+// PROFILE ISOLATION SAFETY — Feature 4.6
+// =============================================================================
+
+function normalizeProfilePath(rawPath) {
+  const raw = String(rawPath || '').trim();
+  if (!raw) return '';
+  let normalized = raw.replace(/\//g, '\\').replace(/[/\\]+$/, '');
+  if (/^[a-zA-Z]:\\/.test(normalized)) normalized = normalized.toLowerCase();
+  return normalized;
+}
+
+function findProfilePathConflict(profilePath, editingAccountId) {
+  const target = normalizeProfilePath(profilePath);
+  if (!target) return null;
+  return uploadAccountManagerItems.find((acc) => {
+    if (String(acc.account_id) === String(editingAccountId)) return false;
+    const accPath = normalizeProfilePath(acc.profile_path || acc.user_data_dir || '');
+    return accPath && accPath === target;
+  }) || null;
+}
+
+function accountHasActiveUpload(accountId) {
+  return uploadQueueManagerItems.some(
+    (item) =>
+      String(item.account_id) === String(accountId) &&
+      ['running', 'uploading', 'processing'].includes(String(item.status || '').toLowerCase())
+  );
+}
+
+function validateAccountProfilePathBeforeSave(formData, editingAccountId) {
+  const errors = [];
+  const warnings = [];
+  const profilePath = normalizeProfilePath(formData.profile_path || '');
+
+  if (!profilePath) {
+    errors.push('Profile folder is required.');
+    return { ok: false, errors, warnings };
+  }
+
+  const conflict = findProfilePathConflict(profilePath, editingAccountId);
+  if (conflict) {
+    const name = conflict.display_name || conflict.account_key || conflict.account_id;
+    errors.push(`Profile folder is already used by account: ${name}.`);
+  }
+
+  if (editingAccountId && accountHasActiveUpload(editingAccountId)) {
+    const existing = uploadAccountManagerItems.find((a) => a.account_id === editingAccountId);
+    const existingPath = normalizeProfilePath(existing?.profile_path || '');
+    if (existingPath && existingPath !== profilePath) {
+      errors.push('Profile folder cannot be changed while an upload is running for this account.');
+    }
+  }
+
+  return { ok: errors.length === 0, errors, warnings };
+}
+
+async function updateProfilePathStatus() {
+  const statusEl = qs('uam_profile_path_status');
+  if (!statusEl) return;
+
+  const rawPath = _uamValue('uam_profile_path');
+  const editingAccountId = _uamValue('uam_account_id');
+
+  if (!rawPath) {
+    statusEl.textContent = '⚠ Profile path is required';
+    statusEl.className = 'uamProfileStatus isError';
+    return;
+  }
+
+  const profilePath = normalizeProfilePath(rawPath);
+  const conflict = findProfilePathConflict(profilePath, editingAccountId);
+  if (conflict) {
+    const name = conflict.display_name || conflict.account_key || conflict.account_id;
+    statusEl.textContent = `🔴 Already used by account: ${name}`;
+    statusEl.className = 'uamProfileStatus isError';
+    return;
+  }
+
+  if (window.electronAPI?.pathExists) {
+    try {
+      const exists = await window.electronAPI.pathExists(rawPath);
+      if (exists) {
+        statusEl.textContent = '🟡 Existing browser profile folder';
+        statusEl.className = 'uamProfileStatus isWarn';
+      } else {
+        statusEl.textContent = '🟢 New profile folder';
+        statusEl.className = 'uamProfileStatus isOk';
+      }
+    } catch (_) {
+      statusEl.textContent = '🟢 Profile folder set';
+      statusEl.className = 'uamProfileStatus isOk';
+    }
+  } else {
+    statusEl.textContent = '🟢 Profile folder set';
+    statusEl.className = 'uamProfileStatus isOk';
+  }
+}
+
+function _setProfileFolderLocked(locked) {
+  const profileInput = qs('uam_profile_path');
+  const chooseBtn = qs('uam_choose_folder_btn');
+  const autoCreateBtn = qs('uam_auto_create_btn');
+  if (profileInput) profileInput.disabled = locked;
+  if (chooseBtn) chooseBtn.disabled = locked;
+  if (autoCreateBtn) autoCreateBtn.disabled = locked;
+}
+
+// =============================================================================
+// FORM: ACCOUNT — helpers
+// =============================================================================
+
+function _genAccountKey(displayName, platform) {
+  const base = (displayName || platform || 'account')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40) || 'account';
+  return base;
+}
+
+function _genChannelCode(platform, accountKey) {
+  const p = (platform || 'tiktok').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return `${p}_${accountKey}`.slice(0, 50);
+}
+
+function _buildProxyConfig() {
+  const type = _uamValue('uam_proxy_type');
+  const host = _uamValue('uam_proxy_host');
+  const port = _uamValue('uam_proxy_port');
+  const username = _uamValue('uam_proxy_username');
+  const password = _uamValue('uam_proxy_password');
+  if (!type || !host) return {};
+  const portPart = port ? `:${port}` : '';
+  const cfg = { network_mode: 'proxy', proxy_server: `${type}://${host}${portPart}` };
+  if (username) cfg.proxy_username = username;
+  if (password) cfg.proxy_password = password;
+  return cfg;
+}
+
+function _parseProxyConfig(cfg) {
+  const clearIds = ['uam_proxy_host', 'uam_proxy_port', 'uam_proxy_username', 'uam_proxy_password'];
+  if (!cfg || typeof cfg !== 'object' || !cfg.proxy_server) {
+    if (qs('uam_proxy_type')) qs('uam_proxy_type').value = '';
+    clearIds.forEach((id) => { if (qs(id)) qs(id).value = ''; });
+    return;
+  }
+  const m = String(cfg.proxy_server).match(/^(https?|socks5?):\/\/([^:/]+)(?::(\d+))?/);
+  const type = m ? (m[1].startsWith('http') ? 'http' : 'socks5') : '';
+  if (qs('uam_proxy_type')) qs('uam_proxy_type').value = type;
+  if (qs('uam_proxy_host')) qs('uam_proxy_host').value = m ? (m[2] || '') : '';
+  if (qs('uam_proxy_port')) qs('uam_proxy_port').value = m ? (m[3] || '') : '';
+  if (qs('uam_proxy_username')) qs('uam_proxy_username').value = cfg.proxy_username || '';
+  if (qs('uam_proxy_password')) qs('uam_proxy_password').value = cfg.proxy_password || '';
+}
+
+async function testProxyConfig() {
+  const host = _uamValue('uam_proxy_host');
+  const resultEl = qs('uam_proxy_test_result');
+  const btn = qs('uam_proxy_test_btn');
+  if (!host) {
+    if (resultEl) { resultEl.textContent = '⚠ Enter host first'; resultEl.className = 'uamProxyTestResult warn'; }
+    return;
+  }
+  if (btn) btn.disabled = true;
+  if (resultEl) { resultEl.textContent = 'Testing…'; resultEl.className = 'uamProxyTestResult'; }
+  try {
+    const res = await fetch('/api/upload/accounts/test-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: _uamValue('uam_proxy_type') || 'http',
+        host,
+        port: _uamInt('uam_proxy_port') || null,
+        username: _uamValue('uam_proxy_username') || null,
+        password: _uamValue('uam_proxy_password') || null,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const parts = ['✓ OK'];
+      if (data.latency_ms) parts.push(`${data.latency_ms}ms`);
+      if (data.ip) parts.push(`IP: ${data.ip}`);
+      if (resultEl) { resultEl.textContent = parts.join(' · '); resultEl.className = 'uamProxyTestResult ok'; }
+    } else {
+      if (resultEl) { resultEl.textContent = `✗ ${data.error || 'Failed'}`; resultEl.className = 'uamProxyTestResult fail'; }
+    }
+  } catch (err) {
+    if (resultEl) { resultEl.textContent = `✗ ${err.message}`; resultEl.className = 'uamProxyTestResult fail'; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function pickProfileFolder() {
+  if (!window.electronAPI?.openFolderPicker) {
+    if (qs('uam_profile_path')) qs('uam_profile_path').focus();
+    return;
+  }
+  const btn = qs('uam_choose_folder_btn');
+  if (btn) btn.disabled = true;
+  document.body.style.cursor = 'wait';
+  try {
+    const folder = await window.electronAPI.openFolderPicker();
+    if (folder) {
+      if (qs('uam_profile_path')) qs('uam_profile_path').value = folder;
+      await updateProfilePathStatus();
+    }
+  } catch (err) {
+    console.warn('[FolderPicker] failed:', err);
+  } finally {
+    document.body.style.cursor = '';
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function autoCreateProfilePath() {
+  const platform = _uamValue('uam_platform') || 'tiktok';
+  const displayName = _uamValue('uam_display_name');
+  let accountKey = _uamValue('uam_account_key');
+  if (!accountKey) accountKey = _genAccountKey(displayName, platform);
+  let channelCode = _uamValue('uam_channel_code');
+  if (!channelCode) channelCode = _genChannelCode(platform, accountKey);
+  const path = `D:\\channels\\${channelCode}\\profiles\\${accountKey}`;
+  if (qs('uam_profile_path')) qs('uam_profile_path').value = path;
+  await updateProfilePathStatus();
+}
+
+// =============================================================================
 // FORM: ACCOUNT
 // =============================================================================
 
 function collectUploadAccountForm(){
-  return {
-    platform: _uamValue('uam_platform') || 'tiktok',
-    channel_code: _uamValue('uam_channel_code'),
-    account_key: _uamValue('uam_account_key') || 'default',
-    display_name: _uamValue('uam_display_name'),
-    status: _uamValue('uam_status') || 'active',
-    login_state: _uamValue('uam_login_state') || 'unknown',
-    daily_limit: _uamInt('uam_daily_limit'),
-    cooldown_minutes: _uamInt('uam_cooldown_minutes'),
-    today_count: _uamInt('uam_today_count'),
+  const platform = _uamValue('uam_platform') || 'tiktok';
+  const displayName = _uamValue('uam_display_name');
+  const isCreate = !_uamValue('uam_account_id');
+
+  let accountKey = _uamValue('uam_account_key');
+  if (!accountKey) accountKey = _genAccountKey(displayName, platform);
+
+  let channelCode = _uamValue('uam_channel_code');
+  if (!channelCode) channelCode = _genChannelCode(platform, accountKey);
+
+  const payload = {
+    platform,
+    channel_code: channelCode,
+    account_key: accountKey,
+    display_name: displayName,
+    status: isCreate ? 'active' : (_uamValue('uam_status') || 'active'),
+    login_state: isCreate ? 'unknown' : (_uamValue('uam_login_state') || 'unknown'),
+    daily_limit: _uamInt('uam_daily_limit') ?? 5,
+    cooldown_minutes: _uamInt('uam_cooldown_minutes') ?? 30,
     profile_path: _uamValue('uam_profile_path'),
     proxy_id: _uamValue('uam_proxy_id'),
+    proxy_config: _buildProxyConfig(),
     health_json: {},
     metadata_json: {},
   };
+  if (!isCreate) payload.today_count = _uamInt('uam_today_count') ?? 0;
+  return payload;
 }
+
 function resetUploadAccountForm(){
-  ['uam_account_id', 'uam_channel_code', 'uam_display_name', 'uam_profile_path', 'uam_proxy_id'].forEach((id) => {
-    if(qs(id)) qs(id).value = '';
+  ['uam_account_id', 'uam_channel_code', 'uam_display_name', 'uam_profile_path',
+   'uam_proxy_id', 'uam_proxy_host', 'uam_proxy_port', 'uam_proxy_username', 'uam_proxy_password'].forEach((id) => {
+    if (qs(id)) qs(id).value = '';
   });
-  if(qs('uam_platform')) qs('uam_platform').value = 'tiktok';
-  if(qs('uam_account_key')) qs('uam_account_key').value = 'default';
-  if(qs('uam_status')) qs('uam_status').value = 'active';
-  if(qs('uam_login_state')) qs('uam_login_state').value = 'unknown';
-  if(qs('uam_daily_limit')) qs('uam_daily_limit').value = '0';
-  if(qs('uam_cooldown_minutes')) qs('uam_cooldown_minutes').value = '0';
-  if(qs('uam_today_count')) qs('uam_today_count').value = '0';
-  if(qs('uam_save_btn')) qs('uam_save_btn').textContent = 'Create Account';
-  if(qs('uam_modal_title')) qs('uam_modal_title').textContent = 'New Account';
+  if (qs('uam_platform')) qs('uam_platform').value = 'tiktok';
+  if (qs('uam_account_key')) qs('uam_account_key').value = '';
+  if (qs('uam_proxy_type')) qs('uam_proxy_type').value = '';
+  if (qs('uam_status')) qs('uam_status').value = 'active';
+  if (qs('uam_login_state')) qs('uam_login_state').value = 'unknown';
+  if (qs('uam_daily_limit')) qs('uam_daily_limit').value = '5';
+  if (qs('uam_cooldown_minutes')) qs('uam_cooldown_minutes').value = '30';
+  if (qs('uam_today_count')) qs('uam_today_count').value = '0';
+  if (qs('uam_proxy_test_result')) { qs('uam_proxy_test_result').textContent = ''; qs('uam_proxy_test_result').className = 'uamProxyTestResult'; }
+  const statusEl = qs('uam_profile_path_status');
+  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'uamProfileStatus'; }
+  _setProfileFolderLocked(false);
+  const diagSection = qs('uam_diagnostics_section');
+  if (diagSection) diagSection.hidden = true;
+  if (qs('uam_save_btn')) qs('uam_save_btn').textContent = 'Create Account';
+  if (qs('uam_modal_title')) qs('uam_modal_title').textContent = 'New Account';
 }
+
 function fillUploadAccountForm(accountId){
   const item = uploadAccountManagerItems.find((x) => x.account_id === accountId);
-  if(!item) return;
+  if (!item) return;
   _selectUploadEntity('account', accountId);
   openUploadAccountModal();
-  if(qs('uam_account_id')) qs('uam_account_id').value = item.account_id || '';
-  if(qs('uam_platform')) qs('uam_platform').value = item.platform || 'tiktok';
-  if(qs('uam_channel_code')) qs('uam_channel_code').value = item.channel_code || '';
-  if(qs('uam_account_key')) qs('uam_account_key').value = item.account_key || 'default';
-  if(qs('uam_display_name')) qs('uam_display_name').value = item.display_name || '';
-  if(qs('uam_status')) qs('uam_status').value = item.status || 'active';
-  if(qs('uam_login_state')) qs('uam_login_state').value = item.login_state || 'unknown';
-  if(qs('uam_daily_limit')) qs('uam_daily_limit').value = Number(item.daily_limit || 0);
-  if(qs('uam_cooldown_minutes')) qs('uam_cooldown_minutes').value = Number(item.cooldown_minutes || 0);
-  if(qs('uam_today_count')) qs('uam_today_count').value = Number(item.today_count || 0);
-  if(qs('uam_profile_path')) qs('uam_profile_path').value = item.profile_path || '';
-  if(qs('uam_proxy_id')) qs('uam_proxy_id').value = item.proxy_id || '';
-  if(qs('uam_save_btn')) qs('uam_save_btn').textContent = 'Save Changes';
-  if(qs('uam_modal_title')) qs('uam_modal_title').textContent = `Edit: ${item.display_name || item.account_key || item.account_id}`;
+  if (qs('uam_account_id')) qs('uam_account_id').value = item.account_id || '';
+  if (qs('uam_platform')) qs('uam_platform').value = item.platform || 'tiktok';
+  if (qs('uam_channel_code')) qs('uam_channel_code').value = item.channel_code || '';
+  if (qs('uam_account_key')) qs('uam_account_key').value = item.account_key || '';
+  if (qs('uam_display_name')) qs('uam_display_name').value = item.display_name || '';
+  if (qs('uam_status')) qs('uam_status').value = item.status || 'active';
+  if (qs('uam_login_state')) qs('uam_login_state').value = item.login_state || 'unknown';
+  if (qs('uam_daily_limit')) qs('uam_daily_limit').value = Number(item.daily_limit ?? 5);
+  if (qs('uam_cooldown_minutes')) qs('uam_cooldown_minutes').value = Number(item.cooldown_minutes ?? 30);
+  if (qs('uam_today_count')) qs('uam_today_count').value = Number(item.today_count || 0);
+  if (qs('uam_profile_path')) qs('uam_profile_path').value = item.profile_path || '';
+  if (qs('uam_proxy_id')) qs('uam_proxy_id').value = item.proxy_id || '';
+  _parseProxyConfig(item.proxy_config);
+  if (qs('uam_proxy_test_result')) { qs('uam_proxy_test_result').textContent = ''; qs('uam_proxy_test_result').className = 'uamProxyTestResult'; }
+  // Active-upload lock: disable profile folder controls if account has running uploads
+  const isLocked = accountHasActiveUpload(item.account_id);
+  _setProfileFolderLocked(isLocked);
+  const statusEl = qs('uam_profile_path_status');
+  if (isLocked && statusEl) {
+    statusEl.textContent = '🔒 Profile folder is locked while uploads are running.';
+    statusEl.className = 'uamProfileStatus isWarn';
+  } else {
+    updateProfilePathStatus();
+  }
+  const diagSection = qs('uam_diagnostics_section');
+  if (diagSection) diagSection.hidden = false;
+  if (qs('uam_save_btn')) qs('uam_save_btn').textContent = 'Save Changes';
+  if (qs('uam_modal_title')) qs('uam_modal_title').textContent = `Edit: ${item.display_name || item.account_key || item.account_id}`;
 }
 
 // =============================================================================
@@ -1379,6 +1816,14 @@ async function saveUploadAccount(event){
   if(event) event.preventDefault();
   const accountId = _uamValue('uam_account_id');
   const payload = collectUploadAccountForm();
+
+  const profileValidation = validateAccountProfilePathBeforeSave(payload, accountId);
+  if (!profileValidation.ok) {
+    showToast(profileValidation.errors[0], 'error');
+    await updateProfilePathStatus();
+    return;
+  }
+
   try{
     const res = await fetch(accountId ? `/api/upload/accounts/${encodeURIComponent(accountId)}` : '/api/upload/accounts', {
       method: accountId ? 'PATCH' : 'POST',
@@ -1472,7 +1917,9 @@ async function checkUploadAccountLogin(accountId){
     if(!res.ok) throw new Error(_formatApiError(data.detail || data.message));
     await loadUploadAccounts();
     const loginState = data?.item?.login_state || (data?.result?.logged_in ? 'logged_in' : 'logged_out');
-    showToast(loginState === 'logged_in' ? 'Login is valid' : (data.message || 'Login check completed'), loginState === 'logged_in' ? 'success' : 'info');
+    const loginMsgs = {logged_in: 'Login OK', logged_out: 'Session Expired', challenge: 'Captcha Required', expired: 'Session Expired', unknown: 'Login state unknown'};
+    const toastType = loginState === 'logged_in' ? 'success' : (loginState === 'unknown' ? 'info' : 'error');
+    showToast(loginMsgs[loginState] || data.message || 'Login check completed', toastType);
   }catch(e){
     showToast(`Login check failed: ${e.message || e}`, 'error');
   }
@@ -1536,6 +1983,8 @@ function _schedulerBlockedSummary(blockedCounts){
 
 function renderUploadSchedulerStatus(data){
   const running = !!(data && (data.running || data.scheduler_enabled || String(data?.scheduler_status || '').toLowerCase() === 'running'));
+  const eligible = Number(data?.next_eligible_count || 0);
+  const activeRuns = Number(data?.running_count || 0);
   const stateText = running ? 'running' : 'stopped';
   ['upload_scheduler_status_badge', 'upload_scheduler_status_badge_top'].forEach((id) => {
     const badge = qs(id);
@@ -1543,9 +1992,18 @@ function renderUploadSchedulerStatus(data){
   });
   ['upload_scheduler_meta', 'upload_scheduler_meta_top'].forEach((id) => {
     const meta = qs(id);
-    if(meta) meta.textContent = `Eligible ${Number(data?.next_eligible_count || 0)} · Running ${Number(data?.running_count || 0)}`;
+    if(meta) meta.textContent = `Eligible ${eligible} · Running ${activeRuns}`;
   });
-  if(qs('upload_scheduler_blocked')) qs('upload_scheduler_blocked').textContent = _schedulerBlockedSummary(data?.blocked_counts || {});
+  const blocked = qs('upload_scheduler_blocked');
+  if(blocked){
+    if(!running && activeRuns === 0 && eligible === 0){
+      blocked.textContent = 'No active uploads. Start scheduler to begin processing queue.';
+    } else if(!running && eligible > 0){
+      blocked.textContent = `${eligible} item${eligible === 1 ? '' : 's'} ready. Start scheduler to begin processing queue.`;
+    } else {
+      blocked.textContent = _schedulerBlockedSummary(data?.blocked_counts || {});
+    }
+  }
 }
 
 async function loadUploadSchedulerStatus(){
@@ -1638,6 +2096,8 @@ function _isBatchEligibleAccount(account){
   const dailyLimit = Number(account.daily_limit || 0);
   const todayCount = Number(account.today_count || 0);
   if(dailyLimit > 0 && todayCount >= dailyLimit) return {eligible: false, reason: 'Daily limit reached'};
+  const health = _computeAccountHealth(account);
+  if(health.status === 'risky' && !_batchIncludeRisky) return {eligible: false, reason: `Risky: ${health.reasons.join(', ')}`};
   return {eligible: true, reason: ''};
 }
 
@@ -1680,10 +2140,12 @@ function _syncSelectAllCheckbox(){
 function _updateBatchAssignButton(){
   const btn = qs('uvl_batch_assign_btn');
   const countEl = qs('uvl_batch_count');
+  const hintEl = qs('uvl_select_hint');
   if(!btn) return;
   const count = selectedUploadVideoIds.size;
   btn.disabled = count === 0;
   if(countEl) countEl.textContent = count > 0 ? `(${count})` : '';
+  if(hintEl) hintEl.hidden = count > 0 || !uploadVideoLibraryItems.length;
 }
 
 function openBatchAssignModal(){
@@ -1725,6 +2187,7 @@ function _renderBatchModalContent(){
 function _buildBatchConfigHtml(){
   const videoCount = selectedUploadVideoIds.size;
   const accountRows = uploadAccountManagerItems.map((acc) => {
+    const health = _computeAccountHealth(acc);
     const {eligible, reason} = _isBatchEligibleAccount(acc);
     const dailyLimit = Number(acc.daily_limit || 0);
     const todayCount = Number(acc.today_count || 0);
@@ -1738,7 +2201,7 @@ function _buildBatchConfigHtml(){
           ${eligible ? '' : 'disabled'}
           onchange="_onBatchAccountToggle(this)">
         <div class="batchAccountInfo">
-          <div class="batchAccountName">${name}</div>
+          <div class="batchAccountName">${name} ${_healthBadgeHtml(health)}</div>
           <div class="batchAccountMeta">${esc(usageLine)} · ${esc(cooldownLine)}</div>
           ${!eligible ? `<div class="batchAccountDisabledReason">${esc(reason)}</div>` : ''}
         </div>
@@ -1754,7 +2217,13 @@ function _buildBatchConfigHtml(){
     <div class="batchModalBody">
       <div class="batchSelectedCount">Selected: <strong>${videoCount}</strong> video${videoCount !== 1 ? 's' : ''}</div>
       <div class="batchSection">
-        <div class="batchSectionTitle">Accounts</div>
+        <div class="batchSectionTitle">Accounts
+          <label class="batchRiskyToggle" title="Risky accounts are excluded by default">
+            <input type="checkbox" id="batch_include_risky" ${_batchIncludeRisky ? 'checked' : ''}
+              onchange="_onBatchIncludeRiskyToggle(this.checked)">
+            Include risky accounts
+          </label>
+        </div>
         <div class="batchAccountList" id="batch_account_list">
           ${accountRows || '<div class="batchNoAccounts">No accounts available. Create an account first.</div>'}
         </div>
@@ -1778,6 +2247,11 @@ function _buildBatchConfigHtml(){
       <button class="primaryButton" type="button" onclick="previewBatchAssign()">Preview</button>
     </div>
   `;
+}
+
+function _onBatchIncludeRiskyToggle(checked){
+  _batchIncludeRisky = !!checked;
+  _renderBatchModalContent();
 }
 
 function _onBatchAccountToggle(chk){

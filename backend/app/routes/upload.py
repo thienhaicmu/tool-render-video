@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
 from app.models.schemas import (
     AddUploadVideoRequest,
+    ProxyTestRequest,
     UpdateUploadVideoRequest,
     UploadAccountCreate,
     UploadAccountUpdate,
@@ -382,7 +383,7 @@ def _validate_account_profile_isolation(account_payload: dict, exclude_account_i
         conflict_name = conflict.get("display_name") or conflict.get("account_key") or conflict.get("account_id") or "unknown"
         raise HTTPException(
             status_code=409,
-            detail=f"profile_path already used by active account {conflict_name}",
+            detail=f"Profile folder is already used by account: {conflict_name}.",
         )
     return account_payload
 
@@ -405,6 +406,37 @@ def create_upload_account_manager_account(payload: UploadAccountCreate):
         account.get("account_key"),
     )
     return {"status": "ok", "item": account}
+
+
+@router.post("/accounts/test-proxy")
+def test_upload_account_proxy_form(payload: ProxyTestRequest):
+    host = str(payload.host or "").strip()
+    if not host:
+        raise HTTPException(status_code=400, detail="host is required")
+    proxy_type = str(payload.type or "http").lower().replace("https", "http")
+    port_part = f":{payload.port}" if payload.port else ""
+    if payload.username and payload.password:
+        proxy_url = f"{proxy_type}://{payload.username}:{payload.password}@{host}{port_part}"
+    else:
+        proxy_url = f"{proxy_type}://{host}{port_part}"
+    test_url = "https://httpbin.org/ip"
+    start = time.time()
+    try:
+        import urllib.request
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+        )
+        resp = opener.open(test_url, timeout=8)
+        latency_ms = int((time.time() - start) * 1000)
+        body = resp.read(256).decode("utf-8", errors="replace").strip()
+        ip = ""
+        try:
+            ip = json.loads(body).get("origin", "")
+        except Exception:
+            ip = body[:45]
+        return {"ok": True, "ip": str(ip)[:45], "latency_ms": latency_ms}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:200]}
 
 
 @router.patch("/accounts/{account_id}")
@@ -495,6 +527,28 @@ def check_upload_account_login_state(account_id: str):
         login_state,
     )
     return {"status": "ok", "item": updated, "result": result}
+
+
+@router.post("/accounts/{account_id}/test-proxy")
+def test_upload_account_proxy(account_id: str):
+    account = get_upload_account_row(account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Upload account not found")
+    proxy_id = str(account.get("proxy_id") or "").strip()
+    if not proxy_id:
+        return {"ok": True, "latency": 0, "note": "No proxy configured"}
+    import urllib.request
+    test_url = "https://www.tiktok.com/robots.txt"
+    start = time.time()
+    try:
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({"http": proxy_id, "https": proxy_id})
+        )
+        opener.open(test_url, timeout=10)
+        latency = int((time.time() - start) * 1000)
+        return {"ok": True, "latency": latency}
+    except Exception as exc:
+        return {"ok": False, "latency": 0, "error": str(exc)[:200]}
 
 
 @router.post("/videos/add")
