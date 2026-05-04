@@ -12813,3 +12813,223 @@ body.is-history-active #history_list {
   margin-left: auto;
 }
 .batchRiskyToggle input { cursor: pointer; }
+
+/* ── Phase 5: Failure Tier Badges + Scheduler Chips ──────────────────────── */
+
+.uqmTierBadge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  letter-spacing: .04em;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.uqmTierBadge[data-tier="wait"]   { background: rgba(59, 130, 246, .15); color: #93c5fd;  border: 1px solid rgba(59, 130, 246, .3); }
+.uqmTierBadge[data-tier="action"] { background: rgba(245, 158, 11, .15); color: #fcd34d;  border: 1px solid rgba(245, 158, 11, .3); }
+.uqmTierBadge[data-tier="fatal"]  { background: rgba(239,  68,  68, .15); color: #fca5a5; border: 1px solid rgba(239,  68,  68, .3); }
+
+.uqmBlockedReason {
+  font-size: 11px;
+  color: #f59e0b;
+  margin-top: 2px;
+}
+.uqmRetryIn {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.schedulerChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.schedulerChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(148, 163, 184, .1);
+  border: 1px solid rgba(148, 163, 184, .2);
+  color: var(--text-dim);
+}
+.schedulerChip[data-tier="wait"]   { background: rgba(59, 130, 246, .1);  border-color: rgba(59, 130, 246, .25);  color: #93c5fd; }
+.schedulerChip[data-tier="action"] { background: rgba(245, 158, 11, .1);  border-color: rgba(245, 158, 11, .25);  color: #fcd34d; }
+.schedulerChip[data-tier="fatal"]  { background: rgba(239,  68,  68, .1); border-color: rgba(239,  68,  68, .25); color: #fca5a5; }
+
+.schedulerStatRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 5px;
+}
+.schedulerStatChip {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.schedulerStatChip strong {
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+/* ── Phase 6: Automation Panel ───────────────────────────────────────────── */
+
+.uploadAutomationPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 0 24px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Dashboard grid */
+.autoDashboard {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.autoDashCard {
+  background: rgba(15, 23, 42, .45);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.autoDashLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.autoDashValue {
+  font-size: 22px;
+  font-weight: 800;
+  color: #e2e8f0;
+  line-height: 1.1;
+}
+.autoDashValue[data-state="ok"]   { color: #6ee7b7; }
+.autoDashValue[data-state="warn"] { color: #fcd34d; }
+.autoDashValue[data-state="none"] { color: var(--text-muted); }
+.autoDashValueSm {
+  font-size: 15px;
+  font-weight: 800;
+  color: #e2e8f0;
+  line-height: 1.2;
+}
+.autoDashValueSm[data-state="ok"]   { color: #6ee7b7; }
+.autoDashValueSm[data-state="none"] { color: var(--text-muted); }
+
+/* Settings group */
+.autoSettingsSection {
+  border: 1px solid rgba(148, 163, 184, .1);
+  border-radius: 8px;
+  padding: 12px 14px 14px;
+  background: rgba(8, 15, 28, .28);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.autoSettingsTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.autoToggleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.autoToggleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 3px 0;
+  user-select: none;
+}
+.autoToggleRow input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.autoInputGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+.autoInputRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.autoInputLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.autoActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Account score badge in preview */
+.autoScoreBadge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.autoScoreBadge[data-tier="high"] { background: rgba(16, 185, 129, .15); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, .3); }
+.autoScoreBadge[data-tier="mid"]  { background: rgba(59, 130, 246, .15);  color: #93c5fd; border: 1px solid rgba(59, 130, 246, .3); }
+.autoScoreBadge[data-tier="low"]  { background: rgba(245, 158, 11, .15);  color: #fcd34d; border: 1px solid rgba(245, 158, 11, .3); }
+.autoScoreBadge[data-tier="neg"]  { background: rgba(239,  68,  68, .15); color: #fca5a5; border: 1px solid rgba(239,  68,  68, .3); }
+
+/* Auto plan preview enhancements */
+.autoPlanPreviewNote {
+  font-size: 12px;
+  color: #93c5fd;
+  padding: 7px 11px;
+  background: rgba(59, 130, 246, .08);
+  border: 1px solid rgba(59, 130, 246, .2);
+  border-radius: 7px;
+}
+.autoPlanExcludeRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+.autoPlanExcludeChk {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.autoPlanExcluded .batchPreviewItemName,
+.autoPlanExcluded .batchPreviewItemTime {
+  opacity: .35;
+  text-decoration: line-through;
+}

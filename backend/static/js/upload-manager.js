@@ -24,6 +24,15 @@ let _uploadAccountHealthFilter = 'all';
 let _batchIncludeRisky = false;
 const _proxyTestCache = {};
 
+// --- PHASE 5: FAILURE TIER CLASSIFICATION ---
+const _QUEUE_TIER_MAP = {
+  'cooldown':           'wait',
+  'daily limit':        'wait',
+  'login required':     'action',
+  'attempts exhausted': 'fatal',
+};
+const _RETRY_BACKOFF_MINUTES = [5, 15, 45];
+
 // --- UPLOAD STORE ---
 const UploadStore = {
   _accounts: [],
@@ -487,7 +496,7 @@ function openUploadEditor(type){
 }
 
 function setUploadManagerTab(tab){
-  uploadManagerActiveTab = ['videos', 'queue', 'settings'].includes(tab) ? tab : 'videos';
+  uploadManagerActiveTab = ['videos', 'queue', 'settings', 'automation'].includes(tab) ? tab : 'videos';
   document.querySelectorAll('.uploadManagerTab').forEach((btn) => {
     btn.classList.toggle('active', btn.id === `upload_tab_${uploadManagerActiveTab}`);
   });
@@ -622,6 +631,41 @@ function renderUploadVideoLibrary(items){
 }
 
 // =============================================================================
+// PHASE 5: FAILURE TIER HELPERS
+// =============================================================================
+
+function classifyQueueBlockReason(reason, status){
+  if(!reason) return status === 'failed' ? 'wait' : null;
+  const key = String(reason).toLowerCase().trim();
+  return _QUEUE_TIER_MAP[key] || 'wait';
+}
+
+function _computeNextRetryAt(item){
+  const attempt = Number(item.attempt_count || 0);
+  const maxAttempts = Number(item.max_attempts || 3);
+  if(attempt >= maxAttempts) return null;
+  const delayMin = _RETRY_BACKOFF_MINUTES[Math.min(attempt, _RETRY_BACKOFF_MINUTES.length - 1)];
+  const updatedAt = item.updated_at ? new Date(item.updated_at) : null;
+  if(!updatedAt || isNaN(updatedAt.getTime())) return null;
+  return new Date(updatedAt.getTime() + delayMin * 60 * 1000);
+}
+
+function _formatRetryIn(item){
+  const nextAt = _computeNextRetryAt(item);
+  if(!nextAt) return '';
+  const diffMs = nextAt - Date.now();
+  if(diffMs <= 0) return 'retry eligible';
+  const diffMin = Math.ceil(diffMs / 60000);
+  if(diffMin < 60) return `retry in ~${diffMin}m`;
+  return `retry in ~${Math.ceil(diffMin / 60)}h`;
+}
+
+function _tierBadgeHtml(tier, label){
+  if(!tier) return '';
+  return `<span class="uqmTierBadge" data-tier="${esc(tier)}">${esc(label || tier)}</span>`;
+}
+
+// =============================================================================
 // RENDER: QUEUE MANAGER (6 visible columns: Video / Account / Status / Scheduled / Attempts / Actions)
 // Phase 0: global queue view; account-filtered view is Phase 1.
 // =============================================================================
@@ -646,6 +690,13 @@ function renderUploadQueueManager(items){
     const accountName = item.account_display_name || item.account_key || item.account_id || '-';
     const clipName = item.video_file_name || String(item.video_path || '').split(/[\\/]/).pop() || '-';
     const selected = _selectedUploadId('queue') === String(item.queue_id || '');
+
+    // Phase 5: failure tier + blocked reason
+    const blockedReason = String(item.blocked_reason || '').trim();
+    const tier = classifyQueueBlockReason(blockedReason || (status === 'failed' ? item.last_error : ''), status);
+    const isFatal = status === 'failed' && tier === 'fatal';
+    const retryIn = status === 'failed' ? _formatRetryIn(item) : '';
+
     const rowCls = [
       muted ? 'isMuted' : '',
       selected ? 'isSelected' : '',
@@ -662,7 +713,11 @@ function renderUploadQueueManager(items){
     if(['pending', 'scheduled', 'held'].includes(status)){
       runButton = `<button class="ghostButton" type="button" title="${esc(runDisabledReason)}" onclick="event.stopPropagation(); runUploadQueueItem('${esc(item.queue_id)}')">Run</button>`;
     } else if(status === 'failed'){
-      runButton = `<button class="ghostButton" type="button" title="Retry failed queue item" onclick="event.stopPropagation(); runUploadQueueItem('${esc(item.queue_id)}')">Retry</button>`;
+      if(isFatal){
+        runButton = `<button class="ghostButton" type="button" disabled title="Attempts exhausted — cannot retry">Retry</button>`;
+      } else {
+        runButton = `<button class="ghostButton" type="button" title="Retry failed queue item" onclick="event.stopPropagation(); runUploadQueueItem('${esc(item.queue_id)}')">Retry</button>`;
+      }
     } else if(status === 'uploading'){
       runButton = '<button class="ghostButton" type="button" disabled>Uploading…</button>';
     } else if(status === 'success'){
@@ -670,14 +725,21 @@ function renderUploadQueueManager(items){
     } else {
       runButton = `<button class="ghostButton" type="button" title="${esc(runDisabledReason)}" disabled>Run</button>`;
     }
+
+    // blocked_reason sub-line (show on pending/scheduled/failed when blocked)
+    const showBlockedLine = blockedReason && ['pending', 'scheduled', 'failed'].includes(status);
+    const tierBadge = (status === 'failed' && tier) ? _tierBadgeHtml(tier, tier === 'wait' ? 'wait' : tier === 'action' ? 'action req.' : 'fatal') : '';
+
     return `
       <tr class="${rowCls}" onclick="_selectUploadEntity('queue', '${esc(item.queue_id)}')">
         <td class="uqmColVideo">
           <div class="uqmClipName">${esc(clipName)}</div>
           ${item.last_error ? `<div class="uqmError">${esc(item.last_error)}</div>` : ''}
+          ${showBlockedLine ? `<div class="uqmBlockedReason">${esc(blockedReason)}</div>` : ''}
+          ${retryIn ? `<div class="uqmRetryIn">${esc(retryIn)}</div>` : ''}
         </td>
         <td class="uqmColAccount">${esc(accountName)}</td>
-        <td class="uqmColStatus">${_uamBadge(status, 'status')}</td>
+        <td class="uqmColStatus">${_uamBadge(status, 'status')}${tierBadge}</td>
         <td class="uqmColScheduled">${esc(item.scheduled_at || '–')}</td>
         <td class="uqmColAttempts">${Number(item.attempt_count || 0)} / ${Number(item.max_attempts || 3)}</td>
         <td class="uqmColActions">
@@ -1803,6 +1865,7 @@ function refreshUploadWorkspace(reason = 'manual'){
     renderUploadQueueManager(uploadQueueManagerItems);
     _renderAccountWorkspaceSummary();
     renderUploadSchedulerStatus(_cachedSchedulerData);
+    renderAutomationDashboard();
   }finally{
     __uploadRefreshing = false;
   }
@@ -1977,8 +2040,33 @@ async function runUploadQueueItem(queueId){
 
 function _schedulerBlockedSummary(blockedCounts){
   const entries = Object.entries(blockedCounts || {});
-  if(!entries.length) return 'No blocked queue items.';
-  return entries.map(([key, value]) => `${key}: ${value}`).join(' · ');
+  if(!entries.length) return '';
+  const tierFor = (label) => _QUEUE_TIER_MAP[String(label).toLowerCase().trim()] || 'wait';
+  const chips = entries.map(([key, value]) =>
+    `<span class="schedulerChip" data-tier="${esc(tierFor(key))}">${esc(key)}: ${Number(value)}</span>`
+  ).join('');
+  return `<div class="schedulerChips">${chips}</div>`;
+}
+
+function _schedulerStatRowHtml(data){
+  const eligible = Number(data?.next_eligible_count || 0);
+  const activeRuns = Number(data?.running_count || 0);
+  const blockedEntries = Object.entries(data?.blocked_counts || {});
+  const blockedTotal = blockedEntries.reduce((s, [, v]) => s + Number(v), 0);
+  const failedItems = uploadQueueManagerItems.filter((x) => String(x.status || '').toLowerCase() === 'failed');
+  const fatalCount = failedItems.filter((x) => {
+    const tier = classifyQueueBlockReason(String(x.blocked_reason || ''), 'failed');
+    return tier === 'fatal';
+  }).length;
+  const retryableCount = failedItems.length - fatalCount;
+  const parts = [
+    `<span class="schedulerStatChip"><strong>${eligible}</strong> ready</span>`,
+    `<span class="schedulerStatChip"><strong>${activeRuns}</strong> running</span>`,
+    blockedTotal > 0 ? `<span class="schedulerStatChip"><strong>${blockedTotal}</strong> blocked</span>` : '',
+    retryableCount > 0 ? `<span class="schedulerStatChip" style="color:#fca5a5"><strong>${retryableCount}</strong> retryable</span>` : '',
+    fatalCount > 0 ? `<span class="schedulerStatChip" style="color:#94a3b8"><strong>${fatalCount}</strong> fatal</span>` : '',
+  ].filter(Boolean);
+  return `<div class="schedulerStatRow">${parts.join('')}</div>`;
 }
 
 function renderUploadSchedulerStatus(data){
@@ -1994,14 +2082,32 @@ function renderUploadSchedulerStatus(data){
     const meta = qs(id);
     if(meta) meta.textContent = `Eligible ${eligible} · Running ${activeRuns}`;
   });
+
+  // Update Retry Failed button states
+  const failedTotal = uploadQueueManagerItems.filter((x) => String(x.status || '').toLowerCase() === 'failed').length;
+  const hasRetryable = uploadQueueManagerItems.some((x) => {
+    if(String(x.status || '').toLowerCase() !== 'failed') return false;
+    return classifyQueueBlockReason(String(x.blocked_reason || ''), 'failed') !== 'fatal';
+  });
+  ['retry_failed_btn', 'retry_failed_btn_top'].forEach((id) => {
+    const btn = qs(id);
+    if(btn){
+      btn.disabled = !hasRetryable;
+      btn.title = hasRetryable ? `Reset ${failedTotal} failed item(s) to pending` : 'No retryable failed items';
+    }
+  });
+
   const blocked = qs('upload_scheduler_blocked');
   if(blocked){
-    if(!running && activeRuns === 0 && eligible === 0){
-      blocked.textContent = 'No active uploads. Start scheduler to begin processing queue.';
+    const statRow = _schedulerStatRowHtml(data);
+    const blockedCounts = data?.blocked_counts || {};
+    const hasBlocked = Object.keys(blockedCounts).length > 0;
+    if(!running && activeRuns === 0 && eligible === 0 && !hasBlocked){
+      blocked.innerHTML = `${statRow}<span style="color:var(--text-muted);font-size:12px">No active uploads. Start scheduler to begin processing queue.</span>`;
     } else if(!running && eligible > 0){
-      blocked.textContent = `${eligible} item${eligible === 1 ? '' : 's'} ready. Start scheduler to begin processing queue.`;
+      blocked.innerHTML = `${statRow}<span style="color:var(--text-muted);font-size:12px">${eligible} item${eligible === 1 ? '' : 's'} ready. Start scheduler to begin processing queue.</span>`;
     } else {
-      blocked.textContent = _schedulerBlockedSummary(data?.blocked_counts || {});
+      blocked.innerHTML = statRow + _schedulerBlockedSummary(blockedCounts);
     }
   }
 }
@@ -2041,6 +2147,29 @@ async function stopUploadScheduler(){
     await loadUploadSchedulerStatus();
   }catch(e){
     showToast(`Scheduler stop failed: ${e.message || e}`, 'error');
+  }
+}
+
+async function retryFailedUploads(){
+  ['retry_failed_btn', 'retry_failed_btn_top'].forEach((id) => {
+    const btn = qs(id);
+    if(btn){ btn.disabled = true; btn.textContent = 'Retrying…'; }
+  });
+  try{
+    const res = await fetch('/api/upload/queue/retry-failed', {method: 'POST'});
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data.detail));
+    const count = Number(data.reset_count || 0);
+    showToast(count > 0 ? `${count} failed item${count === 1 ? '' : 's'} reset to pending` : 'No retryable failed items found', count > 0 ? 'success' : 'info');
+    await loadUploadQueueManager();
+    await loadUploadSchedulerStatus();
+  }catch(e){
+    showToast(`Retry failed: ${e.message || e}`, 'error');
+  }finally{
+    ['retry_failed_btn', 'retry_failed_btn_top'].forEach((id) => {
+      const btn = qs(id);
+      if(btn) btn.textContent = 'Retry Failed';
+    });
   }
 }
 
@@ -2469,6 +2598,42 @@ async function createQueueItemFromAssignment(assignment){
   return data;
 }
 
+function _batchAggressiveWarning(assignments){
+  const warnings = [];
+  const byAccount = {};
+  for(const a of assignments){
+    const key = String(a.account_id || '');
+    if(!byAccount[key]) byAccount[key] = [];
+    byAccount[key].push(a);
+  }
+  for(const [accountId, items] of Object.entries(byAccount)){
+    // Check if any 3 items are scheduled within a 2-hour window
+    const times = items
+      .map((x) => x.scheduled_at ? new Date(x.scheduled_at).getTime() : null)
+      .filter((t) => t && !isNaN(t))
+      .sort((a, b) => a - b);
+    for(let i = 0; i + 2 < times.length; i++){
+      if(times[i + 2] - times[i] < 2 * 60 * 60 * 1000){
+        const account = uploadAccountManagerItems.find((x) => String(x.account_id || '') === accountId);
+        const name = (account && (account.display_name || account.account_key)) || accountId;
+        warnings.push(`Account "${name}" has 3+ uploads scheduled within 2 hours — may trigger rate limits.`);
+        break;
+      }
+    }
+    // Check daily limit proximity
+    const account = uploadAccountManagerItems.find((x) => String(x.account_id || '') === accountId);
+    if(account){
+      const dailyLimit = Number(account.daily_limit || 0);
+      const todayCount = Number(account.today_count || 0);
+      if(dailyLimit > 0 && (todayCount + items.length) > dailyLimit * 0.8){
+        const name = account.display_name || account.account_key || accountId;
+        warnings.push(`Account "${name}" will exceed 80% of its daily upload limit (${dailyLimit}).`);
+      }
+    }
+  }
+  return warnings;
+}
+
 async function executeBatchEnqueue(){
   const btn = qs('batch_enqueue_btn');
   if(btn){ btn.disabled = true; btn.textContent = 'Enqueuing…'; }
@@ -2478,6 +2643,16 @@ async function executeBatchEnqueue(){
     return;
   }
   const {assignments, skipped} = _batchPreviewData;
+
+  // Phase 5: aggressive schedule warning
+  const aggressiveWarns = _batchAggressiveWarning(assignments);
+  if(aggressiveWarns.length > 0){
+    const msg = `Schedule concern:\n\n${aggressiveWarns.join('\n')}\n\nProceed anyway?`;
+    if(!window.confirm(msg)){
+      if(btn){ btn.disabled = false; btn.textContent = `Enqueue ${assignments.length} Video${assignments.length !== 1 ? 's' : ''}`; }
+      return;
+    }
+  }
   const results = [];
   for(const assignment of assignments){
     try{
@@ -2503,4 +2678,459 @@ async function executeBatchEnqueue(){
     showToast(`${succeeded} queued, ${failed} failed. See console for details.`, 'error');
     console.warn('[BatchAssign] Failed items:', results.filter((r) => !r.ok));
   }
+}
+
+// =============================================================================
+// PHASE 6: AUTOMATION LAYER
+// =============================================================================
+
+// --- AUTOMATION SETTINGS ---
+const _AUTO_DEFAULTS = {
+  autoStartScheduler: false,
+  excludeRisky: true,
+  respectDailyLimit: true,
+  respectCooldown: true,
+  jitterEnabled: true,
+  baseSpacingMinutes: 30,
+  jitterMinutes: 5,
+  maxPerAccountPerDay: 5,
+  acceptRenderOutputs: false,
+};
+let _autoSettings = {..._AUTO_DEFAULTS};
+let _autoPlanData = null;
+let _autoPlanExcluded = new Set();
+
+function loadAutomationSettings(){
+  try{
+    const raw = localStorage.getItem('uploadAutomationSettings');
+    if(raw) _autoSettings = {..._AUTO_DEFAULTS, ...JSON.parse(raw)};
+  }catch(_){}
+  _applyAutoSettingsToUi();
+}
+
+function saveAutomationSettings(){
+  _readAutoSettingsFromUi();
+  try{ localStorage.setItem('uploadAutomationSettings', JSON.stringify(_autoSettings)); }catch(_){}
+  renderAutomationDashboard();
+}
+
+function _applyAutoSettingsToUi(){
+  _setChk('auto_set_exclude_risky',     _autoSettings.excludeRisky);
+  _setChk('auto_set_respect_limit',     _autoSettings.respectDailyLimit);
+  _setChk('auto_set_respect_cooldown',  _autoSettings.respectCooldown);
+  _setChk('auto_set_jitter',            _autoSettings.jitterEnabled);
+  _setChk('auto_set_auto_start',        _autoSettings.autoStartScheduler);
+  _setChk('auto_set_accept_render',     _autoSettings.acceptRenderOutputs);
+  _setVal('auto_set_base_spacing',      _autoSettings.baseSpacingMinutes);
+  _setVal('auto_set_jitter_min',        _autoSettings.jitterMinutes);
+  _setVal('auto_set_max_per_day',       _autoSettings.maxPerAccountPerDay);
+}
+
+function _readAutoSettingsFromUi(){
+  _autoSettings.excludeRisky          = _getChk('auto_set_exclude_risky');
+  _autoSettings.respectDailyLimit     = _getChk('auto_set_respect_limit');
+  _autoSettings.respectCooldown       = _getChk('auto_set_respect_cooldown');
+  _autoSettings.jitterEnabled         = _getChk('auto_set_jitter');
+  _autoSettings.autoStartScheduler    = _getChk('auto_set_auto_start');
+  _autoSettings.acceptRenderOutputs   = _getChk('auto_set_accept_render');
+  _autoSettings.baseSpacingMinutes    = Math.max(1,  parseInt(_getVal('auto_set_base_spacing'), 10) || 30);
+  _autoSettings.jitterMinutes         = Math.max(0,  parseInt(_getVal('auto_set_jitter_min'),   10) || 5);
+  _autoSettings.maxPerAccountPerDay   = Math.max(1,  parseInt(_getVal('auto_set_max_per_day'),  10) || 5);
+}
+
+function _getChk(id){ const el = qs(id); return el ? el.checked : false; }
+function _setChk(id, val){ const el = qs(id); if(el) el.checked = !!val; }
+function _getVal(id){ return String(qs(id)?.value || ''); }
+function _setVal(id, val){ const el = qs(id); if(el) el.value = val; }
+function _setEl(id, text, state){
+  const el = qs(id);
+  if(!el) return;
+  el.textContent = text;
+  if(state !== undefined) el.setAttribute('data-state', state);
+}
+
+// --- FEATURE 3: ACCOUNT SCORING ---
+
+function scoreUploadAccount(account){
+  if(!account) return {score: -999, reasons: ['No account']};
+  const health = _computeAccountHealth(account);
+  let score = 0;
+  const reasons = [];
+
+  if(health.status === 'healthy')     { score += 50;  reasons.push('+50 healthy'); }
+  else if(health.status === 'warning'){ score += 20;  reasons.push('+20 warning'); }
+  else if(health.status === 'risky')  { score -= 100; reasons.push('-100 risky'); }
+
+  const dailyLimit = Number(account.daily_limit || 0);
+  const todayCount = Number(account.today_count || 0);
+  if(dailyLimit > 0){
+    const remaining = Math.max(0, dailyLimit - todayCount);
+    const quotaScore = Math.min(20, Math.round((remaining / dailyLimit) * 20));
+    score += quotaScore;
+    if(quotaScore > 0) reasons.push(`+${quotaScore} quota`);
+  }else{
+    score += 10; reasons.push('+10 unlimited');
+  }
+
+  const cooldownMin = Number(account.cooldown_minutes || 0);
+  if(cooldownMin > 0){ score -= 20; reasons.push('-20 cooldown active'); }
+  else               { score += 10; reasons.push('+10 ready'); }
+
+  if(health.fail_count_24h > 0){
+    const p = health.fail_count_24h * 10;
+    score -= p; reasons.push(`-${p} failures`);
+  }
+  if(health.proxy_status === 'failed'){ score -= 50; reasons.push('-50 proxy failed'); }
+
+  const pp = normalizeProfilePath(String(account.profile_path || ''));
+  if(pp){
+    const hasConflict = uploadAccountManagerItems.some((a) =>
+      String(a.account_id) !== String(account.account_id) &&
+      normalizeProfilePath(String(a.profile_path || '')) === pp
+    );
+    if(hasConflict){ score -= 100; reasons.push('-100 profile conflict'); }
+  }
+
+  return {score, reasons};
+}
+
+function _autoScoreTier(score){
+  if(score >= 60) return 'high';
+  if(score >= 30) return 'mid';
+  if(score >= 0)  return 'low';
+  return 'neg';
+}
+
+// --- FEATURE 2 SUPPORT: ELIGIBLE ACCOUNTS + READY VIDEOS ---
+
+function _autoEligibleAccounts(){
+  return uploadAccountManagerItems.filter((acc) => {
+    const status = String(acc.status || '').toLowerCase();
+    if(['banned', 'disabled'].includes(status)) return false;
+    const loginState = String(acc.login_state || '').toLowerCase();
+    if(['logged_out', 'challenge', 'expired'].includes(loginState)) return false;
+    if(_autoSettings.excludeRisky && _computeAccountHealth(acc).status === 'risky') return false;
+    if(_autoSettings.respectDailyLimit){
+      const dl = Number(acc.daily_limit || 0);
+      const tc = Number(acc.today_count || 0);
+      const cap = dl > 0 ? Math.min(_autoSettings.maxPerAccountPerDay, dl) : _autoSettings.maxPerAccountPerDay;
+      if(tc >= cap) return false;
+    }
+    return true;
+  });
+}
+
+function _autoReadyVideos(){
+  const statuses = new Set(['ready']);
+  if(_autoSettings.acceptRenderOutputs) statuses.add('render_ready');
+  return uploadVideoLibraryItems.filter((v) => statuses.has(String(v.status || '').toLowerCase()) && !!v.video_path);
+}
+
+// --- FEATURE 4: SAFE SCHEDULING + SCORING ---
+
+function computeAutoAssignments(){
+  const accounts = _autoEligibleAccounts();
+  const videos = _autoReadyVideos();
+
+  if(!accounts.length || !videos.length){
+    const reason = !accounts.length ? 'no eligible accounts' : 'no ready videos';
+    return {
+      assignments: [],
+      skipped: videos.map((v) => ({video_id: v.video_id, reason})),
+      warnings: [!accounts.length ? 'No eligible accounts found.' : 'No ready videos found.'],
+      scores: {},
+    };
+  }
+
+  const scores = {};
+  accounts.forEach((acc) => { scores[acc.account_id] = scoreUploadAccount(acc); });
+  const sortedIds = [...accounts]
+    .sort((a, b) => scores[b.account_id].score - scores[a.account_id].score)
+    .map((a) => a.account_id);
+
+  const videoIds = videos.map((v) => v.video_id);
+  const result = computeBatchAssignments(videoIds, sortedIds, {mode: 'smart', spaceMinutes: _autoSettings.baseSpacingMinutes});
+
+  if(_autoSettings.jitterEnabled && _autoSettings.jitterMinutes > 0){
+    const jMs = _autoSettings.jitterMinutes * 60 * 1000;
+    result.assignments.forEach((a) => {
+      if(a.scheduled_at){
+        const t = new Date(a.scheduled_at).getTime();
+        const offset = Math.round((Math.random() * 2 - 1) * jMs);
+        a.scheduled_at = new Date(Math.max(Date.now() + 30000, t + offset)).toISOString();
+      }
+    });
+  }
+
+  return {...result, scores};
+}
+
+// --- FEATURE 7: SAFETY WARNINGS ---
+
+function _autoSafetyWarnings(assignments, accounts){
+  const warnings = [];
+  if(!accounts.length) return ['No eligible accounts — check account status and automation settings.'];
+
+  const healthyCount = accounts.filter((a) => _computeAccountHealth(a).status === 'healthy').length;
+  if(healthyCount === 0) warnings.push('No healthy accounts in plan — all eligible accounts are in warning or risky state.');
+
+  if(_autoSettings.baseSpacingMinutes < 15) warnings.push(`Schedule spacing is ${_autoSettings.baseSpacingMinutes}m — below the 15-minute safe minimum may trigger rate limits.`);
+
+  if(!_autoSettings.excludeRisky){
+    const riskyCount = accounts.filter((a) => _computeAccountHealth(a).status === 'risky').length;
+    if(riskyCount > 0) warnings.push(`${riskyCount} risky account(s) included in this plan. Review carefully before confirming.`);
+  }
+
+  const proxyFailed = accounts.filter((a) => _computeAccountHealth(a).proxy_status === 'failed');
+  if(proxyFailed.length) warnings.push(`${proxyFailed.length} account(s) have proxy failures — uploads may fail.`);
+
+  const conflicts = accounts.filter((a) => {
+    const norm = normalizeProfilePath(String(a.profile_path || ''));
+    if(!norm) return false;
+    return uploadAccountManagerItems.some((b) =>
+      String(b.account_id) !== String(a.account_id) && normalizeProfilePath(String(b.profile_path || '')) === norm
+    );
+  });
+  if(conflicts.length) warnings.push(`${conflicts.length} account(s) have profile path conflicts — isolation may be broken.`);
+
+  const totalQuota = accounts.reduce((s, acc) => {
+    const dl = Number(acc.daily_limit || 0);
+    const tc = Number(acc.today_count || 0);
+    return s + (dl > 0 ? Math.max(0, dl - tc) : _autoSettings.maxPerAccountPerDay);
+  }, 0);
+  const readyCount = _autoReadyVideos().length;
+  if(readyCount > totalQuota * 1.5) warnings.push(`${readyCount} ready videos but only ~${totalQuota} quota slots — many will be skipped.`);
+
+  warnings.push(..._batchAggressiveWarning(assignments));
+  return warnings;
+}
+
+// --- FEATURE 6: AUTOMATION DASHBOARD ---
+
+function renderAutomationDashboard(){
+  const eligible = _autoEligibleAccounts();
+  const ready = _autoReadyVideos();
+  const allAccounts = uploadAccountManagerItems;
+
+  const riskyAll = allAccounts.filter((a) => _computeAccountHealth(a).status === 'risky');
+  const riskyExcluded = _autoSettings.excludeRisky ? riskyAll.length : 0;
+
+  const totalQuota = eligible.reduce((sum, acc) => {
+    const dl = Number(acc.daily_limit || 0);
+    const tc = Number(acc.today_count || 0);
+    const cap = dl > 0 ? Math.max(0, Math.min(_autoSettings.maxPerAccountPerDay, dl - tc)) : _autoSettings.maxPerAccountPerDay;
+    return sum + cap;
+  }, 0);
+
+  const estUploads = Math.min(ready.length, totalQuota);
+
+  const minCooldownMs = eligible.reduce((min, acc) => {
+    const cm = Number(acc.cooldown_minutes || 0) * 60000;
+    return Math.min(min, cm);
+  }, Infinity);
+  const nextSlotMs = Date.now() + (isFinite(minCooldownMs) ? minCooldownMs : 0) + _autoSettings.baseSpacingMinutes * 60000;
+  const nextSlotStr = eligible.length > 0
+    ? new Date(nextSlotMs).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
+    : '–';
+
+  _setEl('auto_dash_ready',    String(ready.length),    ready.length > 0 ? 'ok' : 'none');
+  _setEl('auto_dash_accounts', String(eligible.length), eligible.length > 0 ? 'ok' : 'none');
+  _setEl('auto_dash_est',      String(estUploads),      estUploads > 0 ? 'ok' : 'none');
+  _setEl('auto_dash_risky',    String(riskyExcluded),   riskyExcluded > 0 ? 'warn' : 'ok');
+  _setEl('auto_dash_next',     nextSlotStr,             eligible.length > 0 ? 'ok' : 'none');
+  _setEl('auto_dash_quota',    String(isFinite(totalQuota) ? totalQuota : '∞'), totalQuota > 0 ? 'ok' : 'none');
+}
+
+// --- FEATURE 2: AUTO PLAN READY VIDEOS ---
+
+function autoPlanReadyVideos(){
+  _readAutoSettingsFromUi();
+  const accounts = _autoEligibleAccounts();
+  const videos = _autoReadyVideos();
+
+  if(!videos.length){
+    showToast('No ready videos found. Add videos to the library first.', 'info');
+    return;
+  }
+  if(!accounts.length){
+    showToast('No eligible accounts found. Check account status or adjust automation settings.', 'info');
+    return;
+  }
+
+  const result = computeAutoAssignments();
+  const warnings = _autoSafetyWarnings(result.assignments, accounts);
+  _autoPlanData = {...result, safetyWarnings: warnings};
+  _autoPlanExcluded = new Set();
+
+  const modal = document.getElementById('auto_plan_modal');
+  if(modal){ modal.hidden = false; _renderAutoPlanModal(); }
+}
+
+function closeAutoPlanModal(){
+  const modal = document.getElementById('auto_plan_modal');
+  if(modal) modal.hidden = true;
+  _autoPlanData = null;
+  _autoPlanExcluded = new Set();
+}
+
+function toggleAutoPlanExclude(key, included){
+  if(included){ _autoPlanExcluded.delete(key); }else{ _autoPlanExcluded.add(key); }
+  _renderAutoPlanModal();
+}
+
+function _renderAutoPlanModal(){
+  const panel = qs('auto_plan_modal_panel');
+  if(!panel) return;
+  panel.innerHTML = _buildAutoPlanPreviewHtml(_autoPlanData);
+}
+
+// --- FEATURE 8: MANUAL OVERRIDE (EXCLUDE) + PREVIEW ---
+
+function _buildAutoPlanPreviewHtml(result){
+  if(!result) return '';
+  const {assignments = [], skipped = [], safetyWarnings = [], scores = {}} = result;
+
+  const activeAssignments = assignments.filter((a) => !_autoPlanExcluded.has(`${a.video_id}|${a.account_id}`));
+
+  const byAccount = {};
+  for(const a of assignments){
+    if(!byAccount[a.account_id]) byAccount[a.account_id] = [];
+    byAccount[a.account_id].push(a);
+  }
+
+  const groupHtml = Object.entries(byAccount).map(([accountId, items]) => {
+    const acc = uploadAccountManagerItems.find((a) => String(a.account_id) === String(accountId));
+    const accName = acc ? (acc.display_name || acc.account_key || accountId) : accountId;
+    const scoreData = scores[accountId];
+    const scoreTier = scoreData ? _autoScoreTier(scoreData.score) : 'low';
+    const scoreTooltip = scoreData ? scoreData.reasons.join(', ') : '';
+    const scoreNum = scoreData ? scoreData.score : '?';
+    const dl = acc ? Number(acc.daily_limit || 0) : 0;
+    const tc = acc ? Number(acc.today_count || 0) : 0;
+    const slotsLeft = dl > 0 ? Math.max(0, dl - tc) : '∞';
+
+    const rows = items.map((item) => {
+      const video = uploadVideoLibraryItems.find((v) => String(v.video_id) === String(item.video_id));
+      const vname = video ? (video.file_name || String(video.video_path || '').split(/[\\/]/).pop() || item.video_id) : item.video_id;
+      const tStr = item.scheduled_at ? item.scheduled_at.replace('T', ' ').slice(0, 16) : 'ASAP';
+      const key = `${item.video_id}|${item.account_id}`;
+      const excluded = _autoPlanExcluded.has(key);
+      return `
+        <div class="autoPlanExcludeRow${excluded ? ' autoPlanExcluded' : ''}">
+          <input type="checkbox" class="autoPlanExcludeChk" title="Include in enqueue"
+            ${excluded ? '' : 'checked'}
+            onchange="toggleAutoPlanExclude('${esc(key)}', this.checked)">
+          <span class="batchPreviewItemName">${esc(vname)}</span>
+          <span class="batchPreviewItemTime">${esc(tStr)}</span>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="batchPreviewGroup">
+        <div class="batchPreviewGroupTitle">
+          ${esc(accName)}
+          <span class="autoScoreBadge" data-tier="${esc(scoreTier)}" title="${esc(scoreTooltip)}">Score ${esc(String(scoreNum))}</span>
+          <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:6px">${slotsLeft === '∞' ? 'unlimited' : `${slotsLeft} slot${slotsLeft !== 1 ? 's' : ''} left`}</span>
+        </div>
+        ${rows}
+      </div>`;
+  }).join('');
+
+  const safeWarnHtml = safetyWarnings.length ? `
+    <div class="batchSection">
+      <div class="batchSectionTitle batchSectionTitleWarn">Safety Warnings (${safetyWarnings.length})</div>
+      ${safetyWarnings.map((w) => `<div class="batchWarningItem">${esc(w)}</div>`).join('')}
+    </div>` : '';
+
+  const skippedHtml = skipped.length ? `
+    <div class="batchSection">
+      <div class="batchSectionTitle batchSectionTitleWarn">Skipped (${skipped.length})</div>
+      <div class="batchSkippedList">
+        ${skipped.map((s) => {
+          const video = uploadVideoLibraryItems.find((v) => String(v.video_id) === String(s.video_id));
+          const name = video ? (video.file_name || String(video.video_path || '').split(/[\\/]/).pop() || s.video_id) : s.video_id;
+          return `<div class="batchSkippedItem"><span>${esc(name)}</span><span class="batchSkipReason">${esc(s.reason)}</span></div>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  const confirmCount = activeAssignments.length;
+  return `
+    <div class="uploadModalHeader">
+      <div class="uploadModalTitle">Auto Plan — Review &amp; Confirm</div>
+      <button class="ghostButton uploadModalClose" type="button" onclick="closeAutoPlanModal()">×</button>
+    </div>
+    <div class="batchModalBody">
+      <div class="autoPlanPreviewNote">Review the auto-generated plan. Uncheck any item to exclude it from the queue. Click Confirm to enqueue.</div>
+      <div class="batchPreviewSummary" style="margin-top:8px">
+        <div class="batchPreviewStat batchPreviewStatOk">To enqueue: <strong>${confirmCount}</strong></div>
+        ${skipped.length ? `<div class="batchPreviewStat batchPreviewStatSkip">Skipped: <strong>${skipped.length}</strong></div>` : ''}
+        ${safetyWarnings.length ? `<div class="batchPreviewStat batchPreviewStatWarn">Warnings: <strong>${safetyWarnings.length}</strong></div>` : ''}
+      </div>
+      ${safeWarnHtml}
+      ${assignments.length ? `
+        <div class="batchSection">
+          <div class="batchSectionTitle">Assignments by Account</div>
+          <div class="batchPreviewGroups">${groupHtml}</div>
+        </div>` : '<div class="batchNoAccounts">No assignments computed. Check accounts, video library, and settings.</div>'}
+      ${skippedHtml}
+    </div>
+    <div class="batchModalFooter">
+      <button class="ghostButton" type="button" onclick="closeAutoPlanModal()">Cancel</button>
+      <button class="primaryButton" type="button" id="auto_plan_confirm_btn"
+        onclick="executeAutoPlanEnqueue()" ${confirmCount === 0 ? 'disabled' : ''}>
+        Confirm &amp; Enqueue ${confirmCount}
+      </button>
+    </div>`;
+}
+
+// --- FEATURE 2 + 4: EXECUTE AUTO PLAN ENQUEUE ---
+
+async function executeAutoPlanEnqueue(){
+  if(!_autoPlanData) return;
+  const btn = qs('auto_plan_confirm_btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Enqueuing…'; }
+
+  const active = (_autoPlanData.assignments || []).filter((a) => !_autoPlanExcluded.has(`${a.video_id}|${a.account_id}`));
+  const results = [];
+  for(const assignment of active){
+    try{
+      await createQueueItemFromAssignment(assignment);
+      results.push({ok: true});
+    }catch(err){
+      results.push({ok: false, error: err.message || String(err)});
+    }
+  }
+
+  const succeeded = results.filter((r) => r.ok).length;
+  const failed = results.filter((r) => !r.ok).length;
+  closeAutoPlanModal();
+
+  await loadUploadVideoLibrary();
+  await loadUploadQueueManager();
+  refreshUploadWorkspace('auto_plan_enqueued');
+  setUploadManagerTab('queue');
+
+  if(_autoSettings.autoStartScheduler){
+    try{ await fetch('/api/upload/scheduler/start', {method: 'POST'}); await loadUploadSchedulerStatus(); }catch(_){}
+  }
+
+  const msg = failed === 0
+    ? `Auto plan: ${succeeded} video${succeeded !== 1 ? 's' : ''} queued.`
+    : `Auto plan: ${succeeded} queued, ${failed} failed.`;
+  showToast(msg, failed === 0 ? 'success' : 'error');
+  renderAutomationDashboard();
+}
+
+// --- INIT ---
+
+function initAutomationPanel(){
+  loadAutomationSettings();
+  renderAutomationDashboard();
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', initAutomationPanel);
+}else{
+  initAutomationPanel();
 }

@@ -489,6 +489,7 @@
               <button class="primaryButton" type="button" onclick="startUploadScheduler()">Start Scheduler</button>
               <button class="ghostButton" type="button" onclick="stopUploadScheduler()">Stop Scheduler</button>
               <button class="ghostButton" type="button" onclick="runUploadSchedulerTick()">Tick Now</button>
+              <button class="ghostButton" type="button" id="retry_failed_btn_top" onclick="retryFailedUploads()">Retry Failed</button>
               <button class="ghostButton" type="button" onclick="refreshUploadWorkspace()">Refresh</button>
             </div>
           </div>
@@ -541,6 +542,7 @@
                 <button class="uploadManagerTab active" type="button" id="upload_tab_videos" onclick="setUploadManagerTab('videos')">Videos</button>
                 <button class="uploadManagerTab" type="button" id="upload_tab_queue" onclick="setUploadManagerTab('queue')">Uploads</button>
                 <button class="uploadManagerTab" type="button" id="upload_tab_settings" onclick="setUploadManagerTab('settings')">Settings</button>
+                <button class="uploadManagerTab" type="button" id="upload_tab_automation" onclick="setUploadManagerTab('automation')">Automation</button>
               </div>
               <div class="uploadVideoLibrary uploadManagerTabPanel active" id="upload_video_library" data-tab-panel="videos">
                 <div class="uvlHeader uvlPanelHeader">
@@ -636,6 +638,7 @@
                     <button class="primaryButton" type="button" onclick="startUploadScheduler()">Start Scheduler</button>
                     <button class="ghostButton" type="button" onclick="stopUploadScheduler()">Stop</button>
                     <button class="ghostButton" type="button" onclick="runUploadSchedulerTick()">Run Tick Now</button>
+                    <button class="ghostButton" type="button" id="retry_failed_btn" onclick="retryFailedUploads()">Retry Failed</button>
                   </div>
                 </div>
                 <div class="uploadSchedulerBlocked" id="upload_scheduler_blocked">Blocked reasons will appear here.</div>
@@ -690,6 +693,56 @@
                 </div>
                 <div class="uploadSettingsBody" id="upload_settings_body">
                   <div class="uploadInspectorPlaceholder">Select an account to view upload settings.</div>
+                </div>
+              </div>
+
+              <!-- ── Automation Tab Panel ─────────────────────────────── -->
+              <div class="uploadAutomationPanel uploadManagerTabPanel" id="upload_automation_panel" data-tab-panel="automation">
+                <!-- Dashboard -->
+                <div class="uamFormSection" style="margin-top:8px">
+                  <div class="uamFormSectionTitle">Automation Dashboard</div>
+                  <div class="autoDashboard">
+                    <div class="autoDashCard"><div class="autoDashLabel">Ready Videos</div><div class="autoDashValue" id="auto_dash_ready" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">Eligible Accounts</div><div class="autoDashValue" id="auto_dash_accounts" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">Est. Uploads Today</div><div class="autoDashValue" id="auto_dash_est" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">Risky Excluded</div><div class="autoDashValue" id="auto_dash_risky" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">Next Slot</div><div class="autoDashValueSm" id="auto_dash_next" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">Quota Remaining</div><div class="autoDashValue" id="auto_dash_quota" data-state="none">–</div></div>
+                  </div>
+                </div>
+                <!-- Settings -->
+                <div class="autoSettingsSection">
+                  <div class="autoSettingsTitle">Behavior</div>
+                  <div class="autoToggleGroup">
+                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_exclude_risky" onchange="saveAutomationSettings()"> Exclude risky accounts <span class="fieldOptional">(recommended)</span></label>
+                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_respect_limit" onchange="saveAutomationSettings()"> Respect daily upload limits</label>
+                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_respect_cooldown" onchange="saveAutomationSettings()"> Respect account cooldowns</label>
+                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_jitter" onchange="saveAutomationSettings()"> Add random delay jitter to scheduled times</label>
+                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_auto_start" onchange="saveAutomationSettings()"> Auto-start scheduler after enqueue</label>
+                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_accept_render" onchange="saveAutomationSettings()"> Accept render outputs into Upload Library <span class="fieldOptional">(experimental)</span></label>
+                  </div>
+                </div>
+                <div class="autoSettingsSection">
+                  <div class="autoSettingsTitle">Schedule Timing</div>
+                  <div class="autoInputGrid">
+                    <div class="autoInputRow">
+                      <span class="autoInputLabel">Base spacing (min)</span>
+                      <input class="fieldInput" type="number" id="auto_set_base_spacing" value="30" min="5" max="480" onchange="saveAutomationSettings()">
+                    </div>
+                    <div class="autoInputRow">
+                      <span class="autoInputLabel">Jitter range (±min)</span>
+                      <input class="fieldInput" type="number" id="auto_set_jitter_min" value="5" min="0" max="60" onchange="saveAutomationSettings()">
+                    </div>
+                    <div class="autoInputRow">
+                      <span class="autoInputLabel">Max uploads/account/day</span>
+                      <input class="fieldInput" type="number" id="auto_set_max_per_day" value="5" min="1" max="50" onchange="saveAutomationSettings()">
+                    </div>
+                  </div>
+                </div>
+                <!-- Action -->
+                <div class="autoActions">
+                  <button class="primaryButton" type="button" onclick="autoPlanReadyVideos()">Auto Plan Ready Videos</button>
+                  <button class="ghostButton" type="button" onclick="renderAutomationDashboard()">Refresh</button>
                 </div>
               </div>
             </div>
@@ -747,6 +800,13 @@
             <div class="uploadModalBackdrop" onclick="closeBatchAssignModal()"></div>
             <div class="uploadModalPanel batchAssignPanel" id="batch_assign_modal_panel">
               <!-- Rendered by _renderBatchModalContent() -->
+            </div>
+          </div>
+          <!-- ── Auto Plan Modal ───────────────────────────────── -->
+          <div id="auto_plan_modal" class="uploadModal" hidden>
+            <div class="uploadModalBackdrop" onclick="closeAutoPlanModal()"></div>
+            <div class="uploadModalPanel batchAssignPanel" id="auto_plan_modal_panel">
+              <!-- Rendered by _renderAutoPlanModal() -->
             </div>
           </div>
           <!-- ── Account Form Modal ─────────────────────────────── -->
