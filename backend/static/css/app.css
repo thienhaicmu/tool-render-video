@@ -13033,3 +13033,76 @@ body.is-history-active #history_list {
   opacity: .35;
   text-decoration: line-through;
 }
+
+/* Phase 7: Grouped safety warnings */
+.autoWarnGroup { margin-bottom: 8px; }
+.autoWarnGroup:last-child { margin-bottom: 0; }
+.autoWarnGroupLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 4px;
+  padding: 0 2px;
+}
+.autoWarnGroupLabel.critical { color: #fca5a5; }
+.autoWarnGroupLabel.warnings { color: #fcd34d; }
+
+/* Phase 7: Audit log */
+.auditLogPanel {
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.auditLogToggle {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+.auditLogToggle:hover { color: var(--text); }
+.auditLogToggleArrow { font-size: 10px; transition: transform .15s; }
+.auditLogToggle[aria-expanded="true"] .auditLogToggleArrow { transform: rotate(90deg); }
+.auditLogList {
+  max-height: 180px;
+  overflow-y: auto;
+  border-top: 1px solid var(--card-border);
+}
+.auditLogEntry {
+  display: flex;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(255,255,255,.03);
+}
+.auditLogEntry:last-child { border-bottom: none; }
+.auditLogTime { color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
+.auditLogAction { color: var(--text); }
+
+/* Phase 7: Proxy pool placeholder */
+.autoProxyPlaceholder {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: rgba(255,255,255,.03);
+  border: 1px dashed var(--card-border);
+  border-radius: 7px;
+  padding: 10px 14px;
+  text-align: center;
+}
+
+/* Phase 7: Posting window note */
+.autoInputNote {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}

@@ -718,6 +718,7 @@
                     <label class="autoToggleRow"><input type="checkbox" id="auto_set_respect_limit" onchange="saveAutomationSettings()"> Respect daily upload limits</label>
                     <label class="autoToggleRow"><input type="checkbox" id="auto_set_respect_cooldown" onchange="saveAutomationSettings()"> Respect account cooldowns</label>
                     <label class="autoToggleRow"><input type="checkbox" id="auto_set_jitter" onchange="saveAutomationSettings()"> Add random delay jitter to scheduled times</label>
+                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_posting_window" onchange="saveAutomationSettings()"> Restrict uploads to posting window <span class="fieldOptional">(local time)</span></label>
                     <label class="autoToggleRow"><input type="checkbox" id="auto_set_auto_start" onchange="saveAutomationSettings()"> Auto-start scheduler after enqueue</label>
                     <label class="autoToggleRow"><input type="checkbox" id="auto_set_accept_render" onchange="saveAutomationSettings()"> Accept render outputs into Upload Library <span class="fieldOptional">(experimental)</span></label>
                   </div>
@@ -737,12 +738,36 @@
                       <span class="autoInputLabel">Max uploads/account/day</span>
                       <input class="fieldInput" type="number" id="auto_set_max_per_day" value="5" min="1" max="50" onchange="saveAutomationSettings()">
                     </div>
+                    <div class="autoInputRow">
+                      <span class="autoInputLabel">Window start</span>
+                      <input class="fieldInput" type="time" id="auto_set_window_start" value="08:00" onchange="saveAutomationSettings()">
+                    </div>
+                    <div class="autoInputRow">
+                      <span class="autoInputLabel">Window end</span>
+                      <input class="fieldInput" type="time" id="auto_set_window_end" value="23:00" onchange="saveAutomationSettings()">
+                      <span class="autoInputNote">Uses local machine time</span>
+                    </div>
                   </div>
+                </div>
+                <!-- Proxy Pool -->
+                <div class="autoSettingsSection">
+                  <div class="autoSettingsTitle">Proxy Pool <span class="fieldOptional">(Planned)</span></div>
+                  <div class="autoProxyPlaceholder">Proxy pool management will be available in a future release. Assign proxies per-account in Account Settings.</div>
                 </div>
                 <!-- Action -->
                 <div class="autoActions">
                   <button class="primaryButton" type="button" onclick="autoPlanReadyVideos()">Auto Plan Ready Videos</button>
                   <button class="ghostButton" type="button" onclick="renderAutomationDashboard()">Refresh</button>
+                  <button class="ghostButton" type="button" onclick="clearAuditLog()">Clear Log</button>
+                </div>
+                <!-- Recent Activity -->
+                <div class="autoSettingsSection" style="margin-top:4px">
+                  <div class="auditLogPanel">
+                    <button class="auditLogToggle" type="button" aria-expanded="false" onclick="toggleAuditLogPanel(this)">
+                      Recent Activity <span class="auditLogToggleArrow">▶</span>
+                    </button>
+                    <div class="auditLogList" id="audit_log_list" hidden></div>
+                  </div>
                 </div>
               </div>
             </div>

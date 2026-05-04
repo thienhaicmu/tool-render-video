@@ -1339,6 +1339,7 @@ async function testProxyConfig() {
       if (data.latency_ms) parts.push(`${data.latency_ms}ms`);
       if (data.ip) parts.push(`IP: ${data.ip}`);
       if (resultEl) { resultEl.textContent = parts.join(' · '); resultEl.className = 'uamProxyTestResult ok'; }
+      _auditLog('Proxy test OK', `${host}${data.ip ? ` → ${data.ip}` : ''}`);
     } else {
       if (resultEl) { resultEl.textContent = `✗ ${data.error || 'Failed'}`; resultEl.className = 'uamProxyTestResult fail'; }
     }
@@ -1901,6 +1902,7 @@ async function saveUploadAccount(event){
     resetUploadAccountForm();
     closeUploadAccountModal();
     await loadUploadAccounts();
+    _auditLog(accountId ? 'Account updated' : 'Account added', payload.account_key || payload.display_name || accountId || '');
     showToast(accountId ? 'Account updated' : 'Account added', 'success');
   }catch(e){
     showToast(`Account save failed: ${e.message || e}`, 'error');
@@ -1924,6 +1926,7 @@ async function saveUploadVideo(event){
     resetUploadVideoForm();
     _setEditorOpen('uvl_editor', false);
     await loadUploadVideoLibrary();
+    _auditLog(videoId ? 'Video updated' : 'Video added', payload.file_name || String(payload.video_path || '').split(/[\\/]/).pop() || videoId || '');
     showToast(videoId ? 'Video updated' : 'Video added', 'success');
   }catch(e){
     showToast(`Video save failed: ${e.message || e}`, 'error');
@@ -2133,6 +2136,7 @@ async function startUploadScheduler(){
     const res = await fetch('/api/upload/scheduler/start', {method: 'POST'});
     const data = await res.json();
     if(!res.ok) throw new Error(_formatApiError(data.detail));
+    _auditLog('Scheduler started');
     showToast('Scheduler started', 'success');
     await loadUploadSchedulerStatus();
     await loadUploadQueueManager();
@@ -2146,6 +2150,7 @@ async function stopUploadScheduler(){
     const res = await fetch('/api/upload/scheduler/stop', {method: 'POST'});
     const data = await res.json();
     if(!res.ok) throw new Error(_formatApiError(data.detail));
+    _auditLog('Scheduler stopped');
     showToast('Scheduler stopped', 'success');
     await loadUploadSchedulerStatus();
   }catch(e){
@@ -2163,6 +2168,7 @@ async function retryFailedUploads(){
     const data = await res.json();
     if(!res.ok) throw new Error(_formatApiError(data.detail));
     const count = Number(data.reset_count || 0);
+    if(count > 0) _auditLog('Retry failed uploads', `${count} item${count === 1 ? '' : 's'} reset`);
     showToast(count > 0 ? `${count} failed item${count === 1 ? '' : 's'} reset to pending` : 'No retryable failed items found', count > 0 ? 'success' : 'info');
     await loadUploadQueueManager();
     await loadUploadSchedulerStatus();
@@ -2448,7 +2454,7 @@ function computeBatchAssignments(videoIds, accountIds, options){
     const dailyLimit = Number(acc.daily_limit || 0);
     const todayCount = Number(acc.today_count || 0);
     const remaining = dailyLimit > 0 ? Math.max(0, dailyLimit - todayCount) : Infinity;
-    const cooldownMs = Number(acc.cooldown_minutes || 0) * 60 * 1000;
+    const cooldownMs = options.ignoreCooldown ? 0 : Number(acc.cooldown_minutes || 0) * 60 * 1000;
     accountState[acc.account_id] = {
       remaining,
       nextMs: now + cooldownMs,
@@ -2677,6 +2683,7 @@ async function executeBatchEnqueue(){
   await loadUploadQueueManager();
   refreshUploadWorkspace('batch_enqueued');
   setUploadManagerTab('queue');
+  _auditLog('Batch enqueue', `${succeeded} queued${totalSkipped > 0 ? `, ${totalSkipped} skipped` : ''}${failed > 0 ? `, ${failed} failed` : ''}`);
   if(failed === 0){
     showToast(`${succeeded} video${succeeded !== 1 ? 's' : ''} added to queue.${totalSkipped > 0 ? ` ${totalSkipped} skipped.` : ''}`, 'success');
   }else{
@@ -2700,6 +2707,9 @@ const _AUTO_DEFAULTS = {
   jitterMinutes: 5,
   maxPerAccountPerDay: 5,
   acceptRenderOutputs: false,
+  postingWindowEnabled: false,
+  postingWindowStart: '08:00',
+  postingWindowEnd: '23:00',
 };
 let _autoSettings = {..._AUTO_DEFAULTS};
 let _autoPlanData = null;
@@ -2720,15 +2730,18 @@ function saveAutomationSettings(){
 }
 
 function _applyAutoSettingsToUi(){
-  _setChk('auto_set_exclude_risky',     _autoSettings.excludeRisky);
-  _setChk('auto_set_respect_limit',     _autoSettings.respectDailyLimit);
-  _setChk('auto_set_respect_cooldown',  _autoSettings.respectCooldown);
-  _setChk('auto_set_jitter',            _autoSettings.jitterEnabled);
-  _setChk('auto_set_auto_start',        _autoSettings.autoStartScheduler);
-  _setChk('auto_set_accept_render',     _autoSettings.acceptRenderOutputs);
-  _setVal('auto_set_base_spacing',      _autoSettings.baseSpacingMinutes);
-  _setVal('auto_set_jitter_min',        _autoSettings.jitterMinutes);
-  _setVal('auto_set_max_per_day',       _autoSettings.maxPerAccountPerDay);
+  _setChk('auto_set_exclude_risky',      _autoSettings.excludeRisky);
+  _setChk('auto_set_respect_limit',      _autoSettings.respectDailyLimit);
+  _setChk('auto_set_respect_cooldown',   _autoSettings.respectCooldown);
+  _setChk('auto_set_jitter',             _autoSettings.jitterEnabled);
+  _setChk('auto_set_posting_window',     _autoSettings.postingWindowEnabled);
+  _setChk('auto_set_auto_start',         _autoSettings.autoStartScheduler);
+  _setChk('auto_set_accept_render',      _autoSettings.acceptRenderOutputs);
+  _setVal('auto_set_base_spacing',       _autoSettings.baseSpacingMinutes);
+  _setVal('auto_set_jitter_min',         _autoSettings.jitterMinutes);
+  _setVal('auto_set_max_per_day',        _autoSettings.maxPerAccountPerDay);
+  _setVal('auto_set_window_start',       _autoSettings.postingWindowStart);
+  _setVal('auto_set_window_end',         _autoSettings.postingWindowEnd);
 }
 
 function _readAutoSettingsFromUi(){
@@ -2736,11 +2749,14 @@ function _readAutoSettingsFromUi(){
   _autoSettings.respectDailyLimit     = _getChk('auto_set_respect_limit');
   _autoSettings.respectCooldown       = _getChk('auto_set_respect_cooldown');
   _autoSettings.jitterEnabled         = _getChk('auto_set_jitter');
+  _autoSettings.postingWindowEnabled  = _getChk('auto_set_posting_window');
   _autoSettings.autoStartScheduler    = _getChk('auto_set_auto_start');
   _autoSettings.acceptRenderOutputs   = _getChk('auto_set_accept_render');
   _autoSettings.baseSpacingMinutes    = Math.max(1,  parseInt(_getVal('auto_set_base_spacing'), 10) || 30);
   _autoSettings.jitterMinutes         = Math.max(0,  parseInt(_getVal('auto_set_jitter_min'),   10) || 5);
   _autoSettings.maxPerAccountPerDay   = Math.max(1,  parseInt(_getVal('auto_set_max_per_day'),  10) || 5);
+  _autoSettings.postingWindowStart    = _getVal('auto_set_window_start') || '08:00';
+  _autoSettings.postingWindowEnd      = _getVal('auto_set_window_end')   || '23:00';
 }
 
 function _getChk(id){ const el = qs(id); return el ? el.checked : false; }
@@ -2854,7 +2870,11 @@ function computeAutoAssignments(){
     .map((a) => a.account_id);
 
   const videoIds = videos.map((v) => v.video_id);
-  const result = computeBatchAssignments(videoIds, sortedIds, {mode: 'smart', spaceMinutes: _autoSettings.baseSpacingMinutes});
+  const result = computeBatchAssignments(videoIds, sortedIds, {
+    mode: 'smart',
+    spaceMinutes: _autoSettings.baseSpacingMinutes,
+    ignoreCooldown: !_autoSettings.respectCooldown,
+  });
 
   if(_autoSettings.jitterEnabled && _autoSettings.jitterMinutes > 0){
     const jMs = _autoSettings.jitterMinutes * 60 * 1000;
@@ -2867,27 +2887,37 @@ function computeAutoAssignments(){
     });
   }
 
+  if(_autoSettings.postingWindowEnabled){
+    result.assignments.forEach((a) => {
+      if(a.scheduled_at) a.scheduled_at = _applyPostingWindow(a.scheduled_at);
+    });
+  }
+
+  if(!_autoSettings.respectCooldown){
+    const cooldownAccounts = accounts.filter((a) => Number(a.cooldown_minutes || 0) > 0);
+    cooldownAccounts.forEach((a) => {
+      result.warnings.push(`Cooldown ignored for @${a.display_name || a.account_key || a.account_id}`);
+    });
+  }
+
   return {...result, scores};
 }
 
 // --- FEATURE 7: SAFETY WARNINGS ---
 
 function _autoSafetyWarnings(assignments, accounts){
+  const critical = [];
   const warnings = [];
-  if(!accounts.length) return ['No eligible accounts — check account status and automation settings.'];
-
-  const healthyCount = accounts.filter((a) => _computeAccountHealth(a).status === 'healthy').length;
-  if(healthyCount === 0) warnings.push('No healthy accounts in plan — all eligible accounts are in warning or risky state.');
-
-  if(_autoSettings.baseSpacingMinutes < 15) warnings.push(`Schedule spacing is ${_autoSettings.baseSpacingMinutes}m — below the 15-minute safe minimum may trigger rate limits.`);
-
-  if(!_autoSettings.excludeRisky){
-    const riskyCount = accounts.filter((a) => _computeAccountHealth(a).status === 'risky').length;
-    if(riskyCount > 0) warnings.push(`${riskyCount} risky account(s) included in this plan. Review carefully before confirming.`);
+  if(!accounts.length){
+    critical.push('No eligible accounts — check account status and automation settings.');
+    return {critical, warnings};
   }
 
+  const healthyCount = accounts.filter((a) => _computeAccountHealth(a).status === 'healthy').length;
+  if(healthyCount === 0) critical.push('No healthy accounts in plan — all eligible accounts are in warning or risky state.');
+
   const proxyFailed = accounts.filter((a) => _computeAccountHealth(a).proxy_status === 'failed');
-  if(proxyFailed.length) warnings.push(`${proxyFailed.length} account(s) have proxy failures — uploads may fail.`);
+  if(proxyFailed.length) critical.push(`${proxyFailed.length} account(s) have proxy failures — uploads may fail.`);
 
   const conflicts = accounts.filter((a) => {
     const norm = normalizeProfilePath(String(a.profile_path || ''));
@@ -2896,7 +2926,14 @@ function _autoSafetyWarnings(assignments, accounts){
       String(b.account_id) !== String(a.account_id) && normalizeProfilePath(String(b.profile_path || '')) === norm
     );
   });
-  if(conflicts.length) warnings.push(`${conflicts.length} account(s) have profile path conflicts — isolation may be broken.`);
+  if(conflicts.length) critical.push(`${conflicts.length} account(s) have profile path conflicts — isolation may be broken.`);
+
+  if(_autoSettings.baseSpacingMinutes < 15) warnings.push(`Schedule spacing is ${_autoSettings.baseSpacingMinutes}m — below the 15-minute safe minimum may trigger rate limits.`);
+
+  if(!_autoSettings.excludeRisky){
+    const riskyCount = accounts.filter((a) => _computeAccountHealth(a).status === 'risky').length;
+    if(riskyCount > 0) warnings.push(`${riskyCount} risky account(s) included in this plan. Review carefully before confirming.`);
+  }
 
   const totalQuota = accounts.reduce((s, acc) => {
     const dl = Number(acc.daily_limit || 0);
@@ -2906,8 +2943,15 @@ function _autoSafetyWarnings(assignments, accounts){
   const readyCount = _autoReadyVideos().length;
   if(readyCount > totalQuota * 1.5) warnings.push(`${readyCount} ready videos but only ~${totalQuota} quota slots — many will be skipped.`);
 
+  if(!_autoSettings.respectCooldown){
+    const cooldownAccts = accounts.filter((a) => Number(a.cooldown_minutes || 0) > 0);
+    if(cooldownAccts.length) warnings.push(`Cooldown bypassed for ${cooldownAccts.length} account(s) — may hit platform rate limits.`);
+  }
+
+  if(!_autoSettings.postingWindowEnabled) warnings.push('Posting window is disabled — uploads may be scheduled outside safe hours.');
+
   warnings.push(..._batchAggressiveWarning(assignments));
-  return warnings;
+  return {critical, warnings};
 }
 
 // --- FEATURE 6: AUTOMATION DASHBOARD ---
@@ -2929,11 +2973,13 @@ function renderAutomationDashboard(){
 
   const estUploads = Math.min(ready.length, totalQuota);
 
-  const minCooldownMs = eligible.reduce((min, acc) => {
-    const cm = Number(acc.cooldown_minutes || 0) * 60000;
-    return Math.min(min, cm);
-  }, Infinity);
-  const nextSlotMs = Date.now() + (isFinite(minCooldownMs) ? minCooldownMs : 0) + _autoSettings.baseSpacingMinutes * 60000;
+  const eligibleIds = new Set(eligible.map((a) => String(a.account_id)));
+  const latestQueuedMs = uploadQueueManagerItems
+    .filter((q) => eligibleIds.has(String(q.account_id)) &&
+      !['cancelled', 'success', 'failed'].includes(String(q.status || '').toLowerCase()) &&
+      q.scheduled_at)
+    .reduce((max, q) => Math.max(max, new Date(q.scheduled_at).getTime()), 0);
+  const nextSlotMs = Math.max(latestQueuedMs, Date.now()) + _autoSettings.baseSpacingMinutes * 60000;
   const nextSlotStr = eligible.length > 0
     ? new Date(nextSlotMs).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
     : '–';
@@ -2966,6 +3012,7 @@ function autoPlanReadyVideos(){
   const warnings = _autoSafetyWarnings(result.assignments, accounts);
   _autoPlanData = {...result, safetyWarnings: warnings};
   _autoPlanExcluded = new Set();
+  _auditLog('Auto plan generated', `${result.assignments.length} assignments, ${videos.length} videos, ${accounts.length} accounts`);
 
   const modal = document.getElementById('auto_plan_modal');
   if(modal){ modal.hidden = false; _renderAutoPlanModal(); }
@@ -3041,10 +3088,14 @@ function _buildAutoPlanPreviewHtml(result){
       </div>`;
   }).join('');
 
-  const safeWarnHtml = safetyWarnings.length ? `
+  const swCritical = Array.isArray(safetyWarnings) ? [] : (safetyWarnings.critical || []);
+  const swWarnings = Array.isArray(safetyWarnings) ? safetyWarnings : (safetyWarnings.warnings || []);
+  const totalWarnCount = swCritical.length + swWarnings.length;
+  const safeWarnHtml = totalWarnCount > 0 ? `
     <div class="batchSection">
-      <div class="batchSectionTitle batchSectionTitleWarn">Safety Warnings (${safetyWarnings.length})</div>
-      ${safetyWarnings.map((w) => `<div class="batchWarningItem">${esc(w)}</div>`).join('')}
+      <div class="batchSectionTitle batchSectionTitleWarn">Safety Warnings (${totalWarnCount})</div>
+      ${swCritical.length ? `<div class="autoWarnGroup"><div class="autoWarnGroupLabel critical">Critical (${swCritical.length})</div>${swCritical.map((w) => `<div class="batchWarningItem">${esc(w)}</div>`).join('')}</div>` : ''}
+      ${swWarnings.length ? `<div class="autoWarnGroup"><div class="autoWarnGroupLabel warnings">Warnings (${swWarnings.length})</div>${swWarnings.map((w) => `<div class="batchWarningItem">${esc(w)}</div>`).join('')}</div>` : ''}
     </div>` : '';
 
   const skippedHtml = skipped.length ? `
@@ -3070,7 +3121,7 @@ function _buildAutoPlanPreviewHtml(result){
       <div class="batchPreviewSummary" style="margin-top:8px">
         <div class="batchPreviewStat batchPreviewStatOk">To enqueue: <strong>${confirmCount}</strong></div>
         ${skipped.length ? `<div class="batchPreviewStat batchPreviewStatSkip">Skipped: <strong>${skipped.length}</strong></div>` : ''}
-        ${safetyWarnings.length ? `<div class="batchPreviewStat batchPreviewStatWarn">Warnings: <strong>${safetyWarnings.length}</strong></div>` : ''}
+        ${totalWarnCount ? `<div class="batchPreviewStat batchPreviewStatWarn">Warnings: <strong>${totalWarnCount}</strong>${swCritical.length ? ` (${swCritical.length} critical)` : ''}</div>` : ''}
       </div>
       ${safeWarnHtml}
       ${assignments.length ? `
@@ -3120,11 +3171,88 @@ async function executeAutoPlanEnqueue(){
     try{ await fetch('/api/upload/scheduler/start', {method: 'POST'}); await loadUploadSchedulerStatus(); }catch(_){}
   }
 
+  _auditLog('Auto plan enqueued', `${succeeded} queued${failed > 0 ? `, ${failed} failed` : ''}`);
   const msg = failed === 0
     ? `Auto plan: ${succeeded} video${succeeded !== 1 ? 's' : ''} queued.`
     : `Auto plan: ${succeeded} queued, ${failed} failed.`;
   showToast(msg, failed === 0 ? 'success' : 'error');
   renderAutomationDashboard();
+}
+
+// --- FEATURE 4: POSTING WINDOW ---
+
+function _applyPostingWindow(isoStr){
+  if(!_autoSettings.postingWindowEnabled) return isoStr;
+  const start = String(_autoSettings.postingWindowStart || '08:00');
+  const end   = String(_autoSettings.postingWindowEnd   || '23:00');
+  const [sH, sM] = start.split(':').map(Number);
+  const [eH, eM] = end.split(':').map(Number);
+  const dt = new Date(isoStr);
+  const curMin = dt.getHours() * 60 + dt.getMinutes();
+  const startMin = sH * 60 + sM;
+  const endMin   = eH * 60 + eM;
+  if(curMin >= startMin && curMin < endMin) return isoStr;
+  if(curMin < startMin){
+    dt.setHours(sH, sM, 0, 0);
+  }else{
+    dt.setDate(dt.getDate() + 1);
+    dt.setHours(sH, sM, 0, 0);
+  }
+  return dt.toISOString();
+}
+
+// --- PHASE 7: AUDIT LOG ---
+
+const _AUDIT_LOG_KEY = 'uploadAuditLog';
+const _AUDIT_MAX_ENTRIES = 100;
+
+function _auditLog(action, detail){
+  const entry = {ts: new Date().toISOString(), action, detail: detail || ''};
+  try{
+    const raw = localStorage.getItem(_AUDIT_LOG_KEY);
+    const entries = raw ? JSON.parse(raw) : [];
+    entries.unshift(entry);
+    if(entries.length > _AUDIT_MAX_ENTRIES) entries.length = _AUDIT_MAX_ENTRIES;
+    localStorage.setItem(_AUDIT_LOG_KEY, JSON.stringify(entries));
+  }catch(_){}
+}
+
+function _auditGetEntries(){
+  try{
+    const raw = localStorage.getItem(_AUDIT_LOG_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(_){ return []; }
+}
+
+function renderAuditLog(){
+  const panel = qs('audit_log_list');
+  if(!panel) return;
+  const entries = _auditGetEntries();
+  if(!entries.length){
+    panel.innerHTML = '<div class="auditLogEntry"><span class="auditLogTime">–</span><span class="auditLogAction">No activity yet.</span></div>';
+    return;
+  }
+  panel.innerHTML = entries.slice(0, 30).map((e) => {
+    const d = new Date(e.ts);
+    const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    const dateStr = d.toLocaleDateString([], {month: 'short', day: 'numeric'});
+    return `<div class="auditLogEntry"><span class="auditLogTime">${esc(dateStr)} ${esc(t)}</span><span class="auditLogAction">${esc(e.action)}${e.detail ? ` — ${esc(e.detail)}` : ''}</span></div>`;
+  }).join('');
+}
+
+function toggleAuditLogPanel(btn){
+  const list = document.getElementById('audit_log_list');
+  if(!list) return;
+  const expanded = btn.getAttribute('aria-expanded') === 'true';
+  btn.setAttribute('aria-expanded', String(!expanded));
+  list.hidden = expanded;
+  if(!expanded) renderAuditLog();
+}
+
+function clearAuditLog(){
+  try{ localStorage.removeItem(_AUDIT_LOG_KEY); }catch(_){}
+  renderAuditLog();
+  showToast('Activity log cleared', 'info');
 }
 
 // --- INIT ---
@@ -3139,3 +3267,20 @@ if(document.readyState === 'loading'){
 }else{
   initAutomationPanel();
 }
+
+// --- PHASE 7: DEBUG STATE HELPER ---
+
+window.__uploadDebugState = function(){
+  return {
+    uploadAccountManagerItems,
+    uploadVideoLibraryItems,
+    uploadQueueManagerItems,
+    _autoSettings,
+    _autoPlanData,
+    _autoPlanExcluded: [..._autoPlanExcluded],
+    _cachedSchedulerData,
+    selectedUploadVideoIds: [...selectedUploadVideoIds],
+    _batchPreviewData,
+    auditLog: _auditGetEntries(),
+  };
+};
