@@ -182,6 +182,11 @@ function _detailSection(label, value, pre){
     </div>
   `;
 }
+function _collapsedDetailSection(label, value){
+  const raw = _prettyJson(value);
+  if(!raw || raw === '{}' || raw === 'null' || raw === '') return '';
+  return `<details class="rawDebugDetails"><summary>${esc(label)}</summary><pre>${esc(raw)}</pre></details>`;
+}
 function _rowMoreMenu(label, actionsHtml){
   return `
     <details class="rowActionMenu" onclick="event.stopPropagation()">
@@ -998,7 +1003,7 @@ function renderUploadInspector(){
         </div>
         ${_detailSection('Profile Path', account.profile_path || '-', false)}
         ${_detailSection('Proxy', account.proxy_id || '-', false)}
-        ${_detailSection('Health', _prettyJson(account.health_json || {}), true)}
+        ${_collapsedDetailSection('Health JSON', account.health_json || {})}
       `
       : '<div class="uploadInspectorPlaceholder">Select an account, video, or upload item to inspect details.</div>';
     return;
@@ -1022,7 +1027,7 @@ function renderUploadInspector(){
       ${_detailSection('Profile Path', item.profile_path || '-', false)}
       ${_detailSection('Profile', accountHasActiveUpload(item.account_id) ? 'Locked' : (item.profile_conflict ? 'Conflict' : 'Isolated'), false)}
       ${item.profile_conflict ? _detailSection('Profile Conflict', _uamConflictText(item), false) : ''}
-      ${_detailSection('Health JSON', _prettyJson(item.health_json || {}), true)}
+      ${_collapsedDetailSection('Health JSON', item.health_json || {})}
     `;
     return;
   }
@@ -2119,25 +2124,35 @@ function renderSimpleSummary(){
   const el   = qs('spSummary');
   const next = qs('spNextStep');
   if(!el || !next) return;
-  if(!acc){
-    el.innerHTML   = 'No account yet';
-    next.innerHTML = '→ Click + Add Account to start.';
+  if(!uploadAccountManagerItems.length){
+    el.innerHTML   = 'No account yet.';
+    next.innerHTML = 'Add or select an account.';
     return;
   }
-  el.innerHTML = `
-    <b>${esc(acc.display_name || acc.account_key || acc.account_id)}</b><br>
-    Login: ${esc(acc.login_state || 'unknown')}<br>
-    Proxy: ${acc.proxy_id ? 'OK' : 'None'}<br>
-    Today: ${Number(acc.today_count || 0)} / ${Number(acc.daily_limit || 0) || '–'}
-  `;
+  if(!acc){
+    el.innerHTML   = 'Select an account to begin.';
+    next.innerHTML = 'Add or select an account.';
+    return;
+  }
+  const _loginLabels = {logged_in:'Logged in', logged_out:'Need login', expired:'Expired', challenge:'Action required', unknown:'Need login'};
+  const loginLabel = _loginLabels[acc.login_state] || 'Need login';
+  const platform = acc.platform || 'tiktok';
+  const todayCount = Number(acc.today_count || 0);
+  const dailyLimit = Number(acc.daily_limit || 0) || '-';
+  el.innerHTML = `<b>${esc(acc.display_name || acc.account_key || acc.account_id)}</b> · ${esc(platform)} · ${esc(loginLabel)} · Today ${todayCount}/${dailyLimit}`;
+  if(__loginCheckHint && __loginCheckHint.accountId === String(acc.account_id)){
+    const _hintMsgs = {PLAYWRIGHT_BROWSER_MISSING:'Login check tool not installed.', PROFILE_IN_USE:'Close the browser profile, then check again.'};
+    next.innerHTML = esc(_hintMsgs[__loginCheckHint.errorCode] || 'Login check unavailable.');
+    return;
+  }
   if(!acc.profile_path){
-    next.innerHTML = 'Next: Set profile path';
+    next.innerHTML = 'Set profile folder.';
   }else if(acc.login_state !== 'logged_in'){
-    next.innerHTML = 'Next: Open Profile → Login';
+    next.innerHTML = 'Open Profile, log in, then Check Login.';
   }else if(!uploadVideoLibraryItems.length){
-    next.innerHTML = '→ Add a video to begin.';
+    next.innerHTML = 'Add a video.';
   }else{
-    next.innerHTML = 'Ready: Auto Plan or Start Upload';
+    next.innerHTML = 'Auto Plan or Start Upload.';
   }
 }
 

@@ -14313,3 +14313,67 @@ body.is-history-active #history_list {
   border-color: #4f7cff !important;
   box-shadow: 0 0 0 1px rgba(79,124,255,.45), 0 10px 24px rgba(0,0,0,.18) !important;
 }
+
+/* ── Solo Mode Reset (UI reset — verified selectors 2026-05-04) ─────────── */
+
+/* TASK 1: Hide old workspace shell — #uploadSimplePanel is the only center hero */
+.uploadSoloMode #upload_account_workspace_shell {
+  display: none !important;
+}
+
+/* TASK 5: Legacy upload wizard — safe no-op guard */
+.uploadSoloMode #legacyUploadWizard,
+.uploadSoloMode .legacyUploadWizard,
+.uploadSoloMode [data-section="legacy-upload-wizard"] {
+  display: none !important;
+}
+
+/* TASK 6: Hide Settings and Automation tab buttons in Solo Mode */
+.uploadSoloMode #upload_tab_settings,
+.uploadSoloMode #upload_tab_automation {
+  display: none !important;
+}
+/* Also hide their panels so active-state never shows them */
+.uploadSoloMode #upload_settings_panel,
+.uploadSoloMode #upload_automation_panel {
+  display: none !important;
+}
+
+/* TASK 7: rawDebugDetails — collapsible raw JSON in inspector */
+.rawDebugDetails {
+  margin-top: 8px;
+  opacity: .75;
+}
+.rawDebugDetails summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: rgba(235,241,255,.55);
+  user-select: none;
+}
+.rawDebugDetails pre {
+  white-space: pre-wrap;
+  max-height: 140px;
+  overflow: auto;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+/* TASK 7: Final Solo Mode panel polish */
+.uploadSoloMode #uploadSimplePanel.uploadHero {
+  margin: 8px 0 14px !important;
+  padding: 14px !important;
+  border-radius: 14px !important;
+  background: rgba(10,16,30,.92) !important;
+  border: 1px solid rgba(90,130,220,.28) !important;
+  box-shadow: 0 10px 26px rgba(0,0,0,.22) !important;
+}
+
+.uploadSoloMode #spNextStep {
+  margin-top: 10px !important;
+  padding: 9px 10px !important;
+  border-radius: 9px !important;
+  background: rgba(245,158,11,.1) !important;
+  border: 1px solid rgba(245,158,11,.22) !important;
+  color: #ffd38a !important;
+  font-weight: 600 !important;
+}
