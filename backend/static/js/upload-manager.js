@@ -2119,6 +2119,83 @@ function bindSimpleActions(){
   qs('spStartUpload').onclick = () => startUploadScheduler?.();
 }
 
+function getUploadWizardState() {
+  const acc = _getSelectedAccount?.();
+  const readyVideos = (uploadVideoLibraryItems || []).filter(v =>
+    String(v.status || '').toLowerCase() === 'ready' && (v.video_path || v.path)
+  );
+  const queued = (uploadQueueManagerItems || []).filter(i =>
+    !['success', 'cancelled', 'failed'].includes(String(i.status || '').toLowerCase())
+  );
+
+  if (!acc) return { step: 'account' };
+  if (!acc.profile_path || acc.login_state !== 'logged_in') return { step: 'login', acc };
+  if (!readyVideos.length && !queued.length) return { step: 'video', acc };
+  return { step: 'upload', acc, readyVideos, queued };
+}
+
+function renderUploadWizard() {
+  const el = document.querySelector('#uploadWizardSteps');
+  if (!el) return;
+
+  const state = getUploadWizardState();
+  const step = state.step;
+
+  const steps = [
+    { key: 'account', label: 'Account', help: 'Create or select a channel profile.' },
+    { key: 'login', label: 'Login', help: 'Open profile and log in once.' },
+    { key: 'video', label: 'Video', help: 'Add videos ready for upload.' },
+    { key: 'upload', label: 'Upload', help: 'Plan or start uploading.' }
+  ];
+
+  const order = steps.map(s => s.key);
+  const activeIndex = order.indexOf(step);
+
+  el.innerHTML = steps.map((s, idx) => {
+    const cls = idx < activeIndex ? 'done' : idx === activeIndex ? 'active' : 'locked';
+    return `
+      <div class="uploadWizardStep ${cls}">
+        <div class="uploadWizardNum">${idx + 1}</div>
+        <div>
+          <div class="uploadWizardLabel">${s.label}</div>
+          <div class="uploadWizardHelp">${s.help}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderUploadWizardCTA() {
+  const el = document.querySelector('#uploadWizardCTA');
+  if (!el) return;
+
+  const state = getUploadWizardState();
+
+  if (state.step === 'account') {
+    el.innerHTML = `<button class="wizardPrimary" onclick="openUploadEditor('account')">+ Add Account</button>`;
+    return;
+  }
+
+  if (state.step === 'login') {
+    el.innerHTML = `
+      <button class="wizardPrimary" onclick="openAccountProfile('${state.acc.account_id}')">Open Profile</button>
+      <button class="wizardSecondary" onclick="checkUploadAccountLogin('${state.acc.account_id}')">Check Login</button>
+      <button class="wizardSecondary" onclick="markAccountLoggedIn('${state.acc.account_id}')">Mark Logged In</button>
+    `;
+    return;
+  }
+
+  if (state.step === 'video') {
+    el.innerHTML = `<button class="wizardPrimary" onclick="openUploadEditor('video')">+ Add Video</button>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <button class="wizardPrimary" onclick="autoPlanReadyVideos()">Auto Plan</button>
+    <button class="wizardSecondary" onclick="startUploadScheduler()">Start Upload</button>
+  `;
+}
+
 function renderSimpleSummary(){
   const acc  = _getSelectedAccount();
   const el   = qs('spSummary');
@@ -2240,6 +2317,8 @@ function refreshUploadWorkspace(reason = 'manual'){
     bindSimpleActions();
     renderSimpleSummary();
     renderSimpleStats();
+    renderUploadWizard();
+    renderUploadWizardCTA();
   }finally{
     __uploadRefreshing = false;
   }

@@ -14377,3 +14377,93 @@ body.is-history-active #history_list {
   color: #ffd38a !important;
   font-weight: 600 !important;
 }
+
+/* === Upload Solo Wizard === */
+.uploadWizardSteps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.uploadWizardStep {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.03);
+  min-width: 0;
+}
+
+.uploadWizardStep.done {
+  border-color: rgba(34,197,94,.35);
+  background: rgba(34,197,94,.07);
+}
+
+.uploadWizardStep.active {
+  border-color: rgba(96,165,250,.55);
+  background: rgba(96,165,250,.1);
+}
+
+.uploadWizardStep.locked {
+  opacity: .45;
+}
+
+.uploadWizardNum {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,.08);
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.uploadWizardLabel {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.uploadWizardHelp {
+  font-size: 11px;
+  opacity: .65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uploadWizardCTA {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.wizardPrimary,
+.wizardSecondary {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 9px;
+  font-weight: 700;
+}
+
+.wizardPrimary {
+  border: 0;
+  color: white;
+  background: linear-gradient(135deg,#4f7cff,#7c3aed);
+}
+
+.wizardSecondary {
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.04);
+  color: inherit;
+}
+
+@media (max-width: 1366px) {
+  .uploadWizardSteps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
