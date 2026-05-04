@@ -263,19 +263,27 @@ function _inspectorHealthPanelHtml(account){
   const proxyResultHtml = cached
     ? `<div class="uploadProxyTestResult" data-ok="${cached.ok}">${cached.ok ? `OK · ${Number(cached.latency || 0)}ms` : `Failed: ${esc(String(cached.error || 'error'))}`}</div>` : '';
   const id = esc(String(account.account_id || ''));
+  const rotateElig = canRotateProxyForAccount(account);
+  const rotateBtn = `<button class="ghostButton" style="font-size:11px;padding:2px 8px;min-height:0" type="button"
+    onclick="openProxyRotateModal('${id}')"
+    ${rotateElig.ok ? '' : `disabled title="${esc(rotateElig.reason || 'Cannot rotate')}"`}>Rotate Proxy</button>`;
   return `
     <div class="uploadHealthPanel">
       <div class="uploadHealthPanelTitle">Account Health</div>
       ${_healthRowHtml('Login', loginLabel, loginState)}
       ${_healthRowHtml('Proxy', proxyLabel, proxyState)}
       <div class="uploadHealthRow">
-        <span class="uploadHealthRowLabel">Proxy Test</span>
-        <button class="ghostButton" style="font-size:11px;padding:2px 8px;min-height:0" type="button"
-          onclick="testUploadAccountProxy('${id}')">Test Proxy</button>
+        <span class="uploadHealthRowLabel">Proxy Actions</span>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="ghostButton" style="font-size:11px;padding:2px 8px;min-height:0" type="button"
+            onclick="testUploadAccountProxy('${id}')">Test Proxy</button>
+          ${rotateBtn}
+        </div>
       </div>
       ${proxyResultHtml}
       ${_healthRowHtml('Last Upload', lastLabel, lastState)}
       ${_healthRowHtml('Failures (24h)', String(h.fail_count_24h), failState)}
+      ${h.proxy_status === 'failed' && isProxyRelatedFailure(h.reasons.join(' ')) ? '<div class="proxyIssueHint">⚠ Proxy failure detected — rotate proxy to recover.</div>' : ''}
       ${h.status === 'risky' ? '<div class="uploadHealthWarning">⚠ This account may fail uploads</div>' : ''}
     </div>
   `;
@@ -303,6 +311,12 @@ async function testUploadAccountProxy(accountId){
   }
   renderUploadInspector();
   renderUploadAccounts(uploadAccountManagerItems);
+}
+
+function isProxyRelatedFailure(reasonOrError){
+  const s = String(reasonOrError || '').toLowerCase();
+  return ['proxy','timeout','connection','network','tunnel','socks','dns','econn','etimedout']
+    .some((token) => s.includes(token));
 }
 
 // =============================================================================
@@ -465,6 +479,7 @@ function _setEditorOpen(id, open){
 function openUploadAccountModal(){
   const modal = document.getElementById('upload_account_form_modal');
   if(modal) modal.hidden = false;
+  _populateProxyPoolSelect();
 }
 
 function closeUploadAccountModal(){
@@ -737,6 +752,7 @@ function renderUploadQueueManager(items){
           ${item.last_error ? `<div class="uqmError">${esc(item.last_error)}</div>` : ''}
           ${showBlockedLine ? `<div class="uqmBlockedReason">${esc(blockedReason)}</div>` : ''}
           ${retryIn ? `<div class="uqmRetryIn">${esc(retryIn)}</div>` : ''}
+          ${status === 'failed' && isProxyRelatedFailure(item.last_error || blockedReason) ? `<div class="proxyIssueHint">Proxy issue — rotate proxy in account health</div>` : ''}
         </td>
         <td class="uqmColAccount">${esc(accountName)}</td>
         <td class="uqmColStatus">${_uamBadge(status, 'status')}${tierBadge}</td>
@@ -1432,6 +1448,10 @@ function resetUploadAccountForm(){
   if (qs('uam_cooldown_minutes')) qs('uam_cooldown_minutes').value = '30';
   if (qs('uam_today_count')) qs('uam_today_count').value = '0';
   if (qs('uam_proxy_test_result')) { qs('uam_proxy_test_result').textContent = ''; qs('uam_proxy_test_result').className = 'uamProxyTestResult'; }
+  const poolSel = qs('uam_pool_proxy_select');
+  if(poolSel) poolSel.value = '';
+  const poolBadge = qs('uam_pool_proxy_badge');
+  if(poolBadge){ poolBadge.textContent = ''; poolBadge.removeAttribute('data-status'); poolBadge.removeAttribute('data-market'); }
   const statusEl = qs('uam_profile_path_status');
   if (statusEl) { statusEl.textContent = ''; statusEl.className = 'uamProfileStatus'; }
   _setProfileFolderLocked(false);
@@ -1460,6 +1480,13 @@ function fillUploadAccountForm(accountId){
   if (qs('uam_proxy_id')) qs('uam_proxy_id').value = item.proxy_id || '';
   _parseProxyConfig(item.proxy_config);
   if (qs('uam_proxy_test_result')) { qs('uam_proxy_test_result').textContent = ''; qs('uam_proxy_test_result').className = 'uamProxyTestResult'; }
+  // Restore pool proxy selector if proxy_id matches a pool entry
+  const _poolSel = qs('uam_pool_proxy_select');
+  if(_poolSel){
+    const _matchedProxy = _proxyPool.find((p) => p.id === String(item.proxy_id || ''));
+    _poolSel.value = _matchedProxy ? _matchedProxy.id : '';
+    _updateProxyPoolBadge(_matchedProxy ? _matchedProxy.id : '');
+  }
   // Active-upload lock: disable profile folder controls if account has running uploads
   const isLocked = accountHasActiveUpload(item.account_id);
   _setProfileFolderLocked(isLocked);
@@ -1794,6 +1821,7 @@ async function loadUploadAccounts(){
     const data = await res.json();
     if(!res.ok) throw new Error(_formatApiError(data.detail));
     uploadAccountManagerItems = Array.isArray(data.items) ? data.items : [];
+    invalidateUploadAnalyticsCache();
     UploadStore.setAccounts(uploadAccountManagerItems);
     if(!_accountWorkspaceSelectedId() && uploadAccountManagerItems.length){
       selectedUploadAccountWorkspaceId = String(uploadAccountManagerItems[0].account_id || '');
@@ -1847,6 +1875,7 @@ async function loadUploadQueueManager(){
     const data = await res.json();
     if(!res.ok) throw new Error(_formatApiError(data.detail));
     uploadQueueManagerItems = Array.isArray(data.items) ? data.items : [];
+    invalidateUploadAnalyticsCache();
     UploadStore.setQueueItems(uploadQueueManagerItems);
     renderUploadQueueManager(uploadQueueManagerItems);
     renderUploadInspector();
@@ -2710,6 +2739,8 @@ const _AUTO_DEFAULTS = {
   postingWindowEnabled: false,
   postingWindowStart: '08:00',
   postingWindowEnd: '23:00',
+  marketStrategy: 'custom',
+  marketTimezone: '',
 };
 let _autoSettings = {..._AUTO_DEFAULTS};
 let _autoPlanData = null;
@@ -2721,6 +2752,7 @@ function loadAutomationSettings(){
     if(raw) _autoSettings = {..._AUTO_DEFAULTS, ...JSON.parse(raw)};
   }catch(_){}
   _applyAutoSettingsToUi();
+  _refreshTimezoneNote();
 }
 
 function saveAutomationSettings(){
@@ -2742,6 +2774,7 @@ function _applyAutoSettingsToUi(){
   _setVal('auto_set_max_per_day',        _autoSettings.maxPerAccountPerDay);
   _setVal('auto_set_window_start',       _autoSettings.postingWindowStart);
   _setVal('auto_set_window_end',         _autoSettings.postingWindowEnd);
+  _setVal('auto_set_market',             _autoSettings.marketStrategy || 'custom');
 }
 
 function _readAutoSettingsFromUi(){
@@ -2757,6 +2790,7 @@ function _readAutoSettingsFromUi(){
   _autoSettings.maxPerAccountPerDay   = Math.max(1,  parseInt(_getVal('auto_set_max_per_day'),  10) || 5);
   _autoSettings.postingWindowStart    = _getVal('auto_set_window_start') || '08:00';
   _autoSettings.postingWindowEnd      = _getVal('auto_set_window_end')   || '23:00';
+  _autoSettings.marketStrategy        = _getVal('auto_set_market')       || 'custom';
 }
 
 function _getChk(id){ const el = qs(id); return el ? el.checked : false; }
@@ -2810,6 +2844,14 @@ function scoreUploadAccount(account){
       normalizeProfilePath(String(a.profile_path || '')) === pp
     );
     if(hasConflict){ score -= 100; reasons.push('-100 profile conflict'); }
+  }
+
+  const activeMarket = String(_autoSettings.marketStrategy || '').toUpperCase();
+  if(activeMarket && activeMarket !== 'CUSTOM'){
+    const poolEntry = _proxyPool.find((p) => p.id === String(account.proxy_id || ''));
+    const proxyMarket = poolEntry ? String(poolEntry.market || '').toUpperCase() : '';
+    if(proxyMarket === activeMarket)       { score += 20; reasons.push(`+20 proxy market match (${activeMarket})`); }
+    else if(proxyMarket && proxyMarket !== activeMarket){ score -= 15; reasons.push(`-15 proxy market mismatch`); }
   }
 
   return {score, reasons};
@@ -2888,9 +2930,23 @@ function computeAutoAssignments(){
   }
 
   if(_autoSettings.postingWindowEnabled){
+    const tzWarnings = new Set();
     result.assignments.forEach((a) => {
-      if(a.scheduled_at) a.scheduled_at = _applyPostingWindow(a.scheduled_at);
+      if(a.scheduled_at){
+        const {date, warning} = applyPostingWindowForTimezone(
+          new Date(a.scheduled_at),
+          _autoSettings.postingWindowStart,
+          _autoSettings.postingWindowEnd,
+          _autoSettings.marketTimezone,
+        );
+        a.scheduled_at = date.toISOString();
+        if(warning) tzWarnings.add(warning);
+      }
     });
+    tzWarnings.forEach((w) => result.warnings.push(w));
+    if(_autoSettings.marketTimezone && _isValidTimezone(_autoSettings.marketTimezone)){
+      _auditLog('timezone_schedule_applied', _autoSettings.marketTimezone);
+    }
   }
 
   if(!_autoSettings.respectCooldown){
@@ -2949,6 +3005,67 @@ function _autoSafetyWarnings(assignments, accounts){
   }
 
   if(!_autoSettings.postingWindowEnabled) warnings.push('Posting window is disabled — uploads may be scheduled outside safe hours.');
+
+  // Timezone-aware scheduling checks
+  if(_autoSettings.postingWindowEnabled){
+    const tz = String(_autoSettings.marketTimezone || '').trim();
+    if(tz && !_isValidTimezone(tz)){
+      warnings.push(`Timezone "${tz}" is invalid — scheduling will fall back to local machine time.`);
+    } else if(!tz){
+      warnings.push('No market timezone set — posting window uses local machine time. Select a market preset for accurate scheduling.');
+    }
+    const [sH, sM] = String(_autoSettings.postingWindowStart || '08:00').split(':').map(Number);
+    const [eH, eM] = String(_autoSettings.postingWindowEnd   || '23:00').split(':').map(Number);
+    if(sH * 60 + sM >= eH * 60 + eM){
+      warnings.push('Posting window end is before or equal to start — crossing-midnight windows are not yet supported. Scheduling will not adjust.');
+    }
+  }
+
+  // Phase 8: proxy pool + market safety checks
+  const activeMarket = String(_autoSettings.marketStrategy || '').toUpperCase();
+
+  const failedPoolProxyAccounts = accounts.filter((a) => {
+    const p = _proxyPool.find((px) => px.id === String(a.proxy_id || ''));
+    return p && p.status === 'failed';
+  });
+  if(failedPoolProxyAccounts.length) critical.push(`${failedPoolProxyAccounts.length} account(s) have a failed pool proxy — uploads will likely fail.`);
+
+  const proxyCounts = {};
+  accounts.forEach((a) => { const pid = String(a.proxy_id || ''); if(pid) proxyCounts[pid] = (proxyCounts[pid] || 0) + 1; });
+  const overusedEntries = Object.entries(proxyCounts).filter(([, c]) => c > 3);
+  if(overusedEntries.length){
+    overusedEntries.forEach(([pid, count]) => {
+      const p = _proxyPool.find((px) => px.id === pid);
+      const name = p ? p.name : pid;
+      critical.push(`Proxy "${name}" shared by ${count} accounts — IP conflict risk.`);
+    });
+  }
+
+  if(activeMarket && activeMarket !== 'CUSTOM'){
+    const noProxyAccounts = accounts.filter((a) => !String(a.proxy_host || '') && !String(a.proxy_id || ''));
+    if(noProxyAccounts.length) critical.push(`Market strategy ${activeMarket} active but ${noProxyAccounts.length} account(s) have no proxy assigned.`);
+  }
+
+  const untestedPoolProxyAccounts = accounts.filter((a) => {
+    const p = _proxyPool.find((px) => px.id === String(a.proxy_id || ''));
+    return p && (!p.status || p.status === 'untested');
+  });
+  if(untestedPoolProxyAccounts.length) warnings.push(`${untestedPoolProxyAccounts.length} account(s) have untested pool proxies — test before running.`);
+
+  if(activeMarket && activeMarket !== 'CUSTOM'){
+    const mismatchAccounts = accounts.filter((a) => {
+      const p = _proxyPool.find((px) => px.id === String(a.proxy_id || ''));
+      const pm = p ? String(p.market || '').toUpperCase() : '';
+      return pm && pm !== activeMarket;
+    });
+    if(mismatchAccounts.length) warnings.push(`${mismatchAccounts.length} account(s) proxy market does not match strategy (${activeMarket}).`);
+  }
+
+  const highLatencyAccounts = accounts.filter((a) => {
+    const p = _proxyPool.find((px) => px.id === String(a.proxy_id || ''));
+    return p && Number(p.latency_ms || 0) > 1000;
+  });
+  if(highLatencyAccounts.length) warnings.push(`${highLatencyAccounts.length} account(s) have high-latency proxies (>1000ms).`);
 
   warnings.push(..._batchAggressiveWarning(assignments));
   return {critical, warnings};
@@ -3060,6 +3177,14 @@ function _buildAutoPlanPreviewHtml(result){
     const dl = acc ? Number(acc.daily_limit || 0) : 0;
     const tc = acc ? Number(acc.today_count || 0) : 0;
     const slotsLeft = dl > 0 ? Math.max(0, dl - tc) : '∞';
+    const poolEntry = acc ? _proxyPool.find((p) => p.id === String(acc.proxy_id || '')) : null;
+    const proxyLabel = poolEntry
+      ? `${esc(poolEntry.name)} · ${esc((poolEntry.market || 'custom').toUpperCase())} · ${esc(poolEntry.status || 'untested')}`
+      : (acc && acc.proxy_host ? 'Manual proxy' : 'No proxy');
+    const activeMarket = String(_autoSettings.marketStrategy || '').toUpperCase();
+    const proxyMarket = poolEntry ? String(poolEntry.market || '').toUpperCase() : '';
+    const marketMatch = activeMarket && activeMarket !== 'CUSTOM' && proxyMarket === activeMarket;
+    const marketMismatch = activeMarket && activeMarket !== 'CUSTOM' && proxyMarket && proxyMarket !== activeMarket;
 
     const rows = items.map((item) => {
       const video = uploadVideoLibraryItems.find((v) => String(v.video_id) === String(item.video_id));
@@ -3083,6 +3208,9 @@ function _buildAutoPlanPreviewHtml(result){
           ${esc(accName)}
           <span class="autoScoreBadge" data-tier="${esc(scoreTier)}" title="${esc(scoreTooltip)}">Score ${esc(String(scoreNum))}</span>
           <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:6px">${slotsLeft === '∞' ? 'unlimited' : `${slotsLeft} slot${slotsLeft !== 1 ? 's' : ''} left`}</span>
+          ${marketMatch ? `<span style="color:#6ee7b7;font-size:10px;font-weight:700;margin-left:6px">${esc(activeMarket)} match</span>` : ''}
+          ${marketMismatch ? `<span style="color:#fcd34d;font-size:10px;font-weight:700;margin-left:6px">market mismatch</span>` : ''}
+          <span style="color:var(--text-muted);font-size:10px;margin-left:6px">${proxyLabel}</span>
         </div>
         ${rows}
       </div>`;
@@ -3179,26 +3307,692 @@ async function executeAutoPlanEnqueue(){
   renderAutomationDashboard();
 }
 
-// --- FEATURE 4: POSTING WINDOW ---
+// --- FEATURE 4: TIMEZONE-AWARE POSTING WINDOW ---
 
-function _applyPostingWindow(isoStr){
-  if(!_autoSettings.postingWindowEnabled) return isoStr;
-  const start = String(_autoSettings.postingWindowStart || '08:00');
-  const end   = String(_autoSettings.postingWindowEnd   || '23:00');
-  const [sH, sM] = start.split(':').map(Number);
-  const [eH, eM] = end.split(':').map(Number);
-  const dt = new Date(isoStr);
-  const curMin = dt.getHours() * 60 + dt.getMinutes();
+function _isValidTimezone(tz){
+  if(!tz) return false;
+  try{ new Intl.DateTimeFormat('en-US', {timeZone: tz}).format(new Date()); return true; }
+  catch(_){ return false; }
+}
+
+function _getZonedParts(date, timezone){
+  const dtf = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+  const parts = Object.fromEntries(dtf.formatToParts(date).map((p) => [p.type, p.value]));
+  return {
+    year:   Number(parts.year),
+    month:  Number(parts.month),
+    day:    Number(parts.day),
+    hour:   Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+  };
+}
+
+function _zonedDateTimeToUtc(year, month, day, hour, minute, timezone){
+  // Iteratively converge: start with naive UTC estimate, measure how far off
+  // the zoned representation is, and correct. Two iterations always suffice for
+  // offsets within ±14h (all real IANA zones).
+  let probe = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  for(let i = 0; i < 3; i++){
+    const p = _getZonedParts(probe, timezone);
+    let delta = (hour * 60 + minute) - (p.hour * 60 + p.minute);
+    // Clamp to ±720 min to avoid day-wrap confusion
+    if(delta >  720) delta -= 1440;
+    if(delta < -720) delta += 1440;
+    if(delta === 0) break;
+    probe = new Date(probe.getTime() + delta * 60000);
+  }
+  return probe;
+}
+
+/**
+ * Clamp a candidate Date into a posting window defined in a specific IANA timezone.
+ * Returns {date: Date, applied: boolean, warning: string|null}
+ */
+function applyPostingWindowForTimezone(date, windowStart, windowEnd, timezone){
+  if(!_autoSettings.postingWindowEnabled) return {date, applied: false, warning: null};
+
+  // Resolve effective timezone — fallback to local machine timezone when unset
+  let tz = String(timezone || '').trim();
+  let warning = null;
+  if(tz && !_isValidTimezone(tz)){
+    warning = `Invalid timezone "${tz}"; using local machine time for scheduling.`;
+    tz = '';
+  }
+  const effectiveTz = tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const [sH, sM] = String(windowStart || '08:00').split(':').map(Number);
+  const [eH, eM] = String(windowEnd   || '23:00').split(':').map(Number);
   const startMin = sH * 60 + sM;
   const endMin   = eH * 60 + eM;
-  if(curMin >= startMin && curMin < endMin) return isoStr;
-  if(curMin < startMin){
-    dt.setHours(sH, sM, 0, 0);
-  }else{
-    dt.setDate(dt.getDate() + 1);
-    dt.setHours(sH, sM, 0, 0);
+
+  if(startMin >= endMin){
+    return {date, applied: false, warning: 'Posting window crossing midnight is not supported yet.'};
   }
-  return dt.toISOString();
+
+  const parts  = _getZonedParts(date, effectiveTz);
+  const curMin = parts.hour * 60 + parts.minute;
+
+  if(curMin >= startMin && curMin < endMin){
+    // Inside window — keep as-is
+    return {date, applied: false, warning};
+  }
+
+  let resultDate;
+  if(curMin < startMin){
+    // Before window — move to same-day window start in target timezone
+    resultDate = _zonedDateTimeToUtc(parts.year, parts.month, parts.day, sH, sM, effectiveTz);
+  }else{
+    // After window — next calendar day in target timezone at window start.
+    // Pass day+1 directly; _zonedDateTimeToUtc's initial Date.UTC probe handles
+    // month/year overflow correctly and the iteration converges to the right UTC.
+    resultDate = _zonedDateTimeToUtc(parts.year, parts.month, parts.day + 1, sH, sM, effectiveTz);
+  }
+
+  return {date: resultDate, applied: true, warning};
+}
+
+// Thin wrapper kept for any external callers — warnings are silently dropped here.
+function _applyPostingWindow(isoStr){
+  if(!_autoSettings.postingWindowEnabled) return isoStr;
+  const {date} = applyPostingWindowForTimezone(
+    new Date(isoStr),
+    _autoSettings.postingWindowStart,
+    _autoSettings.postingWindowEnd,
+    _autoSettings.marketTimezone,
+  );
+  return date.toISOString();
+}
+
+// =============================================================================
+// PHASE 8: PROXY POOL + MARKET STRATEGY
+// =============================================================================
+
+const _PROXY_POOL_KEY = 'uploadProxyPool';
+let _proxyPool = [];
+let _proxyPoolEditId = null;
+
+const _MARKET_PRESETS = {
+  US: {timezone: 'America/New_York', postingWindowEnabled: true, postingWindowStart: '18:00', postingWindowEnd: '22:00', baseSpacingMinutes: 30, jitterMinutes: 5},
+  JP: {timezone: 'Asia/Tokyo',       postingWindowEnabled: true, postingWindowStart: '19:00', postingWindowEnd: '23:00', baseSpacingMinutes: 30, jitterMinutes: 5},
+  EU: {timezone: 'Europe/Berlin',    postingWindowEnabled: true, postingWindowStart: '18:00', postingWindowEnd: '22:00', baseSpacingMinutes: 35, jitterMinutes: 7},
+};
+
+// --- PROXY POOL STORE ---
+
+function _normalizeProxyFromBackend(item){
+  return {
+    id:             item.proxy_id || item.id || '',
+    name:           item.name     || '',
+    type:           item.type     || 'http',
+    host:           item.host     || '',
+    port:           item.port     || null,
+    username:       item.username || '',
+    password:       item.password || '',
+    market:         item.market   || 'custom',
+    status:         item.status   || 'untested',
+    latency_ms:     item.latency_ms || null,
+    last_tested_at: item.last_tested_at || null,
+  };
+}
+
+async function _loadProxyPool(){
+  try{
+    const res = await fetch('/api/upload/proxies');
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    _proxyPool = (data.items || []).map(_normalizeProxyFromBackend);
+    invalidateUploadAnalyticsCache();
+    // If backend is empty but localStorage has data, prompt migration
+    if(_proxyPool.length === 0){
+      try{
+        const local = JSON.parse(localStorage.getItem(_PROXY_POOL_KEY) || '[]');
+        if(local.length > 0) console.info('[ProxyPool] localStorage has proxies not yet in backend — run importProxyPoolFromLocalStorage()');
+      }catch(_){}
+    }
+  }catch(err){
+    console.warn('[ProxyPool] Backend unavailable, using localStorage fallback:', err);
+    try{
+      _proxyPool = JSON.parse(localStorage.getItem(_PROXY_POOL_KEY) || '[]');
+    }catch(_){ _proxyPool = []; }
+  }
+}
+
+function _saveProxyPool(){
+  // no-op: proxy pool is now persisted in the backend DB
+}
+
+async function importProxyPoolFromLocalStorage(){
+  const raw = localStorage.getItem(_PROXY_POOL_KEY);
+  if(!raw){ showToast('No local proxy data found', 'info'); return; }
+  let items;
+  try{ items = JSON.parse(raw); }catch(_){ showToast('Invalid local proxy data', 'error'); return; }
+  if(!items.length){ showToast('Local proxy list is empty', 'info'); return; }
+  let imported = 0;
+  let failed = 0;
+  for(const proxy of items){
+    try{
+      const res = await fetch('/api/upload/proxies', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          name:     proxy.name     || 'Imported',
+          type:     proxy.type     || 'http',
+          host:     proxy.host     || '',
+          port:     proxy.port     || null,
+          username: proxy.username || '',
+          password: proxy.password || '',
+          market:   proxy.market   || '',
+        }),
+      });
+      if(res.ok) imported++; else failed++;
+    }catch(_){ failed++; }
+  }
+  await _loadProxyPool();
+  renderProxyPool();
+  renderProxyPoolDashboard();
+  _populateProxyPoolSelect();
+  _auditLog('proxy_imported', `${imported} proxies from localStorage`);
+  showToast(`Imported ${imported} proxies${failed ? `, ${failed} failed` : ''}`, imported > 0 ? 'success' : 'error');
+}
+
+function _proxyPoolId(){
+  return `pp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// --- PROXY POOL CRUD ---
+
+function openAddProxyModal(){
+  _proxyPoolEditId = null;
+  ['ppm_proxy_id','ppm_name','ppm_host','ppm_port','ppm_username','ppm_password'].forEach((id) => { const el = qs(id); if(el) el.value = ''; });
+  if(qs('ppm_type'))   qs('ppm_type').value   = 'http';
+  if(qs('ppm_market')) qs('ppm_market').value  = 'custom';
+  if(qs('proxy_pool_modal_title')) qs('proxy_pool_modal_title').textContent = 'Add Proxy';
+  const modal = qs('proxy_pool_modal');
+  if(modal) modal.hidden = false;
+}
+
+function openEditProxyModal(id){
+  const proxy = _proxyPool.find((p) => p.id === id);
+  if(!proxy) return;
+  _proxyPoolEditId = id;
+  if(qs('ppm_proxy_id')) qs('ppm_proxy_id').value  = proxy.id;
+  if(qs('ppm_name'))     qs('ppm_name').value       = proxy.name     || '';
+  if(qs('ppm_type'))     qs('ppm_type').value        = proxy.type     || 'http';
+  if(qs('ppm_host'))     qs('ppm_host').value        = proxy.host     || '';
+  if(qs('ppm_port'))     qs('ppm_port').value        = proxy.port     || '';
+  if(qs('ppm_username')) qs('ppm_username').value    = proxy.username || '';
+  if(qs('ppm_password')) qs('ppm_password').value    = proxy.password || '';
+  if(qs('ppm_market'))   qs('ppm_market').value      = proxy.market   || 'custom';
+  if(qs('proxy_pool_modal_title')) qs('proxy_pool_modal_title').textContent = 'Edit Proxy';
+  const modal = qs('proxy_pool_modal');
+  if(modal) modal.hidden = false;
+}
+
+function closeProxyPoolModal(){
+  const modal = qs('proxy_pool_modal');
+  if(modal) modal.hidden = true;
+  _proxyPoolEditId = null;
+}
+
+async function saveProxyFromModal(){
+  const name = String(qs('ppm_name')?.value || '').trim();
+  const host = String(qs('ppm_host')?.value || '').trim();
+  if(!name){ showToast('Proxy name is required', 'error'); return; }
+  if(!host){ showToast('Proxy host is required', 'error'); return; }
+  const port = parseInt(String(qs('ppm_port')?.value || ''), 10) || null;
+  const editId = _proxyPoolEditId;
+  const payload = {
+    name, host, port,
+    type:     qs('ppm_type')?.value     || 'http',
+    username: qs('ppm_username')?.value || '',
+    password: qs('ppm_password')?.value || '',
+    market:   qs('ppm_market')?.value   || 'custom',
+  };
+  closeProxyPoolModal();
+  try{
+    let res;
+    if(editId){
+      res = await fetch(`/api/upload/proxies/${encodeURIComponent(editId)}`, {
+        method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+      });
+    }else{
+      res = await fetch('/api/upload/proxies', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+      });
+    }
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data));
+    const normalized = _normalizeProxyFromBackend(data.item);
+    if(editId){
+      const idx = _proxyPool.findIndex((p) => p.id === editId);
+      if(idx >= 0) _proxyPool[idx] = normalized; else _proxyPool.push(normalized);
+      _auditLog('proxy_pool_updated', name);
+    }else{
+      _proxyPool.push(normalized);
+      _auditLog('proxy_pool_added', name);
+    }
+    renderProxyPool();
+    renderProxyPoolDashboard();
+    _populateProxyPoolSelect();
+    showToast(editId ? 'Proxy updated' : 'Proxy saved', 'success');
+  }catch(err){
+    showToast(String(err?.message || err), 'error');
+  }
+}
+
+async function deleteProxyFromPool(id){
+  const proxy = _proxyPool.find((p) => p.id === id);
+  if(!proxy) return;
+  if(!window.confirm(`Delete proxy "${proxy.name}"?`)) return;
+  const name = proxy.name;
+  try{
+    const res = await fetch(`/api/upload/proxies/${encodeURIComponent(id)}`, {method: 'DELETE'});
+    if(!res.ok){ const d = await res.json(); throw new Error(_formatApiError(d)); }
+    _proxyPool = _proxyPool.filter((p) => p.id !== id);
+    _auditLog('proxy_pool_deleted', name);
+    renderProxyPool();
+    renderProxyPoolDashboard();
+    _populateProxyPoolSelect();
+    showToast('Proxy deleted', 'info');
+  }catch(err){
+    showToast(String(err?.message || err), 'error');
+  }
+}
+
+// --- PROXY TEST FROM POOL ---
+
+async function testProxyFromPool(id){
+  const proxy = _proxyPool.find((p) => p.id === id);
+  if(!proxy) return;
+  const row = document.querySelector(`[data-proxy-id="${CSS.escape(id)}"]`);
+  const statusEl = row ? row.querySelector('.proxyStatusBadge') : null;
+  if(statusEl){ statusEl.textContent = 'Testing…'; statusEl.removeAttribute('data-status'); }
+  try{
+    const res = await fetch(`/api/upload/proxies/${encodeURIComponent(id)}/test`, {method: 'POST'});
+    const data = await res.json();
+    proxy.last_tested_at = new Date().toISOString();
+    if(data.ok){
+      proxy.status     = 'ok';
+      proxy.latency_ms = data.latency_ms || null;
+      _auditLog('proxy_pool_tested', `${proxy.name} — OK${data.latency_ms ? ` ${data.latency_ms}ms` : ''}`);
+    }else{
+      proxy.status     = 'failed';
+      proxy.latency_ms = null;
+      _auditLog('proxy_pool_tested', `${proxy.name} — Failed: ${data.error || 'no detail'}`);
+    }
+  }catch(err){
+    proxy.status         = 'failed';
+    proxy.latency_ms     = null;
+    proxy.last_tested_at = new Date().toISOString();
+    _auditLog('proxy_pool_tested', `${proxy.name} — Error: ${err.message || err}`);
+  }
+  renderProxyPool();
+  renderProxyPoolDashboard();
+  _populateProxyPoolSelect();
+}
+
+// --- PROXY POOL RENDER ---
+
+function renderProxyPool(){
+  const container = qs('proxy_pool_table_container');
+  if(!container) return;
+  if(!_proxyPool.length){
+    container.innerHTML = '<div class="autoProxyPlaceholder">No proxies yet. Click + Add Proxy to add one.</div>';
+    return;
+  }
+  const assignCounts = getProxyAssignmentCounts();
+  const rows = _proxyPool.map((p) => {
+    const statusText = p.status === 'ok'
+      ? `OK${p.latency_ms ? ' · ' + p.latency_ms + 'ms' : ''}`
+      : (p.status === 'failed' ? 'Failed' : 'Untested');
+    const used = assignCounts[p.id] || 0;
+    const usedBadge = used > 0 ? `<span class="proxyUsedBadge" title="${used} account(s) using this proxy">${used} acct</span>` : '';
+    return `
+      <div class="proxyPoolRow" data-proxy-id="${esc(p.id)}">
+        <span class="proxyPoolName" title="${esc(p.name)}">${esc(p.name)}</span>
+        <span class="proxyTypeBadge">${esc((p.type || 'http').toUpperCase())}</span>
+        <span class="proxyPoolHost">${esc(p.host)}${p.port ? ':' + p.port : ''}</span>
+        <span class="proxyMarketBadge" data-market="${esc(p.market || 'custom')}">${esc((p.market || 'custom').toUpperCase())}</span>
+        <span class="proxyStatusBadge" data-status="${esc(p.status || 'untested')}">${esc(statusText)}</span>
+        <span class="proxyPoolActions">
+          ${usedBadge}
+          <button class="ghostButton" type="button" onclick="testProxyFromPool('${esc(p.id)}')">Test</button>
+          <button class="ghostButton" type="button" onclick="openEditProxyModal('${esc(p.id)}')">Edit</button>
+          <button class="ghostButton" type="button" onclick="deleteProxyFromPool('${esc(p.id)}')">Delete</button>
+        </span>
+      </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="proxyPoolTable">
+      <div class="proxyPoolHeaderRow">
+        <span>Name</span><span>Type</span><span>Host:Port</span><span>Market</span><span>Status</span><span>Actions</span>
+      </div>
+      ${rows}
+    </div>`;
+}
+
+// --- PROXY POOL DASHBOARD ---
+
+function renderProxyPoolDashboard(){
+  const total     = _proxyPool.length;
+  const ok        = _proxyPool.filter((p) => p.status === 'ok').length;
+  const failed    = _proxyPool.filter((p) => p.status === 'failed').length;
+  const untested  = _proxyPool.filter((p) => !p.status || p.status === 'untested').length;
+  const mktCounts = {};
+  _proxyPool.forEach((p) => { const m = (p.market || 'custom').toUpperCase(); mktCounts[m] = (mktCounts[m] || 0) + 1; });
+  const mktStr = total === 0 ? '–' : Object.entries(mktCounts).map(([m, c]) => `${m} ${c}`).join(' / ');
+
+  _setEl('pp_dash_total',    String(total),  total    > 0 ? 'ok'   : 'none');
+  _setEl('pp_dash_ok',       String(ok),     ok       > 0 ? 'ok'   : 'none');
+  _setEl('pp_dash_failed',   String(failed), failed   > 0 ? 'warn' : 'ok');
+  _setEl('pp_dash_untested', String(untested),untested > 0 ? 'warn' : 'ok');
+  _setEl('pp_dash_markets',  mktStr,         total    > 0 ? 'ok'   : 'none');
+}
+
+// --- ACCOUNT PROXY POOL SELECTOR ---
+
+function _populateProxyPoolSelect(){
+  const sel = qs('uam_pool_proxy_select');
+  if(!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- Manual entry --</option>' +
+    _proxyPool.map((p) => {
+      const statusText = p.status === 'ok' ? `OK${p.latency_ms ? ' ' + p.latency_ms + 'ms' : ''}` : (p.status === 'failed' ? 'Failed' : 'Untested');
+      return `<option value="${esc(p.id)}">${esc(p.name)} — ${esc((p.market || 'custom').toUpperCase())} · ${esc(statusText)}</option>`;
+    }).join('');
+  if(_proxyPool.find((p) => p.id === current)) sel.value = current;
+}
+
+function _updateProxyPoolBadge(proxyId){
+  const badge = qs('uam_pool_proxy_badge');
+  if(!badge) return;
+  if(!proxyId){ badge.textContent = ''; badge.removeAttribute('data-status'); badge.removeAttribute('data-market'); return; }
+  const proxy = _proxyPool.find((p) => p.id === proxyId);
+  if(!proxy){ badge.textContent = ''; badge.removeAttribute('data-status'); badge.removeAttribute('data-market'); return; }
+  const statusText = proxy.status === 'ok' ? `OK${proxy.latency_ms ? ' · ' + proxy.latency_ms + 'ms' : ''}` : (proxy.status === 'failed' ? 'Failed' : 'Untested');
+  badge.textContent = `${proxy.name} · ${(proxy.market || 'custom').toUpperCase()} · ${statusText}`;
+  badge.setAttribute('data-status', proxy.status || 'untested');
+  badge.setAttribute('data-market', proxy.market || 'custom');
+}
+
+function assignPoolProxyToAccount(){
+  const id = qs('uam_pool_proxy_select')?.value;
+  if(!id){ _updateProxyPoolBadge(''); return; }
+  const proxy = _proxyPool.find((p) => p.id === id);
+  if(!proxy) return;
+  if(qs('uam_proxy_type'))     qs('uam_proxy_type').value     = proxy.type     || 'http';
+  if(qs('uam_proxy_host'))     qs('uam_proxy_host').value     = proxy.host     || '';
+  if(qs('uam_proxy_port'))     qs('uam_proxy_port').value     = proxy.port     || '';
+  if(qs('uam_proxy_username')) qs('uam_proxy_username').value = proxy.username || '';
+  if(qs('uam_proxy_password')) qs('uam_proxy_password').value = proxy.password || '';
+  if(qs('uam_proxy_id'))       qs('uam_proxy_id').value       = proxy.id;
+  _updateProxyPoolBadge(proxy.id);
+  _auditLog('account_proxy_assigned', proxy.name);
+  showToast(`Proxy "${proxy.name}" applied to form`, 'info');
+}
+
+// --- MARKET STRATEGY ---
+
+function _refreshTimezoneNote(){
+  const noteEl   = qs('market_preset_note');
+  const windowEl = qs('tz_window_note');
+  const market     = String(_autoSettings.marketStrategy || '').toUpperCase();
+  const tz         = String(_autoSettings.marketTimezone || '').trim();
+  const winEnabled = _autoSettings.postingWindowEnabled;
+
+  if(!tz){
+    if(noteEl)   noteEl.textContent   = 'No market timezone set. Posting window uses local machine time.';
+    if(windowEl) windowEl.textContent = 'Uses local machine time';
+    return;
+  }
+  if(!_isValidTimezone(tz)){
+    if(noteEl)   noteEl.textContent   = `⚠ Invalid timezone "${tz}" — local machine time will be used for scheduling.`;
+    if(windowEl) windowEl.textContent = 'Invalid timezone — using local time';
+    return;
+  }
+  const windowRange = winEnabled
+    ? `${_autoSettings.postingWindowStart}–${_autoSettings.postingWindowEnd} ${tz}`
+    : 'window disabled';
+  if(noteEl){
+    noteEl.textContent = `Scheduling timezone: ${tz}${market && market !== 'CUSTOM' ? ' (' + market + ')' : ''}`
+      + ` · Window ${windowRange}`
+      + ` · Spacing ${_autoSettings.baseSpacingMinutes}m · Jitter ±${_autoSettings.jitterMinutes}m`;
+  }
+  if(windowEl) windowEl.textContent = `Market timezone: ${tz}`;
+}
+
+function applyMarketPreset(){
+  _readAutoSettingsFromUi();
+  const market = String(_autoSettings.marketStrategy || '').toUpperCase();
+  const preset = _MARKET_PRESETS[market];
+  if(preset){
+    _autoSettings.postingWindowEnabled = preset.postingWindowEnabled;
+    _autoSettings.postingWindowStart   = preset.postingWindowStart;
+    _autoSettings.postingWindowEnd     = preset.postingWindowEnd;
+    _autoSettings.baseSpacingMinutes   = preset.baseSpacingMinutes;
+    _autoSettings.jitterMinutes        = preset.jitterMinutes;
+    _autoSettings.marketTimezone       = preset.timezone;
+    _applyAutoSettingsToUi();
+  }else{
+    _autoSettings.marketTimezone = '';
+  }
+  _refreshTimezoneNote();
+  try{ localStorage.setItem('uploadAutomationSettings', JSON.stringify(_autoSettings)); }catch(_){}
+  renderAutomationDashboard();
+  _auditLog('market_strategy_changed', market || 'custom');
+  if(preset) showToast(`Market preset applied: ${market}`, 'info');
+}
+
+// =============================================================================
+// PHASE 9: PROXY ROTATION
+// =============================================================================
+
+// FEATURE 7: Count how many accounts are currently assigned each proxy
+function getProxyAssignmentCounts(){
+  const counts = {};
+  uploadAccountManagerItems.forEach((acc) => {
+    const pid = String(acc.proxy_id || '').trim();
+    if(pid) counts[pid] = (counts[pid] || 0) + 1;
+  });
+  return counts;
+}
+
+// FEATURE 2: Rotation eligibility check
+function canRotateProxyForAccount(account){
+  if(!account) return {ok: false, reason: 'Account not found.'};
+  const status = String(account.status || 'active').toLowerCase();
+  if(['disabled','banned'].includes(status)) return {ok: false, reason: `Account is ${status}.`};
+  if(accountHasActiveUpload(account.account_id)) return {ok: false, reason: 'Upload is running — wait for it to finish.'};
+  if(!_proxyPool.length) return {ok: false, reason: 'Proxy pool is empty — add proxies first.'};
+  const currentId = String(account.proxy_id || '').trim();
+  const candidates = _proxyPool.filter((p) => p.id !== currentId);
+  if(!candidates.length) return {ok: false, reason: 'No alternative proxies in pool.'};
+  return {ok: true, reason: null};
+}
+
+// FEATURE 3: Score and rank replacement proxy candidates
+function findBestReplacementProxy(account){
+  if(!account) return {proxy: null, candidates: [], reason: 'No account.'};
+  const currentId = String(account.proxy_id || '').trim();
+  const counts = getProxyAssignmentCounts();
+  const activeMarket = String(_autoSettings.marketStrategy || '').toUpperCase();
+  const currentPoolProxy = _proxyPool.find((p) => p.id === currentId);
+  const targetMarket = (currentPoolProxy ? String(currentPoolProxy.market || '').toUpperCase() : '')
+    || (activeMarket && activeMarket !== 'CUSTOM' ? activeMarket : '');
+
+  const scored = _proxyPool
+    .filter((p) => p.id !== currentId)
+    .map((p) => {
+      let score = 0;
+      const reasons = [];
+      const pMarket = String(p.market || '').toUpperCase();
+      if(targetMarket && pMarket === targetMarket){ score += 40; reasons.push('+40 market'); }
+      const st = String(p.status || 'untested');
+      if(st === 'ok')       { score += 50; reasons.push('+50 ok'); }
+      else if(st === 'untested'){ score += 10; reasons.push('+10 untested'); }
+      else if(st === 'failed')  { score -= 100; reasons.push('-100 failed'); }
+      const lat = Number(p.latency_ms || 0);
+      if(lat > 0 && lat < 500) { score += 10; reasons.push('+10 low lat'); }
+      if(lat > 1500)            { score -= 10; reasons.push('-10 high lat'); }
+      const used = counts[p.id] || 0;
+      if(used > 0){ score -= used * 10; reasons.push(`-${used*10} shared`); }
+      return {proxy: p, score, reasons};
+    })
+    .sort((a, b) => b.score - a.score);
+
+  if(!scored.length) return {proxy: null, candidates: [], reason: 'No alternative proxies in pool.'};
+  return {proxy: scored[0].proxy, candidates: scored, reason: null};
+}
+
+// FEATURE 4: Rotation modal
+let _proxyRotateAccountId = null;
+
+function openProxyRotateModal(accountId){
+  const account = uploadAccountManagerItems.find((a) => String(a.account_id) === String(accountId));
+  const {ok, reason} = canRotateProxyForAccount(account);
+  if(!ok){ showToast(reason || 'Cannot rotate proxy for this account', 'error'); return; }
+  _proxyRotateAccountId = accountId;
+  const modal = qs('proxy_rotate_modal');
+  if(!modal) return;
+  const bodyEl = qs('proxy_rotate_modal_body');
+  const titleEl = qs('proxy_rotate_modal_title');
+  if(titleEl) titleEl.textContent = `Rotate Proxy — @${esc(account.display_name || account.account_key || accountId)}`;
+  if(bodyEl) bodyEl.innerHTML = _buildProxyRotateModalHtml(account);
+  modal.hidden = false;
+}
+
+function closeProxyRotateModal(){
+  const modal = qs('proxy_rotate_modal');
+  if(modal) modal.hidden = true;
+  _proxyRotateAccountId = null;
+}
+
+function _buildProxyRotateModalHtml(account){
+  const currentId = String(account.proxy_id || '').trim();
+  const currentProxy = _proxyPool.find((p) => p.id === currentId) || null;
+  const {proxy: recommended, candidates} = findBestReplacementProxy(account);
+
+  const _proxyBadge = (p) => {
+    if(!p) return '<span class="proxyRotateNone">No proxy assigned</span>';
+    const lat = Number(p.latency_ms || 0);
+    const latText = lat > 0 ? ` · ${lat}ms` : '';
+    const market = String(p.market || '').toUpperCase() || 'CUSTOM';
+    const st = String(p.status || 'untested');
+    return `<span class="proxyMarketBadge" data-market="${esc(market.toLowerCase())}">${esc(market)}</span>`
+      + ` <strong>${esc(p.name || p.host || p.id)}</strong>`
+      + ` · <span class="proxyStatusBadge" data-status="${esc(st)}">${esc(st)}</span>${esc(latText)}`;
+  };
+
+  const currentHtml = `
+    <div class="proxyRotateSection">
+      <div class="proxyRotateSectionLabel">Current Proxy</div>
+      <div class="proxyRotateCurrent">${_proxyBadge(currentProxy)}</div>
+    </div>`;
+
+  if(!recommended){
+    return `${currentHtml}<div class="proxyRotateNone" style="margin-top:12px;padding:10px 0">No replacement proxies available in pool.</div>`;
+  }
+
+  const firstCandidate = candidates[0];
+  const recHtml = `
+    <div class="proxyRotateSection">
+      <div class="proxyRotateSectionLabel">Recommended</div>
+      <div class="proxyCandidateItem isRecommended selected" data-pid="${esc(recommended.id)}"
+        onclick="_selectRotateCandidate(this,'${esc(recommended.id)}')">
+        <div>${_proxyBadge(recommended)}</div>
+        <span class="proxyCandidateScore">Score ${firstCandidate.score}</span>
+      </div>
+    </div>`;
+
+  const others = candidates.slice(1);
+  const othersHtml = others.length ? `
+    <div class="proxyRotateSection">
+      <div class="proxyRotateSectionLabel">Other Candidates</div>
+      <div class="proxyCandidateList">
+        ${others.map((c) => `
+          <div class="proxyCandidateItem" data-pid="${esc(c.proxy.id)}"
+            onclick="_selectRotateCandidate(this,'${esc(c.proxy.id)}')">
+            <div>${_proxyBadge(c.proxy)}</div>
+            <span class="proxyCandidateScore">Score ${c.score}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>` : '';
+
+  return `
+    ${currentHtml}
+    ${recHtml}
+    ${othersHtml}
+    <input type="hidden" id="proxy_rotate_select_id" value="${esc(recommended.id)}">
+    <div class="proxyRotateActions">
+      <button class="ghostButton" type="button" onclick="closeProxyRotateModal()">Cancel</button>
+      <button class="primaryButton" type="button" onclick="applyProxyRotation('${esc(account.account_id)}')">Rotate to Selected</button>
+    </div>
+  `;
+}
+
+function _selectRotateCandidate(el, proxyId){
+  const list = el.closest('.uploadModalPanel');
+  if(list) list.querySelectorAll('.proxyCandidateItem').forEach((e) => e.classList.remove('selected'));
+  el.classList.add('selected');
+  const sel = qs('proxy_rotate_select_id');
+  if(sel) sel.value = proxyId;
+}
+
+// FEATURE 5: Apply rotation
+async function applyProxyRotation(accountId){
+  const selectEl = qs('proxy_rotate_select_id');
+  const newProxyId = selectEl ? String(selectEl.value || '').trim() : '';
+  if(!newProxyId){ showToast('No proxy selected', 'error'); return; }
+  const account = uploadAccountManagerItems.find((a) => String(a.account_id) === String(accountId));
+  const newProxy = _proxyPool.find((p) => p.id === newProxyId);
+  if(!account){ showToast('Account not found', 'error'); return; }
+  if(!newProxy){ showToast('Selected proxy not found in pool', 'error'); return; }
+
+  const fromProxyId = String(account.proxy_id || '');
+  const market = String(newProxy.market || '').toUpperCase();
+  const proxy_config = {
+    type:     String(newProxy.type     || 'http'),
+    host:     String(newProxy.host     || ''),
+    port:     newProxy.port || null,
+    username: String(newProxy.username || ''),
+    password: String(newProxy.password || ''),
+  };
+
+  closeProxyRotateModal();
+  try{
+    const res = await fetch(`/api/upload/accounts/${encodeURIComponent(accountId)}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({proxy_id: newProxyId, proxy_config}),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(_formatApiError(data));
+    const idx = uploadAccountManagerItems.findIndex((a) => String(a.account_id) === String(accountId));
+    if(idx >= 0){
+      uploadAccountManagerItems[idx] = {
+        ...uploadAccountManagerItems[idx],
+        ...(data.item || {}),
+        proxy_id:     newProxyId,
+        proxy_config,
+      };
+    }
+    UploadStore.setAccounts([...uploadAccountManagerItems]);
+    renderUploadAccounts(uploadAccountManagerItems);
+    renderUploadInspector();
+    _auditLog('proxy_rotated',
+      `${account.display_name || account.account_key || accountId}: ${fromProxyId || 'none'} → ${newProxyId}${market ? ' (' + market + ')' : ''}`);
+    showToast(`Proxy rotated to ${esc(newProxy.name || newProxy.host)}`, 'success');
+  }catch(err){
+    showToast(String(err?.message || err), 'error');
+  }
 }
 
 // --- PHASE 7: AUDIT LOG ---
@@ -3255,11 +4049,373 @@ function clearAuditLog(){
   showToast('Activity log cleared', 'info');
 }
 
+// =============================================================================
+// =============================================================================
+// PHASE 9: UPLOAD ANALYTICS
+// =============================================================================
+
+let __uploadAnalyticsCache = null;
+let __uploadAnalyticsCacheTs = 0;
+function invalidateUploadAnalyticsCache(){ __uploadAnalyticsCache = null; __uploadAnalyticsCacheTs = 0; }
+
+window.__disableAnalytics = false;
+let __isRenderingAnalytics = false;
+let __analyticsRenderTimer = null;
+
+const _MAX_ANALYTICS_ITEMS = 500;
+
+function isTodayIso(ts){
+  if(!ts) return false;
+  try{
+    const d = new Date(ts);
+    const n = new Date();
+    return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  }catch(_){ return false; }
+}
+
+function normalizeFailureReason(item){
+  const br = String(item.blocked_reason || '').toLowerCase().trim();
+  const le = String(item.last_error || '').toLowerCase().trim();
+  const combined = br || le;
+  if(!combined) return 'unknown';
+  if(br === 'login_required' || le.includes('login') || le.includes('logged_out') || le.includes('session expired')) return 'login_required';
+  if(br === 'daily limit' || le.includes('daily limit') || le.includes('quota')) return 'daily_limit';
+  if(br === 'cooldown' || le.includes('cooldown')) return 'cooldown';
+  if(br === 'profile busy' || le.includes('profile busy')) return 'profile_busy';
+  if(isProxyRelatedFailure(combined)) return 'proxy_failed';
+  if((le.includes('file') || le.includes('video')) && (le.includes('missing') || le.includes('not found'))) return 'file_missing';
+  if(le.includes('rate') || le.includes('throttl')) return 'rate_limited';
+  if(le.includes('captcha') || le.includes('challenge')) return 'captcha_challenge';
+  if(le.includes('upload') && le.includes('fail')) return 'upload_failed';
+  // Return truncated combined reason for anything else
+  return combined.slice(0, 36).trim() || 'unknown';
+}
+
+function computeUploadAnalytics(){
+  const now = Date.now();
+  if(__uploadAnalyticsCache && (now - __uploadAnalyticsCacheTs) < 15000) return __uploadAnalyticsCache;
+
+  // Cap input to avoid long blocking on huge datasets
+  const queueItems = uploadQueueManagerItems.slice(0, _MAX_ANALYTICS_ITEMS);
+
+  // -- Single pass over queue: today stats + account map + retry + failure reasons --
+  const today = {queued: 0, uploaded: 0, failed: 0, retry: 0};
+  const acctMap = {};       // account_id → {uploaded, failed, retry}
+  const failsByAcct = {};   // account_id → fail count (for proxy section, O(1) lookup)
+  const reasonCounts = {};  // failure reason → count
+  let retryableFailed = 0, retriedCount = 0, stillFailed = 0, recovered = 0;
+
+  queueItems.forEach((item) => {
+    const status = String(item.status || '').toLowerCase();
+    const att    = Number(item.attempt_count || 0);
+    const maxAtt = Number(item.max_attempts || 3);
+    const aid    = String(item.account_id || '');
+    const ts     = item.updated_at || item.created_at;
+
+    // today counters
+    if(isTodayIso(ts)){
+      if(status === 'success')                              today.uploaded++;
+      else if(status === 'failed')                          today.failed++;
+      else if(['pending', 'scheduled', 'held'].includes(status)) today.queued++;
+    }
+    if(att > 1) today.retry++;
+
+    // account map
+    if(aid){
+      if(!acctMap[aid]) acctMap[aid] = {uploaded: 0, failed: 0, retry: 0};
+      if(status === 'success') acctMap[aid].uploaded++;
+      if(status === 'failed')  acctMap[aid].failed++;
+      if(att > 1)              acctMap[aid].retry++;
+    }
+
+    // fail counts by account (for proxy section)
+    if(status === 'failed' && aid){
+      failsByAcct[aid] = (failsByAcct[aid] || 0) + 1;
+    }
+
+    // retry effectiveness — single pass
+    if(status === 'failed'){
+      if(att < maxAtt) retryableFailed++;
+      if(att > 1)      stillFailed++;
+    }
+    if(status === 'success' && att > 1) recovered++;
+    if(att > 1) retriedCount++;
+
+    // failure reasons
+    if(status === 'failed'){
+      const r = normalizeFailureReason(item);
+      reasonCounts[r] = (reasonCounts[r] || 0) + 1;
+    }
+  });
+
+  const totalDone  = today.uploaded + today.failed;
+  const successRate = totalDone > 0 ? Math.round((today.uploaded / totalDone) * 100) : null;
+
+  const failureReasons = Object.entries(reasonCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, count]) => ({reason, count}));
+
+  const retry = {retryableFailed, retried: retriedCount, stillFailed, recovered};
+
+  // -- Account analytics (O(accounts)) --
+  const accounts = uploadAccountManagerItems.map((acc) => {
+    const aid = String(acc.account_id || '');
+    const s   = acctMap[aid] || {uploaded: 0, failed: 0, retry: 0};
+    const tot = s.uploaded + s.failed;
+    return {
+      account_id:   aid,
+      name:         acc.display_name || acc.account_key || aid,
+      uploaded:     s.uploaded,
+      failed:       s.failed,
+      retry:        s.retry,
+      successRate:  tot > 0 ? Math.round((s.uploaded / tot) * 100) : null,
+      health:       _computeAccountHealth(acc).status,
+      lastUploadAt: acc.last_upload_at || null,
+    };
+  }).sort((a, b) => b.uploaded - a.uploaded || a.failed - b.failed);
+
+  // -- Proxy analytics: O(accounts) using precomputed failsByAcct map --
+  const proxyAcctMap = {};
+  uploadAccountManagerItems.forEach((acc) => {
+    const pid = String(acc.proxy_id || '').trim();
+    if(!pid) return;
+    if(!proxyAcctMap[pid]) proxyAcctMap[pid] = {count: 0, failures: 0};
+    proxyAcctMap[pid].count++;
+    proxyAcctMap[pid].failures += failsByAcct[String(acc.account_id || '')] || 0;
+  });
+
+  const proxies = _proxyPool.map((p) => {
+    const u = proxyAcctMap[p.id] || {count: 0, failures: 0};
+    return {
+      proxy_id:        p.id,
+      name:            p.name || p.host || p.id,
+      market:          String(p.market || 'custom').toUpperCase(),
+      usedBy:          u.count,
+      status:          p.status || 'untested',
+      latency_ms:      p.latency_ms || null,
+      accountFailures: u.failures,
+    };
+  }).sort((a, b) => b.accountFailures - a.accountFailures || b.usedBy - a.usedBy);
+
+  const result = {today, successRate, accounts, proxies, failureReasons, retry};
+  __uploadAnalyticsCache = result;
+  __uploadAnalyticsCacheTs = Date.now();
+  return result;
+}
+
+// ── Render helpers ────────────────────────────────────────────────────────────
+
+function _analyticsCard(label, value, state){
+  return `<div class="uploadAnalyticsCard" data-state="${esc(state || 'none')}">
+    <div class="analyticsCardLabel">${esc(label)}</div>
+    <div class="analyticsCardValue">${esc(String(value ?? '—'))}</div>
+  </div>`;
+}
+
+function _renderAccountAnalyticsTable(accounts){
+  if(!accounts.length) return '<div class="analyticsEmpty">No accounts loaded.</div>';
+  const rows = accounts.map((a) => {
+    const sr   = a.successRate !== null ? `${a.successRate}%` : '—';
+    const last = a.lastUploadAt ? new Date(a.lastUploadAt).toLocaleDateString([], {month: 'short', day: 'numeric'}) : '—';
+    return `<tr>
+      <td class="analyticsNameCell">${esc(a.name)}</td>
+      <td>${a.uploaded}</td>
+      <td>${a.failed > 0 ? `<span class="analyticsFailCount">${a.failed}</span>` : '0'}</td>
+      <td>${a.retry}</td>
+      <td>${esc(sr)}</td>
+      <td><span class="uamHealthBadge" data-health="${esc(a.health)}">${esc(a.health)}</span></td>
+      <td class="analyticsDateCell">${esc(last)}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="analyticsSection">
+    <div class="analyticsSectionTitle">Account Performance</div>
+    <div class="analyticsTableWrap">
+      <table class="uploadAnalyticsTable">
+        <thead><tr><th>Account</th><th>Uploaded</th><th>Failed</th><th>Retry</th><th>Rate</th><th>Health</th><th>Last Upload</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function _renderProxyAnalyticsTable(proxies){
+  if(!proxies.length) return '<div class="analyticsEmpty">No proxies in pool.</div>';
+  const rows = proxies.map((p) => {
+    const lat = p.latency_ms ? `${p.latency_ms}ms` : '—';
+    return `<tr>
+      <td class="analyticsNameCell">${esc(p.name)}</td>
+      <td><span class="proxyMarketBadge" data-market="${esc(p.market.toLowerCase())}">${esc(p.market)}</span></td>
+      <td>${p.usedBy}</td>
+      <td><span class="proxyStatusBadge" data-status="${esc(p.status)}">${esc(p.status)}</span></td>
+      <td>${esc(lat)}</td>
+      <td>${p.accountFailures > 0 ? `<span class="analyticsFailCount">${p.accountFailures}</span>` : '0'}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="analyticsSection">
+    <div class="analyticsSectionTitle">Proxy Performance</div>
+    <div class="analyticsTableWrap">
+      <table class="uploadAnalyticsTable">
+        <thead><tr><th>Proxy</th><th>Market</th><th>Used By</th><th>Status</th><th>Latency</th><th>Failures</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function _renderFailureReasonList(reasons){
+  if(!reasons.length){
+    return `<div class="analyticsSection">
+      <div class="analyticsSectionTitle">Failure Reasons</div>
+      <div class="analyticsEmpty">No failed items.</div>
+    </div>`;
+  }
+  const items = reasons.map((r) =>
+    `<li class="uploadAnalyticsReasonItem">
+      <span class="analyticsReasonLabel">${esc(r.reason)}</span>
+      <span class="analyticsReasonCount">×${r.count}</span>
+    </li>`
+  ).join('');
+  return `<div class="analyticsSection">
+    <div class="analyticsSectionTitle">Failure Reasons</div>
+    <ul class="uploadAnalyticsReasonList">${items}</ul>
+  </div>`;
+}
+
+function _renderRetryEffectiveness(retry){
+  return `<div class="analyticsSection">
+    <div class="analyticsSectionTitle">Retry Effectiveness <span class="analyticsApprox">approx.</span></div>
+    <ul class="analyticsRetryList">
+      <li>Retryable failed <strong>${retry.retryableFailed}</strong></li>
+      <li>Total retried <strong>${retry.retried}</strong></li>
+      <li>Still failed <strong>${retry.stillFailed}</strong></li>
+      <li>Recovered <strong>${retry.recovered}</strong></li>
+    </ul>
+  </div>`;
+}
+
+function _renderRecentAuditSnapshot(count){
+  const entries = _auditGetEntries().slice(0, count);
+  if(!entries.length) return '';
+  const items = entries.map((e) => {
+    const d  = new Date(e.ts);
+    const ts = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    return `<li class="auditSnapshotEntry">
+      <span class="auditSnapshotTime">${esc(ts)}</span>
+      <span class="auditSnapshotAction">${esc(e.action)}${e.detail ? ` — ${esc(e.detail.slice(0, 60))}` : ''}</span>
+    </li>`;
+  }).join('');
+  return `<div class="analyticsSection">
+    <div class="analyticsSectionTitle">Recent Activity <span class="analyticsApprox">(last ${count})</span></div>
+    <ul class="auditSnapshotList">${items}</ul>
+  </div>`;
+}
+
+// ── Main render ───────────────────────────────────────────────────────────────
+
+function renderAnalyticsDashboard(){
+  if(window.__disableAnalytics) return;
+  if(__isRenderingAnalytics) return;
+
+  // Skip work while the panel is collapsed — it will render on open
+  const container = qs('analytics_dashboard_container');
+  if(container && container.hidden) return;
+
+  const body = qs('analytics_body');
+  if(!body) return;
+
+  __isRenderingAnalytics = true;
+  try{
+    _renderAnalyticsDashboardInternal(body);
+  }catch(e){
+    console.warn('[Analytics] render error:', e);
+  }finally{
+    __isRenderingAnalytics = false;
+  }
+}
+
+function _renderAnalyticsDashboardInternal(body){
+  const d = computeUploadAnalytics();
+
+  const srText  = d.successRate !== null ? `${d.successRate}%` : '—';
+  const srState = d.successRate === null ? 'none' : d.successRate >= 80 ? 'ok' : d.successRate >= 50 ? 'warn' : 'risky';
+
+  const hc = {healthy: 0, warning: 0, risky: 0};
+  d.accounts.forEach((a) => { hc[a.health] = (hc[a.health] || 0) + 1; });
+
+  const pc = {ok: 0, failed: 0, untested: 0};
+  d.proxies.forEach((p) => { pc[p.status] = (pc[p.status] || 0) + 1; });
+
+  const newHtml = `
+    <div class="uploadAnalyticsGrid">
+      ${_analyticsCard('Queued Today',   d.today.queued,    d.today.queued    > 0 ? 'ok'   : 'none')}
+      ${_analyticsCard('Uploaded Today', d.today.uploaded,  d.today.uploaded  > 0 ? 'ok'   : 'none')}
+      ${_analyticsCard('Failed Today',   d.today.failed,    d.today.failed    > 0 ? 'warn' : 'ok')}
+      ${_analyticsCard('Retries',        d.today.retry,     d.today.retry     > 0 ? 'warn' : 'ok')}
+      ${_analyticsCard('Success Rate',   srText,            srState)}
+    </div>
+    <div class="uploadAnalyticsSubGrid">
+      ${_analyticsCard('Healthy Accts',  hc.healthy,        hc.healthy  > 0 ? 'ok'   : 'none')}
+      ${_analyticsCard('Warning Accts',  hc.warning,        hc.warning  > 0 ? 'warn' : 'ok')}
+      ${_analyticsCard('Risky Accts',    hc.risky,          hc.risky    > 0 ? 'risky': 'ok')}
+      ${_analyticsCard('Proxy OK',       pc.ok,             pc.ok       > 0 ? 'ok'   : 'none')}
+      ${_analyticsCard('Proxy Failed',   pc.failed,         pc.failed   > 0 ? 'warn' : 'ok')}
+    </div>
+    ${_renderAccountAnalyticsTable(d.accounts)}
+    ${_renderProxyAnalyticsTable(d.proxies)}
+    <div class="analyticsBottomRow">
+      ${_renderFailureReasonList(d.failureReasons)}
+      ${_renderRetryEffectiveness(d.retry)}
+    </div>
+    ${_renderRecentAuditSnapshot(5)}
+  `;
+  if(body.innerHTML !== newHtml) body.innerHTML = newHtml;
+}
+
+function scheduleRenderUploadAnalytics(){
+  if(__analyticsRenderTimer) return;
+  __analyticsRenderTimer = setTimeout(() => {
+    __analyticsRenderTimer = null;
+    renderAnalyticsDashboard();
+  }, 80);
+}
+
+function safeRenderUploadAnalytics(){
+  try{ scheduleRenderUploadAnalytics(); }catch(e){ console.warn('[Analytics] schedule failed:', e); }
+}
+
+async function refreshAnalytics(){
+  const btn = qs('analytics_refresh_btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Refreshing…'; }
+  try{
+    await Promise.all([loadUploadAccounts(), loadUploadQueueManager(), _loadProxyPool()]);
+  }catch(e){ console.warn('[Analytics] refresh partial error:', e); }
+  renderAnalyticsDashboard();
+  _auditLog('analytics_refreshed', `${uploadQueueManagerItems.length} queue items`);
+  if(btn){ btn.disabled = false; btn.textContent = 'Refresh'; }
+}
+
+function toggleAnalyticsPanel(btn){
+  const panel = qs('analytics_dashboard_container');
+  if(!panel) return;
+  const expanded = btn.getAttribute('aria-expanded') === 'true';
+  btn.setAttribute('aria-expanded', String(!expanded));
+  panel.hidden = expanded;
+  const arrow = btn.querySelector('.auditLogToggleArrow');
+  if(arrow) arrow.textContent = expanded ? '▶' : '▼';
+  if(!expanded) renderAnalyticsDashboard();
+}
+
 // --- INIT ---
 
-function initAutomationPanel(){
+async function initAutomationPanel(){
+  await _loadProxyPool();
   loadAutomationSettings();
   renderAutomationDashboard();
+  renderProxyPool();
+  renderProxyPoolDashboard();
+  _populateProxyPoolSelect();
+  // Defer analytics: panel is collapsed by default; render after layout settles
+  setTimeout(safeRenderUploadAnalytics, 0);
 }
 
 if(document.readyState === 'loading'){
@@ -3281,6 +4437,7 @@ window.__uploadDebugState = function(){
     _cachedSchedulerData,
     selectedUploadVideoIds: [...selectedUploadVideoIds],
     _batchPreviewData,
+    _proxyPool,
     auditLog: _auditGetEntries(),
   };
 };

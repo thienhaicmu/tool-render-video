@@ -709,6 +709,30 @@
                     <div class="autoDashCard"><div class="autoDashLabel">Next Slot</div><div class="autoDashValueSm" id="auto_dash_next" data-state="none">–</div></div>
                     <div class="autoDashCard"><div class="autoDashLabel">Quota Remaining</div><div class="autoDashValue" id="auto_dash_quota" data-state="none">–</div></div>
                   </div>
+                  <!-- Proxy pool health row -->
+                  <div class="proxyPoolDashboard">
+                    <div class="autoDashCard"><div class="autoDashLabel">Proxy Total</div><div class="autoDashValue" id="pp_dash_total" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">OK</div><div class="autoDashValue" id="pp_dash_ok" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">Failed</div><div class="autoDashValue" id="pp_dash_failed" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">Untested</div><div class="autoDashValue" id="pp_dash_untested" data-state="none">–</div></div>
+                    <div class="autoDashCard"><div class="autoDashLabel">Markets</div><div class="autoDashValueSm" id="pp_dash_markets" data-state="none">–</div></div>
+                  </div>
+                </div>
+                <!-- Market Strategy -->
+                <div class="autoSettingsSection">
+                  <div class="autoSettingsTitle">Market Strategy</div>
+                  <div class="autoInputGrid" style="grid-template-columns: 1fr 1fr; gap: 8px">
+                    <div class="autoInputRow proxyPoolFormSpan2">
+                      <span class="autoInputLabel">Market</span>
+                      <select class="fieldInput" id="auto_set_market" onchange="applyMarketPreset()">
+                        <option value="custom">Custom (manual settings)</option>
+                        <option value="US">US — America/New_York</option>
+                        <option value="JP">JP — Asia/Tokyo</option>
+                        <option value="EU">EU — Europe/Berlin</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="marketPresetNote" id="market_preset_note">Timezone preset stored for reference; current scheduling uses local machine time.</div>
                 </div>
                 <!-- Settings -->
                 <div class="autoSettingsSection">
@@ -745,20 +769,41 @@
                     <div class="autoInputRow">
                       <span class="autoInputLabel">Window end</span>
                       <input class="fieldInput" type="time" id="auto_set_window_end" value="23:00" onchange="saveAutomationSettings()">
-                      <span class="autoInputNote">Uses local machine time</span>
+                      <span class="autoInputNote" id="tz_window_note">Timezone set by market selection</span>
                     </div>
                   </div>
                 </div>
                 <!-- Proxy Pool -->
                 <div class="autoSettingsSection">
-                  <div class="autoSettingsTitle">Proxy Pool <span class="fieldOptional">(Planned)</span></div>
-                  <div class="autoProxyPlaceholder">Proxy pool management will be available in a future release. Assign proxies per-account in Account Settings.</div>
+                  <div class="proxyPoolSectionHeader">
+                    <div class="autoSettingsTitle" style="margin:0">Proxy Pool</div>
+                    <button class="ghostButton" type="button" onclick="openAddProxyModal()">+ Add Proxy</button>
+                  </div>
+                  <div id="proxy_pool_table_container">
+                    <div class="autoProxyPlaceholder">No proxies yet. Click + Add Proxy to add one.</div>
+                  </div>
                 </div>
                 <!-- Action -->
                 <div class="autoActions">
                   <button class="primaryButton" type="button" onclick="autoPlanReadyVideos()">Auto Plan Ready Videos</button>
                   <button class="ghostButton" type="button" onclick="renderAutomationDashboard()">Refresh</button>
                   <button class="ghostButton" type="button" onclick="clearAuditLog()">Clear Log</button>
+                </div>
+                <!-- Analytics -->
+                <div class="autoSettingsSection" style="margin-top:4px">
+                  <div class="auditLogPanel">
+                    <button class="auditLogToggle" type="button" aria-expanded="false" onclick="toggleAnalyticsPanel(this)">
+                      Upload Analytics <span class="auditLogToggleArrow">▶</span>
+                    </button>
+                    <div id="analytics_dashboard_container" hidden>
+                      <div class="analyticsToolbar">
+                        <button class="ghostButton" id="analytics_refresh_btn" type="button" onclick="refreshAnalytics()" style="font-size:11px;padding:3px 10px;min-height:0">Refresh</button>
+                      </div>
+                      <div id="analytics_body">
+                        <div class="analyticsEmpty">Click Refresh to load statistics.</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <!-- Recent Activity -->
                 <div class="autoSettingsSection" style="margin-top:4px">
@@ -834,6 +879,70 @@
               <!-- Rendered by _renderAutoPlanModal() -->
             </div>
           </div>
+          <!-- ── Proxy Pool Add/Edit Modal ────────────────────────── -->
+          <div id="proxy_pool_modal" class="uploadModal" hidden>
+            <div class="uploadModalBackdrop" onclick="closeProxyPoolModal()"></div>
+            <div class="uploadModalPanel proxyPoolModalInner">
+              <div class="uploadModalHeader">
+                <div class="uploadModalTitle" id="proxy_pool_modal_title">Add Proxy</div>
+                <button class="ghostButton uploadModalClose" type="button" onclick="closeProxyPoolModal()">×</button>
+              </div>
+              <div class="proxyPoolForm">
+                <input type="hidden" id="ppm_proxy_id">
+                <div class="field">
+                  <span class="fieldLabel">Name</span>
+                  <input class="fieldInput" id="ppm_name" placeholder="US Proxy 01" required>
+                </div>
+                <div class="field">
+                  <span class="fieldLabel">Type</span>
+                  <select class="fieldInput" id="ppm_type">
+                    <option value="http">HTTP</option>
+                    <option value="socks5">SOCKS5</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <span class="fieldLabel">Host</span>
+                  <input class="fieldInput" id="ppm_host" placeholder="proxy.example.com" required>
+                </div>
+                <div class="field">
+                  <span class="fieldLabel">Port</span>
+                  <input class="fieldInput" id="ppm_port" type="number" min="1" max="65535" placeholder="9000">
+                </div>
+                <div class="field">
+                  <span class="fieldLabel">Username <span class="fieldOptional">optional</span></span>
+                  <input class="fieldInput" id="ppm_username" placeholder="Optional">
+                </div>
+                <div class="field">
+                  <span class="fieldLabel">Password <span class="fieldOptional">optional</span></span>
+                  <input class="fieldInput" id="ppm_password" type="password" placeholder="Optional">
+                </div>
+                <div class="field proxyPoolFormSpan2">
+                  <span class="fieldLabel">Market</span>
+                  <select class="fieldInput" id="ppm_market">
+                    <option value="custom">Custom</option>
+                    <option value="US">US</option>
+                    <option value="JP">JP</option>
+                    <option value="EU">EU</option>
+                  </select>
+                </div>
+              </div>
+              <div class="batchModalFooter">
+                <button class="ghostButton" type="button" onclick="closeProxyPoolModal()">Cancel</button>
+                <button class="primaryButton" type="button" onclick="saveProxyFromModal()">Save Proxy</button>
+              </div>
+            </div>
+          </div>
+          <!-- ── Proxy Rotate Modal ───────────────────────────────── -->
+          <div id="proxy_rotate_modal" class="uploadModal" hidden>
+            <div class="uploadModalBackdrop" onclick="closeProxyRotateModal()"></div>
+            <div class="uploadModalPanel proxyRotateModalInner">
+              <div class="uploadModalHeader">
+                <div class="uploadModalTitle" id="proxy_rotate_modal_title">Rotate Proxy</div>
+                <button class="ghostButton uploadModalClose" type="button" onclick="closeProxyRotateModal()">×</button>
+              </div>
+              <div id="proxy_rotate_modal_body"></div>
+            </div>
+          </div>
           <!-- ── Account Form Modal ─────────────────────────────── -->
           <div id="upload_account_form_modal" class="uploadModal" hidden>
             <div class="uploadModalBackdrop" onclick="closeUploadAccountEditor()"></div>
@@ -901,6 +1010,16 @@
                 <div class="uamFormSection fieldSpan2">
                   <div class="uamFormSectionTitle">Proxy <span class="fieldOptional">optional</span></div>
                   <div class="uploadAdvancedGrid">
+                    <!-- Proxy Pool Selector -->
+                    <div class="uamProxyPoolRow">
+                      <span class="uamProxyPoolLabel">Use Proxy Pool</span>
+                      <div class="uamProxyPoolSelectRow">
+                        <select class="fieldInput" id="uam_pool_proxy_select" onchange="assignPoolProxyToAccount()">
+                          <option value="">-- Manual entry --</option>
+                        </select>
+                        <span class="uamProxyPoolBadge" id="uam_pool_proxy_badge"></span>
+                      </div>
+                    </div>
                     <label class="field">
                       <span class="fieldLabel">Proxy Type</span>
                       <select class="fieldInput" id="uam_proxy_type">

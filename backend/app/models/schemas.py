@@ -569,3 +569,79 @@ class UploadSchedulerStatusResponse(BaseModel):
         if value not in UPLOAD_SCHEDULER_STATUSES:
             raise ValueError(f"status must be one of {sorted(UPLOAD_SCHEDULER_STATUSES)!r}")
         return value
+
+
+PROXY_POOL_TYPES = {"http", "https", "socks4", "socks5"}
+PROXY_POOL_MARKETS = {"", "us", "jp", "eu", "custom"}
+
+
+class ProxyPoolCreate(BaseModel):
+    name: Optional[str] = ""
+    type: Optional[str] = "http"
+    host: str
+    port: Optional[int] = None
+    username: Optional[str] = ""
+    password: Optional[str] = ""
+    market: Optional[str] = ""
+    notes: Optional[str] = ""
+
+    @field_validator("host")
+    @classmethod
+    def _validate_host(cls, v: str) -> str:
+        value = str(v or "").strip()
+        if not value:
+            raise ValueError("host is required")
+        return value
+
+    @field_validator("type")
+    @classmethod
+    def _validate_type(cls, v: Optional[str]) -> str:
+        return str(v or "http").strip().lower() or "http"
+
+    @field_validator("market")
+    @classmethod
+    def _validate_market(cls, v: Optional[str]) -> str:
+        return str(v or "").strip().lower()
+
+    @field_validator("port")
+    @classmethod
+    def _validate_port(cls, v: Optional[int]) -> int:
+        return max(0, int(v or 0))
+
+
+class ProxyPoolUpdate(BaseModel):
+    name: Optional[str] = None
+    type: Optional[str] = None
+    host: Optional[str] = None
+    port: Optional[int] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    market: Optional[str] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+    last_tested_at: Optional[str] = None
+    last_ok_at: Optional[str] = None
+    latency_ms: Optional[int] = None
+    last_ip: Optional[str] = None
+    last_error: Optional[str] = None
+
+    @field_validator("type")
+    @classmethod
+    def _validate_type(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return str(v).strip().lower() or "http"
+
+    @field_validator("market")
+    @classmethod
+    def _validate_market(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return str(v).strip().lower()
+
+    @field_validator("port")
+    @classmethod
+    def _validate_port(cls, v: Optional[int]) -> Optional[int]:
+        if v is None:
+            return None
+        return max(0, int(v or 0))

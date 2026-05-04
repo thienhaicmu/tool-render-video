@@ -9,6 +9,8 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
 from app.models.schemas import (
     AddUploadVideoRequest,
+    ProxyPoolCreate,
+    ProxyPoolUpdate,
     ProxyTestRequest,
     UpdateUploadVideoRequest,
     UploadAccountCreate,
@@ -23,14 +25,18 @@ from app.services.db import (
     acquire_upload_runtime_lock,
     build_default_upload_profile_path,
     cancel_upload_queue_item,
+    create_proxy_pool_row,
     create_upload_account_row,
     create_upload_video_row,
+    delete_proxy_pool_row,
     disable_upload_video_row,
     disable_upload_account_row,
     find_upload_account_profile_conflict,
+    get_proxy_pool_row,
     get_upload_account_row,
     get_upload_queue_item,
     get_upload_video_row,
+    list_proxy_pool_rows,
     normalize_profile_path_value,
     release_upload_runtime_locks_for_queue,
     set_upload_queue_last_error,
@@ -45,6 +51,7 @@ from app.services.db import (
     get_upload_scheduler_state,
     increment_upload_scheduler_running_count,
     list_active_runtime_locks,
+    update_proxy_pool_row,
     update_upload_scheduler_state,
     update_upload_account_row,
     update_upload_queue_item,
@@ -386,6 +393,86 @@ def _validate_account_profile_isolation(account_payload: dict, exclude_account_i
             detail=f"Profile folder is already used by account: {conflict_name}.",
         )
     return account_payload
+
+
+@router.get("/proxies")
+def list_upload_proxies():
+    items = list_proxy_pool_rows()
+    return {"status": "ok", "count": len(items), "items": items}
+
+
+@router.post("/proxies")
+def create_upload_proxy(payload: ProxyPoolCreate):
+    item = create_proxy_pool_row(payload.model_dump())
+    logger.info("proxy_pool_create proxy_id=%s host=%s market=%s", item.get("proxy_id"), item.get("host"), item.get("market"))
+    return {"status": "ok", "item": item}
+
+
+@router.patch("/proxies/{proxy_id}")
+def update_upload_proxy(proxy_id: str, payload: ProxyPoolUpdate):
+    current = get_proxy_pool_row(proxy_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    changes = payload.model_dump(exclude_unset=True)
+    item = update_proxy_pool_row(proxy_id, changes)
+    return {"status": "ok", "item": item}
+
+
+@router.delete("/proxies/{proxy_id}")
+def delete_upload_proxy(proxy_id: str):
+    current = get_proxy_pool_row(proxy_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    delete_proxy_pool_row(proxy_id)
+    logger.info("proxy_pool_delete proxy_id=%s", proxy_id)
+    return {"status": "ok"}
+
+
+@router.post("/proxies/{proxy_id}/test")
+def test_upload_proxy_from_pool(proxy_id: str):
+    current = get_proxy_pool_row(proxy_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    host = str(current.get("host") or "").strip()
+    if not host:
+        raise HTTPException(status_code=400, detail="Proxy has no host configured")
+    proxy_type = str(current.get("type") or "http").lower().replace("https", "http")
+    port = int(current.get("port") or 0)
+    port_part = f":{port}" if port else ""
+    username = str(current.get("username") or "")
+    password = str(current.get("password") or "")
+    if username and password:
+        proxy_url = f"{proxy_type}://{username}:{password}@{host}{port_part}"
+    else:
+        proxy_url = f"{proxy_type}://{host}{port_part}"
+    test_url = "https://httpbin.org/ip"
+    start = time.time()
+    try:
+        import urllib.request
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+        )
+        resp = opener.open(test_url, timeout=8)
+        latency_ms = int((time.time() - start) * 1000)
+        body = resp.read(256).decode("utf-8", errors="replace").strip()
+        ip = ""
+        try:
+            ip = json.loads(body).get("origin", "")
+        except Exception:
+            ip = body[:45]
+        now_iso = datetime.now(timezone.utc).isoformat()
+        update_proxy_pool_row(proxy_id, {
+            "status": "ok", "last_tested_at": now_iso, "last_ok_at": now_iso,
+            "latency_ms": latency_ms, "last_ip": str(ip)[:45], "last_error": "",
+        })
+        return {"ok": True, "ip": str(ip)[:45], "latency_ms": latency_ms}
+    except Exception as exc:
+        err = str(exc)[:200]
+        now_iso = datetime.now(timezone.utc).isoformat()
+        update_proxy_pool_row(proxy_id, {
+            "status": "failed", "last_tested_at": now_iso, "last_error": err,
+        })
+        return {"ok": False, "error": err}
 
 
 @router.get("/accounts")
