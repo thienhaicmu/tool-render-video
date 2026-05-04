@@ -23,6 +23,26 @@ _HL_CLOSE = "\ue101"
 _WHISPER_CACHE_DIR: Path = Path(__file__).resolve().parents[3] / "data" / "whisper_cache"
 _WHISPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+_QUALITY_PRESETS = frozenset({"viral_bold", "clean_pro", "boxed_caption"})
+
+
+def _compute_subtitle_scale(play_res_x: int = 1080, play_res_y: int = 1440) -> dict:
+    base = min(max(1, int(play_res_x)), max(1, int(play_res_y)))
+    return {
+        "font_size": max(24, int(base * 0.05)),
+        "outline":   max(1, round(base * 0.003)),
+        "shadow":    max(1, round(base * 0.004)),
+    }
+
+
+def _compute_margin_v(play_res_x: int = 1080, play_res_y: int = 1440) -> int:
+    ratio = play_res_y / max(1, int(play_res_x))
+    if ratio >= 1.6:
+        return int(play_res_y * 0.18)
+    if ratio >= 1.2:
+        return int(play_res_y * 0.24)
+    return int(play_res_y * 0.30)
+
 
 def get_whisper_model(model_name: str = "base"):
     with _MODEL_CACHE_LOCK:
@@ -330,6 +350,8 @@ def _resolve_ass_style(
     font_name: str = "Bungee",
     margin_v: int = 180,
     font_size: int = 0,
+    outline_size: int = 0,
+    shadow_size: int = 0,
 ):
     """Return (style_line, line_fx) for the requested subtitle style.
 
@@ -385,6 +407,37 @@ def _resolve_ass_style(
         return (
             f"Style: Default,{safe_font},{_fsize(32)},&H00F6F6F6,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,0,2,40,40,{margin_v},1",
             BOUNCE_FX if highlight_per_word else "",
+        )
+
+    if style == "viral_bold":
+        _ol = outline_size if outline_size > 0 else 4
+        _sh = shadow_size  if shadow_size  > 0 else 2
+        return (
+            f"Style: Default,{safe_font},{_fsize(46)},"
+            f"&H00FFFFFF,&H0015CCFA,&H00000000,&HAA000000,"
+            f"-1,0,0,0,100,{scale_y},0,0,1,{_ol},{_sh},"
+            f"2,30,30,{margin_v},1",
+            BOUNCE_FX if highlight_per_word else "",
+        )
+    if style == "clean_pro":
+        _ol = outline_size if outline_size > 0 else 3
+        _sh = shadow_size  if shadow_size  > 0 else 1
+        return (
+            f"Style: Default,{safe_font},{_fsize(38)},"
+            f"&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,"
+            f"-1,0,0,0,100,{scale_y},0,0,1,{_ol},{_sh},"
+            f"2,40,40,{margin_v},1",
+            BOUNCE_FX if highlight_per_word else "",
+        )
+    if style == "boxed_caption":
+        _ol = outline_size if outline_size > 0 else 12
+        _sh = shadow_size  if shadow_size  > 0 else 0
+        return (
+            f"Style: Default,{safe_font},{_fsize(32)},"
+            f"&H00FFFFFF,&H0000FFFF,&H00000000,&HC0000000,"
+            f"0,0,0,0,100,{scale_y},0,0,3,{_ol},{_sh},"
+            f"2,20,20,{margin_v},1",
+            "",
         )
 
     # Default / tiktok_bounce_v1 — Bungee font, word-by-word bounce
@@ -468,21 +521,49 @@ def _approx_visual_width(text: str) -> float:
     return total
 
 
-def _break_by_visual_width(text: str, max_em: float = 18.0) -> str:
-    """Insert a newline when a line's visual width exceeds max_em.
+def _break_by_visual_width(text: str, max_em: float = 18.0, max_lines: int = 2) -> str:
+    """Insert newlines to keep subtitle lines within max_em visual width.
 
-    Operates word by word; never breaks a single-word line.
-    Returns text unchanged when it already contains a newline.
+    When max_lines=2 (default), splits at the visual midpoint to produce
+    balanced two-line captions instead of greedy word-count wrapping.
+    Returns text unchanged when it already fits or already has a newline.
     """
-    if "\n" in text or _approx_visual_width(text) <= max_em:
+    if "\n" in text:
+        # Already line-broken: enforce max_lines cap only
+        parts = text.split("\n")
+        if len(parts) <= max_lines:
+            return text
+        return "\n".join(parts[:max_lines])
+
+    total_w = _approx_visual_width(text)
+    if total_w <= max_em:
         return text
+
     words = text.split()
+    if len(words) <= 1:
+        return text
+
+    if max_lines == 2:
+        # Find split point closest to visual midpoint
+        half = total_w / 2.0
+        cum = 0.0
+        best_idx = 1
+        best_dist = float("inf")
+        for i, word in enumerate(words):
+            cum += _approx_visual_width(word + " ")
+            dist = abs(cum - half)
+            if dist < best_dist:
+                best_dist = dist
+                best_idx = i + 1
+        return " ".join(words[:best_idx]) + "\n" + " ".join(words[best_idx:])
+
+    # General greedy wrap for max_lines > 2
     lines: list[str] = []
     current: list[str] = []
     current_w = 0.0
     for word in words:
         ww = _approx_visual_width(word + " ")
-        if current and current_w + ww > max_em:
+        if current and current_w + ww > max_em and len(lines) < max_lines - 1:
             lines.append(" ".join(current))
             current = [word]
             current_w = ww
@@ -507,6 +588,7 @@ def srt_to_ass_bounce(
     font_name: str = "Bungee",
     margin_v: int = 180,
     play_res_y: int = 1440,
+    play_res_x: int = 1080,
     x_percent: float = 50.0,
     text_overlay_margin_v: int | None = None,
     font_size: int = 0,
@@ -521,13 +603,36 @@ def srt_to_ass_bounce(
     # When text overlays occupy the bottom zone, push subtitles above them.
     effective_margin_v = text_overlay_margin_v if text_overlay_margin_v is not None else margin_v
 
+    # Quality-preset auto-scaling: resolve font/outline/shadow from resolution
+    # when style is one of the new quality presets and no explicit font_size was set.
+    _eff_font_size = font_size
+    _eff_outline = 0
+    _eff_shadow = 0
+    if subtitle_style.lower() in _QUALITY_PRESETS and font_size == 0:
+        if subtitle_style.lower() == "viral_bold":
+            # viral_bold uses heavier font + tighter shadow than the generic preset scale
+            _base = min(max(1, int(play_res_x)), max(1, int(play_res_y)))
+            _eff_font_size = max(24, int(_base * 0.055))
+            _eff_outline   = max(1, round(_base * 0.0035))
+            _eff_shadow    = max(1, round(_base * 0.002))
+            # Push captions to height * 0.20 from bottom when no overlay overrides margin
+            if text_overlay_margin_v is None:
+                effective_margin_v = int(play_res_y * 0.20)
+        else:
+            _scale = _compute_subtitle_scale(play_res_x, play_res_y)
+            _eff_font_size = _scale["font_size"]
+            _eff_outline   = _scale["outline"]
+            _eff_shadow    = _scale["shadow"]
+
     ass_style, line_fx = _resolve_ass_style(
         subtitle_style,
         scale_y,
         highlight_per_word,
         font_name=font_name,
         margin_v=effective_margin_v,
-        font_size=font_size,
+        font_size=_eff_font_size,
+        outline_size=_eff_outline,
+        shadow_size=_eff_shadow,
     )
 
     # Position mode: centred default uses Alignment=2 + MarginV (no \pos tag).
@@ -570,15 +675,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         out.append(f"Dialogue: 0,{start_ass},{end_ass},Default,,0,0,0,,{_pos_tag}{line_fx}{text}\n")
     Path(ass_path).write_text("".join(out), encoding="utf-8")
 
-    _resolved_fsize = max(12, min(120, int(font_size))) if font_size > 0 else 0
+    _resolved_fsize = max(12, min(120, int(_eff_font_size))) if _eff_font_size > 0 else 0
     logger.info(
-        "srt_to_ass_bounce: style=%s font_size=%s x_percent=%.1f margin_v=%d "
-        "play_res_y=%d position_mode=%s -> %s",
+        "subtitle_style_resolved style=%s font_size=%s outline=%s shadow=%s "
+        "margin_v=%d play_res_x=%d play_res_y=%d x_percent=%.1f position_mode=%s -> %s",
         subtitle_style,
         _resolved_fsize if _resolved_fsize else "style_default",
-        x_percent,
+        _eff_outline if _eff_outline else "style_default",
+        _eff_shadow if _eff_shadow else "style_default",
         effective_margin_v,
+        play_res_x,
         play_res_y,
+        x_percent,
         position_mode,
         ass_path,
     )
@@ -608,6 +716,7 @@ def srt_to_ass_karaoke(
     font_name: str = "Bungee",
     margin_v: int = 180,
     play_res_y: int = 1440,
+    play_res_x: int = 1080,
     highlight_color: str = "&H0000FFFF",   # yellow (ASS BGR: 00FFFF = yellow)
     base_color: str = "&H00FFFFFF",         # white
     outline_color: str = "&H00000000",      # black outline
@@ -637,12 +746,18 @@ def srt_to_ass_karaoke(
         if chunk:
             groups.append(chunk)
 
+    # Resolution-aware effective values — scale default 1080p values to actual resolution
+    _scale = _compute_subtitle_scale(play_res_x, play_res_y)
+    _eff_font_size = font_size if font_size != 46 else _scale["font_size"]
+    _eff_outline   = outline_size if outline_size != 3 else _scale["outline"]
+    _eff_shadow    = shadow_size  if shadow_size  != 1 else _scale["shadow"]
+
     # ASS style — 2 colours: primary (base) + secondary (highlight during karaoke)
     style_line = (
-        f"Style: Default,{font_name},{font_size},"
+        f"Style: Default,{font_name},{_eff_font_size},"
         f"{base_color},{highlight_color},"
         f"{outline_color},{back_color},"
-        f"0,0,0,0,100,{scale_y},0,0,1,{outline_size},{shadow_size},"
+        f"0,0,0,0,100,{scale_y},0,0,1,{_eff_outline},{_eff_shadow},"
         f"2,30,30,{effective_margin_v},1"
     )
 
@@ -689,7 +804,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         )
 
     Path(ass_path).write_text("".join(out), encoding="utf-8")
-    logger.info("srt_to_ass_karaoke: play_res_y=%d margin_v=%d words_per_group=%d -> %s", play_res_y, effective_margin_v, words_per_group, ass_path)
+    logger.info(
+        "subtitle_style_resolved style=karaoke font_size=%d outline=%d shadow=%d "
+        "margin_v=%d play_res_x=%d play_res_y=%d words_per_group=%d -> %s",
+        _eff_font_size, _eff_outline, _eff_shadow,
+        effective_margin_v, play_res_x, play_res_y, words_per_group, ass_path,
+    )
     return ass_path
 
 
