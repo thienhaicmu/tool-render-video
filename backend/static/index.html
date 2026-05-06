@@ -634,14 +634,12 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <label class="field" style="grid-column:1/-1">
             <span class="fieldLabel">Style</span>
-            <select class="fieldInput" id="evSubStyle">
-              <option value="pro_karaoke" selected>Pro Karaoke (word highlight)</option>
-              <option value="viral_pop_anton">Viral Pop — Anton</option>
-              <option value="viral_clean_montserrat">Viral Clean — Montserrat</option>
-              <option value="viral_soft_poppins">Viral Soft — Poppins</option>
-              <option value="viral_compact_barlow">Viral Compact — Barlow</option>
-              <option value="clean_bold_01">Clean Bold</option>
-              <option value="story_clean_01">Story Clean</option>
+            <select class="fieldInput" id="evSubStyle" onchange="evUpdateSubPreview()">
+              <option value="tiktok_bounce_v1">Viral Bounce — Fast TikTok/Reels captions</option>
+              <option value="pro_karaoke" selected>Karaoke — Word-highlight story captions</option>
+              <option value="bold_cap">Bold Cap — Large podcast/interview captions</option>
+              <option value="boxed_caption">Boxed — Educational/documentary captions</option>
+              <option value="story_clean_01">Clean — Minimal business/storytelling captions</option>
             </select>
           </label>
           <label class="field">
@@ -687,6 +685,7 @@
           </label>
         </div>
         <div class="inspSubPreview" id="evSubStaticPreview">
+          <img id="evSubPreviewImg" class="evSubPreviewImg" style="display:none" alt="subtitle preview">
           <span id="evSubStaticText" style="font-family:'Bungee';font-size:28px;color:#fff;-webkit-text-stroke:2px #000">Preview subtitle</span>
         </div>
         <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">

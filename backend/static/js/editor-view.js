@@ -1338,7 +1338,7 @@ function evUpdateSubPreview() {
     inner.innerHTML = _evBuildWordSpans(words, _ev.subWordIdx, baseStyle, color, highlight);
   }
 
-  // Static preview box — always uses demo words as a style reference sample
+  // Static preview box — CSS fallback; also updated when real preview is unavailable
   const sp = qs('evSubStaticText');
   sp.style.fontFamily = `'${font}',sans-serif`;
   sp.style.fontSize = `${sampleFontPx}px`;
@@ -1350,6 +1350,73 @@ function evUpdateSubPreview() {
   sp.innerHTML = demoWords.map((w, i) =>
     `<span style="color:${i===half?highlight:color}">${w} </span>`
   ).join('');
+
+  // Schedule a real libass preview render (debounced)
+  evFetchSubPreview();
+}
+
+/* ── Real subtitle preview (libass-rendered PNG) ───────────────────────── */
+let _subPreviewTimer = null;
+let _subPreviewAbort = null;
+
+function evFetchSubPreview() {
+  if (_subPreviewTimer) clearTimeout(_subPreviewTimer);
+  _subPreviewTimer = setTimeout(_evDoFetchSubPreview, 320);
+}
+
+async function _evDoFetchSubPreview() {
+  const img      = document.getElementById('evSubPreviewImg');
+  const fallback = document.getElementById('evSubStaticText');
+  if (!img || !fallback) return;
+
+  const style  = qs('evSubStyle')?.value  || 'tiktok_bounce_v1';
+  const font   = qs('evSubFont')?.value   || 'Bungee';
+  const fsize  = Number(qs('evSubSize')?.value  || 0);
+  const posY   = Number(qs('evSubPos')?.value   || 15);
+  const ar     = qs('evAspectRatio')?.value || '9:16';
+  const _PRY   = {'9:16':1920,'3:4':1440,'4:5':1440,'1:1':1080,'16:9':1080};
+  const marginV = Math.round((posY / 100) * (_PRY[ar] || 1440));
+
+  // Mark loading
+  img.classList.add('loading');
+
+  // Cancel any in-flight request
+  if (_subPreviewAbort) { try { _subPreviewAbort.abort(); } catch (_) {} }
+  _subPreviewAbort = new AbortController();
+
+  try {
+    const res = await fetch('/api/subtitle/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: _subPreviewAbort.signal,
+      body: JSON.stringify({
+        subtitle_style: style,
+        font_name:      font,
+        font_size:      fsize,
+        aspect_ratio:   ar,
+        margin_v:       marginV,
+        sample_text:    'This is a preview subtitle',
+      }),
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    if (data.image_base64) {
+      img.src = `data:${data.mime_type || 'image/png'};base64,${data.image_base64}`;
+      img.style.display = 'block';
+      img.classList.remove('loading');
+      fallback.style.display = 'none';
+    } else {
+      throw new Error(data.error || 'no image');
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') return;   // superseded by newer request
+    console.warn('[subtitle-preview] fallback to CSS preview:', err.message || err);
+    img.classList.remove('loading');
+    img.style.display = 'none';
+    fallback.style.display = '';
+  }
 }
 
 function _evStartSubAnim() {
@@ -1568,7 +1635,7 @@ const _EV_PRESETS = {
   podcast: {
     aspect_ratio: '1:1', render_profile: 'balanced',
     min_part_sec: 60, max_part_sec: 180,
-    subtitle_style: 'clean_bold_01', sub_font: 'Montserrat',
+    subtitle_style: 'story_clean_01', sub_font: 'Montserrat',
     sub_size: 38, sub_color: '#ffffff', sub_highlight: '#60a5fa',
     sub_outline: 2, sub_pos: 18,
     effect_preset: 'slay_soft_01', loudnorm: true,
@@ -1678,9 +1745,11 @@ async function startRenderFromEditor() {
   payload.sub_highlight = qs('evSubHighlight').value;
   payload.sub_outline   = Number(qs('evSubOutline').value);
   const posY = Number(qs('evSubPos').value);
-  // 1440 matches subtitle_engine.py PlayResY — not the actual video height
-  payload.sub_margin_v   = Math.round((posY / 100) * 1440);
+  const _PLAY_RES_Y_MAP = {'9:16': 1920, '3:4': 1440, '4:5': 1440, '1:1': 1080, '16:9': 1080};
+  const _playResY = _PLAY_RES_Y_MAP[qs('evAspectRatio').value] || 1440;
+  payload.sub_margin_v   = Math.round((posY / 100) * _playResY);
   payload.subtitle_style = qs('evSubStyle')?.value || 'pro_karaoke';
+  if (payload.subtitle_style === 'pro_karaoke') payload.highlight_per_word = true;
   payload.sub_x_percent  = Math.max(5, Math.min(95, Number(qs('evSubPosX')?.value ?? _ev.subXPercent ?? 50)));
   // Editor mode: user expects subtitle on all exported parts.
   payload.subtitle_only_viral_high = false;
@@ -1748,7 +1817,7 @@ async function startRenderFromEditor() {
     payload.effect_preset    = 'slay_pop_01';
     payload.transition_sec   = 0.35;
     payload.reup_overlay_opacity = 0.12;
-    payload.subtitle_style   = 'viral_pop_anton';
+    payload.subtitle_style   = 'tiktok_bounce_v1';
   } else if (reupEnabled) {
     payload.effect_preset    = 'story_clean_01';
     payload.transition_sec   = 0.20;
@@ -2144,7 +2213,7 @@ const EV_OUTPUT_PRESETS = {
   tiktok_us_viral: {
     label: 'TikTok US Viral',
     market: 'US', subtitleTone: 'bold', keywordHighlight: true,
-    subtitleStyle: 'viral_pop_anton', subtitleFont: 'Anton',
+    subtitleStyle: 'tiktok_bounce_v1', subtitleFont: 'Bungee',
     renderProfile: 'quality', sourceQuality: 'high_1440', reframeStrategy: 'fast_center',
     combinedScoring: true, adaptiveScoring: true,
     autoBestClips: true, bestExportEnabled: false, bestExportCount: 3,
@@ -2154,7 +2223,7 @@ const EV_OUTPUT_PRESETS = {
   eu_clean_review: {
     label: 'EU Clean Review',
     market: 'EU', subtitleTone: 'clean', keywordHighlight: false,
-    subtitleStyle: 'viral_clean_montserrat', subtitleFont: 'Montserrat',
+    subtitleStyle: 'story_clean_01', subtitleFont: 'Montserrat',
     renderProfile: 'balanced', sourceQuality: 'standard_1080', reframeStrategy: 'fast_center',
     combinedScoring: true, adaptiveScoring: true,
     autoBestClips: true, bestExportEnabled: false, bestExportCount: 3,
@@ -2171,7 +2240,7 @@ const EV_OUTPUT_PRESETS = {
   },
   clean_subtitle_focus: {
     label: 'Clean Subtitle Focus',
-    subtitleStyle: 'clean_bold_01', subtitleFont: 'Montserrat',
+    subtitleStyle: 'story_clean_01', subtitleFont: 'Montserrat',
     keywordHighlight: false,
     hookMode: 'off',
   },

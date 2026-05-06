@@ -3040,10 +3040,19 @@
     .inspActions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
     .inspMeta { margin-left: auto; font-size: 11px; color: var(--text-muted); }
     .inspSubPreview {
-      margin-top: 10px; padding: 10px; background: #000;
+      margin-top: 10px; padding: 0; background: #000;
       border-radius: 8px; text-align: center; min-height: 60px;
       display: flex; align-items: center; justify-content: center;
+      overflow: hidden; position: relative;
     }
+    .inspSubPreview > span { padding: 10px; }
+    .evSubPreviewImg {
+      width: 100%; height: 150px;
+      object-fit: cover; object-position: center bottom;
+      border-radius: 8px; display: block;
+      transition: opacity .18s ease;
+    }
+    .evSubPreviewImg.loading { opacity: 0.35; }
     .inspSubGroupLabel {
       font-size: 10px; font-weight: 600; color: var(--accent);
       text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; margin-top: 4px;

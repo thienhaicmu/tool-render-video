@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 import time
 import threading
+from dataclasses import dataclass
 import whisper
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ _HL_CLOSE = "\ue101"
 _WHISPER_CACHE_DIR: Path = Path(__file__).resolve().parents[3] / "data" / "whisper_cache"
 _WHISPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-_QUALITY_PRESETS = frozenset({"viral_bold", "clean_pro", "boxed_caption"})
+# Replaced by preset-table auto_scale / heavy_scale fields — see ASSPreset below.
 
 
 def _compute_subtitle_scale(play_res_x: int = 1080, play_res_y: int = 1440) -> dict:
@@ -340,120 +341,178 @@ def _write_segment_level_srt(result: dict, srt_path: str):
 
 
 # ---------------------------------------------------------------------------
-# ASS style definitions
+# ASS Preset architecture
 # ---------------------------------------------------------------------------
 
-def _resolve_ass_style(
-    subtitle_style: str = "tiktok_bounce_v1",
-    scale_y: int = 106,
-    highlight_per_word: bool = True,
-    font_name: str = "Bungee",
-    margin_v: int = 180,
+# Premium pop-in: scale up to 122% then snap-settle to 100% over 200 ms.
+BOUNCE_FX = r"{\fscx122\fscy122\t(0,200,\fscx100\fscy100)}"
+
+
+@dataclass(frozen=True)
+class ASSPreset:
+    """Immutable descriptor for one ASS subtitle style."""
+    id: str
+    font_default: str
+    base_font_size: int
+    primary_color: str      # &HAABBGGRR — text fill
+    secondary_color: str    # &HAABBGGRR — karaoke highlight sweep
+    outline_color: str      # &HAABBGGRR — outline / box border
+    back_color: str         # &HAABBGGRR — drop shadow / box fill
+    bold: int               # -1 = bold, 0 = normal
+    border_style: int       # 1 = outline+shadow, 3 = opaque box (boxed_caption)
+    outline_default: int    # Default outline px (box padding when BorderStyle=3)
+    shadow_default: int     # Default shadow depth px
+    alignment: int          # ASS numpad alignment (2 = bottom-center)
+    margin_l: int
+    margin_r: int
+    wrap_max_em: float      # Visual-width limit for _break_by_visual_width
+    bounce_fx: bool         # Whether pop-in animation fires on this preset
+    auto_scale: bool        # Font/outline/shadow scale with resolution when font_size=0
+    heavy_scale: bool       # Use heavier viral_bold formula vs standard _compute_subtitle_scale
+    margin_v_ratio: float   # 0.0 = use margin arg; >0 = override as ratio of play_res_y
+
+
+# Canonical preset table — one entry per supported style ID.
+_PRESETS: dict[str, ASSPreset] = {
+    "tiktok_bounce_v1": ASSPreset(
+        id="tiktok_bounce_v1", font_default="Bungee", base_font_size=38,
+        primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
+        outline_color="&H00000000", back_color="&H90000000",
+        bold=0, border_style=1, outline_default=5, shadow_default=3,
+        alignment=2, margin_l=30, margin_r=30, wrap_max_em=16.0,
+        bounce_fx=True, auto_scale=False, heavy_scale=False, margin_v_ratio=0.0,
+    ),
+    "bold_cap": ASSPreset(
+        id="bold_cap", font_default="Bungee", base_font_size=48,
+        primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
+        outline_color="&H00000000", back_color="&H90000000",
+        bold=-1, border_style=1, outline_default=5, shadow_default=3,
+        alignment=2, margin_l=30, margin_r=30, wrap_max_em=16.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.20,
+    ),
+    "story_clean_01": ASSPreset(
+        id="story_clean_01", font_default="Bungee", base_font_size=32,
+        primary_color="&H00F6F6F6", secondary_color="&H0000FFFF",
+        outline_color="&H00000000", back_color="&H80000000",
+        bold=0, border_style=1, outline_default=4, shadow_default=1,
+        alignment=2, margin_l=40, margin_r=40, wrap_max_em=16.0,
+        bounce_fx=True, auto_scale=False, heavy_scale=False, margin_v_ratio=0.0,
+    ),
+    "viral_bold": ASSPreset(
+        id="viral_bold", font_default="Bungee", base_font_size=46,
+        primary_color="&H00FFFFFF", secondary_color="&H0015CCFA",
+        outline_color="&H00000000", back_color="&HAA000000",
+        bold=-1, border_style=1, outline_default=5, shadow_default=3,
+        alignment=2, margin_l=30, margin_r=30, wrap_max_em=16.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.20,
+    ),
+    "clean_pro": ASSPreset(
+        id="clean_pro", font_default="Bungee", base_font_size=38,
+        primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
+        outline_color="&H00000000", back_color="&H80000000",
+        bold=-1, border_style=1, outline_default=4, shadow_default=2,
+        alignment=2, margin_l=40, margin_r=40, wrap_max_em=16.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
+    ),
+    "boxed_caption": ASSPreset(
+        id="boxed_caption", font_default="Bungee", base_font_size=32,
+        primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
+        outline_color="&H00000000", back_color="&HC0000000",
+        bold=0, border_style=3, outline_default=12, shadow_default=0,
+        alignment=2, margin_l=20, margin_r=20, wrap_max_em=16.0,
+        bounce_fx=False, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
+    ),
+}
+
+# Legacy alias table — maps removed/renamed style IDs to canonical preset IDs.
+# Backward-compatible: old saved job configs and API calls continue to work.
+_STYLE_ALIASES: dict[str, str] = {
+    "viral_clean_montserrat": "tiktok_bounce_v1",
+    "viral_soft_poppins":     "tiktok_bounce_v1",
+    "viral_pop_anton":        "tiktok_bounce_v1",
+    "viral_compact_barlow":   "tiktok_bounce_v1",
+    "clean_bold_01":          "clean_pro",
+}
+
+_DEFAULT_PRESET_ID = "tiktok_bounce_v1"
+
+
+def normalize_subtitle_style_id(style_id: str) -> str:
+    """Normalize a style ID: lowercase → resolve alias → fall back to default."""
+    sid = (style_id or _DEFAULT_PRESET_ID).lower().strip()
+    sid = _STYLE_ALIASES.get(sid, sid)
+    return sid if sid in _PRESETS else _DEFAULT_PRESET_ID
+
+
+def get_subtitle_preset(style_id: str) -> ASSPreset:
+    """Return the ASSPreset for style_id after alias resolution."""
+    return _PRESETS[normalize_subtitle_style_id(style_id)]
+
+
+def build_ass_style_line(
+    preset: ASSPreset,
+    play_res_x: int,
+    play_res_y: int,
+    scale_y: int,
+    font_name: str,
+    margin_v: int,
     font_size: int = 0,
     outline_size: int = 0,
     shadow_size: int = 0,
-):
-    """Return (style_line, line_fx) for the requested subtitle style.
+    highlight_per_word: bool = True,
+) -> tuple[str, str]:
+    """Build an ASS Style line and per-dialogue line_fx tag from a preset.
 
-    font_size: explicit ASS Fontsize to use.  0 = use per-style default.
-    Clamped to [12, 120] when non-zero so the UI value maps 1:1 to ASS output.
+    Returns (style_line, line_fx).
+    line_fx is the override tag prepended to each Dialogue Text field.
 
-    line_fx is prepended to each Dialogue text field (ASS override tags).
-    For word-by-word mode, line_fx includes a pop-in bounce animation.
+    Resolution of font/outline/shadow:
+      auto_scale=True  + font_size=0  → computed from play_res (heavy or standard formula)
+      auto_scale=False or font_size>0 → explicit value, else preset default
     """
-    style = (subtitle_style or "tiktok_bounce_v1").lower()
+    safe_font = (font_name or preset.font_default).replace(",", " ").strip() or preset.font_default
 
-    # Premium pop-in: scale up to 122% then snap-settle to 100% over 200 ms.
-    # 122% (vs old 118%) makes the pop more visible; 200 ms (vs 220 ms) feels snappier.
-    BOUNCE_FX = r"{\fscx122\fscy122\t(0,200,\fscx100\fscy100)}"
+    # --- Resolve font / outline / shadow ---
+    eff_back = preset.back_color
+    if preset.auto_scale and font_size == 0:
+        if preset.heavy_scale:
+            # Heavy formula: viral_bold / bold_cap — larger font, heavier outline
+            _base = min(max(1, int(play_res_x)), max(1, int(play_res_y)))
+            eff_font_size = max(24, int(_base * 0.055))
+            eff_outline   = max(1, round(_base * 0.0035))
+            eff_shadow    = max(1, round(_base * 0.002))
+        else:
+            _sc = _compute_subtitle_scale(play_res_x, play_res_y)
+            eff_font_size = _sc["font_size"]
+            eff_outline   = _sc["outline"]
+            eff_shadow    = _sc["shadow"]
+    else:
+        eff_font_size = max(12, min(120, font_size)) if font_size > 0 else preset.base_font_size
+        eff_outline   = outline_size if outline_size > 0 else preset.outline_default
+        eff_shadow    = shadow_size  if shadow_size  > 0 else preset.shadow_default
+        # tiktok_bounce_v1 segment mode: slightly lighter values for multi-word blocks
+        if not highlight_per_word and preset.id == "tiktok_bounce_v1":
+            eff_font_size = max(12, eff_font_size - 4)
+            eff_outline   = max(1, eff_outline - 1)
+            eff_shadow    = max(1, eff_shadow - 1)
+            eff_back = "&H80000000"
 
-    safe_font = (font_name or "Bungee").replace(",", " ").strip() or "Bungee"
-
-    def _fsize(style_default: int) -> int:
-        """Return user-requested size when provided, else fall back to style default."""
-        if font_size and font_size > 0:
-            return max(12, min(120, int(font_size)))
-        return style_default
-
-    if style == "viral_clean_montserrat":
-        line_fx = BOUNCE_FX if highlight_per_word else ""
-        return (
-            f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
-            line_fx,
-        )
-    if style == "viral_soft_poppins":
-        line_fx = BOUNCE_FX if highlight_per_word else ""
-        return (
-            f"Style: Default,{safe_font},{_fsize(32)},&H00F0F0F0,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
-            line_fx,
-        )
-    if style == "viral_pop_anton":
-        line_fx = BOUNCE_FX if highlight_per_word else r"{\bord4\fscx100\fscy108}"
-        return (
-            f"Style: Default,{safe_font},{_fsize(40)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
-            line_fx,
-        )
-    if style == "viral_compact_barlow":
-        line_fx = BOUNCE_FX if highlight_per_word else ""
-        return (
-            f"Style: Default,{safe_font},{_fsize(36)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
-            line_fx,
-        )
-    if style == "clean_bold_01":
-        return (
-            f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
-            BOUNCE_FX if highlight_per_word else "",
-        )
-    if style == "story_clean_01":
-        # Story style keeps lighter shadow (1) for a clean editorial feel
-        return (
-            f"Style: Default,{safe_font},{_fsize(32)},&H00F6F6F6,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,1,2,40,40,{margin_v},1",
-            BOUNCE_FX if highlight_per_word else "",
-        )
-
-    if style == "viral_bold":
-        _ol = outline_size if outline_size > 0 else 5
-        _sh = shadow_size  if shadow_size  > 0 else 3
-        return (
-            f"Style: Default,{safe_font},{_fsize(46)},"
-            f"&H00FFFFFF,&H0015CCFA,&H00000000,&HAA000000,"
-            f"-1,0,0,0,100,{scale_y},0,0,1,{_ol},{_sh},"
-            f"2,30,30,{margin_v},1",
-            BOUNCE_FX if highlight_per_word else "",
-        )
-    if style == "clean_pro":
-        _ol = outline_size if outline_size > 0 else 4
-        _sh = shadow_size  if shadow_size  > 0 else 2
-        return (
-            f"Style: Default,{safe_font},{_fsize(38)},"
-            f"&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,"
-            f"-1,0,0,0,100,{scale_y},0,0,1,{_ol},{_sh},"
-            f"2,40,40,{margin_v},1",
-            BOUNCE_FX if highlight_per_word else "",
-        )
-    if style == "boxed_caption":
-        _ol = outline_size if outline_size > 0 else 12
-        _sh = shadow_size  if shadow_size  > 0 else 0
-        return (
-            f"Style: Default,{safe_font},{_fsize(32)},"
-            f"&H00FFFFFF,&H0000FFFF,&H00000000,&HC0000000,"
-            f"0,0,0,0,100,{scale_y},0,0,3,{_ol},{_sh},"
-            f"2,20,20,{margin_v},1",
-            "",
-        )
-
-    # Default / tiktok_bounce_v1 — Bungee font, word-by-word bounce
-    # Outline 5 + shadow 3 gives strong readability on bright and busy backgrounds.
-    if highlight_per_word:
-        return (
-            f"Style: Default,{safe_font},{_fsize(38)},&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,0,0,0,0,100,{scale_y},0,0,1,5,3,2,30,30,{margin_v},1",
-            BOUNCE_FX,
-        )
-    # Segment mode — slightly smaller font and lighter shadow (4/2) for multi-word blocks
-    return (
-        f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
-        "",
+    # --- Build style line ---
+    # ASS v4+ field order (23 fields):
+    # Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour,
+    # Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle,
+    # BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+    style_line = (
+        f"Style: Default,{safe_font},{eff_font_size},"
+        f"{preset.primary_color},{preset.secondary_color},"
+        f"{preset.outline_color},{eff_back},"
+        f"{preset.bold},0,0,0,"
+        f"100,{scale_y},0,0,"
+        f"{preset.border_style},{eff_outline},{eff_shadow},"
+        f"{preset.alignment},{preset.margin_l},{preset.margin_r},{margin_v},1"
     )
+    line_fx = BOUNCE_FX if (preset.bounce_fx and highlight_per_word) else ""
+    return style_line, line_fx
 
 
 # ---------------------------------------------------------------------------
@@ -603,48 +662,33 @@ def srt_to_ass_bounce(
                are unchanged when this param is omitted.
                Clamped to [12, 120] when non-zero.
     """
+    preset = get_subtitle_preset(subtitle_style)
+
     # When text overlays occupy the bottom zone, push subtitles above them.
     effective_margin_v = text_overlay_margin_v if text_overlay_margin_v is not None else margin_v
 
-    # Auto-upgrade bottom margin for vertical formats (9:16, 3:4) to avoid TikTok/Reels UI overlap.
-    # Only when no explicit overlay margin was provided and the default (≤180) would clip into the UI zone.
+    # Auto-upgrade bottom margin for vertical formats to avoid TikTok/Reels UI overlap.
     if text_overlay_margin_v is None and effective_margin_v <= 180 and play_res_y > 1200:
         effective_margin_v = _compute_margin_v(play_res_x, play_res_y)
 
-    # Quality-preset auto-scaling: resolve font/outline/shadow from resolution
-    # when style is one of the new quality presets and no explicit font_size was set.
-    _eff_font_size = font_size
-    _eff_outline = 0
-    _eff_shadow = 0
-    if subtitle_style.lower() in _QUALITY_PRESETS and font_size == 0:
-        if subtitle_style.lower() == "viral_bold":
-            # viral_bold uses heavier font + tighter shadow than the generic preset scale
-            _base = min(max(1, int(play_res_x)), max(1, int(play_res_y)))
-            _eff_font_size = max(24, int(_base * 0.055))
-            _eff_outline   = max(1, round(_base * 0.0035))
-            _eff_shadow    = max(1, round(_base * 0.002))
-            # Push captions to height * 0.20 from bottom when no overlay overrides margin
-            if text_overlay_margin_v is None:
-                effective_margin_v = int(play_res_y * 0.20)
-        else:
-            _scale = _compute_subtitle_scale(play_res_x, play_res_y)
-            _eff_font_size = _scale["font_size"]
-            _eff_outline   = _scale["outline"]
-            _eff_shadow    = _scale["shadow"]
+    # Preset-specific margin override — some presets (viral_bold, bold_cap) push captions
+    # higher than the safe-zone default to clear platform UI chrome.
+    if preset.margin_v_ratio > 0 and text_overlay_margin_v is None:
+        effective_margin_v = int(play_res_y * preset.margin_v_ratio)
 
-    ass_style, line_fx = _resolve_ass_style(
-        subtitle_style,
-        scale_y,
-        highlight_per_word,
+    ass_style, line_fx = build_ass_style_line(
+        preset,
+        play_res_x=play_res_x,
+        play_res_y=play_res_y,
+        scale_y=scale_y,
         font_name=font_name,
         margin_v=effective_margin_v,
-        font_size=_eff_font_size,
-        outline_size=_eff_outline,
-        shadow_size=_eff_shadow,
+        font_size=font_size,
+        highlight_per_word=highlight_per_word,
     )
 
     # Position mode: centred default uses Alignment=2 + MarginV (no \pos tag).
-    # Any explicit x or y offset injects a \pos(x,y) that overrides both axes.
+    # Any explicit x offset injects a \pos(x,y) that overrides both axes.
     _pos_tag = ""
     position_mode = "margin"
     if abs(x_percent - 50.0) > 0.5:
@@ -679,18 +723,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         start_ass = _ass_time(parse_srt_timestamp(start_s))
         end_ass   = _ass_time(parse_srt_timestamp(end_s))
         raw_text = "\n".join(lines[2:])
-        text = _ass_escape_text(_break_by_visual_width(raw_text, max_em=16.0))
+        text = _ass_escape_text(_break_by_visual_width(raw_text, max_em=preset.wrap_max_em))
         out.append(f"Dialogue: 0,{start_ass},{end_ass},Default,,0,0,0,,{_pos_tag}{line_fx}{text}\n")
     Path(ass_path).write_text("".join(out), encoding="utf-8")
 
-    _resolved_fsize = max(12, min(120, int(_eff_font_size))) if _eff_font_size > 0 else 0
     logger.info(
-        "subtitle_style_resolved style=%s font_size=%s outline=%s shadow=%s "
+        "subtitle_style_resolved preset=%s font_size=%s auto_scale=%s heavy_scale=%s "
         "margin_v=%d play_res_x=%d play_res_y=%d x_percent=%.1f position_mode=%s -> %s",
-        subtitle_style,
-        _resolved_fsize if _resolved_fsize else "style_default",
-        _eff_outline if _eff_outline else "style_default",
-        _eff_shadow if _eff_shadow else "style_default",
+        preset.id,
+        font_size if font_size > 0 else "preset_default",
+        preset.auto_scale,
+        preset.heavy_scale,
         effective_margin_v,
         play_res_x,
         play_res_y,
@@ -750,6 +793,18 @@ def srt_to_ass_karaoke(
     blocks = _parse_srt_blocks(srt_path)
     if not blocks:
         return srt_to_ass_bounce(srt_path, ass_path, scale_y=scale_y, margin_v=effective_margin_v, play_res_y=play_res_y)
+
+    # Guard: segment-level SRT produces meaningless \k tags — fallback to bounce
+    if len(blocks) > 1:
+        avg_words = sum(len(b["text"].split()) for b in blocks) / len(blocks)
+        if avg_words > 1.5:
+            logger.warning(
+                "srt_to_ass_karaoke: segment-level SRT detected (avg %.1f words/block) "
+                "— \\k tags would be meaningless; falling back to bounce. "
+                "Set highlight_per_word=True for word-level transcription.",
+                avg_words,
+            )
+            return srt_to_ass_bounce(srt_path, ass_path, scale_y=scale_y, margin_v=effective_margin_v, play_res_y=play_res_y)
 
     # Group words into chunks
     groups: list[list[dict]] = []
@@ -992,6 +1047,105 @@ def apply_market_line_break_to_srt(srt_path: str, market_payload: dict) -> str:
     except Exception:
         logger.exception("subtitle_v2_market_format_failed path=%s", srt_path)
     return srt_path
+
+
+# ---------------------------------------------------------------------------
+# Subtitle preview renderer  (used by POST /api/subtitle/preview)
+# ---------------------------------------------------------------------------
+
+# Half-resolution preview frames — same aspect ratio, smaller PNG for fast transfer.
+_PREVIEW_ASPECT_RES: dict[str, tuple[int, int]] = {
+    "9:16": (540, 960),
+    "3:4":  (540, 720),
+    "4:5":  (540, 675),
+    "1:1":  (540, 540),
+    "16:9": (960, 540),
+}
+
+# Bundled fonts directory next to the backend package
+_PREVIEW_FONTS_DIR: Path = Path(__file__).resolve().parents[2] / "fonts"
+
+
+def render_subtitle_preview(
+    subtitle_style: str = "tiktok_bounce_v1",
+    font_name: str = "Bungee",
+    font_size: int = 0,
+    aspect_ratio: str = "9:16",
+    margin_v: int | None = None,
+    sample_text: str = "This is a preview subtitle",
+) -> bytes:
+    """Render one PNG frame with the subtitle style applied.
+
+    Uses the same ASSPreset pipeline as the real render so outline, shadow,
+    border_style, bold, and color all match actual libass output.
+    Returns raw PNG bytes. Raises RuntimeError on FFmpeg failure.
+    """
+    import tempfile as _tempfile
+
+    play_res_x, play_res_y = _PREVIEW_ASPECT_RES.get(aspect_ratio, (540, 960))
+    canonical = normalize_subtitle_style_id(subtitle_style)
+    eff_margin_v = int(margin_v) if margin_v is not None else _compute_margin_v(play_res_x, play_res_y)
+    clean_text = sample_text.replace("\n", " ").strip() or "Preview subtitle"
+
+    with _tempfile.TemporaryDirectory() as _tmp:
+        tmp = Path(_tmp)
+        srt_path = tmp / "prev.srt"
+        ass_path = tmp / "prev.ass"
+        img_path = tmp / "prev.png"
+
+        # Single SRT block at t=0 — visible in the first extracted frame.
+        srt_path.write_text(
+            f"1\n00:00:00,000 --> 00:00:02,000\n{clean_text}\n\n",
+            encoding="utf-8",
+        )
+
+        # Generate ASS through the same preset pipeline as real renders.
+        # highlight_per_word=False omits BOUNCE_FX tags so the static frame
+        # shows the settled appearance (correct font, outline, shadow, box).
+        srt_to_ass_bounce(
+            srt_path=str(srt_path),
+            ass_path=str(ass_path),
+            subtitle_style=canonical,
+            font_name=font_name,
+            margin_v=eff_margin_v,
+            play_res_x=play_res_x,
+            play_res_y=play_res_y,
+            font_size=font_size,
+            highlight_per_word=False,
+        )
+
+        safe_ass = _safe_filter_path(str(ass_path.resolve()))
+        if _PREVIEW_FONTS_DIR.is_dir():
+            safe_fonts = _safe_filter_path(str(_PREVIEW_FONTS_DIR.resolve()))
+            vf = f"ass='{safe_ass}':fontsdir='{safe_fonts}'"
+        else:
+            vf = f"ass='{safe_ass}'"
+
+        # Dark background (0x111827 ≈ slate-900) — mimics a video frame.
+        # r=1 → one frame at PTS=0, subtitle at t=0 is visible.
+        cmd = [
+            get_ffmpeg_bin(), "-y",
+            "-f", "lavfi",
+            "-i", f"color=c=0x111827:s={play_res_x}x{play_res_y}:r=1",
+            "-vf", vf,
+            "-frames:v", "1",
+            str(img_path),
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, timeout=15)
+            if proc.returncode != 0:
+                stderr = (proc.stderr or b"").decode("utf-8", errors="replace")
+                logger.warning(
+                    "subtitle_preview_ffmpeg_error style=%s code=%d stderr=%s",
+                    subtitle_style, proc.returncode, stderr[:500],
+                )
+                raise RuntimeError(
+                    f"FFmpeg preview failed (code {proc.returncode}): {stderr[:120]}"
+                )
+            return img_path.read_bytes()
+        except subprocess.TimeoutExpired:
+            logger.warning("subtitle_preview_timeout style=%s", subtitle_style)
+            raise RuntimeError("FFmpeg subtitle preview timed out")
 
 
 # ---------------------------------------------------------------------------
