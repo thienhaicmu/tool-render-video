@@ -18,8 +18,8 @@ from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes
-from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt, apply_market_hook_text_to_srt, apply_hook_subtitle_format
-from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing
+from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt, apply_market_hook_text_to_srt, apply_hook_subtitle_format, resolve_hook_overlay_text
+from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame
 from app.services.viral_scorer import score_segments
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
 from app.services.report_service import append_rows
@@ -483,13 +483,13 @@ def _resolve_profile(payload: RenderRequest):
     profile = (payload.render_profile or "quality").lower()
     defaults = {
         # fast: quick turnaround, acceptable quality
-        "fast":     {"video_preset": "veryfast", "video_crf": 23, "whisper_model": "tiny",  "transition_sec": 0.10},
+        "fast":     {"video_preset": "veryfast", "video_crf": 23, "whisper_model": "tiny",  "transition_sec": 0.05},
         # balanced: good quality/speed tradeoff — medium is ~3-4x faster than slow with <5% quality delta
-        "balanced": {"video_preset": "medium",   "video_crf": 18, "whisper_model": "base",  "transition_sec": 0.25},
+        "balanced": {"video_preset": "medium",   "video_crf": 18, "whisper_model": "base",  "transition_sec": 0.06},
         # quality: high quality — slow preset gives meaningful gains over medium for large screens
-        "quality":  {"video_preset": "slow",     "video_crf": 15, "whisper_model": "small", "transition_sec": 0.35},
+        "quality":  {"video_preset": "slow",     "video_crf": 15, "whisper_model": "small", "transition_sec": 0.06},
         # best: maximum quality, slowest encode — use for final master output
-        "best":     {"video_preset": "slower",   "video_crf": 13, "whisper_model": "small", "transition_sec": 0.40},
+        "best":     {"video_preset": "slower",   "video_crf": 13, "whisper_model": "small", "transition_sec": 0.08},
     }
     picked = defaults.get(profile, defaults["quality"])
     if payload.video_preset:
@@ -768,6 +768,7 @@ def run_render_pipeline(
     _hook_apply_enabled = bool(getattr(payload, "hook_apply_enabled", False))
     _hook_applied_text = str(getattr(payload, "hook_applied_text", None) or "").strip()
     _hook_score = getattr(payload, "hook_score", None)
+    _hook_overlay_enabled = bool(getattr(payload, "hook_overlay_enabled", False))
     if not _hook_applied_text:
         _hook_apply_enabled = False
     if output_mode == "channel":
@@ -1540,9 +1541,53 @@ def run_render_pipeline(
                 _job_log(effective_channel, job_id, f"Part {idx} silence trim: {_trim_offset:.3f}s offset applied")
             _effective_start = seg["start"] + _trim_offset
 
+            # P4-X: Bad first-frame scan — detect black/dark opening frames and shift start up to 1.0s.
+            _visual_trim = 0.0
+            _force_accurate_cut = False
+            try:
+                logger.info("first_frame_scan_started part_no=%d effective_start=%.3f", idx, _effective_start)
+                _visual_trim = detect_bad_first_frame(str(source_path), _effective_start, seg["end"])
+            except Exception:
+                _visual_trim = 0.0
+            if _visual_trim > 0:
+                _candidate_total = _trim_offset + _visual_trim
+                if (seg["end"] - seg["start"] - _candidate_total) >= 3.0:
+                    _trim_offset = _candidate_total
+                    _effective_start = seg["start"] + _trim_offset
+                    _force_accurate_cut = True
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="first_frame_shift_applied",
+                        level="INFO",
+                        message=f"Bad first frame detected: shifted part {idx} start by {_visual_trim:.3f}s",
+                        step="render.first_frame_scan",
+                        context={
+                            "part_no": idx,
+                            "visual_trim_sec": _visual_trim,
+                            "total_trim_sec": _trim_offset,
+                            "effective_start": _effective_start,
+                            "force_accurate_cut": True,
+                        },
+                    )
+                    _job_log(effective_channel, job_id,
+                        f"first_frame_shift_applied part={idx} visual_trim={_visual_trim:.3f}s "
+                        f"total_trim={_trim_offset:.3f}s effective_start={_effective_start:.3f}s accurate_cut=True")
+
             upsert_job_part(job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
             if not (payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
-                cut_video(str(source_path), str(raw_part), _effective_start, seg["end"], retry_count=retry_count)
+                cut_video(str(source_path), str(raw_part), _effective_start, seg["end"],
+                          retry_count=retry_count, force_accurate_cut=_force_accurate_cut)
+                if _force_accurate_cut:
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="accurate_cut_forced",
+                        level="INFO",
+                        message=f"Accurate re-encode cut used for part {idx} (bad first frame shift)",
+                        step="render.cut",
+                        context={"part_no": idx, "effective_start": _effective_start},
+                    )
                 _job_log(effective_channel, job_id, f"Part {idx} cut done", kind="debug")
             else:
                 _job_log(effective_channel, job_id, f"Part {idx} cut skipped (raw exists)", kind="debug")
@@ -1780,8 +1825,92 @@ def run_render_pipeline(
                         f"play_res_y={_play_res_y} aspect={payload.aspect_ratio}",
                         kind="info",
                     )
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="subtitle_style_applied",
+                        level="INFO",
+                        message=f"Subtitle style applied for part {idx}: {payload.subtitle_style}",
+                        step="render.subtitle",
+                        context={
+                            "part_no": idx,
+                            "subtitle_style": payload.subtitle_style,
+                            "font_size": getattr(payload, "sub_font_size", 0),
+                            "margin_v": _margin_v,
+                            "play_res_y": _play_res_y,
+                            "aspect_ratio": payload.aspect_ratio,
+                        },
+                    )
             else:
                 _job_log(effective_channel, job_id, f"Part {idx} subtitle disabled", kind="debug")
+
+            # ── Hook overlay: build per-part text_layers with optional opening banner ──
+            # Operates on a copy so the global normalized_text_layers is never mutated.
+            _part_text_layers = list(normalized_text_layers)
+            if _hook_overlay_enabled and len(_part_text_layers) < MAX_TEXT_LAYERS:
+                _hook_srt_path = str(srt_part) if srt_part.exists() and srt_part.stat().st_size > 0 else None
+                _hook_text, _hook_source = resolve_hook_overlay_text(
+                    _hook_applied_text if _hook_applied_text else None,
+                    _hook_srt_path,
+                )
+                if _hook_text:
+                    # end_time is pre-setpts, so multiply by speed so the overlay
+                    # shows for ~1.5 s of perceived output time at any playback rate.
+                    _hook_spd = max(0.5, min(1.5, float(payload.playback_speed or 1.07)))
+                    _hook_end_t = round(min(2.5, 1.5 * _hook_spd), 3)
+                    _part_text_layers = [
+                        {
+                            "id": f"hook_overlay_{idx}",
+                            "text": _hook_text,
+                            "font_family": "Bungee",
+                            "font_size": 52,
+                            "color": "#FFFFFF",
+                            "position": "top-center",
+                            "x_percent": 50.0,
+                            "y_percent": 26.0,
+                            "alignment": "center",
+                            "bold": False,
+                            "outline": {"enabled": True, "thickness": 4},
+                            "shadow": {"enabled": False, "offset_x": 0, "offset_y": 0},
+                            "background": {"enabled": True, "color": "#000000CC", "padding": 18},
+                            "start_time": 0.0,
+                            "end_time": _hook_end_t,
+                            "order": -1,
+                        }
+                    ] + _part_text_layers
+                    logger.info(
+                        "hook_overlay_selected part=%d text=%r source=%s end_t=%.3f",
+                        idx, _hook_text, _hook_source, _hook_end_t,
+                    )
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="hook_overlay_applied",
+                        level="INFO",
+                        message=f"Hook overlay applied for part {idx}: {_hook_text!r}",
+                        step="render.hook_overlay",
+                        context={
+                            "part_no": idx,
+                            "hook_text": _hook_text,
+                            "source": _hook_source,
+                            "end_time": _hook_end_t,
+                            "hook_overlay_duration": _hook_end_t,
+                        },
+                    )
+                    _job_log(effective_channel, job_id,
+                        f"hook_overlay_applied part={idx} text={_hook_text!r} source={_hook_source} "
+                        f"end_t={_hook_end_t:.3f}s")
+                else:
+                    logger.info("hook_overlay_skipped_reason part=%d reason=%s", idx, _hook_source)
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="hook_overlay_skipped",
+                        level="INFO",
+                        message=f"Hook overlay skipped for part {idx}: {_hook_source}",
+                        step="render.hook_overlay",
+                        context={"part_no": idx, "reason": _hook_source},
+                    )
 
             overlay_title = (payload.title_overlay_text or "").strip() or source["title"]
             upsert_job_part(job_id, idx, part_name, JobPartStage.RENDERING, 70, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Rendering final video")
@@ -1827,7 +1956,7 @@ def run_render_pipeline(
                     reup_bgm_path=payload.reup_bgm_path,
                     reup_bgm_gain=payload.reup_bgm_gain,
                     playback_speed=float(payload.playback_speed or 1.07),
-                    text_layers=normalized_text_layers,
+                    text_layers=_part_text_layers,
                     loudnorm_enabled=getattr(payload, "loudnorm_enabled", False),
                     ffmpeg_threads=_ffmpeg_threads,
                 )

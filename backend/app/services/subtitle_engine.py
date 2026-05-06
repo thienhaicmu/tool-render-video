@@ -363,8 +363,9 @@ def _resolve_ass_style(
     """
     style = (subtitle_style or "tiktok_bounce_v1").lower()
 
-    # --- Bounce pop-in tag: scale from 118% → 100% over 220ms ---
-    BOUNCE_FX = r"{\fscx118\fscy118\t(0,220,\fscx100\fscy100)}"
+    # Premium pop-in: scale up to 122% then snap-settle to 100% over 200 ms.
+    # 122% (vs old 118%) makes the pop more visible; 200 ms (vs 220 ms) feels snappier.
+    BOUNCE_FX = r"{\fscx122\fscy122\t(0,200,\fscx100\fscy100)}"
 
     safe_font = (font_name or "Bungee").replace(",", " ").strip() or "Bungee"
 
@@ -377,41 +378,42 @@ def _resolve_ass_style(
     if style == "viral_clean_montserrat":
         line_fx = BOUNCE_FX if highlight_per_word else ""
         return (
-            f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "viral_soft_poppins":
         line_fx = BOUNCE_FX if highlight_per_word else ""
         return (
-            f"Style: Default,{safe_font},{_fsize(32)},&H00F0F0F0,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(32)},&H00F0F0F0,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "viral_pop_anton":
-        line_fx = BOUNCE_FX if highlight_per_word else r"{\bord3\fscx100\fscy108}"
+        line_fx = BOUNCE_FX if highlight_per_word else r"{\bord4\fscx100\fscy108}"
         return (
-            f"Style: Default,{safe_font},{_fsize(40)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(40)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "viral_compact_barlow":
         line_fx = BOUNCE_FX if highlight_per_word else ""
         return (
-            f"Style: Default,{safe_font},{_fsize(36)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(36)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
             line_fx,
         )
     if style == "clean_bold_01":
         return (
-            f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
             BOUNCE_FX if highlight_per_word else "",
         )
     if style == "story_clean_01":
+        # Story style keeps lighter shadow (1) for a clean editorial feel
         return (
-            f"Style: Default,{safe_font},{_fsize(32)},&H00F6F6F6,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,0,2,40,40,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(32)},&H00F6F6F6,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,1,2,40,40,{margin_v},1",
             BOUNCE_FX if highlight_per_word else "",
         )
 
     if style == "viral_bold":
-        _ol = outline_size if outline_size > 0 else 4
-        _sh = shadow_size  if shadow_size  > 0 else 2
+        _ol = outline_size if outline_size > 0 else 5
+        _sh = shadow_size  if shadow_size  > 0 else 3
         return (
             f"Style: Default,{safe_font},{_fsize(46)},"
             f"&H00FFFFFF,&H0015CCFA,&H00000000,&HAA000000,"
@@ -420,8 +422,8 @@ def _resolve_ass_style(
             BOUNCE_FX if highlight_per_word else "",
         )
     if style == "clean_pro":
-        _ol = outline_size if outline_size > 0 else 3
-        _sh = shadow_size  if shadow_size  > 0 else 1
+        _ol = outline_size if outline_size > 0 else 4
+        _sh = shadow_size  if shadow_size  > 0 else 2
         return (
             f"Style: Default,{safe_font},{_fsize(38)},"
             f"&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,"
@@ -441,14 +443,15 @@ def _resolve_ass_style(
         )
 
     # Default / tiktok_bounce_v1 — Bungee font, word-by-word bounce
+    # Outline 5 + shadow 3 gives strong readability on bright and busy backgrounds.
     if highlight_per_word:
         return (
-            f"Style: Default,{safe_font},{_fsize(38)},&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+            f"Style: Default,{safe_font},{_fsize(38)},&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,0,0,0,0,100,{scale_y},0,0,1,5,3,2,30,30,{margin_v},1",
             BOUNCE_FX,
         )
-    # Segment mode
+    # Segment mode — slightly smaller font and lighter shadow (4/2) for multi-word blocks
     return (
-        f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,3,1,2,30,30,{margin_v},1",
+        f"Style: Default,{safe_font},{_fsize(34)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,{scale_y},0,0,1,4,2,2,30,30,{margin_v},1",
         "",
     )
 
@@ -603,6 +606,11 @@ def srt_to_ass_bounce(
     # When text overlays occupy the bottom zone, push subtitles above them.
     effective_margin_v = text_overlay_margin_v if text_overlay_margin_v is not None else margin_v
 
+    # Auto-upgrade bottom margin for vertical formats (9:16, 3:4) to avoid TikTok/Reels UI overlap.
+    # Only when no explicit overlay margin was provided and the default (≤180) would clip into the UI zone.
+    if text_overlay_margin_v is None and effective_margin_v <= 180 and play_res_y > 1200:
+        effective_margin_v = _compute_margin_v(play_res_x, play_res_y)
+
     # Quality-preset auto-scaling: resolve font/outline/shadow from resolution
     # when style is one of the new quality presets and no explicit font_size was set.
     _eff_font_size = font_size
@@ -671,7 +679,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         start_ass = _ass_time(parse_srt_timestamp(start_s))
         end_ass   = _ass_time(parse_srt_timestamp(end_s))
         raw_text = "\n".join(lines[2:])
-        text = _ass_escape_text(_break_by_visual_width(raw_text))
+        text = _ass_escape_text(_break_by_visual_width(raw_text, max_em=16.0))
         out.append(f"Dialogue: 0,{start_ass},{end_ass},Default,,0,0,0,,{_pos_tag}{line_fx}{text}\n")
     Path(ass_path).write_text("".join(out), encoding="utf-8")
 
@@ -734,6 +742,10 @@ def srt_to_ass_karaoke(
     Yêu cầu: srt_path là word-level SRT (mỗi entry = 1 từ).
     """
     effective_margin_v = text_overlay_margin_v if text_overlay_margin_v is not None else margin_v
+
+    # Auto-upgrade bottom margin for vertical formats (9:16, 3:4) to avoid TikTok/Reels UI overlap.
+    if text_overlay_margin_v is None and effective_margin_v <= 180 and play_res_y > 1200:
+        effective_margin_v = _compute_margin_v(play_res_x, play_res_y)
 
     blocks = _parse_srt_blocks(srt_path)
     if not blocks:
@@ -853,6 +865,54 @@ def burn_subtitle_onto_video(
         output_path,
     ]
     _run_with_retry(cmd, retries=retry_count)
+
+
+def resolve_hook_overlay_text(
+    hook_applied_text: str | None,
+    srt_path: str | None,
+    max_words: int = 10,
+) -> tuple[str, str]:
+    """Resolve hook overlay text for the opening visual overlay.
+
+    Priority:
+    1. hook_applied_text — explicit user-supplied hook string.
+    2. First meaningful subtitle block from srt_path (≥2 words).
+    3. Return ("", reason) when nothing suitable is found.
+
+    Returns (text, source_reason).
+    Cleans: collapses whitespace, strips ASS tags, truncates to max_words,
+    converts all-caps (>3 words) to title-case.
+    """
+    def _clean(raw: str) -> str:
+        t = re.sub(r"\s+", " ", str(raw or "").replace("\n", " ").strip())
+        t = re.sub(r"\{[^}]*\}", "", t).strip()  # strip ASS override tags
+        words = t.split()
+        if len(words) > max_words:
+            t = " ".join(words[:max_words]).strip()
+            words = t.split()
+        if len(words) > 3 and t == t.upper():
+            t = t.title()
+        return t.strip()
+
+    explicit = str(hook_applied_text or "").strip()
+    if explicit:
+        cleaned = _clean(explicit)
+        if cleaned:
+            return cleaned, "explicit"
+
+    if srt_path:
+        try:
+            blocks = _parse_srt_blocks(srt_path)
+            for b in blocks:
+                text = str(b.get("text") or "").strip()
+                if text and len(text.split()) >= 2:
+                    cleaned = _clean(text)
+                    if cleaned:
+                        return cleaned, "subtitle_first_block"
+        except Exception:
+            pass
+
+    return "", "no_suitable_text"
 
 
 def apply_market_line_break_to_srt(srt_path: str, market_payload: dict) -> str:

@@ -370,7 +370,21 @@ def _get_custom_fonts_dir() -> str | None:
     return None
 
 
-def cut_video(input_path: str, output_path: str, start_time: float, end_time: float, retry_count: int = 2):
+def cut_video(
+    input_path: str,
+    output_path: str,
+    start_time: float,
+    end_time: float,
+    retry_count: int = 2,
+    force_accurate_cut: bool = False,
+):
+    """Cut a segment from input_path.
+
+    force_accurate_cut=True skips the stream-copy attempt and goes straight to
+    a full re-encode, guaranteeing frame-accurate output at the cost of speed.
+    Use this whenever a visual first-frame correction has been applied so that
+    the seek cannot land on the wrong keyframe.
+    """
     intended_duration = max(0.0, float(end_time) - float(start_time))
     duration_tolerance = max(0.35, intended_duration * 0.03) if intended_duration > 0 else 0.35
     base = [
@@ -384,32 +398,36 @@ def cut_video(input_path: str, output_path: str, start_time: float, end_time: fl
     def _duration_ok(duration: float | None) -> bool:
         return duration is not None and abs(float(duration) - intended_duration) <= duration_tolerance
 
-    # Stream-copy first: fastest, lossless, no re-encode
-    copy_cmd = [
-        *base,
-        "-map", "0:v:0", "-map", "0:a?",
-        "-c", "copy", "-avoid_negative_ts", "make_zero",
-        "-movflags", "+faststart",
-        output_path,
-    ]
-    copy_error = None
-    try:
-        _run_ffmpeg_with_retry(copy_cmd, retry_count=retry_count)
-        raw_duration = _probe_cut_duration()
-        if _duration_ok(raw_duration):
-            logger.info(
-                "cut_video: cut_mode=copy intended_duration=%.3f raw_duration=%.3f tolerance=%.3f output=%s",
-                intended_duration, float(raw_duration or 0.0), duration_tolerance, Path(output_path).name,
-            )
-            return
-        copy_error = (
-            f"duration_mismatch intended={intended_duration:.3f}s "
-            f"raw={float(raw_duration or 0.0):.3f}s tolerance={duration_tolerance:.3f}s"
-        )
-    except Exception as exc:
-        copy_error = str(exc)
+    copy_error: str | None = None
 
-    # Re-encode fallback: handles corrupted keyframes or muxing issues
+    if not force_accurate_cut:
+        # Stream-copy first: fastest, lossless, no re-encode
+        copy_cmd = [
+            *base,
+            "-map", "0:v:0", "-map", "0:a?",
+            "-c", "copy", "-avoid_negative_ts", "make_zero",
+            "-movflags", "+faststart",
+            output_path,
+        ]
+        try:
+            _run_ffmpeg_with_retry(copy_cmd, retry_count=retry_count)
+            raw_duration = _probe_cut_duration()
+            if _duration_ok(raw_duration):
+                logger.info(
+                    "cut_video: cut_mode=copy intended_duration=%.3f raw_duration=%.3f tolerance=%.3f output=%s",
+                    intended_duration, float(raw_duration or 0.0), duration_tolerance, Path(output_path).name,
+                )
+                return
+            copy_error = (
+                f"duration_mismatch intended={intended_duration:.3f}s "
+                f"raw={float(raw_duration or 0.0):.3f}s tolerance={duration_tolerance:.3f}s"
+            )
+        except Exception as exc:
+            copy_error = str(exc)
+    else:
+        copy_error = "force_accurate_cut=True"
+
+    # Re-encode path: frame-accurate, handles corrupted keyframes / forced cuts
     fallback_cmd = [
         get_ffmpeg_bin(), "-hide_banner", "-loglevel", "error",
         "-y", "-i", input_path, "-ss", str(start_time), "-t", str(intended_duration),
@@ -468,6 +486,69 @@ def detect_silence_trim_offset(
                 silence_end = float(raw)
                 offset = min(silence_end, max_trim)
                 return offset if offset >= min_trim else 0.0
+    except Exception:
+        pass
+    return 0.0
+
+
+def detect_bad_first_frame(
+    input_path: str,
+    start_sec: float,
+    end_sec: float,
+    max_scan_sec: float = 1.5,
+    max_shift_sec: float = 1.0,
+    black_pix_threshold: float = 0.10,
+) -> float:
+    """Return seconds to skip past leading dark/black frames at the clip start.
+
+    Runs a lightweight ffmpeg blackdetect probe on the first max_scan_sec of the
+    clip.  Returns 0.0 when the opening frame is clean or on any detection error.
+
+    The returned shift is always in the range (0.0, max_shift_sec].
+    A minimum of 3 s of content is always preserved after the shift.
+    """
+    clip_dur = max(0.0, float(end_sec) - float(start_sec))
+    # Leave at least 0.5 s of content after any shift
+    scan_dur = min(float(max_scan_sec), clip_dur - 0.5)
+    if scan_dur < 0.08:
+        return 0.0
+
+    cmd = [
+        get_ffmpeg_bin(), "-hide_banner", "-loglevel", "error",
+        "-ss", str(start_sec),
+        "-t", str(scan_dur),
+        "-i", input_path,
+        "-vf", f"blackdetect=d=0.0:pix_th={black_pix_threshold}",
+        "-an", "-f", "null", "-",
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        # blackdetect writes to stderr:
+        # [blackdetect @ 0x...] black_start:0 black_end:0.458 black_duration:0.458
+        for line in (result.stderr or "").splitlines():
+            if "black_start:" not in line or "black_end:" not in line:
+                continue
+            try:
+                b_start = b_end = None
+                for token in line.split():
+                    if token.startswith("black_start:"):
+                        b_start = float(token.split(":", 1)[1])
+                    elif token.startswith("black_end:"):
+                        b_end = float(token.split(":", 1)[1])
+                if b_start is None or b_end is None:
+                    continue
+                # Only shift when the dark region starts at the very beginning
+                if b_start > 0.08:
+                    continue
+                if b_end <= 0.08:
+                    continue
+                shift = min(b_end, float(max_shift_sec))
+                # Don't shift if it would leave fewer than 3 s of content
+                if clip_dur - shift < 3.0:
+                    shift = max(0.0, clip_dur - 3.0)
+                return shift if shift > 0.08 else 0.0
+            except (ValueError, IndexError):
+                continue
     except Exception:
         pass
     return 0.0
@@ -653,7 +734,7 @@ def render_part(
     add_subtitle: bool = True,
     add_title_overlay: bool = True,
     effect_preset: str = "slay_soft_01",
-    transition_sec: float = 0.25,
+    transition_sec: float = 0.06,
     video_codec: str = "h264",
     video_crf: int = 20,
     video_preset: str = "medium",
@@ -712,7 +793,9 @@ def render_part(
         vf_parts.append(_effect_filter(effect_preset))
     vf_parts.append("format=yuv420p")
     if transition_sec and transition_sec > 0:
-        vf_parts.append(f"fade=t=in:st=0:d={max(0.05, min(0.8, transition_sec))}")
+        # Cap at 0.08 s — long fades look cheap on short-form content.
+        # Floor at 0.03 s keeps at least 1 frame of softening to avoid a hard cut.
+        vf_parts.append(f"fade=t=in:st=0:d={max(0.03, min(0.08, transition_sec))}")
     if add_subtitle and subtitle_ass:
         ass_safe = _safe_filter_path(subtitle_ass)
         fonts_dir = _get_custom_fonts_dir() or _detect_windows_fonts_dir()
@@ -863,7 +946,7 @@ def render_part_smart(
     add_subtitle: bool = True,
     add_title_overlay: bool = True,
     effect_preset: str = "slay_soft_01",
-    transition_sec: float = 0.25,
+    transition_sec: float = 0.06,
     video_codec: str = "h264",
     video_crf: int = 20,
     video_preset: str = "medium",

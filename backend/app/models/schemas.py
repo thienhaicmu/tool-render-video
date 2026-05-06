@@ -209,6 +209,7 @@ class RenderRequest(BaseModel):
     viral_market: Optional[str] = None
     hook_applied_text: Optional[str] = None
     hook_apply_enabled: bool = False
+    hook_overlay_enabled: bool = False
     hook_score: Optional[float] = None
     subtitle_edits: Optional[list] = None
     combined_scoring_enabled: bool = False

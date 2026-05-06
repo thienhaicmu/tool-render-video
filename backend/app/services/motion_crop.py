@@ -56,22 +56,22 @@ class MotionCropConfig:
     subject_switch_confirm_frames: int = 2
     ema_alpha_slow: float = 0.08
     ema_alpha_normal: float = 0.18
-    ema_alpha_fast: float = 0.35
+    ema_alpha_fast: float = 0.25
     lookahead_frames: int = 4
-    lost_subject_hold_frames: int = 18
+    lost_subject_hold_frames: int = 45
 
     # --- Smoothing ---
     # Gaussian window size for the crop path (larger = smoother, less reactive)
-    temporal_smooth_window: int = 31
+    temporal_smooth_window: int = 45
 
     # Max camera pan speed (fraction of frame width per frame)
-    max_pan_speed_ratio: float = 0.015
+    max_pan_speed_ratio: float = 0.010
 
     # Max camera pan acceleration per frame
     max_pan_accel_ratio: float = 0.0045
 
     # Dead zone – ignore subject shifts smaller than this fraction of crop size
-    dead_zone_ratio: float = 0.04
+    dead_zone_ratio: float = 0.06
 
     # --- Legacy motion-mode settings (used when reframe_mode="motion") ---
     sample_every_n_frames: int = 1
@@ -831,12 +831,17 @@ def build_subject_path(
     if _scene_ranges and len(_scene_ranges) > 1:
         all_centers: List[Tuple[int, int]] = []
         fps = cfg.fps_fallback
+        # Carries the final rendered crop center from each scene into the next
+        # so that smooth_cx/smooth_cy in the EMA loop starts from the last
+        # visible position rather than default frame center.
+        _warmup_center: Optional[Tuple[float, float]] = None
 
         for index, (start_sec, end_sec) in enumerate(_scene_ranges):
             fallback_used = False
             try:
                 scene_centers, fps = build_subject_path_scene(
-                    video_path, crop_w, crop_h, cfg, start_sec, end_sec, scene_index=index
+                    video_path, crop_w, crop_h, cfg, start_sec, end_sec,
+                    scene_index=index, warmup_center=_warmup_center,
                 )
             except Exception:
                 fallback_used = True
@@ -866,6 +871,13 @@ def build_subject_path(
                     0.0,
                     True,
                 )
+
+            # Capture final rendered crop center for next scene warmup.
+            # Converts top-left (x, y) → crop center (cx, cy) in source coords.
+            if scene_centers:
+                _last_x, _last_y = scene_centers[-1]
+                _warmup_center = (_last_x + crop_w / 2.0, _last_y + crop_h / 2.0)
+
             all_centers.extend(scene_centers)
 
         return all_centers, fps
@@ -1054,6 +1066,7 @@ def build_subject_path_scene(
     start_sec: float,
     end_sec: float,
     scene_index: int = 0,
+    warmup_center: Optional[Tuple[float, float]] = None,
 ) -> Tuple[List[Tuple[int, int]], float]:
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -1085,15 +1098,31 @@ def build_subject_path_scene(
         switch_count = 0
         switch_cooldown = 0   # frames remaining in post-switch easing window
         lost_frames = 0
-        last_good_center = (default_cx, default_cy)
+        # Continuity: if a warmup center from the previous scene is available,
+        # initialize the EMA state from it so the camera doesn't snap to frame
+        # center at scene boundaries.  Subject identity is NOT carried over.
+        if warmup_center is not None:
+            smooth_cx, smooth_cy = float(warmup_center[0]), float(warmup_center[1])
+            last_good_center = (smooth_cx, smooth_cy)
+            logger.info(
+                "scene_warmup_center_used scene=%d warmup_cx=%.1f warmup_cy=%.1f",
+                scene_index, smooth_cx, smooth_cy,
+            )
+        else:
+            smooth_cx = default_cx
+            smooth_cy = default_cy
+            last_good_center = (default_cx, default_cy)
+            if scene_index > 0:
+                logger.debug(
+                    "scene_warmup_center_skipped scene=%d (no prior center available)",
+                    scene_index,
+                )
         raw_centers: List[Tuple[float, float]] = []
         detect_interval = max(1, cfg.subject_detect_interval)
         required_lock_confirm = _required_lock_confirm_frames(cfg, tracker_available)
         untracked_hold_frames = _untracked_hold_frames(cfg, detect_interval)
         dead_zone_x = crop_w * cfg.dead_zone_ratio
         dead_zone_y = crop_h * cfg.dead_zone_ratio
-        smooth_cx = default_cx
-        smooth_cy = default_cy
         frame_idx = start_frame
         motion_total = 0.0
         motion_samples = 0
@@ -1408,18 +1437,24 @@ def build_subject_path_scene(
             raw_centers = looked
 
         avg_motion = motion_total / max(1, motion_samples)
+        scene_frames = len(raw_centers)
 
-        # Adaptive Gaussian window: micro-jitter cleanup only.
-        # High-motion scenes need maximum responsiveness (window=5);
-        # static/talking-head scenes benefit from a slightly wider smooth (window=9).
-        # Hard cap at 9 — EMA already handled coarse smoothing frame-by-frame.
+        # Adaptive Gaussian window: scales with scene length and motion level.
+        # Short scenes cap tightly to avoid over-smoothing edge frames;
+        # longer scenes absorb the lag cost and benefit from wider passes.
+        # Floor: 7 frames (always odd).  Ceiling: min(25, scene_frames // 6).
         if avg_motion > 2.0:
-            scene_gaussian_window = 5
-        elif avg_motion > 0.5:
             scene_gaussian_window = 7
+        elif avg_motion > 0.5:
+            scene_gaussian_window = 13
         else:
-            scene_gaussian_window = 9
-        scene_gaussian_window = max(3, min(scene_gaussian_window, 9) | 1)
+            scene_gaussian_window = 21
+        max_window = max(7, min(25, scene_frames // 6))
+        scene_gaussian_window = max(3, min(scene_gaussian_window, max_window) | 1)
+        logger.debug(
+            "scene_gaussian_window_used scene=%d window=%d max_window=%d avg_motion=%.2f frames=%d",
+            scene_index, scene_gaussian_window, max_window, avg_motion, scene_frames,
+        )
 
         xs = np.array([c[0] for c in raw_centers], dtype=float)
         ys = np.array([c[1] for c in raw_centers], dtype=float)
@@ -1434,7 +1469,8 @@ def build_subject_path_scene(
             "motion_crop scene=%d strategy=%s tracker_available=%s locked=%s "
             "trackerless_confidence=%.2f center_guard_active=%s crop_x_range=%d-%d "
             "lock_confirmed=%d detections_rejected=%d fallback=%s switches=%d "
-            "avg_motion=%.2f gauss_window=%d subtitle_safe=%.3f",
+            "avg_motion=%.2f gauss_window=%d subtitle_safe=%.3f "
+            "hold_frames_used=%d dead_zone_used=%.3f pan_speed_limit_used=%.4f",
             scene_index,
             strategy,
             tracker_available,
@@ -1450,6 +1486,22 @@ def build_subject_path_scene(
             avg_motion,
             scene_gaussian_window,
             cfg.subtitle_safe_bottom_ratio,
+            cfg.lost_subject_hold_frames,
+            cfg.dead_zone_ratio,
+            cfg.max_pan_speed_ratio,
+        )
+
+        # Log the final rendered crop center so the caller can pass it as warmup
+        # to the next scene — enables scene-boundary camera continuity.
+        if final_centers:
+            _fc_x, _fc_y = final_centers[-1]
+            _final_cx = _fc_x + crop_w / 2.0
+            _final_cy = _fc_y + crop_h / 2.0
+        else:
+            _final_cx, _final_cy = default_cx, default_cy
+        logger.info(
+            "scene_path_final_center scene=%d final_cx=%.1f final_cy=%.1f frames=%d",
+            scene_index, _final_cx, _final_cy, scene_frames,
         )
 
         return final_centers, fps
@@ -1723,6 +1775,19 @@ def render_motion_aware_crop(
     cfg = cfg or MotionCropConfig(scale_x_percent=scale_x_percent, scale_y_percent=scale_y_percent)
     if subtitle_safe_bottom_ratio is not None:
         cfg.subtitle_safe_bottom_ratio = max(0.0, min(0.35, float(subtitle_safe_bottom_ratio)))
+
+    logger.info(
+        "motion_smoothing_profile hold_frames=%d dead_zone=%.3f pan_speed=%.4f "
+        "ema_fast=%.3f ema_normal=%.3f ema_slow=%.3f gauss_window=%d mode=%s",
+        cfg.lost_subject_hold_frames,
+        cfg.dead_zone_ratio,
+        cfg.max_pan_speed_ratio,
+        cfg.ema_alpha_fast,
+        cfg.ema_alpha_normal,
+        cfg.ema_alpha_slow,
+        cfg.temporal_smooth_window,
+        cfg.reframe_mode,
+    )
 
     src_w, src_h, probe_fps = ffprobe_video_info(input_path)
 
