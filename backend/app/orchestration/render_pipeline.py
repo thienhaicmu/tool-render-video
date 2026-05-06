@@ -693,6 +693,131 @@ def _validate_render_output(
     return result
 
 
+def _assess_output_quality(
+    output_path: Path,
+    output_dir: Path,
+    *,
+    expect_subtitle: bool = False,
+    subtitle_file: "Path | None" = None,
+    expect_hook: bool = False,
+    hook_applied: bool = False,
+) -> dict:
+    """Non-blocking perceptual quality checks run after hard validation passes.
+
+    Returns a report dict:
+        passed         – True when no hard failures (currently all checks are warn-only)
+        hard_failures  – list of blocking error strings (reserved; currently always empty)
+        warnings       – list of non-fatal issue strings
+        checks         – per-check boolean/float results
+        score_penalty  – total points to deduct from output_score (clamped by caller)
+
+    Never raises — all exceptions produce a None check value rather than propagating.
+    """
+    hard_failures: list[str] = []
+    warnings: list[str] = []
+    checks: dict = {}
+    penalty = 0
+
+    # 1. Output path safety: must resolve inside output_dir
+    try:
+        is_inside = output_path.resolve().is_relative_to(output_dir.resolve())
+        checks["output_path_safe"] = is_inside
+        if not is_inside:
+            warnings.append(f"output file is outside the selected output folder: {output_path}")
+    except Exception:
+        checks["output_path_safe"] = None
+
+    # 2. First-frame darkness — blackdetect on first 0.5 s of the rendered output
+    checks["first_frame_dark"] = False
+    try:
+        _bdet_cmd = [
+            get_ffmpeg_bin(), "-hide_banner", "-loglevel", "error",
+            "-t", "0.5", "-i", str(output_path),
+            "-vf", "blackdetect=d=0.0:pix_th=0.10",
+            "-an", "-f", "null", "-",
+        ]
+        _bdet_r = subprocess.run(_bdet_cmd, capture_output=True, text=True, timeout=10)
+        for _bd_line in (_bdet_r.stderr or "").splitlines():
+            if "black_start:" not in _bd_line or "black_end:" not in _bd_line:
+                continue
+            try:
+                _b_start = _b_end = None
+                for _tok in _bd_line.split():
+                    if _tok.startswith("black_start:"):
+                        _b_start = float(_tok.split(":", 1)[1])
+                    elif _tok.startswith("black_end:"):
+                        _b_end = float(_tok.split(":", 1)[1])
+                if _b_start is not None and _b_end is not None and _b_start <= 0.08 and _b_end > 0.12:
+                    checks["first_frame_dark"] = True
+                    warnings.append(f"first frame appears dark (black_end={_b_end:.2f}s)")
+                    penalty += 8
+            except (ValueError, IndexError):
+                continue
+    except Exception:
+        checks["first_frame_dark"] = None
+
+    # 3. First-frame blur — blurdetect on first 0.5 s
+    checks["first_frame_blur"] = False
+    checks["first_frame_blur_score"] = None
+    try:
+        _blur_cmd = [
+            get_ffmpeg_bin(), "-hide_banner", "-loglevel", "error",
+            "-t", "0.5", "-i", str(output_path),
+            "-vf", "blurdetect=high=0.35:low=0.25",
+            "-an", "-f", "null", "-",
+        ]
+        _blur_r = subprocess.run(_blur_cmd, capture_output=True, text=True, timeout=10)
+        _blur_vals: list[float] = []
+        for _bl_line in (_blur_r.stderr or "").splitlines():
+            if "blur:" not in _bl_line.lower():
+                continue
+            try:
+                _val_str = _bl_line.split("blur:")[-1].strip().split()[0]
+                _blur_vals.append(float(_val_str))
+            except (ValueError, IndexError):
+                continue
+        if _blur_vals:
+            _avg_blur = sum(_blur_vals) / len(_blur_vals)
+            checks["first_frame_blur_score"] = round(_avg_blur, 3)
+            if _avg_blur > 0.60:
+                checks["first_frame_blur"] = True
+                warnings.append(f"first frames appear blurry (avg_blur={_avg_blur:.2f})")
+                penalty += 6
+    except Exception:
+        checks["first_frame_blur"] = None
+
+    # 4. Subtitle file present when subtitles were requested for this part
+    if expect_subtitle:
+        _sub_ok = (
+            subtitle_file is not None
+            and subtitle_file.exists()
+            and subtitle_file.stat().st_size > 0
+        )
+        checks["subtitle_file_present"] = _sub_ok
+        if not _sub_ok:
+            warnings.append("subtitle file missing or empty (subtitles were requested for this part)")
+            penalty += 10
+    else:
+        checks["subtitle_file_present"] = None  # not applicable
+
+    # 5. Hook overlay confirmed when hook overlay was expected
+    if expect_hook:
+        checks["hook_overlay_applied"] = hook_applied
+        if not hook_applied:
+            warnings.append("hook overlay was enabled but no suitable text was found to apply")
+            penalty += 6
+    else:
+        checks["hook_overlay_applied"] = None  # not applicable
+
+    return {
+        "passed": len(hard_failures) == 0,
+        "hard_failures": hard_failures,
+        "warnings": warnings,
+        "checks": checks,
+        "score_penalty": penalty,
+    }
+
+
 def _render_part_failure_detail(part_no: int, error: Exception | str) -> dict:
     message = str(error)
     is_validation = "output_validation_failed" in message or "duration mismatch" in message
@@ -1846,6 +1971,7 @@ def run_render_pipeline(
 
             # ── Hook overlay: build per-part text_layers with optional opening banner ──
             # Operates on a copy so the global normalized_text_layers is never mutated.
+            _hook_overlay_applied_for_part = False
             _part_text_layers = list(normalized_text_layers)
             if _hook_overlay_enabled and len(_part_text_layers) < MAX_TEXT_LAYERS:
                 _hook_srt_path = str(srt_part) if srt_part.exists() and srt_part.stat().st_size > 0 else None
@@ -1854,6 +1980,7 @@ def run_render_pipeline(
                     _hook_srt_path,
                 )
                 if _hook_text:
+                    _hook_overlay_applied_for_part = True
                     # end_time is pre-setpts, so multiply by speed so the overlay
                     # shows for ~1.5 s of perceived output time at any playback rate.
                     _hook_spd = max(0.5, min(1.5, float(payload.playback_speed or 1.07)))
@@ -2437,6 +2564,78 @@ def run_render_pipeline(
                     context={"part_no": idx, "output_file": str(final_part), **_qa["metadata"]},
                 )
 
+            # ── Output quality validator: perceptual checks + score penalty ──────
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="output_quality_validation_started",
+                level="INFO",
+                message=f"Part {idx} quality validation started",
+                step="render.output.quality",
+                context={"part_no": idx, "output_file": str(final_part)},
+            )
+            _qq = _assess_output_quality(
+                final_part,
+                output_dir,
+                expect_subtitle=part_subtitle_enabled,
+                subtitle_file=ass_part if part_subtitle_enabled else None,
+                expect_hook=_hook_overlay_enabled,
+                hook_applied=_hook_overlay_applied_for_part,
+            )
+            _quality_penalty = int(_qq["score_penalty"])
+            seg["quality_penalty"] = _quality_penalty
+            if _qq["warnings"] or not _qq["passed"]:
+                _qq_level = "ERROR" if not _qq["passed"] else "WARNING"
+                _qq_evt = "output_quality_validation_failed" if not _qq["passed"] else "output_quality_validation_warning"
+                for _qw in _qq["warnings"]:
+                    _job_log(effective_channel, job_id, f"Part {idx} quality_warning: {_qw}", kind="warning")
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event=_qq_evt,
+                    level=_qq_level,
+                    message=f"Part {idx} quality validation: {len(_qq['warnings'])} warning(s)",
+                    step="render.output.quality",
+                    context={
+                        "part_no": idx,
+                        "output_file": str(final_part),
+                        "warnings": _qq["warnings"],
+                        "hard_failures": _qq["hard_failures"],
+                        "checks": _qq["checks"],
+                        "score_penalty": _quality_penalty,
+                    },
+                )
+            else:
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="output_quality_validation_passed",
+                    level="INFO",
+                    message=f"Part {idx} quality validation passed",
+                    step="render.output.quality",
+                    context={"part_no": idx, "output_file": str(final_part), "checks": _qq["checks"]},
+                )
+            if _quality_penalty > 0:
+                _job_log(
+                    effective_channel, job_id,
+                    f"Part {idx} quality_score_penalty: -{_quality_penalty} checks={_qq['checks']}",
+                    kind="warning",
+                )
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="output_quality_score_penalty_applied",
+                    level="WARNING",
+                    message=f"Part {idx} quality penalty applied: -{_quality_penalty} points",
+                    step="render.output.quality",
+                    context={
+                        "part_no": idx,
+                        "score_penalty": _quality_penalty,
+                        "checks": _qq["checks"],
+                        "warnings": _qq["warnings"],
+                    },
+                )
+
             upsert_job_part(job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Completed")
             row = [job_id, effective_channel, source["title"], idx, seg["start"], seg["end"], seg["duration"], seg["viral_score"], seg["priority_rank"], str(final_part)]
             if payload.cleanup_temp_files:
@@ -2686,6 +2885,15 @@ def run_render_pipeline(
                 _r_output,
                 payload_hook_score=_hook_score,
             )
+            # Apply quality penalty from per-part validator
+            _rank_raw_score = float(_rank_entry["output_score"])
+            _rank_q_penalty = int(_r_seg.get("quality_penalty", 0))
+            _rank_final_score = round(max(0.0, min(100.0, _rank_raw_score - _rank_q_penalty)), 1)
+            _rank_entry["raw_score"] = _rank_raw_score
+            _rank_entry["quality_penalty"] = _rank_q_penalty
+            _rank_entry["final_score"] = _rank_final_score
+            _rank_entry["output_score"] = _rank_final_score
+            _rank_entry["output_rank_score"] = _rank_final_score
             _rank_entries.append(_rank_entry)
             _emit_render_event(
                 channel_code=effective_channel,
