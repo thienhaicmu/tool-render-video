@@ -1,58 +1,19 @@
 async function startRender(){
   console.log('[EditorOpen] clicked');
-  const outputMode = (qs('output_mode')?.value || 'channel').trim().toLowerCase();
-  const channel = (qs('channel_code').value || '').trim();
+  const outputDir = (qs('manual_output_dir')?.value || '').trim();
   const sourceMode = (qs('source_mode').value || 'youtube').trim();
   const youtubeUrl = (qs('youtube_url')?.value || '').trim();
   let localVideoPath = (selectedLocalVideoPath || '').trim();
-  const outputDir = outputMode === 'channel'
-    ? (selectedRenderOutputDir || qs('render_output_dir').value || '').trim()
-    : (qs('manual_output_dir')?.value || '').trim();
 
   hideRenderCompletionBar();
   setRenderFlowState('source', sourceMode === 'youtube' ? 'YouTube source selected' : 'Local source selected', { force: true });
 
-  if(outputMode === 'channel' && !channel){
-    addEvent('Validation error: please select target channel first.', 'render');
-    showToast('Please select a target channel first', 'error');
-    return;
-  }
   if(!outputDir){
-    addEvent(outputMode === 'channel'
-      ? 'Validation error: cannot resolve output folder from channel. Please re-select channel.'
-      : 'Validation error: please enter Manual Output Folder before running.', 'render');
-    showToast(outputMode === 'channel'
-      ? 'Please re-select the channel output folder'
-      : 'Please choose an output folder before rendering', 'error');
+    addEvent('Validation error: please enter Output Folder before running.', 'render');
+    showToast('Please choose an output folder before rendering', 'error');
     return;
   }
 
-  const outNorm = outputDir.replace(/\\/g, '/').toLowerCase();
-  let renderSubdir = 'upload/video_output';
-  if(outputMode === 'channel'){
-    const root = String(renderChannelsRootPath || defaultChannelsRootPath || '').trim();
-    const basePath = root ? _joinWinPath(root, channel) : '';
-    const baseNorm = basePath.replace(/\\/g, '/').toLowerCase();
-    if(baseNorm && !outNorm.startsWith(baseNorm)){
-      addEvent(`Validation error: output folder must be inside channel '${channel}' (example: ${_joinWinPath(root, channel, 'upload', 'video_output')}).`, 'render');
-      showToast(`Output folder must be inside channel '${channel}'`, 'error');
-      return;
-    }
-    if(baseNorm){
-      const rawTail = outputDir.replace(/\\/g, '/').slice(baseNorm.length).replace(/^\/+/, '');
-      renderSubdir = rawTail || 'upload/video_output';
-    } else {
-      // Fallback for unknown root: keep old relative extraction by '/channels/<code>/' if present.
-      const channelNeedle = `/channels/${channel.toLowerCase()}/`;
-      const idx = outNorm.indexOf(channelNeedle);
-      if(idx >= 0){
-        const rawTail = outputDir.replace(/\\/g, '/').slice(idx + channelNeedle.length).replace(/^\/+/, '');
-        renderSubdir = rawTail || 'upload/video_output';
-      } else {
-        renderSubdir = 'upload/video_output';
-      }
-    }
-  }
   if (sourceMode === 'youtube') {
     const validYouTube = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(youtubeUrl || '');
     if (!youtubeUrl) {
@@ -78,13 +39,11 @@ async function startRender(){
 
   // Base payload — all render settings will be finalized in the editor screen
   const payload = {
-    output_mode: outputMode,
+    output_mode: 'manual',
     source_mode: sourceMode,
     youtube_url: sourceMode === 'youtube' ? youtubeUrl : null,
     source_video_path: sourceMode === 'local' ? localVideoPath : null,
-    channel_code: outputMode === 'channel' ? channel : '',
     output_dir: outputDir,
-    render_output_subdir: renderSubdir,
     // Defaults (will be overridden by editor UI before submit)
     aspect_ratio: '3:4',
     render_profile: 'balanced',

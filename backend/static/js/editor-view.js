@@ -1974,16 +1974,13 @@ async function startRenderFromEditor() {
 
 // ── Inspector tab system ─────────────────────────────────────────────────────
 function setInspectorTab(tab) {
-  const validTabs = ['mode', 'subtitle', 'voice', 'text', 'audio', 'performance', 'advanced', 'market'];
+  const validTabs = ['mode', 'subtitle', 'text', 'audio', 'performance'];
   const tabTitles = {
-    mode: 'Mode',
-    subtitle: 'Subtitle',
-    voice: 'Voice',
-    text: 'Text',
-    audio: 'Audio',
-    performance: 'Performance',
-    advanced: 'Advanced',
-    market: 'Market Viral — All Clips',
+    mode:        'Cut',
+    subtitle:    'Subtitles',
+    text:        'Text & Voice',
+    audio:       'Audio',
+    performance: 'Render',
   };
   const activeTab = validTabs.includes(tab) ? tab : 'mode';
   const insp = document.getElementById('appInspector');
@@ -2003,8 +2000,13 @@ function setInspectorTab(tab) {
     el.classList.toggle('insp-panel-active', panel === activeTab);
   });
 
-  if (['audio', 'performance', 'advanced'].includes(activeTab)) {
-    evSetInspGroupOpen(activeTab, true);
+  if (activeTab === 'audio') {
+    evSetInspGroupOpen('audio', true);
+  }
+  if (activeTab === 'performance') {
+    // Render tab contains both collapsed groups — open both
+    evSetInspGroupOpen('performance', true);
+    evSetInspGroupOpen('advanced', true);
   }
 }
 

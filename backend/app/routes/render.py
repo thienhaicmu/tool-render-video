@@ -106,20 +106,24 @@ def _emit_request_event(
 
 
 def _validate_output_dir(payload: RenderRequest):
-    """Validate output_dir leaf name. Shared by full validation and session bypass."""
+    """Require output_dir to be non-empty."""
     if not (payload.output_dir or "").strip():
         raise HTTPException(status_code=400, detail="output_dir is required")
-    out_path = Path(str(payload.output_dir).strip())
-    out_leaf = (out_path.name or "").strip().lower()
-    if out_leaf not in {"video_output", "video_out"}:
-        raise HTTPException(
-            status_code=400,
-            detail="output_dir must point to a video output folder named 'video_output' or 'video_out'.",
+
+
+def _coerce_legacy_channel_payload(payload: RenderRequest) -> None:
+    """Convert channel-mode payloads (from old clients/stored jobs) to manual mode in-place."""
+    if (payload.output_mode or "").strip().lower() == "channel":
+        logger.info(
+            "Legacy channel mode payload detected — converting to manual (output_dir=%s channel=%s)",
+            payload.output_dir or "",
+            payload.channel_code or "",
         )
+        payload.output_mode = "manual"
 
 
 def _validate_render_source(payload: RenderRequest):
-    output_mode = (payload.output_mode or "channel").strip().lower()
+    output_mode = (payload.output_mode or "manual").strip().lower()
     if output_mode not in ("channel", "manual"):
         raise HTTPException(status_code=400, detail="output_mode must be 'channel' or 'manual'")
 
@@ -129,9 +133,6 @@ def _validate_render_source(payload: RenderRequest):
         _validate_output_dir(payload)
         return
 
-    channel = (payload.channel_code or "").strip()
-    if output_mode == "channel" and not channel:
-        raise HTTPException(status_code=400, detail="channel_code is required when output_mode='channel'")
     mode = (payload.source_mode or "youtube").lower().strip()
     yt = (payload.youtube_url or "").strip()
     yt_many = [str(x).strip() for x in (payload.youtube_urls or []) if str(x).strip()]
@@ -150,6 +151,9 @@ def _validate_render_source(payload: RenderRequest):
             raise HTTPException(status_code=400, detail="youtube_url must be empty when source_mode='local'")
     _validate_output_dir(payload)
     if output_mode == "channel":
+        channel = (payload.channel_code or "").strip()
+        if not channel:
+            raise HTTPException(status_code=400, detail="channel_code is required when output_mode='channel'")
         out_path = Path(str(payload.output_dir).strip())
         parts = [str(p).strip().lower() for p in out_path.parts if str(p).strip()]
         chan = channel.lower()
@@ -559,6 +563,7 @@ def _queue_render_job(job_id: str, effective_channel: str, payload: RenderReques
 
 @router.post("/process")
 def create_render_job(payload: RenderRequest):
+    _coerce_legacy_channel_payload(payload)
     try:
         _validate_render_source(payload)
         _validate_text_layers_or_400(payload)
@@ -1038,6 +1043,7 @@ def resume_render_job(job_id: str):
 
     payload = RenderRequest(**payload_data)
     payload.resume_from_last = True
+    _coerce_legacy_channel_payload(payload)
     _validate_render_source(payload)
     effective_channel = (payload.channel_code or "").strip() or "manual"
     _queue_render_job(job_id, effective_channel, payload, resume_mode=True, queued_message="Resume job queued")
@@ -1070,6 +1076,7 @@ def retry_failed_parts(job_id: str):
 
     payload = RenderRequest(**payload_data)
     payload.resume_from_last = True
+    _coerce_legacy_channel_payload(payload)
     _validate_render_source(payload)
     effective_channel = (payload.channel_code or "").strip() or "manual"
     _queue_render_job(

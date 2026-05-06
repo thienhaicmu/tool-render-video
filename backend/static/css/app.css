@@ -14467,3 +14467,691 @@ body.is-history-active #history_list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ── Phase 4 — Bottom panel rebuilt: stacked queue/logs layout ─────────────── */
+
+/* rcBottom: flex column, no padding wasting content space */
+.rs-bottom-panel .rcBottom.rcActiveQueue {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* rcAQMain: stacked column — queue fills top, logs strip at bottom */
+.rs-bottom-panel .rcAQMain {
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  grid-template-columns: unset !important;
+  grid-template-areas: unset !important;
+  grid-template-rows: unset !important;
+}
+
+/* Queue panel: fills all vertical space above the log strip */
+.rs-bottom-panel .rcQueuePanel {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  max-height: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  grid-area: unset !important;
+  border-right: none !important;
+  border-bottom: 1px solid rgba(255,255,255,.06) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+/* Panel header: static (not sticky), fixed height */
+.rs-bottom-panel .rcQueuePanel > .rcPanelHeader {
+  position: static !important;
+  flex: 0 0 auto !important;
+}
+
+/* Active card: natural height, does not grow */
+.rs-bottom-panel .rcQueuePanel > .rcActiveCard {
+  flex: 0 0 auto !important;
+  grid-column: unset !important;
+}
+
+/* Clip grid: fills remaining space in queue panel, scrolls vertically */
+.rs-bottom-panel .rcQueuePanel > .rcQueueGrid {
+  flex: 1 1 auto !important;
+  min-height: 60px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  grid-column: unset !important;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important;
+  align-content: start !important;
+  gap: 8px !important;
+  padding: 8px 10px !important;
+}
+
+/* Log strip: fixed height at bottom, spans full width */
+.rs-bottom-panel .rcLogStrip.rcLogPanel {
+  flex: 0 0 140px !important;
+  min-height: 140px !important;
+  max-height: 140px !important;
+  max-width: none !important;
+  width: auto !important;
+  grid-area: unset !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border-top: 1px solid rgba(255,255,255,.07) !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* When logs are collapsed: hide strip, remove queue panel border */
+.rs-bottom-panel.logsCollapsed .rcLogStrip.rcLogPanel {
+  display: none !important;
+}
+.rs-bottom-panel.logsCollapsed .rcQueuePanel {
+  border-bottom: none !important;
+}
+
+/* Override the wide-screen 2-column internal grid on rcQueuePanel */
+@media (min-width: 1281px) {
+  .rs-bottom-panel .rcQueuePanel {
+    display: flex !important;
+    grid-template-columns: unset !important;
+    grid-template-rows: unset !important;
+  }
+  .rs-bottom-panel .rcQueuePanel > .rcActiveCard,
+  .rs-bottom-panel .rcQueuePanel > .rcQueueGrid {
+    grid-column: unset !important;
+  }
+}
+
+/* Override side-by-side column media queries — always use stacked layout */
+@media (max-width: 1440px) {
+  .rs-bottom-panel .rcAQMain {
+    grid-template-columns: unset !important;
+  }
+}
+@media (max-width: 1400px) {
+  .rs-bottom-panel .rcAQMain {
+    grid-template-columns: unset !important;
+  }
+  .rs-bottom-panel .rcQueuePanel > .rcQueueGrid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+  }
+}
+@media (max-width: 1180px) {
+  .rs-bottom-panel .rcAQMain {
+    grid-template-columns: unset !important;
+    grid-template-rows: unset !important;
+  }
+  .rs-bottom-panel .rcLogStrip.rcLogPanel {
+    max-width: none !important;
+  }
+}
+
+/* ── Phase 5 — Bottom panel: 65/35 side-by-side layout ─────────────────────── */
+
+/* rcBottom: flex column wrapper (toolbar is above, rcAQMain fills the rest) */
+.rs-bottom-panel .rcBottom.rcActiveQueue {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* rcAQMain: side-by-side row — queue 65%, logs 35% */
+.rs-bottom-panel .rcAQMain {
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  grid-template-columns: unset !important;
+  grid-template-areas: unset !important;
+  grid-template-rows: unset !important;
+}
+
+/* Queue column: 65%, scrollable */
+.rs-bottom-panel .rcQueuePanel {
+  flex: 0 0 65% !important;
+  max-width: 65% !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  max-height: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  grid-area: unset !important;
+  border-right: 1px solid rgba(255,255,255,.06) !important;
+  border-bottom: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+/* Queue panel header */
+.rs-bottom-panel .rcQueuePanel > .rcPanelHeader {
+  position: static !important;
+  flex: 0 0 auto !important;
+}
+
+/* Active card: natural height */
+.rs-bottom-panel .rcQueuePanel > .rcActiveCard {
+  flex: 0 0 auto !important;
+  grid-column: unset !important;
+}
+
+/* Clip grid: fills remaining height in the queue column */
+.rs-bottom-panel .rcQueuePanel > .rcQueueGrid {
+  flex: 1 1 auto !important;
+  min-height: 60px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  grid-column: unset !important;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
+  align-content: start !important;
+  gap: 8px !important;
+  padding: 8px 10px !important;
+}
+
+/* Logs column: 35%, internal scroll */
+.rs-bottom-panel .rcLogStrip.rcLogPanel {
+  flex: 0 0 35% !important;
+  max-width: 35% !important;
+  width: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  height: auto !important;
+  grid-area: unset !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* Log list scrolls internally */
+.rs-bottom-panel .rcLogList,
+.rs-bottom-panel #event_log_render {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace !important;
+}
+
+/* Collapsed: hide logs column, queue takes full width */
+.rs-bottom-panel.logsCollapsed .rcLogStrip.rcLogPanel {
+  display: none !important;
+}
+.rs-bottom-panel.logsCollapsed .rcQueuePanel {
+  flex: 1 1 auto !important;
+  max-width: none !important;
+  border-right: none !important;
+}
+
+/* Override wide-screen 2-column grid inside queue panel */
+@media (min-width: 1281px) {
+  .rs-bottom-panel .rcQueuePanel {
+    display: flex !important;
+    grid-template-columns: unset !important;
+    grid-template-rows: unset !important;
+  }
+  .rs-bottom-panel .rcQueuePanel > .rcActiveCard,
+  .rs-bottom-panel .rcQueuePanel > .rcQueueGrid {
+    grid-column: unset !important;
+  }
+}
+
+/* Responsive ≤1200px: stack queue on top, logs on bottom */
+@media (max-width: 1200px) {
+  .rs-bottom-panel .rcAQMain {
+    flex-direction: column !important;
+  }
+  .rs-bottom-panel .rcQueuePanel {
+    flex: 0 0 60% !important;
+    max-width: none !important;
+    width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid rgba(255,255,255,.06) !important;
+    overflow-y: auto !important;
+  }
+  .rs-bottom-panel .rcLogStrip.rcLogPanel {
+    flex: 0 0 40% !important;
+    max-width: none !important;
+    width: 100% !important;
+    border-top: 1px solid rgba(255,255,255,.07) !important;
+  }
+  .rs-bottom-panel.logsCollapsed .rcQueuePanel {
+    flex: 1 1 auto !important;
+    border-bottom: none !important;
+  }
+}
+
+/* ── Clips view — card grid layout ─────────────────────────────────────────── */
+
+/* Sort control in the output panel header */
+.clipsSortSelect {
+  appearance: none;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 22px 4px 8px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394a3b8'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+.clipsSortSelect:focus {
+  outline: none;
+  border-color: rgba(96,165,250,.5);
+}
+
+/* Grid container: fluid columns, min 180px each */
+.clipsGrid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+/* Individual clip card */
+.clipCard {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(15,23,42,.55);
+  overflow: hidden;
+  transition: border-color .15s ease, transform .12s ease, box-shadow .15s ease;
+  cursor: default;
+}
+.clipCard:hover {
+  border-color: rgba(96,165,250,.32);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.clipCard.isBestClip {
+  border-color: rgba(34,197,94,.5);
+  background: rgba(20,83,45,.22);
+  box-shadow: 0 0 0 1px rgba(34,197,94,.18);
+}
+.clipCard.isFailed {
+  border-color: rgba(248,113,113,.22);
+  background: rgba(127,29,29,.14);
+  opacity: .85;
+}
+.clipCard.isSkipped {
+  opacity: .6;
+}
+
+/* Thumbnail area — 16:9 aspect ratio */
+.clipCardThumbWrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: rgba(2,6,23,.8);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.clipCardThumbVid {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.clipCardThumbPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  color: rgba(148,163,184,.4);
+  background: rgba(15,23,42,.6);
+}
+
+/* "Best" flag — top-left corner of thumbnail */
+.clipCardBestFlag {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(16,185,129,.92);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+/* Duration badge — bottom-right of thumbnail */
+.clipCardDurTag {
+  position: absolute;
+  bottom: 5px;
+  right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0,0,0,.72);
+  color: rgba(226,232,240,.9);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* Card body */
+.clipCardBody {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 8px;
+}
+.clipCardTitle {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+/* Score row: score pill + rank + status dot */
+.clipCardScoreRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.clipCardScore {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: 5px;
+  line-height: 1.4;
+}
+.clipCardScore[data-tier="high"] { color: #4ade80; background: rgba(34,197,94,.12); }
+.clipCardScore[data-tier="mid"]  { color: #60a5fa; background: rgba(59,130,246,.12); }
+.clipCardScore[data-tier="low"]  { color: #fbbf24; background: rgba(245,158,11,.1); }
+.clipCardScore[data-tier="weak"] { color: rgba(148,163,184,.6); background: transparent; }
+
+.clipCardRankTag {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(148,163,184,.7);
+  letter-spacing: .03em;
+}
+
+/* Status dot */
+.clipCardStatusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: auto;
+  background: rgba(148,163,184,.35);
+}
+.clipCardStatusDot[data-status="completed"] { background: #4ade80; }
+.clipCardStatusDot[data-status="failed"]    { background: #f87171; }
+.clipCardStatusDot[data-status="skipped"]   { background: rgba(148,163,184,.4); }
+.clipCardStatusDot[data-status="pending"]   { background: rgba(148,163,184,.3); }
+
+/* AI reason snippet */
+.clipCardReason {
+  font-size: 10px;
+  color: rgba(148,163,184,.65);
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Action buttons */
+.clipCardActions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.clipCardBtn {
+  flex: 1 1 auto;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.05);
+  color: rgba(203,213,225,.8);
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  transition: background .12s ease, border-color .12s ease;
+  white-space: nowrap;
+}
+.clipCardBtn:hover {
+  background: rgba(96,165,250,.15);
+  border-color: rgba(96,165,250,.35);
+  color: #93c5fd;
+}
+
+/* Responsive: tighter cards on small panels */
+@media (max-width: 640px) {
+  .clipsGrid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VISUAL POLISH — 8px spacing system, unified status colors, noise removal
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* 8px spacing scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+
+  /* Card geometry */
+  --cr: 8px;
+  --crl: 12px;
+  --cb: rgba(255,255,255,.06);
+  --cbg: rgba(15,23,42,.55);
+
+  /* Status color palette */
+  --c-run:  #60a5fa;
+  --c-done: #4ade80;
+  --c-err:  #f87171;
+  --c-wait: rgba(148,163,184,.7);
+  --c-warn: #fbbf24;
+  --c-idle: rgba(148,163,184,.5);
+}
+
+/* ── Top Nav ───────────────────────────────────────────────────────────────── */
+.appTopBarNav .navItem {
+  padding: 6px 16px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  border-radius: 8px !important;
+  border-left: none !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: rgba(148,163,184,.8) !important;
+  transition: background .12s ease, color .12s ease !important;
+  transform: none !important;
+}
+.appTopBarNav .navItem::before { display: none !important; }
+.appTopBarNav .navItem:hover {
+  background: rgba(255,255,255,.06) !important;
+  color: #e2e8f0 !important;
+  transform: none !important;
+}
+.appTopBarNav .navItem.active {
+  background: rgba(59,130,246,.16) !important;
+  color: #93c5fd !important;
+  border-color: rgba(59,130,246,.25) !important;
+  box-shadow: inset 0 0 0 1px rgba(59,130,246,.2) !important;
+}
+
+/* ── rdBadge — status badge on dominant render card ───────────────────────── */
+.rdBadge {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  letter-spacing: .02em !important;
+  text-transform: uppercase !important;
+}
+.rdBadge[data-state="idle"]      { background: rgba(148,163,184,.12) !important; color: var(--c-idle)  !important; }
+.rdBadge[data-state="queued"]    { background: rgba(148,163,184,.12) !important; color: var(--c-wait)  !important; }
+.rdBadge[data-state="running"]   { background: rgba(96,165,250,.14)  !important; color: var(--c-run)   !important; }
+.rdBadge[data-state="completed"] { background: rgba(74,222,128,.12)  !important; color: var(--c-done)  !important; }
+.rdBadge[data-state="partial"]   { background: rgba(251,191,36,.12)  !important; color: var(--c-warn)  !important; }
+.rdBadge[data-state="failed"]    { background: rgba(248,113,113,.12) !important; color: var(--c-err)   !important; }
+
+/* ── rdCard — dominant active render card ─────────────────────────────────── */
+.rdCard {
+  border-radius: var(--crl) !important;
+  padding: var(--sp-4) !important;
+  box-shadow: none !important;
+  margin-bottom: var(--sp-2) !important;
+}
+
+/* ── rcActiveCard — bottom panel current-job card ─────────────────────────── */
+.rcActiveCard {
+  margin: var(--sp-2) var(--sp-3) !important;
+  padding: var(--sp-3) !important;
+  border-radius: var(--cr) !important;
+  box-shadow: none !important;
+}
+.rcActiveCard .rcActiveTitle,
+.rcActiveCard.isRendering .rcActiveTitle {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+/* rcCardStatusBadge — status badge inside rcActiveCard */
+.rcCardStatusBadge[data-state="running"],
+.rcCardStatusBadge[data-state="rendering"] { color: var(--c-run)  !important; }
+.rcCardStatusBadge[data-state="completed"] { color: var(--c-done) !important; }
+.rcCardStatusBadge[data-state="failed"]    { color: var(--c-err)  !important; }
+.rcCardStatusBadge[data-state="queued"],
+.rcCardStatusBadge[data-state="waiting"]   { color: var(--c-wait) !important; }
+.rcCardStatusBadge[data-state="partial"]   { color: var(--c-warn) !important; }
+
+/* ── Bottom panel toolbar ─────────────────────────────────────────────────── */
+.abpToolbar {
+  padding: var(--sp-2) var(--sp-4) !important;
+  gap: var(--sp-3) !important;
+  min-height: 40px !important;
+}
+.abpPct {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+#job_stage_pill {
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+}
+
+/* ── Panel headers ────────────────────────────────────────────────────────── */
+.rcPanelHeader,
+.rcLogStripHeader {
+  padding: var(--sp-2) var(--sp-3) !important;
+  min-height: 36px !important;
+}
+
+/* ── Queue rows ───────────────────────────────────────────────────────────── */
+.rdQueueRow {
+  box-shadow: none !important;
+  border-radius: var(--cr) !important;
+}
+.rcQueueGrid {
+  gap: var(--sp-1) !important;
+  padding: var(--sp-2) !important;
+}
+
+/* ── Part cards ───────────────────────────────────────────────────────────── */
+.rcPartCard {
+  box-shadow: none !important;
+  border-radius: var(--cr) !important;
+  padding: var(--sp-2) var(--sp-3) !important;
+}
+
+/* ── Clips grid and cards ─────────────────────────────────────────────────── */
+.clipsGrid {
+  gap: var(--sp-2) !important;
+  padding: var(--sp-2) !important;
+}
+.clipCard {
+  border-radius: var(--cr) !important;
+  box-shadow: none !important;
+}
+.clipCardBody {
+  padding: var(--sp-2) 10px !important;
+  gap: 4px !important;
+}
+.clipCardBestFlag {
+  font-size: 9px !important;
+  padding: 2px 5px !important;
+}
+.clipCardBtn {
+  padding: 3px 8px !important;
+}
+
+/* ── Render home cards ────────────────────────────────────────────────────── */
+.renderHomeCard {
+  border-radius: var(--cr) !important;
+  padding: var(--sp-4) !important;
+  margin-bottom: var(--sp-2) !important;
+  box-shadow: none !important;
+}
+
+/* ── Output panel ─────────────────────────────────────────────────────────── */
+.renderOutputPanel {
+  box-shadow: none !important;
+  margin-top: var(--sp-3) !important;
+}
+
+/* ── Remove blinking / pulsing animations in bottom panel ─────────────────── */
+.rs-bottom-panel *,
+.rcAQMain * {
+  animation-name: none !important;
+}
+/* Re-enable progress bar fill animation only */
+.rs-bottom-panel .progressValue,
+.rcAQMain .progressValue {
+  animation-name: unset !important;
+}
+

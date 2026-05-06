@@ -1,10 +1,9 @@
 function setView(view){
+  // ── Standard view routing ──────────────────────────────────────────────────
   currentView = view;
   const isRender   = view === 'render';
   const isDownload = view === 'download';
   const isHistory  = view === 'history';
-  const isUpload   = view === 'upload';
-  const isChannels = view === 'channels';
   const isReports  = view === 'reports';
   const isSettings = view === 'settings';
   const isEditor   = view === 'editor';
@@ -21,7 +20,7 @@ function setView(view){
   const flowBar = qs('render_flow_bar');
   if (flowBar) flowBar.classList.toggle('hiddenView', !(isRender || isEditor));
 
-  // pageHeader + layout_grid only visible for upload/channels/reports/settings
+  // pageHeader + layout_grid only visible for reports/settings
   const showMainContent = !isRender && !isEditor && !isDownload && !isHistory;
   const pageHeader = document.querySelector('.pageHeader');
   if (pageHeader) pageHeader.classList.toggle('hiddenView', !showMainContent);
@@ -38,15 +37,11 @@ function setView(view){
   if (renderSetup) renderSetup.classList.toggle('hiddenView', !(isRender || isEditor));
   const downloadSetup = qs('card_download_setup');
   if (downloadSetup) downloadSetup.classList.toggle('hiddenView', !isDownload);
-  qs('card_upload').classList.toggle('hiddenView', !isUpload);
-  qs('card_channels').classList.toggle('hiddenView', !isChannels);
   qs('card_reports').classList.toggle('hiddenView', !isReports);
   qs('card_settings').classList.toggle('hiddenView', !isSettings);
 
-  if (isUpload)  setPageHeader('Upload Studio', 'Choose Action -> Select Channel -> Login or Upload.');
-  if (isHistory) setPageHeader('History', 'Recent Download and Render activity');
-  if (isChannels) setPageHeader('Channel Management', 'Choose Root Folder -> Enter Channel Code -> Configure -> Create.');
-  if (isReports) setPageHeader('Reports', 'Review render and upload reporting output.');
+  if (isHistory) setPageHeader('History', 'Recent render activity');
+  if (isReports) setPageHeader('Reports', 'Review render reporting output.');
   if (isSettings) setPageHeader('Settings', 'System maintenance and operational options.');
 
   document.querySelectorAll('.navItem[data-view]').forEach((btn) => {
@@ -91,9 +86,6 @@ function setView(view){
   // Bottom panel: auto-collapse when switching views with no active job.
   if (!currentJobId) _collapseBottomPanel(true);
 
-  // Upload wizard: reset to step 1 when entering upload view.
-  if (isUpload && typeof setUploadWizardStep === 'function') setUploadWizardStep(1);
-
   // Subtle enter animation: fade + lift the incoming content over 120ms.
   // Remove → reflow → re-add restarts the animation even on repeated calls.
   if (mainArea) {
@@ -103,7 +95,6 @@ function setView(view){
   }
 
   syncRenderBottomPanelVisibility(view);
-  document.body.classList.toggle('is-upload-active', isUpload);
   document.body.classList.toggle('is-history-active', isHistory);
 }
 
@@ -153,33 +144,8 @@ function syncSourceModeUI(){
     const picker = qs('local_video_file_picker');
     if(picker) picker.value = '';
   }
-  if(currentView === 'upload') syncUploadActionModeUI();
 }
 
-function quickOpenFeature(feature){
-  const f = String(feature || '').toLowerCase();
-  const createBtn = qs('feature_create_btn');
-  const loginBtn = qs('feature_login_btn');
-  const uploadBtn = qs('feature_upload_btn');
-  [createBtn, loginBtn, uploadBtn].forEach((b) => b && b.classList.remove('active'));
-  if(f === 'create'){
-    if(createBtn) createBtn.classList.add('active');
-    setView('channels');
-    return;
-  }
-  setView('upload');
-  if(f === 'login'){
-    if(loginBtn) loginBtn.classList.add('active');
-    if(qs('upload_action_mode')) qs('upload_action_mode').value = 'login';
-  } else {
-    if(uploadBtn) uploadBtn.classList.add('active');
-    if(qs('upload_action_mode')) qs('upload_action_mode').value = 'upload';
-  }
-  syncUploadJsonModeUI();
-  if(!String(qs('upload_channels_root')?.value || '').trim()){
-    addEvent('Step 1: Choose Action. Step 2: Choose Root Folder, then select channel.');
-  }
-}
 
 function syncOutputModeUI(){
   const mode = (qs('output_mode')?.value || 'channel').toLowerCase();

@@ -22,14 +22,13 @@
       <div class="brandTitle">Render Studio</div>
     </div>
     <nav class="appTopBarNav">
-      <button class="navItem" data-view="download">Download</button>
       <button class="navItem active" data-view="render">Render</button>
-      <button class="navItem" data-view="upload">Upload</button>
+      <button class="navItem" data-view="download">Download</button>
       <button class="navItem" data-view="history">History</button>
     </nav>
     <div class="appTopBarChips">
       <div class="pill">Local AI · FastAPI</div>
-      <div class="pill" id="warmup_chip" title="Click to see details" onclick="toggleWarmupPanel()" style="cursor:pointer">⏳ Loading models...</div>
+      <div class="pill" id="warmup_chip" title="Click to see details" onclick="toggleWarmupPanel()" style="cursor:pointer">Loading models...</div>
       <button class="topBarIconBtn" type="button" onclick="setView('settings')" title="Settings" aria-label="Settings">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 8.25a3.75 3.75 0 1 0 0 7.5a3.75 3.75 0 0 0 0-7.5Z" fill="currentColor"></path>
@@ -83,14 +82,15 @@
               <label class="field">
                 <span class="fieldLabel">Source Type</span>
                 <select class="fieldInput" id="source_mode">
-                  <option value="youtube" selected>YouTube Link</option>
+                  <option value="youtube" selected>Video URL</option>
                   <option value="local">Local Video File</option>
                 </select>
               </label>
               <div></div>
               <label class="field fieldSpan2" id="field_youtube_url">
-                <span class="fieldLabel">YouTube URL</span>
-                <input class="fieldInput" id="youtube_url" placeholder="https://www.youtube.com/watch?v=...">
+                <span class="fieldLabel">Video URL</span>
+                <input class="fieldInput" id="youtube_url" placeholder="YouTube, TikTok, Instagram or Facebook link">
+                <div class="sectionSubtitle" style="margin-top:4px">Or use <strong>Download</strong> tab to save a video first, then select <em>Local Video File</em>.</div>
               </label>
               <label class="field fieldSpan2 hiddenView" id="field_source_video_path">
                 <span class="fieldLabel">Local Video</span>
@@ -108,31 +108,12 @@
           <div class="setupGroup">
             <div class="setupGroupTitle">Output</div>
             <div class="formGrid">
-              <label class="field">
-                <span class="fieldLabel">Output Mode</span>
-                <select class="fieldInput" id="output_mode">
-                  <option value="channel">By Channel</option>
-                  <option value="manual" selected>Manual Folder</option>
-                </select>
-              </label>
-              <div></div>
-              <label class="field fieldSpan2" id="field_render_channels_root">
-                <span class="fieldLabel">Channels Root Folder</span>
-                <div class="actionsRow" style="margin-top:0">
-                  <input class="fieldInput" id="render_channels_root" placeholder="Select root folder containing channels" readonly disabled>
-                  <button type="button" class="ghostButton" onclick="pickChannelsRoot('render')">Choose Folder</button>
-                </div>
-              </label>
-              <label class="field fieldSpan2" id="field_channel_code">
-                <span class="fieldLabel">Channel</span>
-                <select class="fieldInput" id="channel_code"><option value="">Select channel</option></select>
-              </label>
-              <label class="field fieldSpan2" id="field_render_output_dir">
-                <span class="fieldLabel">Output Folder</span>
-                <input class="fieldInput" id="render_output_dir" placeholder="Auto from channel" readonly>
-                <div class="sectionSubtitle" id="render_output_dir_hint" style="margin-top:6px">Auto-filled when channel is selected.</div>
-              </label>
-              <label class="field fieldSpan2 hiddenView" id="field_manual_output_dir">
+              <!-- channel mode removed; IDs retained hidden for JS compat -->
+              <input type="hidden" id="output_mode" value="manual">
+              <input type="hidden" id="channel_code" value="">
+              <input type="hidden" id="render_channels_root" value="">
+              <input type="hidden" id="render_output_dir" value="">
+              <label class="field fieldSpan2" id="field_manual_output_dir">
                 <span class="fieldLabel">Output Folder</span>
                 <div id="manual_output_folder" class="manualOutputRow">
                   <input class="fieldInput" id="manual_output_dir" placeholder="e.g. D:\videos\output">
@@ -359,7 +340,7 @@
       <div class="rdCard" id="rd_card" data-state="idle">
         <div class="rdCardHead">
           <div class="rdHeadLeft">
-            <div class="rdBadge" id="rd_badge" data-state="running">&#9679; Running</div>
+            <div class="rdBadge" id="rd_badge" data-state="idle">Idle</div>
             <div class="rdTitle" id="rd_title">Preparing render…</div>
           </div>
           <button class="rdLogBtn" type="button" onclick="_collapseBottomPanel(false)">View Logs</button>
@@ -372,7 +353,6 @@
         </div>
         <div class="rdDoneActions hiddenView" id="render_active_actions">
           <button class="primaryButton" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
-          <button class="ghostButton" type="button" onclick="setView('upload')">Go to Upload</button>
         </div>
       </div>
 
@@ -386,17 +366,20 @@
     <div id="render_output_panel" class="renderOutputPanel hiddenView">
       <div class="renderOutputHeader">
         <div class="renderOutputTitle">
-          <span id="render_output_panel_title">Generated Clips</span>
+          <span id="render_output_panel_title">Clips</span>
           <span class="renderOutputBadge" id="render_output_badge">0</span>
         </div>
         <div class="renderOutputActions">
+          <select id="clips_sort_select" class="clipsSortSelect" onchange="sortClipsView(this.value)" title="Sort clips">
+            <option value="score">Best first</option>
+            <option value="part_no">In order</option>
+          </select>
           <button class="ghostButton renderOutputBtn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
-          <button class="ghostButton renderOutputBtn" type="button" onclick="setView('upload')">Upload</button>
         </div>
       </div>
       <div id="render_output_path" class="renderOutputPath"></div>
       <div id="mvRenderSummary" hidden></div>
-      <div id="render_output_list" class="renderOutputList">
+      <div id="render_output_list" class="renderOutputList clipsGrid">
         <div class="renderOutputEmpty">Clips will appear here when render completes.</div>
       </div>
     </div>
@@ -438,7 +421,7 @@
     <header class="pageHeader">
       <div>
         <div class="pageTitle" id="page_title_text">Render Studio</div>
-        <div class="pageSubtitle" id="page_subtitle_text">Render, upload, and channel management dashboard by dedicated workspace sections.</div>
+        <div class="pageSubtitle" id="page_subtitle_text">Creator Render Studio — settings and history.</div>
       </div>
       <div class="headerChips">
         <div class="pill primaryPill" id="job_chip">No active job</div>
@@ -451,926 +434,9 @@
 
       <div class="leftColumn" id="left_column">
 
-        <!-- ── SECTION: upload-card ─────────────────────────────── -->
-        <section class="card" id="card_upload">
-          <div class="sectionHeader">
-            <div><div class="sectionTitle">Upload Studio</div><div class="sectionSubtitle">Manage TikTok accounts, videos, schedules, and upload history.</div></div>
-            <button class="ghostButton" onclick="setView('render')">Back to Main</button>
-          </div>
-          <div class="uploadWorkflowGuide" id="upload_workflow_guide">
-            <div class="uploadWorkflowStep isActive" id="upload_workflow_step_1">
-              <div class="uploadWorkflowStepLabel">Step 1</div>
-              <div class="uploadWorkflowStepTitle">Add Account</div>
-            </div>
-            <div class="uploadWorkflowStep" id="upload_workflow_step_2">
-              <div class="uploadWorkflowStepLabel">Step 2</div>
-              <div class="uploadWorkflowStepTitle">Add Video</div>
-            </div>
-            <div class="uploadWorkflowStep" id="upload_workflow_step_3">
-              <div class="uploadWorkflowStepLabel">Step 3</div>
-              <div class="uploadWorkflowStepTitle">Add to Queue</div>
-            </div>
-            <div class="uploadWorkflowStep" id="upload_workflow_step_4">
-              <div class="uploadWorkflowStepLabel">Step 4</div>
-              <div class="uploadWorkflowStepTitle">Run Upload</div>
-            </div>
-          </div>
-          <div class="uploadWorkflowHint" id="upload_workflow_hint">Start by creating an upload account.</div>
-          <div class="uploadManagerTopBar">
-            <div class="uploadManagerTopBarTitle">
-              <div class="sectionTitle">Upload Manager</div>
-              <div class="sectionSubtitle">Choose an account, assign videos, then start uploads safely.</div>
-            </div>
-            <div class="uploadManagerTopBarControls">
-              <div class="uploadSchedulerStatus">
-                <span class="uamBadge" id="upload_scheduler_status_badge_top" data-state="stopped">stopped</span>
-                <span class="uploadSchedulerMeta" id="upload_scheduler_meta_top">Eligible 0 · Running 0</span>
-              </div>
-              <button class="primaryButton" type="button" onclick="startUploadScheduler()">Start Scheduler</button>
-              <button class="ghostButton" type="button" onclick="stopUploadScheduler()">Stop Scheduler</button>
-              <button class="ghostButton" type="button" onclick="runUploadSchedulerTick()">Tick Now</button>
-              <button class="ghostButton" type="button" id="retry_failed_btn_top" onclick="retryFailedUploads()">Retry Failed</button>
-              <button class="ghostButton" type="button" onclick="refreshUploadWorkspace()">Refresh</button>
-            </div>
-          </div>
-          <div class="uploadManagerWorkspace uploadSoloMode" id="upload_manager_workspace">
-            <div class="uploadManagerColumn uploadManagerColumnLeft">
-              <div class="uploadAccountManager" id="upload_account_manager">
-                <div class="uamHeader uamPanelHeader">
-                  <div class="uamPanelTitle">
-                    <div class="uamTitle">Account Manager</div>
-                    <div class="sectionSubtitle">Isolated TikTok profiles, login, proxy, safety.</div>
-                  </div>
-                  <div class="uamPanelActions">
-                    <button class="primaryButton uploadPrimaryAction" type="button" onclick="openUploadEditor('account')">+ New Account</button>
-                    <button class="ghostButton" type="button" onclick="loadUploadAccounts()">Refresh</button>
-                  </div>
-                </div>
-                <div class="uamHealthFilter" id="uam_health_filter">
-                  <button class="uamHealthFilterBtn active" data-filter="all" onclick="setUploadAccountHealthFilter('all')">All</button>
-                  <button class="uamHealthFilterBtn" data-filter="healthy" onclick="setUploadAccountHealthFilter('healthy')">🟢 Healthy</button>
-                  <button class="uamHealthFilterBtn" data-filter="warning" onclick="setUploadAccountHealthFilter('warning')">🟡 Warning</button>
-                  <button class="uamHealthFilterBtn" data-filter="risky" onclick="setUploadAccountHealthFilter('risky')">🔴 Risky</button>
-                </div>
-                <div class="uamAccountList" id="upload_accounts_list">
-                  <div class="uamEmpty">No upload accounts yet.<br>Create a TikTok account profile before uploading.<br><button class="primaryButton" type="button" onclick="openUploadEditor('account')">+ Create First Account</button></div>
-                </div>
-              </div>
-            </div>
-
-            <div class="uploadManagerColumn uploadManagerColumnCenter">
-              <div class="uploadAccountWorkspaceShell" id="upload_account_workspace_shell">
-                <div class="uploadAccountWorkspaceHeader">
-                  <div>
-                    <div class="uvlTitle" id="upload_account_workspace_title">Account Workspace: Select an account</div>
-                    <div class="sectionSubtitle" id="upload_account_workspace_hint">Select an account to manage its upload flow.</div>
-                  </div>
-                  <div class="uploadAccountWorkspaceActions">
-                    <button class="primaryButton" type="button" id="upload_run_account_btn" onclick="runSelectedAccountQueue()">Start Upload</button>
-                    <button class="ghostButton" type="button" id="upload_stop_account_btn" onclick="stopSelectedAccountQueue()">Hold Pending</button>
-                    <button class="ghostButton" type="button" id="upload_check_login_btn" onclick="checkSelectedAccountLogin()">Check Login</button>
-                  </div>
-                </div>
-                <div id="uploadWorkspaceActionBar" class="uwActionBar">
-                  <button id="uwOpenProfileBtn" class="uwBtnPrimary" type="button">Open Profile</button>
-                  <button id="uwLoginCheckBtn" class="uwBtn" type="button">Check Login</button>
-                  <button id="uwAddVideoBtn" class="uwBtn" type="button">Add Video</button>
-                  <button id="uwAutoPlanBtn" class="uwBtn" type="button">Auto Plan</button>
-                  <button id="uwStartBtn" class="uwBtnPrimary" type="button">Start</button>
-                </div>
-                <div id="uwContextPanel" class="uwContextPanel"></div>
-                <div class="uploadAccountWorkspaceMeta" id="upload_account_workspace_meta">
-                  <div class="uploadWorkspaceEmptyState">
-                    <div class="uploadWorkspaceEmptyTitle">Select an account to manage uploads</div>
-                    <div class="uploadWorkspaceEmptyCopy">Accounts are isolated with their own browser profile.</div>
-                  </div>
-                </div>
-              </div>
-              <div id="uploadSimplePanel" class="uploadSimplePanel uploadHero">
-                <div id="uploadWizardSteps" class="uploadWizardSteps"></div>
-                <div id="uploadWizardCTA" class="uploadWizardCTA"></div>
-                <div class="uploadQuickActions">
-                  <button id="spAddAccount" type="button">+ Add Account</button>
-                  <button id="spOpenProfile" type="button">Open Profile</button>
-                  <button id="spCheckLogin" type="button">Check Login</button>
-                  <button id="spAddVideo" type="button">Add Video</button>
-                  <button id="spAutoPlan" type="button">Auto Plan</button>
-                  <button id="spStartUpload" class="primary" type="button">Start Upload</button>
-                </div>
-                <div id="spSummary" class="uploadSummary"></div>
-                <div id="spNextStep" class="uploadNextStep"></div>
-                <div id="spStats" class="uploadTodayStats"></div>
-              </div>
-
-              <div class="uploadManagerTabs" role="tablist" aria-label="Upload manager lists">
-                <button class="uploadManagerTab active" type="button" id="upload_tab_videos" onclick="setUploadManagerTab('videos')">Videos</button>
-                <button class="uploadManagerTab" type="button" id="upload_tab_queue" onclick="setUploadManagerTab('queue')">Uploads</button>
-                <button class="uploadManagerTab" type="button" id="upload_tab_settings" onclick="setUploadManagerTab('settings')">Settings</button>
-                <button class="uploadManagerTab" type="button" id="upload_tab_automation" onclick="setUploadManagerTab('automation')">Automation</button>
-              </div>
-              <div class="uploadVideoLibrary uploadManagerTabPanel active" id="upload_video_library" data-tab-panel="videos">
-                <div class="uvlHeader uvlPanelHeader">
-                  <div class="uvlPanelTitle">
-                    <div class="uvlTitle">Videos</div>
-                    <div class="sectionSubtitle" id="uvl_account_workspace_hint">Upload-ready files you can assign to the selected account.</div>
-                  </div>
-                  <div class="uvlHeaderActions uvlPanelActions">
-                    <select class="fieldInput" id="uvl_filter_status" onchange="loadUploadVideoLibrary()" title="Status filter">
-                      <option value="">All Status</option>
-                      <option value="ready">Ready</option>
-                      <option value="queued">Queued</option>
-                      <option value="uploaded">Uploaded</option>
-                      <option value="failed">Failed</option>
-                      <option value="disabled">Disabled</option>
-                    </select>
-                    <button class="primaryButton uploadPrimaryAction" type="button" id="uvl_add_video_btn" onclick="openUploadEditor('video')">Add Video</button>
-                    <button class="ghostButton" type="button" onclick="loadUploadVideoLibrary()">Refresh</button>
-                    <button class="secondaryButton" type="button" id="uvl_batch_assign_btn" onclick="openBatchAssignModal()" disabled title="Select ready videos to batch assign">Batch Assign <span id="uvl_batch_count"></span></button>
-                  </div>
-                </div>
-                <details class="uploadEditorSection" id="uvl_editor">
-                  <summary>Add Video</summary>
-                  <form class="uvlForm" id="upload_video_form" onsubmit="saveUploadVideo(event)">
-                    <input type="hidden" id="uvl_video_id">
-                    <label class="field fieldSpan2"><span class="fieldLabel">Add Video File Path</span><input class="fieldInput" id="uvl_video_path" placeholder="D:\videos\upload-ready\clip.mp4"></label>
-                    <label class="field"><span class="fieldLabel">Platform</span><input class="fieldInput" id="uvl_platform" value="tiktok"></label>
-                    <label class="field fieldSpan2"><span class="fieldLabel">Caption</span><input class="fieldInput" id="uvl_caption" placeholder="Caption for this video"></label>
-                    <label class="field fieldSpan2"><span class="fieldLabel">Hashtags</span><input class="fieldInput" id="uvl_hashtags" placeholder="tag1, tag2, #tag3"></label>
-                    <details class="uploadAdvancedFields fieldSpan2">
-                      <summary>Advanced</summary>
-                      <div class="uploadAdvancedGrid">
-                        <label class="field"><span class="fieldLabel">Source Type</span><select class="fieldInput" id="uvl_source_type"><option value="manual_file">Manual File</option><option value="import_folder">Import Folder</option><option value="render_export_later">Render Export Later</option></select></label>
-                        <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uvl_status"><option value="ready">Ready</option><option value="queued">Queued</option><option value="uploaded">Uploaded</option><option value="failed">Failed</option><option value="disabled">Disabled</option></select></label>
-                        <label class="field fieldSpan2"><span class="fieldLabel">Import Folder</span><input class="fieldInput" id="uvl_import_folder" placeholder="Folder import will be added later" disabled></label>
-                        <label class="field fieldSpan2"><span class="fieldLabel">Note</span><input class="fieldInput" id="uvl_note" placeholder="Internal note"></label>
-                        <label class="field fieldSpan2"><span class="fieldLabel">Cover Path</span><input class="fieldInput" id="uvl_cover_path" placeholder="Optional cover image path"></label>
-                      </div>
-                    </details>
-                    <div class="uvlFormActions">
-                      <button class="primaryButton" type="submit" id="uvl_save_btn">Add Video</button>
-                      <button class="ghostButton" type="button" onclick="resetUploadVideoForm()">Clear</button>
-                    </div>
-                  </form>
-                </details>
-                <div class="uvlTableWrap">
-                  <table class="uvlTable uploadDataTable">
-                    <thead>
-                      <tr>
-                        <th class="uvlColCheck"><input type="checkbox" id="uvl_select_all" title="Select all ready videos" onchange="toggleSelectAllVideos(this.checked)"></th>
-                        <th>File</th>
-                        <th>Status</th>
-                        <th>Caption</th>
-                        <th>Tags</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="upload_videos_tbody">
-                      <tr><td colspan="6" class="uvlEmpty">No upload videos yet. Add a file to start building your library.</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="uvlSelectHint" id="uvl_select_hint" hidden>Select videos to start batch assign</div>
-              </div>
-
-              <div class="uploadQueueManager uploadManagerTabPanel" id="upload_queue_manager" data-tab-panel="queue">
-                  <div class="uqmHeader uqmPanelHeader">
-                    <div class="uqmPanelTitle">
-                    <div class="uqmTitle" id="uqm_uploads_title">Uploads for this account</div>
-                    <div class="sectionSubtitle" id="uqm_account_workspace_hint">Select an account to see its upload items and run them safely.</div>
-                    </div>
-                  <div class="uqmHeaderActions uqmPanelActions">
-                    <select class="fieldInput" id="uqm_filter_status" onchange="loadUploadQueueManager()" title="Queue status filter">
-                      <option value="">All Queue</option>
-                      <option value="pending">Pending</option>
-                      <option value="scheduled">Scheduled</option>
-                      <option value="uploading">Uploading</option>
-                      <option value="success">Success</option>
-                      <option value="failed">Failed</option>
-                      <option value="held">Held</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                    <button class="primaryButton uploadPrimaryAction" type="button" id="uqm_add_to_account_btn" onclick="openSelectedAccountQueueFlow()">Assign to Account</button>
-                    <button class="ghostButton" type="button" onclick="loadUploadQueueManager()">Refresh Uploads</button>
-                  </div>
-                </div>
-                <div class="uploadSchedulerBar uploadSchedulerBarSecondary" id="upload_scheduler_bar">
-                  <div class="uploadSchedulerStatus">
-                    <span class="uamBadge" id="upload_scheduler_status_badge" data-state="stopped">stopped</span>
-                    <span class="uploadSchedulerMeta" id="upload_scheduler_meta">Eligible 0 · Running 0</span>
-                  </div>
-                  <div class="uploadSchedulerActions">
-                    <button class="primaryButton" type="button" onclick="startUploadScheduler()">Start Scheduler</button>
-                    <button class="ghostButton" type="button" onclick="stopUploadScheduler()">Stop</button>
-                    <button class="ghostButton" type="button" onclick="runUploadSchedulerTick()">Run Tick Now</button>
-                    <button class="ghostButton" type="button" id="retry_failed_btn" onclick="retryFailedUploads()">Retry Failed</button>
-                  </div>
-                </div>
-                <div class="uploadSchedulerBlocked" id="upload_scheduler_blocked">Blocked reasons will appear here.</div>
-                <details class="uploadEditorSection" id="uqm_editor">
-                  <summary>Assign Video to Account</summary>
-                  <form class="uqmForm" id="upload_queue_form" onsubmit="saveUploadQueueItem(event)">
-                    <input type="hidden" id="uqm_queue_id">
-                    <label class="field fieldSpan2"><span class="fieldLabel">Video</span><select class="fieldInput" id="uqm_video_id"><option value="">Select video</option></select></label>
-                    <label class="field fieldSpan2"><span class="fieldLabel">Account</span><select class="fieldInput" id="uqm_account_id"><option value="">Select account</option></select></label>
-                    <div class="uploadInlineHint" id="uqm_form_hint">Select an account, then choose the next video for it.</div>
-                    <details class="uploadAdvancedFields fieldSpan2">
-                      <summary>Advanced</summary>
-                      <div class="uploadAdvancedGrid">
-                        <label class="field fieldSpan2"><span class="fieldLabel">Caption Override</span><input class="fieldInput" id="uqm_caption" placeholder="Leave empty to inherit video caption"></label>
-                        <label class="field fieldSpan2"><span class="fieldLabel">Hashtags Override</span><input class="fieldInput" id="uqm_hashtags" placeholder="Leave empty to inherit video hashtags"></label>
-                        <label class="field"><span class="fieldLabel">Schedule Time</span><input class="fieldInput" id="uqm_scheduled_at" placeholder="Optional ISO/local text"></label>
-                        <label class="field"><span class="fieldLabel">Priority</span><input class="fieldInput" id="uqm_priority" type="number" value="0"></label>
-                        <label class="field"><span class="fieldLabel">Status</span><select class="fieldInput" id="uqm_status"><option value="pending">Pending</option><option value="scheduled">Scheduled</option><option value="held">Held</option></select></label>
-                      </div>
-                    </details>
-                    <div class="uqmFormActions">
-                      <button class="primaryButton" type="submit" id="uqm_save_btn">Assign to Account</button>
-                      <button class="ghostButton" type="button" onclick="resetUploadQueueForm()">Clear</button>
-                    </div>
-                  </form>
-                </details>
-                <div class="uqmTableWrap">
-                  <table class="uqmTable uploadDataTable">
-                    <thead>
-                      <tr>
-                        <th>Video</th>
-                        <th>Account</th>
-                        <th>Status</th>
-                        <th>Scheduled</th>
-                        <th>Attempts</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="upload_queue_manager_tbody">
-                      <tr><td colspan="6" class="uqmEmpty">Select an account to see its upload items.</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div class="uploadSettingsPanel uploadManagerTabPanel" id="upload_settings_panel" data-tab-panel="settings">
-                <div class="uvlHeader">
-                  <div>
-                    <div class="uvlTitle">Settings</div>
-                    <div class="sectionSubtitle">Account upload settings and isolation details.</div>
-                  </div>
-                </div>
-                <div class="uploadSettingsBody" id="upload_settings_body">
-                  <div class="uploadInspectorPlaceholder">Select an account to view upload settings.</div>
-                </div>
-              </div>
-
-              <!-- ── Automation Tab Panel ─────────────────────────────── -->
-              <div class="uploadAutomationPanel uploadManagerTabPanel" id="upload_automation_panel" data-tab-panel="automation">
-                <!-- Dashboard -->
-                <div class="uamFormSection" style="margin-top:8px">
-                  <div class="uamFormSectionTitle">Automation Dashboard</div>
-                  <div class="autoDashboard">
-                    <div class="autoDashCard"><div class="autoDashLabel">Ready Videos</div><div class="autoDashValue" id="auto_dash_ready" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">Eligible Accounts</div><div class="autoDashValue" id="auto_dash_accounts" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">Est. Uploads Today</div><div class="autoDashValue" id="auto_dash_est" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">Risky Excluded</div><div class="autoDashValue" id="auto_dash_risky" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">Next Slot</div><div class="autoDashValueSm" id="auto_dash_next" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">Quota Remaining</div><div class="autoDashValue" id="auto_dash_quota" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">Rotation</div><div class="autoDashValueSm" id="auto_dash_rotation" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">Top Acct Load</div><div class="autoDashValue" id="auto_dash_topload" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">Accts Used</div><div class="autoDashValue" id="auto_dash_accs_used" data-state="none">–</div></div>
-                  </div>
-                  <!-- Proxy pool health row -->
-                  <div class="proxyPoolDashboard">
-                    <div class="autoDashCard"><div class="autoDashLabel">Proxy Total</div><div class="autoDashValue" id="pp_dash_total" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">OK</div><div class="autoDashValue" id="pp_dash_ok" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">Failed</div><div class="autoDashValue" id="pp_dash_failed" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">Untested</div><div class="autoDashValue" id="pp_dash_untested" data-state="none">–</div></div>
-                    <div class="autoDashCard"><div class="autoDashLabel">Markets</div><div class="autoDashValueSm" id="pp_dash_markets" data-state="none">–</div></div>
-                  </div>
-                </div>
-                <!-- Market Strategy -->
-                <div class="autoSettingsSection">
-                  <div class="autoSettingsTitle">Market Strategy</div>
-                  <div class="autoInputGrid" style="grid-template-columns: 1fr 1fr; gap: 8px">
-                    <div class="autoInputRow proxyPoolFormSpan2">
-                      <span class="autoInputLabel">Market</span>
-                      <select class="fieldInput" id="auto_set_market" onchange="applyMarketPreset()">
-                        <option value="custom">Custom (manual settings)</option>
-                        <option value="US">US — America/New_York</option>
-                        <option value="JP">JP — Asia/Tokyo</option>
-                        <option value="EU">EU — Europe/Berlin</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div class="marketPresetNote" id="market_preset_note">Timezone preset stored for reference; current scheduling uses local machine time.</div>
-                </div>
-                <!-- Settings -->
-                <!-- Account Rotation -->
-                <div class="autoSettingsSection">
-                  <div class="autoSettingsTitle">Account Rotation</div>
-                  <div class="autoToggleGroup">
-                    <label class="autoToggleRow">
-                      <input type="radio" name="auto_rotation_mode" value="balanced" id="auto_rot_balanced" onchange="saveAutomationSettings()">
-                      Balanced <span class="fieldOptional">— spread across accounts, prefer healthy</span>
-                    </label>
-                    <label class="autoToggleRow">
-                      <input type="radio" name="auto_rotation_mode" value="score_first" id="auto_rot_score_first" onchange="saveAutomationSettings()">
-                      Score-first <span class="fieldOptional">— prioritize highest-scoring accounts</span>
-                    </label>
-                    <label class="autoToggleRow">
-                      <input type="radio" name="auto_rotation_mode" value="conservative" id="auto_rot_conservative" onchange="saveAutomationSettings()">
-                      Conservative <span class="fieldOptional">— healthy accounts only, strongest spacing</span>
-                    </label>
-                  </div>
-                </div>
-                <div class="autoSettingsSection">
-                  <div class="autoSettingsTitle">Behavior</div>
-                  <div class="autoToggleGroup">
-                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_exclude_risky" onchange="saveAutomationSettings()"> Exclude risky accounts <span class="fieldOptional">(recommended)</span></label>
-                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_respect_limit" onchange="saveAutomationSettings()"> Respect daily upload limits</label>
-                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_respect_cooldown" onchange="saveAutomationSettings()"> Respect account cooldowns</label>
-                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_jitter" onchange="saveAutomationSettings()"> Add random delay jitter to scheduled times</label>
-                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_posting_window" onchange="saveAutomationSettings()"> Restrict uploads to posting window <span class="fieldOptional">(local time)</span></label>
-                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_auto_start" onchange="saveAutomationSettings()"> Auto-start scheduler after enqueue</label>
-                    <label class="autoToggleRow"><input type="checkbox" id="auto_set_accept_render" onchange="saveAutomationSettings()"> Accept render outputs into Upload Library <span class="fieldOptional">(experimental)</span></label>
-                  </div>
-                </div>
-                <div class="autoSettingsSection">
-                  <div class="autoSettingsTitle">Schedule Timing</div>
-                  <div class="autoInputGrid">
-                    <div class="autoInputRow">
-                      <span class="autoInputLabel">Base spacing (min)</span>
-                      <input class="fieldInput" type="number" id="auto_set_base_spacing" value="30" min="5" max="480" onchange="saveAutomationSettings()">
-                    </div>
-                    <div class="autoInputRow">
-                      <span class="autoInputLabel">Jitter range (±min)</span>
-                      <input class="fieldInput" type="number" id="auto_set_jitter_min" value="5" min="0" max="60" onchange="saveAutomationSettings()">
-                    </div>
-                    <div class="autoInputRow">
-                      <span class="autoInputLabel">Max uploads/account/day</span>
-                      <input class="fieldInput" type="number" id="auto_set_max_per_day" value="5" min="1" max="50" onchange="saveAutomationSettings()">
-                    </div>
-                    <div class="autoInputRow">
-                      <span class="autoInputLabel">Window start</span>
-                      <input class="fieldInput" type="time" id="auto_set_window_start" value="08:00" onchange="saveAutomationSettings()">
-                    </div>
-                    <div class="autoInputRow">
-                      <span class="autoInputLabel">Window end</span>
-                      <input class="fieldInput" type="time" id="auto_set_window_end" value="23:00" onchange="saveAutomationSettings()">
-                      <span class="autoInputNote" id="tz_window_note">Timezone set by market selection</span>
-                    </div>
-                  </div>
-                </div>
-                <!-- Proxy Pool -->
-                <div class="autoSettingsSection">
-                  <div class="proxyPoolSectionHeader">
-                    <div class="autoSettingsTitle" style="margin:0">Proxy Pool</div>
-                    <button class="ghostButton" type="button" onclick="openAddProxyModal()">+ Add Proxy</button>
-                  </div>
-                  <div id="proxy_pool_table_container">
-                    <div class="autoProxyPlaceholder">No proxies yet. Click + Add Proxy to add one.</div>
-                  </div>
-                </div>
-                <!-- Action -->
-                <div class="autoActions">
-                  <button class="primaryButton" type="button" onclick="autoPlanReadyVideos()">Auto Plan Ready Videos</button>
-                  <button class="ghostButton" type="button" onclick="renderAutomationDashboard()">Refresh</button>
-                  <button class="ghostButton" type="button" onclick="clearAuditLog()">Clear Log</button>
-                </div>
-                <!-- Analytics -->
-                <div class="autoSettingsSection" style="margin-top:4px">
-                  <div class="auditLogPanel">
-                    <button class="auditLogToggle" type="button" aria-expanded="false" onclick="toggleAnalyticsPanel(this)">
-                      Upload Analytics <span class="auditLogToggleArrow">▶</span>
-                    </button>
-                    <div id="analytics_dashboard_container" hidden>
-                      <div class="analyticsToolbar">
-                        <button class="ghostButton" id="analytics_refresh_btn" type="button" onclick="refreshAnalytics()" style="font-size:11px;padding:3px 10px;min-height:0">Refresh</button>
-                      </div>
-                      <div id="analytics_body">
-                        <div class="analyticsEmpty">Click Refresh to load statistics.</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <!-- Recent Activity -->
-                <div class="autoSettingsSection" style="margin-top:4px">
-                  <div class="auditLogPanel">
-                    <button class="auditLogToggle" type="button" aria-expanded="false" onclick="toggleAuditLogPanel(this)">
-                      Recent Activity <span class="auditLogToggleArrow">▶</span>
-                    </button>
-                    <div class="auditLogList" id="audit_log_list" hidden></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="uploadManagerColumn uploadManagerColumnRight">
-              <div class="uploadInspectorPanel">
-                <div class="uqmHistoryHeader">
-                  <div>
-                    <div class="uqmHistoryTitle" id="upload_detail_title">Selection Details</div>
-                    <div class="sectionSubtitle" id="upload_detail_hint">Select an account, video, or queue item to inspect details.</div>
-                    <div class="uploadDetailBreadcrumb" id="upload_detail_breadcrumb">Nothing selected</div>
-                  </div>
-                </div>
-                <div class="uploadInspectorBody" id="upload_detail_body">
-                  <div class="uploadInspectorPlaceholder">Select an account, video, or queue item to inspect details.</div>
-                </div>
-              </div>
-
-              <div class="uqmHistoryPanel" id="upload_queue_history_panel">
-                <div class="uqmHistoryHeader">
-                  <div>
-                    <div class="uqmHistoryTitle">Upload History</div>
-                    <div class="sectionSubtitle" id="uqm_history_hint">Select an account to view its recent upload attempts.</div>
-                  </div>
-                  <button class="ghostButton" type="button" onclick="loadSelectedAccountHistory()">Refresh History</button>
-                </div>
-                <div class="uqmHistoryList" id="upload_queue_history_list">
-                  <div class="uqmEmpty">Select an account to view its upload attempts.</div>
-                </div>
-              </div>
-
-              <div class="actionCenter uploadSidebarPanel" id="upload_status_panel" style="margin-top:12px">
-                <div class="actionTop">
-                  <div>
-                    <div class="actionTitle" id="upload_action_title">Upload run idle</div>
-                    <div class="actionHint">Track login/upload pipeline in realtime.</div>
-                  </div>
-                  <div class="actionState" id="upload_action_state">idle</div>
-                </div>
-                <div class="actionMessage" id="upload_action_message">No active upload run.</div>
-                <div class="actionMeta" id="upload_action_meta">Run ID -</div>
-                <div class="progressBar"><div class="progressValue" id="upload_progress_bar"></div></div>
-                <div class="uploadActionSteps" id="upload_action_steps"></div>
-                <div class="partList" id="upload_items_box" style="max-height:180px"><div class="emptyState">No upload items yet.</div></div>
-              </div>
-
-              <div class="actionRowBlock uploadSidebarPanel" id="upload_log_row" style="margin-top:12px">
-                <div class="actionRowTitle">Account Log</div>
-                <div class="logBox" id="event_log_upload"><div class="uqmEmpty">Select an account to view its recent upload log.</div></div>
-              </div>
-            </div>
-          </div>
-          <!-- ── Batch Assign Modal ────────────────────────────── -->
-          <div id="batch_assign_modal" class="uploadModal" hidden>
-            <div class="uploadModalBackdrop" onclick="closeBatchAssignModal()"></div>
-            <div class="uploadModalPanel batchAssignPanel" id="batch_assign_modal_panel">
-              <!-- Rendered by _renderBatchModalContent() -->
-            </div>
-          </div>
-          <!-- ── Auto Plan Modal ───────────────────────────────── -->
-          <div id="auto_plan_modal" class="uploadModal" hidden>
-            <div class="uploadModalBackdrop" onclick="closeAutoPlanModal()"></div>
-            <div class="uploadModalPanel batchAssignPanel" id="auto_plan_modal_panel">
-              <!-- Rendered by _renderAutoPlanModal() -->
-            </div>
-          </div>
-          <!-- ── Proxy Pool Add/Edit Modal ────────────────────────── -->
-          <div id="proxy_pool_modal" class="uploadModal" hidden>
-            <div class="uploadModalBackdrop" onclick="closeProxyPoolModal()"></div>
-            <div class="uploadModalPanel proxyPoolModalInner">
-              <div class="uploadModalHeader">
-                <div class="uploadModalTitle" id="proxy_pool_modal_title">Add Proxy</div>
-                <button class="ghostButton uploadModalClose" type="button" onclick="closeProxyPoolModal()">×</button>
-              </div>
-              <div class="proxyPoolForm">
-                <input type="hidden" id="ppm_proxy_id">
-                <div class="field">
-                  <span class="fieldLabel">Name</span>
-                  <input class="fieldInput" id="ppm_name" placeholder="US Proxy 01" required>
-                </div>
-                <div class="field">
-                  <span class="fieldLabel">Type</span>
-                  <select class="fieldInput" id="ppm_type">
-                    <option value="http">HTTP</option>
-                    <option value="socks5">SOCKS5</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <span class="fieldLabel">Host</span>
-                  <input class="fieldInput" id="ppm_host" placeholder="proxy.example.com" required>
-                </div>
-                <div class="field">
-                  <span class="fieldLabel">Port</span>
-                  <input class="fieldInput" id="ppm_port" type="number" min="1" max="65535" placeholder="9000">
-                </div>
-                <div class="field">
-                  <span class="fieldLabel">Username <span class="fieldOptional">optional</span></span>
-                  <input class="fieldInput" id="ppm_username" placeholder="Optional">
-                </div>
-                <div class="field">
-                  <span class="fieldLabel">Password <span class="fieldOptional">optional</span></span>
-                  <input class="fieldInput" id="ppm_password" type="password" placeholder="Optional">
-                </div>
-                <div class="field proxyPoolFormSpan2">
-                  <span class="fieldLabel">Market</span>
-                  <select class="fieldInput" id="ppm_market">
-                    <option value="custom">Custom</option>
-                    <option value="US">US</option>
-                    <option value="JP">JP</option>
-                    <option value="EU">EU</option>
-                  </select>
-                </div>
-              </div>
-              <div class="batchModalFooter">
-                <button class="ghostButton" type="button" onclick="closeProxyPoolModal()">Cancel</button>
-                <button class="primaryButton" type="button" onclick="saveProxyFromModal()">Save Proxy</button>
-              </div>
-            </div>
-          </div>
-          <!-- ── Proxy Rotate Modal ───────────────────────────────── -->
-          <div id="proxy_rotate_modal" class="uploadModal" hidden>
-            <div class="uploadModalBackdrop" onclick="closeProxyRotateModal()"></div>
-            <div class="uploadModalPanel proxyRotateModalInner">
-              <div class="uploadModalHeader">
-                <div class="uploadModalTitle" id="proxy_rotate_modal_title">Rotate Proxy</div>
-                <button class="ghostButton uploadModalClose" type="button" onclick="closeProxyRotateModal()">×</button>
-              </div>
-              <div id="proxy_rotate_modal_body"></div>
-            </div>
-          </div>
-          <!-- ── Account Form Modal ─────────────────────────────── -->
-          <div id="upload_account_form_modal" class="uploadModal" hidden>
-            <div class="uploadModalBackdrop" onclick="closeUploadAccountEditor()"></div>
-            <div class="uploadModalPanel">
-              <div class="uploadModalHeader">
-                <div class="uploadModalTitle" id="uam_modal_title">New Account</div>
-                <button class="ghostButton uploadModalClose" type="button" onclick="closeUploadAccountEditor()">×</button>
-              </div>
-              <form class="uamForm" id="upload_account_form" onsubmit="saveUploadAccount(event)">
-                <input type="hidden" id="uam_account_id">
-
-                <!-- ── Section 1: Basic Info ── -->
-                <div class="uamFormSection fieldSpan2">
-                  <div class="uamFormSectionTitle">Basic Info</div>
-                  <div class="uploadAdvancedGrid">
-                    <label class="field fieldSpan2">
-                      <span class="fieldLabel">Account Name</span>
-                      <input class="fieldInput" id="uam_display_name" placeholder="Main TikTok US">
-                      <span class="fieldHint">Shown in the account list.</span>
-                    </label>
-                    <label class="field">
-                      <span class="fieldLabel">Platform</span>
-                      <select class="fieldInput" id="uam_platform">
-                        <option value="tiktok">TikTok</option>
-                        <option value="youtube">YouTube</option>
-                      </select>
-                    </label>
-                    <label class="field">
-                      <span class="fieldLabel">Channel Code <span class="fieldOptional">optional</span></span>
-                      <input class="fieldInput" id="uam_channel_code" placeholder="Auto-generated if empty">
-                      <span class="fieldHint">Short identifier for this channel.</span>
-                    </label>
-                  </div>
-                </div>
-
-                <!-- ── Advanced: Account Key ── -->
-                <details class="uploadAdvancedFields fieldSpan2">
-                  <summary>Advanced Identifiers</summary>
-                  <div class="uploadAdvancedGrid">
-                    <label class="field fieldSpan2">
-                      <span class="fieldLabel">Account Key</span>
-                      <input class="fieldInput" id="uam_account_key" placeholder="Auto-generated if empty">
-                      <span class="fieldHint">Internal ID. Auto-generated from Account Name if empty.</span>
-                    </label>
-                  </div>
-                </details>
-
-                <!-- ── Section 2: Browser Profile ── -->
-                <div class="uamFormSection fieldSpan2">
-                  <div class="uamFormSectionTitle">Browser Profile</div>
-                  <div class="uploadAdvancedGrid">
-                    <label class="field fieldSpan2">
-                      <span class="fieldLabel">Profile Folder</span>
-                      <div class="actionsRow uamProfilePathRow" style="margin-top:0">
-                        <input class="fieldInput" id="uam_profile_path" placeholder="D:\channels\<channel>\profiles\<key>" oninput="updateProfilePathStatus()">
-                        <button type="button" class="secondaryButton" id="uam_choose_folder_btn" onclick="pickProfileFolder()">Choose</button>
-                        <button type="button" class="ghostButton" id="uam_auto_create_btn" onclick="autoCreateProfilePath()">Auto Create</button>
-                      </div>
-                      <div id="uam_profile_path_status" class="uamProfileStatus"></div>
-                    </label>
-                  </div>
-                </div>
-
-                <!-- ── Section 3: Proxy ── -->
-                <div class="uamFormSection fieldSpan2">
-                  <div class="uamFormSectionTitle">Proxy <span class="fieldOptional">optional</span></div>
-                  <div class="uploadAdvancedGrid">
-                    <!-- Proxy Pool Selector -->
-                    <div class="uamProxyPoolRow">
-                      <span class="uamProxyPoolLabel">Use Proxy Pool</span>
-                      <div class="uamProxyPoolSelectRow">
-                        <select class="fieldInput" id="uam_pool_proxy_select" onchange="assignPoolProxyToAccount()">
-                          <option value="">-- Manual entry --</option>
-                        </select>
-                        <span class="uamProxyPoolBadge" id="uam_pool_proxy_badge"></span>
-                      </div>
-                    </div>
-                    <label class="field">
-                      <span class="fieldLabel">Proxy Type</span>
-                      <select class="fieldInput" id="uam_proxy_type">
-                        <option value="">No Proxy</option>
-                        <option value="http">HTTP</option>
-                        <option value="socks5">SOCKS5</option>
-                      </select>
-                    </label>
-                    <div></div>
-                    <label class="field">
-                      <span class="fieldLabel">Host</span>
-                      <input class="fieldInput" id="uam_proxy_host" placeholder="127.0.0.1">
-                    </label>
-                    <label class="field">
-                      <span class="fieldLabel">Port</span>
-                      <input class="fieldInput" id="uam_proxy_port" type="number" min="1" max="65535" placeholder="9000">
-                    </label>
-                    <label class="field">
-                      <span class="fieldLabel">Username <span class="fieldOptional">optional</span></span>
-                      <input class="fieldInput" id="uam_proxy_username" placeholder="Optional">
-                    </label>
-                    <label class="field">
-                      <span class="fieldLabel">Password <span class="fieldOptional">optional</span></span>
-                      <input class="fieldInput" id="uam_proxy_password" type="password" placeholder="Optional">
-                    </label>
-                    <div class="uamProxyTestRow fieldSpan2">
-                      <button type="button" class="ghostButton" id="uam_proxy_test_btn" onclick="testProxyConfig()">Test Proxy</button>
-                      <span class="uamProxyTestResult" id="uam_proxy_test_result"></span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- ── Advanced: Proxy ID ── -->
-                <details class="uploadAdvancedFields fieldSpan2">
-                  <summary>Proxy Advanced</summary>
-                  <div class="uploadAdvancedGrid">
-                    <label class="field fieldSpan2">
-                      <span class="fieldLabel">Proxy ID</span>
-                      <input class="fieldInput" id="uam_proxy_id" placeholder="proxy-01">
-                      <span class="fieldHint">Named proxy reference (overrides friendly fields above if set).</span>
-                    </label>
-                  </div>
-                </details>
-
-                <!-- ── Section 4: Upload Limits ── -->
-                <div class="uamFormSection fieldSpan2">
-                  <div class="uamFormSectionTitle">Upload Limits</div>
-                  <div class="uploadAdvancedGrid">
-                    <label class="field">
-                      <span class="fieldLabel">Daily Upload Limit</span>
-                      <input class="fieldInput" id="uam_daily_limit" type="number" min="0" value="5">
-                      <span class="fieldHint">Max uploads this account can run per day.</span>
-                    </label>
-                    <label class="field">
-                      <span class="fieldLabel">Cooldown Between Uploads</span>
-                      <input class="fieldInput" id="uam_cooldown_minutes" type="number" min="0" value="30">
-                      <span class="fieldHint">Minutes to wait between uploads.</span>
-                    </label>
-                  </div>
-                </div>
-
-                <!-- ── Section 5: Diagnostics (edit mode only) ── -->
-                <details class="uploadAdvancedFields fieldSpan2" id="uam_diagnostics_section" hidden>
-                  <summary>Diagnostics</summary>
-                  <div class="uploadAdvancedGrid">
-                    <label class="field">
-                      <span class="fieldLabel">Account Status</span>
-                      <select class="fieldInput" id="uam_status">
-                        <option value="active">Active</option>
-                        <option value="warming">Warming</option>
-                        <option value="limited">Limited</option>
-                        <option value="banned">Banned</option>
-                        <option value="disabled">Disabled</option>
-                        <option value="login_required">Login Required</option>
-                      </select>
-                    </label>
-                    <label class="field">
-                      <span class="fieldLabel">Login State</span>
-                      <select class="fieldInput" id="uam_login_state">
-                        <option value="unknown">Unknown</option>
-                        <option value="logged_in">Logged In</option>
-                        <option value="logged_out">Logged Out</option>
-                        <option value="challenge">Challenge</option>
-                        <option value="expired">Expired</option>
-                      </select>
-                    </label>
-                    <label class="field">
-                      <span class="fieldLabel">Today Count</span>
-                      <input class="fieldInput" id="uam_today_count" type="number" readonly style="opacity:.6">
-                      <span class="fieldHint">Runtime stat — not editable.</span>
-                    </label>
-                  </div>
-                </details>
-
-                <div class="uamFormActions">
-                  <button class="primaryButton" type="submit" id="uam_save_btn">Create Account</button>
-                  <button class="ghostButton" type="button" onclick="closeUploadAccountEditor()">Cancel</button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <details class="uploadLegacySection" id="upload_legacy_section">
-            <summary>Legacy Upload Wizard</summary>
-          <!-- Step wizard indicator — 4 sequential steps replace flat 5-cluster layout -->
-          <div id="upload_step_bar" class="uploadStepBar">
-            <div class="uploadStepItem stepActive" id="upload_step_1" onclick="setUploadWizardStep(1)" title="Step 1: Select Channel">1 · Channel</div>
-            <div class="uploadStepItem" id="upload_step_2" onclick="setUploadWizardStep(2)" title="Step 2: Login">2 · Login</div>
-            <div class="uploadStepItem" id="upload_step_3" onclick="setUploadWizardStep(3)" title="Step 3: Source">3 · Source</div>
-            <div class="uploadStepItem" id="upload_step_4" onclick="setUploadWizardStep(4)" title="Step 4: Run Upload">4 · Run</div>
-          </div>
-          <div class="formGrid">
-            <div class="featureLauncher" id="upload_feature_launcher">
-              <button class="featureLauncherBtn" id="feature_login_btn" onclick="quickOpenFeature('login')">
-                <div class="t">Login</div>
-                <div class="s">Select channel, enter credentials, open login flow</div>
-              </button>
-              <button class="featureLauncherBtn" id="feature_upload_btn" onclick="quickOpenFeature('upload')">
-                <div class="t">Upload Videos</div>
-                <div class="s">Check login, select videos, run upload plan</div>
-              </button>
-              <button class="featureLauncherBtn" id="feature_create_btn" onclick="quickOpenFeature('create')">
-                <div class="t">Create Channel</div>
-                <div class="s">Go to Channel Management to create new channel</div>
-              </button>
-            </div>
-            <div class="uploadFlowBox" id="upload_flow_box">
-              <div class="uploadFlowTitle">Quick Flow</div>
-              <div class="uploadFlowLine">1) Choose Action: Login or Upload Videos.</div>
-              <div class="uploadFlowLine">2) Choose Root Folder, select channel (prefix T is auto-filtered).</div>
-              <div class="uploadFlowLine">3) Login: Enter credentials, click Login Flow, complete OTP/Captcha.</div>
-              <div class="uploadFlowLine">4) Upload: Check Login Status, then Run Upload Plan.</div>
-            </div>
-            <div class="clusterHeader" id="upload_cluster_context">1) Action & Channel</div>
-            <label class="field" id="upload_action_mode_field"><span class="fieldLabel">Action</span><select class="fieldInput" id="upload_action_mode"><option value="login" selected>Login</option><option value="upload">Upload Videos</option></select></label>
-            <label class="field fieldSpan2" id="upload_channels_root_field">
-              <span class="fieldLabel">Channels Root Folder</span>
-              <div class="actionsRow" style="margin-top:0">
-                <input class="fieldInput" id="upload_channels_root" placeholder="Type path or click Choose Folder">
-                <button type="button" class="ghostButton" onclick="pickChannelsRoot('upload')">Choose Folder</button>
-              </div>
-            </label>
-            <label class="field hiddenView" id="channel_name_prefix_field"><span class="fieldLabel">Channel Prefix Filter (optional)</span><input class="fieldInput" id="channel_name_prefix" value="" placeholder="Leave empty to load all channels"></label>
-            <label class="field" id="upload_channel_field"><span class="fieldLabel">Upload Channel</span><select class="fieldInput" id="upload_channel"><option value="">Please select channel</option></select></label>
-            <label class="field" id="upload_mode_field"><span class="fieldLabel">Upload Mode</span><select class="fieldInput" id="upload_mode"><option value="scheduled" selected>Scheduled</option><option value="manual">Manual</option></select></label>
-            <label class="field hiddenView" id="upload_ui_level_field"><span class="fieldLabel">UI Level</span><select class="fieldInput" id="upload_ui_level"><option value="simple" selected>Simple</option><option value="advanced">Advanced</option></select></label>
-            <label class="field hiddenView" id="upload_config_mode_field"><span class="fieldLabel">Config Mode</span><select class="fieldInput" id="upload_config_mode"><option value="ui" selected>UI Mode</option><option value="json">JSON Mode</option><option value="mixed">Mixed Mode</option></select></label>
-            <div class="clusterHeader" id="upload_cluster_account">2) Login (Email OTP -> TikTok)</div>
-            <label class="field hiddenView" id="upload_account_key_field"><span class="fieldLabel">Account Key</span><input class="fieldInput" id="upload_account_key" value="default"></label>
-            <label class="field fieldSpan2 hiddenView" id="upload_profile_path_field"><span class="fieldLabel">Resolved Profile Path</span><input class="fieldInput" id="upload_profile_path" readonly></label>
-            <div class="field fieldSpan2 hiddenView" id="upload_config_actions_field">
-              <span class="fieldLabel">Channel Config</span>
-              <div class="actionsRow" style="margin-top:0">
-                <button type="button" class="ghostButton" id="upload_reload_cfg_btn" onclick="loadUploadChannelConfig(true)">Load Config</button>
-                <button type="button" class="ghostButton" id="upload_edit_cfg_btn" onclick="toggleUploadConfigEdit()">Edit Config</button>
-                <button type="button" class="secondaryButton hiddenView" id="upload_save_cfg_btn" onclick="saveUploadChannelConfig()">Save Config</button>
-              </div>
-              <span class="sectionSubtitle">Select channel to view saved config. Click Edit Config to update.</span>
-            </div>
-            <label class="field fieldSpan2" id="upload_credential_line_field">
-              <span class="fieldLabel">Credential Line (tiktok_user|tiktok_pass|mail_user|mail_pass)</span>
-              <div class="actionsRow" style="margin-top:0">
-                <input class="fieldInput" id="upload_credential_line" placeholder="user|pass|mail@example.com|mailpass">
-                <button type="button" class="ghostButton" onclick="parseCredentialLine()">Parse</button>
-              </div>
-            </label>
-            <label class="field" id="upload_tiktok_username_field"><span class="fieldLabel">TikTok Username</span><input class="fieldInput" id="upload_tiktok_username" placeholder="tiktok username"></label>
-            <label class="field" id="upload_tiktok_password_field"><span class="fieldLabel">TikTok Password</span><input class="fieldInput" id="upload_tiktok_password" type="password"></label>
-            <label class="field" id="upload_mail_username_field"><span class="fieldLabel">Mail Username (OTP)</span><input class="fieldInput" id="upload_mail_username" placeholder="mailbox username"></label>
-            <label class="field" id="upload_mail_password_field"><span class="fieldLabel">Mail Password (OTP)</span><input class="fieldInput" id="upload_mail_password" type="password"></label>
-            <label class="field hiddenView" id="upload_login_username_field"><span class="fieldLabel">Login Username (legacy)</span><input class="fieldInput" id="upload_login_username" placeholder="email / username"></label>
-            <label class="field hiddenView" id="upload_login_password_field"><span class="fieldLabel">Login Password (legacy)</span><input class="fieldInput" id="upload_login_password" type="password"></label>
-            <label class="field" id="upload_browser_preference_field"><span class="fieldLabel">Browser Preference</span><select class="fieldInput" id="upload_browser_preference"><option value="chromeportable" selected>ChromePortable</option><option value="firefoxportable">FirefoxPortable</option></select></label>
-            <label class="field fieldSpan2 hiddenView" id="upload_browser_executable_field"><span class="fieldLabel">Browser Executable (optional)</span><input class="fieldInput" id="upload_browser_executable" placeholder="Leave empty to auto-detect in channel/browser-profile"></label>
-            <div class="clusterHeader" id="upload_cluster_source">3) Upload Source</div>
-            <div class="field fieldSpan2 hiddenView" id="upload_json_panel">
-              <span class="fieldLabel">Upload JSON Templates (for JSON/Mixed mode)</span>
-              <input class="fieldInput jsonTemplatePath" id="upload_json_path" readonly>
-              <textarea class="jsonTemplateBox" id="upload_json_template" spellcheck="false"></textarea>
-              <div class="actionsRow" style="margin-top:8px">
-                <button type="button" class="ghostButton" onclick="copyUploadJsonPath()">Copy account.json Path</button>
-                <button type="button" class="ghostButton" onclick="copyUploadJsonTemplate()">Copy account.json Template</button>
-              </div>
-              <input class="fieldInput jsonTemplatePath" id="upload_settings_json_path" readonly style="margin-top:8px">
-              <textarea class="jsonTemplateBox" id="upload_settings_json_template" spellcheck="false"></textarea>
-              <div class="actionsRow" style="margin-top:8px">
-                <button type="button" class="ghostButton" onclick="copyUploadSettingsJsonPath()">Copy upload_settings.json Path</button>
-                <button type="button" class="ghostButton" onclick="copyUploadSettingsJsonTemplate()">Copy upload_settings.json Template</button>
-              </div>
-              <span class="sectionSubtitle">JSON mode reads these files. Edit values, save files, then run upload.</span>
-            </div>
-            <label class="field fieldSpan2" id="upload_video_input_dir_field"><span class="fieldLabel">Upload Source Folder (Auto by channel)</span><input class="fieldInput" id="upload_video_input_dir" placeholder="Auto by selected channel, e.g. channels/T1/video_out" readonly></label>
-            <label class="field fieldSpan2 hiddenView" id="upload_schedule_slots_wrap"><span class="fieldLabel">Daily Schedule Slots (HH:MM, comma separated)</span><input class="fieldInput" id="upload_schedule_slots" value="07:00,17:00" placeholder="Example: 07:00,12:00,17:00"></label>
-            <div class="field fieldSpan2 hiddenView" id="upload_manual_select_wrap">
-              <span class="fieldLabel">Manual Video Selection</span>
-              <div class="actionsRow" style="margin-top:0">
-                <button type="button" class="ghostButton" onclick="loadUploadVideos()">Load videos from channel folder</button>
-                <button type="button" class="ghostButton" onclick="selectAllUploadVideos()">Select all</button>
-                <button type="button" class="ghostButton" onclick="clearUploadVideos()">Clear</button>
-              </div>
-              <div class="partList" id="upload_video_select_box" style="max-height:180px"><div class="emptyState">No videos loaded yet.</div></div>
-            </div>
-            <label class="field" id="upload_max_items_field"><span class="fieldLabel">Max videos per run</span><input class="fieldInput" id="upload_max_items" type="number" value="0"></label>
-            <label class="field fieldSpan2" id="upload_caption_prefix_field"><span class="fieldLabel">Caption prefix</span><input class="fieldInput" id="upload_caption_prefix" placeholder="Example: Channel A | "></label>
-            <div class="clusterHeader" id="upload_cluster_caption_network">4) Upload Options</div>
-            <label class="field" id="upload_caption_mode_field"><span class="fieldLabel">Caption AI Mode</span>
-              <select class="fieldInput" id="upload_caption_mode">
-                <option value="template" selected>Smart Template (no AI)</option>
-                <option value="ollama">Ollama (local LLM)</option>
-                <option value="claude">Claude API</option>
-                <option value="auto">Auto (best available)</option>
-              </select>
-            </label>
-            <label class="field" id="upload_ollama_model_field"><span class="fieldLabel">Ollama Model</span><input class="fieldInput" id="upload_ollama_model" placeholder="llama3.2:3b" value="llama3.2:3b"></label>
-            <label class="field" id="upload_network_mode_field"><span class="fieldLabel">Network Mode</span><select class="fieldInput" id="upload_network_mode"><option value="direct" selected>Direct</option><option value="proxy">Proxy</option></select></label>
-            <label class="field hiddenView" id="upload_proxy_server_wrap"><span class="fieldLabel">Proxy Server</span><input class="fieldInput" id="upload_proxy_server" placeholder="http://host:port"></label>
-            <label class="field hiddenView" id="upload_proxy_username_wrap"><span class="fieldLabel">Proxy Username</span><input class="fieldInput" id="upload_proxy_username"></label>
-            <label class="field hiddenView" id="upload_proxy_password_wrap"><span class="fieldLabel">Proxy Password</span><input class="fieldInput" id="upload_proxy_password" type="password"></label>
-            <div class="clusterHeader" id="upload_cluster_run">5) Run Upload</div>
-            <label class="field fieldSpan2" id="upload_run_hint_field"><span class="sectionSubtitle">Scheduled mode: videos are assigned by part order to slot sequence. Manual mode: only selected videos are uploaded.</span></label>
-            <label class="toggleCard" id="upload_dry_run_field"><span>Dry run (no publish)</span><input id="upload_dry_run" type="checkbox" checked></label>
-            <label class="toggleCard" id="upload_include_hashtags_field"><span>Auto include hashtags</span><input id="upload_include_hashtags" type="checkbox" checked></label>
-            <label class="toggleCard" id="upload_headless_field"><span>Run in background (headless)</span><input id="upload_headless" type="checkbox"></label>
-          </div>
-          <div class="validationPanel" id="upload_validation_panel">
-            <div class="validationTitle" id="upload_validation_title">Validation: select channel to continue.</div>
-            <div id="upload_validation_items"><div class="validationItem">Please choose Channel first.</div></div>
-          </div>
-          <!-- Step navigation: Back / Next buttons -->
-          <div id="upload_step_nav" class="uploadStepNav">
-            <span id="upload_step_hint" class="uploadStepHint">Select action and channel to continue.</span>
-            <button class="ghostButton" id="upload_step_back" onclick="backUploadStep()" style="visibility:hidden">← Back</button>
-            <button class="primaryButton" id="upload_step_next" onclick="advanceUploadStep()">Next →</button>
-          </div>
-          <!-- Login actions (Step 2) -->
-          <div class="actionRowBlock" id="upload_login_actions_row">
-            <div class="actionRowTitle">Login Session Actions</div>
-            <div class="actionsRow" style="margin-top:0">
-              <button class="ghostButton" id="ensure_upload_btn" onclick="ensureUploadAccount()">Prepare Profile</button>
-              <button class="secondaryButton" id="start_upload_login_btn" onclick="startLogin()">Login Flow (Email -> TikTok)</button>
-              <button class="ghostButton" id="check_upload_btn" onclick="checkUploadLoginStatus(true)">Check Login Status</button>
-            </div>
-          </div>
-          <!-- Upload actions (Step 4) -->
-          <div class="actionRowBlock" id="upload_run_actions_row">
-            <div class="actionRowTitle">Upload Actions</div>
-            <div class="actionsRow" style="margin-top:0">
-              <button class="primaryButton" id="run_upload_btn" onclick="scheduleUpload()">Run Upload Plan</button>
-            </div>
-          </div>
-          <div class="actionRowBlock" id="upload_queue_panel" style="margin-top:12px">
-            <div class="actionRowTitle">Upload Queue</div>
-            <div class="actionsRow" style="margin-top:0">
-              <button class="ghostButton" type="button" onclick="loadUploadQueue()">Refresh Queue</button>
-            </div>
-            <div class="partList" id="upload_queue_items_box" style="max-height:180px"><div class="emptyState">No queued clips yet.</div></div>
-          </div>
-          </details>
-        </section>
-        <!-- /SECTION: upload-card -->
 
         <section class="card hiddenView" id="card_logs"></section>
 
-        <!-- ── SECTION: channels-card ───────────────────────────── -->
-        <section class="card hiddenView" id="card_channels">
-          <div class="sectionHeader">
-            <div><div class="sectionTitle">Channel Management</div><div class="sectionSubtitle">Choose Root Folder -> Enter Channel Code -> Configure -> Create Channel.</div></div>
-          </div>
-          <div class="formGrid">
-            <div class="clusterHeader">1) Choose Root Folder</div>
-            <label class="field fieldSpan2">
-              <span class="fieldLabel">Channels Root Folder</span>
-              <div class="actionsRow" style="margin-top:0">
-                <input class="fieldInput" id="new_channel_channels_root" placeholder="Type path or click Choose Folder">
-                <button type="button" class="ghostButton" id="new_channel_pick_root_btn" onclick="pickChannelsRoot('channels'); return false;">Choose Folder</button>
-              </div>
-            </label>
-            <div class="clusterHeader">2) Channel Info</div>
-            <label class="field"><span class="fieldLabel">New Channel Code</span><input class="fieldInput" id="new_channel_code" placeholder="e.g. T7, travel_vn"></label>
-            <label class="field"><span class="fieldLabel">Channel Folder (auto)</span><div class="fieldInput" id="new_channel_path">Choose folder and enter channel code</div></label>
-            <label class="field"><span class="fieldLabel">Default Account Key</span><input class="fieldInput" id="new_channel_account_key" value="default"></label>
-            <div class="clusterHeader">3) Output & Content</div>
-            <label class="field fieldSpan2"><span class="fieldLabel">Video Output Folder (for render/upload)</span><input class="fieldInput" id="new_channel_video_output_subdir" value="video_out" placeholder="video_out or D:\\videos\\T1"></label>
-            <label class="field fieldSpan2"><span class="fieldLabel">Default Hashtags</span><input class="fieldInput" id="new_channel_default_hashtags" placeholder="#fyp,#viral,#xuhuong"></label>
-            <label class="field"><span class="fieldLabel">Schedule Slots</span><input class="fieldInput" id="new_channel_schedule_slots" value="07:00,17:00" placeholder="07:00,12:00,17:00"></label>
-            <div class="clusterHeader">4) Browser & Network</div>
-            <label class="field"><span class="fieldLabel">Browser Preference</span><select class="fieldInput" id="new_channel_browser_preference"><option value="chromeportable">ChromePortable</option><option value="firefoxportable">FirefoxPortable</option></select></label>
-            <label class="field"><span class="fieldLabel">Network Mode</span><select class="fieldInput" id="new_channel_network_mode"><option value="direct">Direct</option><option value="proxy">Proxy</option></select></label>
-            <label class="field hiddenView" id="new_channel_proxy_server_wrap"><span class="fieldLabel">Proxy Server</span><input class="fieldInput" id="new_channel_proxy_server" placeholder="http://host:port"></label>
-            <label class="field hiddenView" id="new_channel_proxy_username_wrap"><span class="fieldLabel">Proxy Username</span><input class="fieldInput" id="new_channel_proxy_username"></label>
-            <label class="field hiddenView" id="new_channel_proxy_password_wrap"><span class="fieldLabel">Proxy Password</span><input class="fieldInput" id="new_channel_proxy_password" type="password"></label>
-            <div class="clusterHeader">5) Credentials (optional)</div>
-            <label class="field fieldSpan2"><span class="fieldLabel">Credential Line (tiktok_user|tiktok_pass|mail_user|mail_pass)</span><input class="fieldInput" id="new_channel_credential_line" placeholder="tiktok_user|tiktok_pass|mail_user|mail_pass"></label>
-          </div>
-          <div class="actionsRow">
-            <button type="button" class="primaryButton" id="create_channel_btn" onclick="createChannel(); return false;">Create Channel + Config</button>
-            <button class="ghostButton" onclick="setView('render')">Back to Main</button>
-          </div>
-          <div class="partList" id="channel_list_box" style="margin-top:14px"><div class="emptyState">No channels found.</div></div>
-          <div class="actionRowBlock" style="margin-top:12px">
-            <div class="actionRowTitle">Channel Live Log</div>
-            <div class="logBox" id="event_log_channels"></div>
-          </div>
-          <input id="channels_root_picker" type="file" webkitdirectory directory class="hiddenView">
-        </section>
-        <!-- /SECTION: channels-card -->
 
         <!-- ── SECTION: reports-card + settings-card ───────────── -->
         <!-- partial: partials/settings-view.html -->
@@ -1395,7 +461,7 @@
     <!-- Right panel header -->
     <div class="evRightHeader">
       <div style="min-width:0;flex:1">
-        <div class="evRightTitle">🎬 Video Editor</div>
+        <div class="evRightTitle">Video Editor</div>
         <div class="evSourceName" id="evSourceName">No source selected</div>
         <div class="evInfoStrip">
           <div class="evInfoRow">
@@ -1414,14 +480,11 @@
 
     <!-- Inspector tab bar -->
     <div class="rs-insp-tabbar" id="inspTabbar">
-      <button class="insp-tab active" data-insp-tab="mode"     onclick="setInspectorTab('mode')">Mode</button>
-      <button class="insp-tab"        data-insp-tab="subtitle"  onclick="setInspectorTab('subtitle')">Subtitle</button>
-      <button class="insp-tab"        data-insp-tab="voice"     onclick="setInspectorTab('voice')">Voice</button>
-      <button class="insp-tab"        data-insp-tab="text"      onclick="setInspectorTab('text')">Text</button>
-      <button class="insp-tab"        data-insp-tab="audio"     onclick="setInspectorTab('audio')">Audio</button>
-      <button class="insp-tab"        data-insp-tab="performance" onclick="setInspectorTab('performance')">Perf</button>
-      <button class="insp-tab"        data-insp-tab="advanced"  onclick="setInspectorTab('advanced')">Advanced</button>
-      <button class="insp-tab"        data-insp-tab="market" data-ev-mode="market" onclick="setInspectorTab('market')">&#127758; Market</button>
+      <button class="insp-tab active" data-insp-tab="mode"        onclick="setInspectorTab('mode')">Cut</button>
+      <button class="insp-tab"        data-insp-tab="subtitle"    onclick="setInspectorTab('subtitle')">Subtitles</button>
+      <button class="insp-tab"        data-insp-tab="text"        onclick="setInspectorTab('text')">Text &amp; Voice</button>
+      <button class="insp-tab"        data-insp-tab="audio"       onclick="setInspectorTab('audio')">Audio</button>
+      <button class="insp-tab"        data-insp-tab="performance" onclick="setInspectorTab('performance')">Render</button>
     </div>
 
     <!-- Scrollable body: 4-group inspector -->
@@ -1791,7 +854,7 @@
       </div>
 
       <!-- ══ AI NARRATION ══════════════════════════════════════ -->
-      <div class="evSection" id="evSectionVoice" data-section-type="voice-narration" data-insp-panel="voice">
+      <div class="evSection" id="evSectionVoice" data-section-type="voice-narration" data-insp-panel="text">
         <div class="evSectionTitle">🎙️ <span data-i18n="ai_narration">AI Narration</span></div>
         <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer;margin-bottom:10px">
           <input type="checkbox" id="evVoiceEnable" style="width:16px;height:16px;accent-color:#8b5cf6" onchange="evToggleVoiceFields()">
@@ -1968,7 +1031,7 @@
       </div>
 
       <!-- ══ ADVANCED (collapsed) ═════════════════════════════ -->
-      <div class="inspCollapsedGroup" data-insp-panel="advanced">
+      <div class="inspCollapsedGroup" data-insp-panel="performance">
         <div class="inspGroupHdr" id="inspGroupAdvHdr" onclick="evToggleInspGroup('advanced')">
           <span>⚙️ Advanced</span>
           <span id="inspGroupAdvArrow" class="inspGroupArrow">▸</span>
@@ -2175,20 +1238,9 @@
       </div>
       <div class="abpToolbarRight">
         <div class="abpPct" id="job_percent">0%</div>
-        <div class="pill primaryPill" id="job_stage_pill" style="font-size:11px;padding:3px 10px">Idle</div>
+        <div class="pill primaryPill" id="job_stage_pill">Idle</div>
         <button class="abpCollapseBtn" id="abp_collapse_btn" onclick="toggleBottomPanel()" title="Show / hide process panel">▴</button>
       </div>
-    </div>
-
-    <div class="abpMonitorHeader" id="render_monitor_header" data-monitor-state="idle">
-      <div class="abpMonitorMain">
-        <span class="monitorLiveDot" id="render_monitor_dot"></span>
-        <div class="monitorTextBlock">
-          <div class="monitorPrimary" id="render_monitor_primary">Ready to render</div>
-          <div class="monitorSecondary" id="render_monitor_secondary">No active render job.</div>
-        </div>
-      </div>
-      <div class="monitorHeartbeat" id="render_monitor_heartbeat">Idle</div>
     </div>
 
     <div id="render_completion_bar" class="renderCompletionBar hiddenView">
@@ -2199,22 +1251,10 @@
       <div class="renderCompletionActions">
         <button class="secondaryButton" type="button" id="back_to_editor_btn" onclick="backToEditorFromCompletion()">← Back to Editor</button>
         <button class="primaryButton" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
-        <button class="ghostButton" type="button" onclick="setView('upload')">Go to Upload</button>
       </div>
     </div>
 
     <div class="rcBottom rcActiveQueue" id="rc_bottom">
-      <div class="rcStatusStrip">
-        <div class="rcStatusMain">
-          <span id="rc_status" class="rcStatusPill">Ready</span>
-          <strong id="rc_progress" class="rcProgressText">0%</strong>
-          <span id="rc_stage" class="rcStatusText">Idle</span>
-          <span id="rc_parts" class="rcStatusText">0/0 completed</span>
-          <span id="rc_active" class="rcStatusText">No active clip</span>
-        </div>
-        <div id="rc_latest" class="rcLatest"></div>
-      </div>
-
       <div class="rcAQMain">
 
         <!-- LEFT 60%: active strip + part-cards grid -->
@@ -2313,6 +1353,17 @@
       </div>
 
       <div class="rcCompatHidden" hidden aria-hidden="true">
+        <span id="rc_status"></span>
+        <span id="rc_progress"></span>
+        <span id="rc_stage"></span>
+        <span id="rc_parts"></span>
+        <span id="rc_active"></span>
+        <span id="rc_latest"></span>
+        <span id="render_monitor_dot"></span>
+        <span id="render_monitor_primary"></span>
+        <span id="render_monitor_secondary"></span>
+        <span id="render_monitor_heartbeat"></span>
+        <div id="render_monitor_header" hidden></div>
         <button id="rc_open_output_btn" type="button" onclick="openRenderOutputFolder()">Open Output</button>
         <button id="rc_copy_diag_btn" type="button" onclick="copyRenderDiagnostics()">Copy Diagnostics</button>
         <button id="rc_retry_btn" type="button" onclick="rerunRenderJob(currentJobId)">Retry</button>

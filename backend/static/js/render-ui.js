@@ -9,6 +9,7 @@ let _renderMonitorLastParts = [];
 let _renderMonitorHeartbeatTimer = null;
 let _renderLogsUserToggled = false;
 let _selectedClipPaths = new Set();
+let _clipsSortOrder = 'score';
 let _logAutoScroll = true;
 let _rcLastActivePartNo = -1;
 let _rcScrollDebounceId = null;
@@ -1040,7 +1041,7 @@ function rcToggleClip(el) {
   if (!path) return;
   if (el.checked) _selectedClipPaths.add(path);
   else _selectedClipPaths.delete(path);
-  el.closest('.renderClipItem, .rcQueueRow')?.classList.toggle('isSelected', el.checked);
+  el.closest('.renderClipItem, .rcQueueRow, .clipCard')?.classList.toggle('isSelected', el.checked);
 }
 
 function useTopClips() {
@@ -1918,8 +1919,8 @@ function updateRenderMainState(job, summary, parts = []) {
 // ── RD — Dominant Active Render Card helpers ──────────────────────────────────
 
 function _rdBadgeConfig(job, terminal, status, failed, total) {
-  if (!job) return { text: '○ Idle', state: 'idle' };
-  if (status === 'queued' || status === 'pending') return { text: '○ Queued', state: 'queued' };
+  if (!job) return { text: 'Idle', state: 'idle' };
+  if (status === 'queued' || status === 'pending') return { text: 'Queued', state: 'queued' };
   if (terminal) {
     if (isPartialRenderStatus(status)) {
       return { text: 'Completed with errors', state: 'partial' };
@@ -1931,7 +1932,7 @@ function _rdBadgeConfig(job, terminal, status, failed, total) {
     }
     return { text: '✕ Failed', state: 'failed' };
   }
-  return { text: '● Running', state: 'running' };
+  return { text: 'Running', state: 'running' };
 }
 
 function renderSegmentedBar(container, parts) {
@@ -1992,22 +1993,7 @@ function renderRdClipQueue(container, parts, job) {
       openBtn.className = 'rdQueueBtn';
       openBtn.textContent = 'Open Folder';
       openBtn.onclick = () => openStoredOutputPath(outDir);
-      const upBtn = document.createElement('button');
-      upBtn.className = 'rdQueueBtn';
-      upBtn.textContent = 'Upload';
-      upBtn.onclick = () => setView('upload');
-      const queueBtn = document.createElement('button');
-      queueBtn.className = 'rdQueueBtn';
-      queueBtn.textContent = '+ Add to Queue';
-      queueBtn.onclick = () => addRenderClipToUploadQueue({
-        video_path: part.output_file,
-        render_job_id: String(job?.job_id || job?.id || currentJobId || ''),
-        part_no: Number(part.part_no || i + 1),
-        channel_code: String(job?.channel_code || getCurrentJobPayload(job)?.channel_code || '').trim(),
-      });
       acts.appendChild(openBtn);
-      acts.appendChild(upBtn);
-      acts.appendChild(queueBtn);
       row.appendChild(acts);
     } else if (state === 'failed') {
       const errEl = document.createElement('div');
@@ -3430,8 +3416,21 @@ function populateRenderOutputPanel(job, parts) {
   const done = items.filter((p) => ['done', 'completed', 'complete'].includes(String(p?.status || '').toLowerCase()));
   const failed = items.filter((p) => ['failed', 'error'].includes(String(p?.status || '').toLowerCase()));
   const skipped = items.filter((p) => String(p?.status || '').toLowerCase() === 'skipped');
+  // Sort done clips: by AI score desc when _clipsSortOrder==='score', else by part_no
+  const ranking = _rankMap(job);
+  const doneSorted = _clipsSortOrder === 'score'
+    ? done.slice().sort((a, b) => {
+        const sa = Number(ranking.get(Number(a.part_no || 0))?.score || 0);
+        const sb = Number(ranking.get(Number(b.part_no || 0))?.score || 0);
+        if (sb !== sa) return sb - sa;
+        const ba = !!(ranking.get(Number(a.part_no || 0))?.isBest);
+        const bb = !!(ranking.get(Number(b.part_no || 0))?.isBest);
+        if (ba !== bb) return ba ? -1 : 1;
+        return Number(a.part_no || 0) - Number(b.part_no || 0);
+      })
+    : done.slice().sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0));
   const all = [
-    ...done.sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0)),
+    ...doneSorted,
     ...failed.sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0)),
     ...skipped.sort((a, b) => Number(a.part_no || 0) - Number(b.part_no || 0)),
   ];
@@ -3472,16 +3471,12 @@ function populateRenderOutputPanel(job, parts) {
   }
 
   const jobId = String(job?.id || job?.job_id || currentJobId || '');
-  const jobPayload = getCurrentJobPayload(job);
-  const channelCode = String(job?.channel_code || jobPayload.channel_code || '').trim();
-  const ranking = _rankMap(job);
   list.innerHTML = all.map((p) => {
     const partNo = Number(p.part_no || 0);
     const st = String(p?.status || '').toLowerCase();
     const isFailed = st === 'failed' || st === 'error';
     const isSkipped = st === 'skipped';
     const isDone = st === 'done' || st === 'completed' || st === 'complete';
-    const isActive = st === 'rendering' || st === 'transcribing' || st === 'cutting' || st === 'waiting';
     const hasFile = !!p.output_file;
     const name = p.part_name ? esc(p.part_name) : `Clip ${partNo}`;
     const startSec = Number(p.start_sec || 0);
@@ -3489,70 +3484,55 @@ function populateRenderOutputPanel(job, parts) {
     const dur = Math.max(0, endSec - startSec).toFixed(1);
     const rk = ranking.get(partNo) || {};
     const statusText = isFailed ? 'failed' : isSkipped ? 'skipped' : isDone ? 'completed' : (st || 'pending');
-    const meta = isFailed
-      ? `Failed · ${dur}s`
-      : isSkipped
-        ? `Skipped · ${dur}s`
-      : hasFile
-        ? `${dur}s · ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s`
-        : `${dur}s`;
+    const scoreVal = Number(rk.score || 0);
+    const hasScore = !!(rk.rank || rk.score);
+    const scoreTier = scoreVal >= 8 ? 'high' : scoreVal >= 6 ? 'mid' : scoreVal >= 4 ? 'low' : 'weak';
+    const thumbHtml = isDone && hasFile && jobId
+      ? `<video class="clipCardThumbVid" src="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream#t=1" preload="metadata" muted playsinline></video>`
+      : `<div class="clipCardThumbPlaceholder">${isFailed ? '✗' : isSkipped ? '—' : '⋯'}</div>`;
     const previewBtn = (!isFailed && hasFile && jobId)
-      ? `<button type="button" onclick="previewClip(${JSON.stringify(jobId)},${partNo})">Preview/Open</button>`
+      ? `<button class="clipCardBtn" type="button" onclick="previewClip(${JSON.stringify(jobId)},${partNo})">Preview</button>`
       : '';
     const downloadBtn = (!isFailed && hasFile && jobId)
-      ? `<a class="renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download>Download</a>`
+      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download>Download</a>`
       : '';
     const openBtn = hasFile
-      ? `<button type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Open Folder</button>`
-      : '';
-    const queueBtn = (isDone && hasFile && channelCode)
-      ? `<button type="button" onclick="addRenderClipToUploadQueue({video_path:${JSON.stringify(p.output_file)},render_job_id:${JSON.stringify(jobId)},part_no:${partNo},channel_code:${JSON.stringify(channelCode)}})">+ Add to Queue</button>`
+      ? `<button class="clipCardBtn" type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Folder</button>`
       : '';
     if (qs('abp_output_meta') && hasFile) qs('abp_output_meta').textContent = `Latest file: ${String(p.output_file || '').split(/[\\\\/]/).pop()}`;
     const isSelected = isDone && hasFile && _selectedClipPaths.has(p.output_file);
-    const itemClass = `renderClipItem${isFailed ? ' failed isFailed' : ''}${isSkipped ? ' skipped isSkipped' : ''}${isDone ? ' isDone' : ''}${isActive ? ' isActive' : ''}${isSelected ? ' isSelected' : ''}${rk.isBest ? ' isBestClip' : ''}`;
-    const chkHtml = (isDone && hasFile)
-      ? `<input type="checkbox" class="renderClipCheck" data-path="${esc(p.output_file)}"${isSelected ? ' checked' : ''} onchange="rcToggleClip(this)">`
-      : '';
-    const bestHtml = rk.isBest ? '<span class="renderClipBestBadge">Best Clip</span>' : '';
-    const rankHtml = (rk.rank || rk.score || rk.reason)
-      ? `<div class="renderClipRanking">
-          <span>Rank ${rk.rank ? `#${esc(rk.rank)}` : '-'}</span>
-          <span>Score ${Number(rk.score || 0).toFixed(1)}</span>
-          ${rk.reason ? `<span class="renderClipReason">${esc(rk.reason)}</span>` : ''}
-        </div>`
-      : '<div class="renderClipRanking muted"><span>Rank -</span><span>Score -</span></div>';
-    return `<div class="${itemClass}" data-clip-status="${esc(st || 'queued')}">
-      ${chkHtml}
-      <div class="renderClipNum">${partNo}</div>
-      <div class="renderClipInfo">
-        <div class="renderClipName" title="${esc(p.output_file || '')}">${name}${bestHtml}</div>
-        <div class="renderClipMeta"><span class="renderClipStatus ${esc(statusText)}">${esc(statusText)}</span><span>${meta}</span></div>
-        ${rankHtml}
+    const cardClass = `clipCard renderClipItem${isFailed ? ' isFailed' : ''}${isSkipped ? ' isSkipped' : ''}${isDone ? ' isDone' : ''}${isSelected ? ' isSelected' : ''}${rk.isBest ? ' isBestClip' : ''}`;
+    return `<div class="${cardClass}" data-clip-status="${esc(st || 'queued')}">
+      <div class="clipCardThumbWrap">
+        ${thumbHtml}
+        ${rk.isBest ? '<div class="clipCardBestFlag">Best</div>' : ''}
+        <div class="clipCardDurTag">${dur}s</div>
       </div>
-      <div class="renderClipActions">${previewBtn}${downloadBtn}${openBtn}${queueBtn}</div>
+      <div class="clipCardBody">
+        <div class="clipCardTitle" title="${esc(p.output_file || '')}">${name}</div>
+        <div class="clipCardScoreRow">
+          ${hasScore
+            ? `<span class="clipCardScore" data-tier="${scoreTier}">${scoreVal.toFixed(1)}</span><span class="clipCardRankTag">#${rk.rank || '?'}</span>`
+            : `<span class="clipCardScore" data-tier="weak">—</span>`}
+          <span class="clipCardStatusDot" data-status="${esc(statusText)}" title="${esc(statusText)}"></span>
+        </div>
+        ${rk.reason ? `<div class="clipCardReason">${esc(rk.reason.length > 64 ? rk.reason.slice(0, 61) + '…' : rk.reason)}</div>` : ''}
+        <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}</div>
+      </div>
     </div>`;
   }).join('');
-
-  // Inject "Use Top Clips" button into panel header actions
-  const _opActionsEl = qs('render_output_panel')?.querySelector('.renderOutputActions');
-  if (_opActionsEl) {
-    const _existing = _opActionsEl.querySelector('.rcUseTopBtn');
-    if (_existing) _existing.remove();
-    if (done.length) {
-      const _useBtn = document.createElement('button');
-      _useBtn.type = 'button';
-      _useBtn.className = 'ghostButton renderOutputBtn rcUseTopBtn';
-      _useBtn.textContent = 'Use Top Clips';
-      _useBtn.onclick = useTopClips;
-      _opActionsEl.insertBefore(_useBtn, _opActionsEl.firstChild);
-    }
-  }
 
   showRenderOutputPanel();
   renderBottomActiveQueue(job, computeProgressSummary(items), items);
   const panel = qs('render_output_panel');
   if (panel) setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+}
+
+function sortClipsView(val) {
+  _clipsSortOrder = val || 'score';
+  if (_renderMonitorLastJob) {
+    populateRenderOutputPanel(_renderMonitorLastJob, _renderMonitorLastParts);
+  }
 }
 
 function previewClip(jobId, partNo) {

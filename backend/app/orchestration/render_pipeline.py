@@ -461,11 +461,12 @@ def _resolve_job_log_dir(output_dir: Path, output_mode: str, channel_code: str) 
             for p in [out, *out.parents]:
                 if p.name.strip().lower() == chan:
                     return p / "logs"
-    if out.name.strip().lower() in ("video_output", "video_out"):
-        parent = out.parent
-        if parent.name.strip().lower() == "upload":
-            return parent.parent / "logs"
-    return out / "logs"
+        if out.name.strip().lower() in ("video_output", "video_out"):
+            parent = out.parent
+            if parent.name.strip().lower() == "upload":
+                return parent.parent / "logs"
+        return out / "logs"
+    return out / "_logs"
 
 
 def _validate_text_layers_or_400(payload: RenderRequest) -> list[dict]:
