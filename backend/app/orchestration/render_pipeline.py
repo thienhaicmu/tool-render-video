@@ -18,7 +18,12 @@ from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes
-from app.services.subtitle_engine import transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time, slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt, apply_market_hook_text_to_srt, apply_hook_subtitle_format, resolve_hook_overlay_text
+from app.services.subtitle_engine import (
+    transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time,
+    slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt,
+    apply_market_hook_text_to_srt, apply_hook_subtitle_format, resolve_hook_overlay_text,
+    subtitle_emphasis_pass, parse_srt_blocks, write_srt_blocks,
+)
 from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame
 from app.services.viral_scorer import score_segments
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
@@ -1640,6 +1645,11 @@ def run_render_pipeline(
             _hook_subtitle_formatted = False
             _srt_count = 0
 
+            # Performance timing — all in milliseconds, logged at part end
+            _t_part_start = time.perf_counter()
+            _cut_ms = _first_frame_scan_ms = _subtitle_ass_ms = 0
+            _render_ms = _micro_pacing_ms = _quality_validation_ms = 0
+
             # P4-3: Start silence trim — detect and skip leading dead air (all output clips)
             try:
                 _trim_offset = detect_silence_trim_offset(str(source_path), seg["start"], seg["end"])
@@ -1671,7 +1681,10 @@ def run_render_pipeline(
             _force_accurate_cut = False
             try:
                 logger.info("first_frame_scan_started part_no=%d effective_start=%.3f", idx, _effective_start)
+                _t_ff = time.perf_counter()
                 _visual_trim = detect_bad_first_frame(str(source_path), _effective_start, seg["end"])
+                _first_frame_scan_ms = int((time.perf_counter() - _t_ff) * 1000)
+                logger.info("first_frame_scan_ms=%d part=%d shift=%.3f", _first_frame_scan_ms, idx, _visual_trim)
             except Exception:
                 _visual_trim = 0.0
             if _visual_trim > 0:
@@ -1701,8 +1714,11 @@ def run_render_pipeline(
 
             upsert_job_part(job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
             if not (payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
+                _t_cut = time.perf_counter()
                 cut_video(str(source_path), str(raw_part), _effective_start, seg["end"],
                           retry_count=retry_count, force_accurate_cut=_force_accurate_cut)
+                _cut_ms = int((time.perf_counter() - _t_cut) * 1000)
+                logger.info("cut_video_ms=%d part=%d", _cut_ms, idx)
                 if _force_accurate_cut:
                     _emit_render_event(
                         channel_code=effective_channel,
@@ -1912,9 +1928,44 @@ def run_render_pipeline(
                                 "lines_count": _hook_blocks,
                             },
                         )
+                # S4: Subtitle emphasis — semantic wrap + keyword uppercase + highlight markers
+                if _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
+                    try:
+                        _emph_blocks = parse_srt_blocks(str(_ass_srt_source))
+                        if _emph_blocks:
+                            subtitle_emphasis_pass(
+                                _emph_blocks,
+                                preset_id=payload.subtitle_style,
+                                market=_mv_market,
+                                language=_sub_target_lang,
+                            )
+                            write_srt_blocks(_emph_blocks, str(_ass_srt_source))
+                            needs_ass = True
+                            _job_log(
+                                effective_channel, job_id,
+                                f"subtitle_emphasis_applied part={idx} "
+                                f"style={payload.subtitle_style} market={_mv_market} "
+                                f"lang={_sub_target_lang} blocks={len(_emph_blocks)}",
+                                kind="info",
+                            )
+                        else:
+                            _job_log(
+                                effective_channel, job_id,
+                                f"subtitle_emphasis_skipped part={idx} reason=empty_blocks "
+                                f"style={payload.subtitle_style}",
+                                kind="debug",
+                            )
+                    except Exception:
+                        _job_log(
+                            effective_channel, job_id,
+                            f"subtitle_emphasis_error part={idx} style={payload.subtitle_style} "
+                            f"market={_mv_market} — emphasis pass skipped, render continues",
+                            kind="warning",
+                        )
                 if needs_ass:
                     _play_res_y = _aspect_play_res_y(payload.aspect_ratio)
                     _margin_v = getattr(payload, "sub_margin_v", 180)
+                    _t_sub = time.perf_counter()
                     if payload.subtitle_style == "pro_karaoke":
                         from app.services.subtitle_engine import _hex_to_ass
                         srt_to_ass_karaoke(
@@ -1942,6 +1993,8 @@ def run_render_pipeline(
                             x_percent=getattr(payload, "sub_x_percent", 50.0),
                             font_size=getattr(payload, "sub_font_size", 0),
                         )
+                    _subtitle_ass_ms = int((time.perf_counter() - _t_sub) * 1000)
+                    logger.info("subtitle_ass_ms=%d part=%d style=%s", _subtitle_ass_ms, idx, payload.subtitle_style)
                     _job_log(
                         effective_channel, job_id,
                         f"Part {idx} subtitle: style={payload.subtitle_style} "
@@ -2059,6 +2112,7 @@ def run_render_pipeline(
             )
             _encode_timer.start()
             _t_encode = time.perf_counter()
+            _t_render = time.perf_counter()
             try:
                 render_part_smart(
                     str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if payload.add_title_overlay else "",
@@ -2090,6 +2144,9 @@ def run_render_pipeline(
             finally:
                 _encode_stop.set()
                 _encode_timer.join(timeout=5.0)
+            _render_ms = int((time.perf_counter() - _t_render) * 1000)
+            logger.info("render_part_ms=%d part=%d codec=%s crop=%s",
+                        _render_ms, idx, payload.video_codec, payload.motion_aware_crop)
             _part_subtitle_voice_path = None
             if (
                 getattr(payload, "voice_enabled", False)
@@ -2299,8 +2356,10 @@ def run_render_pipeline(
             _micro_pacing_trim_sec = 0.0
             if final_part.exists() and final_part.stat().st_size > 0:
                 _paced_part = work_dir / f"{source['slug']}_part_{idx:03d}_paced.mp4"
+                _t_mp = time.perf_counter()
                 try:
                     _pacing = apply_micro_pacing(str(final_part), str(_paced_part))
+                    _micro_pacing_ms = int((time.perf_counter() - _t_mp) * 1000)
                     if _pacing["applied"] and _paced_part.exists() and _paced_part.stat().st_size > 0:
                         os.replace(str(_paced_part), str(final_part))
                         _micro_pacing_applied = True
@@ -2328,7 +2387,6 @@ def run_render_pipeline(
                             },
                         )
                     else:
-                        _safe_unlink(_paced_part)
                         _emit_render_event(
                             channel_code=effective_channel,
                             job_id=job_id,
@@ -2338,13 +2396,23 @@ def run_render_pipeline(
                             step="render.micro_pacing",
                             context={"part_no": idx},
                         )
+                except subprocess.TimeoutExpired:
+                    _micro_pacing_ms = int((time.perf_counter() - _t_mp) * 1000)
+                    _job_log(
+                        effective_channel, job_id,
+                        f"micro_pacing_timeout part_no={idx} elapsed_ms={_micro_pacing_ms} — skipped, original kept",
+                        kind="warning",
+                    )
                 except Exception as _pace_exc:
-                    _safe_unlink(_paced_part)
+                    _micro_pacing_ms = int((time.perf_counter() - _t_mp) * 1000)
                     _job_log(
                         effective_channel, job_id,
                         f"micro_pacing_failed part_no={idx}: {_pace_exc}",
                         kind="warning",
                     )
+                finally:
+                    _safe_unlink(_paced_part)
+                logger.info("micro_pacing_ms=%d part=%d applied=%s", _micro_pacing_ms, idx, _micro_pacing_applied)
 
             # P4 combined opening optimization summary — emitted for every output part
             _emit_render_event(
@@ -2372,10 +2440,19 @@ def run_render_pipeline(
             )
 
             _encode_ms = int((time.perf_counter() - _t_encode) * 1000)
+            _total_part_ms = int((time.perf_counter() - _t_part_start) * 1000)
             _effective_duration = max(0.0, float(seg["end"]) - float(_effective_start))
             _render_speed = max(0.5, min(1.5, float(payload.playback_speed or 1.0)))
             _expected_final_duration = max(0.0, (_effective_duration / _render_speed) - _micro_pacing_trim_sec)
             _speed_ratio = round(_expected_final_duration * 1000 / max(_encode_ms, 1), 2)
+            logger.info(
+                "total_part_render_ms=%d part=%d "
+                "cut_ms=%d first_frame_ms=%d subtitle_ass_ms=%d "
+                "render_ms=%d pacing_ms=%d quality_ms=%d",
+                _total_part_ms, idx,
+                _cut_ms, _first_frame_scan_ms, _subtitle_ass_ms,
+                _render_ms, _micro_pacing_ms, _quality_validation_ms,
+            )
             if normalized_text_layers:
                 _job_log(
                     effective_channel,
@@ -2574,6 +2651,7 @@ def run_render_pipeline(
                 step="render.output.quality",
                 context={"part_no": idx, "output_file": str(final_part)},
             )
+            _t_qq = time.perf_counter()
             _qq = _assess_output_quality(
                 final_part,
                 output_dir,
@@ -2582,6 +2660,9 @@ def run_render_pipeline(
                 expect_hook=_hook_overlay_enabled,
                 hook_applied=_hook_overlay_applied_for_part,
             )
+            _quality_validation_ms = int((time.perf_counter() - _t_qq) * 1000)
+            logger.info("quality_validation_ms=%d part=%d penalty=%d",
+                        _quality_validation_ms, idx, int(_qq["score_penalty"]))
             _quality_penalty = int(_qq["score_penalty"])
             seg["quality_penalty"] = _quality_penalty
             if _qq["warnings"] or not _qq["passed"]:

@@ -1,4 +1,5 @@
 
+import json
 import os
 import subprocess
 import threading
@@ -21,6 +22,99 @@ logger = logging.getLogger(__name__)
 # Override with NVENC_MAX_SESSIONS env var if your GPU supports more.
 _NVENC_SEM_VALUE: int = max(1, int(os.getenv("NVENC_MAX_SESSIONS", "3")))
 NVENC_SEMAPHORE = threading.Semaphore(_NVENC_SEM_VALUE)
+
+# ---------------------------------------------------------------------------
+# ffprobe metadata cache — keyed by (abspath, mtime_ns, size_bytes)
+# ---------------------------------------------------------------------------
+# Consolidates multiple per-attribute probes into one subprocess call per file.
+# Cache is invalidated automatically when file mtime or size changes.
+# Failed probes are never cached — they return zero/None defaults and retry.
+_PROBE_CACHE: dict[tuple, dict] = {}
+_PROBE_CACHE_LOCK = threading.Lock()
+
+
+def _file_probe_key(path: str) -> "tuple | None":
+    """Return (abspath, mtime_ns, size) cache key, or None if stat fails."""
+    try:
+        st = Path(path).stat()
+        return (str(Path(path).resolve()), st.st_mtime_ns, st.st_size)
+    except Exception:
+        return None
+
+
+def probe_video_metadata(path: str, timeout: int = 15) -> dict:
+    """Return {duration, fps, has_audio, has_video, width, height} for path.
+
+    Runs one ffprobe JSON call and caches by (abspath, mtime, size) so repeated
+    probes on the same unmodified file cost zero subprocess calls.
+    Failed probes are not cached — zero/None defaults are returned and retried.
+    """
+    key = _file_probe_key(path)
+    if key:
+        with _PROBE_CACHE_LOCK:
+            cached = _PROBE_CACHE.get(key)
+        if cached is not None:
+            return cached
+
+    result: dict = {
+        "duration": None,
+        "fps": 0.0,
+        "has_audio": False,
+        "has_video": False,
+        "width": 0,
+        "height": 0,
+    }
+    try:
+        cmd = [
+            get_ffprobe_bin(), "-v", "error",
+            "-show_entries",
+            "format=duration:stream=codec_type,avg_frame_rate,r_frame_rate,width,height",
+            "-of", "json", str(path),
+        ]
+        t0 = time.monotonic()
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        _ms = int((time.monotonic() - t0) * 1000)
+        if r.returncode == 0:
+            data = json.loads(r.stdout or "{}")
+            fmt = data.get("format", {})
+            try:
+                raw_dur = fmt.get("duration")
+                if raw_dur:
+                    result["duration"] = float(raw_dur)
+            except (ValueError, TypeError):
+                pass
+            for stream in data.get("streams", []):
+                ct = stream.get("codec_type", "")
+                if ct == "video" and not result["has_video"]:
+                    result["has_video"] = True
+                    try:
+                        result["width"] = int(stream.get("width") or 0)
+                        result["height"] = int(stream.get("height") or 0)
+                    except (ValueError, TypeError):
+                        pass
+                    for fps_field in ("avg_frame_rate", "r_frame_rate"):
+                        fps_val = _parse_fps_ratio(stream.get(fps_field) or "")
+                        if 1.0 <= fps_val <= 120.0:
+                            result["fps"] = fps_val
+                            break
+                elif ct == "audio":
+                    result["has_audio"] = True
+            logger.debug(
+                "ffprobe_metadata_ms=%d path=%s has_video=%s has_audio=%s fps=%.1f dur=%s",
+                _ms, Path(path).name, result["has_video"], result["has_audio"],
+                result["fps"], result["duration"],
+            )
+    except subprocess.TimeoutExpired:
+        logger.warning("ffprobe_metadata_timeout path=%s timeout=%ds", Path(path).name, timeout)
+        return result
+    except Exception:
+        return result
+
+    # Only store probes where we confirmed video presence — avoids caching garbage.
+    if key and result["has_video"]:
+        with _PROBE_CACHE_LOCK:
+            _PROBE_CACHE[key] = result
+    return result
 
 
 def _run_ffmpeg_with_retry(command: list[str], retry_count: int = 2, wait_sec: float = 0.8):
@@ -245,33 +339,8 @@ def _parse_fps_ratio(s: str) -> float:
 
 
 def _probe_fps(input_path: str) -> float:
-    """Return source video fps via ffprobe. Returns 0.0 on any failure.
-
-    Probes both avg_frame_rate and r_frame_rate in one pass.
-    avg_frame_rate is preferred: it reflects the actual frame cadence and is
-    more accurate for VFR content and YouTube downloads.  r_frame_rate is the
-    container-declared max and can be an unrealistically high rational for
-    some encoders.  We use whichever lands in the sane range [1, 120] first.
-    """
-    try:
-        cmd = [
-            get_ffprobe_bin(),
-            "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=avg_frame_rate,r_frame_rate",
-            "-of", "csv=p=0",
-            str(input_path),
-        ]
-        r = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        parts = (r.stdout or "").strip().split(",")
-        avg_fps = _parse_fps_ratio(parts[0]) if parts else 0.0
-        r_fps   = _parse_fps_ratio(parts[1]) if len(parts) > 1 else 0.0
-        for fps in (avg_fps, r_fps):
-            if 1.0 <= fps <= 120.0:
-                return fps
-        return 0.0
-    except Exception:
-        return 0.0
+    """Return source video fps via cached ffprobe. Returns 0.0 on any failure."""
+    return probe_video_metadata(input_path)["fps"]
 
 
 def _resolve_fps(input_path: str, output_fps: int) -> tuple[int, str]:
@@ -312,19 +381,8 @@ def _sanitize_speed(playback_speed: float | int | None) -> float:
 
 
 def _has_audio_stream(input_path: str) -> bool:
-    try:
-        cmd = [
-            get_ffprobe_bin(),
-            "-v", "error",
-            "-select_streams", "a:0",
-            "-show_entries", "stream=index",
-            "-of", "csv=p=0",
-            str(input_path),
-        ]
-        r = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return bool((r.stdout or "").strip())
-    except Exception:
-        return False
+    """Return True if the file has at least one audio stream (cached ffprobe)."""
+    return probe_video_metadata(input_path)["has_audio"]
 
 
 def _safe_filter_path(path: str) -> str:
@@ -554,19 +612,9 @@ def detect_bad_first_frame(
     return 0.0
 
 
-def _probe_duration(input_path: str) -> float | None:
-    """Return video duration in seconds via ffprobe, or None on error."""
-    try:
-        cmd = [
-            get_ffprobe_bin(), "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            input_path,
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        return float(result.stdout.strip())
-    except Exception:
-        return None
+def _probe_duration(input_path: str) -> "float | None":
+    """Return video duration in seconds via cached ffprobe, or None on error."""
+    return probe_video_metadata(input_path)["duration"]
 
 
 def _detect_silence_segments(
@@ -707,7 +755,7 @@ def apply_micro_pacing(
         *audio_args,
         output_path,
     ]
-    subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=True)
+    subprocess.run(cmd, capture_output=True, text=True, timeout=150, check=True)
 
     return {
         "applied": True,

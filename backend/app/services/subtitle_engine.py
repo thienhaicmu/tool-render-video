@@ -106,6 +106,44 @@ def _parse_srt_blocks(srt_path: str):
     return blocks
 
 
+def parse_srt_blocks(srt_path: str) -> list[dict]:
+    """Parse SRT file into a list of {start, end, text} dicts for round-trip editing.
+
+    Unlike the internal _parse_srt_blocks, multi-line text within a block is joined
+    with \\n so that write_srt_blocks() faithfully preserves line breaks.
+    """
+    content = Path(srt_path).read_text(encoding="utf-8")
+    blocks: list[dict] = []
+    for block in content.split("\n\n"):
+        lines = [x.strip() for x in block.splitlines() if x.strip()]
+        if len(lines) < 3:
+            continue
+        time_line = lines[1]
+        if " --> " not in time_line:
+            continue
+        start_s, end_s = time_line.split(" --> ", 1)
+        start = parse_srt_timestamp(start_s)
+        end = parse_srt_timestamp(end_s)
+        text = "\n".join(lines[2:]).strip()
+        if text and end > start:
+            blocks.append({"start": start, "end": end, "text": text})
+    return blocks
+
+
+def write_srt_blocks(blocks: list[dict], srt_path: str) -> None:
+    """Write parsed SRT blocks back to a file in standard SRT format.
+
+    Preserves timing, block order, and multi-line text (\\n within text is kept).
+    """
+    with Path(srt_path).open("w", encoding="utf-8") as f:
+        for idx, b in enumerate(blocks, start=1):
+            f.write(
+                f"{idx}\n"
+                f"{format_srt_timestamp(b['start'])} --> {format_srt_timestamp(b['end'])}\n"
+                f"{b['text']}\n\n"
+            )
+
+
 def slice_srt_by_time(
     source_srt_path: str,
     output_srt_path: str,
@@ -1304,3 +1342,229 @@ def apply_hook_subtitle_format(srt_path: str, max_hook_blocks: int = 2) -> int:
         return formatted
     except Exception:
         return 0
+
+
+# ---------------------------------------------------------------------------
+# S4 — Subtitle Emphasis Engine
+# ---------------------------------------------------------------------------
+
+def _is_cjk(text: str) -> bool:
+    """Return True when text contains CJK/Japanese/Korean characters."""
+    for ch in text:
+        cp = ord(ch)
+        if (
+            0x3040 <= cp <= 0x309F    # Hiragana
+            or 0x30A0 <= cp <= 0x30FF  # Katakana
+            or 0x4E00 <= cp <= 0x9FFF  # CJK Unified Ideographs (BMP)
+            or 0x3400 <= cp <= 0x4DBF  # CJK Extension A
+            or 0xAC00 <= cp <= 0xD7AF  # Hangul syllables
+            or 0x1100 <= cp <= 0x11FF  # Hangul Jamo
+        ):
+            return True
+    return False
+
+
+def _emphasis_level(preset_id: str) -> str:
+    """Return emphasis intensity for preset_id: strong | medium | subtle | minimal | word_only."""
+    _MAP = {
+        "tiktok_bounce_v1": "strong",
+        "viral_bold":       "strong",
+        "bold_cap":         "strong",
+        "story_clean_01":   "medium",
+        "clean_pro":        "subtle",
+        "boxed_caption":    "minimal",
+        "pro_karaoke":      "word_only",
+    }
+    return _MAP.get(normalize_subtitle_style_id(preset_id), "medium")
+
+
+_EMPH_CONTRAST = frozenset({
+    "only", "never", "always", "first", "last", "best", "worst",
+    "free", "new", "top", "no", "zero", "none",
+})
+_EMPH_EMOTIONAL = frozenset({
+    "crazy", "insane", "unbelievable", "incredible", "impossible",
+    "shocking", "amazing", "secret", "hidden", "truth",
+    "real", "honest", "actually",
+})
+_EMPH_URGENCY = frozenset({
+    "now", "today", "fast", "quick", "limited", "stop", "wait",
+    "urgent", "breaking", "instantly",
+})
+
+_NUMBER_RE = re.compile(
+    r"\$[\d,]+(?:\.\d+)?[kKmMbB]?"  # $1,000  $5k  $2.5M
+    r"|[\d,]+(?:\.\d+)?%"            # 100%  3.5%
+    r"|\d+[xX]"                      # 10x  3X
+    r"|#\d+"                         # #1  #5
+    r"|\d+[kKmMbB]"                  # 500k  1M
+)
+
+
+def _should_emphasize(token: str, level: str) -> bool:
+    """Return True when this word/token deserves a highlight marker."""
+    clean = re.sub(r"[^\w$#%.,]", "", token).rstrip(".,")
+    if _NUMBER_RE.fullmatch(clean):
+        return True
+    lw = clean.lower().rstrip(".,!?;:")
+    if level == "strong":
+        return (
+            lw in _EMPH_CONTRAST or lw in _EMPH_EMOTIONAL
+            or lw in _EMPH_URGENCY or lw in _HOOK_EMPHASIS_WORDS
+        )
+    if level == "medium":
+        return lw in _EMPH_CONTRAST or lw in _EMPH_EMOTIONAL or lw in _HOOK_EMPHASIS_WORDS
+    return False  # subtle → numbers only (handled above); minimal/word_only → never reaches here
+
+
+def _uppercase_emphasis_words(text: str) -> str:
+    """Uppercase emphasis-class words in text (for strong level, Latin script only)."""
+    out = []
+    for part in re.split(r"(\s+)", text):
+        if not part.strip():
+            out.append(part)
+            continue
+        clean = re.sub(r"[^\w$#%.,]", "", part).rstrip(".,")
+        lw = clean.lower().rstrip(".,!?;:")
+        if (
+            lw in _HOOK_EMPHASIS_WORDS
+            or lw in _EMPH_CONTRAST
+            or lw in _EMPH_URGENCY
+            or _NUMBER_RE.fullmatch(clean)
+        ):
+            out.append(part.upper())
+        else:
+            out.append(part)
+    return "".join(out)
+
+
+def _insert_emphasis_markers(text: str, market: str, level: str) -> str:
+    """Wrap emphasis tokens with _HL_OPEN/_HL_CLOSE markers for later ASS resolution.
+
+    Skips any token that already contains a marker — prevents double-wrapping
+    when apply_market_line_break_to_srt() has already marked keywords.
+    """
+    mkt = str(market or "US").upper()[:2]
+    out = []
+    for part in re.split(r"(\s+)", text):
+        if not part.strip():
+            out.append(part)
+            continue
+        if _HL_OPEN in part or _HL_CLOSE in part:
+            out.append(part)
+            continue
+        if _should_emphasize(part, level):
+            out.append(f"{_HL_OPEN}{mkt}:{part}{_HL_CLOSE}")
+        else:
+            out.append(part)
+    return "".join(out)
+
+
+def _semantic_wrap_block(text: str, max_em: float) -> str:
+    """Midpoint line-wrap with orphan/widow avoidance.
+
+    Avoids:
+    - Orphan: a single word stranded alone on line 2 → skip split entirely
+    - Widow: a very short trailing word (≤ 3 chars) on line 2 → shift split right
+    """
+    if "\n" in text or _approx_visual_width(text) <= max_em:
+        return text
+
+    words = text.split()
+    n = len(words)
+    if n <= 1:
+        return text
+
+    total_w = _approx_visual_width(text)
+    half = total_w / 2.0
+    cum = 0.0
+    best_idx = 1
+    best_dist = float("inf")
+    for i, word in enumerate(words):
+        cum += _approx_visual_width(word + " ")
+        dist = abs(cum - half)
+        if dist < best_dist:
+            best_dist = dist
+            best_idx = i + 1
+
+    # Orphan avoidance: exactly 1 word on line 2 — return unsplit
+    if n - best_idx == 1:
+        return text
+
+    # Widow avoidance: last word of line 2 is very short → shift split right by 1
+    last_clean = re.sub(r"\W", "", words[-1])
+    if len(last_clean) <= 3 and (n - best_idx) >= 2 and best_idx + 1 < n:
+        candidate = best_idx + 1
+        # Only shift if the new line 2 still has at least 2 words
+        if n - candidate >= 2:
+            best_idx = candidate
+
+    return " ".join(words[:best_idx]) + "\n" + " ".join(words[best_idx:])
+
+
+def subtitle_emphasis_pass(
+    blocks: list[dict],
+    preset_id: str = "tiktok_bounce_v1",
+    market: str = "US",
+    language: str = "en",
+) -> list[dict]:
+    """Unified emphasis pass: semantic wrap + keyword uppercase + highlight markers.
+
+    Operates on a list of blocks (dicts with 'start', 'end', 'text' keys).
+    Modifies 'text' in-place and returns the same list.
+
+    Per-block pipeline (segment-level only — word-level SRT skips all transforms):
+      1. CJK script detection — skips uppercase and markers for CJK text
+      2. Semantic line wrap with orphan/widow avoidance
+      3. Uppercase transform on emphasis-class words (strong level, Latin only)
+      4. Emphasis highlight markers (_HL_OPEN/_HL_CLOSE, resolved by _ass_escape_text)
+
+    Emphasis intensity per preset:
+      tiktok_bounce_v1 / viral_bold / bold_cap → strong  (numbers, contrast, urgency, hook words)
+      story_clean_01                           → medium  (numbers, contrast, emotional, hook words)
+      clean_pro                                → subtle  (numbers only)
+      boxed_caption                            → minimal (no emphasis transforms)
+      pro_karaoke                              → word_only (no transforms — karaoke handles timing)
+    """
+    if not blocks:
+        return blocks
+
+    preset = get_subtitle_preset(preset_id)
+    level = _emphasis_level(preset_id)
+    mkt = str(market or "US").upper()
+
+    # Word-level SRT detection — skip all text transforms for per-word transcription
+    avg_words = sum(len(str(b.get("text") or "").split()) for b in blocks) / max(1, len(blocks))
+    is_word_level = len(blocks) >= 6 and avg_words <= 1.5
+
+    affected = 0
+    for b in blocks:
+        raw = str(b.get("text") or "").strip()
+        if not raw:
+            continue
+
+        original = raw
+        cjk = _is_cjk(raw)
+
+        # Step 1: semantic line wrap
+        if not is_word_level:
+            raw = _semantic_wrap_block(raw, preset.wrap_max_em)
+
+        # Step 2: uppercase emphasis-class words (strong level, Latin only)
+        if not is_word_level and not cjk and level == "strong":
+            raw = _uppercase_emphasis_words(raw)
+
+        # Step 3: emphasis highlight markers (not word-level, not minimal/word_only, not CJK)
+        if not is_word_level and level not in ("minimal", "word_only") and not cjk:
+            raw = _insert_emphasis_markers(raw, mkt, level)
+
+        if raw != original:
+            b["text"] = raw
+            affected += 1
+
+    logger.info(
+        "subtitle_emphasis_applied preset=%s market=%s level=%s blocks=%d "
+        "word_level=%s affected=%d",
+        preset_id, mkt, level, len(blocks), is_word_level, affected,
+    )
+    return blocks

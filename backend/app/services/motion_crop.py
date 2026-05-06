@@ -81,6 +81,7 @@ class MotionCropConfig:
     prefer_center_bias: float = 0.15
 
     fps_fallback: float = 30.0
+    max_tracking_seconds: float = 300.0
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +266,7 @@ def ffprobe_video_info(video_path: str) -> Tuple[int, int, float]:
         "-show_entries", "stream=width,height,avg_frame_rate,r_frame_rate",
         "-of", "default=noprint_wrappers=1:nokey=1", video_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=15)
     lines = [x.strip() for x in result.stdout.splitlines() if x.strip()]
     width  = int(lines[0])
     height = int(lines[1])
@@ -285,7 +286,7 @@ def has_audio_stream(video_path: str) -> bool:
         "-show_entries", "stream=index", "-of", "csv=p=0", video_path,
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=10)
         return bool((result.stdout or "").strip())
     except Exception:
         return False
@@ -601,6 +602,25 @@ def _filter_subject_candidates(
     return filtered, rejected
 
 
+def prepare_detection_frame(
+    frame: np.ndarray,
+    max_height: int = 720,
+) -> Tuple[np.ndarray, float, float, Tuple[int, int], Tuple[int, int]]:
+    """
+    Cap frame height to max_height before Haar cascade detection.
+    Returns (detect_frame, scale_x, scale_y, original_wh, scaled_wh).
+    Divide detected bbox coords by scale_x/scale_y to recover original-frame coords.
+    If source height <= max_height, returns frame unchanged with scale 1.0.
+    """
+    h, w = frame.shape[:2]
+    if h <= max_height:
+        return frame, 1.0, 1.0, (w, h), (w, h)
+    scale = max_height / h
+    new_w = max(1, int(round(w * scale)))
+    resized = cv2.resize(frame, (new_w, max_height), interpolation=cv2.INTER_LINEAR)
+    return resized, scale, scale, (w, h), (new_w, max_height)
+
+
 def _detect_subjects_in_frame(
     gray_small: np.ndarray,
     face_cascade: Optional[cv2.CascadeClassifier],
@@ -896,6 +916,13 @@ def build_subject_path(
 
     # Reduced-resolution scale for faster detection
     detect_scale = 0.30
+    if src_h > 720:
+        _det_scaled_w = max(1, int(round(src_w * 720.0 / src_h)))
+        logger.debug(
+            "motion_tracking_downscale_applied tracking_resolution_original=%dx%d "
+            "tracking_resolution_scaled=%dx%d scale_ratio=%.3f",
+            src_w, src_h, _det_scaled_w, 720, 720.0 / src_h,
+        )
 
     default_cx = src_w / 2.0
     default_cy = src_h / 2.0
@@ -915,9 +942,29 @@ def build_subject_path(
     trackerless_confidence = 0.0
     trackerless_confirm_streak = 0
 
+    _tracking_start = time.monotonic()
     while True:
         ok, frame = cap.read()
         if not ok or frame is None:
+            break
+
+        _elapsed = time.monotonic() - _tracking_start
+        if _elapsed > cfg.max_tracking_seconds:
+            logger.warning(
+                "motion_tracking_timeout elapsed_s=%.1f max_s=%.1f "
+                "frames_processed=%d centers_collected=%d",
+                _elapsed, cfg.max_tracking_seconds, frame_idx, len(raw_centers),
+            )
+            if raw_centers:
+                logger.info(
+                    "motion_tracking_partial_centers_used frames_processed=%d centers_collected=%d",
+                    frame_idx, len(raw_centers),
+                )
+            else:
+                logger.warning(
+                    "motion_tracking_aborted_safe frames_processed=%d reason=no_centers_at_timeout",
+                    frame_idx,
+                )
             break
 
         subject: Optional[Tuple[int, int, int, int]] = None
@@ -938,11 +985,17 @@ def build_subject_path(
 
         # --- Step 2: re-detect every N frames (or when tracker lost) ---
         if frame_idx % detect_interval == 0 or (tracker_available and not tracking):
-            small = cv2.resize(frame, None, fx=detect_scale, fy=detect_scale)
+            _det_frame, _det_sx, _det_sy, _, _ = prepare_detection_frame(frame)
+            small = cv2.resize(_det_frame, None, fx=detect_scale, fy=detect_scale)
             gray_small = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
             detected, _kind = _detect_subjects_in_frame(
                 gray_small, face_cascade, body_cascade, detect_scale
             )
+            if _det_sx != 1.0:
+                detected = [
+                    (int(x / _det_sx), int(y / _det_sy), int(bw / _det_sx), int(bh / _det_sy))
+                    for (x, y, bw, bh) in detected
+                ]
             detected, _ = _filter_subject_candidates(detected, src_w, src_h, _kind, last_subject)
             best = _pick_best_subject(detected, src_w, src_h, last_subject)
 
@@ -1084,6 +1137,13 @@ def build_subject_path_scene(
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
         detect_scale = 0.30
+        if src_h > 720:
+            _det_scaled_w = max(1, int(round(src_w * 720.0 / src_h)))
+            logger.debug(
+                "motion_tracking_downscale_applied scene=%d tracking_resolution_original=%dx%d "
+                "tracking_resolution_scaled=%dx%d scale_ratio=%.3f",
+                scene_index, src_w, src_h, _det_scaled_w, 720, 720.0 / src_h,
+            )
         default_cx = src_w / 2.0
         default_cy = src_h / 2.0
 
@@ -1135,9 +1195,32 @@ def build_subject_path_scene(
         trackerless_confirm_streak = 0
         center_guard_active = False
 
+        _tracking_start = time.monotonic()
         while frame_idx < end_frame:
             ok, frame = cap.read()
             if not ok or frame is None:
+                break
+
+            _elapsed = time.monotonic() - _tracking_start
+            if _elapsed > cfg.max_tracking_seconds:
+                logger.warning(
+                    "motion_tracking_timeout scene=%d elapsed_s=%.1f max_s=%.1f "
+                    "frames_processed=%d centers_collected=%d",
+                    scene_index, _elapsed, cfg.max_tracking_seconds,
+                    frame_idx - start_frame, len(raw_centers),
+                )
+                if raw_centers:
+                    logger.info(
+                        "motion_tracking_partial_centers_used scene=%d "
+                        "frames_processed=%d centers_collected=%d",
+                        scene_index, frame_idx - start_frame, len(raw_centers),
+                    )
+                else:
+                    logger.warning(
+                        "motion_tracking_aborted_safe scene=%d frames_processed=%d "
+                        "reason=no_centers_at_timeout",
+                        scene_index, frame_idx - start_frame,
+                    )
                 break
 
             subject: Optional[Tuple[int, int, int, int]] = None
@@ -1162,11 +1245,17 @@ def build_subject_path_scene(
                 should_detect = scene_frame_idx % detect_interval == 0
             detection_confirmed = False
             if should_detect:
-                small = cv2.resize(frame, None, fx=detect_scale, fy=detect_scale)
+                _det_frame, _det_sx, _det_sy, _, _ = prepare_detection_frame(frame)
+                small = cv2.resize(_det_frame, None, fx=detect_scale, fy=detect_scale)
                 gray_small = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
                 detected, detected_kind = _detect_subjects_in_frame(
                     gray_small, face_cascade, body_cascade, detect_scale
                 )
+                if _det_sx != 1.0:
+                    detected = [
+                        (int(x / _det_sx), int(y / _det_sy), int(bw / _det_sx), int(bh / _det_sy))
+                        for (x, y, bw, bh) in detected
+                    ]
                 detected, rejected = _filter_subject_candidates(
                     detected, src_w, src_h, detected_kind, locked_subject
                 )
