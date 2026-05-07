@@ -35,6 +35,7 @@ env/
 # ================================================
 **/node_modules/
 desktop-shell/dist/
+desktop-shell/dist*
 desktop-shell/build/
 desktop-shell/out/
 desktop-shell/.electron-builder/
