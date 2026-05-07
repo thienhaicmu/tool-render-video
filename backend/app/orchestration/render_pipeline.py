@@ -313,6 +313,21 @@ def _apply_subtitle_edits_to_srt(srt_path: str, edits: list) -> None:
             logger.warning("subtitle_edits: failed to write patched SRT (%s): %s", srt_path, exc)
 
 
+def _duration_tolerance(expected_duration: float) -> float:
+    """Return the acceptable deviation window for output duration validation.
+
+    Very short clips get at least 0.5 s; long clips are capped at 3.0 s.
+    """
+    if expected_duration > 0:
+        return max(0.5, min(expected_duration * 0.15, 3.0))
+    return 1.0  # safe fallback for unknown/zero expected duration
+
+
+def _stall_deadline(encode_start: float, expected_duration: float) -> float:
+    """Return the monotonic time beyond which a running render is considered stalled."""
+    return encode_start + max(120.0, (expected_duration or 60.0) * 10)
+
+
 def _render_progress_timer(
     stop_event: threading.Event,
     job_id: str,
@@ -322,6 +337,7 @@ def _render_progress_timer(
     output_file: str,
     encode_start: float,
     expected_duration: float,
+    channel_code: str = "",
 ):
     """Background thread that emits linear progress estimates while FFmpeg runs.
 
@@ -335,12 +351,57 @@ def _render_progress_timer(
       render_part_smart() returns, guaranteeing that the final DB write wins.
     - All exceptions are swallowed; a noisy timer must never crash a render thread.
     """
+    stall_deadline = _stall_deadline(encode_start, expected_duration)
+    _stall_suspected_emitted = False
     while not stop_event.wait(timeout=_PROGRESS_TICK_SEC):
         elapsed = time.monotonic() - encode_start
         if expected_duration > 0:
             progress = min(99, 70 + int(30 * elapsed / expected_duration))
         else:
             progress = 85  # unknown duration — park at midpoint
+
+        # Warn once when duration is unknown and render has run for >300 s
+        if expected_duration <= 0 and elapsed > 300 and not _stall_suspected_emitted:
+            _stall_suspected_emitted = True
+            try:
+                if channel_code:
+                    _emit_render_event(
+                        channel_code=channel_code,
+                        job_id=job_id,
+                        event="render.stall_suspected",
+                        level="WARNING",
+                        message=f"Render has been running {elapsed:.0f}s with unknown duration",
+                        step="render.progress",
+                    )
+            except Exception:
+                pass
+
+        # Hard stall guard: wall-clock deadline exceeded — fail the part and exit
+        if not stop_event.is_set() and time.monotonic() > stall_deadline:
+            try:
+                if channel_code:
+                    _emit_render_event(
+                        channel_code=channel_code,
+                        job_id=job_id,
+                        event="render.stall_detected",
+                        level="WARNING",
+                        message=f"Render stall detected: wall-clock timeout exceeded after {elapsed:.0f}s",
+                        step="render.progress",
+                    )
+                upsert_job_part(
+                    job_id, part_no, part_name,
+                    JobPartStage.FAILED, progress,
+                    seg["start"], seg["end"], seg["duration"],
+                    seg.get("viral_score", 0), seg.get("motion_score", 0),
+                    seg.get("hook_score", 0),
+                    output_file,
+                    "Render stall detected: wall-clock timeout exceeded",
+                )
+            except Exception:
+                pass
+            stop_event.set()
+            break
+
         try:
             upsert_job_part(
                 job_id,
@@ -678,7 +739,7 @@ def _validate_render_output(
         return result
 
     if expected_duration and expected_duration > 0:
-        tolerance = max(1.0, expected_duration * 0.15)
+        tolerance = _duration_tolerance(expected_duration)
         result["metadata"]["expected_duration"] = float(expected_duration)
         result["metadata"]["duration_tolerance"] = float(tolerance)
         if abs(duration - expected_duration) > tolerance:
@@ -2106,6 +2167,7 @@ def run_render_pipeline(
                     str(final_part),
                     time.monotonic(),
                     max(float(seg.get("duration") or 0), 1.0),
+                    effective_channel,
                 ),
                 daemon=True,
                 name=f"progress-timer-{job_id[:8]}-p{idx}",
@@ -2714,6 +2776,20 @@ def run_render_pipeline(
                         "score_penalty": _quality_penalty,
                         "checks": _qq["checks"],
                         "warnings": _qq["warnings"],
+                    },
+                )
+            if _quality_penalty > 20:
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="render.quality_penalty_high",
+                    level="WARNING",
+                    message=f"Part {idx} quality penalty high: -{_quality_penalty} points",
+                    step="render.output.quality",
+                    context={
+                        "part_no": idx,
+                        "warnings": _qq["warnings"],
+                        "score_penalty": _quality_penalty,
                     },
                 )
 
