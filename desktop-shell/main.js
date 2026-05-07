@@ -102,7 +102,7 @@ async function findSystemPython() {
 
 let _lastSplashMsg = '';
 
-function createSplash() {
+async function createSplash() {
   splashWindow = new BrowserWindow({
     width: 420,
     height: 260,
@@ -112,18 +112,31 @@ function createSplash() {
     resizable: false,
     skipTaskbar: true,
     backgroundColor: '#0f172a',
+    show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
     },
   });
-  splashWindow.loadFile(path.join(__dirname, 'splash.html'));
-  splashWindow.on('closed', () => { splashWindow = null; });
+
+  await splashWindow.loadFile(path.join(__dirname, 'splash.html'));
+
+  splashWindow.once('ready-to-show', () => {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.show();
+    }
+  });
+
+  splashWindow.on('closed', () => {
+    splashWindow = null;
+  });
+
   // Replay the last queued status once the renderer is ready to receive IPC.
   splashWindow.webContents.on('did-finish-load', () => {
     if (splashWindow && !splashWindow.isDestroyed()) {
       splashWindow.webContents.send('boot-version', app.getVersion());
+
       if (_lastSplashMsg) {
         splashWindow.webContents.send('boot-status', _lastSplashMsg);
       }
@@ -133,6 +146,7 @@ function createSplash() {
 
 function sendSplash(message) {
   _lastSplashMsg = message;
+
   if (splashWindow && !splashWindow.isDestroyed()) {
     splashWindow.webContents.send('boot-status', message);
   }
