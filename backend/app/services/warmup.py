@@ -83,7 +83,41 @@ def _warmup_ffmpeg():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 2. yt-dlp
+# 2. GPU / NVENC detection
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _warmup_gpu():
+    """Probe available hardware accelerators via ffmpeg -hwaccels.
+
+    Lightweight — no encoding performed.  Result is informational only and
+    does not change any render-pipeline behavior.
+    """
+    _set("gpu", "running", "Detecting hardware acceleration...")
+    try:
+        from app.services.bin_paths import get_ffmpeg_bin
+        ffmpeg = get_ffmpeg_bin()
+        r = subprocess.run(
+            [ffmpeg, "-hide_banner", "-hwaccels"],
+            capture_output=True,
+            timeout=10,
+        )
+        out = (r.stdout + r.stderr).decode(errors="ignore").lower()
+        if "nvenc" in out or "cuda" in out or "cuvid" in out:
+            _set("gpu", "ready", "NVENC / CUDA available")
+        elif "d3d11va" in out or "dxva2" in out:
+            _set("gpu", "ready", "DirectX VA available — software encode")
+        elif r.returncode == 0:
+            _set("gpu", "ready", "CPU encode — no NVENC detected")
+        else:
+            _set("gpu", "skipped", "hwaccels probe failed — CPU encode assumed")
+        logger.info("Warmup GPU: %s", _state.get("gpu", {}).get("message", ""))
+    except Exception as exc:
+        _set("gpu", "skipped", f"GPU detection skipped: {exc}")
+        logger.warning("Warmup GPU: %s", exc)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 4. yt-dlp
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _warmup_ytdlp():
@@ -98,7 +132,7 @@ def _warmup_ytdlp():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3. OpenCV cascades
+# 5. OpenCV cascades
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _warmup_cascades():
@@ -116,7 +150,7 @@ def _warmup_cascades():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 4. Whisper models
+# 6. Whisper models
 # ──────────────────────────────────────────────────────────────────────────────
 
 _WHISPER_MODELS = [
@@ -126,8 +160,34 @@ _WHISPER_MODELS = [
 ]
 
 
-_WHISPER_CACHE_DIR = Path(__file__).resolve().parents[3] / "data" / "whisper_cache"
-_WHISPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+def _resolve_whisper_cache() -> Path:
+    """Return a stable, persistent Whisper model cache directory.
+
+    Priority:
+      1. WHISPER_CACHE env var (explicit operator override)
+      2. APP_DATA_DIR / whisper_cache  (config-managed, packaged-safe)
+      3. ~/.cache/render-video-tool/whisper  (home-dir fallback)
+
+    Never falls through to a PyInstaller temp-extraction path.
+    """
+    env_val = os.environ.get("WHISPER_CACHE", "").strip()
+    if env_val:
+        p = Path(env_val)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    try:
+        from app.core.config import APP_DATA_DIR
+        p = APP_DATA_DIR / "whisper_cache"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    except Exception:
+        pass
+    p = Path.home() / ".cache" / "render-video-tool" / "whisper"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+_WHISPER_CACHE_DIR: Path = _resolve_whisper_cache()
 
 
 def _warmup_whisper(name: str, size_mb: int):
@@ -144,7 +204,7 @@ def _warmup_whisper(name: str, size_mb: int):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 5. Ollama — install check, auto-start, model pull
+# 7. Ollama — install check, auto-start, model pull
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _find_ollama_bin() -> str | None:
@@ -196,8 +256,12 @@ def _ollama_model_exists(model: str) -> bool:
 def _start_ollama_service(ollama_bin: str):
     """Start `ollama serve` in background. Returns immediately."""
     try:
-        # Redirect Ollama model cache to project D: drive
-        _ollama_data_dir = Path(__file__).resolve().parents[3] / "data" / "ollama"
+        # Redirect Ollama model cache to stable data directory
+        try:
+            from app.core.config import APP_DATA_DIR
+            _ollama_data_dir = APP_DATA_DIR / "ollama"
+        except Exception:
+            _ollama_data_dir = Path.home() / ".render-video-tool" / "ollama"
         _ollama_data_dir.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
         env.setdefault("OLLAMA_MODELS", str(_ollama_data_dir / "models"))
@@ -316,6 +380,7 @@ def _run_warmup():
 
     # Init all keys as pending
     _set("ffmpeg", "pending", "ffmpeg pending")
+    _set("gpu",    "pending", "GPU detection pending")
     _set("yt_dlp", "pending", "yt-dlp pending")
     _set("opencv_cascades", "pending", "OpenCV cascades pending")
     for name, size in _WHISPER_MODELS:
@@ -325,6 +390,7 @@ def _run_warmup():
 
     # Fast checks (no download)
     _warmup_ffmpeg()
+    _warmup_gpu()
     _warmup_ytdlp()
     _warmup_cascades()
 

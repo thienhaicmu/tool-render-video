@@ -2,12 +2,43 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from functools import lru_cache
 from pathlib import Path
 
 
 def _is_file(path: str | None) -> bool:
     return bool(path) and Path(path).is_file()
+
+
+def _packaged_ffmpeg_candidates() -> list[Path]:
+    """Return ordered candidate paths to check when running as a PyInstaller bundle.
+
+    Layout produced by build-offline-exe.ps1 (onedir mode):
+      <resources>/backend-bin/render-backend.exe   ← sys.executable
+      <resources>/ffmpeg-bin/ffmpeg.exe             ← bundled ffmpeg
+
+    Also checks the EXE directory itself for standalone portable layouts.
+    """
+    if not getattr(sys, "frozen", False):
+        return []
+    exe_dir = Path(sys.executable).parent
+    return [
+        exe_dir / "ffmpeg.exe",                        # beside EXE (flat layout)
+        exe_dir / "ffmpeg-bin" / "ffmpeg.exe",         # sub-dir of EXE dir
+        exe_dir.parent / "ffmpeg-bin" / "ffmpeg.exe",  # sibling of backend-bin/
+    ]
+
+
+def _packaged_ffprobe_candidates() -> list[Path]:
+    if not getattr(sys, "frozen", False):
+        return []
+    exe_dir = Path(sys.executable).parent
+    return [
+        exe_dir / "ffprobe.exe",
+        exe_dir / "ffmpeg-bin" / "ffprobe.exe",
+        exe_dir.parent / "ffmpeg-bin" / "ffprobe.exe",
+    ]
 
 
 @lru_cache(maxsize=1)
@@ -26,20 +57,29 @@ def _winget_ffmpeg_bin_dir() -> str | None:
 
 @lru_cache(maxsize=1)
 def get_ffmpeg_bin() -> str:
+    # 1. Explicit env override
     env = os.environ.get("FFMPEG_BIN")
     if _is_file(env):
         return str(Path(env))
 
+    # 2. Packaged-EXE layout (checked before PATH to prefer bundled binary)
+    for candidate in _packaged_ffmpeg_candidates():
+        if candidate.is_file():
+            return str(candidate)
+
+    # 3. System PATH
     found = shutil.which("ffmpeg")
     if found:
         return found
 
+    # 4. WinGet install location
     winget_dir = _winget_ffmpeg_bin_dir()
     if winget_dir:
         candidate = Path(winget_dir) / "ffmpeg.exe"
         if candidate.is_file():
             return str(candidate)
 
+    # 5. Bare fallback — subprocess will raise if truly missing
     return "ffmpeg"
 
 
@@ -48,6 +88,10 @@ def get_ffprobe_bin() -> str:
     env = os.environ.get("FFPROBE_BIN")
     if _is_file(env):
         return str(Path(env))
+
+    for candidate in _packaged_ffprobe_candidates():
+        if candidate.is_file():
+            return str(candidate)
 
     found = shutil.which("ffprobe")
     if found:
