@@ -30,6 +30,16 @@ from app.orchestration.render_pipeline import (
 router = APIRouter(prefix="/api/render", tags=["render"])
 logger = logging.getLogger("app.render")
 
+
+@router.get("/queue-status")
+def get_queue_status():
+    """Read-only — returns active render count and max concurrent slots."""
+    from app.orchestration.render_pipeline import _render_active_count, _render_active_lock, _JOB_SEM_VALUE
+    with _render_active_lock:
+        active = _render_active_count[0]
+    return {"active_renders": active, "max_renders": _JOB_SEM_VALUE}
+
+
 # ── Error classification ───────────────────────────────────────────────────────
 # Type 1 · Request / validation errors  — HTTPException raised before process_render
 #           logged as WARNING  →  desktop-backend.log  (via logger.warning)

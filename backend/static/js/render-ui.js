@@ -21,6 +21,7 @@ let _rcCompareSelA = '';
 let _rcCompareSelB = '';
 let _rcBenchmark = { jobId: '', logsLoaded: false, totalElapsedMs: 0, sceneDetectionMs: null, sceneCount: null, transcriptionMs: null, transcriptionModel: null, transcriptionLiveSec: null, totalParts: 0, completedParts: 0, failedParts: 0, failedStage: '', outputSizes: [] };
 const RENDER_MONITOR_STALL_MS = 45000;
+let _queueStatusTimer = null;
 
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
 function resetRenderSessionUi(){
@@ -114,6 +115,69 @@ function fmtElapsed(ms){
   if (h > 0) return `${h}h ${m}m ${s}s`;
   return `${m}m ${s}s`;
 }
+
+// ── Render slot visibility ────────────────────────────────────────────────────
+
+async function _loadQueueStatus() {
+  try {
+    const r = await fetch('/api/render/queue-status');
+    if (!r.ok) return;
+    const d = await r.json();
+    const pill = qs('rc_slot_pill');
+    if (pill) {
+      pill.textContent = `Slots: ${d.active_renders} / ${d.max_renders} active`;
+      pill.dataset.active = String(d.active_renders > 0 ? 1 : 0);
+      pill.hidden = false;
+    }
+  } catch(_) {}
+}
+
+function _startQueueStatusPolling() {
+  if (_queueStatusTimer) return;
+  _loadQueueStatus();
+  _queueStatusTimer = setInterval(_loadQueueStatus, 10000);
+}
+
+function _stopQueueStatusPolling() {
+  if (_queueStatusTimer) { clearInterval(_queueStatusTimer); _queueStatusTimer = null; }
+  const pill = qs('rc_slot_pill');
+  if (pill) { pill.hidden = true; }
+}
+
+// ── Stall / stuck signal detection ───────────────────────────────────────────
+
+function _detectStallSignal(job) {
+  const status = String(job?.status || '').toLowerCase();
+  const msg = String(job?.message || '').toLowerCase();
+  if (status === 'stalled' || status === 'timeout') {
+    return 'Render timed out — check logs for details.';
+  }
+  if (msg.includes('stall detected') || msg.includes('wall-clock timeout') || msg.includes('stall_detected')) {
+    return 'Render timed out — check logs for details.';
+  }
+  if (msg.includes('stall_suspected') || msg.includes('stall suspected') || msg.includes('unknown duration')) {
+    return 'Render may be stuck — still waiting for FFmpeg.';
+  }
+  if (msg.includes('stall') || msg.includes('stuck')) {
+    return 'Render may be stuck — still waiting for FFmpeg.';
+  }
+  if (msg.includes('timeout')) {
+    return 'Render timed out — check logs for details.';
+  }
+  return '';
+}
+
+// ── Quality badge helper (per part) ──────────────────────────────────────────
+
+function _partQualityBadgeHtml(part) {
+  const penalty = Number(part?.quality_penalty ?? part?.score_penalty ?? 0);
+  const warnings = Array.isArray(part?.quality_warnings) ? part.quality_warnings : [];
+  if (penalty <= 0 && warnings.length === 0) return '';
+  const tip = warnings.length > 0
+    ? esc(warnings.slice(0, 3).join(' | '))
+    : `Quality penalty: ${penalty}`;
+  return `<span class="rcQualityBadge" title="${tip}">&#9888; Quality issue</span>`;
+}
 function stageLabel(stage){
   const map = {
     queued: 'Queued',
@@ -137,17 +201,17 @@ function stageLabelPlain(stage){
     preparing: 'Preparing',
     starting: 'Preparing',
     downloading: 'Preparing source',
-    scene_detecting: 'Scene Detection',
-    scene_detection: 'Scene Detection',
+    scene_detecting: 'Detecting scenes',
+    scene_detection: 'Detecting scenes',
     segment_building: 'Segment Selection',
-    transcribing_full: 'Subtitles',
-    rendering: 'Rendering Clips',
-    rendering_parallel: 'Rendering Clips',
-    writing_report: 'Writing report',
+    transcribing_full: 'Generating subtitles',
+    rendering: 'Rendering clips',
+    rendering_parallel: 'Rendering clips',
+    writing_report: 'Validating output',
     finalizing: 'Finalizing',
     done: 'Completed',
     completed: 'Completed',
-    completed_with_errors: 'Completed with Errors',
+    completed_with_errors: 'Completed with issues',
     failed: 'Failed',
     working: 'Working...',
   };
@@ -163,7 +227,7 @@ function normalizeRenderStatus(status, stage = ''){
   if (st === 'rendering') return 'rendering';
   if (st === 'completed' || st === 'done' || st === 'complete') return 'completed';
   if (st === 'completed_with_errors' || st === 'partial_failed') return 'completed_with_errors';
-  if (st === 'failed' || st === 'interrupted') return 'failed';
+  if (st === 'failed' || st === 'interrupted' || st === 'stalled' || st === 'timeout') return 'failed';
   if (st === 'running') {
     if (sg === 'scene_detection' || sg === 'scene_detecting') return 'scene_detecting';
     if (sg === 'segment_building') return 'preparing';
@@ -245,12 +309,13 @@ function renderUxStageLabel(job, summary = null, parts = []) {
   const stage = normalizeRenderStage(job?.stage, job?.status);
   const status = normalizeRenderStatus(job?.status, stage);
   if (status === 'completed') return 'Completed';
-  if (status === 'completed_with_errors') return 'Completed with Errors';
+  if (status === 'completed_with_errors') return 'Completed with issues';
   if (status === 'failed') return 'Failed';
-  if (stage === 'scene_detection' || status === 'scene_detecting') return 'Scene Detection';
+  if (stage === 'scene_detection' || status === 'scene_detecting') return 'Detecting scenes';
   if (stage === 'segment_building') return 'Segment Selection';
-  if (stage === 'rendering' || stage === 'rendering_parallel' || status === 'rendering') return 'Rendering Clips';
-  if (stage === 'writing_report') return 'Finalizing';
+  if (stage === 'transcribing_full') return 'Generating subtitles';
+  if (stage === 'rendering' || stage === 'rendering_parallel' || status === 'rendering') return 'Rendering clips';
+  if (stage === 'writing_report') return 'Validating output';
   if (status === 'pending' || stage === 'queued') return 'Preparing';
   if (status === 'preparing' || stage === 'starting' || stage === 'downloading') return 'Preparing';
   return job ? 'Working...' : 'Idle';
@@ -1499,6 +1564,20 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     if (activeBar) activeBar.style.setProperty('--progress', `${activeCardPct}%`);
     if (activeStage) activeStage.textContent = stageLine;
     if (activeMessage) activeMessage.textContent = message;
+
+    // Stall warning banner — shown inside active card when stall is detected
+    const _stallMsg = (!terminal && job) ? _detectStallSignal(job) : '';
+    let _stallBanner = activeCard.querySelector('.rcStallBanner');
+    if (_stallMsg) {
+      if (!_stallBanner) {
+        _stallBanner = document.createElement('div');
+        _stallBanner.className = 'rcStallBanner';
+        activeCard.appendChild(_stallBanner);
+      }
+      _stallBanner.textContent = _stallMsg;
+    } else if (_stallBanner) {
+      _stallBanner.remove();
+    }
 
     const cardJobTitle = qs('rc_card_job_title');
     const cardStatusBadge = qs('rc_card_status_badge');
@@ -3070,6 +3149,7 @@ function renderParts(items, summary){
     const errMsg  = st === 'failed' ? esc(p.message || '') : '';
     const errHtml = errMsg ? `<div class="partError">${errMsg}</div>` : '';
     const stuckHtml = isStuck ? `<div class="partStuckNote">${_stuckLabel(stuckMap.get(key))}</div>` : '';
+    const qualityBadgeHtml = st === 'done' ? _partQualityBadgeHtml(p) : '';
     const partNo = Number(p.part_no || idx + 1);
     const isMvTop = _ptTop3.has(partNo);
     const rowClass  = `${st || 'queued'}${isRun ? ' running isActive' : ''}${st === 'done' ? ' isDone' : ''}${st === 'failed' ? ' isFailed' : ''}${isStuck ? ' stuck' : ''}${isMvTop ? ' mvTop3' : ''}`.trim();
@@ -3098,7 +3178,7 @@ function renderParts(items, summary){
         <div>
           <div class="partName">${partName}</div>
           <div class="partMeta"><span class="clipDuration">${duration.toFixed(1)}s</span> | ${startSec.toFixed(1)}s–${endSec.toFixed(1)}s</div>
-          ${errHtml}${stuckHtml}
+          ${errHtml}${stuckHtml}${qualityBadgeHtml}
         </div>
       </div>
       <div class="partProgressCell">

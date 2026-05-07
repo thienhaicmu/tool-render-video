@@ -205,6 +205,7 @@ async function resumeRender(){
   setRenderFlowState('rendering', 'Resumed render', { force: true });
   addEvent('Resume queued', 'render');
   startPolling(currentJobId);
+  if (typeof _startQueueStatusPolling === 'function') _startQueueStatusPolling();
 }
 
 function _applyJobUpdate(job, parts, summary){
@@ -283,6 +284,7 @@ function _applyJobUpdate(job, parts, summary){
   if(isTerminal){
     _stopJobWs();
     if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+    if (typeof _stopQueueStatusPolling === 'function') _stopQueueStatusPolling();
     setRenderActionBusy(false);
     saveRenderHistoryEntry(job, s, parts);
     if(isFailed && currentJobId && lastFailLogJobId !== currentJobId){
@@ -652,6 +654,7 @@ async function _submitRenderPayload(payload, isBatch) {
   setHeaderJob('Render running');
   addEvent(isBatch ? `Queued render batch (${data.count || '?'} links)` : 'Queued render job', 'render');
   startPolling(currentJobId);
+  if (typeof _startQueueStatusPolling === 'function') _startQueueStatusPolling();
   return { ok: true, error: null };
 }
 

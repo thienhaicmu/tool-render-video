@@ -15538,3 +15538,68 @@ body.is-history-active #history_list {
 
 /* ── End clip playback experience ──────────────────────────────────────────── */
 
+/* ── P2-1: Render Queue / Progress UX additions ─────────────────────────────── */
+
+/* Render slot pill — "Slots: X / Y active" shown while render is active */
+#rc_slot_pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(59,130,246,.12);
+  border: 1px solid rgba(59,130,246,.25);
+  color: #93c5fd;
+  white-space: nowrap;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+#rc_slot_pill[data-active="0"] {
+  background: rgba(148,163,184,.08);
+  border-color: rgba(148,163,184,.18);
+  color: rgba(148,163,184,.65);
+}
+
+/* Stall warning banner inside the active render card */
+.rcStallBanner {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fcd34d;
+  background: rgba(180,83,9,.18);
+  border: 1px solid rgba(245,158,11,.35);
+  line-height: 1.4;
+  animation: none;
+}
+
+/* Quality issue badge shown on completed clips with quality penalties */
+.rcQualityBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(234,179,8,.12);
+  border: 1px solid rgba(234,179,8,.28);
+  color: #fde047;
+  margin-top: 3px;
+  cursor: default;
+}
+
+/* Status badge additions for completed_with_errors and stalled */
+.statusBadge.completed_with_errors {
+  background: rgba(245,158,11,.15);
+  color: #fcd34d;
+}
+.statusBadge.stalled,
+.statusBadge.timeout {
+  background: rgba(239,68,68,.15);
+  color: #f87171;
+}
+
+/* ── End P2-1 ─────────────────────────────────────────────────────────────── */
+
