@@ -41,7 +41,8 @@ desktop-shell/out/
 desktop-shell/.electron-builder/
 desktop-shell/.cache/
 desktop-shell/backend-bin/
-
+dist
+build
 # ================================================
 # Runtime data — generated at runtime, NOT source
 # ================================================
