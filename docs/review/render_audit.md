@@ -1,0 +1,701 @@
+# Render System — Full Architecture Audit
+
+> **Review-only. No code was modified.**
+> All findings are grounded in actual file content with exact line references.
+> Generated: 2026-05-07
+
+---
+
+## A. Executive Summary
+
+**Overall render system rating: 6.5 / 10**
+
+The render system is architecturally sound and shows genuine production thinking: NVENC semaphore design, probe caching, retry logic, structured output validation with blackdetect, a progress subsystem with heartbeat threading, and market-aware viral scoring. However, three years of accretion have left a split-module duplication problem that has **already caused a real codec flag divergence** between `render_engine.py` and `motion_crop.py`, a silent 16:9 dimension bug, a body-crop formula that was never finished, and zero automated tests.
+
+### Top 5 Risks
+
+| # | Risk | Severity |
+|---|------|----------|
+| 1 | `motion_crop._codec_flags()` missing `-maxrate 20M -bufsize 40M` → unbounded bitrate when motion-aware crop is active | HIGH |
+| 2 | `render_part()` aspect_ratio `"16:9"` falls to `else` branch → 1080×1440 portrait output instead of 1920×1080 landscape | HIGH |
+| 3 | Face vs body crop center formula identical (`cy = y + h * 0.34`) for both branches in `_subject_to_crop_center()` — body subjects framed wrong | MEDIUM |
+| 4 | Zero test suite — every regression is invisible, no smoke test for the entire pipeline | MEDIUM |
+| 5 | `_run_with_retry()` in `subtitle_engine.py` does not capture stderr → FFmpeg errors during audio extraction are silently discarded | MEDIUM |
+
+### Top 5 Upgrade Priorities
+
+1. **P0 — Fix 16:9 dimension bug** — `render_engine.py:839–844` — add explicit `elif "16:9"` branch
+2. **P0 — Fix `motion_crop._codec_flags()` divergence** — add missing `-maxrate`/`-bufsize` at lines 162–183
+3. **P0 — Fix body crop center formula** — `motion_crop.py:748–751` — `h * 0.34` → `h * 0.50` for body branch
+4. **P1 — Consolidate duplicate encoder helpers** — extract to `app/services/encoder_helpers.py`; both files import from it
+5. **P0 — Add smoke test suite** — 10 s reference clip: cut → subtitle → render → validate dimensions + duration
+
+---
+
+## B. Feature Health Matrix
+
+| Feature | Status | Evidence | Main Issue | Upgrade | Priority |
+|---------|--------|----------|------------|---------|----------|
+| Pipeline Orchestration | Acceptable | `render_pipeline.py:872–1718` | `_process_one_part` closure is ~400 lines inside `run_render_pipeline` | Extract to top-level `_render_one_part(ctx)` | P2 |
+| FFmpeg Encode (`render_part`) | **Risky** | `render_engine.py:798–1032` | 16:9 aspect ratio falls to `else` → 1080×1440 | Add explicit 16:9 branch | P0 |
+| FFmpeg Encode (motion crop path) | **Risky** | `motion_crop.py:154–183` vs `render_engine.py:218–257` | Missing `-maxrate 20M -bufsize 40M` on both libx264 and libx265 | Sync codec flags | P0 |
+| Codec / GPU Detection | **Risky** | Both files define `_has_encoder`, `_nvenc_runtime_ready`, `_map_preset_for_encoder` | 6-function duplication; divergence already present | Extract to `encoder_helpers.py` | P1 |
+| Output Validation | Good | `render_pipeline.py:591–823` | Duration tolerance 15% is generous for clips < 15s | Tighten for short clips | P2 |
+| Frame Extraction / Preview | Acceptable | `render.py:184–296`, `render_engine.py:45–117`, `motion_crop.py:244–280` | 3 separate probe implementations; `motion_crop.ffprobe_video_info()` not cached | Unify to single cached `probe_video_metadata()` | P1 |
+| Motion Crop / Subject Track | **Weak** | `motion_crop.py:730–770` | Face and body `cy` formula identical (`h*0.34`); body subjects mis-framed | Fix body formula to `h*0.50` | P0 |
+| Subtitle Transcription | Good | `subtitle_engine.py:263–`, `render_pipeline.py:1515–1597` | One-time full transcription with heartbeat thread; correct design | — | — |
+| SRT Slicing / ASS Conversion | Acceptable | `subtitle_engine.py:147–196` | `apply_playback_speed=False` is intentional; subtitles burned before `setpts` | Document explicitly | P3 |
+| Voice / TTS Mix | Needs Inspection | `tts_service.py`, `audio_mix_service.py` | Files outside review scope; timeout and failure visibility unclear | Separate targeted review | P1 |
+| Viral Scoring | Acceptable | `viral_scoring.py:1–743`, `render_pipeline.py:52–134` | Missing score defaults to 50 — masks real zero-score content | Differentiate absent vs neutral | P2 |
+| Output Ranking | Acceptable | `render_pipeline.py:184–236` | `is_best_clip` init to `False`; `continuity_score` in `ranking_components` but weight=0 | Confirm best-clip pass runs | P1 |
+| Render Queue / Progress | Acceptable | `render_pipeline.py:316–361` | No stall detection; parks at 85% when duration unknown | Add wall-clock stall threshold | P2 |
+| Frontend Render Payload | Acceptable | `schemas.py`, `render-ui.js` | `retry_count` unbounded; `whisper_model` resolves silently | Add schema bounds; expose in UI | P2 |
+| Test Coverage | **Risky** | `tests/` directory does not exist | Zero automated tests | Add smoke test | P0 |
+
+---
+
+## C. Deep Findings
+
+### 1. Render Pipeline Architecture
+
+**What exists:**
+`run_render_pipeline()` at `render_pipeline.py:872` is a single function orchestrating: download → scene detect → segment build → subtitle → per-part FFmpeg render → ranking → finalization. Parts run in `ThreadPoolExecutor` with `JOB_SEMAPHORE` (default 2, env `MAX_RENDER_JOBS`) at line 248.
+
+**What is good:**
+- `_set_stage()` at line 954 keeps DB progress consistent on every state transition
+- `_render_progress_timer()` at line 316 uses `stop_event.wait()` — wakes immediately on job completion, never drifts
+- `resume_from_last` logic at line 1630 skips already-done parts
+- `_emit_render_event()` at line 418 writes to 3 targets simultaneously: job log, app.log, error.log
+- `_render_error_code()` at line 401 classifies failure patterns into typed codes (RN001–RN006, VOICE001)
+
+**What is weak/risky:**
+- `_process_one_part` is an inner closure of ~400 lines (lines 1618–2100+). Closures this large capture too many outer-scope variables (`effective_channel`, `job_id`, `output_dir`, `source`, all payload fields), making unit testing impossible and refactors unsafe.
+- `_probe_video_duration()` at line 515 spawns a fresh `ffprobe` subprocess. The cached `probe_video_metadata()` from `render_engine.py` is never used here — redundant subprocess call.
+- If `ensure_channel()` at line 905 raises (filesystem permission), the job never reaches `upsert_job()` — DB shows `STARTING` forever.
+- No stall detection: if FFmpeg hangs silently, the progress timer increments to 99% and never fails the job.
+
+**Evidence:**
+```python
+# render_pipeline.py:515–527 — redundant probe, ignoring render_engine cache
+def _probe_video_duration(video_path: Path) -> int:
+    cmd = [get_ffprobe_bin(), "-v", "error", "-show_entries", "format=duration", ...]
+    try:
+        r = subprocess.run(cmd, ...)
+        return max(0, int(float((r.stdout or "0").strip() or 0)))
+    except Exception:
+        return 0
+```
+
+**Recommended upgrade:**
+- Extract `_process_one_part` to a module-level `_render_one_part(ctx: PartRenderContext)` dataclass
+- Replace `_probe_video_duration()` calls with `probe_video_metadata(path)["duration"]`
+- Add wall-clock stall timeout to progress timer
+
+**Files affected:** `render_pipeline.py`, `render_engine.py`
+**Risk: MEDIUM**
+
+---
+
+### 2. FFmpeg Render Quality
+
+**What exists:**
+`render_part()` at `render_engine.py:798` builds a VF chain:
+`scale+crop → zoom → canvas pad → [denoise] → effect → cinematic color → sharpen → format=yuv420p → fade → ass subtitle → title drawtext → text layers → setpts/speed → fps`
+
+**Critical bug — 16:9 aspect ratio:**
+```python
+# render_engine.py:839-844
+if aspect_ratio == "1:1":
+    target_w, target_h = 1080, 1080
+elif aspect_ratio == "9:16":
+    target_w, target_h = 1080, 1920
+else:  # "3:4", "4:5" AND "16:9" fall here — BUG
+    target_w, target_h = 1080, 1440
+```
+`"16:9"` is a valid schema value but produces 1080×1440 (portrait 3:4). Correct would be 1920×1080.
+
+**What is good:**
+- NVENC semaphore scoped with `with` at line 983 — releases before CPU fallback
+- CPU fallback at lines 992–1028 cleanly reconstructs the full command
+- `hqdn3d` denoiser gated on `veryslow/slower` only
+- `_cinematic_color_filter()` and `_cinematic_sharpen_filter()` skip sources below 480p at lines 314–327
+- BT.709 color metadata applied: `-colorspace`, `-color_primaries`, `-color_trc`
+- `force_accurate_cut` at `cut_video():461` handles keyframe-boundary inaccuracy
+
+**What is weak/risky:**
+- BGM filter_complex build (lines 945–967) is copy-pasted verbatim for the CPU fallback path at lines 1001–1027. Any mixing logic change must be made in both places.
+- `title_text` escaping at line 901 handles `\\`, `:`, `'` but not `%` or `{` — could corrupt `drawtext` filter on edge inputs.
+- No `-shortest` guard on the video/BGM amix `duration=first` path when source has no audio.
+
+**Files affected:** `render_engine.py`
+**Risk: HIGH (16:9 bug), LOW–MEDIUM (others)**
+
+---
+
+### 3. Frame Extraction / Preview / Thumbnail
+
+**Are there 2 separate frame extraction features? Yes — 3 probe functions and 2 blackdetect passes.**
+
+#### Feature 1: Editor Preview Transcode
+- **File:** `render.py:184–296` — `_probe_preview_profile()`, `_is_browser_safe_preview()`, `_ensure_h264_preview()`
+- **Purpose:** Convert any source to browser-safe H.264 for the Chromium editor preview
+- **Method:** Fresh ffprobe per call → transcode at `crf=28 veryfast` if needed
+- **Cache:** Single `preview_h264.mp4` per session dir (existence check at line 242)
+- **Status:** Correct and purpose-specific; keep as-is
+
+#### Feature 2: Cached General Probe (shared service)
+- **File:** `render_engine.py:45–117` — `probe_video_metadata()`
+- **Purpose:** `{duration, fps, has_audio, has_video, width, height}` for all pipeline stages
+- **Method:** One ffprobe JSON call, cached by `(abspath, mtime_ns, size_bytes)` at line 32
+- **Status:** The authoritative implementation; should be the single source of truth
+
+#### Feature 3: Motion Crop Direct Probe (should be eliminated)
+- **File:** `motion_crop.py:244–280` — `ffprobe_video_info()`
+- **Purpose:** Get `(width, height, fps)` for crop coordinate calculation
+- **Method:** Direct `subprocess.run(ffprobe ...)`, **NOT cached**
+- **Problem:** Duplicates `probe_video_metadata()` work; issues a new subprocess every call
+
+#### Blackdetect — 2 separate passes (both intentional):
+- **Source blackdetect:** `render_engine.detect_bad_first_frame():576` — scans clip start in source, returns seconds to skip
+- **Output blackdetect:** `render_pipeline._assess_output_quality():735` — scans first 0.5s of rendered output for validation
+- These serve different purposes and should both be kept.
+
+#### `has_audio_stream` — three implementations:
+| Location | Method | Cached? |
+|----------|--------|---------|
+| `subtitle_engine.py:246` | raw subprocess | No |
+| `motion_crop.py:283` | raw subprocess | No |
+| `render_engine.py:407` (`_has_audio_stream`) | wraps `probe_video_metadata()` | Yes |
+
+#### Which to keep / refactor:
+- `_ensure_h264_preview()` — **KEEP AS-IS** (different purpose: transcode not metadata)
+- `probe_video_metadata()` — **KEEP AND EXPAND** as the shared service
+- `ffprobe_video_info()` in motion_crop — **REFACTOR** to wrap `probe_video_metadata()`
+- `has_audio_stream()` in subtitle_engine and motion_crop — **REPLACE** with `render_engine._has_audio_stream()`
+
+#### Shared service proposal:
+```python
+# motion_crop.py — replace ffprobe_video_info() body:
+from app.services.render_engine import probe_video_metadata
+
+def ffprobe_video_info(video_path: str):
+    meta = probe_video_metadata(video_path)
+    fps = meta["fps"] if meta["fps"] > 0 else 30.0
+    return meta["width"], meta["height"], fps
+```
+4-line change. Zero API contract change. Eliminates redundant subprocesses.
+
+**UI/API impact:** None. `ffprobe_video_info()` is only called internally within `motion_crop.py`.
+
+**Files affected:** `motion_crop.py`, `subtitle_engine.py`, `render_engine.py`
+**Risk: MEDIUM**
+
+---
+
+### 4. Motion Crop / Auto Reframe
+
+**What exists:**
+`render_motion_aware_crop()` in `motion_crop.py` uses OpenCV Haar cascades for face/body detection at 16-frame intervals (`subject_detect_interval=16` at config line 40), with EMA smoothing and velocity-limited Gaussian temporal smoothing. Config in `MotionCropConfig` at line 27.
+
+**Critical bug — body crop center formula:**
+```python
+# motion_crop.py:748-751
+if subject_kind == "body":
+    cy = y + h * 0.34     # BUG: same as face — should be 0.50 for mid-body
+else:
+    cy = y + h * 0.34     # face: upper bias (correct for forehead/nose focus)
+```
+Both branches are identical. A detected body is framed as if it were a face — crop centers on upper chest/shoulder instead of visual mid-body. Clearly an unfinished refactor.
+
+**Codec flag divergence:**
+```python
+# motion_crop.py:178-183 — MISSING maxrate/bufsize
+return ["-crf", str(video_crf), "-profile:v", "high", "-level:v", "5.1",
+        "-tune", "film", "-x264-params", x264p]
+
+# render_engine.py:251-257 — CORRECT
+return ["-crf", ..., "-maxrate", "20M", "-bufsize", "40M",
+        "-profile:v", "high", ...]
+```
+Same divergence exists for libx265 (motion_crop.py:162–169 vs render_engine.py:235–242).
+
+**Duplicated encoder helpers (all 6 must be in sync):**
+| Function | render_engine.py | motion_crop.py |
+|----------|-----------------|----------------|
+| `_ffmpeg_encoders_text()` | line 142 | line 91 |
+| `_has_encoder()` | line 152 | line 101 |
+| `_nvenc_runtime_ready()` | line 156 | line 105 |
+| `_resolve_codec()` / `_resolve_encoder()` | line 200 | line 129 |
+| `_map_preset_for_encoder()` | line 260 | line 142 |
+| `_codec_extra_flags()` / `_codec_flags()` | line 218 | line 154 |
+| `_reup_video_filters()` | line 295 | line 186 |
+| `_reup_audio_filter()` | line 304 | line 194 |
+| `_safe_filter_path()` | line 412 | line 203 |
+| `_detect_windows_fontfile()` | line 416 | line 207 |
+| `_detect_windows_fonts_dir()` | line 432 | line 219 |
+| `_get_custom_fonts_dir()` | line 442 | line 227 |
+
+**What is good:**
+- Velocity limiter (`max_pan_speed_ratio=0.010`) prevents jitter at `_apply_velocity_limiter()`
+- Gaussian temporal smoothing (`window=45` frames) gives cinematic panning
+- Scene-cut detection resets tracking state at `scene_aware_tracking=True`
+- `lost_subject_hold_frames=45` prevents snap-to-center on momentary face loss
+- `motion_fallback=True` gracefully degrades to pixel-diff mode
+- `render_part_smart()` at `render_engine.py:1114` catches all exceptions and falls back to standard `render_part()`
+- NVENC semaphore pre-acquired at `render_engine.py:1077–1079` before passing to `render_motion_aware_crop` — no double-acquire risk
+
+**What is weak/risky:**
+- `ffprobe_video_info()` issues uncached subprocess
+- Codec flags diverged (missing maxrate/bufsize)
+- `subject_padding=0.55` not exposed in schema; users cannot control zoom level
+
+**Files affected:** `motion_crop.py`, `render_engine.py`
+**Risk: HIGH (codec flags, body formula)**
+
+---
+
+### 5. Subtitle Feature
+
+**What exists:**
+Full pipeline at `render_pipeline.py:1515–1597`:
+Whisper transcription (full video once) → `slice_srt_by_time()` per part → optional translation → optional hook text injection → `srt_to_ass_bounce()` or `srt_to_ass_karaoke()` → burn via `ass` FFmpeg filter.
+
+**What is good:**
+- Transcription is done **once** on the full source, then sliced per part — correct and efficient
+- Heartbeat thread at line 1539 emits progress every 12s during Whisper — prevents UI stall
+- `_MODEL_TRANSCRIBE_LOCKS` at `subtitle_engine.py:16` serializes concurrent Whisper calls per model — GPU-safe
+- `slice_srt_by_time()` at line 147 correctly handles overlap-clipping and zero-rebasing
+- `apply_playback_speed=False` at `render_pipeline.py:1750` is **correct by design**: subtitles are burned into pixels before `setpts` runs, so they automatically ride the frame through the speed change
+
+**What is weak/risky:**
+- `_run_with_retry()` at `subtitle_engine.py:211` uses bare `subprocess.run(command, check=True)` with no `capture_output`. FFmpeg errors during audio extraction are silently discarded.
+- If the full SRT write fails (disk full, permissions), `full_srt_available` becomes `False` and all parts silently render without subtitles — only a WARNING is emitted.
+- `_apply_subtitle_edits_to_srt()` at pipeline line 254 matches blocks by index + 0.5s timestamp tolerance. After translation, block indices can shift and edits apply to wrong blocks.
+- Karaoke fallback to bounce when segment-level SRT is detected is silent — no log, no UI warning.
+
+**Evidence:**
+```python
+# subtitle_engine.py:211-220 — stderr silently discarded on failure
+def _run_with_retry(command: list[str], retries: int = 2, wait_sec: float = 0.8):
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            return subprocess.run(command, check=True)  # no capture_output!
+        except Exception:
+            if attempt > retries:
+                raise
+            time.sleep(wait_sec * attempt)
+```
+
+**Files affected:** `subtitle_engine.py`, `render_pipeline.py`
+**Risk: MEDIUM**
+
+---
+
+### 6. Voice / Audio Feature
+
+**Evidence available from imports only:**
+```python
+# render_pipeline.py:35-36
+from app.services.tts_service import generate_narration_mp3
+from app.services.audio_mix_service import mix_narration_audio
+```
+`voice_enabled`, `voice_language`, `voice_gender`, `voice_source` are in the schema.
+`voice_source: "subtitle" | "translated_subtitle" | "manual"` routes to different narration text.
+
+**Needs Inspection:** Full behavior of timeout, per-part failure isolation, audio sync, and error visibility requires reading `tts_service.py` and `audio_mix_service.py`. These were not in the review scope.
+
+**Risk: UNKNOWN — P1 for separate targeted review**
+
+---
+
+### 7. Output Ranking / Market Viral
+
+**What exists:**
+Two-layer scoring:
+1. `viral_scoring.score_part_for_market()` — market-specific component scores
+2. `_compute_output_ranking_entry()` at `render_pipeline.py:184` — 6-component weighted combine
+
+```python
+# render_pipeline.py:197-204
+raw_score = (
+    segment_viral_score * 0.35
+    + hook_score * 0.20
+    + retention_score * 0.20
+    + speech_density_score * 0.10
+    + market_score * 0.10
+    + duration_fit_score * 0.05
+)
+```
+
+**What is good:**
+- Ranking weights are explicit and documented
+- `_output_ranking_reason()` at line 154 generates human-readable explanation strings
+- `_first_score()` at line 147 has multi-name alias fallback for legacy field names
+- `resolve_combined_score_weights()` at line 52 always normalizes to sum=1.0
+
+**What is weak/risky:**
+- `_score_component()` at line 137 returns `default=50.0` when a score is `None`. A part with **no** hook score (genuinely 0) is treated identically to a part with a **neutral** score (50). Failed scoring is indistinguishable from absent scoring.
+- `is_best_clip: False` and `is_best_output: False` initialized at line 219 — never set to `True` inside this function. The auto_best_export pass must run after ranking. If the job fails before that pass, all clips report `is_best_clip=False`.
+- `continuity_score` appears in `ranking_components` at line 213 but has **weight 0** in the raw_score formula. It influences reason strings but not the score — misleading.
+- Duration scoring Gaussian curves (US 70±18s, EU 95±25s, JP 50±15s) are hardcoded; no UI to adjust per campaign.
+
+**Files affected:** `render_pipeline.py`, `viral_scoring.py`
+**Risk: MEDIUM**
+
+---
+
+### 8. Render Queue / Progress / Logs
+
+**What exists:**
+Per-job DB progress via `upsert_job_part()`, background `_render_progress_timer` at `render_pipeline.py:316`, and `_emit_render_event()` writing structured JSON to 3 log destinations.
+
+**Progress timer design:**
+```python
+# render_pipeline.py:338-343
+while not stop_event.wait(timeout=_PROGRESS_TICK_SEC):   # 3.0s
+    elapsed = time.monotonic() - encode_start
+    if expected_duration > 0:
+        progress = min(99, 70 + int(30 * elapsed / expected_duration))
+    else:
+        progress = 85  # parks here forever when duration unknown
+```
+
+**What is good:**
+- `stop_event.wait()` pattern wakes immediately on completion — no polling lag
+- Progress clamped at 99%; caller always writes authoritative 100% after success
+- Log entries include `error_code`, `traceback`, `duration_ms`, `step` — machine-parseable
+- `_render_active_count` at line 251 tracks active render count
+
+**What is weak/risky:**
+- No stall detection. If FFmpeg hangs, progress parks at 85% (unknown duration) or interpolates to 99% and stays there. Job never auto-fails.
+- `_render_active_count` is maintained but never exposed via the API — UI cannot see queue depth.
+- Error codes RN001–RN006 and VOICE001 have no user-facing documentation.
+- Heartbeat during transcription ticks every 12s; during render the timer ticks every 3s — inconsistent granularity.
+
+**Files affected:** `render_pipeline.py`
+**Risk: MEDIUM**
+
+---
+
+### 9. Frontend Render Payload
+
+**Confirmed consumed fields from `schemas.py` and `render_pipeline.py`:**
+
+| Field | Consumed at | Notes |
+|-------|------------|-------|
+| `render_profile` | pipeline:487 | `fast/balanced/quality/best` |
+| `video_preset` / `video_crf` | pipeline:500–509 | override profile defaults |
+| `motion_aware_crop` / `reframe_mode` | render_part_smart | |
+| `add_subtitle` / `subtitle_style` | pipeline:1501, 1744 | |
+| `subtitle_viral_min_score` | pipeline:1492 | gates subtitle per part |
+| `hook_apply_enabled` / `hook_applied_text` | pipeline:898–903 | market viral hook |
+| `text_layers` | pipeline:1000 | validated at entry |
+| `resume_from_last` | pipeline:1602 | skip done parts |
+| `playback_speed` | render_engine:911 | clamped 0.5–1.5 |
+| `reup_mode` / `reup_bgm_*` | render_engine:931 | |
+
+**What is weak/risky:**
+- `retry_count` at pipeline line 950 is clamped `max(0, min(5, int(payload.retry_count)))` but the schema has no declared bounds — client can send arbitrary values.
+- `whisper_model` defaults to `"auto"` resolving silently per profile. Users never see which model is running.
+- `part_order="viral"` + `subtitle_only_viral_high=True` can silently render low-ranked parts without subtitles — no UI warning.
+- `render_output_subdir` required in channel mode is enforced at runtime (`RuntimeError` at pipeline line 906), not at request validation.
+- `edit_session_id` bypass at `render.py:132–134` skips all source validation; stale session returns confusing error instead of clean 404.
+
+**Files affected:** `schemas.py`, `render.py`, `render_pipeline.py`
+**Risk: LOW–MEDIUM**
+
+---
+
+### 10. Tests / QA Coverage
+
+**Existing tests:** Zero. The `tests/` directory does not exist.
+
+**Critical missing regression cases:**
+
+| Test | Guards |
+|------|--------|
+| `cut_video` duration tolerance | stream-copy vs re-encode fallback path |
+| 16:9 aspect ratio output dimensions | silent wrong-dimension render |
+| Motion crop fallback when no face/body | `motion_fallback=True` path |
+| Subtitle slicing at `playback_speed=1.5` | burn-in timing correctness |
+| NVENC semaphore release on encode failure | no GPU deadlock |
+| Output validation rejects empty file | `RN001` code fires |
+| Karaoke with segment-level SRT | silent fallback to bounce |
+| BGM mix with silent source | `amix`/`shortest` edge case |
+| 16:9 render post-fix regression | confirms fix |
+| Resume from last skips done parts | `resume_from_last=True` |
+
+---
+
+## D. Frame Extraction Special Review
+
+See Section C.3 above for full analysis.
+
+**Summary:**
+
+| | Feature 1 | Feature 2 | Feature 3 |
+|---|-----------|-----------|-----------|
+| **Name** | Editor Preview Transcode | Cached General Probe | Motion Crop Probe |
+| **File** | `render.py:184` | `render_engine.py:45` | `motion_crop.py:244` |
+| **Function** | `_ensure_h264_preview()` | `probe_video_metadata()` | `ffprobe_video_info()` |
+| **Cached?** | Yes (file on disk) | Yes (in-process dict) | **No** |
+| **Purpose** | Browser-safe preview | All metadata | Width/height/fps |
+| **Action** | Keep as-is | Keep and expand | Refactor to wrap Feature 2 |
+
+**Shared service:** `render_engine.probe_video_metadata()` — already exists, just needs to be imported by `motion_crop.py` and `subtitle_engine.py`.
+
+---
+
+## E. Recommended Upgrade Roadmap
+
+### P0 — Bug / Risk Fixes
+
+| Item | File | Location | Change |
+|------|------|----------|--------|
+| Fix 16:9 render dimensions | `render_engine.py` | 839–844 | Add `elif aspect_ratio == "16:9": target_w, target_h = 1920, 1080` |
+| Add maxrate/bufsize to motion_crop codec flags | `motion_crop.py` | 154–183 | Mirror `render_engine._codec_extra_flags()` maxrate/bufsize for both libx264 and libx265 |
+| Fix body crop center formula | `motion_crop.py` | 748–751 | Change body branch to `cy = y + h * 0.50` |
+| Fix `_run_with_retry` stderr capture | `subtitle_engine.py` | 211–220 | Add `capture_output=True`, propagate stderr on raise |
+| Add smoke test: cut → render → validate | new `tests/test_smoke.py` | — | 10s reference clip, assert correct dims, >10KB, non-zero duration |
+
+### P1 — Output Quality
+
+| Item | File | Action |
+|------|------|--------|
+| Replace `motion_crop.ffprobe_video_info()` | `motion_crop.py:244` | Wrap `probe_video_metadata()` |
+| Replace `has_audio_stream()` duplicates | `motion_crop.py:283`, `subtitle_engine.py:246` | Import `_has_audio_stream` from `render_engine.py` |
+| Consolidate 12 duplicate encoder helpers | `motion_crop.py:91–238` | Extract to `app/services/encoder_helpers.py` |
+| Review Voice / TTS service | `tts_service.py`, `audio_mix_service.py` | Confirm timeout, per-part isolation, failure visibility |
+| Confirm `is_best_clip` pass runs before final write | `render_pipeline.py` | Find auto_best_export pass; add assertion or log |
+| Replace `_probe_video_duration()` in pipeline | `render_pipeline.py:515` | Use `probe_video_metadata()["duration"]` |
+
+### P2 — Product UX
+
+| Item | Action |
+|------|--------|
+| Expose active Whisper model in progress UI | Surface `tuned["whisper_model"]` in progress event |
+| Add stall detection to progress timer | Wall-clock check: if elapsed > max(120, expected_duration × 10), fail the part |
+| Warn when `part_order=viral` + `subtitle_only_viral_high` silences parts | Emit `subtitle_skipped_viral_gate` WARNING event |
+| Show score breakdown in part card | `ranking_components` already in part record; just render in UI |
+| Make `render_output_subdir` schema-validated in channel mode | Add Pydantic validator in `RenderRequest` |
+| Add stall-suspected event at `progress=85` for unknown-duration jobs | Emit WARNING after 5 min at 85% |
+
+### P3 — Performance / Scale
+
+| Item | Action |
+|------|--------|
+| Reduce BGM filter duplication | Extract `_build_bgm_filter_complex()` helper; used in both GPU and CPU paths in `render_part()` |
+| Cache subtitle slice by (start, end, speed) | Skip re-slicing when SRT slice already exists at same params |
+| Profile Whisper on large sources | Evaluate `faster-whisper` or `whisper.cpp` for 2–4× speedup |
+| Expose `subject_padding` via schema | Add `motion_crop_subject_padding: float = 0.55` to `RenderRequest` |
+
+---
+
+## F. Do Not Touch List
+
+These systems are correctly designed and must not be changed unless a specific defect is confirmed:
+
+1. **`probe_video_metadata()` + `_PROBE_CACHE`** — `render_engine.py:45–117` — Caching strategy is correct; do not rewrite
+2. **`_run_ffmpeg_with_retry()`** — `render_engine.py:120–139` — Retry + stderr capture is clean; do not change signature
+3. **`_render_progress_timer()`** — `render_pipeline.py:316–361` — `stop_event.wait()` pattern is correct; do not convert to `time.sleep()`
+4. **`slice_srt_by_time()` with `apply_playback_speed=False`** — `render_pipeline.py:1750` — The burn-in-before-setpts design is intentional and correct; changing it will break subtitle sync
+5. **`NVENC_SEMAPHORE` scoping** — `render_engine.py:24`, `render_part_smart:1077–1112` — Pre-acquire before `render_motion_aware_crop` is correct; do not add a second acquire inside motion_crop
+6. **`_validate_render_output()` + `_assess_output_quality()`** — `render_pipeline.py:591–823` — Solid two-phase validation; do not collapse
+7. **`_apply_subtitle_edits_to_srt()`** — `render_pipeline.py:254–313` — The 0.5s tolerance guard and silent-skip design is intentional defensive behavior
+
+---
+
+## G. Patch Prompts
+
+### Patch Prompt 1 — Fix Frame Extraction Duplication
+
+```
+You are patching motion_crop.py and subtitle_engine.py to eliminate private ffprobe
+subprocesses in favour of the shared cached probe in render_engine.py.
+
+Context:
+- motion_crop.py:244–280 defines ffprobe_video_info() — fresh subprocess, not cached
+- motion_crop.py:283–292 defines has_audio_stream() — fresh subprocess, not cached
+- subtitle_engine.py:246–260 defines has_audio_stream() — fresh subprocess, not cached
+- render_engine.py:45–117 defines probe_video_metadata() — one subprocess, cached by
+  (abspath, mtime_ns, size_bytes); render_engine._has_audio_stream() wraps it
+
+Tasks:
+1. In motion_crop.py, add at the top:
+     from app.services.render_engine import probe_video_metadata, _has_audio_stream
+2. Replace ffprobe_video_info() body (lines 244–280) with:
+     def ffprobe_video_info(video_path: str):
+         meta = probe_video_metadata(video_path)
+         fps = meta["fps"] if meta["fps"] > 0 else 30.0
+         return meta["width"], meta["height"], fps
+3. Replace motion_crop.has_audio_stream() (lines 283–292) with:
+     has_audio_stream = _has_audio_stream
+4. In subtitle_engine.py, replace has_audio_stream() (lines 246–260) similarly:
+     from app.services.render_engine import _has_audio_stream as has_audio_stream
+5. Render a test clip with motion_aware_crop=True and confirm no double ffprobe
+   subprocess appears in the debug log.
+
+Do not modify render_engine.probe_video_metadata().
+Do not change any function signatures visible outside these files.
+```
+
+---
+
+### Patch Prompt 2 — Fix Render Output Validation
+
+```
+You are strengthening render output validation in render_pipeline.py and adding
+stall detection to the progress timer.
+
+Current problems:
+- _validate_render_output() uses 15% duration tolerance for all clips — too loose for
+  short clips (e.g., 10s clip allows ±1.5s error).
+- _render_progress_timer() parks at 85% forever when expected_duration is unknown and
+  never fails a stalled job.
+- _assess_output_quality() computes score_penalty but never acts on it.
+
+Tasks:
+1. In _validate_render_output() at line 680:
+   Replace: tolerance = max(1.0, expected_duration * 0.15)
+   With:    tolerance = max(0.5, min(expected_duration * 0.15, 3.0))
+   (tightens for short clips, caps at 3.0s for long clips)
+
+2. In _render_progress_timer() at line 316, add a stall guard:
+   After the loop starts, compute:
+     stall_deadline = encode_start + max(120.0, (expected_duration or 60.0) * 10)
+   Inside the while loop, check:
+     if time.monotonic() > stall_deadline:
+         try:
+             upsert_job_part(..., status=JobPartStage.FAILED, ...,
+                             message="Render stall detected: wall-clock timeout exceeded")
+             _emit_render_event(..., event="render.stall_detected", level="WARNING", ...)
+         except Exception:
+             pass
+         stop_event.set()
+         break
+
+3. In the _process_one_part caller of _assess_output_quality(), after receiving the
+   quality_result dict, if quality_result["score_penalty"] > 20:
+     log a WARNING via _emit_render_event with the warnings list
+
+Do not change _validate_render_output() signature.
+Do not remove any existing checks.
+```
+
+---
+
+### Patch Prompt 3 — Fix Motion Crop Quality
+
+```
+You are fixing two bugs in motion_crop.py and adding the missing codec bitrate flags.
+
+Bug 1 — Body crop center formula (line 748–751):
+  Both face and body branches compute cy = y + h * 0.34.
+  For a detected body subject, the crop should center at mid-body, not near the top.
+  Fix:
+    if subject_kind == "body":
+        cy = y + h * 0.50    # mid-body center
+    else:
+        cy = y + h * 0.34    # face: slight upward bias for forehead
+
+Bug 2 — Missing bitrate cap for libx265 (motion_crop.py:162–169):
+  Current:
+    return ["-crf", str(video_crf), "-tag:v", "hvc1", "-x265-params", x265p]
+  Fix: add "-maxrate", "20M", "-bufsize", "40M" before "-tag:v":
+    return ["-crf", str(video_crf), "-maxrate", "20M", "-bufsize", "40M",
+            "-tag:v", "hvc1", "-x265-params", x265p]
+
+Bug 3 — Missing bitrate cap for libx264 (motion_crop.py:178–183):
+  Current:
+    return ["-crf", str(video_crf), "-profile:v", "high", ...]
+  Fix: add "-maxrate", "20M", "-bufsize", "40M":
+    return ["-crf", str(video_crf), "-maxrate", "20M", "-bufsize", "40M",
+            "-profile:v", "high", "-level:v", "5.1", "-tune", "film",
+            "-x264-params", x264p]
+
+After fixing, verify by rendering a high-motion clip with motion_aware_crop=True
+and checking the output file size is consistent with standard render_part() output.
+Do not change MotionCropConfig or any function visible outside motion_crop.py.
+```
+
+---
+
+### Patch Prompt 4 — Fix Subtitle Robustness
+
+```
+You are fixing subtitle reliability issues in subtitle_engine.py and render_pipeline.py.
+
+Fix 1 — Capture stderr in _run_with_retry (subtitle_engine.py:211–220):
+  Current:
+    return subprocess.run(command, check=True)
+  Replace with:
+    result = subprocess.run(command, check=True, capture_output=True, text=True)
+  On CalledProcessError, re-raise with context:
+    except subprocess.CalledProcessError as exc:
+        if attempt > retries:
+            stderr_tail = (exc.stderr or "")[-1000:].strip()
+            raise RuntimeError(
+                f"FFmpeg failed (exit={exc.returncode})"
+                + (f": {stderr_tail}" if stderr_tail else "")
+            ) from exc
+
+Fix 2 — Log karaoke→bounce fallback:
+  In srt_to_ass_karaoke(), when it falls back to bounce because word-level timing
+  is missing, add before the fallback return:
+    logger.warning("srt_to_ass_karaoke: segment-level SRT detected; falling back to bounce style")
+
+Fix 3 — Warn on subtitle_edits misalignment after translation (render_pipeline.py):
+  After translate_srt_file() succeeds (around line 1812) and _sub_edits is non-empty:
+    if _sub_edits:
+        _emit_render_event(..., event="subtitle_edits_may_misalign", level="WARNING",
+            message="subtitle_edits applied after translation; index alignment is best-effort")
+
+Do not change the public signatures of srt_to_ass_bounce() or srt_to_ass_karaoke().
+Do not alter the apply_playback_speed=False design — it is intentional.
+```
+
+---
+
+### Patch Prompt 5 — Improve Render Queue / Progress UI
+
+```
+You are adding stall visibility and queue depth to the render progress system.
+
+Backend changes (render_pipeline.py):
+
+1. Add a new GET endpoint to render.py at /api/render/queue-status:
+   @router.get("/queue-status")
+   def queue_status():
+       from app.orchestration.render_pipeline import _render_active_count, _JOB_SEM_VALUE
+       with _render_active_lock:
+           active = _render_active_count[0]
+       return {"active_renders": active, "max_renders": _JOB_SEM_VALUE}
+
+2. In _render_progress_timer (render_pipeline.py:316), when expected_duration <= 0
+   and time.monotonic() - encode_start > 300:
+     emit a WARNING event with event="render.stall_suspected":
+       _emit_render_event(..., event="render.stall_suspected", level="WARNING",
+           message=f"Render has been running {elapsed:.0f}s with unknown duration")
+   Emit at most once per job (use a local flag inside the timer).
+
+3. After _assess_output_quality() returns, if quality_warnings is non-empty, include
+   them in the final upsert_job_part() call so the UI can display them per-part.
+
+Frontend changes (render-ui.js or render-engine.js):
+
+4. Poll /api/render/queue-status every 10s when an active render is detected.
+   Display "X of Y render slots active" in the status bar.
+   Stop polling when no renders are active.
+
+5. When a part record includes quality_warnings, show a yellow badge "⚠ Quality" on
+   the part card with a tooltip listing the warning strings.
+
+Do not add polling when no render job is active.
+Do not change the _render_progress_timer stop_event pattern.
+```
+
+---
+
+*End of audit. No code was modified. All file:line references are based on direct reads performed during this session.*
