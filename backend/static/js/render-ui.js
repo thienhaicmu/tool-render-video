@@ -1274,7 +1274,7 @@ function updateOutputPreview(job, parts) {
   }
 
   const partNo = Number(targetPart.part_no);
-  const previewUrl = `/api/jobs/${jobId}/parts/${partNo}/stream`;
+  const previewUrl = `/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/media`;
   const outputFile = String(targetPart.output_file || '');
   const fileName = outputFile.replace(/\\/g, '/').split('/').pop() || `clip-${partNo}.mp4`;
   const outDir = outputFile.replace(/\\/g, '/').split('/').slice(0, -1).join('/');
@@ -2210,7 +2210,7 @@ function getCompareOutputCandidates() {
     .map((e) => {
       const partNo = e.firstPartNo ?? null;
       const canPreview = partNo != null;
-      const previewUrl = canPreview ? `/api/jobs/${e.jobId}/parts/${partNo}/stream` : null;
+      const previewUrl = canPreview ? `/api/render/jobs/${encodeURIComponent(e.jobId)}/parts/${partNo}/media` : null;
       const label = (e.totalParts > 1 && partNo != null)
         ? `${e.title} · Part ${partNo}`
         : e.title || 'Render';
@@ -3407,7 +3407,7 @@ function centerPreviewClip(jobId, partNo, outputFile, partName) {
   const dlLink = qs('cs_preview_download');
   if (!area || !video) return;
 
-  const src = `/api/jobs/${encodeURIComponent(jobId)}/parts/${Number(partNo)}/stream`;
+  const src = `/api/render/jobs/${encodeURIComponent(jobId)}/parts/${Number(partNo)}/media`;
   const srcChanged = video.dataset.previewSrc !== src;
 
   if (srcChanged) {
@@ -3562,7 +3562,7 @@ function populateRenderOutputPanel(job, parts) {
     const hasScore = !!(rk.rank || rk.score);
     const scoreTier = scoreVal >= 8 ? 'high' : scoreVal >= 6 ? 'mid' : scoreVal >= 4 ? 'low' : 'weak';
     const thumbHtml = isDone && hasFile && jobId
-      ? `<video class="clipCardThumbVid" src="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream#t=1" preload="metadata" muted playsinline></video>`
+      ? `<video class="clipCardThumbVid" src="/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/media#t=1" preload="metadata" muted playsinline></video>`
       : `<div class="clipCardThumbPlaceholder">${isFailed ? '✗' : isSkipped ? '—' : '⋯'}</div>`;
     const thumbAttrs = (isDone && hasFile && jobId)
       ? ` data-previewable="true" onclick="centerPreviewClip(${JSON.stringify(jobId)},${partNo},${JSON.stringify(p.output_file || '')},${JSON.stringify(p.part_name || `Clip ${partNo}`)})" style="cursor:pointer"`
@@ -3640,7 +3640,7 @@ function previewClip(jobId, partNo) {
   if (!modal || !video) return;
   _previewCurrentJobId = jobId;
   _previewCurrentPartNo = partNo;
-  const src = `/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream`;
+  const src = `/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/media`;
   if (title) title.textContent = `Clip ${partNo}`;
   video.src = src;
   video.load();
