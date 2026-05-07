@@ -15444,3 +15444,97 @@ body.is-history-active #history_list {
 }
 /* ── End render confidence polish ──────────────────────────────────────────── */
 
+/* ── Clip playback experience ──────────────────────────────────────────────── */
+
+/* Loading spinner overlay */
+.csPreviewLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 220px;
+  background: #000;
+}
+
+@keyframes csPreviewSpin {
+  to { transform: rotate(360deg); }
+}
+
+.csPreviewSpinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(148, 163, 184, 0.15);
+  border-top-color: rgba(96, 165, 250, 0.75);
+  border-radius: 50%;
+  animation: csPreviewSpin 0.8s linear infinite;
+}
+
+/* Error state — replaces broken browser video UI */
+.csPreviewError {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 160px;
+  padding: 24px 20px;
+  font-size: 12px;
+  color: rgba(248, 113, 113, 0.8);
+  text-align: center;
+  line-height: 1.5;
+  background: #000;
+}
+
+/* Info row: name + meta chips */
+.csPreviewInfo {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+/* Override old direct flex on .csPreviewName since it's now inside .csPreviewInfo */
+.csPreviewName {
+  flex: unset;
+  min-width: unset;
+}
+
+/* Duration / score meta chips */
+.csPreviewMeta {
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.5);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Aspect-aware video container — portrait clips get centred in a constrained column */
+.csPreviewArea[data-aspect="9:16"] .csPreviewVideoWrap,
+.csPreviewArea[data-aspect="4:5"] .csPreviewVideoWrap,
+.csPreviewArea[data-aspect="3:4"] .csPreviewVideoWrap {
+  justify-content: center;
+}
+
+.csPreviewArea[data-aspect="9:16"] .csPreviewVideo {
+  max-height: 480px;
+  width: auto;
+  max-width: 100%;
+}
+
+.csPreviewArea[data-aspect="4:5"] .csPreviewVideo,
+.csPreviewArea[data-aspect="3:4"] .csPreviewVideo {
+  max-height: 420px;
+  width: auto;
+  max-width: 100%;
+}
+
+.csPreviewArea[data-aspect="1:1"] .csPreviewVideo {
+  max-height: 360px;
+  width: auto;
+  max-width: 100%;
+}
+
+/* ── End clip playback experience ──────────────────────────────────────────── */
+

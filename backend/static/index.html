@@ -364,10 +364,15 @@
       <div id="cs_preview_area" class="csPreviewArea hiddenView">
         <div class="csPreviewVideoWrap">
           <div id="cs_preview_empty" class="csPreviewEmpty">Select a clip to preview.</div>
-          <video id="cs_preview_video" class="csPreviewVideo hiddenView" controls preload="metadata"></video>
+          <div id="cs_preview_loading" class="csPreviewLoading hiddenView"><div class="csPreviewSpinner"></div></div>
+          <div id="cs_preview_error" class="csPreviewError hiddenView"></div>
+          <video id="cs_preview_video" class="csPreviewVideo hiddenView" controls preload="metadata" muted playsinline></video>
         </div>
         <div id="cs_preview_bar" class="csPreviewBar hiddenView">
-          <span id="cs_preview_name" class="csPreviewName"></span>
+          <div class="csPreviewInfo">
+            <span id="cs_preview_name" class="csPreviewName"></span>
+            <span id="cs_preview_meta" class="csPreviewMeta"></span>
+          </div>
           <div class="csPreviewActions">
             <a id="cs_preview_download" class="clipCardBtn renderClipActionLink" download>Download</a>
             <button id="cs_preview_folder" class="clipCardBtn" type="button" onclick="openCsPreviewFolder()">Folder</button>

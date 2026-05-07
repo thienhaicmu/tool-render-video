@@ -3365,8 +3365,12 @@ function _resetCsPreview() {
   const video = qs('cs_preview_video');
   const bar = qs('cs_preview_bar');
   const empty = qs('cs_preview_empty');
-  if (video) { video.pause(); video.src = ''; video.classList.add('hiddenView'); }
+  const loading = qs('cs_preview_loading');
+  const error = qs('cs_preview_error');
+  if (video) { video.pause(); video.src = ''; video.dataset.previewSrc = ''; video.classList.add('hiddenView'); }
   if (bar) bar.classList.add('hiddenView');
+  if (loading) loading.classList.add('hiddenView');
+  if (error) { error.textContent = ''; error.classList.add('hiddenView'); }
   if (empty) empty.classList.remove('hiddenView');
   _csPreviewJobId = null;
   _csPreviewPartNo = null;
@@ -3396,28 +3400,77 @@ function centerPreviewClip(jobId, partNo, outputFile, partName) {
   const video = qs('cs_preview_video');
   const bar = qs('cs_preview_bar');
   const empty = qs('cs_preview_empty');
+  const loading = qs('cs_preview_loading');
+  const errorEl = qs('cs_preview_error');
   const nameEl = qs('cs_preview_name');
+  const metaEl = qs('cs_preview_meta');
   const dlLink = qs('cs_preview_download');
   if (!area || !video) return;
 
   const src = `/api/jobs/${encodeURIComponent(jobId)}/parts/${Number(partNo)}/stream`;
-  if (video.dataset.previewSrc !== src) {
+  const srcChanged = video.dataset.previewSrc !== src;
+
+  if (srcChanged) {
+    video.pause();
+    video.src = '';
     video.dataset.previewSrc = src;
+    // Reset to loading state
+    if (empty) empty.classList.add('hiddenView');
+    if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hiddenView'); }
+    video.classList.add('hiddenView');
+    if (loading) loading.classList.remove('hiddenView');
+
+    video.addEventListener('canplay', function onCanPlay() {
+      if (loading) loading.classList.add('hiddenView');
+      video.classList.remove('hiddenView');
+      video.muted = true;
+      video.play().catch(() => {});
+    }, { once: true });
+
+    video.addEventListener('error', function onError() {
+      if (loading) loading.classList.add('hiddenView');
+      video.classList.add('hiddenView');
+      if (errorEl) {
+        errorEl.textContent = 'Preview unavailable — file may have moved or is still processing.';
+        errorEl.classList.remove('hiddenView');
+      }
+    }, { once: true });
+
     video.src = src;
     video.load();
+  } else {
+    // Same source — ensure visible, hide loading/error overlays
+    if (empty) empty.classList.add('hiddenView');
+    if (loading) loading.classList.add('hiddenView');
+    if (errorEl) errorEl.classList.add('hiddenView');
+    video.classList.remove('hiddenView');
   }
 
-  if (empty) empty.classList.add('hiddenView');
-  video.classList.remove('hiddenView');
-
-  if (nameEl) nameEl.textContent = String(partName || `Clip ${partNo}`);
+  // Enrich bar with metadata from part record
+  const part = (_renderMonitorLastParts || []).find((p) => Number(p.part_no) === Number(partNo));
+  if (nameEl) nameEl.textContent = String(part?.part_name || partName || `Clip ${partNo}`);
+  if (metaEl) {
+    const chunks = [];
+    if (part) {
+      const dur = Number(part.end_sec || 0) - Number(part.start_sec || 0);
+      if (dur > 0) chunks.push(`${Math.round(dur)}s`);
+      const score = Number(part.score ?? part.viral_score ?? part.quality_score ?? NaN);
+      if (!isNaN(score) && score > 0) chunks.push(`Score ${score.toFixed(1)}`);
+    }
+    metaEl.textContent = chunks.join(' · ');
+  }
   if (dlLink) { dlLink.href = src; dlLink.setAttribute('download', `clip-${partNo}.mp4`); }
+
+  // Aspect ratio from selected card
+  const card = document.querySelector(`.clipCard[data-part-no="${Number(partNo)}"]`);
+  const aspect = card?.dataset?.aspect || '16:9';
+  area.dataset.aspect = aspect;
+
   if (bar) bar.classList.remove('hiddenView');
   area.classList.remove('hiddenView');
   area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   document.querySelectorAll('.clipCard.isPreviewActive').forEach((el) => el.classList.remove('isPreviewActive'));
-  const card = document.querySelector(`.clipCard[data-part-no="${Number(partNo)}"]`);
   if (card) card.classList.add('isPreviewActive');
 }
 
