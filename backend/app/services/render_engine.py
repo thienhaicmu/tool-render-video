@@ -221,12 +221,14 @@ def _codec_extra_flags(resolved_codec: str, video_crf: int, video_preset: str = 
     if c == "hevc_nvenc":
         return [
             "-rc", "vbr_hq", "-cq", str(video_crf), "-b:v", "0",
+            "-maxrate", "20M", "-bufsize", "40M",
             "-spatial_aq", "1", "-temporal_aq", "1", "-aq-strength", "8",
             "-rc-lookahead", "32", "-bf", "4",
         ]
     if c == "h264_nvenc":
         return [
             "-rc", "vbr_hq", "-cq", str(video_crf), "-b:v", "0",
+            "-maxrate", "20M", "-bufsize", "40M",
             "-spatial_aq", "1", "-temporal_aq", "1", "-aq-strength", "8",
             "-rc-lookahead", "32", "-bf", "3",
         ]
@@ -237,7 +239,7 @@ def _codec_extra_flags(resolved_codec: str, video_crf: int, video_preset: str = 
             x265p = "aq-mode=3:aq-strength=0.8:deblock=-1,-1:rc-lookahead=40:ref=4:bframes=4"
         else:
             x265p = "aq-mode=2:rc-lookahead=20:ref=3:bframes=3"
-        return ["-crf", str(video_crf), "-tag:v", "hvc1", "-x265-params", x265p]
+        return ["-crf", str(video_crf), "-maxrate", "20M", "-bufsize", "40M", "-tag:v", "hvc1", "-x265-params", x265p]
 
     # libx264 — tiered by preset
     if p in ("veryslow", "slower"):
@@ -248,6 +250,7 @@ def _codec_extra_flags(resolved_codec: str, video_crf: int, video_preset: str = 
         x264p = "ref=3:bframes=2:me=hex:subme=6:trellis=0:aq-mode=2"
     return [
         "-crf", str(video_crf),
+        "-maxrate", "20M", "-bufsize", "40M",
         "-profile:v", "high", "-level:v", "5.1",
         "-tune", "film",
         "-x264-params", x264p,
@@ -308,11 +311,32 @@ def _reup_audio_filter() -> str:
     )
 
 
+def _cinematic_color_filter(src_h: int) -> "str | None":
+    """Very subtle contrast/saturation lift to prevent flat-looking output after recompression.
+    Disabled for sources below 480p to avoid compounding on already-processed low-res content."""
+    if 0 < src_h < 480:
+        return None
+    return "eq=contrast=1.02:saturation=1.03"
+
+
+def _cinematic_sharpen_filter(src_h: int) -> "str | None":
+    """Subtle luma-only edge sharpening to survive social platform recompression.
+    Disabled for sources below 480p — halo artifacts appear on noisy/low-res content."""
+    if 0 < src_h < 480:
+        return None
+    return "unsharp=5:5:0.4:5:5:0.0"
+
+
 def _build_audio_filter(loudnorm_enabled: bool, reup_mode: bool, speed: float) -> str | None:
     """Return a comma-joined -af filter string, or None when no audio processing is needed."""
     parts = []
     if loudnorm_enabled and not reup_mode:
+        # Creator-grade audio polish: rumble removal → loudness target → gentle compression → limiter.
+        # acompressor ratio=2 at -18dB threshold: natural dynamic control without pumping.
+        parts.append("highpass=f=80")
         parts.append("loudnorm=I=-16:LRA=11:TP=-1.5")
+        parts.append("acompressor=threshold=-18dB:ratio=2:attack=40:release=300:makeup=1.5")
+        parts.append("alimiter=limit=0.95")
     if reup_mode:
         parts.append(_reup_audio_filter())
     if abs(speed - 1.0) > 1e-4:
@@ -749,7 +773,7 @@ def apply_micro_pacing(
         "-i", input_path,
         "-filter_complex", filter_complex,
         *map_args,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "17",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         *audio_args,
@@ -784,8 +808,8 @@ def render_part(
     effect_preset: str = "slay_soft_01",
     transition_sec: float = 0.06,
     video_codec: str = "h264",
-    video_crf: int = 20,
-    video_preset: str = "medium",
+    video_crf: int = 18,
+    video_preset: str = "slow",
     audio_bitrate: str = "192k",
     retry_count: int = 2,
     encoder_mode: str = "auto",
@@ -802,6 +826,15 @@ def render_part(
     ffmpeg_threads: int | None = None,
 ):
     preset_low = (video_preset or "").lower()
+    _src_meta = probe_video_metadata(input_path)
+    _src_h = _src_meta.get("height", 0)
+    _src_w = _src_meta.get("width", 0)
+    _low_quality_source = 0 < _src_h < 480
+    logger.info("source_quality_detected src=%dx%d low_quality=%s", _src_w, _src_h, _low_quality_source)
+    if _low_quality_source:
+        logger.info("cinematic_pass_reduced_for_low_quality_source src=%dx%d", _src_w, _src_h)
+    if loudnorm_enabled and not reup_mode:
+        logger.info("audio_polish_enabled audio_loudnorm_applied=True")
     sws = "lanczos" if preset_low in ("slower", "veryslow") else "bicubic"
     if aspect_ratio == "1:1":
         target_w, target_h = 1080, 1080
@@ -837,8 +870,20 @@ def render_part(
             opacity = max(0.01, min(0.20, float(reup_overlay_opacity or 0.08)))
             vf_parts.append(f"drawbox=x=0:y=0:w=iw:h=ih:color=black@{opacity}:t=fill")
     else:
-        # Normal mode: apply creative effect filter
+        # Normal mode: creative effect filter then cinematic finishing passes
         vf_parts.append(_effect_filter(effect_preset))
+        _color_filter = _cinematic_color_filter(_src_h)
+        _sharpen_filter = _cinematic_sharpen_filter(_src_h)
+        if _color_filter:
+            vf_parts.append(_color_filter)
+            logger.debug("cinematic_color_pass_enabled src=%dx%d", _src_w, _src_h)
+        else:
+            logger.debug("cinematic_color_pass_skipped reason=low_quality_source src=%dx%d", _src_w, _src_h)
+        if _sharpen_filter:
+            vf_parts.append(_sharpen_filter)
+            logger.debug("subtle_sharpen_enabled src=%dx%d", _src_w, _src_h)
+        else:
+            logger.debug("subtle_sharpen_skipped reason=low_quality_source src=%dx%d", _src_w, _src_h)
     vf_parts.append("format=yuv420p")
     if transition_sec and transition_sec > 0:
         # Cap at 0.08 s — long fades look cheap on short-form content.
@@ -877,6 +922,12 @@ def render_part(
 
     resolved_codec = _resolve_codec(video_codec, encoder_mode=encoder_mode)
     resolved_preset = _map_preset_for_encoder(video_preset, resolved_codec)
+    logger.info(
+        "encoder_profile_selected codec=%s preset=%s encoder_quality_mode=%s encoder_crf_or_cq=%d",
+        resolved_codec, resolved_preset,
+        "nvenc" if resolved_codec in ("h264_nvenc", "hevc_nvenc") else "cpu",
+        video_crf,
+    )
     bgm_path = str(reup_bgm_path or "").strip()
     bgm_ok = reup_bgm_enable and bgm_path and Path(bgm_path).is_file()
     input_has_audio = _has_audio_stream(input_path)
@@ -996,8 +1047,8 @@ def render_part_smart(
     effect_preset: str = "slay_soft_01",
     transition_sec: float = 0.06,
     video_codec: str = "h264",
-    video_crf: int = 20,
-    video_preset: str = "medium",
+    video_crf: int = 18,
+    video_preset: str = "slow",
     audio_bitrate: str = "192k",
     retry_count: int = 2,
     encoder_mode: str = "auto",
