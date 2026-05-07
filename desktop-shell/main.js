@@ -27,7 +27,9 @@ const BOOTSTRAP_STATE_FILE = path.join(DATA_DIR, 'state', 'bootstrap-state.json'
 const BOOTSTRAP_VERSION = 2;
 
 let mainWindow = null;
+let splashWindow = null;
 let backendProc = null;
+let isQuitting = false;
 
 function ensureLogDir() {
   fs.mkdirSync(path.dirname(BACKEND_LOG_FILE), { recursive: true });
@@ -96,6 +98,80 @@ async function findSystemPython() {
   return null;
 }
 
+// ── Splash window ─────────────────────────────────────────────────────────────
+
+let _lastSplashMsg = '';
+
+function createSplash() {
+  splashWindow = new BrowserWindow({
+    width: 420,
+    height: 260,
+    frame: false,
+    alwaysOnTop: true,
+    center: true,
+    resizable: false,
+    skipTaskbar: true,
+    backgroundColor: '#0f172a',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+  splashWindow.loadFile(path.join(__dirname, 'splash.html'));
+  splashWindow.on('closed', () => { splashWindow = null; });
+  // Replay the last queued status once the renderer is ready to receive IPC.
+  splashWindow.webContents.on('did-finish-load', () => {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.webContents.send('boot-version', app.getVersion());
+      if (_lastSplashMsg) {
+        splashWindow.webContents.send('boot-status', _lastSplashMsg);
+      }
+    }
+  });
+}
+
+function sendSplash(message) {
+  _lastSplashMsg = message;
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.webContents.send('boot-status', message);
+  }
+}
+
+function closeSplash() {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.close();
+    splashWindow = null;
+  }
+}
+
+// ── Error message mapping ─────────────────────────────────────────────────────
+
+function mapErrorToCreatorMessage(rawMsg) {
+  const msg = String(rawMsg || '');
+  if (msg.includes('EADDRINUSE') || msg.includes('address already in use')) {
+    return 'Another instance of Render Studio is already running.\n\nClose it and try again.';
+  }
+  if (app.isPackaged) {
+    if (msg.includes('exit code') || msg.includes('ENOENT') || msg.includes('spawn')) {
+      return 'The render engine could not start. Please restart the app.\n\nIf this keeps happening, re-install Render Studio.';
+    }
+    return 'The render engine did not start in time. Please restart the app.';
+  }
+  if (msg.includes('Python') || msg.includes('python')) {
+    return `Python 3.11+ not found on this machine.\n\nInstall Python from python.org and restart.\n\nDetails: ${msg}`;
+  }
+  if (msg.includes('pip') || msg.includes('requirements')) {
+    return `Failed to install Python dependencies.\n\nCheck internet connection and retry.\n\nDetails: ${msg}`;
+  }
+  if (msg.includes('playwright') || msg.includes('Playwright')) {
+    return `Failed to install browser engine (Playwright).\n\nCheck internet connection and retry.\n\nDetails: ${msg}`;
+  }
+  return `Could not start render engine.\n\n${msg}`;
+}
+
+// ── Bootstrap: Python env + pip + playwright ──────────────────────────────────
+
 async function ensureBackendBootstrap() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const reqHash = requirementsHash();
@@ -106,6 +182,7 @@ async function ensureBackendBootstrap() {
     && fs.existsSync(BACKEND_VENV_PY);
   if (alreadyReady) return;
 
+  sendSplash('Setting up video tools (first run)...');
   appendBootstrapLog('Bootstrap start: creating/updating Python environment');
   const sysPy = await findSystemPython();
   if (!sysPy) {
@@ -113,6 +190,7 @@ async function ensureBackendBootstrap() {
   }
 
   if (!fs.existsSync(BACKEND_VENV_PY)) {
+    sendSplash('Creating workspace environment...');
     appendBootstrapLog(`Creating venv with ${sysPy}`);
     const mk = await runCommand(sysPy, ['-m', 'venv', VENV_DIR], { cwd: DATA_DIR });
     if (mk.code !== 0) {
@@ -120,12 +198,14 @@ async function ensureBackendBootstrap() {
     }
   }
 
+  sendSplash('Installing video tools (this may take a few minutes on first run)...');
   appendBootstrapLog('Installing Python requirements');
   const pipInstall = await runCommand(BACKEND_VENV_PY, ['-m', 'pip', 'install', '-r', BACKEND_REQ_FILE], { cwd: BACKEND_DIR });
   if (pipInstall.code !== 0) {
     throw new Error(`Failed to install requirements.\n${pipInstall.stderr || pipInstall.stdout}`);
   }
 
+  sendSplash('Installing browser engine...');
   appendBootstrapLog('Installing Playwright Chromium');
   const pwInstall = await runCommand(BACKEND_VENV_PY, ['-m', 'playwright', 'install', 'chromium'], { cwd: BACKEND_DIR });
   if (pwInstall.code !== 0) {
@@ -139,6 +219,8 @@ async function ensureBackendBootstrap() {
   });
   appendBootstrapLog('Bootstrap complete');
 }
+
+// ── Health + wait ─────────────────────────────────────────────────────────────
 
 function healthCheck(timeoutMs = 1000) {
   return new Promise((resolve) => {
@@ -158,22 +240,21 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitBackendReady(maxWaitMs = 120000) {
+async function waitBackendReady(maxWaitMs = 120000, onTick = null) {
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
     // eslint-disable-next-line no-await-in-loop
     const ok = await healthCheck(1200);
     if (ok) return true;
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    if (onTick) onTick(elapsed);
     // eslint-disable-next-line no-await-in-loop
     await wait(1000);
   }
   return false;
 }
 
-function isUvicornCmd(args) {
-  const joined = args.join(' ');
-  return joined.includes('uvicorn') && joined.includes('app.main:app');
-}
+// ── Backend spawn ─────────────────────────────────────────────────────────────
 
 function startBackendWithCommand(command, args) {
   return new Promise((resolve, reject) => {
@@ -239,8 +320,7 @@ function startBackendWithCommand(command, args) {
       if (backendProc === proc) {
         backendProc = null;
       }
-      // If process exits immediately after spawn, report useful error.
-      if (code !== 0 && stderr && !mainWindow) {
+      if (code !== 0 && stderr && !mainWindow && !isQuitting) {
         reject(new Error(stderr));
       }
     });
@@ -248,12 +328,13 @@ function startBackendWithCommand(command, args) {
 }
 
 async function startBackend() {
-  // Offline packaged mode: prebuilt backend executable, no first-run pip install.
   if (app.isPackaged && fs.existsSync(BACKEND_EXE_PACKAGED)) {
+    sendSplash('Starting render engine...');
     await startBackendWithCommand(BACKEND_EXE_PACKAGED, []);
     return;
   }
   await ensureBackendBootstrap();
+  sendSplash('Starting render engine...');
   const candidates = [
     ...(fs.existsSync(BACKEND_VENV_PY)
       ? [{ cmd: BACKEND_VENV_PY, args: ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'] }]
@@ -278,6 +359,8 @@ async function startBackend() {
   );
 }
 
+// ── Main window ───────────────────────────────────────────────────────────────
+
 function createWindow() {
   const iconPath = path.join(__dirname, 'build', 'icon.ico');
   const winOpts = {
@@ -286,6 +369,8 @@ function createWindow() {
     minWidth: 1200,
     minHeight: 760,
     autoHideMenuBar: true,
+    show: false,
+    backgroundColor: '#0f172a',
     title: 'Render Studio Desktop',
     webPreferences: {
       nodeIntegration: false,
@@ -297,34 +382,76 @@ function createWindow() {
     winOpts.icon = iconPath;
   }
   mainWindow = new BrowserWindow(winOpts);
+  mainWindow.once('ready-to-show', () => {
+    closeSplash();
+    mainWindow.show();
+  });
   // Force fresh UI load to avoid stale cached index.html after frontend updates.
   mainWindow.webContents.session.clearCache().catch(() => {});
   mainWindow.loadURL(`${BACKEND_URL}/?v=${Date.now()}`);
 }
 
+// ── App lifecycle ─────────────────────────────────────────────────────────────
+
 async function bootstrap() {
+  createSplash();
   try {
+    sendSplash('Checking render engine...');
     const ready = await healthCheck();
     if (!ready) {
       await startBackend();
     }
-    const ok = await waitBackendReady();
+    const maxWait = 120000;
+    const ok = await waitBackendReady(maxWait, (elapsed) => {
+      const remaining = Math.max(0, Math.round((maxWait / 1000) - elapsed));
+      sendSplash(`Starting render engine... (${remaining}s)`);
+    });
     if (!ok) {
       throw new Error('Backend did not become healthy on http://localhost:8000/health');
     }
+    sendSplash('Opening Render Studio...');
     createWindow();
   } catch (e) {
-    dialog.showErrorBox(
-      'Cannot start desktop app',
-      `Failed to start local backend.\n\n${e.message || String(e)}\n\n` +
-      `See log: ${BACKEND_LOG_FILE}\n\n` +
-      'Make sure Python is installed and backend dependencies are installed.'
-    );
+    closeSplash();
+    const creatorMsg = mapErrorToCreatorMessage(e.message || String(e));
+    const result = await dialog.showMessageBox({
+      type: 'error',
+      title: 'Render Studio — Could Not Start',
+      message: 'Render Studio could not start.',
+      detail: `${creatorMsg}\n\nLog: ${BACKEND_LOG_FILE}`,
+      buttons: ['Open Log File', 'Quit'],
+      defaultId: 1,
+      cancelId: 1,
+    });
+    if (result.response === 0) {
+      shell.openPath(BACKEND_LOG_FILE);
+    }
     app.quit();
   }
 }
 
-app.whenReady().then(bootstrap);
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+  app.whenReady().then(bootstrap);
+}
+
+app.on('before-quit', () => { isQuitting = true; });
+
+app.on('window-all-closed', () => {
+  if (backendProc && !backendProc.killed) {
+    try { backendProc.kill(); } catch (_) {}
+  }
+  if (process.platform !== 'darwin') app.quit();
+});
+
+// ── IPC handlers ──────────────────────────────────────────────────────────────
 
 ipcMain.handle('path:exists', (_event, targetPath) => {
   const p = String(targetPath || '').trim();
@@ -393,7 +520,6 @@ ipcMain.handle('open-browser-profile', async (_event, opts) => {
     };
   }
 
-  // Ensure profile directory exists (Chrome will populate it on first run)
   try {
     fs.mkdirSync(profilePath, { recursive: true });
   } catch (_) {}
@@ -423,10 +549,4 @@ ipcMain.handle('open-browser-profile', async (_event, opts) => {
   } catch (err) {
     return { ok: false, error: err.message || String(err) };
   }
-});
-app.on('window-all-closed', () => {
-  if (backendProc && !backendProc.killed) {
-    try { backendProc.kill(); } catch (_) {}
-  }
-  if (process.platform !== 'darwin') app.quit();
 });

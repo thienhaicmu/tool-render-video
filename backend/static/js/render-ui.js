@@ -3367,7 +3367,11 @@ function _resetCsPreview() {
   const empty = qs('cs_preview_empty');
   const loading = qs('cs_preview_loading');
   const error = qs('cs_preview_error');
-  if (video) { video.pause(); video.src = ''; video.dataset.previewSrc = ''; video.classList.add('hiddenView'); }
+  if (video) {
+    if (video._csOnReady) { video.removeEventListener('canplay', video._csOnReady); video.removeEventListener('loadeddata', video._csOnReady); video._csOnReady = null; }
+    if (video._csOnError) { video.removeEventListener('error', video._csOnError); video._csOnError = null; }
+    video.pause(); video.src = ''; video.dataset.previewSrc = ''; video.classList.add('hiddenView');
+  }
   if (bar) bar.classList.add('hiddenView');
   if (loading) loading.classList.add('hiddenView');
   if (error) { error.textContent = ''; error.classList.add('hiddenView'); }
@@ -3420,22 +3424,41 @@ function centerPreviewClip(jobId, partNo, outputFile, partName) {
     video.classList.add('hiddenView');
     if (loading) loading.classList.remove('hiddenView');
 
-    video.addEventListener('canplay', function onCanPlay() {
+    // Remove stale handlers from any previous load that did not resolve
+    if (video._csOnReady) { video.removeEventListener('canplay', video._csOnReady); video.removeEventListener('loadeddata', video._csOnReady); }
+    if (video._csOnError) { video.removeEventListener('error', video._csOnError); }
+
+    // Use both canplay and loadeddata: canplay requires HAVE_FUTURE_DATA which Electron
+    // may not reach while the element is display:none; loadeddata fires at HAVE_CURRENT_DATA
+    // (first frame decoded) and is reliable regardless of visibility state.
+    const _onReady = function() {
+      video.removeEventListener('canplay', _onReady);
+      video.removeEventListener('loadeddata', _onReady);
+      video._csOnReady = null;
       if (loading) loading.classList.add('hiddenView');
       video.classList.remove('hiddenView');
       video.muted = true;
       video.play().catch(() => {});
-    }, { once: true });
-
-    video.addEventListener('error', function onError() {
+      console.log('[preview] loaded', src);
+    };
+    const _onError = function() {
+      video.removeEventListener('error', _onError);
+      video._csOnError = null;
       if (loading) loading.classList.add('hiddenView');
       video.classList.add('hiddenView');
       if (errorEl) {
-        errorEl.textContent = 'Preview unavailable — file may have moved or is still processing.';
+        errorEl.textContent = 'Preview unavailable. Open the output folder to view this clip.';
         errorEl.classList.remove('hiddenView');
       }
-    }, { once: true });
+      console.log('[preview] error', video.error && video.error.code, video.error && video.error.message || '');
+    };
+    video._csOnReady = _onReady;
+    video._csOnError = _onError;
+    video.addEventListener('canplay', _onReady);
+    video.addEventListener('loadeddata', _onReady);
+    video.addEventListener('error', _onError);
 
+    console.log('[preview] src', src);
     video.src = src;
     video.load();
   } else {
