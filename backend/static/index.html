@@ -189,41 +189,6 @@
        SECTION: main-area
   ════════════════════════════════════════════════════════════════ -->
   <main class="mainArea rs-center-panel" id="mainArea">
-    <!-- ── SECTION: render-flow-bar ─────────────────────────────── -->
-    <section id="render_flow_bar" class="renderFlowBar hiddenView" aria-label="Render flow">
-      <div class="renderFlowStep" data-flow-step="source">
-        <div class="renderFlowNum">1</div>
-        <div class="renderFlowText">
-          <div class="renderFlowTitle">Source</div>
-          <div class="renderFlowSub" id="flow_sub_source">Select source</div>
-        </div>
-      </div>
-      <div class="renderFlowArrow">→</div>
-      <div class="renderFlowStep" data-flow-step="configure">
-        <div class="renderFlowNum">2</div>
-        <div class="renderFlowText">
-          <div class="renderFlowTitle">Configure</div>
-          <div class="renderFlowSub" id="flow_sub_configure">Waiting for editor</div>
-        </div>
-      </div>
-      <div class="renderFlowArrow">→</div>
-      <div class="renderFlowStep" data-flow-step="rendering">
-        <div class="renderFlowNum">3</div>
-        <div class="renderFlowText">
-          <div class="renderFlowTitle">Rendering</div>
-          <div class="renderFlowSub" id="flow_sub_rendering">Waiting</div>
-        </div>
-      </div>
-      <div class="renderFlowArrow">→</div>
-      <div class="renderFlowStep" data-flow-step="complete">
-        <div class="renderFlowNum">4</div>
-        <div class="renderFlowText">
-          <div class="renderFlowTitle">Complete</div>
-          <div class="renderFlowSub" id="flow_sub_complete">Not finished</div>
-        </div>
-      </div>
-    </section>
-    <!-- /SECTION: render-flow-bar -->
 
     <div class="rs-center-stage">
 
@@ -346,7 +311,7 @@
           <button class="rdLogBtn" type="button" onclick="_collapseBottomPanel(false)">View Logs</button>
         </div>
         <div class="rdStep" id="render_active_title">Initializing…</div>
-        <div class="rdSegBar" id="rd_seg_bar"></div>
+        <div class="rdSegBar" id="rd_seg_bar" hidden></div>
         <div class="rdMeta">
           <span class="rdPct" id="render_active_pct">0%</span>
           <span class="rdMetaSub" id="render_active_meta">Clips will appear below as they finish.</span>
@@ -356,10 +321,25 @@
         </div>
       </div>
 
-      <!-- Per-clip queue rows, built by renderRdClipQueue() -->
-      <div class="rdQueue" id="rd_clip_queue"></div>
     </div>
     <!-- /SECTION: render-active-panel -->
+
+    <!-- ── SECTION: render-completion-banner ──────────────────── -->
+    <div id="render_completion_bar" class="renderCompletionBar hiddenView">
+      <div class="rcbLeft">
+        <div class="rcbIcon" id="rcb_icon">✓</div>
+        <div class="rcbCopy">
+          <div class="renderCompletionMsg" id="render_completion_msg">Render complete — 0 clips ready</div>
+          <div class="renderCompletionSummary" id="render_completion_summary"></div>
+        </div>
+      </div>
+      <div class="renderCompletionActions">
+        <button class="ghostButton rcbBtn" type="button" id="back_to_editor_btn" onclick="backToEditorFromCompletion()">← Back to Editor</button>
+        <button class="ghostButton rcbBtn" type="button" onclick="reviewClipsFromBanner()">Review Clips</button>
+        <button class="primaryButton rcbBtn" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
+      </div>
+    </div>
+    <!-- /SECTION: render-completion-banner -->
 
     <!-- ── SECTION: render-output-panel ────────────────────────── -->
     <!-- ── Render Output Panel — clips list, shown after render completes ── -->
@@ -379,6 +359,23 @@
       </div>
       <div id="render_output_path" class="renderOutputPath"></div>
       <div id="mvRenderSummary" hidden></div>
+
+      <!-- ── Center-stage clip preview ── -->
+      <div id="cs_preview_area" class="csPreviewArea hiddenView">
+        <div class="csPreviewVideoWrap">
+          <div id="cs_preview_empty" class="csPreviewEmpty">Select a clip to preview.</div>
+          <video id="cs_preview_video" class="csPreviewVideo hiddenView" controls preload="metadata"></video>
+        </div>
+        <div id="cs_preview_bar" class="csPreviewBar hiddenView">
+          <span id="cs_preview_name" class="csPreviewName"></span>
+          <div class="csPreviewActions">
+            <a id="cs_preview_download" class="clipCardBtn renderClipActionLink" download>Download</a>
+            <button id="cs_preview_folder" class="clipCardBtn" type="button" onclick="openCsPreviewFolder()">Folder</button>
+            <button class="csPreviewClose" type="button" onclick="closeCenterPreview()" title="Close preview">&#x2715;</button>
+          </div>
+        </div>
+      </div>
+
       <div id="render_output_list" class="renderOutputList clipsGrid">
         <div class="renderOutputEmpty">Clips will appear here when render completes.</div>
       </div>
@@ -1242,17 +1239,6 @@
       </div>
     </div>
 
-    <div id="render_completion_bar" class="renderCompletionBar hiddenView">
-      <div class="renderCompletionText">
-        <div class="renderCompletionMsg" id="render_completion_msg">✓ Render complete — 0 clips ready</div>
-        <div class="renderCompletionSummary" id="render_completion_summary"></div>
-      </div>
-      <div class="renderCompletionActions">
-        <button class="secondaryButton" type="button" id="back_to_editor_btn" onclick="backToEditorFromCompletion()">← Back to Editor</button>
-        <button class="primaryButton" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
-      </div>
-    </div>
-
     <div class="rcBottom rcActiveQueue" id="rc_bottom">
       <div class="rcAQMain">
 
@@ -1274,6 +1260,7 @@
               <div class="rcActiveCopy">
                 <div id="rc_active_title" class="rcActiveTitle">Ready to render</div>
                 <div id="rc_active_subtitle" class="rcActiveSubtitle">Configure your video, then click Start Render.</div>
+                <span id="rc_eta" class="rcActiveEta" hidden></span>
               </div>
               <div id="rc_active_percent" class="rcActivePercent">0%</div>
             </div>
@@ -1281,7 +1268,7 @@
               <span id="rc_active_bar" style="--progress:0%"></span>
             </div>
             <div id="rc_stage_timeline" class="rcStageTimeline"></div>
-            <div id="rc_active_stage" class="rcActiveStage"></div>
+            <div id="rc_active_stage" class="rcActiveStage" hidden></div>
             <div id="rc_active_message" class="rcActiveMessage"></div>
           </div>
 
@@ -1289,7 +1276,7 @@
             <div class="emptyState">No clips queued yet.</div>
           </div>
 
-          <div id="rc_output_preview" class="rcOutputPreview hiddenView">
+          <div id="rc_output_preview" class="rcOutputPreview hiddenView" hidden>
             <div class="rcPreviewHeader">
               <span class="rcPreviewTitle">Output Preview</span>
               <div class="rcPreviewHeaderRight">
@@ -1341,7 +1328,7 @@
               <button class="rcLogFilterBtn isActive" data-filter="all"    type="button" onclick="filterRenderLogs('all')">All</button>
               <button class="rcLogFilterBtn"          data-filter="error"  type="button" onclick="filterRenderLogs('error')">Error</button>
               <button class="rcLogFilterBtn"          data-filter="ffmpeg" type="button" onclick="filterRenderLogs('ffmpeg')">FFmpeg</button>
-              <button class="rcLogFilterBtn"          data-filter="system" type="button" onclick="filterRenderLogs('system')">System</button>
+              <button class="rcLogFilterBtn"          data-filter="system" type="button" onclick="filterRenderLogs('system')">Progress</button>
             </div>
           </header>
           <div id="event_log_render" class="rcLogList">
@@ -1399,7 +1386,7 @@
     </div>
     <div class="statusBarRight">
       <span class="sbPct" id="sbPct"></span>
-      <span class="statusSystem">ffmpeg · Whisper · GPU auto</span>
+      <span class="statusSystem" id="statusSystem">ffmpeg · Whisper · GPU auto</span>
     </div>
   </footer>
   <!-- /SECTION: status-bar -->
