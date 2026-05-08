@@ -33,6 +33,36 @@ class AICameraPlan:
 
 
 @dataclass
+class AIPacingPlan:
+    """Beat and emotion pacing metadata attached to the AI edit plan.
+
+    Observation-only in Phase 4 — does not yet influence render commands.
+    """
+    beat_available: bool = False
+    bpm: Optional[float] = None
+    beat_count: int = 0
+    energy_level: Optional[float] = None
+    pacing_style: str = "default"
+    emotion: str = "neutral"
+    emotion_score: float = 0.0
+    suggested_cut_style: str = "standard"
+    warnings: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "beat_available": self.beat_available,
+            "bpm": self.bpm,
+            "beat_count": self.beat_count,
+            "energy_level": self.energy_level,
+            "pacing_style": self.pacing_style,
+            "emotion": self.emotion,
+            "emotion_score": self.emotion_score,
+            "suggested_cut_style": self.suggested_cut_style,
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass
 class AIEditPlan:
     enabled: bool
     mode: str
@@ -42,6 +72,7 @@ class AIEditPlan:
     warnings: List[str] = field(default_factory=list)
     fallback_used: bool = False
     memory_context: dict = field(default_factory=dict)
+    pacing: AIPacingPlan = field(default_factory=AIPacingPlan)
 
     def to_dict(self) -> dict:
         return {
@@ -70,4 +101,5 @@ class AIEditPlan:
             "warnings": list(self.warnings),
             "fallback_used": self.fallback_used,
             "memory_context": dict(self.memory_context),
+            "pacing": self.pacing.to_dict(),
         }

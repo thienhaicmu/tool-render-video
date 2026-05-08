@@ -1,8 +1,9 @@
 """
 ai_modes.py — Local AI mode configuration registry.
 
-Each mode defines scoring weights and style preferences for the AI Director.
-All modes are offline-only — no cloud API calls, no mandatory ML libraries.
+Each mode defines scoring weights, style preferences, and pacing hints
+for the AI Director. All modes are offline-only — no cloud API calls,
+no mandatory ML libraries.
 """
 from __future__ import annotations
 
@@ -16,6 +17,10 @@ _AI_MODES: dict[str, dict] = {
         "hook_weight": 0.35,
         "silence_penalty_weight": 0.20,
         "duration_weight": 0.10,
+        # Phase 4 — pacing hints
+        "pacing_style": "fast",
+        "prefer_beat_sync": True,
+        "emotion_bias": "curiosity",
     },
     "podcast_shorts": {
         "preferred_duration_min": 45,
@@ -26,6 +31,10 @@ _AI_MODES: dict[str, dict] = {
         "hook_weight": 0.25,
         "silence_penalty_weight": 0.15,
         "duration_weight": 0.20,
+        # Phase 4 — pacing hints
+        "pacing_style": "medium",
+        "prefer_beat_sync": False,
+        "emotion_bias": "clarity",
     },
     "storytelling": {
         "preferred_duration_min": 60,
@@ -36,6 +45,10 @@ _AI_MODES: dict[str, dict] = {
         "hook_weight": 0.30,
         "silence_penalty_weight": 0.20,
         "duration_weight": 0.20,
+        # Phase 4 — pacing hints
+        "pacing_style": "slow_build",
+        "prefer_beat_sync": False,
+        "emotion_bias": "curiosity",
     },
     "clean_subtitle": {
         "preferred_duration_min": 30,
@@ -46,6 +59,10 @@ _AI_MODES: dict[str, dict] = {
         "hook_weight": 0.25,
         "silence_penalty_weight": 0.20,
         "duration_weight": 0.20,
+        # Phase 4 — pacing hints
+        "pacing_style": "stable",
+        "prefer_beat_sync": False,
+        "emotion_bias": "neutral",
     },
 }
 

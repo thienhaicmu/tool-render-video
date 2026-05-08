@@ -1668,6 +1668,8 @@ def run_render_pipeline(
                     "scenes": scenes,
                     "duration": source.get("duration", 0.0),
                     "market": getattr(payload, "viral_market", None),
+                    # Phase 4: source path for optional beat analysis
+                    "source_path": str(source_path) if source_path else None,
                 }
                 _ai_edit_plan = _create_ai_plan(payload, _ai_context)
                 if _ai_edit_plan is not None:
