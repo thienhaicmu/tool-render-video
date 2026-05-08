@@ -178,6 +178,13 @@ def _build_plan(
         plan.warnings.append(f"explainability_error:{type(exc).__name__}")
         logger.debug("ai_director_explainability_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 12: Story Intelligence ---
+    try:
+        _attach_story_intelligence(plan, chunks, pacing_ctx, memory_ctx, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"story_error:{type(exc).__name__}")
+        logger.debug("ai_director_story_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -373,6 +380,76 @@ def _attach_explainability(plan: "AIEditPlan", job_id: str) -> None:
     except Exception as exc:
         plan.warnings.append(f"explainability_error:{type(exc).__name__}")
         logger.debug("ai_director_explainability_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 12 — Story intelligence attachment
+# ---------------------------------------------------------------------------
+
+def _attach_story_intelligence(
+    plan: "AIEditPlan",
+    chunks: list[dict],
+    pacing_ctx: dict,
+    memory_ctx: dict,
+    job_id: str,
+) -> None:
+    """Run story structure analysis and attach results to the plan. Never raises."""
+    try:
+        from app.ai.story.story_analyzer import analyze_story_structure
+
+        story = analyze_story_structure(
+            transcript_chunks=chunks,
+            pacing_context=pacing_ctx,
+            emotion_context=None,
+            memory_context=memory_ctx or None,
+        )
+        plan.story = story.to_dict()
+
+        logger.info(
+            "ai_story_analysis_generated job_id=%s flow=%s arc=%s retention=%.1f segments=%d",
+            job_id,
+            story.narrative_flow,
+            story.dominant_arc,
+            story.retention_score,
+            len(story.segments),
+        )
+
+        # Attach compact explainability notes when summary exists
+        _append_story_explainability(plan, story)
+
+    except Exception as exc:
+        plan.warnings.append(f"story_error:{type(exc).__name__}")
+        logger.debug("ai_director_story_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_story_explainability(plan: "AIEditPlan", story: Any) -> None:
+    """Append compact story insight lines to plan.explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        types = {s.segment_type for s in story.segments}
+
+        if "hook" in types:
+            lines.append("Strong opening hook detected")
+        if "climax" in types:
+            lines.append("Narrative climax identified")
+        elif "tension" in types:
+            lines.append("Narrative tension peak identified")
+        if "build_up" in types and "climax" not in types:
+            lines.append("Narrative build-up identified")
+        outro_segs = [s for s in story.segments if s.segment_type == "outro"]
+        if any((s.retention_risk or 0) > 0.5 for s in outro_segs):
+            lines.append("Retention pacing weakened near ending")
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------

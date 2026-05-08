@@ -116,6 +116,8 @@ class AIEditPlan:
     confidence: dict = field(default_factory=dict)
     # Phase 11 — beat execution plan (populated by beat_execution module)
     beat_execution: dict = field(default_factory=dict)
+    # Phase 12 — story intelligence (populated by story_analyzer module)
+    story: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -169,4 +171,5 @@ class AIEditPlan:
             "ai_summary": ai_summary,
             "ai_confidence": compact_confidence,
             "beat_execution": dict(self.beat_execution),
+            "story": dict(self.story),
         }

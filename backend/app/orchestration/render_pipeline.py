@@ -3310,6 +3310,7 @@ def run_render_pipeline(
             "ai_director": _ai_edit_plan.to_dict() if _ai_edit_plan is not None else {"enabled": False},
             "ai_render_influence": _ai_influence_report,
             "ai_beat_execution": _ai_beat_report,
+            "story": _ai_edit_plan.story if _ai_edit_plan is not None else {},
         }
         upsert_job(
             job_id,

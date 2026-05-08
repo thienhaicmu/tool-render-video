@@ -7,6 +7,61 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Productization Phase 12: Story Intelligence Foundation
+
+**Implemented:**
+- `app/ai/story/story_schema.py` (new) — `StorySegment` dataclass (start, end, segment_type, confidence, emotion, retention_risk, notes); `StoryAnalysis` dataclass (available, narrative_flow, segments, dominant_arc, retention_score, warnings); both have `to_dict()` methods; `VALID_SEGMENT_TYPES` frozenset (`hook`, `setup`, `build_up`, `tension`, `climax`, `payoff`, `outro`, `unknown`); `to_dict()` caps segments at 12 to prevent giant result dumps
+- `app/ai/story/story_analyzer.py` (new) — `analyze_story_structure(transcript_chunks, pacing_context=None, emotion_context=None, memory_context=None) -> StoryAnalysis`; never raises; deterministic heuristics only — no ML, no external APIs, no audio loading; divides video into 5 temporal phases (early 0-20%, middle 20-50%, peak 50-75%, late 75-90%, outro 90-100%); classifies each phase using: hook keyword density scoring from transcript text, per-phase energy modulation from `pacing_context.energy_level`, and pacing_style; `_classify_phase` maps (phase_name, text_score, energy_score) → segment_type; computes `dominant_arc` (curiosity_build, setup_payoff, tension_release, emotional_peak, linear_build, front_loaded, informational), `narrative_flow` (hook_to_climax, hook_to_payoff, linear_build, front_loaded, flat), and `retention_score` (0-100, duration-weighted by segment type and confidence); emits `ai_story_analysis_generated` log at INFO with flow/arc/retention/segment count
+- `app/ai/story/retention.py` (new) — `estimate_retention(segment, context=None) -> dict` returning `{score:int 0-100, risk:float 0-1, reasons:list[str], warnings:list[str]}`; deterministic only, no ML; per-type score/risk adjustments (hook +20/-0.20, outro -20/+0.25, climax +22/-0.22, etc.); confidence modifier (< 0.30 → −10 score, +0.10 risk); emotion modifier (`curiosity/urgency/surprise/excitement` → +8 score; `sadness/boredom/calm` → −8 score); incorporates `segment.retention_risk` from analyzer via averaging; never raises on garbage input
+- `app/ai/director/edit_plan_schema.py` — `story: dict = field(default_factory=dict)` added to `AIEditPlan`; `"story": dict(self.story)` added to `to_dict()` output; backward-compatible (all existing tests pass)
+- `app/ai/director/ai_director.py` — `_attach_story_intelligence(plan, chunks, pacing_ctx, memory_ctx, job_id)` added; called after `_attach_explainability` inside `_build_plan`; calls `analyze_story_structure` with transcript chunks and pacing context dict; stores `story.to_dict()` on `plan.story`; `_append_story_explainability(plan, story)` appends compact lines to `plan.explainability.summary.summary_lines` ("Strong opening hook detected", "Narrative climax identified", "Narrative tension peak identified", "Narrative build-up identified", "Retention pacing weakened near ending"); both helpers wrapped in try/except — never block rendering
+- `app/orchestration/render_pipeline.py` — `"story": _ai_edit_plan.story if _ai_edit_plan is not None else {}` added to `_result_payload` dict alongside `ai_director`/`ai_render_influence`/`ai_beat_execution`
+- `tests/test_ai_phase12_story_intelligence.py` (new) — 61 tests covering: StorySegment/StoryAnalysis schema defaults and to_dict(), VALID_SEGMENT_TYPES, segment cap at 12, analyzer safety (empty/None/garbage inputs never raise, empty → available=False, valid → available=True, no invalid segment types), hook detection (hook keywords in early position → hook segment, neutral text → no hook), build-up detection (rising energy → build_up, low energy → no build_up), climax detection (high intensity → tension or climax), retention risk (all required keys, hook > outro score, outro > hook risk, low confidence increases risk, score/risk clamped 0-100/0-1, never raises on garbage, curiosity emotion reduces risk), AIEditPlan story field (has field, in to_dict(), defaults to {}), result JSON compactness (≤12 segments, all required keys, valid segment types, strings for arc/flow), explainability integration (appends safely, hook line added, never raises on missing/garbage explainability or summary), no external dependencies (no API key, no GPU, no real rendering, no librosa, no torch, safe imports), narrative flow and arc (hook_to_climax on hook+tension, retention_score 0-100, nonempty strings, segments produced, timing non-negative, retention_risk in range)
+
+**Verification:**
+- 61/61 Phase 12 tests pass
+- 652/652 full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+- No transcript mutations — story analyzer reads chunks read-only
+- No segment timing mutations — start/end never altered
+- No subtitle timing mutations
+- No playback_speed mutations
+- No FFmpeg command changes
+- No external API calls, no GPU, no ML models, no audio loading
+- Deterministic only — same inputs always produce same story classification
+- Story analysis failure never blocks render — wrapped in try/except
+- Result JSON limited to 12 segments maximum (no transcript dumps)
+- All segment types validated against `VALID_SEGMENT_TYPES` frozenset
+
+**What Story Intelligence can do now:**
+- Detect opening hook segments from keyword-dense early transcript text
+- Classify narrative build-up phases from rising energy context
+- Identify tension/climax regions from peak energy signals
+- Estimate per-segment viewer dropout risk deterministically
+- Compute overall retention score (0-100, duration-weighted)
+- Determine dominant narrative arc (curiosity_build, tension_release, etc.)
+- Determine narrative flow shape (hook_to_climax, linear_build, flat, etc.)
+- Append compact narrative insight lines to existing AI explainability summary
+- Expose compact `"story"` key in render result_json
+
+**Not yet implemented:**
+- Story-aware render retiming (Phase 13+)
+- Autonomous narrative editing
+- Retention-driven cut mutation
+- Story-driven subtitle timing or emphasis
+- Full emotional arc execution via FFmpeg
+- Per-chunk audio-based energy analysis (currently uses whole-video energy_level from pacing context)
+
+**Known limitations:**
+- Story classification is positional + keyword-heuristic only — relies on transcript text keyword density and pacing energy_level from beat analysis
+- No semantic understanding of narrative meaning — "build_up" is energy-based, not plot-based
+- Energy is a single global value from pacing_context, not per-segment audio energy
+- Metadata-first: story segments in result_json are advisory only, no effect on rendered output in Phase 12
+
+---
+
 ### 2026-05-08 — AI Productization Phase 11: Beat-aware Render Execution
 
 **Implemented:**
