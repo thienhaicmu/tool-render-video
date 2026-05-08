@@ -7,6 +7,41 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Director Phase 4: Beat + Emotion Pacing Foundation
+
+**Implemented:**
+- `beat_analyzer.py` upgraded — adds `energy` dict (`mean`, `peak`, `curve` ≤64 points) to all return paths; handles `None` audio_path with `"no_audio_path"` warning; full return shape guaranteed regardless of librosa availability
+- `emotion_analyzer.py` (new) — rule-based keyword matching across 5 emotion categories (`urgency`, `surprise`, `curiosity`, `excitement`, `warning`); `analyze_text_emotion(text)` for single strings; `analyze_pacing_emotion(chunks)` for transcript-level aggregation; returns `{dominant, score, signals, warnings}`; no external deps; never raises
+- `AIPacingPlan` dataclass (new, `edit_plan_schema.py`) — `beat_available`, `bpm`, `beat_count`, `energy_level`, `pacing_style`, `emotion`, `emotion_score`, `suggested_cut_style`, `warnings`; `to_dict()` is compact (no beat arrays, no energy curve)
+- `AIEditPlan.pacing` field added — default `AIPacingPlan()` (safe for all existing code and tests)
+- `ai_modes.py` upgraded — each mode now has `pacing_style`, `prefer_beat_sync`, `emotion_bias` (viral_tiktok=fast/True/curiosity, podcast_shorts=medium/False/clarity, storytelling=slow_build/False/curiosity, clean_subtitle=stable/False/neutral)
+- `ai_director.py` upgraded — `_build_pacing_plan()` runs emotion analysis on transcript chunks; attempts beat analysis if `audio_path`/`source_path`/`video_path` in context; `_suggest_cut_style()` maps BPM→fast_cut/medium_cut/slow_cut or falls back to `pacing_style`; pacing warnings include `"beat_analysis_unavailable"` when no path provided
+- `render_pipeline.py` — `source_path` added to `_ai_context` dict (one line, no behavior change)
+
+**Tests added:**
+- `backend/tests/test_ai_director_phase4_pacing.py` — 45 tests covering beat analyzer safety, emotion detection, pacing plan schema, mode config, AI Director integration, cut style logic, safety/regression guards
+
+**Phase 4 design constraints preserved:**
+- Beat analysis is observation-only; no FFmpeg command changes
+- `analyze_beats()` never called at import time
+- All pacing data is plan metadata only; existing render output unchanged
+- All prior Phase 1–3 tests pass without modification (332 total)
+
+**Not yet implemented:**
+- Actual beat-synced cut timestamps in render commands
+- Beat-synced zoom/pulse rendering effects
+- Emotion-driven camera behavior
+- Subtitle emphasis by beat
+- UI controls for pacing/beat settings
+- Librosa energy used to weight clip selection (Phase 5 candidate)
+
+**Known limitations:**
+- Beat quality depends on optional librosa — degrades to `beat_available=False` when absent
+- Emotion detection is keyword-only; no ML models
+- `pacing_style` influences cut style label only, not actual cuts yet
+
+---
+
 ### 2026-05-08 — AI Director Phase 3: Persistent Learning Memory
 
 **Implemented:**
