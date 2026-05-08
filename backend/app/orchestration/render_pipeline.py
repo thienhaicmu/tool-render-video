@@ -3312,6 +3312,7 @@ def run_render_pipeline(
             "ai_beat_execution": _ai_beat_report,
             "story": _ai_edit_plan.story if _ai_edit_plan is not None else {},
             "preset_evolution": _ai_edit_plan.preset_evolution if _ai_edit_plan is not None else {},
+            "creator_style": _ai_edit_plan.creator_style if _ai_edit_plan is not None else {},
         }
         upsert_job(
             job_id,

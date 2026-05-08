@@ -120,6 +120,8 @@ class AIEditPlan:
     story: dict = field(default_factory=dict)
     # Phase 13 — smart preset evolution (populated by preset_analyzer module)
     preset_evolution: dict = field(default_factory=dict)
+    # Phase 14 — creator style intelligence (populated by style_classifier module)
+    creator_style: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -175,4 +177,5 @@ class AIEditPlan:
             "beat_execution": dict(self.beat_execution),
             "story": dict(self.story),
             "preset_evolution": dict(self.preset_evolution),
+            "creator_style": dict(self.creator_style),
         }

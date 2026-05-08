@@ -192,6 +192,13 @@ def _build_plan(
         plan.warnings.append(f"preset_evolution_error:{type(exc).__name__}")
         logger.debug("ai_director_preset_evolution_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 14: Creator Style Intelligence ---
+    try:
+        _attach_creator_style(plan, chunks, pacing_ctx, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_style_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_style_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -537,6 +544,100 @@ def _append_preset_explainability(plan: "AIEditPlan", report: Any) -> None:
             if rec.suggested_adjustments.get("subtitle_tone"):
                 if not any("Subtitle tone" in str(l) for l in lines):
                     lines.append("Subtitle tone suggestion learned from prior high-score outputs")
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 14 — Creator Style Intelligence attachment
+# ---------------------------------------------------------------------------
+
+def _attach_creator_style(
+    plan: "AIEditPlan",
+    chunks: list[dict],
+    pacing_ctx: dict,
+    job_id: str,
+) -> None:
+    """Classify creator style and attach result + recommendation to plan. Never raises."""
+    try:
+        from app.ai.styles.style_classifier import classify_creator_style
+        from app.ai.styles.style_recommender import recommend_style_adjustments
+
+        # Build transcript context from chunks
+        transcript_ctx = {
+            "text": " ".join(c.get("text", "") for c in chunks[:15] if isinstance(c, dict)),
+            "chunk_count": len(chunks),
+        }
+
+        # Story context from plan.story (may be empty dict if story analysis not run)
+        story_ctx = dict(plan.story) if isinstance(plan.story, dict) else {}
+
+        classification = classify_creator_style(
+            transcript_context=transcript_ctx,
+            pacing_context=pacing_ctx,
+            story_context=story_ctx,
+        )
+
+        recommendation = recommend_style_adjustments(
+            classification,
+            current_context={"mode": plan.mode},
+        )
+
+        plan.creator_style = {
+            **classification.to_dict(),
+            "recommendation": recommendation.to_dict(),
+        }
+
+        logger.info(
+            "ai_creator_style_classified job_id=%s style=%s confidence=%.1f",
+            job_id,
+            classification.dominant_style,
+            classification.confidence,
+        )
+
+        _append_style_explainability(plan, classification)
+
+    except Exception as exc:
+        plan.creator_style = {
+            "available": False,
+            "warnings": [f"creator_style_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_style_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_style_explainability(plan: "AIEditPlan", classification: Any) -> None:
+    """Append compact creator style insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        style = getattr(classification, "dominant_style", "unknown")
+        if style == "unknown" or not getattr(classification, "available", False):
+            return
+
+        _STYLE_LINES: dict[str, str] = {
+            "podcast_viral": "Podcast-style pacing identified",
+            "high_energy_reaction": "High-energy reaction editing archetype detected",
+            "storytelling_cinematic": "Cinematic storytelling structure recognized",
+            "documentary_clean": "Documentary clean style identified",
+            "educational_focus": "Educational focus editing style detected",
+            "anime_edit": "High-energy anime edit style identified",
+            "gameplay_highlight": "Gameplay highlight editing style detected",
+            "motivation_short": "Motivation short-form style identified",
+            "interview_clip": "Interview clip editing style recognized",
+            "calm_minimal": "Calm minimal editing style identified",
+        }
+
+        line = _STYLE_LINES.get(style)
+        if line and not any(line in str(l) for l in lines):
+            lines.append(line)
     except Exception:
         pass
 
