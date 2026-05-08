@@ -6,6 +6,98 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 16: Retention Intelligence Foundation
+
+**Implemented:**
+
+* `app/ai/retention/__init__.py` (new) — package marker
+* `app/ai/retention/retention_schema.py` (new) — retention risk dataclasses and compact retention analysis schema; deterministic only; no external deps
+* `app/ai/retention/dropoff_detector.py` (new) — heuristic viewer drop-off risk analysis using transcript pacing, silence gaps, subtitle density, hook strength, and story transitions
+* `app/ai/retention/retention_analyzer.py` (new) — retention scoring pipeline combining story structure, pacing energy, subtitle readability, and narrative progression into compact retention analysis
+* `app/ai/retention/retention_recommender.py` (new) — advisory-only retention recommendations; never mutates render timing, segments, subtitles, playback speed, or FFmpeg commands
+* `app/ai/director/edit_plan_schema.py` — `retention: dict = field(default_factory=dict)` added to `AIEditPlan`; included in `to_dict()` output
+* `app/ai/director/ai_director.py` — Retention Intelligence block added after Story Intelligence and Creator Style Intelligence; compact retention analysis attached to `plan.retention`; explainability integration added with safe fallback guards
+* `tests/test_ai_phase16_retention_intelligence.py` (new) — retention analysis, drop-off detection, explainability, advisory recommendation, schema, and AI Director integration coverage
+
+**Detection categories:**
+
+* `weak_hook`
+* `long_setup`
+* `low_energy`
+* `silence_gap`
+* `subtitle_overload`
+* `story_drop`
+* `unclear_payoff`
+* `pacing_decay`
+
+**Verification:**
+
+* 91/91 Phase 16 tests pass
+* 959/959 full suite passes (zero regressions)
+* `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+* Deterministic heuristics only — no cloud AI, no API keys, no external inference
+* Metadata-first execution only
+* Advisory-only recommendations
+* No segment timing mutation
+* No automatic cuts
+* No subtitle timing mutation
+* No playback_speed mutation
+* No FFmpeg command mutation
+* Never blocks render pipeline execution
+* Never raises on malformed transcript or missing AI context
+
+**Architecture notes:**
+
+* Retention analysis operates entirely on existing AI metadata and transcript context
+* No real viewer analytics required
+* Retention intelligence is explainability-focused in Phase 16
+* Retention recommendations remain advisory metadata only
+* Compatible with all prior AI phases and safe fallback execution
+* Integrated after Story Intelligence and Creator Style Intelligence inside AI Director
+
+**Integrated systems:**
+
+* Story Intelligence
+* Beat/Pacing Intelligence
+* Explainability
+* Timeline Intelligence
+* Smart Preset Evolution
+* Creator Style Intelligence
+* External Knowledge Learning
+
+**What Retention Intelligence can do now:**
+
+* Detect likely viewer drop-off regions
+* Estimate retention pacing quality
+* Detect weak hooks and long setup regions
+* Identify subtitle overload risk
+* Identify pacing decay and story-energy collapse
+* Generate advisory retention recommendations
+* Append retention insight lines to explainability summaries
+* Expose compact `"retention"` metadata in render result_json
+
+**Not yet implemented:**
+
+* Retention-driven timing mutation
+* Automatic silence removal
+* Autonomous edit optimization
+* Viewer analytics integration
+* Retention-based subtitle rewriting
+* Beat-synced retention execution
+
+**Known limitations:**
+
+* No real viewer analytics integration
+* Heuristic scoring only
+* No autonomous editing
+* No automatic pacing mutation
+* Recommendations remain advisory only
+* Retention analysis does not yet alter rendered output
+
+> Phase 16 extends the AI system from story understanding toward viewer-retention-aware editing analysis while preserving stable render execution.
 
 ### 2026-05-08 — AI Productization Phase 15: External Knowledge Learning Foundation
 
