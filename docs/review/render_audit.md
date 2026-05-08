@@ -7,6 +7,77 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Productization Phase 14: Creator Style Intelligence
+
+**Implemented:**
+- `app/ai/styles/style_schema.py` (new) — `CreatorStyleProfile` dataclass (style_id, display_name, pacing_style, subtitle_style, camera_behavior, hook_style, story_arc_style, energy_level, notes); `StyleClassification` dataclass (available, dominant_style, confidence 0-100, secondary_styles list capped at 3, matched_traits list capped at 6, warnings); `StyleRecommendation` dataclass (recommended_style, confidence 0-100, suggested_adjustments dict, reasons list capped at 5, warnings); all have `to_dict()` methods; no Pydantic, no heavy deps
+- `app/ai/styles/style_profiles.py` (new) — 10 creator archetypes in `_PROFILES` dict: `podcast_viral` (fast pacing, punch subtitle, fast_follow camera, urgency hook, high energy), `high_energy_reaction` (fast pacing, punch subtitle, dramatic_push camera, surprise hook, very_high energy), `storytelling_cinematic` (slow_build pacing, minimal subtitle, slow_reveal camera, curiosity hook, medium energy), `documentary_clean` (slow pacing, clean subtitle, static camera, informational hook, low energy), `educational_focus` (medium pacing, bold subtitle, static camera, question hook, medium energy), `anime_edit` (fast pacing, bold subtitle, dramatic_push camera, dramatic hook, very_high energy), `gameplay_highlight` (fast pacing, overlay subtitle, fast_follow camera, reaction hook, high energy), `motivation_short` (medium_fast pacing, bold subtitle, slow_reveal camera, urgency hook, high energy), `interview_clip` (slow pacing, clean subtitle, static camera, question hook, low energy), `calm_minimal` (slow pacing, minimal subtitle, static camera, story hook, very_low energy); `STYLE_IDS` frozenset; `STYLE_DURATION_HINTS` dict (motivation_short/anime_edit=30s, high_energy_reaction=45s, podcast_viral/gameplay_highlight/calm_minimal=60s, etc.); `get_profile(style_id)` and `get_all_profiles()` helpers; no copyrighted creator names anywhere
+- `app/ai/styles/style_classifier.py` (new) — `classify_creator_style(transcript_context, pacing_context, emotion_context, story_context, memory_context) -> StyleClassification`; never raises; deterministic rule-based scoring only; `_build_signals()` aggregates all inputs into flat signal dict; `_score_style(style_id, signals) -> (float, list[str])` applies per-archetype rules (energy_level, pacing_style, emotion, bpm, narrative_flow, dominant_arc, chunk_count); confidence formula: base = min(75, best_score), clarity bonus = min(25, gap×0.8) where gap is spread between 1st and 2nd scores; emits `ai_creator_style_classified` at INFO
+- `app/ai/styles/style_recommender.py` (new) — `recommend_style_adjustments(classification, current_context=None) -> StyleRecommendation`; never raises; advisory only; `_SAFE_ADJUSTMENT_FIELDS = frozenset({subtitle_style, pacing_style, camera_behavior, hook_style, target_duration_hint})`; `_UNSAFE_FIELDS = frozenset({playback_speed, segment_start, segment_end, timing, codec, bitrate, fps, resolution, ffmpeg, output_format})` — safety gate strips all unsafe keys before returning; loads profile via `get_profile(dominant)`, builds adjustments from profile fields; adds `target_duration_hint` from `STYLE_DURATION_HINTS`; reasons (max 5): archetype display name detected, pacing style identified, energy level match, matched signals, high-confidence match; emits `ai_creator_style_recommended` at INFO
+- `app/ai/director/edit_plan_schema.py` — `creator_style: dict = field(default_factory=dict)` added to `AIEditPlan`; `"creator_style": dict(self.creator_style)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_creator_style(plan, chunks, pacing_ctx, job_id)` added; builds `transcript_ctx = {"text": joined first 15 chunks, "chunk_count": len(chunks)}`; passes `story_ctx = dict(plan.story)` for story context; calls `classify_creator_style` then `recommend_style_adjustments`; stores `{**classification.to_dict(), "recommendation": recommendation.to_dict()}` on `plan.creator_style`; `_append_style_explainability(plan, classification)` maps each style_id to a human-readable line via `_STYLE_LINES` dict, appends with dedup guard; Phase 14 block added after Phase 13 in `_build_plan`; both helpers never raise
+- `app/orchestration/render_pipeline.py` — `"creator_style": _ai_edit_plan.creator_style if _ai_edit_plan is not None else {}` added to `_result_payload` dict
+- `tests/test_ai_phase14_creator_styles.py` (new) — 74 tests covering: schema defaults and to_dict() for all three dataclasses, caps (traits at 6, secondary_styles at 3, reasons at 5), profiles (all 10 archetypes present, required fields, no copyrighted creator names in display_names or notes, duration hints positive, get_all_profiles returns copy), classifier safety (never raises on None/garbage/empty inputs, dominant_style always string, valid style_id or "unknown", confidence in 0-100, available=True with signals), high-urgency classification (high energy + fast pacing → podcast_viral or high_energy_reaction, urgency emotion favors podcast_viral, very_high energy + bpm → reaction or anime, matched_traits nonempty for strong signals), calm classification (calm pacing → documentary or calm_minimal, very_low energy → calm_minimal, neutral/low energy not podcast), cinematic classification (narrative arc → cinematic, setup_payoff arc favors cinematic, curiosity + structured flow not high-energy), recommender safety (never raises on None/unavailable/unknown, no playback_speed/timing/ffmpeg suggestions, reasons ≤5, confidence 0-100, only safe adjustment fields, no copyrighted creators in reasons, advisory only no mutation), recommender suggestions (returns StyleRecommendation, recommended_style matches dominant, adjustments nonempty for known style, reasons nonempty, target_duration_hint present), AIEditPlan field (has field, defaults to {}, in to_dict), AI Director integration (sets creator_style dict, never raises on empty chunks or None pacing, includes recommendation key, explainability append never raises, line added for known style, no duplicate lines, never raises on missing explainability), result JSON compactness (classification to_dict compact, recommendation to_dict compact, full dict has recommendation key), no external dependencies (no API key, no GPU, no external models, no real rendering, safe imports, no network calls)
+
+**Verification:**
+- 74/74 Phase 14 tests pass
+- 789/789 full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+- `_UNSAFE_FIELDS` frozenset prevents playback_speed, timing, codec, bitrate, fps, resolution, ffmpeg, output_format from ever appearing in suggested_adjustments
+- `_SAFE_ADJUSTMENT_FIELDS` whitelist ensures only subtitle_style, pacing_style, camera_behavior, hook_style, target_duration_hint can be returned
+- Advisory only — `recommend_style_adjustments` returns recommendations only; nothing auto-applied
+- No copyrighted creator names in any profile display_name, notes field, reason string, or log message
+- Classification is archetype-based only — no imitation of any real creator
+- Deterministic rule-based scoring only — no ML model, no external inference
+- Never raises in any code path — all style intelligence failures caught and recorded as warnings
+- No external API calls, no GPU, no optional AI libraries required
+
+**Architecture notes:**
+- Creator styles are archetype-based only — no copyrighted creator replication
+- Deterministic classification only — heuristic rule scoring, no model inference
+- Metadata-first execution — `creator_style` dict in result_json is advisory, no render command mutation
+- Advisory-only recommendations — suggestions must be explicitly applied by downstream logic or user
+- No timing mutation — style intelligence never alters clip boundaries, segment order, or playback speed
+- No render command mutation — FFmpeg commands are never modified by style intelligence
+
+**Integrated systems:**
+- AI Director — Phase 14 block attached in `_build_plan` after Phase 13
+- Story Intelligence — `story_ctx` passed to classifier for narrative_flow and dominant_arc signals
+- Beat/Pacing Intelligence — `pacing_context` passed for energy_level, bpm, pacing_style signals
+- Smart Preset Evolution — runs before style intelligence; style complements preset recommendations
+- Explainability — `_append_style_explainability` appends human-readable archetype line to summary
+- Timeline Intelligence — transcript chunks passed for text density and hook keyword scoring
+
+**What Creator Style Intelligence can do now:**
+- Classify editing content into one of 10 creator archetypes from combined signals
+- Score each archetype using energy, pacing, emotion, BPM, narrative arc, and text signals
+- Compute confidence from score spread (narrow competition → lower confidence)
+- Recommend safe style-compatible subtitle_style, pacing_style, camera_behavior, hook_style
+- Suggest advisory target_duration_hint from archetype-specific duration hints
+- Expose compact `"creator_style"` key in render result_json with classification + recommendation
+- Append human-readable archetype detection line to AI explainability summary
+
+**Not yet implemented:**
+- Creator-specific fine tuning
+- Autonomous creator adaptation
+- Online creator learning
+- Creator A/B testing
+- Creator-style render mutation
+
+**Known limitations:**
+- No copyrighted creator imitation — archetypes are generic editing style categories only
+- No external creator scraping — all profiles are statically defined
+- No automatic preset mutation — recommendations remain advisory
+- Recommendations remain advisory — no effect on rendered output
+- Confidence is heuristic (not calibrated to actual user satisfaction or creator intent)
+- All 10 archetypes are fixed; no user-defined custom archetypes in Phase 14
+
+> Phase 14 extends the AI system from generic editing intelligence toward creator-style-aware editing archetypes while preserving render stability and fallback-safe execution.
+
+---
+
 ### 2026-05-08 — AI Productization Phase 13: Smart Preset Evolution
 
 **Implemented:**
