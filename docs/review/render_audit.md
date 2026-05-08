@@ -7,6 +7,51 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Productization Phase 10: Safe Render Influence
+
+**Implemented:**
+- `app/models/schemas.py` — `ai_render_influence_enabled: bool = False` added to `RenderRequest`; opt-in only; defaults to False so all existing requests behave identically to before; placed in the AI Director section with other AI flags
+- `app/ai/director/render_influence.py` (new) — `apply_ai_render_influence(payload, edit_plan, context=None) -> tuple[object, dict]`; `clamp_ai_influence(value, min, max, default) -> float`; never raises; mutates payload in-place (required: pipeline reads payload fields directly throughout); returns same payload object plus influence_report
+- `render_influence.py` — Camera influence: activates `motion_aware_crop=True` only when `camera.behavior` is in `{"fast_follow", "dramatic_push", "slow_reveal"}` AND payload already has `motion_aware_crop=True` OR `reframe_mode` is in `{"motion", "subject", "face"}` — the safety gate prevents force-enabling motion crop on static renders; `zoom_strength` clamped to ≤1.18, `follow_strength` clamped to ≤0.85
+- `render_influence.py` — Subtitle influence: enables `highlight_per_word=True` only when `subtitle.highlight_keywords=True` AND `add_subtitle=True` on payload; never alters subtitle text, timing, ASS formatting, or market subtitle policy
+- `render_influence.py` — Pacing influence: report-only in Phase 10; pacing_style and energy_level recorded in skipped list with `beat_sync_deferred=phase11` annotation; no clip duration or cut timing changes
+- `render_influence.py` — Memory influence: report-only in Phase 10; memory context result count recorded in skipped list; no render settings altered based on memory
+- `render_influence.py` — Explainability update: appends compact status line (`"AI render influence applied safely (N adjustments)"` or `"AI render influence enabled (no adjustments needed)"`) to `edit_plan.explainability.summary.summary_lines` if it exists; deduplication guard prevents duplicate lines; cosmetic-only, never raises on missing explainability
+- `app/orchestration/render_pipeline.py` — AI Render Influence block inserted after AI Director plan creation (line ~1695) and before per-part loop; `_ai_influence_report` initialized to `{"enabled": False}`; only invoked when `_ai_edit_plan is not None` AND `ai_render_influence_enabled=True`; outer try/except ensures any module-level crash still leaves render running with the original payload; logs `ai_render_influence_applied` at INFO or `ai_render_influence_module_failed` at WARNING; `ai_render_influence` key added to `_result_payload` dict alongside `ai_director`
+- `tests/test_ai_phase10_render_influence.py` (new) — 53 tests covering: schema defaults/backward-compat, module import safety, None plan/payload/corrupt plan never raises, `clamp_ai_influence` bounds, zoom/follow clamped values in applied report, `playback_speed` never touched, segment `start`/`end`/`score` never touched, subtitle timing/text fields never touched, influence report shape (`enabled/applied/skipped/warnings`), camera gate (only when motion_aware_crop or motion reframe), subtitle gate (only when add_subtitle=True), pacing/memory always skipped (report-only), explainability line append + dedup guard, fallback on corrupt plan fields, no API key, no GPU, no real video
+
+**Verification:**
+- 53/53 Phase 10 tests pass
+- 539/539 full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+- `zoom_strength` hard cap: 1.18 (AI plan values above this are clamped)
+- `follow_strength` hard cap: 0.85
+- `motion_aware_crop` only enabled if payload already permits motion-aware render
+- `highlight_per_word` only enabled if `add_subtitle=True`
+- `playback_speed` — structurally never touched
+- Segment `start`, `end`, `score` — structurally never touched
+- Subtitle timing, text, ASS logic — structurally never touched
+- Output validation fields — structurally never touched
+- Pacing cuts — deferred (Phase 11)
+- Memory-driven render changes — deferred (Phase 11)
+
+**Not yet implemented:**
+- Beat-synced cuts (Phase 11)
+- Render-time subtitle emphasis override
+- Full camera behavior execution (AI zoom/push rendered via FFmpeg)
+- UI toggle for `ai_render_influence_enabled`
+- Autonomous editing
+
+**Known limitations:**
+- AI influence is intentionally conservative in Phase 10
+- Camera influence activates `motion_aware_crop` but does not pass AI zoom/follow values into the FFmpeg motion crop pass (those are payload-level fields not yet linked to AI values)
+- Pacing style observation does not yet alter cut timing or segment ordering
+- Memory context is observed but not applied to render settings until Phase 11
+
+---
+
 ### 2026-05-08 — AI Productization Phase 9: Packaging + Performance Stabilization
 
 **Implemented:**

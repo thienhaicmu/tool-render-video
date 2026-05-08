@@ -1693,6 +1693,33 @@ def run_render_pipeline(
                     kind="warning",
                 )
 
+        # ── AI Render Influence (Phase 10) — bounded opt-in payload adjustments ──
+        _ai_influence_report: dict = {"enabled": False}
+        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False):
+            try:
+                from app.ai.director.render_influence import apply_ai_render_influence as _apply_ai_influence
+                payload, _ai_influence_report = _apply_ai_influence(
+                    payload,
+                    _ai_edit_plan,
+                    context={"job_id": job_id},
+                )
+                logger.info(
+                    "ai_render_influence_applied job_id=%s applied=%d skipped=%d",
+                    job_id,
+                    len(_ai_influence_report.get("applied", [])),
+                    len(_ai_influence_report.get("skipped", [])),
+                )
+            except Exception as _inf_err:
+                _ai_influence_report = {
+                    "enabled": True,
+                    "applied": [],
+                    "skipped": [],
+                    "warnings": [f"influence_module_error:{type(_inf_err).__name__}"],
+                }
+                logger.warning("ai_render_influence_module_failed job_id=%s: %s", job_id, _inf_err)
+        elif _ai_edit_plan is not None:
+            logger.debug("ai_render_influence_skipped job_id=%s (disabled)", job_id)
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()
@@ -3245,6 +3272,7 @@ def run_render_pipeline(
             "failed_outputs_count": len(failed_parts),
             "is_partial_success": _is_partial_success,
             "ai_director": _ai_edit_plan.to_dict() if _ai_edit_plan is not None else {"enabled": False},
+            "ai_render_influence": _ai_influence_report,
         }
         upsert_job(
             job_id,

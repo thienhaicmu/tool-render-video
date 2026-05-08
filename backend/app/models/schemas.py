@@ -224,6 +224,8 @@ class RenderRequest(BaseModel):
     ai_target_duration: Optional[int] = None
     ai_use_semantic_hooks: bool = True
     ai_use_rag_memory: bool = False
+    # AI Render Influence (Phase 10) — opt-in only; false = original behavior preserved.
+    ai_render_influence_enabled: bool = False
 
     @field_validator("render_profile")
     @classmethod
