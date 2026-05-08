@@ -179,6 +179,14 @@ def _build_plan(
         plan.warnings.append(f"ai_apply_policy_error:{type(exc).__name__}")
         logger.debug("ai_director_apply_policy_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 32: Safe Timing Mutation Apply ---
+    # Runs after policy (Phase 31) so effective policy is available.
+    try:
+        _attach_timing_apply(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"timing_apply_error:{type(exc).__name__}")
+        logger.debug("ai_director_timing_apply_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -2353,3 +2361,117 @@ def _resolve_transcript_chunks(context: dict, warnings: list[str]) -> list[dict]
             warnings.append(f"srt_read_failed: {type(exc).__name__}")
 
     return []
+
+
+# ---------------------------------------------------------------------------
+# Phase 32 — Safe Timing Mutation Apply attachment
+# ---------------------------------------------------------------------------
+
+def _attach_timing_apply(plan: "AIEditPlan", request: Any, job_id: str) -> None:
+    """Build and attach safe timing apply pack to the plan.
+
+    Runs after Phase 31 (apply policy) so effective policy is available.
+    Only applies mutations when policy is aggressive or experimental.
+    Hard safety bounds enforced. Never raises. Never mutates FFmpeg.
+    Never rewrites subtitle timing. Never reorders segments.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.timing.timing_apply_engine import build_timing_apply_pack
+
+        raw_policy = str(
+            getattr(request, "ai_apply_policy", "conservative") or "conservative"
+        )
+        context = {"ai_apply_policy": raw_policy, "job_id": job_id}
+
+        pack = build_timing_apply_pack(plan, payload=request, context=context)
+        pack_dict = pack.to_dict()
+        plan.timing_apply = pack_dict
+
+        applied_count = len(pack_dict.get("applied_mutations") or [])
+        blocked_count = len(pack_dict.get("blocked_mutations") or [])
+
+        logger.info(
+            "ai_timing_apply_generated job_id=%s enabled=%s mode=%s "
+            "applied=%d blocked=%d total_delta=%.2f",
+            job_id,
+            pack_dict.get("enabled", False),
+            pack_dict.get("mode", "disabled"),
+            applied_count,
+            blocked_count,
+            pack_dict.get("total_delta_sec", 0.0),
+        )
+
+        _append_timing_apply_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.timing_apply = {
+            "available": False,
+            "enabled": False,
+            "mode": "disabled",
+            "applied_mutations": [],
+            "blocked_mutations": [],
+            "total_delta_sec": 0.0,
+            "warnings": [f"timing_apply_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_timing_apply_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_timing_apply_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact timing apply lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = pack_dict.get("enabled", False)
+        mode = pack_dict.get("mode", "disabled")
+
+        if not enabled or mode == "disabled":
+            line = "Safe timing apply disabled by conservative policy"
+            if not any("timing apply" in str(l).lower() for l in lines):
+                lines.append(line)
+            return
+
+        applied = pack_dict.get("applied_mutations") or []
+        blocked = pack_dict.get("blocked_mutations") or []
+
+        for mut in applied:
+            if not isinstance(mut, dict):
+                continue
+            mut_type = str(mut.get("mutation_type") or "")
+            if mut_type == "trim_silence_gap":
+                line = "Safe silence-gap trim applied"
+            elif mut_type == "tighten_setup":
+                line = "Safe setup tighten applied"
+            elif mut_type == "shorten_outro":
+                line = "Safe outro shorten applied"
+            elif mut_type == "reduce_dead_air":
+                line = "Safe dead-air reduction applied"
+            else:
+                line = "Safe timing mutation applied"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        for mut in blocked:
+            if not isinstance(mut, dict):
+                continue
+            warnings = mut.get("warnings") or []
+            reason = warnings[0] if warnings else "safety_gate_failed"
+            line = f"Unsafe timing mutation blocked ({reason})"
+            if not any("Unsafe timing mutation blocked" in str(l) for l in lines):
+                lines.append(line)
+                break  # one blocked line is enough
+
+    except Exception:
+        pass

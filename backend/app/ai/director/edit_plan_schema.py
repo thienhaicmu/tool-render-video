@@ -156,6 +156,8 @@ class AIEditPlan:
     output_ranking: dict = field(default_factory=dict)
     # Phase 31 — AI apply policy layer (populated by policy_engine module)
     ai_apply_policy: dict = field(default_factory=dict)
+    # Phase 32 — safe timing mutation apply (populated by timing_apply_engine module)
+    timing_apply: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -229,4 +231,5 @@ class AIEditPlan:
             "multivariant_execution": dict(self.multivariant_execution),
             "output_ranking": dict(self.output_ranking),
             "ai_apply_policy": dict(self.ai_apply_policy),
+            "timing_apply": dict(self.timing_apply),
         }

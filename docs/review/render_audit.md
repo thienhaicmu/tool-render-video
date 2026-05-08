@@ -6,6 +6,74 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 32: Safe Timing Mutation Apply Foundation
+
+**First timing apply phase. Policy-gated. Bounded. Deterministic. No FFmpeg mutation.**
+
+**Implemented:**
+
+- `app/ai/timing/timing_apply_schema.py` (new) — `AITimingMutationApply` dataclass (mutation_id, mutation_type, source_candidate_id, confidence, applied, safe, start_sec, end_sec, delta_sec, reason, warnings, explanation; `to_dict()` caps delta at `_MAX_SINGLE_DELTA_SEC=1.5`, caps confidence [0,1], caps warnings/explanation at 10, maps unknown types to "unknown"); `AITimingApplyPack` dataclass (available, enabled, mode, applied_mutations, blocked_mutations, total_delta_sec, warnings; `to_dict()` caps total_delta at `_MAX_TOTAL_DELTA_SEC=4.0`, caps mutations at 20)
+- `app/ai/timing/timing_apply_safety.py` (new) — `sanitize_timing_candidate(candidate) -> dict`; handles both Phase 19 (`start`/`end`/`max_trim_seconds`) and Phase 32 (`start_sec`/`end_sec`/`delta_sec`) key formats; `is_timing_mutation_safe(candidate, context) -> bool`; gates: forbidden type hard-reject, allowed type required, confidence ≥ 0.65, delta > 0 and ≤ 1.5 s, start ≥ 0, post-trim duration ≥ 2.0 s, protected window overlap, subtitle-dense region overlap; never raises
+- `app/ai/timing/timing_apply_engine.py` (new) — `build_timing_apply_pack(edit_plan, payload, context) -> AITimingApplyPack`; policy resolution priority: `context["ai_apply_policy"]` > `payload.ai_apply_policy` > `edit_plan.ai_apply_policy["selected_policy"]` > "conservative"; only `aggressive`/`experimental` policies allow apply; collects candidates from Phase 19 (`timing_mutation`) and Phase 20 (`story_optimization.timing_hints`); Phase 19 action mapping: `trim_silence→trim_silence_gap`, `tighten_setup→tighten_setup`, `shorten_outro→shorten_outro`; unknown Phase 19 actions silently skipped; capped at 5 applied mutations; logs `ai_timing_apply_enabled`, `ai_timing_mutation_applied`, `ai_timing_mutation_blocked`, `ai_timing_apply_skipped`; never raises; never mutates payload in-place
+- `app/ai/director/edit_plan_schema.py` (updated) — `timing_apply: dict = field(default_factory=dict)` added after Phase 31 field; `"timing_apply": dict(self.timing_apply)` in `to_dict()`; backward-compatible; Phase 31 `ai_apply_policy` unchanged
+- `app/ai/director/ai_director.py` (updated) — Phase 32 block inserted between Phase 31 (policy) and Phase 6 (explainability); `_attach_timing_apply(plan, request, job_id)` reads `ai_apply_policy` from request; `_append_timing_apply_explainability()` appends: "Safe timing apply disabled by conservative policy" (disabled), "Safe {type} applied" (per applied mutation), "Unsafe timing mutation blocked ({reason})" (first blocked); wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_timing_apply(payload, edit_plan, report)` added; disabled → `report["skipped"]` as `"timing_apply:disabled_phase32(applied=...,blocked=...)"`; active applied mutations → `report["applied"]` as `"timing_apply:applied({id},{type}:delta=...s)"`; blocked mutations → `report["skipped"]` as `"timing_apply:blocked({id},{type}:{reason})"`; wired after `_report_ai_apply_policy()`; payload never mutated
+- `tests/test_ai_phase32_timing_apply.py` (new) — 74 tests covering schema, safety, engine, edit plan compat, render influence, end-to-end
+
+**Allowed timing mutation types:**
+
+| Type | Source |
+|------|--------|
+| `trim_silence_gap` | Phase 19 `trim_silence` action |
+| `tighten_setup` | Phase 19 `tighten_setup` action |
+| `shorten_outro` | Phase 19 `shorten_outro` action |
+| `reduce_dead_air` | Phase 20 story hint |
+
+**Safety bounds:**
+
+| Gate | Bound |
+|------|-------|
+| `_MAX_SINGLE_DELTA_SEC` | 1.5 s per mutation |
+| `_MAX_TOTAL_DELTA_SEC` | 4.0 s total |
+| `_MIN_CONFIDENCE` | 0.65 |
+| Post-trim segment duration | ≥ 2.0 s |
+| Protected hook/payoff window | no overlap |
+| Subtitle-dense region | no overlap |
+
+**Policy gating:**
+
+| Policy | Timing apply enabled |
+|--------|---------------------|
+| `conservative` | ✗ |
+| `balanced` | ✗ |
+| `aggressive` | ✓ |
+| `experimental` | ✓ |
+
+**Intentionally still blocked:**
+
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Executor authority override
+- Validation bypass
+- Autonomous unlimited rendering
+
+**Architecture notes:**
+
+- Phase 32 runs between Phase 31 (policy) and Phase 6 (explainability) — so effective policy is resolved before timing apply evaluates it
+- Unknown Phase 19 `action` values are silently skipped at collection (not added to blocked) since they were never valid Phase 19 candidates; known forbidden Phase 20 `mutation_type` values are also skipped at collection
+- `report["applied"]` receives timing apply entries for the first time in Phase 32 — prior phases only used `report["skipped"]` for advisory metadata
+- Applied mutations are metadata only — no FFmpeg arg is modified, no subtitle file is rewritten, no segment order changes
+
+**Verification:**
+
+- Phase 32 tests: 74 passed
+- Full suite passes (2134 total, zero regressions)
+- `git diff --check` clean
+
+---
+
 ### 2026-05-08 — AI Productization Phase 31: AI Apply Policy Layer Foundation
 
 **Policy layer controls HOW MUCH AI influence is allowed. Hard safety blocks are NEVER bypassed.**

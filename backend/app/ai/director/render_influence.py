@@ -100,6 +100,7 @@ def apply_ai_render_influence(
         _report_multivariant_execution(payload, edit_plan, report)
         _report_output_ranking(payload, edit_plan, report)
         _report_ai_apply_policy(payload, edit_plan, report)
+        _report_timing_apply(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -715,6 +716,66 @@ def _report_ai_apply_policy(payload: Any, edit_plan: Any, report: dict) -> None:
     logger.debug(
         "ai_apply_policy_reported policy=%s blocked=%d",
         selected, len(blocked),
+    )
+
+
+# ── Timing apply — applied/blocked summary in Phase 32 ───────────────────────
+
+def _report_timing_apply(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report safe timing mutation apply results from Phase 32.
+
+    Applied mutations appear in report["applied"] as bounded timing metadata.
+    Blocked mutations appear in report["skipped"].
+    Payload is never mutated here. No FFmpeg changes. No subtitle timing rewrite.
+    """
+    ta = getattr(edit_plan, "timing_apply", None)
+    if not isinstance(ta, dict) or not ta:
+        report["skipped"].append("timing_apply:no_result")
+        return
+
+    enabled = ta.get("enabled", False)
+    mode = ta.get("mode", "disabled")
+    total_delta = ta.get("total_delta_sec", 0.0)
+    applied = ta.get("applied_mutations") or []
+    blocked = ta.get("blocked_mutations") or []
+
+    if not enabled or mode == "disabled":
+        report["skipped"].append(
+            f"timing_apply:disabled_phase32"
+            f"(applied={len(applied)},blocked={len(blocked)})"
+        )
+        logger.debug("timing_apply_reported disabled")
+        return
+
+    for mut in applied:
+        if not isinstance(mut, dict):
+            continue
+        mut_id = str(mut.get("mutation_id") or "")
+        mut_type = str(mut.get("mutation_type") or "")
+        delta = float(mut.get("delta_sec") or 0.0)
+        report["applied"].append(
+            f"timing_apply:applied({mut_id},{mut_type}:delta={delta:.2f}s)"
+        )
+        logger.info(
+            "ai_timing_mutation_applied mutation_id=%s type=%s delta=%.2f",
+            mut_id, mut_type, delta,
+        )
+
+    for mut in blocked:
+        if not isinstance(mut, dict):
+            continue
+        mut_id = str(mut.get("mutation_id") or "")
+        mut_type = str(mut.get("mutation_type") or "")
+        warnings = mut.get("warnings") or ["blocked"]
+        reason = warnings[0] if warnings else "blocked"
+        report["skipped"].append(
+            f"timing_apply:blocked({mut_id},{mut_type}:{reason})"
+        )
+        logger.info("ai_timing_mutation_blocked mutation_id=%s reason=%s", mut_id, reason)
+
+    logger.debug(
+        "timing_apply_reported applied=%d blocked=%d total_delta=%.2f",
+        len(applied), len(blocked), total_delta,
     )
 
 
