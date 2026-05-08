@@ -102,6 +102,7 @@ def apply_ai_render_influence(
         _report_ai_apply_policy(payload, edit_plan, report)
         _report_timing_apply(payload, edit_plan, report)
         _report_subtitle_text_apply(payload, edit_plan, report)
+        _report_camera_motion_apply(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -842,6 +843,72 @@ def _report_subtitle_text_apply(payload: Any, edit_plan: Any, report: dict) -> N
     report["skipped"].append("subtitle_timestamp_rewrite:always_blocked_phase33")
     logger.debug(
         "subtitle_text_apply_reported applied=%d blocked=%d",
+        len(applied), len(blocked),
+    )
+
+
+# ── Camera motion apply — applied/blocked summary in Phase 34 ────────────────
+
+def _report_camera_motion_apply(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report camera motion apply results from Phase 34.
+
+    Applied guidance appears in report["applied"] as bounded metadata descriptors.
+    Blocked guidance and the direct crop-coordinate safety invariant go to report["skipped"].
+    Payload is never mutated. No crop coordinates changed. No FFmpeg mutation.
+    """
+    cma = getattr(edit_plan, "camera_motion_apply", None)
+    if not isinstance(cma, dict) or not cma:
+        report["skipped"].append("camera_motion_apply:no_result")
+        return
+
+    enabled = cma.get("enabled", False)
+    mode = cma.get("mode", "disabled")
+    applied = cma.get("applied") or []
+    blocked = cma.get("blocked") or []
+
+    if not enabled or mode == "disabled":
+        report["skipped"].append(
+            f"camera_motion_apply:disabled_phase34"
+            f"(applied={len(applied)},blocked={len(blocked)})"
+        )
+        report["skipped"].append("direct_crop_coordinate_rewrite:always_blocked_phase34")
+        logger.debug("camera_motion_apply_reported disabled")
+        return
+
+    for cam in applied:
+        if not isinstance(cam, dict):
+            continue
+        apply_id = str(cam.get("apply_id") or "")
+        cam_type = str(cam.get("camera_type") or "")
+        changes = cam.get("changes") or {}
+        changes_str = ",".join(f"{k}={v}" for k, v in list(changes.items())[:3])
+        report["applied"].append(
+            f"camera_motion_apply:applied({apply_id},{cam_type}:[{changes_str}])"
+        )
+        logger.info(
+            "ai_camera_motion_guidance_applied apply_id=%s type=%s",
+            apply_id, cam_type,
+        )
+
+    for cam in blocked:
+        if not isinstance(cam, dict):
+            continue
+        apply_id = str(cam.get("apply_id") or "")
+        cam_type = str(cam.get("camera_type") or "")
+        warns = cam.get("warnings") or ["blocked"]
+        reason = warns[0] if warns else "blocked"
+        report["skipped"].append(
+            f"camera_motion_apply:blocked({apply_id},{cam_type}:{reason})"
+        )
+        logger.info(
+            "ai_camera_motion_guidance_blocked apply_id=%s reason=%s",
+            apply_id, reason,
+        )
+
+    # Safety invariant always reported
+    report["skipped"].append("direct_crop_coordinate_rewrite:always_blocked_phase34")
+    logger.debug(
+        "camera_motion_apply_reported applied=%d blocked=%d",
         len(applied), len(blocked),
     )
 

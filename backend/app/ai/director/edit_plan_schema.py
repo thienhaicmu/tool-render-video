@@ -160,6 +160,8 @@ class AIEditPlan:
     timing_apply: dict = field(default_factory=dict)
     # Phase 33 — subtitle text optimization apply (populated by subtitle_apply_engine module)
     subtitle_text_apply: dict = field(default_factory=dict)
+    # Phase 34 — safe camera motion apply (populated by camera_apply_engine module)
+    camera_motion_apply: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -235,4 +237,5 @@ class AIEditPlan:
             "ai_apply_policy": dict(self.ai_apply_policy),
             "timing_apply": dict(self.timing_apply),
             "subtitle_text_apply": dict(self.subtitle_text_apply),
+            "camera_motion_apply": dict(self.camera_motion_apply),
         }

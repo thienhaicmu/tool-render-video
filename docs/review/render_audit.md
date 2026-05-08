@@ -6,6 +6,83 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 34: Safe Camera Motion Apply Foundation
+
+**Camera motion guidance metadata only. No crop coordinate rewrite. No FFmpeg mutation. Policy-gated (balanced/aggressive/experimental).**
+
+**Implemented:**
+
+- `app/ai/camera/__init__.py` (new) — package marker
+- `app/ai/camera/camera_apply_schema.py` (new) — `AICameraMotionApply` dataclass (apply_id, camera_type, source_candidate_id, confidence, applied, safe, target_scope, changes, warnings, explanation; `to_dict()` clamps `beat_pulse_strength` [0, 0.35], clamps `max_camera_intensity` [0, 1], strips forbidden change keys, caps confidence [0, 1], caps warnings/explanation at 10, maps unknown camera types to "unknown"); `AICameraMotionApplyPack` dataclass (available, enabled, mode, applied, blocked, warnings; `to_dict()` caps applied/blocked at 20); `_ALLOWED_CAMERA_TYPES` (6 types); `_FORBIDDEN_CAMERA_TYPES` (5 types); `_ALLOWED_CHANGE_KEYS` (8 keys); `_FORBIDDEN_CHANGE_KEYS` (14 keys including all crop/ffmpeg/coordinate keys); `_MAX_BEAT_PULSE_STRENGTH = 0.35`, `_MAX_CAMERA_INTENSITY = 1.0`, `_MIN_CONFIDENCE = 0.65`
+- `app/ai/camera/camera_apply_safety.py` (new) — `sanitize_camera_motion_changes(changes) -> dict`; strips forbidden keys, retains only allowed keys, clamps beat_pulse_strength [0, 0.35] and max_camera_intensity [0, 1]; `is_camera_motion_apply_safe(candidate, context) -> bool`; gates: not-dict → False, forbidden camera type hard-reject, unknown type reject, confidence ≥ 0.65, scope must be "metadata", any forbidden change key present → reject, sanitized changes must be non-empty; never raises
+- `app/ai/camera/camera_apply_engine.py` (new) — `build_camera_motion_apply_pack(edit_plan, payload, context) -> AICameraMotionApplyPack`; policy gate: only `balanced`/`aggressive`/`experimental`; `_MAX_APPLIED = 6`; candidate sources: Phase 18 (`beat_visual_execution.pulse_regions`) → `beat_aware_pulse` with pulse_strength clamped to [0, 0.35] at collection time; Phase 23 (`creator_style_adaptation.adapted_style`) → `creator_style_camera`; Phase 5 camera plan (`subtitle_safe=True`) → `subtitle_safe_framing`; Phase 27 (`safe_render_mutations` visual_rhythm category) → `motion_smoothing_hint`; Phase 33 (`subtitle_text_apply` compact_overload/density_reduce applied) → `subtitle_safe_framing` (if not already present); logs `ai_camera_motion_apply_enabled`, `ai_camera_motion_guidance_applied`, `ai_camera_motion_guidance_blocked`, `ai_camera_motion_apply_skipped`; never raises; never mutates payload in-place; never rewrites crop coordinates
+- `app/ai/director/edit_plan_schema.py` (updated) — `camera_motion_apply: dict = field(default_factory=dict)` added after Phase 33 field; `"camera_motion_apply": dict(self.camera_motion_apply)` in `to_dict()`; backward-compatible
+- `app/ai/director/ai_director.py` (updated) — Phase 34 block inserted between Phase 33 (subtitle text apply) and Phase 6 (explainability); `_attach_camera_motion_apply(plan, request, job_id)` reads `ai_apply_policy` from request; `_append_camera_motion_apply_explainability()` appends: "Camera motion apply disabled by conservative policy" (disabled), "Direct crop coordinate rewrite remains blocked" (always), per-applied camera type labels, "Camera motion guidance blocked ({reason})" (first blocked); wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_camera_motion_apply(payload, edit_plan, report)` added; disabled → `report["skipped"]` as `"camera_motion_apply:disabled_phase34(applied=...,blocked=...)"` + `"direct_crop_coordinate_rewrite:always_blocked_phase34"`; active applied → `report["applied"]` as `"camera_motion_apply:applied({id},{type}:[changes])"`; blocked → `report["skipped"]` as `"camera_motion_apply:blocked({id},{type}:{reason})"`; always appends `"direct_crop_coordinate_rewrite:always_blocked_phase34"` to `report["skipped"]`; wired after `_report_subtitle_text_apply()`; payload never mutated
+- `tests/test_ai_phase34_camera_motion_apply.py` (new) — 83 tests covering schema, safety, engine, edit plan compat, render influence, end-to-end
+
+**Allowed camera types:**
+
+| Type | Source |
+|------|--------|
+| `dynamic_safe` | General dynamic camera guidance |
+| `subtitle_safe_framing` | Phase 5 camera plan / Phase 33 density |
+| `beat_aware_pulse` | Phase 18 `beat_visual_execution` |
+| `creator_style_camera` | Phase 23 `creator_style_adaptation` |
+| `subject_lock_preference` | Subject tracking preference |
+| `motion_smoothing_hint` | Phase 27 `safe_render_mutations` visual_rhythm |
+
+**Allowed change keys (metadata only — no coordinates):**
+
+`camera_behavior`, `subtitle_safe_framing`, `beat_pulse_strength` [0–0.35], `creator_style_camera`, `subject_lock_preference`, `motion_smoothing`, `max_camera_intensity` [0–1], `visual_rhythm_mode`
+
+**Safety bounds:**
+
+| Gate | Rule |
+|------|------|
+| Confidence | ≥ 0.65 |
+| `target_scope` | must be "metadata" |
+| `beat_pulse_strength` | clamped [0, 0.35] |
+| `max_camera_intensity` | clamped [0, 1] |
+| Forbidden change keys | hard-rejected before sanitization |
+| Empty changes after sanitization | rejected |
+
+**Policy gating:**
+
+| Policy | Camera motion apply enabled |
+|--------|----------------------------|
+| `conservative` | ✗ |
+| `balanced` | ✓ |
+| `aggressive` | ✓ |
+| `experimental` | ✓ |
+
+**Intentionally still blocked:**
+
+- Crop coordinate rewrite (always — `crop_x`, `crop_y`, `crop_w`, `crop_h`)
+- FFmpeg filter rewrite (always)
+- Arbitrary zoom curve (always)
+- Unsafe subject jump (always)
+- Scene reorder camera (always)
+- Playback_speed mutation (always)
+- Segment reorder (always)
+- Executor override (always)
+
+**Architecture notes:**
+
+- Phase 34 sits between Phase 33 (subtitle text apply) and Phase 6 (explainability) — the third and final apply phase
+- `report["skipped"]` always contains `"direct_crop_coordinate_rewrite:always_blocked_phase34"` regardless of enabled state — explicit audit trail of the safety invariant
+- `target_scope="metadata"` is enforced by safety gate and reported in all applied entries
+- Beat pulse strength is clamped at two levels: at collection time (in `_collect_candidates`) and again at `to_dict()` serialization
+- Phase 34 is the third apply phase to add entries to `report["applied"]`
+
+**Verification:**
+
+- Phase 34 tests: 83 passed
+- Full suite passes (2296 total, zero regressions)
+- `git diff --check` clean
+
+---
+
 ### 2026-05-08 — AI Productization Phase 33: Subtitle Text Optimization Apply Foundation
 
 **Text/style metadata only. No subtitle timestamp rewrite. Policy-gated (balanced/aggressive/experimental).**
