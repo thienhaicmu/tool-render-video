@@ -1,8 +1,35 @@
 # Render System — Full Architecture Audit
 
-> **Review-only. No code was modified.**
+> **Living document.** Original audit generated 2026-05-07. Patch notes appended below.
 > All findings are grounded in actual file content with exact line references.
-> Generated: 2026-05-07
+
+---
+
+## Patch Status Log
+
+### 2026-05-08 — P0 Render Foundation Fixes
+
+**Fixed:**
+- 16:9 render dimension branch: `resolve_target_dimensions("16:9")` now returns `(1920, 1080)`. The original `else` fallback producing 1080×1440 has been replaced by an explicit `elif "16:9"` branch, extracted into the public helper `resolve_target_dimensions()` in `render_engine.py`.
+- `motion_crop._codec_flags()` CPU paths: libx264 and libx265 now include `-maxrate 20M -bufsize 40M` via delegation to the unified `encoder_helpers.codec_extra_flags()`. NVENC path intentionally keeps unconstrained VBR (pipe-latency constraint).
+- Body subject crop center formula: `_subject_to_crop_center()` body branch now uses `cy = y + h * 0.50` (mid-body). Face branch retains `cy = y + h * 0.34`.
+
+**Also fixed in same patch (P0-P1 encoder unification):**
+- 12 duplicated encoder helpers consolidated into `app/services/encoder_helpers.py`. Both `render_engine.py` and `motion_crop.py` now import from this single source of truth.
+- `ffprobe_video_info()` in `motion_crop.py` now wraps `render_engine.probe_video_metadata()` — no uncached subprocess.
+- `has_audio_stream()` in `motion_crop.py` now wraps `render_engine._has_audio_stream()`.
+
+**Tests added:**
+- `backend/tests/test_render_audit_p0_fixes.py` — 18 focused regression tests (no FFmpeg, no GPU)
+- `backend/tests/test_render_guards.py` — dimension selector unit + integration tests
+- `backend/tests/test_motion_crop_guards.py` — codec flags + body center guard tests
+- `backend/tests/test_probe_unification.py` — probe consolidation guard
+
+**Items intentionally deferred:**
+- Smoke test (real render end-to-end): still P0 priority, not yet added.
+- `_run_with_retry` stderr capture in `subtitle_engine.py`: P0, deferred.
+- BGM filter duplication in `render_part()`: P3, deferred.
+- Stall detection in progress timer: P2, deferred.
 
 ---
 
@@ -14,21 +41,21 @@ The render system is architecturally sound and shows genuine production thinking
 
 ### Top 5 Risks
 
-| # | Risk | Severity |
-|---|------|----------|
-| 1 | `motion_crop._codec_flags()` missing `-maxrate 20M -bufsize 40M` → unbounded bitrate when motion-aware crop is active | HIGH |
-| 2 | `render_part()` aspect_ratio `"16:9"` falls to `else` branch → 1080×1440 portrait output instead of 1920×1080 landscape | HIGH |
-| 3 | Face vs body crop center formula identical (`cy = y + h * 0.34`) for both branches in `_subject_to_crop_center()` — body subjects framed wrong | MEDIUM |
-| 4 | Zero test suite — every regression is invisible, no smoke test for the entire pipeline | MEDIUM |
-| 5 | `_run_with_retry()` in `subtitle_engine.py` does not capture stderr → FFmpeg errors during audio extraction are silently discarded | MEDIUM |
+| # | Risk | Severity | Status |
+|---|------|----------|--------|
+| 1 | `motion_crop._codec_flags()` missing `-maxrate 20M -bufsize 40M` → unbounded bitrate when motion-aware crop is active | HIGH | **Fixed 2026-05-08** — CPU paths delegate to `encoder_helpers.codec_extra_flags()` |
+| 2 | `render_part()` aspect_ratio `"16:9"` falls to `else` branch → 1080×1440 portrait output instead of 1920×1080 landscape | HIGH | **Fixed 2026-05-08** — explicit `elif "16:9"` branch in `resolve_target_dimensions()` |
+| 3 | Face vs body crop center formula identical (`cy = y + h * 0.34`) for both branches in `_subject_to_crop_center()` — body subjects framed wrong | MEDIUM | **Fixed 2026-05-08** — body branch now `cy = y + h * 0.50` |
+| 4 | Zero test suite — every regression is invisible, no smoke test for the entire pipeline | MEDIUM | **Partial** — focused regression tests added; smoke test (real render) still missing |
+| 5 | `_run_with_retry()` in `subtitle_engine.py` does not capture stderr → FFmpeg errors during audio extraction are silently discarded | MEDIUM | Open |
 
 ### Top 5 Upgrade Priorities
 
-1. **P0 — Fix 16:9 dimension bug** — `render_engine.py:839–844` — add explicit `elif "16:9"` branch
-2. **P0 — Fix `motion_crop._codec_flags()` divergence** — add missing `-maxrate`/`-bufsize` at lines 162–183
-3. **P0 — Fix body crop center formula** — `motion_crop.py:748–751` — `h * 0.34` → `h * 0.50` for body branch
-4. **P1 — Consolidate duplicate encoder helpers** — extract to `app/services/encoder_helpers.py`; both files import from it
-5. **P0 — Add smoke test suite** — 10 s reference clip: cut → subtitle → render → validate dimensions + duration
+1. ~~**P0 — Fix 16:9 dimension bug**~~ — **Done 2026-05-08.** `resolve_target_dimensions()` in `render_engine.py` now handles all four ratios explicitly.
+2. ~~**P0 — Fix `motion_crop._codec_flags()` divergence**~~ — **Done 2026-05-08.** CPU paths unified through `encoder_helpers.codec_extra_flags()`.
+3. ~~**P0 — Fix body crop center formula**~~ — **Done 2026-05-08.** Body branch uses `h * 0.50` in `_subject_to_crop_center()`.
+4. ~~**P1 — Consolidate duplicate encoder helpers**~~ — **Done 2026-05-08.** `app/services/encoder_helpers.py` is the single source; both `render_engine.py` and `motion_crop.py` import from it.
+5. **P0 — Add smoke test suite** — Still open. 10 s reference clip: cut → subtitle → render → validate dimensions + duration. Focused unit regression tests added, but end-to-end smoke test not yet written.
 
 ---
 
@@ -37,12 +64,12 @@ The render system is architecturally sound and shows genuine production thinking
 | Feature | Status | Evidence | Main Issue | Upgrade | Priority |
 |---------|--------|----------|------------|---------|----------|
 | Pipeline Orchestration | Acceptable | `render_pipeline.py:872–1718` | `_process_one_part` closure is ~400 lines inside `run_render_pipeline` | Extract to top-level `_render_one_part(ctx)` | P2 |
-| FFmpeg Encode (`render_part`) | **Risky** | `render_engine.py:798–1032` | 16:9 aspect ratio falls to `else` → 1080×1440 | Add explicit 16:9 branch | P0 |
-| FFmpeg Encode (motion crop path) | **Risky** | `motion_crop.py:154–183` vs `render_engine.py:218–257` | Missing `-maxrate 20M -bufsize 40M` on both libx264 and libx265 | Sync codec flags | P0 |
-| Codec / GPU Detection | **Risky** | Both files define `_has_encoder`, `_nvenc_runtime_ready`, `_map_preset_for_encoder` | 6-function duplication; divergence already present | Extract to `encoder_helpers.py` | P1 |
+| FFmpeg Encode (`render_part`) | Good | `render_engine.py` | **Fixed 2026-05-08** — `resolve_target_dimensions()` handles all aspect ratios correctly | — | Done |
+| FFmpeg Encode (motion crop path) | Good | `motion_crop.py` | **Fixed 2026-05-08** — CPU codec flags unified via `encoder_helpers.codec_extra_flags()` | — | Done |
+| Codec / GPU Detection | Good | `app/services/encoder_helpers.py` | **Fixed 2026-05-08** — 12 helpers extracted and unified; both files import from single source | — | Done |
 | Output Validation | Good | `render_pipeline.py:591–823` | Duration tolerance 15% is generous for clips < 15s | Tighten for short clips | P2 |
 | Frame Extraction / Preview | Acceptable | `render.py:184–296`, `render_engine.py:45–117`, `motion_crop.py:244–280` | 3 separate probe implementations; `motion_crop.ffprobe_video_info()` not cached | Unify to single cached `probe_video_metadata()` | P1 |
-| Motion Crop / Subject Track | **Weak** | `motion_crop.py:730–770` | Face and body `cy` formula identical (`h*0.34`); body subjects mis-framed | Fix body formula to `h*0.50` | P0 |
+| Motion Crop / Subject Track | Acceptable | `motion_crop.py` | **Fixed 2026-05-08** — body `cy = h*0.50`; face retains `h*0.34` | — | Done |
 | Subtitle Transcription | Good | `subtitle_engine.py:263–`, `render_pipeline.py:1515–1597` | One-time full transcription with heartbeat thread; correct design | — | — |
 | SRT Slicing / ASS Conversion | Acceptable | `subtitle_engine.py:147–196` | `apply_playback_speed=False` is intentional; subtitles burned before `setpts` | Document explicitly | P3 |
 | Voice / TTS Mix | Needs Inspection | `tts_service.py`, `audio_mix_service.py` | Files outside review scope; timeout and failure visibility unclear | Separate targeted review | P1 |
@@ -50,7 +77,7 @@ The render system is architecturally sound and shows genuine production thinking
 | Output Ranking | Acceptable | `render_pipeline.py:184–236` | `is_best_clip` init to `False`; `continuity_score` in `ranking_components` but weight=0 | Confirm best-clip pass runs | P1 |
 | Render Queue / Progress | Acceptable | `render_pipeline.py:316–361` | No stall detection; parks at 85% when duration unknown | Add wall-clock stall threshold | P2 |
 | Frontend Render Payload | Acceptable | `schemas.py`, `render-ui.js` | `retry_count` unbounded; `whisper_model` resolves silently | Add schema bounds; expose in UI | P2 |
-| Test Coverage | **Risky** | `tests/` directory does not exist | Zero automated tests | Add smoke test | P0 |
+| Test Coverage | **Partial** | `backend/tests/` (9 test files, 200+ tests) | Focused unit tests exist; end-to-end smoke test still missing | Add smoke test | P0 |
 
 ---
 
@@ -104,7 +131,7 @@ def _probe_video_duration(video_path: Path) -> int:
 
 **Critical bug — 16:9 aspect ratio:**
 ```python
-# render_engine.py:839-844
+# render_engine.py:839-844 (original — BUG)
 if aspect_ratio == "1:1":
     target_w, target_h = 1080, 1080
 elif aspect_ratio == "9:16":
@@ -113,6 +140,8 @@ else:  # "3:4", "4:5" AND "16:9" fall here — BUG
     target_w, target_h = 1080, 1440
 ```
 `"16:9"` is a valid schema value but produces 1080×1440 (portrait 3:4). Correct would be 1920×1080.
+
+> **Status Update — Fixed 2026-05-08:** The inline if/elif block was replaced by `resolve_target_dimensions(aspect_ratio)` — a standalone helper with explicit branches for all four ratios. `render_part()` now calls `target_w, target_h = resolve_target_dimensions(aspect_ratio)`. Regression guard: `tests/test_render_audit_p0_fixes.py::TestAspectRatioDimensions`.
 
 **What is good:**
 - NVENC semaphore scoped with `with` at line 983 — releases before CPU fallback
@@ -199,17 +228,19 @@ def ffprobe_video_info(video_path: str):
 
 **Critical bug — body crop center formula:**
 ```python
-# motion_crop.py:748-751
+# motion_crop.py:748-751 (original — BUG)
 if subject_kind == "body":
     cy = y + h * 0.34     # BUG: same as face — should be 0.50 for mid-body
 else:
     cy = y + h * 0.34     # face: upper bias (correct for forehead/nose focus)
 ```
-Both branches are identical. A detected body is framed as if it were a face — crop centers on upper chest/shoulder instead of visual mid-body. Clearly an unfinished refactor.
+Both branches were identical. A detected body was framed as if it were a face — crop centers on upper chest/shoulder instead of visual mid-body. Clearly an unfinished refactor.
+
+> **Status Update — Fixed 2026-05-08:** Body branch now uses `cy = y + h * 0.50`. Face branch retains `cy = y + h * 0.34`. Regression guard: `tests/test_render_audit_p0_fixes.py::TestBodyCropCenterFormula`.
 
 **Codec flag divergence:**
 ```python
-# motion_crop.py:178-183 — MISSING maxrate/bufsize
+# motion_crop.py:178-183 (original — MISSING maxrate/bufsize)
 return ["-crf", str(video_crf), "-profile:v", "high", "-level:v", "5.1",
         "-tune", "film", "-x264-params", x264p]
 
@@ -217,7 +248,9 @@ return ["-crf", str(video_crf), "-profile:v", "high", "-level:v", "5.1",
 return ["-crf", ..., "-maxrate", "20M", "-bufsize", "40M",
         "-profile:v", "high", ...]
 ```
-Same divergence exists for libx265 (motion_crop.py:162–169 vs render_engine.py:235–242).
+Same divergence existed for libx265 (motion_crop.py:162–169 vs render_engine.py:235–242).
+
+> **Status Update — Fixed 2026-05-08:** Both the 12-function encoder helper duplication and the codec flag divergence were resolved by extracting all shared encoder logic into `app/services/encoder_helpers.py`. `motion_crop._codec_flags()` now delegates CPU paths to `encoder_helpers.codec_extra_flags()` which includes `-maxrate 20M -bufsize 40M` for libx264 and libx265. NVENC path in `motion_crop` intentionally keeps unconstrained VBR (raw-pipe latency constraint — see comment in `_codec_flags()`). Regression guard: `tests/test_render_audit_p0_fixes.py::TestMotionCropCodecFlags`.
 
 **Duplicated encoder helpers (all 6 must be in sync):**
 | Function | render_engine.py | motion_crop.py |
@@ -697,5 +730,150 @@ Do not change the _render_progress_timer stop_event pattern.
 ```
 
 ---
+
+# H. AI Architecture Direction
+
+## Current AI Capabilities
+
+The current render system already contains multiple AI-assisted or AI-like systems:
+
+### Existing AI Features
+- Whisper subtitle transcription
+- Subtitle translation pipeline
+- Motion-aware crop
+- Subject tracking
+- EMA camera smoothing
+- Scene-aware tracking reset
+- Viral scoring
+- Market-aware subtitle tone
+- Hook scoring (heuristic-based)
+- Ranking system
+- Multi-market presets
+- Smart fallback handling
+
+### Current Strengths
+- Strong render backbone
+- Strong subtitle rendering pipeline
+- Structured render events/logging
+- Render validation system
+- Motion smoothing stability
+- Multi-market architecture
+- Queue and progress infrastructure
+- Electron-compatible architecture
+- Offline-first rendering flow
+
+---
+
+## Missing AI Capabilities
+
+The system currently lacks higher-level semantic and planning intelligence.
+
+### Missing Semantic AI
+- Semantic hook understanding
+- Context-aware clip understanding
+- Emotion understanding
+- Semantic pacing analysis
+
+### Missing Editing Intelligence
+- AI edit planning
+- Story structure analysis
+- Narrative pacing
+- Dynamic camera behavior planning
+- Dynamic subtitle emphasis
+
+### Missing Learning Systems
+- RAG memory
+- Similar successful output retrieval
+- Render memory persistence
+- Cross-render learning
+- Market-specific learning
+
+### Missing Audio Intelligence
+- Beat-aware editing
+- BPM-aware pacing
+- Music-aware transitions
+- Emotion-aware rhythm planning
+
+---
+
+## AI Upgrade Principles
+
+The AI system must follow these architectural rules:
+
+### Principle 1 — AI Creates Plans
+AI modules generate:
+- edit plans
+- recommendations
+- scores
+- behaviors
+
+AI modules do NOT directly render video.
+
+### Principle 2 — Existing Pipeline Remains Executor
+The existing render pipeline remains:
+- authoritative
+- stable
+- fallback-safe
+
+AI layers must remain optional.
+
+### Principle 3 — Local AI First
+Prefer:
+- local inference
+- offline AI
+- free/open-source AI
+
+Avoid:
+- mandatory cloud APIs
+- mandatory subscriptions
+- cloud-dependent rendering
+
+### Principle 4 — Incremental Upgrades
+AI features must:
+- integrate gradually
+- preserve compatibility
+- avoid rewrite-style refactors
+
+### Principle 5 — Fallback Safety
+If any AI system fails:
+- render pipeline must continue
+- existing render behavior must remain functional
+
+---
+
+# I. AI Dependency Strategy
+
+## Approved Optional AI Libraries
+
+| Library | Purpose |
+|---|---|
+| faster-whisper | Subtitle transcription |
+| sentence-transformers | Semantic understanding |
+| faiss-cpu | RAG memory retrieval |
+| librosa | Beat/BPM analysis |
+| mediapipe | Face/body tracking |
+
+---
+
+## Dependency Rules
+
+### All AI Dependencies Must Be Optional
+
+Rules:
+- no hard imports at startup
+- no mandatory GPU
+- no mandatory CUDA
+- no mandatory API keys
+- no cloud lock-in
+
+### Required Import Pattern
+
+Correct:
+
+```python
+try:
+    from sentence_transformers import SentenceTransformer
+except Exception:
+    SentenceTransformer = None
 
 *End of audit. No code was modified. All file:line references are based on direct reads performed during this session.*

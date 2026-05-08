@@ -1,0 +1,7 @@
+# Optional local AI dependencies — install only when AI features are needed.
+# pip install -r backend/requirements-ai.txt
+sentence-transformers
+faiss-cpu
+librosa
+mediapipe
+faster-whisper
