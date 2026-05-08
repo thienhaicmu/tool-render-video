@@ -6,6 +6,77 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 26: Execution Simulation Layer Foundation
+
+**Implemented:**
+
+- `app/ai/simulation/__init__.py` (new) — package marker; Phase 26 simulation package
+- `app/ai/simulation/simulation_schema.py` (new) — `VALID_SAFETY_LEVELS` frozenset ({safe, caution, blocked}); `AIExecutionSimulation` dataclass (simulation_id, recommendation_id, label, estimated_retention_gain, estimated_story_gain, estimated_subtitle_clarity_gain, estimated_pacing_gain, confidence, safety_level, advisory_only always True, warnings, explanation; `to_dict()` hardcodes advisory_only=True, clamps confidence [0,1], clamps all gains [-100,100], caps explanation at 5, coerces invalid safety_level to "safe"); `AISimulationPack` dataclass (available, mode always "simulation_only", simulations, recommended_simulation_id, warnings; `to_dict()` hardcodes mode="simulation_only", caps simulations at 10)
+- `app/ai/simulation/simulation_scoring.py` (new) — `score_simulation(simulation, edit_plan=None) -> dict`; weighted gain blend (retention×0.35 + story×0.25 + subtitle×0.20 + pacing×0.20) centered at 50; safety penalties: caution −15, blocked −50; low-confidence (<0.40) dampening toward 50; returns {"overall_score":0-100, "confidence":0-1, "reasons":[], "warnings":[]}; deterministic; never raises
+- `app/ai/simulation/execution_simulator.py` (new) — `simulate_execution_recommendations(edit_plan, context) -> AISimulationPack`; primary path reads `execution_recommendations.recommendations` (Phase 25 output) and simulates each by category (retention, creator_style, subtitle, visual_rhythm, pacing, safe_baseline); supplemental direct-metadata path fills gaps: `_simulate_retention()` (gain: 18/10/4 for score <40/<70/≥70), `_simulate_subtitle()` (gain: 12/6/3 for compact/normal/other + 3 bonus for emphasis), `_simulate_visual_rhythm()` (pacing: 10/7/5 for >120/>80/≤80 bpm), `_simulate_story_pacing()` (story_driven/fast_cuts/standard), `_simulate_creator_style()` (retention=confidence×8, pacing=confidence×10); `_select_recommended()`: scores via `score_simulation()`, picks best non-baseline only if it beats baseline by >2 pts; `sim_safe_baseline` always present; emits `ai_execution_simulation_created` at INFO, `ai_execution_simulation_fallback` on error; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `execution_simulation: dict = field(default_factory=dict)` added to `AIEditPlan`; `"execution_simulation": dict(self.execution_simulation)` in `to_dict()`; backward-compatible; Phase 25 `execution_recommendations` field unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_execution_simulation(plan, job_id)` added; runs after Phase 25 (execution recommendations) so simulation reads full recommendation context; calls `simulate_execution_recommendations(plan, context)`; `_append_execution_simulation_explainability(plan, pack_dict)` appends: "Execution simulation estimated retention improvement (+X.Y)" or "Execution simulation prepared (advisory metadata only)", "Subtitle clarity simulation available" (when present), "Simulation remains advisory-only"; None guard on plan; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_execution_simulation(payload, edit_plan, report)` added; checks `edit_plan.execution_simulation`, adds `"execution_simulation:deferred_phase26(count=...,recommended=...)"` to report["skipped"]; no payload mutation; wired into `apply_ai_render_influence()` after `_report_execution_recommendations()`
+- `tests/test_ai_phase26_execution_simulation.py` (new) — comprehensive test suite covering simulation schema, scoring, simulator builder, AIEditPlan field, render_influence reporter, safety invariants, and AI Director integration
+
+**Simulation gain model:**
+
+| Simulation | Retention | Story | Subtitle | Pacing | Source |
+|------------|-----------|-------|----------|--------|--------|
+| retention_pacing (fast_cuts) | +18 (low) / +10 (mid) | — | — | +8 | retention.score |
+| creator_style | confidence×8 | — | — | confidence×10 | creator_style_adaptation |
+| compact_subtitle | — | — | +12/+6/+3 | — | subtitle_execution.density |
+| visual_rhythm (energetic) | +6 | — | — | +10 | beat_visual_execution.bpm |
+| story_pacing (story_driven) | — | (100-score)×0.15 | — | +8 | story_optimization |
+| safe_baseline | 0 | 0 | 0 | 0 | always present |
+
+**Scoring formula:** `overall = clamp(50 + Σ(gain×weight) − safety_penalty − low_conf_dampening, 0, 100)`
+
+**Safety penalties:** safe: −0, caution: −15, blocked: −50
+
+**Recommendation selection:** best non-baseline simulation selected only when `score > baseline_score + 2.0`; otherwise `sim_safe_baseline` is recommended
+
+**Safety boundaries enforced:**
+
+- `advisory_only` always True — hardcoded in `AIExecutionSimulation.to_dict()`
+- `mode` always "simulation_only" — hardcoded in `AISimulationPack.to_dict()`
+- Simulations contain no `recommended_settings` — no forbidden key exposure
+- Blocked simulations penalized −50 pts in scoring (prefer safe/caution)
+- safe_baseline always available as stable neutral reference
+- No FFmpeg commands altered
+- No payload mutation — simulator reads edit_plan, never writes render payload
+- No subtitle timing rewrite, no segment reorder, no playback_speed mutation
+- No autonomous execution of any simulation result
+- Never blocks render — all Phase 26 code wrapped in try/except in AI Director and simulator
+- Deterministic — same edit_plan always produces same simulation pack
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- Actual execution apply
+- Autonomous rendering
+- FFmpeg mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Payload mutation
+- Executor override
+- Output duplication
+
+**Architecture notes:**
+
+- Phase 26 runs after Phase 25 (execution recommendations) so simulations can reference recommendation-backed metadata for higher fidelity estimates
+- Supplemental direct-metadata simulators fire for any gain category not already covered by a recommendation-backed simulation (no duplicates)
+- `score_simulation()` is pure — same simulation object always returns same score regardless of edit_plan context
+
+**Verification:**
+
+- Phase 26 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
 ### 2026-05-08 — AI Productization Phase 25: Safe Execution Recommendation Layer
 
 **Implemented:**

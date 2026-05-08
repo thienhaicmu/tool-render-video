@@ -94,6 +94,7 @@ def apply_ai_render_influence(
         _report_variant_selection(payload, edit_plan, report)
         _report_render_decision_preview(payload, edit_plan, report)
         _report_execution_recommendations(payload, edit_plan, report)
+        _report_execution_simulation(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -483,6 +484,35 @@ def _report_execution_recommendations(payload: Any, edit_plan: Any, report: dict
     )
     logger.debug(
         "execution_recommendations_deferred count=%d recommended=%s",
+        count, recommended_id,
+    )
+
+
+# ── Execution simulation — report-only in Phase 26 ───────────────────────────
+
+def _report_execution_simulation(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record execution simulation metadata — deferred in Phase 26.
+
+    No simulations applied. No payload mutated. No FFmpeg commands altered.
+    """
+    es = getattr(edit_plan, "execution_simulation", None)
+    if not isinstance(es, dict):
+        report["skipped"].append("execution_simulation:no_result")
+        return
+
+    if not es:
+        report["skipped"].append("execution_simulation:empty")
+        return
+
+    count = len(es.get("simulations") or [])
+    recommended_id = es.get("recommended_simulation_id")
+
+    report["skipped"].append(
+        f"execution_simulation:deferred_phase26("
+        f"count={count},recommended={recommended_id!r})"
+    )
+    logger.debug(
+        "execution_simulation_deferred count=%d recommended=%s",
         count, recommended_id,
     )
 
