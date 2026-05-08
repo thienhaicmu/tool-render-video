@@ -6,6 +6,80 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 33: Subtitle Text Optimization Apply Foundation
+
+**Text/style metadata only. No subtitle timestamp rewrite. Policy-gated (balanced/aggressive/experimental).**
+
+**Implemented:**
+
+- `app/ai/subtitles/subtitle_apply_schema.py` (new) — `AISubtitleTextApply` dataclass (apply_id, optimization_type, source_candidate_id, confidence, applied, safe, target_scope, changes, warnings, explanation; `to_dict()` strips forbidden change keys, retains only `_ALLOWED_CHANGE_KEYS`, clamps `max_chars_per_line` to [18, 42], caps confidence [0, 1], caps warnings/explanation at 10, maps unknown optimization types to "unknown"); `AISubtitleTextApplyPack` dataclass (available, enabled, mode, applied, blocked, warnings; `to_dict()` caps applied/blocked at 20); `_ALLOWED_OPTIMIZATION_TYPES` (6 types); `_FORBIDDEN_OPTIMIZATION_TYPES` (5 types); `_ALLOWED_CHANGE_KEYS` (8 keys); `_FORBIDDEN_CHANGE_KEYS` (10 keys including all timestamp/timing keys)
+- `app/ai/subtitles/subtitle_apply_safety.py` (new) — `sanitize_subtitle_text_changes(changes) -> dict`; strips forbidden keys, retains only allowed keys, clamps max_chars_per_line; `is_subtitle_text_apply_safe(candidate, context) -> bool`; gates: not-dict → False, forbidden opt type hard-reject, unknown opt type reject, confidence ≥ 0.65, scope must be "metadata", any forbidden change key present → reject, sanitized changes must be non-empty; never raises
+- `app/ai/subtitles/subtitle_apply_engine.py` (new) — `build_subtitle_text_apply_pack(edit_plan, payload, context) -> AISubtitleTextApplyPack`; policy gate: only `balanced`/`aggressive`/`experimental`; candidate sources: Phase 17 (`subtitle_execution.global_hint`) → `compact_overload` and `keyword_emphasis`; Phase 23 (`creator_style_adaptation`) → `creator_style_tone`; Phase 16 (`retention.subtitle_overload_detected`) → `density_reduce`; Phase 19 (`timing_mutation` hold_hook) → `hook_emphasis`; capped at 6 applied; logs `ai_subtitle_text_apply_enabled`, `ai_subtitle_text_optimization_applied`, `ai_subtitle_text_optimization_blocked`, `ai_subtitle_text_apply_skipped`; never raises; never mutates payload in-place
+- `app/ai/director/edit_plan_schema.py` (updated) — `subtitle_text_apply: dict = field(default_factory=dict)` added after Phase 32 field; `"subtitle_text_apply": dict(self.subtitle_text_apply)` in `to_dict()`; backward-compatible
+- `app/ai/director/ai_director.py` (updated) — Phase 33 block inserted between Phase 32 (timing apply) and Phase 6 (explainability); `_attach_subtitle_text_apply(plan, request, job_id)` reads `ai_apply_policy` from request; `_append_subtitle_text_apply_explainability()` appends: "Subtitle text optimization disabled by conservative policy" (disabled), "Subtitle timestamp rewrite remains blocked" (always), per-applied optimization labels, "Subtitle optimization blocked ({reason})" (first blocked); wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_subtitle_text_apply(payload, edit_plan, report)` added; disabled → `report["skipped"]` as `"subtitle_text_apply:disabled_phase33(applied=...,blocked=...)"` + `"subtitle_timestamp_rewrite:always_blocked_phase33"`; active applied → `report["applied"]` as `"subtitle_text_apply:applied({id},{type}:[changes])"`; blocked → `report["skipped"]` as `"subtitle_text_apply:blocked({id},{type}:{reason})"`; always appends `"subtitle_timestamp_rewrite:always_blocked_phase33"` to `report["skipped"]`; wired after `_report_timing_apply()`; payload never mutated
+- `tests/test_ai_phase33_subtitle_text_apply.py` (new) — 79 tests covering schema, safety, engine, edit plan compat, render influence, end-to-end
+
+**Allowed subtitle optimization types:**
+
+| Type | Source |
+|------|--------|
+| `compact_overload` | Phase 17 `density_mode=compact` |
+| `keyword_emphasis` | Phase 17 `emphasis_strength > 0.3` |
+| `safer_line_breaks` | General text safety |
+| `density_reduce` | Phase 16 `subtitle_overload_detected` |
+| `creator_style_tone` | Phase 23 `creator_style_adaptation` |
+| `hook_emphasis` | Phase 19 `hold_hook` candidate |
+
+**Allowed change keys (metadata/style only):**
+
+`subtitle_density`, `subtitle_emphasis`, `keyword_emphasis`, `line_break_style`, `max_chars_per_line` [18–42], `creator_style_tone`, `hook_emphasis`, `readability_mode`
+
+**Safety bounds:**
+
+| Gate | Rule |
+|------|------|
+| Confidence | ≥ 0.65 |
+| `target_scope` | must be "metadata" |
+| `max_chars_per_line` | clamped [18, 42] |
+| Forbidden change keys | hard-rejected before sanitization |
+| Empty changes after sanitization | rejected |
+
+**Policy gating:**
+
+| Policy | Subtitle text apply enabled |
+|--------|----------------------------|
+| `conservative` | ✗ |
+| `balanced` | ✓ |
+| `aggressive` | ✓ |
+| `experimental` | ✓ |
+
+**Intentionally still blocked:**
+
+- Subtitle timestamp rewrite (always)
+- Subtitle timing shift (always)
+- Full transcript rewrite (always)
+- Generated script replacement (always)
+- Playback_speed mutation (always)
+- FFmpeg command mutation (always)
+- Segment reorder (always)
+- Executor override (always)
+
+**Architecture notes:**
+
+- Phase 33 sits between Phase 32 (timing apply) and Phase 6 (explainability) — after policy is resolved
+- `report["skipped"]` always contains `"subtitle_timestamp_rewrite:always_blocked_phase33"` regardless of enabled state — this is an explicit audit trail of the safety invariant
+- `target_scope="metadata"` is enforced by safety gate and reported in all applied entries
+- Phase 33 is the second apply phase (after Phase 32 timing apply) to add entries to `report["applied"]`
+
+**Verification:**
+
+- Phase 33 tests: 79 passed
+- Full suite passes (2213 total, zero regressions)
+- `git diff --check` clean
+
+---
+
 ### 2026-05-08 — AI Productization Phase 32: Safe Timing Mutation Apply Foundation
 
 **First timing apply phase. Policy-gated. Bounded. Deterministic. No FFmpeg mutation.**

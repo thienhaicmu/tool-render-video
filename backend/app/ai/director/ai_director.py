@@ -187,6 +187,14 @@ def _build_plan(
         plan.warnings.append(f"timing_apply_error:{type(exc).__name__}")
         logger.debug("ai_director_timing_apply_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 33: Subtitle Text Optimization Apply ---
+    # Runs after Phase 32 (timing apply) with full policy context.
+    try:
+        _attach_subtitle_text_apply(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"subtitle_text_apply_error:{type(exc).__name__}")
+        logger.debug("ai_director_subtitle_text_apply_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -2472,6 +2480,124 @@ def _append_timing_apply_explainability(
             if not any("Unsafe timing mutation blocked" in str(l) for l in lines):
                 lines.append(line)
                 break  # one blocked line is enough
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 33 — Subtitle Text Optimization Apply attachment
+# ---------------------------------------------------------------------------
+
+def _attach_subtitle_text_apply(plan: "AIEditPlan", request: Any, job_id: str) -> None:
+    """Build and attach subtitle text optimization pack to the plan.
+
+    Runs after Phase 32 (timing apply). Policy-gated: balanced/aggressive/experimental.
+    Text and style metadata only. Never rewrites subtitle timestamps.
+    Never mutates FFmpeg. Never raises. Never overrides executor authority.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.subtitles.subtitle_apply_engine import build_subtitle_text_apply_pack
+
+        raw_policy = str(
+            getattr(request, "ai_apply_policy", "conservative") or "conservative"
+        )
+        context = {"ai_apply_policy": raw_policy, "job_id": job_id}
+
+        pack = build_subtitle_text_apply_pack(plan, payload=request, context=context)
+        pack_dict = pack.to_dict()
+        plan.subtitle_text_apply = pack_dict
+
+        applied_count = len(pack_dict.get("applied") or [])
+        blocked_count = len(pack_dict.get("blocked") or [])
+
+        logger.info(
+            "ai_subtitle_text_apply_generated job_id=%s enabled=%s mode=%s "
+            "applied=%d blocked=%d",
+            job_id,
+            pack_dict.get("enabled", False),
+            pack_dict.get("mode", "disabled"),
+            applied_count,
+            blocked_count,
+        )
+
+        _append_subtitle_text_apply_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.subtitle_text_apply = {
+            "available": False,
+            "enabled": False,
+            "mode": "disabled",
+            "applied": [],
+            "blocked": [],
+            "warnings": [f"subtitle_text_apply_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_subtitle_text_apply_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_subtitle_text_apply_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact subtitle text apply lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = pack_dict.get("enabled", False)
+        mode = pack_dict.get("mode", "disabled")
+
+        if not enabled or mode == "disabled":
+            line = "Subtitle text optimization disabled by conservative policy"
+            if not any("subtitle text optimization" in str(l).lower() for l in lines):
+                lines.append(line)
+            line = "Subtitle timestamp rewrite remains blocked"
+            if not any("timestamp rewrite" in str(l).lower() for l in lines):
+                lines.append(line)
+            return
+
+        applied = pack_dict.get("applied") or []
+        blocked = pack_dict.get("blocked") or []
+
+        _OPT_LABELS: dict = {
+            "compact_overload": "Compact subtitle overload optimization applied",
+            "keyword_emphasis": "Keyword emphasis optimization applied",
+            "safer_line_breaks": "Safer subtitle line-break optimization applied",
+            "density_reduce": "Subtitle density reduce optimization applied",
+            "creator_style_tone": "Creator style subtitle tone optimization applied",
+            "hook_emphasis": "Hook emphasis subtitle optimization applied",
+        }
+
+        for opt in applied:
+            if not isinstance(opt, dict):
+                continue
+            opt_type = str(opt.get("optimization_type") or "")
+            line = _OPT_LABELS.get(opt_type, f"Subtitle text optimization applied ({opt_type})")
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        for opt in blocked:
+            if not isinstance(opt, dict):
+                continue
+            warns = opt.get("warnings") or []
+            reason = warns[0] if warns else "safety_gate_failed"
+            line = f"Subtitle optimization blocked ({reason})"
+            if not any("Subtitle optimization blocked" in str(l) for l in lines):
+                lines.append(line)
+                break
+
+        line = "Subtitle timestamp rewrite remains blocked"
+        if not any("timestamp rewrite" in str(l).lower() for l in lines):
+            lines.append(line)
 
     except Exception:
         pass

@@ -101,6 +101,7 @@ def apply_ai_render_influence(
         _report_output_ranking(payload, edit_plan, report)
         _report_ai_apply_policy(payload, edit_plan, report)
         _report_timing_apply(payload, edit_plan, report)
+        _report_subtitle_text_apply(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -776,6 +777,72 @@ def _report_timing_apply(payload: Any, edit_plan: Any, report: dict) -> None:
     logger.debug(
         "timing_apply_reported applied=%d blocked=%d total_delta=%.2f",
         len(applied), len(blocked), total_delta,
+    )
+
+
+# ── Subtitle text apply — applied/blocked summary in Phase 33 ────────────────
+
+def _report_subtitle_text_apply(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report subtitle text optimization apply results from Phase 33.
+
+    Applied optimizations appear in report["applied"] as bounded metadata descriptors.
+    Blocked optimizations and the timestamp-rewrite safety invariant go to report["skipped"].
+    Payload is never mutated here. No subtitle timestamp rewrite. No FFmpeg changes.
+    """
+    sta = getattr(edit_plan, "subtitle_text_apply", None)
+    if not isinstance(sta, dict) or not sta:
+        report["skipped"].append("subtitle_text_apply:no_result")
+        return
+
+    enabled = sta.get("enabled", False)
+    mode = sta.get("mode", "disabled")
+    applied = sta.get("applied") or []
+    blocked = sta.get("blocked") or []
+
+    if not enabled or mode == "disabled":
+        report["skipped"].append(
+            f"subtitle_text_apply:disabled_phase33"
+            f"(applied={len(applied)},blocked={len(blocked)})"
+        )
+        report["skipped"].append("subtitle_timestamp_rewrite:always_blocked_phase33")
+        logger.debug("subtitle_text_apply_reported disabled")
+        return
+
+    for opt in applied:
+        if not isinstance(opt, dict):
+            continue
+        apply_id = str(opt.get("apply_id") or "")
+        opt_type = str(opt.get("optimization_type") or "")
+        changes = opt.get("changes") or {}
+        changes_str = ",".join(f"{k}={v}" for k, v in list(changes.items())[:3])
+        report["applied"].append(
+            f"subtitle_text_apply:applied({apply_id},{opt_type}:[{changes_str}])"
+        )
+        logger.info(
+            "ai_subtitle_text_optimization_applied apply_id=%s type=%s",
+            apply_id, opt_type,
+        )
+
+    for opt in blocked:
+        if not isinstance(opt, dict):
+            continue
+        apply_id = str(opt.get("apply_id") or "")
+        opt_type = str(opt.get("optimization_type") or "")
+        warns = opt.get("warnings") or ["blocked"]
+        reason = warns[0] if warns else "blocked"
+        report["skipped"].append(
+            f"subtitle_text_apply:blocked({apply_id},{opt_type}:{reason})"
+        )
+        logger.info(
+            "ai_subtitle_text_optimization_blocked apply_id=%s reason=%s",
+            apply_id, reason,
+        )
+
+    # Safety invariant always reported
+    report["skipped"].append("subtitle_timestamp_rewrite:always_blocked_phase33")
+    logger.debug(
+        "subtitle_text_apply_reported applied=%d blocked=%d",
+        len(applied), len(blocked),
     )
 
 
