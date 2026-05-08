@@ -7,6 +7,45 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Productization Phase 11: Beat-aware Render Execution
+
+**Implemented:**
+- `app/models/schemas.py` — Three new opt-in fields added to `RenderRequest` AI Director section: `ai_beat_execution_enabled: bool = False`, `ai_beat_pulse_enabled: bool = True`, `ai_beat_transition_enabled: bool = False`; all default-false/safe so existing requests are unaffected
+- `app/ai/director/edit_plan_schema.py` — `AIBeatExecutionPlan` dataclass added (enabled, beat_available, bpm, beat_count, pulse_strength, suggested_transition_style, execution_mode="metadata_only", warnings); `beat_execution: dict` field added to `AIEditPlan`; `to_dict()` updated to include `"beat_execution"` key
+- `app/ai/director/beat_execution.py` (new) — `build_beat_execution_plan(edit_plan, payload, context=None) -> dict`; never raises; never mutates payload, timing, or subtitles; BPM gate: [60.0, 190.0]; beat_count gate: ≥4; pulse_strength clamped to ≤0.15 (energy_level * 0.20); transition style: "metadata_only" if transition disabled, "beat_pulse" if fast/dynamic + BPM ≥ 120 + pulse enabled, else "soft_cut"; execution_mode always "metadata_only" in Phase 11; all metadata sourced from `edit_plan.pacing` — no librosa, no audio models
+- `app/ai/director/render_influence.py` — `_apply_pacing_influence` upgraded from report-only to Phase 11 integration: when `ai_beat_execution_enabled=True` AND `pacing.beat_available=True`, calls `build_beat_execution_plan`, stores result on `edit_plan.beat_execution`, records applied or skipped entry; when disabled, records `beat_execution_disabled` in skipped; `_update_explainability` extended to append beat status line (`"Beat-aware execution planned safely"` or `"Beat execution skipped: <reason>"`) after the AI render influence line; deduplication guard prevents duplicates
+- `app/orchestration/render_pipeline.py` — AI Beat Execution block inserted after the Phase 10 influence block: `_ai_beat_report` initialized to `{"enabled": False}`; if `ai_beat_execution_enabled=True` and plan exists, checks `edit_plan.beat_execution` cache (populated by influence module if both were enabled together), otherwise calls `build_beat_execution_plan` directly; logs `ai_beat_execution_planned` at INFO with bpm/count/enabled, or `ai_beat_execution_skipped` at DEBUG; `"ai_beat_execution": _ai_beat_report` added to `_result_payload` dict
+- `tests/test_ai_phase11_beat_execution.py` (new) — 52 tests covering: schema defaults (AIBeatExecutionPlan, AIEditPlan.beat_execution, RenderRequest fields), disabled behavior (no pacing, beat unavailable, bpm None, None/garbage inputs), BPM validation (< 60 skip, = 60 accept, > 190 skip, = 190 accept, 0 skip, negative skip), beat count validation (< 4 skip, = 4 accept, 0 skip, stored in report), pulse strength bounds (high energy capped at 0.15, zero energy = 0.0, None energy defaults, never negative), transition style logic (disabled → metadata_only, fast+120bpm+pulse → beat_pulse, fast+120bpm+no pulse → soft_cut, dynamic+125bpm → beat_pulse, slow style → soft_cut, fast+low bpm → soft_cut), safety no-mutations (playback_speed unchanged, non-default speed unchanged, segment start/end unchanged, execution_mode always metadata_only), report shape (all 10 keys present, lists, applied entry on success, bpm stored), integration with render_influence (beat planned when enabled, stored on plan, disabled skips + notes, explainability beat line added), no external dependencies (no API key, no librosa, no torch, no GPU, no file I/O)
+
+**Verification:**
+- 52/52 Phase 11 tests pass
+- 591/591 full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+- `execution_mode` structurally locked to "metadata_only" — no timing changes possible in Phase 11
+- `pulse_strength` hard cap: 0.15
+- BPM must be in [60.0, 190.0] or entire beat plan is skipped
+- `beat_count` must be ≥ 4 or plan is skipped
+- `playback_speed` — structurally never touched
+- Segment `start`, `end`, `score` — structurally never touched
+- Subtitle timing, text, emphasis — structurally never touched
+- No librosa, no audio model loading — all beat metadata from `edit_plan.pacing` only
+- Beat execution block is opt-in: `ai_beat_execution_enabled=False` by default
+
+**Not yet implemented:**
+- Beat-synced FFmpeg cut timing (Phase 12+)
+- Real-time pulse visual effect in video output
+- UI toggle for `ai_beat_execution_enabled`
+- Subtitle emphasis driven by beat timing
+- Full camera behavior execution (AI zoom/push rendered via FFmpeg)
+
+**Known limitations:**
+- Phase 11 beat execution is metadata-only: the plan is built and stored in result_json but does not yet alter any FFmpeg command or clip boundary
+- `pulse_strength` and `suggested_transition_style` are advisory fields for downstream phases; no visual difference in rendered output in Phase 11
+
+---
+
 ### 2026-05-08 — AI Productization Phase 10: Safe Render Influence
 
 **Implemented:**
