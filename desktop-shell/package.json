@@ -57,9 +57,10 @@
       }
     ],
     "files": [
-      "main.js",
-      "preload.js",
-      "package.json"
-    ]
+    "main.js",
+    "preload.js",
+    "splash.html",
+    "package.json"
+  ]
   }
 }

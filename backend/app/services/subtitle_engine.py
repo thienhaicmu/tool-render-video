@@ -213,7 +213,15 @@ def _run_with_retry(command: list[str], retries: int = 2, wait_sec: float = 0.8)
     while True:
         attempt += 1
         try:
-            return subprocess.run(command, check=True)
+            return subprocess.run(command, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as exc:
+            if attempt > retries:
+                stderr_tail = (exc.stderr or "")[-1000:].strip()
+                raise RuntimeError(
+                    f"FFmpeg failed (exit={exc.returncode})"
+                    + (f": {stderr_tail}" if stderr_tail else "")
+                ) from exc
+            time.sleep(wait_sec * attempt)
         except Exception:
             if attempt > retries:
                 raise
@@ -244,20 +252,15 @@ def _ensure_ffmpeg_in_path_for_whisper():
 
 
 def has_audio_stream(video_path: str) -> bool:
-    """Return True when ffprobe can see at least one audio stream."""
-    try:
-        cmd = [
-            get_ffprobe_bin(),
-            "-v", "error",
-            "-select_streams", "a:0",
-            "-show_entries", "stream=index",
-            "-of", "csv=p=0",
-            str(video_path),
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return bool((result.stdout or "").strip())
-    except Exception:
-        return False
+    """Return True when the file has at least one audio stream (uses cached probe).
+
+    Delegates to render_engine._has_audio_stream() which wraps the shared cached
+    probe_video_metadata() call — zero subprocess cost on repeat calls to the same
+    unmodified file.  Deferred import avoids pulling render_engine into the module
+    namespace at import time.
+    """
+    from app.services.render_engine import _has_audio_stream
+    return _has_audio_stream(video_path)
 
 
 def transcribe_to_srt(

@@ -9,8 +9,8 @@ import subprocess
 from urllib.parse import urlparse
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
+from fastapi.responses import FileResponse, StreamingResponse
 from app.models.schemas import RenderRequest, DownloadHealthRequest, PrepareSourceRequest, QuickProcessRequest
 from app.services.db import upsert_job, get_job, list_job_parts
 from app.services.job_manager import submit_job, is_running
@@ -29,6 +29,31 @@ from app.orchestration.render_pipeline import (
 
 router = APIRouter(prefix="/api/render", tags=["render"])
 logger = logging.getLogger("app.render")
+
+
+@router.get("/queue-status")
+def get_queue_status():
+    """Read-only — returns active render count and max concurrent slots."""
+    from app.orchestration.render_pipeline import _render_active_count, _render_active_lock, _JOB_SEM_VALUE
+    with _render_active_lock:
+        active = _render_active_count[0]
+    return {"active_renders": active, "max_renders": _JOB_SEM_VALUE}
+
+
+@router.get("/ai-diagnostics")
+def get_ai_diagnostics():
+    """Read-only AI runtime diagnostics.
+
+    Returns dependency availability, embedding readiness, vector store mode,
+    and SQLite memory health. Never loads models. Never triggers embeddings.
+    """
+    try:
+        from app.ai.diagnostics import get_ai_runtime_diagnostics
+        return get_ai_runtime_diagnostics()
+    except Exception as exc:
+        logger.debug("ai_diagnostics_endpoint_error: %s", exc)
+        return {"startup_safe": True, "error": "diagnostics_unavailable"}
+
 
 # ── Error classification ───────────────────────────────────────────────────────
 # Type 1 · Request / validation errors  — HTTPException raised before process_render
@@ -1093,3 +1118,89 @@ def get_render_job(job_id: str):
     if not row:
         raise HTTPException(status_code=404, detail="Not found")
     return row
+
+
+# ── Rendered clip media streaming ─────────────────────────────────────────────
+
+@router.get("/jobs/{job_id}/parts/{part_no}/media")
+def stream_render_part_media(job_id: str, part_no: int, request: Request):
+    """Stream a rendered clip output file with proper HTTP Range request support.
+
+    Chrome's <video> element sends a Range probe on every load; without a real
+    206 Partial Content response the element stalls until the full file is
+    buffered, making clips appear broken.  This endpoint handles Range correctly
+    so playback starts immediately.
+
+    Security: the file path is looked up from the job_parts DB record, never
+    taken from user input, so there is no path-traversal risk.
+    """
+    parts = list_job_parts(job_id)
+    part = next((p for p in parts if int(p.get("part_no", -1)) == part_no), None)
+    if not part or not part.get("output_file"):
+        raise HTTPException(status_code=404, detail="Part not found")
+
+    path = Path(part["output_file"])
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Output file not found on disk")
+
+    file_size = path.stat().st_size
+    if file_size == 0:
+        raise HTTPException(status_code=404, detail="Output file is empty")
+
+    def _iter(start: int, end: int, chunk: int = 1 << 16):
+        """Yield file bytes from [start, end] inclusive."""
+        with open(path, "rb") as fh:
+            fh.seek(start)
+            remaining = end - start + 1
+            while remaining > 0:
+                data = fh.read(min(chunk, remaining))
+                if not data:
+                    break
+                remaining -= len(data)
+                yield data
+
+    range_header = request.headers.get("range", "").strip()
+
+    if range_header:
+        m = re.match(r"bytes=(\d+)-(\d*)", range_header)
+        if not m:
+            raise HTTPException(
+                status_code=416,
+                headers={"Content-Range": f"bytes */{file_size}"},
+                detail="Range Not Satisfiable",
+            )
+        byte1 = int(m.group(1))
+        byte2 = int(m.group(2)) if m.group(2) else file_size - 1
+        byte2 = min(byte2, file_size - 1)
+
+        if byte1 > byte2 or byte1 >= file_size:
+            raise HTTPException(
+                status_code=416,
+                headers={"Content-Range": f"bytes */{file_size}"},
+                detail="Range Not Satisfiable",
+            )
+
+        length = byte2 - byte1 + 1
+        return StreamingResponse(
+            _iter(byte1, byte2),
+            status_code=206,
+            media_type="video/mp4",
+            headers={
+                "Content-Range": f"bytes {byte1}-{byte2}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(length),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    # No Range header — send the full file (still streaming, never buffered in-process)
+    return StreamingResponse(
+        _iter(0, file_size - 1),
+        status_code=200,
+        media_type="video/mp4",
+        headers={
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(file_size),
+            "Cache-Control": "no-store",
+        },
+    )

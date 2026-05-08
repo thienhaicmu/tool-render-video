@@ -8,7 +8,7 @@ import logging
 from app.services.db import init_db
 from app.services.channel_service import ensure_channel
 from app.services.maintenance import prune_job_logs, prune_preview_dirs
-from app.core.config import CHANNELS_DIR, TEMP_DIR
+from app.core.config import APP_DATA_DIR, CHANNELS_DIR, TEMP_DIR
 from app.routes.channels import router as channels_router
 from app.routes.download import router as download_router
 from app.routes.render import router as render_router
@@ -66,9 +66,9 @@ PROJECT_ROOT = BACKEND_ROOT.parent
 STATIC_DIR = Path("/app/static") if Path("/app/static").exists() else (BACKEND_ROOT / "static")
 INDEX_FILE = STATIC_DIR / "index.html"
 
-# ── Redirect all model/cache dirs to project drive (D:) — prevents filling C: ──
-_DATA_DIR = PROJECT_ROOT / "data"
-_DATA_DIR.mkdir(parents=True, exist_ok=True)
+# ── Redirect all model/cache dirs to a stable location ───────────────────────
+# APP_DATA_DIR from config already handles packaged vs dev mode correctly.
+_DATA_DIR = APP_DATA_DIR
 
 # Whisper — redirect via env var read by openai-whisper internals
 _whisper_cache = _DATA_DIR / "whisper_cache"

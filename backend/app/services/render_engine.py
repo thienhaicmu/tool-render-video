@@ -10,6 +10,19 @@ from pathlib import Path
 from app.services.motion_crop import render_motion_aware_crop, MotionCropConfig
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin, _summarize_ffmpeg_stderr
 from app.services.text_overlay import append_text_layer_filters
+from app.services.encoder_helpers import (
+    ffmpeg_encoders_text as _ffmpeg_encoders_text,
+    has_encoder as _has_encoder,
+    nvenc_runtime_ready as _nvenc_runtime_ready,
+    codec_extra_flags as _codec_extra_flags,
+    map_preset_for_encoder as _map_preset_for_encoder,
+    reup_video_filters as _reup_video_filters,
+    reup_audio_filter as _reup_audio_filter,
+    safe_filter_path as _safe_filter_path,
+    detect_windows_fontfile as _detect_windows_fontfile,
+    detect_windows_fonts_dir as _detect_windows_fonts_dir,
+    get_custom_fonts_dir as _get_custom_fonts_dir,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -139,49 +152,11 @@ def _run_ffmpeg_with_retry(command: list[str], retry_count: int = 2, wait_sec: f
             time.sleep(wait_sec * attempt)
 
 
-@lru_cache(maxsize=1)
-def _ffmpeg_encoders_text() -> str:
-    try:
-        ffmpeg_bin = get_ffmpeg_bin()
-        r = subprocess.run([ffmpeg_bin, "-hide_banner", "-encoders"], capture_output=True, text=True, check=True)
-        return (r.stdout or "") + "\n" + (r.stderr or "")
-    except Exception:
-        return ""
-
-
-def _has_encoder(name: str) -> bool:
-    return name in _ffmpeg_encoders_text()
-
-
-@lru_cache(maxsize=2)
-def _nvenc_runtime_ready(codec_name: str) -> bool:
-    try:
-        ffmpeg_bin = get_ffmpeg_bin()
-        probe_cmd = [
-            ffmpeg_bin,
-            "-hide_banner",
-            "-loglevel", "error",
-            "-f", "lavfi",
-            "-i", "color=c=black:s=256x256:d=0.1",
-            "-an",
-            "-c:v", codec_name,
-            "-f", "null",
-            "-",
-        ]
-        proc = subprocess.run(probe_cmd, capture_output=True, text=True)
-        text = ((proc.stdout or "") + "\n" + (proc.stderr or "")).lower()
-        if proc.returncode == 0:
-            return True
-        blockers = (
-            "cannot load nvcuda.dll",
-            "no nvenc capable devices found",
-            "cannot init cuda",
-            "operation not permitted",
-        )
-        return not any(b in text for b in blockers)
-    except Exception:
-        return False
-
+# ---------------------------------------------------------------------------
+# nvenc_available — cached GPU-readiness check exported to render_pipeline
+# _resolve_codec — kept as a proper function so tests can patch _has_encoder
+#                  and _nvenc_runtime_ready at the render_engine module level
+# ---------------------------------------------------------------------------
 
 @lru_cache(maxsize=1)
 def nvenc_available() -> bool:
@@ -215,67 +190,6 @@ def _resolve_codec(codec: str, encoder_mode: str = "auto"):
     return "libx264"
 
 
-def _codec_extra_flags(resolved_codec: str, video_crf: int, video_preset: str = "slow"):
-    c = (resolved_codec or "").lower()
-    p = (video_preset or "slow").lower()
-    if c == "hevc_nvenc":
-        return [
-            "-rc", "vbr_hq", "-cq", str(video_crf), "-b:v", "0",
-            "-maxrate", "20M", "-bufsize", "40M",
-            "-spatial_aq", "1", "-temporal_aq", "1", "-aq-strength", "8",
-            "-rc-lookahead", "32", "-bf", "4",
-        ]
-    if c == "h264_nvenc":
-        return [
-            "-rc", "vbr_hq", "-cq", str(video_crf), "-b:v", "0",
-            "-maxrate", "20M", "-bufsize", "40M",
-            "-spatial_aq", "1", "-temporal_aq", "1", "-aq-strength", "8",
-            "-rc-lookahead", "32", "-bf", "3",
-        ]
-    if c == "libx265":
-        if p in ("veryslow", "slower"):
-            x265p = "aq-mode=3:aq-strength=1.0:deblock=-1,-1:rc-lookahead=60:ref=5:bframes=4:psy-rdoq=1.0:rdoq-level=2"
-        elif p == "slow":
-            x265p = "aq-mode=3:aq-strength=0.8:deblock=-1,-1:rc-lookahead=40:ref=4:bframes=4"
-        else:
-            x265p = "aq-mode=2:rc-lookahead=20:ref=3:bframes=3"
-        return ["-crf", str(video_crf), "-maxrate", "20M", "-bufsize", "40M", "-tag:v", "hvc1", "-x265-params", x265p]
-
-    # libx264 — tiered by preset
-    if p in ("veryslow", "slower"):
-        x264p = "ref=5:bframes=3:me=umh:subme=9:analyse=all:trellis=2:deblock=-1,-1:aq-mode=3:aq-strength=0.8:psy-rd=1.0:psy-rdoq=0.0"
-    elif p == "slow":
-        x264p = "ref=4:bframes=3:me=hex:subme=7:trellis=1:deblock=-1,-1:aq-mode=3:aq-strength=0.8:psy-rd=1.0"
-    else:
-        x264p = "ref=3:bframes=2:me=hex:subme=6:trellis=0:aq-mode=2"
-    return [
-        "-crf", str(video_crf),
-        "-maxrate", "20M", "-bufsize", "40M",
-        "-profile:v", "high", "-level:v", "5.1",
-        "-tune", "film",
-        "-x264-params", x264p,
-    ]
-
-
-def _map_preset_for_encoder(video_preset: str, resolved_codec: str):
-    c = (resolved_codec or "").lower()
-    p = (video_preset or "slow").lower()
-    if c in ("h264_nvenc", "hevc_nvenc"):
-        mapping = {
-            "ultrafast": "p2",
-            "superfast": "p3",
-            "veryfast": "p4",
-            "faster": "p4",
-            "fast": "p4",
-            "medium": "p5",
-            "slow": "p6",
-            "slower": "p7",
-            "veryslow": "p7",
-        }
-        return mapping.get(p, "p6")
-    return p
-
-
 def _effect_filter(effect_preset: str):
     preset = (effect_preset or "slay_soft_01").lower()
     if preset == "slay_pop_01":
@@ -290,25 +204,6 @@ def _effect_filter(effect_preset: str):
         return "eq=contrast=1.15:saturation=1.10:brightness=-0.02:gamma=1.0,unsharp=7:7:1.5:5:5:0.6"
     # slay_soft_01 (default): natural cinematic look with light sharpening
     return "eq=contrast=1.05:saturation=1.10:brightness=0.0:gamma=1.01,unsharp=5:5:0.9:3:3:0.35"
-
-
-def _reup_video_filters() -> list[str]:
-    # Lightweight enhancement pack for reup mode.
-    return [
-        "eq=contrast=1.04:saturation=1.10:brightness=0.01",
-        "unsharp=5:5:0.45:3:3:0.0",
-        "hqdn3d=1.2:1.2:6:6",
-    ]
-
-
-def _reup_audio_filter() -> str:
-    # Voice clarity + peak control.
-    return (
-        "highpass=f=120,"
-        "lowpass=f=11000,"
-        "acompressor=threshold=-16dB:ratio=2.2:attack=20:release=200:makeup=2,"
-        "alimiter=limit=0.95"
-    )
 
 
 def _cinematic_color_filter(src_h: int) -> "str | None":
@@ -407,49 +302,6 @@ def _sanitize_speed(playback_speed: float | int | None) -> float:
 def _has_audio_stream(input_path: str) -> bool:
     """Return True if the file has at least one audio stream (cached ffprobe)."""
     return probe_video_metadata(input_path)["has_audio"]
-
-
-def _safe_filter_path(path: str) -> str:
-    return str(path).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
-
-
-def _detect_windows_fontfile() -> str | None:
-    windir = os.environ.get("WINDIR")
-    if not windir:
-        return None
-    fonts_dir = Path(windir) / "Fonts"
-    candidates = [
-        fonts_dir / "arial.ttf",
-        fonts_dir / "segoeui.ttf",
-        fonts_dir / "tahoma.ttf",
-    ]
-    for p in candidates:
-        if p.exists():
-            return str(p)
-    return None
-
-
-def _detect_windows_fonts_dir() -> str | None:
-    windir = os.environ.get("WINDIR")
-    if not windir:
-        return None
-    fonts_dir = Path(windir) / "Fonts"
-    if fonts_dir.exists():
-        return str(fonts_dir)
-    return None
-
-
-def _get_custom_fonts_dir() -> str | None:
-    """Return path to bundled fonts directory."""
-    here = Path(__file__).resolve()
-    candidates = [
-        here.parents[2] / "fonts",  # backend/fonts (current project layout)
-        here.parents[3] / "fonts",  # legacy: repo/fonts
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
-    return None
 
 
 def cut_video(
@@ -795,6 +647,22 @@ def resolve_ffmpeg_threads(max_parallel_parts: int | None = None) -> int:
     return max(1, min(8, cpu_total // workers))
 
 
+def resolve_target_dimensions(aspect_ratio: str) -> tuple[int, int]:
+    """Return (width, height) output canvas for the given aspect_ratio string.
+
+    Supported values: "1:1", "9:16", "16:9", "3:4", "4:5".
+    Unknown values fall through to the portrait default (1080×1440).
+    """
+    ar = (aspect_ratio or "").strip()
+    if ar == "1:1":
+        return 1080, 1080
+    if ar == "9:16":
+        return 1080, 1920
+    if ar == "16:9":
+        return 1920, 1080
+    return 1080, 1440  # 3:4, 4:5, and any unrecognised value
+
+
 def render_part(
     input_path: str,
     output_path: str,
@@ -836,12 +704,7 @@ def render_part(
     if loudnorm_enabled and not reup_mode:
         logger.info("audio_polish_enabled audio_loudnorm_applied=True")
     sws = "lanczos" if preset_low in ("slower", "veryslow") else "bicubic"
-    if aspect_ratio == "1:1":
-        target_w, target_h = 1080, 1080
-    elif aspect_ratio == "9:16":
-        target_w, target_h = 1080, 1920
-    else:
-        target_w, target_h = 1080, 1440
+    target_w, target_h = resolve_target_dimensions(aspect_ratio)
     scale_crop = (
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase:flags={sws},"
         f"crop={target_w}:{target_h}"

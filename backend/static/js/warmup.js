@@ -35,6 +35,18 @@ async function pollWarmupStatus(){
         : `⏳ ${ready_count}/${total_count} ready`;
     }
 
+    const sysEl = document.getElementById('statusSystem');
+    if (sysEl) {
+      if (all_ready) {
+        sysEl.textContent = 'ffmpeg · Whisper · GPU auto';
+      } else if (errors && errors.length) {
+        sysEl.textContent = `${ready_count}/${total_count} tools ready`;
+      } else {
+        const active = (items || []).find(i => i.status === 'downloading');
+        sysEl.textContent = active ? `Loading ${active.key}…` : `${ready_count}/${total_count} tools ready`;
+      }
+    }
+
     // Update detail panel
     const panel = document.getElementById('warmup_panel');
     if(panel){

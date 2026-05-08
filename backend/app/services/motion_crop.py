@@ -6,15 +6,28 @@ import subprocess
 import time
 import logging
 from dataclasses import dataclass, field
-from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
 
-from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin, _summarize_ffmpeg_stderr
+from app.services.bin_paths import get_ffmpeg_bin, _summarize_ffmpeg_stderr
 from app.services.text_overlay import append_text_layer_filters
+from app.services.encoder_helpers import (
+    ffmpeg_encoders_text as _ffmpeg_encoders_text,
+    has_encoder as _has_encoder,
+    nvenc_runtime_ready as _nvenc_runtime_ready,
+    resolve_encoder as _resolve_encoder,
+    map_preset_for_encoder as _map_preset_for_encoder,
+    codec_extra_flags as _codec_extra_flags_shared,
+    reup_video_filters as _reup_video_filters,
+    reup_audio_filter as _reup_audio_filter,
+    safe_filter_path as _safe_filter_path,
+    detect_windows_fontfile as _detect_windows_fontfile,
+    detect_windows_fonts_dir as _detect_windows_fonts_dir,
+    get_custom_fonts_dir as _get_custom_fonts_dir,
+)
 
 logger = logging.getLogger(__name__)
 _TRACKER_CAPABILITY_LOGGED = False
@@ -84,120 +97,21 @@ class MotionCropConfig:
     max_tracking_seconds: float = 300.0
 
 
-# ---------------------------------------------------------------------------
-# Encoder helpers (unchanged)
-# ---------------------------------------------------------------------------
-
-@lru_cache(maxsize=1)
-def _ffmpeg_encoders_text() -> str:
-    try:
-        ffmpeg_bin = get_ffmpeg_bin()
-        r = subprocess.run([ffmpeg_bin, "-hide_banner", "-encoders"], capture_output=True, text=True, check=True)
-        return (r.stdout or "") + "\n" + (r.stderr or "")
-    except Exception:
-        return ""
-
-
-def _has_encoder(name: str) -> bool:
-    return name in _ffmpeg_encoders_text()
-
-
-@lru_cache(maxsize=2)
-def _nvenc_runtime_ready(codec_name: str) -> bool:
-    try:
-        ffmpeg_bin = get_ffmpeg_bin()
-        probe_cmd = [
-            ffmpeg_bin, "-hide_banner", "-loglevel", "error",
-            "-f", "lavfi", "-i", "color=c=black:s=16x16:d=0.1",
-            "-an", "-c:v", codec_name, "-f", "null", "-",
-        ]
-        proc = subprocess.run(probe_cmd, capture_output=True, text=True)
-        text = ((proc.stdout or "") + "\n" + (proc.stderr or "")).lower()
-        if proc.returncode == 0:
-            return True
-        blockers = (
-            "cannot load nvcuda.dll",
-            "no nvenc capable devices found",
-            "cannot init cuda",
-            "operation not permitted",
-        )
-        return not any(b in text for b in blockers)
-    except Exception:
-        return False
-
-
-def _resolve_encoder(video_codec: str, encoder_mode: str = "auto") -> str:
-    codec = (video_codec or "h264").lower()
-    mode = (encoder_mode or "auto").lower()
-    if mode in ("auto", "nvenc"):
-        if codec == "h265" and _has_encoder("hevc_nvenc") and _nvenc_runtime_ready("hevc_nvenc"):
-            return "hevc_nvenc"
-        if codec != "h265" and _has_encoder("h264_nvenc") and _nvenc_runtime_ready("h264_nvenc"):
-            return "h264_nvenc"
-    if codec == "h265":
-        return "libx265"
-    return "libx264"
-
-
-def _map_preset_for_encoder(video_preset: str, resolved_codec: str) -> str:
-    p = (video_preset or "slow").lower()
-    if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
-        mapping = {
-            "ultrafast": "p2", "superfast": "p3", "veryfast": "p4",
-            "faster": "p4", "fast": "p4", "medium": "p5",
-            "slow": "p6", "slower": "p7", "veryslow": "p7",
-        }
-        return mapping.get(p, "p6")
-    return p
-
-
 def _codec_flags(resolved_codec: str, video_crf: int, video_preset: str = "slow") -> list[str]:
-    p = (video_preset or "slow").lower()
+    """Return encoder flags for the motion-crop FFmpeg command.
+
+    NVENC path uses unconstrained VBR (no -maxrate cap) since motion-crop
+    pipes raw frames and operates under tighter latency constraints.
+    CPU paths delegate to encoder_helpers.codec_extra_flags for a single
+    source of truth on libx264/libx265 tuning parameters.
+    """
     if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
         return [
             "-rc", "vbr_hq", "-cq", str(video_crf), "-b:v", "0",
             "-spatial_aq", "1", "-temporal_aq", "1", "-aq-strength", "8",
             "-rc-lookahead", "32", "-bf", "3",
         ]
-    if resolved_codec == "libx265":
-        if p in ("veryslow", "slower"):
-            x265p = "aq-mode=3:aq-strength=1.0:deblock=-1,-1:rc-lookahead=60:ref=5:bframes=4:psy-rdoq=1.0:rdoq-level=2"
-        elif p == "slow":
-            x265p = "aq-mode=3:aq-strength=0.8:deblock=-1,-1:rc-lookahead=40:ref=4:bframes=4"
-        else:
-            x265p = "aq-mode=2:rc-lookahead=20:ref=3:bframes=3"
-        return ["-crf", str(video_crf), "-tag:v", "hvc1", "-x265-params", x265p]
-
-    # libx264 — tiered by preset
-    if p in ("veryslow", "slower"):
-        x264p = "ref=5:bframes=3:me=umh:subme=9:analyse=all:trellis=2:deblock=-1,-1:aq-mode=3:aq-strength=0.8:psy-rd=1.0:psy-rdoq=0.0"
-    elif p == "slow":
-        x264p = "ref=4:bframes=3:me=hex:subme=7:trellis=1:deblock=-1,-1:aq-mode=3:aq-strength=0.8:psy-rd=1.0"
-    else:
-        x264p = "ref=3:bframes=2:me=hex:subme=6:trellis=0:aq-mode=2"
-    return [
-        "-crf", str(video_crf),
-        "-profile:v", "high", "-level:v", "5.1",
-        "-tune", "film",
-        "-x264-params", x264p,
-    ]
-
-
-def _reup_video_filters() -> list[str]:
-    return [
-        "eq=contrast=1.04:saturation=1.10:brightness=0.01",
-        "unsharp=5:5:0.45:3:3:0.0",
-        "hqdn3d=1.2:1.2:6:6",
-    ]
-
-
-def _reup_audio_filter() -> str:
-    return (
-        "highpass=f=120,"
-        "lowpass=f=11000,"
-        "acompressor=threshold=-16dB:ratio=2.2:attack=20:release=200:makeup=2,"
-        "alimiter=limit=0.95"
-    )
+    return _codec_extra_flags_shared(resolved_codec, video_crf, video_preset)
 
 
 def _safe_filter_path(path: str) -> str:
@@ -242,54 +156,26 @@ def _get_custom_fonts_dir() -> str | None:
 # ---------------------------------------------------------------------------
 
 def ffprobe_video_info(video_path: str) -> Tuple[int, int, float]:
-    """Return (width, height, fps) via ffprobe.
+    """Return (width, height, fps) via the shared cached probe service.
 
-    Probes avg_frame_rate (actual cadence) and r_frame_rate (container-declared
-    max).  avg_frame_rate is preferred for accuracy with VFR content.
-    Falls back to 30.0 if both probes fail or are out of the sane [1, 120] range.
+    Delegates to render_engine.probe_video_metadata() which caches results by
+    (abspath, mtime_ns, size_bytes) — zero subprocess cost on repeat calls to the
+    same unmodified file.  Falls back to fps=30.0 when the probe cannot determine
+    a valid frame rate.
+
+    Deferred import used to break the render_engine ↔ motion_crop module-level
+    circular dependency (render_engine imports motion_crop at its own module level).
     """
-    def _parse(s: str) -> float:
-        s = (s or "").strip()
-        if "/" in s:
-            try:
-                a, b = s.split("/", 1)
-                return float(a) / float(b) if float(b) else 0.0
-            except (ValueError, ZeroDivisionError):
-                return 0.0
-        try:
-            return float(s) if s else 0.0
-        except ValueError:
-            return 0.0
-
-    cmd = [
-        get_ffprobe_bin(), "-v", "error", "-select_streams", "v:0",
-        "-show_entries", "stream=width,height,avg_frame_rate,r_frame_rate",
-        "-of", "default=noprint_wrappers=1:nokey=1", video_path,
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=15)
-    lines = [x.strip() for x in result.stdout.splitlines() if x.strip()]
-    width  = int(lines[0])
-    height = int(lines[1])
-    avg_fps = _parse(lines[2]) if len(lines) > 2 else 0.0
-    r_fps   = _parse(lines[3]) if len(lines) > 3 else 0.0
-    fps = 30.0
-    for candidate in (avg_fps, r_fps):
-        if 1.0 <= candidate <= 120.0:
-            fps = candidate
-            break
-    return width, height, fps
+    from app.services.render_engine import probe_video_metadata
+    meta = probe_video_metadata(video_path)
+    fps = meta["fps"] if meta["fps"] > 0 else 30.0
+    return meta["width"], meta["height"], fps
 
 
 def has_audio_stream(video_path: str) -> bool:
-    cmd = [
-        get_ffprobe_bin(), "-v", "error", "-select_streams", "a:0",
-        "-show_entries", "stream=index", "-of", "csv=p=0", video_path,
-    ]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=10)
-        return bool((result.stdout or "").strip())
-    except Exception:
-        return False
+    """Return True when the file has at least one audio stream (uses cached probe)."""
+    from app.services.render_engine import _has_audio_stream
+    return _has_audio_stream(video_path)
 
 
 # ---------------------------------------------------------------------------
@@ -743,10 +629,10 @@ def _subject_to_crop_center(
     of the crop, leaving room for text/chin — just like CapCut.
     """
     x, y, w, h = subject
-    # Face: focus on center-top; body: focus on full center
+    # Face: focus on center-top; body: focus on visual mid-body
     cx = x + w / 2.0
     if subject_kind == "body":
-        cy = y + h * 0.34
+        cy = y + h * 0.50
     else:
         cy = y + h * 0.34
 

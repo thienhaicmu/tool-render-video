@@ -5384,7 +5384,7 @@
       transform: translateY(-1px);
     }
     .renderClipItem.isDone {
-      opacity: .75;
+      /* opacity removed — completed clips show at full strength */
     }
     .renderClipItem.isFailed,
     .renderClipItem.failed {
@@ -6586,7 +6586,7 @@
       z-index: 1;
     }
     .renderClipItem .renderClipNum { margin-left: 24px; }
-    .renderClipItem.isSelected {
+    .clipCard.isSelected {
       border-color: rgba(99,102,241,.5);
       background: rgba(99,102,241,.07);
     }
@@ -14782,7 +14782,7 @@ body.is-history-active #history_list {
 /* Grid container: fluid columns, min 180px each */
 .clipsGrid {
   display: grid !important;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 12px;
   padding: 4px 0 8px;
 }
@@ -14817,15 +14817,21 @@ body.is-history-active #history_list {
   opacity: .6;
 }
 
-/* Thumbnail area — 16:9 aspect ratio */
+/* Thumbnail area — aspect ratio driven by job payload data-aspect attribute */
 .clipCardThumbWrap {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 9 / 16;
   background: rgba(2,6,23,.8);
   overflow: hidden;
   flex-shrink: 0;
 }
+.clipCard[data-aspect="9:16"] .clipCardThumbWrap  { aspect-ratio: 9 / 16; }
+.clipCard[data-aspect="3:4"]  .clipCardThumbWrap  { aspect-ratio: 3 / 4; }
+.clipCard[data-aspect="4:5"]  .clipCardThumbWrap  { aspect-ratio: 4 / 5; }
+.clipCard[data-aspect="1:1"]  .clipCardThumbWrap  { aspect-ratio: 1 / 1; }
+.clipCard[data-aspect="16:9"] .clipCardThumbWrap  { aspect-ratio: 16 / 9; }
+.clipCard:not([data-aspect])  .clipCardThumbWrap  { aspect-ratio: 9 / 16; }
 .clipCardThumbVid {
   width: 100%;
   height: 100%;
@@ -14975,7 +14981,7 @@ body.is-history-active #history_list {
 /* Responsive: tighter cards on small panels */
 @media (max-width: 640px) {
   .clipsGrid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
     gap: 8px;
   }
 }
@@ -15126,6 +15132,7 @@ body.is-history-active #history_list {
 .clipCard {
   border-radius: var(--cr) !important;
   box-shadow: none !important;
+  padding: 0 !important;
 }
 .clipCardBody {
   padding: var(--sp-2) 10px !important;
@@ -15163,4 +15170,736 @@ body.is-history-active #history_list {
 .rcAQMain .progressValue {
   animation-name: unset !important;
 }
+
+/* ── Center-stage completion banner ───────────────────────────────────────── */
+/* Override bottom-panel strip styles — banner is now a standalone card */
+.renderCompletionBar {
+  border-radius: 10px;
+  border: 1px solid rgba(16, 185, 129, .30);
+  border-bottom: 1px solid rgba(16, 185, 129, .30);
+  background: linear-gradient(135deg, rgba(16,185,129,.14) 0%, rgba(6,78,59,.07) 100%);
+  box-shadow: 0 2px 16px rgba(16,185,129,.07);
+  padding: 14px 18px;
+  margin: 0 0 16px;
+  gap: 14px;
+}
+
+/* Partial-success (completed_with_errors) — amber */
+.renderCompletionBar[data-state="warning"] {
+  border-color: rgba(245, 158, 11, .35);
+  background: linear-gradient(135deg, rgba(245,158,11,.14) 0%, rgba(120,53,15,.07) 100%);
+  box-shadow: 0 2px 16px rgba(245,158,11,.07);
+}
+.renderCompletionBar[data-state="warning"] .renderCompletionMsg {
+  color: #fbbf24;
+}
+.renderCompletionBar[data-state="warning"] .rcbIcon {
+  background: rgba(245, 158, 11, .18);
+  color: #fbbf24;
+}
+
+/* Left section: icon + copy */
+.rcbLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rcbIcon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, .18);
+  color: #34d399;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rcbCopy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Action buttons */
+.rcbBtn {
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+@media (max-width: 700px) {
+  .renderCompletionBar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .renderCompletionActions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
+/* ── Center-stage clip preview ─────────────────────────────────────────────── */
+.csPreviewArea {
+  background: rgba(10, 17, 32, 0.9);
+  border: 1px solid rgba(96, 165, 250, 0.15);
+  border-radius: 10px;
+  margin: 0 0 16px;
+  overflow: hidden;
+}
+
+.csPreviewVideoWrap {
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+}
+
+.csPreviewEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 220px;
+  color: var(--text-muted, #64748b);
+  font-size: 13px;
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
+.csPreviewVideo {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  background: #000;
+}
+
+.csPreviewBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(96, 165, 250, 0.10);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.csPreviewName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim, #94a3b8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csPreviewActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.csPreviewClose {
+  background: none;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  color: var(--text-muted, #64748b);
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: color 0.14s, background 0.14s;
+}
+
+.csPreviewClose:hover {
+  color: var(--text, #e2e8f0);
+  background: rgba(148, 163, 184, 0.10);
+}
+
+.clipCard.isPreviewActive {
+  outline: 2px solid rgba(96, 165, 250, 0.55);
+  outline-offset: -2px;
+  background: rgba(96, 165, 250, 0.06);
+}
+
+/* Primary Preview button */
+.clipCardBtnPreview {
+  background: rgba(99, 102, 241, 0.18) !important;
+  color: #a5b4fc !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+  font-weight: 600 !important;
+}
+.clipCardBtnPreview:hover {
+  background: rgba(99, 102, 241, 0.28) !important;
+  border-color: rgba(99, 102, 241, 0.55) !important;
+}
+
+/* Clickable thumbnail */
+.clipCardThumbWrap[data-previewable="true"] {
+  cursor: pointer;
+}
+.clipCardThumbWrap[data-previewable="true"]:hover .clipCardThumbVid {
+  opacity: 0.85;
+}
+
+/* Score /10 suffix */
+.clipCardScoreMax {
+  font-size: 0.75em;
+  opacity: 0.55;
+  font-weight: 400;
+}
+
+/* Failed clip reason message */
+.clipCardFailReason {
+  font-size: 11px;
+  color: rgba(248, 113, 113, 0.85);
+  line-height: 1.3;
+  margin-top: 2px;
+  word-break: break-word;
+}
+
+/* ── Render confidence polish ──────────────────────────────────────────────── */
+
+/* 1. Hide unused rd_seg_bar gap */
+.rdSegBar { display: none !important; }
+
+/* 2. Belt-and-suspenders suppression of rc_active_stage */
+#rc_active_stage { display: none !important; }
+
+/* 3. ETA chip — shown only when JS sets content */
+.rcActiveEta {
+  display: block;
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.65);
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* 4. Liveness pulse on the active rendering row's progress fill */
+@keyframes rcQueuePulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+.rcQueueRow[data-active="1"] .rcQueueBar > span {
+  animation: rcQueuePulse 2s ease-in-out infinite;
+}
+
+/* 5. Active stage dot: larger + glow ring */
+.rcStageDot[data-state="active"] {
+  width: 10px !important;
+  height: 10px !important;
+  background: rgba(56, 189, 248, 0.35) !important;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18), 0 0 6px rgba(56, 189, 248, 0.2) !important;
+}
+
+/* 5b. Done dots: slightly de-emphasised */
+.rcStageDot[data-state="done"] {
+  width: 6px !important;
+  height: 6px !important;
+  opacity: 0.75;
+}
+
+/* 6. Log left-border level indicators */
+.logLine.isError {
+  border-left: 2px solid rgba(248, 113, 113, 0.6) !important;
+  padding-left: 7px !important;
+}
+.logLine.isWarning {
+  border-left: 2px solid rgba(245, 158, 11, 0.55) !important;
+  padding-left: 7px !important;
+}
+
+/* 7. Log timestamp weight by severity */
+.logLine.important .logTime,
+.logLine.error     .logTime {
+  font-weight: 700;
+  color: rgba(226, 232, 240, 0.9);
+}
+.logLine.success .logTime {
+  color: rgba(110, 231, 183, 0.8);
+}
+
+/* 8. Reduce toolbar progress bar to hairline when bottom panel is expanded */
+.appShell:not(.abpCollapsed) .abpProgressBar {
+  height: 2px !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+}
+.appShell:not(.abpCollapsed) .abpToolbarProgress {
+  justify-content: flex-end;
+}
+/* ── End render confidence polish ──────────────────────────────────────────── */
+
+/* ── Clip playback experience ──────────────────────────────────────────────── */
+
+/* Loading spinner overlay */
+.csPreviewLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 220px;
+  background: #000;
+}
+
+@keyframes csPreviewSpin {
+  to { transform: rotate(360deg); }
+}
+
+.csPreviewSpinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(148, 163, 184, 0.15);
+  border-top-color: rgba(96, 165, 250, 0.75);
+  border-radius: 50%;
+  animation: csPreviewSpin 0.8s linear infinite;
+}
+
+/* Error state — replaces broken browser video UI */
+.csPreviewError {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 160px;
+  padding: 24px 20px;
+  font-size: 12px;
+  color: rgba(248, 113, 113, 0.8);
+  text-align: center;
+  line-height: 1.5;
+  background: #000;
+}
+
+/* Info row: name + meta chips */
+.csPreviewInfo {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+/* Override old direct flex on .csPreviewName since it's now inside .csPreviewInfo */
+.csPreviewName {
+  flex: unset;
+  min-width: unset;
+}
+
+/* Duration / score meta chips */
+.csPreviewMeta {
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.5);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Aspect-aware video container — portrait clips get centred in a constrained column */
+.csPreviewArea[data-aspect="9:16"] .csPreviewVideoWrap,
+.csPreviewArea[data-aspect="4:5"] .csPreviewVideoWrap,
+.csPreviewArea[data-aspect="3:4"] .csPreviewVideoWrap {
+  justify-content: center;
+}
+
+.csPreviewArea[data-aspect="9:16"] .csPreviewVideo {
+  max-height: 480px;
+  width: auto;
+  max-width: 100%;
+}
+
+.csPreviewArea[data-aspect="4:5"] .csPreviewVideo,
+.csPreviewArea[data-aspect="3:4"] .csPreviewVideo {
+  max-height: 420px;
+  width: auto;
+  max-width: 100%;
+}
+
+.csPreviewArea[data-aspect="1:1"] .csPreviewVideo {
+  max-height: 360px;
+  width: auto;
+  max-width: 100%;
+}
+
+/* ── End clip playback experience ──────────────────────────────────────────── */
+
+/* ── P2-1: Render Queue / Progress UX additions ─────────────────────────────── */
+
+/* Render slot pill — "Slots: X / Y active" shown while render is active */
+#rc_slot_pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(59,130,246,.12);
+  border: 1px solid rgba(59,130,246,.25);
+  color: #93c5fd;
+  white-space: nowrap;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+#rc_slot_pill[data-active="0"] {
+  background: rgba(148,163,184,.08);
+  border-color: rgba(148,163,184,.18);
+  color: rgba(148,163,184,.65);
+}
+
+/* Stall warning banner inside the active render card */
+.rcStallBanner {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fcd34d;
+  background: rgba(180,83,9,.18);
+  border: 1px solid rgba(245,158,11,.35);
+  line-height: 1.4;
+  animation: none;
+}
+
+/* Quality issue badge shown on completed clips with quality penalties */
+.rcQualityBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(234,179,8,.12);
+  border: 1px solid rgba(234,179,8,.28);
+  color: #fde047;
+  margin-top: 3px;
+  cursor: default;
+}
+
+/* Status badge additions for completed_with_errors and stalled */
+.statusBadge.completed_with_errors {
+  background: rgba(245,158,11,.15);
+  color: #fcd34d;
+}
+.statusBadge.stalled,
+.statusBadge.timeout {
+  background: rgba(239,68,68,.15);
+  color: #f87171;
+}
+
+/* ── End P2-1 ─────────────────────────────────────────────────────────────── */
+
+/* ── AI Insights Panel — Phase 7 ──────────────────────────────────────────── */
+.aiInsightsPanel {
+  margin: 8px 0 0;
+  border: 1px solid #1b2e48;
+  border-radius: var(--radius);
+  background: rgba(10,18,36,0.65);
+  overflow: hidden;
+}
+.aiInHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 12px 6px;
+  border-bottom: 1px solid #1b2e48;
+}
+.aiInLabel {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #6b87aa;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.aiInLabel::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #6366f1;
+  border-radius: 50%;
+  flex: 0 0 6px;
+}
+.aiInConfBadge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #c7d6ee;
+  background: rgba(99,102,241,.14);
+  border: 1px solid rgba(99,102,241,.22);
+  padding: 2px 9px;
+  border-radius: 20px;
+  transition: background .2s;
+}
+.aiInConfBadge[data-level="high"] { background: rgba(16,185,129,.14); border-color: rgba(16,185,129,.22); color: #6ee7b7; }
+.aiInConfBadge[data-level="mid"]  { background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.22); color: #fcd34d; }
+.aiInConfBadge[data-level="low"]  { background: rgba(239,68,68,.14);  border-color: rgba(239,68,68,.22);  color: #fca5a5; }
+.aiInBody {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.aiInSection { }
+.aiInSectionTitle {
+  font-size: 10px;
+  font-weight: 600;
+  color: #5a728a;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 5px;
+}
+/* Headline + summary bullets */
+.aiHeadline {
+  font-size: 13px;
+  font-weight: 600;
+  color: #bfd0e8;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+.aiSummaryList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.aiSummaryItem {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.45;
+}
+.aiSummaryItem::before {
+  content: '·';
+  color: #6366f1;
+  font-size: 15px;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+/* Confidence bars */
+.aiConfGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.aiBarRow {
+  display: grid;
+  grid-template-columns: 58px 1fr 30px;
+  align-items: center;
+  gap: 7px;
+}
+.aiBarLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aiBar {
+  height: 4px;
+  background: rgba(255,255,255,.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.aiBarFill {
+  height: 100%;
+  border-radius: 3px;
+  background: #6366f1;
+  width: var(--ai-bar-pct, 0%);
+}
+.aiBarFill[data-level="high"] { background: #10b981; }
+.aiBarFill[data-level="mid"]  { background: #f59e0b; }
+.aiBarFill[data-level="low"]  { background: #ef4444; }
+.aiBarPct {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* Insight cards grid */
+.aiInsightGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.aiInsightCard {
+  background: rgba(255,255,255,.025);
+  border: 1px solid #1b2e48;
+  border-radius: 8px;
+  padding: 7px 9px;
+  min-width: 0;
+}
+.aiInsightCardWide {
+  grid-column: 1 / -1;
+}
+.aiInsightCardTitle {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #5a728a;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 5px;
+}
+.aiInsightCardRow {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.aiInsightCardBadge {
+  font-size: 10px;
+  background: rgba(99,102,241,.1);
+  color: #a5b0f8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.aiInsightCardBadge.green {
+  background: rgba(16,185,129,.1);
+  color: #34d399;
+}
+.aiInsightCardBadge.amber {
+  background: rgba(245,158,11,.1);
+  color: #fbbf24;
+}
+.aiInsightMuted {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+/* Memory card */
+.aiMemCard {
+  background: rgba(255,255,255,.02);
+  border: 1px solid #1b2e48;
+  border-radius: 8px;
+  padding: 7px 9px;
+}
+.aiMemCardTitle {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #5a728a;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 4px;
+}
+.aiMemCardRow {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+/* Warning pills */
+.aiWarnRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.aiWarnPill {
+  font-size: 10px;
+  background: rgba(245,158,11,.08);
+  border: 1px solid rgba(245,158,11,.18);
+  color: #d9a244;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+/* ── End AI Insights Panel ────────────────────────────────────────────────── */
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Phase 8 — AI Timeline Intelligence
+   Lightweight segment overlay + legend for the editor timeline bar.
+   All pointer-events: none — seek/trim interactions unaffected.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Overlay container sits inside evTimelineBarWrap (position:relative, h:36px).
+   Positioned above the text-layer track band (bottom:12px). */
+.evAiOverlayLayer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  height: 6px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* AI clip segment bars */
+.evAiSegBar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(99, 179, 237, 0.50);
+  border-radius: 2px;
+  min-width: 2px;
+  transition: opacity .15s ease;
+}
+
+/* High-score (hook) segments — amber/gold */
+.evAiSegBarHook {
+  background: rgba(251, 191, 36, 0.72);
+  box-shadow: 0 0 4px rgba(251, 191, 36, 0.30);
+}
+
+/* ── AI Timeline Legend ───────────────────────────────────────────────────── */
+.evAiTimelineLegend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 20px 4px;
+  background: rgba(6, 9, 15, 0.92);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
+}
+
+.evAiLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.evAiLegendItem::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(99, 179, 237, 0.55);
+  flex-shrink: 0;
+}
+
+.evAiLegendHook::before {
+  background: rgba(251, 191, 36, 0.75);
+}
+
+.evAiLegendEnergy {
+  margin-left: auto;
+  font-size: 10px;
+  color: #5a728a;
+  letter-spacing: .01em;
+}
+.evAiLegendEnergy[data-energy="high"] { color: #4ade80; }
+.evAiLegendEnergy[data-energy="mid"]  { color: #fbbf24; }
+.evAiLegendEnergy[data-energy="low"]  { color: #60a5fa; }
+
+/* ── End Phase 8 AI Timeline Intelligence ────────────────────────────────── */
 

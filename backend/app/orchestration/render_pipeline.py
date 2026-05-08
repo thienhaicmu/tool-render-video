@@ -313,6 +313,21 @@ def _apply_subtitle_edits_to_srt(srt_path: str, edits: list) -> None:
             logger.warning("subtitle_edits: failed to write patched SRT (%s): %s", srt_path, exc)
 
 
+def _duration_tolerance(expected_duration: float) -> float:
+    """Return the acceptable deviation window for output duration validation.
+
+    Very short clips get at least 0.5 s; long clips are capped at 3.0 s.
+    """
+    if expected_duration > 0:
+        return max(0.5, min(expected_duration * 0.15, 3.0))
+    return 1.0  # safe fallback for unknown/zero expected duration
+
+
+def _stall_deadline(encode_start: float, expected_duration: float) -> float:
+    """Return the monotonic time beyond which a running render is considered stalled."""
+    return encode_start + max(120.0, (expected_duration or 60.0) * 10)
+
+
 def _render_progress_timer(
     stop_event: threading.Event,
     job_id: str,
@@ -322,6 +337,7 @@ def _render_progress_timer(
     output_file: str,
     encode_start: float,
     expected_duration: float,
+    channel_code: str = "",
 ):
     """Background thread that emits linear progress estimates while FFmpeg runs.
 
@@ -335,12 +351,57 @@ def _render_progress_timer(
       render_part_smart() returns, guaranteeing that the final DB write wins.
     - All exceptions are swallowed; a noisy timer must never crash a render thread.
     """
+    stall_deadline = _stall_deadline(encode_start, expected_duration)
+    _stall_suspected_emitted = False
     while not stop_event.wait(timeout=_PROGRESS_TICK_SEC):
         elapsed = time.monotonic() - encode_start
         if expected_duration > 0:
             progress = min(99, 70 + int(30 * elapsed / expected_duration))
         else:
             progress = 85  # unknown duration — park at midpoint
+
+        # Warn once when duration is unknown and render has run for >300 s
+        if expected_duration <= 0 and elapsed > 300 and not _stall_suspected_emitted:
+            _stall_suspected_emitted = True
+            try:
+                if channel_code:
+                    _emit_render_event(
+                        channel_code=channel_code,
+                        job_id=job_id,
+                        event="render.stall_suspected",
+                        level="WARNING",
+                        message=f"Render has been running {elapsed:.0f}s with unknown duration",
+                        step="render.progress",
+                    )
+            except Exception:
+                pass
+
+        # Hard stall guard: wall-clock deadline exceeded — fail the part and exit
+        if not stop_event.is_set() and time.monotonic() > stall_deadline:
+            try:
+                if channel_code:
+                    _emit_render_event(
+                        channel_code=channel_code,
+                        job_id=job_id,
+                        event="render.stall_detected",
+                        level="WARNING",
+                        message=f"Render stall detected: wall-clock timeout exceeded after {elapsed:.0f}s",
+                        step="render.progress",
+                    )
+                upsert_job_part(
+                    job_id, part_no, part_name,
+                    JobPartStage.FAILED, progress,
+                    seg["start"], seg["end"], seg["duration"],
+                    seg.get("viral_score", 0), seg.get("motion_score", 0),
+                    seg.get("hook_score", 0),
+                    output_file,
+                    "Render stall detected: wall-clock timeout exceeded",
+                )
+            except Exception:
+                pass
+            stop_event.set()
+            break
+
         try:
             upsert_job_part(
                 job_id,
@@ -678,7 +739,7 @@ def _validate_render_output(
         return result
 
     if expected_duration and expected_duration > 0:
-        tolerance = max(1.0, expected_duration * 0.15)
+        tolerance = _duration_tolerance(expected_duration)
         result["metadata"]["expected_duration"] = float(expected_duration)
         result["metadata"]["duration_tolerance"] = float(tolerance)
         if abs(duration - expected_duration) > tolerance:
@@ -1596,6 +1657,105 @@ def run_render_pipeline(
                         _hb_stop.set()
                         _hb.join(timeout=2)
 
+        # ── AI Director Phase 1 — safe edit plan (observation only, no override) ──
+        _ai_edit_plan = None
+        if getattr(payload, "ai_director_enabled", False):
+            try:
+                from app.ai.director.ai_director import create_ai_edit_plan as _create_ai_plan
+                _ai_context = {
+                    "job_id": job_id,
+                    "srt_path": str(full_srt) if full_srt_available else None,
+                    "scenes": scenes,
+                    "duration": source.get("duration", 0.0),
+                    "market": getattr(payload, "viral_market", None),
+                    # Phase 4: source path for optional beat analysis
+                    "source_path": str(source_path) if source_path else None,
+                }
+                _ai_edit_plan = _create_ai_plan(payload, _ai_context)
+                if _ai_edit_plan is not None:
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="ai_director_plan_created",
+                        level="INFO",
+                        message=(
+                            f"AI Director plan: mode={_ai_edit_plan.mode} "
+                            f"segments={len(_ai_edit_plan.selected_segments)} "
+                            f"fallback={_ai_edit_plan.fallback_used}"
+                        ),
+                        step="ai_director",
+                        context=_ai_edit_plan.to_dict(),
+                    )
+            except Exception as _ai_err:
+                _job_log(
+                    effective_channel, job_id,
+                    f"ai_director_failed_fallback: {_ai_err}",
+                    kind="warning",
+                )
+
+        # ── AI Render Influence (Phase 10) — bounded opt-in payload adjustments ──
+        _ai_influence_report: dict = {"enabled": False}
+        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False):
+            try:
+                from app.ai.director.render_influence import apply_ai_render_influence as _apply_ai_influence
+                payload, _ai_influence_report = _apply_ai_influence(
+                    payload,
+                    _ai_edit_plan,
+                    context={"job_id": job_id},
+                )
+                logger.info(
+                    "ai_render_influence_applied job_id=%s applied=%d skipped=%d",
+                    job_id,
+                    len(_ai_influence_report.get("applied", [])),
+                    len(_ai_influence_report.get("skipped", [])),
+                )
+            except Exception as _inf_err:
+                _ai_influence_report = {
+                    "enabled": True,
+                    "applied": [],
+                    "skipped": [],
+                    "warnings": [f"influence_module_error:{type(_inf_err).__name__}"],
+                }
+                logger.warning("ai_render_influence_module_failed job_id=%s: %s", job_id, _inf_err)
+        elif _ai_edit_plan is not None:
+            logger.debug("ai_render_influence_skipped job_id=%s (disabled)", job_id)
+
+        # ── AI Beat Execution (Phase 11) — metadata-only beat plan ───────────
+        _ai_beat_report: dict = {"enabled": False}
+        if _ai_edit_plan is not None and getattr(payload, "ai_beat_execution_enabled", False):
+            beat_exec_cached = getattr(_ai_edit_plan, "beat_execution", None)
+            if isinstance(beat_exec_cached, dict) and beat_exec_cached.get("beat_available"):
+                _ai_beat_report = beat_exec_cached
+                logger.info(
+                    "ai_beat_execution_planned job_id=%s bpm=%s count=%d enabled=%s",
+                    job_id,
+                    _ai_beat_report.get("bpm"),
+                    _ai_beat_report.get("beat_count", 0),
+                    _ai_beat_report.get("enabled", False),
+                )
+            else:
+                try:
+                    from app.ai.director.beat_execution import build_beat_execution_plan as _build_beat
+                    _ai_beat_report = _build_beat(
+                        _ai_edit_plan, payload, context={"job_id": job_id}
+                    )
+                    _ai_edit_plan.beat_execution = _ai_beat_report
+                    logger.info(
+                        "ai_beat_execution_planned job_id=%s bpm=%s count=%d enabled=%s",
+                        job_id,
+                        _ai_beat_report.get("bpm"),
+                        _ai_beat_report.get("beat_count", 0),
+                        _ai_beat_report.get("enabled", False),
+                    )
+                except Exception as _beat_err:
+                    _ai_beat_report = {
+                        "enabled": False,
+                        "warnings": [f"beat_execution_module_error:{type(_beat_err).__name__}"],
+                    }
+                    logger.warning("ai_beat_execution_module_failed job_id=%s: %s", job_id, _beat_err)
+        elif _ai_edit_plan is not None:
+            logger.debug("ai_beat_execution_skipped job_id=%s (disabled)", job_id)
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()
@@ -2106,6 +2266,7 @@ def run_render_pipeline(
                     str(final_part),
                     time.monotonic(),
                     max(float(seg.get("duration") or 0), 1.0),
+                    effective_channel,
                 ),
                 daemon=True,
                 name=f"progress-timer-{job_id[:8]}-p{idx}",
@@ -2716,6 +2877,20 @@ def run_render_pipeline(
                         "warnings": _qq["warnings"],
                     },
                 )
+            if _quality_penalty > 20:
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="render.quality_penalty_high",
+                    level="WARNING",
+                    message=f"Part {idx} quality penalty high: -{_quality_penalty} points",
+                    step="render.output.quality",
+                    context={
+                        "part_no": idx,
+                        "warnings": _qq["warnings"],
+                        "score_penalty": _quality_penalty,
+                    },
+                )
 
             upsert_job_part(job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Completed")
             row = [job_id, effective_channel, source["title"], idx, seg["start"], seg["end"], seg["duration"], seg["viral_score"], seg["priority_rank"], str(final_part)]
@@ -3132,6 +3307,12 @@ def run_render_pipeline(
             "successful_outputs_count": len(outputs),
             "failed_outputs_count": len(failed_parts),
             "is_partial_success": _is_partial_success,
+            "ai_director": _ai_edit_plan.to_dict() if _ai_edit_plan is not None else {"enabled": False},
+            "ai_render_influence": _ai_influence_report,
+            "ai_beat_execution": _ai_beat_report,
+            "story": _ai_edit_plan.story if _ai_edit_plan is not None else {},
+            "preset_evolution": _ai_edit_plan.preset_evolution if _ai_edit_plan is not None else {},
+            "creator_style": _ai_edit_plan.creator_style if _ai_edit_plan is not None else {},
         }
         upsert_job(
             job_id,
@@ -3144,6 +3325,21 @@ def run_render_pipeline(
             progress_percent=100,
             message=_final_message,
         )
+        # ── AI Memory write (Phase 3) — after job finalized, never blocks render ──
+        if getattr(payload, "ai_director_enabled", False) or _ai_edit_plan is not None:
+            try:
+                from app.ai.rag.memory_writer import write_render_memory as _write_mem
+                _write_mem(
+                    _result_payload,
+                    context={
+                        "market": getattr(payload, "viral_market", None),
+                        "mode": getattr(payload, "ai_mode", "viral_tiktok"),
+                        "duration": source.get("duration", 0.0),
+                    },
+                )
+            except Exception:
+                pass
+
         _job_log(
             effective_channel,
             job_id,

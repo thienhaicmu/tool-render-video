@@ -21,6 +21,7 @@ let _rcCompareSelA = '';
 let _rcCompareSelB = '';
 let _rcBenchmark = { jobId: '', logsLoaded: false, totalElapsedMs: 0, sceneDetectionMs: null, sceneCount: null, transcriptionMs: null, transcriptionModel: null, transcriptionLiveSec: null, totalParts: 0, completedParts: 0, failedParts: 0, failedStage: '', outputSizes: [] };
 const RENDER_MONITOR_STALL_MS = 45000;
+let _queueStatusTimer = null;
 
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
 function resetRenderSessionUi(){
@@ -85,7 +86,6 @@ function resetRenderSessionUi(){
   if(RENDER_SESSION_ONLY && qs('jobs_out')){
     qs('jobs_out').innerHTML = '<div class="emptyState">Session mode: old jobs are hidden.</div>';
   }
-  setRenderFlowState('source', 'Select source', { source: 'active', force: true });
   hideRenderCompletionBar();
   resetRenderMonitorHeartbeat();
   _renderLogsUserToggled = false;
@@ -98,12 +98,15 @@ function resetRenderSessionUi(){
   const _pvVid = qs('rc_preview_video');
   if (_pvVid) { _pvVid.src = ''; _pvVid.dataset.previewSrc = ''; }
   if (qs('rc_output_preview')) qs('rc_output_preview').classList.add('hiddenView');
+  _resetCsPreview();
+  _hideCsPreviewArea();
   _rcBenchmark = { jobId: '', logsLoaded: false, totalElapsedMs: 0, sceneDetectionMs: null, sceneCount: null, transcriptionMs: null, transcriptionModel: null, transcriptionLiveSec: null, totalParts: 0, completedParts: 0, failedParts: 0, failedStage: '', outputSizes: [] };
   if (qs('rc_benchmark_panel')) qs('rc_benchmark_panel').classList.add('hiddenView');
   _rcCompareSelA = '';
   _rcCompareSelB = '';
   renderBottomActiveQueue(null, null, []);
   updateRenderMainState(null, null, []);
+  resetAiInsightsPanel();
 }
 function fmtElapsed(ms){
   const sec = Math.max(0, Math.floor(ms / 1000));
@@ -112,6 +115,69 @@ function fmtElapsed(ms){
   const s = sec % 60;
   if (h > 0) return `${h}h ${m}m ${s}s`;
   return `${m}m ${s}s`;
+}
+
+// ── Render slot visibility ────────────────────────────────────────────────────
+
+async function _loadQueueStatus() {
+  try {
+    const r = await fetch('/api/render/queue-status');
+    if (!r.ok) return;
+    const d = await r.json();
+    const pill = qs('rc_slot_pill');
+    if (pill) {
+      pill.textContent = `Slots: ${d.active_renders} / ${d.max_renders} active`;
+      pill.dataset.active = String(d.active_renders > 0 ? 1 : 0);
+      pill.hidden = false;
+    }
+  } catch(_) {}
+}
+
+function _startQueueStatusPolling() {
+  if (_queueStatusTimer) return;
+  _loadQueueStatus();
+  _queueStatusTimer = setInterval(_loadQueueStatus, 10000);
+}
+
+function _stopQueueStatusPolling() {
+  if (_queueStatusTimer) { clearInterval(_queueStatusTimer); _queueStatusTimer = null; }
+  const pill = qs('rc_slot_pill');
+  if (pill) { pill.hidden = true; }
+}
+
+// ── Stall / stuck signal detection ───────────────────────────────────────────
+
+function _detectStallSignal(job) {
+  const status = String(job?.status || '').toLowerCase();
+  const msg = String(job?.message || '').toLowerCase();
+  if (status === 'stalled' || status === 'timeout') {
+    return 'Render timed out — check logs for details.';
+  }
+  if (msg.includes('stall detected') || msg.includes('wall-clock timeout') || msg.includes('stall_detected')) {
+    return 'Render timed out — check logs for details.';
+  }
+  if (msg.includes('stall_suspected') || msg.includes('stall suspected') || msg.includes('unknown duration')) {
+    return 'Render may be stuck — still waiting for FFmpeg.';
+  }
+  if (msg.includes('stall') || msg.includes('stuck')) {
+    return 'Render may be stuck — still waiting for FFmpeg.';
+  }
+  if (msg.includes('timeout')) {
+    return 'Render timed out — check logs for details.';
+  }
+  return '';
+}
+
+// ── Quality badge helper (per part) ──────────────────────────────────────────
+
+function _partQualityBadgeHtml(part) {
+  const penalty = Number(part?.quality_penalty ?? part?.score_penalty ?? 0);
+  const warnings = Array.isArray(part?.quality_warnings) ? part.quality_warnings : [];
+  if (penalty <= 0 && warnings.length === 0) return '';
+  const tip = warnings.length > 0
+    ? esc(warnings.slice(0, 3).join(' | '))
+    : `Quality penalty: ${penalty}`;
+  return `<span class="rcQualityBadge" title="${tip}">&#9888; Quality issue</span>`;
 }
 function stageLabel(stage){
   const map = {
@@ -136,17 +202,17 @@ function stageLabelPlain(stage){
     preparing: 'Preparing',
     starting: 'Preparing',
     downloading: 'Preparing source',
-    scene_detecting: 'Scene Detection',
-    scene_detection: 'Scene Detection',
+    scene_detecting: 'Detecting scenes',
+    scene_detection: 'Detecting scenes',
     segment_building: 'Segment Selection',
-    transcribing_full: 'Subtitles',
-    rendering: 'Rendering Clips',
-    rendering_parallel: 'Rendering Clips',
-    writing_report: 'Writing report',
+    transcribing_full: 'Generating subtitles',
+    rendering: 'Rendering clips',
+    rendering_parallel: 'Rendering clips',
+    writing_report: 'Validating output',
     finalizing: 'Finalizing',
     done: 'Completed',
     completed: 'Completed',
-    completed_with_errors: 'Completed with Errors',
+    completed_with_errors: 'Completed with issues',
     failed: 'Failed',
     working: 'Working...',
   };
@@ -162,7 +228,7 @@ function normalizeRenderStatus(status, stage = ''){
   if (st === 'rendering') return 'rendering';
   if (st === 'completed' || st === 'done' || st === 'complete') return 'completed';
   if (st === 'completed_with_errors' || st === 'partial_failed') return 'completed_with_errors';
-  if (st === 'failed' || st === 'interrupted') return 'failed';
+  if (st === 'failed' || st === 'interrupted' || st === 'stalled' || st === 'timeout') return 'failed';
   if (st === 'running') {
     if (sg === 'scene_detection' || sg === 'scene_detecting') return 'scene_detecting';
     if (sg === 'segment_building') return 'preparing';
@@ -244,12 +310,13 @@ function renderUxStageLabel(job, summary = null, parts = []) {
   const stage = normalizeRenderStage(job?.stage, job?.status);
   const status = normalizeRenderStatus(job?.status, stage);
   if (status === 'completed') return 'Completed';
-  if (status === 'completed_with_errors') return 'Completed with Errors';
+  if (status === 'completed_with_errors') return 'Completed with issues';
   if (status === 'failed') return 'Failed';
-  if (stage === 'scene_detection' || status === 'scene_detecting') return 'Scene Detection';
+  if (stage === 'scene_detection' || status === 'scene_detecting') return 'Detecting scenes';
   if (stage === 'segment_building') return 'Segment Selection';
-  if (stage === 'rendering' || stage === 'rendering_parallel' || status === 'rendering') return 'Rendering Clips';
-  if (stage === 'writing_report') return 'Finalizing';
+  if (stage === 'transcribing_full') return 'Generating subtitles';
+  if (stage === 'rendering' || stage === 'rendering_parallel' || status === 'rendering') return 'Rendering clips';
+  if (stage === 'writing_report') return 'Validating output';
   if (status === 'pending' || stage === 'queued') return 'Preparing';
   if (status === 'preparing' || stage === 'starting' || stage === 'downloading') return 'Preparing';
   return job ? 'Working...' : 'Idle';
@@ -515,79 +582,11 @@ function setActionState(job){
 }
 
 function setRenderFlowState(activeStep, subtitle, overrides = {}) {
-  const order = RENDER_FLOW_ORDER;
-  const force = overrides.force === true;
-  const idx = order.indexOf(activeStep);
-  if (idx < 0) return;
-  const targetIdx = (!force && idx < _renderFlowStepRank) ? _renderFlowStepRank : idx;
-  const targetStep = order[targetIdx];
-  if (force || targetIdx > _renderFlowStepRank) _renderFlowStepRank = targetIdx;
-  const subByStep = {
-    source: qs('flow_sub_source'),
-    configure: qs('flow_sub_configure'),
-    rendering: qs('flow_sub_rendering'),
-    complete: qs('flow_sub_complete'),
-  };
-  Object.entries(subByStep).forEach(([key, el]) => {
-    if (!el) return;
-    if (key === targetStep && subtitle && el.textContent !== subtitle) {
-      el.textContent = subtitle;
-      el.classList.remove('flowSubChanging');
-      void el.offsetWidth;
-      el.classList.add('flowSubChanging');
-    }
-  });
-  document.querySelectorAll('.renderFlowStep[data-flow-step]').forEach((node) => {
-    const key = node.getAttribute('data-flow-step');
-    let state = 'pending';
-    if (overrides[key]) {
-      state = overrides[key];
-    } else {
-      const kIdx = order.indexOf(key);
-      if (kIdx < targetIdx) state = 'done';
-      if (kIdx === targetIdx) state = 'active';
-    }
-    const changed = !node.classList.contains(state);
-    node.classList.remove('pending', 'active', 'done');
-    node.classList.add(state);
-    if (changed) {
-      node.classList.remove('flowStepChanged');
-      void node.offsetWidth;
-      node.classList.add('flowStepChanged');
-    }
-  });
+  // flow bar removed — no-op kept for call-site compatibility
 }
 
 function updateRenderFlowByJob(job, summary, parts = []) {
-  const stage = normalizeRenderStage(job?.stage, job?.status);
-  const status = normalizeRenderStatus(job?.status, stage);
-  if (isPartialRenderStatus(status)) {
-    setRenderFlowState('complete', `${getCompletedClipCount(summary, parts)} clips ready with errors`);
-    return;
-  }
-  if (status === 'completed' || status === 'done' || status === 'complete') {
-    setRenderFlowState('complete', `${getCompletedClipCount(summary, parts)} clips ready`);
-    return;
-  }
-  if (status === 'failed') {
-    setRenderFlowState('complete', String(job?.status || '').toLowerCase() === 'interrupted' ? 'Interrupted' : 'Failed', {
-      source: 'done',
-      configure: 'done',
-      rendering: 'done',
-      complete: 'active',
-    });
-    return;
-  }
-  if (stage === 'queued' || stage === 'starting' || stage === 'downloading') {
-    const step = _renderFlowStepRank >= RENDER_FLOW_ORDER.indexOf('rendering') ? 'rendering' : 'source';
-    setRenderFlowState(step, stageLabelPlain(stage));
-    return;
-  }
-  if (stage === 'scene_detection' || stage === 'segment_building' || stage === 'transcribing_full' || stage === 'rendering' || stage === 'rendering_parallel' || stage === 'writing_report') {
-    const pct = deriveRenderProgress(job, summary, parts);
-    setRenderFlowState('rendering', `${stageLabelPlain(stage)} - ${pct}%`);
-    return;
-  }
+  // flow bar removed — no-op kept for call-site compatibility
 }
 
 function buildCompletionHandoff(summary, parts, job) {
@@ -633,6 +632,14 @@ function showRenderCompletionBar(text, detail) {
   if (msg && text) msg.textContent = text;
   const summary = qs('render_completion_summary');
   if (summary) summary.textContent = detail || '';
+
+  const status = String(_renderMonitorLastJob?.status || '').toLowerCase();
+  const isPartial = status === 'completed_with_errors';
+  bar.dataset.state = isPartial ? 'warning' : 'success';
+
+  const iconEl = qs('rcb_icon');
+  if (iconEl) iconEl.textContent = isPartial ? '⚠' : '✓';
+
   bar.classList.remove('hiddenView');
 }
 
@@ -640,8 +647,18 @@ function hideRenderCompletionBar() {
   const bar = qs('render_completion_bar');
   if (!bar) return;
   bar.classList.add('hiddenView');
+  delete bar.dataset.state;
   const summary = qs('render_completion_summary');
   if (summary) summary.textContent = '';
+}
+
+function reviewClipsFromBanner() {
+  const panel = qs('render_output_panel');
+  if (!panel || panel.classList.contains('hiddenView')) {
+    if (typeof showToast === 'function') showToast('Clips are not ready yet.', 'info');
+    return;
+  }
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function deactivateRenderUiForEditorOpen() {
@@ -803,8 +820,6 @@ function renderBottomControlCenter(job, summary, parts = []) {
     const progress = Math.max(0, Math.min(100, Math.round(Number(p?.progress_percent || 0))));
     const partNo = Number(p.part_no || idx + 1);
     const partTitle = p.part_name ? esc(p.part_name) : `Clip ${partNo}`;
-    const stage = partStatusLabel(st);
-    const message = String(p?.message || '').trim() || (cls === 'isWaiting' ? 'Waiting in queue' : cls === 'isCompleted' ? 'Ready in output folder' : cls === 'isFailed' ? 'Needs review' : 'Processing');
     const startSec = Number(p.start_sec || 0);
     const endSec = Number(p.end_sec || 0);
     const duration = Math.max(0, endSec - startSec);
@@ -813,12 +828,16 @@ function renderBottomControlCenter(job, summary, parts = []) {
       : duration > 0
       ? `${duration.toFixed(1)}s · ${startSec.toFixed(1)}s–${endSec.toFixed(1)}s`
       : '';
+    const rawMsg = String(p?.message || '').trim();
+    const isDebugMsg = !rawMsg || /_ms=|\bpart_render\b|\w+=\w+/.test(rawMsg);
+    const message = isDebugMsg
+      ? (cls === 'isWaiting' ? 'Waiting in queue' : cls === 'isCompleted' ? 'Ready in output folder' : cls === 'isFailed' ? 'Needs review' : 'Processing')
+      : rawMsg;
     return `<article class="rcPartCard ${cls}" data-part-status="${esc(st || 'queued')}">
       <div class="rcPartTop">
         <div class="rcPartTitle">Clip ${partNo} · ${partTitle}</div>
         <div class="rcPartStatus">${esc(partStatusLabel(st))}</div>
       </div>
-      <div class="rcPartStage">Stage: ${esc(stage)}</div>
       <div class="rcPartMessage">${esc(message)}</div>
       <div class="rcMiniProgress" style="--progress:${progress}%"><span></span></div>
       <div class="rcPartMeta">${progress}%${meta ? ` · ${meta}` : ''}</div>
@@ -1196,38 +1215,11 @@ function renderBenchmarkPanel(job, parts) {
   if (badge) { badge.textContent = isTerminal ? 'Done' : 'Live'; badge.dataset.state = isTerminal ? 'done' : 'live'; }
 
   const rows = [];
-  if (b.totalElapsedMs > 0) rows.push({ label: 'Total', value: formatBenchDuration(b.totalElapsedMs) });
-
-  if (b.sceneDetectionMs != null) {
-    const extra = b.sceneCount != null ? ` · ${b.sceneCount.toLocaleString()} scenes` : '';
-    rows.push({ label: 'Scenes', value: formatBenchDuration(b.sceneDetectionMs) + extra });
-  }
-
-  const txMs = b.transcriptionMs != null ? b.transcriptionMs : (b.transcriptionLiveSec != null ? b.transcriptionLiveSec * 1000 : null);
-  if (txMs != null) {
-    const model = b.transcriptionModel ? ` · ${b.transcriptionModel}` : '';
-    const live = (b.transcriptionMs == null && b.transcriptionLiveSec != null) ? ' ⏱' : '';
-    rows.push({ label: 'Transcription', value: `${formatBenchDuration(txMs)}${model}${live}` });
-  } else if (String(job?.stage || '').includes('transcrib')) {
-    rows.push({ label: 'Transcription', value: 'In progress…' });
-  }
+  if (b.totalElapsedMs > 0) rows.push({ label: 'Total time', value: formatBenchDuration(b.totalElapsedMs) });
 
   if (b.totalParts > 0) {
     const failBit = b.failedParts > 0 ? ` · ${b.failedParts} failed` : '';
-    rows.push({ label: 'Parts', value: `${b.completedParts} / ${b.totalParts}${failBit}` });
-  }
-
-  if (b.outputSizes.length > 0) {
-    const avg = Math.round(b.outputSizes.reduce((a, x) => a + x, 0) / b.outputSizes.length);
-    const max = Math.max(...b.outputSizes);
-    rows.push({ label: 'Output', value: b.outputSizes.length > 1 ? `avg ${formatBenchBytes(avg)} · max ${formatBenchBytes(max)}` : formatBenchBytes(avg) });
-  }
-
-  const _bmMvMap = _mvSegmentMap(job);
-  if (_bmMvMap.size > 0) {
-    const _bmBest = [..._bmMvMap.values()].reduce((a, b) => (b.score > a.score ? b : a));
-    const _bmTier = { hot: 'Hot', warm: 'Warm', normal: 'Normal', weak: 'Weak' };
-    rows.push({ label: 'Market Viral', value: `${_bmBest.score} · ${_bmBest.market} · ${_bmTier[_bmBest.tier] || _bmBest.tier}` });
+    rows.push({ label: 'Clips', value: `${b.completedParts} / ${b.totalParts}${failBit}` });
   }
 
   const _bmRkMap = _rankMap(job);
@@ -1348,7 +1340,7 @@ function updateOutputPreview(job, parts) {
   }
 
   const partNo = Number(targetPart.part_no);
-  const previewUrl = `/api/jobs/${jobId}/parts/${partNo}/stream`;
+  const previewUrl = `/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/media`;
   const outputFile = String(targetPart.output_file || '');
   const fileName = outputFile.replace(/\\/g, '/').split('/').pop() || `clip-${partNo}.mp4`;
   const outDir = outputFile.replace(/\\/g, '/').split('/').slice(0, -1).join('/');
@@ -1380,9 +1372,9 @@ function updateOutputPreview(job, parts) {
 
 const RC_STAGE_STEPS = [
   { key: 'prepare',  label: 'Preparing', stages: ['starting', 'queued', 'downloading'] },
-  { key: 'scenes',   label: 'Scene Detection', stages: ['scene_detection'] },
-  { key: 'segment',  label: 'Segment Selection', stages: ['segment_building', 'transcribing_full'] },
-  { key: 'render',   label: 'Rendering Clips', stages: ['rendering', 'rendering_parallel'] },
+  { key: 'scenes',   label: 'Scenes',    stages: ['scene_detection'] },
+  { key: 'segment',  label: 'Segments',  stages: ['segment_building', 'transcribing_full'] },
+  { key: 'render',   label: 'Rendering', stages: ['rendering', 'rendering_parallel'] },
   { key: 'finalize', label: 'Finalizing', stages: ['writing_report'] },
   { key: 'done',     label: 'Completed', stages: ['done', 'completed', 'complete'] },
 ];
@@ -1574,6 +1566,20 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     if (activeStage) activeStage.textContent = stageLine;
     if (activeMessage) activeMessage.textContent = message;
 
+    // Stall warning banner — shown inside active card when stall is detected
+    const _stallMsg = (!terminal && job) ? _detectStallSignal(job) : '';
+    let _stallBanner = activeCard.querySelector('.rcStallBanner');
+    if (_stallMsg) {
+      if (!_stallBanner) {
+        _stallBanner = document.createElement('div');
+        _stallBanner.className = 'rcStallBanner';
+        activeCard.appendChild(_stallBanner);
+      }
+      _stallBanner.textContent = _stallMsg;
+    } else if (_stallBanner) {
+      _stallBanner.remove();
+    }
+
     const cardJobTitle = qs('rc_card_job_title');
     const cardStatusBadge = qs('rc_card_status_badge');
     if (cardJobTitle) {
@@ -1588,6 +1594,27 @@ function renderBottomActiveQueue(job, summary, parts = []) {
       cardStatusBadge.dataset.state = status === 'completed_with_errors' ? 'warning' : overallState;
     }
     _updateStageTimeline(job?.stage || '', status);
+  }
+
+  // ETA: show after ≥2 clips done, hide on terminal/failed
+  const etaEl = qs('rc_eta');
+  if (etaEl) {
+    let etaText = '';
+    if (!terminal && overallState === 'running') {
+      const startedAt = activeJobStartedAt || 0;
+      if (completed >= 2 && waiting > 0 && startedAt > 0) {
+        const elapsedMs = Date.now() - startedAt;
+        if (elapsedMs > 0) {
+          const secPerClip = (elapsedMs / 1000) / completed;
+          const etaSec = secPerClip * waiting;
+          etaText = etaSec < 60 ? '< 1 min left' : `~${Math.round(etaSec / 60)} min left`;
+        }
+      } else if (total > 0 && waiting > 0) {
+        etaText = 'estimating…';
+      }
+    }
+    etaEl.textContent = etaText;
+    etaEl.hidden = !etaText;
   }
 
   updateOutputPreview(job, items);
@@ -1739,7 +1766,7 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     } else if (state === 'failed') {
       bottom.textContent = '✕ Failed';
     } else if (state === 'rendering') {
-      bottom.textContent = `Rendering · ${progress}%`;
+      bottom.textContent = `${progress}%`;
     } else {
       bottom.textContent = 'Waiting…';
     }
@@ -1913,6 +1940,7 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('abp_retry_btn')) qs('abp_retry_btn').classList.toggle('hiddenView', !(hasFailure && currentJobId));
   if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !(completedStatus || String(outputText || '').trim());
   if (qs('render_active_actions')) qs('render_active_actions').classList.toggle('hiddenView', !completedStatus);
+  renderAiInsights(job);
   updateRdCard(job, s, parts || []);
 }
 
@@ -2042,7 +2070,6 @@ function updateRdCard(job, summary, parts) {
   }
 
   renderSegmentedBar(qs('rd_seg_bar'), Array.isArray(parts) ? parts : []);
-  renderRdClipQueue(qs('rd_clip_queue'), Array.isArray(parts) ? parts : [], job);
 }
 
 function getCurrentJobOutputDir(job) {
@@ -2264,7 +2291,7 @@ function getCompareOutputCandidates() {
     .map((e) => {
       const partNo = e.firstPartNo ?? null;
       const canPreview = partNo != null;
-      const previewUrl = canPreview ? `/api/jobs/${e.jobId}/parts/${partNo}/stream` : null;
+      const previewUrl = canPreview ? `/api/render/jobs/${encodeURIComponent(e.jobId)}/parts/${partNo}/media` : null;
       const label = (e.totalParts > 1 && partNo != null)
         ? `${e.title} · Part ${partNo}`
         : e.title || 'Render';
@@ -3124,6 +3151,7 @@ function renderParts(items, summary){
     const errMsg  = st === 'failed' ? esc(p.message || '') : '';
     const errHtml = errMsg ? `<div class="partError">${errMsg}</div>` : '';
     const stuckHtml = isStuck ? `<div class="partStuckNote">${_stuckLabel(stuckMap.get(key))}</div>` : '';
+    const qualityBadgeHtml = st === 'done' ? _partQualityBadgeHtml(p) : '';
     const partNo = Number(p.part_no || idx + 1);
     const isMvTop = _ptTop3.has(partNo);
     const rowClass  = `${st || 'queued'}${isRun ? ' running isActive' : ''}${st === 'done' ? ' isDone' : ''}${st === 'failed' ? ' isFailed' : ''}${isStuck ? ' stuck' : ''}${isMvTop ? ' mvTop3' : ''}`.trim();
@@ -3152,7 +3180,7 @@ function renderParts(items, summary){
         <div>
           <div class="partName">${partName}</div>
           <div class="partMeta"><span class="clipDuration">${duration.toFixed(1)}s</span> | ${startSec.toFixed(1)}s–${endSec.toFixed(1)}s</div>
-          ${errHtml}${stuckHtml}
+          ${errHtml}${stuckHtml}${qualityBadgeHtml}
         </div>
       </div>
       <div class="partProgressCell">
@@ -3378,6 +3406,9 @@ function updateStatusBar(job, summary) {
 let _previewCurrentJobId = null;
 let _previewCurrentPartNo = null;
 let _previewCurrentOutputDir = null;
+let _csPreviewJobId = null;
+let _csPreviewPartNo = null;
+let _csPreviewOutputFile = null;
 
 function showRenderOutputPanel() {
   const p = qs('render_output_panel');
@@ -3403,7 +3434,149 @@ function clearRenderOutputPanel() {
   if (badge) badge.textContent = '0';
   const path = qs('render_output_path');
   if (path) path.textContent = '';
+  _hideCsPreviewArea();
   hideRenderOutputPanel();
+}
+
+function _hideCsPreviewArea() {
+  const area = qs('cs_preview_area');
+  if (area) area.classList.add('hiddenView');
+}
+
+function _resetCsPreview() {
+  const video = qs('cs_preview_video');
+  const bar = qs('cs_preview_bar');
+  const empty = qs('cs_preview_empty');
+  const loading = qs('cs_preview_loading');
+  const error = qs('cs_preview_error');
+  if (video) {
+    if (video._csOnReady) { video.removeEventListener('canplay', video._csOnReady); video.removeEventListener('loadeddata', video._csOnReady); video._csOnReady = null; }
+    if (video._csOnError) { video.removeEventListener('error', video._csOnError); video._csOnError = null; }
+    video.pause(); video.src = ''; video.dataset.previewSrc = ''; video.classList.add('hiddenView');
+  }
+  if (bar) bar.classList.add('hiddenView');
+  if (loading) loading.classList.add('hiddenView');
+  if (error) { error.textContent = ''; error.classList.add('hiddenView'); }
+  if (empty) empty.classList.remove('hiddenView');
+  _csPreviewJobId = null;
+  _csPreviewPartNo = null;
+  _csPreviewOutputFile = null;
+  document.querySelectorAll('.clipCard.isPreviewActive').forEach((el) => el.classList.remove('isPreviewActive'));
+}
+
+function closeCenterPreview() {
+  _resetCsPreview();
+  _hideCsPreviewArea();
+}
+
+function openCsPreviewFolder() {
+  if (!_csPreviewOutputFile) return;
+  const dir = String(_csPreviewOutputFile).replace(/\\/g, '/').split('/').slice(0, -1).join('/');
+  openStoredOutputPath(dir || _csPreviewOutputFile);
+}
+
+function centerPreviewClip(jobId, partNo, outputFile, partName) {
+  const st = String(outputFile || '').trim();
+  if (!jobId || !partNo || !st) return;
+  _csPreviewJobId = String(jobId);
+  _csPreviewPartNo = Number(partNo);
+  _csPreviewOutputFile = st;
+
+  const area = qs('cs_preview_area');
+  const video = qs('cs_preview_video');
+  const bar = qs('cs_preview_bar');
+  const empty = qs('cs_preview_empty');
+  const loading = qs('cs_preview_loading');
+  const errorEl = qs('cs_preview_error');
+  const nameEl = qs('cs_preview_name');
+  const metaEl = qs('cs_preview_meta');
+  const dlLink = qs('cs_preview_download');
+  if (!area || !video) return;
+
+  const src = `/api/render/jobs/${encodeURIComponent(jobId)}/parts/${Number(partNo)}/media`;
+  const srcChanged = video.dataset.previewSrc !== src;
+
+  if (srcChanged) {
+    video.pause();
+    video.src = '';
+    video.dataset.previewSrc = src;
+    // Reset to loading state
+    if (empty) empty.classList.add('hiddenView');
+    if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hiddenView'); }
+    video.classList.add('hiddenView');
+    if (loading) loading.classList.remove('hiddenView');
+
+    // Remove stale handlers from any previous load that did not resolve
+    if (video._csOnReady) { video.removeEventListener('canplay', video._csOnReady); video.removeEventListener('loadeddata', video._csOnReady); }
+    if (video._csOnError) { video.removeEventListener('error', video._csOnError); }
+
+    // Use both canplay and loadeddata: canplay requires HAVE_FUTURE_DATA which Electron
+    // may not reach while the element is display:none; loadeddata fires at HAVE_CURRENT_DATA
+    // (first frame decoded) and is reliable regardless of visibility state.
+    const _onReady = function() {
+      video.removeEventListener('canplay', _onReady);
+      video.removeEventListener('loadeddata', _onReady);
+      video._csOnReady = null;
+      if (loading) loading.classList.add('hiddenView');
+      video.classList.remove('hiddenView');
+      video.muted = true;
+      video.play().catch(() => {});
+      console.log('[preview] loaded', src);
+    };
+    const _onError = function() {
+      video.removeEventListener('error', _onError);
+      video._csOnError = null;
+      if (loading) loading.classList.add('hiddenView');
+      video.classList.add('hiddenView');
+      if (errorEl) {
+        errorEl.textContent = 'Preview unavailable. Open the output folder to view this clip.';
+        errorEl.classList.remove('hiddenView');
+      }
+      console.log('[preview] error', video.error && video.error.code, video.error && video.error.message || '');
+    };
+    video._csOnReady = _onReady;
+    video._csOnError = _onError;
+    video.addEventListener('canplay', _onReady);
+    video.addEventListener('loadeddata', _onReady);
+    video.addEventListener('error', _onError);
+
+    console.log('[preview] src', src);
+    video.src = src;
+    video.load();
+  } else {
+    // Same source — ensure visible, hide loading/error overlays
+    if (empty) empty.classList.add('hiddenView');
+    if (loading) loading.classList.add('hiddenView');
+    if (errorEl) errorEl.classList.add('hiddenView');
+    video.classList.remove('hiddenView');
+  }
+
+  // Enrich bar with metadata from part record
+  const part = (_renderMonitorLastParts || []).find((p) => Number(p.part_no) === Number(partNo));
+  if (nameEl) nameEl.textContent = String(part?.part_name || partName || `Clip ${partNo}`);
+  if (metaEl) {
+    const chunks = [];
+    if (part) {
+      const dur = Number(part.end_sec || 0) - Number(part.start_sec || 0);
+      if (dur > 0) chunks.push(`${Math.round(dur)}s`);
+      const score = Number(part.score ?? part.viral_score ?? part.quality_score ?? NaN);
+      if (!isNaN(score) && score > 0) chunks.push(`Score ${score.toFixed(1)}`);
+    }
+    metaEl.textContent = chunks.join(' · ');
+  }
+  if (dlLink) { dlLink.href = src; dlLink.setAttribute('download', `clip-${partNo}.mp4`); }
+
+  // Aspect ratio from selected card
+  const card = document.querySelector(`.clipCard[data-part-no="${Number(partNo)}"]`);
+  const aspect = card?.dataset?.aspect || '16:9';
+  area.dataset.aspect = aspect;
+
+  if (bar) bar.classList.remove('hiddenView');
+  area.classList.remove('hiddenView');
+  area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  document.querySelectorAll('.clipCard.isPreviewActive').forEach((el) => el.classList.remove('isPreviewActive'));
+  if (card) card.classList.add('isPreviewActive');
 }
 
 function populateRenderOutputPanel(job, parts) {
@@ -3449,18 +3622,21 @@ function populateRenderOutputPanel(job, parts) {
   if (badge) badge.textContent = String(done.length);
 
   const outputDir = getCurrentJobOutputDir(job);
-  if (pathEl) pathEl.textContent = outputDir ? `Output folder: ${outputDir}` : '';
   if (qs('abp_output_text')) qs('abp_output_text').textContent = outputDir ? `Output folder: ${outputDir}` : 'Output folder not set.';
   if (qs('abp_output_meta')) qs('abp_output_meta').textContent = 'Latest file will appear here.';
   if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !outputDir;
   const failureInfo = renderFailureDetails(job, computeProgressSummary(items));
-  if ((failureInfo.count > 0 || failureInfo.warning) && pathEl) {
+  if (pathEl) {
+    if (failureInfo.count > 0 || failureInfo.warning) {
     const warningText = [
       failureInfo.count > 0 ? `${failureInfo.count} failed part${failureInfo.count === 1 ? '' : 's'}` : '',
       failureInfo.warning,
       ...failureInfo.details.slice(0, 3).map((d) => typeof d === 'string' ? d : JSON.stringify(d)),
     ].filter(Boolean).join(' · ');
-    pathEl.textContent = warningText ? `Completed with errors: ${warningText}` : pathEl.textContent;
+      pathEl.textContent = warningText ? `Completed with errors: ${warningText}` : (outputDir ? `Output folder: ${outputDir}` : '');
+    } else {
+      pathEl.textContent = '';
+    }
   }
 
   if (!all.length) {
@@ -3471,6 +3647,9 @@ function populateRenderOutputPanel(job, parts) {
   }
 
   const jobId = String(job?.id || job?.job_id || currentJobId || '');
+  const _jobPayload = getCurrentJobPayload(job);
+  const _aspectRaw = String(_jobPayload?.aspect_ratio || '9:16');
+  const _dataAspect = ['9:16', '3:4', '4:5', '1:1', '16:9'].includes(_aspectRaw) ? _aspectRaw : '9:16';
   list.innerHTML = all.map((p) => {
     const partNo = Number(p.part_no || 0);
     const st = String(p?.status || '').toLowerCase();
@@ -3488,10 +3667,13 @@ function populateRenderOutputPanel(job, parts) {
     const hasScore = !!(rk.rank || rk.score);
     const scoreTier = scoreVal >= 8 ? 'high' : scoreVal >= 6 ? 'mid' : scoreVal >= 4 ? 'low' : 'weak';
     const thumbHtml = isDone && hasFile && jobId
-      ? `<video class="clipCardThumbVid" src="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream#t=1" preload="metadata" muted playsinline></video>`
+      ? `<video class="clipCardThumbVid" src="/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/media#t=1" preload="metadata" muted playsinline></video>`
       : `<div class="clipCardThumbPlaceholder">${isFailed ? '✗' : isSkipped ? '—' : '⋯'}</div>`;
-    const previewBtn = (!isFailed && hasFile && jobId)
-      ? `<button class="clipCardBtn" type="button" onclick="previewClip(${JSON.stringify(jobId)},${partNo})">Preview</button>`
+    const thumbAttrs = (isDone && hasFile && jobId)
+      ? ` data-previewable="true" onclick="centerPreviewClip(${JSON.stringify(jobId)},${partNo},${JSON.stringify(p.output_file || '')},${JSON.stringify(p.part_name || `Clip ${partNo}`)})" style="cursor:pointer"`
+      : '';
+    const previewBtn = (!isFailed && !isSkipped && hasFile && jobId)
+      ? `<button class="clipCardBtn clipCardBtnPreview" type="button" onclick="centerPreviewClip(${JSON.stringify(jobId)},${partNo},${JSON.stringify(p.output_file || '')},${JSON.stringify(p.part_name || `Clip ${partNo}`)})">Preview</button>`
       : '';
     const downloadBtn = (!isFailed && hasFile && jobId)
       ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download>Download</a>`
@@ -3501,26 +3683,40 @@ function populateRenderOutputPanel(job, parts) {
       : '';
     if (qs('abp_output_meta') && hasFile) qs('abp_output_meta').textContent = `Latest file: ${String(p.output_file || '').split(/[\\\\/]/).pop()}`;
     const isSelected = isDone && hasFile && _selectedClipPaths.has(p.output_file);
-    const cardClass = `clipCard renderClipItem${isFailed ? ' isFailed' : ''}${isSkipped ? ' isSkipped' : ''}${isDone ? ' isDone' : ''}${isSelected ? ' isSelected' : ''}${rk.isBest ? ' isBestClip' : ''}`;
-    return `<div class="${cardClass}" data-clip-status="${esc(st || 'queued')}">
-      <div class="clipCardThumbWrap">
+    const cardClass = `clipCard${isFailed ? ' isFailed' : ''}${isSkipped ? ' isSkipped' : ''}${isDone ? ' isDone' : ''}${isSelected ? ' isSelected' : ''}${rk.isBest ? ' isBestClip' : ''}`;
+    const failReasonRaw = isFailed ? String(p?.message || '').trim() : '';
+    const failReasonClean = (failReasonRaw && !/(_ms=|\bpart_render\b|\w+=\w+)/.test(failReasonRaw)) ? failReasonRaw.slice(0, 80) : '';
+    return `<div class="${cardClass}" data-clip-status="${esc(st || 'queued')}" data-part-no="${partNo}" data-aspect="${_dataAspect}">
+      <div class="clipCardThumbWrap"${thumbAttrs}>
         ${thumbHtml}
         ${rk.isBest ? '<div class="clipCardBestFlag">Best</div>' : ''}
         <div class="clipCardDurTag">${dur}s</div>
       </div>
       <div class="clipCardBody">
-        <div class="clipCardTitle" title="${esc(p.output_file || '')}">${name}</div>
+        <div class="clipCardTitle">${name}</div>
         <div class="clipCardScoreRow">
           ${hasScore
-            ? `<span class="clipCardScore" data-tier="${scoreTier}">${scoreVal.toFixed(1)}</span><span class="clipCardRankTag">#${rk.rank || '?'}</span>`
+            ? `<span class="clipCardScore" data-tier="${scoreTier}">${scoreVal.toFixed(1)}<span class="clipCardScoreMax"> /10</span></span><span class="clipCardRankTag">#${rk.rank || '?'}</span>`
             : `<span class="clipCardScore" data-tier="weak">—</span>`}
           <span class="clipCardStatusDot" data-status="${esc(statusText)}" title="${esc(statusText)}"></span>
         </div>
         ${rk.reason ? `<div class="clipCardReason">${esc(rk.reason.length > 64 ? rk.reason.slice(0, 61) + '…' : rk.reason)}</div>` : ''}
+        ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
         <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}</div>
       </div>
     </div>`;
   }).join('');
+
+  // Only reset preview when job changes; never auto-show the area
+  const _prevArea = qs('cs_preview_area');
+  if (_prevArea) {
+    if (!all.length) {
+      _hideCsPreviewArea();
+    } else if (_csPreviewJobId !== null && _csPreviewJobId !== jobId) {
+      _resetCsPreview();
+      _hideCsPreviewArea();
+    }
+  }
 
   showRenderOutputPanel();
   renderBottomActiveQueue(job, computeProgressSummary(items), items);
@@ -3536,13 +3732,20 @@ function sortClipsView(val) {
 }
 
 function previewClip(jobId, partNo) {
+  // Redirect to center-stage inline preview if we have part data
+  const part = (_renderMonitorLastParts || []).find((p) => Number(p.part_no) === Number(partNo));
+  if (part && part.output_file) {
+    centerPreviewClip(jobId, partNo, part.output_file, part.part_name || '');
+    return;
+  }
+  // Fallback: open modal when part record unavailable
   const modal = qs('clip_preview_modal');
   const video = qs('clip_preview_video');
   const title = qs('clip_preview_title');
   if (!modal || !video) return;
   _previewCurrentJobId = jobId;
   _previewCurrentPartNo = partNo;
-  const src = `/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream`;
+  const src = `/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/media`;
   if (title) title.textContent = `Clip ${partNo}`;
   video.src = src;
   video.load();
@@ -3581,4 +3784,180 @@ function openClipFile(filePath) {
   if (!p) { showToast('File path is unavailable', 'info'); return; }
   const dir = p.replace(/\\/g, '/').split('/').slice(0, -1).join('/');
   openStoredOutputPath(dir || p);
+}
+
+// ── AI Insights Panel (Phase 7) ───────────────────────────────────────────────
+
+function _aiBarLevel(pct) {
+  const n = Number(pct) || 0;
+  if (n >= 70) return 'high';
+  if (n >= 40) return 'mid';
+  return 'low';
+}
+
+function _aiBarRowHtml(label, pct) {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  const lvl = _aiBarLevel(p);
+  return `<div class="aiBarRow"><span class="aiBarLabel">${esc(label)}</span><div class="aiBar"><div class="aiBarFill" data-level="${lvl}" style="--ai-bar-pct:${p}%"></div></div><span class="aiBarPct">${p}%</span></div>`;
+}
+
+function _aiEnergyLabel(level) {
+  if (level === null || level === undefined) return null;
+  const e = Number(level);
+  if (isNaN(e)) return null;
+  if (e > 0.75) return 'High';
+  if (e > 0.4) return 'Moderate';
+  return 'Low';
+}
+
+function renderAiInsights(job) {
+  const panel = qs('ai_insights_panel');
+  const body = qs('ai_insights_body');
+  const confBadge = qs('ai_conf_badge');
+  if (!panel) return;
+
+  let result = {};
+  try {
+    const raw = job && job.result_json;
+    result = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+  } catch (_) {}
+
+  const aiDir = result && result.ai_director;
+
+  if (!aiDir || !aiDir.enabled) {
+    panel.classList.add('hiddenView');
+    return;
+  }
+
+  panel.classList.remove('hiddenView');
+  if (typeof _evSetAiPlan === 'function') _evSetAiPlan(aiDir);
+
+  const summary  = aiDir.ai_summary   || {};
+  const conf     = aiDir.ai_confidence || {};
+  const fullConf = aiDir.confidence    || {};
+  const pacing   = aiDir.pacing        || {};
+  const camera   = aiDir.camera        || {};
+  const subtitle = aiDir.subtitle      || {};
+  const memCtx   = aiDir.memory_context || {};
+
+  // Confidence badge
+  const overall = conf.overall != null ? Number(conf.overall) : null;
+  if (confBadge) {
+    confBadge.textContent = overall != null ? `${overall}%` : '–';
+    confBadge.dataset.level = overall != null ? _aiBarLevel(overall) : '';
+  }
+
+  if (!body) return;
+
+  const parts = [];
+
+  // ── 1. Summary headline + bullets ─────────────────────────────
+  const headline = String(summary.headline || '').trim();
+  const lines = Array.isArray(summary.summary_lines) ? summary.summary_lines.slice(0, 5) : [];
+  if (headline || lines.length) {
+    let h = '<div class="aiInSection">';
+    if (headline) h += `<div class="aiHeadline">${esc(headline)}</div>`;
+    if (lines.length) {
+      h += '<ul class="aiSummaryList">';
+      lines.forEach(l => { h += `<li class="aiSummaryItem">${esc(String(l))}</li>`; });
+      h += '</ul>';
+    }
+    h += '</div>';
+    parts.push(h);
+  }
+
+  // ── 2. Confidence bars ─────────────────────────────────────────
+  const semConf = conf.semantic != null ? Number(conf.semantic) : null;
+  const memConf = conf.memory   != null ? Number(conf.memory)   : null;
+  const pacConf = conf.pacing   != null ? Number(conf.pacing)   : null;
+  if (semConf !== null || memConf !== null || pacConf !== null) {
+    let h = '<div class="aiInSection"><div class="aiInSectionTitle">Confidence</div><div class="aiConfGrid">';
+    if (semConf !== null) h += _aiBarRowHtml('Semantic', semConf);
+    if (pacConf !== null) h += _aiBarRowHtml('Pacing', pacConf);
+    if (memConf !== null) h += _aiBarRowHtml('Memory', memConf);
+    h += '</div></div>';
+    parts.push(h);
+  }
+
+  // ── 3. Pacing + Camera cards (2-col grid) ─────────────────────
+  const cutStyle   = String(pacing.suggested_cut_style || '');
+  const emotion    = String(pacing.emotion || '');
+  const bpm        = pacing.bpm != null ? Number(pacing.bpm) : null;
+  const energyLbl  = _aiEnergyLabel(pacing.energy_level);
+  const camBhv     = String(camera.behavior || 'none');
+  const camZoom    = camera.zoom_strength != null ? Number(camera.zoom_strength) : null;
+
+  let cardH = '<div class="aiInSection"><div class="aiInsightGrid">';
+
+  // Pacing card
+  cardH += '<div class="aiInsightCard"><div class="aiInsightCardTitle">Pacing</div><div class="aiInsightCardRow">';
+  if (cutStyle && cutStyle !== 'standard') cardH += `<span class="aiInsightCardBadge">${esc(cutStyle.replace(/_/g,' '))}</span>`;
+  if (bpm !== null) cardH += `<span class="aiInsightCardBadge">${bpm.toFixed(0)} BPM</span>`;
+  if (emotion && emotion !== 'neutral') cardH += `<span class="aiInsightCardBadge">${esc(emotion)}</span>`;
+  if (energyLbl) cardH += `<span class="aiInsightCardBadge${energyLbl === 'High' ? ' green' : energyLbl === 'Moderate' ? ' amber' : ''}">${esc(energyLbl)}</span>`;
+  if (!cutStyle && bpm === null && !energyLbl) cardH += `<span class="aiInsightMuted">${esc(String(pacing.pacing_style || 'default'))}</span>`;
+  cardH += '</div></div>';
+
+  // Camera card
+  cardH += '<div class="aiInsightCard"><div class="aiInsightCardTitle">Camera</div><div class="aiInsightCardRow">';
+  if (camBhv && camBhv !== 'none') {
+    cardH += `<span class="aiInsightCardBadge">${esc(camBhv.replace(/_/g,' '))}</span>`;
+    if (camZoom !== null && camZoom > 1.0) cardH += `<span class="aiInsightCardBadge">${camZoom.toFixed(2)}x</span>`;
+  } else {
+    cardH += `<span class="aiInsightMuted">Disabled</span>`;
+  }
+  if (camera.subtitle_safe) cardH += `<span class="aiInsightCardBadge green">sub-safe</span>`;
+  cardH += '</div></div>';
+
+  cardH += '</div></div>';
+  parts.push(cardH);
+
+  // ── 4. Subtitle card ──────────────────────────────────────────
+  const subTone    = String(subtitle.tone || 'default');
+  const subEmph    = String(subtitle.emphasis_style || 'none');
+  const subDensity = String(subtitle.density || 'normal');
+  const beatAware  = !!subtitle.beat_aware;
+  const emAware    = !!subtitle.emotion_aware;
+  if (subTone !== 'default' || subEmph !== 'none' || beatAware || emAware) {
+    let h = '<div class="aiInSection"><div class="aiInsightCard aiInsightCardWide"><div class="aiInsightCardTitle">Subtitles</div><div class="aiInsightCardRow">';
+    if (subTone !== 'default') h += `<span class="aiInsightCardBadge">${esc(subTone)} tone</span>`;
+    if (subEmph !== 'none')    h += `<span class="aiInsightCardBadge">${esc(subEmph)} emphasis</span>`;
+    if (subDensity !== 'normal') h += `<span class="aiInsightCardBadge">${esc(subDensity)} density</span>`;
+    if (beatAware) h += `<span class="aiInsightCardBadge green">beat-aware</span>`;
+    if (emAware)   h += `<span class="aiInsightCardBadge green">emotion-aware</span>`;
+    h += '</div></div></div>';
+    parts.push(h);
+  }
+
+  // ── 5. Memory card (only when results present) ─────────────────
+  const memResults = Array.isArray(memCtx.results) ? memCtx.results : [];
+  if (memResults.length > 0) {
+    const mode = String(aiDir.mode || '');
+    let h = '<div class="aiInSection"><div class="aiMemCard">';
+    h += '<div class="aiMemCardTitle">Memory</div>';
+    h += `<div class="aiMemCardRow">Similar renders found: <strong>${memResults.length}</strong>`;
+    if (mode) h += ` · <span style="color:var(--text-dim)">${esc(mode.replace(/_/g,' '))}</span>`;
+    h += '</div></div></div>';
+    parts.push(h);
+  }
+
+  // ── 6. Warnings (compact pills, only non-empty) ─────────────────
+  const summaryWarnings = Array.isArray(summary.warnings) ? summary.warnings : [];
+  if (summaryWarnings.length) {
+    const pills = summaryWarnings
+      .map(w => `<span class="aiWarnPill">${esc(String(w))}</span>`)
+      .join('');
+    parts.push(`<div class="aiInSection"><div class="aiWarnRow">${pills}</div></div>`);
+  }
+
+  body.innerHTML = parts.join('');
+}
+
+function resetAiInsightsPanel() {
+  const panel = qs('ai_insights_panel');
+  if (panel) panel.classList.add('hiddenView');
+  const body = qs('ai_insights_body');
+  if (body) body.innerHTML = '';
+  const badge = qs('ai_conf_badge');
+  if (badge) { badge.textContent = '–'; badge.dataset.level = ''; }
 }

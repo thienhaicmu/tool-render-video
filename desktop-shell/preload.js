@@ -38,5 +38,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return { ok: false, error: e?.message || String(e || 'IPC error') };
     }
   },
+  onBootStatus: (cb) => {
+    ipcRenderer.on('boot-status', (_event, msg) => cb(msg));
+  },
+  onBootVersion: (cb) => {
+    ipcRenderer.on('boot-version', (_event, ver) => cb(ver));
+  },
 });
 
