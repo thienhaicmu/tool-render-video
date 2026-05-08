@@ -41,6 +41,7 @@ class AIEditPlan:
     camera: AICameraPlan
     warnings: List[str] = field(default_factory=list)
     fallback_used: bool = False
+    memory_context: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -68,4 +69,5 @@ class AIEditPlan:
             },
             "warnings": list(self.warnings),
             "fallback_used": self.fallback_used,
+            "memory_context": dict(self.memory_context),
         }

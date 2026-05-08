@@ -29,6 +29,7 @@ def select_ai_segments(
     duration: float,
     mode_config: dict,
     target_duration: float | None = None,
+    memory_context: dict | None = None,
 ) -> list[dict]:
     """Select the best transcript windows using hook + density + duration scoring.
 
@@ -36,6 +37,10 @@ def select_ai_segments(
     Returns [] if neither transcript nor scenes are usable.
 
     Result dicts contain: start, end, score, reason, source.
+
+    memory_context: optional RAG result dict (from retrieve_ai_context). When
+    results with score > 0.7 are present a small bonus is added to the top
+    candidate and the reason is annotated with "rag_match".
     """
     target_min, target_max = _resolve_targets(mode_config, target_duration)
 
@@ -49,7 +54,8 @@ def select_ai_segments(
     if not candidates:
         return _select_from_scenes(scenes or [], target_min, target_max)
 
-    return _deduplicate(candidates)[:_MAX_SEGMENTS]
+    selected = _deduplicate(candidates)[:_MAX_SEGMENTS]
+    return _apply_memory_bonus(selected, memory_context)
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +170,25 @@ def _deduplicate(candidates: list[dict]) -> list[dict]:
         if not overlaps:
             selected.append(c)
     return selected
+
+
+def _apply_memory_bonus(
+    segments: list[dict],
+    memory_context: dict | None,
+) -> list[dict]:
+    """Boost the top segment score by up to +5 when strong RAG hits exist."""
+    if not segments or not memory_context:
+        return segments
+    results = memory_context.get("results") or []
+    high_score_hits = [r for r in results if float(r.get("score") or 0.0) > 0.7]
+    if not high_score_hits:
+        return segments
+    bonus = min(5.0, len(high_score_hits) * 2.0)
+    top = dict(segments[0])
+    top["score"] = round(min(100.0, top["score"] + bonus), 2)
+    reason = top.get("reason", "ai_scored")
+    top["reason"] = f"{reason}, rag_match" if reason else "rag_match"
+    return [top] + segments[1:]
 
 
 def _select_from_scenes(scenes: list[dict], t_min: float, t_max: float) -> list[dict]:

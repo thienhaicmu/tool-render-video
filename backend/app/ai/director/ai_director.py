@@ -84,6 +84,21 @@ def _build_plan(
         warnings.append("no_transcript_available")
         logger.info("ai_director_no_segments_fallback job_id=%s: no transcript; using scene fallback", job_id)
 
+    # --- RAG memory context ---
+    memory_ctx: dict = {}
+    if bool(getattr(request, "ai_use_rag_memory", False)):
+        try:
+            from app.ai.rag.retriever import retrieve_ai_context
+            query = _build_rag_query(mode, chunks, context)
+            memory_store = context.get("memory_store")
+            memory_ctx = retrieve_ai_context(query, memory_store=memory_store, top_k=5)
+            if memory_ctx.get("warnings"):
+                for w in memory_ctx["warnings"]:
+                    warnings.append(f"rag:{w}")
+        except Exception as exc:
+            warnings.append(f"rag_error:{type(exc).__name__}")
+            logger.debug("ai_director_rag_failed job_id=%s: %s", job_id, exc)
+
     # --- Clip selection ---
     scenes: list[dict] = list(context.get("scenes") or [])
     duration = float(context.get("duration") or 0.0)
@@ -97,6 +112,7 @@ def _build_plan(
         duration=duration,
         mode_config=mode_config,
         target_duration=target_duration,
+        memory_context=memory_ctx or None,
     )
 
     selected_segments = [
@@ -136,7 +152,23 @@ def _build_plan(
         camera=camera_plan,
         warnings=warnings,
         fallback_used=fallback_used,
+        memory_context=memory_ctx,
     )
+
+
+def _build_rag_query(mode: str, chunks: list[dict], context: dict) -> str:
+    """Build a short search query for the RAG retriever."""
+    market = str(context.get("market") or "")
+    duration = context.get("duration") or 0
+    first_text = chunks[0].get("text", "") if chunks else ""
+    parts = [f"mode:{mode}"]
+    if market:
+        parts.append(f"market:{market}")
+    if duration:
+        parts.append(f"duration:{int(duration)}s")
+    if first_text:
+        parts.append(first_text[:80])
+    return " ".join(parts)
 
 
 def _resolve_transcript_chunks(context: dict, warnings: list[str]) -> list[dict]:
