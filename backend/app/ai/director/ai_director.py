@@ -242,6 +242,16 @@ def _build_plan(
         plan.warnings.append(f"story_optimization_error:{type(exc).__name__}")
         logger.debug("ai_director_story_optimization_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 21: Safe Autonomous Variant Rendering ---
+    try:
+        variant_enabled = bool(getattr(request, "ai_variant_planning_enabled", False))
+        if variant_enabled:
+            raw_count = getattr(request, "ai_variant_count", 3)
+            _attach_variant_plans(plan, raw_count, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"variant_planning_error:{type(exc).__name__}")
+        logger.debug("ai_director_variant_planning_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -1155,6 +1165,85 @@ def _append_beat_visual_explainability(plan: "AIEditPlan", visual_plan: Any) -> 
         line = "Visual beat execution remains metadata-only"
         if not any("metadata-only" in str(l) for l in lines):
             lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 21 — Safe Autonomous Variant Rendering attachment
+# ---------------------------------------------------------------------------
+
+def _attach_variant_plans(
+    plan: "AIEditPlan",
+    count: int,
+    job_id: str,
+) -> None:
+    """Generate advisory variant plans and attach to plan. Never raises."""
+    try:
+        from app.ai.variants.variant_generator import generate_variant_plans
+        from app.ai.variants.variant_schema import clamp_variant_count
+
+        clamped = clamp_variant_count(count)
+        variant_set = generate_variant_plans(plan, context={"job_id": job_id}, count=clamped)
+        plan.variants = variant_set.to_dict()
+
+        safe_count = sum(1 for v in variant_set.variants if v.safe_to_render)
+        logger.info(
+            "ai_variant_plans_attached job_id=%s count=%d safe=%d recommended=%s",
+            job_id,
+            len(variant_set.variants),
+            safe_count,
+            variant_set.recommended_variant_id,
+        )
+
+        _append_variant_explainability(plan, variant_set)
+
+    except Exception as exc:
+        plan.variants = {
+            "available": False,
+            "warnings": [f"variant_planning_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_variant_planning_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_variant_explainability(plan: "AIEditPlan", variant_set: Any) -> None:
+    """Append compact variant planning insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not getattr(variant_set, "available", False):
+            return
+
+        variants = getattr(variant_set, "variants", [])
+        purposes = {getattr(v, "purpose", "") for v in variants}
+
+        line = "AI variant planning prepared safe A/B options"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+        if "retention" in purposes:
+            line = "Retention-focused variant suggested"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if "subtitle" in purposes:
+            line = "Compact subtitle variant available"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if "hook" in purposes:
+            line = "Hook-strengthening variant prepared"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
 
     except Exception:
         pass

@@ -90,6 +90,7 @@ def apply_ai_render_influence(
         _report_beat_visual_execution(payload, edit_plan, report)
         _report_timing_mutation(payload, edit_plan, report)
         _report_story_optimization(payload, edit_plan, report)
+        _report_variant_plans(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -279,6 +280,43 @@ def _report_beat_visual_execution(payload: Any, edit_plan: Any, report: dict) ->
     logger.debug(
         "beat_visual_execution_deferred bpm=%s pulse_regions=%d transition_hints=%d",
         bpm, pulse_count, hint_count,
+    )
+
+
+# ── Variant planning — report-only in Phase 21 ───────────────────────────────
+
+def _report_variant_plans(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record variant planning metadata — deferred in Phase 21.
+
+    No extra render jobs enqueued. No payload mutated. No FFmpeg commands altered.
+    """
+    variants = getattr(edit_plan, "variants", None)
+    if not isinstance(variants, dict):
+        report["skipped"].append("variant_planning:no_plan")
+        return
+
+    if not variants.get("available", False):
+        warns = variants.get("warnings", [])
+        reason = warns[0] if warns else "unavailable"
+        report["skipped"].append(f"variant_planning:deferred({reason})")
+        return
+
+    mode = variants.get("mode", "advisory")
+    variant_count = len(variants.get("variants", []))
+    safe_count = sum(
+        1 for v in variants.get("variants", [])
+        if isinstance(v, dict) and v.get("safe_to_render", False)
+    )
+    recommended = variants.get("recommended_variant_id")
+
+    report["skipped"].append(
+        f"variant_planning:deferred_phase21("
+        f"mode={mode!r},variants={variant_count},"
+        f"safe={safe_count},recommended={recommended!r})"
+    )
+    logger.debug(
+        "variant_planning_deferred mode=%s variants=%d safe=%d recommended=%s",
+        mode, variant_count, safe_count, recommended,
     )
 
 

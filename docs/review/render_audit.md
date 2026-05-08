@@ -6,6 +6,72 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 21: Safe Autonomous Variant Rendering Foundation
+
+**Implemented:**
+
+- `app/ai/variants/__init__.py` (new) — package marker
+- `app/ai/variants/variant_schema.py` (new) — `AIVariantPlan` dataclass (variant_id, label, purpose, confidence, risk, suggested_changes, expected_gain, safe_to_render, warnings); `AIVariantSet` dataclass (available, mode, variants capped at 5, recommended_variant_id, warnings); `VALID_PURPOSES` = {safe_baseline, retention, hook, subtitle, pacing, story, creator_style}; `VALID_RISKS` = {low, medium, high}; `clamp_variant_count(value) -> int` clamps to [1, 5]; no Pydantic, no heavy deps
+- `app/ai/variants/variant_safety.py` (new) — `sanitize_variant_changes(changes) -> dict` strips all forbidden keys; `is_variant_safe(variant, context) -> bool`; gates: risk != "high", no forbidden keys in suggested_changes, non-empty variant_id; `ALLOWED_CHANGE_KEYS` = {subtitle_density, subtitle_emphasis, camera_behavior, pacing_style, target_duration_hint, creator_style, ai_mode}; `FORBIDDEN_CHANGE_KEYS` = {playback_speed, segment_start, segment_end, subtitle_timing, ffmpeg_args, codec, crf, bitrate, validation_rules, output_path}; never raises
+- `app/ai/variants/variant_scoring.py` (new) — `score_variant(variant, edit_plan, context) -> dict`; returns {score 0-100, expected_gain 0-100, reasons, warnings}; base scores per purpose; risk penalty (high=-30, medium=-8); confidence boost (up to +15); safety gate modifier (+5 safe, -20 unsafe); context boosts from edit_plan retention/story/subtitle metadata; deterministic; never raises
+- `app/ai/variants/variant_generator.py` (new) — `generate_variant_plans(edit_plan, context, count=3) -> AIVariantSet`; always includes safe_baseline; factories: retention (low retention score), hook (weak_hook issue), subtitle (subtitle_execution available), pacing (non-fast current pacing), story (low narrative_score), creator_style (dominant_style classified); sanitizes + safety-gates + scores all candidates; recommends highest expected_gain safe variant; mode always "advisory"; max 5 variants; never raises; never enqueues render; never mutates payload or edit_plan; emits `ai_variant_plans_generated` at INFO
+- `app/models/schemas.py` — `ai_variant_planning_enabled: bool = False` and `ai_variant_count: int = 3` added after ai_timing_mutation_enabled; backward-compatible defaults
+- `app/ai/director/edit_plan_schema.py` — `variants: dict = field(default_factory=dict)` added to `AIEditPlan`; `"variants": dict(self.variants)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_variant_plans(plan, count, job_id)` added; runs only when `ai_variant_planning_enabled=True`; calls `generate_variant_plans(plan, ...)` with clamped count; `_append_variant_explainability(plan, variant_set)` appends: "AI variant planning prepared safe A/B options", "Retention-focused variant suggested", "Compact subtitle variant available", "Hook-strengthening variant prepared"; all helpers wrapped in try/except; never block render; Phase 21 runs after Phase 20 in `_build_plan`
+- `app/ai/director/render_influence.py` — `_report_variant_plans(payload, edit_plan, report)` added; reports variant planning as deferred in Phase 21; adds compact entry to `report["skipped"]` with mode/variants/safe/recommended counts; no extra render jobs enqueued, no payload mutated, no FFmpeg commands altered; called inside `apply_ai_render_influence` try block
+- `tests/test_ai_phase21_variant_rendering.py` (new) — 73 tests covering schema defaults, to_dict(), valid purposes/risks, count clamping, variant safety, forbidden key stripping, scoring, generator invariants, request flags, AIEditPlan field, AI Director integration, render influence defer, and all safety boundaries
+
+**Verification:**
+
+- Phase 21 tests pass (73 tests)
+- Full suite passes (1354 tests, zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- `FORBIDDEN_CHANGE_KEYS` always stripped from `suggested_changes` before storage
+- `high` risk variants never receive `safe_to_render=True` from safety gate
+- `mode` always `"advisory"` — variants are metadata only
+- No extra render jobs enqueued — generator is pure metadata computation
+- No payload mutation — generator reads edit_plan, never writes to payload
+- No segment start/end timing changes
+- No playback_speed changes
+- No FFmpeg command changes
+- No subtitle timing changes
+- No segment reordering
+- No automatic rendering of any variant
+- Never blocks render — all Phase 21 code wrapped in try/except in AI Director
+- Deterministic heuristics only — no cloud AI, no API keys, no GPU
+- `ai_variant_planning_enabled` defaults to `False` — zero behavior change for existing requests
+
+**Intentionally still blocked:**
+
+- Actual multi-variant rendering
+- Variant queue execution
+- AI best variant selector with autonomous rendering
+- UI variant selection
+- Auto-export best variant
+- Timing mutation application
+- FFmpeg mutation
+- Payload mutation
+
+**Architecture notes:**
+
+- Variant generator builds on all prior Phase 11–20 metadata — no new analysis
+- Factory priority: baseline → retention → hook → subtitle → pacing → story → creator_style
+- All candidates sanitized via `sanitize_variant_changes()` before scoring
+- `_report_variant_plans` in render_influence records the plan as "deferred_phase21" — safe pass-through for future phases
+- `clamp_variant_count` enforces [1, 5] regardless of request value
+
+**Integrated systems:**
+
+- Retention Intelligence (Phase 16) — low retention_score triggers retention variant
+- Story Optimization (Phase 20) — weak_hook issue triggers hook variant; low narrative_score triggers story variant
+- Subtitle Execution (Phase 17) — available subtitle_execution triggers subtitle variant
+- Creator Style (Phase 14) — dominant_style triggers creator_style variant
+- Pacing Intelligence (Phase 4) — non-fast pacing_style triggers pacing variant
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
 ### 2026-05-08 — AI Productization Phase 20: Story-driven Edit Optimization Foundation
 
 **Implemented:**
