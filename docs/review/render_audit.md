@@ -7,6 +7,48 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Director Phase 7: Insights UI
+
+**Implemented:**
+- `index.html` — `#ai_insights_panel` div added inside `#render_active_panel`, after the dominant render card (`rdCard`); includes `#ai_conf_badge` (confidence badge) and `#ai_insights_body` (dynamic content); starts hidden (`hiddenView`); no existing IDs or layout changed
+- `render-ui.js` — `renderAiInsights(job)` called at end of `updateRenderMainState()`; `resetAiInsightsPanel()` called from `resetRenderSessionUi()`; panel hides cleanly when `ai_director` is absent or `enabled=false`; all text content safely escaped via existing `esc()` helper
+- `render-ui.js` — `renderAiInsights(job)` builds 6 sections: ① summary headline + bullets (max 5), ② confidence bars (Semantic/Pacing/Memory via CSS `--ai-bar-pct`), ③ pacing + camera cards in 2-col grid (behavior/BPM/emotion/energy/zoom), ④ subtitle card (tone/emphasis/density/beat-aware/emotion-aware), ⑤ memory card (only when `memory_context.results` is non-empty), ⑥ warning pills from `ai_summary.warnings`
+- `render-ui.js` — `_aiBarLevel(pct)` maps 0-39→low, 40-69→mid, 70+→high; `_aiEnergyLabel(level)` maps float energy to High/Moderate/Low; `_aiBarRowHtml(label, pct)` generates CSS-only bar row HTML
+- `app.css` — ~150 lines of new AI Insights styles appended at end; classes: `.aiInsightsPanel`, `.aiInHeader`, `.aiInLabel`, `.aiInConfBadge` (color-coded by level data attribute), `.aiInBody`, `.aiHeadline`, `.aiSummaryList/.aiSummaryItem`, `.aiConfGrid/.aiBarRow/.aiBar/.aiBarFill` (CSS custom property `--ai-bar-pct`), `.aiInsightGrid/.aiInsightCard/.aiInsightCardBadge` (color variants: default/green/amber), `.aiMemCard`, `.aiWarnPill`; no existing CSS classes modified
+
+**Visible behavior:**
+- AI Insights panel is hidden during active rendering (no `result_json.ai_director` yet)
+- Panel appears after render completes if `ai_director_enabled=true` in request
+- Confidence badge color-codes: green ≥70, amber 40–69, red <40
+- Bar fills are pure CSS (no canvas, no SVG libraries, no chart deps)
+- Pacing/camera/subtitle cards use compact badge layout with color semantics (green=positive, amber=caution, default=neutral)
+- Memory card appears only when past render results were retrieved
+- Warnings shown as amber pills below the main content
+- Panel hides completely if no AI metadata — existing render card layout unchanged
+
+**Constraints preserved:**
+- No existing IDs, classes, or render flow modified (only additions)
+- No React, Vue, or chart library added
+- No WebSocket logic changed
+- No backend API changes
+- No render queue logic changed
+- 447/447 backend tests still passing after changes
+- `git diff --check` clean
+
+**Not yet implemented:**
+- Timeline AI overlays (per-clip reasoning markers)
+- Interactive AI controls (user-adjustable confidence thresholds)
+- Beat-sync render execution triggered from UI
+- Story intelligence UI
+- Real-time pacing visualization during active render
+
+**Known limitations:**
+- AI Insights only visible after render completion (result_json not set during active render)
+- Compact visualization only — no detailed breakdown modals
+- No timeline overlays yet
+
+---
+
 ### 2026-05-08 — AI Director Phase 6: Explainability Foundation
 
 **Implemented:**
