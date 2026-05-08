@@ -6,6 +6,91 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 18: Beat-synced Visual Execution Foundation
+
+**Implemented:**
+
+- `app/ai/visuals/__init__.py` (new) — package marker
+- `app/ai/visuals/beat_visual_schema.py` (new) — `BeatPulseRegion` dataclass (start, end, pulse_strength clamped [0, 0.15], pulse_style, beat_count, warnings); `TransitionHint` dataclass (start, end, transition_style, confidence, reason, safe_to_apply always False in to_dict()); `BeatVisualExecutionPlan` dataclass (available, execution_mode="metadata_only", bpm, pulse_regions capped at 12, transition_hints capped at 10, warnings); `VALID_PULSE_STYLES` = {none, soft_pulse, punch_pulse, cinematic_pulse}; `VALID_TRANSITION_STYLES` = {none, soft_cut, beat_pulse, energy_pop, cinematic_push}; `_MAX_PULSE_STRENGTH = 0.15`, `_BPM_MIN = 60.0`, `_BPM_MAX = 190.0`, `_MIN_BEAT_COUNT = 4`; no Pydantic, no heavy deps
+- `app/ai/visuals/beat_pulse.py` (new) — `build_beat_pulse_regions(pacing_context, beat_execution_context, story_context, retention_context) -> list[BeatPulseRegion]`; gate checks: beat_available required, BPM must be [60, 190], beat_count ≥ 4; style selection: dominant_arc in {tension_release, emotional_peak, curiosity_build, setup_payoff} → cinematic_pulse; energy ≥ 0.7 + fast pacing or bpm ≥ 120 → punch_pulse; energy < 0.3 → soft_pulse; per-story-segment regions with boost for hook/climax/tension/build_up; retention risk overlap softens pulse × 0.5; fallback single region when no story segments; max 12 regions; never raises; emits `ai_beat_pulse_regions_generated` at INFO
+- `app/ai/visuals/transition_planner.py` (new) — `build_transition_hints(pacing_context, story_context, retention_context, creator_style_context) -> list[TransitionHint]`; advisory-only; safe_to_apply structurally False; segment-pair transition map: hook→build_up=beat_pulse, build_up→climax=cinematic_push, climax→payoff=energy_pop, etc.; hype creator styles (anime_edit, high_energy_reaction, gameplay_highlight, podcast_viral) → energy_pop override; calm styles (documentary_clean, calm_minimal, interview_clip) → soft_cut override; fast pacing + beat + bpm in range → beat_pulse fallback; arc fallback mapping; max 10 hints; never raises; emits `ai_transition_hints_generated` at INFO
+- `app/ai/visuals/visual_execution.py` (new) — `build_beat_visual_execution_plan(...) -> BeatVisualExecutionPlan`; orchestrates pulse regions + transition hints; execution_mode always "metadata_only"; availability requires beat_available + valid bpm + beat_count ≥ 4; never raises; emits `ai_beat_visual_execution_generated` at INFO
+- `app/ai/director/edit_plan_schema.py` — `beat_visual_execution: dict = field(default_factory=dict)` added to `AIEditPlan`; `"beat_visual_execution": dict(self.beat_visual_execution)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_beat_visual_execution(plan, pacing_ctx, job_id)` added; called after Phase 17 in `_build_plan`; pulls beat_execution/story/retention/creator_style context from plan; `_append_beat_visual_explainability(plan, visual_plan)` appends: "Beat pulse visual rhythm planned" (punch_pulse regions), "Cinematic visual rhythm planned" (cinematic_pulse regions), "High-energy visual transition hints detected" (energy_pop/cinematic_push/beat_pulse hints), "Visual beat execution remains metadata-only"; all helpers wrapped in try/except; never block render
+- `app/ai/director/render_influence.py` — `_report_beat_visual_execution(payload, edit_plan, report)` added; reports beat visual execution as deferred in Phase 18; adds compact entry to `report["skipped"]` with bpm/pulse_regions/transition_hints counts; no FFmpeg commands altered, no timing changed, no visual effects applied; called inside `apply_ai_render_influence` try block
+- `tests/test_ai_phase18_beat_visual_execution.py` (new) — 80+ tests covering schema defaults, to_dict(), pulse planner gates, energy/arc style mapping, density softening, transition advisory, render influence defer, AI Director integration, and all safety boundaries
+
+**Verification:**
+
+- Phase 18 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- `pulse_strength` hard cap: 0.15 — matches Phase 11 beat_execution constraint
+- `safe_to_apply` structurally False in `TransitionHint.to_dict()` — cannot be overridden
+- `execution_mode` always "metadata_only" — planner never sets anything else
+- BPM gate: [60.0, 190.0] — outside range → empty regions returned
+- beat_count gate: ≥ 4 — below threshold → empty regions returned
+- No FFmpeg command changes — beat visual plan is metadata only
+- No clip start/end timing changes
+- No subtitle timing changes
+- No playback_speed changes
+- No output validation/status rule changes
+- No librosa at runtime — all metadata sourced from existing pacing/beat context
+- Never blocks render — all Phase 18 code wrapped in try/except in AI Director
+- Deterministic heuristics only — no cloud AI, no API keys, no GPU
+
+**Architecture notes:**
+
+- Beat visual execution builds on existing Phase 11 beat metadata (`plan.beat_execution`) and Phase 4 pacing context — no new audio analysis
+- Pulse regions are derived from story segment boundaries (Phase 12) — no new timing introduced
+- Transition hints are advisory boundaries between adjacent story segments — no cut mutation
+- `_report_beat_visual_execution` in render_influence records the plan as "deferred_phase18" — safe pass-through for future phases
+- Phase 18 runs after Phase 17 (subtitle execution) in the AI Director `_build_plan` sequence
+
+**Integrated systems:**
+
+- Beat/Pacing Intelligence (Phase 4/11) — beat_available, bpm, beat_count, energy_level, pacing_style drive all gates
+- Story Intelligence (Phase 12) — story segments provide region boundaries; dominant_arc informs pulse/transition style
+- Retention Intelligence (Phase 16) — risk_regions soften pulse in overlap zones
+- Creator Style Intelligence (Phase 14) — dominant_style biases transition hint style
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
+**What Beat Visual Execution can do now:**
+
+- Generate compact beat pulse regions from BPM/energy/story segment metadata
+- Classify pulse style per region: punch_pulse (high energy), cinematic_pulse (cinematic arc), soft_pulse (low energy)
+- Soften pulse in retention risk overlap zones
+- Generate advisory transition hints for adjacent story segment pairs
+- Map creator style and story arc to specific transition styles
+- Expose compact `"beat_visual_execution"` key in render result_json
+- Report beat visual execution as safely deferred in render_influence
+- Append advisory explainability lines to AI summary
+
+**Not yet implemented:**
+
+- Actual FFmpeg beat pulse visual effect
+- Actual beat-synced transitions in rendered output
+- Timeline-driven transition editor
+- Autonomous timing mutation
+- Playback speed mutation
+- per-frame visual beat synchronization
+
+**Known limitations:**
+
+- Metadata-first execution only — no visual output change in Phase 18
+- Advisory transition hints only — `safe_to_apply` always False
+- No FFmpeg visual mutation
+- No clip timing mutation
+- No subtitle timing mutation
+- Pulse regions derived from story segment boundaries — not from precise audio beat timestamps
+
+> Phase 18 extends the AI system from subtitle execution intelligence toward beat-synced visual rhythm planning, enabling energy-aware pulse regions and advisory transition hints while preserving complete render stability and safety.
+
+---
+
 ### 2026-05-08 — AI Productization Phase 17: Dynamic Subtitle Execution Foundation
 
 **Implemented:**
