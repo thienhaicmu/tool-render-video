@@ -1657,6 +1657,40 @@ def run_render_pipeline(
                         _hb_stop.set()
                         _hb.join(timeout=2)
 
+        # ── AI Director Phase 1 — safe edit plan (observation only, no override) ──
+        _ai_edit_plan = None
+        if getattr(payload, "ai_director_enabled", False):
+            try:
+                from app.ai.director.ai_director import create_ai_edit_plan as _create_ai_plan
+                _ai_context = {
+                    "job_id": job_id,
+                    "srt_path": str(full_srt) if full_srt_available else None,
+                    "scenes": scenes,
+                    "duration": source.get("duration", 0.0),
+                    "market": getattr(payload, "viral_market", None),
+                }
+                _ai_edit_plan = _create_ai_plan(payload, _ai_context)
+                if _ai_edit_plan is not None:
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="ai_director_plan_created",
+                        level="INFO",
+                        message=(
+                            f"AI Director plan: mode={_ai_edit_plan.mode} "
+                            f"segments={len(_ai_edit_plan.selected_segments)} "
+                            f"fallback={_ai_edit_plan.fallback_used}"
+                        ),
+                        step="ai_director",
+                        context=_ai_edit_plan.to_dict(),
+                    )
+            except Exception as _ai_err:
+                _job_log(
+                    effective_channel, job_id,
+                    f"ai_director_failed_fallback: {_ai_err}",
+                    kind="warning",
+                )
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()
@@ -3208,6 +3242,7 @@ def run_render_pipeline(
             "successful_outputs_count": len(outputs),
             "failed_outputs_count": len(failed_parts),
             "is_partial_success": _is_partial_success,
+            "ai_director": _ai_edit_plan.to_dict() if _ai_edit_plan is not None else {"enabled": False},
         }
         upsert_job(
             job_id,

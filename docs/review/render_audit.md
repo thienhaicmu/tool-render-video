@@ -7,6 +7,30 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Director Phase 1
+
+**Implemented:**
+- `AIEditPlan` schema (`edit_plan_schema.py`) — dataclass, no heavy deps, `to_dict()` included
+- Transcript normalization (`transcript_analyzer.py`) — accepts list[dict], list[obj], SRT string, plain text; returns [] on any failure
+- Silence scoring (`silence_analyzer.py`) — gap-ratio penalty from transcript timing only; no FFmpeg
+- Hook scoring (`hook_analyzer.py`) — rule-based always; optional 40% semantic upgrade via sentence-transformers (lazy-loaded)
+- Clip selection (`clip_selector.py`) — window scoring with hook + density + duration fit + silence penalty; deduplicates overlapping windows; scene fallback
+- AI mode configs (`ai_modes.py`) — `viral_tiktok`, `podcast_shorts`, `storytelling`, `clean_subtitle`
+- AI Director orchestrator (`ai_director.py`) — `create_ai_edit_plan(request, context)`: returns `None` on disabled/failure, never raises
+- `RenderRequest` AI fields — `ai_director_enabled=False` (all defaults preserve old behavior)
+- Pipeline integration — optional call in `render_pipeline.py` after transcription; plan attached to `_result_payload["ai_director"]`; old pipeline runs unchanged when disabled
+
+**Tests added:**
+- `backend/tests/test_ai_director_phase1.py` — 24 tests; no GPU, no API keys, no video rendering
+
+**Not yet implemented in Phase 1:**
+- RAG memory retrieval (infrastructure exists in `rag/`)
+- Beat-aware editing (librosa available but not connected)
+- Emotion/story pacing analysis
+- Aggressive render segment override (plan is observation-only)
+- Semantic similarity across render history
+- Market-specific clip preference learning
+
 ### 2026-05-08 — P0 Render Foundation Fixes
 
 **Fixed:**
@@ -761,6 +785,35 @@ The current render system already contains multiple AI-assisted or AI-like syste
 - Queue and progress infrastructure
 - Electron-compatible architecture
 - Offline-first rendering flow
+
+---
+
+## AI Phase Status
+
+### AI Director Phase 1 — 2026-05-08
+
+**Implemented:**
+- AI Edit Plan schema (`AIClipPlan`, `AISubtitlePlan`, `AICameraPlan`, `AIEditPlan`)
+- Transcript normalization — multi-format, fallback-safe
+- Silence scoring from transcript gap analysis
+- Rule-based hook scoring + optional semantic scoring (sentence-transformers, lazy-loaded)
+- Clip selection foundation — hook + density + duration fit + silence penalty
+- AI mode configs: `viral_tiktok`, `podcast_shorts`, `storytelling`, `clean_subtitle`
+- Render pipeline integration — safe attachment to `result_json`, observation-only
+- 24 unit tests — no GPU, no API keys
+
+**Not yet implemented:**
+- RAG memory retrieval and cross-render learning
+- Beat-aware editing (librosa pipe)
+- Emotion pacing and story structure analysis
+- Aggressive render override (plan influences but does not yet replace segment selection)
+- Market-specific learning
+
+**Known limitations in Phase 1:**
+- Clip selector samples transcript at `len(chunks) // 12` intervals — may miss short high-value windows in very long transcripts
+- Silence penalty uses transcript gap data only — does not detect actual audio silence not reflected in transcript timing
+- Semantic hook scoring requires sentence-transformers; unavailable in default packaging
+- AI plan is attached to `result_json` for logging but does not yet drive render segment ordering
 
 ---
 
