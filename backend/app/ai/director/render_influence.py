@@ -92,6 +92,7 @@ def apply_ai_render_influence(
         _report_story_optimization(payload, edit_plan, report)
         _report_variant_plans(payload, edit_plan, report)
         _report_variant_selection(payload, edit_plan, report)
+        _report_render_decision_preview(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -422,6 +423,37 @@ def _report_timing_mutation(payload: Any, edit_plan: Any, report: dict) -> None:
     logger.debug(
         "timing_mutation_deferred mode=%s candidates=%d safe=%d gain=%.4f",
         mode, candidate_count, safe_count, gain,
+    )
+
+
+# ── Render decision preview — report-only in Phase 24 ────────────────────────
+
+def _report_render_decision_preview(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record render decision preview metadata — deferred in Phase 24.
+
+    No render actions executed. No payload mutated. No FFmpeg commands altered.
+    """
+    rdp = getattr(edit_plan, "render_decision_preview", None)
+    if not isinstance(rdp, dict):
+        report["skipped"].append("render_decision_preview:no_result")
+        return
+
+    if not rdp:
+        report["skipped"].append("render_decision_preview:empty")
+        return
+
+    status = rdp.get("safety_status", "unavailable")
+    confidence = rdp.get("confidence", 0.0)
+    selected = rdp.get("selected_variant_id")
+
+    report["skipped"].append(
+        f"render_decision_preview:deferred_phase24("
+        f"status={status!r},confidence={confidence:.4f},"
+        f"selected_variant={selected!r})"
+    )
+    logger.debug(
+        "render_decision_preview_deferred status=%s confidence=%.4f selected=%s",
+        status, confidence, selected,
     )
 
 

@@ -6,6 +6,60 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 24: AI Render Decision Preview Foundation
+
+**Implemented:**
+
+- `app/ai/preview/__init__.py` (new) — package marker; Phase 24 preview package
+- `app/ai/preview/preview_schema.py` (new) — `VALID_SAFETY_STATUSES` frozenset ({safe, caution, blocked, unavailable}); `AIRenderDecisionPreview` dataclass (available, mode, selected_variant_id, creator_style, decision_summary, recommended_actions, blocked_actions, safety_status, confidence, warnings, explanation; `to_dict()` hardcodes mode="advisory", clamps confidence [0,1], caps recommended_actions at 10, explanation at 8, coerces invalid safety_status to "safe"); `AIPreviewSafetyReport` dataclass (safe_to_preview, safe_to_execute always False, blocked_reasons, advisory_only always True, warnings; `to_dict()` hardcodes safe_to_execute=False and advisory_only=True)
+- `app/ai/preview/decision_preview.py` (new) — `build_render_decision_preview(edit_plan, context) -> dict`; aggregates variant_selection, creator_style_adaptation, retention, story_optimization, subtitle_execution, timing_mutation metadata into a single advisory summary; `_BLOCKED_ACTIONS = [autonomous_rendering_of_selected_variant, ffmpeg_filter_chain_mutation, timing_mutation_application, subtitle_timing_rewrite, playback_speed_mutation, segment_reorder]` always included; `_determine_safety_status()`: unavailable when no variant metadata, caution when ret_score<40 or variant_confidence<0.30, safe otherwise; `_compute_overall_confidence()`: weighted blend of variant_confidence, style_confidence, ret_score/100, narrative_score/100; result always includes `safety_report` sub-dict; emits `ai_render_decision_preview_created` at INFO, `ai_render_decision_preview_fallback` on error; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `render_decision_preview: dict = field(default_factory=dict)` added to `AIEditPlan`; `"render_decision_preview": dict(self.render_decision_preview)` in `to_dict()`; backward-compatible
+- `app/ai/director/ai_director.py` (updated) — `_attach_render_decision_preview(plan, job_id)` added; runs after Phase 22 (variant selection) to aggregate all prior phase outputs; calls `build_render_decision_preview(plan, context)`; `_append_render_decision_preview_explainability(plan, preview_dict)` appends: "AI render decision preview prepared", "Selected advisory variant summarized", "Autonomous render actions remain blocked"; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_render_decision_preview(payload, edit_plan, report)` added; checks `edit_plan.render_decision_preview`, adds `"render_decision_preview:deferred_phase24(status=...,confidence=...,selected_variant=...)"` to report["skipped"]; no payload mutation; wired into `apply_ai_render_influence()` after `_report_variant_selection()`
+- `tests/test_ai_phase24_render_decision_preview.py` (new) — comprehensive test suite covering preview schema, decision_preview builder, blocked actions constant, AIEditPlan field, render_influence reporter, safety invariants, and AI Director integration
+
+**Safety boundaries enforced:**
+
+- `safe_to_execute` always False — hardcoded in both `AIPreviewSafetyReport.to_dict()` and the constant
+- `advisory_only` always True — hardcoded in `AIPreviewSafetyReport.to_dict()`
+- `mode` always "advisory" — hardcoded in `AIRenderDecisionPreview.to_dict()`
+- `_BLOCKED_ACTIONS` always present in every preview result regardless of metadata
+- `phase24_advisory_only_mode` always in `safety_report.blocked_reasons`
+- No FFmpeg commands altered
+- No payload mutation — preview reads all prior phase metadata, never writes render payload
+- No subtitle timing rewrite
+- No segment reorder
+- No playback_speed mutation
+- No autonomous rendering of any variant
+- Never blocks render — all Phase 24 code wrapped in try/except in AI Director and decision_preview
+- Deterministic — same edit_plan always produces same preview
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- Autonomous rendering based on selected variant
+- FFmpeg filter chain mutation
+- Timing mutation application
+- Subtitle timing rewrite
+- Playback_speed mutation
+- Segment reorder
+- Any payload mutation
+
+**Architecture notes:**
+
+- Phase 24 runs after Phase 22 (variant selection) so it can aggregate all prior AI phase outputs into a unified advisory summary
+- Reads from: variants, variant_selection, creator_style_adaptation, retention, story_optimization, subtitle_execution, timing_mutation, explainability
+- Advisory mode is a permanent constraint in Phase 24 — not a configurable parameter
+- `_BLOCKED_ACTIONS` is a module-level constant to prevent accidental omission
+
+**Verification:**
+
+- Phase 24 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
 ### 2026-05-08 — AI Productization Phase 23: Creator Style Adaptation Foundation
 
 **Implemented:**

@@ -268,6 +268,13 @@ def _build_plan(
         plan.warnings.append(f"variant_selection_error:{type(exc).__name__}")
         logger.debug("ai_director_variant_selection_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 24: AI Render Decision Preview ---
+    try:
+        _attach_render_decision_preview(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"render_decision_preview_error:{type(exc).__name__}")
+        logger.debug("ai_director_render_decision_preview_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -1261,6 +1268,88 @@ def _append_variant_selection_explainability(plan: "AIEditPlan", selection: dict
 
         if not any(line in str(l) for l in lines):
             lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 24 — AI Render Decision Preview attachment
+# ---------------------------------------------------------------------------
+
+def _attach_render_decision_preview(plan: "AIEditPlan", job_id: str) -> None:
+    """Build and attach a compact advisory render decision preview to the plan.
+
+    Runs after all prior phases (Phases 21-23) so the preview can aggregate
+    the full set of AI metadata. Never raises. Never mutates render payload.
+    Advisory metadata only.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.preview.decision_preview import build_render_decision_preview
+
+        preview_dict = build_render_decision_preview(plan, context={"job_id": job_id})
+        plan.render_decision_preview = preview_dict
+
+        safety = preview_dict.get("safety_report", {})
+        logger.info(
+            "ai_render_decision_preview_created job_id=%s status=%s confidence=%.4f "
+            "actions=%d blocked=%d",
+            job_id,
+            preview_dict.get("safety_status", "unknown"),
+            float(preview_dict.get("confidence", 0.0)),
+            len(preview_dict.get("recommended_actions", [])),
+            len(preview_dict.get("blocked_actions", [])),
+        )
+
+        _append_render_decision_preview_explainability(plan, preview_dict)
+
+    except Exception as exc:
+        plan.render_decision_preview = {
+            "available": False,
+            "mode": "advisory",
+            "safety_status": "unavailable",
+            "warnings": [f"render_decision_preview_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_render_decision_preview_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_render_decision_preview_explainability(
+    plan: "AIEditPlan",
+    preview_dict: dict,
+) -> None:
+    """Append compact preview insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not any("AI render decision preview" in str(l) for l in lines):
+            lines.append("AI render decision preview prepared")
+
+        selected = preview_dict.get("selected_variant_id")
+        if selected:
+            purpose = ""
+            for v in (plan.variants.get("variants") or []):
+                if isinstance(v, dict) and str(v.get("variant_id")) == str(selected):
+                    purpose = str(v.get("purpose") or "")
+                    break
+            if purpose:
+                line = f"Selected advisory variant summarized ({purpose.replace('_', ' ')})"
+            else:
+                line = "Selected advisory variant summarized"
+            if not any("advisory variant summarized" in str(l) for l in lines):
+                lines.append(line)
+
+        if not any("Autonomous render actions remain blocked" in str(l) for l in lines):
+            lines.append("Autonomous render actions remain blocked")
 
     except Exception:
         pass
