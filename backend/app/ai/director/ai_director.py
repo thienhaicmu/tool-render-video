@@ -185,6 +185,13 @@ def _build_plan(
         plan.warnings.append(f"story_error:{type(exc).__name__}")
         logger.debug("ai_director_story_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 13: Smart Preset Evolution ---
+    try:
+        _attach_preset_evolution(plan, memory_ctx, mode, context, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"preset_evolution_error:{type(exc).__name__}")
+        logger.debug("ai_director_preset_evolution_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -448,6 +455,88 @@ def _append_story_explainability(plan: "AIEditPlan", story: Any) -> None:
         outro_segs = [s for s in story.segments if s.segment_type == "outro"]
         if any((s.retention_risk or 0) > 0.5 for s in outro_segs):
             lines.append("Retention pacing weakened near ending")
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 13 — Smart Preset Evolution attachment
+# ---------------------------------------------------------------------------
+
+def _attach_preset_evolution(
+    plan: "AIEditPlan",
+    memory_ctx: dict,
+    mode: str,
+    context: dict,
+    job_id: str,
+) -> None:
+    """Run preset performance analysis and attach results to the plan. Never raises."""
+    try:
+        from app.ai.presets.preset_analyzer import analyze_preset_performance
+        from app.ai.presets.preset_recommender import recommend_preset
+
+        market = str(context.get("market") or "").strip() or None
+        memories = memory_ctx.get("results", []) if isinstance(memory_ctx, dict) else []
+
+        if not memories:
+            plan.preset_evolution = {
+                "available": False,
+                "warnings": ["no_memory_available_for_preset_analysis"],
+            }
+            logger.debug("ai_preset_evolution_skipped job_id=%s (no memories)", job_id)
+            return
+
+        preset_context = {"market": market, "mode": mode}
+        report = analyze_preset_performance(memories, context=preset_context)
+
+        if report.available:
+            rec = recommend_preset(report, current_context=preset_context)
+            report.recommendation = rec
+
+        plan.preset_evolution = report.to_dict()
+
+        logger.info(
+            "ai_preset_evolution_generated job_id=%s market=%s mode=%s available=%s confidence=%s",
+            job_id,
+            market or "none",
+            mode,
+            report.available,
+            report.recommendation.confidence if report.recommendation else 0,
+        )
+
+        _append_preset_explainability(plan, report)
+
+    except Exception as exc:
+        plan.preset_evolution = {
+            "available": False,
+            "warnings": [f"preset_evolution_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_preset_evolution_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_preset_explainability(plan: "AIEditPlan", report: Any) -> None:
+    """Append compact preset insight lines to plan.explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        rec = report.recommendation
+        if rec is None or not report.available:
+            return
+
+        if rec.confidence >= 30.0:
+            if not any("Preset recommendation" in str(l) for l in lines):
+                lines.append("Preset recommendation based on similar successful renders")
+            if rec.suggested_adjustments.get("subtitle_tone"):
+                if not any("Subtitle tone" in str(l) for l in lines):
+                    lines.append("Subtitle tone suggestion learned from prior high-score outputs")
     except Exception:
         pass
 
