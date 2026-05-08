@@ -86,8 +86,21 @@ class AIEditPlan:
     fallback_used: bool = False
     memory_context: dict = field(default_factory=dict)
     pacing: AIPacingPlan = field(default_factory=AIPacingPlan)
+    # Phase 6 — explainability
+    explainability: dict = field(default_factory=dict)
+    confidence: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
+        # Compact confidence subset exposed as top-level key for easy result_json access.
+        compact_confidence = {
+            k: self.confidence.get(k)
+            for k in ("overall", "semantic", "memory", "pacing")
+            if self.confidence.get(k) is not None
+        }
+        # Summary without the nested confidence copy to avoid duplication.
+        summary = self.explainability.get("summary", {})
+        ai_summary = {k: v for k, v in summary.items() if k != "confidence"}
+
         return {
             "enabled": self.enabled,
             "mode": self.mode,
@@ -124,4 +137,8 @@ class AIEditPlan:
             "fallback_used": self.fallback_used,
             "memory_context": dict(self.memory_context),
             "pacing": self.pacing.to_dict(),
+            "explainability": dict(self.explainability),
+            "confidence": dict(self.confidence),
+            "ai_summary": ai_summary,
+            "ai_confidence": compact_confidence,
         }

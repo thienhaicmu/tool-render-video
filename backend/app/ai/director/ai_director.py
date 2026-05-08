@@ -159,7 +159,7 @@ def _build_plan(
     camera_plan = _safe_camera_plan(mode_config_with_name, pacing_ctx, memory_ctx, transcript_ctx, warnings)
     subtitle_plan = _safe_subtitle_plan(mode_config_with_name, pacing_ctx, memory_ctx, transcript_ctx, warnings)
 
-    return AIEditPlan(
+    plan = AIEditPlan(
         enabled=True,
         mode=mode,
         selected_segments=selected_segments,
@@ -170,6 +170,15 @@ def _build_plan(
         memory_context=memory_ctx,
         pacing=pacing_plan,
     )
+
+    # --- Phase 6: Explainability ---
+    try:
+        _attach_explainability(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"explainability_error:{type(exc).__name__}")
+        logger.debug("ai_director_explainability_failed job_id=%s: %s", job_id, exc)
+
+    return plan
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +323,56 @@ def _suggest_cut_style(bpm: Optional[float], pacing_style: str) -> str:
     if pacing_style in ("medium",):
         return "medium_cut"
     return "standard"
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 — Explainability attachment
+# ---------------------------------------------------------------------------
+
+def _attach_explainability(plan: "AIEditPlan", job_id: str) -> None:
+    """Build and attach explainability + confidence to the plan. Never raises."""
+    try:
+        from app.ai.explainability.reason_builder import (
+            build_clip_reasons,
+            build_camera_reasons,
+            build_subtitle_reasons,
+            build_pacing_reasons,
+        )
+        from app.ai.explainability.confidence import calculate_ai_confidence
+        from app.ai.explainability.summary import build_ai_summary
+
+        clip_reasons = build_clip_reasons(plan.selected_segments, plan.memory_context)
+        camera_reasons = build_camera_reasons(plan.camera, plan.pacing)
+        subtitle_reasons = build_subtitle_reasons(plan.subtitle, plan.pacing)
+        pacing_reasons = build_pacing_reasons(plan.pacing)
+
+        confidence = calculate_ai_confidence(plan)
+        plan.confidence = confidence
+
+        summary = build_ai_summary(plan, confidence)
+        plan.explainability = {
+            "clip_reasons": clip_reasons,
+            "camera_reasons": camera_reasons,
+            "subtitle_reasons": subtitle_reasons,
+            "pacing_reasons": pacing_reasons,
+            "summary": summary,
+        }
+
+        logger.info(
+            "ai_explainability_generated job_id=%s clip_reasons=%d camera_reasons=%d",
+            job_id, len(clip_reasons), len(camera_reasons),
+        )
+        logger.info(
+            "ai_confidence_generated job_id=%s overall=%s semantic=%s memory=%s pacing=%s",
+            job_id,
+            confidence.get("overall"),
+            confidence.get("semantic"),
+            confidence.get("memory"),
+            confidence.get("pacing"),
+        )
+    except Exception as exc:
+        plan.warnings.append(f"explainability_error:{type(exc).__name__}")
+        logger.debug("ai_director_explainability_failed job_id=%s: %s", job_id, exc)
 
 
 # ---------------------------------------------------------------------------
