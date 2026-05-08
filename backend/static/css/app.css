@@ -15822,3 +15822,84 @@ body.is-history-active #history_list {
 }
 /* ── End AI Insights Panel ────────────────────────────────────────────────── */
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   Phase 8 — AI Timeline Intelligence
+   Lightweight segment overlay + legend for the editor timeline bar.
+   All pointer-events: none — seek/trim interactions unaffected.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Overlay container sits inside evTimelineBarWrap (position:relative, h:36px).
+   Positioned above the text-layer track band (bottom:12px). */
+.evAiOverlayLayer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  height: 6px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* AI clip segment bars */
+.evAiSegBar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(99, 179, 237, 0.50);
+  border-radius: 2px;
+  min-width: 2px;
+  transition: opacity .15s ease;
+}
+
+/* High-score (hook) segments — amber/gold */
+.evAiSegBarHook {
+  background: rgba(251, 191, 36, 0.72);
+  box-shadow: 0 0 4px rgba(251, 191, 36, 0.30);
+}
+
+/* ── AI Timeline Legend ───────────────────────────────────────────────────── */
+.evAiTimelineLegend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 20px 4px;
+  background: rgba(6, 9, 15, 0.92);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
+}
+
+.evAiLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.evAiLegendItem::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(99, 179, 237, 0.55);
+  flex-shrink: 0;
+}
+
+.evAiLegendHook::before {
+  background: rgba(251, 191, 36, 0.75);
+}
+
+.evAiLegendEnergy {
+  margin-left: auto;
+  font-size: 10px;
+  color: #5a728a;
+  letter-spacing: .01em;
+}
+.evAiLegendEnergy[data-energy="high"] { color: #4ade80; }
+.evAiLegendEnergy[data-energy="mid"]  { color: #fbbf24; }
+.evAiLegendEnergy[data-energy="low"]  { color: #60a5fa; }
+
+/* ── End Phase 8 AI Timeline Intelligence ────────────────────────────────── */
+

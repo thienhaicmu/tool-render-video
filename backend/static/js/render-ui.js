@@ -3830,6 +3830,7 @@ function renderAiInsights(job) {
   }
 
   panel.classList.remove('hiddenView');
+  if (typeof _evSetAiPlan === 'function') _evSetAiPlan(aiDir);
 
   const summary  = aiDir.ai_summary   || {};
   const conf     = aiDir.ai_confidence || {};

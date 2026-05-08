@@ -10,6 +10,7 @@ let _ev = {
   subtitleEdits: new Map(),
   subtitleMode: 'demo',
   selectedObject: null,
+  aiPlan: null,
 };
 const EV_MAX_TEXT_LAYERS = 8;
 const EV_TEXT_POS_TO_XY = {
@@ -844,6 +845,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   _ev.subtitleOriginalSegments = [];
   _ev.subtitleEdits = new Map();
   _ev.subtitleMode = 'demo';
+  _ev.aiPlan = null;
   if (typeof _mvResetHookRenderState === 'function') _mvResetHookRenderState();
   if (qs('evSubPosX'))    qs('evSubPosX').value       = 50;
   if (qs('evSubPosXVal')) qs('evSubPosXVal').textContent = 50;
@@ -923,6 +925,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   _ev.subtitleOriginalSegments = [];
   _ev.subtitleEdits = new Map();
   _ev.subtitleMode = 'demo';
+  _ev.aiPlan = null;
   if (typeof _mvResetHookRenderState === 'function') _mvResetHookRenderState();
   if (qs('evSubPosX'))    qs('evSubPosX').value       = 50;
   if (qs('evSubPosXVal')) qs('evSubPosXVal').textContent = 50;
@@ -1037,6 +1040,7 @@ function _evSetDuration(dur) {
   qs('evTotalTime').textContent = _fmtTime(dur);
   if (!qs('evTrimOutSec').value) qs('evTrimOutSec').value = Math.round(dur);
   _evUpdateTrimUI();
+  _evRenderAiTimeline();
 }
 
 /* ── Trim ─────────────────────────────────────────────────── */
@@ -3186,6 +3190,61 @@ async function mvAnalyzeMarket() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Analyze'; }
     mvUpdateHookQuality();
+  }
+}
+
+/* ── Phase 8: AI Timeline Intelligence ───────────────────────────────────── */
+
+function _evSetAiPlan(plan) {
+  _ev.aiPlan = plan || null;
+  _evRenderAiTimeline();
+}
+
+function _evRenderAiTimeline() {
+  const layer  = qs('evAiOverlayLayer');
+  const legend = qs('evAiTimelineLegend');
+  if (!layer) return;
+
+  const plan = _ev.aiPlan;
+  const dur  = _ev.duration;
+
+  if (!plan || !plan.enabled || !dur) {
+    layer.innerHTML = '';
+    if (legend) legend.classList.add('hiddenView');
+    return;
+  }
+
+  const segs = Array.isArray(plan.selected_segments) ? plan.selected_segments : [];
+  if (!segs.length) {
+    layer.innerHTML = '';
+    if (legend) legend.classList.add('hiddenView');
+    return;
+  }
+
+  const pacing  = plan.pacing  || {};
+  const energy  = typeof pacing.energy_level === 'number' ? pacing.energy_level : 0.5;
+  const emotion = String(pacing.emotion || 'neutral');
+
+  layer.innerHTML = segs.map(seg => {
+    const st    = Number(seg.start || 0);
+    const et    = Number(seg.end   || 0);
+    if (et <= st || st >= dur) return '';
+    const left  = (st / dur) * 100;
+    const width = Math.max(0.4, ((Math.min(et, dur) - st) / dur) * 100);
+    const score = Number(seg.score || 0);
+    const cls   = score >= 0.7 ? 'evAiSegBar evAiSegBarHook' : 'evAiSegBar';
+    return `<div class="${cls}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%" title="AI clip ${st.toFixed(1)}s–${et.toFixed(1)}s · score ${score.toFixed(2)}"></div>`;
+  }).join('');
+
+  if (legend) {
+    const hasHook    = segs.some(s => Number(s.score || 0) >= 0.7);
+    const energyPct  = Math.round(energy * 100);
+    const energyTier = energyPct > 65 ? 'high' : energyPct > 35 ? 'mid' : 'low';
+    legend.innerHTML =
+      `<span class="evAiLegendItem evAiLegendSegment">AI Clip</span>` +
+      (hasHook ? `<span class="evAiLegendItem evAiLegendHook">Hook</span>` : '') +
+      `<span class="evAiLegendItem evAiLegendEnergy" data-energy="${energyTier}">${emotion} · ${energyPct}% energy</span>`;
+    legend.classList.remove('hiddenView');
   }
 }
 
