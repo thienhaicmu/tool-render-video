@@ -6,6 +6,70 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 20: Story-driven Edit Optimization Foundation
+
+**Implemented:**
+
+- `app/ai/story_optimization/__init__.py` (new) — package marker
+- `app/ai/story_optimization/story_optimization_schema.py` (new) — `StoryOptimizationIssue` dataclass (start, end, issue_type, severity, reason, suggested_action, confidence, safe_to_auto_apply always False in to_dict(), metadata); `StoryOptimizationPlan` dataclass (available, narrative_score, flow_type, issues capped at 10, recommendations capped at 8, warnings); `VALID_ISSUE_TYPES` = {weak_hook, missing_setup, long_setup, weak_build_up, missing_climax, weak_payoff, abrupt_outro, unclear_arc, retention_risk, unknown}; `VALID_SEVERITIES` = {low, medium, high}; `VALID_FLOW_TYPES` = {hook_to_climax, linear, flat, unknown}; no Pydantic, no heavy deps
+- `app/ai/story_optimization/hook_optimizer.py` (new) — `analyze_hook_quality(story_context, retention_context, transcript_chunks) -> list[StoryOptimizationIssue]`; gates: hook segment presence, weak_hook retention risk, retention_risk score > 0.5; severity: high (no hook), medium (retention risk), low (mildly elevated score); no text rewriting; never raises; safe_to_auto_apply always False
+- `app/ai/story_optimization/payoff_analyzer.py` (new) — `analyze_payoff_quality(story_context, retention_context) -> list[StoryOptimizationIssue]`; detects missing payoff (high severity), unclear_payoff retention risk, abrupt_ending, pacing_decay in payoff region, elevated payoff retention_risk; never raises; advisory only
+- `app/ai/story_optimization/arc_optimizer.py` (new) — `analyze_story_arc(story_context, pacing_context, retention_context) -> dict`; returns {flow_type, narrative_score, issues, warnings}; flow classification: hook_to_climax (hook + climax present), linear (≥3 segments + linear flow), flat (≤1 segment or flat arc), unknown; base score from segment presence weights (hook=20, setup=10, build_up=15, climax=25, payoff=15, outro=5); bonus for full arc (+10-20); energy modifier (±5); retention risk deduction (-2 per risk); 60/40 blend with story retention_score when available; issues: weak_hook (no hook), missing_climax, weak_build_up (hook→climax without build-up), unclear_arc (flat), long_setup (setup > 1.5× climax+build_up duration); no segment reorder; never raises; emits `ai_story_arc_analyzed` at INFO
+- `app/ai/story_optimization/story_recommender.py` (new) — `build_story_optimization_plan(story_context, retention_context, pacing_context, transcript_chunks) -> StoryOptimizationPlan`; combines hook + payoff + arc analyses; deduplicates issues by issue_type; issue-driven recommendations from map + flow-type recommendation; max 10 issues, max 8 recommendations; all safe_to_auto_apply=False enforced; never raises; emits `ai_story_optimization_generated` + `ai_story_optimization_issues_detected` at INFO
+- `app/ai/director/edit_plan_schema.py` — `story_optimization: dict = field(default_factory=dict)` added to `AIEditPlan`; `"story_optimization": dict(self.story_optimization)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_story_optimization(plan, chunks, pacing_ctx, job_id)` added; called after Phase 19 in `_build_plan`; pulls story/retention context from plan; `_append_story_optimization_explainability(plan, opt_plan)` appends: "Strong hook-to-climax flow detected" (hook_to_climax), "Story arc can be tightened" (long_setup/weak_build_up), "Payoff clarity may improve retention" (weak_payoff/abrupt_outro), "Opening hook may need strengthening" (weak_hook), "Narrative arc needs clearer structure" (unclear_arc/missing_climax); all helpers wrapped in try/except; never block render
+- `app/ai/director/render_influence.py` — `_report_story_optimization(payload, edit_plan, report)` added; reports story optimization as deferred in Phase 20; adds compact entry to `report["skipped"]` with flow/score/issue/recommendation counts; no segment ordering changed, no timing changed, no subtitle rewritten, no FFmpeg commands altered; called inside `apply_ai_render_influence` try block
+- `tests/test_ai_phase20_story_optimization.py` (new) — 69 tests covering schema defaults, to_dict(), valid types/severities, hook optimizer, payoff analyzer, arc optimizer, story recommender, render influence defer, AI Director integration, and all safety boundaries
+
+**Verification:**
+
+- Phase 20 tests pass (69 tests)
+- Full suite passes (1281 tests, zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- `safe_to_auto_apply` structurally False in `StoryOptimizationIssue.to_dict()` — cannot be overridden regardless of stored value
+- No segment start/end timing changes — story optimization is metadata-only in Phase 20
+- No playback_speed changes
+- No FFmpeg command changes
+- No subtitle timing changes
+- No automatic segment reordering
+- No transcript text rewriting
+- Never blocks render — all Phase 20 code wrapped in try/except in AI Director
+- Deterministic heuristics only — no cloud AI, no API keys, no GPU
+
+**Not yet implemented (intentionally blocked):**
+
+- Automatic segment reordering
+- Story-aware timing execution
+- Autonomous narrative editing
+- AI-generated hook rewriting
+- Render-time story mutation
+
+**Known limitations:**
+
+- Advisory only — all issues have safe_to_auto_apply=False
+- Deterministic heuristics only — no ML models
+- No segment/timing mutation
+- No subtitle rewrite
+- No autonomous editing
+
+**Architecture notes:**
+
+- Story optimization builds on existing Phase 12 story structure, Phase 16 retention risks, and Phase 4 pacing — no new analysis
+- Arc scoring blends structural segment presence (60%) with Phase 12 retention_score (40%) for stability
+- `_report_story_optimization` in render_influence records the plan as "deferred_phase20" — safe pass-through for future phases
+- Phase 20 runs after Phase 19 (timing mutation) in the AI Director `_build_plan` sequence
+- Issues are deduplicated by issue_type before capping at 10
+
+**Integrated systems:**
+
+- Story Intelligence (Phase 12) — segments, dominant_arc, narrative_flow, retention_score drive arc classification
+- Retention Intelligence (Phase 16) — risk_regions drive hook/payoff issue detection
+- Pacing Intelligence (Phase 4) — energy_level biases narrative score up/down
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
 ### 2026-05-08 — AI Productization Phase 19: Retention-driven Timing Mutation Foundation
 
 **Implemented:**
