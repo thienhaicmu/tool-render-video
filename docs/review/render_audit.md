@@ -7,6 +7,58 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Productization Phase 13: Smart Preset Evolution
+
+**Implemented:**
+- `app/ai/presets/preset_schema.py` (new) — `PresetPerformanceSample` dataclass (preset, ai_mode, market, score, duration, subtitle_tone, camera_behavior, pacing_style, story_arc, status, metadata); `PresetRecommendation` dataclass (recommended_preset, confidence 0-100, reasons list capped at 5, suggested_adjustments dict, warnings); `PresetEvolutionReport` dataclass (available, market, ai_mode, best_samples list capped at 5, recommendation, warnings); all have `to_dict()` methods; no Pydantic, no heavy deps
+- `app/ai/presets/preset_analyzer.py` (new) — `analyze_preset_performance(memories, context=None) -> PresetEvolutionReport`; never raises; accepts list of memory result dicts (from retriever) or MemorySearchResult-like objects; parses each into `PresetPerformanceSample` with `_parse_sample()` — handles dict with "metadata" key, direct attributes, or both; relevance scoring: status weight (completed=1.0, completed_with_errors=0.7, failed=0.2), market match +0.25, mode match +0.25, output score ÷ 100 × 0.30; sorts by relevance, separates usable from failed; confidence formula: base = min(60, usable×12), penalty for <3 samples, failure rate penalty up to −25, market+mode match bonus up to +20; returns `PresetEvolutionReport` with `recommendation=None` (filled by recommender); emits `ai_preset_evolution_generated` log at INFO
+- `app/ai/presets/preset_recommender.py` (new) — `recommend_preset(report, current_context=None) -> PresetRecommendation`; never raises; advisory only — never mutates payload; dominant pattern extraction via `Counter.most_common(1)` across best_samples for subtitle_tone, camera_behavior, pacing_style; `target_duration_hint` from median duration of high-score (≥60) samples; `ai_mode_hint` from most common mode; `_UNSAFE_FIELDS` safety gate strips playback_speed, codec, bitrate, fps, resolution, output_format, validation, ffmpeg, timing before returning; reasons list (max 5): market match, mode match, subtitle tone learning, camera behavior pattern, pacing style correlation; confidence: base = min(50, n×15), high-score bonus up to +20, context match bonus up to +20
+- `app/ai/director/edit_plan_schema.py` — `preset_evolution: dict = field(default_factory=dict)` added to `AIEditPlan`; `"preset_evolution": dict(self.preset_evolution)` added to `to_dict()` output; backward-compatible (all existing tests pass)
+- `app/ai/director/ai_director.py` — `_attach_preset_evolution(plan, memory_ctx, mode, context, job_id)` added; called after `_attach_story_intelligence` inside `_build_plan`; extracts memories from `memory_ctx.get("results", [])`; builds `preset_context = {"market": market, "mode": mode}`; calls `analyze_preset_performance` then `recommend_preset`; attaches recommendation to report; stores `report.to_dict()` on `plan.preset_evolution`; when no memories available sets `{"available": False, "warnings": ["no_memory_available_for_preset_analysis"]}`; `_append_preset_explainability(plan, report)` appends ("Preset recommendation based on similar successful renders", "Subtitle tone suggestion learned from prior high-score outputs") when confidence ≥ 30.0; dedup guard prevents duplicate lines; both helpers never raise
+- `app/orchestration/render_pipeline.py` — `"preset_evolution": _ai_edit_plan.preset_evolution if _ai_edit_plan is not None else {}` added to `_result_payload` dict
+- `tests/test_ai_phase13_preset_evolution.py` (new) — 63 tests covering: schema defaults and to_dict() for all three dataclasses, reasons/best_samples caps, analyzer safety (empty/None/garbage inputs never raise, empty/None → available=False, malformed entries skipped, all-failed → available=False), high-score completed samples (produce available report, populate best_samples, cap at 5, completed_with_errors usable), failed samples (warn in report, mixed still works, all-failed gives no usable), market/mode relevance (same market rank higher, same mode rank higher, market/mode stored in report), recommender safety (never raises, unavailable report → confidence 0, None context safe, playback_speed/codec/ffmpeg/timing never suggested, reasons ≤5, confidence 0-100, only allowed adjustment fields), recommender suggestions (subtitle_tone from dominant samples, camera_behavior from dominant, reasons nonempty, all keys in to_dict), AIEditPlan preset_evolution field (has field, defaults to {}, in to_dict), AI Director with no memory (sets available=False, never raises on garbage, works with real memories), explainability integration (appends safely, never raises on missing/None explainability or report, no duplicate lines), result JSON compactness (best_samples ≤5, all keys present, recommendation in output, no raw memory text), no external dependencies (no API key, no GPU, no real rendering, no torch, no sentence_transformers, safe imports)
+
+**Verification:**
+- 63/63 Phase 13 tests pass
+- 715/715 full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+- `_UNSAFE_FIELDS` frozenset prevents playback_speed, codec, bitrate, fps, resolution, output_format, validation, ffmpeg, timing from ever appearing in suggested_adjustments
+- Advisory only — `recommend_preset` returns recommendations only; nothing auto-applied
+- No preset is silently overwritten — `preset_evolution` is metadata only, not wired to payload mutation
+- All-failed memories → `available=False`, no recommendation generated
+- Empty/missing memory context → `available=False`, warning recorded, render continues
+- Never raises in any code path — all preset evolution failures are caught and recorded as warnings
+- No external API calls, no GPU, no optional AI libraries required
+
+**What Preset Evolution can do now:**
+- Parse historical render memories (from RAG retriever results) into structured performance samples
+- Score each sample by market/mode relevance + output score + status weight
+- Identify high-performing patterns: dominant subtitle_tone, camera_behavior, pacing_style
+- Recommend preset name from most-common preset in best samples
+- Suggest safe adjustments: subtitle_tone, camera_behavior, pacing_style, target_duration_hint, ai_mode_hint
+- Include confidence score (0-100) and up to 5 human-readable reasons
+- Expose compact `"preset_evolution"` key in render result_json
+- Append advisory lines to AI explainability summary
+
+**Not yet implemented:**
+- Auto-applying evolved presets (explicitly deferred)
+- UI preset recommendation controls
+- A/B preset testing
+- Online learning or feedback loops
+- Autonomous preset mutation
+- Per-market preset version branching
+
+**Known limitations:**
+- Advisory only — no effect on rendered output
+- Deterministic heuristics only — no ML, no semantic understanding of preset quality
+- Quality depends entirely on the richness of stored render memories; sparse memory → low confidence
+- Confidence formula is heuristic (not calibrated to actual user satisfaction)
+- Does not change user-selected preset automatically under any circumstance
+
+---
+
 ### 2026-05-08 — AI Productization Phase 12: Story Intelligence Foundation
 
 **Implemented:**
