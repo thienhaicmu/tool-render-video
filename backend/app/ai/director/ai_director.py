@@ -220,6 +220,13 @@ def _build_plan(
         plan.warnings.append(f"subtitle_execution_error:{type(exc).__name__}")
         logger.debug("ai_director_subtitle_execution_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 18: Beat-synced Visual Execution ---
+    try:
+        _attach_beat_visual_execution(plan, pacing_ctx, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"beat_visual_execution_error:{type(exc).__name__}")
+        logger.debug("ai_director_beat_visual_execution_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -1025,6 +1032,114 @@ def _append_subtitle_execution_explainability(plan: "AIEditPlan", execution_plan
             line = "Beat-aware subtitle emphasis enabled"
             if not any(line in str(l) for l in lines):
                 lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 18 — Beat-synced Visual Execution attachment
+# ---------------------------------------------------------------------------
+
+def _attach_beat_visual_execution(
+    plan: "AIEditPlan",
+    pacing_ctx: dict,
+    job_id: str,
+) -> None:
+    """Build beat visual execution plan and attach to plan. Never raises."""
+    try:
+        from app.ai.visuals.visual_execution import build_beat_visual_execution_plan
+
+        # Pull context from prior phases
+        beat_ctx = dict(plan.beat_execution) if isinstance(plan.beat_execution, dict) else {}
+        story_ctx = dict(plan.story) if isinstance(plan.story, dict) else {}
+        retention_ctx = dict(plan.retention) if isinstance(plan.retention, dict) else {}
+        creator_ctx = dict(plan.creator_style) if isinstance(plan.creator_style, dict) else {}
+
+        visual_plan = build_beat_visual_execution_plan(
+            pacing_context=pacing_ctx,
+            beat_execution_context=beat_ctx,
+            story_context=story_ctx,
+            retention_context=retention_ctx,
+            creator_style_context=creator_ctx,
+        )
+
+        plan.beat_visual_execution = visual_plan.to_dict()
+
+        logger.info(
+            "ai_beat_visual_execution_generated job_id=%s available=%s "
+            "bpm=%s pulse_regions=%d transition_hints=%d",
+            job_id,
+            visual_plan.available,
+            f"{visual_plan.bpm:.1f}" if visual_plan.bpm is not None else "none",
+            len(visual_plan.pulse_regions),
+            len(visual_plan.transition_hints),
+        )
+
+        _append_beat_visual_explainability(plan, visual_plan)
+
+    except Exception as exc:
+        plan.beat_visual_execution = {
+            "available": False,
+            "warnings": [f"beat_visual_execution_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_beat_visual_execution_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_beat_visual_explainability(plan: "AIEditPlan", visual_plan: Any) -> None:
+    """Append compact beat visual execution lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not getattr(visual_plan, "available", False):
+            return
+
+        pulse_regions = getattr(visual_plan, "pulse_regions", [])
+        transition_hints = getattr(visual_plan, "transition_hints", [])
+
+        # Beat pulse line
+        has_punch = any(
+            getattr(r, "pulse_style", "") == "punch_pulse" for r in pulse_regions
+        )
+        has_cinematic = any(
+            getattr(r, "pulse_style", "") == "cinematic_pulse" for r in pulse_regions
+        )
+
+        if has_punch:
+            line = "Beat pulse visual rhythm planned"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+        elif has_cinematic:
+            line = "Cinematic visual rhythm planned"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+        elif pulse_regions:
+            line = "Beat pulse visual rhythm planned"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        # Transition hints line
+        high_energy_transitions = {
+            r.transition_style for r in transition_hints
+            if getattr(r, "transition_style", "") in ("energy_pop", "cinematic_push", "beat_pulse")
+        }
+        if high_energy_transitions:
+            line = "High-energy visual transition hints detected"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        # Metadata-only reminder
+        line = "Visual beat execution remains metadata-only"
+        if not any("metadata-only" in str(l) for l in lines):
+            lines.append(line)
 
     except Exception:
         pass

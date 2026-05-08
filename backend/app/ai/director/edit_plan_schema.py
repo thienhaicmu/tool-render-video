@@ -128,6 +128,8 @@ class AIEditPlan:
     retention: dict = field(default_factory=dict)
     # Phase 17 — dynamic subtitle execution (populated by subtitle_execution module)
     subtitle_execution: dict = field(default_factory=dict)
+    # Phase 18 — beat-synced visual execution (populated by visual_execution module)
+    beat_visual_execution: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -187,4 +189,5 @@ class AIEditPlan:
             "external_knowledge": dict(self.external_knowledge),
             "retention": dict(self.retention),
             "subtitle_execution": dict(self.subtitle_execution),
+            "beat_visual_execution": dict(self.beat_visual_execution),
         }

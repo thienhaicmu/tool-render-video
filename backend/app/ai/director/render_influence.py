@@ -87,6 +87,7 @@ def apply_ai_render_influence(
         _apply_subtitle_influence(payload, edit_plan, report)
         _apply_pacing_influence(payload, edit_plan, report)
         _apply_memory_influence(payload, edit_plan, report)
+        _report_beat_visual_execution(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -244,6 +245,38 @@ def _apply_memory_influence(payload: Any, edit_plan: Any, report: dict) -> None:
     count = len(results) if isinstance(results, (list, tuple)) else 0
     report["skipped"].append(
         f"memory:report_only(context_results={count},render_influence_deferred)"
+    )
+
+
+# ── Beat visual execution — report-only in Phase 18 ─────────────────────────
+
+def _report_beat_visual_execution(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record beat visual execution metadata — deferred in Phase 18.
+
+    No FFmpeg commands altered. No timing changed. No visual effects applied.
+    """
+    bve = getattr(edit_plan, "beat_visual_execution", None)
+    if not isinstance(bve, dict):
+        report["skipped"].append("beat_visual_execution:no_plan")
+        return
+
+    if not bve.get("available", False):
+        warns = bve.get("warnings", [])
+        reason = warns[0] if warns else "unavailable"
+        report["skipped"].append(f"beat_visual_execution:deferred({reason})")
+        return
+
+    bpm = bve.get("bpm")
+    pulse_count = len(bve.get("pulse_regions", []))
+    hint_count = len(bve.get("transition_hints", []))
+    report["skipped"].append(
+        f"beat_visual_execution:deferred_phase18("
+        f"bpm={bpm},pulse_regions={pulse_count},"
+        f"transition_hints={hint_count})"
+    )
+    logger.debug(
+        "beat_visual_execution_deferred bpm=%s pulse_regions=%d transition_hints=%d",
+        bpm, pulse_count, hint_count,
     )
 
 
