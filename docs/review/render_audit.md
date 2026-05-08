@@ -7,6 +7,47 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Director Phase 6: Explainability Foundation
+
+**Implemented:**
+- `app/ai/explainability/` package (new) — deterministic, rule-based, no external deps, never raises
+- `reason_builder.py` (new) — four public functions: `build_clip_reasons`, `build_camera_reasons`, `build_subtitle_reasons`, `build_pacing_reasons`; each returns up to 5 deduplicated human-readable strings; explanations derived from existing plan data only — no hallucination; all functions wrapped in `try/except` returning `[]` on failure
+- `confidence.py` (new) — `calculate_ai_confidence(edit_plan) -> dict`; returns `{overall, clip_selection, semantic, memory, pacing, camera, subtitle, warnings}` (all 0–100); weighted overall score (clip×0.30, semantic×0.20, memory×0.15, pacing×0.20, camera×0.075, subtitle×0.075); graceful degradation: semantic≤40 when embeddings unavailable, memory≤30 when RAG error, clip=20 when no segments; never raises
+- `summary.py` (new) — `build_ai_summary(edit_plan, confidence) -> dict`; returns `{headline, summary_lines≤6, strengths≤6, warnings, confidence}`; headline reflects overall quality (Strong/Solid/Basic), energy level, emotion, and mode label; warnings derived from plan warnings + confidence warnings; never raises
+- `AIEditPlan` expanded — two new fields: `explainability: dict = {}` and `confidence: dict = {}`; `to_dict()` updated with: `explainability` (full reasons + summary), `confidence` (full scores), `ai_summary` (compact headline/lines/strengths/warnings without nested confidence), `ai_confidence` (compact overall/semantic/memory/pacing subset for result_json)
+- `ai_director.py` upgraded — `_attach_explainability(plan, job_id)` helper called at end of `_build_plan()`; guarded by local try/except so explainability crash can never block plan return; logs `ai_explainability_generated` and `ai_confidence_generated` at INFO level; explainability error appended to `plan.warnings` as `"explainability_error:*"` when it does fail
+
+**Tests added:**
+- `backend/tests/test_ai_explainability_phase6.py` — 64 tests covering reason builder imports/determinism/deduplication/content, confidence imports/structure/degradation rules (semantic≤40 on embeddings_unavailable, memory≤30 on rag_error, clip=20 on no segments), summary structure/compactness/headline quality signals, schema new fields and to_dict keys, AI Director integration (plan has explainability+confidence after creation, to_dict includes ai_summary/ai_confidence, crash isolation via monkeypatch, JSON serialization), constraint checks (no API key, no GPU, no cloud), Phase 1–5 regression
+
+**Phase 6 design constraints preserved:**
+- No cloud API calls, no API keys
+- No ML models, no GPU
+- No LLM reasoning — all explanations are deterministic from existing plan data
+- No changes to render_pipeline.py, render_engine.py, subtitle_engine.py, motion_crop.py
+- Explainability is observation-only metadata — render output unchanged
+- All prior Phase 1–5 tests pass without modification (383 → 447 total)
+
+**How it works:**
+- `reason_builder` maps plan fields (behavior, emotion, BPM, scores, flags) to human-readable strings via rule lookups — same inputs always produce same outputs
+- `confidence` scores each dimension from available evidence (segments, warnings, memory results, beat data) with explicit floor values when data is absent
+- `summary` derives headline quality ("Strong/Solid/Basic") from overall confidence and combines emotion+energy+mode into a natural-language label
+- All data flows into `to_dict()` → `result_json["ai_director"]["ai_summary"]` and `["ai_confidence"]` automatically, with no render_pipeline.py changes needed
+
+**Not yet implemented:**
+- Explainability UI — no frontend exposure yet
+- Timeline AI overlays showing per-clip reasoning
+- Interactive AI insights panel
+- Story intelligence layer
+- Render-time AI overrides based on confidence
+
+**Known limitations:**
+- Explanations are rule-based string mappings — intentionally compact, no natural language generation
+- Confidence scores are heuristic (weighted rules), not calibrated probabilities
+- `ai_summary` and `ai_confidence` appear inside `result_json["ai_director"]`, not at result_json top level
+
+---
+
 ### 2026-05-08 — AI Director Phase 5: Camera + Subtitle Intelligence
 
 **Implemented:**
