@@ -199,6 +199,13 @@ def _build_plan(
         plan.warnings.append(f"creator_style_error:{type(exc).__name__}")
         logger.debug("ai_director_creator_style_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 15: External Knowledge ---
+    try:
+        _attach_external_knowledge(plan, chunks, pacing_ctx, context, mode, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"external_knowledge_error:{type(exc).__name__}")
+        logger.debug("ai_director_external_knowledge_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -638,6 +645,144 @@ def _append_style_explainability(plan: "AIEditPlan", classification: Any) -> Non
         line = _STYLE_LINES.get(style)
         if line and not any(line in str(l) for l in lines):
             lines.append(line)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 15 — External Knowledge attachment
+# ---------------------------------------------------------------------------
+
+def _attach_external_knowledge(
+    plan: "AIEditPlan",
+    chunks: list[dict],
+    pacing_ctx: dict,
+    context: dict,
+    mode: str,
+    job_id: str,
+) -> None:
+    """Retrieve external curated knowledge and attach compact summary. Never raises."""
+    try:
+        context = context or {}
+        knowledge_store = context.get("knowledge_store")
+
+        if knowledge_store is None:
+            plan.external_knowledge = {
+                "available": False,
+                "warnings": ["no_knowledge_store"],
+            }
+            logger.debug("ai_external_knowledge_skipped job_id=%s (no store)", job_id)
+            return
+
+        from app.ai.knowledge.knowledge_retriever import retrieve_external_knowledge
+
+        market = str(context.get("market") or "").strip() or None
+
+        # Style hint from Phase 14 creator style (may be empty dict)
+        style_hint: Optional[str] = None
+        if isinstance(plan.creator_style, dict):
+            raw_style = plan.creator_style.get("dominant_style")
+            if raw_style and str(raw_style) not in ("unknown", ""):
+                style_hint = str(raw_style)
+
+        # Build free-text query from mode + market + transcript excerpt
+        query_parts: list[str] = [mode]
+        if market:
+            query_parts.append(market)
+        text_excerpt = " ".join(
+            c.get("text", "") for c in chunks[:5] if isinstance(c, dict)
+        ).strip()
+        if text_excerpt:
+            query_parts.append(text_excerpt[:200])
+        query = " ".join(query_parts)
+
+        retrieve_ctx = {
+            "knowledge_store": knowledge_store,
+            "market": market,
+            "style": style_hint,
+        }
+
+        result = retrieve_external_knowledge(query, context=retrieve_ctx, top_k=5)
+        plan.external_knowledge = _build_knowledge_summary(result)
+
+        if result.get("available") and result.get("results"):
+            logger.info(
+                "ai_external_knowledge_matched job_id=%s matched=%d",
+                job_id,
+                len(result.get("results", [])),
+            )
+            _append_knowledge_explainability(plan, result)
+        else:
+            logger.debug(
+                "ai_external_knowledge_skipped job_id=%s (no matches)", job_id
+            )
+
+    except Exception as exc:
+        plan.external_knowledge = {
+            "available": False,
+            "warnings": [f"external_knowledge_error:{type(exc).__name__}"],
+        }
+        logger.debug(
+            "ai_director_external_knowledge_failed job_id=%s: %s", job_id, exc
+        )
+
+
+def _build_knowledge_summary(result: dict) -> dict:
+    """Convert retriever result dict to compact external_knowledge payload."""
+    if not result.get("available"):
+        return {
+            "available": False,
+            "warnings": list(result.get("warnings", [])),
+        }
+
+    raw_results = result.get("results", [])
+    top_matches = []
+    for r in raw_results[:5]:
+        if not isinstance(r, dict):
+            continue
+        meta = r.get("metadata", {}) if isinstance(r.get("metadata"), dict) else {}
+        top_matches.append({
+            "source_type": str(meta.get("source_type", "unknown")),
+            "market": meta.get("market"),
+            "style": meta.get("style"),
+            "score": round(float(r.get("score", 0.0)), 4),
+            "text": str(r.get("text", ""))[:300],
+        })
+
+    return {
+        "available": True,
+        "matched_items": len(raw_results),
+        "top_matches": top_matches,
+    }
+
+
+def _append_knowledge_explainability(plan: "AIEditPlan", result: dict) -> None:
+    """Append compact knowledge insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        main_line = "External curated knowledge matched this edit style"
+        if not any(main_line in str(l) for l in lines):
+            lines.append(main_line)
+
+        # Append market-specific hook note when a hook_pattern result is present
+        for r in result.get("results", [])[:3]:
+            if not isinstance(r, dict):
+                continue
+            meta = r.get("metadata", {}) if isinstance(r.get("metadata"), dict) else {}
+            if meta.get("source_type") == "hook_pattern":
+                hook_line = "Market-specific hook guidance identified"
+                if not any(hook_line in str(l) for l in lines):
+                    lines.append(hook_line)
+                break
     except Exception:
         pass
 

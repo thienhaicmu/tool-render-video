@@ -7,6 +7,73 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Productization Phase 15: External Knowledge Learning Foundation
+
+**Implemented:**
+- `app/ai/knowledge/__init__.py` (new) — empty package marker
+- `app/ai/knowledge/knowledge_schema.py` (new) — `ExternalKnowledgeItem` dataclass (id, source_type, text, market, platform, style, topic, tags, confidence 0-1, metadata); `KnowledgeSearchResult` dataclass (id, score, text, metadata) with `to_dict()` that caps text at 500 chars; `VALID_SOURCE_TYPES` frozenset = {manual_note, trend_summary, style_pattern, hook_pattern, subtitle_pattern, pacing_pattern, market_pattern}; no Pydantic, no heavy deps
+- `app/ai/knowledge/knowledge_ingest.py` (new) — `parse_knowledge_json(data) -> list[ExternalKnowledgeItem]`; never raises; validates each item for required id/source_type/text fields and valid source_type membership; skips malformed items with debug logging; confidence clamped to [0, 1]; tags normalized to list[str]; emits `ai_external_knowledge_loaded count=N skipped=M` at INFO; `ingest_knowledge_file(path: str) -> dict` reads local JSON file only, returns `{loaded, skipped, items, warnings}`; returns file_not_found warning if path missing; never raises on corrupt JSON
+- `app/ai/knowledge/knowledge_store.py` (new) — `LocalKnowledgeStore` with in-memory `_items: list[ExternalKnowledgeItem]` and parallel `_vectors: list[Optional[list[float]]]`; `add_item(item) -> bool` tries to embed text via existing `app.ai.rag.embeddings.embed_text`, stores vector or None if unavailable; `add_items(items) -> int` returns count of successful adds; `search(query, top_k=5, filters=None) -> list[KnowledgeSearchResult]` uses vector cosine search if query embeds successfully (items without vectors get 0.0), falls back to keyword token-overlap scoring otherwise; `_apply_filters` passes items with None field through (market-agnostic items included regardless of filter); `_keyword_score` = (matched_tokens / total_tokens) × (0.5 + confidence × 0.5); `_build_result` sets metadata with source_type, market, platform, style, topic, tags, confidence; never raises
+- `app/ai/knowledge/knowledge_retriever.py` (new) — `retrieve_external_knowledge(query, context=None, top_k=5) -> dict`; never raises; expects `context["knowledge_store"]` as `LocalKnowledgeStore`; builds field filters from `context["market"]` and `context["style"]`; returns `{available: False, results: [], warnings: ["no_knowledge_store"]}` when store absent; returns `{available: False, ..., warnings: ["knowledge_store_empty"]}` when count=0; on matches: returns `{available: True, results: [KnowledgeSearchResult.to_dict(), ...], warnings: []}`; emits `ai_external_knowledge_matched count=N top_score=X.XXX` at INFO; emits debug on skip
+- `app/ai/director/edit_plan_schema.py` — `external_knowledge: dict = field(default_factory=dict)` added to `AIEditPlan`; `"external_knowledge": dict(self.external_knowledge)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_external_knowledge(plan, chunks, pacing_ctx, context, mode, job_id)` added; checks `context.get("knowledge_store")`; if absent sets `available=False`; builds query from mode + market + transcript excerpt (first 5 chunks, max 200 chars); extracts style_hint from `plan.creator_style["dominant_style"]` if Phase 14 already ran; calls `retrieve_external_knowledge` with `{knowledge_store, market, style}` context; stores compact summary via `_build_knowledge_summary` on `plan.external_knowledge`; `_build_knowledge_summary(result)` → `{available, matched_items, top_matches: [{source_type, market, style, score, text[:300]}]}`; `_append_knowledge_explainability(plan, result)` appends "External curated knowledge matched this edit style" and "Market-specific hook guidance identified" (when hook_pattern result present) with dedup guard; Phase 15 block added after Phase 14 in `_build_plan`; all helpers never raise; emits `ai_external_knowledge_matched` / `ai_external_knowledge_skipped` logs
+- `tests/test_ai_phase15_external_knowledge.py` (new) — 79 tests covering: schema defaults and to_dict() for both dataclasses, VALID_SOURCE_TYPES completeness, ingest (valid JSON, malformed items skipped, missing id/text/source_type skipped, invalid source_type skipped, empty list, non-dict input, confidence clamping, tags normalization, file_not_found warning, loaded count, items in result, corrupt JSON fallback), store (empty count, add_item returns True, count increases, add_items count, invalid type returns False, search empty returns empty, returns KnowledgeSearchResult list, keyword search finds matching item, top_k respected, score field present, never raises on garbage query, market filter excludes non-matching, None market passes through, metadata has source_type/market/style, empty/None add_items), retriever (never raises on None/empty args, available False without store, required keys present, available True with populated store, results is list, top_k respected, empty store returns False, market filter passed through, warnings is list), AIEditPlan field (has field, defaults {}, in to_dict, value propagated), AI Director integration (sets dict, available False without store, never raises on empty chunks/None context/garbage store, available True with populated store, top_matches present and capped at 5, build_knowledge_summary available False/True, text capped at 300, explainability append never raises, line added on results, hook pattern adds market line, no duplicate lines, style_hint from creator_style), no external dependencies (no API key, no GPU, no internet, no real rendering, safe imports, works without sentence_transformers, no copyrighted names, never raises on broken store)
+
+**Verification:**
+- 79/79 Phase 15 tests pass
+- 868/868 full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+- Local curated JSON files only — no network access, no web scraping, no cloud APIs in any code path
+- Advisory metadata only — `external_knowledge` dict in result_json never mutates render commands, subtitles, timing, or segments
+- `available=False` returned whenever store is absent, empty, or broken — render pipeline continues unaffected
+- No API keys required — knowledge store uses existing optional embedding layer (`sentence-transformers`) with keyword fallback
+- `_apply_filters` never blocks items with None fields — market-agnostic knowledge items always pass through
+- Never raises in any code path — all knowledge failures are caught and recorded as warnings
+- No copyrighted creator names, trend dumps, or scraped content permitted in schema or logic
+
+**Architecture notes:**
+- External knowledge is context-injected — `LocalKnowledgeStore` is passed via `context["knowledge_store"]`, not a global singleton
+- Vector search uses existing `app.ai.rag.embeddings.embed_text` — no new model dependency
+- Keyword fallback is deterministic and works without any AI library installed
+- In-memory only in Phase 15 — no SQLite persistence, no disk writes from the knowledge layer
+- Phase 15 runs after Phase 14 (creator style); style_hint from `plan.creator_style` is used to filter results
+
+**Integrated systems:**
+- AI Director — Phase 15 block attached in `_build_plan` after Phase 14
+- Creator Style Intelligence — style_hint extracted from `plan.creator_style["dominant_style"]` for query filtering
+- Explainability — `_append_knowledge_explainability` adds up to 2 advisory lines to summary
+- Existing embedding layer (`app.ai.rag.embeddings`) — reused for optional vector search
+
+**What External Knowledge Learning can do now:**
+- Ingest curated local JSON knowledge files (manual notes, trend summaries, style/hook/pacing/market patterns)
+- Store items in memory with optional embedding vectors for semantic search
+- Fall back to keyword token-overlap search when embeddings are unavailable
+- Filter search results by market and style from the render context
+- Attach compact `"external_knowledge"` key to render result_json with matched_items count and top 5 matches
+- Append advisory lines to AI explainability summary when knowledge matches edit style
+- Identify market-specific hook guidance from matched hook_pattern knowledge items
+
+**Not yet implemented:**
+- Online trend ingestion
+- Automatic web crawling or social platform API integrations
+- Knowledge persistence UI
+- Auto-application of external knowledge to render settings
+- Knowledge confidence calibration
+- Per-market knowledge version management
+
+**Known limitations:**
+- Local curated JSON only — no internet access, no autonomous trend ingestion
+- Advisory metadata only — no effect on rendered output
+- In-memory only — knowledge is lost when process restarts unless store is re-populated
+- No autonomous training — all knowledge must be manually curated
+- Keyword search is token-overlap only; no TF-IDF, no BM25 weighting
+
+> Phase 15 extends the AI system with a safe, local, auditable external knowledge layer, allowing curated editing/trend knowledge to inform AI recommendations without requiring internet access, cloud APIs, or autonomous training.
+
+---
+
 ### 2026-05-08 — AI Productization Phase 14: Creator Style Intelligence
 
 **Implemented:**
