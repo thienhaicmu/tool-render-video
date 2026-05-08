@@ -7,6 +7,37 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Director Phase 5: Camera + Subtitle Intelligence
+
+**Implemented:**
+- `camera_planner.py` (new) — deterministic, rule-based camera behavior planning; no external deps; never raises; priority rules: `clean_subtitle`→disabled, emotion(`surprise`/`urgency`)→`dramatic_push`, fast pacing/high energy(`>0.75`)→`fast_follow`, `storytelling`/`slow_build`→`slow_reveal`, default→mode config; all paths set `subtitle_safe=True`, `zoom_strength`, `follow_strength`, and `reason` string
+- `subtitle_planner.py` (new) — deterministic, rule-based subtitle behavior planning; no external deps; never raises; mode-based base config: viral_tiktok=hype/punch/4words, podcast=clean/keyword/6words, storytelling=story/soft/6words, clean_subtitle=clean/none/7words; beat-aware override: if `beat_available AND pacing_style=="fast"` → `density="compact"`; emotion-aware override: if emotion in `{curiosity, surprise, urgency}` → `highlight_keywords=True`; all paths return `reason` string
+- `AICameraPlan` expanded — new fields: `zoom_strength` (float, default 1.0), `follow_strength` (float, default 0.5), `motion_energy` (Optional[float]), `reason` (str); `to_dict()` updated
+- `AISubtitlePlan` expanded — new fields: `emphasis_style` (str, default "none"), `density` (str, default "normal"), `beat_aware` (bool), `emotion_aware` (bool), `reason` (str); `to_dict()` updated
+- `ai_modes.py` upgraded — each mode now has `subtitle_emphasis_style`, `subtitle_density`, `camera_zoom_strength` (viral_tiktok=punch/compact/1.12, podcast=keyword/normal/1.05, storytelling=soft/normal/1.05, clean_subtitle=none/comfortable/1.0)
+- `ai_director.py` upgraded — imports `plan_camera_behavior`, `plan_subtitle_behavior`; builds `pacing_ctx` and `transcript_ctx` dicts from pacing plan output; injects `mode_name` into `mode_config_with_name`; calls `_safe_camera_plan()` and `_safe_subtitle_plan()` wrappers that catch all exceptions and return bare plan objects with warning entries (`camera_planner_error:*`, `subtitle_planner_error:*`)
+
+**Tests added:**
+- `backend/tests/test_ai_director_phase5_camera_subtitle.py` — 51 tests covering camera planner behaviors (fast_follow, dramatic_push, slow_reveal, none, subtitle_safe invariant, zoom/follow strengths, reason strings, crash safety), subtitle planner (per-mode defaults, beat_aware/emotion_aware overrides, reason strings, crash safety), schema expansion (new fields on both plan types, to_dict completeness), AI Director integration (expanded plans in output, planner crash fallbacks via monkeypatch on `ai_director` module namespace), ai_modes Phase 5 fields, and Phase 1–4 regression guards
+
+**Phase 5 design constraints preserved:**
+- No changes to `motion_crop.py` or `subtitle_engine.py` — plans are metadata only
+- No camera/subtitle behavior forced into actual render output
+- All camera/subtitle data is observation/planning metadata
+- All prior Phase 1–4 tests pass without modification (332 → 383 total)
+
+**Not yet implemented:**
+- Applying `zoom_strength` to FFmpeg `motion_crop` parameters
+- Applying `emphasis_style`/`density` to subtitle engine rendering
+- UI controls exposing camera/subtitle intelligence settings
+- Memory-context-informed camera/subtitle overrides (RAG feedback loop)
+
+**Known limitations:**
+- Camera and subtitle plans are planning hints only; render output is identical to pre-Phase-5
+- `motion_energy` field is reserved but not yet populated
+
+---
+
 ### 2026-05-08 — AI Director Phase 4: Beat + Emotion Pacing Foundation
 
 **Implemented:**
