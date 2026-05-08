@@ -171,6 +171,14 @@ def _build_plan(
         pacing=pacing_plan,
     )
 
+    # --- Phase 31: AI Apply Policy ---
+    # Runs first so downstream phases can reference the effective policy.
+    try:
+        _attach_ai_apply_policy(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"ai_apply_policy_error:{type(exc).__name__}")
+        logger.debug("ai_director_apply_policy_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -1483,6 +1491,85 @@ def _append_safe_render_mutations_explainability(
 
         if not any("Dangerous timing mutations remain blocked" in str(l) for l in lines):
             lines.append("Dangerous timing mutations remain blocked")
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 31 — AI Apply Policy attachment
+# ---------------------------------------------------------------------------
+
+def _attach_ai_apply_policy(plan: "AIEditPlan", request: Any, job_id: str) -> None:
+    """Build and attach AI apply policy decision to the plan.
+
+    Runs early (before Phase 6 explainability) so downstream AI phases can
+    reference the effective policy. Never raises. Never mutates dangerous fields.
+    Hard safety blocks are never bypassed regardless of policy.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.policy.policy_engine import build_policy_decision
+
+        raw_policy = str(getattr(request, "ai_apply_policy", "conservative") or "conservative")
+        context = {"ai_apply_policy": raw_policy, "job_id": job_id}
+
+        decision = build_policy_decision(plan, payload=request, context=context)
+        decision_dict = decision.to_dict()
+        plan.ai_apply_policy = decision_dict
+
+        logger.info(
+            "ai_apply_policy_selected job_id=%s policy=%s blocked=%d",
+            job_id,
+            decision_dict.get("selected_policy", "conservative"),
+            len(decision_dict.get("blocked_capabilities") or []),
+        )
+
+        _append_ai_apply_policy_explainability(plan, decision_dict)
+
+    except Exception as exc:
+        plan.ai_apply_policy = {
+            "available": False,
+            "selected_policy": "conservative",
+            "effective_policy": {},
+            "blocked_capabilities": [],
+            "warnings": [f"ai_apply_policy_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_apply_policy_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_ai_apply_policy_explainability(
+    plan: "AIEditPlan",
+    decision_dict: dict,
+) -> None:
+    """Append compact policy insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        policy = decision_dict.get("selected_policy") or "conservative"
+        policy_label = policy.capitalize()
+
+        line = f"{policy_label} AI apply policy enabled"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+        if policy in ("aggressive", "experimental"):
+            line = "Aggressive orchestration remains safety-gated"
+            if not any("safety-gated" in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Dangerous timing mutations remain blocked"
+        if not any("Dangerous timing mutations remain blocked" in str(l) for l in lines):
+            lines.append(line)
 
     except Exception:
         pass

@@ -6,6 +6,81 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 31: AI Apply Policy Layer Foundation
+
+**Policy layer controls HOW MUCH AI influence is allowed. Hard safety blocks are NEVER bypassed.**
+
+**Implemented:**
+
+- `app/ai/policy/__init__.py` (new) — package marker; Phase 31 AI apply policy package
+- `app/ai/policy/policy_schema.py` (new) — `AIApplyPolicy` dataclass (policy_name, allow_safe_mutations, allow_multivariant_execution, allow_execution_recommendations, allow_execution_simulation, allow_output_ranking, allow_timing_candidates, allow_creator_style_adaptation, allow_visual_rhythm_guidance, allow_aggressive_behavior, warnings, explanation; `to_dict()` caps warnings/explanation at 10, coerces all allow_* to bool); `AIPolicyDecision` dataclass (available, selected_policy, effective_policy, blocked_capabilities, warnings; `to_dict()` caps blocked_capabilities at 30)
+- `app/ai/policy/policy_safety.py` (new) — `sanitize_policy(policy_name) -> str`; case-insensitive; invalid values → "conservative"; `build_policy(policy_name) -> AIApplyPolicy`; reads from `_POLICY_DEFINITIONS` dict, falls back to conservative on error; `get_blocked_capabilities(policy) -> list[str]`; always includes `_GLOBAL_HARD_BLOCKS` (7 keys: ffmpeg_mutation, playback_speed_mutation, subtitle_timing_rewrite, segment_reorder, executor_override, validation_bypass, autonomous_unlimited_rendering); adds capability-level blocks based on policy flags; never raises
+- `app/ai/policy/policy_engine.py` (new) — `build_policy_decision(edit_plan, payload, context) -> AIPolicyDecision`; resolves policy name from context > payload attribute > edit_plan dict > default "conservative"; calls `build_policy()` + `get_blocked_capabilities()`; logs `ai_apply_policy_selected`/`ai_apply_policy_fallback`/`ai_apply_policy_blocked`; deterministic; never raises; never mutates payload
+- `app/ai/director/edit_plan_schema.py` (updated) — `ai_apply_policy: dict = field(default_factory=dict)` added to `AIEditPlan`; `"ai_apply_policy": dict(self.ai_apply_policy)` in `to_dict()`; backward-compatible; Phase 30 `output_ranking` unchanged
+- `app/ai/director/ai_director.py` (updated) — Phase 31 block inserted **early** (before Phase 6 explainability) so downstream phases can reference the effective policy; `_attach_ai_apply_policy(plan, request, job_id)` reads `ai_apply_policy` attribute from request; `_append_ai_apply_policy_explainability()` appends: "{Policy} AI apply policy enabled", "Aggressive orchestration remains safety-gated" (aggressive/experimental only), "Dangerous timing mutations remain blocked" (always); None guard; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_ai_apply_policy(payload, edit_plan, report)` added; policy summary → `report["skipped"]` as `"ai_apply_policy:phase31(policy=...,available=...,blocked_count=...)"`; wired into `apply_ai_render_influence()` after `_report_output_ranking()`; payload never mutated
+- `tests/test_ai_phase31_apply_policy.py` (new) — comprehensive test suite covering schema invariants, safety gates, policy definitions, engine behavior, edit plan compat, render_influence reporter, and end-to-end integration
+
+**Policy definitions:**
+
+| Policy | allow_multivariant_execution | allow_timing_candidates | allow_aggressive_behavior | Hard blocks |
+|--------|------------------------------|-------------------------|---------------------------|-------------|
+| `conservative` | ✗ | ✗ | ✗ | Always |
+| `balanced` | ✓ | ✗ | ✗ | Always |
+| `aggressive` | ✓ | ✗ | ✓ | Always |
+| `experimental` | ✓ | ✓ | ✓ | Always |
+
+**Resolution priority:** `context["ai_apply_policy"]` > `request.ai_apply_policy` attribute > `edit_plan.ai_apply_policy["selected_policy"]` > `"conservative"`
+
+**Global hard blocks (NEVER bypassed by any policy, 7 keys):**
+
+`ffmpeg_mutation`, `playback_speed_mutation`, `subtitle_timing_rewrite`, `segment_reorder`, `executor_override`, `validation_bypass`, `autonomous_unlimited_rendering`
+
+**Capability-level blocks per policy:**
+
+- `conservative`: + `multivariant_execution`, `timing_candidate_apply`, `aggressive_behavior`
+- `balanced`: + `timing_candidate_apply`, `aggressive_behavior`
+- `aggressive`: + `timing_candidate_apply`
+- `experimental`: no additional capability blocks (hard blocks always apply)
+
+**Policy ordering invariant:** conservative blocks all capabilities blocked by any other policy (conservative ⊇ balanced ⊇ aggressive ⊇ experimental in terms of blocked set).
+
+**Safety boundaries enforced:**
+
+- Hard blocks are unconditional — `get_blocked_capabilities()` always prepends `_GLOBAL_HARD_BLOCKS`
+- Invalid policy names → "conservative" via `sanitize_policy()` — no unknown policies can execute
+- `_POLICY_DEFINITIONS` keys are frozen — no dynamic policy injection
+- Policy never mutates payload, never calls FFmpeg, never touches render executor
+- Phase 31 block is early (pre-Phase 6) so explainability lines reflect effective policy
+- Never raises — all code wrapped in try/except with fallback to conservative
+- Deterministic — same inputs → same policy decision every time
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked (by all policies):**
+
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Executor authority override
+- Validation bypass
+- Autonomous unlimited rendering
+
+**Architecture notes:**
+
+- Phase 31 policy block runs before Phase 6 (explainability) — earliest possible position after plan construction
+- Policy metadata in `ai_apply_policy` field is available to all downstream phases in the same `_build_plan()` call
+- The policy does NOT yet gate downstream phase execution (e.g., if `allow_multivariant_execution=False`, the multivariant block still runs but produces an advisory-only result). Policy gating enforcement is a future hardening step.
+- `report["applied"]` is NOT touched by Phase 31 — all policy reporting goes to `report["skipped"]`
+
+**Verification:**
+
+- Phase 31 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
 ### 2026-05-08 — AI Productization Phase 30: AI Output Ranking & Best Export Recommendation
 
 **Metadata-only output ranker. Recommendation-only. No upload, no publish, no file deletion.**

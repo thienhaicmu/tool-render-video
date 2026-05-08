@@ -99,6 +99,7 @@ def apply_ai_render_influence(
         _report_multivariant_plans(payload, edit_plan, report)
         _report_multivariant_execution(payload, edit_plan, report)
         _report_output_ranking(payload, edit_plan, report)
+        _report_ai_apply_policy(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -687,6 +688,33 @@ def _report_output_ranking(payload: Any, edit_plan: Any, report: dict) -> None:
     logger.debug(
         "output_ranking_reported available=%s best=%s outputs=%d",
         available, best_id, len(outputs),
+    )
+
+
+# ── AI apply policy — summary reporting in Phase 31 ──────────────────────────
+
+def _report_ai_apply_policy(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report AI apply policy metadata from Phase 31.
+
+    Policy summary and blocked capabilities go to report["skipped"].
+    Payload is never mutated. No executor authority overridden.
+    """
+    pol = getattr(edit_plan, "ai_apply_policy", None)
+    if not isinstance(pol, dict) or not pol:
+        report["skipped"].append("ai_apply_policy:no_result")
+        return
+
+    selected = pol.get("selected_policy") or "conservative"
+    blocked = pol.get("blocked_capabilities") or []
+    available = pol.get("available", False)
+
+    report["skipped"].append(
+        f"ai_apply_policy:phase31"
+        f"(policy={selected},available={available},blocked_count={len(blocked)})"
+    )
+    logger.debug(
+        "ai_apply_policy_reported policy=%s blocked=%d",
+        selected, len(blocked),
     )
 
 
