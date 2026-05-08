@@ -303,6 +303,13 @@ def _build_plan(
         plan.warnings.append(f"multivariant_render_plans_error:{type(exc).__name__}")
         logger.debug("ai_director_multivariant_plans_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 29: Safe Multi-Variant Render Execution ---
+    try:
+        _attach_multivariant_execution(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"multivariant_execution_error:{type(exc).__name__}")
+        logger.debug("ai_director_multivariant_execution_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -1460,6 +1467,102 @@ def _append_safe_render_mutations_explainability(
 
         if not any("Dangerous timing mutations remain blocked" in str(l) for l in lines):
             lines.append("Dangerous timing mutations remain blocked")
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 29 — Safe Multi-Variant Render Execution attachment
+# ---------------------------------------------------------------------------
+
+def _attach_multivariant_execution(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build and attach multi-variant execution set to the plan.
+
+    Runs after Phase 28 (multi-variant planning) so execution has full
+    plan metadata. Execution is opt-in only — disabled by default.
+    Never raises. Never overrides executor authority.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.multivariant.multivariant_execution import build_multivariant_execution_set
+
+        execution_enabled = bool(
+            getattr(request, "ai_multivariant_execution_enabled", False)
+        )
+        raw_limit = int(getattr(request, "ai_multivariant_execution_limit", 2) or 2)
+
+        context = {
+            "job_id": job_id,
+            "ai_multivariant_execution_enabled": execution_enabled,
+            "ai_multivariant_execution_limit": raw_limit,
+        }
+
+        execution_set = build_multivariant_execution_set(
+            plan, payload=None, context=context
+        )
+        exec_dict = execution_set.to_dict()
+        plan.multivariant_execution = exec_dict
+
+        executed = exec_dict.get("executed_plan_ids") or []
+        blocked = exec_dict.get("blocked_plan_ids") or []
+
+        logger.info(
+            "ai_multivariant_execution_built job_id=%s enabled=%s "
+            "executed=%d blocked=%d",
+            job_id, execution_enabled, len(executed), len(blocked),
+        )
+
+        _append_multivariant_execution_explainability(plan, exec_dict)
+
+    except Exception as exc:
+        plan.multivariant_execution = {
+            "available": False,
+            "execution_enabled": False,
+            "warnings": [f"multivariant_execution_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_multivariant_execution_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_multivariant_execution_explainability(
+    plan: "AIEditPlan",
+    exec_dict: dict,
+) -> None:
+    """Append compact execution insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        execution_enabled = exec_dict.get("execution_enabled", False)
+        executed_ids = exec_dict.get("executed_plan_ids") or []
+
+        if execution_enabled and executed_ids:
+            line = "Safe multi-variant execution enabled"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+            line = "Bounded render variants prepared"
+            if not any("Bounded render variants" in str(l) for l in lines):
+                lines.append(line)
+        else:
+            line = "Multi-variant execution disabled (opt-in required)"
+            if not any("Multi-variant execution disabled" in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Dangerous execution overrides remain blocked"
+        if not any("Dangerous execution overrides" in str(l) for l in lines):
+            lines.append(line)
 
     except Exception:
         pass

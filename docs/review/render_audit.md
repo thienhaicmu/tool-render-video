@@ -6,6 +6,97 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 29: Safe Multi-Variant Render Execution Foundation
+
+**FIRST phase where AI-prepared variant plans may become actual render jobs.**
+
+**Execution is opt-in only (`ai_multivariant_execution_enabled=True` required). Disabled by default.**
+
+**Implemented:**
+
+- `app/ai/multivariant/multivariant_execution_schema.py` (new) — `AIMultiVariantExecution` dataclass (execution_id, plan_id, variant_id, enabled, safe, advisory_origin, payload_overrides, blocked_fields, render_job_created, warnings, explanation; `to_dict()` hardcodes advisory_origin=True, caps blocked_fields/warnings/explanation at 20/10/10); `AIMultiVariantExecutionSet` dataclass (available, execution_enabled, executions, executed_plan_ids, blocked_plan_ids, warnings; `to_dict()` caps executions at 3)
+- `app/ai/multivariant/multivariant_execution_safety.py` (new) — `sanitize_execution_overrides(overrides) -> dict`; `is_execution_override_safe(overrides) -> bool`; `collect_execution_blocked_fields(overrides) -> list`; `_ALLOWED_KEYS` = 7 safe metadata keys; `_FORBIDDEN_KEYS` = 15 keys (identical to Phase 28 planning); never raises; never mutates originals
+- `app/ai/multivariant/multivariant_execution.py` (new) — `build_multivariant_execution_set(edit_plan, payload, context) -> AIMultiVariantExecutionSet`; reads plans from `edit_plan.multivariant_render_plans.plans`; execution gated by `ai_multivariant_execution_enabled` flag in context; limit clamped to [1, 3]; safe plans produce payload copies via `_make_payload_copy()` — original never mutated; unsafe/not-safe-to-enqueue plans → blocked; limit-exceeded plans → blocked; `_disabled_set()` returns all plans as blocked with execution_enabled=False; logs `ai_multivariant_execution_created`/`ai_multivariant_execution_blocked`/`ai_multivariant_execution_skipped`; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `multivariant_execution: dict = field(default_factory=dict)` added to `AIEditPlan`; `"multivariant_execution": dict(self.multivariant_execution)` in `to_dict()`; backward-compatible; Phase 28 `multivariant_render_plans` unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_multivariant_execution(plan, request, job_id)` added; runs after Phase 28 (multi-variant planning); reads `ai_multivariant_execution_enabled` and `ai_multivariant_execution_limit` from request; calls `build_multivariant_execution_set(plan, payload=None, context)`; logs `ai_multivariant_execution_built` at INFO; `_append_multivariant_execution_explainability()` appends: "Safe multi-variant execution enabled" + "Bounded render variants prepared" (when enabled + executed), "Multi-variant execution disabled (opt-in required)" (when disabled), "Dangerous execution overrides remain blocked" (always); None guard; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_multivariant_execution(payload, edit_plan, report)` added; when disabled: `report["skipped"]` as `"multivariant_execution:disabled_phase29(plans=...,blocked=...)"`; when enabled: executed plans → `report["applied"]` as `"multivariant_exec:executed({id},{plan_id}:[overrides])"`, blocked → `report["skipped"]` as `"multivariant_exec:blocked({id},{plan_id}:reason)"`; wired into `apply_ai_render_influence()` after `_report_multivariant_plans()`; payload never mutated
+- `tests/test_ai_phase29_multivariant_execution.py` (new) — comprehensive test suite covering schema invariants, safety gates, execution engine behavior, edit plan schema compatibility, render_influence reporter, and end-to-end integration
+
+**Execution request flags (opt-in):**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `ai_multivariant_execution_enabled` | `False` | Must be True to create any render jobs |
+| `ai_multivariant_execution_limit` | `2` | Max execution jobs; clamped to [1, 3] |
+
+**Execution limit clamping:** `max(1, min(3, ai_multivariant_execution_limit))`
+
+**Allowed execution override keys (Phase 29 = Phase 28 allowed set):**
+
+`subtitle_density`, `subtitle_emphasis`, `camera_behavior`, `pacing_style`, `creator_style`, `visual_rhythm_mode`, `ai_mode`
+
+**Forbidden execution override keys (15 total — same as Phase 28):**
+
+`playback_speed`, `segment_start`, `segment_end`, `subtitle_timing`, `ffmpeg_args`, `codec`, `bitrate`, `crf`, `validation_rules`, `output_path`, `render_command`, `render_segments`, `segment_order`, `queue_priority`, `job_id`
+
+**Execution plan processing:**
+
+1. Extract plans from `edit_plan.multivariant_render_plans.plans`
+2. For each plan: check `safe_to_enqueue` + run `is_execution_override_safe()` on overrides
+3. Unsafe/not-safe-to-enqueue → blocked (no render job)
+4. If limit reached → blocked (no render job)
+5. Safe plan within limit → `_make_payload_copy(payload, sanitized_overrides)` → `render_job_created=True`
+6. `advisory_origin` is always True on every execution
+
+**`_make_payload_copy` behavior:**
+
+- `payload=None` → returns dict of safe overrides only
+- `payload` is dict → shallow copy + apply safe overrides
+- `payload` has `__dict__` → copy of vars + apply safe overrides
+- Never mutates original payload
+- Never propagates forbidden keys
+
+**Safety boundaries enforced:**
+
+- Execution disabled by default — `ai_multivariant_execution_enabled=False` produces no render jobs
+- `advisory_origin` always True — hardcoded in `AIMultiVariantExecution.to_dict()`
+- Original payload never mutated — `_make_payload_copy()` always creates a copy
+- Max 3 execution jobs — enforced by `_MAX_EXECUTION_JOBS = 3` clamp
+- Forbidden keys stripped by `sanitize_execution_overrides()` before any copy
+- `is_execution_override_safe()` gate: False blocks plan even if `safe_to_enqueue=True`
+- render_influence applied/skipped distinction: executed → applied, everything else → skipped
+- Never blocks render — all Phase 29 code wrapped in try/except in AI Director and engine
+- Deterministic — same edit_plan + same context → same execution set
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- Executor authority override
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Autonomous unlimited rendering (hard limit: 3 jobs max, opt-in only)
+- Validation bypass
+- Output path mutation
+- Render queue direct manipulation
+
+**Architecture notes:**
+
+- Phase 29 is the FIRST phase where render jobs are created from AI planning metadata
+- Execution jobs are payload copies — the render executor receives a bounded job descriptor, not a mutated original
+- `payload=None` at AI Director time means execution job descriptors are override-only dicts (no base payload); downstream render execution will merge these with the actual render payload
+- `report["applied"]` now includes both Phase 27 safe mutations AND Phase 29 execution jobs
+- `_report_multivariant_execution()` runs after `_report_multivariant_plans()` in the influence chain
+
+**Verification:**
+
+- Phase 29 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
 ### 2026-05-08 — AI Productization Phase 28: Safe Multi-Variant Render Planning Foundation
 
 **Planning-only phase: prepares renderable variant jobs WITHOUT enqueueing or executing them.**

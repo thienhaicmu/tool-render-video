@@ -97,6 +97,7 @@ def apply_ai_render_influence(
         _report_execution_simulation(payload, edit_plan, report)
         _report_safe_mutations(payload, edit_plan, report)
         _report_multivariant_plans(payload, edit_plan, report)
+        _report_multivariant_execution(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -593,6 +594,64 @@ def _report_multivariant_plans(payload: Any, edit_plan: Any, report: dict) -> No
     logger.debug(
         "multivariant_plans_reported count=%d safe=%d recommended=%s",
         len(plans), safe_count, recommended_id,
+    )
+
+
+# ── Multi-variant execution — summary reporting in Phase 29 ──────────────────
+
+def _report_multivariant_execution(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report multi-variant execution results from Phase 29.
+
+    Executed plans appear in report["applied"] as bounded render job descriptors.
+    Blocked/disabled plans appear in report["skipped"].
+    Payload is never mutated here — execution payloads were copies built at AI Director time.
+    """
+    mvx = getattr(edit_plan, "multivariant_execution", None)
+    if not isinstance(mvx, dict) or not mvx:
+        report["skipped"].append("multivariant_execution:no_result")
+        return
+
+    execution_enabled = mvx.get("execution_enabled", False)
+    executed_ids = mvx.get("executed_plan_ids") or []
+    blocked_ids = mvx.get("blocked_plan_ids") or []
+    executions = mvx.get("executions") or []
+
+    if not execution_enabled:
+        report["skipped"].append(
+            f"multivariant_execution:disabled_phase29"
+            f"(plans={len(executions)},blocked={len(blocked_ids)})"
+        )
+        logger.debug("multivariant_execution_reported disabled plans=%d", len(executions))
+        return
+
+    for exec_entry in executions:
+        if not isinstance(exec_entry, dict):
+            continue
+        exec_id = str(exec_entry.get("execution_id") or "")
+        plan_id = str(exec_entry.get("plan_id") or "")
+        enabled = exec_entry.get("enabled", False)
+        safe = exec_entry.get("safe", False)
+        overrides = exec_entry.get("payload_overrides") or {}
+        overrides_str = ",".join(f"{k}={v}" for k, v in list(overrides.items())[:3])
+
+        if enabled and safe and plan_id in executed_ids:
+            report["applied"].append(
+                f"multivariant_exec:executed({exec_id},{plan_id}:[{overrides_str}])"
+            )
+            logger.info(
+                "ai_multivariant_execution_created execution_id=%s plan_id=%s",
+                exec_id, plan_id,
+            )
+        else:
+            reason = exec_entry.get("warnings") or ["blocked"]
+            report["skipped"].append(
+                f"multivariant_exec:blocked({exec_id},{plan_id}:{reason[0] if reason else 'unknown'})"
+            )
+            logger.info("ai_multivariant_execution_blocked execution_id=%s", exec_id)
+
+    logger.debug(
+        "multivariant_execution_reported executed=%d blocked=%d",
+        len(executed_ids), len(blocked_ids),
     )
 
 
