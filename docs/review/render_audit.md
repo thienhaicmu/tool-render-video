@@ -6,6 +6,59 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 19: Retention-driven Timing Mutation Foundation
+
+**Implemented:**
+
+- `app/ai/timing/__init__.py` (new) — package marker
+- `app/ai/timing/timing_schema.py` (new) — `TimingMutationCandidate` dataclass (start, end, action, confidence, reason, risk_category, max_trim_seconds clamped [0, 1.5], safe_to_apply, warnings); `TimingMutationPlan` dataclass (available, mode, candidates capped at 10, estimated_retention_gain, warnings); `VALID_ACTIONS` = {tighten_setup, trim_silence, shorten_outro, hold_hook, no_change, none}; `_MAX_TRIM_SECONDS = 1.5`, `_MIN_CONFIDENCE = 0.70`, `_MIN_REGION_DURATION = 3.0`, `_MAX_CANDIDATES = 10`; no Pydantic, no heavy deps
+- `app/ai/timing/timing_safety.py` (new) — `clamp_trim_seconds(value, max_value=1.5) -> float`; `is_candidate_safe(candidate, context=None) -> bool`; gates: confidence ≥ 0.70, action not in {no_change, none, hold_hook}, region duration ≥ 3.0 s, start ≥ 0, max_trim_seconds ≤ 1.5; never raises
+- `app/ai/timing/timing_analyzer.py` (new) — `analyze_timing_candidates(retention_context, story_context, pacing_context, transcript_chunks) -> list[TimingMutationCandidate]`; risk-to-action map: long_setup→tighten_setup, silence_gap→trim_silence, pacing_decay (last 25%)→shorten_outro, weak_hook→hold_hook (max_trim=0, advisory only), unclear_payoff→no_change (max_trim=0); confidence derived from severity + pacing energy boost; max_trim per category: long_setup=1.0, silence_gap=0.8, pacing_decay=1.5; never trim more than 25% of region; max 10 candidates; safe_to_apply always False from analyzer; never raises; emits `ai_timing_candidates_analyzed` at INFO
+- `app/ai/timing/timing_recommender.py` (new) — `build_timing_mutation_plan(..., enabled=False) -> TimingMutationPlan`; enabled=False → mode='advisory', all safe_to_apply=False; enabled=True → runs is_candidate_safe gate; estimated_retention_gain computed from safe candidates (confidence × trim_ratio × 0.05 cap); never raises; emits `ai_timing_mutation_plan_generated` at INFO
+- `app/models/schemas.py` — `ai_timing_mutation_enabled: bool = False` added after ai_beat_transition_enabled; backward-compatible default preserves existing behavior
+- `app/ai/director/edit_plan_schema.py` — `timing_mutation: dict = field(default_factory=dict)` added to `AIEditPlan`; `"timing_mutation": dict(self.timing_mutation)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_timing_mutation(plan, chunks, pacing_ctx, enabled, job_id)` added; called after Phase 18 in `_build_plan`; pulls retention/story context from plan; `_append_timing_mutation_explainability(plan, timing_plan)` appends: "Retention risk: setup pacing candidate identified" (tighten_setup), "Retention risk: silence gap trim candidate identified" (trim_silence), "Retention risk: outro pacing decay candidate identified" (shorten_outro), "Timing mutation plan advisory-only (no segments changed)" (advisory mode), "Timing mutation plan ready (N safe candidates, est. gain=X%)" (enabled mode); all helpers wrapped in try/except; never block render
+- `app/ai/director/render_influence.py` — `_report_timing_mutation(payload, edit_plan, report)` added; reports timing mutation as deferred in Phase 19; adds compact entry to `report["skipped"]` with mode/candidate/safe/gain counts; no segment start/end changed, no playback_speed changed, no FFmpeg commands altered; called inside `apply_ai_render_influence` try block
+- `tests/test_ai_phase19_timing_mutation.py` (new) — 63 tests covering schema defaults, to_dict(), valid actions, safety gates, analyzer heuristics, recommender modes, render influence defer, AI Director integration, and all safety boundaries
+
+**Verification:**
+
+- Phase 19 tests pass (63 tests)
+- Full suite passes (1212 tests, zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- `max_trim_seconds` hard cap: 1.5 s — no AI-proposed trim exceeds this
+- `hold_hook` in `_ADVISORY_ONLY_ACTIONS` — can never receive safe_to_apply=True
+- `no_change` and `none` in `_ADVISORY_ONLY_ACTIONS` — advisory-only actions always blocked
+- `confidence` gate: ≥ 0.70 — low-confidence candidates always blocked
+- `region duration` gate: ≥ 3.0 s — micro-regions always blocked
+- `start ≥ 0` gate — hook region start never trimmed below zero
+- `enabled=False` default — advisory-only mode; no segment timing changed until explicitly opted in
+- No segment start/end timing changes — timing mutation is metadata-only in Phase 19
+- No playback_speed changes
+- No FFmpeg command changes
+- No subtitle timing changes
+- Never blocks render — all Phase 19 code wrapped in try/except in AI Director
+- Deterministic heuristics only — no cloud AI, no API keys, no GPU
+
+**Architecture notes:**
+
+- Timing candidates are derived from retention risk regions (Phase 16) — no new audio analysis
+- `pacing_decay` rule only applies to the last 25% of content to prevent erroneous mid-video trim proposals
+- `hold_hook` produces advisory-only candidates with max_trim=0 — signals the hook needs strengthening, not cutting
+- `_report_timing_mutation` in render_influence records the plan as "deferred_phase19" — safe pass-through for future phases
+- Phase 19 runs after Phase 18 (beat visual execution) in the AI Director `_build_plan` sequence
+- estimated_retention_gain is bounded (confidence × trim_ratio × 0.05 per candidate, sum capped at 1.0)
+
+**Integrated systems:**
+
+- Retention Intelligence (Phase 16) — risk_regions drive all candidate generation
+- Story Intelligence (Phase 12) — story segments available for future region refinement
+- Pacing Intelligence (Phase 4) — energy_level and total_duration used for confidence boosts and last-quarter check
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
 ### 2026-05-08 — AI Productization Phase 18: Beat-synced Visual Execution Foundation
 
 **Implemented:**
