@@ -132,6 +132,8 @@ class AIEditPlan:
     beat_visual_execution: dict = field(default_factory=dict)
     # Phase 19 — retention-driven timing mutation (populated by timing_recommender module)
     timing_mutation: dict = field(default_factory=dict)
+    # Phase 20 — story-driven edit optimization (populated by story_recommender module)
+    story_optimization: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -193,4 +195,5 @@ class AIEditPlan:
             "subtitle_execution": dict(self.subtitle_execution),
             "beat_visual_execution": dict(self.beat_visual_execution),
             "timing_mutation": dict(self.timing_mutation),
+            "story_optimization": dict(self.story_optimization),
         }

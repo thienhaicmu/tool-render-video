@@ -89,6 +89,7 @@ def apply_ai_render_influence(
         _apply_memory_influence(payload, edit_plan, report)
         _report_beat_visual_execution(payload, edit_plan, report)
         _report_timing_mutation(payload, edit_plan, report)
+        _report_story_optimization(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -278,6 +279,41 @@ def _report_beat_visual_execution(payload: Any, edit_plan: Any, report: dict) ->
     logger.debug(
         "beat_visual_execution_deferred bpm=%s pulse_regions=%d transition_hints=%d",
         bpm, pulse_count, hint_count,
+    )
+
+
+# ── Story optimization — report-only in Phase 20 ─────────────────────────────
+
+def _report_story_optimization(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record story optimization metadata — deferred in Phase 20.
+
+    No segment ordering changed. No timing changed. No subtitle rewritten.
+    No FFmpeg commands altered.
+    """
+    so = getattr(edit_plan, "story_optimization", None)
+    if not isinstance(so, dict):
+        report["skipped"].append("story_optimization:no_plan")
+        return
+
+    if not so.get("available", False):
+        warns = so.get("warnings", [])
+        reason = warns[0] if warns else "unavailable"
+        report["skipped"].append(f"story_optimization:deferred({reason})")
+        return
+
+    flow_type = so.get("flow_type", "unknown")
+    score = so.get("narrative_score", 0.0)
+    issue_count = len(so.get("issues", []))
+    rec_count = len(so.get("recommendations", []))
+
+    report["skipped"].append(
+        f"story_optimization:deferred_phase20("
+        f"flow={flow_type!r},score={score:.1f},"
+        f"issues={issue_count},recommendations={rec_count})"
+    )
+    logger.debug(
+        "story_optimization_deferred flow=%s score=%.1f issues=%d recommendations=%d",
+        flow_type, score, issue_count, rec_count,
     )
 
 

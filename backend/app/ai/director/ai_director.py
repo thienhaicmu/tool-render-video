@@ -235,6 +235,13 @@ def _build_plan(
         plan.warnings.append(f"timing_mutation_error:{type(exc).__name__}")
         logger.debug("ai_director_timing_mutation_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 20: Story-driven Edit Optimization ---
+    try:
+        _attach_story_optimization(plan, chunks, pacing_ctx, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"story_optimization_error:{type(exc).__name__}")
+        logger.debug("ai_director_story_optimization_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -1148,6 +1155,104 @@ def _append_beat_visual_explainability(plan: "AIEditPlan", visual_plan: Any) -> 
         line = "Visual beat execution remains metadata-only"
         if not any("metadata-only" in str(l) for l in lines):
             lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 20 — Story-driven Edit Optimization attachment
+# ---------------------------------------------------------------------------
+
+def _attach_story_optimization(
+    plan: "AIEditPlan",
+    chunks: list[dict],
+    pacing_ctx: dict,
+    job_id: str,
+) -> None:
+    """Build story optimization plan and attach compact summary to plan. Never raises."""
+    try:
+        from app.ai.story_optimization.story_recommender import build_story_optimization_plan
+
+        story_ctx = dict(plan.story) if isinstance(plan.story, dict) else {}
+        retention_ctx = dict(plan.retention) if isinstance(plan.retention, dict) else {}
+
+        opt_plan = build_story_optimization_plan(
+            story_context=story_ctx,
+            retention_context=retention_ctx,
+            pacing_context=pacing_ctx,
+            transcript_chunks=chunks,
+        )
+
+        plan.story_optimization = opt_plan.to_dict()
+
+        logger.info(
+            "ai_story_optimization_generated job_id=%s available=%s flow=%s "
+            "score=%.1f issues=%d recommendations=%d",
+            job_id,
+            opt_plan.available,
+            opt_plan.flow_type,
+            opt_plan.narrative_score,
+            len(opt_plan.issues),
+            len(opt_plan.recommendations),
+        )
+
+        _append_story_optimization_explainability(plan, opt_plan)
+
+    except Exception as exc:
+        plan.story_optimization = {
+            "available": False,
+            "warnings": [f"story_optimization_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_story_optimization_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_story_optimization_explainability(plan: "AIEditPlan", opt_plan: Any) -> None:
+    """Append compact story optimization insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not getattr(opt_plan, "available", False):
+            return
+
+        flow_type = getattr(opt_plan, "flow_type", "unknown")
+        issues = getattr(opt_plan, "issues", [])
+        issue_types = {getattr(i, "issue_type", "") for i in issues}
+
+        # Positive flow line
+        if flow_type == "hook_to_climax":
+            line = "Strong hook-to-climax flow detected"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        # Issue-driven lines
+        if "long_setup" in issue_types or "weak_build_up" in issue_types:
+            line = "Story arc can be tightened"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if "weak_payoff" in issue_types or "abrupt_outro" in issue_types:
+            line = "Payoff clarity may improve retention"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if "weak_hook" in issue_types:
+            line = "Opening hook may need strengthening"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if "unclear_arc" in issue_types or "missing_climax" in issue_types:
+            line = "Narrative arc needs clearer structure"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
 
     except Exception:
         pass
