@@ -41,6 +41,7 @@ desktop-shell/out/
 desktop-shell/.electron-builder/
 desktop-shell/.cache/
 desktop-shell/backend-bin/
+desktop-shell/*
 dist
 build
 # ================================================

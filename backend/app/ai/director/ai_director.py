@@ -242,6 +242,13 @@ def _build_plan(
         plan.warnings.append(f"story_optimization_error:{type(exc).__name__}")
         logger.debug("ai_director_story_optimization_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 23: Creator Style Adaptation ---
+    try:
+        _attach_creator_style_adaptation(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_style_adaptation_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_style_adaptation_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 21: Safe Autonomous Variant Rendering ---
     try:
         variant_enabled = bool(getattr(request, "ai_variant_planning_enabled", False))
@@ -1254,6 +1261,117 @@ def _append_variant_selection_explainability(plan: "AIEditPlan", selection: dict
 
         if not any(line in str(l) for l in lines):
             lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 23 — Creator Style Adaptation attachment
+# ---------------------------------------------------------------------------
+
+def _attach_creator_style_adaptation(plan: "AIEditPlan", job_id: str) -> None:
+    """Detect Phase 23 creator style and build advisory adaptation hints.
+
+    Runs after Phase 14 (creator_style) and Phase 16/20 (retention/story)
+    so all prior metadata is available. Result stored in plan.creator_style_adaptation.
+    Never raises. Never mutates render payload. Advisory metadata only.
+    """
+    try:
+        from app.ai.styles.style_classifier import detect_creator_styles
+        from app.ai.styles.style_adapter import build_style_adaptation
+
+        style_set = detect_creator_styles(edit_plan=plan, context={"job_id": job_id})
+
+        # Build adaptation for primary style
+        primary_profile = style_set.styles[0] if style_set.styles else None
+        adaptation_result: dict = {}
+        if primary_profile is not None:
+            adaptation_result = build_style_adaptation(
+                primary_profile, edit_plan=plan, context={"job_id": job_id}
+            )
+
+        plan.creator_style_adaptation = {
+            "detected": style_set.detected,
+            "primary_style": style_set.primary_style,
+            "confidence": round(float(primary_profile.confidence if primary_profile else 0.0), 4),
+            "adaptation": adaptation_result.get("adaptation", {}),
+            "fallback_used": style_set.fallback_used,
+            "warnings": list(style_set.warnings),
+        }
+
+        logger.info(
+            "ai_creator_style_detected job_id=%s primary=%s confidence=%.4f fallback=%s styles=%d",
+            job_id,
+            style_set.primary_style,
+            plan.creator_style_adaptation["confidence"],
+            style_set.fallback_used,
+            len(style_set.styles),
+        )
+
+        if style_set.fallback_used:
+            logger.info("ai_creator_style_fallback job_id=%s reason=low_confidence_or_unknown", job_id)
+
+        _append_creator_style_adaptation_explainability(plan, style_set, adaptation_result)
+
+    except Exception as exc:
+        plan.creator_style_adaptation = {
+            "detected": False,
+            "primary_style": "safe_generic",
+            "confidence": 0.0,
+            "adaptation": {},
+            "fallback_used": True,
+            "warnings": [f"creator_style_adaptation_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_style_adaptation_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_creator_style_adaptation_explainability(
+    plan: "AIEditPlan",
+    style_set: Any,
+    adaptation_result: dict,
+) -> None:
+    """Append compact creator-style adaptation lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        primary = style_set.primary_style
+        fallback = style_set.fallback_used
+        adaptation = adaptation_result.get("adaptation", {})
+
+        if fallback:
+            line = "Creator style: safe generic fallback used"
+        else:
+            _STYLE_LABELS: dict[str, str] = {
+                "viral_tiktok": "viral TikTok",
+                "cinematic": "cinematic",
+                "educational": "educational",
+                "podcast": "podcast",
+                "product_demo": "product demo",
+                "storytelling": "storytelling",
+                "commentary": "commentary",
+                "interview": "interview",
+            }
+            label = _STYLE_LABELS.get(primary, primary)
+            line = f"Creator style classified as {label}"
+
+        if not any("Creator style" in str(l) for l in lines):
+            lines.append(line)
+
+        # Pacing hint line
+        pacing_hint = adaptation.get("pacing_hint", "")
+        if pacing_hint and pacing_hint not in ("default", ""):
+            hint_line = f"{pacing_hint.replace('_', ' ').title()} pacing adaptation suggested"
+            if not any("pacing adaptation" in str(l) for l in lines):
+                lines.append(hint_line)
 
     except Exception:
         pass

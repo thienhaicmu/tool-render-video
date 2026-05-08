@@ -1,7 +1,8 @@
 """
-variant_selector.py — Deterministic AI best variant selector. Phase 22.
+variant_selector.py — Deterministic AI best variant selector. Phase 22 + 23.
 
 Analyzes generated variants and selects the best advisory candidate.
+Phase 23 adds creator-style-fit bonus to ranking (advisory only).
 Never raises. Never renders. Never mutates payload. Advisory-only.
 """
 from __future__ import annotations
@@ -94,7 +95,10 @@ def _select(
         except Exception:
             scored.append((v, {"score": 0.0, "expected_gain": 0.0, "reasons": [], "warnings": []}))
 
-    # Sort: highest score first; tiebreak by purpose priority; tiebreak by risk priority
+    # Phase 23: apply creator-style-fit bonus to sort key (score dict unchanged)
+    style_bonuses: dict[str, float] = _compute_style_bonuses(scored, edit_plan)
+
+    # Sort: highest (score + style_bonus) first; tiebreak by purpose priority; risk priority
     def _sort_key(item: tuple[AIVariantPlan, dict]) -> tuple:
         v, r = item
         purpose_rank = next(
@@ -102,7 +106,8 @@ def _select(
             len(_PURPOSE_PRIORITY),
         )
         risk_rank = _RISK_PRIORITY.get(str(v.risk), 2)
-        return (-r["score"], purpose_rank, risk_rank)
+        bonus = style_bonuses.get(str(v.variant_id), 0.0)
+        return (-(r["score"] + bonus), purpose_rank, risk_rank)
 
     scored.sort(key=_sort_key)
 
@@ -184,6 +189,44 @@ def _select(
         "rejected_variants": _build_rejected(scored, selected_v.variant_id),
         "fallback_used": fallback_used,
     }
+
+
+def _compute_style_bonuses(
+    scored: list[tuple[AIVariantPlan, dict]],
+    edit_plan: Any,
+) -> dict[str, float]:
+    """Phase 23 — Compute style-fit bonus per variant for sort-key use.
+
+    Bonus is added to the sort key only; original score dict is unchanged.
+    Max bonus ±8 points — small enough not to override safety gates.
+    Never raises.
+    """
+    try:
+        csa = getattr(edit_plan, "creator_style_adaptation", None)
+        if not isinstance(csa, dict) or not csa.get("detected"):
+            return {}
+
+        primary_style = str(csa.get("primary_style") or "")
+        style_confidence = float(csa.get("confidence") or 0.0)
+        if not primary_style or style_confidence < 0.20:
+            return {}
+
+        from app.ai.styles.style_scoring import score_style_fit
+
+        bonuses: dict[str, float] = {}
+        style_profile = {"style_id": primary_style, "confidence": style_confidence}
+        for v, _ in scored:
+            try:
+                fit = score_style_fit(style_profile, variant=v, edit_plan=edit_plan)
+                # Center around 60 (neutral) — +8 for perfect fit, −8 for poor fit
+                raw = float(fit.get("style_fit_score", 60.0))
+                bonus = round((raw - 60.0) / 100.0 * 16.0, 3)  # −8 to +8
+                bonuses[str(v.variant_id)] = bonus
+            except Exception:
+                bonuses[str(v.variant_id)] = 0.0
+        return bonuses
+    except Exception:
+        return {}
 
 
 def _build_reasons(

@@ -138,6 +138,8 @@ class AIEditPlan:
     variants: dict = field(default_factory=dict)
     # Phase 22 — AI best variant selection (populated by variant_selector module)
     variant_selection: dict = field(default_factory=dict)
+    # Phase 23 — Creator style adaptation (populated by style_classifier/style_adapter modules)
+    creator_style_adaptation: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -202,4 +204,5 @@ class AIEditPlan:
             "story_optimization": dict(self.story_optimization),
             "variants": dict(self.variants),
             "variant_selection": dict(self.variant_selection),
+            "creator_style_adaptation": dict(self.creator_style_adaptation),
         }

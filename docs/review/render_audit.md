@@ -6,6 +6,93 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 23: Creator Style Adaptation Foundation
+
+**Implemented:**
+
+- `app/ai/styles/style_schema.py` (updated, Phase 23 additions) — `DetectedStyleProfile` dataclass added (style_id, label, confidence, pacing_style, subtitle_style, camera_style, energy_level, hook_density, explanation, warnings; `to_dict()` coerces invalid style_id to `safe_generic`); `CreatorStyleSet` dataclass added (detected, primary_style, styles, fallback_used, warnings; `to_dict()` caps styles at 5); `VALID_P23_STYLES` frozenset added ({viral_tiktok, cinematic, educational, podcast, product_demo, storytelling, commentary, interview, safe_generic}); Phase 14 classes unchanged (backward compatible)
+- `app/ai/styles/style_classifier.py` (updated, Phase 23 additions) — `detect_creator_styles(edit_plan, context) -> CreatorStyleSet` added; reads Phase 14 `creator_style.dominant_style` and maps to Phase 23 ID via `_P14_TO_P23` dict; derives secondary style candidates from pacing/retention/story metadata; `safe_generic` fallback when p14 dominant=unknown or confidence<20; emits `ai_creator_style_detected` at INFO, `ai_creator_style_fallback` when fallback; deterministic; never raises; Phase 14 `classify_creator_style()` unchanged
+- `app/ai/styles/style_adapter.py` (new) — `build_style_adaptation(style_profile, edit_plan, context) -> dict`; maps Phase 23 style_id to advisory hint dict ({subtitle_density, subtitle_style, pacing_hint, camera_hint, hook_density_hint, visual_rhythm_hint, preset_hint}); safety gate strips any key not in `_SAFE_HINT_KEYS` and any key in `_FORBIDDEN_HINT_KEYS`; context-aware adjustments: low retention score raises hook_density from low→medium; compact subtitle execution lowers subtitle_density from high→medium; emits `ai_creator_style_adaptation_applied` at INFO; deterministic; never raises; never mutates payload
+- `app/ai/styles/style_scoring.py` (new) — `score_style_fit(style_profile, variant, edit_plan) -> dict`; returns {style_fit_score 0-100, confidence 0-1, reasons, warnings}; per-style × per-purpose fit score table (`_STYLE_PURPOSE_FIT`); low confidence (<0.30) dampens score toward neutral 60; safe_generic always returns stable 58-65 range; deterministic; never raises; no ML models; no external APIs
+- `app/ai/variants/variant_selector.py` (updated, Phase 23 additions) — `_compute_style_bonuses(scored, edit_plan) -> dict` added; reads `edit_plan.creator_style_adaptation` (detected + confidence ≥ 0.20); calls `score_style_fit()` for each variant; applies bonus = (fit_score − 60) / 100 × 16 (range −8 to +8) to sort key only; original score dict unchanged (confidence math unaffected); `_sort_key` updated to include bonus; never raises; all prior Phase 22 logic preserved
+- `app/ai/director/edit_plan_schema.py` (updated) — `creator_style_adaptation: dict = field(default_factory=dict)` added to `AIEditPlan`; `"creator_style_adaptation": dict(self.creator_style_adaptation)` in `to_dict()`; backward-compatible; Phase 14 `creator_style` field unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_creator_style_adaptation(plan, job_id)` added; runs between Phase 20 and Phase 21 so style adaptation is available when variant selector executes; calls `detect_creator_styles(plan)` + `build_style_adaptation(primary_profile, plan)`; stores compact {detected, primary_style, confidence, adaptation, fallback_used, warnings}; `_append_creator_style_adaptation_explainability(plan, style_set, adaptation_result)` appends: "Creator style classified as viral TikTok", "Fast pacing adaptation suggested", "Creator style: safe generic fallback used", etc.; wrapped in try/except; never blocks render; Phase 14 `_attach_creator_style()` call preserved
+- `tests/test_ai_phase23_creator_style.py` (new) — comprehensive test suite covering style schema, detect_creator_styles, build_style_adaptation, score_style_fit, AIEditPlan field, AI Director integration, variant selector style-fit bonus, and all safety boundaries
+
+**Supported Phase 23 style IDs:**
+
+| ID | Label | Pacing | Subtitle | Camera | Hook Density |
+|----|-------|--------|----------|--------|--------------|
+| `viral_tiktok` | Viral TikTok | fast | punch | fast_follow | high |
+| `cinematic` | Cinematic | slow_build | minimal | slow_reveal | low |
+| `educational` | Educational | medium | bold | static | medium |
+| `podcast` | Podcast | medium | clean | static | low |
+| `product_demo` | Product Demo | medium | overlay | static | medium |
+| `storytelling` | Storytelling | slow_build | minimal | pan | medium |
+| `commentary` | Commentary | fast | bold | reaction | high |
+| `interview` | Interview | slow | clean | static | low |
+| `safe_generic` | Generic | default | default | auto | medium |
+
+**Phase 14 → Phase 23 mapping:**
+
+| Phase 14 | Phase 23 |
+|----------|----------|
+| podcast_viral | viral_tiktok |
+| high_energy_reaction | commentary |
+| storytelling_cinematic | cinematic |
+| documentary_clean | podcast |
+| educational_focus | educational |
+| anime_edit | viral_tiktok |
+| gameplay_highlight | commentary |
+| motivation_short | viral_tiktok |
+| interview_clip | interview |
+| calm_minimal | safe_generic |
+
+**Verification:**
+
+- Phase 23 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- Adaptation output contains only advisory hint keys (subtitle_density, pacing_hint, camera_hint, etc.)
+- `_FORBIDDEN_HINT_KEYS` (playback_speed, segment_start, segment_end, subtitle_timing, ffmpeg_args, codec, crf, bitrate, output_path, validation_rules) always stripped
+- No FFmpeg commands altered
+- No payload mutation — style detection and adaptation read edit_plan, never write render payload
+- No subtitle timing rewrite
+- No segment reorder
+- No playback_speed mutation
+- Style-fit bonus applied to sort key only — base scores unchanged, confidence gate unaffected
+- Never blocks render — all Phase 23 code wrapped in try/except in AI Director
+- Deterministic — same edit_plan always produces same style detection result
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- Autonomous rendering based on detected style
+- Creator-style auto-editing (FFmpeg filter chains)
+- playback_speed mutation
+- subtitle timing rewrite
+- segment reorder
+- payload mutation
+- automatic export selection
+
+**Architecture notes:**
+
+- Phase 23 runs after Phase 20 (story optimization) and before Phase 21 (variant planning) so the style adaptation is available when the variant selector executes in Phase 22
+- Phase 14 `creator_style` dict (dominant_style, confidence, etc.) preserved untouched; Phase 23 adds `creator_style_adaptation` as a separate field
+- Style-fit bonus in variant selector: max ±8 pts on sort key — cannot override safety gates or high-risk penalties
+- `safe_generic` always available as stable fallback with neutral score range (58-65)
+
+**Integrated systems:**
+
+- Creator Style Classification (Phase 14) — dominant_style mapped to Phase 23 ID
+- Retention Intelligence (Phase 16) — low retention score raises hook_density hint
+- Story Optimization (Phase 20) — narrative flow feeds secondary style signal
+- Variant Selector (Phase 22) — style-fit bonus applied per variant
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
 ### 2026-05-08 — AI Productization Phase 22: AI Best Variant Selector Foundation
 
 **Implemented:**
