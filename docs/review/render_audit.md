@@ -6,6 +6,92 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 17: Dynamic Subtitle Execution Foundation
+
+**Implemented:**
+
+- `app/ai/subtitles/__init__.py` (new) — package marker
+- `app/ai/subtitles/subtitle_execution_schema.py` (new) — `SubtitleExecutionHint` dataclass (emphasis_strength, density_mode, emotion_style, beat_sync_strength, keyword_focus, warnings); `SubtitleExecutionRegion` dataclass (start, end, style, emphasis, emotion, beat_strength, metadata); `SubtitleExecutionPlan` dataclass (available, regions capped at 20, global_hint, warnings); `VALID_DENSITY_MODES` = {compact, normal, expressive}; `VALID_EMOTION_STYLES` = {neutral, hype, dramatic, calm, emotional, punch}; all have `to_dict()` methods; no Pydantic, no heavy deps
+- `app/ai/subtitles/subtitle_emphasis.py` (new) — `build_subtitle_emphasis(transcript_chunks, pacing_context, emotion_context, retention_context) -> dict`; deterministic only; never raises; `_detect_hook_strength()` scores hook keyword density in early chunks (ratios → 0.85/0.6/0.3/0.1); `_extract_keyword_focus()` extracts keyword_focus list from early chunks; emotion contribution: urgency/excitement/surprise/hype → +0.3–0.5; energy_level > 0.7 → +0.25 emphasis +0.3 beat_sync; beat_available + bpm ≥ 120 → +0.2–0.4 beat_sync; weak_hook retention risk → +0.1 emphasis; all values clamped [0, 1]; emits `ai_subtitle_emphasis_generated` at INFO
+- `app/ai/subtitles/subtitle_density.py` (new) — `analyze_subtitle_density(transcript_chunks, pacing_context, story_context) -> dict`; deterministic only; never raises; overload detection: avg_words > 6.0 or max_words > 12 → compact + overload_detected; pacing fast/dynamic → compact; slow_build/slow → expressive; avg_words < 3.0 → expressive; story arc curiosity_build/tension_release/front_loaded → compact; emits `ai_subtitle_density_detected` at INFO
+- `app/ai/subtitles/subtitle_emotion.py` (new) — `detect_subtitle_emotion_style(emotion_context, story_context, creator_style_context) -> dict`; deterministic only; never raises; maps emotion → style via `_EMOTION_STYLE_MAP`; maps pacing_style → style via `_PACING_STYLE_MAP`; maps dominant_arc → style via `_ARC_STYLE_MAP`; maps creator_style → style via `_CREATOR_STYLE_MAP`; confidence = top_score × 0.8 + gap × 0.4, clamped [0, 1]; supported mappings: hype/fast pacing → punch/hype; cinematic/tension arc → dramatic; calm/slow → calm; emotional arc → emotional
+- `app/ai/subtitles/subtitle_execution.py` (new) — `build_subtitle_execution_plan(...) -> SubtitleExecutionPlan`; orchestrates emphasis + density + emotion; builds temporal regions from transcript chunks (max 20); chunk score > 0.7 → hook style + +0.15 emphasis; story hook/climax segment bounds → style annotation; all region emphasis and beat_strength values clamped [0, 1]; never raises; emits `ai_subtitle_execution_generated` at INFO
+- `app/ai/director/edit_plan_schema.py` — `subtitle_execution: dict = field(default_factory=dict)` added to `AIEditPlan`; `"subtitle_execution": dict(self.subtitle_execution)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_subtitle_execution(plan, chunks, pacing_ctx, job_id)` added; called after Phase 16 in `_build_plan`; builds execution plan from story/retention/creator_style context; stores `execution_plan.to_dict()` on `plan.subtitle_execution`; `_append_subtitle_execution_explainability(plan, execution_plan)` appends: "Dynamic subtitle emphasis enabled" (emphasis > 0.3), "Emotion-aware subtitle execution detected" (non-neutral emotion), "Compact subtitle density recommended" (density == compact), "Beat-aware subtitle emphasis enabled" (beat_sync > 0.3); both helpers never raise; wrapped in try/except
+- `app/services/subtitle_engine.py` — `apply_subtitle_execution_hints(blocks, subtitle_execution) -> dict` added; safely reads global_hint fields (emphasis_strength, emotion_style, density_mode, keyword_focus); validates and clamps all values; returns `{applied: True, ...}` on success, `{applied: False, ...}` on missing/unavailable metadata; never mutates subtitle blocks timing or text; never raises; emits `subtitle_execution_hints_applied` at INFO
+- `tests/test_ai_phase17_dynamic_subtitles.py` (new) — 78+ tests covering all schema, emphasis, density, emotion, execution planner, AIEditPlan field, subtitle engine hints, AI Director integration, and safety boundary requirements
+
+**Verification:**
+
+- Phase 17 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- No transcript text mutation in any code path
+- No subtitle timing mutation — start/end never altered
+- No SRT segmentation rewrite
+- No playback_speed mutation
+- No FFmpeg command changes
+- No autonomous subtitle rewriting
+- All emphasis/beat_sync values structurally clamped to [0.0, 1.0]
+- Density mode validated against frozenset before use
+- Emotion style validated against frozenset before use
+- Max 20 execution regions — no unbounded output
+- Never blocks render pipeline — all subtitle execution errors are caught and recorded as warnings
+- Deterministic heuristics only — no cloud AI, no API keys, no external inference, no GPU
+- `apply_subtitle_execution_hints` is read-only — returns hints dict, never mutates blocks
+
+**Architecture notes:**
+
+- Subtitle execution intelligence is metadata-first: the plan is built and stored in `result_json["subtitle_execution"]` but does not yet alter ASS generation architecture, karaoke timing, or FFmpeg commands
+- `build_subtitle_execution_plan` combines emphasis + density + emotion sub-systems into a single plan object
+- All three sub-systems (emphasis, density, emotion) are independently callable and fallback-safe
+- Regions are built from transcript chunk boundaries — no new timing introduced
+- `apply_subtitle_execution_hints` in subtitle_engine.py is a safe read interface for downstream render steps
+- Phase 17 runs after Phase 16 (retention intelligence) in the AI Director `_build_plan` sequence
+
+**Integrated systems:**
+
+- Story Intelligence (Phase 12) — story segments used for region style annotation (hook/climax)
+- Retention Intelligence (Phase 16) — risk_regions used for emphasis boost on hook risk
+- Creator Style Intelligence (Phase 14) — dominant_style used for emotion style hint
+- Beat/Pacing Intelligence (Phase 4) — energy_level, bpm, beat_available drive emphasis and beat_sync
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
+**What Dynamic Subtitle Execution can do now:**
+
+- Detect hook keyword density and translate to emphasis strength
+- Map pacing/emotion/story signals to subtitle emotion styles (neutral/hype/dramatic/calm/emotional/punch)
+- Detect overloaded subtitle density regions and recommend compact/expressive modes
+- Build temporal execution regions (max 20) with per-region style, emphasis, and beat_strength hints
+- Annotate hook and climax regions from story intelligence
+- Boost emphasis when retention hook risk is detected
+- Expose compact `"subtitle_execution"` key in render result_json with global_hint + regions
+- Append advisory explainability lines to AI summary
+
+**Not yet implemented:**
+
+- Subtitle timing mutation
+- Autonomous subtitle rewriting
+- Adaptive subtitle segmentation
+- Beat-synced karaoke timing mutation
+- AI-generated subtitle text
+- Adaptive ASS style switching from execution hints
+
+**Known limitations:**
+
+- Metadata-first execution — execution plan is advisory; does not yet alter ASS generation, karaoke logic, or FFmpeg subtitle burn
+- Bounded subtitle influence only — no timing, no text, no segmentation changes
+- No transcript rewriting — subtitle text is read-only throughout
+- No autonomous subtitle generation — all subtitle content originates from Whisper transcription
+- Emphasis hints are informational — not yet wired to per-block ASS style overrides
+
+> Phase 17 extends the AI system from retention intelligence toward dynamic subtitle execution planning, enabling emotion-aware, beat-aware, and density-aware subtitle metadata while preserving complete subtitle timing stability and render safety.
+
+---
+
 ### 2026-05-08 — AI Productization Phase 16: Retention Intelligence Foundation
 
 **Implemented:**
