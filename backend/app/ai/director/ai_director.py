@@ -17,6 +17,8 @@ from typing import Any, Optional
 from app.ai.director.edit_plan_schema import (
     AIClipPlan, AISubtitlePlan, AICameraPlan, AIPacingPlan, AIEditPlan,
 )
+from app.ai.director.camera_planner import plan_camera_behavior
+from app.ai.director.subtitle_planner import plan_subtitle_behavior
 from app.ai.config.ai_modes import get_mode_config
 from app.ai.analyzers.transcript_analyzer import normalize_transcript_chunks
 from app.ai.director.clip_selector import select_ai_segments
@@ -134,22 +136,28 @@ def _build_plan(
         fallback_used = True
         warnings.append("no_segments_selected")
 
-    # --- Subtitle plan ---
-    subtitle_plan = AISubtitlePlan(
-        tone=mode_config.get("subtitle_tone", "default"),
-        highlight_keywords=(mode == "viral_tiktok"),
-        max_words_per_line=None,
-    )
-
-    # --- Camera plan ---
-    camera_plan = AICameraPlan(
-        mode="auto",
-        behavior=mode_config.get("camera_behavior", "none"),
-        subtitle_safe=True,
-    )
-
-    # --- Phase 4: Pacing plan ---
+    # --- Phase 4: Pacing plan (needed by Phase 5 planners) ---
     pacing_plan = _build_pacing_plan(chunks, context, mode_config, warnings)
+
+    # --- Phase 5: Camera + Subtitle planning ---
+    pacing_ctx = {
+        "pacing_style": pacing_plan.pacing_style,
+        "energy_level": pacing_plan.energy_level,
+        "emotion": pacing_plan.emotion,
+        "emotion_score": pacing_plan.emotion_score,
+        "beat_available": pacing_plan.beat_available,
+        "bpm": pacing_plan.bpm,
+    }
+    transcript_ctx = {
+        "text": " ".join(c.get("text", "") for c in chunks[:10]),
+        "chunk_count": len(chunks),
+    }
+    # Inject mode name so planners can apply mode-specific rules.
+    mode_config_with_name = dict(mode_config)
+    mode_config_with_name["mode_name"] = mode
+
+    camera_plan = _safe_camera_plan(mode_config_with_name, pacing_ctx, memory_ctx, transcript_ctx, warnings)
+    subtitle_plan = _safe_subtitle_plan(mode_config_with_name, pacing_ctx, memory_ctx, transcript_ctx, warnings)
 
     return AIEditPlan(
         enabled=True,
@@ -230,6 +238,55 @@ def _build_pacing_plan(
         suggested_cut_style=suggested_cut_style,
         warnings=pacing_warnings,
     )
+
+
+def _safe_camera_plan(
+    mode_config: dict,
+    pacing_ctx: dict,
+    memory_ctx: dict,
+    transcript_ctx: dict,
+    warnings: list[str],
+) -> AICameraPlan:
+    """Call camera_planner with a fallback to a bare AICameraPlan on failure."""
+    try:
+        return plan_camera_behavior(
+            mode_config,
+            pacing_context=pacing_ctx,
+            memory_context=memory_ctx,
+            transcript_context=transcript_ctx,
+        )
+    except Exception as exc:
+        warnings.append(f"camera_planner_error:{type(exc).__name__}")
+        logger.debug("ai_director_camera_planner_failed: %s", exc)
+        return AICameraPlan(
+            mode="auto",
+            behavior=str(mode_config.get("camera_behavior") or "none"),
+            subtitle_safe=True,
+        )
+
+
+def _safe_subtitle_plan(
+    mode_config: dict,
+    pacing_ctx: dict,
+    memory_ctx: dict,
+    transcript_ctx: dict,
+    warnings: list[str],
+) -> AISubtitlePlan:
+    """Call subtitle_planner with a fallback to a bare AISubtitlePlan on failure."""
+    try:
+        return plan_subtitle_behavior(
+            mode_config,
+            pacing_context=pacing_ctx,
+            memory_context=memory_ctx,
+            transcript_context=transcript_ctx,
+        )
+    except Exception as exc:
+        warnings.append(f"subtitle_planner_error:{type(exc).__name__}")
+        logger.debug("ai_director_subtitle_planner_failed: %s", exc)
+        return AISubtitlePlan(
+            tone=str(mode_config.get("subtitle_tone") or "default"),
+            highlight_keywords=False,
+        )
 
 
 def _resolve_audio_path(context: dict) -> Optional[str]:

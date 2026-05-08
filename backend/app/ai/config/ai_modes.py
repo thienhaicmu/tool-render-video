@@ -1,9 +1,9 @@
 """
 ai_modes.py — Local AI mode configuration registry.
 
-Each mode defines scoring weights, style preferences, and pacing hints
-for the AI Director. All modes are offline-only — no cloud API calls,
-no mandatory ML libraries.
+Each mode defines scoring weights, style preferences, pacing hints,
+and camera/subtitle defaults for the AI Director.
+All modes are offline-only — no cloud API calls, no mandatory ML libraries.
 """
 from __future__ import annotations
 
@@ -21,6 +21,10 @@ _AI_MODES: dict[str, dict] = {
         "pacing_style": "fast",
         "prefer_beat_sync": True,
         "emotion_bias": "curiosity",
+        # Phase 5 — camera/subtitle defaults
+        "subtitle_emphasis_style": "punch",
+        "subtitle_density": "compact",
+        "camera_zoom_strength": 1.12,
     },
     "podcast_shorts": {
         "preferred_duration_min": 45,
@@ -35,6 +39,10 @@ _AI_MODES: dict[str, dict] = {
         "pacing_style": "medium",
         "prefer_beat_sync": False,
         "emotion_bias": "clarity",
+        # Phase 5 — camera/subtitle defaults
+        "subtitle_emphasis_style": "keyword",
+        "subtitle_density": "normal",
+        "camera_zoom_strength": 1.05,
     },
     "storytelling": {
         "preferred_duration_min": 60,
@@ -49,6 +57,10 @@ _AI_MODES: dict[str, dict] = {
         "pacing_style": "slow_build",
         "prefer_beat_sync": False,
         "emotion_bias": "curiosity",
+        # Phase 5 — camera/subtitle defaults
+        "subtitle_emphasis_style": "soft",
+        "subtitle_density": "normal",
+        "camera_zoom_strength": 1.05,
     },
     "clean_subtitle": {
         "preferred_duration_min": 30,
@@ -63,6 +75,10 @@ _AI_MODES: dict[str, dict] = {
         "pacing_style": "stable",
         "prefer_beat_sync": False,
         "emotion_bias": "neutral",
+        # Phase 5 — camera/subtitle defaults
+        "subtitle_emphasis_style": "none",
+        "subtitle_density": "comfortable",
+        "camera_zoom_strength": 1.0,
     },
 }
 

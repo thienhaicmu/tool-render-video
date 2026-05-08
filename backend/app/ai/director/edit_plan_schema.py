@@ -20,16 +20,29 @@ class AIClipPlan:
 
 @dataclass
 class AISubtitlePlan:
+    """Subtitle behavior planning. Phase 5 expands with emphasis/density/awareness fields."""
     tone: str = "default"
     highlight_keywords: bool = False
     max_words_per_line: Optional[int] = None
+    # Phase 5
+    emphasis_style: str = "none"
+    density: str = "normal"
+    beat_aware: bool = False
+    emotion_aware: bool = False
+    reason: str = ""
 
 
 @dataclass
 class AICameraPlan:
+    """Camera behavior planning. Phase 5 expands with zoom/follow/energy fields."""
     mode: str = "default"
     behavior: str = "none"
     subtitle_safe: bool = True
+    # Phase 5
+    zoom_strength: float = 1.0
+    follow_strength: float = 0.5
+    motion_energy: Optional[float] = None
+    reason: str = ""
 
 
 @dataclass
@@ -92,11 +105,20 @@ class AIEditPlan:
                 "tone": self.subtitle.tone,
                 "highlight_keywords": self.subtitle.highlight_keywords,
                 "max_words_per_line": self.subtitle.max_words_per_line,
+                "emphasis_style": self.subtitle.emphasis_style,
+                "density": self.subtitle.density,
+                "beat_aware": self.subtitle.beat_aware,
+                "emotion_aware": self.subtitle.emotion_aware,
+                "reason": self.subtitle.reason,
             },
             "camera": {
                 "mode": self.camera.mode,
                 "behavior": self.camera.behavior,
                 "subtitle_safe": self.camera.subtitle_safe,
+                "zoom_strength": self.camera.zoom_strength,
+                "follow_strength": self.camera.follow_strength,
+                "motion_energy": self.camera.motion_energy,
+                "reason": self.camera.reason,
             },
             "warnings": list(self.warnings),
             "fallback_used": self.fallback_used,
