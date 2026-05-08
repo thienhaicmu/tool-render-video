@@ -15603,3 +15603,222 @@ body.is-history-active #history_list {
 
 /* ── End P2-1 ─────────────────────────────────────────────────────────────── */
 
+/* ── AI Insights Panel — Phase 7 ──────────────────────────────────────────── */
+.aiInsightsPanel {
+  margin: 8px 0 0;
+  border: 1px solid #1b2e48;
+  border-radius: var(--radius);
+  background: rgba(10,18,36,0.65);
+  overflow: hidden;
+}
+.aiInHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 12px 6px;
+  border-bottom: 1px solid #1b2e48;
+}
+.aiInLabel {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #6b87aa;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.aiInLabel::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #6366f1;
+  border-radius: 50%;
+  flex: 0 0 6px;
+}
+.aiInConfBadge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #c7d6ee;
+  background: rgba(99,102,241,.14);
+  border: 1px solid rgba(99,102,241,.22);
+  padding: 2px 9px;
+  border-radius: 20px;
+  transition: background .2s;
+}
+.aiInConfBadge[data-level="high"] { background: rgba(16,185,129,.14); border-color: rgba(16,185,129,.22); color: #6ee7b7; }
+.aiInConfBadge[data-level="mid"]  { background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.22); color: #fcd34d; }
+.aiInConfBadge[data-level="low"]  { background: rgba(239,68,68,.14);  border-color: rgba(239,68,68,.22);  color: #fca5a5; }
+.aiInBody {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.aiInSection { }
+.aiInSectionTitle {
+  font-size: 10px;
+  font-weight: 600;
+  color: #5a728a;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 5px;
+}
+/* Headline + summary bullets */
+.aiHeadline {
+  font-size: 13px;
+  font-weight: 600;
+  color: #bfd0e8;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+.aiSummaryList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.aiSummaryItem {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.45;
+}
+.aiSummaryItem::before {
+  content: '·';
+  color: #6366f1;
+  font-size: 15px;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+/* Confidence bars */
+.aiConfGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.aiBarRow {
+  display: grid;
+  grid-template-columns: 58px 1fr 30px;
+  align-items: center;
+  gap: 7px;
+}
+.aiBarLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aiBar {
+  height: 4px;
+  background: rgba(255,255,255,.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.aiBarFill {
+  height: 100%;
+  border-radius: 3px;
+  background: #6366f1;
+  width: var(--ai-bar-pct, 0%);
+}
+.aiBarFill[data-level="high"] { background: #10b981; }
+.aiBarFill[data-level="mid"]  { background: #f59e0b; }
+.aiBarFill[data-level="low"]  { background: #ef4444; }
+.aiBarPct {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* Insight cards grid */
+.aiInsightGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.aiInsightCard {
+  background: rgba(255,255,255,.025);
+  border: 1px solid #1b2e48;
+  border-radius: 8px;
+  padding: 7px 9px;
+  min-width: 0;
+}
+.aiInsightCardWide {
+  grid-column: 1 / -1;
+}
+.aiInsightCardTitle {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #5a728a;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 5px;
+}
+.aiInsightCardRow {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.aiInsightCardBadge {
+  font-size: 10px;
+  background: rgba(99,102,241,.1);
+  color: #a5b0f8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.aiInsightCardBadge.green {
+  background: rgba(16,185,129,.1);
+  color: #34d399;
+}
+.aiInsightCardBadge.amber {
+  background: rgba(245,158,11,.1);
+  color: #fbbf24;
+}
+.aiInsightMuted {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+/* Memory card */
+.aiMemCard {
+  background: rgba(255,255,255,.02);
+  border: 1px solid #1b2e48;
+  border-radius: 8px;
+  padding: 7px 9px;
+}
+.aiMemCardTitle {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #5a728a;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 4px;
+}
+.aiMemCardRow {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+/* Warning pills */
+.aiWarnRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.aiWarnPill {
+  font-size: 10px;
+  background: rgba(245,158,11,.08);
+  border: 1px solid rgba(245,158,11,.18);
+  color: #d9a244;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+/* ── End AI Insights Panel ────────────────────────────────────────────────── */
+

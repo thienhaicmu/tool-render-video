@@ -106,6 +106,7 @@ function resetRenderSessionUi(){
   _rcCompareSelB = '';
   renderBottomActiveQueue(null, null, []);
   updateRenderMainState(null, null, []);
+  resetAiInsightsPanel();
 }
 function fmtElapsed(ms){
   const sec = Math.max(0, Math.floor(ms / 1000));
@@ -1939,6 +1940,7 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('abp_retry_btn')) qs('abp_retry_btn').classList.toggle('hiddenView', !(hasFailure && currentJobId));
   if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !(completedStatus || String(outputText || '').trim());
   if (qs('render_active_actions')) qs('render_active_actions').classList.toggle('hiddenView', !completedStatus);
+  renderAiInsights(job);
   updateRdCard(job, s, parts || []);
 }
 
@@ -3782,4 +3784,179 @@ function openClipFile(filePath) {
   if (!p) { showToast('File path is unavailable', 'info'); return; }
   const dir = p.replace(/\\/g, '/').split('/').slice(0, -1).join('/');
   openStoredOutputPath(dir || p);
+}
+
+// ── AI Insights Panel (Phase 7) ───────────────────────────────────────────────
+
+function _aiBarLevel(pct) {
+  const n = Number(pct) || 0;
+  if (n >= 70) return 'high';
+  if (n >= 40) return 'mid';
+  return 'low';
+}
+
+function _aiBarRowHtml(label, pct) {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  const lvl = _aiBarLevel(p);
+  return `<div class="aiBarRow"><span class="aiBarLabel">${esc(label)}</span><div class="aiBar"><div class="aiBarFill" data-level="${lvl}" style="--ai-bar-pct:${p}%"></div></div><span class="aiBarPct">${p}%</span></div>`;
+}
+
+function _aiEnergyLabel(level) {
+  if (level === null || level === undefined) return null;
+  const e = Number(level);
+  if (isNaN(e)) return null;
+  if (e > 0.75) return 'High';
+  if (e > 0.4) return 'Moderate';
+  return 'Low';
+}
+
+function renderAiInsights(job) {
+  const panel = qs('ai_insights_panel');
+  const body = qs('ai_insights_body');
+  const confBadge = qs('ai_conf_badge');
+  if (!panel) return;
+
+  let result = {};
+  try {
+    const raw = job && job.result_json;
+    result = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+  } catch (_) {}
+
+  const aiDir = result && result.ai_director;
+
+  if (!aiDir || !aiDir.enabled) {
+    panel.classList.add('hiddenView');
+    return;
+  }
+
+  panel.classList.remove('hiddenView');
+
+  const summary  = aiDir.ai_summary   || {};
+  const conf     = aiDir.ai_confidence || {};
+  const fullConf = aiDir.confidence    || {};
+  const pacing   = aiDir.pacing        || {};
+  const camera   = aiDir.camera        || {};
+  const subtitle = aiDir.subtitle      || {};
+  const memCtx   = aiDir.memory_context || {};
+
+  // Confidence badge
+  const overall = conf.overall != null ? Number(conf.overall) : null;
+  if (confBadge) {
+    confBadge.textContent = overall != null ? `${overall}%` : '–';
+    confBadge.dataset.level = overall != null ? _aiBarLevel(overall) : '';
+  }
+
+  if (!body) return;
+
+  const parts = [];
+
+  // ── 1. Summary headline + bullets ─────────────────────────────
+  const headline = String(summary.headline || '').trim();
+  const lines = Array.isArray(summary.summary_lines) ? summary.summary_lines.slice(0, 5) : [];
+  if (headline || lines.length) {
+    let h = '<div class="aiInSection">';
+    if (headline) h += `<div class="aiHeadline">${esc(headline)}</div>`;
+    if (lines.length) {
+      h += '<ul class="aiSummaryList">';
+      lines.forEach(l => { h += `<li class="aiSummaryItem">${esc(String(l))}</li>`; });
+      h += '</ul>';
+    }
+    h += '</div>';
+    parts.push(h);
+  }
+
+  // ── 2. Confidence bars ─────────────────────────────────────────
+  const semConf = conf.semantic != null ? Number(conf.semantic) : null;
+  const memConf = conf.memory   != null ? Number(conf.memory)   : null;
+  const pacConf = conf.pacing   != null ? Number(conf.pacing)   : null;
+  if (semConf !== null || memConf !== null || pacConf !== null) {
+    let h = '<div class="aiInSection"><div class="aiInSectionTitle">Confidence</div><div class="aiConfGrid">';
+    if (semConf !== null) h += _aiBarRowHtml('Semantic', semConf);
+    if (pacConf !== null) h += _aiBarRowHtml('Pacing', pacConf);
+    if (memConf !== null) h += _aiBarRowHtml('Memory', memConf);
+    h += '</div></div>';
+    parts.push(h);
+  }
+
+  // ── 3. Pacing + Camera cards (2-col grid) ─────────────────────
+  const cutStyle   = String(pacing.suggested_cut_style || '');
+  const emotion    = String(pacing.emotion || '');
+  const bpm        = pacing.bpm != null ? Number(pacing.bpm) : null;
+  const energyLbl  = _aiEnergyLabel(pacing.energy_level);
+  const camBhv     = String(camera.behavior || 'none');
+  const camZoom    = camera.zoom_strength != null ? Number(camera.zoom_strength) : null;
+
+  let cardH = '<div class="aiInSection"><div class="aiInsightGrid">';
+
+  // Pacing card
+  cardH += '<div class="aiInsightCard"><div class="aiInsightCardTitle">Pacing</div><div class="aiInsightCardRow">';
+  if (cutStyle && cutStyle !== 'standard') cardH += `<span class="aiInsightCardBadge">${esc(cutStyle.replace(/_/g,' '))}</span>`;
+  if (bpm !== null) cardH += `<span class="aiInsightCardBadge">${bpm.toFixed(0)} BPM</span>`;
+  if (emotion && emotion !== 'neutral') cardH += `<span class="aiInsightCardBadge">${esc(emotion)}</span>`;
+  if (energyLbl) cardH += `<span class="aiInsightCardBadge${energyLbl === 'High' ? ' green' : energyLbl === 'Moderate' ? ' amber' : ''}">${esc(energyLbl)}</span>`;
+  if (!cutStyle && bpm === null && !energyLbl) cardH += `<span class="aiInsightMuted">${esc(String(pacing.pacing_style || 'default'))}</span>`;
+  cardH += '</div></div>';
+
+  // Camera card
+  cardH += '<div class="aiInsightCard"><div class="aiInsightCardTitle">Camera</div><div class="aiInsightCardRow">';
+  if (camBhv && camBhv !== 'none') {
+    cardH += `<span class="aiInsightCardBadge">${esc(camBhv.replace(/_/g,' '))}</span>`;
+    if (camZoom !== null && camZoom > 1.0) cardH += `<span class="aiInsightCardBadge">${camZoom.toFixed(2)}x</span>`;
+  } else {
+    cardH += `<span class="aiInsightMuted">Disabled</span>`;
+  }
+  if (camera.subtitle_safe) cardH += `<span class="aiInsightCardBadge green">sub-safe</span>`;
+  cardH += '</div></div>';
+
+  cardH += '</div></div>';
+  parts.push(cardH);
+
+  // ── 4. Subtitle card ──────────────────────────────────────────
+  const subTone    = String(subtitle.tone || 'default');
+  const subEmph    = String(subtitle.emphasis_style || 'none');
+  const subDensity = String(subtitle.density || 'normal');
+  const beatAware  = !!subtitle.beat_aware;
+  const emAware    = !!subtitle.emotion_aware;
+  if (subTone !== 'default' || subEmph !== 'none' || beatAware || emAware) {
+    let h = '<div class="aiInSection"><div class="aiInsightCard aiInsightCardWide"><div class="aiInsightCardTitle">Subtitles</div><div class="aiInsightCardRow">';
+    if (subTone !== 'default') h += `<span class="aiInsightCardBadge">${esc(subTone)} tone</span>`;
+    if (subEmph !== 'none')    h += `<span class="aiInsightCardBadge">${esc(subEmph)} emphasis</span>`;
+    if (subDensity !== 'normal') h += `<span class="aiInsightCardBadge">${esc(subDensity)} density</span>`;
+    if (beatAware) h += `<span class="aiInsightCardBadge green">beat-aware</span>`;
+    if (emAware)   h += `<span class="aiInsightCardBadge green">emotion-aware</span>`;
+    h += '</div></div></div>';
+    parts.push(h);
+  }
+
+  // ── 5. Memory card (only when results present) ─────────────────
+  const memResults = Array.isArray(memCtx.results) ? memCtx.results : [];
+  if (memResults.length > 0) {
+    const mode = String(aiDir.mode || '');
+    let h = '<div class="aiInSection"><div class="aiMemCard">';
+    h += '<div class="aiMemCardTitle">Memory</div>';
+    h += `<div class="aiMemCardRow">Similar renders found: <strong>${memResults.length}</strong>`;
+    if (mode) h += ` · <span style="color:var(--text-dim)">${esc(mode.replace(/_/g,' '))}</span>`;
+    h += '</div></div></div>';
+    parts.push(h);
+  }
+
+  // ── 6. Warnings (compact pills, only non-empty) ─────────────────
+  const summaryWarnings = Array.isArray(summary.warnings) ? summary.warnings : [];
+  if (summaryWarnings.length) {
+    const pills = summaryWarnings
+      .map(w => `<span class="aiWarnPill">${esc(String(w))}</span>`)
+      .join('');
+    parts.push(`<div class="aiInSection"><div class="aiWarnRow">${pills}</div></div>`);
+  }
+
+  body.innerHTML = parts.join('');
+}
+
+function resetAiInsightsPanel() {
+  const panel = qs('ai_insights_panel');
+  if (panel) panel.classList.add('hiddenView');
+  const body = qs('ai_insights_body');
+  if (body) body.innerHTML = '';
+  const badge = qs('ai_conf_badge');
+  if (badge) { badge.textContent = '–'; badge.dataset.level = ''; }
 }
