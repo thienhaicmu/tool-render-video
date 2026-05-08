@@ -3255,6 +3255,21 @@ def run_render_pipeline(
             progress_percent=100,
             message=_final_message,
         )
+        # ── AI Memory write (Phase 3) — after job finalized, never blocks render ──
+        if getattr(payload, "ai_director_enabled", False) or _ai_edit_plan is not None:
+            try:
+                from app.ai.rag.memory_writer import write_render_memory as _write_mem
+                _write_mem(
+                    _result_payload,
+                    context={
+                        "market": getattr(payload, "viral_market", None),
+                        "mode": getattr(payload, "ai_mode", "viral_tiktok"),
+                        "duration": source.get("duration", 0.0),
+                    },
+                )
+            except Exception:
+                pass
+
         _job_log(
             effective_channel,
             job_id,
