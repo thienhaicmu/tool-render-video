@@ -88,6 +88,7 @@ def apply_ai_render_influence(
         _apply_pacing_influence(payload, edit_plan, report)
         _apply_memory_influence(payload, edit_plan, report)
         _report_beat_visual_execution(payload, edit_plan, report)
+        _report_timing_mutation(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -277,6 +278,43 @@ def _report_beat_visual_execution(payload: Any, edit_plan: Any, report: dict) ->
     logger.debug(
         "beat_visual_execution_deferred bpm=%s pulse_regions=%d transition_hints=%d",
         bpm, pulse_count, hint_count,
+    )
+
+
+# ── Timing mutation — report-only in Phase 19 ────────────────────────────────
+
+def _report_timing_mutation(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record timing mutation metadata — deferred in Phase 19.
+
+    No segment start/end changed. No playback_speed changed. No FFmpeg commands altered.
+    """
+    tm = getattr(edit_plan, "timing_mutation", None)
+    if not isinstance(tm, dict):
+        report["skipped"].append("timing_mutation:no_plan")
+        return
+
+    if not tm.get("available", False):
+        warns = tm.get("warnings", [])
+        reason = warns[0] if warns else "unavailable"
+        report["skipped"].append(f"timing_mutation:deferred({reason})")
+        return
+
+    mode = tm.get("mode", "advisory")
+    candidate_count = len(tm.get("candidates", []))
+    safe_count = sum(
+        1 for c in tm.get("candidates", [])
+        if isinstance(c, dict) and c.get("safe_to_apply", False)
+    )
+    gain = tm.get("estimated_retention_gain", 0.0)
+
+    report["skipped"].append(
+        f"timing_mutation:deferred_phase19("
+        f"mode={mode!r},candidates={candidate_count},"
+        f"safe={safe_count},gain={gain:.4f})"
+    )
+    logger.debug(
+        "timing_mutation_deferred mode=%s candidates=%d safe=%d gain=%.4f",
+        mode, candidate_count, safe_count, gain,
     )
 
 

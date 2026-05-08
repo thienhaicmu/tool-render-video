@@ -230,6 +230,8 @@ class RenderRequest(BaseModel):
     ai_beat_execution_enabled: bool = False
     ai_beat_pulse_enabled: bool = True
     ai_beat_transition_enabled: bool = False
+    # AI Timing Mutation (Phase 19) — opt-in; false = advisory-only, no segment timing changes.
+    ai_timing_mutation_enabled: bool = False
 
     @field_validator("render_profile")
     @classmethod

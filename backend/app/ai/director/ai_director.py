@@ -227,6 +227,14 @@ def _build_plan(
         plan.warnings.append(f"beat_visual_execution_error:{type(exc).__name__}")
         logger.debug("ai_director_beat_visual_execution_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 19: Retention-driven Timing Mutation ---
+    try:
+        timing_enabled = bool(getattr(request, "ai_timing_mutation_enabled", False))
+        _attach_timing_mutation(plan, chunks, pacing_ctx, timing_enabled, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"timing_mutation_error:{type(exc).__name__}")
+        logger.debug("ai_director_timing_mutation_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -1140,6 +1148,109 @@ def _append_beat_visual_explainability(plan: "AIEditPlan", visual_plan: Any) -> 
         line = "Visual beat execution remains metadata-only"
         if not any("metadata-only" in str(l) for l in lines):
             lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 19 — Retention-driven Timing Mutation attachment
+# ---------------------------------------------------------------------------
+
+def _attach_timing_mutation(
+    plan: "AIEditPlan",
+    chunks: list[dict],
+    pacing_ctx: dict,
+    enabled: bool,
+    job_id: str,
+) -> None:
+    """Build timing mutation plan and attach compact summary to plan. Never raises."""
+    try:
+        from app.ai.timing.timing_recommender import build_timing_mutation_plan
+
+        retention_ctx = dict(plan.retention) if isinstance(plan.retention, dict) else {}
+        story_ctx = dict(plan.story) if isinstance(plan.story, dict) else {}
+
+        timing_plan = build_timing_mutation_plan(
+            retention_context=retention_ctx,
+            story_context=story_ctx,
+            pacing_context=pacing_ctx,
+            transcript_chunks=chunks,
+            enabled=enabled,
+        )
+
+        plan.timing_mutation = timing_plan.to_dict()
+
+        from app.ai.timing.timing_schema import _MAX_CANDIDATES
+        safe_count = sum(
+            1 for c in timing_plan.candidates if c.safe_to_apply
+        )
+
+        logger.info(
+            "ai_timing_mutation_generated job_id=%s available=%s mode=%s "
+            "candidates=%d safe=%d retention_gain=%.4f",
+            job_id,
+            timing_plan.available,
+            timing_plan.mode,
+            len(timing_plan.candidates),
+            safe_count,
+            timing_plan.estimated_retention_gain,
+        )
+
+        _append_timing_mutation_explainability(plan, timing_plan)
+
+    except Exception as exc:
+        plan.timing_mutation = {
+            "available": False,
+            "warnings": [f"timing_mutation_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_timing_mutation_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_timing_mutation_explainability(plan: "AIEditPlan", timing_plan: Any) -> None:
+    """Append compact timing mutation insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not getattr(timing_plan, "available", False):
+            return
+
+        candidates = getattr(timing_plan, "candidates", [])
+        mode = getattr(timing_plan, "mode", "advisory")
+        safe_candidates = [c for c in candidates if getattr(c, "safe_to_apply", False)]
+
+        # Summarize risk categories found
+        actions = {getattr(c, "action", "") for c in candidates if getattr(c, "action", "") not in ("none", "no_change")}
+        if "tighten_setup" in actions:
+            line = "Retention risk: setup pacing candidate identified"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+        if "trim_silence" in actions:
+            line = "Retention risk: silence gap trim candidate identified"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+        if "shorten_outro" in actions:
+            line = "Retention risk: outro pacing decay candidate identified"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if mode == "advisory":
+            line = "Timing mutation plan advisory-only (no segments changed)"
+            if not any("advisory-only" in str(l) for l in lines):
+                lines.append(line)
+        elif safe_candidates:
+            gain = getattr(timing_plan, "estimated_retention_gain", 0.0)
+            line = f"Timing mutation plan ready ({len(safe_candidates)} safe candidate(s), est. gain={gain:.1%})"
+            if not any("Timing mutation plan ready" in str(l) for l in lines):
+                lines.append(line)
 
     except Exception:
         pass
