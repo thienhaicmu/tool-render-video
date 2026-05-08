@@ -98,6 +98,7 @@ def apply_ai_render_influence(
         _report_safe_mutations(payload, edit_plan, report)
         _report_multivariant_plans(payload, edit_plan, report)
         _report_multivariant_execution(payload, edit_plan, report)
+        _report_output_ranking(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -652,6 +653,40 @@ def _report_multivariant_execution(payload: Any, edit_plan: Any, report: dict) -
     logger.debug(
         "multivariant_execution_reported executed=%d blocked=%d",
         len(executed_ids), len(blocked_ids),
+    )
+
+
+# ── Output ranking — recommendation_only advisory in Phase 30 ─────────────────
+
+def _report_output_ranking(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report AI output ranking metadata — recommendation_only in Phase 30.
+
+    No files are uploaded, deleted, overwritten, or published.
+    Ranking is advisory only. Best output recommendation goes to report["skipped"]
+    as a deferred/planning entry (actual ranking is post-render).
+    """
+    orr = getattr(edit_plan, "output_ranking", None)
+    if not isinstance(orr, dict) or not orr:
+        report["skipped"].append("output_ranking:no_result")
+        return
+
+    available = orr.get("available", False)
+    best_id = orr.get("best_output_id") or "none"
+    outputs = orr.get("outputs") or []
+
+    if not available:
+        report["skipped"].append(
+            f"output_ranking:deferred_phase30"
+            f"(best={best_id},outputs={len(outputs)})"
+        )
+    else:
+        report["skipped"].append(
+            f"output_ranking:recommendation_only"
+            f"(best={best_id},outputs={len(outputs)})"
+        )
+    logger.debug(
+        "output_ranking_reported available=%s best=%s outputs=%d",
+        available, best_id, len(outputs),
     )
 
 

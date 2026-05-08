@@ -6,6 +6,85 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 30: AI Output Ranking & Best Export Recommendation
+
+**Metadata-only output ranker. Recommendation-only. No upload, no publish, no file deletion.**
+
+**Implemented:**
+
+- `app/ai/output/__init__.py` (new) — package marker; Phase 30 AI output ranking package
+- `app/ai/output/output_schema.py` (new) — `AIOutputScore` dataclass (output_id, path, variant_id, score, confidence, rank, recommended, quality_flags, warnings, explanation; `to_dict()` clamps score [0,100], confidence [0,1], caps quality_flags/warnings/explanation at 10); `AIOutputRanking` dataclass (available, mode, outputs, best_output_id, best_output_path, warnings; `to_dict()` hardcodes mode="recommendation_only", caps outputs at 20)
+- `app/ai/output/output_safety.py` (new) — `sanitize_output_metadata(output) -> dict`; retains only `_SAFE_METADATA_KEYS` (21 safe metadata keys); `is_output_rankable(output) -> bool`; requires non-empty `output_id`; never raises; never opens/writes/deletes files
+- `app/ai/output/output_ranker.py` (new) — `rank_variant_outputs(outputs, edit_plan, context) -> AIOutputRanking`; `_normalize_outputs()` handles list/dict/str input; `_extract_ai_context()` reads variant_selection, creator_style_adaptation, execution_simulation, multivariant_execution from edit plan; `_score_output()` scoring model: base=50 + rank_score_bonus(up to +30) + selected_variant(+10) + creator_style_confidence≥0.60(+5) + retention_gain>0(+5) − warning_penalty(10/warn, max 3) − failed(−50) − validation_failed(−10); deterministic; never raises; logs `ai_output_ranking_created`/`ai_output_ranking_fallback`
+- `app/ai/director/edit_plan_schema.py` (updated) — `output_ranking: dict = field(default_factory=dict)` added to `AIEditPlan`; `"output_ranking": dict(self.output_ranking)` in `to_dict()`; backward-compatible; Phase 29 `multivariant_execution` unchanged
+- `app/ai/director/ai_director.py` (updated) — Phase 30 block attaches placeholder `output_ranking` dict (available=False, warnings=["ranking_deferred_until_render_completion"]); actual ranking is post-render in pipeline; placeholder ensures field is always present in AI Director output
+- `app/ai/director/render_influence.py` (updated) — `_report_output_ranking(payload, edit_plan, report)` added; both deferred and available rankings → `report["skipped"]` as `"output_ranking:deferred_phase30(best=...,outputs=...)"` or `"output_ranking:recommendation_only(best=...,outputs=...)"`; wired into `apply_ai_render_influence()` after `_report_multivariant_execution()`; no payload mutated; no files touched
+- `app/orchestration/render_pipeline.py` (updated) — Phase 30 block added before `_result_payload` construction; builds `_ai_rank_inputs` from `_rank_entries_ordered` (successful) + `failed_parts` (with `failed=True`); calls `rank_variant_outputs(_ai_rank_inputs, edit_plan=_ai_edit_plan)`; attaches `_ai_output_ranking` to `_result_payload["ai_output_ranking"]` and updates `_ai_edit_plan.output_ranking` if plan exists; ranking error → warning-only fallback dict, render job NOT affected
+- `tests/test_ai_phase30_output_ranking.py` (new) — comprehensive test suite covering schema invariants, safety gates, ranker behavior, scoring model, edit plan compat, render_influence reporter, and end-to-end integration
+
+**Scoring model:**
+
+| Signal | Effect |
+|--------|--------|
+| Base score | +50.0 |
+| Existing rank score | +up to 30.0 (existing_score × 0.30) |
+| Selected variant match | +10.0 |
+| Creator style confidence ≥ 0.60 | +5.0 |
+| Retention gain > 0 | +5.0 |
+| Warning (per warning, max 3) | −10.0 each |
+| Failed output | −50.0 |
+| Validation failed | −10.0 |
+| Final clamp | [0.0, 100.0] |
+
+**`mode` always "recommendation_only"** — hardcoded in `AIOutputRanking.to_dict()`.
+
+**Selected variant detection:** matches `variant_id` against `variant_selection.recommended_variant_id` OR `multivariant_execution.executed_plan_ids`.
+
+**`_result_payload` keys added:**
+
+- `ai_output_ranking` — `AIOutputRanking.to_dict()` result: `{available, mode, outputs[], best_output_id, best_output_path, warnings}`
+- Existing `output_ranking` (native pipeline ranker) is unchanged
+
+**Safety boundaries enforced:**
+
+- `mode` always "recommendation_only" — hardcoded in `to_dict()`
+- No files opened, read, written, or deleted in any ranking code path
+- No upload, no publish, no autonomous export replacement
+- Ranking failure → warning-only fallback dict, render job NOT affected
+- `report["applied"]` not touched by Phase 30 — all output ranking goes to `report["skipped"]`
+- Never raises — all code paths wrapped in try/except with logger.warning fallback
+- No internet, no API keys, no GPU required
+- Deterministic — same outputs + same edit_plan → same ranking
+
+**Intentionally still blocked:**
+
+- Auto-upload triggered by ranking
+- Auto-publish triggered by ranking
+- Output deletion (failed or low-ranked)
+- File overwrite by export recommendation
+- Autonomous export replacement
+- FFmpeg mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Executor override
+- Validation rule bypass
+
+**Architecture notes:**
+
+- `output_ranking` in `AIEditPlan` is a placeholder at AI Director time (no outputs exist yet)
+- Actual ranking runs post-render in `render_pipeline.py` after `_rank_entries_ordered` is finalized
+- AI output ranking is additive over the existing native pipeline ranking; both coexist in `_result_payload`
+- The pipeline Phase 30 block is wrapped in try/except — ranking error never blocks the render job
+
+**Verification:**
+
+- Phase 30 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
 ### 2026-05-08 — AI Productization Phase 29: Safe Multi-Variant Render Execution Foundation
 
 **FIRST phase where AI-prepared variant plans may become actual render jobs.**

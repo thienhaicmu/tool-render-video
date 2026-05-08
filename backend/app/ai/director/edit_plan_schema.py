@@ -152,6 +152,8 @@ class AIEditPlan:
     multivariant_render_plans: dict = field(default_factory=dict)
     # Phase 29 — safe multi-variant render execution (populated by multivariant_execution module)
     multivariant_execution: dict = field(default_factory=dict)
+    # Phase 30 — AI output ranking and best export recommendation (populated by output_ranker module)
+    output_ranking: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -223,4 +225,5 @@ class AIEditPlan:
             "safe_render_mutations": dict(self.safe_render_mutations),
             "multivariant_render_plans": dict(self.multivariant_render_plans),
             "multivariant_execution": dict(self.multivariant_execution),
+            "output_ranking": dict(self.output_ranking),
         }

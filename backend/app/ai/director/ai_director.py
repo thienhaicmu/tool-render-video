@@ -310,6 +310,22 @@ def _build_plan(
         plan.warnings.append(f"multivariant_execution_error:{type(exc).__name__}")
         logger.debug("ai_director_multivariant_execution_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 30: AI Output Ranking placeholder ---
+    # Actual ranking occurs post-render in render_pipeline.py when outputs exist.
+    # This block attaches an empty placeholder so the field is always present.
+    try:
+        plan.output_ranking = {
+            "available": False,
+            "mode": "recommendation_only",
+            "outputs": [],
+            "best_output_id": None,
+            "best_output_path": "",
+            "warnings": ["ranking_deferred_until_render_completion"],
+        }
+    except Exception as exc:
+        plan.warnings.append(f"output_ranking_placeholder_error:{type(exc).__name__}")
+        logger.debug("ai_director_output_ranking_placeholder_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
