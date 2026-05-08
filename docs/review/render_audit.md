@@ -7,6 +7,52 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Productization Phase 9: Packaging + Performance Stabilization
+
+**Implemented:**
+- `app/ai/diagnostics.py` (new) — `get_ai_runtime_diagnostics() -> dict`; returns `{dependencies, startup_safe, embedding_available, vector_store, memory, warnings}`; uses dependency detectors only — never loads models, never triggers embeddings, never raises; `embedding_available` checks library presence via `importlib.util.find_spec`, not model load; `memory.db_path` is sanitized to filename only (no full path exposed)
+- `app/ai/rag/sqlite_store.py` — three new methods on `SQLiteMemoryStore`:
+  - `health() -> dict` — checks DB file existence and row count without requiring `initialize()`; returns `{sqlite_available, count, warnings}`; never raises
+  - `vacuum() -> bool` — opens connection with `isolation_level=None` (autocommit) to run `VACUUM` legally; returns `True` on success, `False` on any failure; requires `_ready=True`
+  - `prune(max_rows=5000) -> int` — deletes oldest memories and their matching embeddings in a single transaction (embeddings deleted first for FK consistency); returns rows deleted; never raises; never blocks rendering
+- `app/ai/rag/vector_store.py` — `health() -> dict` on `LocalVectorStore`; returns `{count, faiss_available, fallback_mode, warnings}`; uses `has_faiss()` detector, not FAISS import; never raises even on corrupted internal state
+- `app/ai/rag/memory_store.py` — two new methods on `LocalMemoryStore`:
+  - `get_memory_health() -> dict` — aggregates vector store + SQLite health; returns `{vector_count, sqlite_count, faiss_available, fallback_mode, sqlite_available, hydrated, warnings}`; never raises
+  - `compact_memory(max_rows=5000) -> dict` — calls `prune()` then `vacuum()` if rows were deleted; returns `{pruned, vacuumed, message}`; never raises
+- `app/routes/render.py` — `GET /api/render/ai-diagnostics` endpoint; read-only, no auth changes, matches existing `/queue-status` style; delegates to `get_ai_runtime_diagnostics()`; returns `{startup_safe, error}` fallback on any failure; no model loading, no embedding computation
+- `tests/test_ai_phase9_packaging_performance.py` (new) — 39 tests covering: diagnostics import safety, `get_ai_runtime_diagnostics()` shape/behavior, dependency key presence, embedding lazy-load verification (reload-based sentinel check), `embed_text`/`embed_texts` None-safety, vector store `health()` in fallback mode, SQLite `health()`/`vacuum()`/`prune()` on temp DBs, embedding-memory FK consistency after prune, memory store health/compact, API key independence, GPU independence, model-load guard
+
+**Verification:**
+- 39/39 Phase 9 tests pass
+- 486/486 full suite passes (zero regressions)
+- `git diff --check` clean (LF→CRLF warnings are Windows `core.autocrlf` only)
+
+**Constraints preserved:**
+- No optional AI lib made mandatory
+- No heavy import at module level (sentence-transformers/faiss/torch/mediapipe/faster-whisper never imported at startup)
+- No render pipeline modified
+- No render engine modified
+- No DB schema changed
+- No Electron packaging config changed
+- No cloud dependencies added
+- No background services added
+- All diagnostics are read-only — zero side effects on render behavior
+
+**Not yet implemented:**
+- Full Electron packaging validation (installer size, bundle audit)
+- Real startup profiling (time-to-first-render measurement)
+- GPU/CPU model selection UI
+- Render-time AI influence (Phase 10+)
+- Memory compaction scheduled job (currently manual call only)
+
+**Known limitations:**
+- Diagnostics are lightweight snapshots — they do not benchmark model inference speed
+- Optional AI libraries remain user-installed (`requirements-ai.txt`)
+- Memory compaction is SQLite-only; in-memory vector store is not pruned (only rebuilds on app restart)
+- `vacuum()` requires the store to be initialized (`_ready=True`); safe to call at any time otherwise (returns False)
+
+---
+
 ### 2026-05-08 — AI Director Phase 8: Timeline Intelligence UI
 
 **Implemented:**
