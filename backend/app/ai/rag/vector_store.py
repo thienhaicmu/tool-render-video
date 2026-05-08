@@ -149,3 +149,26 @@ class LocalVectorStore:
 
     def count(self) -> int:
         return len(self._entries)
+
+    def health(self) -> dict:
+        """Return compact health snapshot. Never raises."""
+        try:
+            warnings: list[str] = []
+            count = len(self._entries)
+            faiss_ok = has_faiss()
+            fallback = not self._use_faiss
+            if self._use_faiss and self._faiss_index is None and count > 0:
+                warnings.append("faiss_index_not_built")
+            return {
+                "count": count,
+                "faiss_available": faiss_ok,
+                "fallback_mode": fallback,
+                "warnings": warnings,
+            }
+        except Exception:
+            return {
+                "count": 0,
+                "faiss_available": False,
+                "fallback_mode": True,
+                "warnings": ["health_check_failed"],
+            }

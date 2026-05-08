@@ -196,6 +196,61 @@ class LocalMemoryStore:
                 pass
         return self._store.count()
 
+    # ------------------------------------------------------------------
+    # Health / maintenance
+    # ------------------------------------------------------------------
+
+    def get_memory_health(self) -> dict:
+        """Return compact memory system health. Never raises."""
+        try:
+            vs_health = self._store.health()
+            sq_health: dict = {}
+            if self._sqlite is not None:
+                try:
+                    sq_health = self._sqlite.health()
+                except Exception:
+                    sq_health = {"sqlite_available": False, "count": None, "warnings": ["health_check_failed"]}
+
+            warnings: list[str] = list(vs_health.get("warnings", []))
+            warnings.extend(sq_health.get("warnings", []))
+
+            return {
+                "vector_count": vs_health.get("count", 0),
+                "sqlite_count": sq_health.get("count"),
+                "faiss_available": vs_health.get("faiss_available", False),
+                "fallback_mode": vs_health.get("fallback_mode", True),
+                "sqlite_available": sq_health.get("sqlite_available", self._sqlite is not None),
+                "hydrated": self._hydrated,
+                "warnings": warnings,
+            }
+        except Exception:
+            return {
+                "vector_count": 0,
+                "sqlite_count": None,
+                "faiss_available": False,
+                "fallback_mode": True,
+                "sqlite_available": False,
+                "hydrated": False,
+                "warnings": ["health_check_failed"],
+            }
+
+    def compact_memory(self, max_rows: int = 5000) -> dict:
+        """Prune oldest rows beyond max_rows from SQLite and optionally VACUUM.
+
+        Returns a compact result dict. Never raises.
+        Safe to call outside of rendering — does not interrupt active renders.
+        """
+        if self._sqlite is None:
+            return {"pruned": 0, "vacuumed": False, "message": "sqlite_not_available"}
+        try:
+            pruned = self._sqlite.prune(max_rows=max_rows)
+            vacuumed = False
+            if pruned > 0:
+                vacuumed = self._sqlite.vacuum()
+            return {"pruned": pruned, "vacuumed": vacuumed, "message": "ok"}
+        except Exception:
+            return {"pruned": 0, "vacuumed": False, "message": "compact_failed"}
+
 
 # ---------------------------------------------------------------------------
 # Module-level factory

@@ -198,6 +198,99 @@ class SQLiteMemoryStore:
         finally:
             _close(conn)
 
+    # ------------------------------------------------------------------
+    # Health / maintenance
+    # ------------------------------------------------------------------
+
+    def health(self) -> dict:
+        """Return compact health snapshot. Never raises. Does not require initialize()."""
+        try:
+            if not self._db_path.exists():
+                return {
+                    "sqlite_available": True,
+                    "count": 0,
+                    "warnings": ["db_not_initialized"],
+                }
+            conn = self._connect()
+            if conn is None:
+                return {"sqlite_available": False, "count": None, "warnings": ["connection_failed"]}
+            try:
+                cur = conn.execute("SELECT COUNT(*) FROM render_memories")
+                count = int(cur.fetchone()[0])
+                return {"sqlite_available": True, "count": count, "warnings": []}
+            except Exception:
+                return {"sqlite_available": True, "count": 0, "warnings": ["tables_not_initialized"]}
+            finally:
+                _close(conn)
+        except Exception as exc:
+            logger.debug("sqlite_health_failed: %s", exc)
+            return {"sqlite_available": False, "count": None, "warnings": ["health_check_failed"]}
+
+    def vacuum(self) -> bool:
+        """Run VACUUM to reclaim disk space. Never raises. Returns True on success."""
+        if not self._ready:
+            return False
+        try:
+            # isolation_level=None = autocommit — required for VACUUM
+            conn = sqlite3.connect(str(self._db_path), isolation_level=None, timeout=5)
+            try:
+                conn.execute("VACUUM")
+                return True
+            finally:
+                _close(conn)
+        except Exception as exc:
+            logger.debug("sqlite_vacuum_failed: %s", exc)
+            return False
+
+    def prune(self, max_rows: int = 5000) -> int:
+        """Delete oldest memories (and their embeddings) beyond max_rows.
+
+        Returns number of rows deleted. Never raises. Never blocks rendering.
+        Keeps embeddings table consistent by deleting matching embedding rows first.
+        """
+        if not self._ready:
+            return 0
+        conn = self._connect()
+        if conn is None:
+            return 0
+        try:
+            cur = conn.execute("SELECT COUNT(*) FROM render_memories")
+            total = int(cur.fetchone()[0])
+            if total <= max_rows:
+                return 0
+            to_delete = total - max_rows
+            with conn:
+                # Remove embeddings for the oldest memories first (FK consistency)
+                conn.execute(
+                    """
+                    DELETE FROM embeddings
+                    WHERE memory_id IN (
+                        SELECT id FROM render_memories
+                        ORDER BY created_at ASC
+                        LIMIT ?
+                    )
+                    """,
+                    (to_delete,),
+                )
+                conn.execute(
+                    """
+                    DELETE FROM render_memories
+                    WHERE id IN (
+                        SELECT id FROM render_memories
+                        ORDER BY created_at ASC
+                        LIMIT ?
+                    )
+                    """,
+                    (to_delete,),
+                )
+            logger.info("sqlite_pruned count=%d max_rows=%d", to_delete, max_rows)
+            return to_delete
+        except Exception as exc:
+            logger.warning("sqlite_prune_failed: %s", exc)
+            return 0
+        finally:
+            _close(conn)
+
     def load_vectors(self) -> list[dict]:
         """Load memories with stored vectors for in-memory vector store hydration.
 

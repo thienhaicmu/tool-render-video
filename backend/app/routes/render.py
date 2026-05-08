@@ -40,6 +40,21 @@ def get_queue_status():
     return {"active_renders": active, "max_renders": _JOB_SEM_VALUE}
 
 
+@router.get("/ai-diagnostics")
+def get_ai_diagnostics():
+    """Read-only AI runtime diagnostics.
+
+    Returns dependency availability, embedding readiness, vector store mode,
+    and SQLite memory health. Never loads models. Never triggers embeddings.
+    """
+    try:
+        from app.ai.diagnostics import get_ai_runtime_diagnostics
+        return get_ai_runtime_diagnostics()
+    except Exception as exc:
+        logger.debug("ai_diagnostics_endpoint_error: %s", exc)
+        return {"startup_safe": True, "error": "diagnostics_unavailable"}
+
+
 # ── Error classification ───────────────────────────────────────────────────────
 # Type 1 · Request / validation errors  — HTTPException raised before process_render
 #           logged as WARNING  →  desktop-backend.log  (via logger.warning)
