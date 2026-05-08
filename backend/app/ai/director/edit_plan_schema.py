@@ -148,6 +148,8 @@ class AIEditPlan:
     execution_simulation: dict = field(default_factory=dict)
     # Phase 27 — safe bounded render mutations (populated by mutation_engine module)
     safe_render_mutations: dict = field(default_factory=dict)
+    # Phase 28 — safe multi-variant render planning (populated by multivariant_planner module)
+    multivariant_render_plans: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -217,4 +219,5 @@ class AIEditPlan:
             "execution_recommendations": dict(self.execution_recommendations),
             "execution_simulation": dict(self.execution_simulation),
             "safe_render_mutations": dict(self.safe_render_mutations),
+            "multivariant_render_plans": dict(self.multivariant_render_plans),
         }

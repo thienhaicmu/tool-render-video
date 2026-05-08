@@ -296,6 +296,13 @@ def _build_plan(
         plan.warnings.append(f"safe_render_mutations_error:{type(exc).__name__}")
         logger.debug("ai_director_safe_render_mutations_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 28: Safe Multi-Variant Render Planning ---
+    try:
+        _attach_multivariant_render_plans(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"multivariant_render_plans_error:{type(exc).__name__}")
+        logger.debug("ai_director_multivariant_plans_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -1453,6 +1460,87 @@ def _append_safe_render_mutations_explainability(
 
         if not any("Dangerous timing mutations remain blocked" in str(l) for l in lines):
             lines.append("Dangerous timing mutations remain blocked")
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 28 — Safe Multi-Variant Render Planning attachment
+# ---------------------------------------------------------------------------
+
+def _attach_multivariant_render_plans(plan: "AIEditPlan", job_id: str) -> None:
+    """Build and attach multi-variant render planning set to the plan.
+
+    Runs after Phase 27 (safe mutations) so plans have full mutation context.
+    Mode is always planning_only. Never enqueues. Never executes. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.multivariant.multivariant_planner import build_multivariant_render_plans
+
+        render_set = build_multivariant_render_plans(plan, payload=None, context={"job_id": job_id})
+        render_set_dict = render_set.to_dict()
+        plan.multivariant_render_plans = render_set_dict
+
+        plans = render_set_dict.get("plans") or []
+        safe_count = sum(1 for p in plans if p.get("safe_to_enqueue"))
+
+        logger.info(
+            "ai_multivariant_plans_built job_id=%s available=%s plans=%d "
+            "safe_to_enqueue=%d recommended=%s mode=%s",
+            job_id,
+            render_set_dict.get("available", False),
+            len(plans),
+            safe_count,
+            render_set_dict.get("recommended_plan_id") or "none",
+            render_set_dict.get("mode", "planning_only"),
+        )
+
+        _append_multivariant_plans_explainability(plan, render_set_dict)
+
+    except Exception as exc:
+        plan.multivariant_render_plans = {
+            "available": False,
+            "mode": "planning_only",
+            "warnings": [f"multivariant_render_plans_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_multivariant_plans_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_multivariant_plans_explainability(
+    plan: "AIEditPlan",
+    render_set_dict: dict,
+) -> None:
+    """Append compact multi-variant planning insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        plans = render_set_dict.get("plans") or []
+        safe_plans = [p for p in plans if p.get("safe_to_enqueue")]
+        recommended_id = render_set_dict.get("recommended_plan_id") or ""
+
+        line = "Multi-variant render plans prepared"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+        if safe_plans and recommended_id and recommended_id != "mvplan_baseline":
+            line = "Recommended variant render plan is safe to enqueue later"
+            if not any("safe to enqueue" in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Automatic variant rendering remains blocked"
+        if not any("Automatic variant rendering" in str(l) for l in lines):
+            lines.append(line)
 
     except Exception:
         pass

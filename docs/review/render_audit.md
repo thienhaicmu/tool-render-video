@@ -6,6 +6,102 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 28: Safe Multi-Variant Render Planning Foundation
+
+**Planning-only phase: prepares renderable variant jobs WITHOUT enqueueing or executing them.**
+
+**Implemented:**
+
+- `app/ai/multivariant/__init__.py` (new) — package marker; Phase 28 safe multi-variant render planning package
+- `app/ai/multivariant/multivariant_schema.py` (new) — `AIMultiVariantRenderPlan` dataclass (plan_id, variant_id, label, renderable, safe_to_enqueue, advisory_only, mutation_ids, planned_payload_overrides, blocked_fields, warnings, explanation; `to_dict()` hardcodes advisory_only=True, caps mutation_ids at 20, caps explanation at 300 chars, coerces bool fields); `AIMultiVariantRenderSet` dataclass (available, mode, plans, recommended_plan_id, warnings; `to_dict()` hardcodes mode="planning_only", caps plans at 5)
+- `app/ai/multivariant/multivariant_safety.py` (new) — `sanitize_variant_payload_overrides(overrides) -> dict`; strips forbidden + unknown keys, drops None values; `is_multivariant_plan_safe(overrides) -> bool`; returns False if any forbidden key detected; `collect_blocked_fields(overrides) -> list`; returns list of forbidden keys present; `_ALLOWED_KEYS = {subtitle_density, subtitle_emphasis, camera_behavior, pacing_style, creator_style, visual_rhythm_mode, ai_mode}`; `_FORBIDDEN_KEYS` = Phase 27 set (13 keys) + `queue_priority` + `job_id` = 15 keys total; never raises
+- `app/ai/multivariant/multivariant_planner.py` (new) — `build_multivariant_render_plans(edit_plan, payload=None, context=None) -> AIMultiVariantRenderSet`; builds up to 5 plans from AI planning metadata; `_build_baseline_plan()` (always present, ai_mode=advisory, pacing_style=standard); `_build_recommended_variant_plan()` (from variant_selection + variants + safe_render_mutations); `_build_compact_subtitle_plan()` (from subtitle_execution; skipped if no density/emphasis/mutation_ids); `_build_creator_style_plan()` (gate: confidence ≥ 0.40; camera via style map, pacing via style); `_build_retention_plan()` (gate: retention_score < 70; skipped when score ≥ 70 or not present); `_select_recommended()` prefers safe_to_enqueue non-baseline plans; `_fallback_set()` returns available=False with baseline only; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `multivariant_render_plans: dict = field(default_factory=dict)` added to `AIEditPlan`; `"multivariant_render_plans": dict(self.multivariant_render_plans)` in `to_dict()`; backward-compatible; Phase 27 `safe_render_mutations` field unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_multivariant_render_plans(plan, job_id)` added; runs after Phase 27 (safe mutations); calls `build_multivariant_render_plans(plan, payload=None, context)`; logs `ai_multivariant_plans_built` at INFO; `_append_multivariant_plans_explainability(plan, render_set_dict)` appends: "Multi-variant render plans prepared", "Recommended variant render plan is safe to enqueue later" (when non-baseline recommended), "Automatic variant rendering remains blocked" (always); None guard on plan; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_multivariant_plans(payload, edit_plan, report)` added; all plans → `report["skipped"]` as `"multivariant_render_plans:deferred_phase28(count=...,safe=...,recommended=...)"` — no plans enqueued, no payload mutated; wired into `apply_ai_render_influence()` after `_report_safe_mutations()`
+- `tests/test_ai_phase28_multivariant_planning.py` (new) — comprehensive test suite covering schema invariants, safety gates, planner plan generation, selection logic, edit plan schema compatibility, render_influence reporter, and end-to-end integration
+
+**Plan types and trigger conditions:**
+
+| Plan ID | Label | Trigger condition |
+|---------|-------|-------------------|
+| `mvplan_baseline` | Baseline Safe Render Plan | Always present |
+| `mvplan_recommended_variant` | Recommended Variant Render Plan | variant_selection has recommended_variant_id OR variants list non-empty |
+| `mvplan_compact_subtitle` | Compact Subtitle Render Plan | subtitle_execution has density/emphasis OR subtitle mutations present |
+| `mvplan_creator_style` | Creator Style Render Plan | creator_style_adaptation confidence ≥ 0.40 and style non-empty |
+| `mvplan_retention_optimized` | Retention-Optimized Render Plan | retention_score present and < 70 |
+
+**Allowed payload override keys (Phase 28 safety gate):**
+
+| Key | Purpose |
+|-----|---------|
+| `subtitle_density` | Subtitle density override |
+| `subtitle_emphasis` | Subtitle emphasis override |
+| `camera_behavior` | Camera behavior override |
+| `pacing_style` | Pacing style override |
+| `creator_style` | Creator style label |
+| `visual_rhythm_mode` | Visual rhythm mode |
+| `ai_mode` | AI mode marker |
+
+**Phase 28 forbidden keys (15 total = Phase 27 13 + 2 new):**
+
+Phase 27 forbidden keys (inherited): `playback_speed`, `segment_start`, `segment_end`, `subtitle_timing`, `ffmpeg_args`, `codec`, `bitrate`, `crf`, `validation_rules`, `output_path`, `render_command`, `render_segments`, `segment_order`
+
+Phase 28 additions: `queue_priority`, `job_id`
+
+**`safe_to_enqueue` logic:**
+
+- `safe_to_enqueue=True` only when `collect_blocked_fields(overrides)` returns empty list
+- `safe_to_enqueue=False` when any forbidden key detected in planned_payload_overrides
+- Baseline plan is always `safe_to_enqueue=True` because its overrides are hardcoded clean
+
+**Recommended plan selection:**
+
+1. Prefer `safe_to_enqueue=True` non-baseline plans (first match)
+2. Fall back to any `safe_to_enqueue=True` plan (including baseline)
+3. Fall back to first plan in list
+
+**Safety boundaries enforced:**
+
+- `mode` is always "planning_only" — hardcoded in `AIMultiVariantRenderSet.to_dict()`
+- `advisory_only` is always True — hardcoded in `AIMultiVariantRenderPlan.to_dict()`
+- Max 5 plans in any render set — enforced by `[:_MAX_PLANS]` slice
+- All plans → `report["skipped"]` in render_influence — no plan ever reaches `report["applied"]`
+- No render jobs created, no queue touched, no payload mutated
+- `_FORBIDDEN_KEYS` (15 keys) always stripped by `sanitize_variant_payload_overrides()`
+- Never blocks render — all Phase 28 code wrapped in try/except in AI Director and planner
+- Deterministic — same edit_plan always produces same render set
+- No internet, no API keys, no GPU required
+- Payload object passed to `build_multivariant_render_plans()` is always None (same pattern as Phase 27)
+
+**Intentionally still blocked:**
+
+- Render queue enqueueing
+- Job creation and job_id assignment
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Render structure mutation
+- Autonomous rendering
+- Executor override
+- Output validation mutation
+
+**Architecture notes:**
+
+- Phase 28 is the FIRST phase to prepare renderable multi-variant job descriptors — all as planning metadata only
+- `safe_to_enqueue=True` on a plan means the plan's overrides are clean of forbidden keys — not that the job will or should be enqueued in this phase
+- `report["applied"]` is still populated only by Phase 27 safe mutations — Phase 28 adds nothing to applied list
+- `_report_multivariant_plans()` runs last in the render influence chain (after `_report_safe_mutations()`, before `_update_explainability()`)
+
+**Verification:**
+
+- Phase 28 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
 ### 2026-05-08 — AI Productization Phase 27: Safe AI-Assisted Render Mutations
 
 **First phase where bounded AI mutations are applied to AI guidance metadata fields.**

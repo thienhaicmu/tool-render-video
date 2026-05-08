@@ -96,6 +96,7 @@ def apply_ai_render_influence(
         _report_execution_recommendations(payload, edit_plan, report)
         _report_execution_simulation(payload, edit_plan, report)
         _report_safe_mutations(payload, edit_plan, report)
+        _report_multivariant_plans(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -565,6 +566,33 @@ def _report_safe_mutations(payload: Any, edit_plan: Any, report: dict) -> None:
     logger.debug(
         "safe_mutations_reported applied=%d blocked=%d",
         len(applied_ids), len(blocked_ids),
+    )
+
+
+# ── Multi-variant render plans — planning_only, deferred in Phase 28 ─────────
+
+def _report_multivariant_plans(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record multi-variant render plan metadata — deferred in Phase 28.
+
+    No variants are enqueued. No render jobs are created. No payload mutated.
+    All plans are advisory planning_only; safe_to_enqueue is for future use.
+    """
+    mvp = getattr(edit_plan, "multivariant_render_plans", None)
+    if not isinstance(mvp, dict) or not mvp:
+        report["skipped"].append("multivariant_render_plans:no_result")
+        return
+
+    plans = mvp.get("plans") or []
+    recommended_id = mvp.get("recommended_plan_id") or "none"
+    safe_count = sum(1 for p in plans if isinstance(p, dict) and p.get("safe_to_enqueue"))
+
+    report["skipped"].append(
+        f"multivariant_render_plans:deferred_phase28"
+        f"(count={len(plans)},safe={safe_count},recommended={recommended_id})"
+    )
+    logger.debug(
+        "multivariant_plans_reported count=%d safe=%d recommended=%s",
+        len(plans), safe_count, recommended_id,
     )
 
 
