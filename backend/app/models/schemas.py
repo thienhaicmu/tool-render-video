@@ -226,6 +226,10 @@ class RenderRequest(BaseModel):
     ai_use_rag_memory: bool = False
     # AI Render Influence (Phase 10) — opt-in only; false = original behavior preserved.
     ai_render_influence_enabled: bool = False
+    # AI Beat Execution (Phase 11) — opt-in beat-aware planning; defaults preserve old behavior.
+    ai_beat_execution_enabled: bool = False
+    ai_beat_pulse_enabled: bool = True
+    ai_beat_transition_enabled: bool = False
 
     @field_validator("render_profile")
     @classmethod

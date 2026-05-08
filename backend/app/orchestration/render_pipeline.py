@@ -1720,6 +1720,42 @@ def run_render_pipeline(
         elif _ai_edit_plan is not None:
             logger.debug("ai_render_influence_skipped job_id=%s (disabled)", job_id)
 
+        # ── AI Beat Execution (Phase 11) — metadata-only beat plan ───────────
+        _ai_beat_report: dict = {"enabled": False}
+        if _ai_edit_plan is not None and getattr(payload, "ai_beat_execution_enabled", False):
+            beat_exec_cached = getattr(_ai_edit_plan, "beat_execution", None)
+            if isinstance(beat_exec_cached, dict) and beat_exec_cached.get("beat_available"):
+                _ai_beat_report = beat_exec_cached
+                logger.info(
+                    "ai_beat_execution_planned job_id=%s bpm=%s count=%d enabled=%s",
+                    job_id,
+                    _ai_beat_report.get("bpm"),
+                    _ai_beat_report.get("beat_count", 0),
+                    _ai_beat_report.get("enabled", False),
+                )
+            else:
+                try:
+                    from app.ai.director.beat_execution import build_beat_execution_plan as _build_beat
+                    _ai_beat_report = _build_beat(
+                        _ai_edit_plan, payload, context={"job_id": job_id}
+                    )
+                    _ai_edit_plan.beat_execution = _ai_beat_report
+                    logger.info(
+                        "ai_beat_execution_planned job_id=%s bpm=%s count=%d enabled=%s",
+                        job_id,
+                        _ai_beat_report.get("bpm"),
+                        _ai_beat_report.get("beat_count", 0),
+                        _ai_beat_report.get("enabled", False),
+                    )
+                except Exception as _beat_err:
+                    _ai_beat_report = {
+                        "enabled": False,
+                        "warnings": [f"beat_execution_module_error:{type(_beat_err).__name__}"],
+                    }
+                    logger.warning("ai_beat_execution_module_failed job_id=%s: %s", job_id, _beat_err)
+        elif _ai_edit_plan is not None:
+            logger.debug("ai_beat_execution_skipped job_id=%s (disabled)", job_id)
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()
@@ -3273,6 +3309,7 @@ def run_render_pipeline(
             "is_partial_success": _is_partial_success,
             "ai_director": _ai_edit_plan.to_dict() if _ai_edit_plan is not None else {"enabled": False},
             "ai_render_influence": _ai_influence_report,
+            "ai_beat_execution": _ai_beat_report,
         }
         upsert_job(
             job_id,

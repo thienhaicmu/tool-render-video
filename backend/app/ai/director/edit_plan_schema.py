@@ -76,6 +76,31 @@ class AIPacingPlan:
 
 
 @dataclass
+class AIBeatExecutionPlan:
+    """Beat-aware execution plan. Phase 11 — metadata-only, no timing mutations."""
+    enabled: bool = False
+    beat_available: bool = False
+    bpm: Optional[float] = None
+    beat_count: int = 0
+    pulse_strength: float = 0.0
+    suggested_transition_style: str = "none"
+    execution_mode: str = "metadata_only"
+    warnings: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "enabled": self.enabled,
+            "beat_available": self.beat_available,
+            "bpm": self.bpm,
+            "beat_count": self.beat_count,
+            "pulse_strength": self.pulse_strength,
+            "suggested_transition_style": self.suggested_transition_style,
+            "execution_mode": self.execution_mode,
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass
 class AIEditPlan:
     enabled: bool
     mode: str
@@ -89,6 +114,8 @@ class AIEditPlan:
     # Phase 6 — explainability
     explainability: dict = field(default_factory=dict)
     confidence: dict = field(default_factory=dict)
+    # Phase 11 — beat execution plan (populated by beat_execution module)
+    beat_execution: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -141,4 +168,5 @@ class AIEditPlan:
             "confidence": dict(self.confidence),
             "ai_summary": ai_summary,
             "ai_confidence": compact_confidence,
+            "beat_execution": dict(self.beat_execution),
         }

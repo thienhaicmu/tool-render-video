@@ -180,12 +180,13 @@ def _apply_subtitle_influence(payload: Any, edit_plan: Any, report: dict) -> Non
         report["skipped"].append(f"subtitle:set_failed:{type(exc).__name__}")
 
 
-# ── Pacing influence (report-only in Phase 10) ────────────────────────────────
+# ── Pacing influence (Phase 11 beat execution integration) ───────────────────
 
 def _apply_pacing_influence(payload: Any, edit_plan: Any, report: dict) -> None:
-    """Record pacing metadata only — no render changes in Phase 10.
+    """Record pacing metadata; run beat execution planning when enabled.
 
-    Beat-synced cuts are deferred to Phase 11.
+    Beat execution (Phase 11) builds a metadata-only plan from pacing data.
+    No timing, subtitle, or playback_speed mutations occur.
     """
     pacing = getattr(edit_plan, "pacing", None)
     if pacing is None:
@@ -194,10 +195,40 @@ def _apply_pacing_influence(payload: Any, edit_plan: Any, report: dict) -> None:
 
     style = str(getattr(pacing, "pacing_style", "default") or "default")
     energy = getattr(pacing, "energy_level", None)
-    report["skipped"].append(
-        f"pacing:report_only(style={style!r},energy={energy},"
-        f"beat_sync_deferred=phase11)"
-    )
+    beat_available = bool(getattr(pacing, "beat_available", False))
+
+    beat_execution_enabled = bool(getattr(payload, "ai_beat_execution_enabled", False))
+
+    if beat_execution_enabled and beat_available:
+        try:
+            from app.ai.director.beat_execution import build_beat_execution_plan
+            beat_report = build_beat_execution_plan(edit_plan, payload)
+            edit_plan.beat_execution = beat_report
+            if beat_report.get("enabled"):
+                bpm = beat_report.get("bpm", 0)
+                pulse = beat_report.get("pulse_strength", 0.0)
+                transition = beat_report.get("suggested_transition_style", "none")
+                report["applied"].append(
+                    f"pacing:beat_execution_planned("
+                    f"bpm={bpm:.1f},pulse={pulse:.3f},"
+                    f"transition={transition!r})"
+                )
+            else:
+                beat_warns = beat_report.get("warnings", [])
+                reason = beat_warns[0] if beat_warns else "unknown"
+                report["skipped"].append(f"pacing:beat_execution_skipped({reason})")
+        except Exception as exc:
+            report["warnings"].append(f"pacing:beat_execution_error:{type(exc).__name__}")
+    elif beat_execution_enabled and not beat_available:
+        report["skipped"].append(
+            f"pacing:beat_execution_skipped(beat_data_unavailable,"
+            f"style={style!r},energy={energy})"
+        )
+    else:
+        report["skipped"].append(
+            f"pacing:report_only(style={style!r},energy={energy},"
+            f"beat_execution_disabled)"
+        )
 
 
 # ── Memory influence (report-only in Phase 10) ───────────────────────────────
@@ -244,5 +275,16 @@ def _update_explainability(edit_plan: Any, report: dict) -> None:
         )
         if not any("AI render influence" in str(l) for l in lines):
             lines.append(line)
+
+        beat_exec = getattr(edit_plan, "beat_execution", None)
+        if isinstance(beat_exec, dict) and beat_exec.get("beat_available"):
+            if beat_exec.get("enabled"):
+                beat_line = "Beat-aware execution planned safely"
+            else:
+                beat_warns = beat_exec.get("warnings", [])
+                reason = beat_warns[0] if beat_warns else "beat data unavailable"
+                beat_line = f"Beat execution skipped: {reason}"
+            if not any("Beat" in str(l) for l in lines):
+                lines.append(beat_line)
     except Exception:
         pass
