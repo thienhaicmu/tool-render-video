@@ -1571,3 +1571,74 @@ def subtitle_emphasis_pass(
         preset_id, mkt, level, len(blocks), is_word_level, affected,
     )
     return blocks
+
+
+# ---------------------------------------------------------------------------
+# Phase 17 — AI subtitle execution metadata integration
+# ---------------------------------------------------------------------------
+
+def apply_subtitle_execution_hints(
+    blocks: list[dict],
+    subtitle_execution: dict | None,
+) -> dict:
+    """Safely consume AI subtitle execution metadata hints.
+
+    Reads global_hint fields (emphasis_strength, emotion_style, density_mode,
+    keyword_focus) from the execution plan and returns a compact hints dict that
+    downstream render steps may use.
+
+    Never mutates subtitle timing or text. Never raises. Returns fallback dict
+    when metadata is absent or malformed.
+    """
+    fallback = {
+        "applied": False,
+        "emphasis_strength": 0.0,
+        "emotion_style": "neutral",
+        "density_mode": "normal",
+        "keyword_focus": [],
+        "warnings": [],
+    }
+    try:
+        if not isinstance(subtitle_execution, dict):
+            return fallback
+        if not subtitle_execution.get("available", False):
+            return {**fallback, "warnings": list(subtitle_execution.get("warnings", []))}
+
+        global_hint = subtitle_execution.get("global_hint")
+        if not isinstance(global_hint, dict):
+            return fallback
+
+        emphasis_strength = float(global_hint.get("emphasis_strength", 0.0))
+        emphasis_strength = max(0.0, min(1.0, emphasis_strength))
+
+        emotion_style = str(global_hint.get("emotion_style") or "neutral")
+        _VALID_EMOTION = {"neutral", "hype", "dramatic", "calm", "emotional", "punch"}
+        if emotion_style not in _VALID_EMOTION:
+            emotion_style = "neutral"
+
+        density_mode = str(global_hint.get("density_mode") or "normal")
+        _VALID_DENSITY = {"compact", "normal", "expressive"}
+        if density_mode not in _VALID_DENSITY:
+            density_mode = "normal"
+
+        keyword_focus = [
+            str(k) for k in (global_hint.get("keyword_focus") or [])
+            if isinstance(k, str)
+        ][:10]
+
+        logger.info(
+            "subtitle_execution_hints_applied emphasis=%.3f emotion=%s density=%s keywords=%d",
+            emphasis_strength, emotion_style, density_mode, len(keyword_focus),
+        )
+
+        return {
+            "applied": True,
+            "emphasis_strength": emphasis_strength,
+            "emotion_style": emotion_style,
+            "density_mode": density_mode,
+            "keyword_focus": keyword_focus,
+            "warnings": [],
+        }
+    except Exception as exc:
+        logger.debug("subtitle_execution_hints_failed: %s", exc)
+        return {**fallback, "warnings": [f"hints_error:{type(exc).__name__}"]}

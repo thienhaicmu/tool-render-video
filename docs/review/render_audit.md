@@ -6,6 +6,424 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 22: AI Best Variant Selector Foundation
+
+**Implemented:**
+
+- `app/ai/variants/variant_selector.py` (new) — `select_best_variant(variant_set, edit_plan, context) -> dict`; returns {selected_variant_id, selection_confidence, selection_reasons, rejected_variants, fallback_used}; accepts `AIVariantSet`, serialised dict, or any object with `variants` attribute; scores all candidates via `score_variant()`; sort key: (−score, purpose_priority, risk_priority); skips `risk="high"` variants when any safe option exists; confidence gate: if selection_confidence < 0.50 and non-baseline selected, falls back to `safe_baseline`; emits `ai_variant_selected` at INFO, `ai_variant_selector_fallback` on fallback, `ai_variant_selection_skipped` when no variants; deterministic; never raises; never renders; never mutates payload
+- `app/ai/variants/variant_scoring.py` (updated, Phase 22 additions) — `_RISK_PENALTIES["high"]` raised 30→40 for stronger selection pressure; `_BASELINE_FLOOR = 58.0` guarantees `safe_baseline` always scores ≥ 58; `normalized_score` field added to return dict (score / 100.0); `expected_gain` baseline shifted to `_BASELINE_FLOOR`; backward-compatible (all Phase 21 callers still receive `score`, `expected_gain`, `reasons`, `warnings`)
+- `app/ai/director/edit_plan_schema.py` — `variant_selection: dict = field(default_factory=dict)` added to `AIEditPlan`; `"variant_selection": dict(self.variant_selection)` in `to_dict()`; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_variant_selection(plan, job_id)` added; runs only when `ai_variant_planning_enabled=True` AND `plan.variants.get("available")`; stores compact {selected_variant_id, selection_confidence, selection_reasons, fallback_used, rejected_count}; `_append_variant_selection_explainability(plan, selection)` appends: "AI selected retention-focused variant", "Safe baseline retained due to low confidence", "Creator-style variant scored highest", etc.; all wrapped in try/except; never block render; Phase 22 runs after Phase 21 in `_build_plan`
+- `app/ai/director/render_influence.py` — `_report_variant_selection(payload, edit_plan, report)` added; reports selection as deferred in Phase 22; compact `report["skipped"]` entry with selected/confidence/fallback/rejected; no variant rendered, no payload mutated, no FFmpeg altered; called inside `apply_ai_render_influence` try block
+- `tests/test_ai_phase21_variant_rendering.py` — `test_returns_dict_with_expected_keys` updated from strict set equality to `issubset` to accommodate new `normalized_score` field (non-breaking backward compatibility fix)
+- `tests/test_ai_phase22_best_variant_selector.py` (new) — 48 tests covering selector core behaviour, confidence fallback, priority heuristics, scoring normalization, AIEditPlan field, AI Director integration, render influence defer, and all safety boundaries
+
+**Verification:**
+
+- Phase 22 tests pass (48 tests)
+- Full suite passes (1402 tests, zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- No variant is ever rendered by the selector — metadata only
+- `risk="high"` variants skipped from selection whenever any safe option exists
+- Confidence gate < 0.50 → always falls back to `safe_baseline`
+- `safe_baseline` guaranteed floor score (≥ 58) — selector always has a stable fallback
+- No payload mutation — selector reads variant metadata, never writes to render payload
+- No segment start/end timing changes
+- No playback_speed changes
+- No FFmpeg command changes
+- No subtitle timing changes
+- No automatic rendering of selected variant
+- Never blocks render — all Phase 22 code wrapped in try/except in AI Director
+- Deterministic — same input always produces same selected_variant_id
+
+**Selection heuristics (priority order):**
+1. Highest `score_variant()` score (base + confidence boost + safety gate + context boost − risk penalty)
+2. Tiebreak: purpose_priority (retention → hook → story → subtitle → creator_style → pacing → safe_baseline)
+3. Tiebreak: risk_priority (low → medium → high)
+4. Confidence gate fallback: score < 50 → safe_baseline returned instead
+
+**Intentionally still blocked:**
+
+- Autonomous rendering of selected variant
+- Multi-variant execution queue
+- Auto-export best variant
+- UI auto-selection
+- Timing mutation application
+- FFmpeg mutation
+- Payload mutation
+
+**Architecture notes:**
+
+- Selector operates on Phase 21 `AIVariantSet` or its serialised dict form — no extra analysis
+- `_report_variant_selection` in render_influence records plan as "deferred_phase22" — safe pass-through for future execution phase
+- Phase 22 runs after Phase 21 in `_build_plan`; if Phase 21 produced no variants, Phase 22 is skipped
+- `normalized_score` in scoring is additive — existing callers are unaffected
+
+**Integrated systems:**
+
+- Variant Planning (Phase 21) — AIVariantSet is the selector's input
+- Variant Scoring (Phase 21/22) — `score_variant()` drives ranking
+- Retention Intelligence (Phase 16) — context boost for low retention score
+- Story Optimization (Phase 20) — context boost for weak_hook / low narrative_score
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
+### 2026-05-08 — AI Productization Phase 21: Safe Autonomous Variant Rendering Foundation
+
+**Implemented:**
+
+- `app/ai/variants/__init__.py` (new) — package marker
+- `app/ai/variants/variant_schema.py` (new) — `AIVariantPlan` dataclass (variant_id, label, purpose, confidence, risk, suggested_changes, expected_gain, safe_to_render, warnings); `AIVariantSet` dataclass (available, mode, variants capped at 5, recommended_variant_id, warnings); `VALID_PURPOSES` = {safe_baseline, retention, hook, subtitle, pacing, story, creator_style}; `VALID_RISKS` = {low, medium, high}; `clamp_variant_count(value) -> int` clamps to [1, 5]; no Pydantic, no heavy deps
+- `app/ai/variants/variant_safety.py` (new) — `sanitize_variant_changes(changes) -> dict` strips all forbidden keys; `is_variant_safe(variant, context) -> bool`; gates: risk != "high", no forbidden keys in suggested_changes, non-empty variant_id; `ALLOWED_CHANGE_KEYS` = {subtitle_density, subtitle_emphasis, camera_behavior, pacing_style, target_duration_hint, creator_style, ai_mode}; `FORBIDDEN_CHANGE_KEYS` = {playback_speed, segment_start, segment_end, subtitle_timing, ffmpeg_args, codec, crf, bitrate, validation_rules, output_path}; never raises
+- `app/ai/variants/variant_scoring.py` (new) — `score_variant(variant, edit_plan, context) -> dict`; returns {score 0-100, expected_gain 0-100, reasons, warnings}; base scores per purpose; risk penalty (high=-30, medium=-8); confidence boost (up to +15); safety gate modifier (+5 safe, -20 unsafe); context boosts from edit_plan retention/story/subtitle metadata; deterministic; never raises
+- `app/ai/variants/variant_generator.py` (new) — `generate_variant_plans(edit_plan, context, count=3) -> AIVariantSet`; always includes safe_baseline; factories: retention (low retention score), hook (weak_hook issue), subtitle (subtitle_execution available), pacing (non-fast current pacing), story (low narrative_score), creator_style (dominant_style classified); sanitizes + safety-gates + scores all candidates; recommends highest expected_gain safe variant; mode always "advisory"; max 5 variants; never raises; never enqueues render; never mutates payload or edit_plan; emits `ai_variant_plans_generated` at INFO
+- `app/models/schemas.py` — `ai_variant_planning_enabled: bool = False` and `ai_variant_count: int = 3` added after ai_timing_mutation_enabled; backward-compatible defaults
+- `app/ai/director/edit_plan_schema.py` — `variants: dict = field(default_factory=dict)` added to `AIEditPlan`; `"variants": dict(self.variants)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_variant_plans(plan, count, job_id)` added; runs only when `ai_variant_planning_enabled=True`; calls `generate_variant_plans(plan, ...)` with clamped count; `_append_variant_explainability(plan, variant_set)` appends: "AI variant planning prepared safe A/B options", "Retention-focused variant suggested", "Compact subtitle variant available", "Hook-strengthening variant prepared"; all helpers wrapped in try/except; never block render; Phase 21 runs after Phase 20 in `_build_plan`
+- `app/ai/director/render_influence.py` — `_report_variant_plans(payload, edit_plan, report)` added; reports variant planning as deferred in Phase 21; adds compact entry to `report["skipped"]` with mode/variants/safe/recommended counts; no extra render jobs enqueued, no payload mutated, no FFmpeg commands altered; called inside `apply_ai_render_influence` try block
+- `tests/test_ai_phase21_variant_rendering.py` (new) — 73 tests covering schema defaults, to_dict(), valid purposes/risks, count clamping, variant safety, forbidden key stripping, scoring, generator invariants, request flags, AIEditPlan field, AI Director integration, render influence defer, and all safety boundaries
+
+**Verification:**
+
+- Phase 21 tests pass (73 tests)
+- Full suite passes (1354 tests, zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- `FORBIDDEN_CHANGE_KEYS` always stripped from `suggested_changes` before storage
+- `high` risk variants never receive `safe_to_render=True` from safety gate
+- `mode` always `"advisory"` — variants are metadata only
+- No extra render jobs enqueued — generator is pure metadata computation
+- No payload mutation — generator reads edit_plan, never writes to payload
+- No segment start/end timing changes
+- No playback_speed changes
+- No FFmpeg command changes
+- No subtitle timing changes
+- No segment reordering
+- No automatic rendering of any variant
+- Never blocks render — all Phase 21 code wrapped in try/except in AI Director
+- Deterministic heuristics only — no cloud AI, no API keys, no GPU
+- `ai_variant_planning_enabled` defaults to `False` — zero behavior change for existing requests
+
+**Intentionally still blocked:**
+
+- Actual multi-variant rendering
+- Variant queue execution
+- AI best variant selector with autonomous rendering
+- UI variant selection
+- Auto-export best variant
+- Timing mutation application
+- FFmpeg mutation
+- Payload mutation
+
+**Architecture notes:**
+
+- Variant generator builds on all prior Phase 11–20 metadata — no new analysis
+- Factory priority: baseline → retention → hook → subtitle → pacing → story → creator_style
+- All candidates sanitized via `sanitize_variant_changes()` before scoring
+- `_report_variant_plans` in render_influence records the plan as "deferred_phase21" — safe pass-through for future phases
+- `clamp_variant_count` enforces [1, 5] regardless of request value
+
+**Integrated systems:**
+
+- Retention Intelligence (Phase 16) — low retention_score triggers retention variant
+- Story Optimization (Phase 20) — weak_hook issue triggers hook variant; low narrative_score triggers story variant
+- Subtitle Execution (Phase 17) — available subtitle_execution triggers subtitle variant
+- Creator Style (Phase 14) — dominant_style triggers creator_style variant
+- Pacing Intelligence (Phase 4) — non-fast pacing_style triggers pacing variant
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
+### 2026-05-08 — AI Productization Phase 20: Story-driven Edit Optimization Foundation
+
+**Implemented:**
+
+- `app/ai/story_optimization/__init__.py` (new) — package marker
+- `app/ai/story_optimization/story_optimization_schema.py` (new) — `StoryOptimizationIssue` dataclass (start, end, issue_type, severity, reason, suggested_action, confidence, safe_to_auto_apply always False in to_dict(), metadata); `StoryOptimizationPlan` dataclass (available, narrative_score, flow_type, issues capped at 10, recommendations capped at 8, warnings); `VALID_ISSUE_TYPES` = {weak_hook, missing_setup, long_setup, weak_build_up, missing_climax, weak_payoff, abrupt_outro, unclear_arc, retention_risk, unknown}; `VALID_SEVERITIES` = {low, medium, high}; `VALID_FLOW_TYPES` = {hook_to_climax, linear, flat, unknown}; no Pydantic, no heavy deps
+- `app/ai/story_optimization/hook_optimizer.py` (new) — `analyze_hook_quality(story_context, retention_context, transcript_chunks) -> list[StoryOptimizationIssue]`; gates: hook segment presence, weak_hook retention risk, retention_risk score > 0.5; severity: high (no hook), medium (retention risk), low (mildly elevated score); no text rewriting; never raises; safe_to_auto_apply always False
+- `app/ai/story_optimization/payoff_analyzer.py` (new) — `analyze_payoff_quality(story_context, retention_context) -> list[StoryOptimizationIssue]`; detects missing payoff (high severity), unclear_payoff retention risk, abrupt_ending, pacing_decay in payoff region, elevated payoff retention_risk; never raises; advisory only
+- `app/ai/story_optimization/arc_optimizer.py` (new) — `analyze_story_arc(story_context, pacing_context, retention_context) -> dict`; returns {flow_type, narrative_score, issues, warnings}; flow classification: hook_to_climax (hook + climax present), linear (≥3 segments + linear flow), flat (≤1 segment or flat arc), unknown; base score from segment presence weights (hook=20, setup=10, build_up=15, climax=25, payoff=15, outro=5); bonus for full arc (+10-20); energy modifier (±5); retention risk deduction (-2 per risk); 60/40 blend with story retention_score when available; issues: weak_hook (no hook), missing_climax, weak_build_up (hook→climax without build-up), unclear_arc (flat), long_setup (setup > 1.5× climax+build_up duration); no segment reorder; never raises; emits `ai_story_arc_analyzed` at INFO
+- `app/ai/story_optimization/story_recommender.py` (new) — `build_story_optimization_plan(story_context, retention_context, pacing_context, transcript_chunks) -> StoryOptimizationPlan`; combines hook + payoff + arc analyses; deduplicates issues by issue_type; issue-driven recommendations from map + flow-type recommendation; max 10 issues, max 8 recommendations; all safe_to_auto_apply=False enforced; never raises; emits `ai_story_optimization_generated` + `ai_story_optimization_issues_detected` at INFO
+- `app/ai/director/edit_plan_schema.py` — `story_optimization: dict = field(default_factory=dict)` added to `AIEditPlan`; `"story_optimization": dict(self.story_optimization)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_story_optimization(plan, chunks, pacing_ctx, job_id)` added; called after Phase 19 in `_build_plan`; pulls story/retention context from plan; `_append_story_optimization_explainability(plan, opt_plan)` appends: "Strong hook-to-climax flow detected" (hook_to_climax), "Story arc can be tightened" (long_setup/weak_build_up), "Payoff clarity may improve retention" (weak_payoff/abrupt_outro), "Opening hook may need strengthening" (weak_hook), "Narrative arc needs clearer structure" (unclear_arc/missing_climax); all helpers wrapped in try/except; never block render
+- `app/ai/director/render_influence.py` — `_report_story_optimization(payload, edit_plan, report)` added; reports story optimization as deferred in Phase 20; adds compact entry to `report["skipped"]` with flow/score/issue/recommendation counts; no segment ordering changed, no timing changed, no subtitle rewritten, no FFmpeg commands altered; called inside `apply_ai_render_influence` try block
+- `tests/test_ai_phase20_story_optimization.py` (new) — 69 tests covering schema defaults, to_dict(), valid types/severities, hook optimizer, payoff analyzer, arc optimizer, story recommender, render influence defer, AI Director integration, and all safety boundaries
+
+**Verification:**
+
+- Phase 20 tests pass (69 tests)
+- Full suite passes (1281 tests, zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- `safe_to_auto_apply` structurally False in `StoryOptimizationIssue.to_dict()` — cannot be overridden regardless of stored value
+- No segment start/end timing changes — story optimization is metadata-only in Phase 20
+- No playback_speed changes
+- No FFmpeg command changes
+- No subtitle timing changes
+- No automatic segment reordering
+- No transcript text rewriting
+- Never blocks render — all Phase 20 code wrapped in try/except in AI Director
+- Deterministic heuristics only — no cloud AI, no API keys, no GPU
+
+**Not yet implemented (intentionally blocked):**
+
+- Automatic segment reordering
+- Story-aware timing execution
+- Autonomous narrative editing
+- AI-generated hook rewriting
+- Render-time story mutation
+
+**Known limitations:**
+
+- Advisory only — all issues have safe_to_auto_apply=False
+- Deterministic heuristics only — no ML models
+- No segment/timing mutation
+- No subtitle rewrite
+- No autonomous editing
+
+**Architecture notes:**
+
+- Story optimization builds on existing Phase 12 story structure, Phase 16 retention risks, and Phase 4 pacing — no new analysis
+- Arc scoring blends structural segment presence (60%) with Phase 12 retention_score (40%) for stability
+- `_report_story_optimization` in render_influence records the plan as "deferred_phase20" — safe pass-through for future phases
+- Phase 20 runs after Phase 19 (timing mutation) in the AI Director `_build_plan` sequence
+- Issues are deduplicated by issue_type before capping at 10
+
+**Integrated systems:**
+
+- Story Intelligence (Phase 12) — segments, dominant_arc, narrative_flow, retention_score drive arc classification
+- Retention Intelligence (Phase 16) — risk_regions drive hook/payoff issue detection
+- Pacing Intelligence (Phase 4) — energy_level biases narrative score up/down
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
+### 2026-05-08 — AI Productization Phase 19: Retention-driven Timing Mutation Foundation
+
+**Implemented:**
+
+- `app/ai/timing/__init__.py` (new) — package marker
+- `app/ai/timing/timing_schema.py` (new) — `TimingMutationCandidate` dataclass (start, end, action, confidence, reason, risk_category, max_trim_seconds clamped [0, 1.5], safe_to_apply, warnings); `TimingMutationPlan` dataclass (available, mode, candidates capped at 10, estimated_retention_gain, warnings); `VALID_ACTIONS` = {tighten_setup, trim_silence, shorten_outro, hold_hook, no_change, none}; `_MAX_TRIM_SECONDS = 1.5`, `_MIN_CONFIDENCE = 0.70`, `_MIN_REGION_DURATION = 3.0`, `_MAX_CANDIDATES = 10`; no Pydantic, no heavy deps
+- `app/ai/timing/timing_safety.py` (new) — `clamp_trim_seconds(value, max_value=1.5) -> float`; `is_candidate_safe(candidate, context=None) -> bool`; gates: confidence ≥ 0.70, action not in {no_change, none, hold_hook}, region duration ≥ 3.0 s, start ≥ 0, max_trim_seconds ≤ 1.5; never raises
+- `app/ai/timing/timing_analyzer.py` (new) — `analyze_timing_candidates(retention_context, story_context, pacing_context, transcript_chunks) -> list[TimingMutationCandidate]`; risk-to-action map: long_setup→tighten_setup, silence_gap→trim_silence, pacing_decay (last 25%)→shorten_outro, weak_hook→hold_hook (max_trim=0, advisory only), unclear_payoff→no_change (max_trim=0); confidence derived from severity + pacing energy boost; max_trim per category: long_setup=1.0, silence_gap=0.8, pacing_decay=1.5; never trim more than 25% of region; max 10 candidates; safe_to_apply always False from analyzer; never raises; emits `ai_timing_candidates_analyzed` at INFO
+- `app/ai/timing/timing_recommender.py` (new) — `build_timing_mutation_plan(..., enabled=False) -> TimingMutationPlan`; enabled=False → mode='advisory', all safe_to_apply=False; enabled=True → runs is_candidate_safe gate; estimated_retention_gain computed from safe candidates (confidence × trim_ratio × 0.05 cap); never raises; emits `ai_timing_mutation_plan_generated` at INFO
+- `app/models/schemas.py` — `ai_timing_mutation_enabled: bool = False` added after ai_beat_transition_enabled; backward-compatible default preserves existing behavior
+- `app/ai/director/edit_plan_schema.py` — `timing_mutation: dict = field(default_factory=dict)` added to `AIEditPlan`; `"timing_mutation": dict(self.timing_mutation)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_timing_mutation(plan, chunks, pacing_ctx, enabled, job_id)` added; called after Phase 18 in `_build_plan`; pulls retention/story context from plan; `_append_timing_mutation_explainability(plan, timing_plan)` appends: "Retention risk: setup pacing candidate identified" (tighten_setup), "Retention risk: silence gap trim candidate identified" (trim_silence), "Retention risk: outro pacing decay candidate identified" (shorten_outro), "Timing mutation plan advisory-only (no segments changed)" (advisory mode), "Timing mutation plan ready (N safe candidates, est. gain=X%)" (enabled mode); all helpers wrapped in try/except; never block render
+- `app/ai/director/render_influence.py` — `_report_timing_mutation(payload, edit_plan, report)` added; reports timing mutation as deferred in Phase 19; adds compact entry to `report["skipped"]` with mode/candidate/safe/gain counts; no segment start/end changed, no playback_speed changed, no FFmpeg commands altered; called inside `apply_ai_render_influence` try block
+- `tests/test_ai_phase19_timing_mutation.py` (new) — 63 tests covering schema defaults, to_dict(), valid actions, safety gates, analyzer heuristics, recommender modes, render influence defer, AI Director integration, and all safety boundaries
+
+**Verification:**
+
+- Phase 19 tests pass (63 tests)
+- Full suite passes (1212 tests, zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- `max_trim_seconds` hard cap: 1.5 s — no AI-proposed trim exceeds this
+- `hold_hook` in `_ADVISORY_ONLY_ACTIONS` — can never receive safe_to_apply=True
+- `no_change` and `none` in `_ADVISORY_ONLY_ACTIONS` — advisory-only actions always blocked
+- `confidence` gate: ≥ 0.70 — low-confidence candidates always blocked
+- `region duration` gate: ≥ 3.0 s — micro-regions always blocked
+- `start ≥ 0` gate — hook region start never trimmed below zero
+- `enabled=False` default — advisory-only mode; no segment timing changed until explicitly opted in
+- No segment start/end timing changes — timing mutation is metadata-only in Phase 19
+- No playback_speed changes
+- No FFmpeg command changes
+- No subtitle timing changes
+- Never blocks render — all Phase 19 code wrapped in try/except in AI Director
+- Deterministic heuristics only — no cloud AI, no API keys, no GPU
+
+**Architecture notes:**
+
+- Timing candidates are derived from retention risk regions (Phase 16) — no new audio analysis
+- `pacing_decay` rule only applies to the last 25% of content to prevent erroneous mid-video trim proposals
+- `hold_hook` produces advisory-only candidates with max_trim=0 — signals the hook needs strengthening, not cutting
+- `_report_timing_mutation` in render_influence records the plan as "deferred_phase19" — safe pass-through for future phases
+- Phase 19 runs after Phase 18 (beat visual execution) in the AI Director `_build_plan` sequence
+- estimated_retention_gain is bounded (confidence × trim_ratio × 0.05 per candidate, sum capped at 1.0)
+
+**Integrated systems:**
+
+- Retention Intelligence (Phase 16) — risk_regions drive all candidate generation
+- Story Intelligence (Phase 12) — story segments available for future region refinement
+- Pacing Intelligence (Phase 4) — energy_level and total_duration used for confidence boosts and last-quarter check
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
+### 2026-05-08 — AI Productization Phase 18: Beat-synced Visual Execution Foundation
+
+**Implemented:**
+
+- `app/ai/visuals/__init__.py` (new) — package marker
+- `app/ai/visuals/beat_visual_schema.py` (new) — `BeatPulseRegion` dataclass (start, end, pulse_strength clamped [0, 0.15], pulse_style, beat_count, warnings); `TransitionHint` dataclass (start, end, transition_style, confidence, reason, safe_to_apply always False in to_dict()); `BeatVisualExecutionPlan` dataclass (available, execution_mode="metadata_only", bpm, pulse_regions capped at 12, transition_hints capped at 10, warnings); `VALID_PULSE_STYLES` = {none, soft_pulse, punch_pulse, cinematic_pulse}; `VALID_TRANSITION_STYLES` = {none, soft_cut, beat_pulse, energy_pop, cinematic_push}; `_MAX_PULSE_STRENGTH = 0.15`, `_BPM_MIN = 60.0`, `_BPM_MAX = 190.0`, `_MIN_BEAT_COUNT = 4`; no Pydantic, no heavy deps
+- `app/ai/visuals/beat_pulse.py` (new) — `build_beat_pulse_regions(pacing_context, beat_execution_context, story_context, retention_context) -> list[BeatPulseRegion]`; gate checks: beat_available required, BPM must be [60, 190], beat_count ≥ 4; style selection: dominant_arc in {tension_release, emotional_peak, curiosity_build, setup_payoff} → cinematic_pulse; energy ≥ 0.7 + fast pacing or bpm ≥ 120 → punch_pulse; energy < 0.3 → soft_pulse; per-story-segment regions with boost for hook/climax/tension/build_up; retention risk overlap softens pulse × 0.5; fallback single region when no story segments; max 12 regions; never raises; emits `ai_beat_pulse_regions_generated` at INFO
+- `app/ai/visuals/transition_planner.py` (new) — `build_transition_hints(pacing_context, story_context, retention_context, creator_style_context) -> list[TransitionHint]`; advisory-only; safe_to_apply structurally False; segment-pair transition map: hook→build_up=beat_pulse, build_up→climax=cinematic_push, climax→payoff=energy_pop, etc.; hype creator styles (anime_edit, high_energy_reaction, gameplay_highlight, podcast_viral) → energy_pop override; calm styles (documentary_clean, calm_minimal, interview_clip) → soft_cut override; fast pacing + beat + bpm in range → beat_pulse fallback; arc fallback mapping; max 10 hints; never raises; emits `ai_transition_hints_generated` at INFO
+- `app/ai/visuals/visual_execution.py` (new) — `build_beat_visual_execution_plan(...) -> BeatVisualExecutionPlan`; orchestrates pulse regions + transition hints; execution_mode always "metadata_only"; availability requires beat_available + valid bpm + beat_count ≥ 4; never raises; emits `ai_beat_visual_execution_generated` at INFO
+- `app/ai/director/edit_plan_schema.py` — `beat_visual_execution: dict = field(default_factory=dict)` added to `AIEditPlan`; `"beat_visual_execution": dict(self.beat_visual_execution)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_beat_visual_execution(plan, pacing_ctx, job_id)` added; called after Phase 17 in `_build_plan`; pulls beat_execution/story/retention/creator_style context from plan; `_append_beat_visual_explainability(plan, visual_plan)` appends: "Beat pulse visual rhythm planned" (punch_pulse regions), "Cinematic visual rhythm planned" (cinematic_pulse regions), "High-energy visual transition hints detected" (energy_pop/cinematic_push/beat_pulse hints), "Visual beat execution remains metadata-only"; all helpers wrapped in try/except; never block render
+- `app/ai/director/render_influence.py` — `_report_beat_visual_execution(payload, edit_plan, report)` added; reports beat visual execution as deferred in Phase 18; adds compact entry to `report["skipped"]` with bpm/pulse_regions/transition_hints counts; no FFmpeg commands altered, no timing changed, no visual effects applied; called inside `apply_ai_render_influence` try block
+- `tests/test_ai_phase18_beat_visual_execution.py` (new) — 80+ tests covering schema defaults, to_dict(), pulse planner gates, energy/arc style mapping, density softening, transition advisory, render influence defer, AI Director integration, and all safety boundaries
+
+**Verification:**
+
+- Phase 18 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- `pulse_strength` hard cap: 0.15 — matches Phase 11 beat_execution constraint
+- `safe_to_apply` structurally False in `TransitionHint.to_dict()` — cannot be overridden
+- `execution_mode` always "metadata_only" — planner never sets anything else
+- BPM gate: [60.0, 190.0] — outside range → empty regions returned
+- beat_count gate: ≥ 4 — below threshold → empty regions returned
+- No FFmpeg command changes — beat visual plan is metadata only
+- No clip start/end timing changes
+- No subtitle timing changes
+- No playback_speed changes
+- No output validation/status rule changes
+- No librosa at runtime — all metadata sourced from existing pacing/beat context
+- Never blocks render — all Phase 18 code wrapped in try/except in AI Director
+- Deterministic heuristics only — no cloud AI, no API keys, no GPU
+
+**Architecture notes:**
+
+- Beat visual execution builds on existing Phase 11 beat metadata (`plan.beat_execution`) and Phase 4 pacing context — no new audio analysis
+- Pulse regions are derived from story segment boundaries (Phase 12) — no new timing introduced
+- Transition hints are advisory boundaries between adjacent story segments — no cut mutation
+- `_report_beat_visual_execution` in render_influence records the plan as "deferred_phase18" — safe pass-through for future phases
+- Phase 18 runs after Phase 17 (subtitle execution) in the AI Director `_build_plan` sequence
+
+**Integrated systems:**
+
+- Beat/Pacing Intelligence (Phase 4/11) — beat_available, bpm, beat_count, energy_level, pacing_style drive all gates
+- Story Intelligence (Phase 12) — story segments provide region boundaries; dominant_arc informs pulse/transition style
+- Retention Intelligence (Phase 16) — risk_regions soften pulse in overlap zones
+- Creator Style Intelligence (Phase 14) — dominant_style biases transition hint style
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
+**What Beat Visual Execution can do now:**
+
+- Generate compact beat pulse regions from BPM/energy/story segment metadata
+- Classify pulse style per region: punch_pulse (high energy), cinematic_pulse (cinematic arc), soft_pulse (low energy)
+- Soften pulse in retention risk overlap zones
+- Generate advisory transition hints for adjacent story segment pairs
+- Map creator style and story arc to specific transition styles
+- Expose compact `"beat_visual_execution"` key in render result_json
+- Report beat visual execution as safely deferred in render_influence
+- Append advisory explainability lines to AI summary
+
+**Not yet implemented:**
+
+- Actual FFmpeg beat pulse visual effect
+- Actual beat-synced transitions in rendered output
+- Timeline-driven transition editor
+- Autonomous timing mutation
+- Playback speed mutation
+- per-frame visual beat synchronization
+
+**Known limitations:**
+
+- Metadata-first execution only — no visual output change in Phase 18
+- Advisory transition hints only — `safe_to_apply` always False
+- No FFmpeg visual mutation
+- No clip timing mutation
+- No subtitle timing mutation
+- Pulse regions derived from story segment boundaries — not from precise audio beat timestamps
+
+> Phase 18 extends the AI system from subtitle execution intelligence toward beat-synced visual rhythm planning, enabling energy-aware pulse regions and advisory transition hints while preserving complete render stability and safety.
+
+---
+
+### 2026-05-08 — AI Productization Phase 17: Dynamic Subtitle Execution Foundation
+
+**Implemented:**
+
+- `app/ai/subtitles/__init__.py` (new) — package marker
+- `app/ai/subtitles/subtitle_execution_schema.py` (new) — `SubtitleExecutionHint` dataclass (emphasis_strength, density_mode, emotion_style, beat_sync_strength, keyword_focus, warnings); `SubtitleExecutionRegion` dataclass (start, end, style, emphasis, emotion, beat_strength, metadata); `SubtitleExecutionPlan` dataclass (available, regions capped at 20, global_hint, warnings); `VALID_DENSITY_MODES` = {compact, normal, expressive}; `VALID_EMOTION_STYLES` = {neutral, hype, dramatic, calm, emotional, punch}; all have `to_dict()` methods; no Pydantic, no heavy deps
+- `app/ai/subtitles/subtitle_emphasis.py` (new) — `build_subtitle_emphasis(transcript_chunks, pacing_context, emotion_context, retention_context) -> dict`; deterministic only; never raises; `_detect_hook_strength()` scores hook keyword density in early chunks (ratios → 0.85/0.6/0.3/0.1); `_extract_keyword_focus()` extracts keyword_focus list from early chunks; emotion contribution: urgency/excitement/surprise/hype → +0.3–0.5; energy_level > 0.7 → +0.25 emphasis +0.3 beat_sync; beat_available + bpm ≥ 120 → +0.2–0.4 beat_sync; weak_hook retention risk → +0.1 emphasis; all values clamped [0, 1]; emits `ai_subtitle_emphasis_generated` at INFO
+- `app/ai/subtitles/subtitle_density.py` (new) — `analyze_subtitle_density(transcript_chunks, pacing_context, story_context) -> dict`; deterministic only; never raises; overload detection: avg_words > 6.0 or max_words > 12 → compact + overload_detected; pacing fast/dynamic → compact; slow_build/slow → expressive; avg_words < 3.0 → expressive; story arc curiosity_build/tension_release/front_loaded → compact; emits `ai_subtitle_density_detected` at INFO
+- `app/ai/subtitles/subtitle_emotion.py` (new) — `detect_subtitle_emotion_style(emotion_context, story_context, creator_style_context) -> dict`; deterministic only; never raises; maps emotion → style via `_EMOTION_STYLE_MAP`; maps pacing_style → style via `_PACING_STYLE_MAP`; maps dominant_arc → style via `_ARC_STYLE_MAP`; maps creator_style → style via `_CREATOR_STYLE_MAP`; confidence = top_score × 0.8 + gap × 0.4, clamped [0, 1]; supported mappings: hype/fast pacing → punch/hype; cinematic/tension arc → dramatic; calm/slow → calm; emotional arc → emotional
+- `app/ai/subtitles/subtitle_execution.py` (new) — `build_subtitle_execution_plan(...) -> SubtitleExecutionPlan`; orchestrates emphasis + density + emotion; builds temporal regions from transcript chunks (max 20); chunk score > 0.7 → hook style + +0.15 emphasis; story hook/climax segment bounds → style annotation; all region emphasis and beat_strength values clamped [0, 1]; never raises; emits `ai_subtitle_execution_generated` at INFO
+- `app/ai/director/edit_plan_schema.py` — `subtitle_execution: dict = field(default_factory=dict)` added to `AIEditPlan`; `"subtitle_execution": dict(self.subtitle_execution)` added to `to_dict()` output; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_subtitle_execution(plan, chunks, pacing_ctx, job_id)` added; called after Phase 16 in `_build_plan`; builds execution plan from story/retention/creator_style context; stores `execution_plan.to_dict()` on `plan.subtitle_execution`; `_append_subtitle_execution_explainability(plan, execution_plan)` appends: "Dynamic subtitle emphasis enabled" (emphasis > 0.3), "Emotion-aware subtitle execution detected" (non-neutral emotion), "Compact subtitle density recommended" (density == compact), "Beat-aware subtitle emphasis enabled" (beat_sync > 0.3); both helpers never raise; wrapped in try/except
+- `app/services/subtitle_engine.py` — `apply_subtitle_execution_hints(blocks, subtitle_execution) -> dict` added; safely reads global_hint fields (emphasis_strength, emotion_style, density_mode, keyword_focus); validates and clamps all values; returns `{applied: True, ...}` on success, `{applied: False, ...}` on missing/unavailable metadata; never mutates subtitle blocks timing or text; never raises; emits `subtitle_execution_hints_applied` at INFO
+- `tests/test_ai_phase17_dynamic_subtitles.py` (new) — 78+ tests covering all schema, emphasis, density, emotion, execution planner, AIEditPlan field, subtitle engine hints, AI Director integration, and safety boundary requirements
+
+**Verification:**
+
+- Phase 17 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- No transcript text mutation in any code path
+- No subtitle timing mutation — start/end never altered
+- No SRT segmentation rewrite
+- No playback_speed mutation
+- No FFmpeg command changes
+- No autonomous subtitle rewriting
+- All emphasis/beat_sync values structurally clamped to [0.0, 1.0]
+- Density mode validated against frozenset before use
+- Emotion style validated against frozenset before use
+- Max 20 execution regions — no unbounded output
+- Never blocks render pipeline — all subtitle execution errors are caught and recorded as warnings
+- Deterministic heuristics only — no cloud AI, no API keys, no external inference, no GPU
+- `apply_subtitle_execution_hints` is read-only — returns hints dict, never mutates blocks
+
+**Architecture notes:**
+
+- Subtitle execution intelligence is metadata-first: the plan is built and stored in `result_json["subtitle_execution"]` but does not yet alter ASS generation architecture, karaoke timing, or FFmpeg commands
+- `build_subtitle_execution_plan` combines emphasis + density + emotion sub-systems into a single plan object
+- All three sub-systems (emphasis, density, emotion) are independently callable and fallback-safe
+- Regions are built from transcript chunk boundaries — no new timing introduced
+- `apply_subtitle_execution_hints` in subtitle_engine.py is a safe read interface for downstream render steps
+- Phase 17 runs after Phase 16 (retention intelligence) in the AI Director `_build_plan` sequence
+
+**Integrated systems:**
+
+- Story Intelligence (Phase 12) — story segments used for region style annotation (hook/climax)
+- Retention Intelligence (Phase 16) — risk_regions used for emphasis boost on hook risk
+- Creator Style Intelligence (Phase 14) — dominant_style used for emotion style hint
+- Beat/Pacing Intelligence (Phase 4) — energy_level, bpm, beat_available drive emphasis and beat_sync
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
+**What Dynamic Subtitle Execution can do now:**
+
+- Detect hook keyword density and translate to emphasis strength
+- Map pacing/emotion/story signals to subtitle emotion styles (neutral/hype/dramatic/calm/emotional/punch)
+- Detect overloaded subtitle density regions and recommend compact/expressive modes
+- Build temporal execution regions (max 20) with per-region style, emphasis, and beat_strength hints
+- Annotate hook and climax regions from story intelligence
+- Boost emphasis when retention hook risk is detected
+- Expose compact `"subtitle_execution"` key in render result_json with global_hint + regions
+- Append advisory explainability lines to AI summary
+
+**Not yet implemented:**
+
+- Subtitle timing mutation
+- Autonomous subtitle rewriting
+- Adaptive subtitle segmentation
+- Beat-synced karaoke timing mutation
+- AI-generated subtitle text
+- Adaptive ASS style switching from execution hints
+
+**Known limitations:**
+
+- Metadata-first execution — execution plan is advisory; does not yet alter ASS generation, karaoke logic, or FFmpeg subtitle burn
+- Bounded subtitle influence only — no timing, no text, no segmentation changes
+- No transcript rewriting — subtitle text is read-only throughout
+- No autonomous subtitle generation — all subtitle content originates from Whisper transcription
+- Emphasis hints are informational — not yet wired to per-block ASS style overrides
+
+> Phase 17 extends the AI system from retention intelligence toward dynamic subtitle execution planning, enabling emotion-aware, beat-aware, and density-aware subtitle metadata while preserving complete subtitle timing stability and render safety.
+
+---
+
 ### 2026-05-08 — AI Productization Phase 16: Retention Intelligence Foundation
 
 **Implemented:**

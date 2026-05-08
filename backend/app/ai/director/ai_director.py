@@ -213,6 +213,54 @@ def _build_plan(
         plan.warnings.append(f"retention_error:{type(exc).__name__}")
         logger.debug("ai_director_retention_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 17: Dynamic Subtitle Execution ---
+    try:
+        _attach_subtitle_execution(plan, chunks, pacing_ctx, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"subtitle_execution_error:{type(exc).__name__}")
+        logger.debug("ai_director_subtitle_execution_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 18: Beat-synced Visual Execution ---
+    try:
+        _attach_beat_visual_execution(plan, pacing_ctx, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"beat_visual_execution_error:{type(exc).__name__}")
+        logger.debug("ai_director_beat_visual_execution_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 19: Retention-driven Timing Mutation ---
+    try:
+        timing_enabled = bool(getattr(request, "ai_timing_mutation_enabled", False))
+        _attach_timing_mutation(plan, chunks, pacing_ctx, timing_enabled, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"timing_mutation_error:{type(exc).__name__}")
+        logger.debug("ai_director_timing_mutation_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 20: Story-driven Edit Optimization ---
+    try:
+        _attach_story_optimization(plan, chunks, pacing_ctx, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"story_optimization_error:{type(exc).__name__}")
+        logger.debug("ai_director_story_optimization_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 21: Safe Autonomous Variant Rendering ---
+    try:
+        variant_enabled = bool(getattr(request, "ai_variant_planning_enabled", False))
+        if variant_enabled:
+            raw_count = getattr(request, "ai_variant_count", 3)
+            _attach_variant_plans(plan, raw_count, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"variant_planning_error:{type(exc).__name__}")
+        logger.debug("ai_director_variant_planning_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 22: AI Best Variant Selector ---
+    try:
+        variant_enabled = bool(getattr(request, "ai_variant_planning_enabled", False))
+        if variant_enabled and plan.variants.get("available"):
+            _attach_variant_selection(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"variant_selection_error:{type(exc).__name__}")
+        logger.debug("ai_director_variant_selection_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -919,6 +967,574 @@ def _append_knowledge_explainability(plan: "AIEditPlan", result: dict) -> None:
                 if not any(hook_line in str(l) for l in lines):
                     lines.append(hook_line)
                 break
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 17 — Dynamic Subtitle Execution attachment
+# ---------------------------------------------------------------------------
+
+def _attach_subtitle_execution(
+    plan: "AIEditPlan",
+    chunks: list[dict],
+    pacing_ctx: dict,
+    job_id: str,
+) -> None:
+    """Build subtitle execution plan and attach compact summary to plan. Never raises."""
+    try:
+        from app.ai.subtitles.subtitle_execution import build_subtitle_execution_plan
+
+        # Build context dicts from prior phase results
+        story_ctx = dict(plan.story) if isinstance(plan.story, dict) else {}
+        retention_ctx = dict(plan.retention) if isinstance(plan.retention, dict) else {}
+        creator_ctx = dict(plan.creator_style) if isinstance(plan.creator_style, dict) else {}
+
+        execution_plan = build_subtitle_execution_plan(
+            transcript_chunks=chunks,
+            pacing_context=pacing_ctx,
+            emotion_context=None,
+            story_context=story_ctx,
+            retention_context=retention_ctx,
+            creator_style_context=creator_ctx,
+        )
+
+        plan.subtitle_execution = execution_plan.to_dict()
+
+        logger.info(
+            "ai_subtitle_execution_generated job_id=%s available=%s regions=%d "
+            "density=%s emotion=%s emphasis=%.3f",
+            job_id,
+            execution_plan.available,
+            len(execution_plan.regions),
+            execution_plan.global_hint.density_mode if execution_plan.global_hint else "none",
+            execution_plan.global_hint.emotion_style if execution_plan.global_hint else "none",
+            execution_plan.global_hint.emphasis_strength if execution_plan.global_hint else 0.0,
+        )
+
+        _append_subtitle_execution_explainability(plan, execution_plan)
+
+    except Exception as exc:
+        plan.subtitle_execution = {
+            "available": False,
+            "warnings": [f"subtitle_execution_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_subtitle_execution_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_subtitle_execution_explainability(plan: "AIEditPlan", execution_plan: Any) -> None:
+    """Append compact subtitle execution insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not getattr(execution_plan, "available", False):
+            return
+
+        hint = getattr(execution_plan, "global_hint", None)
+        if hint is None:
+            return
+
+        emphasis = getattr(hint, "emphasis_strength", 0.0)
+        density = getattr(hint, "density_mode", "normal")
+        emotion = getattr(hint, "emotion_style", "neutral")
+        beat_sync = getattr(hint, "beat_sync_strength", 0.0)
+
+        if emphasis > 0.3:
+            line = "Dynamic subtitle emphasis enabled"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if emotion not in ("neutral", ""):
+            line = "Emotion-aware subtitle execution detected"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if density == "compact":
+            line = "Compact subtitle density recommended"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if beat_sync > 0.3:
+            line = "Beat-aware subtitle emphasis enabled"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 18 — Beat-synced Visual Execution attachment
+# ---------------------------------------------------------------------------
+
+def _attach_beat_visual_execution(
+    plan: "AIEditPlan",
+    pacing_ctx: dict,
+    job_id: str,
+) -> None:
+    """Build beat visual execution plan and attach to plan. Never raises."""
+    try:
+        from app.ai.visuals.visual_execution import build_beat_visual_execution_plan
+
+        # Pull context from prior phases
+        beat_ctx = dict(plan.beat_execution) if isinstance(plan.beat_execution, dict) else {}
+        story_ctx = dict(plan.story) if isinstance(plan.story, dict) else {}
+        retention_ctx = dict(plan.retention) if isinstance(plan.retention, dict) else {}
+        creator_ctx = dict(plan.creator_style) if isinstance(plan.creator_style, dict) else {}
+
+        visual_plan = build_beat_visual_execution_plan(
+            pacing_context=pacing_ctx,
+            beat_execution_context=beat_ctx,
+            story_context=story_ctx,
+            retention_context=retention_ctx,
+            creator_style_context=creator_ctx,
+        )
+
+        plan.beat_visual_execution = visual_plan.to_dict()
+
+        logger.info(
+            "ai_beat_visual_execution_generated job_id=%s available=%s "
+            "bpm=%s pulse_regions=%d transition_hints=%d",
+            job_id,
+            visual_plan.available,
+            f"{visual_plan.bpm:.1f}" if visual_plan.bpm is not None else "none",
+            len(visual_plan.pulse_regions),
+            len(visual_plan.transition_hints),
+        )
+
+        _append_beat_visual_explainability(plan, visual_plan)
+
+    except Exception as exc:
+        plan.beat_visual_execution = {
+            "available": False,
+            "warnings": [f"beat_visual_execution_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_beat_visual_execution_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_beat_visual_explainability(plan: "AIEditPlan", visual_plan: Any) -> None:
+    """Append compact beat visual execution lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not getattr(visual_plan, "available", False):
+            return
+
+        pulse_regions = getattr(visual_plan, "pulse_regions", [])
+        transition_hints = getattr(visual_plan, "transition_hints", [])
+
+        # Beat pulse line
+        has_punch = any(
+            getattr(r, "pulse_style", "") == "punch_pulse" for r in pulse_regions
+        )
+        has_cinematic = any(
+            getattr(r, "pulse_style", "") == "cinematic_pulse" for r in pulse_regions
+        )
+
+        if has_punch:
+            line = "Beat pulse visual rhythm planned"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+        elif has_cinematic:
+            line = "Cinematic visual rhythm planned"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+        elif pulse_regions:
+            line = "Beat pulse visual rhythm planned"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        # Transition hints line
+        high_energy_transitions = {
+            r.transition_style for r in transition_hints
+            if getattr(r, "transition_style", "") in ("energy_pop", "cinematic_push", "beat_pulse")
+        }
+        if high_energy_transitions:
+            line = "High-energy visual transition hints detected"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        # Metadata-only reminder
+        line = "Visual beat execution remains metadata-only"
+        if not any("metadata-only" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 22 — AI Best Variant Selector attachment
+# ---------------------------------------------------------------------------
+
+def _attach_variant_selection(plan: "AIEditPlan", job_id: str) -> None:
+    """Run best variant selector and attach compact result to plan. Never raises."""
+    try:
+        from app.ai.variants.variant_selector import select_best_variant
+
+        selection = select_best_variant(plan.variants, edit_plan=plan, context={"job_id": job_id})
+
+        # Store only the compact fields — never store full variant content again
+        plan.variant_selection = {
+            "selected_variant_id": selection.get("selected_variant_id"),
+            "selection_confidence": selection.get("selection_confidence", 0.0),
+            "selection_reasons": list(selection.get("selection_reasons") or []),
+            "fallback_used": bool(selection.get("fallback_used", False)),
+            "rejected_count": len(selection.get("rejected_variants") or []),
+        }
+
+        logger.info(
+            "ai_variant_selection_attached job_id=%s selected=%s confidence=%.4f fallback=%s",
+            job_id,
+            selection.get("selected_variant_id"),
+            selection.get("selection_confidence", 0.0),
+            selection.get("fallback_used", False),
+        )
+
+        _append_variant_selection_explainability(plan, selection)
+
+    except Exception as exc:
+        plan.variant_selection = {
+            "available": False,
+            "warnings": [f"variant_selection_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_variant_selection_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_variant_selection_explainability(plan: "AIEditPlan", selection: dict) -> None:
+    """Append compact variant selection insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        fallback = selection.get("fallback_used", False)
+        reasons = selection.get("selection_reasons") or []
+
+        if fallback:
+            line = "Safe baseline retained due to low confidence"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+            return
+
+        if "retention_focused_variant_highest_score" in reasons:
+            line = "AI selected retention-focused variant"
+        elif "hook_strengthening_variant_highest_score" in reasons:
+            line = "AI selected hook-strengthening variant"
+        elif "creator_style_match_variant_highest_score" in reasons:
+            line = "Creator-style variant scored highest"
+        elif "story_coherence_variant_highest_score" in reasons:
+            line = "Story coherence variant selected"
+        elif "subtitle_optimization_variant_highest_score" in reasons:
+            line = "Compact subtitle variant selected"
+        else:
+            line = "AI variant selection complete"
+
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 21 — Safe Autonomous Variant Rendering attachment
+# ---------------------------------------------------------------------------
+
+def _attach_variant_plans(
+    plan: "AIEditPlan",
+    count: int,
+    job_id: str,
+) -> None:
+    """Generate advisory variant plans and attach to plan. Never raises."""
+    try:
+        from app.ai.variants.variant_generator import generate_variant_plans
+        from app.ai.variants.variant_schema import clamp_variant_count
+
+        clamped = clamp_variant_count(count)
+        variant_set = generate_variant_plans(plan, context={"job_id": job_id}, count=clamped)
+        plan.variants = variant_set.to_dict()
+
+        safe_count = sum(1 for v in variant_set.variants if v.safe_to_render)
+        logger.info(
+            "ai_variant_plans_attached job_id=%s count=%d safe=%d recommended=%s",
+            job_id,
+            len(variant_set.variants),
+            safe_count,
+            variant_set.recommended_variant_id,
+        )
+
+        _append_variant_explainability(plan, variant_set)
+
+    except Exception as exc:
+        plan.variants = {
+            "available": False,
+            "warnings": [f"variant_planning_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_variant_planning_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_variant_explainability(plan: "AIEditPlan", variant_set: Any) -> None:
+    """Append compact variant planning insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not getattr(variant_set, "available", False):
+            return
+
+        variants = getattr(variant_set, "variants", [])
+        purposes = {getattr(v, "purpose", "") for v in variants}
+
+        line = "AI variant planning prepared safe A/B options"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+        if "retention" in purposes:
+            line = "Retention-focused variant suggested"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if "subtitle" in purposes:
+            line = "Compact subtitle variant available"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if "hook" in purposes:
+            line = "Hook-strengthening variant prepared"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 20 — Story-driven Edit Optimization attachment
+# ---------------------------------------------------------------------------
+
+def _attach_story_optimization(
+    plan: "AIEditPlan",
+    chunks: list[dict],
+    pacing_ctx: dict,
+    job_id: str,
+) -> None:
+    """Build story optimization plan and attach compact summary to plan. Never raises."""
+    try:
+        from app.ai.story_optimization.story_recommender import build_story_optimization_plan
+
+        story_ctx = dict(plan.story) if isinstance(plan.story, dict) else {}
+        retention_ctx = dict(plan.retention) if isinstance(plan.retention, dict) else {}
+
+        opt_plan = build_story_optimization_plan(
+            story_context=story_ctx,
+            retention_context=retention_ctx,
+            pacing_context=pacing_ctx,
+            transcript_chunks=chunks,
+        )
+
+        plan.story_optimization = opt_plan.to_dict()
+
+        logger.info(
+            "ai_story_optimization_generated job_id=%s available=%s flow=%s "
+            "score=%.1f issues=%d recommendations=%d",
+            job_id,
+            opt_plan.available,
+            opt_plan.flow_type,
+            opt_plan.narrative_score,
+            len(opt_plan.issues),
+            len(opt_plan.recommendations),
+        )
+
+        _append_story_optimization_explainability(plan, opt_plan)
+
+    except Exception as exc:
+        plan.story_optimization = {
+            "available": False,
+            "warnings": [f"story_optimization_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_story_optimization_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_story_optimization_explainability(plan: "AIEditPlan", opt_plan: Any) -> None:
+    """Append compact story optimization insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not getattr(opt_plan, "available", False):
+            return
+
+        flow_type = getattr(opt_plan, "flow_type", "unknown")
+        issues = getattr(opt_plan, "issues", [])
+        issue_types = {getattr(i, "issue_type", "") for i in issues}
+
+        # Positive flow line
+        if flow_type == "hook_to_climax":
+            line = "Strong hook-to-climax flow detected"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        # Issue-driven lines
+        if "long_setup" in issue_types or "weak_build_up" in issue_types:
+            line = "Story arc can be tightened"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if "weak_payoff" in issue_types or "abrupt_outro" in issue_types:
+            line = "Payoff clarity may improve retention"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if "weak_hook" in issue_types:
+            line = "Opening hook may need strengthening"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if "unclear_arc" in issue_types or "missing_climax" in issue_types:
+            line = "Narrative arc needs clearer structure"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 19 — Retention-driven Timing Mutation attachment
+# ---------------------------------------------------------------------------
+
+def _attach_timing_mutation(
+    plan: "AIEditPlan",
+    chunks: list[dict],
+    pacing_ctx: dict,
+    enabled: bool,
+    job_id: str,
+) -> None:
+    """Build timing mutation plan and attach compact summary to plan. Never raises."""
+    try:
+        from app.ai.timing.timing_recommender import build_timing_mutation_plan
+
+        retention_ctx = dict(plan.retention) if isinstance(plan.retention, dict) else {}
+        story_ctx = dict(plan.story) if isinstance(plan.story, dict) else {}
+
+        timing_plan = build_timing_mutation_plan(
+            retention_context=retention_ctx,
+            story_context=story_ctx,
+            pacing_context=pacing_ctx,
+            transcript_chunks=chunks,
+            enabled=enabled,
+        )
+
+        plan.timing_mutation = timing_plan.to_dict()
+
+        from app.ai.timing.timing_schema import _MAX_CANDIDATES
+        safe_count = sum(
+            1 for c in timing_plan.candidates if c.safe_to_apply
+        )
+
+        logger.info(
+            "ai_timing_mutation_generated job_id=%s available=%s mode=%s "
+            "candidates=%d safe=%d retention_gain=%.4f",
+            job_id,
+            timing_plan.available,
+            timing_plan.mode,
+            len(timing_plan.candidates),
+            safe_count,
+            timing_plan.estimated_retention_gain,
+        )
+
+        _append_timing_mutation_explainability(plan, timing_plan)
+
+    except Exception as exc:
+        plan.timing_mutation = {
+            "available": False,
+            "warnings": [f"timing_mutation_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_timing_mutation_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_timing_mutation_explainability(plan: "AIEditPlan", timing_plan: Any) -> None:
+    """Append compact timing mutation insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not getattr(timing_plan, "available", False):
+            return
+
+        candidates = getattr(timing_plan, "candidates", [])
+        mode = getattr(timing_plan, "mode", "advisory")
+        safe_candidates = [c for c in candidates if getattr(c, "safe_to_apply", False)]
+
+        # Summarize risk categories found
+        actions = {getattr(c, "action", "") for c in candidates if getattr(c, "action", "") not in ("none", "no_change")}
+        if "tighten_setup" in actions:
+            line = "Retention risk: setup pacing candidate identified"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+        if "trim_silence" in actions:
+            line = "Retention risk: silence gap trim candidate identified"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+        if "shorten_outro" in actions:
+            line = "Retention risk: outro pacing decay candidate identified"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if mode == "advisory":
+            line = "Timing mutation plan advisory-only (no segments changed)"
+            if not any("advisory-only" in str(l) for l in lines):
+                lines.append(line)
+        elif safe_candidates:
+            gain = getattr(timing_plan, "estimated_retention_gain", 0.0)
+            line = f"Timing mutation plan ready ({len(safe_candidates)} safe candidate(s), est. gain={gain:.1%})"
+            if not any("Timing mutation plan ready" in str(l) for l in lines):
+                lines.append(line)
+
     except Exception:
         pass
 

@@ -87,6 +87,11 @@ def apply_ai_render_influence(
         _apply_subtitle_influence(payload, edit_plan, report)
         _apply_pacing_influence(payload, edit_plan, report)
         _apply_memory_influence(payload, edit_plan, report)
+        _report_beat_visual_execution(payload, edit_plan, report)
+        _report_timing_mutation(payload, edit_plan, report)
+        _report_story_optimization(payload, edit_plan, report)
+        _report_variant_plans(payload, edit_plan, report)
+        _report_variant_selection(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -244,6 +249,179 @@ def _apply_memory_influence(payload: Any, edit_plan: Any, report: dict) -> None:
     count = len(results) if isinstance(results, (list, tuple)) else 0
     report["skipped"].append(
         f"memory:report_only(context_results={count},render_influence_deferred)"
+    )
+
+
+# ── Beat visual execution — report-only in Phase 18 ─────────────────────────
+
+def _report_beat_visual_execution(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record beat visual execution metadata — deferred in Phase 18.
+
+    No FFmpeg commands altered. No timing changed. No visual effects applied.
+    """
+    bve = getattr(edit_plan, "beat_visual_execution", None)
+    if not isinstance(bve, dict):
+        report["skipped"].append("beat_visual_execution:no_plan")
+        return
+
+    if not bve.get("available", False):
+        warns = bve.get("warnings", [])
+        reason = warns[0] if warns else "unavailable"
+        report["skipped"].append(f"beat_visual_execution:deferred({reason})")
+        return
+
+    bpm = bve.get("bpm")
+    pulse_count = len(bve.get("pulse_regions", []))
+    hint_count = len(bve.get("transition_hints", []))
+    report["skipped"].append(
+        f"beat_visual_execution:deferred_phase18("
+        f"bpm={bpm},pulse_regions={pulse_count},"
+        f"transition_hints={hint_count})"
+    )
+    logger.debug(
+        "beat_visual_execution_deferred bpm=%s pulse_regions=%d transition_hints=%d",
+        bpm, pulse_count, hint_count,
+    )
+
+
+# ── Variant selection — report-only in Phase 22 ──────────────────────────────
+
+def _report_variant_selection(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record variant selection metadata — deferred in Phase 22.
+
+    No variant rendered. No payload mutated. No FFmpeg commands altered.
+    """
+    vs = getattr(edit_plan, "variant_selection", None)
+    if not isinstance(vs, dict):
+        report["skipped"].append("variant_selection:no_result")
+        return
+
+    if not vs:
+        report["skipped"].append("variant_selection:empty")
+        return
+
+    selected = vs.get("selected_variant_id")
+    confidence = vs.get("selection_confidence", 0.0)
+    fallback = vs.get("fallback_used", False)
+    rejected = vs.get("rejected_count", 0)
+
+    report["skipped"].append(
+        f"variant_selection:deferred_phase22("
+        f"selected={selected!r},confidence={confidence:.4f},"
+        f"fallback={fallback},rejected={rejected})"
+    )
+    logger.debug(
+        "variant_selection_deferred selected=%s confidence=%.4f fallback=%s rejected=%d",
+        selected, confidence, fallback, rejected,
+    )
+
+
+# ── Variant planning — report-only in Phase 21 ───────────────────────────────
+
+def _report_variant_plans(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record variant planning metadata — deferred in Phase 21.
+
+    No extra render jobs enqueued. No payload mutated. No FFmpeg commands altered.
+    """
+    variants = getattr(edit_plan, "variants", None)
+    if not isinstance(variants, dict):
+        report["skipped"].append("variant_planning:no_plan")
+        return
+
+    if not variants.get("available", False):
+        warns = variants.get("warnings", [])
+        reason = warns[0] if warns else "unavailable"
+        report["skipped"].append(f"variant_planning:deferred({reason})")
+        return
+
+    mode = variants.get("mode", "advisory")
+    variant_count = len(variants.get("variants", []))
+    safe_count = sum(
+        1 for v in variants.get("variants", [])
+        if isinstance(v, dict) and v.get("safe_to_render", False)
+    )
+    recommended = variants.get("recommended_variant_id")
+
+    report["skipped"].append(
+        f"variant_planning:deferred_phase21("
+        f"mode={mode!r},variants={variant_count},"
+        f"safe={safe_count},recommended={recommended!r})"
+    )
+    logger.debug(
+        "variant_planning_deferred mode=%s variants=%d safe=%d recommended=%s",
+        mode, variant_count, safe_count, recommended,
+    )
+
+
+# ── Story optimization — report-only in Phase 20 ─────────────────────────────
+
+def _report_story_optimization(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record story optimization metadata — deferred in Phase 20.
+
+    No segment ordering changed. No timing changed. No subtitle rewritten.
+    No FFmpeg commands altered.
+    """
+    so = getattr(edit_plan, "story_optimization", None)
+    if not isinstance(so, dict):
+        report["skipped"].append("story_optimization:no_plan")
+        return
+
+    if not so.get("available", False):
+        warns = so.get("warnings", [])
+        reason = warns[0] if warns else "unavailable"
+        report["skipped"].append(f"story_optimization:deferred({reason})")
+        return
+
+    flow_type = so.get("flow_type", "unknown")
+    score = so.get("narrative_score", 0.0)
+    issue_count = len(so.get("issues", []))
+    rec_count = len(so.get("recommendations", []))
+
+    report["skipped"].append(
+        f"story_optimization:deferred_phase20("
+        f"flow={flow_type!r},score={score:.1f},"
+        f"issues={issue_count},recommendations={rec_count})"
+    )
+    logger.debug(
+        "story_optimization_deferred flow=%s score=%.1f issues=%d recommendations=%d",
+        flow_type, score, issue_count, rec_count,
+    )
+
+
+# ── Timing mutation — report-only in Phase 19 ────────────────────────────────
+
+def _report_timing_mutation(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record timing mutation metadata — deferred in Phase 19.
+
+    No segment start/end changed. No playback_speed changed. No FFmpeg commands altered.
+    """
+    tm = getattr(edit_plan, "timing_mutation", None)
+    if not isinstance(tm, dict):
+        report["skipped"].append("timing_mutation:no_plan")
+        return
+
+    if not tm.get("available", False):
+        warns = tm.get("warnings", [])
+        reason = warns[0] if warns else "unavailable"
+        report["skipped"].append(f"timing_mutation:deferred({reason})")
+        return
+
+    mode = tm.get("mode", "advisory")
+    candidate_count = len(tm.get("candidates", []))
+    safe_count = sum(
+        1 for c in tm.get("candidates", [])
+        if isinstance(c, dict) and c.get("safe_to_apply", False)
+    )
+    gain = tm.get("estimated_retention_gain", 0.0)
+
+    report["skipped"].append(
+        f"timing_mutation:deferred_phase19("
+        f"mode={mode!r},candidates={candidate_count},"
+        f"safe={safe_count},gain={gain:.4f})"
+    )
+    logger.debug(
+        "timing_mutation_deferred mode=%s candidates=%d safe=%d gain=%.4f",
+        mode, candidate_count, safe_count, gain,
     )
 
 

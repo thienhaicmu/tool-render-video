@@ -126,6 +126,18 @@ class AIEditPlan:
     external_knowledge: dict = field(default_factory=dict)
     # Phase 16 — retention intelligence (populated by retention_analyzer module)
     retention: dict = field(default_factory=dict)
+    # Phase 17 — dynamic subtitle execution (populated by subtitle_execution module)
+    subtitle_execution: dict = field(default_factory=dict)
+    # Phase 18 — beat-synced visual execution (populated by visual_execution module)
+    beat_visual_execution: dict = field(default_factory=dict)
+    # Phase 19 — retention-driven timing mutation (populated by timing_recommender module)
+    timing_mutation: dict = field(default_factory=dict)
+    # Phase 20 — story-driven edit optimization (populated by story_recommender module)
+    story_optimization: dict = field(default_factory=dict)
+    # Phase 21 — safe autonomous variant rendering (populated by variant_generator module)
+    variants: dict = field(default_factory=dict)
+    # Phase 22 — AI best variant selection (populated by variant_selector module)
+    variant_selection: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -184,4 +196,10 @@ class AIEditPlan:
             "creator_style": dict(self.creator_style),
             "external_knowledge": dict(self.external_knowledge),
             "retention": dict(self.retention),
+            "subtitle_execution": dict(self.subtitle_execution),
+            "beat_visual_execution": dict(self.beat_visual_execution),
+            "timing_mutation": dict(self.timing_mutation),
+            "story_optimization": dict(self.story_optimization),
+            "variants": dict(self.variants),
+            "variant_selection": dict(self.variant_selection),
         }
