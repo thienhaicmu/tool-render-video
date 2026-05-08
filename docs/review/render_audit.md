@@ -6,6 +6,77 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 27: Safe AI-Assisted Render Mutations
+
+**First phase where bounded AI mutations are applied to AI guidance metadata fields.**
+
+**Implemented:**
+
+- `app/ai/mutations/__init__.py` (new) — package marker; Phase 27 safe mutation package
+- `app/ai/mutations/mutation_schema.py` (new) — `VALID_MUTATION_CATEGORIES` frozenset ({subtitle, pacing, camera, creator_style, visual_rhythm}); `AISafeMutation` dataclass (mutation_id, category, confidence, applied, safe, source_recommendation_id, changes, warnings, explanation; `to_dict()` clamps confidence [0,1], caps explanation at 5, coerces invalid category to ""); `AISafeMutationPack` dataclass (available, advisory_mode, mutations, applied_mutation_ids, blocked_mutations, warnings; `to_dict()` caps mutations at 10, caps applied/blocked lists at 20)
+- `app/ai/mutations/mutation_safety.py` (new) — `sanitize_mutation_changes(changes) -> dict`; strips forbidden keys and unknown keys, retains only `_ALLOWED_KEYS`, drops None values; `is_mutation_safe(changes) -> bool`; returns False if any forbidden key detected; `apply_safe_mutation(payload, changes) -> dict`; creates a shallow copy of payload (dict or object with `__dict__`), applies only allowed keys, never mutates original; `_ALLOWED_KEYS = {subtitle_density, subtitle_emphasis, camera_behavior, pacing_style, creator_style, visual_rhythm_mode, ai_mode}`; `_FORBIDDEN_KEYS = {playback_speed, segment_start, segment_end, subtitle_timing, ffmpeg_args, codec, bitrate, crf, validation_rules, output_path, render_command, render_segments, segment_order}`; never raises; original payload never mutated in-place
+- `app/ai/mutations/mutation_engine.py` (new) — `build_safe_mutations(edit_plan, payload=None, context=None) -> AISafeMutationPack`; reads `execution_recommendations.recommendations` (Phase 25 output); per-category builders: `_build_baseline_mutation()` (always applied), `_build_retention_mutation()` (gate: safe_to_apply + confidence ≥ 0.50), `_build_creator_style_mutation()` (gate: confidence ≥ 0.50; maps to safe camera values via `_STYLE_TO_CAMERA_SAFE`), `_build_subtitle_mutation()` (gate: confidence ≥ 0.40), `_build_visual_rhythm_mutation()` (gate: confidence ≥ 0.35; energetic/moderate → beat_light, calm → beat_none), `_build_pacing_mutation()` (gate: confidence ≥ 0.50); unsafe/low-confidence mutations → `changes={}`, `applied=False`, added to `blocked_mutations`; `advisory_mode=True` when zero mutations applied; emits `ai_safe_mutation_applied`/`ai_safe_mutation_blocked` at INFO, `ai_safe_mutation_skipped` on fallback; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `safe_render_mutations: dict = field(default_factory=dict)` added to `AIEditPlan`; `"safe_render_mutations": dict(self.safe_render_mutations)` in `to_dict()`; backward-compatible; Phase 26 `execution_simulation` field unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_safe_render_mutations(plan, job_id)` added; runs after Phase 26 (execution simulation); calls `build_safe_mutations(plan, payload=None, context)`; `_append_safe_render_mutations_explainability(plan, pack_dict)` appends: "Safe subtitle density mutation applied" (subtitle), "Visual rhythm guidance safely adjusted" (visual_rhythm), "Creator style mutation applied safely" (creator_style), "Safe pacing mutation applied" (pacing), "Dangerous timing mutations remain blocked" (always); None guard on plan; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_safe_mutations(payload, edit_plan, report)` added; applied mutations → `report["applied"]` as `"safe_mutation:applied({id},{cat}:[changes])"` — FIRST AI-managed mutations to reach the applied list; blocked mutations → `report["skipped"]` as `"safe_mutation:blocked({id},{cat})"` ; emits `ai_safe_mutation_applied`/`ai_safe_mutation_blocked` at INFO; no payload mutation; wired into `apply_ai_render_influence()` after `_report_execution_simulation()`
+- `tests/test_ai_phase27_safe_render_mutations.py` (new) — comprehensive test suite covering mutation schema, safety gates, apply_safe_mutation payload invariants, mutation engine, AIEditPlan field, render_influence reporter, safety invariants, and AI Director integration
+
+**Allowed mutation keys and gates:**
+
+| Category | Allowed keys | Confidence gate |
+|----------|-------------|-----------------|
+| `safe_baseline` | `ai_mode`, `pacing_style` | always applied (conf=1.0) |
+| `pacing` | `pacing_style` | ≥ 0.50 + safe_to_apply |
+| `creator_style` | `creator_style`, `camera_behavior` | ≥ 0.50 + safe_to_apply |
+| `subtitle` | `subtitle_density`, `subtitle_emphasis` | ≥ 0.40 + safe_to_apply |
+| `visual_rhythm` | `visual_rhythm_mode` | ≥ 0.35 + safe_to_apply |
+
+**Pacing style canonicalisation:** fast_cuts→fast_hook, fast→fast_hook, retention_optimized→retention_focus, story_driven→story_driven, standard→standard, slow_build→slow_build, medium→standard, slow→slow_build
+
+**Camera behaviour safety mapping:** viral_tiktok/cinematic/storytelling/commentary→dynamic_safe; educational/podcast/product_demo/interview/safe_generic→static
+
+**Visual rhythm safety mapping:** energetic→beat_light, moderate→beat_light, calm→beat_none
+
+**Safety boundaries enforced:**
+
+- Original payload NEVER mutated — `apply_safe_mutation()` always creates a copy
+- `_FORBIDDEN_KEYS` (13 keys incl. playback_speed, ffmpeg_args, segment_order, render_segments) always stripped by `sanitize_mutation_changes()`
+- Unsafe mutations have `changes={}` and `applied=False` — empty changes reach the report as blocked
+- `is_mutation_safe()` returns False if any forbidden key detected in changes
+- `advisory_mode=True` set on pack when zero mutations are applied
+- Applied mutations only affect AI guidance metadata fields — never FFmpeg commands, timings, or render payload execution fields
+- Applied mutations appear in `report["applied"]` — but only as AI metadata, no payload object mutation occurs in `_report_safe_mutations`
+- No FFmpeg commands altered. No subtitle timing rewrite. No segment reorder. No playback_speed mutation.
+- Never blocks render — all Phase 27 code wrapped in try/except in AI Director and engine
+- Deterministic — same edit_plan always produces same mutation pack
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Render structure mutation
+- Render queue mutation
+- Autonomous rendering
+- Executor override
+- Output validation mutation
+
+**Architecture notes:**
+
+- Phase 27 is the FIRST phase where mutations appear in `report["applied"]` (all prior phases added to `report["skipped"]`)
+- Mutations are proposed and validated at AI Director time (when edit_plan is built); no payload is needed because changes target AI guidance metadata fields only
+- `apply_safe_mutation(payload, changes) -> dict` is available for downstream use when a payload dict copy is needed; it is not called in the main reporting path to preserve the "no payload mutation" invariant in render_influence
+
+**Verification:**
+
+- Phase 27 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
 ### 2026-05-08 — AI Productization Phase 26: Execution Simulation Layer Foundation
 
 **Implemented:**

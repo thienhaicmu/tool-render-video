@@ -95,6 +95,7 @@ def apply_ai_render_influence(
         _report_render_decision_preview(payload, edit_plan, report)
         _report_execution_recommendations(payload, edit_plan, report)
         _report_execution_simulation(payload, edit_plan, report)
+        _report_safe_mutations(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -514,6 +515,56 @@ def _report_execution_simulation(payload: Any, edit_plan: Any, report: dict) -> 
     logger.debug(
         "execution_simulation_deferred count=%d recommended=%s",
         count, recommended_id,
+    )
+
+
+# ── Safe render mutations — applied + blocked report in Phase 27 ─────────────
+
+def _report_safe_mutations(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report safe mutation results from Phase 27.
+
+    Applied mutations appear in report["applied"] — first AI-managed
+    metadata mutations to reach the applied list. Blocked mutations appear
+    in report["skipped"]. Payload is never mutated here.
+    """
+    srm = getattr(edit_plan, "safe_render_mutations", None)
+    if not isinstance(srm, dict) or not srm:
+        report["skipped"].append("safe_render_mutations:no_result")
+        return
+
+    mutations = srm.get("mutations") or []
+    applied_ids = set(srm.get("applied_mutation_ids") or [])
+    blocked_ids = srm.get("blocked_mutations") or []
+
+    for mut in mutations:
+        if not isinstance(mut, dict):
+            continue
+        mid = str(mut.get("mutation_id") or "")
+        cat = str(mut.get("category") or "")
+        changes = mut.get("changes") or {}
+        changes_str = ",".join(f"{k}={v}" for k, v in list(changes.items())[:3])
+
+        if mid in applied_ids:
+            report["applied"].append(
+                f"safe_mutation:applied({mid},{cat}:[{changes_str}])"
+            )
+            logger.info(
+                "ai_safe_mutation_applied mutation_id=%s category=%s", mid, cat
+            )
+        else:
+            report["skipped"].append(
+                f"safe_mutation:blocked({mid},{cat})"
+            )
+            logger.info("ai_safe_mutation_blocked mutation_id=%s", mid)
+
+    # Record any blocked IDs that have no corresponding mutation dict
+    for bid in blocked_ids:
+        if not any(isinstance(m, dict) and m.get("mutation_id") == bid for m in mutations):
+            report["skipped"].append(f"safe_mutation:blocked_id({bid})")
+
+    logger.debug(
+        "safe_mutations_reported applied=%d blocked=%d",
+        len(applied_ids), len(blocked_ids),
     )
 
 

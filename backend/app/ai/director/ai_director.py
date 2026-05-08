@@ -289,6 +289,13 @@ def _build_plan(
         plan.warnings.append(f"execution_simulation_error:{type(exc).__name__}")
         logger.debug("ai_director_execution_simulation_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 27: Safe AI-Assisted Render Mutations ---
+    try:
+        _attach_safe_render_mutations(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"safe_render_mutations_error:{type(exc).__name__}")
+        logger.debug("ai_director_safe_render_mutations_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -1364,6 +1371,88 @@ def _append_render_decision_preview_explainability(
 
         if not any("Autonomous render actions remain blocked" in str(l) for l in lines):
             lines.append("Autonomous render actions remain blocked")
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 27 — Safe AI-Assisted Render Mutations attachment
+# ---------------------------------------------------------------------------
+
+def _attach_safe_render_mutations(plan: "AIEditPlan", job_id: str) -> None:
+    """Build and attach bounded safe render mutation pack to the plan.
+
+    Runs after Phase 26 (execution simulation) so mutations have full AI
+    context. Applies only bounded AI guidance metadata changes. Never
+    mutates FFmpeg commands, render timings, segment structure, or subtitle
+    timestamps. Never raises. Never blocks render.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.mutations.mutation_engine import build_safe_mutations
+
+        pack = build_safe_mutations(plan, payload=None, context={"job_id": job_id})
+        pack_dict = pack.to_dict()
+        plan.safe_render_mutations = pack_dict
+
+        applied = pack_dict.get("applied_mutation_ids") or []
+        blocked = pack_dict.get("blocked_mutations") or []
+        logger.info(
+            "ai_safe_render_mutations_built job_id=%s applied=%d blocked=%d advisory=%s",
+            job_id,
+            len(applied),
+            len(blocked),
+            pack_dict.get("advisory_mode", True),
+        )
+
+        _append_safe_render_mutations_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.safe_render_mutations = {
+            "available": False,
+            "advisory_mode": True,
+            "warnings": [f"safe_render_mutations_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_safe_render_mutations_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_safe_render_mutations_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact mutation insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        mutations = pack_dict.get("mutations") or []
+        applied_ids = set(pack_dict.get("applied_mutation_ids") or [])
+
+        for mut in mutations:
+            if not isinstance(mut, dict) or not mut.get("applied"):
+                continue
+            mid = str(mut.get("mutation_id") or "")
+            cat = str(mut.get("category") or "")
+            if cat == "subtitle" and not any("subtitle density mutation" in str(l) for l in lines):
+                lines.append("Safe subtitle density mutation applied")
+            elif cat == "visual_rhythm" and not any("Visual rhythm guidance" in str(l) for l in lines):
+                lines.append("Visual rhythm guidance safely adjusted")
+            elif cat == "creator_style" and not any("Creator style mutation" in str(l) for l in lines):
+                lines.append("Creator style mutation applied safely")
+            elif cat == "pacing" and mid != "m_safe_baseline" and not any("pacing mutation" in str(l) for l in lines):
+                lines.append("Safe pacing mutation applied")
+
+        if not any("Dangerous timing mutations remain blocked" in str(l) for l in lines):
+            lines.append("Dangerous timing mutations remain blocked")
 
     except Exception:
         pass
