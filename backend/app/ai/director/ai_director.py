@@ -213,6 +213,13 @@ def _build_plan(
         plan.warnings.append(f"retention_error:{type(exc).__name__}")
         logger.debug("ai_director_retention_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 17: Dynamic Subtitle Execution ---
+    try:
+        _attach_subtitle_execution(plan, chunks, pacing_ctx, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"subtitle_execution_error:{type(exc).__name__}")
+        logger.debug("ai_director_subtitle_execution_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -919,6 +926,106 @@ def _append_knowledge_explainability(plan: "AIEditPlan", result: dict) -> None:
                 if not any(hook_line in str(l) for l in lines):
                     lines.append(hook_line)
                 break
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 17 — Dynamic Subtitle Execution attachment
+# ---------------------------------------------------------------------------
+
+def _attach_subtitle_execution(
+    plan: "AIEditPlan",
+    chunks: list[dict],
+    pacing_ctx: dict,
+    job_id: str,
+) -> None:
+    """Build subtitle execution plan and attach compact summary to plan. Never raises."""
+    try:
+        from app.ai.subtitles.subtitle_execution import build_subtitle_execution_plan
+
+        # Build context dicts from prior phase results
+        story_ctx = dict(plan.story) if isinstance(plan.story, dict) else {}
+        retention_ctx = dict(plan.retention) if isinstance(plan.retention, dict) else {}
+        creator_ctx = dict(plan.creator_style) if isinstance(plan.creator_style, dict) else {}
+
+        execution_plan = build_subtitle_execution_plan(
+            transcript_chunks=chunks,
+            pacing_context=pacing_ctx,
+            emotion_context=None,
+            story_context=story_ctx,
+            retention_context=retention_ctx,
+            creator_style_context=creator_ctx,
+        )
+
+        plan.subtitle_execution = execution_plan.to_dict()
+
+        logger.info(
+            "ai_subtitle_execution_generated job_id=%s available=%s regions=%d "
+            "density=%s emotion=%s emphasis=%.3f",
+            job_id,
+            execution_plan.available,
+            len(execution_plan.regions),
+            execution_plan.global_hint.density_mode if execution_plan.global_hint else "none",
+            execution_plan.global_hint.emotion_style if execution_plan.global_hint else "none",
+            execution_plan.global_hint.emphasis_strength if execution_plan.global_hint else 0.0,
+        )
+
+        _append_subtitle_execution_explainability(plan, execution_plan)
+
+    except Exception as exc:
+        plan.subtitle_execution = {
+            "available": False,
+            "warnings": [f"subtitle_execution_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_subtitle_execution_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_subtitle_execution_explainability(plan: "AIEditPlan", execution_plan: Any) -> None:
+    """Append compact subtitle execution insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not getattr(execution_plan, "available", False):
+            return
+
+        hint = getattr(execution_plan, "global_hint", None)
+        if hint is None:
+            return
+
+        emphasis = getattr(hint, "emphasis_strength", 0.0)
+        density = getattr(hint, "density_mode", "normal")
+        emotion = getattr(hint, "emotion_style", "neutral")
+        beat_sync = getattr(hint, "beat_sync_strength", 0.0)
+
+        if emphasis > 0.3:
+            line = "Dynamic subtitle emphasis enabled"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if emotion not in ("neutral", ""):
+            line = "Emotion-aware subtitle execution detected"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if density == "compact":
+            line = "Compact subtitle density recommended"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        if beat_sync > 0.3:
+            line = "Beat-aware subtitle emphasis enabled"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
     except Exception:
         pass
 
