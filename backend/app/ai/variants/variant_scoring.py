@@ -1,7 +1,8 @@
 """
-variant_scoring.py — Deterministic scoring for AI variant plans. Phase 21.
+variant_scoring.py — Deterministic scoring for AI variant plans. Phase 21–22.
 
 Deterministic only. Never raises. No payload mutation.
+Phase 22 additions: score normalization, stronger safety penalty, baseline stabilizer.
 """
 from __future__ import annotations
 
@@ -24,12 +25,15 @@ _BASE_SCORES: dict[str, float] = {
     "creator_style":  67.0,
 }
 
-# Risk penalties
+# Risk penalties — Phase 22: high penalty increased for stronger selection pressure
 _RISK_PENALTIES: dict[str, float] = {
     "low":    0.0,
     "medium": 8.0,
-    "high":   30.0,  # effectively un-renderable
+    "high":   40.0,  # Phase 22: raised from 30 → 40 for selector clarity
 }
+
+# Phase 22: safe_baseline stabilizer — guarantees a floor score for selection
+_BASELINE_FLOOR: float = 58.0
 
 
 def score_variant(
@@ -95,13 +99,22 @@ def _score(variant: AIVariantPlan, edit_plan: Any, context: dict) -> dict:
         context_boost = _context_boost(purpose, edit_plan, reasons)
 
     raw_score = base + confidence_boost + safety_modifier + context_boost - penalty
+
+    # Phase 22: safe_baseline floor — guarantees selector always has a stable fallback
+    if purpose == "safe_baseline":
+        raw_score = max(raw_score, _BASELINE_FLOOR)
+
     score = round(max(0.0, min(100.0, raw_score)), 2)
 
-    # Expected gain: proportional to score above baseline (60)
-    expected_gain = round(max(0.0, min(100.0, (score - 60.0) * 2.0)), 2)
+    # Phase 22: normalized selection score in [0, 1] for selector use
+    normalized = round(score / 100.0, 4)
+
+    # Expected gain: proportional to score above baseline floor
+    expected_gain = round(max(0.0, min(100.0, (score - _BASELINE_FLOOR) * 2.0)), 2)
 
     return {
         "score": score,
+        "normalized_score": normalized,
         "expected_gain": expected_gain,
         "reasons": reasons,
         "warnings": warnings,

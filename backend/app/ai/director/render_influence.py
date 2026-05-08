@@ -91,6 +91,7 @@ def apply_ai_render_influence(
         _report_timing_mutation(payload, edit_plan, report)
         _report_story_optimization(payload, edit_plan, report)
         _report_variant_plans(payload, edit_plan, report)
+        _report_variant_selection(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -280,6 +281,38 @@ def _report_beat_visual_execution(payload: Any, edit_plan: Any, report: dict) ->
     logger.debug(
         "beat_visual_execution_deferred bpm=%s pulse_regions=%d transition_hints=%d",
         bpm, pulse_count, hint_count,
+    )
+
+
+# ── Variant selection — report-only in Phase 22 ──────────────────────────────
+
+def _report_variant_selection(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record variant selection metadata — deferred in Phase 22.
+
+    No variant rendered. No payload mutated. No FFmpeg commands altered.
+    """
+    vs = getattr(edit_plan, "variant_selection", None)
+    if not isinstance(vs, dict):
+        report["skipped"].append("variant_selection:no_result")
+        return
+
+    if not vs:
+        report["skipped"].append("variant_selection:empty")
+        return
+
+    selected = vs.get("selected_variant_id")
+    confidence = vs.get("selection_confidence", 0.0)
+    fallback = vs.get("fallback_used", False)
+    rejected = vs.get("rejected_count", 0)
+
+    report["skipped"].append(
+        f"variant_selection:deferred_phase22("
+        f"selected={selected!r},confidence={confidence:.4f},"
+        f"fallback={fallback},rejected={rejected})"
+    )
+    logger.debug(
+        "variant_selection_deferred selected=%s confidence=%.4f fallback=%s rejected=%d",
+        selected, confidence, fallback, rejected,
     )
 
 

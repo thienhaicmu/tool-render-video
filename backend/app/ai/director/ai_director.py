@@ -252,6 +252,15 @@ def _build_plan(
         plan.warnings.append(f"variant_planning_error:{type(exc).__name__}")
         logger.debug("ai_director_variant_planning_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 22: AI Best Variant Selector ---
+    try:
+        variant_enabled = bool(getattr(request, "ai_variant_planning_enabled", False))
+        if variant_enabled and plan.variants.get("available"):
+            _attach_variant_selection(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"variant_selection_error:{type(exc).__name__}")
+        logger.debug("ai_director_variant_selection_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -1164,6 +1173,86 @@ def _append_beat_visual_explainability(plan: "AIEditPlan", visual_plan: Any) -> 
         # Metadata-only reminder
         line = "Visual beat execution remains metadata-only"
         if not any("metadata-only" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 22 — AI Best Variant Selector attachment
+# ---------------------------------------------------------------------------
+
+def _attach_variant_selection(plan: "AIEditPlan", job_id: str) -> None:
+    """Run best variant selector and attach compact result to plan. Never raises."""
+    try:
+        from app.ai.variants.variant_selector import select_best_variant
+
+        selection = select_best_variant(plan.variants, edit_plan=plan, context={"job_id": job_id})
+
+        # Store only the compact fields — never store full variant content again
+        plan.variant_selection = {
+            "selected_variant_id": selection.get("selected_variant_id"),
+            "selection_confidence": selection.get("selection_confidence", 0.0),
+            "selection_reasons": list(selection.get("selection_reasons") or []),
+            "fallback_used": bool(selection.get("fallback_used", False)),
+            "rejected_count": len(selection.get("rejected_variants") or []),
+        }
+
+        logger.info(
+            "ai_variant_selection_attached job_id=%s selected=%s confidence=%.4f fallback=%s",
+            job_id,
+            selection.get("selected_variant_id"),
+            selection.get("selection_confidence", 0.0),
+            selection.get("fallback_used", False),
+        )
+
+        _append_variant_selection_explainability(plan, selection)
+
+    except Exception as exc:
+        plan.variant_selection = {
+            "available": False,
+            "warnings": [f"variant_selection_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_variant_selection_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_variant_selection_explainability(plan: "AIEditPlan", selection: dict) -> None:
+    """Append compact variant selection insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        fallback = selection.get("fallback_used", False)
+        reasons = selection.get("selection_reasons") or []
+
+        if fallback:
+            line = "Safe baseline retained due to low confidence"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+            return
+
+        if "retention_focused_variant_highest_score" in reasons:
+            line = "AI selected retention-focused variant"
+        elif "hook_strengthening_variant_highest_score" in reasons:
+            line = "AI selected hook-strengthening variant"
+        elif "creator_style_match_variant_highest_score" in reasons:
+            line = "Creator-style variant scored highest"
+        elif "story_coherence_variant_highest_score" in reasons:
+            line = "Story coherence variant selected"
+        elif "subtitle_optimization_variant_highest_score" in reasons:
+            line = "Compact subtitle variant selected"
+        else:
+            line = "AI variant selection complete"
+
+        if not any(line in str(l) for l in lines):
             lines.append(line)
 
     except Exception:

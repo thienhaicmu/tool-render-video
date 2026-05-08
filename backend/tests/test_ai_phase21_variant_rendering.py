@@ -197,7 +197,7 @@ class TestScoreVariant:
     def test_returns_dict_with_expected_keys(self):
         from app.ai.variants.variant_scoring import score_variant
         result = score_variant(self._make())
-        assert set(result.keys()) == {"score", "expected_gain", "reasons", "warnings"}
+        assert {"score", "expected_gain", "reasons", "warnings"}.issubset(result.keys())
 
     def test_score_in_range(self):
         from app.ai.variants.variant_scoring import score_variant

@@ -6,6 +6,70 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 22: AI Best Variant Selector Foundation
+
+**Implemented:**
+
+- `app/ai/variants/variant_selector.py` (new) — `select_best_variant(variant_set, edit_plan, context) -> dict`; returns {selected_variant_id, selection_confidence, selection_reasons, rejected_variants, fallback_used}; accepts `AIVariantSet`, serialised dict, or any object with `variants` attribute; scores all candidates via `score_variant()`; sort key: (−score, purpose_priority, risk_priority); skips `risk="high"` variants when any safe option exists; confidence gate: if selection_confidence < 0.50 and non-baseline selected, falls back to `safe_baseline`; emits `ai_variant_selected` at INFO, `ai_variant_selector_fallback` on fallback, `ai_variant_selection_skipped` when no variants; deterministic; never raises; never renders; never mutates payload
+- `app/ai/variants/variant_scoring.py` (updated, Phase 22 additions) — `_RISK_PENALTIES["high"]` raised 30→40 for stronger selection pressure; `_BASELINE_FLOOR = 58.0` guarantees `safe_baseline` always scores ≥ 58; `normalized_score` field added to return dict (score / 100.0); `expected_gain` baseline shifted to `_BASELINE_FLOOR`; backward-compatible (all Phase 21 callers still receive `score`, `expected_gain`, `reasons`, `warnings`)
+- `app/ai/director/edit_plan_schema.py` — `variant_selection: dict = field(default_factory=dict)` added to `AIEditPlan`; `"variant_selection": dict(self.variant_selection)` in `to_dict()`; backward-compatible
+- `app/ai/director/ai_director.py` — `_attach_variant_selection(plan, job_id)` added; runs only when `ai_variant_planning_enabled=True` AND `plan.variants.get("available")`; stores compact {selected_variant_id, selection_confidence, selection_reasons, fallback_used, rejected_count}; `_append_variant_selection_explainability(plan, selection)` appends: "AI selected retention-focused variant", "Safe baseline retained due to low confidence", "Creator-style variant scored highest", etc.; all wrapped in try/except; never block render; Phase 22 runs after Phase 21 in `_build_plan`
+- `app/ai/director/render_influence.py` — `_report_variant_selection(payload, edit_plan, report)` added; reports selection as deferred in Phase 22; compact `report["skipped"]` entry with selected/confidence/fallback/rejected; no variant rendered, no payload mutated, no FFmpeg altered; called inside `apply_ai_render_influence` try block
+- `tests/test_ai_phase21_variant_rendering.py` — `test_returns_dict_with_expected_keys` updated from strict set equality to `issubset` to accommodate new `normalized_score` field (non-breaking backward compatibility fix)
+- `tests/test_ai_phase22_best_variant_selector.py` (new) — 48 tests covering selector core behaviour, confidence fallback, priority heuristics, scoring normalization, AIEditPlan field, AI Director integration, render influence defer, and all safety boundaries
+
+**Verification:**
+
+- Phase 22 tests pass (48 tests)
+- Full suite passes (1402 tests, zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- No variant is ever rendered by the selector — metadata only
+- `risk="high"` variants skipped from selection whenever any safe option exists
+- Confidence gate < 0.50 → always falls back to `safe_baseline`
+- `safe_baseline` guaranteed floor score (≥ 58) — selector always has a stable fallback
+- No payload mutation — selector reads variant metadata, never writes to render payload
+- No segment start/end timing changes
+- No playback_speed changes
+- No FFmpeg command changes
+- No subtitle timing changes
+- No automatic rendering of selected variant
+- Never blocks render — all Phase 22 code wrapped in try/except in AI Director
+- Deterministic — same input always produces same selected_variant_id
+
+**Selection heuristics (priority order):**
+1. Highest `score_variant()` score (base + confidence boost + safety gate + context boost − risk penalty)
+2. Tiebreak: purpose_priority (retention → hook → story → subtitle → creator_style → pacing → safe_baseline)
+3. Tiebreak: risk_priority (low → medium → high)
+4. Confidence gate fallback: score < 50 → safe_baseline returned instead
+
+**Intentionally still blocked:**
+
+- Autonomous rendering of selected variant
+- Multi-variant execution queue
+- Auto-export best variant
+- UI auto-selection
+- Timing mutation application
+- FFmpeg mutation
+- Payload mutation
+
+**Architecture notes:**
+
+- Selector operates on Phase 21 `AIVariantSet` or its serialised dict form — no extra analysis
+- `_report_variant_selection` in render_influence records plan as "deferred_phase22" — safe pass-through for future execution phase
+- Phase 22 runs after Phase 21 in `_build_plan`; if Phase 21 produced no variants, Phase 22 is skipped
+- `normalized_score` in scoring is additive — existing callers are unaffected
+
+**Integrated systems:**
+
+- Variant Planning (Phase 21) — AIVariantSet is the selector's input
+- Variant Scoring (Phase 21/22) — `score_variant()` drives ranking
+- Retention Intelligence (Phase 16) — context boost for low retention score
+- Story Optimization (Phase 20) — context boost for weak_hook / low narrative_score
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
 ### 2026-05-08 — AI Productization Phase 21: Safe Autonomous Variant Rendering Foundation
 
 **Implemented:**
