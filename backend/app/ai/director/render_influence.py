@@ -93,6 +93,7 @@ def apply_ai_render_influence(
         _report_variant_plans(payload, edit_plan, report)
         _report_variant_selection(payload, edit_plan, report)
         _report_render_decision_preview(payload, edit_plan, report)
+        _report_execution_recommendations(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -454,6 +455,35 @@ def _report_render_decision_preview(payload: Any, edit_plan: Any, report: dict) 
     logger.debug(
         "render_decision_preview_deferred status=%s confidence=%.4f selected=%s",
         status, confidence, selected,
+    )
+
+
+# ── Execution recommendations — report-only in Phase 25 ──────────────────────
+
+def _report_execution_recommendations(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Record execution recommendation metadata — deferred in Phase 25.
+
+    No recommendations applied. No payload mutated. No FFmpeg commands altered.
+    """
+    er = getattr(edit_plan, "execution_recommendations", None)
+    if not isinstance(er, dict):
+        report["skipped"].append("execution_recommendations:no_result")
+        return
+
+    if not er:
+        report["skipped"].append("execution_recommendations:empty")
+        return
+
+    count = len(er.get("recommendations") or [])
+    recommended_id = er.get("recommended_pack_id")
+
+    report["skipped"].append(
+        f"execution_recommendations:deferred_phase25("
+        f"count={count},recommended={recommended_id!r})"
+    )
+    logger.debug(
+        "execution_recommendations_deferred count=%d recommended=%s",
+        count, recommended_id,
     )
 
 

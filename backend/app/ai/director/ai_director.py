@@ -275,6 +275,13 @@ def _build_plan(
         plan.warnings.append(f"render_decision_preview_error:{type(exc).__name__}")
         logger.debug("ai_director_render_decision_preview_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 25: Safe Execution Recommendation Layer ---
+    try:
+        _attach_execution_recommendations(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"execution_recommendations_error:{type(exc).__name__}")
+        logger.debug("ai_director_execution_recommendations_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -1350,6 +1357,84 @@ def _append_render_decision_preview_explainability(
 
         if not any("Autonomous render actions remain blocked" in str(l) for l in lines):
             lines.append("Autonomous render actions remain blocked")
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 25 — Safe Execution Recommendation Layer attachment
+# ---------------------------------------------------------------------------
+
+def _attach_execution_recommendations(plan: "AIEditPlan", job_id: str) -> None:
+    """Build and attach advisory execution recommendation pack to the plan.
+
+    Runs after Phase 24 so all prior AI metadata is available for aggregation.
+    Never raises. Never mutates render payload. Advisory metadata only.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.execution.execution_recommendation import build_execution_recommendations
+
+        pack = build_execution_recommendations(plan, context={"job_id": job_id})
+        pack_dict = pack.to_dict()
+        plan.execution_recommendations = pack_dict
+
+        logger.info(
+            "ai_execution_recommendations_created job_id=%s available=%s "
+            "count=%d recommended=%s",
+            job_id,
+            pack_dict.get("available", False),
+            len(pack_dict.get("recommendations", [])),
+            pack_dict.get("recommended_pack_id") or "none",
+        )
+
+        _append_execution_recommendations_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.execution_recommendations = {
+            "available": False,
+            "mode": "advisory",
+            "warnings": [f"execution_recommendations_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_execution_recommendations_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_execution_recommendations_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact execution recommendation lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not any("AI execution recommendation" in str(l) for l in lines):
+            lines.append("AI execution recommendation pack prepared")
+
+        recommended_id = pack_dict.get("recommended_pack_id") or ""
+        if recommended_id and recommended_id != "safe_baseline":
+            if "retention" in recommended_id:
+                hint = "Retention-oriented pacing recommendation available"
+            elif "creator_style" in recommended_id:
+                hint = "Creator-style execution recommendation available"
+            elif "story" in recommended_id:
+                hint = "Story-driven pacing recommendation available"
+            else:
+                hint = f"Execution recommendation available ({recommended_id})"
+            if not any(hint in str(l) for l in lines):
+                lines.append(hint)
+
+        if not any("Autonomous execution remains blocked" in str(l) for l in lines):
+            lines.append("Autonomous execution remains blocked")
 
     except Exception:
         pass

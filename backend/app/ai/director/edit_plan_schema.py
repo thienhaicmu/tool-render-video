@@ -142,6 +142,8 @@ class AIEditPlan:
     creator_style_adaptation: dict = field(default_factory=dict)
     # Phase 24 — AI render decision preview (populated by decision_preview module)
     render_decision_preview: dict = field(default_factory=dict)
+    # Phase 25 — safe execution recommendation pack (populated by execution_recommendation module)
+    execution_recommendations: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -208,4 +210,5 @@ class AIEditPlan:
             "variant_selection": dict(self.variant_selection),
             "creator_style_adaptation": dict(self.creator_style_adaptation),
             "render_decision_preview": dict(self.render_decision_preview),
+            "execution_recommendations": dict(self.execution_recommendations),
         }

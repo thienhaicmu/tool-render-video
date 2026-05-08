@@ -6,6 +6,82 @@
 ---
 
 ## Patch Status Log
+### 2026-05-08 — AI Productization Phase 25: Safe Execution Recommendation Layer
+
+**Implemented:**
+
+- `app/ai/execution/__init__.py` (new) — package marker; Phase 25 execution package
+- `app/ai/execution/execution_schema.py` (new) — `VALID_CATEGORIES` frozenset ({subtitle, pacing, camera, creator_style, retention, visual_rhythm, safe_baseline}); `AIExecutionRecommendation` dataclass (recommendation_id, label, category, confidence, safe_to_apply, advisory_only always True, recommended_settings, blocked_settings, warnings, explanation; `to_dict()` hardcodes advisory_only=True, clamps confidence [0,1], caps explanation at 5, coerces invalid category to "safe_baseline"); `AIExecutionPack` dataclass (available, mode always "advisory", recommendations, recommended_pack_id, warnings; `to_dict()` hardcodes mode="advisory", caps recommendations at 10)
+- `app/ai/execution/execution_safety.py` (new) — `sanitize_execution_settings(settings) -> dict`; strips all forbidden keys, retains only `_ALLOWED_KEYS`; `is_execution_recommendation_safe(recommendation, context) -> bool`; checks recommended_settings for forbidden keys; `_ALLOWED_KEYS = {subtitle_density, subtitle_emphasis, camera_behavior, pacing_style, creator_style, visual_rhythm_mode, hook_density, target_duration_hint, ai_mode}`; `_FORBIDDEN_KEYS = {playback_speed, segment_start, segment_end, subtitle_timing, ffmpeg_args, codec, bitrate, crf, validation_rules, output_path, render_command}`; never raises; no payload mutation
+- `app/ai/execution/execution_recommendation.py` (new) — `build_execution_recommendations(edit_plan, context) -> AIExecutionPack`; reads: creator_style_adaptation, retention, subtitle_execution, beat_visual_execution, story_optimization; safe_baseline always built first; `_build_creator_style_recommendation()`: maps Phase 23 style_id to camera_behavior + pacing_style; safe_to_apply=True only when confidence ≥ 0.50; `_build_retention_recommendation()`: fast_cuts/high-hook for score<40, retention_optimized/medium for score<70, standard/low otherwise; `_build_visual_rhythm_recommendation()`: energetic(>120bpm)/moderate(>80bpm)/calm; `_build_story_pacing_recommendation()`: story_driven for three_act/hero_journey, fast_cuts for montage/highlight; `_select_recommended()`: max by confidence×100 + category bonus (retention+15, creator_style+10, pacing+8, subtitle+6, visual_rhythm+4) minus 20 if not safe_to_apply; all settings sanitized via `sanitize_execution_settings()` before attachment; emits `ai_execution_recommendations_created` at INFO, `ai_execution_recommendation_fallback` on error; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `execution_recommendations: dict = field(default_factory=dict)` added to `AIEditPlan`; `"execution_recommendations": dict(self.execution_recommendations)` in `to_dict()`; backward-compatible; Phase 24 `render_decision_preview` field unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_execution_recommendations(plan, job_id)` added; runs after Phase 24 (render decision preview); calls `build_execution_recommendations(plan, context)`; `_append_execution_recommendations_explainability(plan, pack_dict)` appends: "AI execution recommendation pack prepared", "Retention-oriented pacing recommendation available" / "Creator-style execution recommendation available" / "Story-driven pacing recommendation available", "Autonomous execution remains blocked"; None guard on plan; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_execution_recommendations(payload, edit_plan, report)` added; checks `edit_plan.execution_recommendations`, adds `"execution_recommendations:deferred_phase25(count=...,recommended=...)"` to report["skipped"]; no payload mutation; wired into `apply_ai_render_influence()` after `_report_render_decision_preview()`
+- `tests/test_ai_phase25_execution_recommendation.py` (new) — comprehensive test suite covering execution schema, safety gates, recommendation builder, AIEditPlan field, render_influence reporter, safety invariants, and AI Director integration
+
+**Recommendation categories and scoring:**
+
+| Category | Bonus | Source |
+|----------|-------|--------|
+| `retention` | +15 | retention.overall_retention_score |
+| `creator_style` | +10 | creator_style_adaptation.primary_style |
+| `pacing` | +8 | story_optimization.flow_type |
+| `subtitle` | +6 | subtitle_execution.density |
+| `visual_rhythm` | +4 | beat_visual_execution.bpm |
+| `safe_baseline` | 0 | always present |
+
+**Retention pacing thresholds:**
+
+| Score range | Pacing style | Hook density |
+|-------------|-------------|--------------|
+| < 40 | fast_cuts | high |
+| 40–69 | retention_optimized | medium |
+| ≥ 70 | standard | low |
+
+**Safety boundaries enforced:**
+
+- `advisory_only` always True — hardcoded in `AIExecutionRecommendation.to_dict()`
+- `mode` always "advisory" — hardcoded in `AIExecutionPack.to_dict()`
+- `_FORBIDDEN_KEYS` (playback_speed, segment_start, segment_end, subtitle_timing, ffmpeg_args, codec, bitrate, crf, validation_rules, output_path, render_command) always stripped by `sanitize_execution_settings()`
+- `is_execution_recommendation_safe()` returns False if any forbidden key detected
+- safe_baseline always available as stable fallback
+- No FFmpeg commands altered
+- No payload mutation — builder reads edit_plan, never writes render payload
+- No subtitle timing rewrite
+- No segment reorder
+- No playback_speed mutation
+- No autonomous execution of any recommendation
+- Never blocks render — all Phase 25 code wrapped in try/except in AI Director and builder
+- Deterministic — same edit_plan always produces same recommendations
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- Autonomous execution of recommendations
+- Direct render mutation
+- FFmpeg filter chain mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Payload mutation
+- Automatic execution apply
+- Render executor override
+
+**Architecture notes:**
+
+- Phase 25 runs after Phase 24 (render decision preview) so all prior AI phase outputs are available
+- safe_baseline recommendation always scored at confidence=1.0 but with 0 category bonus, so a high-confidence retention/style recommendation will be selected as recommended_pack_id instead
+- `_ALLOWED_KEYS` whitelist is the authoritative list of settings the recommendation layer can suggest
+- Creator style → camera behavior mapping mirrors Phase 23 adaptation hints for consistency
+
+**Verification:**
+
+- Phase 25 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
 ### 2026-05-08 — AI Productization Phase 24: AI Render Decision Preview Foundation
 
 **Implemented:**
