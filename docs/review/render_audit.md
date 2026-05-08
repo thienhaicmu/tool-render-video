@@ -7,6 +7,33 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Director Phase 2: Semantic Hook + Local RAG Memory
+
+**Implemented:**
+- `RenderMemory` / `MemorySearchResult` dataclasses (`rag/memory_schema.py`) — plain Python, no heavy deps
+- `LocalMemoryStore` (`rag/memory_store.py`) — session-scoped in-memory store; `add_render_memory()` / `search_similar()` / `count()`; silently degrades when sentence-transformers absent
+- `retrieve_ai_context()` (`rag/retriever.py`) — stable `{enabled, available, results, warnings}` contract; never raises; handles missing deps, missing store, empty store, and search errors independently
+- `AIEditPlan.memory_context` field added (`edit_plan_schema.py`); `to_dict()` includes it
+- `select_ai_segments()` extended with `memory_context` param (`clip_selector.py`); `_apply_memory_bonus()` adds up to +5 score to top segment when RAG hits score > 0.7; annotates reason with `rag_match`
+- `create_ai_edit_plan()` RAG integration (`ai_director.py`): when `ai_use_rag_memory=True`, builds query from mode/market/duration/first-chunk text, calls retriever, attaches result to plan; errors append `rag:` warning prefix and do not crash the plan
+- `_build_rag_query()` helper constructs a concise retrieval query for the memory store
+
+**Tests added:**
+- `backend/tests/test_ai_director_phase2_rag.py` — 25 tests covering schema, store, retriever contract, plan field, clip bonus, and end-to-end director RAG; all library-optional (pass without sentence-transformers / faiss)
+
+**Constraints preserved:**
+- `ai_use_rag_memory=False` default → `memory_context={}` on plan, zero regression risk
+- All Phase 1 test_ai_director_phase1.py (24 tests) still pass without modification
+- No SQLite persistence in Phase 2 — memory is session-scoped only
+
+**Not yet implemented:**
+- Persistent cross-session memory (SQLite / file-based)
+- Market-specific retrieval weighting
+- Auto-storage of completed renders into memory store
+- Beat-aware editing, emotion/story pacing, render segment override
+
+---
+
 ### 2026-05-08 — AI Director Phase 1
 
 **Implemented:**
