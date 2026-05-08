@@ -206,6 +206,13 @@ def _build_plan(
         plan.warnings.append(f"external_knowledge_error:{type(exc).__name__}")
         logger.debug("ai_director_external_knowledge_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 16: Retention Intelligence ---
+    try:
+        _attach_retention_intelligence(plan, chunks, pacing_ctx, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"retention_error:{type(exc).__name__}")
+        logger.debug("ai_director_retention_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -645,6 +652,135 @@ def _append_style_explainability(plan: "AIEditPlan", classification: Any) -> Non
         line = _STYLE_LINES.get(style)
         if line and not any(line in str(l) for l in lines):
             lines.append(line)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 16 — Retention Intelligence attachment
+# ---------------------------------------------------------------------------
+
+def _attach_retention_intelligence(
+    plan: "AIEditPlan",
+    chunks: list[dict],
+    pacing_ctx: dict,
+    job_id: str,
+) -> None:
+    """Run retention analysis and attach compact summary to plan. Never raises."""
+    try:
+        from app.ai.retention.retention_analyzer import analyze_retention
+        from app.ai.retention.retention_recommender import build_retention_recommendations
+
+        # Build subtitle context from plan.subtitle (safe attribute access)
+        subtitle_ctx = {
+            "density": getattr(plan.subtitle, "density", "normal"),
+            "max_words_per_line": getattr(plan.subtitle, "max_words_per_line", None),
+            "tone": getattr(plan.subtitle, "tone", "default"),
+        }
+
+        # Build beat context from plan.pacing
+        beat_ctx = {
+            "beat_available": getattr(plan.pacing, "beat_available", False),
+            "bpm": getattr(plan.pacing, "bpm", None),
+            "energy_level": getattr(plan.pacing, "energy_level", None),
+        }
+
+        # Story context from Phase 12 (may be empty dict)
+        story_ctx = dict(plan.story) if isinstance(plan.story, dict) else {}
+
+        # Memory context from Phase 3
+        memory_ctx = dict(plan.memory_context) if isinstance(plan.memory_context, dict) else {}
+
+        analysis = analyze_retention(
+            transcript_chunks=chunks,
+            pacing_context=pacing_ctx,
+            story_context=story_ctx,
+            subtitle_context=subtitle_ctx,
+            beat_context=beat_ctx,
+            memory_context=memory_ctx,
+        )
+
+        recommendations = build_retention_recommendations(analysis)
+
+        plan.retention = {
+            "available": analysis.available,
+            "overall_retention_score": round(analysis.overall_retention_score),
+            "risk_regions": [r.to_dict() for r in analysis.risk_regions[:10]],
+            "strengths": list(analysis.strengths[:6]),
+            "recommendations": [r.to_dict() for r in recommendations[:6]],
+            "warnings": list(analysis.warnings),
+        }
+
+        logger.info(
+            "ai_retention_analysis_generated job_id=%s score=%d risks=%d strengths=%d",
+            job_id,
+            round(analysis.overall_retention_score),
+            len(analysis.risk_regions),
+            len(analysis.strengths),
+        )
+
+        if analysis.risk_regions:
+            logger.info(
+                "ai_retention_risks_detected job_id=%s categories=%s",
+                job_id,
+                ",".join(r.category for r in analysis.risk_regions[:5]),
+            )
+
+        _append_retention_explainability(plan, analysis)
+
+    except Exception as exc:
+        plan.retention = {
+            "available": False,
+            "warnings": [f"retention_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_retention_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_retention_explainability(plan: "AIEditPlan", analysis: Any) -> None:
+    """Append compact retention insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        _RISK_LINES: dict[str, str] = {
+            "weak_hook": "Weak opening hook may increase early dropout",
+            "long_setup": "Retention risk detected in long setup",
+            "pacing_decay": "Pacing decay may reduce viewer retention",
+            "silence_gap": "Silence gaps may interrupt viewer flow",
+            "subtitle_overload": "Subtitle density may weaken retention",
+            "story_drop": "Unclear narrative may reduce engagement",
+            "unclear_payoff": "Unclear payoff may reduce viewer satisfaction",
+        }
+
+        # Risk-based lines — up to 2 most severe
+        seen: set[str] = set()
+        risk_regions = getattr(analysis, "risk_regions", [])
+        for region in risk_regions[:3]:
+            cat = getattr(region, "category", "")
+            if cat in seen:
+                continue
+            seen.add(cat)
+            line = _RISK_LINES.get(cat)
+            if line and not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        # Strength-based lines
+        strengths = getattr(analysis, "strengths", [])
+        if "strong opening hook" in strengths:
+            line = "Strong hook supports early retention"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+        if "high pacing energy" in strengths:
+            line = "High pacing energy supports viewer engagement"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
     except Exception:
         pass
 

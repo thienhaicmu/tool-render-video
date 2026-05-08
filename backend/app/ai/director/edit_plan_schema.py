@@ -124,6 +124,8 @@ class AIEditPlan:
     creator_style: dict = field(default_factory=dict)
     # Phase 15 — external knowledge (populated by knowledge_retriever module)
     external_knowledge: dict = field(default_factory=dict)
+    # Phase 16 — retention intelligence (populated by retention_analyzer module)
+    retention: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -181,4 +183,5 @@ class AIEditPlan:
             "preset_evolution": dict(self.preset_evolution),
             "creator_style": dict(self.creator_style),
             "external_knowledge": dict(self.external_knowledge),
+            "retention": dict(self.retention),
         }
