@@ -7,6 +7,45 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Director Phase 3: Persistent Learning Memory
+
+**Implemented:**
+- `SQLiteMemoryStore` (`rag/sqlite_store.py`) — stdlib `sqlite3` only, no ORM; auto-creates `ai_memory.db` under `APP_DATA_DIR` (packaging-safe, same dir as `app.db`); tables: `render_memories`, `embeddings`; methods: `initialize()`, `add_memory()`, `search_memories()`, `count()`, `load_vectors()`; all methods return safe defaults on any failure
+- `write_render_memory()` (`rag/memory_writer.py`) — summarizes render result JSON into compact human-readable text; embeds if sentence-transformers available; persists to SQLite; falls back to text-only write if embeddings unavailable; never raises; never blocks rendering
+- `LocalMemoryStore` upgraded (`rag/memory_store.py`) — integrates `SQLiteMemoryStore`; `initialize_with_sqlite()` attaches persistence + hydrates in-memory vector store from stored vectors; `add_render_memory()` writes to both SQLite and in-memory; `search_recent()` returns recent memories as text-only fallback (score=0.5)
+- `initialize_memory_system(db_path=None)` factory — creates and hydrates a `LocalMemoryStore` in one call; always returns usable store
+- `retrieve_ai_context()` upgraded (`rag/retriever.py`) — text-only fallback path: when embeddings unavailable but store has SQLite records, returns recent memories with `"text_only_fallback"` warning instead of empty; behavior unchanged when `memory_store=None` (preserves Phase 2 test compatibility)
+- Render pipeline integration (`render_pipeline.py`) — after `upsert_job()`, calls `write_render_memory()` when `ai_director_enabled=True` or a plan was created; wrapped in bare `try/except`; zero impact on render result or job state
+
+**Tests added:**
+- `backend/tests/test_ai_director_phase3_memory.py` — 37 tests covering SQLite CRUD, persist/reload, vector round-trip, memory writer, text summary, retriever contract, AI Director end-to-end, safety guarantees, Phase 1/2 regression guard
+
+**Persistence design:**
+- DB path: `APP_DATA_DIR / "ai_memory.db"` (resolves to `%APPDATA%\RenderVideoTool\data\ai_memory.db` in packaged mode; `<project>/data/ai_memory.db` in dev)
+- Memories stored without vectors still counted and returned via `search_recent()`
+- Memories with vectors loaded on `initialize_with_sqlite()` for semantic search in next session
+- No ORM, no migration system — only `CREATE TABLE IF NOT EXISTS`
+
+**Not stored:**
+- Raw filesystem paths, usernames, proxy credentials, API keys
+- Full FFmpeg tracebacks (failure memories store compact summary only)
+
+**Not yet implemented:**
+- Beat-aware editing
+- Emotion/story pacing
+- Camera planner
+- Subtitle planner
+- UI AI memory controls
+- Distributed/cloud vector DB
+
+**Known limitations:**
+- Retrieval quality depends on optional sentence-transformers
+- Memory score influence intentionally capped at +5
+- No cross-device sync
+- Session hydration loads ≤500 most-recent vectors (prevents RAM growth)
+
+---
+
 ### 2026-05-08 — AI Director Phase 2: Semantic Hook + Local RAG Memory
 
 **Implemented:**
