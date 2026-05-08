@@ -7,6 +7,39 @@
 
 ## Patch Status Log
 
+### 2026-05-08 — AI Director Phase 8: Timeline Intelligence UI
+
+**Implemented:**
+- `index.html` — `#evAiOverlayLayer` div added inside `#evTimelineBarWrap` (after `#evTimelineLayers`); `#evAiTimelineLegend` div added after the `evTimeline` block, inside `view_editor`; both hidden by default; `aria-hidden="true"` set; no existing IDs or DOM structure changed
+- `editor-view.js` — `aiPlan: null` added to `_ev` state object; reset to `null` in both `openEditorView()` and `openEditorView_withSession()` on session open; `_evSetDuration()` now calls `_evRenderAiTimeline()` after updating trim UI so overlay redraws whenever duration changes
+- `editor-view.js` — `_evSetAiPlan(plan)` public setter: stores plan in `_ev.aiPlan` and triggers `_evRenderAiTimeline()`; `_evRenderAiTimeline()` builds absolute-positioned segment bars from `plan.selected_segments[].{start,end,score}`; segments with `score ≥ 0.7` get hook class (amber); populates legend with AI Clip / Hook chips and energy+emotion badge; clears overlay and hides legend when plan is absent, disabled, or duration is zero
+- `render-ui.js` — `renderAiInsights()` calls `if (typeof _evSetAiPlan === 'function') _evSetAiPlan(aiDir)` immediately after the panel becomes visible, so the editor timeline overlay is populated whenever a completed render's AI plan is shown
+- `app.css` — ~80 lines of Phase 8 styles appended at end; `.evAiOverlayLayer` (absolute, `bottom:12px`, `height:6px`, `pointer-events:none`, `z-index:2`); `.evAiSegBar` (blue clip bars, `rgba(99,179,237,.50)`); `.evAiSegBarHook` (amber hook bars with subtle glow, `rgba(251,191,36,.72)`); `.evAiTimelineLegend` (flex row, dark bg, `border-top`); `.evAiLegendItem`/`.evAiLegendHook` with `::before` color chips; `.evAiLegendEnergy` with `data-energy` color variants (high=green, mid=amber, low=blue)
+
+**Visible behavior:**
+- Editor timeline shows no overlay by default (clean, no regression)
+- After a render completes with AI Director enabled, switching to editor view reveals colored segment bars overlaid on the timeline: blue for standard AI clips, amber/gold for high-score hook segments
+- Legend row appears below the timeline showing clip/hook chip legend and a right-aligned energy+emotion summary badge (color-coded by energy tier)
+- Hovering a segment bar shows a tooltip with start/end times and score
+- Overlay is fully static — no per-frame updates; `pointer-events: none` throughout so seek and trim interactions are completely unaffected
+- On editor re-open (`openEditorView*`), overlay and legend are cleared
+
+**Constraints preserved:**
+- No canvas, no SVG libraries, no chart dependencies
+- No new API endpoints
+- No WebSocket or render queue logic changed
+- No existing CSS classes or editor DOM modified (additions only)
+- `_evOnTimeUpdate()` untouched — no per-frame overlay work
+- Overlay does not appear until a completed render provides AI metadata
+
+**Not yet implemented:**
+- Interactive AI controls (user-adjustable confidence thresholds)
+- Beat-sync render execution triggered from UI
+- Story intelligence UI
+- Real-time pacing visualization during active render
+
+---
+
 ### 2026-05-08 — AI Director Phase 7: Insights UI
 
 **Implemented:**
