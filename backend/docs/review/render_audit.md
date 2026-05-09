@@ -802,3 +802,98 @@ All bias weights are clamped `[0.0, 0.30]`.
 - Quality evaluation runs post-render automatically when outputs are available
 - Director pre-populates placeholder so field is always present in `plan.to_dict()`
 - No new required request fields
+
+---
+
+## AI Productization Phase 46 — Creator Preset Evolution Intelligence
+
+### Implemented
+
+- Creator preset evolution engine (`app/ai/preset_evolution/preset_evolution_engine.py`)
+  - `build_preset_evolution_pack(edit_plan, payload, context)` → `AIPresetEvolutionPack`
+  - Combines creator behavior + market + feedback + quality signals to evolve presets
+  - Built-in evolution templates for TikTok, Shorts, Reels, Podcast, Educational
+- Creator preset schema (`app/ai/preset_evolution/preset_schema.py`)
+  - `AICreatorPreset` — single preset with style/scoring/evolution metadata
+  - `AIPresetEvolutionPack` — pack with recommended + evolved presets + best selection
+- Creator preset safety validation (`app/ai/preset_evolution/preset_safety.py`) — 11 forbidden keys auto-stripped
+- Creator preset memory (`app/ai/preset_evolution/preset_memory.py`)
+  - Local JSON persistence at `data/preset_evolution/presets/`
+  - Safe fallback to built-in presets on missing/corrupt file
+  - 3 built-in starter presets: TikTok Viral, Podcast Clean, Educational
+  - Cap at 50 evolved presets
+- Creator preset scoring (`app/ai/preset_evolution/preset_scoring.py`)
+  - Weighted: quality(35%) + creator_fit(25%) + market_fit(20%) + feedback(10%) + retrieval(10%)
+  - Style match bonus for feedback alignment
+  - Retrieval alignment scoring from Phase 41
+- `AIEditPlan.creator_preset_evolution` field (defaults to `{}`)
+- AI Director Phase 46 block: `_attach_creator_preset_evolution()`, `_append_preset_evolution_explainability()`
+- Render influence reporting: `_report_creator_preset_evolution()`
+
+### Architecture direction
+
+| Principle | Detail |
+|---|---|
+| Evolution source | Local presets + AI signals (42–45) — no internet, no cloud AI |
+| Market resolution | Context > payload `ai_target_market` > payload `ai_mode` > plan mode |
+| Score amplification | Phase 44 market confidence (×10%) + Phase 42 style confidence (×8%) |
+| Minimum confidence | 0.30 required to generate evolved preset |
+| Influence mode | Always `assistive_only` — recommendation-only, never overrides user choice |
+
+### Evolution templates
+
+| Market | Evolved name | Style overrides |
+|---|---|---|
+| `viral_tiktok` / `tiktok` | TikTok Viral v2 | compact subtitle, fast_hook pacing, strong_open hook |
+| `youtube_shorts` | YouTube Shorts v2 | readable subtitle, medium_fast pacing, curiosity_hook |
+| `facebook_reels` | Facebook Reels v2 | medium_density subtitle, smooth_engagement, emotional_hook |
+| `podcast` | Podcast Clean v2 | readable subtitle, calm_storytelling, stable framing |
+| `educational` | Educational Pro | clean_readable subtitle, clarity_first pacing |
+
+### Preset scoring weights
+
+| Signal | Weight | Source |
+|---|---|---|
+| `quality_score` | 35% | Preset base quality |
+| `creator_fit_score` | 25% | Preset creator alignment |
+| `market_fit_score` | 20% | Preset market alignment |
+| `feedback_score` | 10% | Phase 43 exports + style match |
+| `retrieval_score` | 10% | Phase 41 retrieval matches |
+
+### Forbidden preset keys (auto-stripped)
+
+`ffmpeg_args`, `render_command`, `playback_speed`, `subtitle_timing`,
+`rerender`, `delete_output`, `subprocess`, `executable`, `python_code`,
+`queue_priority`, `output_path`
+
+### Still intentionally blocked
+
+- **Autonomous preset replacement** — never performed
+- **FFmpeg mutation** — never touched
+- **playback_speed mutation** — never touched
+- **Subtitle timing rewrite** — never touched
+- **Output deletion** — never performed
+- **Autonomous rerender** — never triggered
+- **Executor override** — never performed
+- **Internet scraping** — never performed
+- **Model fine-tuning** — never executed
+- **Cloud AI / external API** — not required
+- **GPU** — not required
+- **Internet** — not required
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_preset_evolution_started` | Evolution engine started |
+| `ai_preset_evolved` | Evolved preset generated |
+| `ai_preset_recommended` | Preset scored above threshold and recommended |
+| `ai_preset_evolution_skipped` | Confidence too low or no target market |
+| `ai_preset_evolution_applied` | Pack attached to plan in director |
+
+### Phase compatibility
+
+- All Phase 1–45 behavior preserved
+- `AIEditPlan.creator_preset_evolution` defaults to `{}` — backward compatible
+- Preset evolution runs automatically when AI Director is enabled
+- No new required request fields — `ai_target_market` is optional (falls back to `ai_mode`)

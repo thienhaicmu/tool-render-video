@@ -305,6 +305,15 @@ def _build_plan(
         "warnings": ["quality_evaluation_pending_post_render"],
     }
 
+    # --- Phase 46: Creator Preset Evolution Intelligence ---
+    # Combines creator behavior + market + feedback + quality signals.
+    # Assistive-only: no FFmpeg, no playback_speed, no subtitle timing, no executor override.
+    try:
+        _attach_creator_preset_evolution(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_preset_evolution_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_preset_evolution_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -3907,6 +3916,103 @@ def _append_quality_explainability(
 
         line = "Render quality evaluation remains evaluation-only"
         if not any("Render quality evaluation remains" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 46 — Creator Preset Evolution Intelligence
+# ---------------------------------------------------------------------------
+
+def _attach_creator_preset_evolution(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build creator preset evolution pack and attach to plan.
+
+    Assistive-only: evolves preset metadata, never mutates render output,
+    never overrides executor, never rewrites subtitle timing.
+    Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.preset_evolution.preset_evolution_engine import build_preset_evolution_pack
+
+        logger.debug("ai_preset_evolution_started job_id=%s", job_id)
+
+        context: dict = {}
+        target = getattr(request, "ai_target_market", None) or getattr(request, "ai_mode", None)
+        if target:
+            context["target_market"] = str(target)
+
+        pack = build_preset_evolution_pack(plan, payload=request, context=context)
+        plan.creator_preset_evolution = pack.to_dict()
+
+        if pack.enabled:
+            logger.info(
+                "ai_preset_evolution_applied job_id=%s best_preset=%s recommended=%d evolved=%d",
+                job_id,
+                pack.best_preset_id,
+                len(pack.recommended_presets),
+                len(pack.evolved_presets),
+            )
+        else:
+            logger.debug("ai_preset_evolution_skipped job_id=%s", job_id)
+
+        _append_preset_evolution_explainability(plan, pack.to_dict())
+
+    except Exception as exc:
+        plan.creator_preset_evolution = {
+            "available": False,
+            "enabled": False,
+            "evolution_mode": "assistive_only",
+            "recommended_presets": [],
+            "evolved_presets": [],
+            "best_preset_id": "",
+            "warnings": [f"creator_preset_evolution_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_preset_evolution_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_preset_evolution_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact preset evolution lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = pack_dict.get("enabled", False)
+        if not enabled:
+            return
+
+        line = "Creator preset evolution prepared"
+        if not any("Creator preset evolution" in str(l) for l in lines):
+            lines.append(line)
+
+        # Best evolved preset
+        evolved = pack_dict.get("evolved_presets") or []
+        if evolved:
+            best_name = evolved[0].get("preset_name", "")
+            if best_name:
+                line = f"{best_name} recommended"
+                if not any(best_name in str(l) for l in lines):
+                    lines.append(line)
+
+        line = "Preset evolution remains assistive-only"
+        if not any("Preset evolution remains" in str(l) for l in lines):
             lines.append(line)
 
     except Exception:

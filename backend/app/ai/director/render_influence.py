@@ -112,6 +112,7 @@ def apply_ai_render_influence(
         _report_creator_feedback_intelligence(payload, edit_plan, report)
         _report_market_optimization_intelligence(payload, edit_plan, report)
         _report_render_quality_evaluation(payload, edit_plan, report)
+        _report_creator_preset_evolution(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1372,4 +1373,46 @@ def _report_render_quality_evaluation(payload: Any, edit_plan: Any, report: dict
     logger.debug(
         "render_quality_evaluation_reported mode=%s enabled=%s outputs=%d best_id=%s",
         mode, enabled, len(output_scores), best_id,
+    )
+
+
+# ── Creator preset evolution — assistive_only advisory in Phase 46 ────────────
+
+def _report_creator_preset_evolution(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report creator preset evolution metadata — assistive_only in Phase 46.
+
+    No render execution. No FFmpeg altered. No playback_speed changed.
+    No subtitle timing rewritten. No executor override.
+    Preset evolution is metadata-only and assistive.
+    """
+    cpe = getattr(edit_plan, "creator_preset_evolution", None)
+    if not isinstance(cpe, dict) or not cpe:
+        report["skipped"].append("creator_preset_evolution:no_result")
+        return
+
+    available = cpe.get("available", False)
+    enabled = cpe.get("enabled", False)
+    mode = cpe.get("evolution_mode", "assistive_only")
+
+    recommended = cpe.get("recommended_presets") or []
+    evolved = cpe.get("evolved_presets") or []
+    best_preset_id = cpe.get("best_preset_id", "")
+
+    if not available:
+        report["skipped"].append("creator_preset_evolution:unavailable_phase46")
+    elif not enabled:
+        report["skipped"].append(
+            f"creator_preset_evolution:assistive_only_phase46"
+            f"(mode={mode})"
+        )
+    else:
+        report["skipped"].append(
+            f"creator_preset_evolution:{mode}_phase46"
+            f"(recommended={len(recommended)},evolved={len(evolved)}"
+            f",best_preset={best_preset_id!r})"
+        )
+
+    logger.debug(
+        "creator_preset_evolution_reported mode=%s enabled=%s recommended=%d evolved=%d best=%s",
+        mode, enabled, len(recommended), len(evolved), best_preset_id,
     )
