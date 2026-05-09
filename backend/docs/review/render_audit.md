@@ -230,3 +230,82 @@ remains intentionally blocked.
 - All Phase 1–36 behavior preserved
 - `ai_clip_batch_planning_enabled` defaults to `False` — old requests unaffected
 - `AIEditPlan.clip_batch_planning` defaults to `{}` — backward compatible
+
+---
+
+## AI Productization Phase 38 — AI-Assisted Existing Feature Enhancement Integration
+
+### Implemented
+
+- Unified AI feature enhancement integration (`feature_enhancement_engine.py`)
+- Feature enhancement schema (`AIFeatureEnhancement`, `AIFeatureEnhancementPack`)
+- Enhancement safety validation (`feature_enhancement_safety.py`)
+- Assistive-only AI orchestration across all existing render features
+- Subtitle enhancement integration (subtitle_text_apply + subtitle_execution)
+- Camera enhancement integration (camera_motion_apply + visual rhythm)
+- Timing enhancement integration (timing_apply + silence/dead-air guidance)
+- Clip selection enhancement integration (Phase 35/36 + story/retention intelligence)
+- Creator style enhancement integration (style adaptation + market + exec recommendations)
+- Variant enhancement integration (variant selection + simulation + batch plans)
+- Output ranking enhancement integration (output ranking + retention/story scoring)
+- Compact metadata pass-through in `AIEditPlan.feature_enhancement`
+
+### Architecture direction
+
+| Principle | Detail |
+|---|---|
+| AI role | Enhance existing features — never replace them |
+| Render authority | Deterministic render engine always has final authority |
+| Creator control | User intent preserved; AI improves quality, not autonomy |
+| Mode | Always `assistive_only` |
+
+### Enhancement integration sources
+
+| Category | Primary sources |
+|---|---|
+| Subtitle | `subtitle_text_apply`, `subtitle_execution`, creator style tone |
+| Camera | `camera_motion_apply`, `beat_visual_execution`, motion energy |
+| Timing | `timing_apply`, retention risk regions (silence/dead-air) |
+| Clip selection | `clip_segment_selection`, `clip_candidate_discovery`, story, retention |
+| Creator style | `creator_style_adaptation`, `creator_style`, `execution_recommendations` |
+| Variant | `variant_selection`, `execution_simulation`, `clip_batch_planning` |
+| Output ranking | `output_ranking`, retention score, story score |
+
+### Safety boundaries (still intentionally blocked)
+
+- **Autonomous render takeover** — never executed
+- **FFmpeg mutation** — never touched
+- **playback_speed mutation** — never touched
+- **Subtitle timing rewrite** — never touched
+- **Unrestricted editing** — never performed
+- **Queue mutation** — never performed
+- **Executor override** — never performed
+- **Autonomous publishing** — never triggered
+- **Cloud AI / external API** — not required
+- **GPU** — not required
+- **Internet** — not required
+
+### Allowed behaviors
+
+- Enhance existing subtitle quality via AI metadata
+- Improve camera framing guidance from AI motion analysis
+- Reduce dead-air and silence gaps via timing intelligence
+- Improve clip selection via story and retention signals
+- Apply creator style adaptation to existing features
+- Provide variant ranking and batch planning enhancement
+- Expose assistive-only improvement metadata
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_feature_enhancement_created` | Enhancement pack built successfully |
+| `ai_feature_enhancement_applied` | Enhancement categories active |
+| `ai_feature_enhancement_skipped` | No AI metadata available |
+| `ai_feature_enhancement_assistive_only` | Confirms assistive-only mode |
+
+### Phase compatibility
+
+- All Phase 1–37 behavior preserved
+- `AIEditPlan.feature_enhancement` defaults to `{}` — backward compatible
+- No new request fields — enhancement always runs when AI Director is enabled

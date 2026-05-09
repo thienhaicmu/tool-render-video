@@ -230,6 +230,15 @@ def _build_plan(
         plan.warnings.append(f"clip_batch_planning_error:{type(exc).__name__}")
         logger.debug("ai_director_clip_batch_planning_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 38: AI Feature Enhancement Integration ---
+    # Runs after all other phases so all AI metadata is available for enhancement.
+    # Assistive-only: enhances existing features, never replaces render engine authority.
+    try:
+        _attach_feature_enhancement(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"feature_enhancement_error:{type(exc).__name__}")
+        logger.debug("ai_director_feature_enhancement_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -3059,6 +3068,124 @@ def _append_clip_batch_explainability(
                 lines.append(line)
 
         line = "Batch rendering remains disabled until execution phase"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 38 — AI Feature Enhancement Integration attachment
+# ---------------------------------------------------------------------------
+
+def _attach_feature_enhancement(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build unified AI feature enhancement pack from all available AI metadata.
+
+    Assistive-only: enhances existing features, never replaces render engine authority.
+    Never executes renders, never mutates FFmpeg, never rewrites subtitle timing.
+    Never enqueues jobs, never overrides executor. No external API. No GPU. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.enhancement.feature_enhancement_engine import build_feature_enhancement_pack
+
+        pack = build_feature_enhancement_pack(plan, payload=request, context={"job_id": job_id})
+        pack_dict = pack.to_dict()
+        plan.feature_enhancement = pack_dict
+
+        subtitle_enh = pack_dict.get("subtitle_enhancement", {})
+        camera_enh = pack_dict.get("camera_enhancement", {})
+        timing_enh = pack_dict.get("timing_enhancement", {})
+        clip_enh = pack_dict.get("clip_selection_enhancement", {})
+
+        enabled_categories = [
+            name for name, enh in (
+                ("subtitle", subtitle_enh),
+                ("camera", camera_enh),
+                ("timing", timing_enh),
+                ("clip_selection", clip_enh),
+                ("creator_style", pack_dict.get("creator_style_enhancement", {})),
+                ("variant", pack_dict.get("variant_enhancement", {})),
+                ("output_ranking", pack_dict.get("output_ranking_enhancement", {})),
+            )
+            if isinstance(enh, dict) and enh.get("enabled", False)
+        ]
+
+        if enabled_categories:
+            logger.info(
+                "ai_feature_enhancement_applied job_id=%s categories=%s",
+                job_id, ",".join(enabled_categories),
+            )
+            logger.info(
+                "ai_feature_enhancement_assistive_only job_id=%s mode=assistive_only",
+                job_id,
+            )
+        else:
+            logger.debug(
+                "ai_feature_enhancement_skipped job_id=%s (no_categories_active)", job_id
+            )
+
+        _append_feature_enhancement_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.feature_enhancement = {
+            "available": False,
+            "mode": "assistive_only",
+            "subtitle_enhancement": {},
+            "camera_enhancement": {},
+            "timing_enhancement": {},
+            "clip_selection_enhancement": {},
+            "creator_style_enhancement": {},
+            "variant_enhancement": {},
+            "output_ranking_enhancement": {},
+            "warnings": [f"feature_enhancement_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_feature_enhancement_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_feature_enhancement_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact feature enhancement lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        subtitle_enh = pack_dict.get("subtitle_enhancement", {})
+        if isinstance(subtitle_enh, dict) and subtitle_enh.get("enabled", False):
+            line = "AI subtitle enhancement improved readability"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        timing_enh = pack_dict.get("timing_enhancement", {})
+        if isinstance(timing_enh, dict) and timing_enh.get("enabled", False):
+            improvements = timing_enh.get("improvements") or []
+            if any("dead_air" in str(i) for i in improvements):
+                line = "AI timing enhancement reduced dead-air"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+
+        camera_enh = pack_dict.get("camera_enhancement", {})
+        if isinstance(camera_enh, dict) and camera_enh.get("enabled", False):
+            line = "AI camera enhancement improved framing guidance"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        line = "AI feature enhancement remains assistive-only"
         if not any(line in str(l) for l in lines):
             lines.append(line)
 

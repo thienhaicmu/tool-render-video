@@ -106,6 +106,7 @@ def apply_ai_render_influence(
         _report_clip_candidate_discovery(payload, edit_plan, report)
         _report_clip_segment_selection(payload, edit_plan, report)
         _report_clip_batch_planning(payload, edit_plan, report)
+        _report_feature_enhancement(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1069,3 +1070,41 @@ def _update_explainability(edit_plan: Any, report: dict) -> None:
                 lines.append(beat_line)
     except Exception:
         pass
+
+
+def _report_feature_enhancement(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report feature enhancement metadata — assistive_only in Phase 38.
+
+    No render execution. No FFmpeg altered. No playback_speed changed.
+    No subtitle timing rewritten. AI enhances existing features only.
+    """
+    feh = getattr(edit_plan, "feature_enhancement", None)
+    if not isinstance(feh, dict) or not feh:
+        report["skipped"].append("feature_enhancement:no_result")
+        return
+
+    available = feh.get("available", False)
+    mode = feh.get("mode", "assistive_only")
+
+    categories = []
+    for key in (
+        "subtitle_enhancement", "camera_enhancement", "timing_enhancement",
+        "clip_selection_enhancement", "creator_style_enhancement",
+        "variant_enhancement", "output_ranking_enhancement",
+    ):
+        enh = feh.get(key, {})
+        if isinstance(enh, dict) and enh.get("enabled", False):
+            categories.append(key.replace("_enhancement", ""))
+
+    if not available:
+        report["skipped"].append("feature_enhancement:unavailable_phase38")
+    else:
+        report["skipped"].append(
+            f"feature_enhancement:{mode}_phase38"
+            f"(categories={len(categories)}:{','.join(categories) or 'none'})"
+        )
+
+    logger.debug(
+        "feature_enhancement_reported mode=%s categories=%d",
+        mode, len(categories),
+    )

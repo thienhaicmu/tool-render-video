@@ -168,6 +168,8 @@ class AIEditPlan:
     clip_segment_selection: dict = field(default_factory=dict)
     # Phase 37 — AI multi-clip batch planning (populated by clip_batch_planner module)
     clip_batch_planning: dict = field(default_factory=dict)
+    # Phase 38 — AI feature enhancement integration (populated by feature_enhancement_engine module)
+    feature_enhancement: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -247,4 +249,5 @@ class AIEditPlan:
             "clip_candidate_discovery": dict(self.clip_candidate_discovery),
             "clip_segment_selection": dict(self.clip_segment_selection),
             "clip_batch_planning": dict(self.clip_batch_planning),
+            "feature_enhancement": dict(self.feature_enhancement),
         }
