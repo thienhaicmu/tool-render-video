@@ -1,0 +1,20 @@
+{
+  "pattern_id": "pacing_fast_hook",
+  "pattern_type": "pacing",
+  "creator_style": "",
+  "title": "Fast Hook Pacing",
+  "description": "Aggressive front-loaded pacing for 3-second hook capture",
+  "confidence": 0.85,
+  "tags": ["pacing", "fast", "hook", "attention"],
+  "hook_patterns": [],
+  "subtitle_patterns": {},
+  "pacing_patterns": {
+    "hook_duration_sec": 3,
+    "intro_style": "abrupt",
+    "cut_cadence": "rapid",
+    "silence_tolerance_sec": 0.5,
+    "avoid_dead_air": true
+  },
+  "camera_patterns": {},
+  "retention_patterns": {}
+}

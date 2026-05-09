@@ -138,6 +138,54 @@ class AIEditPlan:
     variants: dict = field(default_factory=dict)
     # Phase 22 — AI best variant selection (populated by variant_selector module)
     variant_selection: dict = field(default_factory=dict)
+    # Phase 23 — Creator style adaptation (populated by style_classifier/style_adapter modules)
+    creator_style_adaptation: dict = field(default_factory=dict)
+    # Phase 24 — AI render decision preview (populated by decision_preview module)
+    render_decision_preview: dict = field(default_factory=dict)
+    # Phase 25 — safe execution recommendation pack (populated by execution_recommendation module)
+    execution_recommendations: dict = field(default_factory=dict)
+    # Phase 26 — execution simulation layer (populated by execution_simulator module)
+    execution_simulation: dict = field(default_factory=dict)
+    # Phase 27 — safe bounded render mutations (populated by mutation_engine module)
+    safe_render_mutations: dict = field(default_factory=dict)
+    # Phase 28 — safe multi-variant render planning (populated by multivariant_planner module)
+    multivariant_render_plans: dict = field(default_factory=dict)
+    # Phase 29 — safe multi-variant render execution (populated by multivariant_execution module)
+    multivariant_execution: dict = field(default_factory=dict)
+    # Phase 30 — AI output ranking and best export recommendation (populated by output_ranker module)
+    output_ranking: dict = field(default_factory=dict)
+    # Phase 31 — AI apply policy layer (populated by policy_engine module)
+    ai_apply_policy: dict = field(default_factory=dict)
+    # Phase 32 — safe timing mutation apply (populated by timing_apply_engine module)
+    timing_apply: dict = field(default_factory=dict)
+    # Phase 33 — subtitle text optimization apply (populated by subtitle_apply_engine module)
+    subtitle_text_apply: dict = field(default_factory=dict)
+    # Phase 34 — safe camera motion apply (populated by camera_apply_engine module)
+    camera_motion_apply: dict = field(default_factory=dict)
+    # Phase 35 — AI clip candidate discovery (populated by clip_candidate_engine module)
+    clip_candidate_discovery: dict = field(default_factory=dict)
+    # Phase 36 — AI clip segment selection (populated by clip_segment_selector module)
+    clip_segment_selection: dict = field(default_factory=dict)
+    # Phase 37 — AI multi-clip batch planning (populated by clip_batch_planner module)
+    clip_batch_planning: dict = field(default_factory=dict)
+    # Phase 38 — AI feature enhancement integration (populated by feature_enhancement_engine module)
+    feature_enhancement: dict = field(default_factory=dict)
+    # Phase 39 — External creator knowledge ingestion (populated by knowledge_registry module)
+    creator_knowledge: dict = field(default_factory=dict)
+    # Phase 40 — Creator pattern extraction (populated by pattern_registry module)
+    creator_patterns: dict = field(default_factory=dict)
+    # Phase 41 — Retrieval-based creator intelligence (populated by retrieval_engine module)
+    creator_retrieval: dict = field(default_factory=dict)
+    # Phase 42 — Adaptive creator intelligence (populated by adaptive_learning module)
+    adaptive_creator_intelligence: dict = field(default_factory=dict)
+    # Phase 43 — Creator feedback loop intelligence (populated by feedback_learning module)
+    creator_feedback_intelligence: dict = field(default_factory=dict)
+    # Phase 44 — Market-aware optimization intelligence (populated by market_optimizer module)
+    market_optimization_intelligence: dict = field(default_factory=dict)
+    # Phase 45 — AI render quality evaluation (populated post-render by quality_evaluator module)
+    render_quality_evaluation: dict = field(default_factory=dict)
+    # Phase 46 — Creator preset evolution intelligence (populated by preset_evolution_engine module)
+    creator_preset_evolution: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -202,4 +250,28 @@ class AIEditPlan:
             "story_optimization": dict(self.story_optimization),
             "variants": dict(self.variants),
             "variant_selection": dict(self.variant_selection),
+            "creator_style_adaptation": dict(self.creator_style_adaptation),
+            "render_decision_preview": dict(self.render_decision_preview),
+            "execution_recommendations": dict(self.execution_recommendations),
+            "execution_simulation": dict(self.execution_simulation),
+            "safe_render_mutations": dict(self.safe_render_mutations),
+            "multivariant_render_plans": dict(self.multivariant_render_plans),
+            "multivariant_execution": dict(self.multivariant_execution),
+            "output_ranking": dict(self.output_ranking),
+            "ai_apply_policy": dict(self.ai_apply_policy),
+            "timing_apply": dict(self.timing_apply),
+            "subtitle_text_apply": dict(self.subtitle_text_apply),
+            "camera_motion_apply": dict(self.camera_motion_apply),
+            "clip_candidate_discovery": dict(self.clip_candidate_discovery),
+            "clip_segment_selection": dict(self.clip_segment_selection),
+            "clip_batch_planning": dict(self.clip_batch_planning),
+            "feature_enhancement": dict(self.feature_enhancement),
+            "creator_knowledge": dict(self.creator_knowledge),
+            "creator_patterns": dict(self.creator_patterns),
+            "creator_retrieval": dict(self.creator_retrieval),
+            "adaptive_creator_intelligence": dict(self.adaptive_creator_intelligence),
+            "creator_feedback_intelligence": dict(self.creator_feedback_intelligence),
+            "market_optimization_intelligence": dict(self.market_optimization_intelligence),
+            "render_quality_evaluation": dict(self.render_quality_evaluation),
+            "creator_preset_evolution": dict(self.creator_preset_evolution),
         }

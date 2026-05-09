@@ -6,6 +6,1015 @@
 ---
 
 ## Patch Status Log
+---
+
+### 2026-05-08 — AI Productization Phase 41: Retrieval-Based Creator Intelligence
+
+**Implemented:**
+- `app/ai/retrieval/__init__.py` (new) — package marker for Phase 41 retrieval intelligence package
+- `app/ai/retrieval/retrieval_schema.py` (new) — `AICreatorRetrievalMatch` dataclass and `AICreatorRetrievalPack` dataclass; compact metadata-only schema for creator pattern retrieval matches; includes subtitle/pacing/camera/retention/hook influence dictionaries; `retrieval_mode` remains `"assistive_only"`
+- `app/ai/retrieval/retrieval_safety.py` (new) — retrieval sanitization and safety gates; strips forbidden execution fields; clamps confidence to `[0, 1]`; clamps retrieval_score to `[0, 100]`; rejects unsafe execution/mutation fields
+- `app/ai/retrieval/retrieval_engine.py` (new) — `retrieve_creator_intelligence(edit_plan, payload=None, context=None)`; deterministic local retrieval engine using Phase 39 creator knowledge and Phase 40 creator patterns; retrieves subtitle, pacing, camera, retention, hook, and creator-style influence metadata
+- `app/ai/director/edit_plan_schema.py` (updated) — `creator_retrieval: dict = field(default_factory=dict)` added to `AIEditPlan`; included in `to_dict()`; backward-compatible
+- `app/ai/director/ai_director.py` (updated) — Phase 41 retrieval block added after creator knowledge/pattern metadata is available; attaches compact `creator_retrieval` metadata and explainability lines
+- `app/ai/director/render_influence.py` (updated) — reports retrieval-based creator intelligence as assistive-only render influence metadata
+- `tests/test_ai_phase41_retrieval_creator_intelligence.py` (new) — 72 tests covering schema, safety, retrieval engine, creator style retrieval, subtitle/pacing/camera/retention influence, no-mutation safety, edit plan integration, render influence, and environment requirements
+
+**What Phase 41 adds:**
+
+- Retrieval-based creator intelligence
+- Creator archetype matching
+- Context-aware creator pattern retrieval
+- Subtitle influence retrieval
+- Pacing influence retrieval
+- Camera influence retrieval
+- Retention influence retrieval
+- Hook influence retrieval
+- Assistive-only creator intelligence metadata
+
+**Retrieval examples:**
+
+| Clip context | Retrieved intelligence |
+|-------------|------------------------|
+| Viral shortform / TikTok-style | compact subtitles, fast pacing, dynamic camera, strong hook emphasis |
+| Podcast / storytelling | readable subtitles, calm pacing, stable framing |
+| Retention decay / dead air | reengagement patterns, silence/dead-air reduction guidance |
+| Subtitle overload | compact subtitle patterns, readability-oriented subtitle influence |
+
+**Safety boundaries enforced:**
+
+- Retrieval is metadata-only
+- `retrieval_mode` always `"assistive_only"`
+- No payload mutation
+- No render execution
+- No FFmpeg mutation
+- No playback_speed mutation
+- No subtitle timing rewrite
+- No executor override
+- No queue mutation
+- No subprocess execution
+- No internet access
+- No API key required
+- No GPU required
+
+**Forbidden fields stripped/rejected:**
+
+`ffmpeg_args`, `render_command`, `playback_speed`, `subtitle_timing`, `queue_priority`, `output_path`, `subprocess`, `executable`, `python_code`, `shell`, `powershell`, `direct_crop_coordinates`
+
+**Architecture notes:**
+
+- Phase 41 connects Phase 39 external creator knowledge ingestion and Phase 40 creator pattern extraction to AI Director runtime orchestration
+- AI Director can now retrieve creator intelligence dynamically based on clip context
+- Retrieved metadata can influence existing subtitle, pacing, camera, hook, and retention systems safely
+- This phase does not replace deterministic rendering logic
+- Stable render executor remains final authority
+- AI remains assistive, bounded, and metadata-first
+
+**Intentionally still blocked:**
+
+- Live internet scraping
+- Autonomous crawling
+- Model fine-tuning
+- Unrestricted autonomous editing
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Direct crop-coordinate rewrite
+- Segment reorder
+- Executor override
+- Queue mutation
+- Autonomous publishing
+
+**Verification:**
+
+- Phase 41 tests: 72 passed
+- Full suite: 2771 passed
+- `git diff --check` clean
+- `py_compile` passed
+
+**Status:**
+
+Phase 41 complete. Retrieval-based creator intelligence is now available as an assistive metadata layer for AI Director and render influence reporting.
+
+### 2026-05-08 — AI Productization Phase 34: Safe Camera Motion Apply Foundation
+
+**Camera motion guidance metadata only. No crop coordinate rewrite. No FFmpeg mutation. Policy-gated (balanced/aggressive/experimental).**
+
+**Implemented:**
+
+- `app/ai/camera/__init__.py` (new) — package marker
+- `app/ai/camera/camera_apply_schema.py` (new) — `AICameraMotionApply` dataclass (apply_id, camera_type, source_candidate_id, confidence, applied, safe, target_scope, changes, warnings, explanation; `to_dict()` clamps `beat_pulse_strength` [0, 0.35], clamps `max_camera_intensity` [0, 1], strips forbidden change keys, caps confidence [0, 1], caps warnings/explanation at 10, maps unknown camera types to "unknown"); `AICameraMotionApplyPack` dataclass (available, enabled, mode, applied, blocked, warnings; `to_dict()` caps applied/blocked at 20); `_ALLOWED_CAMERA_TYPES` (6 types); `_FORBIDDEN_CAMERA_TYPES` (5 types); `_ALLOWED_CHANGE_KEYS` (8 keys); `_FORBIDDEN_CHANGE_KEYS` (14 keys including all crop/ffmpeg/coordinate keys); `_MAX_BEAT_PULSE_STRENGTH = 0.35`, `_MAX_CAMERA_INTENSITY = 1.0`, `_MIN_CONFIDENCE = 0.65`
+- `app/ai/camera/camera_apply_safety.py` (new) — `sanitize_camera_motion_changes(changes) -> dict`; strips forbidden keys, retains only allowed keys, clamps beat_pulse_strength [0, 0.35] and max_camera_intensity [0, 1]; `is_camera_motion_apply_safe(candidate, context) -> bool`; gates: not-dict → False, forbidden camera type hard-reject, unknown type reject, confidence ≥ 0.65, scope must be "metadata", any forbidden change key present → reject, sanitized changes must be non-empty; never raises
+- `app/ai/camera/camera_apply_engine.py` (new) — `build_camera_motion_apply_pack(edit_plan, payload, context) -> AICameraMotionApplyPack`; policy gate: only `balanced`/`aggressive`/`experimental`; `_MAX_APPLIED = 6`; candidate sources: Phase 18 (`beat_visual_execution.pulse_regions`) → `beat_aware_pulse` with pulse_strength clamped to [0, 0.35] at collection time; Phase 23 (`creator_style_adaptation.adapted_style`) → `creator_style_camera`; Phase 5 camera plan (`subtitle_safe=True`) → `subtitle_safe_framing`; Phase 27 (`safe_render_mutations` visual_rhythm category) → `motion_smoothing_hint`; Phase 33 (`subtitle_text_apply` compact_overload/density_reduce applied) → `subtitle_safe_framing` (if not already present); logs `ai_camera_motion_apply_enabled`, `ai_camera_motion_guidance_applied`, `ai_camera_motion_guidance_blocked`, `ai_camera_motion_apply_skipped`; never raises; never mutates payload in-place; never rewrites crop coordinates
+- `app/ai/director/edit_plan_schema.py` (updated) — `camera_motion_apply: dict = field(default_factory=dict)` added after Phase 33 field; `"camera_motion_apply": dict(self.camera_motion_apply)` in `to_dict()`; backward-compatible
+- `app/ai/director/ai_director.py` (updated) — Phase 34 block inserted between Phase 33 (subtitle text apply) and Phase 6 (explainability); `_attach_camera_motion_apply(plan, request, job_id)` reads `ai_apply_policy` from request; `_append_camera_motion_apply_explainability()` appends: "Camera motion apply disabled by conservative policy" (disabled), "Direct crop coordinate rewrite remains blocked" (always), per-applied camera type labels, "Camera motion guidance blocked ({reason})" (first blocked); wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_camera_motion_apply(payload, edit_plan, report)` added; disabled → `report["skipped"]` as `"camera_motion_apply:disabled_phase34(applied=...,blocked=...)"` + `"direct_crop_coordinate_rewrite:always_blocked_phase34"`; active applied → `report["applied"]` as `"camera_motion_apply:applied({id},{type}:[changes])"`; blocked → `report["skipped"]` as `"camera_motion_apply:blocked({id},{type}:{reason})"`; always appends `"direct_crop_coordinate_rewrite:always_blocked_phase34"` to `report["skipped"]`; wired after `_report_subtitle_text_apply()`; payload never mutated
+- `tests/test_ai_phase34_camera_motion_apply.py` (new) — 83 tests covering schema, safety, engine, edit plan compat, render influence, end-to-end
+
+**Allowed camera types:**
+
+| Type | Source |
+|------|--------|
+| `dynamic_safe` | General dynamic camera guidance |
+| `subtitle_safe_framing` | Phase 5 camera plan / Phase 33 density |
+| `beat_aware_pulse` | Phase 18 `beat_visual_execution` |
+| `creator_style_camera` | Phase 23 `creator_style_adaptation` |
+| `subject_lock_preference` | Subject tracking preference |
+| `motion_smoothing_hint` | Phase 27 `safe_render_mutations` visual_rhythm |
+
+**Allowed change keys (metadata only — no coordinates):**
+
+`camera_behavior`, `subtitle_safe_framing`, `beat_pulse_strength` [0–0.35], `creator_style_camera`, `subject_lock_preference`, `motion_smoothing`, `max_camera_intensity` [0–1], `visual_rhythm_mode`
+
+**Safety bounds:**
+
+| Gate | Rule |
+|------|------|
+| Confidence | ≥ 0.65 |
+| `target_scope` | must be "metadata" |
+| `beat_pulse_strength` | clamped [0, 0.35] |
+| `max_camera_intensity` | clamped [0, 1] |
+| Forbidden change keys | hard-rejected before sanitization |
+| Empty changes after sanitization | rejected |
+
+**Policy gating:**
+
+| Policy | Camera motion apply enabled |
+|--------|----------------------------|
+| `conservative` | ✗ |
+| `balanced` | ✓ |
+| `aggressive` | ✓ |
+| `experimental` | ✓ |
+
+**Intentionally still blocked:**
+
+- Crop coordinate rewrite (always — `crop_x`, `crop_y`, `crop_w`, `crop_h`)
+- FFmpeg filter rewrite (always)
+- Arbitrary zoom curve (always)
+- Unsafe subject jump (always)
+- Scene reorder camera (always)
+- Playback_speed mutation (always)
+- Segment reorder (always)
+- Executor override (always)
+
+**Architecture notes:**
+
+- Phase 34 sits between Phase 33 (subtitle text apply) and Phase 6 (explainability) — the third and final apply phase
+- `report["skipped"]` always contains `"direct_crop_coordinate_rewrite:always_blocked_phase34"` regardless of enabled state — explicit audit trail of the safety invariant
+- `target_scope="metadata"` is enforced by safety gate and reported in all applied entries
+- Beat pulse strength is clamped at two levels: at collection time (in `_collect_candidates`) and again at `to_dict()` serialization
+- Phase 34 is the third apply phase to add entries to `report["applied"]`
+
+**Verification:**
+
+- Phase 34 tests: 83 passed
+- Full suite passes (2296 total, zero regressions)
+- `git diff --check` clean
+
+---
+
+### 2026-05-08 — AI Productization Phase 33: Subtitle Text Optimization Apply Foundation
+
+**Text/style metadata only. No subtitle timestamp rewrite. Policy-gated (balanced/aggressive/experimental).**
+
+**Implemented:**
+
+- `app/ai/subtitles/subtitle_apply_schema.py` (new) — `AISubtitleTextApply` dataclass (apply_id, optimization_type, source_candidate_id, confidence, applied, safe, target_scope, changes, warnings, explanation; `to_dict()` strips forbidden change keys, retains only `_ALLOWED_CHANGE_KEYS`, clamps `max_chars_per_line` to [18, 42], caps confidence [0, 1], caps warnings/explanation at 10, maps unknown optimization types to "unknown"); `AISubtitleTextApplyPack` dataclass (available, enabled, mode, applied, blocked, warnings; `to_dict()` caps applied/blocked at 20); `_ALLOWED_OPTIMIZATION_TYPES` (6 types); `_FORBIDDEN_OPTIMIZATION_TYPES` (5 types); `_ALLOWED_CHANGE_KEYS` (8 keys); `_FORBIDDEN_CHANGE_KEYS` (10 keys including all timestamp/timing keys)
+- `app/ai/subtitles/subtitle_apply_safety.py` (new) — `sanitize_subtitle_text_changes(changes) -> dict`; strips forbidden keys, retains only allowed keys, clamps max_chars_per_line; `is_subtitle_text_apply_safe(candidate, context) -> bool`; gates: not-dict → False, forbidden opt type hard-reject, unknown opt type reject, confidence ≥ 0.65, scope must be "metadata", any forbidden change key present → reject, sanitized changes must be non-empty; never raises
+- `app/ai/subtitles/subtitle_apply_engine.py` (new) — `build_subtitle_text_apply_pack(edit_plan, payload, context) -> AISubtitleTextApplyPack`; policy gate: only `balanced`/`aggressive`/`experimental`; candidate sources: Phase 17 (`subtitle_execution.global_hint`) → `compact_overload` and `keyword_emphasis`; Phase 23 (`creator_style_adaptation`) → `creator_style_tone`; Phase 16 (`retention.subtitle_overload_detected`) → `density_reduce`; Phase 19 (`timing_mutation` hold_hook) → `hook_emphasis`; capped at 6 applied; logs `ai_subtitle_text_apply_enabled`, `ai_subtitle_text_optimization_applied`, `ai_subtitle_text_optimization_blocked`, `ai_subtitle_text_apply_skipped`; never raises; never mutates payload in-place
+- `app/ai/director/edit_plan_schema.py` (updated) — `subtitle_text_apply: dict = field(default_factory=dict)` added after Phase 32 field; `"subtitle_text_apply": dict(self.subtitle_text_apply)` in `to_dict()`; backward-compatible
+- `app/ai/director/ai_director.py` (updated) — Phase 33 block inserted between Phase 32 (timing apply) and Phase 6 (explainability); `_attach_subtitle_text_apply(plan, request, job_id)` reads `ai_apply_policy` from request; `_append_subtitle_text_apply_explainability()` appends: "Subtitle text optimization disabled by conservative policy" (disabled), "Subtitle timestamp rewrite remains blocked" (always), per-applied optimization labels, "Subtitle optimization blocked ({reason})" (first blocked); wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_subtitle_text_apply(payload, edit_plan, report)` added; disabled → `report["skipped"]` as `"subtitle_text_apply:disabled_phase33(applied=...,blocked=...)"` + `"subtitle_timestamp_rewrite:always_blocked_phase33"`; active applied → `report["applied"]` as `"subtitle_text_apply:applied({id},{type}:[changes])"`; blocked → `report["skipped"]` as `"subtitle_text_apply:blocked({id},{type}:{reason})"`; always appends `"subtitle_timestamp_rewrite:always_blocked_phase33"` to `report["skipped"]`; wired after `_report_timing_apply()`; payload never mutated
+- `tests/test_ai_phase33_subtitle_text_apply.py` (new) — 79 tests covering schema, safety, engine, edit plan compat, render influence, end-to-end
+
+**Allowed subtitle optimization types:**
+
+| Type | Source |
+|------|--------|
+| `compact_overload` | Phase 17 `density_mode=compact` |
+| `keyword_emphasis` | Phase 17 `emphasis_strength > 0.3` |
+| `safer_line_breaks` | General text safety |
+| `density_reduce` | Phase 16 `subtitle_overload_detected` |
+| `creator_style_tone` | Phase 23 `creator_style_adaptation` |
+| `hook_emphasis` | Phase 19 `hold_hook` candidate |
+
+**Allowed change keys (metadata/style only):**
+
+`subtitle_density`, `subtitle_emphasis`, `keyword_emphasis`, `line_break_style`, `max_chars_per_line` [18–42], `creator_style_tone`, `hook_emphasis`, `readability_mode`
+
+**Safety bounds:**
+
+| Gate | Rule |
+|------|------|
+| Confidence | ≥ 0.65 |
+| `target_scope` | must be "metadata" |
+| `max_chars_per_line` | clamped [18, 42] |
+| Forbidden change keys | hard-rejected before sanitization |
+| Empty changes after sanitization | rejected |
+
+**Policy gating:**
+
+| Policy | Subtitle text apply enabled |
+|--------|----------------------------|
+| `conservative` | ✗ |
+| `balanced` | ✓ |
+| `aggressive` | ✓ |
+| `experimental` | ✓ |
+
+**Intentionally still blocked:**
+
+- Subtitle timestamp rewrite (always)
+- Subtitle timing shift (always)
+- Full transcript rewrite (always)
+- Generated script replacement (always)
+- Playback_speed mutation (always)
+- FFmpeg command mutation (always)
+- Segment reorder (always)
+- Executor override (always)
+
+**Architecture notes:**
+
+- Phase 33 sits between Phase 32 (timing apply) and Phase 6 (explainability) — after policy is resolved
+- `report["skipped"]` always contains `"subtitle_timestamp_rewrite:always_blocked_phase33"` regardless of enabled state — this is an explicit audit trail of the safety invariant
+- `target_scope="metadata"` is enforced by safety gate and reported in all applied entries
+- Phase 33 is the second apply phase (after Phase 32 timing apply) to add entries to `report["applied"]`
+
+**Verification:**
+
+- Phase 33 tests: 79 passed
+- Full suite passes (2213 total, zero regressions)
+- `git diff --check` clean
+
+---
+
+### 2026-05-08 — AI Productization Phase 32: Safe Timing Mutation Apply Foundation
+
+**First timing apply phase. Policy-gated. Bounded. Deterministic. No FFmpeg mutation.**
+
+**Implemented:**
+
+- `app/ai/timing/timing_apply_schema.py` (new) — `AITimingMutationApply` dataclass (mutation_id, mutation_type, source_candidate_id, confidence, applied, safe, start_sec, end_sec, delta_sec, reason, warnings, explanation; `to_dict()` caps delta at `_MAX_SINGLE_DELTA_SEC=1.5`, caps confidence [0,1], caps warnings/explanation at 10, maps unknown types to "unknown"); `AITimingApplyPack` dataclass (available, enabled, mode, applied_mutations, blocked_mutations, total_delta_sec, warnings; `to_dict()` caps total_delta at `_MAX_TOTAL_DELTA_SEC=4.0`, caps mutations at 20)
+- `app/ai/timing/timing_apply_safety.py` (new) — `sanitize_timing_candidate(candidate) -> dict`; handles both Phase 19 (`start`/`end`/`max_trim_seconds`) and Phase 32 (`start_sec`/`end_sec`/`delta_sec`) key formats; `is_timing_mutation_safe(candidate, context) -> bool`; gates: forbidden type hard-reject, allowed type required, confidence ≥ 0.65, delta > 0 and ≤ 1.5 s, start ≥ 0, post-trim duration ≥ 2.0 s, protected window overlap, subtitle-dense region overlap; never raises
+- `app/ai/timing/timing_apply_engine.py` (new) — `build_timing_apply_pack(edit_plan, payload, context) -> AITimingApplyPack`; policy resolution priority: `context["ai_apply_policy"]` > `payload.ai_apply_policy` > `edit_plan.ai_apply_policy["selected_policy"]` > "conservative"; only `aggressive`/`experimental` policies allow apply; collects candidates from Phase 19 (`timing_mutation`) and Phase 20 (`story_optimization.timing_hints`); Phase 19 action mapping: `trim_silence→trim_silence_gap`, `tighten_setup→tighten_setup`, `shorten_outro→shorten_outro`; unknown Phase 19 actions silently skipped; capped at 5 applied mutations; logs `ai_timing_apply_enabled`, `ai_timing_mutation_applied`, `ai_timing_mutation_blocked`, `ai_timing_apply_skipped`; never raises; never mutates payload in-place
+- `app/ai/director/edit_plan_schema.py` (updated) — `timing_apply: dict = field(default_factory=dict)` added after Phase 31 field; `"timing_apply": dict(self.timing_apply)` in `to_dict()`; backward-compatible; Phase 31 `ai_apply_policy` unchanged
+- `app/ai/director/ai_director.py` (updated) — Phase 32 block inserted between Phase 31 (policy) and Phase 6 (explainability); `_attach_timing_apply(plan, request, job_id)` reads `ai_apply_policy` from request; `_append_timing_apply_explainability()` appends: "Safe timing apply disabled by conservative policy" (disabled), "Safe {type} applied" (per applied mutation), "Unsafe timing mutation blocked ({reason})" (first blocked); wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_timing_apply(payload, edit_plan, report)` added; disabled → `report["skipped"]` as `"timing_apply:disabled_phase32(applied=...,blocked=...)"`; active applied mutations → `report["applied"]` as `"timing_apply:applied({id},{type}:delta=...s)"`; blocked mutations → `report["skipped"]` as `"timing_apply:blocked({id},{type}:{reason})"`; wired after `_report_ai_apply_policy()`; payload never mutated
+- `tests/test_ai_phase32_timing_apply.py` (new) — 74 tests covering schema, safety, engine, edit plan compat, render influence, end-to-end
+
+**Allowed timing mutation types:**
+
+| Type | Source |
+|------|--------|
+| `trim_silence_gap` | Phase 19 `trim_silence` action |
+| `tighten_setup` | Phase 19 `tighten_setup` action |
+| `shorten_outro` | Phase 19 `shorten_outro` action |
+| `reduce_dead_air` | Phase 20 story hint |
+
+**Safety bounds:**
+
+| Gate | Bound |
+|------|-------|
+| `_MAX_SINGLE_DELTA_SEC` | 1.5 s per mutation |
+| `_MAX_TOTAL_DELTA_SEC` | 4.0 s total |
+| `_MIN_CONFIDENCE` | 0.65 |
+| Post-trim segment duration | ≥ 2.0 s |
+| Protected hook/payoff window | no overlap |
+| Subtitle-dense region | no overlap |
+
+**Policy gating:**
+
+| Policy | Timing apply enabled |
+|--------|---------------------|
+| `conservative` | ✗ |
+| `balanced` | ✗ |
+| `aggressive` | ✓ |
+| `experimental` | ✓ |
+
+**Intentionally still blocked:**
+
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Executor authority override
+- Validation bypass
+- Autonomous unlimited rendering
+
+**Architecture notes:**
+
+- Phase 32 runs between Phase 31 (policy) and Phase 6 (explainability) — so effective policy is resolved before timing apply evaluates it
+- Unknown Phase 19 `action` values are silently skipped at collection (not added to blocked) since they were never valid Phase 19 candidates; known forbidden Phase 20 `mutation_type` values are also skipped at collection
+- `report["applied"]` receives timing apply entries for the first time in Phase 32 — prior phases only used `report["skipped"]` for advisory metadata
+- Applied mutations are metadata only — no FFmpeg arg is modified, no subtitle file is rewritten, no segment order changes
+
+**Verification:**
+
+- Phase 32 tests: 74 passed
+- Full suite passes (2134 total, zero regressions)
+- `git diff --check` clean
+
+---
+
+### 2026-05-08 — AI Productization Phase 31: AI Apply Policy Layer Foundation
+
+**Policy layer controls HOW MUCH AI influence is allowed. Hard safety blocks are NEVER bypassed.**
+
+**Implemented:**
+
+- `app/ai/policy/__init__.py` (new) — package marker; Phase 31 AI apply policy package
+- `app/ai/policy/policy_schema.py` (new) — `AIApplyPolicy` dataclass (policy_name, allow_safe_mutations, allow_multivariant_execution, allow_execution_recommendations, allow_execution_simulation, allow_output_ranking, allow_timing_candidates, allow_creator_style_adaptation, allow_visual_rhythm_guidance, allow_aggressive_behavior, warnings, explanation; `to_dict()` caps warnings/explanation at 10, coerces all allow_* to bool); `AIPolicyDecision` dataclass (available, selected_policy, effective_policy, blocked_capabilities, warnings; `to_dict()` caps blocked_capabilities at 30)
+- `app/ai/policy/policy_safety.py` (new) — `sanitize_policy(policy_name) -> str`; case-insensitive; invalid values → "conservative"; `build_policy(policy_name) -> AIApplyPolicy`; reads from `_POLICY_DEFINITIONS` dict, falls back to conservative on error; `get_blocked_capabilities(policy) -> list[str]`; always includes `_GLOBAL_HARD_BLOCKS` (7 keys: ffmpeg_mutation, playback_speed_mutation, subtitle_timing_rewrite, segment_reorder, executor_override, validation_bypass, autonomous_unlimited_rendering); adds capability-level blocks based on policy flags; never raises
+- `app/ai/policy/policy_engine.py` (new) — `build_policy_decision(edit_plan, payload, context) -> AIPolicyDecision`; resolves policy name from context > payload attribute > edit_plan dict > default "conservative"; calls `build_policy()` + `get_blocked_capabilities()`; logs `ai_apply_policy_selected`/`ai_apply_policy_fallback`/`ai_apply_policy_blocked`; deterministic; never raises; never mutates payload
+- `app/ai/director/edit_plan_schema.py` (updated) — `ai_apply_policy: dict = field(default_factory=dict)` added to `AIEditPlan`; `"ai_apply_policy": dict(self.ai_apply_policy)` in `to_dict()`; backward-compatible; Phase 30 `output_ranking` unchanged
+- `app/ai/director/ai_director.py` (updated) — Phase 31 block inserted **early** (before Phase 6 explainability) so downstream phases can reference the effective policy; `_attach_ai_apply_policy(plan, request, job_id)` reads `ai_apply_policy` attribute from request; `_append_ai_apply_policy_explainability()` appends: "{Policy} AI apply policy enabled", "Aggressive orchestration remains safety-gated" (aggressive/experimental only), "Dangerous timing mutations remain blocked" (always); None guard; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_ai_apply_policy(payload, edit_plan, report)` added; policy summary → `report["skipped"]` as `"ai_apply_policy:phase31(policy=...,available=...,blocked_count=...)"`; wired into `apply_ai_render_influence()` after `_report_output_ranking()`; payload never mutated
+- `tests/test_ai_phase31_apply_policy.py` (new) — comprehensive test suite covering schema invariants, safety gates, policy definitions, engine behavior, edit plan compat, render_influence reporter, and end-to-end integration
+
+**Policy definitions:**
+
+| Policy | allow_multivariant_execution | allow_timing_candidates | allow_aggressive_behavior | Hard blocks |
+|--------|------------------------------|-------------------------|---------------------------|-------------|
+| `conservative` | ✗ | ✗ | ✗ | Always |
+| `balanced` | ✓ | ✗ | ✗ | Always |
+| `aggressive` | ✓ | ✗ | ✓ | Always |
+| `experimental` | ✓ | ✓ | ✓ | Always |
+
+**Resolution priority:** `context["ai_apply_policy"]` > `request.ai_apply_policy` attribute > `edit_plan.ai_apply_policy["selected_policy"]` > `"conservative"`
+
+**Global hard blocks (NEVER bypassed by any policy, 7 keys):**
+
+`ffmpeg_mutation`, `playback_speed_mutation`, `subtitle_timing_rewrite`, `segment_reorder`, `executor_override`, `validation_bypass`, `autonomous_unlimited_rendering`
+
+**Capability-level blocks per policy:**
+
+- `conservative`: + `multivariant_execution`, `timing_candidate_apply`, `aggressive_behavior`
+- `balanced`: + `timing_candidate_apply`, `aggressive_behavior`
+- `aggressive`: + `timing_candidate_apply`
+- `experimental`: no additional capability blocks (hard blocks always apply)
+
+**Policy ordering invariant:** conservative blocks all capabilities blocked by any other policy (conservative ⊇ balanced ⊇ aggressive ⊇ experimental in terms of blocked set).
+
+**Safety boundaries enforced:**
+
+- Hard blocks are unconditional — `get_blocked_capabilities()` always prepends `_GLOBAL_HARD_BLOCKS`
+- Invalid policy names → "conservative" via `sanitize_policy()` — no unknown policies can execute
+- `_POLICY_DEFINITIONS` keys are frozen — no dynamic policy injection
+- Policy never mutates payload, never calls FFmpeg, never touches render executor
+- Phase 31 block is early (pre-Phase 6) so explainability lines reflect effective policy
+- Never raises — all code wrapped in try/except with fallback to conservative
+- Deterministic — same inputs → same policy decision every time
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked (by all policies):**
+
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Executor authority override
+- Validation bypass
+- Autonomous unlimited rendering
+
+**Architecture notes:**
+
+- Phase 31 policy block runs before Phase 6 (explainability) — earliest possible position after plan construction
+- Policy metadata in `ai_apply_policy` field is available to all downstream phases in the same `_build_plan()` call
+- The policy does NOT yet gate downstream phase execution (e.g., if `allow_multivariant_execution=False`, the multivariant block still runs but produces an advisory-only result). Policy gating enforcement is a future hardening step.
+- `report["applied"]` is NOT touched by Phase 31 — all policy reporting goes to `report["skipped"]`
+
+**Verification:**
+
+- Phase 31 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
+### 2026-05-08 — AI Productization Phase 30: AI Output Ranking & Best Export Recommendation
+
+**Metadata-only output ranker. Recommendation-only. No upload, no publish, no file deletion.**
+
+**Implemented:**
+
+- `app/ai/output/__init__.py` (new) — package marker; Phase 30 AI output ranking package
+- `app/ai/output/output_schema.py` (new) — `AIOutputScore` dataclass (output_id, path, variant_id, score, confidence, rank, recommended, quality_flags, warnings, explanation; `to_dict()` clamps score [0,100], confidence [0,1], caps quality_flags/warnings/explanation at 10); `AIOutputRanking` dataclass (available, mode, outputs, best_output_id, best_output_path, warnings; `to_dict()` hardcodes mode="recommendation_only", caps outputs at 20)
+- `app/ai/output/output_safety.py` (new) — `sanitize_output_metadata(output) -> dict`; retains only `_SAFE_METADATA_KEYS` (21 safe metadata keys); `is_output_rankable(output) -> bool`; requires non-empty `output_id`; never raises; never opens/writes/deletes files
+- `app/ai/output/output_ranker.py` (new) — `rank_variant_outputs(outputs, edit_plan, context) -> AIOutputRanking`; `_normalize_outputs()` handles list/dict/str input; `_extract_ai_context()` reads variant_selection, creator_style_adaptation, execution_simulation, multivariant_execution from edit plan; `_score_output()` scoring model: base=50 + rank_score_bonus(up to +30) + selected_variant(+10) + creator_style_confidence≥0.60(+5) + retention_gain>0(+5) − warning_penalty(10/warn, max 3) − failed(−50) − validation_failed(−10); deterministic; never raises; logs `ai_output_ranking_created`/`ai_output_ranking_fallback`
+- `app/ai/director/edit_plan_schema.py` (updated) — `output_ranking: dict = field(default_factory=dict)` added to `AIEditPlan`; `"output_ranking": dict(self.output_ranking)` in `to_dict()`; backward-compatible; Phase 29 `multivariant_execution` unchanged
+- `app/ai/director/ai_director.py` (updated) — Phase 30 block attaches placeholder `output_ranking` dict (available=False, warnings=["ranking_deferred_until_render_completion"]); actual ranking is post-render in pipeline; placeholder ensures field is always present in AI Director output
+- `app/ai/director/render_influence.py` (updated) — `_report_output_ranking(payload, edit_plan, report)` added; both deferred and available rankings → `report["skipped"]` as `"output_ranking:deferred_phase30(best=...,outputs=...)"` or `"output_ranking:recommendation_only(best=...,outputs=...)"`; wired into `apply_ai_render_influence()` after `_report_multivariant_execution()`; no payload mutated; no files touched
+- `app/orchestration/render_pipeline.py` (updated) — Phase 30 block added before `_result_payload` construction; builds `_ai_rank_inputs` from `_rank_entries_ordered` (successful) + `failed_parts` (with `failed=True`); calls `rank_variant_outputs(_ai_rank_inputs, edit_plan=_ai_edit_plan)`; attaches `_ai_output_ranking` to `_result_payload["ai_output_ranking"]` and updates `_ai_edit_plan.output_ranking` if plan exists; ranking error → warning-only fallback dict, render job NOT affected
+- `tests/test_ai_phase30_output_ranking.py` (new) — comprehensive test suite covering schema invariants, safety gates, ranker behavior, scoring model, edit plan compat, render_influence reporter, and end-to-end integration
+
+**Scoring model:**
+
+| Signal | Effect |
+|--------|--------|
+| Base score | +50.0 |
+| Existing rank score | +up to 30.0 (existing_score × 0.30) |
+| Selected variant match | +10.0 |
+| Creator style confidence ≥ 0.60 | +5.0 |
+| Retention gain > 0 | +5.0 |
+| Warning (per warning, max 3) | −10.0 each |
+| Failed output | −50.0 |
+| Validation failed | −10.0 |
+| Final clamp | [0.0, 100.0] |
+
+**`mode` always "recommendation_only"** — hardcoded in `AIOutputRanking.to_dict()`.
+
+**Selected variant detection:** matches `variant_id` against `variant_selection.recommended_variant_id` OR `multivariant_execution.executed_plan_ids`.
+
+**`_result_payload` keys added:**
+
+- `ai_output_ranking` — `AIOutputRanking.to_dict()` result: `{available, mode, outputs[], best_output_id, best_output_path, warnings}`
+- Existing `output_ranking` (native pipeline ranker) is unchanged
+
+**Safety boundaries enforced:**
+
+- `mode` always "recommendation_only" — hardcoded in `to_dict()`
+- No files opened, read, written, or deleted in any ranking code path
+- No upload, no publish, no autonomous export replacement
+- Ranking failure → warning-only fallback dict, render job NOT affected
+- `report["applied"]` not touched by Phase 30 — all output ranking goes to `report["skipped"]`
+- Never raises — all code paths wrapped in try/except with logger.warning fallback
+- No internet, no API keys, no GPU required
+- Deterministic — same outputs + same edit_plan → same ranking
+
+**Intentionally still blocked:**
+
+- Auto-upload triggered by ranking
+- Auto-publish triggered by ranking
+- Output deletion (failed or low-ranked)
+- File overwrite by export recommendation
+- Autonomous export replacement
+- FFmpeg mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Executor override
+- Validation rule bypass
+
+**Architecture notes:**
+
+- `output_ranking` in `AIEditPlan` is a placeholder at AI Director time (no outputs exist yet)
+- Actual ranking runs post-render in `render_pipeline.py` after `_rank_entries_ordered` is finalized
+- AI output ranking is additive over the existing native pipeline ranking; both coexist in `_result_payload`
+- The pipeline Phase 30 block is wrapped in try/except — ranking error never blocks the render job
+
+**Verification:**
+
+- Phase 30 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
+### 2026-05-08 — AI Productization Phase 29: Safe Multi-Variant Render Execution Foundation
+
+**FIRST phase where AI-prepared variant plans may become actual render jobs.**
+
+**Execution is opt-in only (`ai_multivariant_execution_enabled=True` required). Disabled by default.**
+
+**Implemented:**
+
+- `app/ai/multivariant/multivariant_execution_schema.py` (new) — `AIMultiVariantExecution` dataclass (execution_id, plan_id, variant_id, enabled, safe, advisory_origin, payload_overrides, blocked_fields, render_job_created, warnings, explanation; `to_dict()` hardcodes advisory_origin=True, caps blocked_fields/warnings/explanation at 20/10/10); `AIMultiVariantExecutionSet` dataclass (available, execution_enabled, executions, executed_plan_ids, blocked_plan_ids, warnings; `to_dict()` caps executions at 3)
+- `app/ai/multivariant/multivariant_execution_safety.py` (new) — `sanitize_execution_overrides(overrides) -> dict`; `is_execution_override_safe(overrides) -> bool`; `collect_execution_blocked_fields(overrides) -> list`; `_ALLOWED_KEYS` = 7 safe metadata keys; `_FORBIDDEN_KEYS` = 15 keys (identical to Phase 28 planning); never raises; never mutates originals
+- `app/ai/multivariant/multivariant_execution.py` (new) — `build_multivariant_execution_set(edit_plan, payload, context) -> AIMultiVariantExecutionSet`; reads plans from `edit_plan.multivariant_render_plans.plans`; execution gated by `ai_multivariant_execution_enabled` flag in context; limit clamped to [1, 3]; safe plans produce payload copies via `_make_payload_copy()` — original never mutated; unsafe/not-safe-to-enqueue plans → blocked; limit-exceeded plans → blocked; `_disabled_set()` returns all plans as blocked with execution_enabled=False; logs `ai_multivariant_execution_created`/`ai_multivariant_execution_blocked`/`ai_multivariant_execution_skipped`; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `multivariant_execution: dict = field(default_factory=dict)` added to `AIEditPlan`; `"multivariant_execution": dict(self.multivariant_execution)` in `to_dict()`; backward-compatible; Phase 28 `multivariant_render_plans` unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_multivariant_execution(plan, request, job_id)` added; runs after Phase 28 (multi-variant planning); reads `ai_multivariant_execution_enabled` and `ai_multivariant_execution_limit` from request; calls `build_multivariant_execution_set(plan, payload=None, context)`; logs `ai_multivariant_execution_built` at INFO; `_append_multivariant_execution_explainability()` appends: "Safe multi-variant execution enabled" + "Bounded render variants prepared" (when enabled + executed), "Multi-variant execution disabled (opt-in required)" (when disabled), "Dangerous execution overrides remain blocked" (always); None guard; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_multivariant_execution(payload, edit_plan, report)` added; when disabled: `report["skipped"]` as `"multivariant_execution:disabled_phase29(plans=...,blocked=...)"`; when enabled: executed plans → `report["applied"]` as `"multivariant_exec:executed({id},{plan_id}:[overrides])"`, blocked → `report["skipped"]` as `"multivariant_exec:blocked({id},{plan_id}:reason)"`; wired into `apply_ai_render_influence()` after `_report_multivariant_plans()`; payload never mutated
+- `tests/test_ai_phase29_multivariant_execution.py` (new) — comprehensive test suite covering schema invariants, safety gates, execution engine behavior, edit plan schema compatibility, render_influence reporter, and end-to-end integration
+
+**Execution request flags (opt-in):**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `ai_multivariant_execution_enabled` | `False` | Must be True to create any render jobs |
+| `ai_multivariant_execution_limit` | `2` | Max execution jobs; clamped to [1, 3] |
+
+**Execution limit clamping:** `max(1, min(3, ai_multivariant_execution_limit))`
+
+**Allowed execution override keys (Phase 29 = Phase 28 allowed set):**
+
+`subtitle_density`, `subtitle_emphasis`, `camera_behavior`, `pacing_style`, `creator_style`, `visual_rhythm_mode`, `ai_mode`
+
+**Forbidden execution override keys (15 total — same as Phase 28):**
+
+`playback_speed`, `segment_start`, `segment_end`, `subtitle_timing`, `ffmpeg_args`, `codec`, `bitrate`, `crf`, `validation_rules`, `output_path`, `render_command`, `render_segments`, `segment_order`, `queue_priority`, `job_id`
+
+**Execution plan processing:**
+
+1. Extract plans from `edit_plan.multivariant_render_plans.plans`
+2. For each plan: check `safe_to_enqueue` + run `is_execution_override_safe()` on overrides
+3. Unsafe/not-safe-to-enqueue → blocked (no render job)
+4. If limit reached → blocked (no render job)
+5. Safe plan within limit → `_make_payload_copy(payload, sanitized_overrides)` → `render_job_created=True`
+6. `advisory_origin` is always True on every execution
+
+**`_make_payload_copy` behavior:**
+
+- `payload=None` → returns dict of safe overrides only
+- `payload` is dict → shallow copy + apply safe overrides
+- `payload` has `__dict__` → copy of vars + apply safe overrides
+- Never mutates original payload
+- Never propagates forbidden keys
+
+**Safety boundaries enforced:**
+
+- Execution disabled by default — `ai_multivariant_execution_enabled=False` produces no render jobs
+- `advisory_origin` always True — hardcoded in `AIMultiVariantExecution.to_dict()`
+- Original payload never mutated — `_make_payload_copy()` always creates a copy
+- Max 3 execution jobs — enforced by `_MAX_EXECUTION_JOBS = 3` clamp
+- Forbidden keys stripped by `sanitize_execution_overrides()` before any copy
+- `is_execution_override_safe()` gate: False blocks plan even if `safe_to_enqueue=True`
+- render_influence applied/skipped distinction: executed → applied, everything else → skipped
+- Never blocks render — all Phase 29 code wrapped in try/except in AI Director and engine
+- Deterministic — same edit_plan + same context → same execution set
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- Executor authority override
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Autonomous unlimited rendering (hard limit: 3 jobs max, opt-in only)
+- Validation bypass
+- Output path mutation
+- Render queue direct manipulation
+
+**Architecture notes:**
+
+- Phase 29 is the FIRST phase where render jobs are created from AI planning metadata
+- Execution jobs are payload copies — the render executor receives a bounded job descriptor, not a mutated original
+- `payload=None` at AI Director time means execution job descriptors are override-only dicts (no base payload); downstream render execution will merge these with the actual render payload
+- `report["applied"]` now includes both Phase 27 safe mutations AND Phase 29 execution jobs
+- `_report_multivariant_execution()` runs after `_report_multivariant_plans()` in the influence chain
+
+**Verification:**
+
+- Phase 29 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
+### 2026-05-08 — AI Productization Phase 28: Safe Multi-Variant Render Planning Foundation
+
+**Planning-only phase: prepares renderable variant jobs WITHOUT enqueueing or executing them.**
+
+**Implemented:**
+
+- `app/ai/multivariant/__init__.py` (new) — package marker; Phase 28 safe multi-variant render planning package
+- `app/ai/multivariant/multivariant_schema.py` (new) — `AIMultiVariantRenderPlan` dataclass (plan_id, variant_id, label, renderable, safe_to_enqueue, advisory_only, mutation_ids, planned_payload_overrides, blocked_fields, warnings, explanation; `to_dict()` hardcodes advisory_only=True, caps mutation_ids at 20, caps explanation at 300 chars, coerces bool fields); `AIMultiVariantRenderSet` dataclass (available, mode, plans, recommended_plan_id, warnings; `to_dict()` hardcodes mode="planning_only", caps plans at 5)
+- `app/ai/multivariant/multivariant_safety.py` (new) — `sanitize_variant_payload_overrides(overrides) -> dict`; strips forbidden + unknown keys, drops None values; `is_multivariant_plan_safe(overrides) -> bool`; returns False if any forbidden key detected; `collect_blocked_fields(overrides) -> list`; returns list of forbidden keys present; `_ALLOWED_KEYS = {subtitle_density, subtitle_emphasis, camera_behavior, pacing_style, creator_style, visual_rhythm_mode, ai_mode}`; `_FORBIDDEN_KEYS` = Phase 27 set (13 keys) + `queue_priority` + `job_id` = 15 keys total; never raises
+- `app/ai/multivariant/multivariant_planner.py` (new) — `build_multivariant_render_plans(edit_plan, payload=None, context=None) -> AIMultiVariantRenderSet`; builds up to 5 plans from AI planning metadata; `_build_baseline_plan()` (always present, ai_mode=advisory, pacing_style=standard); `_build_recommended_variant_plan()` (from variant_selection + variants + safe_render_mutations); `_build_compact_subtitle_plan()` (from subtitle_execution; skipped if no density/emphasis/mutation_ids); `_build_creator_style_plan()` (gate: confidence ≥ 0.40; camera via style map, pacing via style); `_build_retention_plan()` (gate: retention_score < 70; skipped when score ≥ 70 or not present); `_select_recommended()` prefers safe_to_enqueue non-baseline plans; `_fallback_set()` returns available=False with baseline only; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `multivariant_render_plans: dict = field(default_factory=dict)` added to `AIEditPlan`; `"multivariant_render_plans": dict(self.multivariant_render_plans)` in `to_dict()`; backward-compatible; Phase 27 `safe_render_mutations` field unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_multivariant_render_plans(plan, job_id)` added; runs after Phase 27 (safe mutations); calls `build_multivariant_render_plans(plan, payload=None, context)`; logs `ai_multivariant_plans_built` at INFO; `_append_multivariant_plans_explainability(plan, render_set_dict)` appends: "Multi-variant render plans prepared", "Recommended variant render plan is safe to enqueue later" (when non-baseline recommended), "Automatic variant rendering remains blocked" (always); None guard on plan; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_multivariant_plans(payload, edit_plan, report)` added; all plans → `report["skipped"]` as `"multivariant_render_plans:deferred_phase28(count=...,safe=...,recommended=...)"` — no plans enqueued, no payload mutated; wired into `apply_ai_render_influence()` after `_report_safe_mutations()`
+- `tests/test_ai_phase28_multivariant_planning.py` (new) — comprehensive test suite covering schema invariants, safety gates, planner plan generation, selection logic, edit plan schema compatibility, render_influence reporter, and end-to-end integration
+
+**Plan types and trigger conditions:**
+
+| Plan ID | Label | Trigger condition |
+|---------|-------|-------------------|
+| `mvplan_baseline` | Baseline Safe Render Plan | Always present |
+| `mvplan_recommended_variant` | Recommended Variant Render Plan | variant_selection has recommended_variant_id OR variants list non-empty |
+| `mvplan_compact_subtitle` | Compact Subtitle Render Plan | subtitle_execution has density/emphasis OR subtitle mutations present |
+| `mvplan_creator_style` | Creator Style Render Plan | creator_style_adaptation confidence ≥ 0.40 and style non-empty |
+| `mvplan_retention_optimized` | Retention-Optimized Render Plan | retention_score present and < 70 |
+
+**Allowed payload override keys (Phase 28 safety gate):**
+
+| Key | Purpose |
+|-----|---------|
+| `subtitle_density` | Subtitle density override |
+| `subtitle_emphasis` | Subtitle emphasis override |
+| `camera_behavior` | Camera behavior override |
+| `pacing_style` | Pacing style override |
+| `creator_style` | Creator style label |
+| `visual_rhythm_mode` | Visual rhythm mode |
+| `ai_mode` | AI mode marker |
+
+**Phase 28 forbidden keys (15 total = Phase 27 13 + 2 new):**
+
+Phase 27 forbidden keys (inherited): `playback_speed`, `segment_start`, `segment_end`, `subtitle_timing`, `ffmpeg_args`, `codec`, `bitrate`, `crf`, `validation_rules`, `output_path`, `render_command`, `render_segments`, `segment_order`
+
+Phase 28 additions: `queue_priority`, `job_id`
+
+**`safe_to_enqueue` logic:**
+
+- `safe_to_enqueue=True` only when `collect_blocked_fields(overrides)` returns empty list
+- `safe_to_enqueue=False` when any forbidden key detected in planned_payload_overrides
+- Baseline plan is always `safe_to_enqueue=True` because its overrides are hardcoded clean
+
+**Recommended plan selection:**
+
+1. Prefer `safe_to_enqueue=True` non-baseline plans (first match)
+2. Fall back to any `safe_to_enqueue=True` plan (including baseline)
+3. Fall back to first plan in list
+
+**Safety boundaries enforced:**
+
+- `mode` is always "planning_only" — hardcoded in `AIMultiVariantRenderSet.to_dict()`
+- `advisory_only` is always True — hardcoded in `AIMultiVariantRenderPlan.to_dict()`
+- Max 5 plans in any render set — enforced by `[:_MAX_PLANS]` slice
+- All plans → `report["skipped"]` in render_influence — no plan ever reaches `report["applied"]`
+- No render jobs created, no queue touched, no payload mutated
+- `_FORBIDDEN_KEYS` (15 keys) always stripped by `sanitize_variant_payload_overrides()`
+- Never blocks render — all Phase 28 code wrapped in try/except in AI Director and planner
+- Deterministic — same edit_plan always produces same render set
+- No internet, no API keys, no GPU required
+- Payload object passed to `build_multivariant_render_plans()` is always None (same pattern as Phase 27)
+
+**Intentionally still blocked:**
+
+- Render queue enqueueing
+- Job creation and job_id assignment
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Render structure mutation
+- Autonomous rendering
+- Executor override
+- Output validation mutation
+
+**Architecture notes:**
+
+- Phase 28 is the FIRST phase to prepare renderable multi-variant job descriptors — all as planning metadata only
+- `safe_to_enqueue=True` on a plan means the plan's overrides are clean of forbidden keys — not that the job will or should be enqueued in this phase
+- `report["applied"]` is still populated only by Phase 27 safe mutations — Phase 28 adds nothing to applied list
+- `_report_multivariant_plans()` runs last in the render influence chain (after `_report_safe_mutations()`, before `_update_explainability()`)
+
+**Verification:**
+
+- Phase 28 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
+### 2026-05-08 — AI Productization Phase 27: Safe AI-Assisted Render Mutations
+
+**First phase where bounded AI mutations are applied to AI guidance metadata fields.**
+
+**Implemented:**
+
+- `app/ai/mutations/__init__.py` (new) — package marker; Phase 27 safe mutation package
+- `app/ai/mutations/mutation_schema.py` (new) — `VALID_MUTATION_CATEGORIES` frozenset ({subtitle, pacing, camera, creator_style, visual_rhythm}); `AISafeMutation` dataclass (mutation_id, category, confidence, applied, safe, source_recommendation_id, changes, warnings, explanation; `to_dict()` clamps confidence [0,1], caps explanation at 5, coerces invalid category to ""); `AISafeMutationPack` dataclass (available, advisory_mode, mutations, applied_mutation_ids, blocked_mutations, warnings; `to_dict()` caps mutations at 10, caps applied/blocked lists at 20)
+- `app/ai/mutations/mutation_safety.py` (new) — `sanitize_mutation_changes(changes) -> dict`; strips forbidden keys and unknown keys, retains only `_ALLOWED_KEYS`, drops None values; `is_mutation_safe(changes) -> bool`; returns False if any forbidden key detected; `apply_safe_mutation(payload, changes) -> dict`; creates a shallow copy of payload (dict or object with `__dict__`), applies only allowed keys, never mutates original; `_ALLOWED_KEYS = {subtitle_density, subtitle_emphasis, camera_behavior, pacing_style, creator_style, visual_rhythm_mode, ai_mode}`; `_FORBIDDEN_KEYS = {playback_speed, segment_start, segment_end, subtitle_timing, ffmpeg_args, codec, bitrate, crf, validation_rules, output_path, render_command, render_segments, segment_order}`; never raises; original payload never mutated in-place
+- `app/ai/mutations/mutation_engine.py` (new) — `build_safe_mutations(edit_plan, payload=None, context=None) -> AISafeMutationPack`; reads `execution_recommendations.recommendations` (Phase 25 output); per-category builders: `_build_baseline_mutation()` (always applied), `_build_retention_mutation()` (gate: safe_to_apply + confidence ≥ 0.50), `_build_creator_style_mutation()` (gate: confidence ≥ 0.50; maps to safe camera values via `_STYLE_TO_CAMERA_SAFE`), `_build_subtitle_mutation()` (gate: confidence ≥ 0.40), `_build_visual_rhythm_mutation()` (gate: confidence ≥ 0.35; energetic/moderate → beat_light, calm → beat_none), `_build_pacing_mutation()` (gate: confidence ≥ 0.50); unsafe/low-confidence mutations → `changes={}`, `applied=False`, added to `blocked_mutations`; `advisory_mode=True` when zero mutations applied; emits `ai_safe_mutation_applied`/`ai_safe_mutation_blocked` at INFO, `ai_safe_mutation_skipped` on fallback; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `safe_render_mutations: dict = field(default_factory=dict)` added to `AIEditPlan`; `"safe_render_mutations": dict(self.safe_render_mutations)` in `to_dict()`; backward-compatible; Phase 26 `execution_simulation` field unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_safe_render_mutations(plan, job_id)` added; runs after Phase 26 (execution simulation); calls `build_safe_mutations(plan, payload=None, context)`; `_append_safe_render_mutations_explainability(plan, pack_dict)` appends: "Safe subtitle density mutation applied" (subtitle), "Visual rhythm guidance safely adjusted" (visual_rhythm), "Creator style mutation applied safely" (creator_style), "Safe pacing mutation applied" (pacing), "Dangerous timing mutations remain blocked" (always); None guard on plan; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_safe_mutations(payload, edit_plan, report)` added; applied mutations → `report["applied"]` as `"safe_mutation:applied({id},{cat}:[changes])"` — FIRST AI-managed mutations to reach the applied list; blocked mutations → `report["skipped"]` as `"safe_mutation:blocked({id},{cat})"` ; emits `ai_safe_mutation_applied`/`ai_safe_mutation_blocked` at INFO; no payload mutation; wired into `apply_ai_render_influence()` after `_report_execution_simulation()`
+- `tests/test_ai_phase27_safe_render_mutations.py` (new) — comprehensive test suite covering mutation schema, safety gates, apply_safe_mutation payload invariants, mutation engine, AIEditPlan field, render_influence reporter, safety invariants, and AI Director integration
+
+**Allowed mutation keys and gates:**
+
+| Category | Allowed keys | Confidence gate |
+|----------|-------------|-----------------|
+| `safe_baseline` | `ai_mode`, `pacing_style` | always applied (conf=1.0) |
+| `pacing` | `pacing_style` | ≥ 0.50 + safe_to_apply |
+| `creator_style` | `creator_style`, `camera_behavior` | ≥ 0.50 + safe_to_apply |
+| `subtitle` | `subtitle_density`, `subtitle_emphasis` | ≥ 0.40 + safe_to_apply |
+| `visual_rhythm` | `visual_rhythm_mode` | ≥ 0.35 + safe_to_apply |
+
+**Pacing style canonicalisation:** fast_cuts→fast_hook, fast→fast_hook, retention_optimized→retention_focus, story_driven→story_driven, standard→standard, slow_build→slow_build, medium→standard, slow→slow_build
+
+**Camera behaviour safety mapping:** viral_tiktok/cinematic/storytelling/commentary→dynamic_safe; educational/podcast/product_demo/interview/safe_generic→static
+
+**Visual rhythm safety mapping:** energetic→beat_light, moderate→beat_light, calm→beat_none
+
+**Safety boundaries enforced:**
+
+- Original payload NEVER mutated — `apply_safe_mutation()` always creates a copy
+- `_FORBIDDEN_KEYS` (13 keys incl. playback_speed, ffmpeg_args, segment_order, render_segments) always stripped by `sanitize_mutation_changes()`
+- Unsafe mutations have `changes={}` and `applied=False` — empty changes reach the report as blocked
+- `is_mutation_safe()` returns False if any forbidden key detected in changes
+- `advisory_mode=True` set on pack when zero mutations are applied
+- Applied mutations only affect AI guidance metadata fields — never FFmpeg commands, timings, or render payload execution fields
+- Applied mutations appear in `report["applied"]` — but only as AI metadata, no payload object mutation occurs in `_report_safe_mutations`
+- No FFmpeg commands altered. No subtitle timing rewrite. No segment reorder. No playback_speed mutation.
+- Never blocks render — all Phase 27 code wrapped in try/except in AI Director and engine
+- Deterministic — same edit_plan always produces same mutation pack
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Render structure mutation
+- Render queue mutation
+- Autonomous rendering
+- Executor override
+- Output validation mutation
+
+**Architecture notes:**
+
+- Phase 27 is the FIRST phase where mutations appear in `report["applied"]` (all prior phases added to `report["skipped"]`)
+- Mutations are proposed and validated at AI Director time (when edit_plan is built); no payload is needed because changes target AI guidance metadata fields only
+- `apply_safe_mutation(payload, changes) -> dict` is available for downstream use when a payload dict copy is needed; it is not called in the main reporting path to preserve the "no payload mutation" invariant in render_influence
+
+**Verification:**
+
+- Phase 27 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
+### 2026-05-08 — AI Productization Phase 26: Execution Simulation Layer Foundation
+
+**Implemented:**
+
+- `app/ai/simulation/__init__.py` (new) — package marker; Phase 26 simulation package
+- `app/ai/simulation/simulation_schema.py` (new) — `VALID_SAFETY_LEVELS` frozenset ({safe, caution, blocked}); `AIExecutionSimulation` dataclass (simulation_id, recommendation_id, label, estimated_retention_gain, estimated_story_gain, estimated_subtitle_clarity_gain, estimated_pacing_gain, confidence, safety_level, advisory_only always True, warnings, explanation; `to_dict()` hardcodes advisory_only=True, clamps confidence [0,1], clamps all gains [-100,100], caps explanation at 5, coerces invalid safety_level to "safe"); `AISimulationPack` dataclass (available, mode always "simulation_only", simulations, recommended_simulation_id, warnings; `to_dict()` hardcodes mode="simulation_only", caps simulations at 10)
+- `app/ai/simulation/simulation_scoring.py` (new) — `score_simulation(simulation, edit_plan=None) -> dict`; weighted gain blend (retention×0.35 + story×0.25 + subtitle×0.20 + pacing×0.20) centered at 50; safety penalties: caution −15, blocked −50; low-confidence (<0.40) dampening toward 50; returns {"overall_score":0-100, "confidence":0-1, "reasons":[], "warnings":[]}; deterministic; never raises
+- `app/ai/simulation/execution_simulator.py` (new) — `simulate_execution_recommendations(edit_plan, context) -> AISimulationPack`; primary path reads `execution_recommendations.recommendations` (Phase 25 output) and simulates each by category (retention, creator_style, subtitle, visual_rhythm, pacing, safe_baseline); supplemental direct-metadata path fills gaps: `_simulate_retention()` (gain: 18/10/4 for score <40/<70/≥70), `_simulate_subtitle()` (gain: 12/6/3 for compact/normal/other + 3 bonus for emphasis), `_simulate_visual_rhythm()` (pacing: 10/7/5 for >120/>80/≤80 bpm), `_simulate_story_pacing()` (story_driven/fast_cuts/standard), `_simulate_creator_style()` (retention=confidence×8, pacing=confidence×10); `_select_recommended()`: scores via `score_simulation()`, picks best non-baseline only if it beats baseline by >2 pts; `sim_safe_baseline` always present; emits `ai_execution_simulation_created` at INFO, `ai_execution_simulation_fallback` on error; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `execution_simulation: dict = field(default_factory=dict)` added to `AIEditPlan`; `"execution_simulation": dict(self.execution_simulation)` in `to_dict()`; backward-compatible; Phase 25 `execution_recommendations` field unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_execution_simulation(plan, job_id)` added; runs after Phase 25 (execution recommendations) so simulation reads full recommendation context; calls `simulate_execution_recommendations(plan, context)`; `_append_execution_simulation_explainability(plan, pack_dict)` appends: "Execution simulation estimated retention improvement (+X.Y)" or "Execution simulation prepared (advisory metadata only)", "Subtitle clarity simulation available" (when present), "Simulation remains advisory-only"; None guard on plan; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_execution_simulation(payload, edit_plan, report)` added; checks `edit_plan.execution_simulation`, adds `"execution_simulation:deferred_phase26(count=...,recommended=...)"` to report["skipped"]; no payload mutation; wired into `apply_ai_render_influence()` after `_report_execution_recommendations()`
+- `tests/test_ai_phase26_execution_simulation.py` (new) — comprehensive test suite covering simulation schema, scoring, simulator builder, AIEditPlan field, render_influence reporter, safety invariants, and AI Director integration
+
+**Simulation gain model:**
+
+| Simulation | Retention | Story | Subtitle | Pacing | Source |
+|------------|-----------|-------|----------|--------|--------|
+| retention_pacing (fast_cuts) | +18 (low) / +10 (mid) | — | — | +8 | retention.score |
+| creator_style | confidence×8 | — | — | confidence×10 | creator_style_adaptation |
+| compact_subtitle | — | — | +12/+6/+3 | — | subtitle_execution.density |
+| visual_rhythm (energetic) | +6 | — | — | +10 | beat_visual_execution.bpm |
+| story_pacing (story_driven) | — | (100-score)×0.15 | — | +8 | story_optimization |
+| safe_baseline | 0 | 0 | 0 | 0 | always present |
+
+**Scoring formula:** `overall = clamp(50 + Σ(gain×weight) − safety_penalty − low_conf_dampening, 0, 100)`
+
+**Safety penalties:** safe: −0, caution: −15, blocked: −50
+
+**Recommendation selection:** best non-baseline simulation selected only when `score > baseline_score + 2.0`; otherwise `sim_safe_baseline` is recommended
+
+**Safety boundaries enforced:**
+
+- `advisory_only` always True — hardcoded in `AIExecutionSimulation.to_dict()`
+- `mode` always "simulation_only" — hardcoded in `AISimulationPack.to_dict()`
+- Simulations contain no `recommended_settings` — no forbidden key exposure
+- Blocked simulations penalized −50 pts in scoring (prefer safe/caution)
+- safe_baseline always available as stable neutral reference
+- No FFmpeg commands altered
+- No payload mutation — simulator reads edit_plan, never writes render payload
+- No subtitle timing rewrite, no segment reorder, no playback_speed mutation
+- No autonomous execution of any simulation result
+- Never blocks render — all Phase 26 code wrapped in try/except in AI Director and simulator
+- Deterministic — same edit_plan always produces same simulation pack
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- Actual execution apply
+- Autonomous rendering
+- FFmpeg mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Payload mutation
+- Executor override
+- Output duplication
+
+**Architecture notes:**
+
+- Phase 26 runs after Phase 25 (execution recommendations) so simulations can reference recommendation-backed metadata for higher fidelity estimates
+- Supplemental direct-metadata simulators fire for any gain category not already covered by a recommendation-backed simulation (no duplicates)
+- `score_simulation()` is pure — same simulation object always returns same score regardless of edit_plan context
+
+**Verification:**
+
+- Phase 26 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
+### 2026-05-08 — AI Productization Phase 25: Safe Execution Recommendation Layer
+
+**Implemented:**
+
+- `app/ai/execution/__init__.py` (new) — package marker; Phase 25 execution package
+- `app/ai/execution/execution_schema.py` (new) — `VALID_CATEGORIES` frozenset ({subtitle, pacing, camera, creator_style, retention, visual_rhythm, safe_baseline}); `AIExecutionRecommendation` dataclass (recommendation_id, label, category, confidence, safe_to_apply, advisory_only always True, recommended_settings, blocked_settings, warnings, explanation; `to_dict()` hardcodes advisory_only=True, clamps confidence [0,1], caps explanation at 5, coerces invalid category to "safe_baseline"); `AIExecutionPack` dataclass (available, mode always "advisory", recommendations, recommended_pack_id, warnings; `to_dict()` hardcodes mode="advisory", caps recommendations at 10)
+- `app/ai/execution/execution_safety.py` (new) — `sanitize_execution_settings(settings) -> dict`; strips all forbidden keys, retains only `_ALLOWED_KEYS`; `is_execution_recommendation_safe(recommendation, context) -> bool`; checks recommended_settings for forbidden keys; `_ALLOWED_KEYS = {subtitle_density, subtitle_emphasis, camera_behavior, pacing_style, creator_style, visual_rhythm_mode, hook_density, target_duration_hint, ai_mode}`; `_FORBIDDEN_KEYS = {playback_speed, segment_start, segment_end, subtitle_timing, ffmpeg_args, codec, bitrate, crf, validation_rules, output_path, render_command}`; never raises; no payload mutation
+- `app/ai/execution/execution_recommendation.py` (new) — `build_execution_recommendations(edit_plan, context) -> AIExecutionPack`; reads: creator_style_adaptation, retention, subtitle_execution, beat_visual_execution, story_optimization; safe_baseline always built first; `_build_creator_style_recommendation()`: maps Phase 23 style_id to camera_behavior + pacing_style; safe_to_apply=True only when confidence ≥ 0.50; `_build_retention_recommendation()`: fast_cuts/high-hook for score<40, retention_optimized/medium for score<70, standard/low otherwise; `_build_visual_rhythm_recommendation()`: energetic(>120bpm)/moderate(>80bpm)/calm; `_build_story_pacing_recommendation()`: story_driven for three_act/hero_journey, fast_cuts for montage/highlight; `_select_recommended()`: max by confidence×100 + category bonus (retention+15, creator_style+10, pacing+8, subtitle+6, visual_rhythm+4) minus 20 if not safe_to_apply; all settings sanitized via `sanitize_execution_settings()` before attachment; emits `ai_execution_recommendations_created` at INFO, `ai_execution_recommendation_fallback` on error; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `execution_recommendations: dict = field(default_factory=dict)` added to `AIEditPlan`; `"execution_recommendations": dict(self.execution_recommendations)` in `to_dict()`; backward-compatible; Phase 24 `render_decision_preview` field unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_execution_recommendations(plan, job_id)` added; runs after Phase 24 (render decision preview); calls `build_execution_recommendations(plan, context)`; `_append_execution_recommendations_explainability(plan, pack_dict)` appends: "AI execution recommendation pack prepared", "Retention-oriented pacing recommendation available" / "Creator-style execution recommendation available" / "Story-driven pacing recommendation available", "Autonomous execution remains blocked"; None guard on plan; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_execution_recommendations(payload, edit_plan, report)` added; checks `edit_plan.execution_recommendations`, adds `"execution_recommendations:deferred_phase25(count=...,recommended=...)"` to report["skipped"]; no payload mutation; wired into `apply_ai_render_influence()` after `_report_render_decision_preview()`
+- `tests/test_ai_phase25_execution_recommendation.py` (new) — comprehensive test suite covering execution schema, safety gates, recommendation builder, AIEditPlan field, render_influence reporter, safety invariants, and AI Director integration
+
+**Recommendation categories and scoring:**
+
+| Category | Bonus | Source |
+|----------|-------|--------|
+| `retention` | +15 | retention.overall_retention_score |
+| `creator_style` | +10 | creator_style_adaptation.primary_style |
+| `pacing` | +8 | story_optimization.flow_type |
+| `subtitle` | +6 | subtitle_execution.density |
+| `visual_rhythm` | +4 | beat_visual_execution.bpm |
+| `safe_baseline` | 0 | always present |
+
+**Retention pacing thresholds:**
+
+| Score range | Pacing style | Hook density |
+|-------------|-------------|--------------|
+| < 40 | fast_cuts | high |
+| 40–69 | retention_optimized | medium |
+| ≥ 70 | standard | low |
+
+**Safety boundaries enforced:**
+
+- `advisory_only` always True — hardcoded in `AIExecutionRecommendation.to_dict()`
+- `mode` always "advisory" — hardcoded in `AIExecutionPack.to_dict()`
+- `_FORBIDDEN_KEYS` (playback_speed, segment_start, segment_end, subtitle_timing, ffmpeg_args, codec, bitrate, crf, validation_rules, output_path, render_command) always stripped by `sanitize_execution_settings()`
+- `is_execution_recommendation_safe()` returns False if any forbidden key detected
+- safe_baseline always available as stable fallback
+- No FFmpeg commands altered
+- No payload mutation — builder reads edit_plan, never writes render payload
+- No subtitle timing rewrite
+- No segment reorder
+- No playback_speed mutation
+- No autonomous execution of any recommendation
+- Never blocks render — all Phase 25 code wrapped in try/except in AI Director and builder
+- Deterministic — same edit_plan always produces same recommendations
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- Autonomous execution of recommendations
+- Direct render mutation
+- FFmpeg filter chain mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Segment reorder
+- Payload mutation
+- Automatic execution apply
+- Render executor override
+
+**Architecture notes:**
+
+- Phase 25 runs after Phase 24 (render decision preview) so all prior AI phase outputs are available
+- safe_baseline recommendation always scored at confidence=1.0 but with 0 category bonus, so a high-confidence retention/style recommendation will be selected as recommended_pack_id instead
+- `_ALLOWED_KEYS` whitelist is the authoritative list of settings the recommendation layer can suggest
+- Creator style → camera behavior mapping mirrors Phase 23 adaptation hints for consistency
+
+**Verification:**
+
+- Phase 25 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
+### 2026-05-08 — AI Productization Phase 24: AI Render Decision Preview Foundation
+
+**Implemented:**
+
+- `app/ai/preview/__init__.py` (new) — package marker; Phase 24 preview package
+- `app/ai/preview/preview_schema.py` (new) — `VALID_SAFETY_STATUSES` frozenset ({safe, caution, blocked, unavailable}); `AIRenderDecisionPreview` dataclass (available, mode, selected_variant_id, creator_style, decision_summary, recommended_actions, blocked_actions, safety_status, confidence, warnings, explanation; `to_dict()` hardcodes mode="advisory", clamps confidence [0,1], caps recommended_actions at 10, explanation at 8, coerces invalid safety_status to "safe"); `AIPreviewSafetyReport` dataclass (safe_to_preview, safe_to_execute always False, blocked_reasons, advisory_only always True, warnings; `to_dict()` hardcodes safe_to_execute=False and advisory_only=True)
+- `app/ai/preview/decision_preview.py` (new) — `build_render_decision_preview(edit_plan, context) -> dict`; aggregates variant_selection, creator_style_adaptation, retention, story_optimization, subtitle_execution, timing_mutation metadata into a single advisory summary; `_BLOCKED_ACTIONS = [autonomous_rendering_of_selected_variant, ffmpeg_filter_chain_mutation, timing_mutation_application, subtitle_timing_rewrite, playback_speed_mutation, segment_reorder]` always included; `_determine_safety_status()`: unavailable when no variant metadata, caution when ret_score<40 or variant_confidence<0.30, safe otherwise; `_compute_overall_confidence()`: weighted blend of variant_confidence, style_confidence, ret_score/100, narrative_score/100; result always includes `safety_report` sub-dict; emits `ai_render_decision_preview_created` at INFO, `ai_render_decision_preview_fallback` on error; deterministic; never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `render_decision_preview: dict = field(default_factory=dict)` added to `AIEditPlan`; `"render_decision_preview": dict(self.render_decision_preview)` in `to_dict()`; backward-compatible
+- `app/ai/director/ai_director.py` (updated) — `_attach_render_decision_preview(plan, job_id)` added; runs after Phase 22 (variant selection) to aggregate all prior phase outputs; calls `build_render_decision_preview(plan, context)`; `_append_render_decision_preview_explainability(plan, preview_dict)` appends: "AI render decision preview prepared", "Selected advisory variant summarized", "Autonomous render actions remain blocked"; wrapped in try/except; never blocks render
+- `app/ai/director/render_influence.py` (updated) — `_report_render_decision_preview(payload, edit_plan, report)` added; checks `edit_plan.render_decision_preview`, adds `"render_decision_preview:deferred_phase24(status=...,confidence=...,selected_variant=...)"` to report["skipped"]; no payload mutation; wired into `apply_ai_render_influence()` after `_report_variant_selection()`
+- `tests/test_ai_phase24_render_decision_preview.py` (new) — comprehensive test suite covering preview schema, decision_preview builder, blocked actions constant, AIEditPlan field, render_influence reporter, safety invariants, and AI Director integration
+
+**Safety boundaries enforced:**
+
+- `safe_to_execute` always False — hardcoded in both `AIPreviewSafetyReport.to_dict()` and the constant
+- `advisory_only` always True — hardcoded in `AIPreviewSafetyReport.to_dict()`
+- `mode` always "advisory" — hardcoded in `AIRenderDecisionPreview.to_dict()`
+- `_BLOCKED_ACTIONS` always present in every preview result regardless of metadata
+- `phase24_advisory_only_mode` always in `safety_report.blocked_reasons`
+- No FFmpeg commands altered
+- No payload mutation — preview reads all prior phase metadata, never writes render payload
+- No subtitle timing rewrite
+- No segment reorder
+- No playback_speed mutation
+- No autonomous rendering of any variant
+- Never blocks render — all Phase 24 code wrapped in try/except in AI Director and decision_preview
+- Deterministic — same edit_plan always produces same preview
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- Autonomous rendering based on selected variant
+- FFmpeg filter chain mutation
+- Timing mutation application
+- Subtitle timing rewrite
+- Playback_speed mutation
+- Segment reorder
+- Any payload mutation
+
+**Architecture notes:**
+
+- Phase 24 runs after Phase 22 (variant selection) so it can aggregate all prior AI phase outputs into a unified advisory summary
+- Reads from: variants, variant_selection, creator_style_adaptation, retention, story_optimization, subtitle_execution, timing_mutation, explainability
+- Advisory mode is a permanent constraint in Phase 24 — not a configurable parameter
+- `_BLOCKED_ACTIONS` is a module-level constant to prevent accidental omission
+
+**Verification:**
+
+- Phase 24 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+---
+
+### 2026-05-08 — AI Productization Phase 23: Creator Style Adaptation Foundation
+
+**Implemented:**
+
+- `app/ai/styles/style_schema.py` (updated, Phase 23 additions) — `DetectedStyleProfile` dataclass added (style_id, label, confidence, pacing_style, subtitle_style, camera_style, energy_level, hook_density, explanation, warnings; `to_dict()` coerces invalid style_id to `safe_generic`); `CreatorStyleSet` dataclass added (detected, primary_style, styles, fallback_used, warnings; `to_dict()` caps styles at 5); `VALID_P23_STYLES` frozenset added ({viral_tiktok, cinematic, educational, podcast, product_demo, storytelling, commentary, interview, safe_generic}); Phase 14 classes unchanged (backward compatible)
+- `app/ai/styles/style_classifier.py` (updated, Phase 23 additions) — `detect_creator_styles(edit_plan, context) -> CreatorStyleSet` added; reads Phase 14 `creator_style.dominant_style` and maps to Phase 23 ID via `_P14_TO_P23` dict; derives secondary style candidates from pacing/retention/story metadata; `safe_generic` fallback when p14 dominant=unknown or confidence<20; emits `ai_creator_style_detected` at INFO, `ai_creator_style_fallback` when fallback; deterministic; never raises; Phase 14 `classify_creator_style()` unchanged
+- `app/ai/styles/style_adapter.py` (new) — `build_style_adaptation(style_profile, edit_plan, context) -> dict`; maps Phase 23 style_id to advisory hint dict ({subtitle_density, subtitle_style, pacing_hint, camera_hint, hook_density_hint, visual_rhythm_hint, preset_hint}); safety gate strips any key not in `_SAFE_HINT_KEYS` and any key in `_FORBIDDEN_HINT_KEYS`; context-aware adjustments: low retention score raises hook_density from low→medium; compact subtitle execution lowers subtitle_density from high→medium; emits `ai_creator_style_adaptation_applied` at INFO; deterministic; never raises; never mutates payload
+- `app/ai/styles/style_scoring.py` (new) — `score_style_fit(style_profile, variant, edit_plan) -> dict`; returns {style_fit_score 0-100, confidence 0-1, reasons, warnings}; per-style × per-purpose fit score table (`_STYLE_PURPOSE_FIT`); low confidence (<0.30) dampens score toward neutral 60; safe_generic always returns stable 58-65 range; deterministic; never raises; no ML models; no external APIs
+- `app/ai/variants/variant_selector.py` (updated, Phase 23 additions) — `_compute_style_bonuses(scored, edit_plan) -> dict` added; reads `edit_plan.creator_style_adaptation` (detected + confidence ≥ 0.20); calls `score_style_fit()` for each variant; applies bonus = (fit_score − 60) / 100 × 16 (range −8 to +8) to sort key only; original score dict unchanged (confidence math unaffected); `_sort_key` updated to include bonus; never raises; all prior Phase 22 logic preserved
+- `app/ai/director/edit_plan_schema.py` (updated) — `creator_style_adaptation: dict = field(default_factory=dict)` added to `AIEditPlan`; `"creator_style_adaptation": dict(self.creator_style_adaptation)` in `to_dict()`; backward-compatible; Phase 14 `creator_style` field unchanged
+- `app/ai/director/ai_director.py` (updated) — `_attach_creator_style_adaptation(plan, job_id)` added; runs between Phase 20 and Phase 21 so style adaptation is available when variant selector executes; calls `detect_creator_styles(plan)` + `build_style_adaptation(primary_profile, plan)`; stores compact {detected, primary_style, confidence, adaptation, fallback_used, warnings}; `_append_creator_style_adaptation_explainability(plan, style_set, adaptation_result)` appends: "Creator style classified as viral TikTok", "Fast pacing adaptation suggested", "Creator style: safe generic fallback used", etc.; wrapped in try/except; never blocks render; Phase 14 `_attach_creator_style()` call preserved
+- `tests/test_ai_phase23_creator_style.py` (new) — comprehensive test suite covering style schema, detect_creator_styles, build_style_adaptation, score_style_fit, AIEditPlan field, AI Director integration, variant selector style-fit bonus, and all safety boundaries
+
+**Supported Phase 23 style IDs:**
+
+| ID | Label | Pacing | Subtitle | Camera | Hook Density |
+|----|-------|--------|----------|--------|--------------|
+| `viral_tiktok` | Viral TikTok | fast | punch | fast_follow | high |
+| `cinematic` | Cinematic | slow_build | minimal | slow_reveal | low |
+| `educational` | Educational | medium | bold | static | medium |
+| `podcast` | Podcast | medium | clean | static | low |
+| `product_demo` | Product Demo | medium | overlay | static | medium |
+| `storytelling` | Storytelling | slow_build | minimal | pan | medium |
+| `commentary` | Commentary | fast | bold | reaction | high |
+| `interview` | Interview | slow | clean | static | low |
+| `safe_generic` | Generic | default | default | auto | medium |
+
+**Phase 14 → Phase 23 mapping:**
+
+| Phase 14 | Phase 23 |
+|----------|----------|
+| podcast_viral | viral_tiktok |
+| high_energy_reaction | commentary |
+| storytelling_cinematic | cinematic |
+| documentary_clean | podcast |
+| educational_focus | educational |
+| anime_edit | viral_tiktok |
+| gameplay_highlight | commentary |
+| motivation_short | viral_tiktok |
+| interview_clip | interview |
+| calm_minimal | safe_generic |
+
+**Verification:**
+
+- Phase 23 tests pass
+- Full suite passes (zero regressions)
+- `git diff --check` clean
+
+**Safety boundaries enforced:**
+
+- Adaptation output contains only advisory hint keys (subtitle_density, pacing_hint, camera_hint, etc.)
+- `_FORBIDDEN_HINT_KEYS` (playback_speed, segment_start, segment_end, subtitle_timing, ffmpeg_args, codec, crf, bitrate, output_path, validation_rules) always stripped
+- No FFmpeg commands altered
+- No payload mutation — style detection and adaptation read edit_plan, never write render payload
+- No subtitle timing rewrite
+- No segment reorder
+- No playback_speed mutation
+- Style-fit bonus applied to sort key only — base scores unchanged, confidence gate unaffected
+- Never blocks render — all Phase 23 code wrapped in try/except in AI Director
+- Deterministic — same edit_plan always produces same style detection result
+- No internet, no API keys, no GPU required
+
+**Intentionally still blocked:**
+
+- Autonomous rendering based on detected style
+- Creator-style auto-editing (FFmpeg filter chains)
+- playback_speed mutation
+- subtitle timing rewrite
+- segment reorder
+- payload mutation
+- automatic export selection
+
+**Architecture notes:**
+
+- Phase 23 runs after Phase 20 (story optimization) and before Phase 21 (variant planning) so the style adaptation is available when the variant selector executes in Phase 22
+- Phase 14 `creator_style` dict (dominant_style, confidence, etc.) preserved untouched; Phase 23 adds `creator_style_adaptation` as a separate field
+- Style-fit bonus in variant selector: max ±8 pts on sort key — cannot override safety gates or high-risk penalties
+- `safe_generic` always available as stable fallback with neutral score range (58-65)
+
+**Integrated systems:**
+
+- Creator Style Classification (Phase 14) — dominant_style mapped to Phase 23 ID
+- Retention Intelligence (Phase 16) — low retention score raises hook_density hint
+- Story Optimization (Phase 20) — narrative flow feeds secondary style signal
+- Variant Selector (Phase 22) — style-fit bonus applied per variant
+- Explainability (Phase 6) — compact lines appended to summary_lines
+
 ### 2026-05-08 — AI Productization Phase 22: AI Best Variant Selector Foundation
 
 **Implemented:**

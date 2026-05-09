@@ -1,11 +1,11 @@
 """
-style_classifier.py — Deterministic creator style classifier. Phase 14.
+style_classifier.py — Deterministic creator style classifier. Phase 14 + 23.
 
 Scores transcript/pacing/emotion/story signals against known editing
 archetypes and returns the best match. No external deps, no ML models,
 no API calls. Deterministic and fallback-safe.
 
-Public API:
+Public API (Phase 14):
     classify_creator_style(
         transcript_context=None,
         pacing_context=None,
@@ -13,13 +13,19 @@ Public API:
         story_context=None,
         memory_context=None,
     ) -> StyleClassification
+
+Public API (Phase 23):
+    detect_creator_styles(
+        edit_plan=None,
+        context=None,
+    ) -> CreatorStyleSet
 """
 from __future__ import annotations
 
 import logging
 from typing import Any, Optional
 
-from app.ai.styles.style_schema import StyleClassification
+from app.ai.styles.style_schema import StyleClassification, CreatorStyleSet, DetectedStyleProfile
 from app.ai.styles.style_profiles import STYLE_IDS
 
 logger = logging.getLogger("app.ai.styles.classifier")
@@ -288,3 +294,267 @@ def _f(val: Any, default: Any) -> Any:
         return float(val)
     except (TypeError, ValueError):
         return default
+
+
+# ── Phase 23 — detect_creator_styles ─────────────────────────────────────────
+
+# Mapping from Phase 14 archetype IDs to Phase 23 canonical style IDs
+_P14_TO_P23: dict[str, str] = {
+    "podcast_viral":          "viral_tiktok",
+    "high_energy_reaction":   "commentary",
+    "storytelling_cinematic": "cinematic",
+    "documentary_clean":      "podcast",
+    "educational_focus":      "educational",
+    "anime_edit":             "viral_tiktok",
+    "gameplay_highlight":     "commentary",
+    "motivation_short":       "viral_tiktok",
+    "interview_clip":         "interview",
+    "calm_minimal":           "safe_generic",
+    "unknown":                "safe_generic",
+}
+
+# Phase 23 style metadata catalog
+_P23_PROFILES: dict[str, dict] = {
+    "viral_tiktok": {
+        "label": "Viral TikTok",
+        "pacing_style": "fast",
+        "subtitle_style": "punch",
+        "camera_style": "fast_follow",
+        "energy_level": "very_high",
+        "hook_density": "high",
+    },
+    "cinematic": {
+        "label": "Cinematic",
+        "pacing_style": "slow_build",
+        "subtitle_style": "minimal",
+        "camera_style": "slow_reveal",
+        "energy_level": "medium",
+        "hook_density": "low",
+    },
+    "educational": {
+        "label": "Educational",
+        "pacing_style": "medium",
+        "subtitle_style": "bold",
+        "camera_style": "static",
+        "energy_level": "medium",
+        "hook_density": "medium",
+    },
+    "podcast": {
+        "label": "Podcast",
+        "pacing_style": "medium",
+        "subtitle_style": "clean",
+        "camera_style": "static",
+        "energy_level": "low",
+        "hook_density": "low",
+    },
+    "product_demo": {
+        "label": "Product Demo",
+        "pacing_style": "medium",
+        "subtitle_style": "overlay",
+        "camera_style": "static",
+        "energy_level": "medium",
+        "hook_density": "medium",
+    },
+    "storytelling": {
+        "label": "Storytelling",
+        "pacing_style": "slow_build",
+        "subtitle_style": "minimal",
+        "camera_style": "pan",
+        "energy_level": "medium",
+        "hook_density": "medium",
+    },
+    "commentary": {
+        "label": "Commentary",
+        "pacing_style": "fast",
+        "subtitle_style": "bold",
+        "camera_style": "reaction",
+        "energy_level": "high",
+        "hook_density": "high",
+    },
+    "interview": {
+        "label": "Interview",
+        "pacing_style": "slow",
+        "subtitle_style": "clean",
+        "camera_style": "static",
+        "energy_level": "low",
+        "hook_density": "low",
+    },
+    "safe_generic": {
+        "label": "Generic",
+        "pacing_style": "default",
+        "subtitle_style": "default",
+        "camera_style": "auto",
+        "energy_level": "medium",
+        "hook_density": "medium",
+    },
+}
+
+
+def detect_creator_styles(
+    edit_plan: Any = None,
+    context: Optional[dict] = None,
+) -> "CreatorStyleSet":
+    """Detect Phase 23 creator style categories from edit plan metadata.
+
+    Uses Phase 14 classification result + pacing/retention/story signals.
+    Deterministic. Never raises. Fallback to safe_generic when signals absent.
+
+    Args:
+        edit_plan:  AIEditPlan (or None) — source of prior phase metadata.
+        context:    Optional extra context dict.
+
+    Returns:
+        CreatorStyleSet — advisory metadata only; never mutates edit_plan.
+    """
+    try:
+        return _detect(edit_plan, context or {})
+    except Exception as exc:
+        logger.debug("detect_creator_styles_failed: %s", exc)
+        return _fallback_style_set(str(exc))
+
+
+def _detect(edit_plan: Any, context: dict) -> "CreatorStyleSet":
+    warnings: list[str] = []
+
+    # 1. Extract Phase 14 dominant style from edit_plan.creator_style
+    p14_dominant = "unknown"
+    p14_confidence = 0.0
+    try:
+        cs = getattr(edit_plan, "creator_style", {}) or {}
+        if isinstance(cs, dict):
+            raw = str(cs.get("dominant_style") or "unknown")
+            p14_dominant = raw if raw else "unknown"
+            p14_confidence = float(cs.get("confidence") or 0.0)
+    except Exception:
+        warnings.append("p14_style_read_failed")
+
+    # 2. Map to Phase 23 style ID
+    primary_p23 = _P14_TO_P23.get(p14_dominant, "safe_generic")
+
+    # 3. Secondary style signals from pacing / retention / story metadata
+    secondary_ids: list[str] = []
+    try:
+        secondary_ids = _secondary_signals(edit_plan, primary_p23)
+    except Exception:
+        warnings.append("secondary_signals_failed")
+
+    # 4. Build DetectedStyleProfile for primary style
+    primary_profile = _build_detected_profile(
+        primary_p23,
+        confidence=_map_confidence(p14_confidence),
+        explanation=_build_explanation(primary_p23, p14_dominant, p14_confidence),
+    )
+
+    # 5. Build secondary profiles (deduped, max 2 extra)
+    all_profiles: list[DetectedStyleProfile] = [primary_profile]
+    seen = {primary_p23}
+    for sid in secondary_ids:
+        if sid not in seen and len(all_profiles) < 3:
+            all_profiles.append(_build_detected_profile(sid, confidence=0.4))
+            seen.add(sid)
+
+    # 6. Fallback logic — if primary has very low confidence, mark fallback
+    fallback_used = (p14_dominant == "unknown" or p14_confidence < 20.0)
+    if fallback_used and primary_p23 != "safe_generic":
+        # Add safe_generic as an additional fallback profile
+        if "safe_generic" not in seen:
+            all_profiles.append(_build_detected_profile("safe_generic", confidence=0.55))
+
+    detected = primary_p23 != "safe_generic" or p14_confidence >= 20.0
+
+    logger.info(
+        "ai_creator_style_detected primary=%s confidence=%.2f fallback=%s",
+        primary_p23,
+        primary_profile.confidence,
+        fallback_used,
+    )
+
+    return CreatorStyleSet(
+        detected=detected,
+        primary_style=primary_p23,
+        styles=all_profiles,
+        fallback_used=fallback_used,
+        warnings=warnings,
+    )
+
+
+def _secondary_signals(edit_plan: Any, primary_p23: str) -> list[str]:
+    """Derive secondary style candidates from pacing/retention/story metadata."""
+    secondary: list[str] = []
+
+    pacing = getattr(edit_plan, "pacing", None)
+    energy = float(getattr(pacing, "energy_level") or 0.5) if pacing else 0.5
+    pacing_style = str(getattr(pacing, "pacing_style") or "default") if pacing else "default"
+
+    retention = getattr(edit_plan, "retention", {}) or {}
+    if isinstance(retention, dict):
+        ret_score = float(retention.get("overall_retention_score") or 50)
+    else:
+        ret_score = 50.0
+
+    story_opt = getattr(edit_plan, "story_optimization", {}) or {}
+    if isinstance(story_opt, dict):
+        flow = str(story_opt.get("flow_type") or "unknown")
+        narrative_score = float(story_opt.get("narrative_score") or 50)
+    else:
+        flow, narrative_score = "unknown", 50.0
+
+    # High energy → suggest commentary or viral_tiktok as secondary
+    if energy > 0.7 and primary_p23 not in ("viral_tiktok", "commentary"):
+        secondary.append("viral_tiktok")
+    # Strong narrative → cinematic or storytelling
+    if narrative_score > 65 and flow in ("hook_to_climax", "linear_build", "hook_to_payoff"):
+        if primary_p23 not in ("cinematic", "storytelling"):
+            secondary.append("cinematic")
+    # Low energy + slow pacing → podcast or interview
+    if energy < 0.35 and pacing_style in ("slow", "default"):
+        if primary_p23 not in ("podcast", "interview"):
+            secondary.append("podcast")
+    # Low retention → suggest retention-boosting viral_tiktok
+    if ret_score < 55 and primary_p23 != "viral_tiktok":
+        secondary.append("viral_tiktok")
+
+    return secondary
+
+
+def _build_detected_profile(
+    style_id: str,
+    confidence: float = 0.5,
+    explanation: Optional[list[str]] = None,
+) -> "DetectedStyleProfile":
+    meta = _P23_PROFILES.get(style_id, _P23_PROFILES["safe_generic"])
+    return DetectedStyleProfile(
+        style_id=style_id,
+        label=meta["label"],
+        confidence=round(float(confidence), 4),
+        pacing_style=meta["pacing_style"],
+        subtitle_style=meta["subtitle_style"],
+        camera_style=meta["camera_style"],
+        energy_level=meta["energy_level"],
+        hook_density=meta["hook_density"],
+        explanation=list(explanation or []),
+    )
+
+
+def _map_confidence(p14_conf: float) -> float:
+    """Map Phase 14 0-100 confidence to 0-1 range for Phase 23."""
+    return round(min(1.0, max(0.0, float(p14_conf) / 100.0)), 4)
+
+
+def _build_explanation(p23_id: str, p14_id: str, p14_conf: float) -> list[str]:
+    lines: list[str] = []
+    if p14_id != "unknown":
+        lines.append(f"Mapped from Phase 14 archetype: {p14_id}")
+    label = _P23_PROFILES.get(p23_id, {}).get("label", p23_id)
+    lines.append(f"Detected as {label} style (confidence={p14_conf:.0f})")
+    return lines
+
+
+def _fallback_style_set(reason: str) -> "CreatorStyleSet":
+    return CreatorStyleSet(
+        detected=False,
+        primary_style="safe_generic",
+        styles=[_build_detected_profile("safe_generic", confidence=0.5, explanation=["fallback_used"])],
+        fallback_used=True,
+        warnings=[f"detect_error:{reason}"],
+    )

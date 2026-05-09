@@ -41,6 +41,7 @@ desktop-shell/out/
 desktop-shell/.electron-builder/
 desktop-shell/.cache/
 desktop-shell/backend-bin/
+desktop-shell/*
 dist
 build
 # ================================================
@@ -81,6 +82,7 @@ temp/
 *.flv
 *.wav
 *.mp3
+*.png
 # ================================================
 # AI / ML models & cache
 # ================================================

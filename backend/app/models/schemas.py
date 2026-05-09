@@ -235,6 +235,42 @@ class RenderRequest(BaseModel):
     # AI Variant Planning (Phase 21) — opt-in; plans advisory variants, never auto-renders.
     ai_variant_planning_enabled: bool = False
     ai_variant_count: int = 3
+    # AI Clip Candidate Discovery (Phase 35) — opt-in; discovery-only, never executes cuts.
+    ai_clip_discovery_enabled: bool = False
+    ai_clip_min_duration_sec: int = 15
+    ai_clip_max_duration_sec: int = 60
+    ai_clip_candidate_limit: int = 5
+    # AI Clip Segment Selection (Phase 36) — opt-in; selection-only, never executes renders.
+    ai_clip_segment_selection_enabled: bool = False
+    ai_clip_target_count: int = 3
+    # AI Multi-Clip Batch Planning (Phase 37) — opt-in; planning-only, never executes batch renders.
+    ai_clip_batch_planning_enabled: bool = False
+    ai_clip_batch_limit: int = 5
+
+    @field_validator("ai_clip_min_duration_sec")
+    @classmethod
+    def _validate_clip_min_duration(cls, v: int) -> int:
+        return max(5, min(180, int(v)))
+
+    @field_validator("ai_clip_max_duration_sec")
+    @classmethod
+    def _validate_clip_max_duration(cls, v: int) -> int:
+        return max(10, min(300, int(v)))
+
+    @field_validator("ai_clip_candidate_limit")
+    @classmethod
+    def _validate_clip_candidate_limit(cls, v: int) -> int:
+        return max(1, min(20, int(v)))
+
+    @field_validator("ai_clip_target_count")
+    @classmethod
+    def _validate_clip_target_count(cls, v: int) -> int:
+        return max(1, min(20, int(v)))
+
+    @field_validator("ai_clip_batch_limit")
+    @classmethod
+    def _validate_clip_batch_limit(cls, v: int) -> int:
+        return max(1, min(20, int(v)))
 
     @field_validator("render_profile")
     @classmethod
@@ -253,6 +289,12 @@ class RenderRequest(BaseModel):
         if v not in allowed:
             raise ValueError(f"source_quality_mode must be one of {sorted(allowed)!r}, got {v!r}")
         return v
+
+    @model_validator(mode="after")
+    def validate_clip_discovery_settings(self):
+        if self.ai_clip_max_duration_sec < self.ai_clip_min_duration_sec:
+            self.ai_clip_max_duration_sec = self.ai_clip_min_duration_sec
+        return self
 
     @model_validator(mode="after")
     def validate_voice_settings(self):

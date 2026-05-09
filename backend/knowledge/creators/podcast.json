@@ -1,0 +1,37 @@
+{
+  "knowledge_id": "podcast_viral",
+  "category": "creator",
+  "source_type": "local_json",
+  "creator_style": "podcast_viral",
+  "title": "Podcast Viral Clip Style",
+  "description": "Conversation-forward editing patterns for viral podcast clip content.",
+  "tags": ["podcast", "conversational", "clip", "interview"],
+  "hook_patterns": [
+    "the thing is",
+    "what nobody tells you",
+    "I realized",
+    "here's what happened"
+  ],
+  "subtitle_patterns": {
+    "density": "normal",
+    "keyword_emphasis": true,
+    "max_words_per_line": 7
+  },
+  "pacing_patterns": {
+    "intro_speed": "moderate",
+    "cut_style": "conversational",
+    "hook_duration_sec": 5
+  },
+  "camera_patterns": {
+    "behavior": "static_safe",
+    "zoom_emphasis": false
+  },
+  "retention_patterns": {
+    "hook_window_sec": 8,
+    "avoid_silence_gaps": true
+  },
+  "creator_patterns": {
+    "platform": "tiktok",
+    "target_duration_sec": 60
+  }
+}

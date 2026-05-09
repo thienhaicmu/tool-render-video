@@ -171,6 +171,149 @@ def _build_plan(
         pacing=pacing_plan,
     )
 
+    # --- Phase 31: AI Apply Policy ---
+    # Runs first so downstream phases can reference the effective policy.
+    try:
+        _attach_ai_apply_policy(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"ai_apply_policy_error:{type(exc).__name__}")
+        logger.debug("ai_director_apply_policy_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 32: Safe Timing Mutation Apply ---
+    # Runs after policy (Phase 31) so effective policy is available.
+    try:
+        _attach_timing_apply(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"timing_apply_error:{type(exc).__name__}")
+        logger.debug("ai_director_timing_apply_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 33: Subtitle Text Optimization Apply ---
+    # Runs after Phase 32 (timing apply) with full policy context.
+    try:
+        _attach_subtitle_text_apply(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"subtitle_text_apply_error:{type(exc).__name__}")
+        logger.debug("ai_director_subtitle_text_apply_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 34: Safe Camera Motion Apply ---
+    # Runs after Phase 33 (subtitle apply) so subtitle safety metadata is available.
+    try:
+        _attach_camera_motion_apply(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"camera_motion_apply_error:{type(exc).__name__}")
+        logger.debug("ai_director_camera_motion_apply_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 35: AI Clip Candidate Discovery ---
+    # Runs after all prior phases so story/retention/timing/style metadata is available.
+    # Discovery-only: never executes cuts, never mutates render payload or FFmpeg.
+    try:
+        _attach_clip_candidate_discovery(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"clip_candidate_discovery_error:{type(exc).__name__}")
+        logger.debug("ai_director_clip_candidate_discovery_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 36: AI Clip Segment Selection ---
+    # Runs after Phase 35 so candidate discovery metadata is available.
+    # Selection-only: never executes renders, never mutates payload or FFmpeg.
+    try:
+        _attach_clip_segment_selection(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"clip_segment_selection_error:{type(exc).__name__}")
+        logger.debug("ai_director_clip_segment_selection_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 37: AI Multi-Clip Batch Planning ---
+    # Runs after Phase 36 so selected segment metadata is available.
+    # Planning-only: never executes batch renders, never enqueues jobs, never mutates FFmpeg.
+    try:
+        _attach_clip_batch_planning(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"clip_batch_planning_error:{type(exc).__name__}")
+        logger.debug("ai_director_clip_batch_planning_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 38: AI Feature Enhancement Integration ---
+    # Runs after all other phases so all AI metadata is available for enhancement.
+    # Assistive-only: enhances existing features, never replaces render engine authority.
+    try:
+        _attach_feature_enhancement(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"feature_enhancement_error:{type(exc).__name__}")
+        logger.debug("ai_director_feature_enhancement_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 39: External Creator Knowledge Ingestion ---
+    # Loads local-first creator knowledge registry. No internet, no scraping.
+    # Knowledge-only: never mutates render payload, never overrides executor.
+    try:
+        _attach_creator_knowledge(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_knowledge_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_knowledge_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 40: Creator Pattern Extraction ---
+    # Extracts structured creator intelligence patterns from ingested knowledge.
+    # Extraction-only: no internet, no model training, no executor override.
+    try:
+        _attach_creator_patterns(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_patterns_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_patterns_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 41: Retrieval-Based Creator Intelligence ---
+    # Retrieves creator intelligence patterns from Phase 39/40 registry.
+    # Retrieval-only: assistive metadata only, no internet, no executor override.
+    try:
+        _attach_creator_retrieval(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_retrieval_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_retrieval_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 42: Adaptive Creator Intelligence ---
+    # Learns creator preferences over time from edit plan signals.
+    # Assistive-only: no FFmpeg, no playback_speed, no subtitle timing, no executor override.
+    try:
+        _attach_adaptive_creator_intelligence(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"adaptive_creator_intelligence_error:{type(exc).__name__}")
+        logger.debug("ai_director_adaptive_creator_intelligence_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 43: Creator Feedback Loop Intelligence ---
+    # Learns from creator feedback behavior (exports, selections, ignores).
+    # Assistive-only: no FFmpeg, no playback_speed, no subtitle timing, no executor override.
+    try:
+        _attach_creator_feedback_intelligence(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_feedback_intelligence_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_feedback_intelligence_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 44: Market-Aware Optimization Intelligence ---
+    # Optimizes rendering metadata for target platform/market.
+    # Assistive-only: no FFmpeg, no playback_speed, no subtitle timing, no executor override.
+    try:
+        _attach_market_optimization_intelligence(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"market_optimization_intelligence_error:{type(exc).__name__}")
+        logger.debug("ai_director_market_optimization_intelligence_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 45: AI Render Quality Evaluation (pre-render placeholder) ---
+    # Actual scoring is post-render (in render_pipeline.py after outputs are ready).
+    # Director only initializes the field so the schema slot is present in plan.to_dict().
+    plan.render_quality_evaluation = {
+        "available": True,
+        "enabled": False,
+        "evaluation_mode": "evaluation_only",
+        "output_scores": [],
+        "best_quality_output_id": "",
+        "warnings": ["quality_evaluation_pending_post_render"],
+    }
+
+    # --- Phase 46: Creator Preset Evolution Intelligence ---
+    # Combines creator behavior + market + feedback + quality signals.
+    # Assistive-only: no FFmpeg, no playback_speed, no subtitle timing, no executor override.
+    try:
+        _attach_creator_preset_evolution(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_preset_evolution_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_preset_evolution_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -242,6 +385,13 @@ def _build_plan(
         plan.warnings.append(f"story_optimization_error:{type(exc).__name__}")
         logger.debug("ai_director_story_optimization_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 23: Creator Style Adaptation ---
+    try:
+        _attach_creator_style_adaptation(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_style_adaptation_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_style_adaptation_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 21: Safe Autonomous Variant Rendering ---
     try:
         variant_enabled = bool(getattr(request, "ai_variant_planning_enabled", False))
@@ -260,6 +410,64 @@ def _build_plan(
     except Exception as exc:
         plan.warnings.append(f"variant_selection_error:{type(exc).__name__}")
         logger.debug("ai_director_variant_selection_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 24: AI Render Decision Preview ---
+    try:
+        _attach_render_decision_preview(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"render_decision_preview_error:{type(exc).__name__}")
+        logger.debug("ai_director_render_decision_preview_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 25: Safe Execution Recommendation Layer ---
+    try:
+        _attach_execution_recommendations(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"execution_recommendations_error:{type(exc).__name__}")
+        logger.debug("ai_director_execution_recommendations_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 26: Execution Simulation Layer ---
+    try:
+        _attach_execution_simulation(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"execution_simulation_error:{type(exc).__name__}")
+        logger.debug("ai_director_execution_simulation_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 27: Safe AI-Assisted Render Mutations ---
+    try:
+        _attach_safe_render_mutations(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"safe_render_mutations_error:{type(exc).__name__}")
+        logger.debug("ai_director_safe_render_mutations_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 28: Safe Multi-Variant Render Planning ---
+    try:
+        _attach_multivariant_render_plans(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"multivariant_render_plans_error:{type(exc).__name__}")
+        logger.debug("ai_director_multivariant_plans_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 29: Safe Multi-Variant Render Execution ---
+    try:
+        _attach_multivariant_execution(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"multivariant_execution_error:{type(exc).__name__}")
+        logger.debug("ai_director_multivariant_execution_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 30: AI Output Ranking placeholder ---
+    # Actual ranking occurs post-render in render_pipeline.py when outputs exist.
+    # This block attaches an empty placeholder so the field is always present.
+    try:
+        plan.output_ranking = {
+            "available": False,
+            "mode": "recommendation_only",
+            "outputs": [],
+            "best_output_id": None,
+            "best_output_path": "",
+            "warnings": ["ranking_deferred_until_render_completion"],
+        }
+    except Exception as exc:
+        plan.warnings.append(f"output_ranking_placeholder_error:{type(exc).__name__}")
+        logger.debug("ai_director_output_ranking_placeholder_failed job_id=%s: %s", job_id, exc)
 
     return plan
 
@@ -1260,6 +1468,702 @@ def _append_variant_selection_explainability(plan: "AIEditPlan", selection: dict
 
 
 # ---------------------------------------------------------------------------
+# Phase 24 — AI Render Decision Preview attachment
+# ---------------------------------------------------------------------------
+
+def _attach_render_decision_preview(plan: "AIEditPlan", job_id: str) -> None:
+    """Build and attach a compact advisory render decision preview to the plan.
+
+    Runs after all prior phases (Phases 21-23) so the preview can aggregate
+    the full set of AI metadata. Never raises. Never mutates render payload.
+    Advisory metadata only.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.preview.decision_preview import build_render_decision_preview
+
+        preview_dict = build_render_decision_preview(plan, context={"job_id": job_id})
+        plan.render_decision_preview = preview_dict
+
+        safety = preview_dict.get("safety_report", {})
+        logger.info(
+            "ai_render_decision_preview_created job_id=%s status=%s confidence=%.4f "
+            "actions=%d blocked=%d",
+            job_id,
+            preview_dict.get("safety_status", "unknown"),
+            float(preview_dict.get("confidence", 0.0)),
+            len(preview_dict.get("recommended_actions", [])),
+            len(preview_dict.get("blocked_actions", [])),
+        )
+
+        _append_render_decision_preview_explainability(plan, preview_dict)
+
+    except Exception as exc:
+        plan.render_decision_preview = {
+            "available": False,
+            "mode": "advisory",
+            "safety_status": "unavailable",
+            "warnings": [f"render_decision_preview_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_render_decision_preview_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_render_decision_preview_explainability(
+    plan: "AIEditPlan",
+    preview_dict: dict,
+) -> None:
+    """Append compact preview insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not any("AI render decision preview" in str(l) for l in lines):
+            lines.append("AI render decision preview prepared")
+
+        selected = preview_dict.get("selected_variant_id")
+        if selected:
+            purpose = ""
+            for v in (plan.variants.get("variants") or []):
+                if isinstance(v, dict) and str(v.get("variant_id")) == str(selected):
+                    purpose = str(v.get("purpose") or "")
+                    break
+            if purpose:
+                line = f"Selected advisory variant summarized ({purpose.replace('_', ' ')})"
+            else:
+                line = "Selected advisory variant summarized"
+            if not any("advisory variant summarized" in str(l) for l in lines):
+                lines.append(line)
+
+        if not any("Autonomous render actions remain blocked" in str(l) for l in lines):
+            lines.append("Autonomous render actions remain blocked")
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 27 — Safe AI-Assisted Render Mutations attachment
+# ---------------------------------------------------------------------------
+
+def _attach_safe_render_mutations(plan: "AIEditPlan", job_id: str) -> None:
+    """Build and attach bounded safe render mutation pack to the plan.
+
+    Runs after Phase 26 (execution simulation) so mutations have full AI
+    context. Applies only bounded AI guidance metadata changes. Never
+    mutates FFmpeg commands, render timings, segment structure, or subtitle
+    timestamps. Never raises. Never blocks render.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.mutations.mutation_engine import build_safe_mutations
+
+        pack = build_safe_mutations(plan, payload=None, context={"job_id": job_id})
+        pack_dict = pack.to_dict()
+        plan.safe_render_mutations = pack_dict
+
+        applied = pack_dict.get("applied_mutation_ids") or []
+        blocked = pack_dict.get("blocked_mutations") or []
+        logger.info(
+            "ai_safe_render_mutations_built job_id=%s applied=%d blocked=%d advisory=%s",
+            job_id,
+            len(applied),
+            len(blocked),
+            pack_dict.get("advisory_mode", True),
+        )
+
+        _append_safe_render_mutations_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.safe_render_mutations = {
+            "available": False,
+            "advisory_mode": True,
+            "warnings": [f"safe_render_mutations_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_safe_render_mutations_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_safe_render_mutations_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact mutation insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        mutations = pack_dict.get("mutations") or []
+        applied_ids = set(pack_dict.get("applied_mutation_ids") or [])
+
+        for mut in mutations:
+            if not isinstance(mut, dict) or not mut.get("applied"):
+                continue
+            mid = str(mut.get("mutation_id") or "")
+            cat = str(mut.get("category") or "")
+            if cat == "subtitle" and not any("subtitle density mutation" in str(l) for l in lines):
+                lines.append("Safe subtitle density mutation applied")
+            elif cat == "visual_rhythm" and not any("Visual rhythm guidance" in str(l) for l in lines):
+                lines.append("Visual rhythm guidance safely adjusted")
+            elif cat == "creator_style" and not any("Creator style mutation" in str(l) for l in lines):
+                lines.append("Creator style mutation applied safely")
+            elif cat == "pacing" and mid != "m_safe_baseline" and not any("pacing mutation" in str(l) for l in lines):
+                lines.append("Safe pacing mutation applied")
+
+        if not any("Dangerous timing mutations remain blocked" in str(l) for l in lines):
+            lines.append("Dangerous timing mutations remain blocked")
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 31 — AI Apply Policy attachment
+# ---------------------------------------------------------------------------
+
+def _attach_ai_apply_policy(plan: "AIEditPlan", request: Any, job_id: str) -> None:
+    """Build and attach AI apply policy decision to the plan.
+
+    Runs early (before Phase 6 explainability) so downstream AI phases can
+    reference the effective policy. Never raises. Never mutates dangerous fields.
+    Hard safety blocks are never bypassed regardless of policy.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.policy.policy_engine import build_policy_decision
+
+        raw_policy = str(getattr(request, "ai_apply_policy", "conservative") or "conservative")
+        context = {"ai_apply_policy": raw_policy, "job_id": job_id}
+
+        decision = build_policy_decision(plan, payload=request, context=context)
+        decision_dict = decision.to_dict()
+        plan.ai_apply_policy = decision_dict
+
+        logger.info(
+            "ai_apply_policy_selected job_id=%s policy=%s blocked=%d",
+            job_id,
+            decision_dict.get("selected_policy", "conservative"),
+            len(decision_dict.get("blocked_capabilities") or []),
+        )
+
+        _append_ai_apply_policy_explainability(plan, decision_dict)
+
+    except Exception as exc:
+        plan.ai_apply_policy = {
+            "available": False,
+            "selected_policy": "conservative",
+            "effective_policy": {},
+            "blocked_capabilities": [],
+            "warnings": [f"ai_apply_policy_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_apply_policy_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_ai_apply_policy_explainability(
+    plan: "AIEditPlan",
+    decision_dict: dict,
+) -> None:
+    """Append compact policy insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        policy = decision_dict.get("selected_policy") or "conservative"
+        policy_label = policy.capitalize()
+
+        line = f"{policy_label} AI apply policy enabled"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+        if policy in ("aggressive", "experimental"):
+            line = "Aggressive orchestration remains safety-gated"
+            if not any("safety-gated" in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Dangerous timing mutations remain blocked"
+        if not any("Dangerous timing mutations remain blocked" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 29 — Safe Multi-Variant Render Execution attachment
+# ---------------------------------------------------------------------------
+
+def _attach_multivariant_execution(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build and attach multi-variant execution set to the plan.
+
+    Runs after Phase 28 (multi-variant planning) so execution has full
+    plan metadata. Execution is opt-in only — disabled by default.
+    Never raises. Never overrides executor authority.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.multivariant.multivariant_execution import build_multivariant_execution_set
+
+        execution_enabled = bool(
+            getattr(request, "ai_multivariant_execution_enabled", False)
+        )
+        raw_limit = int(getattr(request, "ai_multivariant_execution_limit", 2) or 2)
+
+        context = {
+            "job_id": job_id,
+            "ai_multivariant_execution_enabled": execution_enabled,
+            "ai_multivariant_execution_limit": raw_limit,
+        }
+
+        execution_set = build_multivariant_execution_set(
+            plan, payload=None, context=context
+        )
+        exec_dict = execution_set.to_dict()
+        plan.multivariant_execution = exec_dict
+
+        executed = exec_dict.get("executed_plan_ids") or []
+        blocked = exec_dict.get("blocked_plan_ids") or []
+
+        logger.info(
+            "ai_multivariant_execution_built job_id=%s enabled=%s "
+            "executed=%d blocked=%d",
+            job_id, execution_enabled, len(executed), len(blocked),
+        )
+
+        _append_multivariant_execution_explainability(plan, exec_dict)
+
+    except Exception as exc:
+        plan.multivariant_execution = {
+            "available": False,
+            "execution_enabled": False,
+            "warnings": [f"multivariant_execution_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_multivariant_execution_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_multivariant_execution_explainability(
+    plan: "AIEditPlan",
+    exec_dict: dict,
+) -> None:
+    """Append compact execution insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        execution_enabled = exec_dict.get("execution_enabled", False)
+        executed_ids = exec_dict.get("executed_plan_ids") or []
+
+        if execution_enabled and executed_ids:
+            line = "Safe multi-variant execution enabled"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+            line = "Bounded render variants prepared"
+            if not any("Bounded render variants" in str(l) for l in lines):
+                lines.append(line)
+        else:
+            line = "Multi-variant execution disabled (opt-in required)"
+            if not any("Multi-variant execution disabled" in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Dangerous execution overrides remain blocked"
+        if not any("Dangerous execution overrides" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 28 — Safe Multi-Variant Render Planning attachment
+# ---------------------------------------------------------------------------
+
+def _attach_multivariant_render_plans(plan: "AIEditPlan", job_id: str) -> None:
+    """Build and attach multi-variant render planning set to the plan.
+
+    Runs after Phase 27 (safe mutations) so plans have full mutation context.
+    Mode is always planning_only. Never enqueues. Never executes. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.multivariant.multivariant_planner import build_multivariant_render_plans
+
+        render_set = build_multivariant_render_plans(plan, payload=None, context={"job_id": job_id})
+        render_set_dict = render_set.to_dict()
+        plan.multivariant_render_plans = render_set_dict
+
+        plans = render_set_dict.get("plans") or []
+        safe_count = sum(1 for p in plans if p.get("safe_to_enqueue"))
+
+        logger.info(
+            "ai_multivariant_plans_built job_id=%s available=%s plans=%d "
+            "safe_to_enqueue=%d recommended=%s mode=%s",
+            job_id,
+            render_set_dict.get("available", False),
+            len(plans),
+            safe_count,
+            render_set_dict.get("recommended_plan_id") or "none",
+            render_set_dict.get("mode", "planning_only"),
+        )
+
+        _append_multivariant_plans_explainability(plan, render_set_dict)
+
+    except Exception as exc:
+        plan.multivariant_render_plans = {
+            "available": False,
+            "mode": "planning_only",
+            "warnings": [f"multivariant_render_plans_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_multivariant_plans_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_multivariant_plans_explainability(
+    plan: "AIEditPlan",
+    render_set_dict: dict,
+) -> None:
+    """Append compact multi-variant planning insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        plans = render_set_dict.get("plans") or []
+        safe_plans = [p for p in plans if p.get("safe_to_enqueue")]
+        recommended_id = render_set_dict.get("recommended_plan_id") or ""
+
+        line = "Multi-variant render plans prepared"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+        if safe_plans and recommended_id and recommended_id != "mvplan_baseline":
+            line = "Recommended variant render plan is safe to enqueue later"
+            if not any("safe to enqueue" in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Automatic variant rendering remains blocked"
+        if not any("Automatic variant rendering" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 26 — Execution Simulation Layer attachment
+# ---------------------------------------------------------------------------
+
+def _attach_execution_simulation(plan: "AIEditPlan", job_id: str) -> None:
+    """Build and attach advisory execution simulation pack to the plan.
+
+    Runs after Phase 25 (execution recommendations) so simulation has full
+    recommendation context available. Never raises. Never mutates render
+    payload. Simulation metadata only.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.simulation.execution_simulator import simulate_execution_recommendations
+
+        pack = simulate_execution_recommendations(plan, context={"job_id": job_id})
+        pack_dict = pack.to_dict()
+        plan.execution_simulation = pack_dict
+
+        logger.info(
+            "ai_execution_simulation_created job_id=%s available=%s "
+            "count=%d recommended=%s",
+            job_id,
+            pack_dict.get("available", False),
+            len(pack_dict.get("simulations", [])),
+            pack_dict.get("recommended_simulation_id") or "none",
+        )
+
+        _append_execution_simulation_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.execution_simulation = {
+            "available": False,
+            "mode": "simulation_only",
+            "warnings": [f"execution_simulation_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_execution_simulation_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_execution_simulation_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact simulation insight lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        sims = pack_dict.get("simulations") or []
+        recommended_id = pack_dict.get("recommended_simulation_id") or ""
+
+        # Identify highest-gain simulation
+        max_ret_gain = max(
+            (float(s.get("estimated_retention_gain") or 0) for s in sims if isinstance(s, dict)),
+            default=0.0,
+        )
+        max_subtitle_gain = max(
+            (float(s.get("estimated_subtitle_clarity_gain") or 0) for s in sims if isinstance(s, dict)),
+            default=0.0,
+        )
+
+        if not any("Execution simulation" in str(l) for l in lines):
+            if max_ret_gain > 5:
+                lines.append(
+                    f"Execution simulation estimated retention improvement (+{max_ret_gain:.1f})"
+                )
+            else:
+                lines.append("Execution simulation prepared (advisory metadata only)")
+
+        if max_subtitle_gain > 0 and not any("Subtitle clarity simulation" in str(l) for l in lines):
+            lines.append("Subtitle clarity simulation available")
+
+        if not any("Simulation remains advisory" in str(l) for l in lines):
+            lines.append("Simulation remains advisory-only")
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 25 — Safe Execution Recommendation Layer attachment
+# ---------------------------------------------------------------------------
+
+def _attach_execution_recommendations(plan: "AIEditPlan", job_id: str) -> None:
+    """Build and attach advisory execution recommendation pack to the plan.
+
+    Runs after Phase 24 so all prior AI metadata is available for aggregation.
+    Never raises. Never mutates render payload. Advisory metadata only.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.execution.execution_recommendation import build_execution_recommendations
+
+        pack = build_execution_recommendations(plan, context={"job_id": job_id})
+        pack_dict = pack.to_dict()
+        plan.execution_recommendations = pack_dict
+
+        logger.info(
+            "ai_execution_recommendations_created job_id=%s available=%s "
+            "count=%d recommended=%s",
+            job_id,
+            pack_dict.get("available", False),
+            len(pack_dict.get("recommendations", [])),
+            pack_dict.get("recommended_pack_id") or "none",
+        )
+
+        _append_execution_recommendations_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.execution_recommendations = {
+            "available": False,
+            "mode": "advisory",
+            "warnings": [f"execution_recommendations_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_execution_recommendations_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_execution_recommendations_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact execution recommendation lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not any("AI execution recommendation" in str(l) for l in lines):
+            lines.append("AI execution recommendation pack prepared")
+
+        recommended_id = pack_dict.get("recommended_pack_id") or ""
+        if recommended_id and recommended_id != "safe_baseline":
+            if "retention" in recommended_id:
+                hint = "Retention-oriented pacing recommendation available"
+            elif "creator_style" in recommended_id:
+                hint = "Creator-style execution recommendation available"
+            elif "story" in recommended_id:
+                hint = "Story-driven pacing recommendation available"
+            else:
+                hint = f"Execution recommendation available ({recommended_id})"
+            if not any(hint in str(l) for l in lines):
+                lines.append(hint)
+
+        if not any("Autonomous execution remains blocked" in str(l) for l in lines):
+            lines.append("Autonomous execution remains blocked")
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 23 — Creator Style Adaptation attachment
+# ---------------------------------------------------------------------------
+
+def _attach_creator_style_adaptation(plan: "AIEditPlan", job_id: str) -> None:
+    """Detect Phase 23 creator style and build advisory adaptation hints.
+
+    Runs after Phase 14 (creator_style) and Phase 16/20 (retention/story)
+    so all prior metadata is available. Result stored in plan.creator_style_adaptation.
+    Never raises. Never mutates render payload. Advisory metadata only.
+    """
+    try:
+        from app.ai.styles.style_classifier import detect_creator_styles
+        from app.ai.styles.style_adapter import build_style_adaptation
+
+        style_set = detect_creator_styles(edit_plan=plan, context={"job_id": job_id})
+
+        # Build adaptation for primary style
+        primary_profile = style_set.styles[0] if style_set.styles else None
+        adaptation_result: dict = {}
+        if primary_profile is not None:
+            adaptation_result = build_style_adaptation(
+                primary_profile, edit_plan=plan, context={"job_id": job_id}
+            )
+
+        plan.creator_style_adaptation = {
+            "detected": style_set.detected,
+            "primary_style": style_set.primary_style,
+            "confidence": round(float(primary_profile.confidence if primary_profile else 0.0), 4),
+            "adaptation": adaptation_result.get("adaptation", {}),
+            "fallback_used": style_set.fallback_used,
+            "warnings": list(style_set.warnings),
+        }
+
+        logger.info(
+            "ai_creator_style_detected job_id=%s primary=%s confidence=%.4f fallback=%s styles=%d",
+            job_id,
+            style_set.primary_style,
+            plan.creator_style_adaptation["confidence"],
+            style_set.fallback_used,
+            len(style_set.styles),
+        )
+
+        if style_set.fallback_used:
+            logger.info("ai_creator_style_fallback job_id=%s reason=low_confidence_or_unknown", job_id)
+
+        _append_creator_style_adaptation_explainability(plan, style_set, adaptation_result)
+
+    except Exception as exc:
+        plan.creator_style_adaptation = {
+            "detected": False,
+            "primary_style": "safe_generic",
+            "confidence": 0.0,
+            "adaptation": {},
+            "fallback_used": True,
+            "warnings": [f"creator_style_adaptation_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_style_adaptation_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_creator_style_adaptation_explainability(
+    plan: "AIEditPlan",
+    style_set: Any,
+    adaptation_result: dict,
+) -> None:
+    """Append compact creator-style adaptation lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        primary = style_set.primary_style
+        fallback = style_set.fallback_used
+        adaptation = adaptation_result.get("adaptation", {})
+
+        if fallback:
+            line = "Creator style: safe generic fallback used"
+        else:
+            _STYLE_LABELS: dict[str, str] = {
+                "viral_tiktok": "viral TikTok",
+                "cinematic": "cinematic",
+                "educational": "educational",
+                "podcast": "podcast",
+                "product_demo": "product demo",
+                "storytelling": "storytelling",
+                "commentary": "commentary",
+                "interview": "interview",
+            }
+            label = _STYLE_LABELS.get(primary, primary)
+            line = f"Creator style classified as {label}"
+
+        if not any("Creator style" in str(l) for l in lines):
+            lines.append(line)
+
+        # Pacing hint line
+        pacing_hint = adaptation.get("pacing_hint", "")
+        if pacing_hint and pacing_hint not in ("default", ""):
+            hint_line = f"{pacing_hint.replace('_', ' ').title()} pacing adaptation suggested"
+            if not any("pacing adaptation" in str(l) for l in lines):
+                lines.append(hint_line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Phase 21 — Safe Autonomous Variant Rendering attachment
 # ---------------------------------------------------------------------------
 
@@ -1584,3 +2488,1532 @@ def _resolve_transcript_chunks(context: dict, warnings: list[str]) -> list[dict]
             warnings.append(f"srt_read_failed: {type(exc).__name__}")
 
     return []
+
+
+# ---------------------------------------------------------------------------
+# Phase 32 — Safe Timing Mutation Apply attachment
+# ---------------------------------------------------------------------------
+
+def _attach_timing_apply(plan: "AIEditPlan", request: Any, job_id: str) -> None:
+    """Build and attach safe timing apply pack to the plan.
+
+    Runs after Phase 31 (apply policy) so effective policy is available.
+    Only applies mutations when policy is aggressive or experimental.
+    Hard safety bounds enforced. Never raises. Never mutates FFmpeg.
+    Never rewrites subtitle timing. Never reorders segments.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.timing.timing_apply_engine import build_timing_apply_pack
+
+        raw_policy = str(
+            getattr(request, "ai_apply_policy", "conservative") or "conservative"
+        )
+        context = {"ai_apply_policy": raw_policy, "job_id": job_id}
+
+        pack = build_timing_apply_pack(plan, payload=request, context=context)
+        pack_dict = pack.to_dict()
+        plan.timing_apply = pack_dict
+
+        applied_count = len(pack_dict.get("applied_mutations") or [])
+        blocked_count = len(pack_dict.get("blocked_mutations") or [])
+
+        logger.info(
+            "ai_timing_apply_generated job_id=%s enabled=%s mode=%s "
+            "applied=%d blocked=%d total_delta=%.2f",
+            job_id,
+            pack_dict.get("enabled", False),
+            pack_dict.get("mode", "disabled"),
+            applied_count,
+            blocked_count,
+            pack_dict.get("total_delta_sec", 0.0),
+        )
+
+        _append_timing_apply_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.timing_apply = {
+            "available": False,
+            "enabled": False,
+            "mode": "disabled",
+            "applied_mutations": [],
+            "blocked_mutations": [],
+            "total_delta_sec": 0.0,
+            "warnings": [f"timing_apply_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_timing_apply_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_timing_apply_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact timing apply lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = pack_dict.get("enabled", False)
+        mode = pack_dict.get("mode", "disabled")
+
+        if not enabled or mode == "disabled":
+            line = "Safe timing apply disabled by conservative policy"
+            if not any("timing apply" in str(l).lower() for l in lines):
+                lines.append(line)
+            return
+
+        applied = pack_dict.get("applied_mutations") or []
+        blocked = pack_dict.get("blocked_mutations") or []
+
+        for mut in applied:
+            if not isinstance(mut, dict):
+                continue
+            mut_type = str(mut.get("mutation_type") or "")
+            if mut_type == "trim_silence_gap":
+                line = "Safe silence-gap trim applied"
+            elif mut_type == "tighten_setup":
+                line = "Safe setup tighten applied"
+            elif mut_type == "shorten_outro":
+                line = "Safe outro shorten applied"
+            elif mut_type == "reduce_dead_air":
+                line = "Safe dead-air reduction applied"
+            else:
+                line = "Safe timing mutation applied"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        for mut in blocked:
+            if not isinstance(mut, dict):
+                continue
+            warnings = mut.get("warnings") or []
+            reason = warnings[0] if warnings else "safety_gate_failed"
+            line = f"Unsafe timing mutation blocked ({reason})"
+            if not any("Unsafe timing mutation blocked" in str(l) for l in lines):
+                lines.append(line)
+                break  # one blocked line is enough
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 33 — Subtitle Text Optimization Apply attachment
+# ---------------------------------------------------------------------------
+
+def _attach_subtitle_text_apply(plan: "AIEditPlan", request: Any, job_id: str) -> None:
+    """Build and attach subtitle text optimization pack to the plan.
+
+    Runs after Phase 32 (timing apply). Policy-gated: balanced/aggressive/experimental.
+    Text and style metadata only. Never rewrites subtitle timestamps.
+    Never mutates FFmpeg. Never raises. Never overrides executor authority.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.subtitles.subtitle_apply_engine import build_subtitle_text_apply_pack
+
+        raw_policy = str(
+            getattr(request, "ai_apply_policy", "conservative") or "conservative"
+        )
+        context = {"ai_apply_policy": raw_policy, "job_id": job_id}
+
+        pack = build_subtitle_text_apply_pack(plan, payload=request, context=context)
+        pack_dict = pack.to_dict()
+        plan.subtitle_text_apply = pack_dict
+
+        applied_count = len(pack_dict.get("applied") or [])
+        blocked_count = len(pack_dict.get("blocked") or [])
+
+        logger.info(
+            "ai_subtitle_text_apply_generated job_id=%s enabled=%s mode=%s "
+            "applied=%d blocked=%d",
+            job_id,
+            pack_dict.get("enabled", False),
+            pack_dict.get("mode", "disabled"),
+            applied_count,
+            blocked_count,
+        )
+
+        _append_subtitle_text_apply_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.subtitle_text_apply = {
+            "available": False,
+            "enabled": False,
+            "mode": "disabled",
+            "applied": [],
+            "blocked": [],
+            "warnings": [f"subtitle_text_apply_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_subtitle_text_apply_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_subtitle_text_apply_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact subtitle text apply lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = pack_dict.get("enabled", False)
+        mode = pack_dict.get("mode", "disabled")
+
+        if not enabled or mode == "disabled":
+            line = "Subtitle text optimization disabled by conservative policy"
+            if not any("subtitle text optimization" in str(l).lower() for l in lines):
+                lines.append(line)
+            line = "Subtitle timestamp rewrite remains blocked"
+            if not any("timestamp rewrite" in str(l).lower() for l in lines):
+                lines.append(line)
+            return
+
+        applied = pack_dict.get("applied") or []
+        blocked = pack_dict.get("blocked") or []
+
+        _OPT_LABELS: dict = {
+            "compact_overload": "Compact subtitle overload optimization applied",
+            "keyword_emphasis": "Keyword emphasis optimization applied",
+            "safer_line_breaks": "Safer subtitle line-break optimization applied",
+            "density_reduce": "Subtitle density reduce optimization applied",
+            "creator_style_tone": "Creator style subtitle tone optimization applied",
+            "hook_emphasis": "Hook emphasis subtitle optimization applied",
+        }
+
+        for opt in applied:
+            if not isinstance(opt, dict):
+                continue
+            opt_type = str(opt.get("optimization_type") or "")
+            line = _OPT_LABELS.get(opt_type, f"Subtitle text optimization applied ({opt_type})")
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        for opt in blocked:
+            if not isinstance(opt, dict):
+                continue
+            warns = opt.get("warnings") or []
+            reason = warns[0] if warns else "safety_gate_failed"
+            line = f"Subtitle optimization blocked ({reason})"
+            if not any("Subtitle optimization blocked" in str(l) for l in lines):
+                lines.append(line)
+                break
+
+        line = "Subtitle timestamp rewrite remains blocked"
+        if not any("timestamp rewrite" in str(l).lower() for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 34 — Safe Camera Motion Apply attachment
+# ---------------------------------------------------------------------------
+
+def _attach_camera_motion_apply(plan: "AIEditPlan", request: Any, job_id: str) -> None:
+    """Build and attach safe camera motion apply pack to the plan.
+
+    Runs after Phase 33 (subtitle apply). Policy-gated: balanced/aggressive/experimental.
+    Camera guidance metadata only. Never rewrites crop coordinates.
+    Never mutates motion_crop.py. Never mutates FFmpeg. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.camera.camera_apply_engine import build_camera_motion_apply_pack
+
+        raw_policy = str(
+            getattr(request, "ai_apply_policy", "conservative") or "conservative"
+        )
+        context = {"ai_apply_policy": raw_policy, "job_id": job_id}
+
+        pack = build_camera_motion_apply_pack(plan, payload=request, context=context)
+        pack_dict = pack.to_dict()
+        plan.camera_motion_apply = pack_dict
+
+        applied_count = len(pack_dict.get("applied") or [])
+        blocked_count = len(pack_dict.get("blocked") or [])
+
+        logger.info(
+            "ai_camera_motion_apply_generated job_id=%s enabled=%s mode=%s "
+            "applied=%d blocked=%d",
+            job_id,
+            pack_dict.get("enabled", False),
+            pack_dict.get("mode", "disabled"),
+            applied_count,
+            blocked_count,
+        )
+
+        _append_camera_motion_apply_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.camera_motion_apply = {
+            "available": False,
+            "enabled": False,
+            "mode": "disabled",
+            "applied": [],
+            "blocked": [],
+            "warnings": [f"camera_motion_apply_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_camera_motion_apply_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_camera_motion_apply_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact camera motion apply lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = pack_dict.get("enabled", False)
+        mode = pack_dict.get("mode", "disabled")
+
+        if not enabled or mode == "disabled":
+            line = "Camera motion apply disabled by conservative policy"
+            if not any("camera motion apply" in str(l).lower() for l in lines):
+                lines.append(line)
+            line = "Direct crop coordinate rewrite remains blocked"
+            if not any("crop coordinate" in str(l).lower() for l in lines):
+                lines.append(line)
+            return
+
+        applied = pack_dict.get("applied") or []
+        blocked = pack_dict.get("blocked") or []
+
+        _CAM_LABELS: dict = {
+            "dynamic_safe": "Dynamic safe camera guidance applied",
+            "subtitle_safe_framing": "Subtitle-safe framing guidance applied",
+            "beat_aware_pulse": "Beat-aware camera pulse guidance applied",
+            "creator_style_camera": "Creator style camera guidance applied",
+            "subject_lock_preference": "Subject-lock preference guidance applied",
+            "motion_smoothing_hint": "Motion smoothing hint applied",
+        }
+
+        for cam in applied:
+            if not isinstance(cam, dict):
+                continue
+            cam_type = str(cam.get("camera_type") or "")
+            line = _CAM_LABELS.get(cam_type, f"Camera motion guidance applied ({cam_type})")
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        for cam in blocked:
+            if not isinstance(cam, dict):
+                continue
+            warns = cam.get("warnings") or []
+            reason = warns[0] if warns else "safety_gate_failed"
+            line = f"Camera motion guidance blocked ({reason})"
+            if not any("Camera motion guidance blocked" in str(l) for l in lines):
+                lines.append(line)
+                break
+
+        line = "Direct crop coordinate rewrite remains blocked"
+        if not any("crop coordinate" in str(l).lower() for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 35 — AI Clip Candidate Discovery attachment
+# ---------------------------------------------------------------------------
+
+def _attach_clip_candidate_discovery(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Discover and rank clip candidates from all available AI metadata.
+
+    Discovery-only: never executes actual cuts, never mutates render payload,
+    never modifies FFmpeg, never rewrites subtitle timing, never reorders
+    segments. No external API calls. No GPU. No internet. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.clips.clip_candidate_engine import discover_clip_candidates
+
+        pack = discover_clip_candidates(plan, payload=request, context={"job_id": job_id})
+        pack_dict = pack.to_dict()
+        plan.clip_candidate_discovery = pack_dict
+
+        enabled = pack_dict.get("enabled", False)
+        candidates = pack_dict.get("candidates") or []
+        recommended = pack_dict.get("recommended_candidate_id")
+
+        if enabled:
+            logger.info(
+                "ai_clip_candidate_discovery_enabled job_id=%s candidates=%d recommended=%s",
+                job_id, len(candidates), recommended or "none",
+            )
+            if candidates:
+                logger.info(
+                    "ai_clip_candidate_created job_id=%s count=%d",
+                    job_id, len(candidates),
+                )
+            if recommended:
+                logger.info(
+                    "ai_clip_candidate_recommended job_id=%s candidate_id=%s",
+                    job_id, recommended,
+                )
+        else:
+            logger.debug(
+                "ai_clip_candidate_discovery_skipped job_id=%s (disabled)", job_id
+            )
+
+        _append_clip_candidate_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.clip_candidate_discovery = {
+            "available": False,
+            "enabled": False,
+            "mode": "discovery_only",
+            "candidates": [],
+            "recommended_candidate_id": None,
+            "warnings": [f"clip_candidate_discovery_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_clip_candidate_discovery_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_clip_candidate_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact clip discovery lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not pack_dict.get("enabled", False):
+            return
+
+        if not any("AI clip candidate discovery" in str(l) for l in lines):
+            lines.append("AI clip candidate discovery enabled")
+
+        candidates = pack_dict.get("candidates") or []
+        if candidates:
+            best_retention = max(
+                (float(c.get("retention_score", 0.0)) for c in candidates if isinstance(c, dict)),
+                default=0.0,
+            )
+            if best_retention > 70.0:
+                line = "High-retention candidate window identified"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+
+        line = "Candidate discovery remains advisory-only"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 36 — AI Clip Segment Selection attachment
+# ---------------------------------------------------------------------------
+
+def _attach_clip_segment_selection(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Select and rank clip segment plans from Phase 35 candidates.
+
+    Selection-only: never executes actual cuts, never mutates render payload,
+    never modifies FFmpeg, never rewrites subtitle timing, never reorders
+    source media. No external API calls. No GPU. No internet. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.clips.clip_segment_selector import select_clip_segments
+
+        selection = select_clip_segments(plan, payload=request, context={"job_id": job_id})
+        sel_dict  = selection.to_dict()
+        plan.clip_segment_selection = sel_dict
+
+        enabled   = sel_dict.get("enabled", False)
+        selected  = sel_dict.get("selected_segments") or []
+        rejected  = sel_dict.get("rejected_candidates") or []
+
+        if enabled:
+            logger.info(
+                "ai_clip_segment_selection_enabled job_id=%s selected=%d rejected=%d",
+                job_id, len(selected), len(rejected),
+            )
+            for seg in selected:
+                if isinstance(seg, dict):
+                    logger.info(
+                        "ai_clip_segment_selected job_id=%s segment_id=%s "
+                        "start=%.2f end=%.2f score=%.2f",
+                        job_id,
+                        seg.get("segment_id", ""),
+                        float(seg.get("start_sec", 0.0)),
+                        float(seg.get("end_sec", 0.0)),
+                        float(seg.get("score", 0.0)),
+                    )
+            if rejected:
+                logger.info(
+                    "ai_clip_segment_rejected job_id=%s count=%d",
+                    job_id, len(rejected),
+                )
+        else:
+            logger.debug(
+                "ai_clip_segment_selection_skipped job_id=%s (disabled)", job_id
+            )
+
+        _append_clip_segment_explainability(plan, sel_dict)
+
+    except Exception as exc:
+        plan.clip_segment_selection = {
+            "available": False,
+            "enabled": False,
+            "mode": "selection_only",
+            "selected_segments": [],
+            "rejected_candidates": [],
+            "warnings": [f"clip_segment_selection_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_clip_segment_selection_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_clip_segment_explainability(
+    plan: "AIEditPlan",
+    sel_dict: dict,
+) -> None:
+    """Append compact segment selection lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not sel_dict.get("enabled", False):
+            return
+
+        selected = sel_dict.get("selected_segments") or []
+
+        if not any("AI selected clip segments" in str(l) for l in lines):
+            lines.append("AI selected clip segments from discovered candidates")
+
+        if selected:
+            line = "Selected segments respect configured duration bounds"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Segment selection remains planning-only"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 37 — AI Multi-Clip Batch Planning attachment
+# ---------------------------------------------------------------------------
+
+def _attach_clip_batch_planning(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Convert selected clip segments into safe batch render plans.
+
+    Planning-only: never executes batch renders, never enqueues jobs,
+    never modifies FFmpeg, never rewrites subtitle timing, never reorders
+    source media. No external API calls. No GPU. No internet. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.clips.clip_batch_planner import build_clip_batch_plans
+
+        plan_set = build_clip_batch_plans(plan, payload=request, context={"job_id": job_id})
+        plan_set_dict = plan_set.to_dict()
+        plan.clip_batch_planning = plan_set_dict
+
+        enabled = plan_set_dict.get("enabled", False)
+        plans = plan_set_dict.get("plans") or []
+        recommended = plan_set_dict.get("recommended_plan_ids") or []
+
+        if enabled:
+            logger.info(
+                "ai_clip_batch_planning_enabled job_id=%s plans=%d recommended=%d",
+                job_id, len(plans), len(recommended),
+            )
+            for p in plans:
+                if isinstance(p, dict):
+                    logger.info(
+                        "ai_clip_batch_plan_created job_id=%s batch_plan_id=%s strategy=%s",
+                        job_id,
+                        p.get("batch_plan_id", ""),
+                        p.get("render_strategy", ""),
+                    )
+            if recommended:
+                logger.info(
+                    "ai_clip_batch_plan_recommended job_id=%s ids=%s",
+                    job_id, ",".join(recommended),
+                )
+        else:
+            logger.debug(
+                "ai_clip_batch_planning_skipped job_id=%s (disabled)", job_id
+            )
+
+        _append_clip_batch_explainability(plan, plan_set_dict)
+
+    except Exception as exc:
+        plan.clip_batch_planning = {
+            "available": False,
+            "enabled": False,
+            "mode": "planning_only",
+            "plans": [],
+            "recommended_plan_ids": [],
+            "warnings": [f"clip_batch_planning_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_clip_batch_planning_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_clip_batch_explainability(
+    plan: "AIEditPlan",
+    plan_set_dict: dict,
+) -> None:
+    """Append compact batch planning lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not plan_set_dict.get("enabled", False):
+            return
+
+        plans = plan_set_dict.get("plans") or []
+
+        if not any("AI multi-clip batch plans" in str(l) for l in lines):
+            lines.append("AI multi-clip batch plans prepared")
+
+        if plans:
+            line = "Selected segments converted into planning-only render plans"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Batch rendering remains disabled until execution phase"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 38 — AI Feature Enhancement Integration attachment
+# ---------------------------------------------------------------------------
+
+def _attach_feature_enhancement(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build unified AI feature enhancement pack from all available AI metadata.
+
+    Assistive-only: enhances existing features, never replaces render engine authority.
+    Never executes renders, never mutates FFmpeg, never rewrites subtitle timing.
+    Never enqueues jobs, never overrides executor. No external API. No GPU. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.enhancement.feature_enhancement_engine import build_feature_enhancement_pack
+
+        pack = build_feature_enhancement_pack(plan, payload=request, context={"job_id": job_id})
+        pack_dict = pack.to_dict()
+        plan.feature_enhancement = pack_dict
+
+        subtitle_enh = pack_dict.get("subtitle_enhancement", {})
+        camera_enh = pack_dict.get("camera_enhancement", {})
+        timing_enh = pack_dict.get("timing_enhancement", {})
+        clip_enh = pack_dict.get("clip_selection_enhancement", {})
+
+        enabled_categories = [
+            name for name, enh in (
+                ("subtitle", subtitle_enh),
+                ("camera", camera_enh),
+                ("timing", timing_enh),
+                ("clip_selection", clip_enh),
+                ("creator_style", pack_dict.get("creator_style_enhancement", {})),
+                ("variant", pack_dict.get("variant_enhancement", {})),
+                ("output_ranking", pack_dict.get("output_ranking_enhancement", {})),
+            )
+            if isinstance(enh, dict) and enh.get("enabled", False)
+        ]
+
+        if enabled_categories:
+            logger.info(
+                "ai_feature_enhancement_applied job_id=%s categories=%s",
+                job_id, ",".join(enabled_categories),
+            )
+            logger.info(
+                "ai_feature_enhancement_assistive_only job_id=%s mode=assistive_only",
+                job_id,
+            )
+        else:
+            logger.debug(
+                "ai_feature_enhancement_skipped job_id=%s (no_categories_active)", job_id
+            )
+
+        _append_feature_enhancement_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.feature_enhancement = {
+            "available": False,
+            "mode": "assistive_only",
+            "subtitle_enhancement": {},
+            "camera_enhancement": {},
+            "timing_enhancement": {},
+            "clip_selection_enhancement": {},
+            "creator_style_enhancement": {},
+            "variant_enhancement": {},
+            "output_ranking_enhancement": {},
+            "warnings": [f"feature_enhancement_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_feature_enhancement_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_feature_enhancement_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact feature enhancement lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        subtitle_enh = pack_dict.get("subtitle_enhancement", {})
+        if isinstance(subtitle_enh, dict) and subtitle_enh.get("enabled", False):
+            line = "AI subtitle enhancement improved readability"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        timing_enh = pack_dict.get("timing_enhancement", {})
+        if isinstance(timing_enh, dict) and timing_enh.get("enabled", False):
+            improvements = timing_enh.get("improvements") or []
+            if any("dead_air" in str(i) for i in improvements):
+                line = "AI timing enhancement reduced dead-air"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+
+        camera_enh = pack_dict.get("camera_enhancement", {})
+        if isinstance(camera_enh, dict) and camera_enh.get("enabled", False):
+            line = "AI camera enhancement improved framing guidance"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        line = "AI feature enhancement remains assistive-only"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 39 — External Creator Knowledge Ingestion attachment
+# ---------------------------------------------------------------------------
+
+def _attach_creator_knowledge(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Load local creator knowledge registry and attach compact summary.
+
+    Local-first: reads only from the knowledge/ directory on the local filesystem.
+    No internet, no scraping, no subprocess, no cloud dependency.
+    Never mutates FFmpeg, never overrides executor. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.knowledge.knowledge_registry import load_knowledge_registry
+
+        registry = load_knowledge_registry()
+        registry_dict = registry.to_dict()
+        plan.creator_knowledge = registry_dict
+
+        loaded = registry_dict.get("loaded_count", 0)
+        categories = registry_dict.get("categories") or []
+        styles = registry_dict.get("creator_styles") or []
+
+        if loaded > 0:
+            logger.info(
+                "ai_creator_knowledge_loaded job_id=%s count=%d categories=%s",
+                job_id, loaded, categories,
+            )
+            logger.info(
+                "ai_creator_knowledge_registry_ready job_id=%s styles=%s",
+                job_id, styles,
+            )
+        else:
+            logger.debug(
+                "ai_creator_knowledge_skipped job_id=%s (no_knowledge_files_found)", job_id
+            )
+
+        _append_creator_knowledge_explainability(plan, registry_dict)
+
+    except Exception as exc:
+        plan.creator_knowledge = {
+            "available": False,
+            "loaded_count": 0,
+            "categories": [],
+            "creator_styles": [],
+            "warnings": [f"creator_knowledge_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_knowledge_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_creator_knowledge_explainability(
+    plan: "AIEditPlan",
+    registry_dict: dict,
+) -> None:
+    """Append compact creator knowledge lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        loaded = registry_dict.get("loaded_count", 0)
+        if loaded > 0:
+            line = "External creator knowledge registry loaded"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+            line = "Local creator intelligence available"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Knowledge ingestion remains local-first"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 40 — Creator Pattern Extraction attachment
+# ---------------------------------------------------------------------------
+
+def _attach_creator_patterns(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Extract creator intelligence patterns from knowledge registry.
+
+    Local-only: reads from knowledge/patterns/. No internet, no model training.
+    Never mutates FFmpeg, never overrides executor. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.knowledge.pattern_registry import load_pattern_registry
+
+        registry = load_pattern_registry()
+        registry_dict = registry.to_dict()
+        plan.creator_patterns = registry_dict
+
+        loaded = registry_dict.get("loaded_patterns", 0)
+        pattern_types = registry_dict.get("pattern_types") or []
+        styles = registry_dict.get("creator_styles") or []
+
+        if loaded > 0:
+            logger.info(
+                "ai_creator_pattern_loaded job_id=%s count=%d types=%s",
+                job_id, loaded, pattern_types,
+            )
+            logger.info(
+                "ai_creator_pattern_registry_ready job_id=%s styles=%s",
+                job_id, styles,
+            )
+        else:
+            logger.debug(
+                "ai_creator_pattern_skipped job_id=%s (no_patterns_found)", job_id
+            )
+
+        _append_creator_patterns_explainability(plan, registry_dict)
+
+    except Exception as exc:
+        plan.creator_patterns = {
+            "available": False,
+            "loaded_patterns": 0,
+            "pattern_types": [],
+            "creator_styles": [],
+            "warnings": [f"creator_patterns_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_patterns_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_creator_patterns_explainability(
+    plan: "AIEditPlan",
+    registry_dict: dict,
+) -> None:
+    """Append compact creator pattern lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        pattern_types = registry_dict.get("pattern_types") or []
+        loaded = registry_dict.get("loaded_patterns", 0)
+
+        if loaded > 0:
+            if "hook" in pattern_types:
+                line = "Creator hook patterns extracted"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+            if "subtitle" in pattern_types:
+                line = "Subtitle style patterns available"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+            if "pacing" in pattern_types:
+                line = "Creator pacing patterns loaded"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+
+    except Exception:
+        pass
+
+
+# Phase 41 — Retrieval-Based Creator Intelligence attachment
+
+
+def _attach_creator_retrieval(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Retrieve creator intelligence patterns from Phase 40 registry.
+
+    Retrieval-only: assistive metadata, no internet, no model training.
+    Never mutates FFmpeg, never overrides executor. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.retrieval.retrieval_engine import retrieve_creator_intelligence
+
+        logger.debug("ai_creator_retrieval_started job_id=%s", job_id)
+
+        pack = retrieve_creator_intelligence(plan)
+        plan.creator_retrieval = pack.to_dict()
+
+        matches = pack.matches or []
+        enabled = pack.enabled
+        style = pack.recommended_creator_style or ""
+
+        if enabled and matches:
+            logger.info(
+                "ai_creator_retrieval_completed job_id=%s matches=%d recommended_style=%s",
+                job_id, len(matches), style,
+            )
+            for m in matches[:3]:
+                logger.debug(
+                    "ai_creator_retrieval_match job_id=%s id=%s type=%s score=%.2f",
+                    job_id, m.match_id, m.pattern_type, m.retrieval_score,
+                )
+        else:
+            logger.debug(
+                "ai_creator_retrieval_skipped job_id=%s (no_matches)", job_id
+            )
+
+        _append_creator_retrieval_explainability(plan, pack.to_dict())
+
+    except Exception as exc:
+        plan.creator_retrieval = {
+            "available": False,
+            "enabled": False,
+            "retrieval_mode": "assistive_only",
+            "matches": [],
+            "recommended_creator_style": "",
+            "warnings": [f"creator_retrieval_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_retrieval_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_creator_retrieval_explainability(
+    plan: "AIEditPlan",
+    retrieval_dict: dict,
+) -> None:
+    """Append compact creator retrieval lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = retrieval_dict.get("enabled", False)
+        matches = retrieval_dict.get("matches", [])
+        style = retrieval_dict.get("recommended_creator_style", "")
+
+        if enabled and matches:
+            pacing_matches = [m for m in matches if isinstance(m, dict) and m.get("pattern_type") == "pacing"]
+            subtitle_matches = [m for m in matches if isinstance(m, dict) and m.get("pattern_type") == "subtitle"]
+
+            if pacing_matches:
+                line = "Creator pacing patterns retrieved"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+            if subtitle_matches:
+                line = "Compact subtitle creator patterns applied"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+
+            line = "Retrieval-based creator intelligence remains assistive-only"
+            if not any("assistive-only" in str(l) for l in lines):
+                lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Adaptive creator intelligence
+# ---------------------------------------------------------------------------
+
+def _attach_adaptive_creator_intelligence(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build adaptive learning pack from edit plan signals and creator profile.
+
+    Assistive-only: influences metadata ranking only.
+    Never mutates FFmpeg, never overrides executor, never rewrites subtitle timing.
+    Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.adaptive.adaptive_learning import build_adaptive_learning_pack
+
+        logger.debug("ai_adaptive_creator_intelligence_started job_id=%s", job_id)
+
+        context: dict = {}
+        raw_profile_id = getattr(request, "ai_adaptive_profile_id", None)
+        if raw_profile_id:
+            context["profile_id"] = str(raw_profile_id)
+
+        pack = build_adaptive_learning_pack(plan, payload=request, context=context)
+        plan.adaptive_creator_intelligence = pack.to_dict()
+
+        if pack.enabled:
+            profile_dict = pack.creator_profile or {}
+            style = profile_dict.get("creator_style_preference", "")
+            subtitle = profile_dict.get("preferred_subtitle_style", "")
+            pacing = profile_dict.get("preferred_pacing_style", "")
+            camera = profile_dict.get("preferred_camera_style", "")
+
+            logger.info(
+                "ai_adaptive_learning_applied job_id=%s style=%s subtitle=%s pacing=%s camera=%s",
+                job_id, style, subtitle, pacing, camera,
+            )
+        else:
+            logger.debug("ai_adaptive_learning_skipped job_id=%s (no_signals)", job_id)
+
+        _append_adaptive_explainability(plan, pack.to_dict())
+
+    except Exception as exc:
+        plan.adaptive_creator_intelligence = {
+            "available": False,
+            "enabled": False,
+            "learning_mode": "assistive_only",
+            "creator_profile": {},
+            "learned_preferences": {},
+            "adaptive_influences": {},
+            "warnings": [f"adaptive_creator_intelligence_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_adaptive_creator_intelligence_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_adaptive_explainability(
+    plan: "AIEditPlan",
+    adaptive_dict: dict,
+) -> None:
+    """Append compact adaptive intelligence lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = adaptive_dict.get("enabled", False)
+        if not enabled:
+            return
+
+        learned = adaptive_dict.get("learned_preferences", {}) or {}
+        subtitle_style = learned.get("subtitle_style", "")
+        pacing_style = learned.get("pacing_style", "")
+        camera_style = learned.get("camera_style", "")
+
+        if subtitle_style:
+            line = "Creator subtitle preferences learned"
+            if not any("subtitle preferences" in str(l) for l in lines):
+                lines.append(line)
+
+        if pacing_style:
+            line = "Adaptive creator preferences updated"
+            if not any("Adaptive creator preferences" in str(l) for l in lines):
+                lines.append(line)
+
+        if camera_style:
+            line = "Creator camera preferences learned"
+            if not any("camera preferences" in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Adaptive creator intelligence remains assistive-only"
+        if not any("Adaptive creator intelligence" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 43 — Creator feedback loop intelligence
+# ---------------------------------------------------------------------------
+
+def _attach_creator_feedback_intelligence(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build feedback learning pack from creator behavior signals.
+
+    Assistive-only: influences ranking biases only.
+    Never mutates FFmpeg, never overrides executor, never rewrites subtitle timing.
+    Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.feedback.feedback_learning import build_feedback_learning_pack
+
+        logger.debug("ai_creator_feedback_intelligence_started job_id=%s", job_id)
+
+        context: dict = {}
+        raw_fb_id = getattr(request, "ai_feedback_id", None)
+        if raw_fb_id:
+            context["feedback_id"] = str(raw_fb_id)
+
+        for attr in (
+            "ai_feedback_exported",
+            "ai_feedback_selected",
+            "ai_feedback_ignored",
+            "ai_feedback_output_rank",
+            "ai_feedback_creator_style",
+            "ai_feedback_subtitle_style",
+            "ai_feedback_pacing_style",
+            "ai_feedback_camera_style",
+            "ai_feedback_duration_bucket",
+        ):
+            val = getattr(request, attr, None)
+            if val is not None:
+                # Strip the "ai_feedback_" prefix to match context keys
+                ctx_key = attr[len("ai_feedback_"):]
+                if ctx_key == "output_rank":
+                    ctx_key = "selected_output_rank"
+                if ctx_key == "exported":
+                    ctx_key = "exported"
+                context[ctx_key] = val
+
+        pack = build_feedback_learning_pack(plan, payload=request, context=context)
+        plan.creator_feedback_intelligence = pack.to_dict()
+
+        if pack.enabled:
+            patterns = pack.learned_feedback_patterns or {}
+            logger.info(
+                "ai_feedback_learning_applied job_id=%s total_signals=%d exports=%d ignores=%d",
+                job_id,
+                patterns.get("total_signals", 0),
+                patterns.get("total_exports", 0),
+                patterns.get("total_ignores", 0),
+            )
+        else:
+            logger.debug("ai_feedback_learning_skipped job_id=%s", job_id)
+
+        _append_feedback_explainability(plan, pack.to_dict())
+
+    except Exception as exc:
+        plan.creator_feedback_intelligence = {
+            "available": False,
+            "enabled": False,
+            "feedback_mode": "assistive_only",
+            "feedback_signals": [],
+            "learned_feedback_patterns": {},
+            "ranking_biases": {},
+            "warnings": [f"creator_feedback_intelligence_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_feedback_intelligence_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_feedback_explainability(
+    plan: "AIEditPlan",
+    feedback_dict: dict,
+) -> None:
+    """Append compact feedback intelligence lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = feedback_dict.get("enabled", False)
+        if not enabled:
+            return
+
+        patterns = feedback_dict.get("learned_feedback_patterns", {}) or {}
+        biases = feedback_dict.get("ranking_biases", {}) or {}
+
+        total_exports = patterns.get("total_exports", 0)
+        if total_exports > 0:
+            line = "Ranking biases adapted from export behavior"
+            if not any("Ranking biases" in str(l) for l in lines):
+                lines.append(line)
+
+        if biases.get("subtitle_weighting_bias", 0) > 0 or biases.get("pacing_weighting_bias", 0) > 0:
+            line = "Creator feedback signals applied"
+            if not any("Creator feedback signals" in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Creator feedback intelligence remains assistive-only"
+        if not any("Creator feedback intelligence" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 44 — Market-aware optimization intelligence
+# ---------------------------------------------------------------------------
+
+def _attach_market_optimization_intelligence(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build market optimization pack for the target platform.
+
+    Assistive-only: influences subtitle/pacing/camera/hook metadata.
+    Never mutates FFmpeg, never overrides executor, never rewrites subtitle timing.
+    Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.market.market_optimizer import build_market_optimization_pack
+
+        logger.debug("ai_market_optimization_intelligence_started job_id=%s", job_id)
+
+        context: dict = {}
+        target = getattr(request, "ai_target_market", None) or getattr(request, "ai_mode", None)
+        if target:
+            context["target_market"] = str(target)
+
+        pack = build_market_optimization_pack(plan, payload=request, context=context)
+        plan.market_optimization_intelligence = pack.to_dict()
+
+        if pack.enabled:
+            logger.info(
+                "ai_market_optimization_applied job_id=%s market=%s subtitle_w=%.3f pacing_w=%.3f",
+                job_id,
+                pack.target_market,
+                pack.subtitle_market_bias.get("weight", 0.0),
+                pack.pacing_market_bias.get("weight", 0.0),
+            )
+        else:
+            logger.debug("ai_market_optimization_skipped job_id=%s market=%s", job_id, pack.target_market)
+
+        _append_market_explainability(plan, pack.to_dict())
+
+    except Exception as exc:
+        plan.market_optimization_intelligence = {
+            "available": False,
+            "enabled": False,
+            "optimization_mode": "assistive_only",
+            "target_market": "",
+            "market_profile": {},
+            "subtitle_market_bias": {},
+            "pacing_market_bias": {},
+            "camera_market_bias": {},
+            "hook_market_bias": {},
+            "warnings": [f"market_optimization_intelligence_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_market_optimization_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_market_explainability(
+    plan: "AIEditPlan",
+    market_dict: dict,
+) -> None:
+    """Append compact market optimization lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = market_dict.get("enabled", False)
+        if not enabled:
+            return
+
+        target = market_dict.get("target_market", "")
+        profile = market_dict.get("market_profile", {}) or {}
+        platform = profile.get("platform_type", "")
+
+        # Platform-specific explainability line
+        if platform in ("tiktok",):
+            line = "TikTok market optimization applied"
+        elif platform in ("youtube_shorts",):
+            line = "YouTube Shorts market optimization applied"
+        elif platform in ("facebook_reels",):
+            line = "Facebook Reels market optimization applied"
+        elif platform in ("podcast",):
+            line = "Podcast readability optimization applied"
+        elif platform in ("educational",):
+            line = "Educational readability optimization applied"
+        else:
+            line = f"Market optimization applied ({target})" if target else "Market optimization applied"
+
+        if not any("market optimization" in str(l).lower() for l in lines):
+            lines.append(line)
+
+        line = "Market optimization remains assistive-only"
+        if not any("Market optimization remains" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 45 — AI Render Quality Evaluation
+# ---------------------------------------------------------------------------
+
+def _append_quality_explainability(
+    plan: "AIEditPlan",
+    quality_dict: dict,
+) -> None:
+    """Append compact quality evaluation lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = quality_dict.get("enabled", False)
+        if not enabled:
+            return
+
+        scores = quality_dict.get("output_scores") or []
+        if scores:
+            best_id = quality_dict.get("best_quality_output_id", "")
+            line = f"Render quality evaluated across {len(scores)} output(s)"
+            if not any("Render quality evaluated" in str(l) for l in lines):
+                lines.append(line)
+            if best_id:
+                line = f"Best quality output: {best_id}"
+                if not any("Best quality output" in str(l) for l in lines):
+                    lines.append(line)
+
+        line = "Render quality evaluation remains evaluation-only"
+        if not any("Render quality evaluation remains" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 46 — Creator Preset Evolution Intelligence
+# ---------------------------------------------------------------------------
+
+def _attach_creator_preset_evolution(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build creator preset evolution pack and attach to plan.
+
+    Assistive-only: evolves preset metadata, never mutates render output,
+    never overrides executor, never rewrites subtitle timing.
+    Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.preset_evolution.preset_evolution_engine import build_preset_evolution_pack
+
+        logger.debug("ai_preset_evolution_started job_id=%s", job_id)
+
+        context: dict = {}
+        target = getattr(request, "ai_target_market", None) or getattr(request, "ai_mode", None)
+        if target:
+            context["target_market"] = str(target)
+
+        pack = build_preset_evolution_pack(plan, payload=request, context=context)
+        plan.creator_preset_evolution = pack.to_dict()
+
+        if pack.enabled:
+            logger.info(
+                "ai_preset_evolution_applied job_id=%s best_preset=%s recommended=%d evolved=%d",
+                job_id,
+                pack.best_preset_id,
+                len(pack.recommended_presets),
+                len(pack.evolved_presets),
+            )
+        else:
+            logger.debug("ai_preset_evolution_skipped job_id=%s", job_id)
+
+        _append_preset_evolution_explainability(plan, pack.to_dict())
+
+    except Exception as exc:
+        plan.creator_preset_evolution = {
+            "available": False,
+            "enabled": False,
+            "evolution_mode": "assistive_only",
+            "recommended_presets": [],
+            "evolved_presets": [],
+            "best_preset_id": "",
+            "warnings": [f"creator_preset_evolution_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_preset_evolution_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_preset_evolution_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact preset evolution lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = pack_dict.get("enabled", False)
+        if not enabled:
+            return
+
+        line = "Creator preset evolution prepared"
+        if not any("Creator preset evolution" in str(l) for l in lines):
+            lines.append(line)
+
+        # Best evolved preset
+        evolved = pack_dict.get("evolved_presets") or []
+        if evolved:
+            best_name = evolved[0].get("preset_name", "")
+            if best_name:
+                line = f"{best_name} recommended"
+                if not any(best_name in str(l) for l in lines):
+                    lines.append(line)
+
+        line = "Preset evolution remains assistive-only"
+        if not any("Preset evolution remains" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass

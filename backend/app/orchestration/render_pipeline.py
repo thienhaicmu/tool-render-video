@@ -3288,6 +3288,80 @@ def run_render_pipeline(
         _is_partial_success = bool(failed_parts)
         _final_status = "completed_with_errors" if _is_partial_success else "completed"
         _final_message = "Render completed with errors" if _is_partial_success else "Render completed"
+
+        # ── Phase 30: AI Output Ranking — best-effort, never blocks render ──
+        _ai_output_ranking: dict = {"available": False, "mode": "recommendation_only"}
+        try:
+            from app.ai.output.output_ranker import rank_variant_outputs as _rank_ai_outputs
+            _ai_rank_inputs = [
+                {
+                    "output_id": str(_re.get("part_no") or i),
+                    "path": str(_re.get("output_file") or ""),
+                    "variant_id": str(_re.get("variant_id") or ""),
+                    "output_rank_score": float(_re.get("output_rank_score") or _re.get("output_score") or 0.0),
+                    "failed": False,
+                    "warnings": [],
+                }
+                for i, _re in enumerate(_rank_entries_ordered)
+            ] + [
+                {
+                    "output_id": str(_fp.get("part_no") or f"failed_{i}"),
+                    "path": "",
+                    "variant_id": "",
+                    "output_rank_score": 0.0,
+                    "failed": True,
+                    "warnings": [str(_fp.get("error") or "render_failed")],
+                }
+                for i, _fp in enumerate(failed_parts)
+            ]
+            _ai_rank_result = _rank_ai_outputs(
+                _ai_rank_inputs,
+                edit_plan=_ai_edit_plan,
+                context={"job_id": job_id},
+            )
+            _ai_output_ranking = _ai_rank_result.to_dict()
+            if _ai_edit_plan is not None:
+                _ai_edit_plan.output_ranking = _ai_output_ranking
+            logger.info(
+                "ai_output_ranking_created job_id=%s best=%s outputs=%d",
+                job_id,
+                _ai_output_ranking.get("best_output_id") or "none",
+                len(_ai_output_ranking.get("outputs") or []),
+            )
+        except Exception as _rank_err:
+            logger.warning("ai_output_ranking_skipped job_id=%s: %s", job_id, _rank_err)
+            _ai_output_ranking = {
+                "available": False,
+                "mode": "recommendation_only",
+                "warnings": [f"ranking_error:{type(_rank_err).__name__}"],
+            }
+
+        # ── Phase 45: AI Render Quality Evaluation — evaluation-only, never blocks render ──
+        _ai_render_quality: dict = {"available": False, "evaluation_mode": "evaluation_only"}
+        try:
+            from app.ai.quality.quality_evaluator import evaluate_render_quality as _eval_quality
+            _quality_eval = _eval_quality(
+                outputs,
+                edit_plan=_ai_edit_plan,
+                context={"job_id": job_id},
+            )
+            _ai_render_quality = _quality_eval.to_dict()
+            if _ai_edit_plan is not None:
+                _ai_edit_plan.render_quality_evaluation = _ai_render_quality
+            logger.info(
+                "ai_render_quality_evaluated job_id=%s best=%s outputs=%d",
+                job_id,
+                _ai_render_quality.get("best_quality_output_id") or "none",
+                len(_ai_render_quality.get("output_scores") or []),
+            )
+        except Exception as _quality_err:
+            logger.warning("ai_render_quality_evaluation_skipped job_id=%s: %s", job_id, _quality_err)
+            _ai_render_quality = {
+                "available": False,
+                "evaluation_mode": "evaluation_only",
+                "warnings": [f"quality_evaluation_error:{type(_quality_err).__name__}"],
+            }
+
         _result_payload = {
             "outputs": outputs,
             "render_preset": _preset_name,
@@ -3313,6 +3387,8 @@ def run_render_pipeline(
             "story": _ai_edit_plan.story if _ai_edit_plan is not None else {},
             "preset_evolution": _ai_edit_plan.preset_evolution if _ai_edit_plan is not None else {},
             "creator_style": _ai_edit_plan.creator_style if _ai_edit_plan is not None else {},
+            "ai_output_ranking": _ai_output_ranking,
+            "ai_render_quality_evaluation": _ai_render_quality,
         }
         upsert_job(
             job_id,

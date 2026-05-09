@@ -1,0 +1,22 @@
+{
+  "pattern_id": "hook_question_hook",
+  "pattern_type": "hook",
+  "creator_style": "",
+  "title": "Question-Based Hook",
+  "description": "Question-based opening hook driving viewer curiosity",
+  "confidence": 0.85,
+  "tags": ["hook", "question", "curiosity"],
+  "hook_patterns": [
+    "Did you know",
+    "Have you ever wondered",
+    "What if I told you",
+    "Why does",
+    "How did",
+    "What happens when",
+    "Can you believe"
+  ],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {}
+}

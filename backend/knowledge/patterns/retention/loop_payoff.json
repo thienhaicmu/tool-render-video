@@ -1,0 +1,19 @@
+{
+  "pattern_id": "retention_loop_payoff",
+  "pattern_type": "retention",
+  "creator_style": "",
+  "title": "Loop Payoff Retention Pattern",
+  "description": "Loop-inducing hook that rewards rewatchers",
+  "confidence": 0.80,
+  "tags": ["retention", "loop", "payoff"],
+  "hook_patterns": [],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {
+    "hook_style": "loop",
+    "payoff_timing": "late",
+    "reengagement_cadence": "slow",
+    "avoid_silence_gaps": true
+  }
+}
