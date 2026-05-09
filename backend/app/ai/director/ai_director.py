@@ -203,6 +203,15 @@ def _build_plan(
         plan.warnings.append(f"camera_motion_apply_error:{type(exc).__name__}")
         logger.debug("ai_director_camera_motion_apply_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 35: AI Clip Candidate Discovery ---
+    # Runs after all prior phases so story/retention/timing/style metadata is available.
+    # Discovery-only: never executes cuts, never mutates render payload or FFmpeg.
+    try:
+        _attach_clip_candidate_discovery(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"clip_candidate_discovery_error:{type(exc).__name__}")
+        logger.debug("ai_director_clip_candidate_discovery_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -2723,6 +2732,109 @@ def _append_camera_motion_apply_explainability(
 
         line = "Direct crop coordinate rewrite remains blocked"
         if not any("crop coordinate" in str(l).lower() for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 35 — AI Clip Candidate Discovery attachment
+# ---------------------------------------------------------------------------
+
+def _attach_clip_candidate_discovery(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Discover and rank clip candidates from all available AI metadata.
+
+    Discovery-only: never executes actual cuts, never mutates render payload,
+    never modifies FFmpeg, never rewrites subtitle timing, never reorders
+    segments. No external API calls. No GPU. No internet. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.clips.clip_candidate_engine import discover_clip_candidates
+
+        pack = discover_clip_candidates(plan, payload=request, context={"job_id": job_id})
+        pack_dict = pack.to_dict()
+        plan.clip_candidate_discovery = pack_dict
+
+        enabled = pack_dict.get("enabled", False)
+        candidates = pack_dict.get("candidates") or []
+        recommended = pack_dict.get("recommended_candidate_id")
+
+        if enabled:
+            logger.info(
+                "ai_clip_candidate_discovery_enabled job_id=%s candidates=%d recommended=%s",
+                job_id, len(candidates), recommended or "none",
+            )
+            if candidates:
+                logger.info(
+                    "ai_clip_candidate_created job_id=%s count=%d",
+                    job_id, len(candidates),
+                )
+            if recommended:
+                logger.info(
+                    "ai_clip_candidate_recommended job_id=%s candidate_id=%s",
+                    job_id, recommended,
+                )
+        else:
+            logger.debug(
+                "ai_clip_candidate_discovery_skipped job_id=%s (disabled)", job_id
+            )
+
+        _append_clip_candidate_explainability(plan, pack_dict)
+
+    except Exception as exc:
+        plan.clip_candidate_discovery = {
+            "available": False,
+            "enabled": False,
+            "mode": "discovery_only",
+            "candidates": [],
+            "recommended_candidate_id": None,
+            "warnings": [f"clip_candidate_discovery_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_clip_candidate_discovery_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_clip_candidate_explainability(
+    plan: "AIEditPlan",
+    pack_dict: dict,
+) -> None:
+    """Append compact clip discovery lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not pack_dict.get("enabled", False):
+            return
+
+        if not any("AI clip candidate discovery" in str(l) for l in lines):
+            lines.append("AI clip candidate discovery enabled")
+
+        candidates = pack_dict.get("candidates") or []
+        if candidates:
+            best_retention = max(
+                (float(c.get("retention_score", 0.0)) for c in candidates if isinstance(c, dict)),
+                default=0.0,
+            )
+            if best_retention > 70.0:
+                line = "High-retention candidate window identified"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+
+        line = "Candidate discovery remains advisory-only"
+        if not any(line in str(l) for l in lines):
             lines.append(line)
 
     except Exception:

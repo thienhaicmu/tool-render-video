@@ -103,6 +103,7 @@ def apply_ai_render_influence(
         _report_timing_apply(payload, edit_plan, report)
         _report_subtitle_text_apply(payload, edit_plan, report)
         _report_camera_motion_apply(payload, edit_plan, report)
+        _report_clip_candidate_discovery(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -910,6 +911,44 @@ def _report_camera_motion_apply(payload: Any, edit_plan: Any, report: dict) -> N
     logger.debug(
         "camera_motion_apply_reported applied=%d blocked=%d",
         len(applied), len(blocked),
+    )
+
+
+# ── Clip candidate discovery — discovery_only reporting in Phase 35 ──────────
+
+def _report_clip_candidate_discovery(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report clip candidate discovery metadata — discovery_only in Phase 35.
+
+    No actual clips are cut. No segments mutated. No FFmpeg altered.
+    No playback_speed changed. No subtitle timing rewritten.
+    """
+    ccd = getattr(edit_plan, "clip_candidate_discovery", None)
+    if not isinstance(ccd, dict) or not ccd:
+        report["skipped"].append("clip_candidate_discovery:no_result")
+        return
+
+    enabled = ccd.get("enabled", False)
+    candidates = ccd.get("candidates") or []
+    recommended = ccd.get("recommended_candidate_id") or "none"
+    safe_count = sum(
+        1 for c in candidates if isinstance(c, dict) and c.get("safe", False)
+    )
+
+    if not enabled:
+        report["skipped"].append(
+            f"clip_candidate_discovery:disabled_phase35"
+            f"(candidates={len(candidates)},recommended={recommended!r})"
+        )
+    else:
+        report["skipped"].append(
+            f"clip_candidate_discovery:discovery_only_phase35"
+            f"(candidates={len(candidates)},safe={safe_count},"
+            f"recommended={recommended!r})"
+        )
+
+    logger.debug(
+        "clip_candidate_discovery_reported enabled=%s candidates=%d recommended=%s",
+        enabled, len(candidates), recommended,
     )
 
 
