@@ -544,3 +544,93 @@ See Phase 41 implementation. `AIEditPlan.creator_retrieval` defaults to `{}`.
 - `AIEditPlan.adaptive_creator_intelligence` defaults to `{}` — backward compatible
 - Adaptive learning runs automatically when AI Director is enabled
 - No new required request fields — `ai_adaptive_profile_id` is optional
+
+---
+
+## AI Productization Phase 43 — Creator Feedback Loop Intelligence
+
+### Implemented
+
+- Creator feedback learning engine (`app/ai/feedback/feedback_learning.py`)
+- Creator feedback schema (`app/ai/feedback/feedback_schema.py`)
+  - `AICreatorFeedbackSignal` — single creator behavior event (export, select, ignore)
+  - `AIFeedbackLearningPack` — pack with signals, learned patterns, ranking biases
+- Creator feedback safety validation (`app/ai/feedback/feedback_safety.py`)
+  - 12 forbidden keys auto-stripped
+- Local feedback memory (`app/ai/feedback/feedback_memory.py`)
+  - JSON persistence in `data/feedback/render_feedback/`
+  - Pattern frequency counters per category
+  - Capped at 200 signals to prevent unbounded growth
+  - Fallback-safe load/save/record — never raises
+- Output ranking feedback adaptation via `ranking_biases`
+- Subtitle/pacing/camera feedback weighting from pattern frequency
+- Retrieval weighting adaptation from creator style dominance
+- Adaptive intelligence amplification when Phase 42 profile aligns
+- Assistive-only feedback intelligence in AI Director and Render Influence
+- `AIEditPlan.creator_feedback_intelligence` field (defaults to `{}`)
+
+### Architecture direction
+
+| Principle | Detail |
+|---|---|
+| Learning source | Creator export/select/ignore behavior + edit plan signals |
+| Persistence | Local JSON only (`data/feedback/render_feedback/`) |
+| Influence mode | Always `assistive_only` — bounded bias weights [0.0, 0.30] |
+| Reliability gate | Minimum 3 signals before biases become active |
+| Render authority | Deterministic render engine always has final authority |
+
+### Feedback signal sources
+
+| Signal | Source |
+|---|---|
+| `exported` | Session context — creator exported output |
+| `selected` | Session context — creator selected output |
+| `ignored` | Session context — creator ignored output |
+| `selected_output_rank` | Session context or `output_ranking.best_output_id` |
+| `creator_style` | Session context or `creator_style_adaptation.adapted_style` |
+| `subtitle_style` | Session context or `subtitle_text_apply.subtitle_style` |
+| `pacing_style` | Session context or `pacing.pacing_style` |
+| `camera_style` | Session context or `camera_motion_apply.camera_behavior` |
+| `duration_bucket` | Session context or derived from `selected_segments` |
+| `selected_variant` | Session context or `variant_selection.selected_variant_id` |
+
+### Ranking biases (bounded, assistive-only)
+
+| Bias | Condition | Max |
+|---|---|---|
+| `output_ranking_bias` | ≥3 exports, top-rank ratio | 0.20 |
+| `variant_ranking_bias` | ≥3 exports, low-rank ratio | 0.15 |
+| `retrieval_weighting_bias` | creator_style dominance ≥3 | 0.20 |
+| `subtitle_weighting_bias` | subtitle_style dominance ≥3 | 0.25 |
+| `pacing_weighting_bias` | pacing_style dominance ≥3 (+ adaptive) | 0.25 |
+| `camera_weighting_bias` | camera_style dominance ≥3 | 0.25 |
+
+### Still intentionally blocked
+
+- **Unrestricted autonomous editing** — never executed
+- **FFmpeg mutation** — never touched
+- **playback_speed mutation** — never touched
+- **Subtitle timing rewrite** — never touched
+- **Executor override** — never performed
+- **Queue mutation** — never performed
+- **Internet scraping** — never performed
+- **Model fine-tuning** — never executed
+- **Cloud AI / external API** — not required
+- **GPU** — not required
+- **Internet** — not required
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_feedback_loaded` | Feedback memory loaded from local JSON |
+| `ai_feedback_signal_recorded` | A new feedback signal recorded |
+| `ai_feedback_learning_applied` | Feedback patterns and biases applied |
+| `ai_feedback_learning_skipped` | No signals yet to apply |
+
+### Phase compatibility
+
+- All Phase 1–42 behavior preserved
+- `AIEditPlan.creator_feedback_intelligence` defaults to `{}` — backward compatible
+- Feedback learning runs automatically when AI Director is enabled
+- No new required request fields — all `ai_feedback_*` fields are optional

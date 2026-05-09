@@ -275,6 +275,15 @@ def _build_plan(
         plan.warnings.append(f"adaptive_creator_intelligence_error:{type(exc).__name__}")
         logger.debug("ai_director_adaptive_creator_intelligence_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 43: Creator Feedback Loop Intelligence ---
+    # Learns from creator feedback behavior (exports, selections, ignores).
+    # Assistive-only: no FFmpeg, no playback_speed, no subtitle timing, no executor override.
+    try:
+        _attach_creator_feedback_intelligence(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_feedback_intelligence_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_feedback_intelligence_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -3606,6 +3615,126 @@ def _append_adaptive_explainability(
 
         line = "Adaptive creator intelligence remains assistive-only"
         if not any("Adaptive creator intelligence" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 43 — Creator feedback loop intelligence
+# ---------------------------------------------------------------------------
+
+def _attach_creator_feedback_intelligence(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build feedback learning pack from creator behavior signals.
+
+    Assistive-only: influences ranking biases only.
+    Never mutates FFmpeg, never overrides executor, never rewrites subtitle timing.
+    Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.feedback.feedback_learning import build_feedback_learning_pack
+
+        logger.debug("ai_creator_feedback_intelligence_started job_id=%s", job_id)
+
+        context: dict = {}
+        raw_fb_id = getattr(request, "ai_feedback_id", None)
+        if raw_fb_id:
+            context["feedback_id"] = str(raw_fb_id)
+
+        for attr in (
+            "ai_feedback_exported",
+            "ai_feedback_selected",
+            "ai_feedback_ignored",
+            "ai_feedback_output_rank",
+            "ai_feedback_creator_style",
+            "ai_feedback_subtitle_style",
+            "ai_feedback_pacing_style",
+            "ai_feedback_camera_style",
+            "ai_feedback_duration_bucket",
+        ):
+            val = getattr(request, attr, None)
+            if val is not None:
+                # Strip the "ai_feedback_" prefix to match context keys
+                ctx_key = attr[len("ai_feedback_"):]
+                if ctx_key == "output_rank":
+                    ctx_key = "selected_output_rank"
+                if ctx_key == "exported":
+                    ctx_key = "exported"
+                context[ctx_key] = val
+
+        pack = build_feedback_learning_pack(plan, payload=request, context=context)
+        plan.creator_feedback_intelligence = pack.to_dict()
+
+        if pack.enabled:
+            patterns = pack.learned_feedback_patterns or {}
+            logger.info(
+                "ai_feedback_learning_applied job_id=%s total_signals=%d exports=%d ignores=%d",
+                job_id,
+                patterns.get("total_signals", 0),
+                patterns.get("total_exports", 0),
+                patterns.get("total_ignores", 0),
+            )
+        else:
+            logger.debug("ai_feedback_learning_skipped job_id=%s", job_id)
+
+        _append_feedback_explainability(plan, pack.to_dict())
+
+    except Exception as exc:
+        plan.creator_feedback_intelligence = {
+            "available": False,
+            "enabled": False,
+            "feedback_mode": "assistive_only",
+            "feedback_signals": [],
+            "learned_feedback_patterns": {},
+            "ranking_biases": {},
+            "warnings": [f"creator_feedback_intelligence_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_feedback_intelligence_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_feedback_explainability(
+    plan: "AIEditPlan",
+    feedback_dict: dict,
+) -> None:
+    """Append compact feedback intelligence lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = feedback_dict.get("enabled", False)
+        if not enabled:
+            return
+
+        patterns = feedback_dict.get("learned_feedback_patterns", {}) or {}
+        biases = feedback_dict.get("ranking_biases", {}) or {}
+
+        total_exports = patterns.get("total_exports", 0)
+        if total_exports > 0:
+            line = "Ranking biases adapted from export behavior"
+            if not any("Ranking biases" in str(l) for l in lines):
+                lines.append(line)
+
+        if biases.get("subtitle_weighting_bias", 0) > 0 or biases.get("pacing_weighting_bias", 0) > 0:
+            line = "Creator feedback signals applied"
+            if not any("Creator feedback signals" in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Creator feedback intelligence remains assistive-only"
+        if not any("Creator feedback intelligence" in str(l) for l in lines):
             lines.append(line)
 
     except Exception:
