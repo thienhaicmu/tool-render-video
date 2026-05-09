@@ -110,6 +110,7 @@ def apply_ai_render_influence(
         _report_creator_retrieval(payload, edit_plan, report)
         _report_adaptive_creator_intelligence(payload, edit_plan, report)
         _report_creator_feedback_intelligence(payload, edit_plan, report)
+        _report_market_optimization_intelligence(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1275,4 +1276,60 @@ def _report_creator_feedback_intelligence(payload: Any, edit_plan: Any, report: 
     logger.debug(
         "creator_feedback_intelligence_reported mode=%s enabled=%s signals=%d exports=%d",
         mode, enabled, total_signals, total_exports,
+    )
+
+
+# ── Market optimization intelligence — assistive_only advisory in Phase 44 ───
+
+def _report_market_optimization_intelligence(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report market optimization metadata — assistive_only in Phase 44.
+
+    No render execution. No FFmpeg altered. No playback_speed changed.
+    No subtitle timing rewritten. No executor override.
+    Market biases are metadata-only and bounded.
+    """
+    moi = getattr(edit_plan, "market_optimization_intelligence", None)
+    if not isinstance(moi, dict) or not moi:
+        report["skipped"].append("market_optimization_intelligence:no_result")
+        return
+
+    available = moi.get("available", False)
+    enabled = moi.get("enabled", False)
+    mode = moi.get("optimization_mode", "assistive_only")
+    target = moi.get("target_market", "")
+
+    sub_bias = moi.get("subtitle_market_bias", {}) or {}
+    pac_bias = moi.get("pacing_market_bias", {}) or {}
+    cam_bias = moi.get("camera_market_bias", {}) or {}
+    hook_bias = moi.get("hook_market_bias", {}) or {}
+
+    sub_w = sub_bias.get("weight", 0.0)
+    pac_w = pac_bias.get("weight", 0.0)
+    cam_w = cam_bias.get("weight", 0.0)
+    hook_w = hook_bias.get("weight", 0.0)
+
+    sub_style = sub_bias.get("preferred_style", "")
+    pac_style = pac_bias.get("preferred_style", "")
+    cam_style = cam_bias.get("preferred_style", "")
+
+    if not available:
+        report["skipped"].append("market_optimization_intelligence:unavailable_phase44")
+    elif not enabled:
+        report["skipped"].append(
+            f"market_optimization_intelligence:assistive_only_phase44"
+            f"(mode={mode},market={target!r})"
+        )
+    else:
+        report["skipped"].append(
+            f"market_optimization_intelligence:{mode}_phase44"
+            f"(market={target!r}"
+            f",subtitle={sub_style!r},subtitle_w={sub_w:.3f}"
+            f",pacing={pac_style!r},pacing_w={pac_w:.3f}"
+            f",camera={cam_style!r},camera_w={cam_w:.3f}"
+            f",hook_w={hook_w:.3f})"
+        )
+
+    logger.debug(
+        "market_optimization_intelligence_reported mode=%s enabled=%s market=%s sub_w=%.3f pac_w=%.3f",
+        mode, enabled, target, sub_w, pac_w,
     )

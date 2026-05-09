@@ -634,3 +634,91 @@ See Phase 41 implementation. `AIEditPlan.creator_retrieval` defaults to `{}`.
 - `AIEditPlan.creator_feedback_intelligence` defaults to `{}` — backward compatible
 - Feedback learning runs automatically when AI Director is enabled
 - No new required request fields — all `ai_feedback_*` fields are optional
+
+---
+
+## AI Productization Phase 44 — Market-Aware Optimization Intelligence
+
+### Implemented
+
+- Market-aware optimization engine (`app/ai/market/market_optimizer.py`)
+- Market optimization schema (`app/ai/market/market_schema.py`)
+  - `AIMarketOptimizationProfile` — per-platform style/bias profile
+  - `AIMarketOptimizationPack` — pack with market_profile + subtitle/pacing/camera/hook biases
+- Market safety validation (`app/ai/market/market_safety.py`) — 9 forbidden keys auto-stripped
+- Built-in market profiles (`app/ai/market/market_profiles.py`)
+  - TikTok Viral — compact subtitle, fast hook, dynamic camera, aggressive hook
+  - YouTube Shorts — readable subtitle, curiosity hook, medium-fast pacing
+  - Facebook Reels — social framing, emotional hook, engagement pacing
+  - Podcast — calm pacing, readable subtitle, stable framing
+  - Educational — clean subtitle, measured pacing, readability-first
+- Alias resolution (`tiktok` → `viral_tiktok`, `shorts` → `youtube_shorts`, etc.)
+- Phase 42 adaptive amplification of market biases
+- Phase 43 feedback amplification of market biases
+- Assistive-only market intelligence in AI Director and Render Influence
+- `AIEditPlan.market_optimization_intelligence` field (defaults to `{}`)
+
+### Architecture direction
+
+| Principle | Detail |
+|---|---|
+| Profile source | Local built-in profiles only — no internet, no scraping |
+| Market resolution | Context > payload `ai_target_market` > payload `ai_mode` > plan mode |
+| Bias amplification | Phase 42 adaptive (×0.08) + Phase 43 feedback (×0.06) |
+| Influence mode | Always `assistive_only` — bounded bias weights [0.0, 0.30] |
+| Render authority | Deterministic render engine always has final authority |
+
+### Market profiles
+
+| Market | Platform | Subtitle | Pacing | Camera | Hook bias |
+|---|---|---|---|---|---|
+| `viral_tiktok` | TikTok | compact | fast_hook | dynamic_safe | 0.90 |
+| `youtube_shorts` | YouTube Shorts | readable | medium_fast | creator_framing | 0.75 |
+| `facebook_reels` | Facebook Reels | medium_density | smooth_engagement | social_framing | 0.65 |
+| `podcast` | Podcast | readable | calm_storytelling | static_podcast | 0.40 |
+| `educational` | Educational | clean_readable | measured | static_framing | 0.50 |
+
+### Bias weights (bounded, assistive-only)
+
+All bias weights are clamped `[0.0, 0.30]`.
+
+| Bias | Derivation |
+|---|---|
+| `subtitle_market_bias.weight` | `profile.subtitle_density_bias × 0.40` + adaptive amplifier |
+| `pacing_market_bias.weight` | `profile.pacing_energy_bias × 0.40` + adaptive + feedback amplifier |
+| `camera_market_bias.weight` | `profile.camera_motion_bias × 0.35` + adaptive + feedback amplifier |
+| `hook_market_bias.weight` | `profile.hook_strength_bias × 0.35` |
+
+### Forbidden market profile keys (auto-stripped)
+
+`ffmpeg_args`, `render_command`, `playback_speed`, `subtitle_timing`,
+`subprocess`, `executable`, `python_code`, `queue_priority`, `output_path`
+
+### Still intentionally blocked
+
+- **Unrestricted autonomous editing** — never executed
+- **FFmpeg mutation** — never touched
+- **playback_speed mutation** — never touched
+- **Subtitle timing rewrite** — never touched
+- **Executor override** — never performed
+- **Queue mutation** — never performed
+- **Internet scraping** — never performed
+- **Model fine-tuning** — never executed
+- **Cloud AI / external API** — not required
+- **GPU** — not required
+- **Internet** — not required
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_market_profile_loaded` | Market profile resolved and loaded |
+| `ai_market_optimization_applied` | Market biases computed and attached |
+| `ai_market_optimization_skipped` | Market confidence too low |
+
+### Phase compatibility
+
+- All Phase 1–43 behavior preserved
+- `AIEditPlan.market_optimization_intelligence` defaults to `{}` — backward compatible
+- Market optimization runs automatically when AI Director is enabled
+- No new required request fields — `ai_target_market` is optional (falls back to `ai_mode`)

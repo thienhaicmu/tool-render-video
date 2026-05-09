@@ -284,6 +284,15 @@ def _build_plan(
         plan.warnings.append(f"creator_feedback_intelligence_error:{type(exc).__name__}")
         logger.debug("ai_director_creator_feedback_intelligence_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 44: Market-Aware Optimization Intelligence ---
+    # Optimizes rendering metadata for target platform/market.
+    # Assistive-only: no FFmpeg, no playback_speed, no subtitle timing, no executor override.
+    try:
+        _attach_market_optimization_intelligence(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"market_optimization_intelligence_error:{type(exc).__name__}")
+        logger.debug("ai_director_market_optimization_intelligence_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -3735,6 +3744,114 @@ def _append_feedback_explainability(
 
         line = "Creator feedback intelligence remains assistive-only"
         if not any("Creator feedback intelligence" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 44 — Market-aware optimization intelligence
+# ---------------------------------------------------------------------------
+
+def _attach_market_optimization_intelligence(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build market optimization pack for the target platform.
+
+    Assistive-only: influences subtitle/pacing/camera/hook metadata.
+    Never mutates FFmpeg, never overrides executor, never rewrites subtitle timing.
+    Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.market.market_optimizer import build_market_optimization_pack
+
+        logger.debug("ai_market_optimization_intelligence_started job_id=%s", job_id)
+
+        context: dict = {}
+        target = getattr(request, "ai_target_market", None) or getattr(request, "ai_mode", None)
+        if target:
+            context["target_market"] = str(target)
+
+        pack = build_market_optimization_pack(plan, payload=request, context=context)
+        plan.market_optimization_intelligence = pack.to_dict()
+
+        if pack.enabled:
+            logger.info(
+                "ai_market_optimization_applied job_id=%s market=%s subtitle_w=%.3f pacing_w=%.3f",
+                job_id,
+                pack.target_market,
+                pack.subtitle_market_bias.get("weight", 0.0),
+                pack.pacing_market_bias.get("weight", 0.0),
+            )
+        else:
+            logger.debug("ai_market_optimization_skipped job_id=%s market=%s", job_id, pack.target_market)
+
+        _append_market_explainability(plan, pack.to_dict())
+
+    except Exception as exc:
+        plan.market_optimization_intelligence = {
+            "available": False,
+            "enabled": False,
+            "optimization_mode": "assistive_only",
+            "target_market": "",
+            "market_profile": {},
+            "subtitle_market_bias": {},
+            "pacing_market_bias": {},
+            "camera_market_bias": {},
+            "hook_market_bias": {},
+            "warnings": [f"market_optimization_intelligence_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_market_optimization_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_market_explainability(
+    plan: "AIEditPlan",
+    market_dict: dict,
+) -> None:
+    """Append compact market optimization lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = market_dict.get("enabled", False)
+        if not enabled:
+            return
+
+        target = market_dict.get("target_market", "")
+        profile = market_dict.get("market_profile", {}) or {}
+        platform = profile.get("platform_type", "")
+
+        # Platform-specific explainability line
+        if platform in ("tiktok",):
+            line = "TikTok market optimization applied"
+        elif platform in ("youtube_shorts",):
+            line = "YouTube Shorts market optimization applied"
+        elif platform in ("facebook_reels",):
+            line = "Facebook Reels market optimization applied"
+        elif platform in ("podcast",):
+            line = "Podcast readability optimization applied"
+        elif platform in ("educational",):
+            line = "Educational readability optimization applied"
+        else:
+            line = f"Market optimization applied ({target})" if target else "Market optimization applied"
+
+        if not any("market optimization" in str(l).lower() for l in lines):
+            lines.append(line)
+
+        line = "Market optimization remains assistive-only"
+        if not any("Market optimization remains" in str(l) for l in lines):
             lines.append(line)
 
     except Exception:
