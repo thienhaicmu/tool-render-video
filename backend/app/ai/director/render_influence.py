@@ -105,6 +105,7 @@ def apply_ai_render_influence(
         _report_camera_motion_apply(payload, edit_plan, report)
         _report_clip_candidate_discovery(payload, edit_plan, report)
         _report_clip_segment_selection(payload, edit_plan, report)
+        _report_clip_batch_planning(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -988,6 +989,42 @@ def _report_clip_segment_selection(payload: Any, edit_plan: Any, report: dict) -
     logger.debug(
         "clip_segment_selection_reported enabled=%s selected=%d rejected=%d",
         enabled, len(selected), len(rejected),
+    )
+
+
+def _report_clip_batch_planning(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report batch planning metadata — planning_only in Phase 37.
+
+    No batch renders executed. No jobs enqueued. No FFmpeg altered.
+    No playback_speed changed. No subtitle timing rewritten.
+    """
+    cbp = getattr(edit_plan, "clip_batch_planning", None)
+    if not isinstance(cbp, dict) or not cbp:
+        report["skipped"].append("clip_batch_planning:no_result")
+        return
+
+    enabled = cbp.get("enabled", False)
+    plans = cbp.get("plans") or []
+    recommended = cbp.get("recommended_plan_ids") or []
+    safe_count = sum(
+        1 for p in plans if isinstance(p, dict) and p.get("safe", False)
+    )
+
+    if not enabled:
+        report["skipped"].append(
+            f"clip_batch_planning:disabled_phase37"
+            f"(plans={len(plans)},recommended={len(recommended)})"
+        )
+    else:
+        report["skipped"].append(
+            f"clip_batch_planning:planning_only_phase37"
+            f"(plans={len(plans)},safe={safe_count},"
+            f"recommended={len(recommended)})"
+        )
+
+    logger.debug(
+        "clip_batch_planning_reported enabled=%s plans=%d recommended=%d",
+        enabled, len(plans), len(recommended),
     )
 
 

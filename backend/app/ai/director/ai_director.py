@@ -221,6 +221,15 @@ def _build_plan(
         plan.warnings.append(f"clip_segment_selection_error:{type(exc).__name__}")
         logger.debug("ai_director_clip_segment_selection_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 37: AI Multi-Clip Batch Planning ---
+    # Runs after Phase 36 so selected segment metadata is available.
+    # Planning-only: never executes batch renders, never enqueues jobs, never mutates FFmpeg.
+    try:
+        _attach_clip_batch_planning(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"clip_batch_planning_error:{type(exc).__name__}")
+        logger.debug("ai_director_clip_batch_planning_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -2948,6 +2957,108 @@ def _append_clip_segment_explainability(
                 lines.append(line)
 
         line = "Segment selection remains planning-only"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 37 — AI Multi-Clip Batch Planning attachment
+# ---------------------------------------------------------------------------
+
+def _attach_clip_batch_planning(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Convert selected clip segments into safe batch render plans.
+
+    Planning-only: never executes batch renders, never enqueues jobs,
+    never modifies FFmpeg, never rewrites subtitle timing, never reorders
+    source media. No external API calls. No GPU. No internet. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.clips.clip_batch_planner import build_clip_batch_plans
+
+        plan_set = build_clip_batch_plans(plan, payload=request, context={"job_id": job_id})
+        plan_set_dict = plan_set.to_dict()
+        plan.clip_batch_planning = plan_set_dict
+
+        enabled = plan_set_dict.get("enabled", False)
+        plans = plan_set_dict.get("plans") or []
+        recommended = plan_set_dict.get("recommended_plan_ids") or []
+
+        if enabled:
+            logger.info(
+                "ai_clip_batch_planning_enabled job_id=%s plans=%d recommended=%d",
+                job_id, len(plans), len(recommended),
+            )
+            for p in plans:
+                if isinstance(p, dict):
+                    logger.info(
+                        "ai_clip_batch_plan_created job_id=%s batch_plan_id=%s strategy=%s",
+                        job_id,
+                        p.get("batch_plan_id", ""),
+                        p.get("render_strategy", ""),
+                    )
+            if recommended:
+                logger.info(
+                    "ai_clip_batch_plan_recommended job_id=%s ids=%s",
+                    job_id, ",".join(recommended),
+                )
+        else:
+            logger.debug(
+                "ai_clip_batch_planning_skipped job_id=%s (disabled)", job_id
+            )
+
+        _append_clip_batch_explainability(plan, plan_set_dict)
+
+    except Exception as exc:
+        plan.clip_batch_planning = {
+            "available": False,
+            "enabled": False,
+            "mode": "planning_only",
+            "plans": [],
+            "recommended_plan_ids": [],
+            "warnings": [f"clip_batch_planning_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_clip_batch_planning_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_clip_batch_explainability(
+    plan: "AIEditPlan",
+    plan_set_dict: dict,
+) -> None:
+    """Append compact batch planning lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not plan_set_dict.get("enabled", False):
+            return
+
+        plans = plan_set_dict.get("plans") or []
+
+        if not any("AI multi-clip batch plans" in str(l) for l in lines):
+            lines.append("AI multi-clip batch plans prepared")
+
+        if plans:
+            line = "Selected segments converted into planning-only render plans"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Batch rendering remains disabled until execution phase"
         if not any(line in str(l) for l in lines):
             lines.append(line)
 

@@ -243,6 +243,9 @@ class RenderRequest(BaseModel):
     # AI Clip Segment Selection (Phase 36) — opt-in; selection-only, never executes renders.
     ai_clip_segment_selection_enabled: bool = False
     ai_clip_target_count: int = 3
+    # AI Multi-Clip Batch Planning (Phase 37) — opt-in; planning-only, never executes batch renders.
+    ai_clip_batch_planning_enabled: bool = False
+    ai_clip_batch_limit: int = 5
 
     @field_validator("ai_clip_min_duration_sec")
     @classmethod
@@ -262,6 +265,11 @@ class RenderRequest(BaseModel):
     @field_validator("ai_clip_target_count")
     @classmethod
     def _validate_clip_target_count(cls, v: int) -> int:
+        return max(1, min(20, int(v)))
+
+    @field_validator("ai_clip_batch_limit")
+    @classmethod
+    def _validate_clip_batch_limit(cls, v: int) -> int:
         return max(1, min(20, int(v)))
 
     @field_validator("render_profile")

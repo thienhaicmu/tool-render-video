@@ -142,3 +142,91 @@ remains intentionally blocked.
 - All Phase 1–35 behavior preserved
 - `ai_clip_segment_selection_enabled` defaults to `False` — old requests unaffected
 - `AIEditPlan.clip_segment_selection` defaults to `{}` — backward compatible
+
+---
+
+## AI Productization Phase 37 — AI Multi-Clip Batch Planning Foundation
+
+### Implemented
+
+- AI clip batch plan schema (`AIClipBatchPlan`, `AIClipBatchPlanSet`)
+- Deterministic multi-clip batch planner (`clip_batch_planner.py`)
+- Batch plan safety validation (`clip_batch_safety.py`)
+- Selected segments → batch render plans conversion
+- Strategy assignment per selected segment (render/variant/subtitle/camera/timing)
+- Safe planned payload override filtering (forbidden keys stripped automatically)
+- Planning-only batch orchestration metadata
+- Compact metadata pass-through in `AIEditPlan.clip_batch_planning`
+- New request fields: `ai_clip_batch_planning_enabled`, `ai_clip_batch_limit`
+
+### Planning behavior
+
+| Behavior | Detail |
+|---|---|
+| Primary source | Phase 36 `clip_segment_selection.selected_segments` |
+| Fallback | `edit_plan.selected_segments` when no Phase 36 segments |
+| Batch limit | `ai_clip_batch_limit` (1–20, default 5) |
+| Plan IDs | `batch_01`, `batch_02`, … deterministic |
+| Rank | Sequential 1, 2, … per output order |
+| Recommended plan IDs | Safe plans only, at most 3 |
+| Mode | Always `planning_only` |
+
+### Strategy assignment heuristics
+
+| Strategy type | Assignment rule |
+|---|---|
+| `render_strategy` | `subtitle_clarity` if subtitle_overload warning; `creator_style_focused` if confidence > 0.75; `camera_dynamic_safe` if camera motion dynamic; `retention_focused` if retention/hook/story > 70; else `safe_default` |
+| `variant_strategy` | `single_safe` for conservative policy; `selected_variant` if balanced + variant available; `multivariant_limited` if aggressive/experimental + multivariant available |
+| `subtitle_strategy` | `reduced_density` if subtitle_overload warning; `optimized` if subtitle apply enabled; else `default` |
+| `camera_strategy` | `motion_guided` if camera apply enabled; else `default` |
+| `timing_strategy` | `retention_optimized` if timing apply enabled; else `default` |
+
+### Allowed planned_payload_override keys
+
+`subtitle_density`, `subtitle_emphasis`, `camera_behavior`, `pacing_style`,
+`creator_style`, `visual_rhythm_mode`, `ai_mode`
+
+### Forbidden planned_payload_override keys (auto-stripped)
+
+`playback_speed`, `segment_start`, `segment_end`, `subtitle_timing`,
+`ffmpeg_args`, `codec`, `bitrate`, `crf`, `validation_rules`,
+`output_path`, `render_command`, `render_segments`, `segment_order`,
+`queue_priority`, `job_id`
+
+### Safety boundaries (still intentionally blocked)
+
+- **Actual batch render execution** — never executed
+- **Render job creation** — never performed
+- **Queue mutation** — never performed
+- **FFmpeg mutation** — never touched
+- **playback_speed mutation** — never touched
+- **Subtitle timing rewrite** — never touched
+- **Source segment reorder** — never performed
+- **Executor override** — never performed
+- **Validation bypass** — never attempted
+- **Cloud AI / external API** — not required
+- **GPU** — not required
+- **Internet** — not required
+
+### Allowed behaviors
+
+- Convert selected clip segments into batch render plans
+- Assign render/subtitle/camera/timing/variant strategies
+- Attach safe planned payload overrides
+- Rank and recommend batch plans
+- Expose compact planning-only metadata
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_clip_batch_planning_enabled` | Batch planning ran and produced plans |
+| `ai_clip_batch_plan_created` | A plan was created |
+| `ai_clip_batch_plan_recommended` | Recommended plan IDs selected |
+| `ai_clip_batch_planning_skipped` | Planning disabled or no segments found |
+
+### Phase compatibility
+
+- All Phase 1–36 behavior preserved
+- `ai_clip_batch_planning_enabled` defaults to `False` — old requests unaffected
+- `AIEditPlan.clip_batch_planning` defaults to `{}` — backward compatible
