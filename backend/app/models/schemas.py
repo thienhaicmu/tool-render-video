@@ -240,6 +240,9 @@ class RenderRequest(BaseModel):
     ai_clip_min_duration_sec: int = 15
     ai_clip_max_duration_sec: int = 60
     ai_clip_candidate_limit: int = 5
+    # AI Clip Segment Selection (Phase 36) — opt-in; selection-only, never executes renders.
+    ai_clip_segment_selection_enabled: bool = False
+    ai_clip_target_count: int = 3
 
     @field_validator("ai_clip_min_duration_sec")
     @classmethod
@@ -254,6 +257,11 @@ class RenderRequest(BaseModel):
     @field_validator("ai_clip_candidate_limit")
     @classmethod
     def _validate_clip_candidate_limit(cls, v: int) -> int:
+        return max(1, min(20, int(v)))
+
+    @field_validator("ai_clip_target_count")
+    @classmethod
+    def _validate_clip_target_count(cls, v: int) -> int:
         return max(1, min(20, int(v)))
 
     @field_validator("render_profile")

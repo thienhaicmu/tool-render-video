@@ -212,6 +212,15 @@ def _build_plan(
         plan.warnings.append(f"clip_candidate_discovery_error:{type(exc).__name__}")
         logger.debug("ai_director_clip_candidate_discovery_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 36: AI Clip Segment Selection ---
+    # Runs after Phase 35 so candidate discovery metadata is available.
+    # Selection-only: never executes renders, never mutates payload or FFmpeg.
+    try:
+        _attach_clip_segment_selection(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"clip_segment_selection_error:{type(exc).__name__}")
+        logger.debug("ai_director_clip_segment_selection_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -2834,6 +2843,111 @@ def _append_clip_candidate_explainability(
                     lines.append(line)
 
         line = "Candidate discovery remains advisory-only"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 36 — AI Clip Segment Selection attachment
+# ---------------------------------------------------------------------------
+
+def _attach_clip_segment_selection(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Select and rank clip segment plans from Phase 35 candidates.
+
+    Selection-only: never executes actual cuts, never mutates render payload,
+    never modifies FFmpeg, never rewrites subtitle timing, never reorders
+    source media. No external API calls. No GPU. No internet. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.clips.clip_segment_selector import select_clip_segments
+
+        selection = select_clip_segments(plan, payload=request, context={"job_id": job_id})
+        sel_dict  = selection.to_dict()
+        plan.clip_segment_selection = sel_dict
+
+        enabled   = sel_dict.get("enabled", False)
+        selected  = sel_dict.get("selected_segments") or []
+        rejected  = sel_dict.get("rejected_candidates") or []
+
+        if enabled:
+            logger.info(
+                "ai_clip_segment_selection_enabled job_id=%s selected=%d rejected=%d",
+                job_id, len(selected), len(rejected),
+            )
+            for seg in selected:
+                if isinstance(seg, dict):
+                    logger.info(
+                        "ai_clip_segment_selected job_id=%s segment_id=%s "
+                        "start=%.2f end=%.2f score=%.2f",
+                        job_id,
+                        seg.get("segment_id", ""),
+                        float(seg.get("start_sec", 0.0)),
+                        float(seg.get("end_sec", 0.0)),
+                        float(seg.get("score", 0.0)),
+                    )
+            if rejected:
+                logger.info(
+                    "ai_clip_segment_rejected job_id=%s count=%d",
+                    job_id, len(rejected),
+                )
+        else:
+            logger.debug(
+                "ai_clip_segment_selection_skipped job_id=%s (disabled)", job_id
+            )
+
+        _append_clip_segment_explainability(plan, sel_dict)
+
+    except Exception as exc:
+        plan.clip_segment_selection = {
+            "available": False,
+            "enabled": False,
+            "mode": "selection_only",
+            "selected_segments": [],
+            "rejected_candidates": [],
+            "warnings": [f"clip_segment_selection_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_clip_segment_selection_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_clip_segment_explainability(
+    plan: "AIEditPlan",
+    sel_dict: dict,
+) -> None:
+    """Append compact segment selection lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        if not sel_dict.get("enabled", False):
+            return
+
+        selected = sel_dict.get("selected_segments") or []
+
+        if not any("AI selected clip segments" in str(l) for l in lines):
+            lines.append("AI selected clip segments from discovered candidates")
+
+        if selected:
+            line = "Selected segments respect configured duration bounds"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Segment selection remains planning-only"
         if not any(line in str(l) for l in lines):
             lines.append(line)
 

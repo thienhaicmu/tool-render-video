@@ -104,6 +104,7 @@ def apply_ai_render_influence(
         _report_subtitle_text_apply(payload, edit_plan, report)
         _report_camera_motion_apply(payload, edit_plan, report)
         _report_clip_candidate_discovery(payload, edit_plan, report)
+        _report_clip_segment_selection(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -949,6 +950,44 @@ def _report_clip_candidate_discovery(payload: Any, edit_plan: Any, report: dict)
     logger.debug(
         "clip_candidate_discovery_reported enabled=%s candidates=%d recommended=%s",
         enabled, len(candidates), recommended,
+    )
+
+
+# ── Clip segment selection — selection_only reporting in Phase 36 ────────────
+
+def _report_clip_segment_selection(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report clip segment selection metadata — selection_only in Phase 36.
+
+    No actual clips are rendered. No source segments mutated. No FFmpeg altered.
+    No playback_speed changed. No subtitle timing rewritten.
+    """
+    css = getattr(edit_plan, "clip_segment_selection", None)
+    if not isinstance(css, dict) or not css:
+        report["skipped"].append("clip_segment_selection:no_result")
+        return
+
+    enabled  = css.get("enabled", False)
+    selected = css.get("selected_segments") or []
+    rejected = css.get("rejected_candidates") or []
+    safe_count = sum(
+        1 for s in selected if isinstance(s, dict) and s.get("safe", False)
+    )
+
+    if not enabled:
+        report["skipped"].append(
+            f"clip_segment_selection:disabled_phase36"
+            f"(selected={len(selected)},rejected={len(rejected)})"
+        )
+    else:
+        report["skipped"].append(
+            f"clip_segment_selection:selection_only_phase36"
+            f"(selected={len(selected)},safe={safe_count},"
+            f"rejected={len(rejected)})"
+        )
+
+    logger.debug(
+        "clip_segment_selection_reported enabled=%s selected=%d rejected=%d",
+        enabled, len(selected), len(rejected),
     )
 
 

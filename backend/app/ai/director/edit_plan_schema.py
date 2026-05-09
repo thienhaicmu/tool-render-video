@@ -164,6 +164,8 @@ class AIEditPlan:
     camera_motion_apply: dict = field(default_factory=dict)
     # Phase 35 — AI clip candidate discovery (populated by clip_candidate_engine module)
     clip_candidate_discovery: dict = field(default_factory=dict)
+    # Phase 36 — AI clip segment selection (populated by clip_segment_selector module)
+    clip_segment_selection: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -241,4 +243,5 @@ class AIEditPlan:
             "subtitle_text_apply": dict(self.subtitle_text_apply),
             "camera_motion_apply": dict(self.camera_motion_apply),
             "clip_candidate_discovery": dict(self.clip_candidate_discovery),
+            "clip_segment_selection": dict(self.clip_segment_selection),
         }
