@@ -6,6 +6,96 @@
 ---
 
 ## Patch Status Log
+---
+
+### 2026-05-08 — AI Productization Phase 41: Retrieval-Based Creator Intelligence
+
+**Implemented:**
+- `app/ai/retrieval/__init__.py` (new) — package marker for Phase 41 retrieval intelligence package
+- `app/ai/retrieval/retrieval_schema.py` (new) — `AICreatorRetrievalMatch` dataclass and `AICreatorRetrievalPack` dataclass; compact metadata-only schema for creator pattern retrieval matches; includes subtitle/pacing/camera/retention/hook influence dictionaries; `retrieval_mode` remains `"assistive_only"`
+- `app/ai/retrieval/retrieval_safety.py` (new) — retrieval sanitization and safety gates; strips forbidden execution fields; clamps confidence to `[0, 1]`; clamps retrieval_score to `[0, 100]`; rejects unsafe execution/mutation fields
+- `app/ai/retrieval/retrieval_engine.py` (new) — `retrieve_creator_intelligence(edit_plan, payload=None, context=None)`; deterministic local retrieval engine using Phase 39 creator knowledge and Phase 40 creator patterns; retrieves subtitle, pacing, camera, retention, hook, and creator-style influence metadata
+- `app/ai/director/edit_plan_schema.py` (updated) — `creator_retrieval: dict = field(default_factory=dict)` added to `AIEditPlan`; included in `to_dict()`; backward-compatible
+- `app/ai/director/ai_director.py` (updated) — Phase 41 retrieval block added after creator knowledge/pattern metadata is available; attaches compact `creator_retrieval` metadata and explainability lines
+- `app/ai/director/render_influence.py` (updated) — reports retrieval-based creator intelligence as assistive-only render influence metadata
+- `tests/test_ai_phase41_retrieval_creator_intelligence.py` (new) — 72 tests covering schema, safety, retrieval engine, creator style retrieval, subtitle/pacing/camera/retention influence, no-mutation safety, edit plan integration, render influence, and environment requirements
+
+**What Phase 41 adds:**
+
+- Retrieval-based creator intelligence
+- Creator archetype matching
+- Context-aware creator pattern retrieval
+- Subtitle influence retrieval
+- Pacing influence retrieval
+- Camera influence retrieval
+- Retention influence retrieval
+- Hook influence retrieval
+- Assistive-only creator intelligence metadata
+
+**Retrieval examples:**
+
+| Clip context | Retrieved intelligence |
+|-------------|------------------------|
+| Viral shortform / TikTok-style | compact subtitles, fast pacing, dynamic camera, strong hook emphasis |
+| Podcast / storytelling | readable subtitles, calm pacing, stable framing |
+| Retention decay / dead air | reengagement patterns, silence/dead-air reduction guidance |
+| Subtitle overload | compact subtitle patterns, readability-oriented subtitle influence |
+
+**Safety boundaries enforced:**
+
+- Retrieval is metadata-only
+- `retrieval_mode` always `"assistive_only"`
+- No payload mutation
+- No render execution
+- No FFmpeg mutation
+- No playback_speed mutation
+- No subtitle timing rewrite
+- No executor override
+- No queue mutation
+- No subprocess execution
+- No internet access
+- No API key required
+- No GPU required
+
+**Forbidden fields stripped/rejected:**
+
+`ffmpeg_args`, `render_command`, `playback_speed`, `subtitle_timing`, `queue_priority`, `output_path`, `subprocess`, `executable`, `python_code`, `shell`, `powershell`, `direct_crop_coordinates`
+
+**Architecture notes:**
+
+- Phase 41 connects Phase 39 external creator knowledge ingestion and Phase 40 creator pattern extraction to AI Director runtime orchestration
+- AI Director can now retrieve creator intelligence dynamically based on clip context
+- Retrieved metadata can influence existing subtitle, pacing, camera, hook, and retention systems safely
+- This phase does not replace deterministic rendering logic
+- Stable render executor remains final authority
+- AI remains assistive, bounded, and metadata-first
+
+**Intentionally still blocked:**
+
+- Live internet scraping
+- Autonomous crawling
+- Model fine-tuning
+- Unrestricted autonomous editing
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Direct crop-coordinate rewrite
+- Segment reorder
+- Executor override
+- Queue mutation
+- Autonomous publishing
+
+**Verification:**
+
+- Phase 41 tests: 72 passed
+- Full suite: 2771 passed
+- `git diff --check` clean
+- `py_compile` passed
+
+**Status:**
+
+Phase 41 complete. Retrieval-based creator intelligence is now available as an assistive metadata layer for AI Director and render influence reporting.
+
 ### 2026-05-08 — AI Productization Phase 34: Safe Camera Motion Apply Foundation
 
 **Camera motion guidance metadata only. No crop coordinate rewrite. No FFmpeg mutation. Policy-gated (balanced/aggressive/experimental).**

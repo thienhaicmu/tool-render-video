@@ -107,6 +107,7 @@ def apply_ai_render_influence(
         _report_clip_segment_selection(payload, edit_plan, report)
         _report_clip_batch_planning(payload, edit_plan, report)
         _report_feature_enhancement(payload, edit_plan, report)
+        _report_creator_retrieval(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1107,4 +1108,56 @@ def _report_feature_enhancement(payload: Any, edit_plan: Any, report: dict) -> N
     logger.debug(
         "feature_enhancement_reported mode=%s categories=%d",
         mode, len(categories),
+    )
+
+
+def _report_creator_retrieval(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report creator intelligence retrieval metadata — assistive_only in Phase 41.
+
+    No render execution. No FFmpeg altered. No playback_speed changed.
+    No subtitle timing rewritten. Creator intelligence influences metadata only.
+    """
+    cr = getattr(edit_plan, "creator_retrieval", None)
+    if not isinstance(cr, dict) or not cr:
+        report["skipped"].append("creator_retrieval:no_result")
+        return
+
+    available = cr.get("available", False)
+    enabled = cr.get("enabled", False)
+    mode = cr.get("retrieval_mode", "assistive_only")
+    matches = cr.get("matches", [])
+    recommended_style = cr.get("recommended_creator_style", "")
+
+    if not isinstance(matches, list):
+        matches = []
+
+    # Collect retrieved influence categories
+    influence_categories = set()
+    retrieved_styles = set()
+    for m in matches:
+        if not isinstance(m, dict):
+            continue
+        ptype = m.get("pattern_type", "")
+        if ptype:
+            influence_categories.add(ptype)
+        style = m.get("creator_style", "")
+        if style:
+            retrieved_styles.add(style)
+
+    if not available:
+        report["skipped"].append("creator_retrieval:unavailable_phase41")
+    elif not enabled or not matches:
+        report["skipped"].append("creator_retrieval:assistive_only_phase41(no_matches)")
+    else:
+        cats_str = ",".join(sorted(influence_categories)) or "none"
+        styles_str = ",".join(sorted(retrieved_styles)) or "none"
+        report["skipped"].append(
+            f"creator_retrieval:{mode}_phase41"
+            f"(matches={len(matches)},categories={cats_str}"
+            f",styles={styles_str},recommended={recommended_style or 'none'})"
+        )
+
+    logger.debug(
+        "creator_retrieval_reported mode=%s matches=%d categories=%s",
+        mode, len(matches), sorted(influence_categories),
     )

@@ -174,6 +174,8 @@ class AIEditPlan:
     creator_knowledge: dict = field(default_factory=dict)
     # Phase 40 — Creator pattern extraction (populated by pattern_registry module)
     creator_patterns: dict = field(default_factory=dict)
+    # Phase 41 — Retrieval-based creator intelligence (populated by retrieval_engine module)
+    creator_retrieval: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -256,4 +258,5 @@ class AIEditPlan:
             "feature_enhancement": dict(self.feature_enhancement),
             "creator_knowledge": dict(self.creator_knowledge),
             "creator_patterns": dict(self.creator_patterns),
+            "creator_retrieval": dict(self.creator_retrieval),
         }

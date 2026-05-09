@@ -257,6 +257,15 @@ def _build_plan(
         plan.warnings.append(f"creator_patterns_error:{type(exc).__name__}")
         logger.debug("ai_director_creator_patterns_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 41: Retrieval-Based Creator Intelligence ---
+    # Retrieves creator intelligence patterns from Phase 39/40 registry.
+    # Retrieval-only: assistive metadata only, no internet, no executor override.
+    try:
+        _attach_creator_retrieval(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_retrieval_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_retrieval_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -3385,6 +3394,103 @@ def _append_creator_patterns_explainability(
                 line = "Creator pacing patterns loaded"
                 if not any(line in str(l) for l in lines):
                     lines.append(line)
+
+    except Exception:
+        pass
+
+
+# Phase 41 — Retrieval-Based Creator Intelligence attachment
+
+
+def _attach_creator_retrieval(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Retrieve creator intelligence patterns from Phase 40 registry.
+
+    Retrieval-only: assistive metadata, no internet, no model training.
+    Never mutates FFmpeg, never overrides executor. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.retrieval.retrieval_engine import retrieve_creator_intelligence
+
+        logger.debug("ai_creator_retrieval_started job_id=%s", job_id)
+
+        pack = retrieve_creator_intelligence(plan)
+        plan.creator_retrieval = pack.to_dict()
+
+        matches = pack.matches or []
+        enabled = pack.enabled
+        style = pack.recommended_creator_style or ""
+
+        if enabled and matches:
+            logger.info(
+                "ai_creator_retrieval_completed job_id=%s matches=%d recommended_style=%s",
+                job_id, len(matches), style,
+            )
+            for m in matches[:3]:
+                logger.debug(
+                    "ai_creator_retrieval_match job_id=%s id=%s type=%s score=%.2f",
+                    job_id, m.match_id, m.pattern_type, m.retrieval_score,
+                )
+        else:
+            logger.debug(
+                "ai_creator_retrieval_skipped job_id=%s (no_matches)", job_id
+            )
+
+        _append_creator_retrieval_explainability(plan, pack.to_dict())
+
+    except Exception as exc:
+        plan.creator_retrieval = {
+            "available": False,
+            "enabled": False,
+            "retrieval_mode": "assistive_only",
+            "matches": [],
+            "recommended_creator_style": "",
+            "warnings": [f"creator_retrieval_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_retrieval_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_creator_retrieval_explainability(
+    plan: "AIEditPlan",
+    retrieval_dict: dict,
+) -> None:
+    """Append compact creator retrieval lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = retrieval_dict.get("enabled", False)
+        matches = retrieval_dict.get("matches", [])
+        style = retrieval_dict.get("recommended_creator_style", "")
+
+        if enabled and matches:
+            pacing_matches = [m for m in matches if isinstance(m, dict) and m.get("pattern_type") == "pacing"]
+            subtitle_matches = [m for m in matches if isinstance(m, dict) and m.get("pattern_type") == "subtitle"]
+
+            if pacing_matches:
+                line = "Creator pacing patterns retrieved"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+            if subtitle_matches:
+                line = "Compact subtitle creator patterns applied"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+
+            line = "Retrieval-based creator intelligence remains assistive-only"
+            if not any("assistive-only" in str(l) for l in lines):
+                lines.append(line)
 
     except Exception:
         pass
