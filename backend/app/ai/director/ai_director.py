@@ -293,6 +293,18 @@ def _build_plan(
         plan.warnings.append(f"market_optimization_intelligence_error:{type(exc).__name__}")
         logger.debug("ai_director_market_optimization_intelligence_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 45: AI Render Quality Evaluation (pre-render placeholder) ---
+    # Actual scoring is post-render (in render_pipeline.py after outputs are ready).
+    # Director only initializes the field so the schema slot is present in plan.to_dict().
+    plan.render_quality_evaluation = {
+        "available": True,
+        "enabled": False,
+        "evaluation_mode": "evaluation_only",
+        "output_scores": [],
+        "best_quality_output_id": "",
+        "warnings": ["quality_evaluation_pending_post_render"],
+    }
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -3852,6 +3864,49 @@ def _append_market_explainability(
 
         line = "Market optimization remains assistive-only"
         if not any("Market optimization remains" in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 45 — AI Render Quality Evaluation
+# ---------------------------------------------------------------------------
+
+def _append_quality_explainability(
+    plan: "AIEditPlan",
+    quality_dict: dict,
+) -> None:
+    """Append compact quality evaluation lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = quality_dict.get("enabled", False)
+        if not enabled:
+            return
+
+        scores = quality_dict.get("output_scores") or []
+        if scores:
+            best_id = quality_dict.get("best_quality_output_id", "")
+            line = f"Render quality evaluated across {len(scores)} output(s)"
+            if not any("Render quality evaluated" in str(l) for l in lines):
+                lines.append(line)
+            if best_id:
+                line = f"Best quality output: {best_id}"
+                if not any("Best quality output" in str(l) for l in lines):
+                    lines.append(line)
+
+        line = "Render quality evaluation remains evaluation-only"
+        if not any("Render quality evaluation remains" in str(l) for l in lines):
             lines.append(line)
 
     except Exception:

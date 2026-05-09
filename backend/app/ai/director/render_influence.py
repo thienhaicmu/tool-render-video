@@ -111,6 +111,7 @@ def apply_ai_render_influence(
         _report_adaptive_creator_intelligence(payload, edit_plan, report)
         _report_creator_feedback_intelligence(payload, edit_plan, report)
         _report_market_optimization_intelligence(payload, edit_plan, report)
+        _report_render_quality_evaluation(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1332,4 +1333,43 @@ def _report_market_optimization_intelligence(payload: Any, edit_plan: Any, repor
     logger.debug(
         "market_optimization_intelligence_reported mode=%s enabled=%s market=%s sub_w=%.3f pac_w=%.3f",
         mode, enabled, target, sub_w, pac_w,
+    )
+
+
+# ── Render quality evaluation — evaluation_only advisory in Phase 45 ─────────
+
+def _report_render_quality_evaluation(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report render quality evaluation metadata — evaluation_only in Phase 45.
+
+    No render execution. No file mutation. No output deletion.
+    Quality scores are metadata-only and bounded 0–100.
+    """
+    rqe = getattr(edit_plan, "render_quality_evaluation", None)
+    if not isinstance(rqe, dict) or not rqe:
+        report["skipped"].append("render_quality_evaluation:no_result")
+        return
+
+    available = rqe.get("available", False)
+    enabled = rqe.get("enabled", False)
+    mode = rqe.get("evaluation_mode", "evaluation_only")
+
+    output_scores = rqe.get("output_scores") or []
+    best_id = rqe.get("best_quality_output_id", "")
+
+    if not available:
+        report["skipped"].append("render_quality_evaluation:unavailable_phase45")
+    elif not enabled:
+        report["skipped"].append(
+            f"render_quality_evaluation:pending_post_render_phase45"
+            f"(mode={mode})"
+        )
+    else:
+        report["skipped"].append(
+            f"render_quality_evaluation:{mode}_phase45"
+            f"(outputs_scored={len(output_scores)},best_id={best_id!r})"
+        )
+
+    logger.debug(
+        "render_quality_evaluation_reported mode=%s enabled=%s outputs=%d best_id=%s",
+        mode, enabled, len(output_scores), best_id,
     )

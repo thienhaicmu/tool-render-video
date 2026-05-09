@@ -3336,6 +3336,32 @@ def run_render_pipeline(
                 "warnings": [f"ranking_error:{type(_rank_err).__name__}"],
             }
 
+        # ── Phase 45: AI Render Quality Evaluation — evaluation-only, never blocks render ──
+        _ai_render_quality: dict = {"available": False, "evaluation_mode": "evaluation_only"}
+        try:
+            from app.ai.quality.quality_evaluator import evaluate_render_quality as _eval_quality
+            _quality_eval = _eval_quality(
+                outputs,
+                edit_plan=_ai_edit_plan,
+                context={"job_id": job_id},
+            )
+            _ai_render_quality = _quality_eval.to_dict()
+            if _ai_edit_plan is not None:
+                _ai_edit_plan.render_quality_evaluation = _ai_render_quality
+            logger.info(
+                "ai_render_quality_evaluated job_id=%s best=%s outputs=%d",
+                job_id,
+                _ai_render_quality.get("best_quality_output_id") or "none",
+                len(_ai_render_quality.get("output_scores") or []),
+            )
+        except Exception as _quality_err:
+            logger.warning("ai_render_quality_evaluation_skipped job_id=%s: %s", job_id, _quality_err)
+            _ai_render_quality = {
+                "available": False,
+                "evaluation_mode": "evaluation_only",
+                "warnings": [f"quality_evaluation_error:{type(_quality_err).__name__}"],
+            }
+
         _result_payload = {
             "outputs": outputs,
             "render_preset": _preset_name,
@@ -3362,6 +3388,7 @@ def run_render_pipeline(
             "preset_evolution": _ai_edit_plan.preset_evolution if _ai_edit_plan is not None else {},
             "creator_style": _ai_edit_plan.creator_style if _ai_edit_plan is not None else {},
             "ai_output_ranking": _ai_output_ranking,
+            "ai_render_quality_evaluation": _ai_render_quality,
         }
         upsert_job(
             job_id,

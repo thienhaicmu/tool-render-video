@@ -182,6 +182,8 @@ class AIEditPlan:
     creator_feedback_intelligence: dict = field(default_factory=dict)
     # Phase 44 — Market-aware optimization intelligence (populated by market_optimizer module)
     market_optimization_intelligence: dict = field(default_factory=dict)
+    # Phase 45 — AI render quality evaluation (populated post-render by quality_evaluator module)
+    render_quality_evaluation: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -268,4 +270,5 @@ class AIEditPlan:
             "adaptive_creator_intelligence": dict(self.adaptive_creator_intelligence),
             "creator_feedback_intelligence": dict(self.creator_feedback_intelligence),
             "market_optimization_intelligence": dict(self.market_optimization_intelligence),
+            "render_quality_evaluation": dict(self.render_quality_evaluation),
         }

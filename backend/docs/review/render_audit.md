@@ -722,3 +722,83 @@ All bias weights are clamped `[0.0, 0.30]`.
 - `AIEditPlan.market_optimization_intelligence` defaults to `{}` — backward compatible
 - Market optimization runs automatically when AI Director is enabled
 - No new required request fields — `ai_target_market` is optional (falls back to `ai_mode`)
+
+---
+
+## AI Productization Phase 45 — AI Render Quality Evaluation
+
+### Implemented
+
+- Quality scoring engine (`app/ai/quality/quality_scoring.py`)
+  - `score_render_quality(output_metadata, edit_plan, context)` → `AIRenderQualityScore`
+  - 7-dimension weighted quality scoring: pacing(20%), subtitle(20%), camera(15%), hook(15%), retention(15%), creator_consistency(10%), market_fit(5%)
+  - Failed-output penalty: 30% reduction on all dimensions when output is marked failed
+  - Baseline score: 50.0 when no signals are available
+- Quality evaluation orchestrator (`app/ai/quality/quality_evaluator.py`)
+  - `evaluate_render_quality(outputs, edit_plan, context)` → `AIRenderQualityEvaluation`
+  - Caps at 20 outputs per call
+  - Selects `best_quality_output_id` by highest `overall_score`
+- Quality evaluation schema (`app/ai/quality/quality_schema.py`)
+  - `AIRenderQualityScore` — per-output score with 7 dimensions + confidence + flags + explanation
+  - `AIRenderQualityEvaluation` — evaluation across all outputs + best output selection
+- Quality safety validation (`app/ai/quality/quality_safety.py`) — 12 forbidden keys auto-stripped
+- Post-render integration in `render_pipeline.py` (after `_ai_output_ranking`, before `_result_payload`)
+- `AIEditPlan.render_quality_evaluation` field (defaults to `{}`)
+- Render influence reporting: `_report_render_quality_evaluation()`
+
+### Architecture direction
+
+| Principle | Detail |
+|---|---|
+| Evaluation scope | Post-render, evaluation-only — never triggers rerender |
+| Output cap | Maximum 20 outputs evaluated per render job |
+| Best selection | Highest `overall_score` (first on tie) |
+| Influence mode | Always `evaluation_only` — no mutation of outputs |
+| Render authority | Deterministic render engine always has final authority |
+
+### Quality dimensions
+
+| Dimension | Weight | Signal sources |
+|---|---|---|
+| `pacing_quality` | 20% | `timing_apply`, `story_optimization`, `retention.risk_regions`, `market.pacing_bias` |
+| `subtitle_readability` | 20% | `subtitle_text_apply`, `subtitle_execution`, `adaptive.subtitle_confidence`, `market.subtitle_bias` |
+| `camera_smoothness` | 15% | `camera_motion_apply`, `beat_visual_execution`, `market.camera_bias` |
+| `hook_strength` | 15% | `story.hook_score`, `retention.hook_score`, `clip_candidate_discovery`, `market.hook_bias` |
+| `retention_quality` | 15% | `retention.overall_score`, `creator_feedback.total_exports`, `output_ranking` |
+| `creator_consistency` | 10% | `creator_retrieval.matches`, `adaptive.style_confidence`, `creator_style_adaptation` |
+| `market_fit` | 5% | `market_optimization_intelligence.market_profile.confidence`, active bias count |
+
+### Forbidden quality evaluation keys (auto-stripped)
+
+`ffmpeg_args`, `render_command`, `playback_speed`, `subtitle_timing`,
+`delete_output`, `overwrite_output`, `rerender`, `queue_priority`,
+`output_path_mutation`, `subprocess`, `executable`, `python_code`
+
+### Still intentionally blocked
+
+- **Rerender trigger** — never executed
+- **Output deletion** — never performed
+- **Output overwrite** — never performed
+- **FFmpeg mutation** — never touched
+- **playback_speed mutation** — never touched
+- **Subtitle timing rewrite** — never touched
+- **Executor override** — never performed
+- **Internet** — not required
+- **Cloud AI / external API** — not required
+- **GPU** — not required
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_render_quality_score_created` | Single output scored |
+| `ai_render_quality_evaluation_done` | All outputs evaluated, best selected |
+| `ai_render_quality_evaluated` | Pipeline-level evaluation complete |
+
+### Phase compatibility
+
+- All Phase 1–44 behavior preserved
+- `AIEditPlan.render_quality_evaluation` defaults to `{}` — backward compatible
+- Quality evaluation runs post-render automatically when outputs are available
+- Director pre-populates placeholder so field is always present in `plan.to_dict()`
+- No new required request fields
