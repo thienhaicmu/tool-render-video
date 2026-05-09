@@ -1,0 +1,32 @@
+{
+  "knowledge_id": "us_shortform",
+  "category": "market",
+  "source_type": "local_json",
+  "creator_style": "",
+  "title": "US Short-Form Market Intelligence",
+  "description": "Audience attention and hook patterns for US short-form video market.",
+  "tags": ["us", "short_form", "market", "retention"],
+  "hook_patterns": [
+    "POV:",
+    "This changed everything",
+    "Day in my life",
+    "Rating my"
+  ],
+  "subtitle_patterns": {
+    "density": "compact",
+    "keyword_emphasis": true
+  },
+  "pacing_patterns": {
+    "avg_clip_sec": 25,
+    "attention_window_sec": 3
+  },
+  "camera_patterns": {},
+  "retention_patterns": {
+    "drop_off_risk_after_sec": 8,
+    "hook_critical_window_sec": 5
+  },
+  "creator_patterns": {
+    "market": "us",
+    "platform": "tiktok"
+  }
+}

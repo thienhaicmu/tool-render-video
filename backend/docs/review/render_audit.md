@@ -309,3 +309,74 @@ remains intentionally blocked.
 - All Phase 1–37 behavior preserved
 - `AIEditPlan.feature_enhancement` defaults to `{}` — backward compatible
 - No new request fields — enhancement always runs when AI Director is enabled
+
+---
+
+## AI Productization Phase 39 — External Creator Knowledge Ingestion Foundation
+
+### Implemented
+
+- Local-first creator knowledge ingestion (`knowledge_ingestion.py`)
+- Creator knowledge schema (`AICreatorKnowledge`, `AIKnowledgeRegistry`) — appended to Phase 15 schema
+- Safe knowledge registry (`knowledge_registry.py`)
+- Knowledge safety validation (`knowledge_safety.py`) — 13 forbidden keys auto-stripped
+- Creator/market/subtitle/pacing/hook knowledge categories
+- Deterministic retrieval-ready creator intelligence foundation
+- Example knowledge files: `knowledge/creators/`, `markets/`, `subtitles/`, `pacing/`, `hooks/`
+- Compact metadata pass-through in `AIEditPlan.creator_knowledge`
+
+### Architecture direction
+
+| Principle | Detail |
+|---|---|
+| Knowledge source | Local JSON files only — no internet, no scraping |
+| Ingestion mode | Deterministic, file-based, fallback-safe |
+| Registry | Indexed by category + creator_style; cached per base_path |
+| Safety | Forbidden keys stripped; source_type validated against allowlist |
+| Phase 15 compat | `ExternalKnowledgeItem`, `KnowledgeSearchResult` preserved unchanged |
+
+### Knowledge folder structure
+
+```
+knowledge/
+  creators/   viral_tiktok.json, podcast.json
+  markets/    us_shortform.json
+  subtitles/  compact_hooks.json
+  pacing/     fast_hook.json
+  hooks/      question_hooks.json
+```
+
+### Forbidden knowledge keys (auto-stripped)
+
+`script`, `executable`, `command`, `subprocess`, `ffmpeg_args`, `render_command`,
+`shell`, `powershell`, `batch_script`, `python_code`, `live_scrape_url`,
+`auth_token`, `api_key`
+
+### Safety boundaries (still intentionally blocked)
+
+- **Live internet scraping** — never performed
+- **Autonomous crawling** — never triggered
+- **Cloud AI dependency** — not required
+- **Model fine-tuning** — never executed
+- **FFmpeg mutation** — never touched
+- **playback_speed mutation** — never touched
+- **Subtitle timing rewrite** — never touched
+- **Executor override** — never performed
+- **GPU** — not required
+- **Internet** — not required
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_creator_knowledge_loaded` | Knowledge files loaded from registry |
+| `ai_creator_knowledge_ingested` | Single knowledge file parsed |
+| `ai_creator_knowledge_skipped` | No knowledge files found |
+| `ai_creator_knowledge_registry_ready` | Registry indexed and ready |
+
+### Phase compatibility
+
+- All Phase 1–38 behavior preserved
+- `AIEditPlan.creator_knowledge` defaults to `{}` — backward compatible
+- No new request fields — knowledge loading runs automatically when AI Director is enabled
+- Phase 15 `ExternalKnowledgeItem`/`KnowledgeSearchResult` unchanged

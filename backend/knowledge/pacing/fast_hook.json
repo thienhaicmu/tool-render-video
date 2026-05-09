@@ -1,0 +1,24 @@
+{
+  "knowledge_id": "fast_hook_pacing",
+  "category": "pacing",
+  "source_type": "local_json",
+  "creator_style": "",
+  "title": "Fast Hook Pacing Pattern",
+  "description": "Aggressive front-loaded pacing to capture attention in first 3 seconds.",
+  "tags": ["pacing", "hook", "fast", "attention"],
+  "hook_patterns": [],
+  "subtitle_patterns": {},
+  "pacing_patterns": {
+    "hook_duration_sec": 3,
+    "intro_style": "abrupt",
+    "cut_cadence": "rapid",
+    "silence_tolerance_sec": 0.5,
+    "avoid_dead_air": true
+  },
+  "camera_patterns": {},
+  "retention_patterns": {
+    "critical_hook_window_sec": 3,
+    "min_energy_level": 0.6
+  },
+  "creator_patterns": {}
+}

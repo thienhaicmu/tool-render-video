@@ -1,0 +1,26 @@
+{
+  "knowledge_id": "question_hooks",
+  "category": "hook",
+  "source_type": "local_json",
+  "creator_style": "",
+  "title": "Question-Based Hook Patterns",
+  "description": "Proven question-style opening hooks that drive viewer retention.",
+  "tags": ["hook", "question", "retention", "opening"],
+  "hook_patterns": [
+    "Did you know",
+    "Have you ever wondered",
+    "What if I told you",
+    "Why does",
+    "How did",
+    "What happens when",
+    "Can you believe"
+  ],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {
+    "hook_style": "question",
+    "engagement_multiplier": 1.3
+  },
+  "creator_patterns": {}
+}

@@ -1,0 +1,38 @@
+{
+  "knowledge_id": "viral_tiktok",
+  "category": "creator",
+  "source_type": "local_json",
+  "creator_style": "viral_tiktok",
+  "title": "Viral TikTok Style",
+  "description": "High-energy short-form editing patterns for viral TikTok content.",
+  "tags": ["tiktok", "viral", "short_form", "hook_heavy"],
+  "hook_patterns": [
+    "wait for it",
+    "watch this",
+    "here's why",
+    "you won't believe",
+    "this is how"
+  ],
+  "subtitle_patterns": {
+    "density": "compact",
+    "keyword_emphasis": true,
+    "max_words_per_line": 5
+  },
+  "pacing_patterns": {
+    "intro_speed": "fast",
+    "cut_style": "rapid",
+    "hook_duration_sec": 3
+  },
+  "camera_patterns": {
+    "behavior": "dynamic_safe",
+    "zoom_emphasis": true
+  },
+  "retention_patterns": {
+    "hook_window_sec": 5,
+    "avoid_silence_gaps": true
+  },
+  "creator_patterns": {
+    "platform": "tiktok",
+    "target_duration_sec": 30
+  }
+}

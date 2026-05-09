@@ -239,6 +239,15 @@ def _build_plan(
         plan.warnings.append(f"feature_enhancement_error:{type(exc).__name__}")
         logger.debug("ai_director_feature_enhancement_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 39: External Creator Knowledge Ingestion ---
+    # Loads local-first creator knowledge registry. No internet, no scraping.
+    # Knowledge-only: never mutates render payload, never overrides executor.
+    try:
+        _attach_creator_knowledge(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_knowledge_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_knowledge_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -3186,6 +3195,94 @@ def _append_feature_enhancement_explainability(
                 lines.append(line)
 
         line = "AI feature enhancement remains assistive-only"
+        if not any(line in str(l) for l in lines):
+            lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 39 — External Creator Knowledge Ingestion attachment
+# ---------------------------------------------------------------------------
+
+def _attach_creator_knowledge(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Load local creator knowledge registry and attach compact summary.
+
+    Local-first: reads only from the knowledge/ directory on the local filesystem.
+    No internet, no scraping, no subprocess, no cloud dependency.
+    Never mutates FFmpeg, never overrides executor. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.knowledge.knowledge_registry import load_knowledge_registry
+
+        registry = load_knowledge_registry()
+        registry_dict = registry.to_dict()
+        plan.creator_knowledge = registry_dict
+
+        loaded = registry_dict.get("loaded_count", 0)
+        categories = registry_dict.get("categories") or []
+        styles = registry_dict.get("creator_styles") or []
+
+        if loaded > 0:
+            logger.info(
+                "ai_creator_knowledge_loaded job_id=%s count=%d categories=%s",
+                job_id, loaded, categories,
+            )
+            logger.info(
+                "ai_creator_knowledge_registry_ready job_id=%s styles=%s",
+                job_id, styles,
+            )
+        else:
+            logger.debug(
+                "ai_creator_knowledge_skipped job_id=%s (no_knowledge_files_found)", job_id
+            )
+
+        _append_creator_knowledge_explainability(plan, registry_dict)
+
+    except Exception as exc:
+        plan.creator_knowledge = {
+            "available": False,
+            "loaded_count": 0,
+            "categories": [],
+            "creator_styles": [],
+            "warnings": [f"creator_knowledge_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_knowledge_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_creator_knowledge_explainability(
+    plan: "AIEditPlan",
+    registry_dict: dict,
+) -> None:
+    """Append compact creator knowledge lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        loaded = registry_dict.get("loaded_count", 0)
+        if loaded > 0:
+            line = "External creator knowledge registry loaded"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+            line = "Local creator intelligence available"
+            if not any(line in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Knowledge ingestion remains local-first"
         if not any(line in str(l) for l in lines):
             lines.append(line)
 

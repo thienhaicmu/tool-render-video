@@ -170,6 +170,8 @@ class AIEditPlan:
     clip_batch_planning: dict = field(default_factory=dict)
     # Phase 38 — AI feature enhancement integration (populated by feature_enhancement_engine module)
     feature_enhancement: dict = field(default_factory=dict)
+    # Phase 39 — External creator knowledge ingestion (populated by knowledge_registry module)
+    creator_knowledge: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -250,4 +252,5 @@ class AIEditPlan:
             "clip_segment_selection": dict(self.clip_segment_selection),
             "clip_batch_planning": dict(self.clip_batch_planning),
             "feature_enhancement": dict(self.feature_enhancement),
+            "creator_knowledge": dict(self.creator_knowledge),
         }
