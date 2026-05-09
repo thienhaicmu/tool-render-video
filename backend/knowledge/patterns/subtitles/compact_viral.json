@@ -1,0 +1,20 @@
+{
+  "pattern_id": "subtitle_compact_viral",
+  "pattern_type": "subtitle",
+  "creator_style": "viral_tiktok",
+  "title": "Compact Viral Subtitle Style",
+  "description": "Compact, emphasis-driven subtitle style for viral short-form",
+  "confidence": 0.85,
+  "tags": ["subtitle", "compact", "viral", "tiktok"],
+  "hook_patterns": [],
+  "subtitle_patterns": {
+    "density": "compact",
+    "max_words_per_line": 5,
+    "keyword_emphasis": true,
+    "capitalize_keywords": true,
+    "bold_hook_words": true
+  },
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {}
+}

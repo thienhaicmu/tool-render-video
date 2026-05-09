@@ -172,6 +172,8 @@ class AIEditPlan:
     feature_enhancement: dict = field(default_factory=dict)
     # Phase 39 — External creator knowledge ingestion (populated by knowledge_registry module)
     creator_knowledge: dict = field(default_factory=dict)
+    # Phase 40 — Creator pattern extraction (populated by pattern_registry module)
+    creator_patterns: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -253,4 +255,5 @@ class AIEditPlan:
             "clip_batch_planning": dict(self.clip_batch_planning),
             "feature_enhancement": dict(self.feature_enhancement),
             "creator_knowledge": dict(self.creator_knowledge),
+            "creator_patterns": dict(self.creator_patterns),
         }

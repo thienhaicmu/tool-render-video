@@ -380,3 +380,71 @@ knowledge/
 - `AIEditPlan.creator_knowledge` defaults to `{}` — backward compatible
 - No new request fields — knowledge loading runs automatically when AI Director is enabled
 - Phase 15 `ExternalKnowledgeItem`/`KnowledgeSearchResult` unchanged
+
+---
+
+## Phase 40 — Creator Pattern Extraction Engine
+
+### What was added
+
+- `app/ai/knowledge/pattern_schema.py` — `AICreatorPattern` and `AIPatternRegistry` dataclasses
+- `app/ai/knowledge/pattern_safety.py` — pattern safety validation (12 forbidden keys, allowed pattern types)
+- `app/ai/knowledge/pattern_extractor.py` — deterministic archetype-based pattern extraction for 5 categories
+- `app/ai/knowledge/pattern_registry.py` — file-based + built-in archetype registry with module-level caching
+- `knowledge/patterns/hooks/question_hook.json` — hook archetype seed file
+- `knowledge/patterns/subtitles/compact_viral.json` — subtitle archetype seed file
+- `knowledge/patterns/pacing/fast_hook.json` — pacing archetype seed file
+- `knowledge/patterns/camera/dynamic_safe.json` — camera archetype seed file
+- `knowledge/patterns/retention/loop_payoff.json` — retention archetype seed file
+- `AIEditPlan.creator_patterns` — Phase 40 field (defaults to `{}`)
+
+### Render Influence Report
+
+Phase 40 reports to `skipped` only. Example entry:
+
+```
+creator_patterns:extraction_only_phase40(loaded=N,types=T)
+```
+
+### Pattern types
+
+| Type | Built-in archetypes | Description |
+|---|---|---|
+| `hook` | 4 (question, curiosity, rapid, delayed_payoff) | Hook opening strategies |
+| `subtitle` | 3 (compact_viral, podcast_readable, educational_clean) | Subtitle display patterns |
+| `pacing` | 3 (fast_hook, calm_storytelling, high_energy_shortform) | Edit pacing styles |
+| `camera` | 3 (dynamic_safe, cinematic_smooth, static_podcast) | Camera behavior patterns |
+| `retention` | 3 (loop_payoff, rapid_reengagement, payoff_reinforcement) | Viewer retention tactics |
+
+### Forbidden keys (pattern_safety)
+
+`ffmpeg_args`, `render_command`, `shell`, `powershell`, `subprocess`, `executable`,
+`python_code`, `api_key`, `auth_token`, `remote_script`, `playback_speed`, `subtitle_timing`
+
+### Safety boundaries (still intentionally blocked)
+
+- **Live internet access** — never performed
+- **Subprocess execution** — never triggered
+- **FFmpeg mutation** — never touched
+- **Playback speed mutation** — never touched
+- **Subtitle timing rewrite** — never touched
+- **Model training** — never executed
+- **GPU** — not required
+- **Internet** — not required
+- **API key** — not required
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_creator_patterns_loaded` | Patterns extracted from registry |
+| `ai_creator_patterns_skipped` | No registry/knowledge available |
+| `ai_creator_patterns_file_loaded` | Single pattern JSON file parsed |
+
+### Phase compatibility
+
+- All Phase 1–39 behavior preserved
+- `AIEditPlan.creator_patterns` defaults to `{}` — backward compatible
+- Pattern extraction runs automatically when AI Director is enabled and Phase 39 knowledge is available
+- Phase 39 `AICreatorKnowledge`/`AIKnowledgeRegistry` types unchanged
+- Phase 15 `ExternalKnowledgeItem`/`KnowledgeSearchResult` unchanged

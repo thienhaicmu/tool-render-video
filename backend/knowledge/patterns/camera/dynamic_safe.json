@@ -1,0 +1,19 @@
+{
+  "pattern_id": "camera_dynamic_safe",
+  "pattern_type": "camera",
+  "creator_style": "viral_tiktok",
+  "title": "Dynamic Safe Camera Pattern",
+  "description": "Dynamic camera motion within safe bounds for viral content",
+  "confidence": 0.82,
+  "tags": ["camera", "dynamic", "safe", "tiktok"],
+  "hook_patterns": [],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {
+    "behavior": "dynamic_safe",
+    "zoom_emphasis": true,
+    "subject_lock": false,
+    "motion_smoothing": true
+  },
+  "retention_patterns": {}
+}

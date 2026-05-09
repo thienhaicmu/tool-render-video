@@ -248,6 +248,15 @@ def _build_plan(
         plan.warnings.append(f"creator_knowledge_error:{type(exc).__name__}")
         logger.debug("ai_director_creator_knowledge_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 40: Creator Pattern Extraction ---
+    # Extracts structured creator intelligence patterns from ingested knowledge.
+    # Extraction-only: no internet, no model training, no executor override.
+    try:
+        _attach_creator_patterns(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_patterns_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_patterns_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -3285,6 +3294,97 @@ def _append_creator_knowledge_explainability(
         line = "Knowledge ingestion remains local-first"
         if not any(line in str(l) for l in lines):
             lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 40 — Creator Pattern Extraction attachment
+# ---------------------------------------------------------------------------
+
+def _attach_creator_patterns(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Extract creator intelligence patterns from knowledge registry.
+
+    Local-only: reads from knowledge/patterns/. No internet, no model training.
+    Never mutates FFmpeg, never overrides executor. Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.knowledge.pattern_registry import load_pattern_registry
+
+        registry = load_pattern_registry()
+        registry_dict = registry.to_dict()
+        plan.creator_patterns = registry_dict
+
+        loaded = registry_dict.get("loaded_patterns", 0)
+        pattern_types = registry_dict.get("pattern_types") or []
+        styles = registry_dict.get("creator_styles") or []
+
+        if loaded > 0:
+            logger.info(
+                "ai_creator_pattern_loaded job_id=%s count=%d types=%s",
+                job_id, loaded, pattern_types,
+            )
+            logger.info(
+                "ai_creator_pattern_registry_ready job_id=%s styles=%s",
+                job_id, styles,
+            )
+        else:
+            logger.debug(
+                "ai_creator_pattern_skipped job_id=%s (no_patterns_found)", job_id
+            )
+
+        _append_creator_patterns_explainability(plan, registry_dict)
+
+    except Exception as exc:
+        plan.creator_patterns = {
+            "available": False,
+            "loaded_patterns": 0,
+            "pattern_types": [],
+            "creator_styles": [],
+            "warnings": [f"creator_patterns_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_patterns_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_creator_patterns_explainability(
+    plan: "AIEditPlan",
+    registry_dict: dict,
+) -> None:
+    """Append compact creator pattern lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        pattern_types = registry_dict.get("pattern_types") or []
+        loaded = registry_dict.get("loaded_patterns", 0)
+
+        if loaded > 0:
+            if "hook" in pattern_types:
+                line = "Creator hook patterns extracted"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+            if "subtitle" in pattern_types:
+                line = "Subtitle style patterns available"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
+            if "pacing" in pattern_types:
+                line = "Creator pacing patterns loaded"
+                if not any(line in str(l) for l in lines):
+                    lines.append(line)
 
     except Exception:
         pass
