@@ -176,6 +176,8 @@ class AIEditPlan:
     creator_patterns: dict = field(default_factory=dict)
     # Phase 41 — Retrieval-based creator intelligence (populated by retrieval_engine module)
     creator_retrieval: dict = field(default_factory=dict)
+    # Phase 42 — Adaptive creator intelligence (populated by adaptive_learning module)
+    adaptive_creator_intelligence: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -259,4 +261,5 @@ class AIEditPlan:
             "creator_knowledge": dict(self.creator_knowledge),
             "creator_patterns": dict(self.creator_patterns),
             "creator_retrieval": dict(self.creator_retrieval),
+            "adaptive_creator_intelligence": dict(self.adaptive_creator_intelligence),
         }

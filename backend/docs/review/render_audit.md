@@ -448,3 +448,99 @@ creator_patterns:extraction_only_phase40(loaded=N,types=T)
 - Pattern extraction runs automatically when AI Director is enabled and Phase 39 knowledge is available
 - Phase 39 `AICreatorKnowledge`/`AIKnowledgeRegistry` types unchanged
 - Phase 15 `ExternalKnowledgeItem`/`KnowledgeSearchResult` unchanged
+
+---
+
+## AI Productization Phase 41 — Retrieval-Based Creator Intelligence
+
+See Phase 41 implementation. `AIEditPlan.creator_retrieval` defaults to `{}`.
+
+---
+
+## AI Productization Phase 42 — Adaptive Creator Intelligence Foundation
+
+### Implemented
+
+- Adaptive creator preference learning (`app/ai/adaptive/adaptive_learning.py`)
+- Creator preference profiles (`app/ai/adaptive/adaptive_schema.py`)
+  - `AICreatorPreferenceProfile` — learned style/subtitle/pacing/camera preferences with confidence scores
+  - `AIAdaptiveLearningPack` — learning pack with creator profile, learned preferences, adaptive influences
+- Adaptive creator safety validation (`app/ai/adaptive/adaptive_safety.py`)
+  - 12 forbidden keys auto-stripped (password, token, api_key, auth, subprocess, executable,
+    ffmpeg_args, render_command, playback_speed, subtitle_timing, queue_priority, output_path)
+- Local adaptive creator memory (`app/ai/adaptive/adaptive_memory.py`)
+  - JSON persistence in `data/adaptive/creator_profiles/`
+  - Fallback-safe load/save/update — never raises
+- Retrieval weighting adaptation via `adaptive_influences`
+- Adaptive subtitle/pacing/camera enhancement weighting
+- Assistive-only adaptive creator intelligence integration in AI Director and Render Influence
+- `AIEditPlan.adaptive_creator_intelligence` field (defaults to `{}`)
+- Phase 42 structured log events
+
+### Architecture direction
+
+| Principle | Detail |
+|---|---|
+| Learning source | Edit plan signals + explicit session context — no internet, no scraping |
+| Persistence | Local JSON only (`data/adaptive/creator_profiles/`) |
+| Influence mode | Always `assistive_only` — bounded influence weights [0.0, 0.30] |
+| Confidence | Increments on repeated preference selection, clamped to [0.0, 1.0] |
+| Render authority | Deterministic render engine always has final authority |
+
+### Learning signals
+
+| Signal | Source |
+|---|---|
+| `selected_creator_style` | Session context or `creator_style_adaptation.adapted_style` |
+| `selected_subtitle_style` | Session context or `subtitle_text_apply.subtitle_style` |
+| `selected_pacing_style` | Session context or `pacing.pacing_style` |
+| `selected_camera_style` | Session context or `camera_motion_apply.camera_behavior` |
+| `selected_duration_range` | Session context or derived from `selected_segments` duration |
+| `selected_variant_strategy` | Session context or `variant_selection.selected_variant_id` |
+| `export_completed` | Session context bool |
+
+### Adaptive influence behavior (bounded, assistive-only)
+
+| Influence | Condition | Max weight |
+|---|---|---|
+| `retrieval_ranking_weight` | style_confidence ≥ 0.20 | 0.15 |
+| `subtitle_enhancement_weight` | subtitle_confidence ≥ 0.20 | 0.20 |
+| `pacing_enhancement_weight` | pacing_confidence ≥ 0.20 | 0.20 |
+| `camera_enhancement_weight` | camera_confidence ≥ 0.20 | 0.20 |
+| `variant_ranking_weight` | export_history_count > 0 | 0.15 |
+
+### Forbidden adaptive profile keys (auto-stripped)
+
+`password`, `token`, `api_key`, `auth`, `subprocess`, `executable`,
+`ffmpeg_args`, `render_command`, `playback_speed`, `subtitle_timing`,
+`queue_priority`, `output_path`
+
+### Still intentionally blocked
+
+- **Unrestricted autonomous editing** — never executed
+- **FFmpeg mutation** — never touched
+- **playback_speed mutation** — never touched
+- **Subtitle timing rewrite** — never touched
+- **Executor override** — never performed
+- **Queue mutation** — never performed
+- **Internet scraping** — never performed
+- **Model fine-tuning** — never executed
+- **Cloud AI / external API** — not required
+- **GPU** — not required
+- **Internet** — not required
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_adaptive_profile_loaded` | Creator profile loaded from local JSON |
+| `ai_adaptive_profile_updated` | Creator profile saved after learning |
+| `ai_adaptive_learning_applied` | Learning signals applied to profile |
+| `ai_adaptive_learning_skipped` | No feedback signals found this session |
+
+### Phase compatibility
+
+- All Phase 1–41 behavior preserved
+- `AIEditPlan.adaptive_creator_intelligence` defaults to `{}` — backward compatible
+- Adaptive learning runs automatically when AI Director is enabled
+- No new required request fields — `ai_adaptive_profile_id` is optional

@@ -108,6 +108,7 @@ def apply_ai_render_influence(
         _report_clip_batch_planning(payload, edit_plan, report)
         _report_feature_enhancement(payload, edit_plan, report)
         _report_creator_retrieval(payload, edit_plan, report)
+        _report_adaptive_creator_intelligence(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1160,4 +1161,61 @@ def _report_creator_retrieval(payload: Any, edit_plan: Any, report: dict) -> Non
     logger.debug(
         "creator_retrieval_reported mode=%s matches=%d categories=%s",
         mode, len(matches), sorted(influence_categories),
+    )
+
+
+# ── Adaptive creator intelligence — assistive_only advisory in Phase 42 ──────
+
+def _report_adaptive_creator_intelligence(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report adaptive creator learning metadata — assistive_only in Phase 42.
+
+    No render execution. No FFmpeg altered. No playback_speed changed.
+    No subtitle timing rewritten. No executor override.
+    Adaptive influences are metadata-only and bounded.
+    """
+    aci = getattr(edit_plan, "adaptive_creator_intelligence", None)
+    if not isinstance(aci, dict) or not aci:
+        report["skipped"].append("adaptive_creator_intelligence:no_result")
+        return
+
+    available = aci.get("available", False)
+    enabled = aci.get("enabled", False)
+    mode = aci.get("learning_mode", "assistive_only")
+
+    learned = aci.get("learned_preferences", {}) or {}
+    influences = aci.get("adaptive_influences", {}) or {}
+    profile = aci.get("creator_profile", {}) or {}
+
+    style = profile.get("creator_style_preference", "")
+    subtitle = profile.get("preferred_subtitle_style", "")
+    pacing = profile.get("preferred_pacing_style", "")
+    camera = profile.get("preferred_camera_style", "")
+    history = learned.get("history", {}) or {}
+    selections = history.get("selections", 0)
+    exports = history.get("exports", 0)
+
+    retrieval_w = influences.get("retrieval_ranking_weight", 0.0)
+    subtitle_w = influences.get("subtitle_enhancement_weight", 0.0)
+    pacing_w = influences.get("pacing_enhancement_weight", 0.0)
+    camera_w = influences.get("camera_enhancement_weight", 0.0)
+
+    if not available:
+        report["skipped"].append("adaptive_creator_intelligence:unavailable_phase42")
+    elif not enabled:
+        report["skipped"].append(
+            f"adaptive_creator_intelligence:assistive_only_phase42"
+            f"(mode={mode},selections={selections})"
+        )
+    else:
+        report["skipped"].append(
+            f"adaptive_creator_intelligence:{mode}_phase42"
+            f"(style={style!r},subtitle={subtitle!r},pacing={pacing!r}"
+            f",camera={camera!r},selections={selections},exports={exports}"
+            f",retrieval_w={retrieval_w:.3f},subtitle_w={subtitle_w:.3f}"
+            f",pacing_w={pacing_w:.3f},camera_w={camera_w:.3f})"
+        )
+
+    logger.debug(
+        "adaptive_creator_intelligence_reported mode=%s enabled=%s style=%s selections=%d",
+        mode, enabled, style, selections,
     )

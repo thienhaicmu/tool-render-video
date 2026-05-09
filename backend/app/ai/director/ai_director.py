@@ -266,6 +266,15 @@ def _build_plan(
         plan.warnings.append(f"creator_retrieval_error:{type(exc).__name__}")
         logger.debug("ai_director_creator_retrieval_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 42: Adaptive Creator Intelligence ---
+    # Learns creator preferences over time from edit plan signals.
+    # Assistive-only: no FFmpeg, no playback_speed, no subtitle timing, no executor override.
+    try:
+        _attach_adaptive_creator_intelligence(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"adaptive_creator_intelligence_error:{type(exc).__name__}")
+        logger.debug("ai_director_adaptive_creator_intelligence_failed job_id=%s: %s", job_id, exc)
+
     # --- Phase 6: Explainability ---
     try:
         _attach_explainability(plan, job_id)
@@ -3491,6 +3500,113 @@ def _append_creator_retrieval_explainability(
             line = "Retrieval-based creator intelligence remains assistive-only"
             if not any("assistive-only" in str(l) for l in lines):
                 lines.append(line)
+
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Adaptive creator intelligence
+# ---------------------------------------------------------------------------
+
+def _attach_adaptive_creator_intelligence(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Build adaptive learning pack from edit plan signals and creator profile.
+
+    Assistive-only: influences metadata ranking only.
+    Never mutates FFmpeg, never overrides executor, never rewrites subtitle timing.
+    Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.adaptive.adaptive_learning import build_adaptive_learning_pack
+
+        logger.debug("ai_adaptive_creator_intelligence_started job_id=%s", job_id)
+
+        context: dict = {}
+        raw_profile_id = getattr(request, "ai_adaptive_profile_id", None)
+        if raw_profile_id:
+            context["profile_id"] = str(raw_profile_id)
+
+        pack = build_adaptive_learning_pack(plan, payload=request, context=context)
+        plan.adaptive_creator_intelligence = pack.to_dict()
+
+        if pack.enabled:
+            profile_dict = pack.creator_profile or {}
+            style = profile_dict.get("creator_style_preference", "")
+            subtitle = profile_dict.get("preferred_subtitle_style", "")
+            pacing = profile_dict.get("preferred_pacing_style", "")
+            camera = profile_dict.get("preferred_camera_style", "")
+
+            logger.info(
+                "ai_adaptive_learning_applied job_id=%s style=%s subtitle=%s pacing=%s camera=%s",
+                job_id, style, subtitle, pacing, camera,
+            )
+        else:
+            logger.debug("ai_adaptive_learning_skipped job_id=%s (no_signals)", job_id)
+
+        _append_adaptive_explainability(plan, pack.to_dict())
+
+    except Exception as exc:
+        plan.adaptive_creator_intelligence = {
+            "available": False,
+            "enabled": False,
+            "learning_mode": "assistive_only",
+            "creator_profile": {},
+            "learned_preferences": {},
+            "adaptive_influences": {},
+            "warnings": [f"adaptive_creator_intelligence_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_adaptive_creator_intelligence_failed job_id=%s: %s", job_id, exc)
+
+
+def _append_adaptive_explainability(
+    plan: "AIEditPlan",
+    adaptive_dict: dict,
+) -> None:
+    """Append compact adaptive intelligence lines to explainability. Never raises."""
+    try:
+        explainability = getattr(plan, "explainability", None)
+        if not isinstance(explainability, dict):
+            return
+        summary = explainability.get("summary")
+        if not isinstance(summary, dict):
+            return
+        lines = summary.get("summary_lines")
+        if not isinstance(lines, list):
+            return
+
+        enabled = adaptive_dict.get("enabled", False)
+        if not enabled:
+            return
+
+        learned = adaptive_dict.get("learned_preferences", {}) or {}
+        subtitle_style = learned.get("subtitle_style", "")
+        pacing_style = learned.get("pacing_style", "")
+        camera_style = learned.get("camera_style", "")
+
+        if subtitle_style:
+            line = "Creator subtitle preferences learned"
+            if not any("subtitle preferences" in str(l) for l in lines):
+                lines.append(line)
+
+        if pacing_style:
+            line = "Adaptive creator preferences updated"
+            if not any("Adaptive creator preferences" in str(l) for l in lines):
+                lines.append(line)
+
+        if camera_style:
+            line = "Creator camera preferences learned"
+            if not any("camera preferences" in str(l) for l in lines):
+                lines.append(line)
+
+        line = "Adaptive creator intelligence remains assistive-only"
+        if not any("Adaptive creator intelligence" in str(l) for l in lines):
+            lines.append(line)
 
     except Exception:
         pass
