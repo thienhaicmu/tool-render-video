@@ -117,7 +117,7 @@
                 <span class="fieldLabel">Output Folder</span>
                 <div id="manual_output_folder" class="manualOutputRow">
                   <input class="fieldInput" id="manual_output_dir" placeholder="e.g. D:\videos\output">
-                  <button type="button" id="btn_pick_output_dir" class="btn btnSecondary" style="padding:0 14px;height:38px">📁 Choose</button>
+                  <button type="button" id="btn_pick_output_dir" class="secondaryButton pickActionBtn">📁 Choose</button>
                 </div>
                 <div class="sectionSubtitle" id="manual_output_dir_hint" style="margin-top:6px">All output saved here.</div>
               </label>
@@ -310,7 +310,7 @@
             <div class="rdBadge" id="rd_badge" data-state="idle">Idle</div>
             <div class="rdTitle" id="rd_title">Preparing render…</div>
           </div>
-          <button class="rdLogBtn" type="button" onclick="_collapseBottomPanel(false)">View Logs</button>
+          <button class="rdLogBtn" type="button" onclick="focusRenderLogPanel()">View Logs</button>
         </div>
         <div class="rdStep" id="render_active_title">Initializing…</div>
         <div class="rdSegBar" id="rd_seg_bar" hidden></div>

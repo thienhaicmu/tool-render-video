@@ -23,6 +23,16 @@ let _rcBenchmark = { jobId: '', logsLoaded: false, totalElapsedMs: 0, sceneDetec
 const RENDER_MONITOR_STALL_MS = 45000;
 let _queueStatusTimer = null;
 
+function mountRenderRuntimePanel() {
+  const activePanel = qs('render_active_panel');
+  const bottomPanel = qs('appBottomPanel');
+  if (!activePanel || !bottomPanel) return;
+  if (bottomPanel.dataset.runtimeMounted === '1') return;
+  bottomPanel.dataset.runtimeMounted = '1';
+  bottomPanel.classList.add('renderRuntimePanel');
+  activePanel.appendChild(bottomPanel);
+}
+
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
 function resetRenderSessionUi(){
   initRenderLogScrollBehavior();
@@ -2536,14 +2546,13 @@ async function rerunRenderJob(jobId) {
 }
 
 function focusBottomPanel() {
-  const panel = qs('appBottomPanel');
+  const panel = qs('render_active_panel') || qs('appBottomPanel');
   if (!panel) return;
-  if (typeof _collapseBottomPanel === 'function') _collapseBottomPanel(false);
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function focusRenderLogPanel() {
-  const panel = qs('appBottomPanel');
+  const panel = qs('render_active_panel') || qs('appBottomPanel');
   const logBox = qs('event_log_render');
   if (!panel || !logBox) return;
   setRenderLogsCollapsed(false);

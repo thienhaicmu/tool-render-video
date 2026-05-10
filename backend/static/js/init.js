@@ -34,6 +34,7 @@ if (qs('channel_code')) qs('channel_code').addEventListener('change', syncRender
 })();
 syncSourceModeUI();
 syncOutputModeUI();
+if (typeof mountRenderRuntimePanel === 'function') mountRenderRuntimePanel();
 renderYoutubeUrlBatch();
 setView('render');
 resetRenderSessionUi();

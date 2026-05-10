@@ -7568,17 +7568,53 @@
        forces every sidebar button full-width. The scoped ID+class selector
        below overrides that for the output-folder row only.
     ─────────────────────────────────────────────────────────────────────── */
-    #manual_output_folder.manualOutputRow {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+#manual_output_folder.manualOutputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-    #manual_output_folder.manualOutputRow input {
-      flex: 1;
-      min-width: 0;
-      width: auto;
-    }
+#field_source_video_path .actionsRow,
+#manual_output_folder.manualOutputRow {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+}
+
+#field_source_video_path .actionsRow .fieldInput,
+#manual_output_folder.manualOutputRow .fieldInput {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 40px;
+  height: 40px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+}
+
+#field_source_video_path .actionsRow button,
+#manual_output_folder.manualOutputRow button,
+.pickActionBtn {
+  flex: 0 0 auto;
+  min-width: 124px;
+  height: 40px;
+  padding: 0 16px !important;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+#manual_output_folder.manualOutputRow input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
 
     #manual_output_folder.manualOutputRow button {
       flex: 0 0 auto;
@@ -15190,6 +15226,202 @@ body.is-history-active #history_list {
   background: linear-gradient(135deg, rgba(245,158,11,.14) 0%, rgba(120,53,15,.07) 100%);
   box-shadow: 0 2px 16px rgba(245,158,11,.07);
 }
+
+/* Runtime panel migration: appBottomPanel is mounted inside render_active_panel.
+   Keep existing IDs/JS, remove the global bottom strip layout, and restyle only
+   in render runtime view. */
+.appShell {
+  grid-template-rows: 42px minmax(0, 1fr) 28px !important;
+}
+
+#render_active_panel {
+  padding: 14px 18px 18px !important;
+  gap: 14px !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel {
+  grid-column: auto !important;
+  grid-row: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: visible !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .abpCollapseBtn {
+  display: none !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .abpToolbar {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.3fr) minmax(220px, 1fr) auto !important;
+  gap: 14px !important;
+  align-items: center !important;
+  padding: 14px 16px !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 12px !important;
+  background: linear-gradient(180deg, rgba(17,24,39,.96), rgba(9,13,23,.96)) !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .abpToolbarJob,
+#render_active_panel > #appBottomPanel.renderRuntimePanel .abpToolbarProgress,
+#render_active_panel > #appBottomPanel.renderRuntimePanel .abpToolbarRight {
+  min-width: 0 !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .abpToolbarRight {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcBottom.rcActiveQueue {
+  display: block !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcAQMain {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 340px !important;
+  gap: 14px !important;
+  align-items: stretch !important;
+  grid-auto-rows: minmax(0, 1fr) !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel,
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
+  border: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 12px !important;
+  background: linear-gradient(180deg, rgba(17,24,39,.96), rgba(9,13,23,.96)) !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel {
+  display: flex !important;
+  flex-direction: column !important;
+  align-self: stretch !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-width: none !important;
+  overflow: visible !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcPanelHeader {
+  border-bottom: 1px solid rgba(255,255,255,.06) !important;
+  padding: 12px 14px !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+  gap: 12px !important;
+  padding: 0 !important;
+  align-content: start !important;
+  justify-items: stretch !important;
+  width: 100% !important;
+  overflow: visible !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid:has(> .rcQueueRow:only-child),
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid:has(> .emptyState:only-child) {
+  grid-template-columns: 1fr !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child,
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .emptyState:only-child {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  max-width: none !important;
+  justify-self: stretch !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child {
+  min-height: 132px !important;
+  padding: 14px 14px 12px !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcQueueTop {
+  align-items: flex-start !important;
+  margin-bottom: 12px !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcClipLabel {
+  font-size: 28px !important;
+  line-height: 1.1 !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcQueueBottom {
+  margin-top: 10px !important;
+  font-size: 12px !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcActiveCard {
+  margin: 0 !important;
+  border-radius: 10px !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcOutputPreview,
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcBenchmarkPanel,
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcComparePanel,
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueueGrid,
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcActiveCard {
+  margin: 0 14px 14px !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
+  display: flex !important;
+  flex-direction: column !important;
+  align-self: stretch !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  width: auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogStripHeader {
+  padding: 12px 14px !important;
+  border-bottom: 1px solid rgba(255,255,255,.06) !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogList,
+#render_active_panel > #appBottomPanel.renderRuntimePanel #event_log_render {
+  max-height: 620px !important;
+  min-height: 420px !important;
+  overflow-y: auto !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel.logsCollapsed .rcAQMain {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel.logsCollapsed .rcLogStrip.rcLogPanel {
+  display: none !important;
+}
+
+body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.renderRuntimePanel {
+  display: none !important;
+}
+
+@media (max-width: 1280px) {
+  #render_active_panel > #appBottomPanel.renderRuntimePanel .rcAQMain {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  #render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
+    min-height: 280px !important;
+  }
+}
 .renderCompletionBar[data-state="warning"] .renderCompletionMsg {
   color: #fbbf24;
 }
@@ -15903,3 +16135,81 @@ body.is-history-active #history_list {
 
 /* ── End Phase 8 AI Timeline Intelligence ────────────────────────────────── */
 
+
+/* Final override: render queue single-card analyze state */
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid:has(.rcQueueRow:only-child) {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  max-width: none !important;
+  justify-self: stretch !important;
+  min-height: 136px !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcQueueTop {
+  width: 100% !important;
+}
+
+/* Final override: render runtime layout and active analyze card */
+#render_active_panel {
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcBottom.rcActiveQueue {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcAQMain {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 340px !important;
+  gap: 14px !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  align-items: stretch !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel,
+#render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
+  align-self: stretch !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel #rc_active_card {
+  display: grid !important;
+  width: calc(100% - 28px) !important;
+  max-width: none !important;
+  margin: 14px !important;
+  min-height: 136px !important;
+}
+
+#render_active_panel > #appBottomPanel.renderRuntimePanel #rc_active_card .rcActiveTop,
+#render_active_panel > #appBottomPanel.renderRuntimePanel #rc_active_card .rcCardHeader {
+  width: 100% !important;
+}
+
+@media (max-width: 1280px) {
+  #render_active_panel > #appBottomPanel.renderRuntimePanel .rcAQMain {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) minmax(280px, 38%) !important;
+  }
+}
