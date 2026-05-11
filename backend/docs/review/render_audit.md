@@ -1026,3 +1026,150 @@ All bias weights are clamped `[0.0, 0.30]`.
 - Orchestrator runs automatically when AI Director is enabled
 - No new required request fields — all orchestrator inputs come from prior phase fields
 - All Phase 41–46 AI signal fields remain unchanged
+
+---
+
+## Phase 48 — Safe Controlled Influence Engine
+
+**Date:** 2026-05-11
+**Status:** Implemented
+**Module:** `app/ai/influence/` (7 files)
+
+### Summary
+
+Phase 48 implements a Safe Controlled Influence Engine that consumes the Phase 47 Multi-Signal Orchestration output and produces conservative, confidence-gated influence recommendations across four domains: subtitle style/density, camera motion, clip ranking, and market weights.
+
+**Influence is recommendation-only.** The render executor retains full authority. No render mutation occurs.
+
+### Architecture
+
+```
+Phase 47 multi_signal_orchestration
+         │
+         ▼
+  Safety Gate (evaluate_gate)
+  ├─ < 0.70  → blocked (no influence)
+  ├─ 0.70–0.85 → soft tier (density + smoothing only)
+  └─ > 0.85  → strong tier (all bias domains)
+         │
+         ├─ subtitle_bias.py   → style preset + density adjustment
+         ├─ camera_bias.py     → smoothing + stability + deadzone
+         ├─ ranking_bias.py    → priority bias + secondary sort
+         └─ market_weighting.py → per-platform weight biases
+         │
+         ▼
+  Unified safe_influence surface:
+  {
+    "subtitle_style_bias":   "clean_pro" | "viral_bold" | "boxed_caption" | ""
+    "subtitle_density_bias": "lighter" | "unchanged" | ""
+    "camera_motion_bias":    str (Phase 47 passthrough hint)
+    "ranking_priority_bias": "retention" | "creator_fit" | ... | ""
+  }
+```
+
+### Files
+
+| File | Role |
+|---|---|
+| `app/ai/influence/__init__.py` | Package marker |
+| `app/ai/influence/safety_gate.py` | Confidence tier classification (blocked/soft/strong) |
+| `app/ai/influence/subtitle_bias.py` | Subtitle style + density bias |
+| `app/ai/influence/camera_bias.py` | Camera smoothing + stability + deadzone bias |
+| `app/ai/influence/ranking_bias.py` | Clip output ranking priority bias |
+| `app/ai/influence/market_weighting.py` | Per-platform market weight biases |
+| `app/ai/influence/influence_engine.py` | Main entry point, assembles all domain biases |
+
+### Safety gate thresholds
+
+| Confidence | Tier | Allowed influence |
+|---|---|---|
+| < 0.70 | blocked | None — returns disabled immediately |
+| 0.70–0.85 | soft | Density bias + smoothing preference only |
+| > 0.85 | strong | All bias domains |
+
+### Market weight profiles
+
+| Market | hook_weight | retention_weight | energy_weight | readability | story | calm |
+|---|---|---|---|---|---|---|
+| viral_tiktok / tiktok | 1.0 | 0.9 | 0.8 | 0.2 | 0.3 | 0.0 |
+| youtube_shorts | 0.7 | 0.8 | 0.6 | 0.5 | 0.4 | 0.1 |
+| facebook_reels | 0.6 | 0.7 | 0.5 | 0.6 | 0.5 | 0.2 |
+| podcast | 0.1 | 0.4 | 0.1 | 1.0 | 0.7 | 0.9 |
+| educational | 0.2 | 0.5 | 0.2 | 1.0 | 0.8 | 0.7 |
+
+All biases bounded [0.0, 0.20] (conservative ceiling). Soft tier uses 0.6× multiplier.
+
+### Example output (strong tier, tiktok, confidence=0.92)
+
+```json
+{
+  "available": true,
+  "enabled": true,
+  "influence_mode": "safe_controlled",
+  "gate": {"passed": true, "tier": "strong", "confidence": 0.92, "reason": "strong_tier"},
+  "safe_influence": {
+    "subtitle_style_bias": "clean_pro",
+    "subtitle_density_bias": "lighter",
+    "camera_motion_bias": "smooth_subject",
+    "ranking_priority_bias": "retention"
+  },
+  "subtitle_bias":  {"available": true, "subtitle_style_bias": "clean_pro", ...},
+  "camera_bias":    {"available": true, "smoothing_preference": "prefer_smooth", ...},
+  "ranking_bias":   {"available": true, "ranking_priority_bias": "retention", ...},
+  "market_weights": {"available": true, "target_market": "tiktok", "hook_weight_bias": 0.2, ...},
+  "confidence": 0.92,
+  "explainability": [
+    "Safety gate passed — tier=strong confidence=0.92",
+    "Subtitle bias: style→clean_pro, density→lighter",
+    "Camera bias: motion→smooth_subject, smooth→prefer_smooth",
+    "Ranking bias: priority→retention",
+    "Market weights active for 'tiktok' platform"
+  ],
+  "warnings": []
+}
+```
+
+### Safety boundaries
+
+❌ No FFmpeg mutation
+❌ No render rewrite
+❌ No playback_speed mutation
+❌ No subtitle timing rewrite
+❌ No rerender
+❌ No executor override
+❌ No crop engine rewrite
+❌ No autonomous execution
+❌ No destructive pipeline changes
+
+All output fields are metadata/recommendation-only. Render executor retains full authority.
+
+### AIEditPlan field
+
+```python
+# Phase 48 — Safe controlled influence pack (populated by influence_engine module)
+safe_influence_pack: dict = field(default_factory=dict)
+```
+
+Defaults to `{}`. Backward compatible with all prior phases.
+
+### Render influence reporting
+
+Phase 48 safe influence pack is reported in `render_influence.py` via `_report_safe_influence_pack()`.
+- **Always** reports to `report["skipped"]` — never to `report["applied"]`
+- Metadata-only; no render execution logged
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_safe_influence_started` | Influence engine started for a job |
+| `ai_safe_influence_done` | Influence computed — logs confidence + tier |
+| `ai_safe_influence_skipped` | Gate blocked or no orchestration output |
+
+### Phase compatibility
+
+- All Phase 1–47 behavior preserved
+- `AIEditPlan.safe_influence_pack` defaults to `{}` — backward compatible
+- Influence engine runs after Phase 47 in `_build_plan`, consuming `multi_signal_orchestration`
+- No new required request fields
+- All Phase 41–47 AI signal fields remain unchanged

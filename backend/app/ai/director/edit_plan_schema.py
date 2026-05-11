@@ -188,6 +188,8 @@ class AIEditPlan:
     creator_preset_evolution: dict = field(default_factory=dict)
     # Phase 47 — Multi-signal AI render orchestration (populated by render_orchestrator module)
     multi_signal_orchestration: dict = field(default_factory=dict)
+    # Phase 48 — Safe controlled influence pack (populated by influence_engine module)
+    safe_influence_pack: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -277,4 +279,5 @@ class AIEditPlan:
             "render_quality_evaluation": dict(self.render_quality_evaluation),
             "creator_preset_evolution": dict(self.creator_preset_evolution),
             "multi_signal_orchestration": dict(self.multi_signal_orchestration),
+            "safe_influence_pack": dict(self.safe_influence_pack),
         }

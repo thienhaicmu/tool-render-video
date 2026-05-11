@@ -114,6 +114,7 @@ def apply_ai_render_influence(
         _report_render_quality_evaluation(payload, edit_plan, report)
         _report_creator_preset_evolution(payload, edit_plan, report)
         _report_multi_signal_orchestration(payload, edit_plan, report)
+        _report_safe_influence_pack(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1465,4 +1466,58 @@ def _report_multi_signal_orchestration(payload: Any, edit_plan: Any, report: dic
     logger.debug(
         "multi_signal_orchestration_reported mode=%s enabled=%s active=%d confidence=%.3f",
         mode, enabled, active, agg_conf,
+    )
+
+
+def _report_safe_influence_pack(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report safe influence pack metadata — safe_controlled in Phase 48.
+
+    No render execution. No FFmpeg altered. No playback_speed changed.
+    No subtitle timing rewritten. No executor override.
+    Influence is metadata-only and recommendation-only.
+    """
+    sip = getattr(edit_plan, "safe_influence_pack", None)
+    if not isinstance(sip, dict) or not sip:
+        report["skipped"].append("safe_influence_pack:no_result")
+        return
+
+    available = sip.get("available", False)
+    enabled = sip.get("enabled", False)
+    mode = sip.get("influence_mode", "safe_controlled")
+
+    if not available:
+        report["skipped"].append("safe_influence_pack:unavailable_phase48")
+        return
+
+    conf = float(sip.get("confidence") or 0.0)
+    gate = sip.get("gate") or {}
+    tier = str(gate.get("tier") or "")
+
+    if not enabled:
+        gate_reason = str(gate.get("reason") or "")
+        report["skipped"].append(
+            f"safe_influence_pack:{mode}_phase48"
+            f"(enabled=False,tier={tier!r},reason={gate_reason!r})"
+        )
+    else:
+        safe_inf = sip.get("safe_influence") or {}
+        subtitle_style = str(safe_inf.get("subtitle_style_bias") or "")
+        subtitle_density = str(safe_inf.get("subtitle_density_bias") or "")
+        camera = str(safe_inf.get("camera_motion_bias") or "")
+        ranking = str(safe_inf.get("ranking_priority_bias") or "")
+        market = str((sip.get("market_weights") or {}).get("target_market") or "")
+        report["skipped"].append(
+            f"safe_influence_pack:{mode}_phase48"
+            f"(tier={tier!r}"
+            f",confidence={round(conf, 3)}"
+            f",subtitle_style={subtitle_style!r}"
+            f",subtitle_density={subtitle_density!r}"
+            f",camera={camera!r}"
+            f",ranking={ranking!r}"
+            f",market={market!r})"
+        )
+
+    logger.debug(
+        "safe_influence_pack_reported mode=%s enabled=%s tier=%s confidence=%.3f",
+        mode, enabled, tier, conf,
     )

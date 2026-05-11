@@ -478,6 +478,15 @@ def _build_plan(
         plan.warnings.append(f"multi_signal_orchestration_error:{type(exc).__name__}")
         logger.debug("ai_director_multi_signal_orchestration_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 48: Safe Controlled Influence Engine ---
+    # Runs after Phase 47: consumes multi_signal_orchestration output.
+    # Safe influence only: no render mutation, no executor override, no FFmpeg.
+    try:
+        _attach_safe_influence_pack(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"safe_influence_pack_error:{type(exc).__name__}")
+        logger.debug("ai_director_safe_influence_pack_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4082,3 +4091,58 @@ def _attach_multi_signal_orchestration(
             "warnings": [f"multi_signal_orchestration_error:{type(exc).__name__}"],
         }
         logger.debug("ai_director_multi_signal_orchestration_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 48 — Safe Controlled Influence Engine attachment
+# ---------------------------------------------------------------------------
+
+def _attach_safe_influence_pack(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Compute safe controlled influence recommendations. Phase 48.
+
+    Consumes Phase 47 multi_signal_orchestration output and produces
+    conservative, confidence-gated influence recommendations.
+
+    Safe influence only: subtitle bias, camera motion bias, clip ranking bias,
+    market weight bias. Never mutates render output, never overrides executor,
+    never touches FFmpeg, playback_speed, or subtitle timing.
+    Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.influence.influence_engine import compute_safe_influence
+
+        logger.debug("ai_safe_influence_started job_id=%s", job_id)
+
+        context: dict = {}
+        target = getattr(request, "ai_target_market", None) or getattr(request, "ai_mode", None)
+        if target:
+            context["target_market"] = str(target)
+
+        result = compute_safe_influence(plan, payload=request, context=context)
+        plan.safe_influence_pack = result
+
+        if result.get("enabled"):
+            conf = float(result.get("confidence") or 0.0)
+            tier = str((result.get("gate") or {}).get("tier") or "")
+            logger.info(
+                "ai_safe_influence_done job_id=%s enabled=True "
+                "confidence=%.3f tier=%s",
+                job_id, conf, tier,
+            )
+        else:
+            logger.debug("ai_safe_influence_skipped job_id=%s", job_id)
+
+    except Exception as exc:
+        plan.safe_influence_pack = {
+            "available": False,
+            "enabled": False,
+            "influence_mode": "safe_controlled",
+            "warnings": [f"safe_influence_pack_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_safe_influence_pack_failed job_id=%s: %s", job_id, exc)
