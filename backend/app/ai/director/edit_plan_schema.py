@@ -200,6 +200,8 @@ class AIEditPlan:
     creator_preference_profile: dict = field(default_factory=dict)
     # Phase 51A — Safe strategy variant generator (populated by variant_generator module)
     strategy_variants: dict = field(default_factory=dict)
+    # Phase 51B — Variant evaluation engine (populated by variant_evaluator module)
+    variant_evaluation: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -295,4 +297,5 @@ class AIEditPlan:
             "creator_subtitle_influence": dict(self.creator_subtitle_influence),
             "creator_preference_profile": dict(self.creator_preference_profile),
             "strategy_variants": dict(self.strategy_variants),
+            "variant_evaluation": dict(self.variant_evaluation),
         }

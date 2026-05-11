@@ -534,6 +534,15 @@ def _build_plan(
         plan.warnings.append(f"strategy_variants_error:{type(exc).__name__}")
         logger.debug("ai_director_strategy_variants_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 51B: Variant Evaluation Engine ---
+    # Runs after Phase 51A: scores and ranks the generated strategy variants.
+    # Evaluation-only — best_variant_id is metadata advisory, never applied to render.
+    try:
+        _attach_variant_evaluation(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"variant_evaluation_error:{type(exc).__name__}")
+        logger.debug("ai_director_variant_evaluation_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4459,3 +4468,48 @@ def _attach_strategy_variants(
             "warnings":        [f"strategy_variants_error:{type(exc).__name__}"],
         }
         logger.debug("ai_director_strategy_variants_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 51B — Variant Evaluation Engine attachment
+# ---------------------------------------------------------------------------
+
+def _attach_variant_evaluation(
+    plan: "AIEditPlan",
+    job_id: str,
+) -> None:
+    """Score and rank Phase 51A strategy variants. Phase 51B.
+
+    Reads plan.strategy_variants (51A), creator_preference_profile (50D),
+    market_optimization_intelligence (44), and render_quality_evaluation (45).
+    Produces a deterministic ranked evaluation with best_variant_id.
+    Evaluation-only — best_variant_id is advisory metadata, never applied to render.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.strategy_variants.variant_evaluator import evaluate_strategy_variants
+
+        logger.debug("ai_variant_evaluation_started job_id=%s", job_id)
+        pack = evaluate_strategy_variants(plan)
+        plan.variant_evaluation = pack.to_dict()
+
+        best     = pack.best_variant_id or "none"
+        conf     = pack.confidence
+        n_ranked = len(pack.ranking)
+        logger.info(
+            "ai_variant_evaluation_done job_id=%s best=%s ranked=%d confidence=%.2f",
+            job_id, best, n_ranked, float(conf),
+        )
+
+    except Exception as exc:
+        plan.variant_evaluation = {
+            "available":       False,
+            "best_variant_id": None,
+            "ranking":         [],
+            "confidence":      0.0,
+            "reasoning":       [],
+            "evaluation_mode": "evaluation_only",
+            "warnings":        [f"variant_evaluation_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_variant_evaluation_failed job_id=%s: %s", job_id, exc)

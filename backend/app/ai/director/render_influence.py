@@ -120,6 +120,7 @@ def apply_ai_render_influence(
         _report_creator_subtitle_influence(payload, edit_plan, report)
         _report_creator_preference_profile(payload, edit_plan, report)
         _report_strategy_variants(payload, edit_plan, report)
+        _report_variant_evaluation(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1725,4 +1726,37 @@ def _report_strategy_variants(payload: Any, edit_plan: Any, report: dict) -> Non
     logger.debug(
         "strategy_variants_reported count=%d ids=[%s]",
         count, ids_str,
+    )
+
+
+def _report_variant_evaluation(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report Phase 51B variant evaluation metadata.
+
+    Phase 51B always reports to report["skipped"] — evaluation-only metadata,
+    no execution path activated, no best variant applied to render.
+    """
+    ve = getattr(edit_plan, "variant_evaluation", None) or {}
+
+    if not ve.get("available"):
+        report["skipped"].append("variant_evaluation:not_evaluated_phase51b")
+        return
+
+    best_id  = ve.get("best_variant_id") or "none"
+    conf     = float(ve.get("confidence") or 0.0)
+    ranking  = ve.get("ranking") or []
+    n_ranked = len(ranking)
+    top_score = ranking[0].get("score", 0) if ranking else 0
+
+    # Phase 51B always reports to skipped — evaluation advisory metadata only.
+    report["skipped"].append(
+        f"variant_evaluation:evaluated_phase51b"
+        f"(best={best_id!r}"
+        f",ranked={n_ranked}"
+        f",top_score={top_score}"
+        f",confidence={round(conf, 3)})"
+    )
+
+    logger.debug(
+        "variant_evaluation_reported best=%s ranked=%d top_score=%d confidence=%.3f",
+        best_id, n_ranked, top_score, conf,
     )

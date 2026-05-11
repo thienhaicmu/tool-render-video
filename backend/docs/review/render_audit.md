@@ -2129,3 +2129,157 @@ Executor authority is fully preserved. All variant output is metadata-only.
 - Variant generation runs automatically when AI Director is enabled
 - No new required request fields
 - All Phase 50A/B/C/D outputs unchanged
+
+---
+
+## Phase 51B — Variant Evaluation Engine
+
+**Date:** 2026-05-11
+**Status:** Implemented
+**Branch:** feature/product-polish
+**Module:** `app/ai/strategy_variants/` (2 new files)
+
+### Mission
+
+Deterministically score and rank the safe strategy variants produced by Phase 51A using four
+signal dimensions: creator_fit, market_fit, quality_fit, and safety_fit.  Produces a ranked
+evaluation with `best_variant_id`.  Evaluation-only — no variant is selected for execution,
+no render pipeline is altered, no executor authority is affected.  Phase 51C will consume
+this evaluation for reasoning and recommendation.
+
+### Scoring dimensions and weights
+
+| Dimension | Weight | Signal sources |
+|---|---|---|
+| `creator_fit` | 35% | Phase 50D `creator_preference_profile.confidence` + style/motion alignment |
+| `quality_fit` | 30% | Phase 45 `render_quality_evaluation.output_scores` averages |
+| `market_fit`  | 20% | Phase 44 `market_optimization_intelligence.market_profile.confidence` + style match |
+| `safety_fit`  | 15% | Variant confidence + stability/crop indicators |
+
+All dimension scores are integers in `[0, 100]`. Composite = weighted sum, rounded to int.
+
+### Per-variant scoring behavior
+
+| Variant | creator_fit primary source | market_fit primary source | quality_fit primary source |
+|---|---|---|---|
+| `creator_safe` | Profile confidence × 80 + style/motion bonuses (max ~95) | Style/camera alignment with market target | Density/stability alignment + avg quality scores |
+| `market_balanced` | Style/camera overlap with creator profile (base 45) | Market profile confidence × 70 + 15 | Moderate quality alignment |
+| `quality_focused` | Readability/smoothness overlap with creator (base 40) | Market readability fit (educational/podcast bonus) | Directly from `avg_sub × 0.55 + avg_cam × 0.45` × 65 + 25 |
+
+Safety fit:
+- Base 75 (all Phase 51A variants are structurally safe)
+- +15 if variant confidence ≥ 0.75, +8 if ≥ 0.50, +3 if > 0
+- +5 if stability_priority = "high", +3 if crop_aggressiveness = "low"
+
+### Ranking sort order (deterministic)
+
+1. `score` descending (composite weighted score)
+2. `safety_fit` descending (tie-break 1)
+3. `creator_fit` descending (tie-break 2)
+4. Variant order ascending (`creator_safe`=0, `market_balanced`=1, `quality_focused`=2)
+
+No random ordering. No timestamp tiebreaking.
+
+### Example output
+
+```json
+{
+  "available": true,
+  "best_variant_id": "quality_focused",
+  "ranking": [
+    {
+      "id": "quality_focused",
+      "score": 82,
+      "creator_fit": 70,
+      "market_fit": 65,
+      "quality_fit": 90,
+      "safety_fit": 93,
+      "confidence": 0.77,
+      "reasoning": [
+        "Optimizes subtitle readability and camera smoothness signals",
+        "Highest dimension: quality_fit=90"
+      ]
+    }
+  ],
+  "confidence": 0.78,
+  "reasoning": [
+    "'quality_focused' ranked first with composite score=82",
+    "Score gap to runner-up 'creator_safe': 4 point(s)",
+    "Creator preference profile available — creator_fit dimension active"
+  ],
+  "evaluation_mode": "evaluation_only",
+  "warnings": []
+}
+```
+
+### Fallback behavior
+
+| Condition | Behavior |
+|---|---|
+| `strategy_variants` missing or empty | Returns unavailable pack with warning |
+| `creator_preference_profile` missing | creator_fit uses conservative defaults (35–40) |
+| `market_optimization_intelligence` missing | market_fit returns conservative 45 for all variants |
+| `render_quality_evaluation` missing | quality_fit uses structural indicators only |
+| `edit_plan is None` | Returns unavailable pack with warning `no_edit_plan` |
+| Any exception | Never raises — returns safe fallback pack |
+
+### Files
+
+| File | Role |
+|---|---|
+| `app/ai/strategy_variants/evaluation_schema.py` | `VariantScore`, `VariantEvaluationPack` dataclasses |
+| `app/ai/strategy_variants/variant_evaluator.py` | `evaluate_strategy_variants()` public API |
+| `app/ai/director/edit_plan_schema.py` | `variant_evaluation: dict` field added |
+| `app/ai/director/ai_director.py` | Phase 51B block + `_attach_variant_evaluation()` |
+| `app/ai/director/render_influence.py` | `_report_variant_evaluation()` reporting |
+| `tests/test_ai_phase51b_variant_evaluation.py` | 80+ tests across 13 classes |
+
+### Integration points
+
+- **Reads from:** `strategy_variants` (51A), `creator_preference_profile` (50D),
+  `market_optimization_intelligence` (44), `render_quality_evaluation` (45)
+- **Writes to:** `plan.variant_evaluation` (Phase 51B output)
+- **Runs after:** Phase 51A in AI Director orchestration
+- **Future consumers:** Phase 51C reasoning and recommendation layer
+
+### Render influence reporting
+
+Phase 51B always reports to `report["skipped"]` — evaluation advisory metadata only.
+
+```
+variant_evaluation:evaluated_phase51b(best='creator_safe',ranked=3,top_score=82,confidence=0.78)
+variant_evaluation:not_evaluated_phase51b   ← when pack unavailable
+```
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_variant_evaluation_started` | Evaluation engine started for a job |
+| `ai_variant_evaluation_done` | Evaluation complete — logs best, ranked count, confidence |
+| `ai_director_variant_evaluation_failed` | Evaluation failed, safe fallback attached |
+
+### Safety boundaries
+
+❌ No render pipeline rewrite
+❌ No FFmpeg mutation
+❌ No subtitle timing rewrite
+❌ No motion_crop rewrite
+❌ No playback_speed mutation
+❌ No executor override
+❌ No autonomous execution
+❌ No best variant application to render
+❌ No variant execution triggered
+❌ No cloud AI / external API required
+❌ No GPU required
+❌ No internet required
+
+Executor authority is fully preserved. `best_variant_id` is advisory metadata only.
+
+### Phase compatibility
+
+- All Phase 1–51A behaviour preserved
+- `AIEditPlan.variant_evaluation` defaults to `{}` — backward compatible
+- Evaluation runs automatically when AI Director is enabled
+- No new required request fields
+- All Phase 51A `strategy_variants` output unchanged
