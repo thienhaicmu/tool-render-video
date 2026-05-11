@@ -1299,3 +1299,80 @@ All existing `result_json` fields are preserved unchanged. `ai_ux` is additive o
 - `ai_ux` defaults to `{"available": False}` on any error — never blocks render
 - No new required request fields
 - Backward compatible: consumers that don't read `ai_ux` are unaffected
+
+---
+
+## Phase 49B — Safe AI Strategy Panel
+
+**Date:** 2026-05-11
+**Status:** Implemented
+**Files:** `static/js/render-ui.js`, `static/css/app.css`
+
+### Summary
+
+Phase 49B adds a compact, premium AI Strategy Panel to the Render Result surface using safe DOM injection. The panel renders Phase 49A `ai_ux` metadata in a creator-friendly format — no technical terminology, no raw JSON, no debug output.
+
+### Placement
+
+```
+render_output_panel
+├── renderOutputHeader  (Clips title, sort, Open Folder)
+├── render_output_path  (output dir / error info)
+├── mvRenderSummary     (viral render summary)
+├── cs_preview_area     (center-stage preview)
+├── [aiux_strategy_panel]  ← INJECTED HERE (above cards)
+└── render_output_list  (clip cards grid)
+```
+
+### What the panel shows
+
+| Section | Content |
+|---|---|
+| Header | "AI Strategy" label + confidence badge (e.g. "87% confidence") |
+| Chips | Creator style pill + target market pill |
+| Recommended | Up to 5 human-readable strategy bullets (✓ prefix) |
+| Why | Up to 4 AI reasoning lines (• prefix, muted) |
+| AI Adjustments | Up to 4 Phase 48 influence items applied (✦ prefix) |
+
+### CSS isolation
+
+All new CSS uses `.aiux-*` prefix namespace — zero bleed into existing layout:
+- `.aiux-panel`, `.aiux-header`, `.aiux-title`, `.aiux-conf-badge`
+- `.aiux-body`, `.aiux-chips`, `.aiux-chip`, `.aiux-chip--style`, `.aiux-chip--market`
+- `.aiux-section`, `.aiux-section-label`, `.aiux-list`, `.aiux-list-item`
+- `.aiux-check`, `.aiux-check--applied`, `.aiux-bullet`, `.aiux-list--why`
+
+No global overrides. No `!important` abuse. No broad selectors.
+
+### DOM injection approach
+
+- `document.createElement('div')` + `innerHTML` + `insertBefore()` (never innerHTML on existing container)
+- Panel inserted immediately before `render_output_list` inside `render_output_panel`
+- Fully idempotent: re-renders remove the old panel before injecting
+- `clearRenderOutputPanel()` calls `resetAiStrategyPanel()` — cleans up on reset
+
+### Fallback safety
+
+- If `ai_ux` is missing or `available=false`: silent no-op, no panel rendered
+- If `render_output_panel` or `render_output_list` not found: silent no-op
+- Entire injection wrapped in try/catch: never throws, never crashes render result
+- Individual sections (chips, recs, why, adjustments) only render when non-empty
+
+### Preserved IDs (unchanged)
+
+`render_output_panel`, `render_output_list`, `render_output_badge`, `render_output_path`, `mvRenderSummary`, `cs_preview_area`, all `clipCard` elements, all `rc_*` and `abp_*` IDs.
+
+### Safety contract
+
+❌ No render pipeline modification
+❌ No websocket flow modification
+❌ No upload/editor/download/history flow modification
+❌ No DOM renaming or movement of existing elements
+❌ No global CSS overrides
+❌ No index.html modification required
+
+### Phase compatibility
+
+- All Phase 1–49A behavior preserved
+- Panel only appears when `ai_ux.available === true` in result_json
+- Backward compatible: jobs without `ai_ux` show no panel (silent)

@@ -3435,6 +3435,7 @@ function hideRenderOutputPanel() {
 
 function clearRenderOutputPanel() {
   _selectedClipPaths = new Set();
+  resetAiStrategyPanel();
   const _sumEl = qs('mvRenderSummary');
   if (_sumEl) { _sumEl.innerHTML = ''; _sumEl.hidden = true; }
   const list = qs('render_output_list');
@@ -3727,6 +3728,7 @@ function populateRenderOutputPanel(job, parts) {
     }
   }
 
+  renderAiStrategyPanel(job);
   showRenderOutputPanel();
   renderBottomActiveQueue(job, computeProgressSummary(items), items);
   const panel = qs('render_output_panel');
@@ -3969,4 +3971,115 @@ function resetAiInsightsPanel() {
   if (body) body.innerHTML = '';
   const badge = qs('ai_conf_badge');
   if (badge) { badge.textContent = '–'; badge.dataset.level = ''; }
+}
+
+// ── Phase 49B — AI Strategy Panel ────────────────────────────────────────────
+
+function renderAiStrategyPanel(job) {
+  // Inject a compact AI Strategy panel above the clips list inside render_output_panel.
+  // Silently no-ops when ai_ux is missing or unavailable.
+  try {
+    const container = qs('render_output_panel');
+    const listEl    = qs('render_output_list');
+    if (!container || !listEl) return;
+
+    // Remove any previously injected panel (idempotent on re-render)
+    const existing = document.getElementById('aiux_strategy_panel');
+    if (existing) existing.remove();
+
+    let aiUx = null;
+    try {
+      const raw = job && job.result_json;
+      const result = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+      aiUx = result && result.ai_ux;
+    } catch (_) {}
+
+    if (!aiUx || !aiUx.available) return;
+
+    const strategy       = aiUx.strategy        || {};
+    const safeInfluence  = aiUx.safe_influence   || {};
+    const bestExport     = aiUx.best_export      || {};
+
+    const confidence  = strategy.confidence;
+    const confPct     = (confidence != null && confidence !== '') ? Math.round(Number(confidence) * 100) : null;
+    const confLevel   = confPct != null ? (confPct >= 80 ? 'high' : confPct >= 60 ? 'mid' : 'low') : '';
+    const creatorStyle = String(strategy.creator_style || '').trim();
+    const targetMarket = String(strategy.target_market || '').trim();
+    const recs    = Array.isArray(strategy.recommendations) ? strategy.recommendations.slice(0, 5) : [];
+    const why     = Array.isArray(strategy.why)             ? strategy.why.slice(0, 4)             : [];
+    const applied  = !!safeInfluence.applied;
+    const infItems = (applied && Array.isArray(safeInfluence.items)) ? safeInfluence.items.slice(0, 4) : [];
+
+    let h = '<div id="aiux_strategy_panel" class="aiux-panel" role="region" aria-label="AI Strategy">';
+
+    // ── Header ──────────────────────────────────────────────────────────────
+    h += '<div class="aiux-header">';
+    h += '<span class="aiux-title">AI Strategy</span>';
+    if (confPct != null) {
+      h += `<span class="aiux-conf-badge" data-level="${confLevel}">${confPct}% confidence</span>`;
+    }
+    h += '</div>';
+
+    // ── Body ────────────────────────────────────────────────────────────────
+    h += '<div class="aiux-body">';
+
+    // Creator style + target market chips
+    if (creatorStyle || targetMarket) {
+      h += '<div class="aiux-chips">';
+      if (creatorStyle) h += `<span class="aiux-chip aiux-chip--style">${esc(creatorStyle)}</span>`;
+      if (targetMarket) h += `<span class="aiux-chip aiux-chip--market">${esc(targetMarket)}</span>`;
+      h += '</div>';
+    }
+
+    // Recommended actions
+    if (recs.length) {
+      h += '<div class="aiux-section">';
+      h += '<div class="aiux-section-label">Recommended</div>';
+      h += '<ul class="aiux-list">';
+      recs.forEach(function(r) {
+        h += `<li class="aiux-list-item"><span class="aiux-check">✓</span>${esc(String(r))}</li>`;
+      });
+      h += '</ul></div>';
+    }
+
+    // Why (reasoning)
+    if (why.length) {
+      h += '<div class="aiux-section">';
+      h += '<div class="aiux-section-label">Why</div>';
+      h += '<ul class="aiux-list aiux-list--why">';
+      why.forEach(function(w) {
+        h += `<li class="aiux-list-item"><span class="aiux-bullet">•</span>${esc(String(w))}</li>`;
+      });
+      h += '</ul></div>';
+    }
+
+    // AI adjustments applied (Phase 48 influence)
+    if (applied && infItems.length) {
+      h += '<div class="aiux-section">';
+      h += '<div class="aiux-section-label">AI Adjustments</div>';
+      h += '<ul class="aiux-list">';
+      infItems.forEach(function(item) {
+        h += `<li class="aiux-list-item"><span class="aiux-check aiux-check--applied">✦</span>${esc(String(item))}</li>`;
+      });
+      h += '</ul></div>';
+    }
+
+    h += '</div>'; // .aiux-body
+    h += '</div>'; // .aiux-panel
+
+    const wrap = document.createElement('div');
+    wrap.innerHTML = h;
+    const panelNode = wrap.firstElementChild;
+    if (panelNode) container.insertBefore(panelNode, listEl);
+  } catch (_) {
+    // Silently ignore — never crash the render result
+  }
+}
+
+function resetAiStrategyPanel() {
+  // Remove injected AI Strategy panel when output panel is cleared.
+  try {
+    const panel = document.getElementById('aiux_strategy_panel');
+    if (panel) panel.remove();
+  } catch (_) {}
 }
