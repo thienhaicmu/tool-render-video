@@ -1820,3 +1820,141 @@ creator_subtitle_influence:influence_ready_phase50c(tier=...,preset_bias=...,bia
 - Influence runs automatically when AI Director is enabled
 - No new required request fields
 - All Phase 50A subtitle preference inference unchanged
+
+---
+
+## Phase 50D — Creator Preference Fusion
+
+**Date:** 2026-05-11
+**Status:** Implemented
+**Branch:** feature/product-polish
+
+### Mission
+
+Unify all creator intelligence signals from Phase 50A/B/C into one deterministic, creator-first
+preference profile.  Improves creator consistency across subtitle and camera dimensions.
+Prepares unified profile for Phase 51 Multi-Variant AI Evaluation Engine.
+
+### Unified creator preference profile shape
+
+```json
+{
+  "available": true,
+  "subtitle": {
+    "style": "clean_pro",
+    "density": "medium",
+    "keyword_emphasis": "moderate",
+    "readability_priority": "high"
+  },
+  "camera": {
+    "motion_style": "smooth_subject",
+    "crop_aggressiveness": "low",
+    "stability_priority": "high",
+    "smoothness_priority": "high"
+  },
+  "clip": {
+    "content_style": "educational",
+    "ranking_preference": "retention"
+  },
+  "market_alignment": {
+    "target_market": "educational",
+    "market_fit": "high"
+  },
+  "quality_alignment": {
+    "readability_priority": "high",
+    "smoothness_priority": "high"
+  },
+  "confidence": 0.86,
+  "reasoning": [
+    "Subtitle: style='clean_pro' emphasis='moderate' (creator:'clean_pro', market:'clean_pro')",
+    "Camera: motion='smooth_subject' stability='high' (creator:'smooth_subject', market:'smooth_subject')",
+    "Content style: 'educational' (ranking_preference='retention')",
+    "Quality: readability='high' smoothness='high'",
+    "Fused confidence=0.86 from 3 signal(s) (sub=0.85, cam=0.82, exports=6)"
+  ],
+  "conflicts_resolved": [],
+  "warnings": []
+}
+```
+
+### Fusion signal sources and weights
+
+| Source | Field | Weight |
+|---|---|---|
+| Phase 50A subtitle preference | `creator_subtitle_preference.subtitle_preference.confidence` | ~35% |
+| Phase 50B camera preference | `creator_camera_preference.camera_preference.confidence` | ~35% |
+| Phase 43 creator feedback exports | `creator_feedback_intelligence.learned_feedback_patterns.total_exports` | ~30% |
+
+Confidence = weighted average of available signals + amplifier (exports ≥ 5 → +0.005/export, capped at +0.05).
+
+### Conflict resolution philosophy
+
+Creator history always beats market signal when creator preference is known.  When creator signal
+is absent, market signal is used as fallback.  Conservative compromise applies only for emphasis:
+if creator prefers less emphasis than market, the profile nudges one step toward market.
+
+| Scenario | Resolution |
+|---|---|
+| Creator `clean_pro` + viral market | `clean_pro` (creator wins) |
+| Creator `subtle` emphasis + `strong` market | `moderate` (one-step compromise) |
+| Creator `strong` emphasis + `subtle` market | `strong` (creator wins) |
+| Creator `static_center` + dynamic market | `smooth_subject` (safe middle) |
+| Creator `smooth_subject` + dynamic market | `smooth_subject` (creator wins) |
+| Creator unknown + any market | market signal used as fallback |
+
+### Files
+
+| File | Role |
+|---|---|
+| `app/ai/creator_fusion/__init__.py` | Package marker |
+| `app/ai/creator_fusion/fusion_schema.py` | CreatorPreferenceProfile + 5 sub-dataclasses |
+| `app/ai/creator_fusion/fusion_engine.py` | `fuse_creator_preferences()` public API |
+| `app/ai/creator_fusion/conflict_resolver.py` | 3 conflict resolution functions |
+| `app/ai/director/edit_plan_schema.py` | `creator_preference_profile: dict` field added |
+| `app/ai/director/ai_director.py` | Phase 50D block + `_attach_creator_preference_profile()` |
+| `app/ai/director/render_influence.py` | `_report_creator_preference_profile()` reporting |
+| `tests/test_ai_phase50d_creator_fusion.py` | 85+ tests across 14 classes |
+
+### Integration points
+
+- **Reads from:** `creator_subtitle_preference` (50A), `creator_camera_preference` (50B),
+  `creator_feedback_intelligence` (43), `market_optimization_intelligence` (44),
+  `render_quality_evaluation` (45)
+- **Writes to:** `plan.creator_preference_profile` (Phase 50D output)
+- **Runs after:** Phase 50C in AI Director orchestration
+- **Future consumers:** Phase 51 Multi-Variant AI Evaluation Engine
+
+### Render influence reporting
+
+Phase 50D always reports to `report["skipped"]` — advisory metadata only.
+```
+creator_preference_profile:fused_phase50d(subtitle_style=...,camera_motion=...,content_style=...,market_fit=...,confidence=...,conflicts_resolved=N)
+```
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_creator_preference_fusion_started` | Fusion engine started |
+| `ai_creator_preference_fusion_done` | Fusion complete — logs style, motion, confidence, conflicts |
+| `creator_preference_profile_error` | Fusion failed, safe fallback attached |
+
+### Safety guarantees
+
+- No render pipeline rewrite
+- No subtitle timing rewrite
+- No motion_crop rewrite
+- No FFmpeg mutation
+- No executor override
+- No autonomous execution
+- Deterministic — same inputs always produce same output
+- Never raises — always returns safe default profile
+- `creator_preference_profile` defaults to `{}` — backward compatible
+
+### Phase compatibility
+
+- All Phase 1–50C behaviour preserved
+- `AIEditPlan.creator_preference_profile` defaults to `{}` — backward compatible
+- Fusion runs automatically when AI Director is enabled
+- No new required request fields
+- All Phase 50A/B/C outputs unchanged

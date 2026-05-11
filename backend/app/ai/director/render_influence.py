@@ -118,6 +118,7 @@ def apply_ai_render_influence(
         _report_creator_subtitle_preference(payload, edit_plan, report)
         _report_creator_camera_preference(payload, edit_plan, report)
         _report_creator_subtitle_influence(payload, edit_plan, report)
+        _report_creator_preference_profile(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1653,4 +1654,45 @@ def _report_creator_subtitle_influence(payload: Any, edit_plan: Any, report: dic
     logger.debug(
         "creator_subtitle_influence_reported tier=%s preset_bias=%s density_nudge=%s emphasis_delta=%.3f",
         tier, bias, nudge, emp_delta,
+    )
+
+
+def _report_creator_preference_profile(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report unified creator preference fusion metadata — fused_phase50d in Phase 50D.
+
+    No render execution. No subtitle engine rewrite. No motion_crop rewrite.
+    No FFmpeg altered. No executor override.
+    Creator preference fusion is advisory metadata only.
+    """
+    cpp = getattr(edit_plan, "creator_preference_profile", None)
+    if not isinstance(cpp, dict) or not cpp:
+        report["skipped"].append("creator_preference_profile:no_result_phase50d")
+        return
+
+    available = cpp.get("available", False)
+    if not available:
+        report["skipped"].append("creator_preference_profile:unavailable_phase50d")
+        return
+
+    sub_style      = (cpp.get("subtitle") or {}).get("style",        "unknown")
+    cam_motion     = (cpp.get("camera")   or {}).get("motion_style", "unknown")
+    content_style  = (cpp.get("clip")     or {}).get("content_style","unknown")
+    market_fit     = (cpp.get("market_alignment") or {}).get("market_fit", "unknown")
+    confidence     = float(cpp.get("confidence") or 0.0)
+    n_conflicts    = len(cpp.get("conflicts_resolved") or [])
+
+    # Phase 50D always reports to skipped — advisory metadata only, no execution path.
+    report["skipped"].append(
+        f"creator_preference_profile:fused_phase50d"
+        f"(subtitle_style={sub_style!r}"
+        f",camera_motion={cam_motion!r}"
+        f",content_style={content_style!r}"
+        f",market_fit={market_fit!r}"
+        f",confidence={round(confidence, 3)}"
+        f",conflicts_resolved={n_conflicts})"
+    )
+
+    logger.debug(
+        "creator_preference_profile_reported subtitle=%s camera=%s confidence=%.3f conflicts=%d",
+        sub_style, cam_motion, confidence, n_conflicts,
     )

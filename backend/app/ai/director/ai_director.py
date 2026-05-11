@@ -515,6 +515,15 @@ def _build_plan(
         plan.warnings.append(f"creator_subtitle_influence_error:{type(exc).__name__}")
         logger.debug("ai_director_creator_subtitle_influence_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 50D: Creator Preference Fusion ---
+    # Runs after Phase 50A/B/C: fuses all creator intelligence into one unified profile.
+    # Advisory metadata only — no render mutation, no executor override.
+    try:
+        _attach_creator_preference_profile(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_preference_profile_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_preference_profile_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4338,3 +4347,54 @@ def _attach_creator_subtitle_influence(
             "warnings": [f"creator_subtitle_influence_error:{type(exc).__name__}"],
         }
         logger.debug("ai_director_creator_subtitle_influence_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 50D — Creator Preference Fusion attachment
+# ---------------------------------------------------------------------------
+
+def _attach_creator_preference_profile(
+    plan: "AIEditPlan",
+    job_id: str,
+) -> None:
+    """Fuse all creator intelligence signals into a unified preference profile. Phase 50D.
+
+    Reads Phase 50A subtitle preference, Phase 50B camera preference, Phase 50C
+    influence pack, and Phase 42–47 metadata.  Advisory metadata only — no render
+    mutation, no executor override.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.creator_fusion.fusion_engine import fuse_creator_preferences
+
+        logger.debug("ai_creator_preference_fusion_started job_id=%s", job_id)
+        profile = fuse_creator_preferences(plan)
+        plan.creator_preference_profile = profile.to_dict()
+
+        sub_style   = profile.subtitle.style
+        cam_motion  = profile.camera.motion_style
+        conf        = profile.confidence
+        n_conflicts = len(profile.conflicts_resolved)
+        logger.info(
+            "ai_creator_preference_fusion_done job_id=%s"
+            " subtitle_style=%s camera_motion=%s confidence=%.2f conflicts=%d",
+            job_id, sub_style, cam_motion, float(conf), n_conflicts,
+        )
+
+    except Exception as exc:
+        plan.creator_preference_profile = {
+            "available": False,
+            "subtitle":  {"style": "unknown", "density": "unknown",
+                          "keyword_emphasis": "unknown", "readability_priority": "unknown"},
+            "camera":    {"motion_style": "unknown", "crop_aggressiveness": "unknown",
+                          "stability_priority": "unknown", "smoothness_priority": "unknown"},
+            "clip":      {"content_style": "unknown", "ranking_preference": "unknown"},
+            "market_alignment":  {"target_market": "unknown", "market_fit": "unknown"},
+            "quality_alignment": {"readability_priority": "unknown", "smoothness_priority": "unknown"},
+            "confidence":         0.0,
+            "reasoning":          [],
+            "conflicts_resolved": [],
+            "warnings": [f"creator_preference_profile_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_preference_profile_failed job_id=%s: %s", job_id, exc)
