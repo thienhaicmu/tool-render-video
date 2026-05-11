@@ -3660,6 +3660,19 @@ function populateRenderOutputPanel(job, parts) {
   const _jobPayload = getCurrentJobPayload(job);
   const _aspectRaw = String(_jobPayload?.aspect_ratio || '9:16');
   const _dataAspect = ['9:16', '3:4', '4:5', '1:1', '16:9'].includes(_aspectRaw) ? _aspectRaw : '9:16';
+
+  // Phase 49C — Parse best export reasons once, before card loop
+  let _bestExportWhy = [];
+  try {
+    const _rawResult = job && job.result_json;
+    const _resultObj = _rawResult ? (typeof _rawResult === 'string' ? JSON.parse(_rawResult) : _rawResult) : {};
+    const _aiUx = _resultObj && _resultObj.ai_ux;
+    if (_aiUx && _aiUx.available && _aiUx.best_export && _aiUx.best_export.enabled) {
+      const _why = Array.isArray(_aiUx.best_export.why) ? _aiUx.best_export.why : [];
+      _bestExportWhy = _why.map(w => String(w || '').trim()).filter(Boolean).slice(0, 3);
+    }
+  } catch (_) {}
+
   list.innerHTML = all.map((p) => {
     const partNo = Number(p.part_no || 0);
     const st = String(p?.status || '').toLowerCase();
@@ -3712,6 +3725,7 @@ function populateRenderOutputPanel(job, parts) {
         </div>
         ${rk.reason ? `<div class="clipCardReason">${esc(rk.reason.length > 64 ? rk.reason.slice(0, 61) + '…' : rk.reason)}</div>` : ''}
         ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
+        ${rk.isBest && _bestExportWhy.length ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">✓</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}
         <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}</div>
       </div>
     </div>`;

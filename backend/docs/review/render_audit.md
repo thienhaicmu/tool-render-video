@@ -1376,3 +1376,81 @@ No global overrides. No `!important` abuse. No broad selectors.
 - All Phase 1–49A behavior preserved
 - Panel only appears when `ai_ux.available === true` in result_json
 - Backward compatible: jobs without `ai_ux` show no panel (silent)
+
+---
+
+## Phase 49C — Best Export Explanation on Output Cards
+
+**Date:** 2026-05-11
+**Status:** Implemented
+**Files:** `static/js/render-ui.js` (+18 lines), `static/css/app.css` (+50 lines)
+
+### Summary
+
+Phase 49C adds a compact "Why this output?" explanation block inside the best output card. It reads `ai_ux.best_export.why` reasons from the Phase 49A metadata contract and injects them inside the card body when the card is flagged `isBest` and reasons are available.
+
+### Detection logic
+
+```
+rk.isBest === true          (existing ranking flag — not recomputed)
+AND _bestExportWhy.length > 0  (reasons parsed from ai_ux.best_export.why)
+```
+
+- `rk.isBest` comes from existing `_rankMap(job)` — no new ranking logic
+- `ai_ux.best_export.enabled` must be `true` to populate reasons
+- Max 3 reasons shown, filtered for non-empty strings
+- All other cards: no change
+
+### Card structure (best card only)
+
+```
+clipCard.isBestClip
+  ├─ clipCardThumbWrap
+  │    ├─ [video thumbnail]
+  │    ├─ clipCardBestFlag ("Best")   ← existing — unchanged
+  │    └─ clipCardDurTag (duration)
+  └─ clipCardBody
+       ├─ clipCardTitle
+       ├─ clipCardScoreRow
+       ├─ clipCardReason (if any)
+       ├─ [aiux-best-export]           ← NEW (injected only on best card)
+       │    ├─ aiux-best-title "Why this output?"
+       │    └─ aiux-best-reasons
+       │         ├─ ✓ Strong hook
+       │         ├─ ✓ High subtitle readability
+       │         └─ ✓ Best creator fit
+       └─ clipCardActions (Preview · Download · Folder)
+```
+
+### CSS isolation
+
+All new CSS uses `.aiux-best-*` prefix:
+`.aiux-best-export`, `.aiux-best-title`, `.aiux-best-reasons`, `.aiux-best-reason`, `.aiux-best-check`
+
+No global selectors. No overrides to `.clipCard`, `.clipCardBody`, `.clipCardActions`, or any existing class.
+
+### Fallback behavior
+
+| Condition | Result |
+|---|---|
+| `ai_ux` missing or `available: false` | `_bestExportWhy = []` → no section |
+| `best_export.enabled` is false | `_bestExportWhy = []` → no section |
+| `best_export.why` is empty | no section |
+| `rk.isBest` is false | no section |
+| JSON parse error | caught silently, `_bestExportWhy = []` |
+
+### Safety contract
+
+❌ No render pipeline modification
+❌ No card action changes (Preview/Download/Folder unchanged)
+❌ No existing badge duplication (`clipCardBestFlag` preserved as-is)
+❌ No DOM renaming or movement
+❌ No global CSS overrides
+❌ No index.html modification
+
+### Phase compatibility
+
+- All Phase 49B AI Strategy Panel behavior preserved
+- All Phase 1–49A behavior preserved
+- Jobs without `ai_ux` show no explanation (silent fallback)
+- Non-best cards entirely unchanged
