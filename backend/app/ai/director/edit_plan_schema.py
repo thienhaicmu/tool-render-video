@@ -212,6 +212,8 @@ class AIEditPlan:
     hook_quality_v2: dict = field(default_factory=dict)
     # Phase 52D — Unified quality score v2 (populated by unified_quality_evaluator module)
     render_quality_v2: dict = field(default_factory=dict)
+    # Phase 53A — Knowledge injection foundation (populated by knowledge_pack_retriever module)
+    knowledge_injection: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -313,4 +315,5 @@ class AIEditPlan:
             "camera_quality_v2": dict(self.camera_quality_v2),
             "hook_quality_v2": dict(self.hook_quality_v2),
             "render_quality_v2": dict(self.render_quality_v2),
+            "knowledge_injection": dict(self.knowledge_injection),
         }

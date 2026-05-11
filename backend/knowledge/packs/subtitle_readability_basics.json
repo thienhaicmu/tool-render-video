@@ -1,0 +1,31 @@
+{
+  "id": "subtitle_readability_basics",
+  "domain": "subtitle",
+  "title": "Subtitle Readability Basics",
+  "version": 1,
+  "tags": ["subtitle", "readability", "mobile", "short_form"],
+  "rules": [
+    {
+      "id": "two_line_mobile_safe",
+      "title": "Prefer one to two subtitle lines on mobile",
+      "description": "Short mobile videos are easier to read when subtitles remain compact. Long lines reduce readability on small screens.",
+      "applies_to": ["short_form", "mobile", "tiktok"],
+      "recommendation": {
+        "subtitle_density_bias": "medium",
+        "line_count_preference": 2
+      },
+      "confidence": 0.8
+    },
+    {
+      "id": "keyword_emphasis_hooks",
+      "title": "Emphasise hook keywords in subtitles",
+      "description": "Highlighting 1-2 key words per subtitle segment improves attention retention during the opening hook window.",
+      "applies_to": ["hook", "short_form", "mobile"],
+      "recommendation": {
+        "keyword_emphasis": true,
+        "max_emphasized_words": 2
+      },
+      "confidence": 0.75
+    }
+  ]
+}

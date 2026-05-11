@@ -126,6 +126,7 @@ def apply_ai_render_influence(
         _report_camera_quality_v2(payload, edit_plan, report)
         _report_hook_quality_v2(payload, edit_plan, report)
         _report_render_quality_v2(payload, edit_plan, report)
+        _report_knowledge_injection(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1977,4 +1978,39 @@ def _report_render_quality_v2(payload: Any, edit_plan: Any, report: dict) -> Non
         "render_quality_v2_reported overall=%d confidence=%.3f "
         "subtitle=%d camera=%d hook=%d creator=%d market=%d strategy=%d",
         overall, conf, subtitle, camera, hook, creator, market, strategy,
+    )
+
+
+def _report_knowledge_injection(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report knowledge injection metadata — advisory_only in Phase 53A.
+
+    No render mutation. No executor override. No autonomous execution.
+    Knowledge context is metadata-only; it informs but never executes.
+    """
+    ki = getattr(edit_plan, "knowledge_injection", None)
+    if not isinstance(ki, dict) or not ki:
+        report["skipped"].append("knowledge_injection:no_result_phase53a")
+        return
+
+    available = bool(ki.get("available", False))
+    matches   = int(len(ki.get("matches") or []))
+    conf      = float(ki.get("confidence") or 0.0)
+    domains   = ",".join(sorted(ki.get("domains") or []))
+
+    if not available and matches == 0:
+        report["skipped"].append("knowledge_injection:no_signal_phase53a")
+        return
+
+    # Phase 53A always reports to skipped — advisory metadata only.
+    report["skipped"].append(
+        f"knowledge_injection:evaluated_phase53a"
+        f"(available={available}"
+        f",matches={matches}"
+        f",confidence={round(conf, 3)}"
+        f",domains=[{domains}])"
+    )
+
+    logger.debug(
+        "knowledge_injection_reported available=%s matches=%d confidence=%.3f domains=%s",
+        available, matches, conf, domains,
     )

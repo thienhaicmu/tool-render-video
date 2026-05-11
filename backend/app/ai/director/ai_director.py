@@ -592,6 +592,15 @@ def _build_plan(
         plan.warnings.append(f"render_quality_v2_error:{type(exc).__name__}")
         logger.debug("ai_director_unified_quality_v2_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 53A: Knowledge Injection Foundation ---
+    # Runs after Phase 52D: builds knowledge context from active quality signals.
+    # Advisory only — no render mutation, no executor override, no autonomous execution.
+    try:
+        _attach_knowledge_injection(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"knowledge_injection_error:{type(exc).__name__}")
+        logger.debug("ai_director_knowledge_injection_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4809,3 +4818,25 @@ def _attach_unified_quality_v2(
             "reasoning":      [],
         }
         logger.debug("ai_director_unified_quality_v2_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 53A — Knowledge Injection Foundation helper
+# ---------------------------------------------------------------------------
+
+def _attach_knowledge_injection(plan: "AIEditPlan", job_id: str) -> None:
+    """Retrieve context-aware knowledge and attach to plan.knowledge_injection.
+
+    Advisory only — informs; never mutates render parameters.
+    """
+    from app.ai.knowledge.knowledge_pack_retriever import retrieve_knowledge_context
+    result = retrieve_knowledge_context(plan)
+    plan.knowledge_injection = result.get("knowledge_context", {})
+    ctx = plan.knowledge_injection
+    logger.debug(
+        "ai_knowledge_injection_done job_id=%s available=%s matches=%d confidence=%.2f",
+        job_id,
+        ctx.get("available", False),
+        len(ctx.get("matches") or []),
+        float(ctx.get("confidence") or 0.0),
+    )

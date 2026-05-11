@@ -3072,3 +3072,64 @@ except Exception:
     SentenceTransformer = None
 
 *End of audit. No code was modified. All file:line references are based on direct reads performed during this session.*
+
+---
+
+# Phase 53A — Knowledge Injection Foundation
+
+**Date:** 2026-05-11
+**Status:** Complete — evaluation/advisory only
+
+## Summary
+
+Phase 53A introduces a deterministic, local-only knowledge injection foundation. Knowledge packs are curated JSON files loaded at runtime; the retriever scores them by domain and tag overlap and attaches a `KnowledgeContext` to the edit plan. All outputs are advisory metadata — no render mutation, no executor override, no autonomous execution.
+
+## New Files
+
+| File | Purpose |
+|---|---|
+| `backend/knowledge/packs/subtitle_readability_basics.json` | Seed knowledge pack (domain: subtitle, 2 rules) |
+| `backend/app/ai/knowledge/knowledge_pack_schema.py` | Pack schema dataclasses + validation helpers + fallback |
+| `backend/app/ai/knowledge/knowledge_pack_loader.py` | Local JSON pack loader, deterministic sort |
+| `backend/app/ai/knowledge/knowledge_pack_retriever.py` | Domain/tag retrieval engine + context builder |
+| `backend/tests/test_ai_phase53a_knowledge_injection.py` | 76 tests across 13 classes |
+
+## Modified Files
+
+| File | Change |
+|---|---|
+| `backend/app/ai/director/edit_plan_schema.py` | Added `knowledge_injection: dict` field + `to_dict()` entry |
+| `backend/app/ai/director/ai_director.py` | Added Phase 53A orchestration block + `_attach_knowledge_injection()` helper |
+| `backend/app/ai/director/render_influence.py` | Added `_report_knowledge_injection()` to chain (always → `skipped`) |
+
+## Safety Contract
+
+- Local only — no internet, no cloud API, no vector DB, no embeddings
+- Never raises — all public functions wrapped in try/except with fallback returns
+- Deterministic — same inputs always produce the same output
+- Bounded — `_MAX_MATCHES=20`, `_MAX_REASONING=5`, `max_results` param on retriever
+- Advisory only — knowledge informs, never executes; all phase reports to `skipped`, never `applied`
+- Pack content is data only — no executable code, no arbitrary Python imports triggered by packs
+
+## Retrieval Scoring
+
+```
+score = domain_match (2 pts if domain matches) + tag_overlap (1 pt per shared tag)
+sort  = (-score, pack_id, rule_id) for full determinism on ties
+```
+
+## Context Builder Signal Sources
+
+| Signal | Domain activated | Tags added |
+|---|---|---|
+| `subtitle_quality_v2.overall > 0` or `confidence > 0` | subtitle | subtitle, readability |
+| `camera_quality_v2.overall > 0` or `confidence > 0` | camera | camera |
+| `hook_quality_v2.overall > 0` or `confidence > 0` | hook | hook |
+| `pacing.pacing_style` in (upbeat, fast, dynamic) | — | short_form |
+| `pacing.energy_level >= 0.60` | — | mobile |
+| `market_optimization_intelligence.target_market` | — | market string |
+
+## Test Results
+
+- Focused: **76/76** passed
+- Full regression: **4232/4232** passed (0 regressions)
