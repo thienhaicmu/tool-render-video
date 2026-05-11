@@ -2365,3 +2365,142 @@ best_strategy_reasoning:no_recommendation_phase51c
 - Reasoning runs automatically when AI Director is enabled
 - No new required request fields
 - All Phase 51A/51B outputs unchanged
+
+---
+
+## Phase 52A — Subtitle Quality Intelligence v2
+
+**Date:** 2026-05-11
+**Status:** Implemented
+
+### Mission
+
+Make subtitle quality scoring significantly smarter by evaluating 5 quality dimensions
+and 2 risk scores using only existing plan metadata.  Evaluation-only — no subtitle
+mutation, no timing rewrite, no ASS rewrite, no render pipeline rewrite, no executor
+override.
+
+### Quality dimensions
+
+| Dimension | Weight | Description |
+|---|---|---|
+| `mobile_readability` | 25% | Density, line count, mobile viewing comfort |
+| `subtitle_balance` | 20% | Line balance, pacing consistency, density consistency |
+| `keyword_emphasis_quality` | 15% | Emphasis targeting, highlight usage, overuse/underuse risk |
+| `safe_zone_fit` | 20% | Margin fit, TikTok/mobile UI overlap risk, placement safety |
+| `creator_fit` | 20% | Creator preference alignment (Phase 50A/C/D) |
+
+### Risk scores
+
+| Score | Description |
+|---|---|
+| `overload_risk` | Subtitle overload probability — lower is better |
+| `fatigue_risk` | Viewer reading fatigue probability — lower is better |
+
+Risk scores reduce overall score conservatively: each 10-pt average risk reduces
+overall by ~1.2 pts.
+
+### Output shape
+
+```json
+{
+  "subtitle_quality_v2": {
+    "mobile_readability": 87,
+    "subtitle_balance": 81,
+    "keyword_emphasis_quality": 84,
+    "safe_zone_fit": 92,
+    "creator_fit": 88,
+    "overload_risk": 10,
+    "fatigue_risk": 15,
+    "overall": 86,
+    "confidence": 0.84,
+    "reasoning": [
+      "Subtitle density is comfortable for mobile viewing",
+      "Subtitle pacing and emphasis are well balanced",
+      "Subtitle style aligns with your creator preferences"
+    ]
+  }
+}
+```
+
+### Fallback (all inputs missing)
+
+```json
+{
+  "subtitle_quality_v2": {
+    "mobile_readability": 0,
+    "subtitle_balance": 0,
+    "keyword_emphasis_quality": 0,
+    "safe_zone_fit": 0,
+    "creator_fit": 0,
+    "overload_risk": 0,
+    "fatigue_risk": 0,
+    "overall": 0,
+    "confidence": 0.0,
+    "reasoning": []
+  }
+}
+```
+
+### Metadata sources consumed
+
+- Phase 17: `subtitle_execution` — density, emphasis, regions, beat sync
+- Phase 32: `subtitle_text_apply` — text optimization signals
+- Phase 44: `market_optimization_intelligence` — target market, subtitle market bias
+- Phase 46: `creator_preset_evolution` — preset maturity signal
+- Phase 50A: `creator_subtitle_preference` — style, density, emphasis preference + confidence
+- Phase 50C: `creator_subtitle_influence` — tier, bias, emphasis delta, mobile nudge
+- Phase 50D: `creator_preference_profile` — unified profile subtitle field
+- Phase 4: `pacing` — BPM, energy level for fatigue scoring
+
+### Files introduced / modified
+
+| File | Purpose |
+|---|---|
+| `app/ai/subtitle_quality/__init__.py` | Package marker |
+| `app/ai/subtitle_quality/subtitle_quality_schema.py` | `SubtitleQualityV2` dataclass + weights + fallback |
+| `app/ai/subtitle_quality/subtitle_quality_scorer.py` | 7 deterministic dimension scorers + confidence |
+| `app/ai/subtitle_quality/subtitle_quality_evaluator.py` | `evaluate_subtitle_quality_v2()` public API + reasoning |
+| `app/ai/director/edit_plan_schema.py` | `subtitle_quality_v2: dict` field added |
+| `app/ai/director/ai_director.py` | Phase 52A block + `_attach_subtitle_quality_v2()` |
+| `app/ai/director/render_influence.py` | `_report_subtitle_quality_v2()` reporting |
+| `tests/test_ai_phase52a_subtitle_quality_v2.py` | Tests across 10 classes |
+
+### Data flow
+
+- **Reads from:** `subtitle_execution` (17), `subtitle_text_apply` (32), `market_optimization_intelligence` (44), `creator_preset_evolution` (46), `creator_subtitle_preference` (50A), `creator_subtitle_influence` (50C), `creator_preference_profile` (50D), `pacing` (4)
+- **Writes to:** `plan.subtitle_quality_v2`
+- **Runs after:** Phase 51C in AI Director orchestration
+- **Future consumers:** UI quality dashboard, variant scoring enrichment
+
+### Render influence reporting
+
+Phase 52A always reports to `report["skipped"]` — evaluation advisory metadata only.
+
+```
+subtitle_quality_v2:evaluated_phase52a(overall=86,confidence=0.84,mobile=87,...)
+subtitle_quality_v2:no_result_phase52a
+subtitle_quality_v2:no_signal_phase52a
+```
+
+### Safety boundaries (still intentionally blocked)
+
+❌ No subtitle timing rewrite
+❌ No subtitle segmentation rewrite
+❌ No ASS generation rewrite
+❌ No transcription mutation
+❌ No FFmpeg mutation
+❌ No render pipeline rewrite
+❌ No playback_speed mutation
+❌ No executor override
+❌ No autonomous execution
+❌ No cloud AI / external API required
+❌ No GPU required
+
+### Backward compatibility
+
+- All Phase 1–51C behaviour preserved
+- `AIEditPlan.subtitle_quality_v2` defaults to `{}` — backward compatible
+- Evaluation runs automatically when AI Director is enabled
+- No new required request fields
+- All existing quality fields (Phase 45 `render_quality_evaluation`) unchanged

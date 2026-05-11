@@ -122,6 +122,7 @@ def apply_ai_render_influence(
         _report_strategy_variants(payload, edit_plan, report)
         _report_variant_evaluation(payload, edit_plan, report)
         _report_best_strategy_reasoning(payload, edit_plan, report)
+        _report_subtitle_quality_v2(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1790,4 +1791,51 @@ def _report_best_strategy_reasoning(payload: Any, edit_plan: Any, report: dict) 
     logger.debug(
         "best_strategy_reasoning_reported selected=%s strength=%s confidence=%.3f",
         selected_id, strength, conf,
+    )
+
+
+def _report_subtitle_quality_v2(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report subtitle quality v2 evaluation metadata — evaluation_only in Phase 52A.
+
+    No subtitle mutation. No timing rewrite. No ASS rewrite.
+    No FFmpeg mutation. No render pipeline rewrite. No executor override.
+    All scores are metadata-only and bounded 0–100.
+    """
+    sqv2 = getattr(edit_plan, "subtitle_quality_v2", None)
+    if not isinstance(sqv2, dict) or not sqv2:
+        report["skipped"].append("subtitle_quality_v2:no_result_phase52a")
+        return
+
+    overall  = int(sqv2.get("overall") or 0)
+    conf     = float(sqv2.get("confidence") or 0.0)
+    mobile   = int(sqv2.get("mobile_readability") or 0)
+    balance  = int(sqv2.get("subtitle_balance") or 0)
+    emphasis = int(sqv2.get("keyword_emphasis_quality") or 0)
+    safe_z   = int(sqv2.get("safe_zone_fit") or 0)
+    creator  = int(sqv2.get("creator_fit") or 0)
+    overload = int(sqv2.get("overload_risk") or 0)
+    fatigue  = int(sqv2.get("fatigue_risk") or 0)
+
+    if overall == 0 and conf == 0.0:
+        report["skipped"].append("subtitle_quality_v2:no_signal_phase52a")
+        return
+
+    # Phase 52A always reports to skipped — evaluation advisory metadata only.
+    report["skipped"].append(
+        f"subtitle_quality_v2:evaluated_phase52a"
+        f"(overall={overall}"
+        f",confidence={round(conf, 3)}"
+        f",mobile={mobile}"
+        f",balance={balance}"
+        f",emphasis={emphasis}"
+        f",safe_zone={safe_z}"
+        f",creator_fit={creator}"
+        f",overload_risk={overload}"
+        f",fatigue_risk={fatigue})"
+    )
+
+    logger.debug(
+        "subtitle_quality_v2_reported overall=%d confidence=%.3f mobile=%d "
+        "balance=%d emphasis=%d safe_zone=%d creator=%d overload=%d fatigue=%d",
+        overall, conf, mobile, balance, emphasis, safe_z, creator, overload, fatigue,
     )

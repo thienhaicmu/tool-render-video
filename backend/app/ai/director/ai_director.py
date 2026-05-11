@@ -552,6 +552,16 @@ def _build_plan(
         plan.warnings.append(f"best_strategy_reasoning_error:{type(exc).__name__}")
         logger.debug("ai_director_best_strategy_reasoning_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 52A: Subtitle Quality Intelligence v2 ---
+    # Runs after Phase 51C: all subtitle, creator preference, and market signals are available.
+    # Evaluation-only — no subtitle mutation, no timing rewrite, no ASS rewrite,
+    # no FFmpeg mutation, no render pipeline rewrite, no executor override.
+    try:
+        _attach_subtitle_quality_v2(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"subtitle_quality_v2_error:{type(exc).__name__}")
+        logger.debug("ai_director_subtitle_quality_v2_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4567,3 +4577,53 @@ def _attach_best_strategy_reasoning(
             "warnings":                [f"best_strategy_reasoning_error:{type(exc).__name__}"],
         }
         logger.debug("ai_director_best_strategy_reasoning_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 52A — Subtitle Quality Intelligence v2 attachment
+# ---------------------------------------------------------------------------
+
+def _attach_subtitle_quality_v2(
+    plan: "AIEditPlan",
+    job_id: str,
+) -> None:
+    """Evaluate subtitle quality across 5 dimensions + 2 risk scores. Phase 52A.
+
+    Reads subtitle execution, creator preference, market, and quality signals.
+    Produces deterministic quality metadata: per-dimension scores, risk scores,
+    overall weighted score, confidence, and creator-facing reasoning.
+    Evaluation-only — no subtitle mutation, no timing rewrite, no executor override.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.subtitle_quality.subtitle_quality_evaluator import evaluate_subtitle_quality_v2
+
+        logger.debug("ai_subtitle_quality_v2_started job_id=%s", job_id)
+        result = evaluate_subtitle_quality_v2(plan)
+
+        # result is {"subtitle_quality_v2": {...}}
+        plan.subtitle_quality_v2 = result.get("subtitle_quality_v2", {})
+
+        sqv2    = plan.subtitle_quality_v2
+        overall = sqv2.get("overall", 0)
+        conf    = sqv2.get("confidence", 0.0)
+        logger.info(
+            "ai_subtitle_quality_v2_done job_id=%s overall=%d confidence=%.2f",
+            job_id, overall, float(conf),
+        )
+
+    except Exception as exc:
+        plan.subtitle_quality_v2 = {
+            "mobile_readability":       0,
+            "subtitle_balance":         0,
+            "keyword_emphasis_quality": 0,
+            "safe_zone_fit":            0,
+            "creator_fit":              0,
+            "overload_risk":            0,
+            "fatigue_risk":             0,
+            "overall":                  0,
+            "confidence":               0.0,
+            "reasoning":                [],
+        }
+        logger.debug("ai_director_subtitle_quality_v2_failed job_id=%s: %s", job_id, exc)
