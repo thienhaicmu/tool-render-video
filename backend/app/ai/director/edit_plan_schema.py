@@ -206,6 +206,8 @@ class AIEditPlan:
     best_strategy_reasoning: dict = field(default_factory=dict)
     # Phase 52A — Subtitle quality intelligence v2 (populated by subtitle_quality_evaluator module)
     subtitle_quality_v2: dict = field(default_factory=dict)
+    # Phase 52B — Camera quality intelligence v2 (populated by camera_quality_evaluator module)
+    camera_quality_v2: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -304,4 +306,5 @@ class AIEditPlan:
             "variant_evaluation": dict(self.variant_evaluation),
             "best_strategy_reasoning": dict(self.best_strategy_reasoning),
             "subtitle_quality_v2": dict(self.subtitle_quality_v2),
+            "camera_quality_v2": dict(self.camera_quality_v2),
         }

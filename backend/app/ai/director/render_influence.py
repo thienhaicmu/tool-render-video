@@ -123,6 +123,7 @@ def apply_ai_render_influence(
         _report_variant_evaluation(payload, edit_plan, report)
         _report_best_strategy_reasoning(payload, edit_plan, report)
         _report_subtitle_quality_v2(payload, edit_plan, report)
+        _report_camera_quality_v2(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1838,4 +1839,49 @@ def _report_subtitle_quality_v2(payload: Any, edit_plan: Any, report: dict) -> N
         "subtitle_quality_v2_reported overall=%d confidence=%.3f mobile=%d "
         "balance=%d emphasis=%d safe_zone=%d creator=%d overload=%d fatigue=%d",
         overall, conf, mobile, balance, emphasis, safe_z, creator, overload, fatigue,
+    )
+
+
+def _report_camera_quality_v2(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report camera quality v2 evaluation metadata — evaluation_only in Phase 52B.
+
+    No motion_crop rewrite. No tracking rewrite. No scene detection mutation.
+    No FFmpeg mutation. No render pipeline rewrite. No executor override.
+    All scores are metadata-only and bounded 0–100.
+    """
+    cqv2 = getattr(edit_plan, "camera_quality_v2", None)
+    if not isinstance(cqv2, dict) or not cqv2:
+        report["skipped"].append("camera_quality_v2:no_result_phase52b")
+        return
+
+    overall    = int(cqv2.get("overall") or 0)
+    conf       = float(cqv2.get("confidence") or 0.0)
+    jitter     = int(cqv2.get("micro_jitter_risk") or 0)
+    whip_pan   = int(cqv2.get("whip_pan_risk") or 0)
+    smoothness = int(cqv2.get("crop_smoothness") or 0)
+    stability  = int(cqv2.get("subject_stability") or 0)
+    continuity = int(cqv2.get("scene_continuity") or 0)
+    creator    = int(cqv2.get("creator_fit") or 0)
+
+    if overall == 0 and conf == 0.0:
+        report["skipped"].append("camera_quality_v2:no_signal_phase52b")
+        return
+
+    # Phase 52B always reports to skipped — evaluation advisory metadata only.
+    report["skipped"].append(
+        f"camera_quality_v2:evaluated_phase52b"
+        f"(overall={overall}"
+        f",confidence={round(conf, 3)}"
+        f",jitter_risk={jitter}"
+        f",whip_pan_risk={whip_pan}"
+        f",smoothness={smoothness}"
+        f",stability={stability}"
+        f",continuity={continuity}"
+        f",creator_fit={creator})"
+    )
+
+    logger.debug(
+        "camera_quality_v2_reported overall=%d confidence=%.3f jitter=%d whip_pan=%d "
+        "smoothness=%d stability=%d continuity=%d creator=%d",
+        overall, conf, jitter, whip_pan, smoothness, stability, continuity, creator,
     )

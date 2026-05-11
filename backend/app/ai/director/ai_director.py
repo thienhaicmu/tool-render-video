@@ -562,6 +562,16 @@ def _build_plan(
         plan.warnings.append(f"subtitle_quality_v2_error:{type(exc).__name__}")
         logger.debug("ai_director_subtitle_quality_v2_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 52B: Camera Quality Intelligence v2 ---
+    # Runs after Phase 52A: all camera, creator preference, and market signals are available.
+    # Evaluation-only — no motion_crop rewrite, no tracking rewrite, no scene detection
+    # mutation, no FFmpeg mutation, no render pipeline rewrite, no executor override.
+    try:
+        _attach_camera_quality_v2(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"camera_quality_v2_error:{type(exc).__name__}")
+        logger.debug("ai_director_camera_quality_v2_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4627,3 +4637,53 @@ def _attach_subtitle_quality_v2(
             "reasoning":                [],
         }
         logger.debug("ai_director_subtitle_quality_v2_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 52B — Camera Quality Intelligence v2 attachment
+# ---------------------------------------------------------------------------
+
+def _attach_camera_quality_v2(
+    plan: "AIEditPlan",
+    job_id: str,
+) -> None:
+    """Evaluate camera quality across 4 dimensions + 2 risk scores. Phase 52B.
+
+    Reads camera_motion_apply, creator_camera_preference, creator_preference_profile,
+    market, beat_visual_execution, and quality signals.
+    Produces deterministic quality metadata: per-dimension scores, risk scores,
+    overall weighted score, confidence, and creator-facing reasoning.
+    Evaluation-only — no motion_crop rewrite, no tracking rewrite, no executor override.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.camera_quality.camera_quality_evaluator import evaluate_camera_quality_v2
+
+        logger.debug("ai_camera_quality_v2_started job_id=%s", job_id)
+        result = evaluate_camera_quality_v2(plan)
+
+        # result is {"camera_quality_v2": {...}}
+        plan.camera_quality_v2 = result.get("camera_quality_v2", {})
+
+        cqv2    = plan.camera_quality_v2
+        overall = cqv2.get("overall", 0)
+        conf    = cqv2.get("confidence", 0.0)
+        logger.info(
+            "ai_camera_quality_v2_done job_id=%s overall=%d confidence=%.2f",
+            job_id, overall, float(conf),
+        )
+
+    except Exception as exc:
+        plan.camera_quality_v2 = {
+            "micro_jitter_risk": 0,
+            "whip_pan_risk":     0,
+            "crop_smoothness":   0,
+            "subject_stability": 0,
+            "scene_continuity":  0,
+            "creator_fit":       0,
+            "overall":           0,
+            "confidence":        0.0,
+            "reasoning":         [],
+        }
+        logger.debug("ai_director_camera_quality_v2_failed job_id=%s: %s", job_id, exc)

@@ -2504,3 +2504,143 @@ subtitle_quality_v2:no_signal_phase52a
 - Evaluation runs automatically when AI Director is enabled
 - No new required request fields
 - All existing quality fields (Phase 45 `render_quality_evaluation`) unchanged
+
+---
+
+## Phase 52B — Camera Quality Intelligence v2
+
+**Date:** 2026-05-11
+**Status:** Implemented
+
+### Mission
+
+Make camera quality scoring significantly smarter by evaluating 4 quality dimensions
+and 2 risk scores using only existing plan metadata.  Evaluation-only — no motion_crop
+rewrite, no tracking rewrite, no scene detection mutation, no FFmpeg mutation, no
+executor override.
+
+### Quality dimensions
+
+| Dimension | Weight | Description |
+|---|---|---|
+| `crop_smoothness` | 25% | Crop motion smoothness (blends Phase 45 signal at 30%) |
+| `subject_stability` | 25% | Subject framing stability throughout the clip |
+| `scene_continuity` | 20% | Scene-aware camera transition consistency |
+| `creator_fit` | 20% | Creator camera preference alignment (Phase 50B/D) |
+
+Weights sum to 0.90; the remaining 0.10 is reserved for risk penalty.
+
+### Risk scores
+
+| Score | Description |
+|---|---|
+| `micro_jitter_risk` | Micro-jitter probability — lower is better |
+| `whip_pan_risk` | Rapid framing change probability — lower is better |
+
+Risk deduction: `avg(jitter, whip_pan) × RISK_WEIGHT (0.10)` subtracted from overall,
+making the effective weight budget sum to 1.0.
+
+### Output shape
+
+```json
+{
+  "camera_quality_v2": {
+    "micro_jitter_risk": 12,
+    "whip_pan_risk": 8,
+    "crop_smoothness": 82,
+    "subject_stability": 79,
+    "scene_continuity": 75,
+    "creator_fit": 84,
+    "overall": 80,
+    "confidence": 0.78,
+    "reasoning": [
+      "Subject framing remained stable throughout",
+      "Crop motion is smooth and well controlled",
+      "Crop motion matched your creator camera preference",
+      "Low jitter risk improves camera quality"
+    ]
+  }
+}
+```
+
+### Fallback (all inputs missing)
+
+```json
+{
+  "camera_quality_v2": {
+    "micro_jitter_risk": 0,
+    "whip_pan_risk": 0,
+    "crop_smoothness": 0,
+    "subject_stability": 0,
+    "scene_continuity": 0,
+    "creator_fit": 0,
+    "overall": 0,
+    "confidence": 0.0,
+    "reasoning": []
+  }
+}
+```
+
+### Metadata sources consumed
+
+- Phase 4: `pacing` — BPM, energy level for motion energy baseline
+- Phase 12: `story` — scene types for continuity evaluation
+- Phase 18: `beat_visual_execution` — beat-sync camera hints
+- Phase 34: `camera_motion_apply` — applied smoothing, stability, framing metadata
+- Phase 42: `adaptive_creator_intelligence` — adaptive camera style signals
+- Phase 44: `market_optimization_intelligence` — market stability target
+- Phase 45: `render_quality_evaluation` — camera_smoothness score (blended 30%)
+- Phase 46: `creator_preset_evolution` — preset maturity signal
+- Phase 50B: `creator_camera_preference` — camera style + follow/zoom strength + confidence
+- Phase 50D: `creator_preference_profile` — unified profile camera field
+
+### Files introduced / modified
+
+| File | Purpose |
+|---|---|
+| `app/ai/camera_quality/__init__.py` | Package marker |
+| `app/ai/camera_quality/camera_quality_schema.py` | `CameraQualityV2` dataclass + weights + fallback |
+| `app/ai/camera_quality/camera_quality_scorer.py` | 6 deterministic dimension scorers + confidence |
+| `app/ai/camera_quality/camera_quality_evaluator.py` | `evaluate_camera_quality_v2()` public API + reasoning |
+| `app/ai/director/edit_plan_schema.py` | `camera_quality_v2: dict` field added |
+| `app/ai/director/ai_director.py` | Phase 52B block + `_attach_camera_quality_v2()` |
+| `app/ai/director/render_influence.py` | `_report_camera_quality_v2()` reporting |
+| `tests/test_ai_phase52b_camera_quality_v2.py` | 84 tests across 14 classes |
+
+### Data flow
+
+- **Reads from:** `creator_camera_preference` (50B), `camera_motion_apply` (34), `creator_preference_profile` (50D), `market_optimization_intelligence` (44), `beat_visual_execution` (18), `pacing` (4), `render_quality_evaluation` (45), `creator_preset_evolution` (46), `adaptive_creator_intelligence` (42), `story` (12)
+- **Writes to:** `plan.camera_quality_v2`
+- **Runs after:** Phase 52A in AI Director orchestration
+- **Future consumers:** UI quality dashboard, variant scoring enrichment
+
+### Render influence reporting
+
+Phase 52B always reports to `report["skipped"]` — evaluation advisory metadata only.
+
+```
+camera_quality_v2:evaluated_phase52b(overall=80,confidence=0.78,smoothness=82,...)
+camera_quality_v2:no_result_phase52b
+camera_quality_v2:no_signal_phase52b
+```
+
+### Safety boundaries (still intentionally blocked)
+
+❌ No motion_crop rewrite
+❌ No tracking rewrite
+❌ No scene detection mutation
+❌ No FFmpeg mutation
+❌ No render pipeline rewrite
+❌ No playback_speed mutation
+❌ No executor override
+❌ No autonomous execution
+❌ No cloud AI / external API required
+❌ No GPU required
+
+### Backward compatibility
+
+- All Phase 1–52A behaviour preserved
+- `AIEditPlan.camera_quality_v2` defaults to `{}` — backward compatible
+- Evaluation runs automatically when AI Director is enabled
+- No new required request fields
+- All existing quality fields (Phase 45 `render_quality_evaluation`) unchanged
