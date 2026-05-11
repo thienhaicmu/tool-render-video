@@ -202,6 +202,8 @@ class AIEditPlan:
     strategy_variants: dict = field(default_factory=dict)
     # Phase 51B — Variant evaluation engine (populated by variant_evaluator module)
     variant_evaluation: dict = field(default_factory=dict)
+    # Phase 51C — Best strategy reasoning (populated by strategy_reasoner module)
+    best_strategy_reasoning: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -298,4 +300,5 @@ class AIEditPlan:
             "creator_preference_profile": dict(self.creator_preference_profile),
             "strategy_variants": dict(self.strategy_variants),
             "variant_evaluation": dict(self.variant_evaluation),
+            "best_strategy_reasoning": dict(self.best_strategy_reasoning),
         }

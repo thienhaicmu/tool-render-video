@@ -2283,3 +2283,85 @@ Executor authority is fully preserved. `best_variant_id` is advisory metadata on
 - Evaluation runs automatically when AI Director is enabled
 - No new required request fields
 - All Phase 51A `strategy_variants` output unchanged
+
+---
+
+## Phase 51C — Best Strategy Reasoning
+
+**Date:** 2026-05-11
+**Status:** Implemented
+
+### Mission
+
+Turn Phase 51B variant evaluation results into clear, creator-facing reasoning that explains
+why the best strategy variant was selected and what tradeoffs it represents.  Reasoning is
+explanation-only — no variant is executed, no render pipeline is altered, no executor
+authority is affected.
+
+### Recommendation strength thresholds
+
+| Strength | Condition |
+|---|---|
+| `none` | Confidence = 0.0 |
+| `weak` | Confidence < 0.65 |
+| `moderate` | Confidence ≤ 0.82, or confidence > 0.82 with score gap < 5 |
+| `strong` | Confidence > 0.82 AND best-to-runner score gap ≥ 5 |
+
+### Output fields (`best_strategy_reasoning`)
+
+| Field | Type | Description |
+|---|---|---|
+| `selected_variant_id` | str or None | ID of the best variant (e.g. `"creator_safe"`) |
+| `selected_label` | str | Human-readable label (e.g. `"Creator Safe"`) |
+| `confidence` | float | Clamped 0–1 from Phase 51B evaluation confidence |
+| `summary` | str | One-sentence creator-facing recommendation summary |
+| `why_selected` | list[str] | Up to 4 creator-facing reasons for selection |
+| `tradeoffs` | list[str] | Up to 2 notes about close runner-up alternatives |
+| `recommendation_strength` | str | `none` / `weak` / `moderate` / `strong` |
+| `warnings` | list[str] | Internal diagnostic notes; empty on success |
+
+### Files introduced / modified
+
+| File | Purpose |
+|---|---|
+| `app/ai/strategy_variants/reasoning_schema.py` | `BestStrategyReasoning` dataclass + strength constants |
+| `app/ai/strategy_variants/strategy_reasoner.py` | `build_best_strategy_reasoning()` public API |
+| `app/ai/director/edit_plan_schema.py` | `best_strategy_reasoning: dict` field added |
+| `app/ai/director/ai_director.py` | Phase 51C block + `_attach_best_strategy_reasoning()` |
+| `app/ai/director/render_influence.py` | `_report_best_strategy_reasoning()` reporting |
+| `tests/test_ai_phase51c_best_strategy_reasoning.py` | 80 tests across 10 classes |
+
+### Data flow
+
+- **Reads from:** `variant_evaluation` (51B), `creator_preference_profile` (50D)
+- **Writes to:** `plan.best_strategy_reasoning` (Phase 51C output)
+- **Runs after:** Phase 51B in AI Director orchestration
+- **Future consumers:** UI recommendation display, creator dashboard
+
+### Render influence reporting
+
+Phase 51C always reports to `report["skipped"]` — reasoning advisory metadata only.
+
+```
+best_strategy_reasoning:explained_phase51c(selected=creator_safe,strength=strong,confidence=0.85)
+best_strategy_reasoning:no_recommendation_phase51c
+```
+
+### Safety boundaries (still intentionally blocked)
+
+❌ No render pipeline rewrite
+❌ No FFmpeg mutation
+❌ No subtitle timing rewrite
+❌ No executor override
+❌ No autonomous execution
+❌ No variant application to render
+❌ No cloud AI / external API required
+❌ No GPU required
+
+### Backward compatibility
+
+- All Phase 1–51B behaviour preserved
+- `AIEditPlan.best_strategy_reasoning` defaults to `{}` — backward compatible
+- Reasoning runs automatically when AI Director is enabled
+- No new required request fields
+- All Phase 51A/51B outputs unchanged

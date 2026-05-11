@@ -121,6 +121,7 @@ def apply_ai_render_influence(
         _report_creator_preference_profile(payload, edit_plan, report)
         _report_strategy_variants(payload, edit_plan, report)
         _report_variant_evaluation(payload, edit_plan, report)
+        _report_best_strategy_reasoning(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1759,4 +1760,34 @@ def _report_variant_evaluation(payload: Any, edit_plan: Any, report: dict) -> No
     logger.debug(
         "variant_evaluation_reported best=%s ranked=%d top_score=%d confidence=%.3f",
         best_id, n_ranked, top_score, conf,
+    )
+
+
+def _report_best_strategy_reasoning(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report Phase 51C best strategy reasoning metadata.
+
+    Phase 51C always reports to report["skipped"] — reasoning-only metadata,
+    no execution path activated, no selected strategy applied to render.
+    """
+    bsr = getattr(edit_plan, "best_strategy_reasoning", None) or {}
+
+    selected_id = bsr.get("selected_variant_id") or "none"
+    strength    = bsr.get("recommendation_strength") or "none"
+    conf        = float(bsr.get("confidence") or 0.0)
+
+    if selected_id == "none" or strength == "none":
+        report["skipped"].append("best_strategy_reasoning:no_recommendation_phase51c")
+        return
+
+    # Phase 51C always reports to skipped — reasoning advisory metadata only.
+    report["skipped"].append(
+        f"best_strategy_reasoning:explained_phase51c"
+        f"(selected={selected_id!r}"
+        f",strength={strength!r}"
+        f",confidence={round(conf, 3)})"
+    )
+
+    logger.debug(
+        "best_strategy_reasoning_reported selected=%s strength=%s confidence=%.3f",
+        selected_id, strength, conf,
     )

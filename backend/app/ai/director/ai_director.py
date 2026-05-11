@@ -543,6 +543,15 @@ def _build_plan(
         plan.warnings.append(f"variant_evaluation_error:{type(exc).__name__}")
         logger.debug("ai_director_variant_evaluation_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 51C: Best Strategy Reasoning ---
+    # Runs after Phase 51B: explains why the best evaluated variant was selected.
+    # Reasoning-only — never applied to render, no executor override.
+    try:
+        _attach_best_strategy_reasoning(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"best_strategy_reasoning_error:{type(exc).__name__}")
+        logger.debug("ai_director_best_strategy_reasoning_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4513,3 +4522,48 @@ def _attach_variant_evaluation(
             "warnings":        [f"variant_evaluation_error:{type(exc).__name__}"],
         }
         logger.debug("ai_director_variant_evaluation_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 51C — Best Strategy Reasoning attachment
+# ---------------------------------------------------------------------------
+
+def _attach_best_strategy_reasoning(
+    plan: "AIEditPlan",
+    job_id: str,
+) -> None:
+    """Build creator-facing reasoning for the best evaluated strategy. Phase 51C.
+
+    Reads plan.variant_evaluation (51B) and plan.creator_preference_profile (50D).
+    Produces deterministic explanation metadata: summary, why_selected, tradeoffs,
+    and recommendation_strength.  Reasoning-only — never applied to render.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.strategy_variants.strategy_reasoner import build_best_strategy_reasoning
+
+        logger.debug("ai_best_strategy_reasoning_started job_id=%s", job_id)
+        reasoning = build_best_strategy_reasoning(plan)
+        plan.best_strategy_reasoning = reasoning.to_dict()
+
+        vid      = reasoning.selected_variant_id or "none"
+        strength = reasoning.recommendation_strength
+        conf     = reasoning.confidence
+        logger.info(
+            "ai_best_strategy_reasoning_done job_id=%s selected=%s strength=%s confidence=%.2f",
+            job_id, vid, strength, float(conf),
+        )
+
+    except Exception as exc:
+        plan.best_strategy_reasoning = {
+            "selected_variant_id":     None,
+            "selected_label":          "",
+            "confidence":              0.0,
+            "summary":                 "No confident AI strategy recommendation available.",
+            "why_selected":            [],
+            "tradeoffs":               [],
+            "recommendation_strength": "none",
+            "warnings":                [f"best_strategy_reasoning_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_best_strategy_reasoning_failed job_id=%s: %s", job_id, exc)
