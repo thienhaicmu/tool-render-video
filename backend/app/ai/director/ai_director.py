@@ -572,6 +572,16 @@ def _build_plan(
         plan.warnings.append(f"camera_quality_v2_error:{type(exc).__name__}")
         logger.debug("ai_director_camera_quality_v2_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 52C: Hook Quality Intelligence v2 ---
+    # Runs after Phase 52B: all story, retention, pacing, market, and creator signals available.
+    # Evaluation-only — no hook rewriting, no clip rewrite, no render mutation,
+    # no FFmpeg mutation, no render pipeline rewrite, no executor override.
+    try:
+        _attach_hook_quality_v2(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"hook_quality_v2_error:{type(exc).__name__}")
+        logger.debug("ai_director_hook_quality_v2_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4687,3 +4697,54 @@ def _attach_camera_quality_v2(
             "reasoning":         [],
         }
         logger.debug("ai_director_camera_quality_v2_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 52C — Hook Quality Intelligence v2 attachment
+# ---------------------------------------------------------------------------
+
+def _attach_hook_quality_v2(
+    plan: "AIEditPlan",
+    job_id: str,
+) -> None:
+    """Evaluate hook quality across 6 dimensions + 1 risk score. Phase 52C.
+
+    Reads story, retention, pacing, market_optimization_intelligence,
+    creator_preference_profile, creator_preset_evolution, and adaptive_creator_intelligence.
+    Produces deterministic quality metadata: per-dimension scores, risk score,
+    overall weighted score, confidence, and creator-facing reasoning.
+    Evaluation-only — no hook rewriting, no clip rewrite, no render mutation, no executor override.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.hook_quality.hook_quality_evaluator import evaluate_hook_quality_v2
+
+        logger.debug("ai_hook_quality_v2_started job_id=%s", job_id)
+        result = evaluate_hook_quality_v2(plan)
+
+        # result is {"hook_quality_v2": {...}}
+        plan.hook_quality_v2 = result.get("hook_quality_v2", {})
+
+        hqv2    = plan.hook_quality_v2
+        overall = hqv2.get("overall", 0)
+        conf    = hqv2.get("confidence", 0.0)
+        logger.info(
+            "ai_hook_quality_v2_done job_id=%s overall=%d confidence=%.2f",
+            job_id, overall, float(conf),
+        )
+
+    except Exception as exc:
+        plan.hook_quality_v2 = {
+            "first_3s_strength":  0,
+            "first_5s_retention": 0,
+            "curiosity_strength": 0,
+            "open_loop_quality":  0,
+            "hook_fatigue_risk":  0,
+            "market_fit":         0,
+            "creator_fit":        0,
+            "overall":            0,
+            "confidence":         0.0,
+            "reasoning":          [],
+        }
+        logger.debug("ai_director_hook_quality_v2_failed job_id=%s: %s", job_id, exc)

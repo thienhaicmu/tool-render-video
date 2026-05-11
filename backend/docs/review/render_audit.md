@@ -2644,3 +2644,144 @@ camera_quality_v2:no_signal_phase52b
 - Evaluation runs automatically when AI Director is enabled
 - No new required request fields
 - All existing quality fields (Phase 45 `render_quality_evaluation`) unchanged
+
+---
+
+## Phase 52C — Hook Quality Intelligence v2
+
+**Date:** 2026-05-11
+**Status:** Implemented
+
+### Mission
+
+Make hook quality scoring significantly smarter by evaluating 6 quality dimensions
+and 1 risk score using only existing plan metadata.  Evaluation-only — no hook
+rewriting, no clip rewrite, no render mutation, no FFmpeg mutation, no render
+pipeline rewrite, no executor override.
+
+### Quality dimensions
+
+| Dimension | Weight | Description |
+|---|---|---|
+| `first_3s_strength` | 25% | Opening hook signal strength — story hook, emotion, energy, pacing |
+| `first_5s_retention` | 20% | First-five-second retention potential from retention score, BPM, pacing |
+| `curiosity_strength` | 15% | Curiosity/tension signal from story segments, emotion, market hook bias |
+| `open_loop_quality` | 10% | Unresolved curiosity / payoff expectation from story narrative structure |
+| `market_fit` | 15% | Hook style alignment with target market preferences (US/JP/EU/KR) |
+| `creator_fit` | 15% | Creator preference alignment (Phase 50D, 46, 42) |
+
+Weights sum to 1.00.
+
+### Risk score
+
+| Score | Description |
+|---|---|
+| `hook_fatigue_risk` | Over-aggressive hook / repetitive hook pattern risk — lower is better |
+
+Risk deduction: `(hook_fatigue_risk / 10) × 1.5` subtracted from overall score.
+At maximum risk (100), penalty = 15 pts. Conservative by design.
+
+### Output shape
+
+```json
+{
+  "hook_quality_v2": {
+    "first_3s_strength": 88,
+    "first_5s_retention": 84,
+    "curiosity_strength": 81,
+    "open_loop_quality": 79,
+    "hook_fatigue_risk": 24,
+    "market_fit": 87,
+    "creator_fit": 83,
+    "overall": 85,
+    "confidence": 0.84,
+    "reasoning": [
+      "Opening sequence creates strong early attention",
+      "Hook pacing aligns with target market preferences",
+      "Hook style matches your creator preferences"
+    ]
+  }
+}
+```
+
+### Fallback (all inputs missing)
+
+```json
+{
+  "hook_quality_v2": {
+    "first_3s_strength": 0,
+    "first_5s_retention": 0,
+    "curiosity_strength": 0,
+    "open_loop_quality": 0,
+    "hook_fatigue_risk": 0,
+    "market_fit": 0,
+    "creator_fit": 0,
+    "overall": 0,
+    "confidence": 0.0,
+    "reasoning": []
+  }
+}
+```
+
+### Metadata sources consumed
+
+- Phase 4: `pacing` — BPM, energy level, emotion, pacing_style, suggested_cut_style
+- Phase 12: `story` — segments (hook, tension, climax, payoff types), narrative structure
+- Phase 16: `retention` — overall_score, risk_regions (start times for first-5s analysis)
+- Phase 17: `subtitle_execution` — density, speech signals (confidence signal)
+- Phase 42: `adaptive_creator_intelligence` — style confidence, total exports
+- Phase 44: `market_optimization_intelligence` — target market, hook_market_bias, confidence
+- Phase 46: `creator_preset_evolution` — preset maturity (evolved_presets signal)
+- Phase 50D: `creator_preference_profile` — hook style/strength, pacing preference, confidence
+
+### Files introduced / modified
+
+| File | Purpose |
+|---|---|
+| `app/ai/hook_quality/__init__.py` | Package marker |
+| `app/ai/hook_quality/hook_quality_schema.py` | `HookQualityV2` dataclass + weights + fallback |
+| `app/ai/hook_quality/hook_quality_scorer.py` | 7 deterministic dimension scorers + confidence |
+| `app/ai/hook_quality/hook_quality_evaluator.py` | `evaluate_hook_quality_v2()` public API + reasoning |
+| `app/ai/director/edit_plan_schema.py` | `hook_quality_v2: dict` field added |
+| `app/ai/director/ai_director.py` | Phase 52C block + `_attach_hook_quality_v2()` |
+| `app/ai/director/render_influence.py` | `_report_hook_quality_v2()` reporting |
+| `tests/test_ai_phase52c_hook_quality_v2.py` | 85 tests across 13 classes |
+
+### Data flow
+
+- **Reads from:** `pacing` (4), `story` (12), `retention` (16), `subtitle_execution` (17), `adaptive_creator_intelligence` (42), `market_optimization_intelligence` (44), `creator_preset_evolution` (46), `creator_preference_profile` (50D)
+- **Writes to:** `plan.hook_quality_v2`
+- **Runs after:** Phase 52B in AI Director orchestration
+- **Future consumers:** UI quality dashboard, variant scoring enrichment, retention intelligence cross-reference
+
+### Render influence reporting
+
+Phase 52C always reports to `report["skipped"]` — evaluation advisory metadata only.
+
+```
+hook_quality_v2:evaluated_phase52c(overall=85,confidence=0.84,first_3s=88,...)
+hook_quality_v2:no_result_phase52c
+hook_quality_v2:no_signal_phase52c
+```
+
+### Safety boundaries (still intentionally blocked)
+
+❌ No hook rewriting
+❌ No clip rewrite
+❌ No render mutation
+❌ No FFmpeg mutation
+❌ No render pipeline rewrite
+❌ No playback_speed mutation
+❌ No subtitle mutation
+❌ No executor override
+❌ No autonomous execution
+❌ No cloud AI / external API required
+❌ No GPU required
+
+### Backward compatibility
+
+- All Phase 1–52B behaviour preserved
+- `AIEditPlan.hook_quality_v2` defaults to `{}` — backward compatible
+- Evaluation runs automatically when AI Director is enabled
+- No new required request fields
+- All existing quality fields (Phase 45 `render_quality_evaluation`) unchanged

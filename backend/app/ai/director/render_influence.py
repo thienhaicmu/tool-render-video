@@ -124,6 +124,7 @@ def apply_ai_render_influence(
         _report_best_strategy_reasoning(payload, edit_plan, report)
         _report_subtitle_quality_v2(payload, edit_plan, report)
         _report_camera_quality_v2(payload, edit_plan, report)
+        _report_hook_quality_v2(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1884,4 +1885,51 @@ def _report_camera_quality_v2(payload: Any, edit_plan: Any, report: dict) -> Non
         "camera_quality_v2_reported overall=%d confidence=%.3f jitter=%d whip_pan=%d "
         "smoothness=%d stability=%d continuity=%d creator=%d",
         overall, conf, jitter, whip_pan, smoothness, stability, continuity, creator,
+    )
+
+
+def _report_hook_quality_v2(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report hook quality v2 evaluation metadata — evaluation_only in Phase 52C.
+
+    No hook rewriting. No clip rewrite. No render mutation.
+    No FFmpeg mutation. No render pipeline rewrite. No executor override.
+    All scores are metadata-only and bounded 0–100.
+    """
+    hqv2 = getattr(edit_plan, "hook_quality_v2", None)
+    if not isinstance(hqv2, dict) or not hqv2:
+        report["skipped"].append("hook_quality_v2:no_result_phase52c")
+        return
+
+    overall   = int(hqv2.get("overall") or 0)
+    conf      = float(hqv2.get("confidence") or 0.0)
+    first_3s  = int(hqv2.get("first_3s_strength") or 0)
+    first_5s  = int(hqv2.get("first_5s_retention") or 0)
+    curiosity = int(hqv2.get("curiosity_strength") or 0)
+    open_loop = int(hqv2.get("open_loop_quality") or 0)
+    fatigue   = int(hqv2.get("hook_fatigue_risk") or 0)
+    market    = int(hqv2.get("market_fit") or 0)
+    creator   = int(hqv2.get("creator_fit") or 0)
+
+    if overall == 0 and conf == 0.0:
+        report["skipped"].append("hook_quality_v2:no_signal_phase52c")
+        return
+
+    # Phase 52C always reports to skipped — evaluation advisory metadata only.
+    report["skipped"].append(
+        f"hook_quality_v2:evaluated_phase52c"
+        f"(overall={overall}"
+        f",confidence={round(conf, 3)}"
+        f",first_3s={first_3s}"
+        f",first_5s={first_5s}"
+        f",curiosity={curiosity}"
+        f",open_loop={open_loop}"
+        f",fatigue_risk={fatigue}"
+        f",market_fit={market}"
+        f",creator_fit={creator})"
+    )
+
+    logger.debug(
+        "hook_quality_v2_reported overall=%d confidence=%.3f first_3s=%d first_5s=%d "
+        "curiosity=%d open_loop=%d fatigue=%d market=%d creator=%d",
+        overall, conf, first_3s, first_5s, curiosity, open_loop, fatigue, market, creator,
     )
