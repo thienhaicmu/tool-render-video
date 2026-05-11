@@ -1173,3 +1173,129 @@ Phase 48 safe influence pack is reported in `render_influence.py` via `_report_s
 - Influence engine runs after Phase 47 in `_build_plan`, consuming `multi_signal_orchestration`
 - No new required request fields
 - All Phase 41–47 AI signal fields remain unchanged
+
+---
+
+## Phase 49A — Backend Metadata Contract for Visible AI UX
+
+**Date:** 2026-05-11
+**Status:** Implemented
+**Module:** `app/ai/ux/` (2 files) + `render_pipeline.py` patch
+
+### Summary
+
+Phase 49A creates a stable, UI-safe metadata contract (`ai_ux`) that future frontend code can consume without knowing internal AI subsystem shapes. It is metadata-contract only: no UI changes, no render mutation, no executor override.
+
+### Problem solved
+
+Prior to Phase 49A, the frontend had no stable surface to display AI intelligence. Phases 47 and 48 produced rich internal metadata, but:
+- Keys changed across phases
+- Internal debug strings were mixed with presentable data
+- No single compact shape existed for the UI to render
+
+### Solution: `ai_ux` result field
+
+A new `ai_ux` key is added to every `result_json` payload (additive, backward-compatible). Built by `build_ai_ux_metadata()` in `app/ai/ux/ai_ux_metadata.py`.
+
+### Canonical shape
+
+```json
+{
+  "ai_ux": {
+    "available": true,
+    "strategy": {
+      "title": "AI Strategy",
+      "creator_style": "Podcast Clean",
+      "target_market": "US",
+      "confidence": 0.87,
+      "recommendations": [
+        "Clean readable subtitles",
+        "Balanced pacing",
+        "Smooth subject tracking",
+        "Moderate hook emphasis",
+        "Retention-focused clip ranking"
+      ],
+      "why": [
+        "Creator intelligence adapted to 'podcast_clean' style (confidence=0.82)",
+        "Creator has 5 prior export(s) — feedback patterns active",
+        "US market optimization active (confidence=0.75)"
+      ]
+    },
+    "safe_influence": {
+      "applied": true,
+      "items": [
+        "Cleaner subtitle style applied",
+        "Lighter subtitle density recommended",
+        "Smoother subject tracking bias",
+        "Retention-boosted clip ranking"
+      ]
+    },
+    "best_export": {
+      "enabled": true,
+      "why": [
+        "Retention-optimized clip selected as best export",
+        "High AI confidence in selection"
+      ]
+    }
+  }
+}
+```
+
+### Fallback shape (when AI unavailable)
+
+```json
+{"ai_ux": {"available": false}}
+```
+
+### Files
+
+| File | Role |
+|---|---|
+| `app/ai/ux/__init__.py` | Package marker |
+| `app/ai/ux/ai_ux_metadata.py` | `build_ai_ux_metadata()` builder — Phase 49A public API |
+| `app/orchestration/render_pipeline.py` | +6 lines: call builder, add `ai_ux` to `_result_payload` |
+
+### Data sources
+
+| ai_ux field | Source |
+|---|---|
+| `strategy.confidence` | Phase 47 `confidence_scores.aggregate_confidence` |
+| `strategy.target_market` | Phase 47 `aggregated_signals.market_signal.target_market` |
+| `strategy.creator_style` | Phase 14 `creator_style.style_label` → Phase 23 `creator_style_adaptation.adapted_style` |
+| `strategy.recommendations` | Phase 47 `recommended_strategy` — mapped to human-readable labels |
+| `strategy.why` | Phase 47 `explainability.why_this_strategy` — filtered |
+| `safe_influence.applied` | Phase 48 `safe_influence_pack.enabled` |
+| `safe_influence.items` | Phase 48 `safe_influence_pack.safe_influence` — mapped to labels |
+| `best_export.enabled` | Phase 30 `output_ranking.available` + `best_output_id` |
+| `best_export.why` | Derived from Phase 48 ranking bias + gate tier |
+
+### UI-safety guarantees
+
+- No raw debug JSON exposed
+- No stack traces
+- No internal Python class names
+- No snake_case keys in label strings
+- Debug/error prefixes filtered from all string lists
+- Confidence clamped [0.0, 1.0], rounded to 2 decimals
+- All list outputs bounded (_MAX_RECOMMENDATIONS=5, _MAX_WHY=5, _MAX_INFLUENCE_ITEMS=5)
+- Deterministic: identical inputs produce identical outputs
+
+### Safety boundaries
+
+❌ No FFmpeg mutation
+❌ No render rewrite
+❌ No playback_speed mutation
+❌ No subtitle timing rewrite
+❌ No rerender
+❌ No executor override
+❌ No autonomous execution
+❌ No frontend redesign in this phase
+
+All existing `result_json` fields are preserved unchanged. `ai_ux` is additive only.
+
+### Phase compatibility
+
+- All Phase 1–48 behavior preserved
+- `ai_ux` defaults to `{"available": False}` on any error — never blocks render
+- No new required request fields
+- Backward compatible: consumers that don't read `ai_ux` are unaffected

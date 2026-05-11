@@ -3362,6 +3362,14 @@ def run_render_pipeline(
                 "warnings": [f"quality_evaluation_error:{type(_quality_err).__name__}"],
             }
 
+        # Phase 49A — Build stable UI-safe AI UX metadata contract
+        _ai_ux_metadata: dict = {"available": False}
+        try:
+            from app.ai.ux.ai_ux_metadata import build_ai_ux_metadata as _build_ai_ux
+            _ai_ux_metadata = _build_ai_ux(_ai_edit_plan, output_ranking=_ai_output_ranking)
+        except Exception as _ux_err:
+            logger.debug("ai_ux_metadata_skipped job_id=%s: %s", job_id, _ux_err)
+
         _result_payload = {
             "outputs": outputs,
             "render_preset": _preset_name,
@@ -3389,6 +3397,7 @@ def run_render_pipeline(
             "creator_style": _ai_edit_plan.creator_style if _ai_edit_plan is not None else {},
             "ai_output_ranking": _ai_output_ranking,
             "ai_render_quality_evaluation": _ai_render_quality,
+            "ai_ux": _ai_ux_metadata,
         }
         upsert_job(
             job_id,
