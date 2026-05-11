@@ -1454,3 +1454,81 @@ No global selectors. No overrides to `.clipCard`, `.clipCardBody`, `.clipCardAct
 - All Phase 1–49A behavior preserved
 - Jobs without `ai_ux` show no explanation (silent fallback)
 - Non-best cards entirely unchanged
+
+---
+
+## Phase 49D — AI UX Hardening & Regression Guard
+
+**Date:** 2026-05-11
+**Status:** Implemented
+**Files:** `static/js/render-ui.js` (+70 lines), `static/css/app.css` (+10 lines)
+
+### Summary
+
+Phase 49D hardens the AI UX added in 49B/49C with shared helper functions, eliminating duplicated parsing, guarding all null/NaN/undefined paths, and adding CSS overflow guards.
+
+### New helpers (all deterministic, never-raise)
+
+| Helper | Purpose |
+|---|---|
+| `_aiSafeText(s, maxLen)` | Trims, rejects `"null"`/`"undefined"`, truncates to maxLen |
+| `_aiSafeList(arr, maxLen, maxItems)` | Filters, deduplicates, bounds to safe string array |
+| `_aiClampConf(v)` | Clamps confidence [0,1], rejects NaN/Infinity, rounds to 2dp |
+| `_parseAiUx(job)` | Single parse point for `job.result_json.ai_ux`, returns null on any failure |
+| `_shouldRenderAiStrategy(aiUx)` | Gate: true only when ≥1 displayable section exists |
+| `_shouldRenderBestExport(aiUx, isBest)` | Gate: true only when card is best AND reasons are available |
+
+### What was fixed
+
+| Risk | Fix |
+|---|---|
+| Double `JSON.parse` of result_json | Single `_parseAiUx(job)` call, result shared |
+| `null`/`undefined` string items shown | `_aiSafeList` filters via `_aiSafeText` |
+| `"null"` / `"undefined"` literal strings | `_aiSafeText` rejects both |
+| NaN confidence producing `NaN%` | `_aiClampConf` returns null → badge hidden |
+| Long text overflowing cards/panel | `overflow-wrap`, `word-break` on list items |
+| Long creator style chip overflow | `max-width:180px`, `text-overflow:ellipsis` on chips |
+| Panel shown with zero content | `_shouldRenderAiStrategy` guards body emptiness |
+| Best reasons shown on wrong card | `_shouldRenderBestExport(aiUx, isBest)` double-gates |
+| Duplicate reasons in list | `_aiSafeList` deduplicates via Set |
+| Hardcoded unicode in template strings | HTML entities (`&#x2713;`, `&#x2736;`, `&bull;`) |
+
+### CSS changes
+
+- `.aiux-list-item`: added `min-width:0`, `overflow-wrap:break-word`, `word-break:break-word`
+- `.aiux-best-reason`: added `min-width:0`, `overflow-wrap:break-word`, `word-break:break-word`
+- `.aiux-chip`: added `max-width:180px`, `overflow:hidden`, `text-overflow:ellipsis`, `white-space:nowrap`
+
+### Manual validation checklist
+
+- [ ] Render completes and result panel appears
+- [ ] AI Strategy Panel visible when `ai_ux.available === true`
+- [ ] AI Strategy Panel hidden when `ai_ux` missing or `available: false`
+- [ ] Panel shows no content sections when all are empty
+- [ ] Best card shows "Why this output?" only when `best_export.enabled && why.length`
+- [ ] Non-best cards show no explanation
+- [ ] Preview button works on best card
+- [ ] Download button works on best card
+- [ ] Open Folder button works on best card
+- [ ] Active selection works (click to select)
+- [ ] History tab still shows previous jobs
+- [ ] No duplicate "Best" badges
+- [ ] No `undefined` / `null` text visible anywhere
+- [ ] No console errors in devtools
+- [ ] No overlap at 640px viewport width
+- [ ] Sort select still works (Best first / In order)
+- [ ] Center-stage preview still opens on card click
+
+### Remaining UI risks
+
+- Panel fade-in animation replays on every sort reorder (cosmetic, not a bug)
+- No explicit max-height on `.aiux-panel` — relies on bounded list sizes (max 5 items)
+- If backend returns > 3 `best_export.why` reasons, extra are silently truncated by `_aiSafeList`
+
+### Safety contract
+
+❌ No render pipeline modification
+❌ No websocket changes
+❌ No DOM renaming or movement
+❌ No global CSS overrides
+❌ No index.html modification

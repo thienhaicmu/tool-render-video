@@ -3661,17 +3661,11 @@ function populateRenderOutputPanel(job, parts) {
   const _aspectRaw = String(_jobPayload?.aspect_ratio || '9:16');
   const _dataAspect = ['9:16', '3:4', '4:5', '1:1', '16:9'].includes(_aspectRaw) ? _aspectRaw : '9:16';
 
-  // Phase 49C — Parse best export reasons once, before card loop
-  let _bestExportWhy = [];
-  try {
-    const _rawResult = job && job.result_json;
-    const _resultObj = _rawResult ? (typeof _rawResult === 'string' ? JSON.parse(_rawResult) : _rawResult) : {};
-    const _aiUx = _resultObj && _resultObj.ai_ux;
-    if (_aiUx && _aiUx.available && _aiUx.best_export && _aiUx.best_export.enabled) {
-      const _why = Array.isArray(_aiUx.best_export.why) ? _aiUx.best_export.why : [];
-      _bestExportWhy = _why.map(w => String(w || '').trim()).filter(Boolean).slice(0, 3);
-    }
-  } catch (_) {}
+  // Phase 49C/49D — Parse best export reasons once, before card loop (hardened)
+  const _cardAiUx = _parseAiUx(job);
+  const _bestExportWhy = _cardAiUx && _cardAiUx.best_export && _cardAiUx.best_export.enabled
+    ? _aiSafeList(_cardAiUx.best_export.why, 100, 3)
+    : [];
 
   list.innerHTML = all.map((p) => {
     const partNo = Number(p.part_no || 0);
@@ -3725,7 +3719,7 @@ function populateRenderOutputPanel(job, parts) {
         </div>
         ${rk.reason ? `<div class="clipCardReason">${esc(rk.reason.length > 64 ? rk.reason.slice(0, 61) + '…' : rk.reason)}</div>` : ''}
         ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
-        ${rk.isBest && _bestExportWhy.length ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">✓</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}
+        ${_shouldRenderBestExport(_cardAiUx, rk.isBest) ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">&#x2713;</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}
         <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}</div>
       </div>
     </div>`;
@@ -3987,11 +3981,73 @@ function resetAiInsightsPanel() {
   if (badge) { badge.textContent = '–'; badge.dataset.level = ''; }
 }
 
+// ── Phase 49D — AI UX Hardening Helpers ──────────────────────────────────────
+
+function _aiSafeText(s, maxLen) {
+  // Trims, rejects literal "null"/"undefined", truncates if over maxLen.
+  try {
+    const t = String(s == null ? '' : s).trim();
+    if (!t || t === 'null' || t === 'undefined') return '';
+    return (maxLen > 0 && t.length > maxLen) ? t.slice(0, maxLen - 1) + '…' : t;
+  } catch (_) { return ''; }
+}
+
+function _aiSafeList(arr, maxLen, maxItems) {
+  // Filters, trims, deduplicates, and bounds an array to safe non-empty strings.
+  if (!Array.isArray(arr)) return [];
+  const cap = maxItems > 0 ? maxItems : 5;
+  const seen = new Set();
+  const out = [];
+  for (let i = 0; i < arr.length && out.length < cap; i++) {
+    const s = _aiSafeText(arr[i], maxLen > 0 ? maxLen : 120);
+    if (s && !seen.has(s)) { seen.add(s); out.push(s); }
+  }
+  return out;
+}
+
+function _aiClampConf(v) {
+  // Returns confidence clamped [0,1] rounded to 2dp, or null if non-finite.
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(Math.min(1, Math.max(0, n)) * 100) / 100;
+}
+
+function _parseAiUx(job) {
+  // Returns the ai_ux object when available === true, null otherwise. Never throws.
+  try {
+    const raw = job && job.result_json;
+    const obj = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+    const aiUx = obj && obj.ai_ux;
+    if (aiUx && aiUx.available === true) return aiUx;
+  } catch (_) {}
+  return null;
+}
+
+function _shouldRenderAiStrategy(aiUx) {
+  // Returns true only when there is at least one displayable content section.
+  if (!aiUx) return false;
+  const s = aiUx.strategy || {};
+  return !!(
+    _aiSafeList(s.recommendations, 120, 5).length ||
+    _aiSafeList(s.why, 120, 4).length ||
+    _aiSafeText(s.creator_style, 60) ||
+    _aiSafeText(s.target_market, 40) ||
+    _aiClampConf(s.confidence) != null
+  );
+}
+
+function _shouldRenderBestExport(aiUx, isBest) {
+  // Returns true only when best card has enabled reasons from ai_ux.
+  if (!isBest || !aiUx) return false;
+  const be = aiUx.best_export || {};
+  return !!(be.enabled && _aiSafeList(be.why, 100, 3).length);
+}
+
 // ── Phase 49B — AI Strategy Panel ────────────────────────────────────────────
 
 function renderAiStrategyPanel(job) {
   // Inject a compact AI Strategy panel above the clips list inside render_output_panel.
-  // Silently no-ops when ai_ux is missing or unavailable.
+  // Silently no-ops when ai_ux is missing, unavailable, or has no displayable content.
   try {
     const container = qs('render_output_panel');
     const listEl    = qs('render_output_list');
@@ -4001,28 +4057,21 @@ function renderAiStrategyPanel(job) {
     const existing = document.getElementById('aiux_strategy_panel');
     if (existing) existing.remove();
 
-    let aiUx = null;
-    try {
-      const raw = job && job.result_json;
-      const result = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
-      aiUx = result && result.ai_ux;
-    } catch (_) {}
+    const aiUx = _parseAiUx(job);
+    if (!aiUx || !_shouldRenderAiStrategy(aiUx)) return;
 
-    if (!aiUx || !aiUx.available) return;
+    const strategy      = aiUx.strategy       || {};
+    const safeInfluence = aiUx.safe_influence  || {};
 
-    const strategy       = aiUx.strategy        || {};
-    const safeInfluence  = aiUx.safe_influence   || {};
-    const bestExport     = aiUx.best_export      || {};
-
-    const confidence  = strategy.confidence;
-    const confPct     = (confidence != null && confidence !== '') ? Math.round(Number(confidence) * 100) : null;
-    const confLevel   = confPct != null ? (confPct >= 80 ? 'high' : confPct >= 60 ? 'mid' : 'low') : '';
-    const creatorStyle = String(strategy.creator_style || '').trim();
-    const targetMarket = String(strategy.target_market || '').trim();
-    const recs    = Array.isArray(strategy.recommendations) ? strategy.recommendations.slice(0, 5) : [];
-    const why     = Array.isArray(strategy.why)             ? strategy.why.slice(0, 4)             : [];
+    const confRaw  = _aiClampConf(strategy.confidence);
+    const confPct  = confRaw != null ? Math.round(confRaw * 100) : null;
+    const confLevel = confPct != null ? (confPct >= 80 ? 'high' : confPct >= 60 ? 'mid' : 'low') : '';
+    const creatorStyle = _aiSafeText(strategy.creator_style, 60);
+    const targetMarket = _aiSafeText(strategy.target_market, 40);
+    const recs     = _aiSafeList(strategy.recommendations, 120, 5);
+    const why      = _aiSafeList(strategy.why, 120, 4);
     const applied  = !!safeInfluence.applied;
-    const infItems = (applied && Array.isArray(safeInfluence.items)) ? safeInfluence.items.slice(0, 4) : [];
+    const infItems = applied ? _aiSafeList(safeInfluence.items, 120, 4) : [];
 
     let h = '<div id="aiux_strategy_panel" class="aiux-panel" role="region" aria-label="AI Strategy">';
 
@@ -4037,7 +4086,6 @@ function renderAiStrategyPanel(job) {
     // ── Body ────────────────────────────────────────────────────────────────
     h += '<div class="aiux-body">';
 
-    // Creator style + target market chips
     if (creatorStyle || targetMarket) {
       h += '<div class="aiux-chips">';
       if (creatorStyle) h += `<span class="aiux-chip aiux-chip--style">${esc(creatorStyle)}</span>`;
@@ -4045,41 +4093,25 @@ function renderAiStrategyPanel(job) {
       h += '</div>';
     }
 
-    // Recommended actions
     if (recs.length) {
-      h += '<div class="aiux-section">';
-      h += '<div class="aiux-section-label">Recommended</div>';
-      h += '<ul class="aiux-list">';
-      recs.forEach(function(r) {
-        h += `<li class="aiux-list-item"><span class="aiux-check">✓</span>${esc(String(r))}</li>`;
-      });
+      h += '<div class="aiux-section"><div class="aiux-section-label">Recommended</div><ul class="aiux-list">';
+      recs.forEach(function(r) { h += `<li class="aiux-list-item"><span class="aiux-check">&#x2713;</span>${esc(r)}</li>`; });
       h += '</ul></div>';
     }
 
-    // Why (reasoning)
     if (why.length) {
-      h += '<div class="aiux-section">';
-      h += '<div class="aiux-section-label">Why</div>';
-      h += '<ul class="aiux-list aiux-list--why">';
-      why.forEach(function(w) {
-        h += `<li class="aiux-list-item"><span class="aiux-bullet">•</span>${esc(String(w))}</li>`;
-      });
+      h += '<div class="aiux-section"><div class="aiux-section-label">Why</div><ul class="aiux-list aiux-list--why">';
+      why.forEach(function(w) { h += `<li class="aiux-list-item"><span class="aiux-bullet">&bull;</span>${esc(w)}</li>`; });
       h += '</ul></div>';
     }
 
-    // AI adjustments applied (Phase 48 influence)
     if (applied && infItems.length) {
-      h += '<div class="aiux-section">';
-      h += '<div class="aiux-section-label">AI Adjustments</div>';
-      h += '<ul class="aiux-list">';
-      infItems.forEach(function(item) {
-        h += `<li class="aiux-list-item"><span class="aiux-check aiux-check--applied">✦</span>${esc(String(item))}</li>`;
-      });
+      h += '<div class="aiux-section"><div class="aiux-section-label">AI Adjustments</div><ul class="aiux-list">';
+      infItems.forEach(function(item) { h += `<li class="aiux-list-item"><span class="aiux-check aiux-check--applied">&#x2736;</span>${esc(item)}</li>`; });
       h += '</ul></div>';
     }
 
-    h += '</div>'; // .aiux-body
-    h += '</div>'; // .aiux-panel
+    h += '</div></div>'; // .aiux-body + .aiux-panel
 
     const wrap = document.createElement('div');
     wrap.innerHTML = h;
