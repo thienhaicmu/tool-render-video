@@ -115,6 +115,7 @@ def apply_ai_render_influence(
         _report_creator_preset_evolution(payload, edit_plan, report)
         _report_multi_signal_orchestration(payload, edit_plan, report)
         _report_safe_influence_pack(payload, edit_plan, report)
+        _report_creator_subtitle_preference(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1520,4 +1521,44 @@ def _report_safe_influence_pack(payload: Any, edit_plan: Any, report: dict) -> N
     logger.debug(
         "safe_influence_pack_reported mode=%s enabled=%s tier=%s confidence=%.3f",
         mode, enabled, tier, conf,
+    )
+
+
+def _report_creator_subtitle_preference(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report creator subtitle preference metadata — inference_only in Phase 50A.
+
+    No render execution. No subtitle engine rewrite. No timing rewrite.
+    No FFmpeg altered. No executor override.
+    Subtitle preference is metadata-only and inference-only.
+    """
+    csp = getattr(edit_plan, "creator_subtitle_preference", None)
+    if not isinstance(csp, dict) or not csp:
+        report["skipped"].append("creator_subtitle_preference:no_result_phase50a")
+        return
+
+    available = csp.get("available", False)
+    if not available:
+        report["skipped"].append("creator_subtitle_preference:unavailable_phase50a")
+        return
+
+    pref = csp.get("subtitle_preference") or {}
+    style = str(pref.get("style") or "unknown")
+    density = str(pref.get("density") or "unknown")
+    emphasis = str(pref.get("keyword_emphasis") or "unknown")
+    conf = float(pref.get("confidence") or 0.0)
+    signal_count = len(pref.get("signals") or [])
+
+    # Phase 50A always reports to skipped — inference-only, no render execution.
+    report["skipped"].append(
+        f"creator_subtitle_preference:inference_only_phase50a"
+        f"(style={style!r}"
+        f",density={density!r}"
+        f",emphasis={emphasis!r}"
+        f",confidence={round(conf, 3)}"
+        f",signals={signal_count})"
+    )
+
+    logger.debug(
+        "creator_subtitle_preference_reported style=%s density=%s confidence=%.3f",
+        style, density, conf,
     )

@@ -487,6 +487,15 @@ def _build_plan(
         plan.warnings.append(f"safe_influence_pack_error:{type(exc).__name__}")
         logger.debug("ai_director_safe_influence_pack_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 50A: Deep Subtitle Preference Intelligence ---
+    # Runs after Phase 48: all subtitle/influence/orchestration signals are populated.
+    # Inference-only: no render mutation, no subtitle engine rewrite, no executor override.
+    try:
+        _attach_creator_subtitle_preference(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_subtitle_preference_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_subtitle_preference_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4146,3 +4155,52 @@ def _attach_safe_influence_pack(
             "warnings": [f"safe_influence_pack_error:{type(exc).__name__}"],
         }
         logger.debug("ai_director_safe_influence_pack_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 50A — Deep Subtitle Preference Intelligence attachment
+# ---------------------------------------------------------------------------
+
+def _attach_creator_subtitle_preference(
+    plan: "AIEditPlan",
+    job_id: str,
+) -> None:
+    """Infer deep subtitle preferences from all available AI metadata. Phase 50A.
+
+    Reads Phase 17, 33, 42–48 signal fields from the edit plan and produces
+    a rich subtitle preference profile. Inference-only: no render mutation,
+    no subtitle engine rewrite, no timing rewrite, no executor override.
+    Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.creator_subtitle.subtitle_preference_inference import (
+            infer_subtitle_preference,
+        )
+
+        logger.debug("ai_subtitle_preference_started job_id=%s", job_id)
+        result = infer_subtitle_preference(plan)
+        plan.creator_subtitle_preference = result
+
+        conf = (result.get("subtitle_preference") or {}).get("confidence", 0.0)
+        style = (result.get("subtitle_preference") or {}).get("style", "unknown")
+        logger.info(
+            "ai_subtitle_preference_done job_id=%s style=%s confidence=%.2f",
+            job_id, style, float(conf),
+        )
+
+    except Exception as exc:
+        plan.creator_subtitle_preference = {
+            "available": False,
+            "inference_mode": "metadata_only",
+            "subtitle_preference": {
+                "style": "unknown", "density": "unknown", "line_count": 2,
+                "uppercase": "unknown", "keyword_emphasis": "unknown",
+                "motion_style": "unknown", "caption_box": "unknown",
+                "readability_priority": "unknown", "mobile_safe": True,
+                "confidence": 0.0, "signals": [],
+            },
+            "warnings": [f"creator_subtitle_preference_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_subtitle_preference_failed job_id=%s: %s", job_id, exc)

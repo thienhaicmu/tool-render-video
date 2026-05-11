@@ -1532,3 +1532,147 @@ Phase 49D hardens the AI UX added in 49B/49C with shared helper functions, elimi
 ❌ No DOM renaming or movement
 ❌ No global CSS overrides
 ❌ No index.html modification
+
+---
+
+## Phase 50A — Deep Subtitle Preference Intelligence
+
+**Date:** 2026-05-11
+**Status:** Implemented
+**Module:** `app/ai/creator_subtitle/` (4 files)
+
+### Summary
+
+Phase 50A makes Creator Intelligence understand subtitle preferences more deeply.
+Prior subtitle preference was coarse (style label + density). Phase 50A infers nine
+distinct preference dimensions from available AI metadata signals — all metadata-only,
+no render mutation, no subtitle engine rewrite.
+
+### Nine preference dimensions
+
+| Dimension | Allowed values |
+|---|---|
+| `style` | `viral_bold`, `clean_pro`, `boxed_caption`, `unknown` |
+| `density` | `light`, `medium`, `dense`, `unknown` |
+| `line_count` | `1`, `2`, `3` |
+| `uppercase` | `uppercase`, `mixed`, `lowercase`, `unknown` |
+| `keyword_emphasis` | `none`, `subtle`, `moderate`, `strong`, `unknown` |
+| `motion_style` | `clean`, `bounce`, `karaoke`, `unknown` |
+| `caption_box` | `none`, `minimal`, `boxed`, `unknown` |
+| `readability_priority` | `low`, `medium`, `high`, `unknown` |
+| `mobile_safe` | `true`, `false` |
+
+### Signal priority order (style inference example)
+
+1. Creator feedback dominant pattern — highest priority (actual creator choices)
+2. Phase 48 safe influence style bias
+3. Phase 47 orchestration `recommended_strategy.subtitle_style`
+4. Phase 33 subtitle apply metadata (`subtitle_text_apply.subtitle_style`)
+5. Phase 46 preset evolution `recommended_preset.subtitle_style`
+6. Phase 44 market profile `market_profile.subtitle_style`
+7. Fallback: `"unknown"`
+
+### Confidence scoring
+
+| Condition | Amplification |
+|---|---|
+| `active_signal_domains / 8` | Base score (0.0–1.0) |
+| Phase 42 `subtitle_enhancement_weight > 0.20` | `weight × 0.10` |
+| Phase 43 feedback exports ≥ 3 | `min(count × 0.02, 0.10)` |
+
+Confidence clamped to `[0.0, 1.0]`, rounded to 2 decimal places.
+Low confidence never suppressed — `unknown` is always a valid safe output.
+
+### Example output
+
+```json
+{
+  "available": true,
+  "inference_mode": "metadata_only",
+  "subtitle_preference": {
+    "style": "clean_pro",
+    "density": "medium",
+    "line_count": 2,
+    "uppercase": "mixed",
+    "keyword_emphasis": "moderate",
+    "motion_style": "clean",
+    "caption_box": "minimal",
+    "readability_priority": "high",
+    "mobile_safe": true,
+    "confidence": 0.72,
+    "signals": [
+      "Creator historically preferred clean_pro subtitle style",
+      "AI influence recommended lighter subtitle density",
+      "Subtitle readability score consistently high (avg=0.78)",
+      "Medium max-words-per-line suggests two-line subtitle preference",
+      "TikTok market balances readability with visual impact"
+    ]
+  },
+  "warnings": []
+}
+```
+
+### Files
+
+| File | Role |
+|---|---|
+| `app/ai/creator_subtitle/__init__.py` | Package marker |
+| `app/ai/creator_subtitle/subtitle_preference_schema.py` | `AISubtitlePreference`, `AISubtitlePreferencePack` dataclasses + allowed value sets |
+| `app/ai/creator_subtitle/subtitle_preference_safety.py` | Forbidden key stripping (14 forbidden keys) |
+| `app/ai/creator_subtitle/subtitle_preference_inference.py` | Main inference engine — `infer_subtitle_preference()` public API |
+
+### Integration points
+
+| File | Change |
+|---|---|
+| `app/ai/director/edit_plan_schema.py` | Added `creator_subtitle_preference: dict = field(default_factory=dict)` + `to_dict()` entry |
+| `app/ai/director/ai_director.py` | Phase 50A block after Phase 48: `_attach_creator_subtitle_preference()` |
+| `app/ai/director/render_influence.py` | `_report_creator_subtitle_preference()` — always to `skipped`, never `applied` |
+
+### Safety boundaries
+
+❌ No FFmpeg mutation
+❌ No render pipeline changes
+❌ No subtitle timing rewrite
+❌ No ASS generation rewrite
+❌ No transcription mutation
+❌ No playback_speed mutation
+❌ No rerender trigger
+❌ No executor override
+❌ No autonomous execution
+❌ No cloud AI / external API required
+❌ No GPU required
+❌ No internet required
+
+All nine preference dimensions are metadata advisory only.
+Render executor retains full authority over all subtitle execution.
+
+### Render influence reporting
+
+Phase 50A always reports to `report["skipped"]`, never to `report["applied"]`.
+Entry format:
+```
+creator_subtitle_preference:inference_only_phase50a(style=...,density=...,emphasis=...,confidence=...,signals=N)
+```
+
+### Forbidden safety keys (auto-stripped by subtitle_preference_safety.py)
+
+`ffmpeg_args`, `render_command`, `playback_speed`, `subtitle_timing`,
+`subprocess`, `executable`, `python_code`, `shell`, `powershell`,
+`api_key`, `auth_token`, `queue_priority`, `output_path`, `rerender`, `delete_output`
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_subtitle_preference_started` | Inference engine started for a job |
+| `ai_subtitle_preference_done` | Inference complete — logs style + confidence |
+| `creator_subtitle_preference_error` | Inference failed, fallback attached |
+
+### Phase compatibility
+
+- All Phase 1–49D behavior preserved
+- `AIEditPlan.creator_subtitle_preference` defaults to `{}` — backward compatible
+- Inference runs automatically when AI Director is enabled
+- No new required request fields
+- All Phase 17, 33, 42–48 AI signal fields remain unchanged
