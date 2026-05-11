@@ -1958,3 +1958,174 @@ creator_preference_profile:fused_phase50d(subtitle_style=...,camera_motion=...,c
 - Fusion runs automatically when AI Director is enabled
 - No new required request fields
 - All Phase 50A/B/C outputs unchanged
+
+---
+
+## Phase 51A — Safe Strategy Variant Generator
+
+**Date:** 2026-05-11
+**Status:** Implemented
+**Branch:** feature/product-polish
+**Module:** `app/ai/strategy_variants/` (3 files)
+
+### Mission
+
+Generate up to 3 deterministic, metadata-only candidate render strategy variants from the
+unified creator preference profile (Phase 50D), market intelligence (Phase 44), and render
+quality evaluation (Phase 45).  Variants are candidate-only — they are never evaluated,
+never ranked, never selected, and never applied to execution.  Phase 51B Variant Evaluation
+Engine will evaluate and rank them.
+
+### Variant types (deterministic order)
+
+| # | Variant ID | Label | Source | Purpose |
+|---|---|---|---|---|
+| 1 | `creator_safe` | Creator Safe | Phase 50D `creator_preference_profile` | Preserve creator preferences exactly |
+| 2 | `market_balanced` | Market Balanced | Phase 44 `market_optimization_intelligence` | Balance creator with target market |
+| 3 | `quality_focused` | Quality Focused | Phase 45 `render_quality_evaluation` | Optimize for readability and smoothness |
+
+Creator Safe is always generated first.  If creator profile unavailable, a conservative fallback
+with all "unknown" fields is produced.  Market Balanced only generated when market profile
+has a known target market.  Quality Focused only generated when output_scores is non-empty.
+
+### Variant schema shape
+
+```json
+{
+  "available": true,
+  "strategy_variants": [
+    {
+      "id": "creator_safe",
+      "label": "Creator Safe",
+      "intent": "preserve creator preference",
+      "subtitle": {
+        "style": "clean_pro",
+        "density": "medium",
+        "keyword_emphasis": "moderate"
+      },
+      "camera": {
+        "motion_style": "smooth_subject",
+        "stability_priority": "high",
+        "crop_aggressiveness": "low"
+      },
+      "ranking": {"priority": "retention"},
+      "confidence": 0.84,
+      "reasoning": [
+        "Matches unified creator preference profile from Phase 50D fusion",
+        "Preserves subtitle style='clean_pro' and camera motion='smooth_subject'"
+      ]
+    }
+  ],
+  "variant_count": 3,
+  "generation_mode": "candidate_only",
+  "warnings": []
+}
+```
+
+### Allowed field values (enforced by frozenset validation)
+
+| Field | Allowed values |
+|---|---|
+| `subtitle.style` | `viral_bold`, `clean_pro`, `boxed_caption`, `unknown` |
+| `subtitle.density` | `light`, `medium`, `dense`, `unknown` |
+| `subtitle.keyword_emphasis` | `none`, `subtle`, `moderate`, `strong`, `unknown` |
+| `camera.motion_style` | `static_center`, `smooth_subject`, `dynamic_subject`, `unknown` |
+| `camera.stability_priority` | `low`, `medium`, `high`, `unknown` |
+| `camera.crop_aggressiveness` | `low`, `medium`, `high`, `unknown` |
+| `ranking.priority` | `creator_fit`, `retention`, `hook_strength`, `readability`, `balanced`, `unknown` |
+| `id` | `creator_safe`, `market_balanced`, `quality_focused` |
+
+No arbitrary values. `_safe_val()` normalizes any out-of-set value to `"unknown"`.
+
+### Market signal helpers (deterministic, local-only)
+
+| Target market | subtitle.style | density | emphasis | camera.motion |
+|---|---|---|---|---|
+| `tiktok` / `reels` / `instagram` | `viral_bold` | `dense` | `strong` | `dynamic_subject` |
+| `podcast` / `educational` | `clean_pro` | `light` | `subtle` | `static_center` |
+| `youtube` / `shorts` | `clean_pro` | `medium` | `moderate` | `smooth_subject` |
+| other | `unknown` | `medium` | `unknown` | `unknown` |
+
+### Quality-focused derivation
+
+| Signal | Threshold | Result |
+|---|---|---|
+| `avg_subtitle_readability ≥ 0.70` | high quality | style=`clean_pro`, density=`light`, emphasis=`subtle` |
+| `avg_subtitle_readability < 0.70` | lower quality | style=`unknown`, density=`medium`, emphasis=`moderate` |
+| `avg_camera_smoothness ≥ 0.40` | smooth | motion=`smooth_subject` |
+| `avg_camera_smoothness < 0.40` | less smooth | motion=`static_center` |
+
+Confidence = `avg_sub × 0.5 + avg_cam × 0.5`, clamped to [0.0, 1.0].
+
+### Fallback behavior
+
+| Condition | Behavior |
+|---|---|
+| `creator_preference_profile.available = False` | Conservative fallback: all "unknown", confidence=0.0, warning added |
+| `market_profile` missing or target = "unknown" | No `market_balanced` variant generated |
+| `output_scores` empty | No `quality_focused` variant generated |
+| `edit_plan is None` | Returns unavailable pack with warning |
+| Any exception | Never raises — returns safe fallback pack |
+
+### Files
+
+| File | Role |
+|---|---|
+| `app/ai/strategy_variants/__init__.py` | Package marker |
+| `app/ai/strategy_variants/variant_schema.py` | `StrategyVariant`, `StrategyVariantPack` dataclasses + 7 allowed-value frozensets |
+| `app/ai/strategy_variants/variant_generator.py` | `generate_strategy_variants()` public API |
+| `app/ai/director/edit_plan_schema.py` | `strategy_variants: dict` field added |
+| `app/ai/director/ai_director.py` | Phase 51A block + `_attach_strategy_variants()` |
+| `app/ai/director/render_influence.py` | `_report_strategy_variants()` reporting |
+| `tests/test_ai_phase51a_strategy_variants.py` | 70 tests across 11 classes |
+
+### Integration points
+
+- **Reads from:** `creator_preference_profile` (50D), `market_optimization_intelligence` (44),
+  `render_quality_evaluation` (45)
+- **Writes to:** `plan.strategy_variants` (Phase 51A output)
+- **Runs after:** Phase 50D in AI Director orchestration
+- **Future consumers:** Phase 51B Variant Evaluation Engine
+
+### Render influence reporting
+
+Phase 51A always reports to `report["skipped"]` — candidate generation only, no execution.
+
+```
+strategy_variants:generated_phase51a(count=3,ids=[creator_safe,market_balanced,quality_focused])
+strategy_variants:not_generated_phase51a   ← when pack unavailable
+```
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_strategy_variants_started` | Generation engine started for a job |
+| `ai_strategy_variants_done` | Generation complete — logs count + variant IDs |
+| `ai_director_strategy_variants_failed` | Generation failed, safe fallback attached |
+
+### Safety boundaries
+
+❌ No render pipeline rewrite
+❌ No FFmpeg mutation
+❌ No subtitle timing rewrite
+❌ No motion_crop rewrite
+❌ No playback_speed mutation
+❌ No executor override
+❌ No autonomous execution
+❌ No variant evaluation (Phase 51B)
+❌ No variant selection (Phase 51B)
+❌ No variant application to execution
+❌ No cloud AI / external API required
+❌ No GPU required
+❌ No internet required
+
+Executor authority is fully preserved. All variant output is metadata-only.
+
+### Phase compatibility
+
+- All Phase 1–50D behaviour preserved
+- `AIEditPlan.strategy_variants` defaults to `{}` — backward compatible
+- Variant generation runs automatically when AI Director is enabled
+- No new required request fields
+- All Phase 50A/B/C/D outputs unchanged

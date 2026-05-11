@@ -119,6 +119,7 @@ def apply_ai_render_influence(
         _report_creator_camera_preference(payload, edit_plan, report)
         _report_creator_subtitle_influence(payload, edit_plan, report)
         _report_creator_preference_profile(payload, edit_plan, report)
+        _report_strategy_variants(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1695,4 +1696,33 @@ def _report_creator_preference_profile(payload: Any, edit_plan: Any, report: dic
     logger.debug(
         "creator_preference_profile_reported subtitle=%s camera=%s confidence=%.3f conflicts=%d",
         sub_style, cam_motion, confidence, n_conflicts,
+    )
+
+
+def _report_strategy_variants(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report Phase 51A safe strategy variant generation metadata.
+
+    Phase 51A always reports to report["skipped"] — candidate-only metadata,
+    no evaluation, no selection, no execution path activated.
+    """
+    sv = getattr(edit_plan, "strategy_variants", None) or {}
+
+    if not sv.get("available"):
+        report["skipped"].append("strategy_variants:not_generated_phase51a")
+        return
+
+    variants  = sv.get("strategy_variants") or []
+    count     = int(sv.get("variant_count") or len(variants))
+    ids       = [str(v.get("id", "?")) for v in variants[:3]]
+    ids_str   = ",".join(ids)
+
+    # Phase 51A always reports to skipped — candidate generation only, no execution.
+    report["skipped"].append(
+        f"strategy_variants:generated_phase51a"
+        f"(count={count},ids=[{ids_str}])"
+    )
+
+    logger.debug(
+        "strategy_variants_reported count=%d ids=[%s]",
+        count, ids_str,
     )

@@ -524,6 +524,16 @@ def _build_plan(
         plan.warnings.append(f"creator_preference_profile_error:{type(exc).__name__}")
         logger.debug("ai_director_creator_preference_profile_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 51A: Safe Strategy Variant Generator ---
+    # Runs after Phase 50D: generates candidate strategy variants from the unified
+    # creator preference profile, market intelligence, and quality evaluation.
+    # Candidate-only — no evaluation, no selection, no execution applied.
+    try:
+        _attach_strategy_variants(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"strategy_variants_error:{type(exc).__name__}")
+        logger.debug("ai_director_strategy_variants_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4398,3 +4408,54 @@ def _attach_creator_preference_profile(
             "warnings": [f"creator_preference_profile_error:{type(exc).__name__}"],
         }
         logger.debug("ai_director_creator_preference_profile_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 51A — Safe Strategy Variant Generator attachment
+# ---------------------------------------------------------------------------
+
+def _attach_strategy_variants(
+    plan: "AIEditPlan",
+    job_id: str,
+) -> None:
+    """Generate safe candidate strategy variants from unified creator profile. Phase 51A.
+
+    Reads Phase 50D creator_preference_profile, Phase 44 market_optimization_intelligence,
+    and Phase 45 render_quality_evaluation.  Produces up to 3 deterministic candidate
+    strategy variants.  Candidate-only — no evaluation, no selection, no execution.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.strategy_variants.variant_generator import generate_strategy_variants
+
+        logger.debug("ai_strategy_variants_started job_id=%s", job_id)
+        pack = generate_strategy_variants(plan)
+        plan.strategy_variants = pack.to_dict()
+
+        count   = pack.variant_count
+        ids_str = ",".join(v.id for v in pack.strategy_variants[:3])
+        logger.info(
+            "ai_strategy_variants_done job_id=%s variant_count=%d ids=[%s]",
+            job_id, count, ids_str,
+        )
+
+    except Exception as exc:
+        plan.strategy_variants = {
+            "available":         False,
+            "strategy_variants": [{
+                "id":         "creator_safe",
+                "label":      "Creator Safe",
+                "intent":     "fallback conservative strategy",
+                "subtitle":   {"style": "unknown", "density": "unknown", "keyword_emphasis": "unknown"},
+                "camera":     {"motion_style": "unknown", "stability_priority": "unknown",
+                               "crop_aggressiveness": "unknown"},
+                "ranking":    {"priority": "balanced"},
+                "confidence": 0.0,
+                "reasoning":  ["Conservative fallback — strategy variant generation failed"],
+            }],
+            "variant_count":   1,
+            "generation_mode": "candidate_only",
+            "warnings":        [f"strategy_variants_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_strategy_variants_failed job_id=%s: %s", job_id, exc)
