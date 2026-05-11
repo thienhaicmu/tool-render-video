@@ -1676,3 +1676,147 @@ creator_subtitle_preference:inference_only_phase50a(style=...,density=...,emphas
 - Inference runs automatically when AI Director is enabled
 - No new required request fields
 - All Phase 17, 33, 42–48 AI signal fields remain unchanged
+
+---
+
+## Phase 50C — Subtitle Preference Safe Influence
+
+**Date:** 2026-05-11
+**Status:** Implemented
+**Branch:** feature/product-polish
+
+### Mission
+
+Use Phase 50A creator subtitle preference intelligence to safely improve subtitle output quality
+through bounded tuning of six subtitle configuration dimensions.  No subtitle engine rewrite,
+no ASS generation rewrite, no timing rewrite, no segmentation rewrite, no FFmpeg mutation.
+
+### Six influence dimensions
+
+| Dimension | Allowed values | Conservative rule |
+|---|---|---|
+| `preset_bias` | `viral_bold`, `clean_pro`, `boxed_caption`, `none`, `unknown` | Bias toward preferred preset; never force-switch |
+| `density_nudge` | `reduce`, `none` | Reduction only — never forced increase |
+| `emphasis_delta` | float [-0.30, +0.30] | Signed intensity offset; bounded absolutely |
+| `line_count_bias` | -1, 0, +1 | Directional preference; no segmentation rewrite |
+| `motion_style_bias` | `clean`, `bounce`, `karaoke`, `none`, `unknown` | Pass-through of inferred preference |
+| `mobile_readability_nudge` | float [0.0, 0.20] | Font-scale / margin boost fraction |
+
+### Confidence gate
+
+| Confidence | Tier | Multiplier | Effect |
+|---|---|---|---|
+| < 0.75 | `low` | — | No influence; default subtitle behaviour |
+| 0.75–0.88 | `medium` | 0.5 | Soft influence — all deltas at half strength |
+| > 0.88 | `high` | 1.0 | Full bounded influence |
+
+### Bounded tuning constants (subtitle_influence_schema.py)
+
+| Constant | Value |
+|---|---|
+| `EMPHASIS_DELTA_MIN` | -0.30 |
+| `EMPHASIS_DELTA_MAX` | +0.30 |
+| `PRESET_BIAS_MAX` | 1.0 |
+| `MOBILE_NUDGE_MAX` | 0.20 |
+| `LINE_COUNT_BIAS_MIN/MAX` | -1 / +1 |
+| `SOFT_TIER_MULTIPLIER` | 0.5 |
+
+### Input / output example
+
+**Input** (from `plan.creator_subtitle_preference`, Phase 50A output):
+```json
+{
+  "available": true,
+  "subtitle_preference": {
+    "style": "clean_pro",
+    "density": "dense",
+    "keyword_emphasis": "moderate",
+    "line_count": 1,
+    "motion_style": "clean",
+    "readability_priority": "high",
+    "mobile_safe": true,
+    "confidence": 0.90
+  }
+}
+```
+
+**Output** (stored in `plan.creator_subtitle_influence`):
+```json
+{
+  "available": true,
+  "confidence_tier": "high",
+  "preset_bias": "clean_pro",
+  "preset_bias_strength": 0.6,
+  "density_nudge": "reduce",
+  "emphasis_delta": 0.1,
+  "line_count_bias": -1,
+  "motion_style_bias": "clean",
+  "mobile_readability_nudge": 0.1,
+  "reasoning": [
+    "Confidence tier=high (conf=0.90)",
+    "preset_bias='clean_pro' strength=0.60 from style='clean_pro'",
+    "density_nudge=reduce (dense->medium for readability)",
+    "emphasis_delta=+0.10 from emphasis='moderate'",
+    "mobile_readability_nudge=0.10 (readability='high', mobile_safe=True)"
+  ],
+  "warnings": []
+}
+```
+
+### Files
+
+| File | Role |
+|---|---|
+| `app/ai/creator_subtitle/subtitle_influence_schema.py` | Bounded constants + AISubtitleInfluencePack dataclass |
+| `app/ai/creator_subtitle/subtitle_influence_engine.py` | `compute_subtitle_influence()` public API |
+| `app/ai/director/edit_plan_schema.py` | `creator_subtitle_influence: dict` field added |
+| `app/ai/director/ai_director.py` | Phase 50C block + `_attach_creator_subtitle_influence()` |
+| `app/ai/director/render_influence.py` | `_report_creator_subtitle_influence()` reporting |
+| `tests/test_ai_phase50c_subtitle_influence.py` | 80 focused tests |
+
+### Integration points
+
+- **Reads from:** `plan.creator_subtitle_preference` (Phase 50A output)
+- **Writes to:** `plan.creator_subtitle_influence` (Phase 50C output)
+- **Runs after:** Phase 50B (camera preference) in AI Director orchestration
+- **Consumed by:** Subtitle configuration layer (optional — additive only)
+
+### Render influence reporting
+
+Phase 50C reports to `report["skipped"]` as `influence_ready_phase50c` — bounded influence
+metadata only, no render execution path activated.
+Entry format:
+```
+creator_subtitle_influence:influence_ready_phase50c(tier=...,preset_bias=...,bias_strength=...,density_nudge=...,emphasis_delta=...,motion_bias=...,mobile_nudge=...)
+```
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_subtitle_influence_started` | Influence engine started for a job |
+| `ai_subtitle_influence_done` | Influence complete — logs tier + preset_bias + available |
+| `creator_subtitle_influence_error` | Influence failed, safe fallback attached |
+
+### Safety guarantees
+
+- No subtitle engine rewrite
+- No ASS generation rewrite
+- No subtitle timing rewrite
+- No segmentation rewrite
+- No FFmpeg mutation
+- No executor override
+- No autonomous execution
+- All deltas bounded absolutely (constants in schema.py)
+- Density can only be reduced, never forced higher
+- Never raises — always returns safe fallback pack
+- Deterministic — same input always produces same output
+- Backward compatible — `creator_subtitle_influence` defaults to `{}`
+
+### Phase compatibility
+
+- All Phase 1–50B behaviour preserved
+- `AIEditPlan.creator_subtitle_influence` defaults to `{}` — backward compatible
+- Influence runs automatically when AI Director is enabled
+- No new required request fields
+- All Phase 50A subtitle preference inference unchanged

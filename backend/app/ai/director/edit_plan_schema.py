@@ -194,6 +194,8 @@ class AIEditPlan:
     creator_subtitle_preference: dict = field(default_factory=dict)
     # Phase 50B — Creator camera preference intelligence (populated by camera_preference_inference module)
     creator_camera_preference: dict = field(default_factory=dict)
+    # Phase 50C — Subtitle preference safe influence (populated by subtitle_influence_engine module)
+    creator_subtitle_influence: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -286,4 +288,5 @@ class AIEditPlan:
             "safe_influence_pack": dict(self.safe_influence_pack),
             "creator_subtitle_preference": dict(self.creator_subtitle_preference),
             "creator_camera_preference": dict(self.creator_camera_preference),
+            "creator_subtitle_influence": dict(self.creator_subtitle_influence),
         }

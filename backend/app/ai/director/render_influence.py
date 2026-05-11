@@ -117,6 +117,7 @@ def apply_ai_render_influence(
         _report_safe_influence_pack(payload, edit_plan, report)
         _report_creator_subtitle_preference(payload, edit_plan, report)
         _report_creator_camera_preference(payload, edit_plan, report)
+        _report_creator_subtitle_influence(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1605,4 +1606,51 @@ def _report_creator_camera_preference(payload: Any, edit_plan: Any, report: dict
     logger.debug(
         "creator_camera_preference_reported style=%s stability=%s confidence=%.3f tier=%s",
         style, stability, conf, tier,
+    )
+
+
+def _report_creator_subtitle_influence(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report creator subtitle influence metadata — influence_ready in Phase 50C.
+
+    No render execution. No subtitle engine rewrite. No ASS generation rewrite.
+    No subtitle timing rewrite. No segmentation rewrite. No FFmpeg altered.
+    No executor override. Subtitle influence is metadata-only.
+    """
+    csi = getattr(edit_plan, "creator_subtitle_influence", None)
+    if not isinstance(csi, dict) or not csi:
+        report["skipped"].append("creator_subtitle_influence:no_result_phase50c")
+        return
+
+    available = csi.get("available", False)
+    if not available:
+        report["skipped"].append(
+            f"creator_subtitle_influence:unavailable_phase50c"
+            f"(tier={csi.get('confidence_tier', 'low')!r})"
+        )
+        return
+
+    tier      = csi.get("confidence_tier",          "low")
+    bias      = csi.get("preset_bias",               "unknown")
+    strength  = float(csi.get("preset_bias_strength", 0.0))
+    nudge     = csi.get("density_nudge",             "none")
+    emp_delta = float(csi.get("emphasis_delta",       0.0))
+    motion    = csi.get("motion_style_bias",          "unknown")
+    mob_nudge = float(csi.get("mobile_readability_nudge", 0.0))
+
+    # Phase 50C always reports to skipped — bounded influence metadata only,
+    # no render execution path activated.
+    report["skipped"].append(
+        f"creator_subtitle_influence:influence_ready_phase50c"
+        f"(tier={tier!r}"
+        f",preset_bias={bias!r}"
+        f",bias_strength={round(strength, 3)}"
+        f",density_nudge={nudge!r}"
+        f",emphasis_delta={round(emp_delta, 3):+}"
+        f",motion_bias={motion!r}"
+        f",mobile_nudge={round(mob_nudge, 3)})"
+    )
+
+    logger.debug(
+        "creator_subtitle_influence_reported tier=%s preset_bias=%s density_nudge=%s emphasis_delta=%.3f",
+        tier, bias, nudge, emp_delta,
     )

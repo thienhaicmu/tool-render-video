@@ -505,6 +505,16 @@ def _build_plan(
         plan.warnings.append(f"creator_camera_preference_error:{type(exc).__name__}")
         logger.debug("ai_director_creator_camera_preference_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 50C: Subtitle Preference Safe Influence ---
+    # Runs after Phase 50A: uses creator_subtitle_preference as input.
+    # Produces bounded subtitle tuning recommendations — no subtitle engine rewrite,
+    # no ASS generation rewrite, no timing rewrite, no FFmpeg mutation.
+    try:
+        _attach_creator_subtitle_influence(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_subtitle_influence_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_subtitle_influence_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4276,3 +4286,55 @@ def _attach_creator_camera_preference(
             "warnings": [f"creator_camera_preference_error:{type(exc).__name__}"],
         }
         logger.debug("ai_director_creator_camera_preference_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 50C — Subtitle Preference Safe Influence attachment
+# ---------------------------------------------------------------------------
+
+def _attach_creator_subtitle_influence(
+    plan: "AIEditPlan",
+    job_id: str,
+) -> None:
+    """Compute bounded subtitle influence recommendations from Phase 50A preferences. Phase 50C.
+
+    Reads plan.creator_subtitle_preference (produced by Phase 50A) and
+    generates six bounded subtitle tuning signals.  No subtitle engine
+    rewrite, no ASS generation rewrite, no timing rewrite, no FFmpeg mutation.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.creator_subtitle.subtitle_influence_engine import compute_subtitle_influence
+
+        logger.debug("ai_subtitle_influence_started job_id=%s", job_id)
+        pref_pack = getattr(plan, "creator_subtitle_influence", None)
+        # Input is the Phase 50A preference pack, not the influence pack field
+        subtitle_pref = getattr(plan, "creator_subtitle_preference", None) or {}
+        influence = compute_subtitle_influence(subtitle_pref)
+        plan.creator_subtitle_influence = influence.to_dict()
+
+        tier  = influence.confidence_tier
+        bias  = influence.preset_bias
+        avail = influence.available
+        logger.info(
+            "ai_subtitle_influence_done job_id=%s tier=%s preset_bias=%s available=%s",
+            job_id, tier, bias, avail,
+        )
+        del pref_pack  # unused variable guard
+
+    except Exception as exc:
+        plan.creator_subtitle_influence = {
+            "available":                False,
+            "confidence_tier":          "low",
+            "preset_bias":              "unknown",
+            "preset_bias_strength":     0.0,
+            "density_nudge":            "none",
+            "emphasis_delta":           0.0,
+            "line_count_bias":          0,
+            "motion_style_bias":        "unknown",
+            "mobile_readability_nudge": 0.0,
+            "reasoning":                [],
+            "warnings": [f"creator_subtitle_influence_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_subtitle_influence_failed job_id=%s: %s", job_id, exc)
