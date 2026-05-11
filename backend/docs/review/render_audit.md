@@ -897,3 +897,132 @@ All bias weights are clamped `[0.0, 0.30]`.
 - `AIEditPlan.creator_preset_evolution` defaults to `{}` — backward compatible
 - Preset evolution runs automatically when AI Director is enabled
 - No new required request fields — `ai_target_market` is optional (falls back to `ai_mode`)
+
+---
+
+## AI Productization Phase 47 — Multi-Signal AI Render Orchestrator
+
+### Implemented
+
+- Unified signal aggregation layer (`app/ai/orchestrator/signal_aggregation.py`)
+  - Aggregates creator, market, quality, preset, feedback, and retrieval signals
+  - Gracefully tolerates missing signals — falls back to `{"available": False}`
+  - Computes `active_signal_count` and aggregate `confidence` (active/6)
+- Per-signal confidence engine (`app/ai/orchestrator/confidence_engine.py`)
+  - Conservative scale factors per signal type
+  - Aggregate confidence = mean of active (non-zero) signal scores
+- Deterministic conflict resolver (`app/ai/orchestrator/conflict_resolver.py`)
+  - Resolves subtitle_style, pacing_style, camera_style, hook_emphasis conflicts
+  - Priority order: creator > feedback > preset > market > retrieval > quality
+  - Lower-priority signal overrides only when confidence delta ≥ 0.25
+  - Every resolution includes an explainable reason string
+- Recommendation-only strategy planner (`app/ai/orchestrator/strategy_planner.py`)
+  - Derives subtitle_style, subtitle_density, camera_motion, hook_emphasis,
+    clip_selection_bias, ranking_priority from resolved conflicts
+  - Conservative guard: aggregate confidence < 0.30 → safe defaults only
+- Render orchestrator entry point (`app/ai/orchestrator/render_orchestrator.py`)
+  - Public API: `orchestrate_render_signals(edit_plan, payload=None, context=None) → dict`
+  - Runs all 4 steps: aggregate → confidence → conflict → strategy
+  - Generates future UI-safe `explainability.why_this_strategy` list
+- `AIEditPlan.multi_signal_orchestration` field (defaults to `{}`)
+- AI Director Phase 47 block: `_attach_multi_signal_orchestration()` — runs last
+- Render influence reporting: `_report_multi_signal_orchestration()`
+
+### Architecture direction
+
+| Principle | Detail |
+|---|---|
+| Phase role | Reasoning-only — aggregates all prior signals, never executes |
+| Execution mode | Always `reasoning_only` — `strategy_mode` always `recommendation_only` |
+| Signal sources | Phases 41–46 + Phase 23 creator style adaptation |
+| Confidence guard | aggregate_confidence < 0.30 → conservative default strategy |
+| Conflict resolution | Deterministic priority order with confidence-based override threshold |
+| Explainability | `why_this_strategy` list powers future AI Strategy Panel |
+| Render authority | Deterministic render engine always has final authority |
+
+### Signal sources integrated
+
+| Signal | Source phase |
+|---|---|
+| `creator_signal` | Phase 42 adaptive + Phase 23 style adaptation |
+| `market_signal` | Phase 44 market optimization |
+| `quality_signal` | Phase 45 render quality evaluation |
+| `preset_signal` | Phase 46 creator preset evolution |
+| `feedback_signal` | Phase 43 creator feedback loop |
+| `retrieval_signal` | Phase 41 creator retrieval |
+
+### Example orchestration output
+
+```json
+{
+  "available": true,
+  "enabled": true,
+  "orchestration_mode": "reasoning_only",
+  "confidence_scores": {
+    "creator_confidence": 0.75,
+    "market_confidence": 0.82,
+    "quality_confidence": 0.61,
+    "preset_confidence": 0.51,
+    "feedback_confidence": 0.72,
+    "retrieval_confidence": 0.60,
+    "aggregate_confidence": 0.67
+  },
+  "resolved_conflicts": {
+    "subtitle_style": {"winner": "feedback_preference", "value": "compact", "reason": "priority_preferred conf=0.72"},
+    "hook_emphasis": {"winner": "market_preference", "value": "strong", "reason": "market_hook_bias_weight=0.24"},
+    "conflict_count": 2,
+    "resolution_mode": "deterministic"
+  },
+  "recommended_strategy": {
+    "subtitle_style": "compact",
+    "subtitle_density": "high",
+    "camera_motion": "dynamic_subject",
+    "hook_emphasis": "strong",
+    "clip_selection_bias": "retention",
+    "ranking_priority": "creator_fit"
+  },
+  "strategy_confidence": 0.67,
+  "strategy_mode": "recommendation_only",
+  "explainability": {
+    "why_this_strategy": [
+      "Creator intelligence adapted to 'viral_tiktok' style (confidence=0.75)",
+      "Creator has 8 prior export(s) — feedback patterns active",
+      "VIRAL_TIKTOK market optimization active (confidence=0.82)",
+      "Preset 'tiktok_viral_v2' strongly matched (score=72.5)",
+      "2 signal conflict(s) resolved — subtitle_style: feedback_preference preferred; pacing_style: feedback_preference preferred"
+    ],
+    "signal_count": 6,
+    "strategy_confidence": 0.67
+  }
+}
+```
+
+### Safety boundaries (still intentionally blocked)
+
+- **FFmpeg mutation** — never touched
+- **Render rewrite** — never performed
+- **Subtitle timing rewrite** — never touched
+- **playback_speed mutation** — never touched
+- **Rerender** — never triggered
+- **Executor override** — never performed
+- **Autonomous execution** — never triggered
+- **Destructive mutation** — never performed
+- **Cloud AI / external API** — not required
+- **GPU** — not required
+- **Internet** — not required
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `ai_render_orchestrator_started` | Orchestrator started for a job |
+| `ai_render_orchestrator_done` | Orchestration complete — logs active signals + confidence |
+| `ai_render_orchestrator_skipped` | No active signals or no edit plan available |
+
+### Phase compatibility
+
+- All Phase 1–46 behavior preserved
+- `AIEditPlan.multi_signal_orchestration` defaults to `{}` — backward compatible
+- Orchestrator runs automatically when AI Director is enabled
+- No new required request fields — all orchestrator inputs come from prior phase fields
+- All Phase 41–46 AI signal fields remain unchanged

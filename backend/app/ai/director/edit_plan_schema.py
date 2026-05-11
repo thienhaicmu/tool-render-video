@@ -186,6 +186,8 @@ class AIEditPlan:
     render_quality_evaluation: dict = field(default_factory=dict)
     # Phase 46 — Creator preset evolution intelligence (populated by preset_evolution_engine module)
     creator_preset_evolution: dict = field(default_factory=dict)
+    # Phase 47 — Multi-signal AI render orchestration (populated by render_orchestrator module)
+    multi_signal_orchestration: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -274,4 +276,5 @@ class AIEditPlan:
             "market_optimization_intelligence": dict(self.market_optimization_intelligence),
             "render_quality_evaluation": dict(self.render_quality_evaluation),
             "creator_preset_evolution": dict(self.creator_preset_evolution),
+            "multi_signal_orchestration": dict(self.multi_signal_orchestration),
         }

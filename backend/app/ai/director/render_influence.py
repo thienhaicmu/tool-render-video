@@ -113,6 +113,7 @@ def apply_ai_render_influence(
         _report_market_optimization_intelligence(payload, edit_plan, report)
         _report_render_quality_evaluation(payload, edit_plan, report)
         _report_creator_preset_evolution(payload, edit_plan, report)
+        _report_multi_signal_orchestration(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1415,4 +1416,53 @@ def _report_creator_preset_evolution(payload: Any, edit_plan: Any, report: dict)
     logger.debug(
         "creator_preset_evolution_reported mode=%s enabled=%s recommended=%d evolved=%d best=%s",
         mode, enabled, len(recommended), len(evolved), best_preset_id,
+    )
+
+
+def _report_multi_signal_orchestration(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report multi-signal orchestration metadata — reasoning_only in Phase 47.
+
+    No render execution. No FFmpeg altered. No playback_speed changed.
+    No subtitle timing rewritten. No executor override.
+    Orchestration is metadata-only and reasoning-only.
+    """
+    mso = getattr(edit_plan, "multi_signal_orchestration", None)
+    if not isinstance(mso, dict) or not mso:
+        report["skipped"].append("multi_signal_orchestration:no_result")
+        return
+
+    available = mso.get("available", False)
+    enabled = mso.get("enabled", False)
+    mode = mso.get("orchestration_mode", "reasoning_only")
+
+    if not available:
+        report["skipped"].append("multi_signal_orchestration:unavailable_phase47")
+        return
+
+    confidence_scores = mso.get("confidence_scores") or {}
+    agg_conf = float(confidence_scores.get("aggregate_confidence") or 0.0)
+    active = int((mso.get("aggregated_signals") or {}).get("active_signal_count") or 0)
+
+    if not enabled:
+        report["skipped"].append(
+            f"multi_signal_orchestration:{mode}_phase47"
+            f"(active_signals={active},confidence={round(agg_conf, 3)})"
+        )
+    else:
+        rec_strategy = mso.get("recommended_strategy") or {}
+        subtitle = str(rec_strategy.get("subtitle_style") or "")
+        camera = str(rec_strategy.get("camera_motion") or "")
+        hook = str(rec_strategy.get("hook_emphasis") or "")
+        report["skipped"].append(
+            f"multi_signal_orchestration:{mode}_phase47"
+            f"(active_signals={active}"
+            f",confidence={round(agg_conf, 3)}"
+            f",subtitle={subtitle!r}"
+            f",camera={camera!r}"
+            f",hook={hook!r})"
+        )
+
+    logger.debug(
+        "multi_signal_orchestration_reported mode=%s enabled=%s active=%d confidence=%.3f",
+        mode, enabled, active, agg_conf,
     )

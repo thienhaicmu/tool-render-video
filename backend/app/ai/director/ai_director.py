@@ -469,6 +469,15 @@ def _build_plan(
         plan.warnings.append(f"output_ranking_placeholder_error:{type(exc).__name__}")
         logger.debug("ai_director_output_ranking_placeholder_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 47: Multi-Signal AI Render Orchestrator ---
+    # Runs last: all Phase 41–46 signals and Phase 23 style adaptation are populated.
+    # Reasoning-only: no render mutation, no executor override, no FFmpeg.
+    try:
+        _attach_multi_signal_orchestration(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"multi_signal_orchestration_error:{type(exc).__name__}")
+        logger.debug("ai_director_multi_signal_orchestration_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4017,3 +4026,59 @@ def _append_preset_evolution_explainability(
 
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 47 — Multi-Signal AI Render Orchestrator attachment
+# ---------------------------------------------------------------------------
+
+def _attach_multi_signal_orchestration(
+    plan: "AIEditPlan",
+    request: Any,
+    job_id: str,
+) -> None:
+    """Orchestrate all AI signals into a unified render strategy. Phase 47.
+
+    Reasoning-only: aggregates Phase 41–46 signals into one coherent
+    recommendation. Never mutates render output, never overrides executor,
+    never touches FFmpeg, playback_speed, or subtitle timing.
+    Never raises.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.orchestrator.render_orchestrator import orchestrate_render_signals
+
+        logger.debug("ai_render_orchestrator_started job_id=%s", job_id)
+
+        context: dict = {}
+        target = getattr(request, "ai_target_market", None) or getattr(request, "ai_mode", None)
+        if target:
+            context["target_market"] = str(target)
+
+        result = orchestrate_render_signals(plan, payload=request, context=context)
+        plan.multi_signal_orchestration = result
+
+        if result.get("enabled"):
+            agg_conf = float(
+                (result.get("confidence_scores") or {}).get("aggregate_confidence") or 0.0
+            )
+            active = int(
+                (result.get("aggregated_signals") or {}).get("active_signal_count") or 0
+            )
+            logger.info(
+                "ai_render_orchestrator_done job_id=%s enabled=True "
+                "confidence=%.3f active_signals=%d",
+                job_id, agg_conf, active,
+            )
+        else:
+            logger.debug("ai_render_orchestrator_skipped job_id=%s", job_id)
+
+    except Exception as exc:
+        plan.multi_signal_orchestration = {
+            "available": False,
+            "enabled": False,
+            "orchestration_mode": "reasoning_only",
+            "warnings": [f"multi_signal_orchestration_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_multi_signal_orchestration_failed job_id=%s: %s", job_id, exc)
