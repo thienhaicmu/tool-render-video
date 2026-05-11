@@ -2785,3 +2785,146 @@ hook_quality_v2:no_signal_phase52c
 - Evaluation runs automatically when AI Director is enabled
 - No new required request fields
 - All existing quality fields (Phase 45 `render_quality_evaluation`) unchanged
+
+---
+
+## Phase 52D — Unified Quality Score v2
+
+**Date:** 2026-05-11
+**Status:** Implemented
+
+### Mission
+
+Fuse subtitle_quality_v2 (52A), camera_quality_v2 (52B), and hook_quality_v2 (52C)
+into one deterministic `render_quality_v2` unified score.  Adds creator fit, market fit,
+and strategy fit dimensions derived from existing metadata.  Quality scoring only —
+no render mutation, no executor override, no autonomous execution.
+
+### Scoring dimensions and weights
+
+| Dimension | Weight | Source |
+|---|---|---|
+| `subtitle_score` | 25% | `subtitle_quality_v2.overall` (Phase 52A) |
+| `camera_score` | 25% | `camera_quality_v2.overall` (Phase 52B) |
+| `hook_score` | 20% | `hook_quality_v2.overall` (Phase 52C) |
+| `creator_fit` | 15% | Average of subscore creator_fits + Phase 50D profile confidence |
+| `market_fit` | 10% | `hook_quality_v2.market_fit` (primary) + subtitle safe_zone_fit (proxy) |
+| `strategy_fit` | 5% | Phase 51B variant_evaluation confidence + Phase 51C reasoning strength |
+
+Weights sum to 1.00. No risk penalty in unified score (risk is handled within each subsystem).
+
+### Confidence calculation
+
+Confidence counts how many of 6 signal sources are populated:
+1. `subtitle_quality_v2` (overall > 0 or confidence > 0)
+2. `camera_quality_v2` (overall > 0 or confidence > 0)
+3. `hook_quality_v2` (overall > 0 or confidence > 0)
+4. `creator_preference_profile` (confidence > 0)
+5. `market_optimization_intelligence` (available = true)
+6. `variant_evaluation` (available = true)
+
+`confidence = available_signals / 6`. Missing subsystems lower confidence proportionally.
+
+### Output shape
+
+```json
+{
+  "render_quality_v2": {
+    "subtitle_score": 86,
+    "camera_score": 88,
+    "hook_score": 85,
+    "creator_fit": 89,
+    "market_fit": 83,
+    "strategy_fit": 70,
+    "overall": 87,
+    "confidence": 0.86,
+    "reasoning": [
+      "Subtitle readability, camera stability, and hook strength are well balanced",
+      "Creator preference alignment is strong",
+      "Hook strength supports retention for the selected market"
+    ]
+  }
+}
+```
+
+### Fallback (all inputs missing)
+
+```json
+{
+  "render_quality_v2": {
+    "subtitle_score": 0,
+    "camera_score": 0,
+    "hook_score": 0,
+    "creator_fit": 0,
+    "market_fit": 0,
+    "strategy_fit": 0,
+    "overall": 0,
+    "confidence": 0.0,
+    "reasoning": []
+  }
+}
+```
+
+### Metadata sources consumed
+
+- Phase 51B: `variant_evaluation` — confidence, best_variant_id (for strategy_fit)
+- Phase 51C: `best_strategy_reasoning` — recommendation_strength, confidence (for strategy_fit)
+- Phase 52A: `subtitle_quality_v2` — overall, creator_fit, safe_zone_fit
+- Phase 52B: `camera_quality_v2` — overall, creator_fit
+- Phase 52C: `hook_quality_v2` — overall, creator_fit, market_fit
+- Phase 44: `market_optimization_intelligence` — available, confidence (market_fit supplement)
+- Phase 46: `creator_preset_evolution` — available, evolved_presets (creator_fit supplement)
+- Phase 50D: `creator_preference_profile` — confidence (creator_fit supplement)
+
+### Files introduced / modified
+
+| File | Purpose |
+|---|---|
+| `app/ai/unified_quality/__init__.py` | Package marker |
+| `app/ai/unified_quality/unified_quality_schema.py` | `UnifiedQualityV2` dataclass + `SCORE_WEIGHTS` + fallback |
+| `app/ai/unified_quality/unified_quality_scorer.py` | 6 deterministic dimension scorers + confidence |
+| `app/ai/unified_quality/unified_quality_evaluator.py` | `evaluate_unified_quality_v2()` public API + reasoning |
+| `app/ai/director/edit_plan_schema.py` | `render_quality_v2: dict` field added |
+| `app/ai/director/ai_director.py` | Phase 52D block + `_attach_unified_quality_v2()` |
+| `app/ai/director/render_influence.py` | `_report_render_quality_v2()` reporting |
+| `tests/test_ai_phase52d_unified_quality_v2.py` | 82 tests across 11 classes |
+
+### Data flow
+
+- **Reads from:** `subtitle_quality_v2` (52A), `camera_quality_v2` (52B), `hook_quality_v2` (52C), `variant_evaluation` (51B), `best_strategy_reasoning` (51C), `market_optimization_intelligence` (44), `creator_preset_evolution` (46), `creator_preference_profile` (50D)
+- **Writes to:** `plan.render_quality_v2`
+- **Runs after:** Phase 52C (last in Phase 52 quality series)
+- **Future consumers:** UI unified quality dashboard, creator analytics, render decision support
+
+### Render influence reporting
+
+Phase 52D always reports to `report["skipped"]` — evaluation advisory metadata only.
+
+```
+render_quality_v2:evaluated_phase52d(overall=87,confidence=0.86,subtitle=86,camera=88,hook=85,...)
+render_quality_v2:no_result_phase52d
+render_quality_v2:no_signal_phase52d
+```
+
+### Safety boundaries (still intentionally blocked)
+
+❌ No render mutation
+❌ No hook rewriting
+❌ No subtitle mutation
+❌ No motion_crop rewrite
+❌ No FFmpeg mutation
+❌ No render pipeline rewrite
+❌ No playback_speed mutation
+❌ No executor override
+❌ No autonomous execution
+❌ No cloud AI / external API required
+❌ No GPU required
+
+### Backward compatibility
+
+- All Phase 1–52C behaviour preserved
+- `AIEditPlan.render_quality_v2` defaults to `{}` — backward compatible
+- Evaluation runs automatically when AI Director is enabled
+- No new required request fields
+- All existing quality fields (Phase 45 `render_quality_evaluation`) unchanged
+- Phase 52A/B/C subsystem fields unchanged — this phase reads them, never rewrites them

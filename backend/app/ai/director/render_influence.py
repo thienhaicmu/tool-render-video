@@ -125,6 +125,7 @@ def apply_ai_render_influence(
         _report_subtitle_quality_v2(payload, edit_plan, report)
         _report_camera_quality_v2(payload, edit_plan, report)
         _report_hook_quality_v2(payload, edit_plan, report)
+        _report_render_quality_v2(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1932,4 +1933,48 @@ def _report_hook_quality_v2(payload: Any, edit_plan: Any, report: dict) -> None:
         "hook_quality_v2_reported overall=%d confidence=%.3f first_3s=%d first_5s=%d "
         "curiosity=%d open_loop=%d fatigue=%d market=%d creator=%d",
         overall, conf, first_3s, first_5s, curiosity, open_loop, fatigue, market, creator,
+    )
+
+
+def _report_render_quality_v2(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report unified quality v2 evaluation metadata — evaluation_only in Phase 52D.
+
+    No render mutation. No executor override. No autonomous execution.
+    All scores are metadata-only and bounded 0–100.
+    """
+    rqv2 = getattr(edit_plan, "render_quality_v2", None)
+    if not isinstance(rqv2, dict) or not rqv2:
+        report["skipped"].append("render_quality_v2:no_result_phase52d")
+        return
+
+    overall  = int(rqv2.get("overall") or 0)
+    conf     = float(rqv2.get("confidence") or 0.0)
+    subtitle = int(rqv2.get("subtitle_score") or 0)
+    camera   = int(rqv2.get("camera_score") or 0)
+    hook     = int(rqv2.get("hook_score") or 0)
+    creator  = int(rqv2.get("creator_fit") or 0)
+    market   = int(rqv2.get("market_fit") or 0)
+    strategy = int(rqv2.get("strategy_fit") or 0)
+
+    if overall == 0 and conf == 0.0:
+        report["skipped"].append("render_quality_v2:no_signal_phase52d")
+        return
+
+    # Phase 52D always reports to skipped — evaluation advisory metadata only.
+    report["skipped"].append(
+        f"render_quality_v2:evaluated_phase52d"
+        f"(overall={overall}"
+        f",confidence={round(conf, 3)}"
+        f",subtitle={subtitle}"
+        f",camera={camera}"
+        f",hook={hook}"
+        f",creator_fit={creator}"
+        f",market_fit={market}"
+        f",strategy_fit={strategy})"
+    )
+
+    logger.debug(
+        "render_quality_v2_reported overall=%d confidence=%.3f "
+        "subtitle=%d camera=%d hook=%d creator=%d market=%d strategy=%d",
+        overall, conf, subtitle, camera, hook, creator, market, strategy,
     )

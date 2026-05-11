@@ -582,6 +582,16 @@ def _build_plan(
         plan.warnings.append(f"hook_quality_v2_error:{type(exc).__name__}")
         logger.debug("ai_director_hook_quality_v2_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 52D: Unified Quality Score v2 ---
+    # Runs last in the 52-series: fuses subtitle_quality_v2, camera_quality_v2,
+    # hook_quality_v2, creator/market/strategy signals into one render_quality_v2 score.
+    # Evaluation-only — no render mutation, no executor override, no autonomous execution.
+    try:
+        _attach_unified_quality_v2(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"render_quality_v2_error:{type(exc).__name__}")
+        logger.debug("ai_director_unified_quality_v2_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4748,3 +4758,54 @@ def _attach_hook_quality_v2(
             "reasoning":          [],
         }
         logger.debug("ai_director_hook_quality_v2_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 52D — Unified Quality Score v2 attachment
+# ---------------------------------------------------------------------------
+
+def _attach_unified_quality_v2(
+    plan: "AIEditPlan",
+    job_id: str,
+) -> None:
+    """Fuse subtitle/camera/hook quality scores into one unified render quality score. Phase 52D.
+
+    Reads subtitle_quality_v2 (52A), camera_quality_v2 (52B), hook_quality_v2 (52C),
+    creator_preference_profile (50D), market_optimization_intelligence (44),
+    variant_evaluation (51B), and best_strategy_reasoning (51C).
+    Produces deterministic unified quality metadata: per-dimension scores, overall
+    weighted score, confidence, and creator-facing reasoning.
+    Evaluation-only — no render mutation, no executor override, no autonomous execution.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.unified_quality.unified_quality_evaluator import evaluate_unified_quality_v2
+
+        logger.debug("ai_unified_quality_v2_started job_id=%s", job_id)
+        result = evaluate_unified_quality_v2(plan)
+
+        # result is {"render_quality_v2": {...}}
+        plan.render_quality_v2 = result.get("render_quality_v2", {})
+
+        rqv2    = plan.render_quality_v2
+        overall = rqv2.get("overall", 0)
+        conf    = rqv2.get("confidence", 0.0)
+        logger.info(
+            "ai_unified_quality_v2_done job_id=%s overall=%d confidence=%.2f",
+            job_id, overall, float(conf),
+        )
+
+    except Exception as exc:
+        plan.render_quality_v2 = {
+            "subtitle_score": 0,
+            "camera_score":   0,
+            "hook_score":     0,
+            "creator_fit":    0,
+            "market_fit":     0,
+            "strategy_fit":   0,
+            "overall":        0,
+            "confidence":     0.0,
+            "reasoning":      [],
+        }
+        logger.debug("ai_director_unified_quality_v2_failed job_id=%s: %s", job_id, exc)
