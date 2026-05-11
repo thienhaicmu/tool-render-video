@@ -496,6 +496,15 @@ def _build_plan(
         plan.warnings.append(f"creator_subtitle_preference_error:{type(exc).__name__}")
         logger.debug("ai_director_creator_subtitle_preference_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 50B: Creator Camera Preference Intelligence ---
+    # Runs after Phase 50A: all camera/influence/orchestration signals are populated.
+    # Inference-only metadata: no motion_crop rewrite, no tracking rewrite, no FFmpeg mutation.
+    try:
+        _attach_creator_camera_preference(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"creator_camera_preference_error:{type(exc).__name__}")
+        logger.debug("ai_director_creator_camera_preference_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4204,3 +4213,66 @@ def _attach_creator_subtitle_preference(
             "warnings": [f"creator_subtitle_preference_error:{type(exc).__name__}"],
         }
         logger.debug("ai_director_creator_subtitle_preference_failed job_id=%s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# Phase 50B — Creator Camera Preference Intelligence attachment
+# ---------------------------------------------------------------------------
+
+def _attach_creator_camera_preference(
+    plan: "AIEditPlan",
+    job_id: str,
+) -> None:
+    """Infer creator camera preferences from all available AI metadata. Phase 50B.
+
+    Reads Phase 34, 42–48 signal fields from the edit plan and produces a rich
+    camera preference profile plus bounded MotionCropConfig tuning deltas.
+    Inference-only metadata: no motion_crop rewrite, no tracking rewrite,
+    no FFmpeg mutation, no executor override.
+    """
+    if plan is None:
+        return
+    try:
+        from app.ai.creator_camera.camera_preference_inference import infer_camera_preference
+        from app.ai.creator_camera.camera_tuning_engine import compute_camera_tuning
+        from app.ai.creator_camera.camera_preference_schema import AICameraPreferencePack
+
+        logger.debug("ai_camera_preference_started job_id=%s", job_id)
+        camera_pref = infer_camera_preference(plan)
+        tuning_pack = compute_camera_tuning(camera_pref)
+        pack = AICameraPreferencePack(
+            available=True,
+            inference_mode="metadata_only",
+            camera_preference=camera_pref,
+            tuning_pack=tuning_pack,
+        )
+        plan.creator_camera_preference = pack.to_dict()
+
+        conf = camera_pref.confidence
+        style = camera_pref.motion_style
+        tier = tuning_pack.confidence_tier
+        logger.info(
+            "ai_camera_preference_done job_id=%s style=%s confidence=%.2f tier=%s applied=%s",
+            job_id, style, float(conf), tier, tuning_pack.applied,
+        )
+
+    except Exception as exc:
+        plan.creator_camera_preference = {
+            "available": False,
+            "inference_mode": "metadata_only",
+            "camera_preference": {
+                "motion_style": "unknown", "crop_aggressiveness": "unknown",
+                "stability_priority": "unknown", "deadzone_preference": "unknown",
+                "subject_hold": "unknown", "scene_sensitivity": "unknown",
+                "center_bias": "unknown", "reframing_risk_tolerance": "unknown",
+                "smoothness_priority": "unknown", "confidence": 0.0, "signals": [],
+            },
+            "tuning_pack": {
+                "applied": False, "confidence_tier": "low",
+                "deadzone_delta": 0.0, "ema_alpha_delta": 0.0,
+                "hold_frames_delta": 0, "scene_threshold_delta": 0.0,
+                "smooth_window_delta": 0, "reasoning": [], "warnings": [],
+            },
+            "warnings": [f"creator_camera_preference_error:{type(exc).__name__}"],
+        }
+        logger.debug("ai_director_creator_camera_preference_failed job_id=%s: %s", job_id, exc)

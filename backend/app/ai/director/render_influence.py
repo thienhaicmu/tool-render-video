@@ -116,6 +116,7 @@ def apply_ai_render_influence(
         _report_multi_signal_orchestration(payload, edit_plan, report)
         _report_safe_influence_pack(payload, edit_plan, report)
         _report_creator_subtitle_preference(payload, edit_plan, report)
+        _report_creator_camera_preference(payload, edit_plan, report)
         _update_explainability(edit_plan, report)
     except Exception as exc:
         report["warnings"].append(f"influence_error:{type(exc).__name__}")
@@ -1561,4 +1562,47 @@ def _report_creator_subtitle_preference(payload: Any, edit_plan: Any, report: di
     logger.debug(
         "creator_subtitle_preference_reported style=%s density=%s confidence=%.3f",
         style, density, conf,
+    )
+
+
+def _report_creator_camera_preference(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Report creator camera preference metadata — inference_only in Phase 50B.
+
+    No render execution. No motion_crop rewrite. No tracking rewrite.
+    No FFmpeg altered. No executor override.
+    Camera preference is metadata-only and inference-only.
+    """
+    ccp = getattr(edit_plan, "creator_camera_preference", None)
+    if not isinstance(ccp, dict) or not ccp:
+        report["skipped"].append("creator_camera_preference:no_result_phase50b")
+        return
+
+    available = ccp.get("available", False)
+    if not available:
+        report["skipped"].append("creator_camera_preference:unavailable_phase50b")
+        return
+
+    pref = ccp.get("camera_preference") or {}
+    tuning = ccp.get("tuning_pack") or {}
+    style = pref.get("motion_style", "unknown")
+    stability = pref.get("stability_priority", "unknown")
+    conf = float(pref.get("confidence") or 0.0)
+    tier = tuning.get("confidence_tier", "low")
+    applied = bool(tuning.get("applied", False))
+    signal_count = len(pref.get("signals") or [])
+
+    # Phase 50B always reports to skipped — inference-only, no render execution.
+    report["skipped"].append(
+        f"creator_camera_preference:inference_only_phase50b"
+        f"(style={style!r}"
+        f",stability={stability!r}"
+        f",confidence={round(conf, 3)}"
+        f",tier={tier!r}"
+        f",tuning_applied={applied}"
+        f",signals={signal_count})"
+    )
+
+    logger.debug(
+        "creator_camera_preference_reported style=%s stability=%s confidence=%.3f tier=%s",
+        style, stability, conf, tier,
     )

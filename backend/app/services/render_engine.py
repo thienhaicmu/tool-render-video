@@ -926,14 +926,18 @@ def render_part_smart(
     text_layers: list[dict] | None = None,
     loudnorm_enabled: bool = False,
     ffmpeg_threads: int | None = None,
+    crop_cfg_override: MotionCropConfig | None = None,
 ):
     if motion_aware_crop:
         try:
-            crop_cfg = MotionCropConfig(
-                scale_x_percent=float(scale_x),
-                scale_y_percent=float(scale_y),
-                reframe_mode=reframe_mode,
-            )
+            if crop_cfg_override is not None:
+                crop_cfg = crop_cfg_override
+            else:
+                crop_cfg = MotionCropConfig(
+                    scale_x_percent=float(scale_x),
+                    scale_y_percent=float(scale_y),
+                    reframe_mode=reframe_mode,
+                )
             # motion_crop.py has its own NVENC resolve logic; acquire the semaphore
             # here (one level up) so the session slot is held for the full encode.
             _crop_codec = _resolve_codec(video_codec, encoder_mode=encoder_mode)
