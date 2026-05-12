@@ -458,3 +458,129 @@ def test_real_podcast_pack_loads():
 
     pack = retrieve_knowledge(domain="subtitle", tags=["podcast"])
     assert pack is not None
+
+
+# ---------------------------------------------------------------------------
+# 13. Phase 52A knowledge integration — quality evaluator (requirement #5)
+# ---------------------------------------------------------------------------
+
+def test_quality_evaluator_no_crash_with_knowledge():
+    """Phase 52A evaluate_subtitle_quality_v2 doesn't crash with knowledge available."""
+    from app.ai.subtitle_quality.subtitle_quality_evaluator import evaluate_subtitle_quality_v2
+
+    result = evaluate_subtitle_quality_v2(None)
+    assert "subtitle_quality_v2" in result
+    assert isinstance(result["subtitle_quality_v2"], dict)
+
+
+def test_quality_evaluator_returns_valid_schema():
+    """Phase 52A output shape is unchanged after Phase 53B integration."""
+    from app.ai.subtitle_quality.subtitle_quality_evaluator import evaluate_subtitle_quality_v2
+
+    result = evaluate_subtitle_quality_v2(None)
+    q = result["subtitle_quality_v2"]
+    for key in ("mobile_readability", "subtitle_balance", "keyword_emphasis_quality",
+                "safe_zone_fit", "creator_fit", "overload_risk", "fatigue_risk",
+                "overall", "confidence", "reasoning"):
+        assert key in q, f"Missing key: {key}"
+
+
+def test_quality_evaluator_reasoning_is_list():
+    """Phase 52A reasoning list remains a list after Phase 53B enrichment."""
+    from app.ai.subtitle_quality.subtitle_quality_evaluator import evaluate_subtitle_quality_v2
+
+    result = evaluate_subtitle_quality_v2(None)
+    reasoning = result["subtitle_quality_v2"]["reasoning"]
+    assert isinstance(reasoning, list)
+    for hint in reasoning:
+        assert isinstance(hint, str)
+
+
+def test_mobile_knowledge_hint_no_crash():
+    """_mobile_knowledge_hint() never raises and returns str."""
+    from app.ai.subtitle_quality.subtitle_quality_evaluator import _mobile_knowledge_hint
+
+    hint = _mobile_knowledge_hint()
+    assert isinstance(hint, str)
+
+
+def test_mobile_knowledge_hint_no_forbidden_keys():
+    """_mobile_knowledge_hint() output contains no execution-related content."""
+    from app.ai.subtitle_quality.subtitle_quality_evaluator import _mobile_knowledge_hint
+
+    hint = _mobile_knowledge_hint()
+    for forbidden in ("ffmpeg", "render_command", "subtitle_timing", "playback_speed",
+                      "subprocess", "executable"):
+        assert forbidden not in hint
+
+
+# ---------------------------------------------------------------------------
+# 14. Phase 50A knowledge integration — preference inference (requirement #4)
+# ---------------------------------------------------------------------------
+
+def test_preference_inference_no_crash_with_knowledge():
+    """Phase 50A infer_subtitle_preference doesn't crash with knowledge available."""
+    from app.ai.creator_subtitle.subtitle_preference_inference import infer_subtitle_preference
+
+    result = infer_subtitle_preference(None)
+    assert "subtitle_preference" in result
+
+
+def test_preference_inference_signals_are_strings():
+    """Phase 50A signals list elements are all strings after Phase 53B enrichment."""
+    from app.ai.creator_subtitle.subtitle_preference_inference import infer_subtitle_preference
+
+    result = infer_subtitle_preference(None)
+    signals = result["subtitle_preference"].get("signals", [])
+    assert isinstance(signals, list)
+    for sig in signals:
+        assert isinstance(sig, str)
+
+
+def test_get_knowledge_signal_no_crash():
+    """_get_knowledge_signal() never raises and returns str."""
+    from app.ai.creator_subtitle.subtitle_preference_inference import _get_knowledge_signal
+
+    for style, mobile_safe in [
+        ("clean_pro", True),
+        ("viral_bold", False),
+        ("unknown", True),
+        ("boxed_caption", False),
+    ]:
+        result = _get_knowledge_signal(style, mobile_safe)
+        assert isinstance(result, str)
+
+
+def test_get_knowledge_signal_bounded():
+    """_get_knowledge_signal() result never exceeds 100 chars."""
+    from app.ai.creator_subtitle.subtitle_preference_inference import _get_knowledge_signal
+
+    for style in ("clean_pro", "viral_bold", "unknown"):
+        sig = _get_knowledge_signal(style, True)
+        assert len(sig) <= 100
+
+
+def test_knowledge_signal_no_forbidden_content():
+    """_get_knowledge_signal() output contains no execution-related content."""
+    from app.ai.creator_subtitle.subtitle_preference_inference import _get_knowledge_signal
+
+    for style in ("clean_pro", "viral_bold"):
+        sig = _get_knowledge_signal(style, True)
+        for forbidden in ("ffmpeg", "render_command", "subtitle_timing", "playback_speed",
+                          "subprocess", "executable"):
+            assert forbidden not in sig
+
+
+def test_knowledge_aware_reasoning_example():
+    """Knowledge-aware reasoning: clean_pro + podcast → alignment hint produced."""
+    from app.ai.knowledge.subtitle_knowledge_retriever import (
+        retrieve_knowledge,
+        build_subtitle_reasoning,
+    )
+
+    pack = retrieve_knowledge(domain="subtitle", tags=["podcast"])
+    hints = build_subtitle_reasoning(pack, creator_style="podcast", subtitle_style="clean_pro")
+    assert isinstance(hints, list)
+    # Each hint is a string; integration is optional (available depends on real files)
+    for h in hints:
+        assert isinstance(h, str)

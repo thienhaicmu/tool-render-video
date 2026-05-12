@@ -175,4 +175,31 @@ def _build_reasoning(
     if fatigue >= 35:
         lines.append("Fast-paced subtitle rhythm may increase viewer fatigue")
 
+    # Phase 53B: optional mobile readability knowledge enrichment
+    if len(lines) < 6 and mobile < 75:
+        k_hint = _mobile_knowledge_hint()
+        if k_hint:
+            lines.append(k_hint)
+
     return lines
+
+
+def _mobile_knowledge_hint() -> str:
+    """Return an optional knowledge-informed mobile readability hint. Never raises.
+
+    Phase 53B subtitle knowledge integration — metadata-only, additive.
+    Enriches reasoning when mobile readability score is below optimal.
+    """
+    try:
+        from app.ai.knowledge.subtitle_knowledge_retriever import retrieve_knowledge
+        pack = retrieve_knowledge(domain="subtitle", tags=["mobile", "readability"], max_results=1)
+        if not pack.available or not pack.items:
+            return ""
+        patterns = pack.items[0].subtitle_patterns
+        if patterns.get("avoid_dense_blocks"):
+            return "Compact, dense-free subtitle design supports mobile readability"
+        if patterns.get("compact_design"):
+            return "Compact subtitle design is recommended for mobile viewers"
+        return ""
+    except Exception:
+        return ""

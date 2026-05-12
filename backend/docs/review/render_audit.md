@@ -2928,3 +2928,140 @@ render_quality_v2:no_signal_phase52d
 - No new required request fields
 - All existing quality fields (Phase 45 `render_quality_evaluation`) unchanged
 - Phase 52A/B/C subsystem fields unchanged — this phase reads them, never rewrites them
+
+---
+
+## AI Productization Phase 53B — Subtitle Knowledge Injection Pack
+
+**Date:** 2026-05-12
+**Status:** Implemented
+**Branch:** main
+
+### Mission
+
+Inject curated subtitle expertise into subtitle-related AI systems so subtitle AI can know
+more, reason better, and support subtitle rendering quality — without becoming autonomous.
+Knowledge informs and guides; it never rewrites subtitle execution, timing, or segmentation.
+
+### Files introduced
+
+| File | Type | Purpose |
+|---|---|---|
+| `app/ai/knowledge/subtitle_knowledge_schema.py` | Schema | `AISubtitleKnowledgeItem`, `AISubtitleKnowledgePack` dataclasses |
+| `app/ai/knowledge/subtitle_knowledge_retriever.py` | Retriever | `retrieve_knowledge()`, `build_subtitle_reasoning()` public API |
+| `knowledge/subtitles/mobile_readability.json` | Knowledge Pack | Mobile readability, compact design, overload prevention |
+| `knowledge/subtitles/tiktok_shortform.json` | Knowledge Pack | TikTok hook-friendly pacing, selective keyword emphasis |
+| `knowledge/subtitles/podcast_talking_head.json` | Knowledge Pack | Podcast clean style, low fatigue, trust-building pacing |
+| `knowledge/subtitles/educational_subtitle.json` | Knowledge Pack | Educational clarity-first, important keywords only |
+| `tests/test_ai_phase53b_subtitle_knowledge.py` | Tests | 41 focused tests — schema, retrieval, integration, safety |
+
+### Files modified (additive hooks only)
+
+| File | Change | Safety |
+|---|---|---|
+| `app/ai/subtitle_quality/subtitle_quality_evaluator.py` | +`_mobile_knowledge_hint()` helper; optional hint appended when `mobile < 75` and `len(lines) < 6` | No score weight change; no execution mutation |
+| `app/ai/creator_subtitle/subtitle_preference_inference.py` | +`_get_knowledge_signal()` helper; optional signal appended when `len(signals) < 5` | No inference logic change; no confidence rewrite |
+
+### Subtitle knowledge domains
+
+| Pack | knowledge_id | Tags | Creator style |
+|---|---|---|---|
+| Mobile Readability | `mobile_readability_subtitle` | mobile, readability, compact, retention | — |
+| TikTok Short-form | `tiktok_shortform_subtitle` | tiktok, shortform, mobile, keyword_emphasis | viral_tiktok |
+| Podcast Talking Head | `podcast_talking_head_subtitle` | podcast, talking_head, clean, readability | podcast |
+| Educational | `educational_subtitle` | educational, clarity, readability, keyword_emphasis | educational |
+
+### Retrieval API
+
+```python
+from app.ai.knowledge.subtitle_knowledge_retriever import retrieve_knowledge, build_subtitle_reasoning
+
+# Retrieve subtitle knowledge by domain and tags
+pack = retrieve_knowledge(domain="subtitle", tags=["mobile", "tiktok", "readability"])
+
+# Build reasoning hints from retrieved knowledge
+hints = build_subtitle_reasoning(pack, creator_style="viral_tiktok", subtitle_style="compact")
+```
+
+- Tag any-match filtering; creator_style prioritized first in sort; alphabetical tiebreaker → **deterministic**
+- `max_results` clamped `[1, 10]`; all error paths return `available=False` — **never raises**
+- Returns `AISubtitleKnowledgePack` — always non-None
+
+### Metadata-only influence contract
+
+| System | How knowledge is used | What never changes |
+|---|---|---|
+| Phase 52A subtitle quality evaluator | Optional `_mobile_knowledge_hint()` adds 1 reasoning line | Scores, weights, fallback, existing reasoning |
+| Phase 50A subtitle preference inference | Optional `_get_knowledge_signal()` adds 1 signal | Inferred values, confidence, existing signals |
+| Phase 50C subtitle influence | Can call `retrieve_knowledge()` optionally | Influence deltas, tier thresholds |
+| Phase 51 strategy reasoning | Can call `retrieve_knowledge()` optionally | Strategy logic, variant selection |
+
+### Subtitle reasoning improvement example
+
+Before Phase 53B (Phase 50A signals):
+```
+"Creator historically preferred clean_pro subtitle style"
+"Subtitle execution metadata shows medium density preference"
+```
+
+After Phase 53B (with podcast + mobile knowledge):
+```
+"Creator historically preferred clean_pro subtitle style"
+"Subtitle execution metadata shows medium density preference"
+"Podcast Subtitle Intelligence: Clean, readable subtitle guidance for podcast and talking-head content..."
+```
+
+After Phase 53B (with `build_subtitle_reasoning()`):
+```
+"clean_pro style aligned with podcast subtitle intelligence guidance."
+```
+
+### Safety guarantees
+
+| Guarantee | Status |
+|---|---|
+| Subtitle timing rewrite | ❌ never performed |
+| Subtitle segmentation rewrite | ❌ never performed |
+| ASS generation rewrite | ❌ never performed |
+| Subtitle engine rewrite | ❌ never performed |
+| Executor override | ❌ never performed |
+| FFmpeg mutation | ❌ never touched |
+| playback_speed mutation | ❌ never touched |
+| Score weight rewrite (52A) | ❌ never performed |
+| Inference logic change (50A) | ❌ never performed |
+| Internet / network access | ❌ not required |
+| Cloud AI / external API | ❌ not required |
+| GPU | ❌ not required |
+
+### Fallback behaviour
+
+| Scenario | Behaviour |
+|---|---|
+| No knowledge pack available | `available=False`, empty items, warning logged |
+| Malformed JSON file | File silently skipped by Phase 39 ingestion layer |
+| Empty tag list | All subtitle domain items returned (no tag filter) |
+| Tags with no match | `available=False`, `warnings=["no_matching_subtitle_knowledge"]` |
+| Missing creator profile | Ordering falls back to alphabetical by knowledge_id |
+| Knowledge retrieval error | `available=False`, error type logged; caller receives empty pack |
+| Phase 52A knowledge unavailable | `_mobile_knowledge_hint()` returns `""` — reasoning unchanged |
+| Phase 50A knowledge unavailable | `_get_knowledge_signal()` returns `""` — signals unchanged |
+
+### Structured log events
+
+| Event | Description |
+|---|---|
+| `subtitle_knowledge_retrieved` | Knowledge items returned for domain + tags |
+| `subtitle_knowledge_empty` | No subtitle domain items found in registry |
+| `subtitle_knowledge_no_match` | Tag filter returned zero matches |
+| `subtitle_knowledge_retrieval_error` | Unexpected error caught; fallback returned |
+
+### Phase compatibility
+
+- All Phase 1–52D behaviour preserved
+- No new required request fields
+- Phase 39 ingestion infrastructure reused unchanged
+- Phase 39 `AICreatorKnowledge` / `AIKnowledgeRegistry` types unchanged
+- Phase 40 pattern extraction unchanged
+- Phase 50A `infer_subtitle_preference()` output shape unchanged — signal list same or richer
+- Phase 52A `evaluate_subtitle_quality_v2()` output shape unchanged — reasoning list same or richer
+- Knowledge packs load automatically via existing registry (`knowledge/subtitles/` subdir)

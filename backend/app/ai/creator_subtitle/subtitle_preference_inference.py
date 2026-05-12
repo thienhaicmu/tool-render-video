@@ -166,6 +166,14 @@ def _infer(edit_plan: Any) -> AISubtitlePreferencePack:
     # ── Confidence ───────────────────────────────────────────────────────────
     confidence = _compute_confidence(active_domains, adaptive, feedback)
 
+    # Phase 53B: optional knowledge-aware signal enrichment
+    # Guard: only enrich when style is known and at least one domain was active.
+    # Empty / no-signal plans are not enriched to preserve existing fallback behaviour.
+    if len(signals) < _MAX_SIGNAL_ITEMS and style != "unknown" and active_domains > 0:
+        k_signal = _get_knowledge_signal(style, mobile_safe)
+        if k_signal:
+            signals.append(k_signal)
+
     preference = AISubtitlePreference(
         style=style,
         density=density,
@@ -571,3 +579,38 @@ def _safe_int(val) -> int:
         return int(val or 0)
     except (TypeError, ValueError):
         return 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 53B — optional knowledge signal enrichment
+# ---------------------------------------------------------------------------
+
+def _get_knowledge_signal(style: str, mobile_safe: bool) -> str:
+    """Return an optional subtitle knowledge signal. Never raises. Phase 53B.
+
+    Enriches the inference signals list with curated subtitle knowledge guidance.
+    Metadata-only — does not change inferred values, weights, or confidence.
+    """
+    try:
+        from app.ai.knowledge.subtitle_knowledge_retriever import (
+            retrieve_knowledge,
+            build_subtitle_reasoning,
+        )
+        tags: list = []
+        if style == "clean_pro":
+            tags.append("podcast")
+        elif style == "viral_bold":
+            tags.append("tiktok")
+        if mobile_safe:
+            tags.append("mobile")
+        if not tags:
+            return ""
+        pack = retrieve_knowledge(domain="subtitle", tags=tags, max_results=1)
+        hints = build_subtitle_reasoning(pack, creator_style=None, subtitle_style=style)
+        if hints:
+            raw = hints[0]
+            # Truncate to keep signal concise (max 100 chars for UI display)
+            return raw[:100] if raw else ""
+        return ""
+    except Exception:
+        return ""
