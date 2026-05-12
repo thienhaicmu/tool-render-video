@@ -3303,3 +3303,103 @@ retrieve_knowledge(domain="hook", tags=["fatigue"]) → fatigue / overuse knowle
 
 - Focused: **44/44** passed
 - Full regression: **4351/4351** passed (0 regressions)
+
+---
+
+# Phase 53E — Knowledge-Aware Render Reasoning
+
+**Date:** 2026-05-12
+**Status:** Complete — advisory/metadata only
+
+## Summary
+
+Phase 53E connects Phase 53B/C/D domain retrievers (subtitle, camera, hook) into a unified cross-domain `knowledge_reasoning_context`. A new `knowledge_reasoning_context.py` module reads active quality signals from the edit plan, derives relevant retrieval tags per domain, calls the appropriate domain retriever, and assembles a structured advisory reasoning context. The context is attached to `AIEditPlan.knowledge_reasoning_context` via a Phase 53E block in `ai_director.py` and optionally enriches unified quality v2 reasoning via `_knowledge_reasoning_hint()`. All influence is advisory metadata — no render mutation, no executor override, no autonomous execution.
+
+## Knowledge Routing
+
+| Domain | Signal Source | Tags Derived |
+|---|---|---|
+| Subtitle | `subtitle_quality_v2.mobile_readability < 70` | `["mobile", "readability"]` |
+| Subtitle | `creator_subtitle_preference.style == "viral_bold"` | `["tiktok", "shortform"]` |
+| Subtitle | `creator_subtitle_preference.style == "clean_pro"` | `["podcast", "clean"]` |
+| Camera | `camera_quality_v2.micro_jitter_risk >= 35` | `["anti_jitter", "jitter"]` |
+| Camera | `camera_quality_v2.whip_pan_risk >= 35` | `["stable_framing", "smooth"]` |
+| Camera | `creator_camera_preference.motion_style == "static_center"` | `["interview", "talking_head"]` |
+| Hook | `hook_quality_v2.first_3s_strength < 55` | `["first_3s", "opening"]` |
+| Hook | `hook_quality_v2.curiosity_strength < 50` | `["curiosity", "open_loop"]` |
+| Hook | `hook_quality_v2.hook_fatigue_risk >= 40` | `["fatigue", "overuse"]` |
+| Hook | `market_optimization_intelligence.target_market` | `["market_hook", market_code]` |
+
+## Context Schema
+
+```json
+{
+  "knowledge_reasoning_context": {
+    "available": true,
+    "domains": ["camera", "hook", "subtitle"],
+    "matches": [
+      {"domain": "subtitle", "rule_id": "mobile_readability_subtitle", "title": "...", "confidence": 0.75},
+      {"domain": "camera", "rule_id": "anti_jitter_camera", "title": "...", "confidence": 0.75},
+      {"domain": "hook", "rule_id": "opening_3s_hook", "title": "...", "confidence": 0.75}
+    ],
+    "confidence": 0.75,
+    "reasoning": [
+      "Subtitle knowledge is relevant to the current subtitle quality signals",
+      "Camera knowledge is relevant to the current camera quality signals",
+      "Knowledge matched across subtitle, camera and hook domains supports quality reasoning"
+    ]
+  }
+}
+```
+
+## New Files
+
+| File | Purpose |
+|---|---|
+| `backend/app/ai/knowledge/knowledge_reasoning_context.py` | Cross-domain routing, retrieval, and context assembly |
+| `backend/tests/test_ai_phase53e_knowledge_reasoning.py` | 44 focused tests |
+
+## Modified Files
+
+| File | Change |
+|---|---|
+| `backend/app/ai/director/edit_plan_schema.py` | Added `knowledge_reasoning_context: dict` Phase 53E field + `to_dict()` entry |
+| `backend/app/ai/director/ai_director.py` | Added Phase 53E block + `_attach_knowledge_reasoning_context()` helper |
+| `backend/app/ai/unified_quality/unified_quality_evaluator.py` | Added `_knowledge_reasoning_hint()` + call in `_build_reasoning()` |
+
+## Safety Contract
+
+- Local only — no internet, no cloud API
+- Never raises — all code wrapped in try/except, fallback returns `available=False` context
+- Deterministic — same edit plan inputs always produce the same context output
+- Bounded — max 3 domain retrievals × 1 item each = max 3 matches per context
+- Advisory only — enriches `reasoning` list and `knowledge_reasoning_context` metadata field; never mutates subtitle timing, motion_crop, clip boundaries, FFmpeg, or render parameters
+- No executor override, no autonomous execution
+- Safety filter: `_FORBIDDEN_KEYS` frozenset guards against execution-related content leaking into match output
+- No raw JSON pack content exposed — only `rule_id`, `title`, and `confidence` surfaced
+
+## AI UX Reasoning
+
+`safe_knowledge_reasoning_summary(ctx)` produces a single creator-facing line:
+
+```
+"AI used subtitle, camera and hook knowledge to support this recommendation."
+```
+
+Rules:
+- Never exposes raw knowledge JSON
+- Never exposes internal rule IDs beyond the knowledge_id
+- Never exposes file paths or stack traces
+- Returns empty string when context is unavailable
+
+## Executor Authority
+
+The render executor retains full authority. Knowledge-aware reasoning is metadata only:
+- `knowledge_reasoning_context` is attached to `AIEditPlan` but never read by the render executor
+- No render path reads `knowledge_reasoning_context` to alter execution behavior
+- Quality scores are unchanged — knowledge reasoning enriches *reasoning text* only
+
+## Test Results
+
+- Focused: **44/44** passed
+- Full regression: **4395/4395** passed (0 regressions)

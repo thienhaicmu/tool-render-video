@@ -601,6 +601,16 @@ def _build_plan(
         plan.warnings.append(f"knowledge_injection_error:{type(exc).__name__}")
         logger.debug("ai_director_knowledge_injection_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 53E: Knowledge-Aware Render Reasoning ---
+    # Runs after Phase 53A: routes subtitle/camera/hook knowledge retrievers from quality
+    # signals and assembles a cross-domain advisory reasoning context.
+    # Advisory only — no render mutation, no executor override, no autonomous execution.
+    try:
+        _attach_knowledge_reasoning_context(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"knowledge_reasoning_context_error:{type(exc).__name__}")
+        logger.debug("ai_director_knowledge_reasoning_context_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4837,6 +4847,32 @@ def _attach_knowledge_injection(plan: "AIEditPlan", job_id: str) -> None:
         "ai_knowledge_injection_done job_id=%s available=%s matches=%d confidence=%.2f",
         job_id,
         ctx.get("available", False),
+        len(ctx.get("matches") or []),
+        float(ctx.get("confidence") or 0.0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 53E — Knowledge-Aware Render Reasoning helper
+# ---------------------------------------------------------------------------
+
+def _attach_knowledge_reasoning_context(plan: "AIEditPlan", job_id: str) -> None:
+    """Route subtitle/camera/hook knowledge retrievers from quality signals.
+
+    Builds cross-domain advisory reasoning context attached to
+    plan.knowledge_reasoning_context.
+
+    Advisory only — informs; never mutates render parameters.
+    """
+    from app.ai.knowledge.knowledge_reasoning_context import build_knowledge_reasoning_context
+    result = build_knowledge_reasoning_context(plan)
+    plan.knowledge_reasoning_context = result.get("knowledge_reasoning_context", {})
+    ctx = plan.knowledge_reasoning_context
+    logger.debug(
+        "ai_knowledge_reasoning_context_done job_id=%s available=%s domains=%s matches=%d confidence=%.2f",
+        job_id,
+        ctx.get("available", False),
+        ctx.get("domains", []),
         len(ctx.get("matches") or []),
         float(ctx.get("confidence") or 0.0),
     )

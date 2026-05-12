@@ -163,4 +163,29 @@ def _build_reasoning(
     elif hook >= 80:
         lines.append("Hook opening strength is a key quality contributor")
 
+    # Phase 53E: optional knowledge-aware unified reasoning enrichment
+    if len(lines) < 6:
+        k_hint = _knowledge_reasoning_hint(edit_plan)
+        if k_hint:
+            lines.append(k_hint)
+
     return lines
+
+
+def _knowledge_reasoning_hint(edit_plan: Any) -> str:
+    """Return an optional knowledge-context-aware unified quality hint. Never raises.
+
+    Phase 53E knowledge-aware render reasoning — metadata-only, additive.
+    Enriches unified quality reasoning when cross-domain knowledge is available.
+    """
+    try:
+        from app.ai.knowledge.knowledge_reasoning_context import safe_knowledge_reasoning_summary
+        krc = {}
+        if edit_plan is not None:
+            if hasattr(edit_plan, "knowledge_reasoning_context"):
+                krc = edit_plan.knowledge_reasoning_context or {}
+            elif isinstance(edit_plan, dict):
+                krc = edit_plan.get("knowledge_reasoning_context") or {}
+        return safe_knowledge_reasoning_summary(krc)
+    except Exception:
+        return ""
