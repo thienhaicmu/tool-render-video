@@ -3403,3 +3403,95 @@ The render executor retains full authority. Knowledge-aware reasoning is metadat
 
 - Focused: **44/44** passed
 - Full regression: **4395/4395** passed (0 regressions)
+
+---
+
+# Phase 54 — Knowledge-Aware Influence Upgrade
+
+**Date:** 2026-05-12
+**Status:** Complete — advisory metadata only
+
+## Summary
+
+Phase 54 builds on Phase 53E's `knowledge_reasoning_context` to produce per-domain influence support metadata. Each active knowledge domain (subtitle, camera, hook/ranking) receives a bounded `confidence_delta` and creator-facing reasoning strings. Three enrich helpers (subtitle, camera, ranking) allow downstream influence engines to optionally append knowledge reasoning to their output — additive only, no bias values changed. The Phase 48 safety gate is never bypassed or lowered by knowledge.
+
+## New Files
+
+| File | Purpose |
+|---|---|
+| `backend/app/ai/knowledge/knowledge_influence_context.py` | Phase 54 context builder + enrich helpers |
+| `backend/tests/test_ai_phase54_knowledge_influence.py` | 41 focused tests |
+
+## Modified Files
+
+| File | Change |
+|---|---|
+| `backend/app/ai/director/edit_plan_schema.py` | Added `knowledge_influence_context: dict` Phase 54 field + `to_dict()` entry |
+| `backend/app/ai/director/ai_director.py` | Added Phase 54 block + `_attach_knowledge_influence_context()` helper |
+| `backend/app/ai/knowledge/knowledge_influence_context.py` | Fixed enrich helpers to return `{}` instead of `None` for falsy inputs |
+
+## Confidence Delta Bounds (strictly enforced)
+
+| Domain | Fixed Delta | Max Per Domain | Max Total |
+|---|---|---|---|
+| Subtitle | 0.04 | 0.05 | 0.10 |
+| Camera | 0.03 | 0.05 | 0.10 |
+| Ranking (hook) | 0.04 | 0.05 | 0.10 |
+| **Total** | 0.07–0.11 clamped | — | **0.10** |
+
+Delta is advisory metadata only — never fed into `evaluate_gate()`.
+
+## Public API
+
+```python
+from app.ai.knowledge.knowledge_influence_context import (
+    build_knowledge_influence_context,
+    enrich_subtitle_influence_reasoning,
+    enrich_camera_influence_reasoning,
+    enrich_ranking_influence_reasoning,
+)
+
+# Build per-domain influence support from Phase 53E context
+ctx = build_knowledge_influence_context(edit_plan)
+
+# Enrich influence dicts (additive, preserves all other fields)
+subtitle_inf = enrich_subtitle_influence_reasoning(subtitle_inf, ctx["influence_support"]["subtitle"])
+camera_inf   = enrich_camera_influence_reasoning(camera_inf, ctx["influence_support"]["camera"])
+ranking_inf  = enrich_ranking_influence_reasoning(ranking_inf, ctx["influence_support"]["ranking"])
+```
+
+## Enrich Helper Contract
+
+- **Additive only** — appends to existing `reasoning` list, never replaces
+- **Cap at 6** — merged reasoning capped at 6 items total
+- **Preserves all other fields** — `{**influence_dict, "reasoning": merged}`
+- **Never raises** — wrapped in try/except, fallback returns original dict (or `{}` for None input)
+- **No bias mutation** — enrich helpers never alter bias values, deltas, or scores
+
+## Safety Contract
+
+- Local only — no internet, no cloud API
+- Never raises — all code wrapped in try/except
+- Deterministic — same inputs → same output
+- Advisory only — `confidence_delta` is metadata, NEVER fed into safety gate
+- Safety gate unchanged — Phase 48 `evaluate_gate()` is never called with boosted confidence
+- Bounded — per-domain max 0.05, total max 0.10
+- Safety filter — `_FORBIDDEN_INFLUENCE_KEYS` frozenset blocks execution-related keys from output
+- No raw knowledge pack content exposed — only creator-facing reasoning strings
+
+## Safety Gate Preservation
+
+The Phase 48 safety gate retains full authority:
+
+```python
+# evaluate_gate() is called with raw plan confidence — knowledge delta is never passed to it
+gate = evaluate_gate(plan_confidence)  # unchanged
+# knowledge_influence_context is metadata on the plan, not an input to evaluate_gate
+```
+
+A plan with confidence 0.65 remains BLOCKED regardless of knowledge delta (+0.10 → 0.75 hypothetically, but delta is never fed to the gate).
+
+## Test Results
+
+- Focused: **41/41** passed
+- Full regression: **4436/4436** passed (0 regressions)

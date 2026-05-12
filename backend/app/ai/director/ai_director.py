@@ -611,6 +611,18 @@ def _build_plan(
         plan.warnings.append(f"knowledge_reasoning_context_error:{type(exc).__name__}")
         logger.debug("ai_director_knowledge_reasoning_context_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 54: Knowledge-Aware Influence Upgrade ---
+    # Runs after Phase 53E: reads knowledge_reasoning_context, builds per-domain influence
+    # support context with bounded confidence deltas, and enriches existing influence
+    # reasoning for subtitle, camera, and ranking domains.
+    # Advisory only — confidence_delta is metadata only, never fed to safety gate.
+    # Safety gates are NEVER lowered or bypassed by knowledge.
+    try:
+        _attach_knowledge_influence_context(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"knowledge_influence_context_error:{type(exc).__name__}")
+        logger.debug("ai_director_knowledge_influence_context_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4875,4 +4887,73 @@ def _attach_knowledge_reasoning_context(plan: "AIEditPlan", job_id: str) -> None
         ctx.get("domains", []),
         len(ctx.get("matches") or []),
         float(ctx.get("confidence") or 0.0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 54 — Knowledge-Aware Influence Upgrade helper
+# ---------------------------------------------------------------------------
+
+def _attach_knowledge_influence_context(plan: "AIEditPlan", job_id: str) -> None:
+    """Build per-domain knowledge influence support and enrich influence reasoning.
+
+    1. Reads plan.knowledge_reasoning_context (Phase 53E output).
+    2. Builds knowledge_influence_context with per-domain confidence_delta metadata.
+    3. Enriches plan.creator_subtitle_influence reasoning (additive only).
+    4. Enriches plan.creator_camera_preference tuning reasoning (additive only).
+    5. Enriches plan.safe_influence_pack reasoning (additive only).
+
+    Advisory only — confidence_delta is metadata, NEVER fed to safety gate.
+    Safety gates are NEVER lowered or bypassed. No render mutation.
+    """
+    from app.ai.knowledge.knowledge_influence_context import (
+        build_knowledge_influence_context,
+        enrich_subtitle_influence_reasoning,
+        enrich_camera_influence_reasoning,
+        enrich_ranking_influence_reasoning,
+    )
+
+    result = build_knowledge_influence_context(plan)
+    plan.knowledge_influence_context = result.get("knowledge_influence_context", {})
+    kic = plan.knowledge_influence_context
+
+    if not kic.get("available"):
+        logger.debug("ai_knowledge_influence_context_unavailable job_id=%s", job_id)
+        return
+
+    influence_support = kic.get("influence_support") or {}
+
+    # --- Enrich subtitle influence reasoning (additive only) ---
+    subtitle_support = influence_support.get("subtitle") or {}
+    if subtitle_support.get("supported") and plan.creator_subtitle_influence:
+        plan.creator_subtitle_influence = enrich_subtitle_influence_reasoning(
+            plan.creator_subtitle_influence, subtitle_support
+        )
+
+    # --- Enrich camera preference tuning reasoning (additive only) ---
+    camera_support = influence_support.get("camera") or {}
+    if camera_support.get("supported") and plan.creator_camera_preference:
+        cam_pref = plan.creator_camera_preference
+        # Enrich the camera_preference dict (top level or nested tuning)
+        tuning = cam_pref.get("camera_preference") or {}
+        if tuning and isinstance(tuning, dict):
+            enriched_tuning = enrich_camera_influence_reasoning(tuning, camera_support)
+            plan.creator_camera_preference = {
+                **cam_pref,
+                "camera_preference": enriched_tuning,
+            }
+
+    # --- Enrich ranking influence reasoning (additive only) ---
+    ranking_support = influence_support.get("ranking") or {}
+    if ranking_support.get("supported") and plan.safe_influence_pack:
+        plan.safe_influence_pack = enrich_ranking_influence_reasoning(
+            plan.safe_influence_pack, ranking_support
+        )
+
+    logger.debug(
+        "ai_knowledge_influence_context_done job_id=%s available=%s domains=%s confidence=%.2f",
+        job_id,
+        kic.get("available", False),
+        kic.get("domains", []),
+        float(kic.get("confidence") or 0.0),
     )

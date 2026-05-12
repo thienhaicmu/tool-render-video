@@ -216,6 +216,8 @@ class AIEditPlan:
     knowledge_injection: dict = field(default_factory=dict)
     # Phase 53E — Knowledge-aware render reasoning context (populated by knowledge_reasoning_context module)
     knowledge_reasoning_context: dict = field(default_factory=dict)
+    # Phase 54 — Knowledge-aware influence upgrade (populated by knowledge_influence_context module)
+    knowledge_influence_context: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -319,4 +321,5 @@ class AIEditPlan:
             "render_quality_v2": dict(self.render_quality_v2),
             "knowledge_injection": dict(self.knowledge_injection),
             "knowledge_reasoning_context": dict(self.knowledge_reasoning_context),
+            "knowledge_influence_context": dict(self.knowledge_influence_context),
         }
