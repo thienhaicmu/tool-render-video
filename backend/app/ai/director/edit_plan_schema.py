@@ -228,6 +228,8 @@ class AIEditPlan:
     platform_hook_context: dict = field(default_factory=dict)
     # Phase 55E — Platform-aware render strategy (populated by platform_render_strategy_engine module)
     platform_render_strategy: dict = field(default_factory=dict)
+    # Phase 56 — Platform-aware strategy influence (populated by platform_strategy_influence_context module)
+    platform_strategy_influence: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -337,4 +339,5 @@ class AIEditPlan:
             "platform_camera_context": dict(self.platform_camera_context),
             "platform_hook_context": dict(self.platform_hook_context),
             "platform_render_strategy": dict(self.platform_render_strategy),
+            "platform_strategy_influence": dict(self.platform_strategy_influence),
         }

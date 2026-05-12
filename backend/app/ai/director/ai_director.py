@@ -674,6 +674,18 @@ def _build_plan(
         plan.warnings.append(f"platform_render_strategy_error:{type(exc).__name__}")
         logger.debug("ai_director_platform_render_strategy_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 56: Platform-Aware Strategy Influence ---
+    # Runs after Phase 55E: reads platform_render_strategy, builds per-domain
+    # influence support (subtitle, camera, ranking) with bounded confidence deltas,
+    # and enriches existing influence reasoning (additive only).
+    # Advisory only — confidence_delta is metadata only, NEVER fed to safety gate.
+    # Safety gates are NEVER lowered or bypassed. No render mutation.
+    try:
+        _attach_platform_strategy_influence(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"platform_strategy_influence_error:{type(exc).__name__}")
+        logger.debug("ai_director_platform_strategy_influence_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -5174,4 +5186,74 @@ def _attach_platform_render_strategy(plan: "AIEditPlan", job_id: str) -> None:
         strat.get("platform", ""),
         strat.get("creator_type", ""),
         float(strat.get("confidence") or 0.0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 56 — Platform-Aware Strategy Influence helper
+# ---------------------------------------------------------------------------
+
+def _attach_platform_strategy_influence(plan: "AIEditPlan", job_id: str) -> None:
+    """Build platform strategy influence context and enrich influence dicts.
+
+    Reads plan.platform_render_strategy (Phase 55E), builds per-domain influence
+    support (subtitle, camera, ranking) with bounded confidence deltas, and
+    enriches existing influence reasoning (additive only):
+      1. plan.creator_subtitle_influence reasoning
+      2. plan.creator_camera_preference tuning reasoning
+      3. plan.safe_influence_pack reasoning
+
+    Advisory only — confidence_delta is metadata, NEVER fed to safety gate.
+    Safety gates are NEVER lowered or bypassed by platform strategy.
+    No render mutation, no executor override, no pipeline changes.
+    """
+    from app.ai.knowledge.platform_strategy_influence_context import (
+        build_platform_strategy_influence,
+        enrich_subtitle_influence_reasoning,
+        enrich_camera_influence_reasoning,
+        enrich_ranking_influence_reasoning,
+    )
+
+    result = build_platform_strategy_influence(plan)
+    plan.platform_strategy_influence = result.get("platform_strategy_influence", {})
+    psi = plan.platform_strategy_influence
+
+    if not psi.get("available"):
+        logger.debug("ai_platform_strategy_influence_unavailable job_id=%s", job_id)
+        return
+
+    # --- Enrich subtitle influence reasoning (additive only) ---
+    subtitle_support = psi.get("subtitle") or {}
+    if subtitle_support.get("supported") and plan.creator_subtitle_influence:
+        plan.creator_subtitle_influence = enrich_subtitle_influence_reasoning(
+            plan.creator_subtitle_influence, subtitle_support,
+        )
+
+    # --- Enrich camera preference tuning reasoning (additive only) ---
+    camera_support = psi.get("camera") or {}
+    if camera_support.get("supported") and plan.creator_camera_preference:
+        cam_pref = plan.creator_camera_preference
+        tuning = cam_pref.get("camera_preference") or {}
+        if tuning and isinstance(tuning, dict):
+            enriched_tuning = enrich_camera_influence_reasoning(tuning, camera_support)
+            plan.creator_camera_preference = {
+                **cam_pref,
+                "camera_preference": enriched_tuning,
+            }
+
+    # --- Enrich ranking influence reasoning (additive only) ---
+    ranking_support = psi.get("ranking") or {}
+    if ranking_support.get("supported") and plan.safe_influence_pack:
+        plan.safe_influence_pack = enrich_ranking_influence_reasoning(
+            plan.safe_influence_pack, ranking_support,
+        )
+
+    logger.debug(
+        "ai_platform_strategy_influence_done job_id=%s available=%s "
+        "platform=%s creator_type=%s confidence=%.2f",
+        job_id,
+        psi.get("available", False),
+        psi.get("platform", ""),
+        psi.get("creator_type", ""),
+        float(psi.get("confidence") or 0.0),
     )
