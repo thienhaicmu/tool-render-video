@@ -686,6 +686,17 @@ def _build_plan(
         plan.warnings.append(f"platform_strategy_influence_error:{type(exc).__name__}")
         logger.debug("ai_director_platform_strategy_influence_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 57: Platform-Aware Quality Feedback Loop ---
+    # Runs after Phase 56: reads platform_render_strategy + all quality v2 signals
+    # (subtitle, camera, hook, render) and evaluates how well the render output
+    # aligns with the target platform strategy.
+    # Quality feedback only — no render mutation, no rerender, no executor override.
+    try:
+        _attach_platform_quality_feedback(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"platform_quality_feedback_error:{type(exc).__name__}")
+        logger.debug("ai_director_platform_quality_feedback_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -5250,10 +5261,45 @@ def _attach_platform_strategy_influence(plan: "AIEditPlan", job_id: str) -> None
 
     logger.debug(
         "ai_platform_strategy_influence_done job_id=%s available=%s "
-        "platform=%s creator_type=%s confidence=%.2f",
+        "platform=%s creator_type=%s confidence=%.3f",
         job_id,
         psi.get("available", False),
         psi.get("platform", ""),
         psi.get("creator_type", ""),
         float(psi.get("confidence") or 0.0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 57 — Platform-Aware Quality Feedback Loop helper
+# ---------------------------------------------------------------------------
+
+def _attach_platform_quality_feedback(plan: "AIEditPlan", job_id: str) -> None:
+    """Evaluate platform quality feedback and attach to plan.
+
+    Reads platform_render_strategy (55E), platform_strategy_influence (56),
+    subtitle_quality_v2 (52A), camera_quality_v2 (52B), hook_quality_v2 (52C),
+    render_quality_v2 (52D), and platform context metadata (55B–55D) to
+    evaluate how well the render output aligns with the target platform strategy.
+
+    Quality feedback only — no render mutation, no rerender, no executor override.
+    Advisory only — platform_quality_feedback is metadata, never alters render.
+    """
+    from app.ai.knowledge.platform_quality_feedback_evaluator import (
+        evaluate_platform_quality_feedback,
+    )
+
+    result = evaluate_platform_quality_feedback(plan)
+    plan.platform_quality_feedback = result.get("platform_quality_feedback", {})
+    fb = plan.platform_quality_feedback
+
+    logger.debug(
+        "ai_platform_quality_feedback_done job_id=%s available=%s "
+        "platform=%s creator_type=%s overall=%d confidence=%.3f",
+        job_id,
+        fb.get("available", False),
+        fb.get("platform", ""),
+        fb.get("creator_type", ""),
+        int(fb.get("overall") or 0),
+        float(fb.get("confidence") or 0.0),
     )
