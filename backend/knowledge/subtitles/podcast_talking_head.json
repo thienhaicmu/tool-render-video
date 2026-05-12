@@ -1,0 +1,23 @@
+{
+  "knowledge_id": "podcast_talking_head_subtitle",
+  "category": "subtitle",
+  "source_type": "subtitle_pattern",
+  "creator_style": "podcast",
+  "title": "Podcast Subtitle Intelligence",
+  "description": "Clean, readable subtitle guidance for podcast and talking-head content. Minimal motion, low visual fatigue, trust-building readability pacing.",
+  "tags": ["podcast", "talking_head", "clean", "readability", "trust", "low_fatigue", "minimal_motion"],
+  "hook_patterns": [],
+  "subtitle_patterns": {
+    "density": "normal",
+    "clean_preference": true,
+    "minimal_motion": true,
+    "low_visual_fatigue": true,
+    "trust_pacing": true,
+    "keyword_emphasis_enabled": false,
+    "stable_display": true
+  },
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {},
+  "creator_patterns": {}
+}

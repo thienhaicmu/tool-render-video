@@ -1,0 +1,23 @@
+{
+  "knowledge_id": "educational_subtitle",
+  "category": "subtitle",
+  "source_type": "subtitle_pattern",
+  "creator_style": "educational",
+  "title": "Educational Subtitle Intelligence",
+  "description": "Clarity-first subtitle formatting for educational content. Important keyword emphasis only, moderate density, readability-first formatting.",
+  "tags": ["educational", "clarity", "readability", "keyword_emphasis", "moderate_density"],
+  "hook_patterns": [],
+  "subtitle_patterns": {
+    "density": "normal",
+    "clarity_first": true,
+    "keyword_emphasis": "important_only",
+    "avoid_hype": true,
+    "readability_first": true,
+    "moderate_density": true,
+    "max_words_per_line": 7
+  },
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {},
+  "creator_patterns": {}
+}

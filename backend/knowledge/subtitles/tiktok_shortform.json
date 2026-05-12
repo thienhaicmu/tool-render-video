@@ -1,0 +1,24 @@
+{
+  "knowledge_id": "tiktok_shortform_subtitle",
+  "category": "subtitle",
+  "source_type": "subtitle_pattern",
+  "creator_style": "viral_tiktok",
+  "title": "TikTok Short-form Subtitle Intelligence",
+  "description": "Hook-friendly subtitle pacing and readability guidance for TikTok and short-form content. Bold emphasis selective, high density reduces retention.",
+  "tags": ["tiktok", "shortform", "mobile", "attention", "keyword_emphasis", "readability", "hook"],
+  "hook_patterns": [],
+  "subtitle_patterns": {
+    "density": "compact",
+    "keyword_emphasis": "selective",
+    "avoid_overload": true,
+    "hook_pacing": true,
+    "mobile_attention": true,
+    "readability_first": true,
+    "keyword_overload_prevention": true,
+    "max_words_per_line": 5
+  },
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {},
+  "creator_patterns": {}
+}

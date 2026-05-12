@@ -1,0 +1,24 @@
+{
+  "knowledge_id": "mobile_readability_subtitle",
+  "category": "subtitle",
+  "source_type": "subtitle_pattern",
+  "creator_style": "",
+  "title": "Mobile Subtitle Readability",
+  "description": "Curated subtitle readability guidance for mobile viewers. Prefer 1-2 lines, avoid dense subtitle blocks, compact design improves retention.",
+  "tags": ["mobile", "readability", "subtitle", "compact", "retention", "overload_prevention"],
+  "hook_patterns": [],
+  "subtitle_patterns": {
+    "preferred_lines": 2,
+    "max_lines": 2,
+    "density": "compact",
+    "avoid_dense_blocks": true,
+    "reading_fatigue_prevention": true,
+    "compact_design": true,
+    "mobile_safe": true,
+    "max_words_per_line": 6
+  },
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {},
+  "creator_patterns": {}
+}
