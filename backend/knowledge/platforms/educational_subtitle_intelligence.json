@@ -1,0 +1,26 @@
+{
+  "knowledge_id": "educational_subtitle_intelligence",
+  "platform": "general",
+  "creator_type": "educational",
+  "version": 1,
+  "title": "Educational Subtitle Intelligence",
+  "description": "Subtitle-specific guidance for educational content. Clarity over hype, targeted keyword emphasis for key concepts, moderate density, and structured readability build comprehension and retention.",
+  "tags": ["educational", "subtitle", "clarity", "concept_highlighting", "structured", "keyword_emphasis", "readable", "learning"],
+  "domains": ["subtitle"],
+  "guidance": {
+    "subtitle": {
+      "density_bias": "normal",
+      "readability_priority": "high",
+      "keyword_emphasis": "moderate",
+      "line_count_preference": 2,
+      "max_words_per_line": 8,
+      "overload_risk_sensitivity": "medium",
+      "mobile_safe_required": false,
+      "animation_level": "low",
+      "style_preference": "clean_pro",
+      "avoid_dense_blocks": false,
+      "concept_highlighting": true
+    }
+  },
+  "confidence": 0.80
+}

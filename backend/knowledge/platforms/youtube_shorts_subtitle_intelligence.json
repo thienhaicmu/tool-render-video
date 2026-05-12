@@ -1,0 +1,25 @@
+{
+  "knowledge_id": "youtube_shorts_subtitle_intelligence",
+  "platform": "youtube_shorts",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "YouTube Shorts Subtitle Intelligence",
+  "description": "Subtitle-specific guidance for YouTube Shorts. Clarity-first design, balanced density, reduced visual fatigue, and retention-safe readable flow improve watch-through rate.",
+  "tags": ["youtube_shorts", "subtitle", "clarity", "balanced", "readability", "retention", "fatigue_reduction", "shortform"],
+  "domains": ["subtitle"],
+  "guidance": {
+    "subtitle": {
+      "density_bias": "normal",
+      "readability_priority": "high",
+      "keyword_emphasis": "moderate",
+      "line_count_preference": 2,
+      "max_words_per_line": 7,
+      "overload_risk_sensitivity": "medium",
+      "mobile_safe_required": true,
+      "animation_level": "low",
+      "style_preference": "clean_pro",
+      "avoid_dense_blocks": true
+    }
+  },
+  "confidence": 0.81
+}

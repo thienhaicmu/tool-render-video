@@ -1,0 +1,25 @@
+{
+  "knowledge_id": "instagram_reels_subtitle_intelligence",
+  "platform": "instagram_reels",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "Instagram Reels Subtitle Intelligence",
+  "description": "Subtitle-specific guidance for Instagram Reels. Visual cleanliness, compact captions, creator-style consistency, and moderate emphasis support discovery and brand recognition.",
+  "tags": ["instagram_reels", "subtitle", "visual", "compact", "mobile", "clean", "brand_consistency", "moderate_emphasis"],
+  "domains": ["subtitle"],
+  "guidance": {
+    "subtitle": {
+      "density_bias": "compact",
+      "readability_priority": "medium",
+      "keyword_emphasis": "moderate",
+      "line_count_preference": 2,
+      "max_words_per_line": 6,
+      "overload_risk_sensitivity": "medium",
+      "mobile_safe_required": true,
+      "animation_level": "low",
+      "style_preference": "compact",
+      "avoid_dense_blocks": true
+    }
+  },
+  "confidence": 0.79
+}

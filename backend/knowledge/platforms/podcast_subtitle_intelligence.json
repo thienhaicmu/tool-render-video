@@ -1,0 +1,25 @@
+{
+  "knowledge_id": "podcast_subtitle_intelligence",
+  "platform": "general",
+  "creator_type": "podcast",
+  "version": 1,
+  "title": "Podcast Subtitle Intelligence",
+  "description": "Subtitle-specific guidance for podcast and talking-head content. Clean style, low animation, trust-first readability, and stable reading pace build credibility and comprehension.",
+  "tags": ["podcast", "talking_head", "subtitle", "clean", "readable", "low_animation", "trust", "stable_pace"],
+  "domains": ["subtitle"],
+  "guidance": {
+    "subtitle": {
+      "density_bias": "normal",
+      "readability_priority": "high",
+      "keyword_emphasis": "subtle",
+      "line_count_preference": 2,
+      "max_words_per_line": 8,
+      "overload_risk_sensitivity": "low",
+      "mobile_safe_required": false,
+      "animation_level": "low",
+      "style_preference": "clean_pro",
+      "avoid_dense_blocks": true
+    }
+  },
+  "confidence": 0.82
+}

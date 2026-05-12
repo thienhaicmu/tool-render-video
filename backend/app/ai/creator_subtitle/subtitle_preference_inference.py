@@ -174,6 +174,13 @@ def _infer(edit_plan: Any) -> AISubtitlePreferencePack:
         if k_signal:
             signals.append(k_signal)
 
+    # Phase 55B: optional platform subtitle context signal enrichment
+    # Guard: only enrich when signals list has room and active_domains > 0.
+    if len(signals) < _MAX_SIGNAL_ITEMS and active_domains > 0:
+        p_signal = _get_platform_subtitle_signal(edit_plan)
+        if p_signal:
+            signals.append(p_signal)
+
     preference = AISubtitlePreference(
         style=style,
         density=density,
@@ -611,6 +618,32 @@ def _get_knowledge_signal(style: str, mobile_safe: bool) -> str:
             raw = hints[0]
             # Truncate to keep signal concise (max 100 chars for UI display)
             return raw[:100] if raw else ""
+        return ""
+    except Exception:
+        return ""
+
+
+def _get_platform_subtitle_signal(edit_plan: Any) -> str:
+    """Return an optional platform-aware subtitle signal. Never raises. Phase 55B.
+
+    Reads platform_subtitle_context from edit_plan when available.
+    Metadata-only — does not change inferred values, weights, or confidence.
+    Guard: only fires when context is available and has guidance.
+    """
+    try:
+        ctx = getattr(edit_plan, "platform_subtitle_context", None)
+        if not ctx or not isinstance(ctx, dict) or not ctx.get("available"):
+            return ""
+        reasoning = ctx.get("reasoning") or []
+        if reasoning:
+            raw = str(reasoning[0])
+            return raw[:100] if raw else ""
+        guidance = ctx.get("guidance") or {}
+        platform = str(ctx.get("platform") or "")
+        density = str(guidance.get("density_bias") or "")
+        if platform and density:
+            msg = f"{platform.replace('_', ' ').title()} platform guidance supports {density} subtitle density"
+            return msg[:100]
         return ""
     except Exception:
         return ""

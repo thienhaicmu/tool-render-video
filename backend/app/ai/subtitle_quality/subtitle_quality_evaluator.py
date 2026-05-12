@@ -181,7 +181,40 @@ def _build_reasoning(
         if k_hint:
             lines.append(k_hint)
 
+    # Phase 55B: optional platform subtitle context hint
+    if len(lines) < 6:
+        p_hint = _platform_subtitle_hint(edit_plan)
+        if p_hint:
+            lines.append(p_hint)
+
     return lines
+
+
+def _platform_subtitle_hint(edit_plan: Any) -> str:
+    """Return an optional platform-aware subtitle reasoning hint. Never raises.
+
+    Phase 55B platform subtitle intelligence — metadata-only, additive.
+    Reads platform_subtitle_context from the edit plan when available.
+    """
+    try:
+        ctx = getattr(edit_plan, "platform_subtitle_context", None)
+        if not ctx or not isinstance(ctx, dict) or not ctx.get("available"):
+            return ""
+        guidance = ctx.get("guidance") or {}
+        reasoning = ctx.get("reasoning") or []
+        platform = str(ctx.get("platform") or "")
+        density = str(guidance.get("density_bias") or "")
+        readability = str(guidance.get("readability_priority") or "")
+
+        if reasoning:
+            return str(reasoning[0])
+        if platform and density:
+            return f"{platform.replace('_', ' ').title()} subtitle guidance recommends {density} density"
+        if density and readability:
+            return f"Platform guidance supports {density} density with {readability} readability priority"
+        return ""
+    except Exception:
+        return ""
 
 
 def _mobile_knowledge_hint() -> str:

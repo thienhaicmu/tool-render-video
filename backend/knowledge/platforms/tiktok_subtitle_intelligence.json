@@ -1,0 +1,25 @@
+{
+  "knowledge_id": "tiktok_subtitle_intelligence",
+  "platform": "tiktok",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "TikTok Subtitle Intelligence",
+  "description": "Subtitle-specific guidance for TikTok content. Compact density, high mobile readability, selective keyword emphasis, and hook-friendly pacing reduce overload and drive retention.",
+  "tags": ["tiktok", "subtitle", "compact", "mobile", "readability", "keyword_emphasis", "overload_prevention", "shortform"],
+  "domains": ["subtitle"],
+  "guidance": {
+    "subtitle": {
+      "density_bias": "compact",
+      "readability_priority": "high",
+      "keyword_emphasis": "selective",
+      "line_count_preference": 2,
+      "max_words_per_line": 6,
+      "overload_risk_sensitivity": "high",
+      "mobile_safe_required": true,
+      "animation_level": "medium",
+      "style_preference": "viral_bold",
+      "avoid_dense_blocks": true
+    }
+  },
+  "confidence": 0.83
+}

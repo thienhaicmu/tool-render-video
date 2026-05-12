@@ -3625,7 +3625,7 @@ The render executor retains full authority. Platform knowledge is foundation met
 
 | Phase | Mission |
 |---|---|
-| 55B | Platform Subtitle Intelligence — subtitle guidance from platform context |
+| 55B | Platform Subtitle Intelligence — subtitle guidance from platform context ✅ |
 | 55C | Platform Camera Intelligence — camera guidance from platform context |
 | 55D | Platform Hook Intelligence — hook/retention guidance from platform context |
 | 55E | Platform-Aware Render Strategy — cross-domain platform strategy |
@@ -3634,3 +3634,117 @@ The render executor retains full authority. Platform knowledge is foundation met
 
 - Focused: **53/53** passed
 - Full regression: **4489/4489** passed (0 regressions)
+
+---
+
+# Phase 55B — Platform Subtitle Intelligence
+
+**Date:** 2026-05-12
+**Status:** Complete — advisory metadata only
+
+## Summary
+
+Phase 55B extends Phase 55A with subtitle-specific platform intelligence. Five new subtitle-focused JSON packs (TikTok, YouTube Shorts, Instagram Reels, podcast, educational) are retrieved by `platform_subtitle_retriever.py`, which filters the Phase 55A platform loader to subtitle-domain items, merges guidance, and builds an advisory `platform_subtitle_context` dict. Light integration hooks add optional one-line hints to the Phase 52A subtitle quality evaluator and the Phase 50A subtitle preference inference engine — additive only, never mutating subtitle execution.
+
+## New Files
+
+| File | Purpose |
+|---|---|
+| `backend/app/ai/knowledge/platform_subtitle_retriever.py` | Phase 55B retriever + `build_platform_subtitle_context()` |
+| `backend/knowledge/platforms/tiktok_subtitle_intelligence.json` | TikTok subtitle intelligence pack |
+| `backend/knowledge/platforms/youtube_shorts_subtitle_intelligence.json` | YouTube Shorts subtitle pack |
+| `backend/knowledge/platforms/instagram_reels_subtitle_intelligence.json` | Instagram Reels subtitle pack |
+| `backend/knowledge/platforms/podcast_subtitle_intelligence.json` | Podcast/talking-head subtitle pack |
+| `backend/knowledge/platforms/educational_subtitle_intelligence.json` | Educational creator subtitle pack |
+| `backend/tests/test_ai_phase55b_platform_subtitle.py` | 48 focused tests |
+
+## Modified Files
+
+| File | Change |
+|---|---|
+| `backend/app/ai/director/edit_plan_schema.py` | Added `platform_subtitle_context: dict` Phase 55B field + `to_dict()` entry |
+| `backend/app/ai/director/ai_director.py` | Added Phase 55B block + `_attach_platform_subtitle_context()` helper |
+| `backend/app/ai/subtitle_quality/subtitle_quality_evaluator.py` | Added `_platform_subtitle_hint()` — optional Phase 55B reasoning hint |
+| `backend/app/ai/creator_subtitle/subtitle_preference_inference.py` | Added `_get_platform_subtitle_signal()` — optional Phase 55B preference signal |
+
+## platform_subtitle_context Shape
+
+```json
+{
+  "platform_subtitle_context": {
+    "available": true,
+    "platform": "tiktok",
+    "creator_type": "viral_short_form",
+    "guidance": {
+      "density_bias": "compact",
+      "readability_priority": "high",
+      "keyword_emphasis": "selective",
+      "line_count_preference": 2,
+      "overload_risk_sensitivity": "high",
+      "mobile_safe_required": true,
+      "animation_level": "medium",
+      "style_preference": "viral_bold"
+    },
+    "confidence": 0.83,
+    "reasoning": [
+      "TikTok Subtitle Intelligence supports compact density with high readability priority"
+    ]
+  }
+}
+```
+
+Fallback:
+```json
+{"platform_subtitle_context": {"available": false, "guidance": {}, "confidence": 0.0, "reasoning": []}}
+```
+
+## Subtitle Packs
+
+| knowledge_id | platform | creator_type | Key guidance |
+|---|---|---|---|
+| `tiktok_subtitle_intelligence` | tiktok | viral_short_form | compact density, high readability, selective emphasis, mobile_safe |
+| `youtube_shorts_subtitle_intelligence` | youtube_shorts | viral_short_form | normal density, high readability, moderate emphasis, low animation |
+| `instagram_reels_subtitle_intelligence` | instagram_reels | viral_short_form | compact density, medium readability, moderate emphasis |
+| `podcast_subtitle_intelligence` | general | podcast | normal density, high readability, subtle emphasis, low animation, clean_pro |
+| `educational_subtitle_intelligence` | general | educational | normal density, high readability, moderate emphasis, concept_highlighting |
+
+## Retrieval Architecture
+
+`retrieve_platform_subtitle_knowledge(platform, creator_type, tags, base_path, max_results)`:
+1. Loads all platform items via Phase 55A `load_platform_knowledge()`
+2. Filters to items with `"subtitle"` in their `domains` list
+3. Filters by platform and/or creator_type
+4. Optional tag filter (any-match) — falls back to unfiltered when no match
+5. Deterministic sort: exact dual-match → platform-only → creator_type-only → alpha
+6. Merges subtitle guidance from top matches (first item wins on conflicts)
+7. Strips forbidden execution keys from guidance via `_safe_guidance()`
+
+## Integration Hooks
+
+| Hook | Location | Guard | Effect |
+|---|---|---|---|
+| `_platform_subtitle_hint()` | Phase 52A subtitle quality evaluator | `len(lines) < 6` | Appends one platform reasoning hint |
+| `_get_platform_subtitle_signal()` | Phase 50A subtitle preference inference | `len(signals) < 5 AND active_domains > 0` | Appends one platform preference signal |
+
+Both hooks:
+- Read `plan.platform_subtitle_context` via `getattr(edit_plan, ...)` — no AttributeError risk
+- Return `""` (no-op) when context is unavailable — existing behavior unchanged
+- Truncate output to 100 chars for UI display
+- Never mutate subtitle values, scores, or confidence
+
+## Safety Contract
+
+- Local only — no internet, no cloud API, no scraping
+- Never raises — all paths wrapped in try/except
+- Deterministic — same inputs → same output
+- Advisory only — `platform_subtitle_context` is metadata, never alters subtitle execution
+- No subtitle timing rewrite, no ASS rewrite, no segmentation rewrite
+- Safety filter — forbidden execution keys rejected by loader (`ffmpeg_args`, `render_command`, `motion_crop`, etc.) — entire file rejected, not just keys stripped
+- No raw file paths in creator-facing reasoning strings
+- Executor authority unchanged — render pipeline never reads `platform_subtitle_context`
+- Backward compatible — defaults to `{}` when platform/creator_type not provided
+
+## Test Results
+
+- Focused: **48/48** passed
+- Full regression: **4537/4537** passed (0 regressions)

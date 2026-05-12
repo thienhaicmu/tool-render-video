@@ -220,6 +220,8 @@ class AIEditPlan:
     knowledge_influence_context: dict = field(default_factory=dict)
     # Phase 55A — Platform knowledge foundation (populated by platform_knowledge_retriever module)
     platform_context: dict = field(default_factory=dict)
+    # Phase 55B — Platform subtitle intelligence (populated by platform_subtitle_retriever module)
+    platform_subtitle_context: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -325,4 +327,5 @@ class AIEditPlan:
             "knowledge_reasoning_context": dict(self.knowledge_reasoning_context),
             "knowledge_influence_context": dict(self.knowledge_influence_context),
             "platform_context": dict(self.platform_context),
+            "platform_subtitle_context": dict(self.platform_subtitle_context),
         }
