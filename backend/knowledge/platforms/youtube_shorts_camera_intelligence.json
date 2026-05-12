@@ -1,0 +1,22 @@
+{
+  "knowledge_id": "youtube_shorts_camera_intelligence",
+  "platform": "youtube_shorts",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "YouTube Shorts Camera Intelligence",
+  "description": "Camera guidance for YouTube Shorts: balanced motion with high smoothness for algorithm-friendly framing and consistent subject tracking",
+  "tags": ["youtube_shorts", "camera", "smooth", "stable", "balanced", "subject_tracking"],
+  "domains": ["camera"],
+  "guidance": {
+    "camera": {
+      "motion_energy": "medium",
+      "stability_priority": "high",
+      "jitter_sensitivity": "medium",
+      "subject_continuity": "high",
+      "deadzone_bias": "medium",
+      "crop_aggressiveness_guidance": "low",
+      "smoothness_priority": "high"
+    }
+  },
+  "confidence": 0.80
+}

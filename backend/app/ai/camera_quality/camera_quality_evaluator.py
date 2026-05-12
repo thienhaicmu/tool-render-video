@@ -171,7 +171,40 @@ def _build_reasoning(
         if k_hint:
             lines.append(k_hint)
 
+    # Phase 55C: optional platform camera context hint
+    if len(lines) < 6:
+        p_hint = _platform_camera_hint(edit_plan)
+        if p_hint:
+            lines.append(p_hint)
+
     return lines
+
+
+def _platform_camera_hint(edit_plan: Any) -> str:
+    """Return an optional platform-aware camera reasoning hint. Never raises.
+
+    Phase 55C platform camera intelligence — metadata-only, additive.
+    Reads platform_camera_context from the edit plan when available.
+    """
+    try:
+        ctx = getattr(edit_plan, "platform_camera_context", None)
+        if not ctx or not isinstance(ctx, dict) or not ctx.get("available"):
+            return ""
+        guidance = ctx.get("guidance") or {}
+        reasoning = ctx.get("reasoning") or []
+        platform = str(ctx.get("platform") or "")
+        motion = str(guidance.get("motion_energy") or "")
+        stability = str(guidance.get("stability_priority") or "")
+
+        if reasoning:
+            return str(reasoning[0])
+        if platform and motion:
+            return f"{platform.replace('_', ' ').title()} camera guidance recommends {motion} motion energy"
+        if motion and stability:
+            return f"Platform guidance supports {motion} motion energy with {stability} stability priority"
+        return ""
+    except Exception:
+        return ""
 
 
 def _jitter_knowledge_hint() -> str:

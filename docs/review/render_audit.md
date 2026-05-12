@@ -3748,3 +3748,106 @@ Both hooks:
 
 - Focused: **48/48** passed
 - Full regression: **4537/4537** passed (0 regressions)
+
+
+---
+
+### 2026-05-12 — AI Productization Phase 55C: Platform Camera Intelligence
+
+**Implemented:**
+- `backend/knowledge/platforms/tiktok_camera_intelligence.json` — TikTok camera intelligence pack
+- `backend/knowledge/platforms/youtube_shorts_camera_intelligence.json` — YouTube Shorts camera pack
+- `backend/knowledge/platforms/instagram_reels_camera_intelligence.json` — Instagram Reels camera pack
+- `backend/knowledge/platforms/podcast_camera_intelligence.json` — Podcast/talking-head camera pack
+- `backend/knowledge/platforms/educational_camera_intelligence.json` — Educational creator camera pack
+- `backend/app/ai/knowledge/platform_camera_retriever.py` — Phase 55C retriever + `build_platform_camera_context()`
+
+**Modified Files:**
+
+| File | Change |
+|---|---|
+| `backend/app/ai/director/edit_plan_schema.py` | Added `platform_camera_context: dict` Phase 55C field + `to_dict()` entry |
+| `backend/app/ai/director/ai_director.py` | Added Phase 55C block + `_attach_platform_camera_context()` helper |
+| `backend/app/ai/camera_quality/camera_quality_evaluator.py` | Added `_platform_camera_hint()` — optional Phase 55C reasoning hint |
+| `backend/app/ai/creator_camera/camera_preference_inference.py` | Added `_get_platform_camera_signal()` — optional Phase 55C preference signal |
+
+## platform_camera_context Shape
+
+```json
+{
+  "platform_camera_context": {
+    "available": true,
+    "platform": "tiktok",
+    "creator_type": "viral_short_form",
+    "guidance": {
+      "motion_energy": "high",
+      "stability_priority": "medium",
+      "jitter_sensitivity": "low",
+      "subject_continuity": "high",
+      "deadzone_bias": "narrow",
+      "crop_aggressiveness_guidance": "medium",
+      "smoothness_priority": "medium"
+    },
+    "confidence": 0.82,
+    "reasoning": [
+      "TikTok Camera Intelligence recommends high motion energy with medium stability priority"
+    ]
+  }
+}
+```
+
+Fallback:
+```json
+{"platform_camera_context": {"available": false, "guidance": {}, "confidence": 0.0, "reasoning": []}}
+```
+
+## Camera Packs
+
+| knowledge_id | platform | creator_type | Key guidance |
+|---|---|---|---|
+| `tiktok_camera_intelligence` | tiktok | viral_short_form | high motion energy, medium stability, low jitter_sensitivity, narrow deadzone |
+| `youtube_shorts_camera_intelligence` | youtube_shorts | viral_short_form | medium motion energy, high stability, high smoothness_priority |
+| `instagram_reels_camera_intelligence` | instagram_reels | viral_short_form | high motion energy, medium stability, narrow deadzone |
+| `podcast_camera_intelligence` | general | podcast | low motion energy, high stability, high jitter_sensitivity, wide deadzone |
+| `educational_camera_intelligence` | general | educational | low motion energy, high stability, high jitter_sensitivity, wide deadzone |
+
+## Retrieval Architecture
+
+`retrieve_platform_camera_knowledge(platform, creator_type, tags, base_path, max_results)`:
+1. Loads all platform items via Phase 55A `load_platform_knowledge()`
+2. Filters to items with `"camera"` in their `domains` list
+3. Filters by platform and/or creator_type
+4. Optional tag filter (any-match) — falls back to unfiltered when no match
+5. Deterministic sort: exact dual-match → platform-only → creator_type-only → alpha
+6. Merges camera guidance from top matches (first item wins on conflicts)
+7. Strips forbidden execution keys from guidance via `_safe_guidance()`
+
+## Integration Hooks
+
+| Hook | Location | Guard | Effect |
+|---|---|---|---|
+| `_platform_camera_hint()` | Phase 52B camera quality evaluator | `len(lines) < 6` | Appends one platform reasoning hint |
+| `_get_platform_camera_signal()` | Phase 50B camera preference inference | `len(signals) < 5 AND active_domains > 0` | Appends one platform preference signal |
+
+Both hooks:
+- Read `plan.platform_camera_context` via `getattr(edit_plan, ...)` — no AttributeError risk
+- Return `""` (no-op) when context is unavailable — existing behavior unchanged
+- Truncate output to 100 chars for UI display
+- Never mutate camera values, scores, or confidence
+
+## Safety Contract
+
+- Local only — no internet, no cloud API, no scraping
+- Never raises — all paths wrapped in try/except
+- Deterministic — same inputs → same output
+- Advisory only — `platform_camera_context` is metadata, never alters camera execution
+- No motion_crop rewrite, no tracking config change, no FFmpeg mutation
+- Safety filter — forbidden execution keys rejected by loader (`ffmpeg_args`, `render_command`, `motion_crop`, etc.) — entire file rejected, not just keys stripped
+- No raw file paths in creator-facing reasoning strings
+- Executor authority unchanged — render pipeline never reads `platform_camera_context`
+- Backward compatible — defaults to `{}` when platform/creator_type not provided
+
+## Test Results
+
+- Focused: **50/50** passed (1 skipped)
+- Full regression: **4587/4587** passed (0 regressions)

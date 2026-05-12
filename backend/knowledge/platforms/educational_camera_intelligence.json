@@ -1,0 +1,22 @@
+{
+  "knowledge_id": "educational_camera_intelligence",
+  "platform": "general",
+  "creator_type": "educational",
+  "version": 1,
+  "title": "Educational Creator Camera Intelligence",
+  "description": "Camera guidance for educational creators: stable framing with smooth transitions to maintain viewer focus and comprehension throughout the lesson",
+  "tags": ["educational", "camera", "stable", "smooth", "focus", "subject_hold", "clarity"],
+  "domains": ["camera"],
+  "guidance": {
+    "camera": {
+      "motion_energy": "low",
+      "stability_priority": "high",
+      "jitter_sensitivity": "high",
+      "subject_continuity": "high",
+      "deadzone_bias": "wide",
+      "crop_aggressiveness_guidance": "low",
+      "smoothness_priority": "high"
+    }
+  },
+  "confidence": 0.84
+}

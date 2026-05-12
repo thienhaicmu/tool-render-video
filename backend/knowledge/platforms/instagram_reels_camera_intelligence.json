@@ -1,0 +1,22 @@
+{
+  "knowledge_id": "instagram_reels_camera_intelligence",
+  "platform": "instagram_reels",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "Instagram Reels Camera Intelligence",
+  "description": "Camera guidance for Instagram Reels: energetic framing with aesthetic emphasis and strong subject continuity for visual storytelling",
+  "tags": ["instagram_reels", "camera", "dynamic", "aesthetic", "subject_tracking", "viral"],
+  "domains": ["camera"],
+  "guidance": {
+    "camera": {
+      "motion_energy": "high",
+      "stability_priority": "medium",
+      "jitter_sensitivity": "low",
+      "subject_continuity": "high",
+      "deadzone_bias": "narrow",
+      "crop_aggressiveness_guidance": "medium",
+      "smoothness_priority": "medium"
+    }
+  },
+  "confidence": 0.79
+}

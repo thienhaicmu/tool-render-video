@@ -644,6 +644,16 @@ def _build_plan(
         plan.warnings.append(f"platform_subtitle_context_error:{type(exc).__name__}")
         logger.debug("ai_director_platform_subtitle_context_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 55C: Platform Camera Intelligence ---
+    # Runs after Phase 55B: retrieves camera-specific platform knowledge and
+    # attaches advisory platform_camera_context to the plan.
+    # Advisory only — no motion_crop rewrite, no tracking config change, no FFmpeg mutation.
+    try:
+        _attach_platform_camera_context(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"platform_camera_context_error:{type(exc).__name__}")
+        logger.debug("ai_director_platform_camera_context_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -5038,6 +5048,39 @@ def _attach_platform_subtitle_context(plan: "AIEditPlan", request: Any, job_id: 
 
     logger.debug(
         "ai_platform_subtitle_context_done job_id=%s available=%s platform=%s "
+        "creator_type=%s confidence=%.2f",
+        job_id,
+        ctx.get("available", False),
+        ctx.get("platform", ""),
+        ctx.get("creator_type", ""),
+        float(ctx.get("confidence") or 0.0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 55C — Platform Camera Intelligence helper
+# ---------------------------------------------------------------------------
+
+def _attach_platform_camera_context(plan: "AIEditPlan", request: Any, job_id: str) -> None:
+    """Retrieve camera-specific platform knowledge and attach to plan.
+
+    Reads platform and creator_type from request, calls the platform camera
+    retriever, and attaches advisory platform_camera_context to the plan.
+
+    Advisory only — no motion_crop rewrite, no tracking config change,
+    no FFmpeg mutation, no executor override, no autonomous execution.
+    """
+    from app.ai.knowledge.platform_camera_retriever import build_platform_camera_context
+
+    platform = str(getattr(request, "platform", "") or "").strip().lower()
+    creator_type = str(getattr(request, "creator_type", "") or "").strip().lower()
+
+    result = build_platform_camera_context(platform=platform, creator_type=creator_type)
+    plan.platform_camera_context = result.get("platform_camera_context", {})
+    ctx = plan.platform_camera_context
+
+    logger.debug(
+        "ai_platform_camera_context_done job_id=%s available=%s platform=%s "
         "creator_type=%s confidence=%.2f",
         job_id,
         ctx.get("available", False),

@@ -131,6 +131,12 @@ def _infer(edit_plan: Any) -> AICameraPreference:
         if k_signal:
             signals.append(k_signal)
 
+    # Phase 55C: optional platform camera context signal enrichment
+    if len(signals) < _MAX_SIGNAL_ITEMS and active_domains > 0:
+        p_signal = _get_platform_camera_signal(edit_plan)
+        if p_signal:
+            signals.append(p_signal)
+
     return AICameraPreference(
         motion_style=motion_style,
         crop_aggressiveness=crop_aggressiveness,
@@ -521,6 +527,36 @@ def _get_camera_knowledge_signal(motion_style: str) -> str:
         if hints:
             raw = hints[0]
             return raw[:100] if raw else ""
+        return ""
+    except Exception:
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# Phase 55C — optional platform camera context signal enrichment
+# ---------------------------------------------------------------------------
+
+def _get_platform_camera_signal(edit_plan: Any) -> str:
+    """Return an optional platform camera context signal. Never raises. Phase 55C.
+
+    Enriches the inference signals list with platform-aware camera guidance.
+    Metadata-only — does not change inferred values, weights, or confidence.
+    """
+    try:
+        ctx = getattr(edit_plan, "platform_camera_context", None)
+        if not ctx or not isinstance(ctx, dict) or not ctx.get("available"):
+            return ""
+        reasoning = ctx.get("reasoning") or []
+        if reasoning:
+            return str(reasoning[0])[:100]
+        guidance = ctx.get("guidance") or {}
+        platform = str(ctx.get("platform") or "")
+        motion = str(guidance.get("motion_energy") or "")
+        stability = str(guidance.get("stability_priority") or "")
+        if platform and motion:
+            return f"{platform.replace('_', ' ').title()} camera guidance recommends {motion} motion energy"[:100]
+        if motion and stability:
+            return f"Platform guidance supports {motion} motion energy with {stability} stability priority"[:100]
         return ""
     except Exception:
         return ""

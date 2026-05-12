@@ -1,0 +1,22 @@
+{
+  "knowledge_id": "podcast_camera_intelligence",
+  "platform": "general",
+  "creator_type": "podcast",
+  "version": 1,
+  "title": "Podcast Camera Intelligence",
+  "description": "Camera guidance for podcast and talking-head creators: static center framing, high stability, wide deadzone for professional, distraction-free video",
+  "tags": ["podcast", "camera", "stable", "static", "wide_deadzone", "talking_head", "professional"],
+  "domains": ["camera"],
+  "guidance": {
+    "camera": {
+      "motion_energy": "low",
+      "stability_priority": "high",
+      "jitter_sensitivity": "high",
+      "subject_continuity": "high",
+      "deadzone_bias": "wide",
+      "crop_aggressiveness_guidance": "low",
+      "smoothness_priority": "high"
+    }
+  },
+  "confidence": 0.85
+}
