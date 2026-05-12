@@ -1,0 +1,27 @@
+{
+  "knowledge_id": "hook_fatigue_overuse",
+  "category": "hook",
+  "source_type": "hook_pattern",
+  "creator_style": "",
+  "title": "Hook Fatigue and Overuse Intelligence",
+  "description": "Overuse of hype language can reduce trust. Aggressive hooks can hurt creator fit for educational or podcast content. Repeated hook structures feel formulaic and reduce retention.",
+  "tags": ["fatigue", "overuse", "hype", "credibility", "trust", "formulaic", "hook_variety"],
+  "hook_patterns": [
+    "Vary hook structure to avoid formulaic patterns",
+    "Reduce hype language when targeting trust-oriented audiences",
+    "Aggressive hooks conflict with educational and podcast creator styles",
+    "Hook fatigue accumulates when the same pattern repeats across videos"
+  ],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {
+    "hook_style": "varied",
+    "fatigue_risk": "real",
+    "hype_overuse_risk": true,
+    "creator_style_mismatch_risk": "educational_podcast",
+    "variety_recommended": true,
+    "formulaic_penalty": "trust_reduction"
+  },
+  "creator_patterns": {}
+}

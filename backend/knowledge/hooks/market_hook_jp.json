@@ -1,0 +1,27 @@
+{
+  "knowledge_id": "market_hook_jp",
+  "category": "hook",
+  "source_type": "hook_pattern",
+  "creator_style": "",
+  "title": "JP Market Hook Intelligence",
+  "description": "JP audiences prefer subtle curiosity, story-first openings, daily-life pacing, and softer emotional tension. Hooks should invite rather than demand attention.",
+  "tags": ["market_hook", "jp", "subtle", "story_first", "soft_tension", "daily_life", "market"],
+  "hook_patterns": [
+    "Open with a story moment rather than a direct claim",
+    "Subtle curiosity performs better than aggressive attention capture",
+    "Daily-life relatability opens the emotional door",
+    "Soft emotional tension draws in without demanding"
+  ],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {
+    "hook_style": "story_invitation",
+    "market": "jp",
+    "subtle_curiosity": true,
+    "aggressive_hook_risk": "negative_signal",
+    "daily_life_pacing": true,
+    "soft_emotional_tension": true
+  },
+  "creator_patterns": {}
+}

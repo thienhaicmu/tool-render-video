@@ -1,0 +1,27 @@
+{
+  "knowledge_id": "market_hook_eu",
+  "category": "hook",
+  "source_type": "hook_pattern",
+  "creator_style": "",
+  "title": "EU Market Hook Intelligence",
+  "description": "EU audiences prefer trust-first hooks, informative openings, credibility-oriented setup, and less exaggerated claims. Hooks should build trust before making promises.",
+  "tags": ["market_hook", "eu", "trust_first", "credibility", "informative", "low_hype", "market"],
+  "hook_patterns": [
+    "Open with credibility context before making a claim",
+    "Informative opening builds trust with EU audiences",
+    "Avoid exaggerated claims — EU audiences are skeptical of hype",
+    "Credibility-oriented setup improves reception"
+  ],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {
+    "hook_style": "trust_first",
+    "market": "eu",
+    "credibility_oriented": true,
+    "exaggeration_risk": "high_rejection",
+    "informative_opening": true,
+    "hype_sensitivity": "high"
+  },
+  "creator_patterns": {}
+}

@@ -1,0 +1,26 @@
+{
+  "knowledge_id": "first_5s_retention",
+  "category": "hook",
+  "source_type": "hook_pattern",
+  "creator_style": "",
+  "title": "First 5-Second Retention Intelligence",
+  "description": "A good hook must be followed by momentum, not a pause. Early payoff signals reduce viewer uncertainty. Retention improves when the next moment feels worth waiting for.",
+  "tags": ["first_5s", "retention", "momentum", "pacing", "continuation", "payoff_signal"],
+  "hook_patterns": [
+    "Maintain energy after the hook — avoid momentum drops",
+    "Deliver an early payoff signal within 5 seconds",
+    "Build continuation pressure — make the next second feel necessary",
+    "Consistent pacing reduces first-5s dropout"
+  ],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {
+    "hook_style": "momentum_continuation",
+    "early_payoff_signal": true,
+    "continuation_pressure": "high",
+    "retention_window_seconds": 5,
+    "pause_after_hook_risk": "high"
+  },
+  "creator_patterns": {}
+}

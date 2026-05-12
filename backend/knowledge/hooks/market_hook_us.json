@@ -1,0 +1,27 @@
+{
+  "knowledge_id": "market_hook_us",
+  "category": "hook",
+  "source_type": "hook_pattern",
+  "creator_style": "",
+  "title": "US Market Hook Intelligence",
+  "description": "US audiences respond to direct hooks, high energy, clear promises, and strong result framing. Hooks should state the value immediately without hedging.",
+  "tags": ["market_hook", "us", "direct", "high_energy", "promise", "result_framing", "market"],
+  "hook_patterns": [
+    "Lead with a clear, direct promise or result",
+    "High energy opening matches US audience expectation",
+    "State the value explicitly — do not bury the lead",
+    "Confident, bold framing performs better than hedging"
+  ],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {
+    "hook_style": "direct_promise",
+    "market": "us",
+    "energy_level": "high",
+    "result_framing": true,
+    "hedging_risk": "negative_signal",
+    "direct_value_preferred": true
+  },
+  "creator_patterns": {}
+}

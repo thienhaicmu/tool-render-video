@@ -1,0 +1,27 @@
+{
+  "knowledge_id": "opening_3s_hook",
+  "category": "hook",
+  "source_type": "hook_pattern",
+  "creator_style": "",
+  "title": "Opening 3-Second Hook Intelligence",
+  "description": "The first 3 seconds should immediately establish why the viewer should care. Strong openings combine curiosity with clear context. Slow intros reduce retention in short-form content.",
+  "tags": ["first_3s", "opening", "attention", "immediate", "hook", "capture", "retention"],
+  "hook_patterns": [
+    "Establish viewer relevance in the first sentence",
+    "Combine curiosity with immediate context clarity",
+    "Avoid slow preamble before the core message",
+    "Use high-energy opening to capture attention fast",
+    "Direct value proposition in the first frame"
+  ],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {
+    "hook_style": "immediate_capture",
+    "first_3s_critical": true,
+    "slow_intro_risk": "high",
+    "direct_value": true,
+    "attention_window_seconds": 3
+  },
+  "creator_patterns": {}
+}

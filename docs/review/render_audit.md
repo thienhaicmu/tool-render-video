@@ -3228,3 +3228,78 @@ Phase 53C mirrors Phase 53B for the camera domain. Five camera-domain JSON packs
 
 - Focused: **39/39** passed
 - Full regression: **4307/4307** passed (0 regressions)
+
+---
+
+# Phase 53D — Hook / Retention Knowledge Injection Pack
+
+**Date:** 2026-05-12
+**Status:** Complete — evaluation/advisory only
+
+## Summary
+
+Phase 53D injects curated hook, retention, curiosity, opening-sequence, and market-specific hook expertise into the hook quality AI system (Phase 52C). Seven hook-domain JSON packs (opening 3-second hook, first-5-second retention, curiosity/open-loop, US market hook, EU market hook, JP market hook, hook fatigue/overuse) are loaded by a dedicated `hook_knowledge_retriever` with its own `AIHookKnowledgeItem` / `AIHookKnowledgePack` schema. Three integration hooks add optional knowledge enrichment to Phase 52C (hook quality evaluator — first-3s hint, curiosity hint, market hint). All influence is additive reasoning metadata — hook text, transcript, clip boundaries, subtitle timing, motion_crop, FFmpeg, and the render pipeline are never mutated.
+
+## Hook Knowledge Domains
+
+| Domain | Description |
+|---|---|
+| Opening 3-second hook | Immediate attention capture, first-frame strength, direct value proposition |
+| First 5-second retention | Momentum after hook, early payoff signal, continuation pressure |
+| Curiosity / open loop | Curiosity gap, unresolved question, story tension, payoff expectation |
+| Market-specific — US | Direct hook, high energy, clear promise, strong result framing |
+| Market-specific — EU | Trust-first hook, informative opening, credibility-oriented setup |
+| Market-specific — JP | Subtle curiosity, story-first opening, softer emotional tension |
+| Hook fatigue / overuse | Hype overuse risk, formulaic pattern fatigue, creator style mismatch |
+
+## New Files
+
+| File | Purpose |
+|---|---|
+| `backend/knowledge/hooks/opening_3s_hook.json` | Opening 3-second hook knowledge pack |
+| `backend/knowledge/hooks/first_5s_retention.json` | First 5-second retention knowledge pack |
+| `backend/knowledge/hooks/curiosity_open_loop.json` | Curiosity and open-loop knowledge pack |
+| `backend/knowledge/hooks/market_hook_us.json` | US market hook knowledge pack |
+| `backend/knowledge/hooks/market_hook_eu.json` | EU market hook knowledge pack |
+| `backend/knowledge/hooks/market_hook_jp.json` | JP market hook knowledge pack |
+| `backend/knowledge/hooks/hook_fatigue_overuse.json` | Hook fatigue / overuse knowledge pack |
+| `backend/app/ai/knowledge/hook_knowledge_schema.py` | `AIHookKnowledgeItem` + `AIHookKnowledgePack` dataclasses |
+| `backend/app/ai/knowledge/hook_knowledge_retriever.py` | Tag-based retrieval + `build_hook_reasoning()` |
+| `backend/tests/test_ai_phase53d_hook_knowledge.py` | 44 focused tests |
+
+## Modified Files
+
+| File | Change |
+|---|---|
+| `backend/app/ai/hook_quality/hook_quality_evaluator.py` | Added `_first3s_knowledge_hint()`, `_curiosity_knowledge_hint()`, `_market_hook_hint()` + calls in `_build_reasoning()` |
+
+## Safety Contract
+
+- Local only — no internet, no cloud API
+- Never raises — all hooks wrapped in try/except, return `""` on any error
+- Guard: knowledge hints fire only when reasoning list has room (`len(lines) < 6`) AND score is below threshold
+- Additive only — enriches `reasoning` list; never mutates hook text, transcript, clip boundaries, or render parameters
+- No transcript rewrite, no hook text rewrite, no clip segmentation mutation
+- No subtitle engine mutation, no motion_crop mutation, no FFmpeg mutation, no executor override
+
+## Knowledge Hook Logic
+
+| Hook | File | Trigger condition | Effect |
+|---|---|---|---|
+| `_first3s_knowledge_hint()` | `hook_quality_evaluator.py` | `len(reasoning) < 6 and first_3s < 55` | Appends opening-hook guidance string to reasoning |
+| `_curiosity_knowledge_hint()` | `hook_quality_evaluator.py` | `len(reasoning) < 6 and curiosity < 50` | Appends curiosity/open-loop guidance string to reasoning |
+| `_market_hook_hint()` | `hook_quality_evaluator.py` | `len(reasoning) < 6 and market < 55` | Appends market-specific hook guidance string to reasoning |
+
+## Retrieval Behavior
+
+```
+retrieve_knowledge(domain="hook", tags=["first_3s", "opening"]) → opening 3s knowledge
+retrieve_knowledge(domain="hook", tags=["curiosity", "open_loop"]) → curiosity knowledge
+retrieve_knowledge(domain="hook", tags=["market_hook", "us"]) → US market hook knowledge
+retrieve_knowledge(domain="hook", tags=["fatigue"]) → fatigue / overuse knowledge
+```
+
+## Test Results
+
+- Focused: **44/44** passed
+- Full regression: **4351/4351** passed (0 regressions)

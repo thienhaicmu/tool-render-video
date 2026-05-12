@@ -177,4 +177,100 @@ def _build_reasoning(
     elif fatigue < 15:
         lines.append("Low hook fatigue risk supports engagement")
 
+    # Phase 53D: optional opening-hook knowledge enrichment
+    if len(lines) < 6 and first_3s < 55:
+        k_hint = _first3s_knowledge_hint()
+        if k_hint:
+            lines.append(k_hint)
+
+    # Phase 53D: optional curiosity / open-loop knowledge enrichment
+    if len(lines) < 6 and curiosity < 50:
+        k_hint = _curiosity_knowledge_hint()
+        if k_hint:
+            lines.append(k_hint)
+
+    # Phase 53D: optional market-specific hook knowledge enrichment
+    if len(lines) < 6 and market < 55:
+        k_hint = _market_hook_hint(edit_plan)
+        if k_hint:
+            lines.append(k_hint)
+
     return lines
+
+
+def _first3s_knowledge_hint() -> str:
+    """Return an optional knowledge-informed opening-hook hint. Never raises.
+
+    Phase 53D hook knowledge integration — metadata-only, additive.
+    Enriches reasoning when first-3s hook strength is limited.
+    """
+    try:
+        from app.ai.knowledge.hook_knowledge_retriever import retrieve_knowledge
+        pack = retrieve_knowledge(domain="hook", tags=["first_3s", "opening"], max_results=1)
+        if not pack.available or not pack.items:
+            return ""
+        patterns = pack.items[0].retention_patterns
+        if patterns.get("slow_intro_risk") == "high":
+            return "Establishing viewer relevance in the first seconds improves hook strength"
+        if patterns.get("direct_value"):
+            return "A direct value proposition in the opening frames increases early retention"
+        return ""
+    except Exception:
+        return ""
+
+
+def _curiosity_knowledge_hint() -> str:
+    """Return an optional knowledge-informed curiosity hint. Never raises.
+
+    Phase 53D hook knowledge integration — metadata-only, additive.
+    Enriches reasoning when curiosity signals are weak.
+    """
+    try:
+        from app.ai.knowledge.hook_knowledge_retriever import retrieve_knowledge
+        pack = retrieve_knowledge(domain="hook", tags=["curiosity", "open_loop"], max_results=1)
+        if not pack.available or not pack.items:
+            return ""
+        patterns = pack.items[0].retention_patterns
+        if patterns.get("open_loop_clarity") == "required":
+            return "A clear open loop with explicit payoff expectation improves curiosity strength"
+        if patterns.get("narrative_tension"):
+            return "Story tension and an unresolved question drive curiosity and watch-through rate"
+        return ""
+    except Exception:
+        return ""
+
+
+def _market_hook_hint(edit_plan: Any) -> str:
+    """Return an optional knowledge-informed market-specific hook hint. Never raises.
+
+    Phase 53D hook knowledge integration — metadata-only, additive.
+    Enriches reasoning when market hook fit is below threshold.
+    """
+    try:
+        moi = {}
+        if edit_plan is not None and hasattr(edit_plan, "market_optimization_intelligence"):
+            moi = edit_plan.market_optimization_intelligence or {}
+        elif isinstance(edit_plan, dict):
+            moi = edit_plan.get("market_optimization_intelligence") or {}
+        market_code = str(moi.get("target_market") or "").strip().lower()
+        if not market_code:
+            return ""
+
+        from app.ai.knowledge.hook_knowledge_retriever import retrieve_knowledge
+        pack = retrieve_knowledge(
+            domain="hook",
+            tags=["market_hook", market_code],
+            max_results=1,
+        )
+        if not pack.available or not pack.items:
+            return ""
+        patterns = pack.items[0].retention_patterns
+        if patterns.get("hook_style") == "direct_promise":
+            return "Direct promise framing aligns with US market hook expectations"
+        if patterns.get("hook_style") == "trust_first":
+            return "Trust-first opening aligns with EU market hook preferences"
+        if patterns.get("hook_style") == "story_invitation":
+            return "Story-invitation style aligns with JP market hook preferences"
+        return ""
+    except Exception:
+        return ""

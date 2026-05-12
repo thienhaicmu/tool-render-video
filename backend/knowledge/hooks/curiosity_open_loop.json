@@ -1,0 +1,26 @@
+{
+  "knowledge_id": "curiosity_open_loop",
+  "category": "hook",
+  "source_type": "hook_pattern",
+  "creator_style": "",
+  "title": "Curiosity and Open Loop Intelligence",
+  "description": "Open loops work best when the viewer understands what question will be answered. Curiosity should not become confusion. Strong open loops create a clear expectation of payoff.",
+  "tags": ["curiosity", "open_loop", "tension", "payoff", "question", "unresolved", "expectation"],
+  "hook_patterns": [
+    "Frame the open loop with a clear unanswered question",
+    "Avoid ambiguity — curiosity gap must be understandable",
+    "Create story tension that implies a concrete payoff",
+    "Unresolved question drives watch-through rate"
+  ],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {},
+  "retention_patterns": {
+    "hook_style": "curiosity_gap",
+    "open_loop_clarity": "required",
+    "payoff_expectation": "explicit",
+    "confusion_risk": "high_dropout",
+    "narrative_tension": true
+  },
+  "creator_patterns": {}
+}
