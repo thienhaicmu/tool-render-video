@@ -3133,3 +3133,98 @@ sort  = (-score, pack_id, rule_id) for full determinism on ties
 
 - Focused: **76/76** passed
 - Full regression: **4232/4232** passed (0 regressions)
+
+---
+
+# Phase 53B — Subtitle Knowledge Injection Pack
+
+**Date:** 2026-05-11
+**Status:** Complete — evaluation/advisory only
+
+## Summary
+
+Phase 53B extends the Phase 53A knowledge foundation with a curated subtitle knowledge pack layer. Four subtitle-domain JSON packs (mobile readability, TikTok short-form, podcast/talking-head, educational) are loaded by a dedicated `subtitle_knowledge_retriever` with its own `AISubtitleKnowledgeItem` / `AISubtitleKnowledgePack` schema. Two integration hooks add optional knowledge enrichment to Phase 52A (subtitle quality evaluator) and Phase 50A (subtitle preference inference). All influence is additive reasoning metadata — subtitle timing, text, FFmpeg, and the render pipeline are never mutated.
+
+## New Files
+
+| File | Purpose |
+|---|---|
+| `backend/knowledge/subtitles/mobile_readability.json` | Mobile readability subtitle knowledge pack |
+| `backend/knowledge/subtitles/tiktok_shortform.json` | TikTok short-form subtitle knowledge pack |
+| `backend/knowledge/subtitles/podcast_talking_head.json` | Podcast/talking-head subtitle knowledge pack |
+| `backend/knowledge/subtitles/educational_subtitle.json` | Educational subtitle knowledge pack |
+| `backend/app/ai/knowledge/subtitle_knowledge_schema.py` | `AISubtitleKnowledgeItem` + `AISubtitleKnowledgePack` dataclasses |
+| `backend/app/ai/knowledge/subtitle_knowledge_retriever.py` | Tag-based retrieval + `build_subtitle_reasoning()` |
+| `backend/tests/test_ai_phase53b_subtitle_knowledge.py` | 36 focused tests |
+
+## Modified Files
+
+| File | Change |
+|---|---|
+| `backend/app/ai/knowledge/knowledge_registry.py` | Added `"subtitles"` to `_KNOWLEDGE_SUBDIRS` |
+| `backend/app/ai/subtitle_quality/subtitle_quality_evaluator.py` | Added `_mobile_knowledge_hint()` + call in `_build_reasoning()` |
+| `backend/app/ai/creator_subtitle/subtitle_preference_inference.py` | Added `_get_knowledge_signal()` + call after confidence computation |
+
+## Safety Contract
+
+- Local only — no internet, no cloud API
+- Never raises — all hooks wrapped in try/except, return `""` on any error
+- Guard: knowledge hooks fire only when `style != "unknown" and active_domains > 0`
+- Additive only — enriches `reasoning` list and `signals` list; never mutates subtitle timing, text, or render parameters
+
+## Test Results
+
+- Focused: **36/36** passed
+- Full regression: **4268/4268** passed (0 regressions)
+
+---
+
+# Phase 53C — Camera Knowledge Injection Pack
+
+**Date:** 2026-05-12
+**Status:** Complete — evaluation/advisory only
+
+## Summary
+
+Phase 53C mirrors Phase 53B for the camera domain. Five camera-domain JSON packs (stable framing, interview/talking-head, vertical short-form, dynamic viral, anti-jitter) are loaded by a dedicated `camera_knowledge_retriever` with its own `AICameraKnowledgeItem` / `AICameraKnowledgePack` schema. Two integration hooks add optional knowledge enrichment to Phase 52B (camera quality evaluator — jitter hint) and Phase 50B (camera preference inference — motion style signal). All influence is additive reasoning metadata — motion_crop, tracking, scene detection, FFmpeg, and the render pipeline are never mutated.
+
+## New Files
+
+| File | Purpose |
+|---|---|
+| `backend/knowledge/camera/stable_framing.json` | Stable framing / low-jitter camera knowledge pack |
+| `backend/knowledge/camera/interview_talking_head.json` | Interview / talking-head camera knowledge pack (`creator_style: podcast`) |
+| `backend/knowledge/camera/vertical_shortform.json` | Vertical short-form / TikTok safe-zone camera knowledge pack |
+| `backend/knowledge/camera/dynamic_viral.json` | Dynamic viral motion camera knowledge pack |
+| `backend/knowledge/camera/anti_jitter.json` | Anti-jitter / anti-whip-pan camera knowledge pack |
+| `backend/app/ai/knowledge/camera_knowledge_schema.py` | `AICameraKnowledgeItem` + `AICameraKnowledgePack` dataclasses |
+| `backend/app/ai/knowledge/camera_knowledge_retriever.py` | Tag-based retrieval + `build_camera_reasoning()` |
+| `backend/tests/test_ai_phase53c_camera_knowledge.py` | 39 focused tests |
+
+## Modified Files
+
+| File | Change |
+|---|---|
+| `backend/app/ai/knowledge/knowledge_registry.py` | Added `"camera"` to `_KNOWLEDGE_SUBDIRS` |
+| `backend/app/ai/camera_quality/camera_quality_evaluator.py` | Added `_jitter_knowledge_hint()` + call in `_build_reasoning()` when `jitter >= 35` |
+| `backend/app/ai/creator_camera/camera_preference_inference.py` | Added `_get_camera_knowledge_signal()` + call after confidence computation |
+
+## Safety Contract
+
+- Local only — no internet, no cloud API
+- Never raises — all hooks wrapped in try/except, return `""` on any error
+- Guard: knowledge hooks fire only when `motion_style != "unknown" and active_domains > 0`
+- Additive only — enriches `reasoning` list and `signals` list; never mutates motion_crop, tracking, scene detection, or render parameters
+- No motion_crop rewrite, no tracking rewrite, no FFmpeg mutation, no executor override
+
+## Knowledge Hook Logic
+
+| Hook | File | Trigger condition | Effect |
+|---|---|---|---|
+| `_jitter_knowledge_hint()` | `camera_quality_evaluator.py` | `len(reasoning) < 6 and jitter >= 35` | Appends anti-jitter guidance string to reasoning |
+| `_get_camera_knowledge_signal()` | `camera_preference_inference.py` | `len(signals) < 5 and motion_style != "unknown" and active_domains > 0` | Appends motion-style aligned knowledge signal |
+
+## Test Results
+
+- Focused: **39/39** passed
+- Full regression: **4307/4307** passed (0 regressions)

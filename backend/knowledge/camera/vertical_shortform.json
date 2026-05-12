@@ -1,0 +1,23 @@
+{
+  "knowledge_id": "vertical_shortform_camera",
+  "category": "camera",
+  "source_type": "style_pattern",
+  "creator_style": "viral_tiktok",
+  "title": "Vertical Short-form Camera Intelligence",
+  "description": "Vertical 9:16 framing should preserve subject clarity. Camera movement should not compete with subtitle readability. Subject-safe center and safe-zone awareness are critical.",
+  "tags": ["vertical", "shortform", "mobile", "safe_zone", "subtitle_safe", "tiktok", "9_16"],
+  "hook_patterns": [],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {
+    "aspect_ratio": "9:16",
+    "subject_safe_center": true,
+    "mobile_viewing": true,
+    "safe_zone_awareness": true,
+    "subtitle_safe_crop": true,
+    "avoid_subtitle_overlap": true,
+    "subject_clarity": true
+  },
+  "retention_patterns": {},
+  "creator_patterns": {}
+}

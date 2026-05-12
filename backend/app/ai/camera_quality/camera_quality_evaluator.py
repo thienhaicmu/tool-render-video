@@ -165,4 +165,29 @@ def _build_reasoning(
     if whip_pan >= 35:
         lines.append("Rapid framing changes detected — may feel aggressive")
 
+    # Phase 53C: optional anti-jitter knowledge enrichment
+    if len(lines) < 6 and jitter >= 35:
+        k_hint = _jitter_knowledge_hint()
+        if k_hint:
+            lines.append(k_hint)
+
     return lines
+
+
+def _jitter_knowledge_hint() -> str:
+    """Return an optional knowledge-informed anti-jitter hint. Never raises.
+
+    Phase 53C camera knowledge integration — metadata-only, additive.
+    Enriches reasoning when micro-jitter risk is elevated.
+    """
+    try:
+        from app.ai.knowledge.camera_knowledge_retriever import retrieve_knowledge
+        pack = retrieve_knowledge(domain="camera", tags=["anti_jitter", "jitter"], max_results=1)
+        if not pack.available or not pack.items:
+            return ""
+        patterns = pack.items[0].camera_patterns
+        if patterns.get("overreactive_tracking_risk") or patterns.get("deadzone") == "wide":
+            return "Wider deadzone and higher smoothing can reduce micro-jitter risk"
+        return ""
+    except Exception:
+        return ""

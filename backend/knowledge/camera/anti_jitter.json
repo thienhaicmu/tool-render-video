@@ -1,0 +1,23 @@
+{
+  "knowledge_id": "anti_jitter_camera",
+  "category": "camera",
+  "source_type": "style_pattern",
+  "creator_style": "",
+  "title": "Anti-Jitter / Anti-Whip-Pan Camera Intelligence",
+  "description": "Overreactive tracking increases perceived jitter. Sudden large crop corrections increase whip-pan risk. Wider deadzone and higher smoothing reduce micro-jitter without sacrificing subject tracking.",
+  "tags": ["anti_jitter", "jitter", "whip_pan", "smoothing", "deadzone", "stability", "overreactive"],
+  "hook_patterns": [],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {
+    "deadzone": "wide",
+    "smoothing": "high",
+    "overreactive_tracking_risk": true,
+    "whip_pan_prevention": true,
+    "subject_hold_stability": true,
+    "large_correction_risk": true,
+    "crop_aggressiveness": "low"
+  },
+  "retention_patterns": {},
+  "creator_patterns": {}
+}

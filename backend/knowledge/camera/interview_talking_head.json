@@ -1,0 +1,23 @@
+{
+  "knowledge_id": "interview_talking_head_camera",
+  "category": "camera",
+  "source_type": "style_pattern",
+  "creator_style": "podcast",
+  "title": "Interview / Talking Head Camera Intelligence",
+  "description": "Interview and talking-head content benefits from calm, stable framing. Centered subject, consistent headroom, low reframe aggressiveness, low whip-pan risk.",
+  "tags": ["interview", "talking_head", "centered", "stable", "low_whip_pan", "podcast", "calm"],
+  "hook_patterns": [],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {
+    "motion_style": "static_center",
+    "crop_aggressiveness": "low",
+    "stable_crop": true,
+    "consistent_headroom": true,
+    "low_whip_pan_risk": true,
+    "low_reframe_aggressiveness": true,
+    "unnecessary_movement_avoidance": true
+  },
+  "retention_patterns": {},
+  "creator_patterns": {}
+}

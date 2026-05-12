@@ -1,0 +1,22 @@
+{
+  "knowledge_id": "stable_framing_camera",
+  "category": "camera",
+  "source_type": "style_pattern",
+  "creator_style": "",
+  "title": "Stable Framing Camera Intelligence",
+  "description": "Stable creator styles benefit from wider deadzone, longer subject hold, and low crop aggressiveness. Smoothing reduces micro-jitter without making tracking feel delayed.",
+  "tags": ["stable_framing", "jitter", "smooth", "deadzone", "subject_hold", "continuity"],
+  "hook_patterns": [],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {
+    "deadzone": "wide",
+    "subject_hold": "long",
+    "crop_aggressiveness": "low",
+    "micro_jitter_prevention": true,
+    "smooth_continuity": true,
+    "smoothing": "high"
+  },
+  "retention_patterns": {},
+  "creator_patterns": {}
+}

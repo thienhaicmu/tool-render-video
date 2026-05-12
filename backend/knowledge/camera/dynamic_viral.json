@@ -1,0 +1,22 @@
+{
+  "knowledge_id": "dynamic_viral_camera",
+  "category": "camera",
+  "source_type": "style_pattern",
+  "creator_style": "viral_tiktok",
+  "title": "Dynamic / Viral Camera Intelligence",
+  "description": "Dynamic framing supports short-form energy but excessive crop movement harms retention. Moderate camera responsiveness with controlled energy is optimal.",
+  "tags": ["dynamic", "viral", "shortform", "motion", "controlled_energy", "tiktok"],
+  "hook_patterns": [],
+  "subtitle_patterns": {},
+  "pacing_patterns": {},
+  "camera_patterns": {
+    "motion_style": "dynamic_subject",
+    "controlled_energy": true,
+    "moderate_responsiveness": true,
+    "avoid_excessive_movement": true,
+    "attention_supporting": true,
+    "crop_aggressiveness": "medium"
+  },
+  "retention_patterns": {},
+  "creator_patterns": {}
+}

@@ -15,7 +15,7 @@ from app.ai.knowledge.knowledge_ingestion import ingest_knowledge_directory
 
 logger = logging.getLogger("app.ai.knowledge.registry")
 
-_KNOWLEDGE_SUBDIRS = ("creators", "markets", "subtitles", "pacing", "hooks")
+_KNOWLEDGE_SUBDIRS = ("creators", "markets", "subtitles", "pacing", "hooks", "camera")
 
 # Module-level cache: registry instance per resolved base_path string
 _REGISTRY_CACHE: Dict[str, AIKnowledgeRegistry] = {}

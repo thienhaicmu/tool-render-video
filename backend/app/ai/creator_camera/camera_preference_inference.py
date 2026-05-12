@@ -124,6 +124,13 @@ def _infer(edit_plan: Any) -> AICameraPreference:
     # ── Confidence ────────────────────────────────────────────────────────────
     confidence = _compute_confidence(active_domains, adaptive, feedback)
 
+    # Phase 53C: optional knowledge-aware signal enrichment
+    # Guard: only enrich when motion style is known and at least one domain was active.
+    if len(signals) < _MAX_SIGNAL_ITEMS and motion_style != "unknown" and active_domains > 0:
+        k_signal = _get_camera_knowledge_signal(motion_style)
+        if k_signal:
+            signals.append(k_signal)
+
     return AICameraPreference(
         motion_style=motion_style,
         crop_aggressiveness=crop_aggressiveness,
@@ -483,3 +490,37 @@ def _safe_int(val) -> int:
         return int(val or 0)
     except (TypeError, ValueError):
         return 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 53C — optional knowledge signal enrichment
+# ---------------------------------------------------------------------------
+
+def _get_camera_knowledge_signal(motion_style: str) -> str:
+    """Return an optional camera knowledge signal. Never raises. Phase 53C.
+
+    Enriches the inference signals list with curated camera guidance.
+    Metadata-only — does not change inferred values, weights, or confidence.
+    """
+    try:
+        from app.ai.knowledge.camera_knowledge_retriever import (
+            retrieve_knowledge,
+            build_camera_reasoning,
+        )
+        tags: list = []
+        if motion_style == "static_center":
+            tags.extend(["interview", "talking_head"])
+        elif motion_style == "smooth_subject":
+            tags.extend(["stable_framing", "smooth"])
+        elif motion_style == "dynamic_subject":
+            tags.extend(["dynamic", "viral"])
+        if not tags:
+            return ""
+        pack = retrieve_knowledge(domain="camera", tags=tags, max_results=1)
+        hints = build_camera_reasoning(pack, creator_style=None, motion_style=motion_style)
+        if hints:
+            raw = hints[0]
+            return raw[:100] if raw else ""
+        return ""
+    except Exception:
+        return ""
