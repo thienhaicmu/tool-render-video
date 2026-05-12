@@ -1,0 +1,27 @@
+{
+  "knowledge_id": "educational_hook_intelligence",
+  "platform": "general",
+  "creator_type": "educational",
+  "version": 1,
+  "title": "Educational Hook Intelligence",
+  "description": "Hook and retention guidance for educational creators: clear learning promise, concept-first hook, curiosity with clarity, strong payoff expectation, avoid vague hook",
+  "tags": ["educational", "hook", "retention", "concept_first", "learning_promise", "clarity", "payoff", "curiosity"],
+  "domains": ["hook", "retention"],
+  "guidance": {
+    "hook": {
+      "first_3s_priority": "medium",
+      "retention_priority": "high",
+      "curiosity_strength": "medium",
+      "hook_energy": "low",
+      "slow_intro_risk": "low",
+      "payoff_expectation": "strong",
+      "hook_style": "concept_first",
+      "open_loop_quality": "moderate",
+      "first_5s_retention": "high",
+      "hype_level": "low",
+      "trust_priority": "high",
+      "clarity_priority": "high"
+    }
+  },
+  "confidence": 0.83
+}

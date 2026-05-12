@@ -224,6 +224,8 @@ class AIEditPlan:
     platform_subtitle_context: dict = field(default_factory=dict)
     # Phase 55C — Platform camera intelligence (populated by platform_camera_retriever module)
     platform_camera_context: dict = field(default_factory=dict)
+    # Phase 55D — Platform hook & retention intelligence (populated by platform_hook_retriever module)
+    platform_hook_context: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -331,4 +333,5 @@ class AIEditPlan:
             "platform_context": dict(self.platform_context),
             "platform_subtitle_context": dict(self.platform_subtitle_context),
             "platform_camera_context": dict(self.platform_camera_context),
+            "platform_hook_context": dict(self.platform_hook_context),
         }

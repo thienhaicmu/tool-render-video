@@ -1,0 +1,29 @@
+{
+  "knowledge_id": "viral_storytelling_hook_intelligence",
+  "platform": "general",
+  "creator_type": "storytelling",
+  "version": 1,
+  "title": "Viral Storytelling Hook Intelligence",
+  "description": "Hook and retention guidance for viral storytelling creators: unresolved tension, open loop, emotional stakes, fast context setup, strong payoff expectation",
+  "tags": ["storytelling", "hook", "retention", "tension", "open_loop", "emotional", "narrative", "viral", "payoff"],
+  "domains": ["hook", "retention"],
+  "guidance": {
+    "hook": {
+      "first_3s_priority": "high",
+      "retention_priority": "high",
+      "curiosity_strength": "high",
+      "hook_energy": "high",
+      "slow_intro_risk": "high",
+      "payoff_expectation": "strong",
+      "hook_style": "story_invitation",
+      "open_loop_quality": "strong",
+      "first_5s_retention": "high",
+      "hype_level": "medium",
+      "trust_priority": "medium",
+      "clarity_priority": "medium",
+      "emotional_stakes": "high",
+      "narrative_tension": "high"
+    }
+  },
+  "confidence": 0.82
+}

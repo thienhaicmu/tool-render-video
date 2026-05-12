@@ -3851,3 +3851,119 @@ Both hooks:
 
 - Focused: **50/50** passed (1 skipped)
 - Full regression: **4587/4587** passed (0 regressions)
+
+
+---
+
+### 2026-05-12 — AI Productization Phase 55D: Platform Hook & Retention Intelligence
+
+**Implemented:**
+- `backend/knowledge/platforms/tiktok_hook_intelligence.json` — TikTok hook/retention pack
+- `backend/knowledge/platforms/youtube_shorts_hook_intelligence.json` — YouTube Shorts hook pack
+- `backend/knowledge/platforms/instagram_reels_hook_intelligence.json` — Instagram Reels hook pack
+- `backend/knowledge/platforms/podcast_hook_intelligence.json` — Podcast/talking-head hook pack
+- `backend/knowledge/platforms/educational_hook_intelligence.json` — Educational creator hook pack
+- `backend/knowledge/platforms/viral_storytelling_hook_intelligence.json` — Viral storytelling hook pack
+- `backend/app/ai/knowledge/platform_hook_retriever.py` — Phase 55D retriever + `build_platform_hook_context()`
+
+**Modified Files:**
+
+| File | Change |
+|---|---|
+| `backend/app/ai/director/edit_plan_schema.py` | Added `platform_hook_context: dict` Phase 55D field + `to_dict()` entry |
+| `backend/app/ai/director/ai_director.py` | Added Phase 55D block + `_attach_platform_hook_context()` helper |
+| `backend/app/ai/hook_quality/hook_quality_evaluator.py` | Added `_platform_hook_hint()` — optional Phase 55D reasoning hint |
+
+## platform_hook_context Shape
+
+```json
+{
+  "platform_hook_context": {
+    "available": true,
+    "platform": "tiktok",
+    "creator_type": "viral_short_form",
+    "guidance": {
+      "first_3s_priority": "high",
+      "retention_priority": "high",
+      "curiosity_strength": "medium_high",
+      "hook_energy": "high",
+      "slow_intro_risk": "high",
+      "payoff_expectation": "strong",
+      "hook_style": "direct_promise",
+      "open_loop_quality": "strong",
+      "first_5s_retention": "high",
+      "hype_level": "medium",
+      "trust_priority": "low",
+      "clarity_priority": "high"
+    },
+    "confidence": 0.84,
+    "reasoning": [
+      "TikTok Hook Intelligence prioritizes high first-3-second attention with high retention priority"
+    ]
+  }
+}
+```
+
+Fallback:
+```json
+{"platform_hook_context": {"available": false, "guidance": {}, "confidence": 0.0, "reasoning": []}}
+```
+
+## Hook Packs
+
+| knowledge_id | platform | creator_type | Key guidance |
+|---|---|---|---|
+| `tiktok_hook_intelligence` | tiktok | viral_short_form | high first_3s_priority, direct_promise, high hook_energy, strong payoff |
+| `youtube_shorts_hook_intelligence` | youtube_shorts | viral_short_form | high first_5s_retention, direct_promise, high clarity_priority |
+| `instagram_reels_hook_intelligence` | instagram_reels | viral_short_form | high first_3s, emotional hook_style, high emotional_stakes |
+| `podcast_hook_intelligence` | general | podcast | trust_first hook_style, high trust_priority, low hype_level |
+| `educational_hook_intelligence` | general | educational | concept_first hook_style, strong payoff_expectation, high clarity |
+| `viral_storytelling_hook_intelligence` | general | storytelling | story_invitation, high narrative_tension, high emotional_stakes |
+
+## Domains
+
+All hook packs carry `domains: ["hook", "retention"]` — both hook quality and retention signals.
+
+## Retrieval Architecture
+
+`retrieve_platform_hook_knowledge(platform, creator_type, tags, base_path, max_results)`:
+1. Loads all platform items via Phase 55A `load_platform_knowledge()`
+2. Filters to items with `"hook"` in their `domains` list
+3. Filters by platform and/or creator_type
+4. Optional tag filter (any-match) — falls back to unfiltered when no match
+5. Deterministic sort: exact dual-match → platform-only → creator_type-only → alpha
+6. Merges hook guidance from top matches (first item wins on conflicts)
+7. Strips forbidden execution keys from guidance via `_safe_guidance()`
+
+## Integration Hook
+
+| Hook | Location | Guard | Effect |
+|---|---|---|---|
+| `_platform_hook_hint()` | Phase 52C hook quality evaluator | `len(lines) < 6` | Appends one platform hook reasoning hint |
+
+The hook:
+- Reads `plan.platform_hook_context` via `getattr(edit_plan, ...)` — no AttributeError risk
+- Returns `""` (no-op) when context is unavailable — existing behavior unchanged
+- Never mutates hook text, transcript, clip boundaries, or scores
+
+## Safe Guidance Keys
+
+`first_3s_priority`, `retention_priority`, `curiosity_strength`, `hook_energy`, `slow_intro_risk`,
+`payoff_expectation`, `hook_style`, `open_loop_quality`, `first_5s_retention`, `hype_level`,
+`trust_priority`, `clarity_priority`, `emotional_stakes`, `narrative_tension`
+
+## Safety Contract
+
+- Local only — no internet, no cloud API, no scraping
+- Never raises — all paths wrapped in try/except
+- Deterministic — same inputs → same output
+- Advisory only — `platform_hook_context` is metadata, never alters hook execution
+- No transcript rewrite, no hook text rewrite, no clip boundary mutation, no render mutation
+- Safety filter — forbidden execution keys rejected by loader (`ffmpeg_args`, `render_command`, `hook_rewrite`, `transcript`, etc.) — entire file rejected
+- Executor authority unchanged — render pipeline never reads `platform_hook_context`
+- Backward compatible — defaults to `{}` when platform/creator_type not provided
+
+## Test Results
+
+- Focused: **53/53** passed
+- Full regression: **4640/4640** passed (0 regressions)

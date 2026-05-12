@@ -654,6 +654,16 @@ def _build_plan(
         plan.warnings.append(f"platform_camera_context_error:{type(exc).__name__}")
         logger.debug("ai_director_platform_camera_context_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 55D: Platform Hook & Retention Intelligence ---
+    # Runs after Phase 55C: retrieves hook/retention-specific platform knowledge and
+    # attaches advisory platform_hook_context to the plan.
+    # Advisory only — no transcript rewrite, no hook text rewrite, no clip boundary change.
+    try:
+        _attach_platform_hook_context(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"platform_hook_context_error:{type(exc).__name__}")
+        logger.debug("ai_director_platform_hook_context_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -5081,6 +5091,40 @@ def _attach_platform_camera_context(plan: "AIEditPlan", request: Any, job_id: st
 
     logger.debug(
         "ai_platform_camera_context_done job_id=%s available=%s platform=%s "
+        "creator_type=%s confidence=%.2f",
+        job_id,
+        ctx.get("available", False),
+        ctx.get("platform", ""),
+        ctx.get("creator_type", ""),
+        float(ctx.get("confidence") or 0.0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 55D — Platform Hook & Retention Intelligence helper
+# ---------------------------------------------------------------------------
+
+def _attach_platform_hook_context(plan: "AIEditPlan", request: Any, job_id: str) -> None:
+    """Retrieve hook/retention-specific platform knowledge and attach to plan.
+
+    Reads platform and creator_type from request, calls the platform hook
+    retriever, and attaches advisory platform_hook_context to the plan.
+
+    Advisory only — no transcript rewrite, no hook text rewrite, no clip
+    boundary change, no render mutation, no executor override, no autonomous
+    execution.
+    """
+    from app.ai.knowledge.platform_hook_retriever import build_platform_hook_context
+
+    platform = str(getattr(request, "platform", "") or "").strip().lower()
+    creator_type = str(getattr(request, "creator_type", "") or "").strip().lower()
+
+    result = build_platform_hook_context(platform=platform, creator_type=creator_type)
+    plan.platform_hook_context = result.get("platform_hook_context", {})
+    ctx = plan.platform_hook_context
+
+    logger.debug(
+        "ai_platform_hook_context_done job_id=%s available=%s platform=%s "
         "creator_type=%s confidence=%.2f",
         job_id,
         ctx.get("available", False),

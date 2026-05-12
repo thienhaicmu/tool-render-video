@@ -1,0 +1,28 @@
+{
+  "knowledge_id": "instagram_reels_hook_intelligence",
+  "platform": "instagram_reels",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "Instagram Reels Hook Intelligence",
+  "description": "Hook and retention guidance for Instagram Reels: clean emotional hook, visual-first attention, softer curiosity, aesthetic pacing, avoid excessive hype",
+  "tags": ["instagram_reels", "hook", "retention", "emotional", "visual", "aesthetic", "curiosity", "pacing"],
+  "domains": ["hook", "retention"],
+  "guidance": {
+    "hook": {
+      "first_3s_priority": "high",
+      "retention_priority": "medium",
+      "curiosity_strength": "medium",
+      "hook_energy": "medium",
+      "slow_intro_risk": "medium",
+      "payoff_expectation": "moderate",
+      "hook_style": "emotional",
+      "open_loop_quality": "moderate",
+      "first_5s_retention": "medium",
+      "hype_level": "low",
+      "trust_priority": "medium",
+      "clarity_priority": "medium",
+      "emotional_stakes": "high"
+    }
+  },
+  "confidence": 0.79
+}

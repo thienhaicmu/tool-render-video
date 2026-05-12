@@ -1,0 +1,27 @@
+{
+  "knowledge_id": "tiktok_hook_intelligence",
+  "platform": "tiktok",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "TikTok Hook Intelligence",
+  "description": "Hook and retention guidance for TikTok viral short-form: strong first-3-second scroll-stop attention, direct promise opening, high early momentum, avoid slow intro",
+  "tags": ["tiktok", "hook", "retention", "first_3s", "curiosity", "viral", "momentum", "scroll_stop"],
+  "domains": ["hook", "retention"],
+  "guidance": {
+    "hook": {
+      "first_3s_priority": "high",
+      "retention_priority": "high",
+      "curiosity_strength": "medium_high",
+      "hook_energy": "high",
+      "slow_intro_risk": "high",
+      "payoff_expectation": "strong",
+      "hook_style": "direct_promise",
+      "open_loop_quality": "strong",
+      "first_5s_retention": "high",
+      "hype_level": "medium",
+      "trust_priority": "low",
+      "clarity_priority": "high"
+    }
+  },
+  "confidence": 0.84
+}

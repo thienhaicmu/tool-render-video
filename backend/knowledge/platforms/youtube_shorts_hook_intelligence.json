@@ -1,0 +1,27 @@
+{
+  "knowledge_id": "youtube_shorts_hook_intelligence",
+  "platform": "youtube_shorts",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "YouTube Shorts Hook Intelligence",
+  "description": "Hook and retention guidance for YouTube Shorts: clear value promise, strong first-5-second retention, payoff expectation, continuity after hook, clarity over chaos",
+  "tags": ["youtube_shorts", "hook", "retention", "first_5s", "payoff", "clarity", "continuity", "value_promise"],
+  "domains": ["hook", "retention"],
+  "guidance": {
+    "hook": {
+      "first_3s_priority": "medium",
+      "retention_priority": "high",
+      "curiosity_strength": "medium",
+      "hook_energy": "medium",
+      "slow_intro_risk": "medium",
+      "payoff_expectation": "strong",
+      "hook_style": "direct_promise",
+      "open_loop_quality": "moderate",
+      "first_5s_retention": "high",
+      "hype_level": "low",
+      "trust_priority": "medium",
+      "clarity_priority": "high"
+    }
+  },
+  "confidence": 0.81
+}

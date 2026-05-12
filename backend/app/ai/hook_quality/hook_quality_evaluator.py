@@ -195,6 +195,12 @@ def _build_reasoning(
         if k_hint:
             lines.append(k_hint)
 
+    # Phase 55D: optional platform hook context hint
+    if len(lines) < 6:
+        p_hint = _platform_hook_hint(edit_plan)
+        if p_hint:
+            lines.append(p_hint)
+
     return lines
 
 
@@ -235,6 +241,33 @@ def _curiosity_knowledge_hint() -> str:
             return "A clear open loop with explicit payoff expectation improves curiosity strength"
         if patterns.get("narrative_tension"):
             return "Story tension and an unresolved question drive curiosity and watch-through rate"
+        return ""
+    except Exception:
+        return ""
+
+
+def _platform_hook_hint(edit_plan: Any) -> str:
+    """Return an optional platform-aware hook reasoning hint. Never raises.
+
+    Phase 55D platform hook intelligence — metadata-only, additive.
+    Reads platform_hook_context from the edit plan when available.
+    """
+    try:
+        ctx = getattr(edit_plan, "platform_hook_context", None)
+        if not ctx or not isinstance(ctx, dict) or not ctx.get("available"):
+            return ""
+        guidance = ctx.get("guidance") or {}
+        reasoning = ctx.get("reasoning") or []
+        platform = str(ctx.get("platform") or "")
+        first_3s = str(guidance.get("first_3s_priority") or "")
+        hook_style = str(guidance.get("hook_style") or "")
+
+        if reasoning:
+            return str(reasoning[0])
+        if platform and first_3s:
+            return f"{platform.replace('_', ' ').title()} hook guidance recommends {first_3s} first-3-second attention"
+        if hook_style and first_3s:
+            return f"Platform guidance supports {hook_style} hook style with {first_3s} first-3-second priority"
         return ""
     except Exception:
         return ""

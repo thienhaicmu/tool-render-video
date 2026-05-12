@@ -1,0 +1,27 @@
+{
+  "knowledge_id": "podcast_hook_intelligence",
+  "platform": "general",
+  "creator_type": "podcast",
+  "version": 1,
+  "title": "Podcast Hook Intelligence",
+  "description": "Hook and retention guidance for podcast and talking-head creators: trust-first hook, subtle curiosity, credibility setup, lower hype, strong conversational clarity",
+  "tags": ["podcast", "hook", "retention", "trust_first", "credibility", "conversational", "talking_head", "clarity"],
+  "domains": ["hook", "retention"],
+  "guidance": {
+    "hook": {
+      "first_3s_priority": "medium",
+      "retention_priority": "high",
+      "curiosity_strength": "medium",
+      "hook_energy": "low",
+      "slow_intro_risk": "low",
+      "payoff_expectation": "moderate",
+      "hook_style": "trust_first",
+      "open_loop_quality": "subtle",
+      "first_5s_retention": "medium",
+      "hype_level": "low",
+      "trust_priority": "high",
+      "clarity_priority": "high"
+    }
+  },
+  "confidence": 0.85
+}
