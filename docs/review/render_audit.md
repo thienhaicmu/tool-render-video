@@ -3495,3 +3495,142 @@ A plan with confidence 0.65 remains BLOCKED regardless of knowledge delta (+0.10
 
 - Focused: **41/41** passed
 - Full regression: **4436/4436** passed (0 regressions)
+
+---
+
+# Phase 55A — Platform Knowledge Foundation
+
+**Date:** 2026-05-12
+**Status:** Complete — advisory metadata only
+
+## Summary
+
+Phase 55A creates a deterministic local platform knowledge framework. Curated JSON packs describe platform-specific and creator-archetype-specific guidance (subtitle density, camera stability, hook priority). A new loader reads from `knowledge/platforms/`, a retriever provides filtered deterministic access, and a context builder attaches advisory metadata to `AIEditPlan.platform_context`. This is a foundation-only phase — no influence mutation, no render execution change.
+
+## New Files
+
+| File | Purpose |
+|---|---|
+| `backend/app/ai/knowledge/platform_knowledge_schema.py` | `AIPlatformKnowledgeItem`, `AIPlatformKnowledgePack`, `AIPlatformContext` dataclasses |
+| `backend/app/ai/knowledge/platform_knowledge_loader.py` | Local JSON loader with safety filter, file-size cap, module cache |
+| `backend/app/ai/knowledge/platform_knowledge_retriever.py` | `retrieve_platform_knowledge()` + `build_platform_context()` public API |
+| `backend/knowledge/platforms/tiktok_shortform_foundation.json` | TikTok short-form seed pack |
+| `backend/knowledge/platforms/youtube_shorts_foundation.json` | YouTube Shorts seed pack |
+| `backend/knowledge/platforms/instagram_reels_foundation.json` | Instagram Reels seed pack |
+| `backend/knowledge/platforms/podcast_creator_foundation.json` | Podcast creator archetype seed pack |
+| `backend/knowledge/platforms/educational_creator_foundation.json` | Educational creator archetype seed pack |
+| `backend/tests/test_ai_phase55a_platform_knowledge.py` | 53 focused tests |
+
+## Modified Files
+
+| File | Change |
+|---|---|
+| `backend/app/ai/director/edit_plan_schema.py` | Added `platform_context: dict` Phase 55A field + `to_dict()` entry |
+| `backend/app/ai/director/ai_director.py` | Added Phase 55A block + `_attach_platform_context()` helper |
+
+## Platform Knowledge Architecture
+
+### JSON pack schema
+
+```json
+{
+  "knowledge_id": "tiktok_shortform_foundation",
+  "platform": "tiktok",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "TikTok Short-Form Foundation",
+  "description": "...",
+  "tags": ["tiktok", "shortform", "viral", "mobile"],
+  "domains": ["subtitle", "camera", "hook"],
+  "guidance": {
+    "subtitle": {"density_bias": "compact", "readability_priority": "high"},
+    "camera": {"stability_priority": "medium", "aggressiveness": "moderate"},
+    "hook": {"first_3s_priority": "high", "retention_priority": "high"}
+  },
+  "confidence": 0.82
+}
+```
+
+### Loader contract
+
+- Reads `knowledge/platforms/*.json` via a **separate loader** from Phase 39 `knowledge_registry.py` (different schema)
+- Hard limits: 500 KB file-size cap, 100 item max
+- Safety filter: rejects any file containing forbidden execution keys (`ffmpeg_args`, `render_command`, `motion_crop`, `subprocess`, …)
+- Deterministic final sort: alphabetical by `knowledge_id`
+- Module-level cache: same path → same list (test-clearable via `clear_cache()`)
+- Never raises — malformed files silently skipped
+
+### Retrieval rules
+
+```
+retrieve_platform_knowledge(platform, creator_type, base_path, max_results)
+```
+
+| Filter combination | Behaviour |
+|---|---|
+| both platform + creator_type | exact dual-match first, then platform-only, then creator_type-only, alpha tiebreak |
+| platform only | any item with matching platform |
+| creator_type only | any item with matching creator_type |
+| neither | all items |
+
+- `max_results` clamped `[1, 10]`
+- Always returns `AIPlatformKnowledgePack` — never None, never raises
+
+### Context builder
+
+```python
+build_platform_context(platform, creator_type, base_path)
+# → {"platform_context": {available, platform, creator_type, matches, confidence, reasoning}}
+```
+
+Reads `platform` / `creator_type` from request in `_attach_platform_context()` and attaches the result to `AIEditPlan.platform_context`.
+
+## Seed Packs
+
+| knowledge_id | platform | creator_type | domains | confidence |
+|---|---|---|---|---|
+| `tiktok_shortform_foundation` | tiktok | viral_short_form | subtitle, camera, hook | 0.82 |
+| `youtube_shorts_foundation` | youtube_shorts | viral_short_form | subtitle, camera, hook | 0.80 |
+| `instagram_reels_foundation` | instagram_reels | viral_short_form | subtitle, camera, hook | 0.78 |
+| `podcast_creator_foundation` | general | podcast | subtitle, camera | 0.81 |
+| `educational_creator_foundation` | general | educational | subtitle, camera, hook | 0.79 |
+
+## Supported identifiers
+
+**Platforms:** `tiktok`, `youtube_shorts`, `instagram_reels`, `general`
+**Creator archetypes:** `podcast`, `talking_head`, `educational`, `storytelling`, `viral_short_form`, `general`
+
+Future phases (55B–55D) will add domain-specific intelligence using this foundation.
+
+## Safety Contract
+
+- Local only — no internet, no cloud API, no scraping, no autonomous learning
+- Never raises — all paths wrapped in try/except with fallback returns
+- Deterministic — same inputs → same output (no randomness)
+- Advisory only — `platform_context` is metadata, never alters render parameters
+- Foundation only — no influence mutation, no scoring change, no executor override
+- Safety filter — `_FORBIDDEN_KEYS` frozenset rejects packs with execution-related keys
+- No raw file paths in creator-facing reasoning strings
+- Executor authority unchanged — render pipeline never reads `platform_context`
+- Backward compatible — `platform_context` defaults to `{}` when platform/creator_type not provided
+
+## Executor Authority
+
+The render executor retains full authority. Platform knowledge is foundation metadata only:
+- `platform_context` is attached to `AIEditPlan` but never read by the render executor
+- No render path reads `platform_context` to alter execution behavior
+- Quality scores, timing, subtitle segmentation, motion_crop, and FFmpeg are unchanged
+
+## Future Phases
+
+| Phase | Mission |
+|---|---|
+| 55B | Platform Subtitle Intelligence — subtitle guidance from platform context |
+| 55C | Platform Camera Intelligence — camera guidance from platform context |
+| 55D | Platform Hook Intelligence — hook/retention guidance from platform context |
+| 55E | Platform-Aware Render Strategy — cross-domain platform strategy |
+
+## Test Results
+
+- Focused: **53/53** passed
+- Full regression: **4489/4489** passed (0 regressions)

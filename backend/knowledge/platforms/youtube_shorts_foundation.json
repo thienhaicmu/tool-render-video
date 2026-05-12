@@ -1,0 +1,29 @@
+{
+  "knowledge_id": "youtube_shorts_foundation",
+  "platform": "youtube_shorts",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "YouTube Shorts Foundation",
+  "description": "Platform guidance for YouTube Shorts. Clean subtitles, stable camera framing, and a strong hook within the first 3 seconds improve watch-through rate.",
+  "tags": ["youtube_shorts", "shorts", "shortform", "mobile", "vertical", "retention", "hook"],
+  "domains": ["subtitle", "camera", "hook"],
+  "guidance": {
+    "subtitle": {
+      "density_bias": "compact",
+      "readability_priority": "high",
+      "max_words_per_line": 7,
+      "avoid_dense_blocks": true
+    },
+    "camera": {
+      "stability_priority": "high",
+      "aggressiveness": "low",
+      "subtitle_safe": true
+    },
+    "hook": {
+      "first_3s_priority": "high",
+      "retention_priority": "high",
+      "slow_intro_risk": "medium"
+    }
+  },
+  "confidence": 0.80
+}

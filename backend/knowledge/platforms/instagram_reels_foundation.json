@@ -1,0 +1,29 @@
+{
+  "knowledge_id": "instagram_reels_foundation",
+  "platform": "instagram_reels",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "Instagram Reels Foundation",
+  "description": "Platform guidance for Instagram Reels. Visual-first framing, minimal subtitle density, and an attention-grabbing first frame support discovery and shares.",
+  "tags": ["instagram_reels", "reels", "instagram", "shortform", "mobile", "vertical", "visual"],
+  "domains": ["subtitle", "camera", "hook"],
+  "guidance": {
+    "subtitle": {
+      "density_bias": "minimal",
+      "readability_priority": "medium",
+      "max_words_per_line": 6,
+      "avoid_dense_blocks": true
+    },
+    "camera": {
+      "stability_priority": "medium",
+      "aggressiveness": "moderate",
+      "subtitle_safe": true
+    },
+    "hook": {
+      "first_3s_priority": "high",
+      "retention_priority": "medium",
+      "slow_intro_risk": "high"
+    }
+  },
+  "confidence": 0.78
+}

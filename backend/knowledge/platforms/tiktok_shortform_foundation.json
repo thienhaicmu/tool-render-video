@@ -1,0 +1,29 @@
+{
+  "knowledge_id": "tiktok_shortform_foundation",
+  "platform": "tiktok",
+  "creator_type": "viral_short_form",
+  "version": 1,
+  "title": "TikTok Short-Form Foundation",
+  "description": "Platform guidance for TikTok short-form content. Compact subtitles, moderate camera stability, and strong opening hooks drive retention on this platform.",
+  "tags": ["tiktok", "shortform", "viral", "mobile", "short_form", "vertical", "retention"],
+  "domains": ["subtitle", "camera", "hook"],
+  "guidance": {
+    "subtitle": {
+      "density_bias": "compact",
+      "readability_priority": "high",
+      "max_words_per_line": 6,
+      "avoid_dense_blocks": true
+    },
+    "camera": {
+      "stability_priority": "medium",
+      "aggressiveness": "moderate",
+      "subtitle_safe": true
+    },
+    "hook": {
+      "first_3s_priority": "high",
+      "retention_priority": "high",
+      "slow_intro_risk": "high"
+    }
+  },
+  "confidence": 0.82
+}

@@ -623,6 +623,17 @@ def _build_plan(
         plan.warnings.append(f"knowledge_influence_context_error:{type(exc).__name__}")
         logger.debug("ai_director_knowledge_influence_context_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 55A: Platform Knowledge Foundation ---
+    # Runs after Phase 54: reads platform/creator_type from request, retrieves
+    # matching platform knowledge packs, and attaches advisory platform_context.
+    # Foundation only — no influence mutation, no render execution change.
+    # Advisory only — platform_context is metadata, never alters render parameters.
+    try:
+        _attach_platform_context(plan, request, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"platform_context_error:{type(exc).__name__}")
+        logger.debug("ai_director_platform_context_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -4956,4 +4967,38 @@ def _attach_knowledge_influence_context(plan: "AIEditPlan", job_id: str) -> None
         kic.get("available", False),
         kic.get("domains", []),
         float(kic.get("confidence") or 0.0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 55A — Platform Knowledge Foundation helper
+# ---------------------------------------------------------------------------
+
+def _attach_platform_context(plan: "AIEditPlan", request: Any, job_id: str) -> None:
+    """Retrieve platform knowledge and attach advisory platform_context to plan.
+
+    Reads platform and creator_type from the request (informational fields),
+    calls the platform knowledge retriever, and attaches the result to
+    plan.platform_context.
+
+    Foundation only — no influence mutation, no render execution change.
+    Advisory only — platform_context is metadata, never alters render parameters.
+    """
+    from app.ai.knowledge.platform_knowledge_retriever import build_platform_context
+
+    platform = str(getattr(request, "platform", "") or "").strip().lower()
+    creator_type = str(getattr(request, "creator_type", "") or "").strip().lower()
+
+    result = build_platform_context(platform=platform, creator_type=creator_type)
+    plan.platform_context = result.get("platform_context", {})
+    ctx = plan.platform_context
+
+    logger.debug(
+        "ai_platform_context_done job_id=%s available=%s platform=%s creator_type=%s matches=%d confidence=%.2f",
+        job_id,
+        ctx.get("available", False),
+        ctx.get("platform", ""),
+        ctx.get("creator_type", ""),
+        len(ctx.get("matches") or []),
+        float(ctx.get("confidence") or 0.0),
     )

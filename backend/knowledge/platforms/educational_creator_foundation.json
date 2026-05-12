@@ -1,0 +1,31 @@
+{
+  "knowledge_id": "educational_creator_foundation",
+  "platform": "general",
+  "creator_type": "educational",
+  "version": 1,
+  "title": "Educational Creator Foundation",
+  "description": "Creator archetype guidance for educational content. Clarity-first subtitles, stable framing, and structured pacing build comprehension and retention.",
+  "tags": ["educational", "clarity", "structured", "subtitle_heavy", "readable", "retention", "learning"],
+  "domains": ["subtitle", "camera", "hook"],
+  "guidance": {
+    "subtitle": {
+      "density_bias": "normal",
+      "readability_priority": "high",
+      "max_words_per_line": 8,
+      "avoid_dense_blocks": false,
+      "clarity_priority": "high"
+    },
+    "camera": {
+      "stability_priority": "high",
+      "aggressiveness": "low",
+      "subtitle_safe": true,
+      "framing_preference": "stable_center"
+    },
+    "hook": {
+      "first_3s_priority": "medium",
+      "retention_priority": "high",
+      "curiosity_priority": "high"
+    }
+  },
+  "confidence": 0.79
+}

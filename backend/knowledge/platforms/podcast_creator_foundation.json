@@ -1,0 +1,26 @@
+{
+  "knowledge_id": "podcast_creator_foundation",
+  "platform": "general",
+  "creator_type": "podcast",
+  "version": 1,
+  "title": "Podcast Creator Foundation",
+  "description": "Creator archetype guidance for podcast-style content. Clean readable subtitles, static camera framing, and trust-building pacing define this format.",
+  "tags": ["podcast", "talking_head", "clean", "readable", "trust", "static", "long_form"],
+  "domains": ["subtitle", "camera"],
+  "guidance": {
+    "subtitle": {
+      "density_bias": "normal",
+      "readability_priority": "high",
+      "max_words_per_line": 8,
+      "avoid_dense_blocks": true,
+      "clean_style": true
+    },
+    "camera": {
+      "stability_priority": "high",
+      "aggressiveness": "low",
+      "subtitle_safe": true,
+      "framing_preference": "static_center"
+    }
+  },
+  "confidence": 0.81
+}
