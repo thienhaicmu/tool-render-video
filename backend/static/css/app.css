@@ -16562,3 +16562,99 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
     display: none;
   }
 }
+
+/* Desktop Render result-state layout patch.
+   Additive only: keep render DOM IDs, hiddenView, and appBottomPanel mounting intact. */
+@media (min-width: 901px) {
+  .mainArea.rs-center-panel:has(#render_active_panel:not(.hiddenView)) {
+    justify-content: flex-start;
+  }
+
+  .mainArea.rs-center-panel:has(#render_active_panel:not(.hiddenView)) > .rs-center-stage {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    justify-content: flex-start;
+  }
+
+  .mainArea:has(#render_active_panel:not(.hiddenView)) > .mainContentScroll {
+    display: none !important;
+    flex: 0 0 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .mainArea:has(#render_active_panel:not(.hiddenView)) #partial_render_home {
+    flex: 0 0 auto !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  #render_active_panel[data-render-state="complete"]:not(.hiddenView) {
+    flex: 0 1 auto !important;
+    max-height: min(34vh, 280px);
+    overflow: auto !important;
+  }
+
+  #render_active_panel[data-render-state="complete"]:not(.hiddenView) > #appBottomPanel.renderRuntimePanel {
+    flex: 0 1 auto !important;
+    max-height: 168px;
+    overflow: auto !important;
+  }
+
+  #render_completion_bar:not(.hiddenView) {
+    flex: 0 0 auto;
+    margin: 0 0 10px !important;
+  }
+
+  #render_completion_bar:not(.hiddenView) + #render_output_panel:not(.hiddenView) {
+    margin-top: 0 !important;
+  }
+
+  #render_output_panel:not(.hiddenView) {
+    flex: 1 1 auto !important;
+    min-height: 260px;
+    overflow: auto !important;
+  }
+
+  #render_output_panel:not(.hiddenView) #render_output_list {
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .sidebarScrollable #field_source_video_path .actionsRow,
+  .sidebarScrollable #manual_output_folder.manualOutputRow {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .sidebarScrollable #field_source_video_path .actionsRow .fieldInput,
+  .sidebarScrollable #manual_output_folder.manualOutputRow .fieldInput {
+    flex: 1 1 0;
+    width: auto !important;
+    min-width: 0;
+    height: 40px;
+    min-height: 40px;
+    box-sizing: border-box;
+  }
+
+  .sidebarScrollable #field_source_video_path .actionsRow button,
+  .sidebarScrollable #manual_output_folder.manualOutputRow button,
+  .sidebarScrollable #manual_output_folder.manualOutputRow .pickActionBtn {
+    flex: 0 0 124px;
+    width: 124px !important;
+    min-width: 124px;
+    height: 40px;
+    min-height: 40px;
+    box-sizing: border-box;
+  }
+
+  .sidebarScrollable #start_render_btn {
+    min-height: 40px;
+    height: 40px;
+  }
+}

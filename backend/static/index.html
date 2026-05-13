@@ -51,97 +51,110 @@
 
       <section id="card_render_setup" class="setupCard">
 
-        <!-- Hidden fields: read by startRender() — IDs must not change -->
-        <input type="hidden" id="aspect_ratio" value="3:4">
-        <input type="hidden" id="render_profile" value="balanced">
-        <input type="hidden" id="render_device" value="auto">
-        <input type="hidden" id="output_fps" value="60">
-        <input type="hidden" id="playback_speed" value="1.07">
-        <input type="hidden" id="min_part_sec" value="70">
-        <input type="hidden" id="max_part_sec" value="180">
-        <input type="hidden" id="max_export_parts" value="0">
-        <input type="hidden" id="part_order" value="viral">
-        <input type="hidden" id="frame_scale_x" value="100">
-        <input type="hidden" id="frame_scale_y" value="106">
-        <input type="hidden" id="subtitle_style" value="pro_karaoke">
-        <input type="hidden" id="transform_preset" value="slight">
-        <input type="hidden" id="motion_aware_crop" value="1">
-        <input type="hidden" id="add_subtitle" value="1">
-        <input type="hidden" id="reup_mode" value="0">
-        <input type="hidden" id="cleanup_temp_files" value="1">
-        <input type="hidden" id="reup_bgm_enable" value="0">
-        <input type="hidden" id="reup_bgm_path" value="">
-        <input type="hidden" id="reup_bgm_gain" value="0.18">
+        <!-- Render setup compatibility fields: read by startRender(); IDs must not change. -->
+        <div class="renderSetupCompatFields" aria-hidden="true">
+          <input type="hidden" id="aspect_ratio" value="3:4">
+          <input type="hidden" id="render_profile" value="balanced">
+          <input type="hidden" id="render_device" value="auto">
+          <input type="hidden" id="output_fps" value="60">
+          <input type="hidden" id="playback_speed" value="1.07">
+          <input type="hidden" id="min_part_sec" value="70">
+          <input type="hidden" id="max_part_sec" value="180">
+          <input type="hidden" id="max_export_parts" value="0">
+          <input type="hidden" id="part_order" value="viral">
+          <input type="hidden" id="frame_scale_x" value="100">
+          <input type="hidden" id="frame_scale_y" value="106">
+          <input type="hidden" id="subtitle_style" value="pro_karaoke">
+          <input type="hidden" id="transform_preset" value="slight">
+          <input type="hidden" id="motion_aware_crop" value="1">
+          <input type="hidden" id="add_subtitle" value="1">
+          <input type="hidden" id="reup_mode" value="0">
+          <input type="hidden" id="cleanup_temp_files" value="1">
+          <input type="hidden" id="reup_bgm_enable" value="0">
+          <input type="hidden" id="reup_bgm_path" value="">
+          <input type="hidden" id="reup_bgm_gain" value="0.18">
+        </div><!-- /renderSetupCompatFields -->
 
+        <!-- Render setup sections: source and output controls. -->
         <div class="setupGroups">
 
-          <!-- ① Source -->
+          <!-- Source setup -->
           <div class="setupGroup">
             <div class="setupGroupTitle">Source</div>
-            <div class="formGrid">
-              <label class="field">
-                <span class="fieldLabel">Source Type</span>
-                <select class="fieldInput" id="source_mode">
-                  <option value="youtube" selected>Video URL</option>
-                  <option value="local">Local Video File</option>
-                </select>
-              </label>
-              <div></div>
-              <label class="field fieldSpan2" id="field_youtube_url">
-                <span class="fieldLabel">Video URL</span>
-                <input class="fieldInput" id="youtube_url" placeholder="YouTube, TikTok, Instagram or Facebook link">
-                <div class="sectionSubtitle" style="margin-top:4px">Or use <strong>Download</strong> tab to save a video first, then select <em>Local Video File</em>.</div>
-              </label>
-              <label class="field fieldSpan2 hiddenView" id="field_source_video_path">
-                <span class="fieldLabel">Local Video</span>
-                <div class="actionsRow" style="margin-top:0">
-                  <input class="fieldInput" id="source_video_path" placeholder="No file selected" readonly>
-                  <button type="button" class="secondaryButton" id="pick_local_video_btn" onclick="browseLocalVideo()">Choose Video</button>
-                </div>
-                <div class="sectionSubtitle" id="source_video_name" style="margin-top:6px">No video selected.</div>
-                <input id="local_video_file_picker" type="file" accept="video/*" class="hiddenView">
-              </label>
-            </div>
+            <div class="renderSetupSourceSection">
+              <div class="formGrid">
+                <label class="field">
+                  <span class="fieldLabel">Source Type</span>
+                  <select class="fieldInput" id="source_mode">
+                    <option value="youtube" selected>Video URL</option>
+                    <option value="local">Local Video File</option>
+                  </select>
+                </label>
+                <div></div>
+                <label class="field fieldSpan2" id="field_youtube_url">
+                  <span class="fieldLabel">Video URL</span>
+                  <input class="fieldInput" id="youtube_url" placeholder="YouTube, TikTok, Instagram or Facebook link">
+                  <div class="sectionSubtitle" style="margin-top:4px">Or use <strong>Download</strong> tab to save a video first, then select <em>Local Video File</em>.</div>
+                </label>
+                <label class="field fieldSpan2 hiddenView" id="field_source_video_path">
+                  <span class="fieldLabel">Local Video</span>
+                  <div class="actionsRow" style="margin-top:0">
+                    <input class="fieldInput" id="source_video_path" placeholder="No file selected" readonly>
+                    <button type="button" class="secondaryButton" id="pick_local_video_btn" onclick="browseLocalVideo()">Choose Video</button>
+                  </div>
+                  <div class="sectionSubtitle" id="source_video_name" style="margin-top:6px">No video selected.</div>
+                  <input id="local_video_file_picker" type="file" accept="video/*" class="hiddenView">
+                </label>
+              </div>
+            </div><!-- /renderSetupSourceSection -->
           </div>
 
-          <!-- ② Output -->
+          <!-- Output setup -->
           <div class="setupGroup">
             <div class="setupGroupTitle">Output</div>
-            <div class="formGrid">
-              <!-- channel mode removed; IDs retained hidden for JS compat -->
-              <input type="hidden" id="output_mode" value="manual">
-              <input type="hidden" id="channel_code" value="">
-              <input type="hidden" id="render_channels_root" value="">
-              <input type="hidden" id="render_output_dir" value="">
-              <label class="field fieldSpan2" id="field_manual_output_dir">
-                <span class="fieldLabel">Output Folder</span>
-                <div id="manual_output_folder" class="manualOutputRow">
-                  <input class="fieldInput" id="manual_output_dir" placeholder="e.g. D:\videos\output">
-                  <button type="button" id="btn_pick_output_dir" class="secondaryButton pickActionBtn">📁 Choose</button>
-                </div>
-                <div class="sectionSubtitle" id="manual_output_dir_hint" style="margin-top:6px">All output saved here.</div>
-              </label>
-            </div>
+            <div class="renderSetupOutputSection">
+              <div class="formGrid">
+                <!-- Output compatibility fields: channel mode removed; IDs retained for JS. -->
+                <input type="hidden" id="output_mode" value="manual">
+                <input type="hidden" id="channel_code" value="">
+                <input type="hidden" id="render_channels_root" value="">
+                <input type="hidden" id="render_output_dir" value="">
+                <label class="field fieldSpan2" id="field_manual_output_dir">
+                  <span class="fieldLabel">Output Folder</span>
+                  <div id="manual_output_folder" class="manualOutputRow">
+                    <input class="fieldInput" id="manual_output_dir" placeholder="e.g. D:\videos\output">
+                    <button type="button" id="btn_pick_output_dir" class="secondaryButton pickActionBtn">📁 Choose</button>
+                  </div>
+                  <div class="sectionSubtitle" id="manual_output_dir_hint" style="margin-top:6px">All output saved here.</div>
+                </label>
+              </div>
+            </div><!-- /renderSetupOutputSection -->
           </div>
 
         </div><!-- /setupGroups -->
 
-        <div class="setupActions">
-          <div class="resumeRow">
-            <button class="ghostButton" onclick="resumeRender()">↺ Resume Job</button>
-            <input class="fieldInput" id="resume_job_id" placeholder="Job ID" style="max-width:180px">
+        <!-- Render setup actions -->
+        <div class="renderSetupActionSection">
+          <div class="setupActions">
+            <div class="resumeRow">
+              <button class="ghostButton" onclick="resumeRender()">↺ Resume Job</button>
+              <input class="fieldInput" id="resume_job_id" placeholder="Job ID" style="max-width:180px">
+            </div>
+            <button class="primaryButton" id="start_render_btn" onclick="startRender()">▶ Open Editor</button>
           </div>
-          <button class="primaryButton" id="start_render_btn" onclick="startRender()">▶ Open Editor</button>
-        </div>
-        <!-- YouTube download progress — visible only during active download -->
-        <div id="yt_dl_progress" class="ytDlProgress hiddenView">
-          <div class="ytDlProgressRow">
-            <span id="yt_dl_msg" class="ytDlProgressMsg">Downloading YouTube video…</span>
-            <span id="yt_dl_elapsed" class="ytDlElapsed">0s</span>
-            <button class="ytDlCancelBtn" onclick="cancelYtDownload()">✕ Cancel</button>
+        </div><!-- /renderSetupActionSection -->
+
+        <!-- Render setup progress: visible only during active YouTube download. -->
+        <div class="renderSetupProgressSection">
+          <div id="yt_dl_progress" class="ytDlProgress hiddenView">
+            <div class="ytDlProgressRow">
+              <span id="yt_dl_msg" class="ytDlProgressMsg">Downloading YouTube video…</span>
+              <span id="yt_dl_elapsed" class="ytDlElapsed">0s</span>
+              <button class="ytDlCancelBtn" onclick="cancelYtDownload()">✕ Cancel</button>
+            </div>
+            <div class="ytDlProgressBar"><div class="ytDlProgressFill"></div></div>
           </div>
-          <div class="ytDlProgressBar"><div class="ytDlProgressFill"></div></div>
-        </div>
+        </div><!-- /renderSetupProgressSection -->
 
       </section><!-- /card_render_setup -->
 
@@ -190,88 +203,94 @@
   ════════════════════════════════════════════════════════════════ -->
   <main class="mainArea rs-center-panel" id="mainArea">
 
+    <!-- ═══════════════════════════════════════════════════════════════
+         SECTION: center-stage
+         Keep child sibling order stable; render/nav CSS and JS depend on it.
+    ════════════════════════════════════════════════════════════════ -->
     <div class="rs-center-stage">
 
-    <div class="rs-preview-stage">
-    <!-- ═══════════════════════════════════════════════════════════════
-         SECTION: editor-view — in-layout center-stage editor (local/YouTube)
-    ════════════════════════════════════════════════════════════════ -->
-    <div id="view_editor" class="evLayout hiddenView">
+      <!-- ── SECTION: editor-preview-stage ──────────────────────── -->
+      <div class="rs-preview-stage">
+        <!-- ═══════════════════════════════════════════════════════════════
+             SECTION: editor-view — in-layout center-stage editor (local/YouTube)
+        ════════════════════════════════════════════════════════════════ -->
+        <div id="view_editor" class="evLayout hiddenView">
 
-      <!-- Workspace: preview + controls (above timeline) -->
-      <div class="evWorkspace">
+          <!-- Workspace: preview + controls (above timeline) -->
+          <div class="evWorkspace">
 
-      <!-- LEFT: Video Preview -->
-      <div class="evLeft">
-        <!-- Aspect ratio indicator bar -->
-        <div class="evAspectBar">
-          <span style="font-size:11px;color:var(--text-muted)">Aspect ratio:</span>
-          <span id="evAspectBadge" style="font-size:11px;font-weight:700;color:#60a5fa;background:rgba(59,130,246,.12);padding:2px 8px;border-radius:4px">9:16</span>
-          <span style="font-size:11px;color:var(--text-muted);margin-left:4px">— preview crop matches output framing</span>
-          <button id="evGuideToggleBtn" class="evGuideToggle" onclick="evToggleGuides()">Guides</button>
-        </div>
-
-        <div class="evVideoBox" id="evVideoBox">
-          <!-- Frame with exact aspect ratio — video fills it with object-fit:cover -->
-          <div class="evVideoFrame" id="evVideoFrame">
-
-            <!-- Video element -->
-            <video id="evVideo" class="evVideo" preload="metadata" style="display:none"></video>
-
-            <!-- Subtitle preview overlay — inside frame, % relative to frame height -->
-            <div class="evSubOverlay" id="evSubOverlay" style="bottom:15%;display:none">
-              <div class="evSubInner" id="evSubInner" onmousedown="evSubOverlayDragStart(event)">
-                <span style="font-family:'Bungee',sans-serif;font-size:clamp(12px,4cqw,46px);color:#FFFF00;-webkit-text-stroke:2px #000;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000">POV: </span><span style="font-family:'Bungee',sans-serif;font-size:clamp(12px,4cqw,46px);color:#FFF;-webkit-text-stroke:2px #000;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000">never gonna</span>
+            <!-- LEFT: Video Preview -->
+            <div class="evLeft">
+              <!-- Aspect ratio indicator bar -->
+              <div class="evAspectBar">
+                <span style="font-size:11px;color:var(--text-muted)">Aspect ratio:</span>
+                <span id="evAspectBadge" style="font-size:11px;font-weight:700;color:#60a5fa;background:rgba(59,130,246,.12);padding:2px 8px;border-radius:4px">9:16</span>
+                <span style="font-size:11px;color:var(--text-muted);margin-left:4px">— preview crop matches output framing</span>
+                <button id="evGuideToggleBtn" class="evGuideToggle" onclick="evToggleGuides()">Guides</button>
               </div>
+
+              <div class="evVideoBox" id="evVideoBox">
+                <!-- Frame with exact aspect ratio — video fills it with object-fit:cover -->
+                <div class="evVideoFrame" id="evVideoFrame">
+
+                  <!-- Video element -->
+                  <video id="evVideo" class="evVideo" preload="metadata" style="display:none"></video>
+
+                  <!-- Subtitle preview overlay — inside frame, % relative to frame height -->
+                  <div class="evSubOverlay" id="evSubOverlay" style="bottom:15%;display:none">
+                    <div class="evSubInner" id="evSubInner" onmousedown="evSubOverlayDragStart(event)">
+                      <span style="font-family:'Bungee',sans-serif;font-size:clamp(12px,4cqw,46px);color:#FFFF00;-webkit-text-stroke:2px #000;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000">POV: </span><span style="font-family:'Bungee',sans-serif;font-size:clamp(12px,4cqw,46px);color:#FFF;-webkit-text-stroke:2px #000;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000">never gonna</span>
+                    </div>
+                  </div>
+                  <div class="evTextLayersOverlay" id="evTextLayersOverlay"></div>
+                  <div class="evGuides"></div>
+                  <div id="evSelLabel" class="evSelLabel"></div>
+                  <div id="evSubDragLabel"></div>
+                  <div id="evSubModeLabel" class="evSubModeLabel demo">Preview sample</div>
+
+                  <!-- Loading overlay -->
+                  <div class="evLoadingOverlay" id="evLoadingOverlay">
+                    <div class="editorSpinner"></div>
+                    <div id="evLoadingText" style="color:var(--text-dim);font-size:13px;font-weight:600">Loading video…</div>
+                    <div style="font-size:11px;color:var(--text-muted)">This can take a few seconds</div>
+                  </div>
+
+                </div><!-- /evVideoFrame -->
+              </div>
+
+            </div><!-- /evLeft -->
+
+
+          </div><!-- /evWorkspace -->
+
+          <!-- Timeline — full-width, anchored at bottom of editor -->
+          <div class="evTimeline">
+            <span class="evTimeText" id="evCurTime">0:00:00</span>
+            <div class="evTimelineBarWrap" id="evTimelineBarWrap" onclick="evSeekClick(event)">
+              <div class="evTimelineProgress" id="evTimelineProgress" style="width:0%"></div>
+              <div class="evTrimRegion" id="evTrimRegion" style="left:0%;width:100%"></div>
+              <div class="evTrimRegionLabel" id="evTrimRegionLabel">Trim: full video</div>
+              <div id="evTimelineLayers" class="evTimelineLayers"></div>
+              <div id="evAiOverlayLayer" class="evAiOverlayLayer" aria-hidden="true"></div>
             </div>
-            <div class="evTextLayersOverlay" id="evTextLayersOverlay"></div>
-            <div class="evGuides"></div>
-            <div id="evSelLabel" class="evSelLabel"></div>
-            <div id="evSubDragLabel"></div>
-            <div id="evSubModeLabel" class="evSubModeLabel demo">Preview sample</div>
+            <span class="evTrimHelper">Use right panel to adjust trim range</span>
+            <span class="evTimeText" id="evTotalTime">0:00:00</span>
+            <button class="ghostButton" style="padding:5px 10px;font-size:12px" onclick="evTogglePlay()" id="evPlayBtn">▶</button>
+          </div>
+          <div id="evAiTimelineLegend" class="evAiTimelineLegend hiddenView" aria-hidden="true"></div>
 
-            <!-- Loading overlay -->
-            <div class="evLoadingOverlay" id="evLoadingOverlay">
-              <div class="editorSpinner"></div>
-              <div id="evLoadingText" style="color:var(--text-dim);font-size:13px;font-weight:600">Loading video…</div>
-              <div style="font-size:11px;color:var(--text-muted)">This can take a few seconds</div>
-            </div>
+        </div><!-- /view_editor -->
+        <!-- /SECTION: editor-view -->
+      </div><!-- /rs-preview-stage -->
+      <!-- /SECTION: editor-preview-stage -->
 
-          </div><!-- /evVideoFrame -->
-        </div>
-
-      </div><!-- /evLeft -->
-
-
-      </div><!-- /evWorkspace -->
-
-      <!-- Timeline — full-width, anchored at bottom of editor -->
-      <div class="evTimeline">
-        <span class="evTimeText" id="evCurTime">0:00:00</span>
-        <div class="evTimelineBarWrap" id="evTimelineBarWrap" onclick="evSeekClick(event)">
-          <div class="evTimelineProgress" id="evTimelineProgress" style="width:0%"></div>
-          <div class="evTrimRegion" id="evTrimRegion" style="left:0%;width:100%"></div>
-          <div class="evTrimRegionLabel" id="evTrimRegionLabel">Trim: full video</div>
-          <div id="evTimelineLayers" class="evTimelineLayers"></div>
-          <div id="evAiOverlayLayer" class="evAiOverlayLayer" aria-hidden="true"></div>
-        </div>
-        <span class="evTrimHelper">Use right panel to adjust trim range</span>
-        <span class="evTimeText" id="evTotalTime">0:00:00</span>
-        <button class="ghostButton" style="padding:5px 10px;font-size:12px" onclick="evTogglePlay()" id="evPlayBtn">▶</button>
-      </div>
-      <div id="evAiTimelineLegend" class="evAiTimelineLegend hiddenView" aria-hidden="true"></div>
-
-    </div><!-- /view_editor -->
-    <!-- /SECTION: editor-view -->
-    </div><!-- /rs-preview-stage -->
-
-    <!-- ═══════════════════════════════════════════════════════════════
-         SECTION: monitor-view (DEAD — permanently hidden)
-         Ghost IDs below are still written by render-ui.js and render-engine.js.
-         Do not remove this block — remove the IDs from JS first.
-    ════════════════════════════════════════════════════════════════ -->
-    <!-- view_monitor: permanently hidden; remaining IDs silently updated by JS -->
-    <div id="view_monitor" class="hiddenView" data-jm-status="idle" style="display:none">
+      <!-- ═══════════════════════════════════════════════════════════════
+           SECTION: monitor-view-compat (DEAD — permanently hidden)
+           Ghost IDs below are still written by render-ui.js and render-engine.js.
+           Do not remove this block — remove the IDs from JS first.
+      ════════════════════════════════════════════════════════════════ -->
+      <!-- view_monitor: permanently hidden; remaining IDs silently updated by JS -->
+      <div id="view_monitor" class="hiddenView" data-jm-status="idle" style="display:none">
       <div class="actionTitle" id="action_title"></div>
       <div class="actionState" id="action_state"></div>
       <div class="actionMessage" id="action_message"></div>
@@ -279,18 +298,19 @@
       <div id="part_focus"></div>
       <div class="stepsGrid" id="steps_grid"></div>
       <div class="hiddenView" id="jobs_out"></div>
-    </div>
-    <!-- /SECTION: monitor-view -->
+      </div>
+      <!-- /SECTION: monitor-view-compat -->
 
-    <!-- ── SECTION: render-home-panel ──────────────────────────── -->
-    <!-- partial: partials/render-home.html -->
-    <div id="partial_render_home"></div>
-    <!-- /SECTION: render-home-panel -->
+      <!-- ── SECTION: render-home-panel ──────────────────────────── -->
+      <!-- partial: partials/render-home.html -->
+      <div id="partial_render_home"></div>
+      <!-- /SECTION: render-home-panel -->
 
-    <!-- ── SECTION: render-active-panel ────────────────────────── -->
-    <div id="render_active_panel" class="renderActivePanel hiddenView" aria-live="polite">
-      <!-- Ghost IDs: updateRenderMainState still writes to these; hidden from view -->
-      <div hidden>
+      <!-- ── SECTION: render-active-panel ────────────────────────── -->
+      <div id="render_active_panel" class="renderActivePanel hiddenView" aria-live="polite">
+      <!-- SECTION: render-active-compat-targets
+           Ghost IDs: updateRenderMainState still writes to these; hidden from view. -->
+      <div class="renderActiveCompatTargets" hidden>
         <span id="render_active_state"></span>
         <span id="render_active_bar"></span>
         <span id="render_workspace_source"></span>
@@ -303,7 +323,7 @@
         </div>
       </div>
 
-      <!-- Dominant active render card -->
+      <!-- SECTION: render-active-summary-card -->
       <div class="rdCard" id="rd_card" data-state="idle">
         <div class="rdCardHead">
           <div class="rdHeadLeft">
@@ -323,7 +343,7 @@
         </div>
       </div>
 
-      <!-- ── AI Insights Panel (Phase 7) ───────────────────────── -->
+      <!-- SECTION: render-active-ai-insights -->
       <div id="ai_insights_panel" class="aiInsightsPanel hiddenView" aria-label="AI Insights">
         <div class="aiInHeader">
           <span class="aiInLabel">AI Insights</span>
@@ -333,13 +353,16 @@
           <!-- Populated by renderAiInsights() -->
         </div>
       </div>
-      <!-- /AI Insights Panel -->
 
-    </div>
-    <!-- /SECTION: render-active-panel -->
+      <!-- Runtime mount note:
+           #appBottomPanel is appended here by mountRenderRuntimePanel().
+           Do not add a placeholder or move #appBottomPanel without JS approval. -->
 
-    <!-- ── SECTION: render-completion-banner ──────────────────── -->
-    <div id="render_completion_bar" class="renderCompletionBar hiddenView">
+      </div>
+      <!-- /SECTION: render-active-panel -->
+
+      <!-- ── SECTION: render-completion-banner ──────────────────── -->
+      <div id="render_completion_bar" class="renderCompletionBar hiddenView">
       <div class="rcbLeft">
         <div class="rcbIcon" id="rcb_icon">✓</div>
         <div class="rcbCopy">
@@ -352,58 +375,66 @@
         <button class="ghostButton rcbBtn" type="button" onclick="reviewClipsFromBanner()">Review Clips</button>
         <button class="primaryButton rcbBtn" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
       </div>
-    </div>
-    <!-- /SECTION: render-completion-banner -->
-
-    <!-- ── SECTION: render-output-panel ────────────────────────── -->
-    <!-- ── Render Output Panel — clips list, shown after render completes ── -->
-    <div id="render_output_panel" class="renderOutputPanel hiddenView">
-      <div class="renderOutputHeader">
-        <div class="renderOutputTitle">
-          <span id="render_output_panel_title">Clips</span>
-          <span class="renderOutputBadge" id="render_output_badge">0</span>
-        </div>
-        <div class="renderOutputActions">
-          <select id="clips_sort_select" class="clipsSortSelect" onchange="sortClipsView(this.value)" title="Sort clips">
-            <option value="score">Best first</option>
-            <option value="part_no">In order</option>
-          </select>
-          <button class="ghostButton renderOutputBtn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
-        </div>
       </div>
-      <div id="render_output_path" class="renderOutputPath"></div>
-      <div id="mvRenderSummary" hidden></div>
+      <!-- /SECTION: render-completion-banner -->
 
-      <!-- ── Center-stage clip preview ── -->
-      <div id="cs_preview_area" class="csPreviewArea hiddenView">
-        <div class="csPreviewVideoWrap">
-          <div id="cs_preview_empty" class="csPreviewEmpty">Select a clip to preview.</div>
-          <div id="cs_preview_loading" class="csPreviewLoading hiddenView"><div class="csPreviewSpinner"></div></div>
-          <div id="cs_preview_error" class="csPreviewError hiddenView"></div>
-          <video id="cs_preview_video" class="csPreviewVideo hiddenView" controls preload="metadata" muted playsinline></video>
-        </div>
-        <div id="cs_preview_bar" class="csPreviewBar hiddenView">
-          <div class="csPreviewInfo">
-            <span id="cs_preview_name" class="csPreviewName"></span>
-            <span id="cs_preview_meta" class="csPreviewMeta"></span>
+      <!-- ── SECTION: render-output-panel ────────────────────────── -->
+      <!-- Render Output Panel — clips list, shown after render completes. -->
+      <div id="render_output_panel" class="renderOutputPanel hiddenView">
+        <!-- SECTION: render-output-header -->
+        <div class="renderOutputHeader">
+          <div class="renderOutputTitle">
+            <span id="render_output_panel_title">Clips</span>
+            <span class="renderOutputBadge" id="render_output_badge">0</span>
           </div>
-          <div class="csPreviewActions">
-            <a id="cs_preview_download" class="clipCardBtn renderClipActionLink" download>Download</a>
-            <button id="cs_preview_folder" class="clipCardBtn" type="button" onclick="openCsPreviewFolder()">Folder</button>
-            <button class="csPreviewClose" type="button" onclick="closeCenterPreview()" title="Close preview">&#x2715;</button>
+          <div class="renderOutputActions">
+            <select id="clips_sort_select" class="clipsSortSelect" onchange="sortClipsView(this.value)" title="Sort clips">
+              <option value="score">Best first</option>
+              <option value="part_no">In order</option>
+            </select>
+            <button class="ghostButton renderOutputBtn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
           </div>
         </div>
-      </div>
+        <!-- /SECTION: render-output-header -->
 
-      <div id="render_output_list" class="renderOutputList clipsGrid">
-        <div class="renderOutputEmpty">Clips will appear here when render completes.</div>
-      </div>
-    </div>
-    <!-- /SECTION: render-output-panel -->
+        <!-- SECTION: render-output-status -->
+        <div id="render_output_path" class="renderOutputPath"></div>
+        <div id="mvRenderSummary" hidden></div>
+        <!-- /SECTION: render-output-status -->
 
-    <!-- ── SECTION: clip-preview-modal ─────────────────────────── -->
-    <!-- ── Clip Preview Modal ── -->
-    <div id="clip_preview_modal" class="clipPreviewModal hiddenView" onclick="closeClipPreview(event)">
+        <!-- SECTION: render-output-center-preview -->
+        <div id="cs_preview_area" class="csPreviewArea hiddenView">
+          <div class="csPreviewVideoWrap">
+            <div id="cs_preview_empty" class="csPreviewEmpty">Select a clip to preview.</div>
+            <div id="cs_preview_loading" class="csPreviewLoading hiddenView"><div class="csPreviewSpinner"></div></div>
+            <div id="cs_preview_error" class="csPreviewError hiddenView"></div>
+            <video id="cs_preview_video" class="csPreviewVideo hiddenView" controls preload="metadata" muted playsinline></video>
+          </div>
+          <div id="cs_preview_bar" class="csPreviewBar hiddenView">
+            <div class="csPreviewInfo">
+              <span id="cs_preview_name" class="csPreviewName"></span>
+              <span id="cs_preview_meta" class="csPreviewMeta"></span>
+            </div>
+            <div class="csPreviewActions">
+              <a id="cs_preview_download" class="clipCardBtn renderClipActionLink" download>Download</a>
+              <button id="cs_preview_folder" class="clipCardBtn" type="button" onclick="openCsPreviewFolder()">Folder</button>
+              <button class="csPreviewClose" type="button" onclick="closeCenterPreview()" title="Close preview">&#x2715;</button>
+            </div>
+          </div>
+        </div>
+        <!-- /SECTION: render-output-center-preview -->
+
+        <!-- SECTION: render-output-clips-list -->
+        <div id="render_output_list" class="renderOutputList clipsGrid">
+          <div class="renderOutputEmpty">Clips will appear here when render completes.</div>
+        </div>
+        <!-- /SECTION: render-output-clips-list -->
+      </div>
+      <!-- /SECTION: render-output-panel -->
+
+      <!-- ── SECTION: clip-preview-modal ─────────────────────────── -->
+      <!-- Clip Preview Modal -->
+      <div id="clip_preview_modal" class="clipPreviewModal hiddenView" onclick="closeClipPreview(event)">
       <div class="clipPreviewDialog">
         <div class="clipPreviewTitleBar">
           <span id="clip_preview_title" class="clipPreviewName"></span>
@@ -414,10 +445,11 @@
           <button class="ghostButton" type="button" onclick="openCurrentClipFolder()">Open Folder</button>
         </div>
       </div>
-    </div>
-    <!-- /SECTION: clip-preview-modal -->
+      </div>
+      <!-- /SECTION: clip-preview-modal -->
 
     </div><!-- /rs-center-stage -->
+    <!-- /SECTION: center-stage -->
 
     <!-- ── SECTION: download-view ──────────────────────────────── -->
     <!-- partial: partials/download-view.html -->
