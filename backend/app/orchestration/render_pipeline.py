@@ -36,6 +36,7 @@ from app.services.text_overlay import normalize_text_layers, MAX_TEXT_LAYERS
 from app.services.tts_service import generate_narration_mp3
 from app.services.audio_mix_service import mix_narration_audio
 from app.services.translation_service import translate_srt_file
+from app.services.remotion_adapter import generate_hook_intro, prepend_intro_clip
 
 logger = logging.getLogger("app.render")
 
@@ -143,6 +144,72 @@ def _score_component(value, default: float = 50.0) -> float:
         return max(0.0, min(100.0, float(value)))
     except (TypeError, ValueError):
         return default
+
+
+def _maybe_prepend_remotion_hook_intro(
+    final_part: Path,
+    payload: RenderRequest,
+    *,
+    effective_channel: str,
+    job_id: str,
+    part_no: int,
+    headline_text: str | None = None,
+    duration_sec: float = 1.0,
+) -> float:
+    if not bool(getattr(payload, "remotion_hook_intro", False)):
+        return 0.0
+
+    started = time.perf_counter()
+    intro_path = final_part.with_name(f"{final_part.stem}.hook_intro.mp4")
+    concat_path = final_part.with_name(f"{final_part.stem}.with_intro.mp4")
+    _job_log(
+        effective_channel,
+        job_id,
+        f"remotion_requested part={part_no} duration_sec={duration_sec:.2f}",
+    )
+    try:
+        intro = generate_hook_intro(
+            str(intro_path),
+            aspect_ratio=str(getattr(payload, "aspect_ratio", "3:4") or "3:4"),
+            duration_sec=duration_sec,
+            headline_text=headline_text,
+        )
+        if not intro:
+            _job_log(
+                effective_channel,
+                job_id,
+                f"remotion_failed part={part_no} reason=intro_generation_failed",
+                kind="warning",
+            )
+            return 0.0
+        merged = prepend_intro_clip(str(final_part), intro, str(concat_path))
+        if not merged:
+            _job_log(
+                effective_channel,
+                job_id,
+                f"remotion_failed part={part_no} reason=concat_failed",
+                kind="warning",
+            )
+            return 0.0
+        os.replace(merged, final_part)
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        _job_log(
+            effective_channel,
+            job_id,
+            f"remotion_generated part={part_no} intro_duration_ms={int(duration_sec * 1000)} elapsed_ms={elapsed_ms}",
+        )
+        return duration_sec
+    except Exception as exc:
+        _job_log(
+            effective_channel,
+            job_id,
+            f"remotion_failed part={part_no} error={type(exc).__name__}: {exc}",
+            kind="warning",
+        )
+        return 0.0
+    finally:
+        _safe_unlink(intro_path)
+        _safe_unlink(concat_path)
 
 
 def _first_score(seg: dict, names: list[str], default: float = 50.0) -> float:
@@ -2623,7 +2690,19 @@ def run_render_pipeline(
             _total_part_ms = int((time.perf_counter() - _t_part_start) * 1000)
             _effective_duration = max(0.0, float(seg["end"]) - float(_effective_start))
             _render_speed = max(0.5, min(1.5, float(payload.playback_speed or 1.0)))
-            _expected_final_duration = max(0.0, (_effective_duration / _render_speed) - _micro_pacing_trim_sec)
+            _remotion_intro_sec = _maybe_prepend_remotion_hook_intro(
+                final_part,
+                payload,
+                effective_channel=effective_channel,
+                job_id=job_id,
+                part_no=idx,
+                headline_text="STOP SCROLLING",
+                duration_sec=1.0,
+            )
+            _expected_final_duration = max(
+                0.0,
+                (_effective_duration / _render_speed) - _micro_pacing_trim_sec + _remotion_intro_sec,
+            )
             _speed_ratio = round(_expected_final_duration * 1000 / max(_encode_ms, 1), 2)
             logger.info(
                 "total_part_render_ms=%d part=%d "
