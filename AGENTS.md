@@ -1,5 +1,120 @@
 # AGENTS.md
 
+## Required Reading Order (MANDATORY)
+
+Before making any architecture, render, UI, AI, subtitle,
+voice, motion crop, desktop, packaging, API,
+or pipeline-related changes:
+
+You MUST follow this order:
+
+READ
+→ UNDERSTAND
+→ PLAN
+→ PATCH
+→ VERIFY
+
+Do not start implementation immediately.
+
+### Step 1 — Read Context First
+
+Read the relevant documentation before touching code.
+
+Always read:
+
+1. `docs/PROJECT_FLOW_VI.md`
+2. `docs/ARCHITECTURE.md`
+3. `docs/RENDER_PIPELINE.md`
+4. `docs/UI_BEHAVIOR.md`
+
+Then read domain-specific docs depending on task:
+
+Subtitle work:
+- `docs/SUBTITLE_TRANSLATION.md`
+
+Voice / narration / TTS:
+- `docs/VOICE_NARRATION.md`
+
+Download / source preparation:
+- `docs/DOWNLOAD_SYSTEM.md`
+
+Desktop / Electron / packaging:
+- `docs/DESKTOP_APP.md`
+
+### Step 2 — Understand The Project
+
+Before patching, explain:
+
+- what the system currently does
+- where the relevant flow exists
+- what files are responsible
+- what compatibility contracts exist
+- what must not break
+- risks of the change
+
+Do not guess architecture.
+
+Treat this project as:
+
+"An AI rendering intelligence platform with FFmpeg as execution backend"
+
+NOT:
+
+"An FFmpeg render tool with AI features"
+
+### Step 3 — Plan First
+
+Before editing files:
+
+Provide:
+
+1. Summary of understanding
+2. Proposed approach
+3. Files to touch
+4. Risks
+5. Test strategy
+6. Rollback concerns
+
+Do not patch before plan approval when scope is medium/high risk.
+
+### Step 4 — Patch Conservatively
+
+Rules:
+- minimal patch only
+- preserve backward compatibility
+- preserve DOM IDs
+- preserve result_json contracts
+- preserve render events
+- preserve job statuses
+- preserve bounded AI execution
+- preserve fallback behavior
+
+Never casually refactor:
+- `render_pipeline.py`
+- `render_engine.py`
+- `subtitle_engine.py`
+- `motion_crop.py`
+- `schemas.py`
+- giant frontend JS files
+- render/UI contracts
+
+### Step 5 — Verify
+
+Always:
+
+- `py_compile` changed Python files
+- run focused pytest
+- recommend full pytest if needed
+- explain compatibility impact
+
+Protected folders:
+- NEVER edit `docs/review/**`
+- NEVER edit `docs/archive/**`
+unless explicitly requested.
+
+If docs and code disagree:
+trust implementation first.
+
 Strict operating instructions for AI agents working in this repository.
 
 This project is a local video rendering tool. Treat it as production software: changes must be minimal, reviewable, backward compatible, and tested against the affected path.
