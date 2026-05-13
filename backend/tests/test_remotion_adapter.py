@@ -17,8 +17,10 @@ def test_generate_hook_intro_returns_path_when_ffmpeg_creates_file(tmp_path):
     from app.services.remotion_adapter import generate_hook_intro
 
     output = tmp_path / "intro.mp4"
+    captured = {}
 
     def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
         output.write_bytes(b"video")
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
@@ -31,6 +33,39 @@ def test_generate_hook_intro_returns_path_when_ffmpeg_creates_file(tmp_path):
         )
 
     assert result == str(output)
+    cmd = captured["cmd"]
+    assert "color=c=black:s=1080x1920:r=30:d=1.000" in cmd
+    vf = cmd[cmd.index("-vf") + 1]
+    assert "STOP SCROLLING" in vf
+    assert "borderw=5" in vf
+    assert "shadowcolor=0x000000@0.70" in vf
+    assert "drawbox=" in vf
+    assert "enable='between(t\\,0\\,0.18)'" in vf
+
+
+def test_generate_hook_intro_uses_fallback_headline_rotation(tmp_path):
+    from app.services.remotion_adapter import _FALLBACK_HEADLINES, generate_hook_intro
+
+    output = tmp_path / "fallback.mp4"
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        output.write_bytes(b"video")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    with patch("app.services.remotion_adapter.subprocess.run", side_effect=fake_run):
+        result = generate_hook_intro(
+            str(output),
+            aspect_ratio="1:1",
+            duration_sec=1.0,
+            headline_text=None,
+        )
+
+    assert result == str(output)
+    assert "color=c=black:s=1080x1080:r=30:d=1.000" in captured["cmd"]
+    vf = captured["cmd"][captured["cmd"].index("-vf") + 1]
+    assert any(headline.replace("'", "\\'") in vf for headline in _FALLBACK_HEADLINES)
 
 
 def test_generate_hook_intro_failure_returns_none(tmp_path):

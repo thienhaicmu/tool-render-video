@@ -12,6 +12,13 @@ _DIMENSIONS_BY_ASPECT = {
     "3:4": (1080, 1440),
 }
 
+_FALLBACK_HEADLINES = (
+    "STOP SCROLLING",
+    "WATCH THIS",
+    "DON'T MISS THIS",
+    "AI HIGHLIGHT",
+)
+
 
 def _dimensions_for_aspect(aspect_ratio: str) -> tuple[int, int]:
     return _DIMENSIONS_BY_ASPECT.get((aspect_ratio or "").strip(), _DIMENSIONS_BY_ASPECT["3:4"])
@@ -25,6 +32,14 @@ def _escape_drawtext(text: str) -> str:
         .replace("'", "\\'")
         .replace("%", "\\%")
     )
+
+
+def _resolve_headline_text(headline_text: str | None, output_path: str) -> str:
+    cleaned = str(headline_text or "").strip()
+    if cleaned:
+        return cleaned.upper()
+    idx = sum(ord(ch) for ch in str(output_path)) % len(_FALLBACK_HEADLINES)
+    return _FALLBACK_HEADLINES[idx]
 
 
 def generate_hook_intro(
@@ -42,11 +57,22 @@ def generate_hook_intro(
     out = Path(output_path)
     duration = max(0.5, min(2.0, float(duration_sec or 1.0)))
     width, height = _dimensions_for_aspect(aspect_ratio)
-    text = _escape_drawtext((headline_text or "AI HIGHLIGHT").strip() or "AI HIGHLIGHT")
-    font_size = max(44, int(height * 0.075))
+    text = _escape_drawtext(_resolve_headline_text(headline_text, output_path))
+    font_size = max(44, min(int(height * 0.072), int(width * 0.115)))
+    punch_font_size = int(font_size * 1.08)
+    accent_h = max(4, int(height * 0.006))
+    accent_y_top = int(height * 0.315)
+    accent_y_bottom = int(height * 0.675)
     fade_out_start = max(0.1, duration - 0.25)
     vf = (
+        f"drawbox=x=0:y=0:w=iw:h=ih:color=0x07080D@1:t=fill,"
+        f"drawbox=x={int(width * 0.10)}:y={accent_y_top}:w={int(width * 0.80)}:h={accent_h}:color=0xFFFFFF@0.16:t=fill,"
+        f"drawbox=x={int(width * 0.16)}:y={accent_y_bottom}:w={int(width * 0.68)}:h={accent_h}:color=0xFF2D55@0.72:t=fill,"
+        f"drawtext=text='{text}':fontcolor=0xFFFFFF@0.18:fontsize={punch_font_size}:"
+        "borderw=8:bordercolor=0xFF2D55@0.22:shadowcolor=0x000000@0.35:shadowx=0:shadowy=10:"
+        "x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t\\,0\\,0.18)',"
         f"drawtext=text='{text}':fontcolor=white:fontsize={font_size}:"
+        "borderw=5:bordercolor=0x000000@0.92:shadowcolor=0x000000@0.70:shadowx=0:shadowy=8:"
         "x=(w-text_w)/2:y=(h-text_h)/2,"
         "fade=t=in:st=0:d=0.2,"
         f"fade=t=out:st={fade_out_start:.3f}:d=0.2"

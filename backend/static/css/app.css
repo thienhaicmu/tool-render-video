@@ -16439,3 +16439,126 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
   margin-top: 2px;
   line-height: 1;
 }
+
+/* Render page responsive layout fixes.
+   Keep this late so it wins over earlier phase-specific grid rules. */
+@media (max-width: 900px) {
+  .appShell.noInspector .rs-main,
+  .rs-main {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .appShell.noInspector .rs-main {
+    grid-template-rows: auto minmax(0, 1fr) !important;
+  }
+
+  .appShell.noInspector .mainArea {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    min-height: 0;
+  }
+
+  .appShell.noInspector .sidebar {
+    height: min(44vh, 360px);
+    min-height: 0;
+  }
+
+  .appShell.noInspector #partial_render_home {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .appTopBar,
+  .appTopBarBrand,
+  .appTopBarNav,
+  .appTopBarChips,
+  .appStatusBar,
+  .statusBarRight {
+    min-width: 0;
+  }
+
+  .appTopBar {
+    gap: 8px;
+    padding-inline: 10px;
+    overflow: hidden;
+  }
+
+  .appTopBarBrand {
+    flex: 0 1 auto;
+  }
+
+  .appTopBarNav {
+    flex: 1 1 auto;
+    gap: 2px;
+    margin-inline: 4px;
+    overflow: hidden;
+  }
+
+  .appTopBarNav .navItem {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 8px !important;
+    text-align: center;
+  }
+
+  .appTopBarChips {
+    flex: 0 1 auto;
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .appStatusBar {
+    gap: 8px;
+    overflow: hidden;
+  }
+
+  .statusBarRight {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    overflow: hidden;
+  }
+
+  #statusSystem {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #manual_output_folder.manualOutputRow {
+    flex-wrap: wrap;
+  }
+
+  #manual_output_folder.manualOutputRow .fieldInput {
+    flex: 1 1 150px;
+  }
+
+  #manual_output_folder.manualOutputRow button,
+  #manual_output_folder.manualOutputRow .pickActionBtn {
+    flex: 1 1 124px;
+    width: auto !important;
+    min-width: 124px;
+  }
+}
+
+@media (max-width: 520px) {
+  .appTopBarBrand .brandTitle {
+    max-width: 74px;
+    line-height: 1.05;
+  }
+
+  .appTopBarNav .navItem {
+    padding-inline: 6px !important;
+  }
+
+  .appTopBarChips {
+    display: none;
+  }
+
+  .appStatusBar {
+    padding-inline: 12px;
+  }
+
+  .statusBarRight {
+    display: none;
+  }
+}
