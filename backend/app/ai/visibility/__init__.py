@@ -1,0 +1,1 @@
+"""AI visibility metadata helpers."""

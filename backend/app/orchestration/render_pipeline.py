@@ -37,6 +37,7 @@ from app.services.tts_service import generate_narration_mp3
 from app.services.audio_mix_service import mix_narration_audio
 from app.services.translation_service import translate_srt_file
 from app.services.remotion_adapter import generate_hook_intro, prepend_intro_clip
+from app.ai.visibility.ai_visibility_summary import attach_ai_visibility_summaries
 
 logger = logging.getLogger("app.render")
 
@@ -3286,6 +3287,11 @@ def run_render_pipeline(
                 _re["partial_failure_warning"] = _partial_warning
             if _best_rank_entry:
                 _best_rank_entry["partial_failure_warning"] = _partial_warning
+        _rank_entries_ordered = attach_ai_visibility_summaries(_rank_entries_ordered)
+        _best_rank_entry = next(
+            (_entry for _entry in _rank_entries_ordered if bool(_entry.get("is_best_clip"))),
+            None,
+        )
         if _best_rank_entry:
             _job_log(
                 effective_channel,
