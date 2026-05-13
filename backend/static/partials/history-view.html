@@ -1,14 +1,21 @@
-<section id="view_history" class="historyWorkspace hiddenView" aria-live="polite">
+<section id="view_history" class="historyWorkspace historyProductWorkspace hiddenView" aria-live="polite">
 
   <div class="hwHeader">
     <div class="hwHeaderLeft">
-      <div class="hwTitle">History</div>
-      <div class="hwSub">Review previous jobs and reopen outputs</div>
+      <div class="productKicker">History</div>
+      <div class="hwTitle">Render and download activity</div>
+      <div class="hwSub">Review previous jobs, reopen packages, retry failures, or rerun a render with the same source.</div>
     </div>
     <div class="hwHeaderRight">
       <span class="hwMeta" id="history_status_text"></span>
       <button class="hwRefreshBtn" type="button" onclick="loadHistoryView()" title="Refresh">&#8635; Refresh</button>
     </div>
+  </div>
+
+  <div class="historySummaryRail" aria-label="History scopes">
+    <div class="historySummaryCard"><strong>Render jobs</strong><span>Completed, partial, failed, interrupted</span></div>
+    <div class="historySummaryCard"><strong>Download jobs</strong><span>Saved files, failed links, open in Render</span></div>
+    <div class="historySummaryCard"><strong>Packages</strong><span>Outputs, reports, best exports</span></div>
   </div>
 
   <div class="hwFilterBar" id="history_filter_bar">
@@ -24,7 +31,7 @@
       <div class="hwEmpty">
         <div class="hwEmptyIcon">&#128203;</div>
         <div class="hwEmptyTitle">No history yet</div>
-        <div class="hwEmptySub">Completed render, download, and upload jobs will appear here.</div>
+        <div class="hwEmptySub">Render and download jobs will appear here after they start.</div>
       </div>
     </div>
   </div>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Render Studio Desktop</title>
+  <title>AI Clip Studio</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Anton&family=Montserrat:wght@700;900&family=Oswald:wght@700&family=Bebas+Neue&family=Roboto:wght@700&display=swap" rel="stylesheet">
@@ -18,8 +18,11 @@
   ════════════════════════════════════════════════════════════════ -->
   <header class="appTopBar">
     <div class="appTopBarBrand">
-      <div class="brandBadge">NM</div>
-      <div class="brandTitle">Render Studio</div>
+      <div class="brandBadge">AI</div>
+      <div class="brandStack">
+        <div class="brandTitle">AI Clip Studio</div>
+        <div class="brandSub">Creator-ready short video workspace</div>
+      </div>
     </div>
     <nav class="appTopBarNav">
       <button class="navItem active" data-view="render">Render</button>
@@ -27,7 +30,7 @@
       <button class="navItem" data-view="history">History</button>
     </nav>
     <div class="appTopBarChips">
-      <div class="pill">Local AI · FastAPI</div>
+      <div class="pill productModePill">Local AI render engine</div>
       <div class="pill" id="warmup_chip" title="Click to see details" onclick="toggleWarmupPanel()" style="cursor:pointer">Loading models...</div>
       <button class="topBarIconBtn" type="button" onclick="setView('settings')" title="Settings" aria-label="Settings">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -45,11 +48,19 @@
   ════════════════════════════════════════════════════════════════ -->
   <nav class="sidebar rs-left-panel" id="sidebarPanel">
     <div class="sidebarHeader">
-      <div class="sidebarTitle">Render Studio</div>
+      <div class="sidebarTitle">Render Setup</div>
+      <div class="sidebarSubtitle">Source, destination, then editor.</div>
     </div>
     <div class="sidebarScrollable">
 
       <section id="card_render_setup" class="setupCard">
+        <div class="setupIntro">
+          <div>
+            <div class="setupEyebrow">Render</div>
+            <div class="setupIntroTitle">Create ranked clips</div>
+          </div>
+          <div class="setupIntroMeta">Source -> Plan -> Editor -> Render -> Review</div>
+        </div>
 
         <!-- Render setup compatibility fields: read by startRender(); IDs must not change. -->
         <div class="renderSetupCompatFields" aria-hidden="true">
@@ -80,7 +91,7 @@
 
           <!-- Source setup -->
           <div class="setupGroup">
-            <div class="setupGroupTitle">Source</div>
+            <div class="setupGroupTitle">1. Source</div>
             <div class="renderSetupSourceSection">
               <div class="formGrid">
                 <label class="field">
@@ -94,7 +105,7 @@
                 <label class="field fieldSpan2" id="field_youtube_url">
                   <span class="fieldLabel">Video URL</span>
                   <input class="fieldInput" id="youtube_url" placeholder="YouTube, TikTok, Instagram or Facebook link">
-                  <div class="sectionSubtitle" style="margin-top:4px">Or use <strong>Download</strong> tab to save a video first, then select <em>Local Video File</em>.</div>
+                  <div class="sectionSubtitle" style="margin-top:4px">Use a public link here, or download first and reopen the saved file as a local source.</div>
                 </label>
                 <label class="field fieldSpan2 hiddenView" id="field_source_video_path">
                   <span class="fieldLabel">Local Video</span>
@@ -111,7 +122,7 @@
 
           <!-- Output setup -->
           <div class="setupGroup">
-            <div class="setupGroupTitle">Output</div>
+            <div class="setupGroupTitle">2. Package</div>
             <div class="renderSetupOutputSection">
               <div class="formGrid">
                 <!-- Output compatibility fields: channel mode removed; IDs retained for JS. -->
@@ -125,7 +136,7 @@
                     <input class="fieldInput" id="manual_output_dir" placeholder="e.g. D:\videos\output">
                     <button type="button" id="btn_pick_output_dir" class="secondaryButton pickActionBtn">📁 Choose</button>
                   </div>
-                  <div class="sectionSubtitle" id="manual_output_dir_hint" style="margin-top:6px">All output saved here.</div>
+                  <div class="sectionSubtitle" id="manual_output_dir_hint" style="margin-top:6px">Rendered clips, reports, and best exports are saved here.</div>
                 </label>
               </div>
             </div><!-- /renderSetupOutputSection -->
@@ -140,7 +151,7 @@
               <button class="ghostButton" onclick="resumeRender()">↺ Resume Job</button>
               <input class="fieldInput" id="resume_job_id" placeholder="Job ID" style="max-width:180px">
             </div>
-            <button class="primaryButton" id="start_render_btn" onclick="startRender()">▶ Open Editor</button>
+            <button class="primaryButton" id="start_render_btn" onclick="startRender()">Open Editor</button>
           </div>
         </div><!-- /renderSetupActionSection -->
 
@@ -159,9 +170,16 @@
       </section><!-- /card_render_setup -->
 
       <section id="card_download_setup" class="setupCard hiddenView">
+        <div class="setupIntro">
+          <div>
+            <div class="setupEyebrow">Download</div>
+            <div class="setupIntroTitle">Build a source inbox</div>
+          </div>
+          <div class="setupIntroMeta">Paste -> Queue -> Save -> Open in Render</div>
+        </div>
         <div class="setupGroups">
           <div class="setupGroup">
-            <div class="setupGroupTitle">Links</div>
+            <div class="setupGroupTitle">1. Links</div>
             <div class="formGrid">
               <label class="field fieldSpan2">
                 <span class="fieldLabel">Paste Public Links</span>
@@ -175,7 +193,7 @@
             </div>
           </div>
           <div class="setupGroup">
-            <div class="setupGroupTitle">Save Folder</div>
+            <div class="setupGroupTitle">2. Save Folder</div>
             <div class="formGrid">
               <label class="field fieldSpan2">
                 <span class="fieldLabel">Destination</span>
@@ -354,9 +372,10 @@
         </div>
       </div>
 
-      <!-- Runtime mount note:
-           #appBottomPanel is appended here by mountRenderRuntimePanel().
-           Do not add a placeholder or move #appBottomPanel without JS approval. -->
+      <!-- Runtime mount target:
+           mountRenderRuntimePanel() moves the visible runtime UI here.
+           #appBottomPanel remains only as a hidden compatibility wrapper. -->
+      <div id="render_runtime_mount" class="renderRuntimeMount"></div>
 
       </div>
       <!-- /SECTION: render-active-panel -->
@@ -432,6 +451,165 @@
       </div>
       <!-- /SECTION: render-output-panel -->
 
+      <!-- ═══════════════════════════════════════════════════════════════
+           SECTION: render-runtime-monitor — Process Timeline + Live Log
+      ════════════════════════════════════════════════════════════════ -->
+      <section class="appBottomPanel rs-bottom-panel" id="appBottomPanel">
+
+        <!-- Toolbar: job status summary + Source Setup toggle -->
+        <div class="abpToolbar">
+          <div class="abpToolbarJob">
+            <div class="abpJobTitle" id="job_title">No active job</div>
+            <div class="abpJobMeta" id="job_meta_1"></div>
+            <div class="abpJobMeta" id="job_meta_2"></div>
+          </div>
+          <div class="abpToolbarProgress">
+            <div class="jmProgressBar abpProgressBar"><div class="progressValue" id="job_bar"></div></div>
+            <span class="abpJobMsg" id="job_message"></span>
+          </div>
+          <div class="abpToolbarRight">
+            <div class="abpPct" id="job_percent">0%</div>
+            <div class="pill primaryPill" id="job_stage_pill">Idle</div>
+            <button class="abpCollapseBtn" id="abp_collapse_btn" onclick="toggleBottomPanel()" title="Show / hide process panel">▴</button>
+          </div>
+        </div>
+
+        <div class="rcBottom rcActiveQueue" id="rc_bottom">
+          <div class="rcAQMain">
+
+            <!-- LEFT 60%: active strip + part-cards grid -->
+            <section class="rcQueuePanel">
+              <header class="rcPanelHeader">
+                <strong>Render Queue</strong>
+                <span id="rc_queue_summary" class="rcPanelMeta">0 waiting</span>
+                <span id="rc_active_badge" class="rcPanelBadge">Idle</span>
+                <button class="rcLogBtn rcLogToggleBtn" id="rc_log_panel_btn" type="button" onclick="toggleRenderLogs()" title="Toggle log panel">‹ Logs</button>
+              </header>
+
+              <div id="rc_active_card" class="rcActiveCard isIdle">
+                <div class="rcCardHeader">
+                  <span id="rc_card_job_title" class="rcCardJobTitle"></span>
+                  <span id="rc_card_status_badge" class="rcCardStatusBadge" data-state="idle">Idle</span>
+                </div>
+                <div class="rcActiveTop">
+                  <div class="rcActiveCopy">
+                    <div id="rc_active_title" class="rcActiveTitle">Ready to render</div>
+                    <div id="rc_active_subtitle" class="rcActiveSubtitle">Configure your video, then click Start Render.</div>
+                    <span id="rc_eta" class="rcActiveEta" hidden></span>
+                  </div>
+                  <div id="rc_active_percent" class="rcActivePercent">0%</div>
+                </div>
+                <div class="rcActiveProgress">
+                  <span id="rc_active_bar" style="--progress:0%"></span>
+                </div>
+                <div id="rc_stage_timeline" class="rcStageTimeline"></div>
+                <div id="rc_active_stage" class="rcActiveStage" hidden></div>
+                <div id="rc_active_message" class="rcActiveMessage"></div>
+              </div>
+
+              <div id="rc_part_cards" class="rcQueueGrid">
+                <div class="emptyState">No clips queued yet.</div>
+              </div>
+
+              <div id="rc_output_preview" class="rcOutputPreview hiddenView" hidden>
+                <div class="rcPreviewHeader">
+                  <span class="rcPreviewTitle">Output Preview</span>
+                  <div class="rcPreviewHeaderRight">
+                    <select id="rc_preview_part_select" class="rcPreviewPartSelect hiddenView" onchange="_rcPreviewHandleSelectChange()"></select>
+                    <button class="rcPreviewOpenBtn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
+                  </div>
+                </div>
+                <video id="rc_preview_video" class="rcPreviewVideo" controls preload="metadata"></video>
+                <div id="rc_preview_unavailable" class="rcPreviewUnavailable hiddenView">Preview unavailable. Use Open Output Folder to access files.</div>
+                <div class="rcPreviewMeta">
+                  <span id="rc_preview_filename" class="rcPreviewFilename"></span>
+                  <span id="rc_preview_partno" class="rcPreviewPartNo"></span>
+                  <span id="rc_preview_path" class="rcPreviewPath"></span>
+                </div>
+              </div>
+
+              <div id="rc_benchmark_panel" class="rcBenchmarkPanel hiddenView">
+                <div class="rcBenchmarkHeader">
+                  <span class="rcBenchmarkTitle">Render Insights</span>
+                  <span id="rc_benchmark_badge" class="rcBenchmarkBadge" data-state="live">Live</span>
+                </div>
+                <div id="rc_benchmark_grid" class="rcBenchmarkGrid"></div>
+                <div id="rc_benchmark_insight" class="rcBenchmarkInsight hiddenView"></div>
+              </div>
+
+              <div id="rc_compare_panel" class="rcComparePanel hiddenView" hidden>
+                <div class="rcCompareHeader">
+                  <span class="rcCompareTitle">Compare Outputs</span>
+                </div>
+                <div id="rc_compare_empty" class="rcCompareEmpty">Render at least two outputs to compare.</div>
+                <div id="rc_compare_grid" class="rcCompareGrid hiddenView">
+                  <div class="rcCompareColumn" id="rc_compare_col_a"></div>
+                  <div class="rcCompareColumn" id="rc_compare_col_b"></div>
+                </div>
+                <div id="rc_compare_diff" class="rcCompareDiff hiddenView"></div>
+              </div>
+            </section>
+
+            <!-- RIGHT 40%: log panel -->
+            <section class="rcLogStrip rcLogPanel">
+              <header class="rcLogStripHeader">
+                <strong>Recent Activity</strong>
+                <div class="rcLogToolbarActions">
+                  <button class="rcLogBtn isActive" id="rc_log_autoscroll_btn" type="button" onclick="toggleLogAutoScroll()" title="Auto-scroll: On">↑ Auto</button>
+                  <button class="rcLogBtn" id="rc_copy_logs_btn" type="button" onclick="copyRenderLogs()" title="Copy all log text">Copy</button>
+                  <button class="rcLogBtn" id="rc_toggle_logs_btn" type="button" onclick="toggleRenderLogs()">View logs</button>
+                </div>
+                <div class="rcLogFilterRow">
+                  <button class="rcLogFilterBtn isActive" data-filter="all"    type="button" onclick="filterRenderLogs('all')">All</button>
+                  <button class="rcLogFilterBtn"          data-filter="error"  type="button" onclick="filterRenderLogs('error')">Error</button>
+                  <button class="rcLogFilterBtn"          data-filter="ffmpeg" type="button" onclick="filterRenderLogs('ffmpeg')">FFmpeg</button>
+                  <button class="rcLogFilterBtn"          data-filter="system" type="button" onclick="filterRenderLogs('system')">Progress</button>
+                </div>
+              </header>
+              <div id="event_log_render" class="rcLogList">
+                <div class="rcLogEmpty">No logs yet</div>
+              </div>
+            </section>
+
+          </div>
+
+          <div class="rcCompatHidden" hidden aria-hidden="true">
+            <span id="rc_status"></span>
+            <span id="rc_progress"></span>
+            <span id="rc_stage"></span>
+            <span id="rc_parts"></span>
+            <span id="rc_active"></span>
+            <span id="rc_latest"></span>
+            <span id="render_monitor_dot"></span>
+            <span id="render_monitor_primary"></span>
+            <span id="render_monitor_secondary"></span>
+            <span id="render_monitor_heartbeat"></span>
+            <div id="render_monitor_header" hidden></div>
+            <button id="rc_open_output_btn" type="button" onclick="openRenderOutputFolder()">Open Output</button>
+            <button id="rc_copy_diag_btn" type="button" onclick="copyRenderDiagnostics()">Copy Diagnostics</button>
+            <button id="rc_retry_btn" type="button" onclick="rerunRenderJob(currentJobId)">Retry</button>
+            <button id="abp_retry_btn" type="button" onclick="rerunRenderJob(currentJobId)">Retry</button>
+            <div id="parts_wrap"></div>
+            <div id="pipeline_wrap"></div>
+            <span id="clips_section_label"></span>
+            <div id="abp_output_text">No output yet</div>
+            <div id="abp_output_meta">Latest file will appear here.</div>
+            <div id="abp_error_block">
+              <div id="abp_error_text">No blocking errors.</div>
+            </div>
+            <span id="abp_summary_primary"></span>
+            <span id="abp_summary_progress"></span>
+            <span id="abp_summary_meta"></span>
+            <span id="abp_summary_stage"></span>
+            <span id="abp_summary_parts"></span>
+            <span id="abp_summary_active"></span>
+            <span id="abp_summary_latest"></span>
+          </div>
+        </div><!-- /rcBottom -->
+
+      </section><!-- /appBottomPanel -->
+      <!-- /SECTION: render-runtime-monitor -->
+
       <!-- ── SECTION: clip-preview-modal ─────────────────────────── -->
       <!-- Clip Preview Modal -->
       <div id="clip_preview_modal" class="clipPreviewModal hiddenView" onclick="closeClipPreview(event)">
@@ -468,8 +646,8 @@
     <div class="mainContentScroll">
     <header class="pageHeader">
       <div>
-        <div class="pageTitle" id="page_title_text">Render Studio</div>
-        <div class="pageSubtitle" id="page_subtitle_text">Creator Render Studio — settings and history.</div>
+        <div class="pageTitle" id="page_title_text">AI Clip Studio</div>
+        <div class="pageSubtitle" id="page_subtitle_text">Creator-ready render, download, and history workspace.</div>
       </div>
       <div class="headerChips">
         <div class="pill primaryPill" id="job_chip">No active job</div>
@@ -478,7 +656,7 @@
 
     <div class="layoutGrid" id="layout_grid">
 
-      <!-- card_render_setup lives in appBottomPanel → abpSetupPanel -->
+      <!-- card_render_setup is mounted into the render sidebar by JS. -->
 
       <div class="leftColumn" id="left_column">
 
@@ -1267,164 +1445,6 @@
   </aside>
   <!-- /SECTION: inspector -->
   </div><!-- /rs-main -->
-  <!-- ═══════════════════════════════════════════════════════════════
-       SECTION: bottom-panel — Process Timeline + Live Log + Source Setup
-  ════════════════════════════════════════════════════════════════ -->
-  <section class="appBottomPanel rs-bottom-panel" id="appBottomPanel">
-
-    <!-- Toolbar: job status summary + Source Setup toggle -->
-    <div class="abpToolbar">
-      <div class="abpToolbarJob">
-        <div class="abpJobTitle" id="job_title">No active job</div>
-        <div class="abpJobMeta" id="job_meta_1"></div>
-        <div class="abpJobMeta" id="job_meta_2"></div>
-      </div>
-      <div class="abpToolbarProgress">
-        <div class="jmProgressBar abpProgressBar"><div class="progressValue" id="job_bar"></div></div>
-        <span class="abpJobMsg" id="job_message"></span>
-      </div>
-      <div class="abpToolbarRight">
-        <div class="abpPct" id="job_percent">0%</div>
-        <div class="pill primaryPill" id="job_stage_pill">Idle</div>
-        <button class="abpCollapseBtn" id="abp_collapse_btn" onclick="toggleBottomPanel()" title="Show / hide process panel">▴</button>
-      </div>
-    </div>
-
-    <div class="rcBottom rcActiveQueue" id="rc_bottom">
-      <div class="rcAQMain">
-
-        <!-- LEFT 60%: active strip + part-cards grid -->
-        <section class="rcQueuePanel">
-          <header class="rcPanelHeader">
-            <strong>Render Queue</strong>
-            <span id="rc_queue_summary" class="rcPanelMeta">0 waiting</span>
-            <span id="rc_active_badge" class="rcPanelBadge">Idle</span>
-            <button class="rcLogBtn rcLogToggleBtn" id="rc_log_panel_btn" type="button" onclick="toggleRenderLogs()" title="Toggle log panel">‹ Logs</button>
-          </header>
-
-          <div id="rc_active_card" class="rcActiveCard isIdle">
-            <div class="rcCardHeader">
-              <span id="rc_card_job_title" class="rcCardJobTitle"></span>
-              <span id="rc_card_status_badge" class="rcCardStatusBadge" data-state="idle">Idle</span>
-            </div>
-            <div class="rcActiveTop">
-              <div class="rcActiveCopy">
-                <div id="rc_active_title" class="rcActiveTitle">Ready to render</div>
-                <div id="rc_active_subtitle" class="rcActiveSubtitle">Configure your video, then click Start Render.</div>
-                <span id="rc_eta" class="rcActiveEta" hidden></span>
-              </div>
-              <div id="rc_active_percent" class="rcActivePercent">0%</div>
-            </div>
-            <div class="rcActiveProgress">
-              <span id="rc_active_bar" style="--progress:0%"></span>
-            </div>
-            <div id="rc_stage_timeline" class="rcStageTimeline"></div>
-            <div id="rc_active_stage" class="rcActiveStage" hidden></div>
-            <div id="rc_active_message" class="rcActiveMessage"></div>
-          </div>
-
-          <div id="rc_part_cards" class="rcQueueGrid">
-            <div class="emptyState">No clips queued yet.</div>
-          </div>
-
-          <div id="rc_output_preview" class="rcOutputPreview hiddenView" hidden>
-            <div class="rcPreviewHeader">
-              <span class="rcPreviewTitle">Output Preview</span>
-              <div class="rcPreviewHeaderRight">
-                <select id="rc_preview_part_select" class="rcPreviewPartSelect hiddenView" onchange="_rcPreviewHandleSelectChange()"></select>
-                <button class="rcPreviewOpenBtn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
-              </div>
-            </div>
-            <video id="rc_preview_video" class="rcPreviewVideo" controls preload="metadata"></video>
-            <div id="rc_preview_unavailable" class="rcPreviewUnavailable hiddenView">Preview unavailable. Use Open Output Folder to access files.</div>
-            <div class="rcPreviewMeta">
-              <span id="rc_preview_filename" class="rcPreviewFilename"></span>
-              <span id="rc_preview_partno" class="rcPreviewPartNo"></span>
-              <span id="rc_preview_path" class="rcPreviewPath"></span>
-            </div>
-          </div>
-
-          <div id="rc_benchmark_panel" class="rcBenchmarkPanel hiddenView">
-            <div class="rcBenchmarkHeader">
-              <span class="rcBenchmarkTitle">Render Insights</span>
-              <span id="rc_benchmark_badge" class="rcBenchmarkBadge" data-state="live">Live</span>
-            </div>
-            <div id="rc_benchmark_grid" class="rcBenchmarkGrid"></div>
-            <div id="rc_benchmark_insight" class="rcBenchmarkInsight hiddenView"></div>
-          </div>
-
-          <div id="rc_compare_panel" class="rcComparePanel hiddenView" hidden>
-            <div class="rcCompareHeader">
-              <span class="rcCompareTitle">Compare Outputs</span>
-            </div>
-            <div id="rc_compare_empty" class="rcCompareEmpty">Render at least two outputs to compare.</div>
-            <div id="rc_compare_grid" class="rcCompareGrid hiddenView">
-              <div class="rcCompareColumn" id="rc_compare_col_a"></div>
-              <div class="rcCompareColumn" id="rc_compare_col_b"></div>
-            </div>
-            <div id="rc_compare_diff" class="rcCompareDiff hiddenView"></div>
-          </div>
-        </section>
-
-        <!-- RIGHT 40%: log panel -->
-        <section class="rcLogStrip rcLogPanel">
-          <header class="rcLogStripHeader">
-            <strong>Recent Activity</strong>
-            <div class="rcLogToolbarActions">
-              <button class="rcLogBtn isActive" id="rc_log_autoscroll_btn" type="button" onclick="toggleLogAutoScroll()" title="Auto-scroll: On">↑ Auto</button>
-              <button class="rcLogBtn" id="rc_copy_logs_btn" type="button" onclick="copyRenderLogs()" title="Copy all log text">Copy</button>
-              <button class="rcLogBtn" id="rc_toggle_logs_btn" type="button" onclick="toggleRenderLogs()">View logs</button>
-            </div>
-            <div class="rcLogFilterRow">
-              <button class="rcLogFilterBtn isActive" data-filter="all"    type="button" onclick="filterRenderLogs('all')">All</button>
-              <button class="rcLogFilterBtn"          data-filter="error"  type="button" onclick="filterRenderLogs('error')">Error</button>
-              <button class="rcLogFilterBtn"          data-filter="ffmpeg" type="button" onclick="filterRenderLogs('ffmpeg')">FFmpeg</button>
-              <button class="rcLogFilterBtn"          data-filter="system" type="button" onclick="filterRenderLogs('system')">Progress</button>
-            </div>
-          </header>
-          <div id="event_log_render" class="rcLogList">
-            <div class="rcLogEmpty">No logs yet</div>
-          </div>
-        </section>
-
-      </div>
-
-      <div class="rcCompatHidden" hidden aria-hidden="true">
-        <span id="rc_status"></span>
-        <span id="rc_progress"></span>
-        <span id="rc_stage"></span>
-        <span id="rc_parts"></span>
-        <span id="rc_active"></span>
-        <span id="rc_latest"></span>
-        <span id="render_monitor_dot"></span>
-        <span id="render_monitor_primary"></span>
-        <span id="render_monitor_secondary"></span>
-        <span id="render_monitor_heartbeat"></span>
-        <div id="render_monitor_header" hidden></div>
-        <button id="rc_open_output_btn" type="button" onclick="openRenderOutputFolder()">Open Output</button>
-        <button id="rc_copy_diag_btn" type="button" onclick="copyRenderDiagnostics()">Copy Diagnostics</button>
-        <button id="rc_retry_btn" type="button" onclick="rerunRenderJob(currentJobId)">Retry</button>
-        <button id="abp_retry_btn" type="button" onclick="rerunRenderJob(currentJobId)">Retry</button>
-        <div id="parts_wrap"></div>
-        <div id="pipeline_wrap"></div>
-        <span id="clips_section_label"></span>
-        <div id="abp_output_text">No output yet</div>
-        <div id="abp_output_meta">Latest file will appear here.</div>
-        <div id="abp_error_block">
-          <div id="abp_error_text">No blocking errors.</div>
-        </div>
-        <span id="abp_summary_primary"></span>
-        <span id="abp_summary_progress"></span>
-        <span id="abp_summary_meta"></span>
-        <span id="abp_summary_stage"></span>
-        <span id="abp_summary_parts"></span>
-        <span id="abp_summary_active"></span>
-        <span id="abp_summary_latest"></span>
-      </div>
-    </div><!-- /rcBottom -->
-
-  </section><!-- /appBottomPanel -->
-  <!-- /SECTION: bottom-panel -->
 
   <!-- ═══════════════════════════════════════════════════════════════
        SECTION: status-bar

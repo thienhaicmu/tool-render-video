@@ -15239,7 +15239,7 @@ body.is-history-active #history_list {
   gap: 14px !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel {
   grid-column: auto !important;
   grid-row: auto !important;
   display: flex !important;
@@ -15253,11 +15253,11 @@ body.is-history-active #history_list {
   background: transparent !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .abpCollapseBtn {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .abpCollapseBtn {
   display: none !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .abpToolbar {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .abpToolbar {
   display: grid !important;
   grid-template-columns: minmax(0, 1.3fr) minmax(220px, 1fr) auto !important;
   gap: 14px !important;
@@ -15268,26 +15268,26 @@ body.is-history-active #history_list {
   background: linear-gradient(180deg, rgba(17,24,39,.96), rgba(9,13,23,.96)) !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .abpToolbarJob,
-#render_active_panel > #appBottomPanel.renderRuntimePanel .abpToolbarProgress,
-#render_active_panel > #appBottomPanel.renderRuntimePanel .abpToolbarRight {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .abpToolbarJob,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .abpToolbarProgress,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .abpToolbarRight {
   min-width: 0 !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .abpToolbarRight {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .abpToolbarRight {
   display: flex !important;
   align-items: center !important;
   gap: 10px !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcBottom.rcActiveQueue {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcBottom.rcActiveQueue {
   display: block !important;
   height: auto !important;
   min-height: 0 !important;
   overflow: visible !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcAQMain {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcAQMain {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) 340px !important;
   gap: 14px !important;
@@ -15298,14 +15298,14 @@ body.is-history-active #history_list {
   overflow: visible !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel,
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
   border: 1px solid rgba(255,255,255,.08) !important;
   border-radius: 12px !important;
   background: linear-gradient(180deg, rgba(17,24,39,.96), rgba(9,13,23,.96)) !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel {
   display: flex !important;
   flex-direction: column !important;
   align-self: stretch !important;
@@ -15316,12 +15316,12 @@ body.is-history-active #history_list {
   overflow: visible !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcPanelHeader {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcPanelHeader {
   border-bottom: 1px solid rgba(255,255,255,.06) !important;
   padding: 12px 14px !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid {
   display: grid !important;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
   gap: 12px !important;
@@ -15332,53 +15332,53 @@ body.is-history-active #history_list {
   overflow: visible !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid:has(> .rcQueueRow:only-child),
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid:has(> .emptyState:only-child) {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid:has(> .rcQueueRow:only-child),
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid:has(> .emptyState:only-child) {
   grid-template-columns: 1fr !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child,
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .emptyState:only-child {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .emptyState:only-child {
   grid-column: 1 / -1 !important;
   width: 100% !important;
   max-width: none !important;
   justify-self: stretch !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child {
   min-height: 132px !important;
   padding: 14px 14px 12px !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcQueueTop {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcQueueTop {
   align-items: flex-start !important;
   margin-bottom: 12px !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcClipLabel {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcClipLabel {
   font-size: 28px !important;
   line-height: 1.1 !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcQueueBottom {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcQueueBottom {
   margin-top: 10px !important;
   font-size: 12px !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcActiveCard {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcActiveCard {
   margin: 0 !important;
   border-radius: 10px !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcOutputPreview,
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcBenchmarkPanel,
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcComparePanel,
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueueGrid,
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcActiveCard {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcOutputPreview,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcBenchmarkPanel,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcComparePanel,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueueGrid,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcActiveCard {
   margin: 0 14px 14px !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
   display: flex !important;
   flex-direction: column !important;
   align-self: stretch !important;
@@ -15390,35 +15390,35 @@ body.is-history-active #history_list {
   overflow: hidden !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogStripHeader {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcLogStripHeader {
   padding: 12px 14px !important;
   border-bottom: 1px solid rgba(255,255,255,.06) !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogList,
-#render_active_panel > #appBottomPanel.renderRuntimePanel #event_log_render {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcLogList,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel #event_log_render {
   max-height: 620px !important;
   min-height: 420px !important;
   overflow-y: auto !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel.logsCollapsed .rcAQMain {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel.logsCollapsed .rcAQMain {
   grid-template-columns: minmax(0, 1fr) !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel.logsCollapsed .rcLogStrip.rcLogPanel {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel.logsCollapsed .rcLogStrip.rcLogPanel {
   display: none !important;
 }
 
-body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.renderRuntimePanel {
+body:not(.is-render-studio-active) .rs-center-stage > #appBottomPanel.renderRuntimePanel {
   display: none !important;
 }
 
 @media (max-width: 1280px) {
-  #render_active_panel > #appBottomPanel.renderRuntimePanel .rcAQMain {
+  .rs-center-stage > #appBottomPanel.renderRuntimePanel .rcAQMain {
     grid-template-columns: minmax(0, 1fr) !important;
   }
-  #render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
+  .rs-center-stage > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
     min-height: 280px !important;
   }
 }
@@ -16137,15 +16137,15 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
 
 
 /* Final override: render queue single-card analyze state */
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid:has(.rcQueueRow:only-child) {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid:has(.rcQueueRow:only-child) {
   grid-template-columns: minmax(0, 1fr) !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child {
   grid-column: 1 / -1 !important;
   width: 100% !important;
   max-width: none !important;
@@ -16153,7 +16153,7 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
   min-height: 136px !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcQueueTop {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel > .rcQueueGrid > .rcQueueRow:only-child .rcQueueTop {
   width: 100% !important;
 }
 
@@ -16163,13 +16163,13 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
   height: 100% !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel {
   flex: 1 1 auto !important;
   min-height: 0 !important;
   height: 100% !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcBottom.rcActiveQueue {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcBottom.rcActiveQueue {
   display: flex !important;
   flex-direction: column !important;
   flex: 1 1 auto !important;
@@ -16177,7 +16177,7 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
   height: 100% !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcAQMain {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcAQMain {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) 340px !important;
   gap: 14px !important;
@@ -16187,14 +16187,14 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
   align-items: stretch !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcQueuePanel,
-#render_active_panel > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
   align-self: stretch !important;
   min-height: 0 !important;
   height: 100% !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel #rc_active_card {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel #rc_active_card {
   display: grid !important;
   width: calc(100% - 28px) !important;
   max-width: none !important;
@@ -16202,13 +16202,13 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
   min-height: 136px !important;
 }
 
-#render_active_panel > #appBottomPanel.renderRuntimePanel #rc_active_card .rcActiveTop,
-#render_active_panel > #appBottomPanel.renderRuntimePanel #rc_active_card .rcCardHeader {
+.rs-center-stage > #appBottomPanel.renderRuntimePanel #rc_active_card .rcActiveTop,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel #rc_active_card .rcCardHeader {
   width: 100% !important;
 }
 
 @media (max-width: 1280px) {
-  #render_active_panel > #appBottomPanel.renderRuntimePanel .rcAQMain {
+  .rs-center-stage > #appBottomPanel.renderRuntimePanel .rcAQMain {
     grid-template-columns: minmax(0, 1fr) !important;
     grid-template-rows: minmax(0, 1fr) minmax(280px, 38%) !important;
   }
@@ -16440,6 +16440,306 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
   line-height: 1;
 }
 
+/* Product redesign phase: Render | Download | History IA.
+   Additive and scoped so existing render/editor IDs and JS contracts remain intact. */
+.brandStack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.productModePill {
+  color: #bfdbfe !important;
+  border-color: rgba(96,165,250,.26) !important;
+  background: rgba(37,99,235,.10) !important;
+}
+
+.sidebarSubtitle {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.setupIntro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid rgba(148,163,184,.12);
+}
+
+.setupEyebrow,
+.productKicker {
+  color: #7dd3fc;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.setupIntroTitle {
+  margin-top: 3px;
+  color: #f8fafc;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.setupIntroMeta {
+  max-width: 148px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.renderProductHome,
+.downloadProductWorkspace,
+.historyProductWorkspace {
+  gap: 14px !important;
+}
+
+.renderHeroPanel,
+.downloadWorkspaceHeader,
+.hwHeader {
+  border-radius: 12px !important;
+  border: 1px solid rgba(148,163,184,.15) !important;
+  background:
+    linear-gradient(135deg, rgba(15,23,42,.94), rgba(8,13,24,.96)),
+    radial-gradient(circle at 90% 10%, rgba(20,184,166,.14), transparent 30%) !important;
+  box-shadow: 0 18px 60px rgba(0,0,0,.24) !important;
+}
+
+.renderHeroPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, .7fr);
+  gap: 18px;
+  padding: 18px;
+}
+
+.renderHeroTitle {
+  margin: 4px 0 8px;
+  color: #f8fafc;
+  font-size: clamp(24px, 3vw, 38px);
+  line-height: 1.06;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.renderHeroText {
+  margin: 0;
+  max-width: 760px;
+  color: #a7b4c8;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.renderHeroStats {
+  display: grid;
+  gap: 10px;
+  align-content: center;
+}
+
+.heroStat {
+  min-width: 0;
+  border: 1px solid rgba(148,163,184,.13);
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: rgba(2,6,23,.34);
+}
+
+.heroStat span,
+.renderStepCard small,
+.downloadFlowStep span,
+.historySummaryCard span,
+.featureItem small,
+.downloadQueueHint {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.heroStat strong {
+  display: block;
+  margin-top: 3px;
+  color: #e2e8f0;
+  font-size: 13px;
+}
+
+.renderStepRail,
+.downloadFlowRail,
+.historySummaryRail {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.downloadFlowRail {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.historySummaryRail {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.renderStepCard,
+.downloadFlowStep,
+.historySummaryCard {
+  min-width: 0;
+  border: 1px solid rgba(148,163,184,.12);
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(8,13,24,.72);
+}
+
+.renderStepCard.isActive,
+.downloadFlowStep.isActive {
+  border-color: rgba(96,165,250,.36);
+  background: rgba(37,99,235,.12);
+}
+
+.renderStepNum {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-bottom: 9px;
+  border-radius: 999px;
+  color: #dbeafe;
+  background: rgba(37,99,235,.28);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.renderStepCard strong,
+.downloadFlowStep strong,
+.historySummaryCard strong {
+  display: block;
+  color: #e2e8f0;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.renderProductGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(260px, .75fr);
+  gap: 12px;
+}
+
+.renderProductGrid .renderHistoryCard {
+  grid-column: 1 / -1;
+}
+
+.featureList {
+  display: grid;
+  gap: 12px;
+}
+
+.featureItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.featureItem strong {
+  display: block;
+  color: #e2e8f0;
+  font-size: 13px;
+}
+
+.rhDot.amber {
+  background: #f59e0b;
+}
+
+.downloadHeaderCopy,
+.hwHeaderLeft {
+  min-width: 0;
+}
+
+.downloadWorkspaceTitle,
+.hwTitle {
+  margin-top: 4px;
+  color: #f8fafc !important;
+  font-size: clamp(22px, 2.6vw, 32px) !important;
+  line-height: 1.08 !important;
+  font-weight: 850 !important;
+  letter-spacing: 0 !important;
+}
+
+.downloadQueueHeader {
+  align-items: flex-start !important;
+}
+
+.downloadQueueHint {
+  margin-top: 4px;
+}
+
+.historyProductWorkspace .hwHeader {
+  padding: 18px !important;
+}
+
+@media (max-width: 1180px) {
+  .renderStepRail {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .renderHeroPanel,
+  .renderProductGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .brandSub,
+  .productModePill,
+  .sidebarSubtitle,
+  .setupIntroMeta {
+    display: none !important;
+  }
+
+  .setupIntro {
+    padding-bottom: 10px;
+  }
+
+  .setupIntroTitle {
+    font-size: 15px;
+  }
+
+  .renderHeroPanel,
+  .downloadWorkspaceHeader,
+  .historyProductWorkspace .hwHeader {
+    padding: 14px !important;
+    border-radius: 10px !important;
+  }
+
+  .renderHeroTitle,
+  .downloadWorkspaceTitle,
+  .hwTitle {
+    font-size: 22px !important;
+  }
+
+  .renderHeroStats,
+  .renderStepRail,
+  .downloadFlowRail,
+  .historySummaryRail {
+    grid-template-columns: 1fr;
+  }
+
+  .renderProductGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .downloadFlowStep,
+  .historySummaryCard,
+  .renderStepCard {
+    padding: 10px;
+  }
+}
+
 /* Render page responsive layout fixes.
    Keep this late so it wins over earlier phase-specific grid rules. */
 @media (max-width: 900px) {
@@ -16540,6 +16840,245 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
   }
 }
 
+/* Phase 6B.1: runtime UI now lives inside #render_active_panel.
+   #appBottomPanel stays in the DOM only as an invisible compatibility shell. */
+#appBottomPanel.renderCompatWrapper,
+#appBottomPanel.appBottomPanel,
+#appBottomPanel.rs-bottom-panel,
+.rs-center-stage > #appBottomPanel.renderCompatWrapper,
+.rs-center-stage > #appBottomPanel.renderRuntimePanel {
+  display: none !important;
+  visibility: hidden !important;
+  grid-column: auto !important;
+  grid-row: auto !important;
+  flex: 0 0 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+#render_active_panel:not(.hiddenView) {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  max-height: min(78vh, 760px) !important;
+  overflow: hidden !important;
+  padding: 12px !important;
+}
+
+#render_active_panel[data-render-state="complete"]:not(.hiddenView) {
+  max-height: min(44vh, 480px) !important;
+}
+
+#render_active_panel.renderStartPulse {
+  animation: renderStartPulse .5s ease-out;
+}
+
+#render_active_panel .renderRuntimeMount {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#render_active_panel .abpToolbar {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 1fr) auto !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+  padding: 12px 14px !important;
+  border: 1px solid rgba(148,163,184,.16) !important;
+  border-radius: 8px !important;
+  background: rgba(8,13,24,.78) !important;
+  box-shadow: none !important;
+}
+
+#render_active_panel .abpToolbarJob,
+#render_active_panel .abpToolbarProgress,
+#render_active_panel .abpToolbarRight {
+  min-width: 0 !important;
+}
+
+#render_active_panel .abpToolbarRight {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+}
+
+#render_active_panel .abpCollapseBtn {
+  display: none !important;
+}
+
+#render_active_panel #rc_bottom.rcBottom.rcActiveQueue {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: hidden !important;
+}
+
+#render_active_panel .rcAQMain {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 34%) !important;
+  gap: 12px !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+#render_active_panel .rcQueuePanel,
+#render_active_panel .rcLogStrip.rcLogPanel {
+  display: flex !important;
+  flex-direction: column !important;
+  align-self: stretch !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  border: 1px solid rgba(148,163,184,.14) !important;
+  border-radius: 8px !important;
+  background: rgba(7,12,22,.72) !important;
+  overflow: hidden !important;
+  box-shadow: none !important;
+  grid-column: auto !important;
+  grid-row: auto !important;
+}
+
+#render_active_panel .rcQueuePanel {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+#render_active_panel .rcPanelHeader,
+#render_active_panel .rcLogStripHeader {
+  flex: 0 0 auto !important;
+  padding: 10px 12px !important;
+  border-bottom: 1px solid rgba(148,163,184,.10) !important;
+}
+
+#render_active_panel #rc_active_card,
+#render_active_panel #rc_output_preview,
+#render_active_panel #rc_benchmark_panel,
+#render_active_panel #rc_compare_panel {
+  flex: 0 0 auto !important;
+  margin: 12px 12px 0 !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+#render_active_panel #rc_part_cards {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+  gap: 10px !important;
+  flex: 1 1 auto !important;
+  min-height: 96px !important;
+  max-height: none !important;
+  width: auto !important;
+  margin: 12px !important;
+  padding: 0 !important;
+  overflow: auto !important;
+  align-content: start !important;
+  grid-column: auto !important;
+  grid-row: auto !important;
+}
+
+#render_active_panel #rc_part_cards:has(> .rcQueueRow:only-child),
+#render_active_panel #rc_part_cards:has(> .emptyState:only-child) {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#render_active_panel .renderRuntimeErrorBlock:not(.hiddenView) {
+  display: block !important;
+  flex: 0 0 auto !important;
+  margin: 12px 12px 0 !important;
+  padding: 10px 12px !important;
+  border: 1px solid rgba(245,158,11,.28) !important;
+  border-radius: 8px !important;
+  background: rgba(245,158,11,.08) !important;
+}
+
+#render_active_panel .renderRuntimeErrorBlock #abp_retry_btn {
+  margin-top: 8px;
+}
+
+#render_active_panel #event_log_render {
+  flex: 1 1 auto !important;
+  min-height: 160px !important;
+  max-height: none !important;
+  height: auto !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+#render_active_panel.logsCollapsed .rcAQMain {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#render_active_panel.logsCollapsed .rcLogStrip.rcLogPanel {
+  display: none !important;
+}
+
+#render_completion_bar:not(.hiddenView),
+#render_output_panel:not(.hiddenView) {
+  position: relative;
+  z-index: 1;
+}
+
+#render_completion_bar:not(.hiddenView) {
+  flex: 0 0 auto !important;
+}
+
+#render_output_panel:not(.hiddenView) {
+  flex: 1 1 auto !important;
+  min-height: 240px !important;
+}
+
+@media (max-width: 1280px) {
+  #render_active_panel .rcAQMain {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  #render_active_panel #event_log_render {
+    min-height: 180px !important;
+    max-height: 260px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  #render_active_panel:not(.hiddenView) {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  #render_active_panel .abpToolbar {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  #render_active_panel .abpToolbarRight {
+    justify-content: flex-start !important;
+  }
+
+  #render_active_panel #rc_part_cards {
+    max-height: 320px !important;
+  }
+}
+
 @media (max-width: 520px) {
   .appTopBarBrand .brandTitle {
     max-width: 74px;
@@ -16598,12 +17137,6 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
     overflow: auto !important;
   }
 
-  #render_active_panel[data-render-state="complete"]:not(.hiddenView) > #appBottomPanel.renderRuntimePanel {
-    flex: 0 1 auto !important;
-    max-height: 168px;
-    overflow: auto !important;
-  }
-
   #render_completion_bar:not(.hiddenView) {
     flex: 0 0 auto;
     margin: 0 0 10px !important;
@@ -16656,5 +17189,242 @@ body:not(.is-render-studio-active) #render_active_panel > #appBottomPanel.render
   .sidebarScrollable #start_render_btn {
     min-height: 40px;
     height: 40px;
+  }
+}
+
+/* Phase 6A: runtime monitor is a sibling zone inside rs-center-stage. */
+@media (min-width: 901px) {
+  .mainArea.rs-center-panel:has(#render_active_panel:not(.hiddenView)) > .rs-center-stage {
+    overflow: hidden !important;
+  }
+
+  .rs-center-stage:has(#render_active_panel.hiddenView) > #appBottomPanel.renderRuntimePanel {
+    display: none !important;
+  }
+
+  #render_active_panel:not(.hiddenView) {
+    flex: 0 0 auto !important;
+    height: auto !important;
+    max-height: 240px !important;
+    overflow: auto !important;
+  }
+
+  #render_active_panel[data-render-state="complete"]:not(.hiddenView) {
+    max-height: 120px !important;
+  }
+
+  .rs-center-stage > #appBottomPanel.renderRuntimePanel {
+    display: flex !important;
+    flex: 1 1 280px !important;
+    min-height: 180px !important;
+    max-height: min(42vh, 360px) !important;
+    height: auto !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+
+  #render_active_panel[data-render-state="complete"]:not(.hiddenView) ~ #appBottomPanel.renderRuntimePanel {
+    flex: 0 0 120px !important;
+    min-height: 120px !important;
+    max-height: 120px !important;
+  }
+
+  .rs-center-stage > #appBottomPanel.renderRuntimePanel .rcBottom.rcActiveQueue,
+  .rs-center-stage > #appBottomPanel.renderRuntimePanel .rcAQMain {
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .rs-center-stage > #appBottomPanel.renderRuntimePanel .rcQueuePanel,
+  .rs-center-stage > #appBottomPanel.renderRuntimePanel .rcLogStrip.rcLogPanel {
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .rs-center-stage > #appBottomPanel.renderRuntimePanel #rc_part_cards {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: auto !important;
+    align-content: start !important;
+  }
+
+  .rs-center-stage > #appBottomPanel.renderRuntimePanel #event_log_render {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+}
+
+/* Phase 6B.1 final cascade guard.
+   The runtime monitor is no longer a fourth visible render panel. */
+@media (min-width: 901px) {
+  .rs-center-stage > #appBottomPanel,
+  .rs-center-stage > #appBottomPanel.renderRuntimePanel,
+  .rs-center-stage > #appBottomPanel.renderCompatWrapper {
+    display: none !important;
+    visibility: hidden !important;
+    flex: 0 0 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+
+  #render_active_panel:not(.hiddenView) {
+    flex: 0 1 auto !important;
+    height: auto !important;
+    max-height: min(78vh, 760px) !important;
+    overflow: auto !important;
+  }
+
+  #render_active_panel[data-render-state="complete"]:not(.hiddenView) {
+    max-height: min(44vh, 480px) !important;
+  }
+
+  #render_active_panel .renderRuntimeMount {
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  #render_active_panel #rc_bottom {
+    min-height: 0 !important;
+    overflow: visible !important;
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+
+  #render_active_panel .rcAQMain {
+    min-height: 280px !important;
+    overflow: hidden !important;
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+
+  #render_active_panel .rcLogStrip.rcLogPanel {
+    min-height: 0 !important;
+    overflow: hidden !important;
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+
+  #render_active_panel .rcQueuePanel {
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+
+  #render_active_panel #rc_part_cards {
+    min-height: 96px !important;
+    overflow: auto !important;
+  }
+
+  #render_active_panel #event_log_render {
+    min-height: 160px !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+}
+
+/* Product redesign final cascade guard. Keep this after legacy phase overrides. */
+.renderProductHome .renderHomeCard,
+.renderProductHome .renderHeroPanel,
+.downloadProductWorkspace .downloadWorkspaceHeader,
+.downloadProductWorkspace .downloadQueuePanel,
+.historyProductWorkspace .hwHeader,
+.historyProductWorkspace .historySummaryCard {
+  border-radius: 12px !important;
+}
+
+.renderProductHome .renderStepRail,
+.downloadProductWorkspace .downloadFlowRail,
+.historyProductWorkspace .historySummaryRail {
+  width: 100%;
+}
+
+.renderProductHome .renderStepCard,
+.downloadProductWorkspace .downloadFlowStep,
+.historyProductWorkspace .historySummaryCard {
+  min-width: 0 !important;
+}
+
+.renderProductHome .renderHeroTitle,
+.downloadProductWorkspace .downloadWorkspaceTitle,
+.historyProductWorkspace .hwTitle {
+  letter-spacing: 0 !important;
+}
+
+@media (max-width: 900px) {
+  .renderProductHome .renderHeroPanel,
+  .downloadProductWorkspace .downloadWorkspaceHeader,
+  .historyProductWorkspace .hwHeader {
+    padding: 14px !important;
+  }
+
+  .renderProductHome .renderStepRail,
+  .downloadProductWorkspace .downloadFlowRail,
+  .historyProductWorkspace .historySummaryRail {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* Phase 6B.1 terminal override: keep only the three render panels visible. */
+.rs-center-stage > #appBottomPanel {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+@media (min-width: 901px) {
+  #render_active_panel:not(.hiddenView) {
+    max-height: min(78vh, 760px) !important;
+    overflow: auto !important;
+  }
+
+  #render_active_panel[data-render-state="complete"]:not(.hiddenView) {
+    max-height: min(44vh, 480px) !important;
+  }
+
+  #render_active_panel .renderRuntimeMount {
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+  }
+
+  #render_active_panel #rc_bottom.rcBottom.rcActiveQueue {
+    flex: 0 0 auto !important;
+    height: auto !important;
+    min-height: 300px !important;
+    overflow: visible !important;
+  }
+
+  #render_active_panel .rcAQMain {
+    min-height: 300px !important;
   }
 }

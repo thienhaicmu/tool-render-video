@@ -24,13 +24,29 @@ const RENDER_MONITOR_STALL_MS = 45000;
 let _queueStatusTimer = null;
 
 function mountRenderRuntimePanel() {
+  const runtimeMount = qs('render_runtime_mount');
   const activePanel = qs('render_active_panel');
   const bottomPanel = qs('appBottomPanel');
-  if (!activePanel || !bottomPanel) return;
+  if (!runtimeMount || !activePanel || !bottomPanel) return;
   if (bottomPanel.dataset.runtimeMounted === '1') return;
   bottomPanel.dataset.runtimeMounted = '1';
-  bottomPanel.classList.add('renderRuntimePanel');
-  activePanel.appendChild(bottomPanel);
+  bottomPanel.classList.add('renderCompatWrapper');
+  bottomPanel.setAttribute('aria-hidden', 'true');
+
+  const toolbar = bottomPanel.querySelector('.abpToolbar');
+  const runtimeBody = qs('rc_bottom');
+  if (toolbar && toolbar.parentElement !== runtimeMount) runtimeMount.appendChild(toolbar);
+  if (runtimeBody && runtimeBody.parentElement !== runtimeMount) runtimeMount.appendChild(runtimeBody);
+
+  const queuePanel = runtimeMount.querySelector('.rcQueuePanel');
+  const partCards = qs('rc_part_cards');
+  const errorBlock = qs('abp_error_block');
+  const retryBtn = qs('abp_retry_btn');
+  if (queuePanel && errorBlock && errorBlock.parentElement !== queuePanel) {
+    errorBlock.classList.add('renderRuntimeErrorBlock', 'hiddenView');
+    if (retryBtn && retryBtn.parentElement !== errorBlock) errorBlock.appendChild(retryBtn);
+    queuePanel.insertBefore(errorBlock, partCards || null);
+  }
 }
 
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
@@ -2604,9 +2620,11 @@ async function copyRenderDiagnostics() {
 }
 
 function setRenderLogsCollapsed(collapsed, options = {}) {
-  const panel = qs('appBottomPanel');
+  const panel = qs('render_active_panel') || qs('appBottomPanel');
   if (!panel) return;
   panel.classList.toggle('logsCollapsed', !!collapsed);
+  const compatPanel = qs('appBottomPanel');
+  if (compatPanel && compatPanel !== panel) compatPanel.classList.toggle('logsCollapsed', !!collapsed);
   const btn = qs('rc_toggle_logs_btn') || document.querySelector('.abpLogToggle');
   if (btn) btn.textContent = collapsed ? 'View logs' : 'Hide logs';
   const toggleBtn = qs('rc_log_panel_btn');
@@ -2621,7 +2639,7 @@ function maybeAutoCollapseRenderLogs() {
 }
 
 function toggleRenderLogs() {
-  const panel = qs('appBottomPanel');
+  const panel = qs('render_active_panel') || qs('appBottomPanel');
   if (!panel) return;
   setRenderLogsCollapsed(!panel.classList.contains('logsCollapsed'), { fromUser: true });
 }
@@ -2879,7 +2897,7 @@ function setRenderActionBusy(isBusy){
     updateRenderMainState({ status: 'running', stage: 'queued', progress_percent: _jobDisplayPct || 0 }, computeProgressSummary([]), []);
     focusBottomPanel();
     maybeAutoCollapseRenderLogs();
-    const panel = qs('appBottomPanel');
+    const panel = qs('render_active_panel') || qs('appBottomPanel');
     if (panel) {
       panel.classList.remove('renderStartPulse');
       void panel.offsetWidth;
