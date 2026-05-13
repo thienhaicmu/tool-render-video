@@ -35,6 +35,7 @@ from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin, _summarize_f
 from app.services.text_overlay import normalize_text_layers, MAX_TEXT_LAYERS
 from app.services.tts_service import generate_narration_mp3
 from app.services.audio_mix_service import mix_narration_audio
+from app.services.audio_cleanup_adapters import cleanup_audio_with_adapter
 from app.services.translation_service import translate_srt_file
 from app.services.remotion_adapter import generate_hook_intro, prepend_intro_clip
 from app.ai.visibility.ai_visibility_summary import attach_ai_visibility_summaries
@@ -211,6 +212,68 @@ def _maybe_prepend_remotion_hook_intro(
     finally:
         _safe_unlink(intro_path)
         _safe_unlink(concat_path)
+
+
+def _maybe_cleanup_narration_audio(
+    narration_audio_path: str,
+    payload: RenderRequest,
+    *,
+    effective_channel: str,
+    job_id: str,
+    part_no: int | None = None,
+    source: str = "manual",
+) -> str:
+    engine = str(getattr(payload, "audio_cleanup_engine", "none") or "none").strip().lower()
+    if engine == "none":
+        return narration_audio_path
+
+    input_path = Path(narration_audio_path)
+    cleaned_path = input_path.with_name(f"{input_path.stem}.cleaned{input_path.suffix}")
+    context = f"part_no={part_no} " if part_no is not None else ""
+    _job_log(
+        effective_channel,
+        job_id,
+        f"audio_cleanup_requested {context}source={source} audio_cleanup_engine={engine}",
+    )
+    try:
+        result = cleanup_audio_with_adapter(
+            str(input_path),
+            str(cleaned_path),
+            engine=engine,
+            logger=logger,
+        )
+    except Exception as exc:
+        _job_log(
+            effective_channel,
+            job_id,
+            f"audio_cleanup_failed {context}source={source} audio_cleanup_engine={engine} "
+            f"audio_cleanup_warning={type(exc).__name__}",
+            kind="warning",
+        )
+        _safe_unlink(cleaned_path)
+        return narration_audio_path
+
+    candidate = Path(result.output_path) if result.applied and result.output_path else None
+    if candidate and candidate.exists() and candidate.stat().st_size > 0:
+        _job_log(
+            effective_channel,
+            job_id,
+            f"audio_cleanup_applied {context}source={source} audio_cleanup_engine={engine} "
+            f"elapsed_ms={result.elapsed_ms}",
+        )
+        return str(candidate)
+
+    warning = ",".join(result.warnings) if result.warnings else "audio_cleanup_not_applied"
+    _job_log(
+        effective_channel,
+        job_id,
+        f"audio_cleanup_failed {context}source={source} audio_cleanup_engine={engine} "
+        f"audio_cleanup_warning={warning}",
+        kind="warning",
+    )
+    if cleaned_path != input_path:
+        _safe_unlink(cleaned_path)
+    return narration_audio_path
 
 
 def _first_score(seg: dict, names: list[str], default: float = 50.0) -> float:
@@ -1479,6 +1542,13 @@ def run_render_pipeline(
                     step="voice.tts",
                     context={"audio_path": str(voice_audio_path), "voice_text_length": len(str(payload.voice_text or ""))},
                 )
+                voice_audio_path = _maybe_cleanup_narration_audio(
+                    str(voice_audio_path),
+                    payload,
+                    effective_channel=effective_channel,
+                    job_id=job_id,
+                    source="manual",
+                )
             except Exception as voice_exc:
                 voice_audio_path = None
                 _voice_tts_failed = True
@@ -2444,6 +2514,14 @@ def run_render_pipeline(
                                 step="voice.tts",
                                 context={"part_no": idx, "audio_path": _part_subtitle_voice_path, "voice_text_length": len(_part_narration_text)},
                             )
+                            _part_subtitle_voice_path = _maybe_cleanup_narration_audio(
+                                str(_part_subtitle_voice_path),
+                                payload,
+                                effective_channel=effective_channel,
+                                job_id=job_id,
+                                part_no=idx,
+                                source="subtitle",
+                            )
                         except Exception as _part_tts_exc:
                             _part_subtitle_voice_path = None
                             _job_log(effective_channel, job_id, f"voice_part_tts_failed part_no={idx}: {_part_tts_exc}", kind="error")
@@ -2524,6 +2602,14 @@ def run_render_pipeline(
                                 message=f"AI voice from translated subtitle generated (part {idx})",
                                 step="voice.tts",
                                 context={"part_no": idx, "audio_path": _part_subtitle_voice_path, "voice_text_length": len(_part_narration_text)},
+                            )
+                            _part_subtitle_voice_path = _maybe_cleanup_narration_audio(
+                                str(_part_subtitle_voice_path),
+                                payload,
+                                effective_channel=effective_channel,
+                                job_id=job_id,
+                                part_no=idx,
+                                source="translated_subtitle",
                             )
                         except Exception as _part_tts_exc:
                             _part_subtitle_voice_path = None
