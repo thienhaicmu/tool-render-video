@@ -1,138 +1,210 @@
-﻿# Subtitle Translation
+# Subtitle and Translation System
 
-## Scope
-This document explains how subtitle translation works in the Render Studio render pipeline:
-- Whisper transcription
-- SRT slicing per clip
-- Translation with `deep-translator` (`GoogleTranslator`)
-- Translation result states (`applied` / `partial` / `failed` / `not used`)
-- `translated_subtitle` narration mode
+## Subtitle System Role
 
-## End-to-End Flow
+**Stability marker: Stable contract**
 
-### 1. Full transcription (once per source)
-When subtitles are enabled, the pipeline transcribes the full source video one time:
-- Function: `transcribe_to_srt(...)`
-- Output: `*_full.srt`
-- Whisper model comes from render profile tuning (`auto` resolves by profile)
+Subtitles are part of the render intelligence layer, not just text burn-in. They affect creator-perceived quality, market fit, hook impact, accessibility, voice narration, and output ranking context.
 
-### 2. Per-part SRT slicing
-For each selected segment:
-- Function: `slice_srt_by_time(full_srt, part_srt, start, end, rebase_to_zero=True)`
-- Output: `*_part_XXX.srt`
+Primary file:
 
-This avoids re-transcribing each part.
+- `backend/app/services/subtitle_engine.py`
 
-### 3. Translation (optional)
-If `subtitle_translate_enabled=true`:
-- Function: `translate_srt_file(input_srt, output_srt, target_language)`
-- Output file pattern: `*_part_XXX.<lang>.srt` (example: `part_001.vi.srt`)
-- Supported target languages in schema: `vi`, `en`, `ja`
+Related files:
 
-Implementation details:
-- Service uses `deep_translator.GoogleTranslator`
-- Long text is chunked at ~4500 chars
-- Translation is block-based (SRT block by block)
-- If a block fails, original text is kept for that block (not dropped)
+- `backend/app/services/translation_service.py`
+- `backend/app/services/market_subtitle_policy.py`
+- `backend/app/ai/subtitles/**`
+- `backend/app/ai/creator_subtitle/**`
+- `backend/app/orchestration/render_pipeline.py`
 
-### 4. ASS generation and burn-in
-ASS is generated from:
-- translated SRT when available
-- otherwise original sliced SRT
+## Full Subtitle Workflow
 
-Then FFmpeg burns ASS into each part.
+**Stability marker: Stable contract**
 
-## Translation State Model
+```text
+source video
+  -> full Whisper transcription
+  -> full SRT
+  -> per-part SRT slice
+  -> rebase timing to zero
+  -> optional translation
+  -> optional subtitle edits
+  -> optional market hook/line-break policy
+  -> optional keyword/emphasis markers
+  -> ASS generation
+  -> FFmpeg subtitle burn
+```
 
-At job end, pipeline writes `subtitle_translate_summary` into `jobs.result_json`:
+## Full SRT Generation
+
+**Stability marker: Semi-stable implementation**
+
+The pipeline transcribes the full source once when subtitles are enabled and at least one selected part needs subtitles.
+
+`transcribe_to_srt()` uses Whisper and writes a full-source SRT. The render profile can influence the model selection.
+
+If the source has no audio stream, subtitle generation should be skipped safely.
+
+## Per-Part SRT Slicing and Rebasing
+
+**Stability marker: Stable contract**
+
+Each selected segment gets a sliced SRT:
+
+```text
+full_srt + source start/end
+  -> part_srt with timestamps rebased to 00:00:00,000
+```
+
+This is critical because FFmpeg burns subtitles onto each raw cut, whose local time starts at zero.
+
+### What must not break: SRT timing
+
+- Preserve `rebase_to_zero=True` behavior.
+- Do not shift subtitles with source-time timestamps in per-part files.
+- Do not re-transcribe each part unless explicitly changing architecture.
+- Preserve playback-speed handling assumptions.
+
+## Subtitle Translation Flow
+
+**Stability marker: Semi-stable implementation**
+
+If `subtitle_translate_enabled=true`, `translate_srt_file()` translates each part SRT to the target language.
+
+Supported target language values are currently:
+
+- `vi`
+- `en`
+- `ja`
+
+Translation is block-based. If a block fails, original text is kept for that block. This is intentional; render should continue with partial translation rather than dropping subtitles.
+
+Result summary in `jobs.result_json`:
 
 - `not used`
 - `applied`
 - `partial`
 - `failed`
 
-Decision logic:
-- `not used`: translation toggle off, or no part attempted translation
-- `applied`: all attempted parts translated cleanly (no failed blocks/parts)
-- `failed`: all attempted parts failed translation
-- `partial`: mixed result (some clean, some failed blocks, or some failed parts)
+## ASS Generation
 
-Internal tracking lists in pipeline:
-- `_sub_translate_attempts`
-- `_sub_translate_clean`
-- `_sub_translate_partial`
-- `_sub_translate_failed_parts`
+**Stability marker: Stable contract**
 
-## Event and Log Signals
+ASS files are generated from translated SRT when available, otherwise from original sliced SRT.
 
-Per part translation emits events/logs such as:
-- `subtitle_translate_started`
-- `subtitle_translate_completed`
-- `subtitle_translate_block_failed` (warning per failed block)
-- `subtitle_translate_failed`
+Current ASS generation paths include:
 
-These appear in:
-- channel job log (`channels/<channel>/logs/<job_id>.log`)
-- structured app logs (`data/logs/app.log`)
+- bounce-style subtitles
+- karaoke-style subtitles
 
-## Narration Interaction: `translated_subtitle`
+ASS generation must preserve browser/output readability, safe margins, style aliases, and fallback behavior.
 
-When voice is enabled and `voice_source="translated_subtitle"`:
+## Bounce and Karaoke Styles
 
-1. Pipeline prefers translated SRT for narration text.
-2. Fallback chain is:
-   - translated part SRT
-   - original part SRT
-   - temporary slice from full SRT
-3. If no usable SRT text exists, narration for that part is skipped.
+**Stability marker: Semi-stable implementation**
 
-Important behavior:
-- Render still continues when part-level TTS fails.
-- Voice failures are logged with `voice_failed` (`error_code: VOICE001`).
+Known subtitle styles include modern presets such as:
 
-## Request Fields (Editor -> Render)
+- `pro_karaoke`
+- `tiktok_bounce_v1`
+- `bold_cap`
+- `story_clean_01`
+- `viral_bold`
+- `clean_pro`
+- `boxed_caption`
 
-Relevant payload fields:
+Karaoke depends on word-level timing. If the SRT is not suitable for karaoke, the engine can fall back to bounce-style rendering.
 
-```json
-{
-  "add_subtitle": true,
-  "subtitle_translate_enabled": true,
-  "subtitle_target_language": "en",
-  "voice_enabled": true,
-  "voice_source": "translated_subtitle",
-  "voice_language": "en-US"
-}
+### What must not break: subtitle styles
+
+- Preserve legacy aliases. Subtitle style aliases are backward compatibility contracts, not cleanup targets.
+- Preserve karaoke fallback.
+- Preserve ASS escaping and marker handling.
+- Preserve readability across vertical formats.
+
+## Market Subtitle Policy
+
+**Stability marker: Semi-stable implementation**
+
+`market_subtitle_policy.py` contains market-specific behavior for US/EU/JP style differences.
+
+It can affect:
+
+- line breaks
+- keyword emphasis
+- hook wording style
+- reading density
+- market fit metadata
+
+Do not make market subtitle behavior global without preserving market-specific defaults.
+
+## Hook Subtitle Formatting
+
+**Stability marker: Semi-stable implementation**
+
+Hook subtitle formatting can emphasize the first subtitle blocks for impact. It is connected to market viral behavior and hook application in the render pipeline.
+
+This is creator-facing quality. It should improve perceived hook strength without corrupting text or timing.
+
+## Keyword Highlighting and Emphasis
+
+**Stability marker: Experimental / needs verification**
+
+Keyword highlighting and emphasis markers are used to make important words stand out. AI subtitle execution can also produce metadata hints such as density, emotion style, emphasis strength, and keyword focus.
+
+These hints should remain safe:
+
+- no timing mutation unless explicitly implemented and tested
+- no transcript rewrite as a side effect
+- no unsafe ASS override injection
+
+## Subtitle-Safe Regions
+
+**Stability marker: Stable contract**
+
+Subtitle placement interacts with:
+
+- text overlays
+- motion crop
+- vertical aspect ratios
+- safe bottom region
+- creator readability
+
+Do not treat subtitle placement as isolated. Changes can break overlays, crop framing, and perceived quality.
+
+## Narration Interaction
+
+**Stability marker: Stable contract**
+
+Voice mode `translated_subtitle` depends on subtitle translation output.
+
+Fallback chain:
+
+```text
+translated part SRT
+  -> original part SRT
+  -> temporary slice from full SRT
+  -> skip narration for that part
 ```
 
-## Practical Outcomes
+Voice failures should not remove subtitles or fail otherwise valid video output.
 
-### Case A: Translation off
-- Subtitle is generated from original SRT
-- `subtitle_translate_summary = "not used"`
+## Known Limitations
 
-### Case B: Translation on, all good
-- Part subtitles use translated SRT
-- `subtitle_translate_summary = "applied"`
+**Stability marker: Semi-stable implementation**
 
-### Case C: Some blocks fail in some parts
-- Failed blocks keep original text
-- Render still completes
-- `subtitle_translate_summary = "partial"`
+- Translation quality depends on the translation service and source text.
+- Mixed-language subtitles can occur when block-level fallback keeps original text.
+- Karaoke quality depends on word-level timing.
+- Premium subtitle feel requires more than valid ASS: typography, motion rhythm, contrast, and consistency matter.
+- Subtitle AI metadata is richer than the currently visible UI.
 
-### Case D: All part translations fail
-- ASS falls back to original part SRT
-- Render may still complete successfully
-- `subtitle_translate_summary = "failed"`
+## What Should Not Be Documented
 
-## Troubleshooting Quick List
+**Stability marker: Stable contract**
 
-- Translation not happening:
-  - Check `subtitle_translate_enabled`
-  - Check `subtitle_target_language` (`vi`/`en`/`ja`)
-- Narration from translated subtitles missing:
-  - Check `voice_source=translated_subtitle`
-  - Ensure translated SRT exists per part
-  - Check fallback logs (`VOICE_TRANSLATED_SUBTITLE_MISSING`)
-- Mixed language lines in subtitle output:
-  - Expected when block-level fallback keeps original text on translation errors
+- Do not claim translation is perfect.
+- Do not document exact visual tuning values as permanent.
+- Do not promise every AI subtitle hint changes final output.
+- Do not remove historical warnings about fallback and partial translation.

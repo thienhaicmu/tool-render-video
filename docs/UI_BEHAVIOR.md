@@ -1,143 +1,282 @@
-﻿# UI Behavior
+# UI Behavior
 
-## Scope
-This document covers runtime UI behavior for rendering:
-- job state transitions (`queued -> running -> completed/failed/interrupted`)
-- WebSocket stream + HTTP polling fallback
-- completion bar behavior
-- Back to Editor flow
-- editor session usage (`_ev.sessionId`)
+## UI Product Role
 
-## Render State Lifecycle
+**Stability marker: Semi-stable implementation**
 
-## Backend status values
-Render jobs are persisted in SQLite and exposed via `/api/jobs/*`.
+The UI is a static frontend for an AI rendering intelligence platform. It should help users prepare sources, refine render settings, monitor jobs, inspect outputs, and understand why AI-selected clips are useful.
 
-Primary statuses:
-- `queued`
-- `running`
-- `completed`
-- `failed`
-- `interrupted`
+The current UI behaves like a hybrid:
 
-Related UI/summary status:
-- `partial` (computed in history when completed parts + failed parts both exist)
+- creator productivity dashboard
+- lightweight editor
+- render monitor
+- output gallery
+- AI insight surface
 
-## Typical state flow
-1. User submits render from Editor.
-2. Job starts at `queued`.
-3. Worker updates to `running`.
-4. Terminal state:
-   - `completed` (full or partial clip success)
-   - `failed`
-   - `interrupted` (startup recovery marks unfinished jobs)
+It is not a full CapCut-style timeline editor. Manual controls are refinement tools around AI-assisted clip generation.
 
-## Stage flow shown in monitor
-Stage labels map from backend stage values:
-- `queued`, `starting`, `downloading`
-- `scene_detection`
-- `segment_building`
-- `transcribing_full`
-- `rendering` / `rendering_parallel`
-- `writing_report`
-- `done` / `failed`
+## Navigation Structure
 
-## Real-Time Updates
+**Stability marker: Stable contract**
 
-### Primary channel: WebSocket
-Frontend first opens:
-- `GET ws /api/jobs/{job_id}/ws`
+Primary views are managed by `backend/static/js/nav.js`.
 
-Server pushes every ~500 ms:
-```json
-{
-  "job": {...},
-  "parts": [...],
-  "summary": {
-    "total_parts": 8,
-    "completed_parts": 3,
-    "failed_parts": 1,
-    "processing_parts": 2,
-    "pending_parts": 2,
-    "overall_progress_percent": 41.3,
-    "stuck_parts": []
-  }
-}
-```
+Known views:
 
-### Fallback channel: HTTP polling
-If WebSocket errors, UI degrades gracefully to polling:
-- `GET /api/jobs/{job_id}`
-- `GET /api/jobs/{job_id}/parts`
-- poll interval from globals: `2500 ms`
+- Render
+- Download
+- History
+- Settings
+- Editor
 
-This fallback is always available even if WS is blocked.
+The Render setup card, Download setup card, editor workspace, output panel, bottom monitor, and inspector are toggled by view state and CSS classes. Do not move or rename these panels without updating all callers.
 
-## Progress and Completion Bars
+## State Ownership
 
-## Active progress bars
-UI maintains smooth progress animation:
-- backend value is source-of-truth
-- display value interpolates for visual smoothness
+**Stability marker: Semi-stable implementation**
 
-During clip rendering:
-- part aggregate is used to refine overall progress
-- rendering segment maps roughly to 30-90% of job bar
-- terminal states snap progress to 100%
+Shared frontend state is global and fragile.
 
-## Completion bar
-When job reaches `completed`:
-- completion bar is shown (`render_completion_bar`)
-- main message example:
-  - `Render complete - X clips ready`
-  - or `Render complete - X clips completed, Y failed`
-- summary line includes output location and optional voice/subtitle translation summary
+Important globals live in `backend/static/js/globals.js`, including:
 
-When job is `failed`/`interrupted`:
-- completion bar is hidden
+- `currentJobId`
+- `pollTimer`
+- `pollIntervalMs`
+- `activeJobStartedAt`
+- `jobWs`
+- `currentView`
+- selected source/output paths
 
-## Back to Editor Flow
+Editor state lives mostly in `_ev` in `backend/static/js/editor-view.js`.
 
-Function: `backToEditorFromCompletion()`
+Render output and monitor state is derived from backend job/part responses but also cached in DOM state, localStorage history, and current preview selection.
 
-Behavior:
-1. Reads `(_ev && _ev.sessionId)`.
-2. If missing session:
-   - shows error toast/event (`Editor session is no longer available...`)
-   - does not reopen editor
-3. If session exists:
-   - builds a minimal session payload (`session_id`, `duration`, `title`, `export_dir`)
-   - calls `openEditorView_withSession(...)`
-   - reuses existing preview session (no re-download)
+### What must not break: UI state
 
-## Editor Session Model (`_ev`)
+- Do not introduce competing sources of truth for `currentJobId`.
+- Do not stop polling unless WebSocket replacement is fully verified.
+- Do not clear output gallery/history state during normal view switches.
+- Do not break `_ev.sessionId` and editor pending payload flow.
 
-Editor runtime object stores:
-- `_ev.sessionId`
-- `_ev.exportDir`
-- `_ev.duration`
-- `_ev.pendingPayload`
-- `_ev.sourceMode`, `_ev.sourceUrl`
+## Render View
 
-Session creation path:
-- `POST /api/render/prepare-source`
-- returns `session_id`, `duration`, `title`, `export_dir`
+**Stability marker: Stable contract**
 
-Preview paths:
-- `GET /api/render/preview-video/{session_id}`
-- `GET /api/render/preview-transcript/{session_id}` (Whisper tiny transcript for live subtitle preview)
+The Render view starts from source setup and output selection. For YouTube input, the frontend prepares the source first through `/api/render/prepare-source`, then opens the editor with a session. Local input also goes through preview/session setup.
 
-Session failure behavior:
-- if session missing/expired, render submission with `edit_session_id` fails clearly
-- UI prompts user to re-open editor from source prep
+Render submission eventually posts to:
 
-## Stuck Detection and Monitor Signals
+- `/api/render/process`
+- `/api/render/process/batch` for batch YouTube render jobs
 
-Backend summary marks active parts as stuck when no DB update crosses threshold.
-UI uses this to display diagnostics badges and stale-progress hints.
+Important setup IDs include:
 
-## Practical UX Notes
+- `source_mode`
+- `youtube_url`
+- `source_video_path`
+- `local_video_file_picker`
+- `manual_output_dir`
+- `render_output_dir`
+- `start_render_btn`
+- `resume_job_id`
 
-- `queued` and early stages can show "waiting" animation state if backend progress is static.
-- `interrupted` is treated as terminal in frontend monitor logic.
-- history cards compute `completed` / `partial` / `failed` from part outcomes, not just base status.
+These IDs are compatibility contracts.
+
+## Download View
+
+**Stability marker: Stable contract**
+
+The Download view is separate from render source preparation. It submits standalone download jobs through `/api/download/process` and tracks per-item status.
+
+Do not conflate Download tab jobs with render preview sessions. They share downloader infrastructure, but they serve different workflows.
+
+## History View
+
+**Stability marker: Semi-stable implementation**
+
+History combines backend job history and local UI state. It displays completed, partial, failed, interrupted, and recent render states. Some render cards can reopen output panels or rerun jobs.
+
+History state depends on `jobs.result_json`, `job_parts`, output paths, and status normalization.
+
+## Editor View
+
+**Stability marker: Semi-stable implementation**
+
+The editor is driven by `_ev` in `editor-view.js`.
+
+It manages:
+
+- preview session ID
+- preview video
+- trim range
+- volume
+- subtitle preview/edit state
+- voice settings
+- text layers
+- render payload assembly
+- output folder
+
+Important editor IDs include:
+
+- `view_editor`
+- `evVideo`
+- `evSubOverlay`
+- `evTextLayersOverlay`
+- `evStartBtn`
+- `evVoiceEnable`
+- `evVoiceSource`
+- `evSubTranslate`
+
+Do not rename editor DOM IDs without updating `editor-view.js`.
+
+## Center Preview Behavior
+
+**Stability marker: Semi-stable implementation**
+
+The center preview area is used for editor preview and rendered output preview.
+
+Rendered clip preview uses job/part media endpoints, not raw filesystem paths. The output gallery can load a selected clip into the center preview and may attempt muted autoplay after media readiness events.
+
+Important IDs include:
+
+- `cs_preview_area`
+- `cs_preview_video`
+- `cs_preview_download`
+
+## Output Gallery Behavior
+
+**Stability marker: Stable contract**
+
+Output gallery logic lives mostly in `backend/static/js/render-ui.js`.
+
+It reads job result JSON and part rows to display:
+
+- rendered clips
+- part numbers
+- scores
+- best clip metadata
+- download/preview links
+- partial failures
+- AI insights when available
+
+Important IDs:
+
+- `render_output_panel`
+- `render_output_panel_title`
+- `render_output_badge`
+- `render_output_path`
+- `render_output_list`
+
+### What must not break: output gallery
+
+- Preserve media stream URLs for job parts.
+- Preserve ranking field aliases from `result_json`.
+- Preserve display of partial success and failed parts.
+- Preserve download links.
+- Preserve output panel visibility behavior across view changes.
+
+## Job Progress Monitor
+
+**Stability marker: Stable contract**
+
+The frontend uses both polling and WebSocket:
+
+- Polling starts immediately after job submission.
+- WebSocket connects to `/api/jobs/{job_id}/ws` when possible.
+- If WebSocket fails, polling continues.
+
+Backend state remains the source of truth. UI smoothing is display-only.
+
+Important monitor IDs include:
+
+- `render_active_panel`
+- `render_active_state`
+- `render_completion_bar`
+- `render_monitor_header`
+- `render_monitor_progress`
+- `rc_status`
+- `rc_stage`
+- `rc_active_badge`
+
+## Logs and Diagnostics
+
+**Stability marker: Stable contract**
+
+Render logs appear in `event_log_render`. They combine frontend events, backend job logs, and structured progress messages.
+
+Important ID:
+
+- `event_log_render`
+
+Do not remove logs. They are part of the support and recovery workflow, especially for FFmpeg, download, subtitle, TTS, and partial-failure diagnosis.
+
+## AI Visibility in the UI
+
+**Stability marker: Experimental / needs verification**
+
+The backend contains more AI intelligence than the UI currently exposes.
+
+Hidden AI value includes:
+
+- ranking reasons
+- hook strength
+- retention fit
+- market fit
+- subtitle strategy
+- camera strategy
+- creator intelligence
+- quality evaluation
+- explainability
+
+The UI should increasingly help users understand why a clip is best, why a subtitle/camera/market strategy was chosen, and what quality warnings mean. This is product direction, not a mandate to redesign the UI in this doc.
+
+## DOM ID Compatibility Contract
+
+**Stability marker: Stable contract**
+
+DOM IDs are effectively API contracts for this static frontend.
+
+High-risk ID groups:
+
+- Render setup: `source_mode`, `youtube_url`, `manual_output_dir`, `start_render_btn`.
+- Editor: `evVideo`, `evStartBtn`, `evVoice*`, `evSub*`, text layer controls.
+- Monitor: `render_active_panel`, `render_monitor_*`, `rc_*`.
+- Output: `render_output_panel`, `render_output_list`, `cs_preview_video`.
+- Logs: `event_log_render`.
+
+Before changing IDs, search all `backend/static/js/*.js`, `backend/static/index.html`, and `backend/static/css/app.css`.
+
+UI contract tests: Needs verification. Avoid DOM/state refactors until critical render setup, editor session, monitor, output gallery, and log contracts are verified by focused tests or manual checks.
+
+## UI Fragility and Ownership Boundaries
+
+**Stability marker: Semi-stable implementation**
+
+The UI is fragile because:
+
+- state is global
+- `render-ui.js` and `editor-view.js` are large
+- `app.css` is very large and includes many late-phase overrides
+- behavior is split between DOM state, CSS state selectors, localStorage, polling responses, WebSocket responses, and backend result JSON
+- many features share the same page instead of isolated components
+
+This explains why small UI edits can cause unrelated regressions.
+
+### What must not break: UI ownership
+
+- `render-engine.js` owns submission/polling/WebSocket setup.
+- `render-ui.js` owns monitor/output/log rendering.
+- `editor-view.js` owns editor session and final payload assembly.
+- `nav.js` owns top-level view switching.
+- `index.html` owns stable IDs and layout anchors.
+- `app.css` owns visual state and layout.
+
+## What Should Not Be Documented
+
+**Stability marker: Stable contract**
+
+- Do not document every CSS selector.
+- Do not promise a redesign.
+- Do not describe unimplemented UI AI features as current behavior.
+- Do not treat visual polish experiments as stable contracts.

@@ -1,125 +1,198 @@
-﻿# Desktop App
+# Desktop App
 
-## Scope
-This document describes the Electron desktop shell behavior for Render Studio:
-- `desktop-shell/main.js` lifecycle
-- backend bootstrap/start strategy
-- offline packaging model
-- `backend-bin/render-backend.exe`
-- `ffmpeg` external dependency behavior
+## Desktop App Role
 
-## Runtime Architecture
+**Stability marker: Experimental / needs verification**
 
-Desktop app = Electron shell + local FastAPI backend.
+The desktop app is an Electron shell around the local FastAPI backend. It is not a separate backend architecture.
 
-At runtime:
-1. Electron process starts.
-2. Backend health checked at `http://127.0.0.1:8000/health`.
-3. If backend not running, Electron starts backend.
-4. BrowserWindow loads `http://127.0.0.1:8000`.
+Primary file:
 
-## Main Process Lifecycle (`desktop-shell/main.js`)
+- `desktop-shell/main.js`
 
-## Startup sequence
-- `app.whenReady().then(bootstrap)`
-- `bootstrap()`:
-  1. `healthCheck()`
-  2. if unhealthy -> `startBackend()`
-  3. `waitBackendReady()` (up to 120s)
-  4. `createWindow()`
+The desktop shell provides:
 
-If startup fails:
-- Error dialog shown with backend log path
-- app exits
+- startup orchestration
+- splash window
+- single-instance behavior
+- backend health check
+- backend spawn/bootstrap
+- packaged runtime paths
+- folder picker and shell IPC
+- FFmpeg path injection when packaged binaries exist
 
-## Window behavior
-- Creates `BrowserWindow` (desktop-focused min size)
-- Uses `preload.js` with `contextIsolation: true`, `nodeIntegration: false`
-- Clears web cache before loading URL to avoid stale frontend bundles
+Packaged behavior should be verified on target machines before being documented as fully stable.
 
-## Shutdown behavior
-On `window-all-closed`:
-- kills spawned backend process if still running
-- quits app on non-macOS
+## Startup Flow
 
-## Backend Start Modes
+**Stability marker: Semi-stable implementation**
 
-## Mode A: Offline packaged backend executable
-When packaged and file exists:
-- path: `backend-bin/render-backend.exe`
-- `startBackend()` directly spawns this executable
-- skips Python venv/pip bootstrap
+Current startup behavior:
 
-## Mode B: Python backend bootstrap (dev / non-offline)
-If no packaged backend exe:
-- resolve/create venv
-- install `backend/requirements.txt`
-- install Playwright Chromium
-- launch `uvicorn app.main:app --host 127.0.0.1 --port 8000`
+```text
+Electron app starts
+  -> acquire single-instance lock
+  -> create splash window
+  -> health check http://127.0.0.1:8000/health
+  -> if unhealthy, start backend
+  -> wait for backend readiness
+  -> clear web cache
+  -> create BrowserWindow
+  -> load http://127.0.0.1:8000 with cache-busting query
+```
 
-Bootstrap state is cached using:
-- `data/state/bootstrap-state.json`
-- keyed by requirements hash + bootstrap version
+If backend startup fails, the desktop app should show an error with log path context and exit cleanly.
 
-## Runtime Environment Paths and Env Vars
+## Dev Mode
 
-Electron sets a dedicated app data root and runtime env:
-- `APP_DATA_DIR`
-- `DATABASE_PATH`
-- `CHANNELS_DIR`
-- `TEMP_DIR`
-- `HF_HOME`, `TORCH_HOME`, `TRANSFORMERS_CACHE`
-- `PLAYWRIGHT_BROWSERS_PATH`
-- etc.
+**Stability marker: Semi-stable implementation**
 
-This keeps desktop runtime isolated from source tree in packaged mode.
+In dev mode, the shell can use the source-tree backend and a Python virtual environment under `backend/.venv`.
 
-## FFmpeg Dependency Behavior
+Typical backend command is Uvicorn running `app.main:app` on `127.0.0.1:8000`.
 
-## Packaged ffmpeg binaries available
-If packaged files exist:
-- `ffmpeg-bin/ffmpeg.exe`
-- `ffmpeg-bin/ffprobe.exe`
+Dev mode expects Python dependencies to be installable from `backend/requirements.txt`.
 
-Electron injects:
-- `FFMPEG_BIN=<packaged ffmpeg.exe>`
-- `FFPROBE_BIN=<packaged ffprobe.exe>`
+## Packaged Mode
 
-## Packaged ffmpeg binaries not available
-- Backend falls back to normal ffmpeg discovery on target machine.
-- Offline package may still run, but encode/probe features require ffmpeg availability.
+**Stability marker: Experimental / needs verification**
 
-## Build and Packaging
+Packaged mode uses Electron resources and app user data directories instead of assuming the source tree is writable.
 
-## Standard desktop build
-Script: `build-desktop.ps1`
+Runtime data is moved under Electron's app data area where possible:
 
-Steps:
-1. Build backend executable (`build-backend.bat clean`)
-2. Build Electron app (`npm run dist` in `desktop-shell`)
+- database
+- channels
+- temp
+- logs
+- model/cache directories
+- Playwright browser path
 
-## Offline portable build
-Script: `build-offline-exe.ps1`
+Do not hardcode source-tree paths into packaged-only behavior.
 
-Steps:
-1. Build backend one-file exe via PyInstaller
-2. Copy to `desktop-shell/backend-bin/render-backend.exe`
-3. Try to copy local `ffmpeg.exe` + `ffprobe.exe` into `desktop-shell/ffmpeg-bin`
-4. Build Electron distro (`npm run dist`)
+## Backend Startup Strategy
 
-## Electron builder resource model
-`desktop-shell/package.json` includes `extraResources`:
-- `../backend` -> `backend` (without `.venv`, caches, pyc)
-- `backend-bin` -> `backend-bin`
-- `ffmpeg-bin` -> `ffmpeg-bin`
+**Stability marker: Semi-stable implementation**
 
-## Practical Failure Checklist
+Backend startup order:
 
-- Backend never becomes healthy:
-  - check desktop backend log in app data logs folder
-  - verify port `8000` availability
-- Offline app fails on render/probe:
-  - verify `ffmpeg-bin/ffmpeg.exe` and `ffmpeg-bin/ffprobe.exe`
-  - otherwise install system ffmpeg
-- First run bootstrap very slow:
-  - expected when installing Python deps and Playwright Chromium
+1. If already healthy on localhost, reuse it.
+2. If packaged backend executable exists, spawn it.
+3. Otherwise bootstrap/use Python environment and launch Uvicorn.
+
+Startup waits for `/health` for a bounded period.
+
+### What must not break: backend startup
+
+- Health check before spawn.
+- Wait-for-ready loop.
+- Backend log capture.
+- Port `8000` assumption unless changed everywhere.
+- Clean shutdown of spawned backend process.
+
+## backend-bin Behavior
+
+**Stability marker: Experimental / needs verification**
+
+Packaged offline builds may include:
+
+```text
+desktop-shell/backend-bin/render-backend.exe
+```
+
+When present, Electron can spawn this executable directly and skip Python/venv bootstrap.
+
+This path is packaging-sensitive and should be verified after build changes.
+
+## Python Dependency Bootstrap
+
+**Stability marker: Semi-stable implementation**
+
+When no packaged backend executable is used, Electron can create/use a virtual environment, install backend requirements, and install Playwright Chromium.
+
+Bootstrap state is cached using requirements hash and a bootstrap version so first run can be slower than later runs.
+
+Preserve the existing warning: first run may be slow due to dependency installation and browser download.
+
+## ffmpeg-bin Behavior
+
+**Stability marker: Semi-stable implementation**
+
+Packaged builds may include:
+
+```text
+desktop-shell/ffmpeg-bin/ffmpeg.exe
+desktop-shell/ffmpeg-bin/ffprobe.exe
+```
+
+When present, Electron injects:
+
+- `FFMPEG_BIN`
+- `FFPROBE_BIN`
+
+If packaged binaries are missing, the backend falls back to normal FFmpeg discovery. Rendering/probing can fail on machines without system FFmpeg.
+
+### What must not break: FFmpeg desktop behavior
+
+- Preserve packaged binary detection.
+- Preserve environment injection.
+- Preserve fallback to system discovery.
+- Preserve clear failure diagnostics when FFmpeg is missing.
+
+## Runtime Environment Paths
+
+**Stability marker: Stable contract**
+
+The desktop shell sets environment variables for local runtime isolation. These include app data, database, reports, channels, temp, model/cache folders, Playwright browsers, and FFmpeg/ffprobe when available.
+
+These paths are part of desktop portability. Do not casually redirect them back to the source tree in packaged mode.
+
+## Health Checks and Warmup
+
+**Stability marker: Semi-stable implementation**
+
+The backend exposes:
+
+- `/health`
+- `/api/warmup/status`
+
+The desktop shell depends on `/health` before loading the app. Warmup is backend-managed and can prepare heavy dependencies such as model/cache resources.
+
+## Electron IPC Surface
+
+**Stability marker: Stable contract**
+
+The preload/IPC surface is used by the static frontend for desktop-only capabilities such as folder picking and opening paths.
+
+Do not remove IPC handlers without checking frontend calls.
+
+Known capabilities include:
+
+- folder picker
+- path existence checks
+- shell open path
+- browser profile open behavior
+
+## Known Packaging Risks
+
+**Stability marker: Experimental / needs verification**
+
+Preserve these warnings:
+
+- Packaged backend executable may not include every runtime dependency.
+- FFmpeg binaries may be missing from the package.
+- Playwright browser install/cache can fail or be slow.
+- Model caches can be large.
+- Antivirus or Windows permissions can block spawned executables.
+- Port `8000` may already be occupied.
+- Packaged startup must be tested separately from dev startup.
+
+## What Should Not Be Documented
+
+**Stability marker: Stable contract**
+
+- Do not claim packaged builds are fully verified unless tested.
+- Do not document private local paths as universal.
+- Do not promise offline behavior when runtime dependencies are absent.
+- Do not expose signing/distribution assumptions not present in the repo.
+

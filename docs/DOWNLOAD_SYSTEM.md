@@ -1,215 +1,199 @@
-# Download System
+# Download and Source Preparation
 
-Two independent download paths exist in the application:
+## Download System Role
 
-1. **Render source download** — downloads a YouTube video as input to the render pipeline (`download_youtube()`)
-2. **Download tab** — standalone batch downloader for saving public videos to disk (`download_public_video()`)
+**Stability marker: Stable contract**
 
-Both share the same proxy sanitization infrastructure. As of the latest patch, both also share the same multi-client YouTube retry strategy.
+The project has two related but separate download/source flows:
 
----
+1. **Render source preparation**: prepares a source for editor preview and render.
+2. **Download tab**: standalone batch downloader for saving public videos to disk.
 
-## Download tab — batch mode
+Both use shared downloader infrastructure, but they are not the same product flow.
 
-Route: `POST /api/download/process`  
-File: `backend/app/routes/download.py`
+Primary files:
 
-### Request
+- `backend/app/routes/render.py`
+- `backend/app/routes/download.py`
+- `backend/app/services/downloader.py`
 
-```json
-{
-  "urls": ["https://youtube.com/watch?v=...", "https://facebook.com/..."],
-  "output_dir": "D:/Downloads/videos"
-}
+## Render Source Preparation
+
+**Stability marker: Stable contract**
+
+Render source preparation uses `/api/render/prepare-source`.
+
+It can handle:
+
+- YouTube URL input
+- local file input
+
+The endpoint validates the source, creates a preview session, probes duration, creates a browser-safe preview when needed, and returns session metadata for the editor.
+
+Preview sessions are later consumed by `/api/render/process` through `edit_session_id`.
+
+### What must not break: source preparation
+
+- Preserve `session_id` behavior.
+- Preserve `video_path` and `preview_path` distinction.
+- Preserve local file validation.
+- Preserve YouTube download health and error handling.
+- Preserve editor preview routes.
+
+## YouTube Input Flow
+
+**Stability marker: Semi-stable implementation**
+
+For render input, YouTube source preparation downloads through `download_youtube()`.
+
+The downloader supports:
+
+- multi-client yt-dlp attempts
+- dynamic format fallback
+- proxy sanitization
+- quality rejection for too-low results
+- progress callbacks
+- fixed source filename behavior for pipeline stability
+
+`source_quality_mode` is validated by `RenderRequest` and passed to the downloader.
+
+## Local Input Flow
+
+**Stability marker: Stable contract**
+
+Local source mode validates the file path and probes the media. The preview session keeps the original video path and may also create a browser-safe preview copy.
+
+The render pipeline should not mutate the user's original local file.
+
+If source archive is enabled, the pipeline may hardlink or copy the source into the output source archive.
+
+## Preview Session Behavior
+
+**Stability marker: Stable contract**
+
+Preview sessions live under:
+
+```text
+TEMP_DIR/preview/{session_id}
 ```
 
-### Flow
+They can contain:
 
-```
-POST /api/download/process
-  ├─ _clean_urls() — deduplicate, strip whitespace
-  ├─ _validate_url() — scheme check + detect_public_video_source()
-  ├─ _resolve_output_dir() — mkdir parents
-  ├─ upsert_job() — status: queued
-  └─ submit_job(process_download_batch)
-       └─ ThreadPoolExecutor (max 2 parallel)
-            └─ _run_one(idx, url)
-                 ├─ detect_public_video_source()
-                 ├─ download_public_video(url, item_tmp_dir, progress_callback)
-                 ├─ _unique_output_path() — avoid overwriting
-                 └─ shutil.move(downloaded, final_path)
-```
+- `session.json`
+- downloaded or referenced source
+- browser-safe preview
+- cached preview transcript
 
-### Supported sources
+Routes:
 
-| Source | Detection |
-|---|---|
-| YouTube | `youtube.com`, `youtu.be`, `m.youtube.com` |
-| Facebook | `facebook.com`, `fb.watch`, `m.facebook.com` |
-| Instagram | `instagram.com`, `instagr.am` |
-| Unknown | → status `unsupported`, skip |
+- `GET /api/render/preview-video/{session_id}`
+- `GET /api/render/preview-transcript/{session_id}`
 
-### Retry
+Preview transcript uses a lightweight Whisper path for editor preview and should not be confused with full render transcription.
 
-`POST /api/download/retry/{job_id}`  
-Body: `{"part_numbers": [2, 4]}` (empty = retry all failed)
+## Download Tab Flow
 
-Only parts with `status = "failed"` are re-attempted. Parts with `status = "done"` are preserved as-is.
+**Stability marker: Stable contract**
 
-### Per-item status values
+The Download tab uses `/api/download/process`.
 
-| Status | Meaning |
-|---|---|
-| `waiting` | Queued, not yet started |
-| `downloading` | Active download with progress |
-| `done` | File saved to output_dir |
-| `failed` | Error — user-friendly message stored |
-| `unsupported` | URL did not match any known source |
+It supports batch URLs and per-item status. It saves files to the requested output directory and is separate from render jobs.
 
----
+Supported public source detection currently includes:
 
-## YouTube download — multi-client retry
+- YouTube
+- Facebook
+- Instagram
+- unknown/unsupported
 
-File: `backend/app/services/downloader.py`  
-Function: `download_youtube(url, temp_dir, context="render", progress_callback=None)`
+Standalone download jobs use the job/part system for progress and retry.
 
-### Problem
+## YouTube Multi-Client Retry
 
-YouTube's player API requires a valid "client" token. Different clients (iOS app, Android app, TV browser) receive different format availability and different throttling behavior. A stale OS proxy entry (e.g. `127.0.0.1:9` from a stopped VPN) causes all requests to fail silently.
+**Stability marker: Semi-stable implementation**
 
-### Strategy
+`download_youtube()` rotates through multiple yt-dlp client/format strategies and can run a dynamic fallback based on probed formats.
 
-10 pre-defined attempts in order:
+Preserve the historical warning: YouTube behavior changes often. Client and format strategy details are implementation, not a permanent public contract.
 
-| Attempt | Client | Format |
-|---|---|---|
-| 1 | ios | `bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b` |
-| 2 | ios | `bv*+ba/b` |
-| 3 | android | `bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b` |
-| 4 | android | `bv*+ba/b` |
-| 5 | tv_embedded | `bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b` |
-| 6 | tv_embedded | `bv*+ba/b` |
-| 7 | auto | `bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b` |
-| 8 | auto | `bv*+ba/b` |
-| 9 | auto | `b[height<=1080]/b` |
-| 10 | auto | `best` |
+## Proxy Sanitization
 
-If all 10 fail with "Requested format is not available", a **dynamic fallback** runs:
-- Probe available formats from each client (ios → android → tv_embedded → auto)
-- Build concrete `format_id+format_id` pairs from actual stream list
-- Retry up to 8 dynamic combinations
+**Stability marker: Stable contract**
 
-### Quality rejection
+Proxy sanitization exists because stale OS proxy values can break yt-dlp.
 
-```python
-if height and height < 480:
-    raise RuntimeError(f"Got only {height}p - rejecting, trying next strategy")
-```
+Priority:
 
-Low-quality results are rejected so the next attempt can try for better.
+1. `YTDLP_PROXY`
+2. proxy environment variables
+3. `urllib.request.getproxies()`
+4. explicit no-proxy fallback
 
-### Structured logging
+Bad loopback proxy hosts such as `127.0.0.1`, `localhost`, `::1`, and `0.0.0.0` are disabled for yt-dlp.
 
-Every attempt logs structured events:
+Preserve this behavior. It prevents confusing download failures caused by stale local proxy settings.
 
-```
-download.ytdlp.attempt  context=render attempt=1/10 client=ios format=... proxy_used=False
-download.ytdlp.success  context=render attempt=1/10 client=ios format=... height=1080@60fps
-download.ytdlp.failed   context=render attempt=2/10 client=ios format=... reason=...
-download.failed_all_attempts  context=render proxy_used=... tried_formats=[...]
-```
+## Cache and Temp Paths
 
-`context` is `"render"` when called from the render pipeline, `"download"` when called from the Download tab.
+**Stability marker: Semi-stable implementation**
 
-### File naming
+Important runtime locations:
 
-- Render pipeline: `source.%(ext)s` → `source.mp4` (fixed name for pipeline stability)
-- Download tab: after `download_youtube()` returns, the file is renamed to `{title-slug}.{ext}` for meaningful filenames
+- preview sessions under `TEMP_DIR/preview`
+- render job work files under `TEMP_DIR/{job_id}`
+- download job temp folders under download temp paths
+- final outputs under user-selected output directories or channel output folders
 
----
+Cleanup must not delete user originals or final outputs.
 
-## Non-YouTube sources
+## Validation and Error Messages
 
-Function: `download_public_video(url, temp_dir, progress_callback=None)`
+**Stability marker: Stable contract**
 
-For Facebook and Instagram, uses a single generic yt-dlp invocation:
+Validation protects:
 
-```python
-opts = {
-    "outtmpl": "%(title).80s [%(id)s].%(ext)s",
-    "format": "bv*+ba/b/best",
-    "retries": 8,
-    "proxy": proxy_val,
-    ...
-}
-```
+- URL format
+- supported source type
+- output directory
+- local file existence
+- source availability
 
-For YouTube URLs, `download_public_video()` now delegates to `download_youtube()` internally:
+Friendly error mapping should preserve user-readable categories such as:
 
-```python
-if source == "youtube":
-    yt = download_youtube(url, temp_dir, context="download", progress_callback=progress_callback)
-    # rename source.* → {title-slug}.{ext}
-    return adapted_result
-```
+- unsupported link
+- private/unavailable video
+- login required
+- network/proxy issue
+- timeout
+- download could not be completed
 
-This ensures the Download tab uses the same multi-client retry as the render pipeline.
+## Download Health Check
 
----
+**Stability marker: Semi-stable implementation**
 
-## Proxy sanitization
+`POST /api/render/download-health` probes YouTube availability without downloading the full file. It uses related client rotation logic and returns information such as title, best height, fps, and stream counts.
 
-Function: `_resolve_ytdlp_proxy(context)`
+This is advisory. Actual download can still fail later because public video platforms change behavior.
 
-```python
-# Priority order:
-1. YTDLP_PROXY env var            → used as-is
-2. HTTPS_PROXY / HTTP_PROXY / ALL_PROXY env vars → checked
-3. urllib.request.getproxies()    → checked
-4. Nothing → return ""            → explicit no-proxy
-```
+## Known Failure Modes
 
-Bad hosts that trigger disable: `127.0.0.1`, `localhost`, `::1`, `0.0.0.0`
+**Stability marker: Stable contract**
 
-When a bad proxy is found:
-- Log: `download.proxy.disabled context=... source=... proxy=... reason=bad_host`
-- Return `""` (yt-dlp no-proxy mode)
+Preserve these warnings:
 
-The `"proxy": proxy_val` key is set in **all** yt-dlp option dicts, including health-check probes.
+- YouTube format availability changes frequently.
+- Some videos require login/cookies.
+- Proxy settings can silently break downloads.
+- Low-quality formats may be rejected.
+- Facebook/Instagram support depends on yt-dlp behavior.
+- Preview source and final render source must remain consistent.
 
----
+## What Should Not Be Documented
 
-## Download health check
+**Stability marker: Stable contract**
 
-Route: `POST /api/render/download-health`  
-Function: `check_youtube_download_health(url)`
+- Do not promise every public URL can be downloaded.
+- Do not document bypass tactics beyond current implementation facts.
+- Do not expose private cookies or credentials.
+- Do not freeze every yt-dlp format string as a stable API.
 
-Probes a YouTube URL without downloading, using the same client rotation (ios → android → tv_embedded → auto). Returns:
-
-```json
-{
-  "ok": true,
-  "client": "ios",
-  "title": "Video Title",
-  "best_height": 1080,
-  "best_fps": 60,
-  "video_stream_count": 12
-}
-```
-
-Used by the editor to show "1080p available" before committing to render.
-
----
-
-## Error messages (user-facing)
-
-`_friendly_download_error(exc)` maps technical exceptions to readable messages:
-
-| Internal pattern | User message |
-|---|---|
-| `unsupported link` / `invalid url` | Unsupported link |
-| `private` / `unavailable` | Private or unavailable video |
-| `login` / `sign in` / `cookies` | Login required |
-| `proxy` / `player response` | Download failed. Check network/proxy settings. |
-| `network` / `connection` / `timeout` | Download failed. Check network connection. |
-| (other) | Download could not be completed |

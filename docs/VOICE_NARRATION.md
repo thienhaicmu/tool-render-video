@@ -1,175 +1,202 @@
 # Voice Narration
 
-AI-generated narration is added to each rendered part using Microsoft Edge TTS.  
-Voice is optional and controlled by `voice_enabled` in `RenderRequest`.
+## Voice System Role
 
----
+**Stability marker: Semi-stable implementation**
 
-## Voice sources
+Voice narration is an optional creator-facing layer added after a clip has been rendered. It can turn source subtitles, translated subtitles, or manual text into narration audio and mix that audio into each output part.
 
-Three mutually exclusive modes for the narration text:
+Primary files:
 
-### 1. `manual`
+- `backend/app/services/tts_service.py`
+- `backend/app/services/audio_mix_service.py`
+- `backend/app/services/voice_profiles.py`
+- `backend/app/orchestration/render_pipeline.py`
 
-The user provides text directly in the editor:
+Voice improves creator productivity, but it is not yet a full audio mastering system.
 
-```json
-{
-  "voice_enabled": true,
-  "voice_source": "manual",
-  "voice_text": "Welcome to today's video. Here are the top highlights..."
-}
+## Narration Modes
+
+**Stability marker: Stable contract**
+
+Voice is controlled by `voice_enabled` in `RenderRequest`.
+
+Supported `voice_source` values:
+
+- `manual`
+- `subtitle`
+- `translated_subtitle`
+
+Supported `voice_mix_mode` values:
+
+- `replace_original`
+- `keep_original_low`
+
+## Manual Voice Text
+
+**Stability marker: Stable contract**
+
+`voice_source="manual"` uses `voice_text` from the editor.
+
+Behavior:
+
+- `voice_text` is required when manual voice is enabled.
+- TTS can be generated before per-part rendering.
+- The same narration source can be mixed into outputs.
+- If TTS fails, render should continue without narration when possible.
+
+## Subtitle Source Mode
+
+**Stability marker: Stable contract**
+
+`voice_source="subtitle"` extracts narration text from the per-part SRT generated from Whisper.
+
+Behavior:
+
+- TTS runs per part.
+- Empty or missing subtitle text skips narration for that part.
+- Other parts continue even if one part has no usable subtitle text.
+
+## Translated Subtitle Source Mode
+
+**Stability marker: Stable contract**
+
+`voice_source="translated_subtitle"` prefers translated per-part SRT text.
+
+Fallback chain:
+
+```text
+translated part SRT
+  -> original part SRT
+  -> temporary slice from full SRT
+  -> skip narration for that part
 ```
 
-- TTS is run once before the render loop starts
-- The same audio file is mixed into every part
-- Requires `voice_text` to be non-empty
+This mode is intended for workflows such as original-language video plus translated subtitle plus target-language narration.
 
-### 2. `subtitle`
+The pipeline can warn on mismatch between `subtitle_target_language` and `voice_language`.
 
-Narration text is extracted from the Whisper-generated SRT for each part:
+## TTS Engine
 
-```python
-# Per part, inside _process_one_part():
-_part_narration_text = extract_text_from_srt(str(srt_part))
-_part_subtitle_voice_path = generate_narration_mp3(text=_part_narration_text, ...)
-```
+**Stability marker: Semi-stable implementation**
 
-- TTS runs separately for each part
-- Each part gets narration from its own subtitle segment
-- If SRT is empty or missing, narration is skipped for that part (logged as `VOICE_SUBTITLE_EMPTY` or `VOICE_SUBTITLE_MISSING`)
+The current TTS engine uses `edge-tts`.
 
-### 3. `translated_subtitle`
+Output files are written under the job temp voice directory.
 
-Narration text comes from the translated SRT (after `translate_srt_file()` runs):
+Voice profiles are defined in `backend/app/services/voice_profiles.py`. Current language families include:
 
-```python
-_voice_srt = translated_srt_part   # e.g. part_001.vi.srt
-# fallback chain: translated → original → full_srt slice
-```
+- `vi-VN`
+- `ja-JP`
+- `en-US`
+- `en-GB`
 
-- Intended use: video in language A → subtitle translated to language B → TTS in language B
-- Falls back to original SRT if translation is unavailable
-- Warns on language mismatch (`VOICE_LANGUAGE_TARGET_MISMATCH`)
+The user can pass a direct `voice_id` or rely on language/gender defaults.
 
----
+## Audio Mix Modes
 
-## TTS engine
+**Stability marker: Stable contract**
 
-File: `backend/app/services/tts_service.py`  
-Library: `edge-tts` (Microsoft Edge browser TTS, no API key required)
+`replace_original`:
 
-```python
-communicate = edge_tts.Communicate(text, voice_id, rate=rate)
-await communicate.save(mp3_path)
-```
+- keeps video stream
+- discards original audio
+- uses narration as the only audio track
 
-Output: `.mp3` file in `TEMP_DIR/{job_id}/voice/`
+`keep_original_low`:
 
----
+- keeps original audio at reduced volume
+- mixes narration above it
+- falls back to narration-only behavior when the video has no original audio stream
 
-## Voice profiles
+Mixing is performed by FFmpeg. A failed mix should preserve the already rendered video.
 
-File: `backend/app/services/voice_profiles.py`
+## Failure and Timeout Behavior
 
-| Language | Gender | Voice ID |
-|---|---|---|
-| `vi-VN` | female | `vi-VN-HoaiMyNeural` |
-| `vi-VN` | male | `vi-VN-NamMinhNeural` |
-| `ja-JP` | female | `ja-JP-NanamiNeural` |
-| `ja-JP` | male | `ja-JP-KeitaNeural` |
-| `en-US` | female | `en-US-JennyNeural`, `en-US-AriaNeural` |
-| `en-US` | male | `en-US-GuyNeural`, `en-US-DavisNeural` |
-| `en-GB` | female | `en-GB-SoniaNeural`, `en-GB-LibbyNeural` |
-| `en-GB` | male | `en-GB-RyanNeural`, `en-GB-OliverNeural` |
+**Stability marker: Stable contract**
 
-`voice_id` can be passed directly to override the gender-based default. The `resolve_voice_profile()` function validates the ID against the flat `_ALL_VOICES` dict.
+Voice is optional. Voice failures should not destroy valid rendered clips.
 
-**Rate parameter:** `voice_rate` is a string like `"+0%"`, `"+10%"`, `"-5%"` — passed directly to Edge TTS for speed adjustment.
+Expected behavior:
 
----
+- TTS failure logs `voice_failed`.
+- Voice errors use `error_code: VOICE001`.
+- Per-part TTS failure skips narration for that part.
+- Mix failure removes temporary mixed output and preserves the original final part.
+- Render result JSON still records voice summary.
 
-## Audio mixing
+### What must not break: voice
 
-File: `backend/app/services/audio_mix_service.py`  
-Function: `mix_narration_audio(video_path, narration_audio_path, mix_mode, output_path)`
+- Do not make optional voice failure fatal for the whole render unless explicitly required by product policy.
+- Do not remove `VOICE001` diagnostics.
+- Do not change mix-mode semantics silently.
+- Do not break translated-subtitle fallback.
+- Do not overwrite video output with a failed audio mix.
 
-Two mix modes:
+## Result Summary Fields
 
-### `replace_original`
+**Stability marker: Stable contract**
 
-```
-ffmpeg -i video.mp4 -i narration.mp3
-  -map 0:v:0 -map 1:a:0
-  -c:v copy -c:a aac -shortest
-  output.mp4
-```
+The render pipeline writes `voice_summary` into `jobs.result_json`.
 
-Original audio is discarded. Narration becomes the only audio track.
+Expected values include:
 
-### `keep_original_low`
+- `not used`
+- `applied`
+- `failed`
+- `partial`
 
-```
-ffmpeg -i video.mp4 -i narration.mp3
-  -filter_complex "[0:a]volume=0.25[a0];[1:a]volume=1.0[a1];[a0][a1]amix=..."
-  -map 0:v:0 -map [aout]
-  -c:v copy -c:a aac -shortest
-  output.mp4
-```
+The exact summary depends on which parts attempted voice and whether generation/mix succeeded.
 
-Original audio ducked to 25%, narration at 100%, mixed together. If the video has no audio stream, narration is used directly (no filter_complex needed).
+## Audio Polish Limitations
 
-After mixing, the output replaces the final part atomically:
+**Stability marker: Experimental / needs verification**
 
-```python
-os.replace(mixed_part, final_part)
-```
+Technical audio correctness is not the same as creator-perceived premium audio.
 
----
+Current voice/audio flow can produce valid narration, but premium audio may still require:
 
-## Narration pipeline (per-part)
+- loudness normalization across all outputs
+- smoother ducking
+- EQ/compression
+- better pause/breath handling
+- transition polish
+- consistent voice identity per creator/channel
 
-```
-render_part_smart() → final_part.mp4
-        ↓
-generate_narration_mp3(text, ...) → part_NNN.mp3
-        ↓
-mix_narration_audio(final_part, part_NNN.mp3, mix_mode, .voice_tmp.mp4)
-        ↓
-os.replace(.voice_tmp.mp4, final_part.mp4)
-```
-
-The `.voice_tmp.mp4` intermediate is cleaned up automatically by `os.replace()`.
-
----
-
-## Failure handling
-
-- TTS failure for `manual` source: `voice_tts_failed = True`, render continues without narration
-- TTS failure for `subtitle` / `translated_subtitle` source: part-level failure logged, other parts continue
-- Mix failure: `_safe_unlink(mixed_part)`, original `final_part.mp4` is preserved
-- All voice failures are logged as `voice_failed` events with `error_code: VOICE001`
-
----
+Do not document current TTS as studio-grade mastering.
 
 ## Voice API
 
-Route: `GET /api/voice/profiles`  
-Route: `GET /api/voice/list`
+**Stability marker: Stable contract**
 
-Returns available languages, voice IDs, gender labels, and recommended use descriptions.
+Routes:
 
----
+- `GET /api/voice/profiles`
+- `GET /api/voice/list`
 
-## Validation rules (from RenderRequest schema)
+These return available voices, labels, gender, language, and recommended-use metadata for the frontend.
 
-```python
-voice_source: "manual" | "subtitle" | "translated_subtitle"
-voice_language: "vi-VN" | "ja-JP" | "en-US" | "en-GB"
-voice_gender: "female" | "male"
-voice_mix_mode: "replace_original" | "keep_original_low"
-voice_text: required when voice_source == "manual"
-subtitle_target_language: "vi" | "en" | "ja"
-```
+## Validation Rules
 
-All validated in `RenderRequest.validate_voice_settings()` before the job is submitted.
+**Stability marker: Stable contract**
+
+Validation is in `RenderRequest`.
+
+Important constraints:
+
+- `voice_source`: `manual`, `subtitle`, `translated_subtitle`
+- `voice_language`: `vi-VN`, `ja-JP`, `en-US`, `en-GB`
+- `voice_gender`: `female`, `male`
+- `voice_mix_mode`: `replace_original`, `keep_original_low`
+- `voice_text` is required for manual mode
+- `subtitle_target_language`: `vi`, `en`, `ja`
+
+## What Should Not Be Documented
+
+**Stability marker: Stable contract**
+
+- Do not promise a specific third-party TTS provider forever.
+- Do not document exact timeout values as stable unless exposed by config/tests.
+- Do not claim professional mastering.
+- Do not expose provider credentials or private environment assumptions.
+
