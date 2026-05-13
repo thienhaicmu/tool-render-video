@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Protocol
 
 from app.ai.dependencies import has_whisperx
-from app.services.subtitle_engine import transcribe_to_srt
+from app.services.subtitle_engine import format_srt_timestamp, transcribe_to_srt
 
 
 @dataclass
@@ -82,17 +83,61 @@ class WhisperXAdapter:
         retry_count: int,
         highlight_per_word: bool,
     ) -> SubtitleTranscriptionResult:
-        warning = (
-            "whisperx_adapter_not_implemented"
-            if self.is_available()
-            else "whisperx_unavailable"
-        )
-        return SubtitleTranscriptionResult(
-            readable_srt_path=readable_srt_path,
-            engine=self.engine_name,
-            aligned=False,
-            warnings=[warning],
-        )
+        start = time.perf_counter()
+        if not self.is_available():
+            return SubtitleTranscriptionResult(
+                readable_srt_path=readable_srt_path,
+                engine=self.engine_name,
+                aligned=False,
+                warnings=["whisperx_unavailable"],
+            )
+
+        out_path = Path(readable_srt_path)
+        tmp_path = out_path.with_name(out_path.stem + ".whisperx.tmp" + out_path.suffix)
+        try:
+            # Lazy import only. WhisperX, torch, and alignment models must never load at startup.
+            import whisperx  # type: ignore
+
+            device = "cpu"
+            compute_type = "int8"
+            batch_size = 4
+            model = whisperx.load_model(
+                model_name or "base",
+                device,
+                compute_type=compute_type,
+            )
+            audio = whisperx.load_audio(video_path)
+            result = model.transcribe(audio, batch_size=batch_size)
+            language = str(result.get("language") or "en")
+            model_a, metadata = whisperx.load_align_model(language_code=language, device=device)
+            aligned = whisperx.align(
+                result.get("segments", []),
+                model_a,
+                metadata,
+                audio,
+                device,
+                return_char_alignments=False,
+            )
+
+            _write_whisperx_srt(aligned, str(tmp_path), word_level=highlight_per_word)
+            if not tmp_path.exists() or tmp_path.stat().st_size <= 0:
+                raise RuntimeError("whisperx produced empty SRT")
+            tmp_path.replace(out_path)
+            return SubtitleTranscriptionResult(
+                readable_srt_path=readable_srt_path,
+                engine=self.engine_name,
+                aligned=True,
+                elapsed_ms=int((time.perf_counter() - start) * 1000),
+            )
+        except Exception as exc:
+            tmp_path.unlink(missing_ok=True)
+            return SubtitleTranscriptionResult(
+                readable_srt_path=readable_srt_path,
+                engine=self.engine_name,
+                aligned=False,
+                warnings=[f"whisperx_runtime_error:{type(exc).__name__}"],
+                elapsed_ms=int((time.perf_counter() - start) * 1000),
+            )
 
 
 def transcribe_with_adapter(
@@ -118,19 +163,31 @@ def transcribe_with_adapter(
         )
 
     if requested == "whisperx":
-        placeholder = WhisperXAdapter().transcribe(
+        whisperx_result = WhisperXAdapter().transcribe(
             video_path,
             readable_srt_path,
             model_name=model_name,
             retry_count=retry_count,
             highlight_per_word=highlight_per_word,
         )
-        warning = placeholder.warnings[0] if placeholder.warnings else "whisperx_fallback"
+        if whisperx_result.aligned:
+            if logger is not None:
+                logger.info(
+                    "subtitle_transcription_adapter_used requested=%s used=%s aligned=%s elapsed_ms=%d",
+                    requested,
+                    whisperx_result.engine,
+                    whisperx_result.aligned,
+                    whisperx_result.elapsed_ms,
+                )
+            return whisperx_result
+
+        warning = whisperx_result.warnings[0] if whisperx_result.warnings else "whisperx_fallback"
         if logger is not None:
             logger.warning(
-                "subtitle_transcription_adapter_fallback requested=%s warning=%s fallback=default",
+                "subtitle_transcription_adapter_fallback requested=%s warning=%s fallback=default elapsed_ms=%d",
                 requested,
                 warning,
+                whisperx_result.elapsed_ms,
             )
         result = default_adapter.transcribe(
             video_path,
@@ -139,7 +196,7 @@ def transcribe_with_adapter(
             retry_count=retry_count,
             highlight_per_word=highlight_per_word,
         )
-        result.warnings.extend(placeholder.warnings)
+        result.warnings.extend(whisperx_result.warnings)
         return result
 
     if logger is not None:
@@ -156,3 +213,40 @@ def transcribe_with_adapter(
     )
     result.warnings.append("unknown_subtitle_transcription_engine")
     return result
+
+
+def _write_whisperx_srt(result: dict, srt_path: str, *, word_level: bool) -> None:
+    segments = list((result or {}).get("segments", []) or [])
+    blocks: list[dict] = []
+
+    if word_level:
+        for seg in segments:
+            for word in seg.get("words", []) or []:
+                text = str(word.get("word", "")).strip()
+                if not text or word.get("start") is None or word.get("end") is None:
+                    continue
+                start = float(word.get("start"))
+                end = float(word.get("end"))
+                if end <= start:
+                    continue
+                blocks.append({"start": start, "end": end, "text": text})
+
+    if not blocks:
+        for seg in segments:
+            text = str(seg.get("text", "")).strip()
+            if not text or seg.get("start") is None or seg.get("end") is None:
+                continue
+            start = float(seg.get("start"))
+            end = float(seg.get("end"))
+            if end <= start:
+                continue
+            blocks.append({"start": start, "end": end, "text": text})
+
+    with Path(srt_path).open("w", encoding="utf-8") as f:
+        for idx, block in enumerate(blocks, start=1):
+            f.write(
+                f"{idx}\n"
+                f"{format_srt_timestamp(block['start'])} --> "
+                f"{format_srt_timestamp(block['end'])}\n"
+                f"{block['text']}\n\n"
+            )
