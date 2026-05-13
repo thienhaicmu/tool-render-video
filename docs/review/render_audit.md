@@ -8,6 +8,198 @@
 ## Patch Status Log
 ---
 
+### 2026-05-12 — AI Intelligence v2 Phase 55E: Platform-Aware Render Strategy
+
+**Implemented:**
+
+- `app/ai/knowledge/platform_render_strategy_schema.py` (new) — `AIPlatformRenderStrategy` dataclass; explicit allowed-value frozensets for all four strategy domains (subtitle, camera, hook, ranking); `_normalize()` helper that maps any invalid value to `"unknown"`; `_sanitize_strategy()` strips forbidden execution keys from nested dicts; `_fallback_strategy()` returns valid available=False dict; `to_dict()` clamps confidence [0, 1], caps reasoning at 8 lines
+- `app/ai/knowledge/platform_render_strategy_engine.py` (new) — `build_platform_render_strategy(plan)` public API; accepts AIEditPlan or dict via duck-typed `_get()`; reads `platform_context` (55A), `platform_subtitle_context` (55B), `platform_camera_context` (55C), `platform_hook_context` (55D), `creator_preference_profile` (50D), `render_quality_v2` (52D); fuses all four domain strategies with deterministic conflict resolution; never raises — fallback-safe
+- `app/ai/director/edit_plan_schema.py` (updated) — `platform_render_strategy: dict = field(default_factory=dict)` added after Phase 55D field; included in `to_dict()`; backward-compatible
+- `app/ai/director/ai_director.py` (updated) — Phase 55E block inserted after Phase 55D hook context; `_attach_platform_render_strategy(plan, job_id)` imports `build_platform_render_strategy` and attaches result to `plan.platform_render_strategy`; wrapped in try/except; never blocks render
+- `tests/test_ai_phase55e_platform_render_strategy.py` (new) — 104 tests covering schema allowed-value sets, normalization, fallback shape, full fusion structure, TikTok+podcast conflict, YouTube Shorts+educational strategy, TikTok+viral_short_form (no conflict), missing platform fallback, missing creator profile, deterministic output, confidence computation, garbage-input normalization, safety key scanning, edit plan backward compatibility, duck-typed object acceptance
+
+**What Phase 55E adds:**
+
+- Unified platform-aware render strategy that fuses Phases 55A–55D platform contexts
+- Deterministic conflict resolution between platform guidance and creator style preference
+- Explicit allowed-value enforcement across all four strategy domains
+- Creator-safe conservative conflict resolution (trust/clarity creators always get stable framing and clean subtitles regardless of platform energy pressure)
+- Strategy output informing orchestrator reasoning, variant evaluation, and AI UX explanation
+
+**Platform render strategy shape:**
+
+```json
+{
+  "platform_render_strategy": {
+    "available": true,
+    "platform": "tiktok",
+    "creator_type": "podcast",
+    "strategy": {
+      "subtitle": {
+        "style_bias": "clean_pro",
+        "density_bias": "compact",
+        "keyword_emphasis": "selective",
+        "readability_priority": "high"
+      },
+      "camera": {
+        "motion_energy": "low_medium",
+        "stability_priority": "high",
+        "crop_aggressiveness": "low",
+        "jitter_sensitivity": "high"
+      },
+      "hook": {
+        "first_3s_priority": "high",
+        "retention_priority": "high",
+        "hook_energy": "moderate",
+        "curiosity_style": "soft_direct"
+      },
+      "ranking": {
+        "priority": "retention_creator_fit"
+      }
+    },
+    "confidence": 0.8333,
+    "reasoning": [
+      "TikTok platform guidance supports strong early retention while podcast creator style keeps framing stable and subtitles clean.",
+      "Platform subtitle guidance supports compact density with clean_pro style.",
+      "Platform camera guidance supports low_medium motion energy and high stability priority.",
+      "Platform hook guidance sets moderate hook energy with high first-3-second priority.",
+      "Strategy balances TikTok retention pressure with podcast trust-focused style.",
+      "Strategy prioritizes retention creator fit in variant ranking."
+    ]
+  }
+}
+```
+
+**Fallback shape:**
+
+```json
+{
+  "platform_render_strategy": {
+    "available": false,
+    "platform": "",
+    "creator_type": "",
+    "strategy": {},
+    "confidence": 0.0,
+    "reasoning": []
+  }
+}
+```
+
+**Conflict resolution behavior:**
+
+| Scenario | Platform signal | Creator signal | Resolution |
+|---|---|---|---|
+| TikTok + podcast | high motion energy, viral style | stable, trust, clean | `motion_energy=low_medium`, `style_bias=clean_pro`, `hook_energy=moderate`, `curiosity_style=soft_direct`, `ranking=retention_creator_fit` |
+| TikTok + podcast (camera) | high crop aggressiveness | trust creator safety | `crop_aggressiveness=low`, `stability_priority=high` |
+| YouTube Shorts + educational | medium motion, balanced density | clarity, readability | `motion_energy=low_medium`, `style_bias=clean_pro`, `ranking=retention_creator_fit` |
+| TikTok + viral_short_form | high energy, direct hook | viral creator, no conflict | `hook_energy=high`, `curiosity_style=direct`, `motion_energy=medium_high`, `ranking=retention` |
+| Instagram Reels + any | boxed caption default | creator may override style | subtitle style respect creator-safe rules |
+
+**Allowed values enforced per domain:**
+
+| Domain | Field | Allowed set |
+|---|---|---|
+| subtitle | `style_bias` | `viral_bold`, `clean_pro`, `boxed_caption`, `unknown` |
+| subtitle | `density_bias` | `compact`, `balanced`, `dense`, `unknown` |
+| subtitle | `keyword_emphasis` | `none`, `selective`, `moderate`, `strong`, `unknown` |
+| subtitle | `readability_priority` | `high`, `medium`, `low`, `unknown` |
+| camera | `motion_energy` | `low`, `low_medium`, `medium`, `medium_high`, `high`, `unknown` |
+| camera | `stability_priority` | `low`, `medium`, `medium_high`, `high`, `unknown` |
+| camera | `crop_aggressiveness` | `low`, `medium`, `high`, `unknown` |
+| camera | `jitter_sensitivity` | `high`, `medium`, `low`, `unknown` |
+| hook | `first_3s_priority` | `low`, `medium`, `high`, `unknown` |
+| hook | `retention_priority` | `low`, `medium`, `high`, `unknown` |
+| hook | `hook_energy` | `low`, `moderate`, `high`, `unknown` |
+| hook | `curiosity_style` | `subtle`, `soft_direct`, `direct`, `open_loop`, `unknown` |
+| ranking | `priority` | `creator_fit`, `retention`, `hook_strength`, `readability`, `retention_creator_fit`, `balanced`, `unknown` |
+
+**Confidence fusion:**
+
+- Average of all available domain context confidences (55A–55D)
+- Falls back to 0.5 if platform or creator_type is known but no context confidence available
+- Falls back to 0.0 if no context and no platform/creator_type known
+- Always clamped [0, 1]
+
+**Advisory-only strategy contract:**
+
+- Strategy informs orchestrator reasoning, variant evaluation, and AI UX explanation
+- Strategy must NOT execute rendering
+- Strategy must NOT override executor authority
+- Strategy must NOT mutate the render pipeline
+- `direct_execution`, `executor_override`, `ffmpeg_args`, `render_command`, `subtitle_timing`, `motion_crop`, `tracking_config`, `clip_boundaries`, `playback_speed`, `subprocess`, `executable`, `python_code`, `shell`, `transcript`, `hook_rewrite`, `crop_coordinates`, `output_path`, `queue_priority` — all stripped/blocked from output
+
+**Fallback behavior:**
+
+| Missing input | Result |
+|---|---|
+| No platform, no creator_type, no domain contexts | `available=False`, empty strategy |
+| Platform known but no domain contexts | `available=True`, strategy from platform rules, confidence=0.5 |
+| Creator_type known but no domain contexts | `available=True`, strategy from creator rules, confidence=0.5 |
+| Malformed guidance values | Normalized to `"unknown"`, then rule-based default applied |
+| None input to engine | Fallback dict returned, no crash |
+| Empty dict input | Fallback dict returned, no crash |
+
+**Integration points:**
+
+- Runs after Phase 55D (platform_hook_context) so all platform domain contexts are populated
+- Reads from `plan.platform_context`, `plan.platform_subtitle_context`, `plan.platform_camera_context`, `plan.platform_hook_context`, `plan.creator_preference_profile`, `plan.render_quality_v2`
+- Does not call retrievers again — works entirely from plan metadata
+- Preserved for future orchestrator consumption, strategy variant evaluation, and AI UX reasoning
+
+**Safety boundaries enforced:**
+
+- Strategy is metadata-only
+- No payload mutation
+- No render execution
+- No FFmpeg mutation
+- No subtitle timing rewrite
+- No motion_crop rewrite
+- No executor override
+- No queue mutation
+- No subprocess execution
+- No internet access
+- No API key required
+- No autonomous execution
+
+**Forbidden fields stripped/rejected:**
+
+`ffmpeg_args`, `render_command`, `subtitle_timing`, `motion_crop`, `tracking_config`, `clip_boundaries`, `playback_speed`, `subprocess`, `executable`, `python_code`, `shell`, `transcript`, `hook_rewrite`, `crop_coordinates`, `direct_execution`, `executor_override`, `output_path`, `queue_priority`
+
+**Architecture notes:**
+
+- Phase 55E is the synthesis layer of the platform intelligence stack (55A–55E)
+- Fused strategy resolves conflicts between platform pressure and creator safety before reaching orchestrator
+- Conservative-first resolution ensures creator trust and clarity creators are never pushed into aggressive high-energy modes by platform signals
+- Strategy uses duck-typed plan access so it works with both AIEditPlan objects and plain dicts in test/integration contexts
+- Stable render executor remains final authority — strategy is purely advisory
+
+**Intentionally still blocked:**
+
+- Live internet scraping
+- Autonomous crawling
+- Model fine-tuning
+- FFmpeg command mutation
+- Playback_speed mutation
+- Subtitle timing rewrite
+- Direct crop-coordinate rewrite
+- Segment reorder
+- Executor override
+- Queue mutation
+- Autonomous publishing
+
+**Verification:**
+
+- Phase 55E tests: 104 passed
+- Full suite: 4744 passed, 1 skipped
+- `py_compile` passed on all changed modules
+- `git diff --check` clean
+
+**Status:**
+
+Phase 55E complete. Unified platform-aware render strategy is now available as a deterministic advisory metadata layer fusing subtitle, camera, and hook platform intelligence.
+
+---
+
 ### 2026-05-08 — AI Productization Phase 41: Retrieval-Based Creator Intelligence
 
 **Implemented:**
@@ -3966,4 +4158,368 @@ The hook:
 ## Test Results
 
 - Focused: **53/53** passed
+
+---
+
+# Phase 55E — Platform-Aware Render Strategy
+
+**Module:** `app/ai/knowledge/platform_render_strategy_engine.py`
+**Schema:** `app/ai/knowledge/platform_render_strategy_schema.py`
+**Plan field:** `platform_render_strategy` (added to `AIEditPlan` in `edit_plan_schema.py`)
+**Director hook:** `_attach_platform_render_strategy(plan, job_id)` — after Phase 55D
+
+## Purpose
+
+Fuses platform subtitle (55B), camera (55C), and hook (55D) intelligence into one deterministic advisory `platform_render_strategy`. This is the first module that synthesises multiple platform contexts into a single coherent strategy.
+
+## Output Model
+
+```json
+{
+  "platform_render_strategy": {
+    "available": true,
+    "platform": "tiktok",
+    "creator_type": "podcast",
+    "confidence": 0.8475,
+    "strategy": {
+      "subtitle": {
+        "style_bias": "viral_bold",
+        "density_bias": "dense",
+        "keyword_emphasis": "high",
+        "readability_priority": "high"
+      },
+      "camera": {
+        "motion_energy": "low_medium",
+        "stability_priority": "high",
+        "crop_aggressiveness": "low",
+        "jitter_sensitivity": "high"
+      },
+      "hook": {
+        "first_3s_priority": "high",
+        "hook_energy": "moderate",
+        "retention_priority": "high",
+        "curiosity_style": "soft_direct"
+      },
+      "ranking": {
+        "priority": "retention_creator_fit"
+      }
+    },
+    "reasoning": ["TikTok platform guidance and podcast creator intelligence are informing strategy."]
+  }
+}
+```
+
+Fallback:
+
+```json
+{"platform_render_strategy": {"available": false, "platform": "", "creator_type": "", "strategy": {}, "confidence": 0.0, "reasoning": []}}
+```
+
+## Allowed Value Sets (frozensets)
+
+All strategy field values are normalised against explicit allowed sets — any unknown value becomes `"unknown"`:
+
+| Field | Allowed values |
+|---|---|
+| `subtitle.style_bias` | `viral_bold`, `clean_pro`, `boxed_caption`, `unknown` |
+| `subtitle.density_bias` | `dense`, `normal`, `minimal`, `unknown` |
+| `subtitle.keyword_emphasis` | `high`, `medium`, `low`, `none`, `unknown` |
+| `subtitle.readability_priority` | `high`, `medium`, `low`, `unknown` |
+| `camera.motion_energy` | `high`, `medium_high`, `medium`, `low_medium`, `low`, `unknown` |
+| `camera.stability_priority` | `high`, `medium_high`, `medium`, `low`, `unknown` |
+| `camera.crop_aggressiveness` | `high`, `medium`, `low`, `unknown` |
+| `camera.jitter_sensitivity` | `high`, `medium`, `low`, `unknown` |
+| `hook.first_3s_priority` | `high`, `medium`, `low`, `unknown` |
+| `hook.retention_priority` | `high`, `medium`, `low`, `unknown` |
+| `hook.hook_energy` | `high`, `moderate`, `low`, `unknown` |
+| `hook.curiosity_style` | `direct`, `soft_direct`, `open_loop`, `subtle`, `unknown` |
+| `ranking.priority` | `creator_fit`, `retention`, `hook_strength`, `readability`, `retention_creator_fit`, `balanced`, `unknown` |
+
+## Conflict Resolution
+
+Creator safety > platform energy pressure. Key rules:
+
+| Condition | Conflict | Resolution |
+|---|---|---|
+| TikTok + podcast | High energy vs stable camera | `motion_energy → low_medium`, `stability_priority → high`, `crop_aggressiveness → low` |
+| TikTok + podcast | `viral_bold` subtitle vs creator trust | `style_bias = viral_bold` (allowed — bold is compatible with trust) |
+| TikTok + podcast | `direct` curiosity style | `curiosity_style → soft_direct` (conservative trust cap) |
+| TikTok + podcast | `high` hook energy | `hook_energy → moderate` (trust creator cap) |
+| YouTube Shorts + educational | `medium` camera motion | `motion_energy → low_medium` (clarity cap) |
+| High retention platform + trust/clarity creator | Retention vs creator fit | `ranking.priority → retention_creator_fit` |
+| Trust creator only | Any | `ranking.priority → creator_fit` |
+| Educational creator | Any | `ranking.priority → readability` |
+
+Hook energy remap: raw guidance value `"medium"` → normalised `"moderate"` before allowed-set check.
+
+## Confidence Computation
+
+`confidence = avg(subtitle_context.confidence, camera_context.confidence, hook_context.confidence)` from available contexts only. Clamped `[0, 1]`.
+
+## Safety Contract
+
+- Local only — no internet, no cloud API, no subprocess
+- Never raises — all paths wrapped in try/except
+- Deterministic — same inputs → same output
+- Advisory only — `platform_render_strategy` is metadata, never alters render parameters
+- No render mutation, no executor override, no pipeline change
+- Executor authority unchanged — render pipeline never reads `platform_render_strategy`
+- Backward compatible — fallback when no platform/creator_type context available
+
+## Test Results
+
+- Focused: **104/104** passed
+
+---
+
+# Phase 56 — Platform-Aware Strategy Influence
+
+**Module:** `app/ai/knowledge/platform_strategy_influence_context.py`
+**Plan field:** `platform_strategy_influence` (added to `AIEditPlan` in `edit_plan_schema.py`)
+**Director hook:** `_attach_platform_strategy_influence(plan, job_id)` — after Phase 55E
+
+## Purpose
+
+Reads `platform_render_strategy` (Phase 55E) and builds per-domain influence support context for subtitle, camera, and ranking domains. Enriches existing influence reasoning additively (never changes bias values). Bounded confidence deltas ensure the safety gate is never affected.
+
+## Output Model
+
+```json
+{
+  "platform_strategy_influence": {
+    "available": true,
+    "platform": "tiktok",
+    "creator_type": "podcast",
+    "subtitle": {
+      "supported": true,
+      "bias": {"style": "viral_bold", "density": "dense", "keyword_emphasis": "high"},
+      "confidence_delta": 0.04,
+      "reasoning": ["Platform strategy supports dense viral_bold subtitles for tiktok podcast content"]
+    },
+    "camera": {
+      "supported": true,
+      "bias": {"motion_energy": "low_medium", "stability_priority": "high", "crop_aggressiveness": "low"},
+      "confidence_delta": 0.03,
+      "reasoning": ["Platform strategy supports stable podcast framing"]
+    },
+    "ranking": {
+      "supported": true,
+      "bias": {"priority": "retention_creator_fit"},
+      "confidence_delta": 0.05,
+      "reasoning": ["Platform strategy supports retention and creator-fit ranking for tiktok podcast content"]
+    },
+    "confidence": 0.8475,
+    "platform_strategy_influence_reasoning": [
+      "Tiktok platform guidance and podcast creator intelligence are informing safe influence.",
+      "Platform strategy supports dense viral_bold subtitles for tiktok podcast content",
+      "Platform strategy supports stable podcast framing"
+    ]
+  }
+}
+```
+
+Fallback:
+
+```json
+{"platform_strategy_influence": {"available": false, "confidence": 0.0}}
+```
+
+## Confidence Delta Limits (Phase 54 contract)
+
+| Limit | Value |
+|---|---|
+| Max delta per domain | 0.05 |
+| Max total boost | 0.10 |
+| subtitle delta | 0.04 |
+| camera delta | 0.03 |
+| ranking delta | 0.05 |
+
+Confidence deltas are **advisory metadata only** — they are NEVER fed into the Phase 48 safety gate evaluation.
+
+## Ranking Support Boundary
+
+`ranking` domain is NOT supported when `ranking.priority` is `"balanced"` or `"unknown"` — these are neutral/default values that do not indicate a meaningful platform preference.
+
+## Enrichment Pattern (Additive Only)
+
+Three public enrichment helpers append platform-strategy reasons to existing influence dicts:
+
+| Function | Target | Cap |
+|---|---|---|
+| `enrich_subtitle_influence_reasoning(influence_dict, platform_subtitle_support)` | `plan.creator_subtitle_influence.reasoning` | 6 total |
+| `enrich_camera_influence_reasoning(influence_dict, platform_camera_support)` | `plan.creator_camera_preference.camera_preference.reasoning` | 6 total |
+| `enrich_ranking_influence_reasoning(influence_dict, platform_ranking_support)` | `plan.safe_influence_pack.reasoning` or `.explainability` | 6 total |
+
+All enrichment functions:
+- Only append, never replace existing reasons
+- Never modify bias values or tuning values
+- Return the original dict unchanged if support is False or input is empty
+
+## Safety Contract
+
+- Local only — no internet, no cloud API, no subprocess
+- Never raises — all paths wrapped in try/except
+- Deterministic — same inputs → same output
+- Advisory only — `confidence_delta` is metadata, NEVER fed to safety gate
+- Safety gates (Phase 48: BLOCKED < 0.70, SOFT 0.70–0.85, STRONG > 0.85) are NEVER modified
+- No render mutation, no executor override, no pipeline change
+- No subtitle timing rewrite, no motion_crop rewrite, no clip boundary mutation
+- Forbidden execution keys (`ffmpeg_args`, `render_command`, etc.) stripped from all output
+
+## Test Results
+
+- Focused: **85/85** passed
+
+---
+
+# Phase 57 — Platform-Aware Quality Feedback Loop
+
+**Module:** `app/ai/knowledge/platform_quality_feedback_evaluator.py`
+**Plan field:** `platform_quality_feedback` (added to `AIEditPlan` in `edit_plan_schema.py`)
+**Director hook:** `_attach_platform_quality_feedback(plan, job_id)` — after Phase 56
+
+## Purpose
+
+Evaluates whether render outputs align with the target platform strategy and quality expectations. Produces per-domain platform fit scores (subtitle, camera, hook, strategy) and creator-facing feedback (strengths, improvement opportunities, reasoning). **Quality feedback only** — no render mutation, no rerender, no executor override.
+
+## Output Model
+
+```json
+{
+  "platform_quality_feedback": {
+    "available": true,
+    "platform": "tiktok",
+    "creator_type": "podcast",
+    "platform_fit": 85,
+    "subtitle_fit": 88,
+    "camera_fit": 84,
+    "hook_fit": 80,
+    "strategy_fit": 81,
+    "overall": 85,
+    "confidence": 0.8150,
+    "strengths": [
+      "Subtitles are compact and readable for tiktok podcast content",
+      "Camera stability fits podcast-style content delivery"
+    ],
+    "improvement_opportunities": [
+      "Opening hook could create stronger first-3-second attention for tiktok"
+    ],
+    "reasoning": [
+      "Output aligns well with Tiktok podcast strategy while preserving creator style",
+      "Subtitle quality is the strongest contributor to platform fit",
+      "Platform strategy confidence is strong — guidance is highly reliable"
+    ]
+  }
+}
+```
+
+Fallback:
+
+```json
+{
+  "platform_quality_feedback": {
+    "available": false,
+    "platform_fit": 0, "subtitle_fit": 0, "camera_fit": 0,
+    "hook_fit": 0, "strategy_fit": 0, "overall": 0,
+    "confidence": 0.0, "strengths": [], "improvement_opportunities": [], "reasoning": []
+  }
+}
+```
+
+## Input Sources
+
+| Field | Phase | Used for |
+|---|---|---|
+| `platform_render_strategy` | 55E | Platform + creator type, strategy per domain, PRS confidence |
+| `platform_strategy_influence` | 56 | Per-domain support flags, PSI confidence |
+| `subtitle_quality_v2` | 52A | Raw subtitle quality score (base for subtitle_fit) |
+| `camera_quality_v2` | 52B | Raw camera quality score (base for camera_fit) |
+| `hook_quality_v2` | 52C | Raw hook quality score (base for hook_fit) |
+| `render_quality_v2` | 52D | `strategy_fit` score + evaluation confidence |
+| `platform_subtitle_context` | 55B | Subtitle context confidence → platform alignment factor |
+| `platform_camera_context` | 55C | Camera context confidence → platform alignment factor |
+| `platform_hook_context` | 55D | Hook context confidence → platform alignment factor |
+
+## Scoring Weights
+
+| Dimension | Weight |
+|---|---|
+| `subtitle_fit` | 0.25 |
+| `camera_fit` | 0.25 |
+| `hook_fit` | 0.25 |
+| `strategy_fit` | 0.15 |
+| `platform_context_confidence` | 0.10 |
+
+All scores clamped `[0, 100]`. Overall confidence clamped `[0.0, 1.0]`.
+
+## Per-Domain Fit Scoring
+
+### Subtitle Fit
+
+1. Base = `subtitle_quality_v2.overall`
+2. If `platform_subtitle_context.available`: blend `0.70 × raw + 0.30 × (context_confidence × 100)`
+3. If `platform_strategy_influence.subtitle.supported`: add 3-point bonus (capped at 100)
+4. Without context: fit = raw quality
+
+### Camera Fit
+
+1. Base = `camera_quality_v2.overall`
+2. If `platform_camera_context.available`: blend `0.70 × raw + 0.30 × (context_confidence × 100)`
+3. If `platform_strategy_influence.camera.supported`: add 3-point bonus (capped at 100)
+4. Without context: fit = raw quality
+
+### Hook Fit
+
+1. Base = `hook_quality_v2.overall`
+2. If `platform_hook_context.available`: blend `0.70 × raw + 0.30 × (context_confidence × 100)`
+3. Without context: fit = raw quality
+
+### Strategy Fit
+
+1. If `render_quality_v2.strategy_fit > 0`: blend `0.60 × rqv2_strategy + 0.40 × (prs_confidence × 100)`
+2. If `platform_strategy_influence.available`: add 5-point bonus (capped at 100)
+3. If no rqv2 strategy score: `prs_confidence × 75`
+
+### Platform Context Confidence Score (used in weighted overall)
+
+`0.70 × (prs_confidence × 100) + 0.30 × (psi_confidence × 100)` when PSI is available; otherwise `prs_confidence × 100`.
+
+### Confidence (output field)
+
+`(platform_render_strategy.confidence + render_quality_v2.confidence) / 2`, clamped `[0.0, 1.0]`.
+
+## Feedback Text Generation
+
+| Output | Threshold | Cap |
+|---|---|---|
+| `strengths` | score ≥ 75 | max 3 items |
+| `improvement_opportunities` | score < 65 | max 3 items |
+| `reasoning` | always | max 3 items |
+
+All feedback text:
+- Creator-facing natural language only
+- No raw JSON, no internal file paths, no stack traces
+- No low-level implementation details
+- Platform and creator type incorporated in language when available
+
+**Strength categories**: subtitle quality (readability/clarity by creator type), camera quality (stability for trust creators, energy for high-energy platforms), hook quality (retention for short-form platforms, trust for podcast/talking head), strategy alignment.
+
+**Improvement categories**: hook first-3-second attention (highest priority for retention platforms), subtitle platform alignment, camera stability/alignment, strategy alignment.
+
+## Safety Contract
+
+- Local only — no internet, no cloud API, no subprocess
+- Never raises — try/except wraps entire evaluation
+- Deterministic — same inputs → same output
+- **Quality feedback only**: no render mutation, no rerender trigger, no executor override
+- No subtitle timing rewrite, no motion_crop rewrite, no clip boundary mutation
+- No transcript rewrite, no hook text rewrite, no FFmpeg mutation
+- No autonomous execution, no render pipeline change
+- Executor authority unchanged — render pipeline never reads `platform_quality_feedback`
+- Forbidden execution keys (`ffmpeg_args`, `render_command`, `subtitle_timing`, `motion_crop`, etc.) never appear in output
+- Backward compatible — Phase 56 and all prior phase fields unchanged
+
+## Test Results
+
+- Focused: **76/76** passed
 - Full regression: **4640/4640** passed (0 regressions)

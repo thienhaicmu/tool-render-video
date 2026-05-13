@@ -664,6 +664,39 @@ def _build_plan(
         plan.warnings.append(f"platform_hook_context_error:{type(exc).__name__}")
         logger.debug("ai_director_platform_hook_context_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 55E: Platform-Aware Render Strategy ---
+    # Runs after Phase 55D: fuses platform subtitle, camera, and hook intelligence
+    # into one deterministic advisory platform render strategy.
+    # Advisory only — no render execution, no executor override, no pipeline mutation.
+    try:
+        _attach_platform_render_strategy(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"platform_render_strategy_error:{type(exc).__name__}")
+        logger.debug("ai_director_platform_render_strategy_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 56: Platform-Aware Strategy Influence ---
+    # Runs after Phase 55E: reads platform_render_strategy, builds per-domain
+    # influence support (subtitle, camera, ranking) with bounded confidence deltas,
+    # and enriches existing influence reasoning (additive only).
+    # Advisory only — confidence_delta is metadata only, NEVER fed to safety gate.
+    # Safety gates are NEVER lowered or bypassed. No render mutation.
+    try:
+        _attach_platform_strategy_influence(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"platform_strategy_influence_error:{type(exc).__name__}")
+        logger.debug("ai_director_platform_strategy_influence_failed job_id=%s: %s", job_id, exc)
+
+    # --- Phase 57: Platform-Aware Quality Feedback Loop ---
+    # Runs after Phase 56: reads platform_render_strategy + all quality v2 signals
+    # (subtitle, camera, hook, render) and evaluates how well the render output
+    # aligns with the target platform strategy.
+    # Quality feedback only — no render mutation, no rerender, no executor override.
+    try:
+        _attach_platform_quality_feedback(plan, job_id)
+    except Exception as exc:
+        plan.warnings.append(f"platform_quality_feedback_error:{type(exc).__name__}")
+        logger.debug("ai_director_platform_quality_feedback_failed job_id=%s: %s", job_id, exc)
+
     return plan
 
 
@@ -5131,4 +5164,142 @@ def _attach_platform_hook_context(plan: "AIEditPlan", request: Any, job_id: str)
         ctx.get("platform", ""),
         ctx.get("creator_type", ""),
         float(ctx.get("confidence") or 0.0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 55E — Platform-Aware Render Strategy helper
+# ---------------------------------------------------------------------------
+
+def _attach_platform_render_strategy(plan: "AIEditPlan", job_id: str) -> None:
+    """Fuse platform contexts into unified advisory render strategy and attach to plan.
+
+    Reads platform_subtitle_context (55B), platform_camera_context (55C),
+    platform_hook_context (55D), platform_context (55A), creator_preference_profile
+    (50D), and render_quality_v2 (52D) from the plan and produces one
+    deterministic platform_render_strategy.
+
+    Advisory only — strategy enriches orchestrator reasoning, variant evaluation,
+    and AI UX explanation. Never executes rendering, never overrides executor
+    authority, never mutates render pipeline parameters.
+    """
+    from app.ai.knowledge.platform_render_strategy_engine import build_platform_render_strategy
+
+    result = build_platform_render_strategy(plan)
+    plan.platform_render_strategy = result.get("platform_render_strategy", {})
+    strat = plan.platform_render_strategy
+
+    logger.debug(
+        "ai_platform_render_strategy_done job_id=%s available=%s platform=%s "
+        "creator_type=%s confidence=%.2f",
+        job_id,
+        strat.get("available", False),
+        strat.get("platform", ""),
+        strat.get("creator_type", ""),
+        float(strat.get("confidence") or 0.0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 56 — Platform-Aware Strategy Influence helper
+# ---------------------------------------------------------------------------
+
+def _attach_platform_strategy_influence(plan: "AIEditPlan", job_id: str) -> None:
+    """Build platform strategy influence context and enrich influence dicts.
+
+    Reads plan.platform_render_strategy (Phase 55E), builds per-domain influence
+    support (subtitle, camera, ranking) with bounded confidence deltas, and
+    enriches existing influence reasoning (additive only):
+      1. plan.creator_subtitle_influence reasoning
+      2. plan.creator_camera_preference tuning reasoning
+      3. plan.safe_influence_pack reasoning
+
+    Advisory only — confidence_delta is metadata, NEVER fed to safety gate.
+    Safety gates are NEVER lowered or bypassed by platform strategy.
+    No render mutation, no executor override, no pipeline changes.
+    """
+    from app.ai.knowledge.platform_strategy_influence_context import (
+        build_platform_strategy_influence,
+        enrich_subtitle_influence_reasoning,
+        enrich_camera_influence_reasoning,
+        enrich_ranking_influence_reasoning,
+    )
+
+    result = build_platform_strategy_influence(plan)
+    plan.platform_strategy_influence = result.get("platform_strategy_influence", {})
+    psi = plan.platform_strategy_influence
+
+    if not psi.get("available"):
+        logger.debug("ai_platform_strategy_influence_unavailable job_id=%s", job_id)
+        return
+
+    # --- Enrich subtitle influence reasoning (additive only) ---
+    subtitle_support = psi.get("subtitle") or {}
+    if subtitle_support.get("supported") and plan.creator_subtitle_influence:
+        plan.creator_subtitle_influence = enrich_subtitle_influence_reasoning(
+            plan.creator_subtitle_influence, subtitle_support,
+        )
+
+    # --- Enrich camera preference tuning reasoning (additive only) ---
+    camera_support = psi.get("camera") or {}
+    if camera_support.get("supported") and plan.creator_camera_preference:
+        cam_pref = plan.creator_camera_preference
+        tuning = cam_pref.get("camera_preference") or {}
+        if tuning and isinstance(tuning, dict):
+            enriched_tuning = enrich_camera_influence_reasoning(tuning, camera_support)
+            plan.creator_camera_preference = {
+                **cam_pref,
+                "camera_preference": enriched_tuning,
+            }
+
+    # --- Enrich ranking influence reasoning (additive only) ---
+    ranking_support = psi.get("ranking") or {}
+    if ranking_support.get("supported") and plan.safe_influence_pack:
+        plan.safe_influence_pack = enrich_ranking_influence_reasoning(
+            plan.safe_influence_pack, ranking_support,
+        )
+
+    logger.debug(
+        "ai_platform_strategy_influence_done job_id=%s available=%s "
+        "platform=%s creator_type=%s confidence=%.3f",
+        job_id,
+        psi.get("available", False),
+        psi.get("platform", ""),
+        psi.get("creator_type", ""),
+        float(psi.get("confidence") or 0.0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 57 — Platform-Aware Quality Feedback Loop helper
+# ---------------------------------------------------------------------------
+
+def _attach_platform_quality_feedback(plan: "AIEditPlan", job_id: str) -> None:
+    """Evaluate platform quality feedback and attach to plan.
+
+    Reads platform_render_strategy (55E), platform_strategy_influence (56),
+    subtitle_quality_v2 (52A), camera_quality_v2 (52B), hook_quality_v2 (52C),
+    render_quality_v2 (52D), and platform context metadata (55B–55D) to
+    evaluate how well the render output aligns with the target platform strategy.
+
+    Quality feedback only — no render mutation, no rerender, no executor override.
+    Advisory only — platform_quality_feedback is metadata, never alters render.
+    """
+    from app.ai.knowledge.platform_quality_feedback_evaluator import (
+        evaluate_platform_quality_feedback,
+    )
+
+    result = evaluate_platform_quality_feedback(plan)
+    plan.platform_quality_feedback = result.get("platform_quality_feedback", {})
+    fb = plan.platform_quality_feedback
+
+    logger.debug(
+        "ai_platform_quality_feedback_done job_id=%s available=%s "
+        "platform=%s creator_type=%s overall=%d confidence=%.3f",
+        job_id,
+        fb.get("available", False),
+        fb.get("platform", ""),
+        fb.get("creator_type", ""),
+        int(fb.get("overall") or 0),
+        float(fb.get("confidence") or 0.0),
     )
