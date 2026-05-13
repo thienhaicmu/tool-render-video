@@ -3,7 +3,7 @@ test_ai_optional_dependencies.py
 
 Verifies that all AI sub-package modules load safely and degrade
 gracefully when optional libraries (sentence-transformers, faiss,
-librosa, mediapipe, faster-whisper) are not installed.
+librosa, mediapipe, faster-whisper, whisperx) are not installed.
 
 No GPU required. No API keys required.
 """
@@ -34,6 +34,7 @@ def test_get_ai_dependency_status_keys():
         "librosa",
         "mediapipe",
         "faster_whisper",
+        "whisperx",
     }
     assert expected_keys == set(status.keys()), f"Missing keys: {expected_keys - set(status.keys())}"
     for key, val in status.items():
@@ -208,8 +209,25 @@ def test_all_dependency_checks_return_bool():
         has_librosa,
         has_mediapipe,
         has_sentence_transformers,
+        has_whisperx,
     )
 
-    for fn in (has_sentence_transformers, has_faiss, has_librosa, has_mediapipe, has_faster_whisper):
+    for fn in (has_sentence_transformers, has_faiss, has_librosa, has_mediapipe, has_faster_whisper, has_whisperx):
         result = fn()
         assert isinstance(result, bool), f"{fn.__name__} must return bool"
+
+
+def test_has_whisperx_does_not_import_whisperx(monkeypatch):
+    import sys
+    from app.ai import dependencies
+
+    sys.modules.pop("whisperx", None)
+
+    def fake_find_spec(name):
+        assert name == "whisperx"
+        return None
+
+    monkeypatch.setattr(dependencies.importlib.util, "find_spec", fake_find_spec)
+
+    assert dependencies.has_whisperx() is False
+    assert "whisperx" not in sys.modules

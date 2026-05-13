@@ -19,11 +19,12 @@ from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes
 from app.services.subtitle_engine import (
-    transcribe_to_srt, srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time,
+    srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time,
     slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt,
     apply_market_hook_text_to_srt, apply_hook_subtitle_format, resolve_hook_overlay_text,
     subtitle_emphasis_pass, parse_srt_blocks, write_srt_blocks,
 )
+from app.services.subtitle_transcription_adapters import transcribe_with_adapter
 from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame
 from app.services.viral_scorer import score_segments
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
@@ -1625,7 +1626,25 @@ def run_render_pipeline(
                     _hb = threading.Thread(target=_hb_thread_fn, daemon=True, name=f"transcribe_hb_{job_id[:8]}")
                     _hb.start()
                     try:
-                        transcribe_to_srt(str(source_path), str(full_srt), model_name=_whisper_model, retry_count=retry_count, highlight_per_word=payload.highlight_per_word)
+                        _transcription_result = transcribe_with_adapter(
+                            str(source_path),
+                            str(full_srt),
+                            engine=getattr(payload, "subtitle_transcription_engine", "default"),
+                            model_name=_whisper_model,
+                            retry_count=retry_count,
+                            highlight_per_word=payload.highlight_per_word,
+                            logger=logger,
+                        )
+                        if _transcription_result.warnings:
+                            _job_log(
+                                effective_channel,
+                                job_id,
+                                "subtitle_transcription_adapter_warning "
+                                f"requested={getattr(payload, 'subtitle_transcription_engine', 'default')} "
+                                f"used={_transcription_result.engine} "
+                                f"warnings={','.join(_transcription_result.warnings)}",
+                                kind="warning",
+                            )
                         full_srt_available = bool(full_srt.exists() and full_srt.stat().st_size > 0)
                         _transcribe_ms = int((time.perf_counter() - _t_transcribe) * 1000)
                         _srt_size = full_srt.stat().st_size if full_srt_available else 0

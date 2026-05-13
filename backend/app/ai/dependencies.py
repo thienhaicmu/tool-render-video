@@ -30,6 +30,10 @@ def has_faster_whisper() -> bool:
     return importlib.util.find_spec("faster_whisper") is not None
 
 
+def has_whisperx() -> bool:
+    return importlib.util.find_spec("whisperx") is not None
+
+
 def get_ai_dependency_status() -> dict:
     """Return availability of all optional AI libraries."""
     return {
@@ -38,4 +42,5 @@ def get_ai_dependency_status() -> dict:
         "librosa": has_librosa(),
         "mediapipe": has_mediapipe(),
         "faster_whisper": has_faster_whisper(),
+        "whisperx": has_whisperx(),
     }
