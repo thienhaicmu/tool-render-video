@@ -3,7 +3,7 @@ test_ai_optional_dependencies.py
 
 Verifies that all AI sub-package modules load safely and degrade
 gracefully when optional libraries (sentence-transformers, faiss,
-librosa, mediapipe, faster-whisper, whisperx) are not installed.
+librosa, mediapipe, faster-whisper, whisperx, deepfilternet) are not installed.
 
 No GPU required. No API keys required.
 """
@@ -35,6 +35,7 @@ def test_get_ai_dependency_status_keys():
         "mediapipe",
         "faster_whisper",
         "whisperx",
+        "deepfilternet",
     }
     assert expected_keys == set(status.keys()), f"Missing keys: {expected_keys - set(status.keys())}"
     for key, val in status.items():
@@ -206,13 +207,22 @@ def test_all_dependency_checks_return_bool():
     from app.ai.dependencies import (
         has_faiss,
         has_faster_whisper,
+        has_deepfilternet,
         has_librosa,
         has_mediapipe,
         has_sentence_transformers,
         has_whisperx,
     )
 
-    for fn in (has_sentence_transformers, has_faiss, has_librosa, has_mediapipe, has_faster_whisper, has_whisperx):
+    for fn in (
+        has_sentence_transformers,
+        has_faiss,
+        has_librosa,
+        has_mediapipe,
+        has_faster_whisper,
+        has_whisperx,
+        has_deepfilternet,
+    ):
         result = fn()
         assert isinstance(result, bool), f"{fn.__name__} must return bool"
 
@@ -231,3 +241,22 @@ def test_has_whisperx_does_not_import_whisperx(monkeypatch):
 
     assert dependencies.has_whisperx() is False
     assert "whisperx" not in sys.modules
+
+
+def test_has_deepfilternet_does_not_import_ml_packages(monkeypatch):
+    import sys
+    from app.ai import dependencies
+
+    for name in ("deepfilternet", "torch", "torchaudio"):
+        sys.modules.pop(name, None)
+
+    def fake_find_spec(name):
+        assert name == "deepfilternet"
+        return None
+
+    monkeypatch.setattr(dependencies.importlib.util, "find_spec", fake_find_spec)
+
+    assert dependencies.has_deepfilternet() is False
+    assert "deepfilternet" not in sys.modules
+    assert "torch" not in sys.modules
+    assert "torchaudio" not in sys.modules
