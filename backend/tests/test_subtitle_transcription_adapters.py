@@ -221,3 +221,116 @@ def test_transcribe_with_adapter_whisperx_success_writes_word_level_srt(monkeypa
     assert [block["text"] for block in blocks] == ["hello", "world"]
     assert blocks[0]["start"] == pytest.approx(0.1)
     assert blocks[1]["end"] == pytest.approx(0.9)
+
+
+def test_whisperx_word_timing_normalizes_ultra_short_duration(tmp_path):
+    from app.services.subtitle_engine import parse_srt_blocks
+    from app.services.subtitle_transcription_adapters import _write_whisperx_srt
+
+    output_srt = tmp_path / "output.srt"
+    _write_whisperx_srt(
+        {
+            "segments": [
+                {
+                    "start": 0.0,
+                    "end": 1.0,
+                    "text": "a test",
+                    "words": [
+                        {"word": "a", "start": 0.10, "end": 0.12},
+                        {"word": "test", "start": 0.30, "end": 0.60},
+                    ],
+                }
+            ]
+        },
+        str(output_srt),
+        word_level=True,
+    )
+
+    blocks = parse_srt_blocks(str(output_srt))
+    assert blocks[0]["text"] == "a"
+    assert blocks[0]["end"] - blocks[0]["start"] >= 0.099
+
+
+def test_whisperx_word_timing_repairs_overlapping_words(tmp_path):
+    from app.services.subtitle_engine import parse_srt_blocks
+    from app.services.subtitle_transcription_adapters import _write_whisperx_srt
+
+    output_srt = tmp_path / "output.srt"
+    _write_whisperx_srt(
+        {
+            "segments": [
+                {
+                    "start": 0.0,
+                    "end": 1.0,
+                    "text": "hello world",
+                    "words": [
+                        {"word": "hello", "start": 0.10, "end": 0.35},
+                        {"word": "world", "start": 0.20, "end": 0.50},
+                    ],
+                }
+            ]
+        },
+        str(output_srt),
+        word_level=True,
+    )
+
+    blocks = parse_srt_blocks(str(output_srt))
+    assert [block["text"] for block in blocks] == ["hello", "world"]
+    assert blocks[1]["start"] >= blocks[0]["end"] + 0.009
+
+
+def test_whisperx_word_timing_drops_punctuation_only_fragments(tmp_path):
+    from app.services.subtitle_engine import parse_srt_blocks
+    from app.services.subtitle_transcription_adapters import _write_whisperx_srt
+
+    output_srt = tmp_path / "output.srt"
+    _write_whisperx_srt(
+        {
+            "segments": [
+                {
+                    "start": 0.0,
+                    "end": 1.0,
+                    "text": "wait",
+                    "words": [
+                        {"word": "!!!", "start": 0.10, "end": 0.20},
+                        {"word": "wait", "start": 0.30, "end": 0.60},
+                    ],
+                }
+            ]
+        },
+        str(output_srt),
+        word_level=True,
+    )
+
+    blocks = parse_srt_blocks(str(output_srt))
+    assert [block["text"] for block in blocks] == ["wait"]
+
+
+def test_whisperx_invalid_word_timing_falls_back_to_segment_level(tmp_path):
+    from app.services.subtitle_engine import parse_srt_blocks
+    from app.services.subtitle_transcription_adapters import _write_whisperx_srt
+
+    output_srt = tmp_path / "output.srt"
+    _write_whisperx_srt(
+        {
+            "segments": [
+                {
+                    "start": 1.0,
+                    "end": 2.0,
+                    "text": "segment fallback",
+                    "words": [
+                        {"word": "bad", "start": 1.20, "end": 1.10},
+                        {"word": "also bad", "start": None, "end": 1.80},
+                    ],
+                }
+            ]
+        },
+        str(output_srt),
+        word_level=True,
+    )
+
+    blocks = parse_srt_blocks(str(output_srt))
+    assert len(blocks) == 1
+    assert blocks[0]["text"] == "segment fallback"
+    assert blocks[0]["start"] == pytest.approx(1.0)
+    assert blocks[0]["end"] == pytest.approx(2.0)
