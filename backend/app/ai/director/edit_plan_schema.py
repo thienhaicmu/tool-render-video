@@ -236,6 +236,8 @@ class AIEditPlan:
     subtitle_execution_promotion: dict = field(default_factory=dict)
     # Phase 59B — Camera influence promotion result (populated by camera_promotion_engine module)
     camera_execution_promotion: dict = field(default_factory=dict)
+    # Phase 59C — Segment selection promotion result (populated by segment_promotion_engine module)
+    segment_selection_promotion: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -347,6 +349,7 @@ class AIEditPlan:
             "platform_render_strategy": dict(self.platform_render_strategy),
             "platform_strategy_influence": dict(self.platform_strategy_influence),
             "platform_quality_feedback": dict(self.platform_quality_feedback),
-            "subtitle_execution_promotion": dict(self.subtitle_execution_promotion),
-            "camera_execution_promotion":   dict(self.camera_execution_promotion),
+            "subtitle_execution_promotion":  dict(self.subtitle_execution_promotion),
+            "camera_execution_promotion":    dict(self.camera_execution_promotion),
+            "segment_selection_promotion":   dict(self.segment_selection_promotion),
         }

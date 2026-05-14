@@ -1913,6 +1913,51 @@ def run_render_pipeline(
         elif _ai_edit_plan is not None:
             logger.debug("ai_beat_execution_skipped job_id=%s (disabled)", job_id)
 
+        # ── AI Segment Selection Promotion (Phase 59C) ───────────────────────
+        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False):
+            try:
+                from app.ai.segment_promotion.segment_promotion_engine import (
+                    promote_segment_selection as _promote_segments,
+                )
+                scored, _seg_promo = _promote_segments(
+                    scored, _ai_edit_plan, payload, context={"job_id": job_id}
+                )
+                _promo = _seg_promo.get("segment_selection_promotion") or {}
+                try:
+                    _ai_edit_plan.segment_selection_promotion = _promo
+                except Exception:
+                    pass
+                if _promo.get("applied"):
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="ai_segment_promotion_applied",
+                        level="INFO",
+                        message=(
+                            f"AI segment promotion: {_promo.get('selected_count', 0)}"
+                            f"/{_promo.get('total_count', 0)} segments reordered"
+                        ),
+                        step="ai_segment_promotion",
+                        context=_promo,
+                    )
+                    logger.info(
+                        "ai_segment_promotion_applied job_id=%s selected=%d total=%d conf=%.3f",
+                        job_id,
+                        _promo.get("selected_count", 0),
+                        _promo.get("total_count", 0),
+                        _promo.get("confidence", 0.0),
+                    )
+                else:
+                    logger.debug(
+                        "ai_segment_promotion_skipped job_id=%s reason=%s",
+                        job_id,
+                        _promo.get("reason", "not_eligible"),
+                    )
+            except Exception as _seg_err:
+                logger.warning(
+                    "ai_segment_promotion_failed job_id=%s: %s", job_id, _seg_err
+                )
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()

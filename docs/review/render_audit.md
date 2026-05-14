@@ -458,6 +458,128 @@ After Phase 59B: For creators with `smooth_subject` / `dynamic_subject` preferen
 
 ---
 
+### 2026-05-14 — Phase 59C: Segment Selection Promotion (first safe AI clip selection)
+
+**Implemented:**
+
+- `app/ai/segment_promotion/segment_promotion_engine.py` (new) — `promote_segment_selection(scored, edit_plan, payload, context)` public API; reorders the render pipeline's `scored` list to put AI-endorsed segments first; overlap-based matching; never raises
+- `app/ai/segment_promotion/__init__.py` (new) — package marker
+- `app/ai/director/edit_plan_schema.py` (updated) — `segment_selection_promotion: dict` field added after Phase 59B field; included in `to_dict()`; backward-compatible
+- `app/orchestration/render_pipeline.py` (updated) — Phase 59C block inserted between beat execution and the `for idx, seg in enumerate(scored)` loop (injection window lines ~1914–1916); calls `promote_segment_selection`, stores report on `_ai_edit_plan.segment_selection_promotion`, emits render event
+- `tests/test_ai_phase59c_segment_promotion.py` (new) — 36 focused tests
+
+**What Phase 59C is:**
+
+Phase 59C is the first AI execution promotion that affects **which clips are rendered and in what order**. Prior phases (59A/59B) modified payload config fields (subtitle_style, reframe_mode). Phase 59C modifies the **segment render list** itself.
+
+**Promotion mechanism:**
+
+The render pipeline builds `scored` (a list of scene-based segment dicts) from scene detection before the AI Director runs. Phase 59C compares AI `selected_segments` (transcript-based time windows) against the `scored` list using **overlap matching**, then **reorders** `scored` to put AI-endorsed segments first.
+
+No new segments are created. No timestamps are modified. The existing dicts are just rearranged.
+
+**Injection point:**
+
+`render_pipeline.py` — after beat execution block, before `for idx, seg in enumerate(scored, start=1)`. This is the last possible moment to modify `scored` before it is committed to the DB as job parts.
+
+**Overlap matching algorithm:**
+
+A `scored` segment is "AI endorsed" if any valid AI segment overlaps it by:
+- ≥ 1.0 second absolute overlap (`_MIN_OVERLAP_SECONDS`)
+- ≥ 5% of the scored segment's duration (`_MIN_OVERLAP_RATIO`)
+
+The scored segment receives the endorsement score = max AI score of all overlapping AI segments (normalized to 0–1). Endorsed segments are sorted by endorsement score descending, then non-endorsed segments follow in their original order.
+
+**Confidence gate:**
+
+- `effective_conf = mean(normalize(ai_seg.score) for ai_seg in valid_ai_segs)`
+- Score normalization: values > 1.0 treated as 0–100 scale (÷ 100); values ≤ 1.0 treated as 0–1 scale
+- Promotion requires `effective_conf >= 0.80`
+
+**Segment validation (every AI segment checked):**
+
+| Check | Rule |
+|---|---|
+| Start bound | `start >= 0.0` |
+| End bound | `end > start` |
+| Not NaN | `not math.isnan(start or end)` |
+| Not Inf | `not math.isinf(start or end)` |
+| Not None | start and end must be numeric |
+
+Invalid AI segments are silently skipped. If ALL AI segments are invalid → fallback.
+
+**Safety gates:**
+
+| Condition | Behavior |
+|---|---|
+| `ai_director_enabled = False` | No promotion, reason `ai_director_disabled` |
+| `ai_render_influence_enabled = False` | No promotion, reason `ai_render_influence_disabled` |
+| `segment_ai_lock = True` | No promotion, reason `user_override:segment_ai_lock=true` |
+| `edit_plan = None` | No promotion, reason `no_edit_plan` |
+| `selected_segments` empty | No promotion, reason `no_selected_segments` |
+| All AI segments invalid | No promotion, reason `no_valid_ai_segments` |
+| `effective_conf < 0.80` | No promotion, reason `low_confidence` |
+| No overlap found | No promotion, reason `no_overlap_found` |
+| Any exception | Caught, original `scored` returned, pipeline continues |
+
+**Promotion report shape:**
+
+```json
+{
+  "segment_selection_promotion": {
+    "applied": true,
+    "selected_count": 2,
+    "total_count": 4,
+    "source": "ai_selected_segments",
+    "confidence": 0.8600,
+    "reason": "promotion_applied",
+    "reasoning": [
+      "AI endorsed 2/4 segments (mean_conf=0.860)",
+      "2 non-endorsed segment(s) preserved at end",
+      "Reorder only — no segments dropped"
+    ],
+    "fallback_used": false
+  }
+}
+```
+
+**Safety contract enforced:**
+
+| Boundary | Status |
+|---|---|
+| No new timestamp generation | ✅ |
+| No segment dict mutation | ✅ |
+| No ffmpeg mutation | ✅ |
+| No subtitle timing rewrite | ✅ |
+| No ASS generation rewrite | ✅ |
+| No motion_crop rewrite | ✅ |
+| No playback_speed mutation | ✅ |
+| No executor override | ✅ |
+| Reorder only — existing segments preserved intact | ✅ |
+| Overlap-validated matching only | ✅ |
+| Confidence gate enforced before any reorder | ✅ |
+| Original scored list returned unchanged on gate failure | ✅ |
+| Final list never shorter than _MIN_FINAL_SEGMENTS | ✅ |
+| Deterministic: same inputs → same output | ✅ |
+| Never raises | ✅ |
+
+**Real render impact:**
+
+Before Phase 59C: `selected_segments` was advisory metadata only. Render always used the score-sorted output of scene detection regardless of AI transcript intelligence.
+
+After Phase 59C: When AI director confidence ≥ 0.80 and AI segments overlap with scored segments, the AI-endorsed segments move to the front of the render queue (part_001, part_002, ...). This means:
+- Platform delivery order prioritizes AI-selected content
+- First export (most commonly used single-clip export) is the AI-recommended clip
+- All clips still rendered (no content is dropped)
+
+**Verification:**
+
+- Phase 59C tests: 36 passed
+- Full suite: 5064 passed, 1 skipped
+- `py_compile` passed on all changed modules
+
+---
+
 ### 2026-05-08 — AI Productization Phase 41: Retrieval-Based Creator Intelligence
 
 **Implemented:**
