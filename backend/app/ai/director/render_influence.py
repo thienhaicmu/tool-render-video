@@ -87,6 +87,7 @@ def apply_ai_render_influence(
         _apply_camera_promotion(payload, edit_plan, report)
         _apply_subtitle_influence(payload, edit_plan, report)
         _apply_subtitle_promotion(payload, edit_plan, report)
+        _apply_quality_gate(payload, edit_plan, report)
         _apply_pacing_influence(payload, edit_plan, report)
         _apply_memory_influence(payload, edit_plan, report)
         _report_beat_visual_execution(payload, edit_plan, report)
@@ -357,6 +358,67 @@ def _apply_subtitle_promotion(payload: Any, edit_plan: Any, report: dict) -> Non
     except Exception as exc:
         report["warnings"].append(f"subtitle_promotion_error:{type(exc).__name__}")
         logger.warning("ai_subtitle_promotion_failed: %s", exc)
+
+
+# ── Quality gate (Phase 59D) ─────────────────────────────────────────────────
+
+def _apply_quality_gate(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Phase 59D — Gate or revert subtitle/camera promotions based on quality signals.
+
+    May revert:
+        payload.highlight_per_word  — if subtitle_quality_v2.keyword_emphasis_quality is low
+        payload.reframe_mode        — if camera_quality_v2 shows high risk signals
+
+    Results that change payload go to report["applied"].
+    Advisory actions and no-change outcomes go to report["skipped"].
+    """
+    if edit_plan is None:
+        report["skipped"].append("quality_gate:no_edit_plan_phase59d")
+        return
+
+    try:
+        from app.ai.quality_gate.quality_gate_engine import apply_quality_gate
+        _, gate_report = apply_quality_gate(
+            payload, edit_plan, context={}
+        )
+        gate = gate_report.get("quality_gated_influence") or {}
+
+        try:
+            edit_plan.quality_gated_influence = gate
+        except Exception:
+            pass
+
+        if gate.get("applied"):
+            entries: list[str] = []
+            sub = gate.get("subtitle") or {}
+            cam = gate.get("camera")   or {}
+            if sub.get("applied"):
+                entries.append(
+                    f"subtitle_gate={sub['gate_action']!r}"
+                    f"(reverted={sub.get('reverted_fields')})"
+                )
+            if cam.get("applied"):
+                entries.append(
+                    f"camera_gate={cam['gate_action']!r}"
+                    f"(reverted={cam.get('reverted_fields')})"
+                )
+            report["applied"].append(
+                f"quality_gate:phase59d({','.join(entries)})"
+            )
+            logger.info(
+                "ai_quality_gate_applied subtitle_action=%r camera_action=%r",
+                sub.get("gate_action"),
+                cam.get("gate_action"),
+            )
+        else:
+            sub_action = (gate.get("subtitle") or {}).get("gate_action", "no_change")
+            cam_action = (gate.get("camera")   or {}).get("gate_action", "no_change")
+            report["skipped"].append(
+                f"quality_gate:phase59d(subtitle={sub_action!r},camera={cam_action!r})"
+            )
+    except Exception as exc:
+        report["warnings"].append(f"quality_gate_error:{type(exc).__name__}")
+        logger.warning("ai_quality_gate_failed: %s", exc)
 
 
 # ── Pacing influence (Phase 11 beat execution integration) ───────────────────

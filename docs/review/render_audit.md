@@ -580,6 +580,105 @@ After Phase 59C: When AI director confidence ≥ 0.80 and AI segments overlap wi
 
 ---
 
+### 2026-05-14 — AI Intelligence v2 Phase 59D: Quality-Gated Execution Influence
+
+**Implemented:**
+
+- `app/ai/quality_gate/__init__.py` (new) — package marker
+- `app/ai/quality_gate/quality_gate_engine.py` (new) — Phase 59D core engine; `apply_quality_gate(payload, edit_plan, context)` handles subtitle and camera gates; `apply_segment_quality_gate(scored, scored_original, edit_plan, context)` handles segment gate; never raises; all advisory actions leave payload unchanged
+- `app/ai/director/edit_plan_schema.py` (updated) — `quality_gated_influence: dict = field(default_factory=dict)` added after Phase 59C field; included in `to_dict()`
+- `app/ai/director/render_influence.py` (updated) — `_apply_quality_gate()` injected after `_apply_subtitle_promotion()` (after 59A and 59B have run); stores gate result on `edit_plan.quality_gated_influence`; reverts go to `report["applied"]`, advisory/no-change go to `report["skipped"]`
+- `app/orchestration/render_pipeline.py` (updated) — `_scored_original = list(scored)` saved before Phase 59C block; Phase 59D segment gate block injected after Phase 59C and before `for idx, seg in enumerate(scored)`; merges segment gate result into `edit_plan.quality_gated_influence["segment"]`
+- `tests/test_ai_phase59d_quality_gate.py` (new) — 23 tests covering all gate actions for all three domains plus safety paths
+
+**What Phase 59D adds:**
+
+Phase 59D is a quality-signal-driven post-promotion gate. It runs AFTER Phases 59A, 59B, and 59C have applied their promotions and can revert those promotions when quality signals indicate the promotion would produce a worse result.
+
+- **Subtitle gate**: reads `subtitle_quality_v2.keyword_emphasis_quality`, `overload_risk`, `safe_zone_fit`, `mobile_readability`
+  - `block_keyword_strengthening`: `keyword_emphasis_quality < 40` → reverts `payload.highlight_per_word = False` if Phase 59A had applied it
+  - `allow_density_reduction`: `overload_risk >= 60` → advisory, no revert
+  - `allow_readability_bias`: `safe_zone_fit < 40` or `mobile_readability < 40` → advisory, no revert
+  - `no_change`: all signals acceptable
+
+- **Camera gate**: reads `camera_quality_v2.micro_jitter_risk`, `whip_pan_risk`
+  - `block_aggressive_motion`: `whip_pan_risk >= 60` → reverts `payload.reframe_mode = "center"` when Phase 59B had set it to "motion"
+  - `prefer_stability`: `micro_jitter_risk >= 60` → downgrades reframe_mode from "motion" to "subject"; advisory when already safe
+  - `allow_subject_hold`: jitter risk high but reframe already safe → advisory, no revert
+  - `no_change`: all signals acceptable
+
+- **Segment gate**: reads `hook_quality_v2`, `render_quality_v2.hook_score`, `platform_quality_feedback.hook_fit`
+  - `fallback_default_segments`: `hook_fatigue_risk >= 60` or `render_hook_score < 35` → reverts `scored` to `_scored_original`
+  - `allow_reorder_only`: first_3s + overall both weak, or platform hook_fit low → advisory, no revert
+  - `allow_ai_selected_segments`: hook quality acceptable → advisory confirmation
+  - `no_change`: Phase 59C promotion was not applied, nothing to gate
+
+**Gate execution order (render_pipeline.py):**
+
+```
+apply_ai_render_influence()          ← Phase 59A + 59B + 59D subtitle/camera gate
+  └─ _apply_camera_promotion()       ← Phase 59B
+  └─ _apply_subtitle_promotion()     ← Phase 59A
+  └─ _apply_quality_gate()           ← Phase 59D (subtitle + camera gates)
+
+_scored_original = list(scored)      ← snapshot before Phase 59C
+
+Phase 59C block                      ← may reorder scored
+Phase 59D segment gate block         ← may revert scored to _scored_original
+
+for idx, seg in enumerate(scored)    ← DB commit loop
+```
+
+**Safety contract:**
+
+- Gate actions `allow_density_reduction`, `allow_readability_bias`, `allow_subject_hold`, `allow_reorder_only`, `allow_ai_selected_segments` are advisory-only — they never mutate payload or scored
+- Only `block_keyword_strengthening`, `block_aggressive_motion`, `prefer_stability`, and `fallback_default_segments` produce payload/scored mutations
+- Confidence gate: quality signals with `confidence < 0.50` AND `overall == 0` are ignored (no gate applied)
+- Segment gate only runs when Phase 59C `segment_selection_promotion.applied == True`
+- Never raises — exception in either gate function returns original payload/scored + fallback report
+
+**quality_gated_influence report shape:**
+
+```json
+{
+  "quality_gated_influence": {
+    "applied": true,
+    "subtitle": {
+      "gate_action": "block_keyword_strengthening",
+      "reverted_fields": ["highlight_per_word"],
+      "quality_signals": {"keyword_emphasis_quality": 25, "overload_risk": 20},
+      "confidence": 0.85,
+      "reasoning": ["keyword_emphasis_quality=25 < threshold 40"],
+      "applied": true
+    },
+    "camera": {
+      "gate_action": "no_change",
+      "reverted_fields": [],
+      "quality_signals": {"micro_jitter_risk": 30, "whip_pan_risk": 20},
+      "confidence": 0.90,
+      "reasoning": [],
+      "applied": false
+    },
+    "segment": {
+      "gate_action": "allow_ai_selected_segments",
+      "reverted": false,
+      "quality_signals": {"hook_fatigue_risk": 15, "hook_overall": 78},
+      "confidence": 0.82,
+      "reasoning": ["hook quality acceptable, AI segment selection allowed"],
+      "applied": false
+    }
+  }
+}
+```
+
+**Verification:**
+
+- Phase 59D tests: 23 passed (including REQUIRED EXECUTION TEST: `test_execution_keyword_emphasis_blocked_by_low_quality`)
+- Full suite: 5087 passed, 1 skipped
+- `py_compile` passed on all changed modules
+
+---
+
 ### 2026-05-08 — AI Productization Phase 41: Retrieval-Based Creator Intelligence
 
 **Implemented:**

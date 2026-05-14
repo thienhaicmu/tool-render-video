@@ -1913,6 +1913,9 @@ def run_render_pipeline(
         elif _ai_edit_plan is not None:
             logger.debug("ai_beat_execution_skipped job_id=%s (disabled)", job_id)
 
+        # Save original scored order before Phase 59C (used by Phase 59D segment gate)
+        _scored_original: list = list(scored)
+
         # ── AI Segment Selection Promotion (Phase 59C) ───────────────────────
         if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False):
             try:
@@ -1956,6 +1959,40 @@ def run_render_pipeline(
             except Exception as _seg_err:
                 logger.warning(
                     "ai_segment_promotion_failed job_id=%s: %s", job_id, _seg_err
+                )
+
+        # ── AI Quality Gate — Segment (Phase 59D) ────────────────────────────
+        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False):
+            try:
+                from app.ai.quality_gate.quality_gate_engine import (
+                    apply_segment_quality_gate as _segment_quality_gate,
+                )
+                scored, _seg_gate = _segment_quality_gate(
+                    scored, _scored_original, _ai_edit_plan, context={"job_id": job_id}
+                )
+                _sg = _seg_gate.get("segment_quality_gate") or {}
+                try:
+                    existing_qg = getattr(_ai_edit_plan, "quality_gated_influence", {}) or {}
+                    existing_qg["segment"] = _sg
+                    _ai_edit_plan.quality_gated_influence = existing_qg
+                except Exception:
+                    pass
+                if _sg.get("applied"):
+                    logger.info(
+                        "ai_segment_quality_gate_applied job_id=%s action=%s reverted=%s",
+                        job_id,
+                        _sg.get("gate_action"),
+                        _sg.get("reverted"),
+                    )
+                else:
+                    logger.debug(
+                        "ai_segment_quality_gate_no_change job_id=%s action=%s",
+                        job_id,
+                        _sg.get("gate_action", "no_change"),
+                    )
+            except Exception as _qg_err:
+                logger.warning(
+                    "ai_segment_quality_gate_failed job_id=%s: %s", job_id, _qg_err
                 )
 
         for idx, seg in enumerate(scored, start=1):
