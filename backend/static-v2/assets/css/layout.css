@@ -128,3 +128,13 @@
 .mb-3 { margin-bottom: var(--sp-3); }
 .mb-4 { margin-bottom: var(--sp-4); }
 .mb-6 { margin-bottom: var(--sp-6); }
+
+/* ── Route-specific shell overrides ─────────────────────────────────── */
+
+.shell[data-route="create"] {
+  grid-template-columns: var(--nav-rail-width) 1fr 0px;
+}
+
+.shell[data-route="create"] .shell__panel {
+  display: none;
+}

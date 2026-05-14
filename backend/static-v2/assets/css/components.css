@@ -2245,3 +2245,486 @@
   font-size: 11px;
   font-weight: 500;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Creator Workspace (UI-R5C.1) — preview-first, no right panel
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Nav rail: creator energy, not enterprise ────────────────────────── */
+
+.nav-rail-item span {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── Root workspace ──────────────────────────────────────────────────── */
+
+.cw {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  background: var(--color-background);
+}
+
+/* ── Hero zone (dominant — fills all available space) ────────────────── */
+
+.cw-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Import surface ──────────────────────────────────────────────────── */
+
+.cw-import {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-8);
+  overflow-y: auto;
+}
+
+.cw-import-inner {
+  width: 100%;
+  max-width: 520px;
+}
+
+.cw-import-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.5px;
+  margin-bottom: var(--sp-2);
+}
+
+.cw-import-sub {
+  font-size: 13px;
+  color: var(--color-text-faint);
+  line-height: 1.5;
+}
+
+.cw-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-faint);
+}
+
+/* ── Source tabs ─────────────────────────────────────────────────────── */
+
+.cw-tabs {
+  background: var(--color-surface);
+  border-radius: 8px;
+  padding: 3px;
+  display: inline-flex;
+  align-self: flex-start;
+}
+
+.cw-tab {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.cw-tab:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.cw-tab--active {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.cw-tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── URL / path input ────────────────────────────────────────────────── */
+
+.cw-url-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 150ms;
+  box-sizing: border-box;
+}
+
+.cw-url-input:focus {
+  border-color: var(--color-accent);
+}
+
+.cw-url-input::placeholder {
+  color: var(--color-text-faint);
+}
+
+/* ── Preparing state ─────────────────────────────────────────────────── */
+
+.cw-preparing {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding: var(--sp-8);
+}
+
+.cw-preparing-label {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.cw-preparing-sub {
+  font-size: 13px;
+  color: var(--color-text-faint);
+}
+
+/* ── Preview state ───────────────────────────────────────────────────── */
+
+.cw-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cw-preview__video {
+  flex: 1;
+  width: 100%;
+  object-fit: contain;
+  background: #000;
+  min-height: 0;
+}
+
+.cw-preview--idle {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  background: var(--color-surface);
+}
+
+.cw-preview--idle-icon {
+  font-size: 52px;
+  opacity: 0.10;
+  color: var(--color-text);
+}
+
+.cw-preview--idle-text {
+  font-size: 13px;
+  color: var(--color-text-faint);
+}
+
+.cw-session-bar {
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--color-bg-raised);
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.cw-session-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cw-session-title--empty {
+  font-weight: 400;
+  color: var(--color-text-faint);
+}
+
+.cw-session-duration {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.cw-reset-btn {
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 120ms, color 120ms;
+}
+
+.cw-reset-btn:hover {
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
+}
+
+/* ── Controls strip ──────────────────────────────────────────────────── */
+
+.cw-controls {
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-raised);
+}
+
+/* ── Intent cards ────────────────────────────────────────────────────── */
+
+.cw-intent-row {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.cw-intent-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--sp-3) var(--sp-4);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--color-border);
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms;
+  gap: var(--sp-1);
+}
+
+.cw-intent-card:last-child {
+  border-right: none;
+}
+
+.cw-intent-card:hover {
+  background: var(--color-surface);
+}
+
+.cw-intent-card--active {
+  background: var(--color-surface);
+  box-shadow: inset 0 2px 0 var(--color-accent);
+}
+
+.cw-intent-card__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.cw-intent-card--active .cw-intent-card__name {
+  color: var(--color-accent);
+}
+
+.cw-intent-card__desc {
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+/* ── Options row (format + subtitle + advanced) ──────────────────────── */
+
+.cw-options-row {
+  display: flex;
+  align-items: center;
+  padding: var(--sp-2) var(--sp-4);
+  min-height: 44px;
+}
+
+.cw-format-pills {
+  display: flex;
+  gap: var(--sp-1);
+}
+
+.cw-format-pill {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+
+.cw-format-pill:hover {
+  color: var(--color-text);
+}
+
+.cw-format-pill--active {
+  background: var(--color-surface);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.cw-options-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--color-border);
+  margin: 0 var(--sp-3);
+  flex-shrink: 0;
+}
+
+.cw-option-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.cw-option-label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.cw-adv-btn {
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--color-text-faint);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 120ms, border-color 120ms;
+}
+
+.cw-adv-btn:hover {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+
+/* ── Advanced panel ──────────────────────────────────────────────────── */
+
+.cw-advanced {
+  border-top: 1px solid var(--color-border);
+  padding: var(--sp-4);
+  background: var(--color-surface);
+}
+
+.cw-advanced-inner {
+  display: flex;
+  gap: var(--sp-6);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.cw-adv-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-faint);
+  margin-bottom: var(--sp-2);
+}
+
+.cw-adv-unit {
+  font-size: 12px;
+  color: var(--color-text-faint);
+}
+
+/* ── CTA zone ────────────────────────────────────────────────────────── */
+
+.cw-cta {
+  flex-shrink: 0;
+  padding: var(--sp-4) var(--sp-6);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-raised);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.cw-cta-hint {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  text-align: center;
+}
+
+.cw-cta-chips {
+  flex-wrap: wrap;
+}
+
+.cw-chip {
+  padding: 3px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.cw-chip--ai {
+  background: rgba(184, 166, 255, 0.12);
+  border-color: rgba(184, 166, 255, 0.30);
+  color: var(--color-ai, #B8A6FF);
+}
+
+/* ── Generate / Prepare button ───────────────────────────────────────── */
+
+.cw-generate-btn {
+  width: 100%;
+  padding: 14px var(--sp-6);
+  background: var(--color-accent);
+  color: #0D1117;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 150ms, transform 80ms;
+  letter-spacing: 0.01em;
+}
+
+.cw-generate-btn:hover:not(:disabled) {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.cw-generate-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.cw-generate-btn:disabled {
+  opacity: 0.30;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Inline feedback ─────────────────────────────────────────────────── */
+
+.cw-error {
+  padding: var(--sp-3) var(--sp-4);
+  background: rgba(229, 83, 75, 0.10);
+  border: 1px solid rgba(229, 83, 75, 0.25);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--color-failed, #E5534B);
+}
+
+.cw-warning {
+  font-size: 12px;
+  color: var(--color-warning, #E3B341);
+  gap: var(--sp-2);
+}

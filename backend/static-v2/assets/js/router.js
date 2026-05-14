@@ -73,6 +73,9 @@ async function navigate(path) {
 
   shell.setActiveNav(route.navId);
 
+  const shellEl = document.querySelector('.shell');
+  if (shellEl) shellEl.dataset.route = route.id;
+
   if (_currentId === route.id && params.length === 0) return;
   _currentId = route.id;
 
