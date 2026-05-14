@@ -71,7 +71,7 @@ function _updateBanner(root, state) {
     </div>
   `;
   banner.querySelector('#banner-retry')?.addEventListener('click', () => {
-    import('../store/system.js').then(m => m.systemStore.refresh());
+    systemStore.refresh();
   });
 }
 

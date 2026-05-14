@@ -1182,6 +1182,62 @@ No changes to:
 
 ---
 
-## 18. Next Phase
+## 18. UI-R6 — Static-V2 End-to-End QA Pass
+
+**Date:** 2026-05-14  
+**Commit:** `test(ui): validate static-v2 end-to-end workflow`  
+**Scope:** Full QA audit of static-v2 — activation, core workflow, extended screens, desktop hardening, visual smoke.
+
+### QA Areas Checked
+
+| Area | Files Audited | Finding |
+|---|---|---|
+| Static-v2 activation | `main.py`, `ui_gate.py`, `index.html` | ✓ Gate wired, assets mount correct |
+| Core creator workflow | `screens/source.js`, `screens/studio.js`, `screens/monitor.js`, `screens/results.js` | ✓ No crash bugs; all route guards present |
+| Extended screens | `screens/library.js`, `screens/downloads.js`, `screens/system.js` | ✓ Clean state reset on mount; graceful error handling |
+| Desktop hardening | `desktop-adapter.js`, `transport.js`, `store/readiness.js`, `store/system.js` | ✓ IPC wrapped in try/catch; transport fail-open |
+| Shell & routing | `components/shell.js`, `router.js`, `app.js` | 1 minor fix applied (see below) |
+
+### Bug Fixed
+
+**`components/shell.js` — redundant dynamic import in banner retry handler**
+
+The retry button in `_updateBanner` was using a dynamic `import('../store/system.js')` to reach `systemStore.refresh()` even though `systemStore` is already statically imported at the top of the module. This caused an unnecessary module re-load on every retry click.
+
+Fixed by replacing the dynamic import with a direct call to the already-imported `systemStore`:
+
+```js
+// Before
+banner.querySelector('#banner-retry')?.addEventListener('click', () => {
+  import('../store/system.js').then(m => m.systemStore.refresh());
+});
+
+// After
+banner.querySelector('#banner-retry')?.addEventListener('click', () => {
+  systemStore.refresh();
+});
+```
+
+### Verification Results
+
+| Check | Result |
+|---|---|
+| `node --check` on 12 JS files (all modified/new files) | ✓ 12/12 passed |
+| `py_compile backend/app/main.py` | ✓ |
+| `py_compile backend/app/core/ui_gate.py` | ✓ |
+| `pytest tests/test_ui_gate.py` — 11/11 | ✓ |
+| Explore agent deep audit — 41 JS files scanned | 0 crash bugs found |
+| Manual read of 7 core files | All clean |
+
+### QA Notes
+
+- `screens/system.js` uses `Array.isArray(_s.warmup?.items)` — if backend returns items as an object (not array), the readiness grid shows empty with no crash. Acceptable.
+- `store/readiness.js` normalizes warmup response shape: `data?.items ?? data?.warmup_items ?? {}`. This correctly handles both the legacy dict format and a future array format.
+- All screens reset module-level state in `mount()` — no stale state leaks across route changes.
+- Error boundary (`withErrorBoundary`) is applied at router level and available as a HOF for individual screens.
+
+---
+
+## 19. Next Phase
 
 _(pending)_
