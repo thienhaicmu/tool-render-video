@@ -1995,6 +1995,41 @@ def run_render_pipeline(
                     "ai_segment_quality_gate_failed job_id=%s: %s", job_id, _qg_err
                 )
 
+        # ── AI Execution Metrics (Phase 60A) — observability only ────────
+        if _ai_edit_plan is not None:
+            try:
+                from app.ai.metrics.ai_execution_metrics_engine import (
+                    build_ai_execution_metrics as _build_metrics,
+                )
+                _metrics_result = _build_metrics(
+                    _ai_edit_plan, payload, context={"job_id": job_id}
+                )
+                try:
+                    _ai_edit_plan.ai_execution_metrics = (
+                        _metrics_result.get("ai_execution_metrics") or {}
+                    )
+                    _ai_edit_plan.ai_execution_summary = (
+                        _metrics_result.get("ai_execution_summary") or {}
+                    )
+                except Exception:
+                    pass
+                _summary = _metrics_result.get("ai_execution_summary") or {}
+                logger.info(
+                    "ai_execution_metrics_collected job_id=%s "
+                    "sub=%s cam=%s seg=%s qg_blocks=%d uo=%d assistance=%s",
+                    job_id,
+                    _summary.get("subtitle_apply"),
+                    _summary.get("camera_apply"),
+                    _summary.get("segment_apply"),
+                    _summary.get("quality_gate_blocks", 0),
+                    _summary.get("user_override_count", 0),
+                    _summary.get("overall_ai_assistance", "none"),
+                )
+            except Exception as _met_err:
+                logger.warning(
+                    "ai_execution_metrics_failed job_id=%s: %s", job_id, _met_err
+                )
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()

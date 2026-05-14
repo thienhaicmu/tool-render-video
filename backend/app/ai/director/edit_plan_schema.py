@@ -240,6 +240,10 @@ class AIEditPlan:
     segment_selection_promotion: dict = field(default_factory=dict)
     # Phase 59D — Quality-gated influence result (populated by quality_gate_engine module)
     quality_gated_influence: dict = field(default_factory=dict)
+    # Phase 60A — AI execution metrics and telemetry (populated by ai_execution_metrics_engine)
+    ai_execution_metrics: dict = field(default_factory=dict)
+    # Phase 60A — Compact AI execution summary (populated by ai_execution_metrics_engine)
+    ai_execution_summary: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -355,4 +359,6 @@ class AIEditPlan:
             "camera_execution_promotion":    dict(self.camera_execution_promotion),
             "segment_selection_promotion":   dict(self.segment_selection_promotion),
             "quality_gated_influence":       dict(self.quality_gated_influence),
+            "ai_execution_metrics":          dict(self.ai_execution_metrics),
+            "ai_execution_summary":          dict(self.ai_execution_summary),
         }

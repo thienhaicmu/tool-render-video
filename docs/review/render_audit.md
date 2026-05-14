@@ -580,6 +580,132 @@ After Phase 59C: When AI director confidence ≥ 0.80 and AI segments overlap wi
 
 ---
 
+### 2026-05-14 — AI Intelligence v2 Phase 60A: AI Influence Metrics & Telemetry
+
+**Implemented:**
+
+- `app/ai/metrics/__init__.py` (new) — package marker
+- `app/ai/metrics/ai_execution_metrics_engine.py` (new) — `build_ai_execution_metrics(edit_plan, payload, context)` reads stored promotion reports from Phases 59A–59D and produces compact, deterministic telemetry; no side-effects, no mutations, never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `ai_execution_metrics: dict` and `ai_execution_summary: dict` fields added; included in `to_dict()`
+- `app/orchestration/render_pipeline.py` (updated) — Phase 60A metrics block injected after Phase 59D segment gate, before the DB commit loop; stores results on `edit_plan.ai_execution_metrics` and `edit_plan.ai_execution_summary`; logs structured summary at INFO level
+- `tests/test_ai_phase60a_execution_metrics.py` (new) — 27 tests including 5 required execution tests
+
+**What Phase 60A adds:**
+
+Phase 60A is observability-only. Zero render behavior change. It reads the promotion reports already written by Phases 59A–59D and computes answerable metrics about what actually happened.
+
+**Questions now answerable:**
+- Did AI subtitle promotion apply? Was it blocked by the quality gate?
+- Did camera reframe promotion apply? Did whip-pan protection trigger?
+- Did segment reordering apply? Did hook-fatigue fallback trigger?
+- Did the user override any AI domain?
+- What was the overall AI assistance level for this render?
+
+**Telemetry shape — `ai_execution_metrics`:**
+
+```json
+{
+  "ai_execution_metrics": {
+    "subtitle": {
+      "eligible":     true,
+      "applied":      true,
+      "blocked":      false,
+      "fallback_used": false,
+      "reason":       "promotion_applied",
+      "confidence":   0.87
+    },
+    "camera": {
+      "eligible":        true,
+      "applied":         false,
+      "blocked":         true,
+      "reframe_applied": null,
+      "crop_applied":    false,
+      "tuning_applied":  false,
+      "fallback_used":   true,
+      "reason":          "promotion_applied",
+      "confidence":      0.83
+    },
+    "segment": {
+      "eligible":       true,
+      "applied":        true,
+      "blocked":        false,
+      "selected_count": 3,
+      "total_count":    5,
+      "fallback_used":  false,
+      "reason":         "promotion_applied",
+      "confidence":     0.86
+    },
+    "quality_gate": {
+      "subtitle_blocked":     false,
+      "camera_blocked":       true,
+      "segment_blocked":      false,
+      "subtitle_gate_action": "no_change",
+      "camera_gate_action":   "block_aggressive_motion",
+      "segment_gate_action":  "allow_ai_selected_segments"
+    },
+    "user_override": {
+      "subtitle": false,
+      "camera":   false,
+      "segment":  false
+    },
+    "confidence": 0.853
+  }
+}
+```
+
+**Telemetry shape — `ai_execution_summary`:**
+
+```json
+{
+  "ai_execution_summary": {
+    "subtitle_apply":        true,
+    "camera_apply":          false,
+    "segment_apply":         true,
+    "quality_gate_blocks":   1,
+    "user_override_count":   0,
+    "overall_ai_assistance": "medium"
+  }
+}
+```
+
+**`overall_ai_assistance` values:**
+| Applied domains | Level |
+|-----------------|-------|
+| 0 | `"none"` |
+| 1 | `"low"` |
+| 2 | `"medium"` |
+| 3 | `"high"` |
+
+**`eligible` vs `applied` distinction:**
+- `eligible=true`: the AI system was active and attempted to evaluate this domain (no system-level disables)
+- `applied=true`: the promotion ran AND was not reverted by the quality gate (net applied)
+- `blocked=true`: the quality gate reverted a promotion that had been applied
+- `user_override=true`: the user explicitly disabled AI for this domain via a lock flag
+
+**Execution order in render_pipeline.py:**
+
+```
+apply_ai_render_influence()          ← 59A + 59B + 59D subtitle/camera gate
+Phase 59C segment promotion
+Phase 59D segment quality gate
+Phase 60A metrics collection         ← reads all four above, no mutations
+for idx, seg in enumerate(scored)    ← DB commit loop
+```
+
+**Safety contract:**
+- No render mutation, no payload change, no influence change
+- Never raises — returns fallback metrics on any error
+- Reads only: `edit_plan.subtitle_execution_promotion`, `camera_execution_promotion`, `segment_selection_promotion`, `quality_gated_influence`
+- Bounded output: compact metadata dicts only
+
+**Verification:**
+
+- Phase 60A focused tests: 27 passed (including 5 required execution tests)
+- Full suite: 5114 passed, 1 skipped
+- `py_compile` passed on all changed modules
+
+---
+
 ### 2026-05-14 — AI Intelligence v2 Phase 59D: Quality-Gated Execution Influence
 
 **Implemented:**
