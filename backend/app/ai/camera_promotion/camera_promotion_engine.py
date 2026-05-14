@@ -188,6 +188,8 @@ def _promote(payload: Any, edit_plan: Any, job_id: str) -> dict:
     prs       = _get_dict(edit_plan, "platform_render_strategy")
     psi       = _get_dict(edit_plan, "platform_strategy_influence")
     pqf       = _get_dict(edit_plan, "platform_quality_feedback")
+    # Phase 61C: archetype-derived camera style (lowest-priority fallback)
+    ccs_promo = _get_dict(edit_plan, "creator_camera_style_promotion")
 
     # ── Effective confidence ───────────────────────────────────────────────
     pref_inner  = (cam_pref.get("camera_preference") or {}) if cam_pref else {}
@@ -205,7 +207,7 @@ def _promote(payload: Any, edit_plan: Any, job_id: str) -> dict:
     reframe_applied: Optional[str] = None
     if effective_conf >= _CONF_THRESHOLD_REFRAME:
         candidate, reframe_reason = _resolve_reframe_mode(
-            cam_pref, pref_inner, prs, psi, quality_flags
+            cam_pref, pref_inner, prs, psi, quality_flags, ccs_promo
         )
         if candidate and candidate in ALLOWED_PROMOTION_MODES:
             try:
@@ -256,7 +258,7 @@ def _promote(payload: Any, edit_plan: Any, job_id: str) -> dict:
     # ── Advisory tuning (no field mutation) ───────────────────────────────
     tuning_applied: dict = {}
     if effective_conf >= _CONF_THRESHOLD_TUNING:
-        tuning_applied = _resolve_tuning_advisory(cam_pref, quality_flags)
+        tuning_applied = _resolve_tuning_advisory(cam_pref, quality_flags, ccs_promo)
         if tuning_applied:
             tuning_desc = ", ".join(f"{k}={v}" for k, v in tuning_applied.items())
             reasoning.append(f"Advisory tuning: {tuning_desc}")
@@ -328,6 +330,7 @@ def _resolve_reframe_mode(
     prs: dict,
     psi: dict,
     quality_flags: dict,
+    ccs_promo: Optional[dict] = None,
 ) -> tuple[Optional[str], str]:
     """Priority-ordered reframe mode resolution. Returns (reframe_mode | None, reason)."""
 
@@ -380,71 +383,101 @@ def _resolve_reframe_mode(
                     f"→ reframe={reframe!r}"
                 )
 
+    # 4. Phase 61C creator camera style (archetype-derived lowest-priority fallback)
+    if ccs_promo and ccs_promo.get("available"):
+        arch_reframe = ccs_promo.get("reframe_preference")
+        if arch_reframe and arch_reframe in ALLOWED_PROMOTION_MODES:
+            creator = str(ccs_promo.get("creator_type") or "unknown")
+            if restrict_to_subject and arch_reframe == "motion":
+                arch_reframe = "subject"
+                return arch_reframe, (
+                    f"Creator archetype ({creator!r}) motion preference downgraded to "
+                    f"'subject' due to quality risk flags"
+                )
+            return arch_reframe, (
+                f"Creator archetype ({creator!r}) camera style recommended "
+                f"{arch_reframe!r} reframe"
+            )
+
     return None, ""
 
 
-def _resolve_tuning_advisory(cam_pref: dict, quality_flags: dict) -> dict:
+def _resolve_tuning_advisory(
+    cam_pref: dict,
+    quality_flags: dict,
+    ccs_promo: Optional[dict] = None,
+) -> dict:
     """Build an advisory tuning delta dict. No field is mutated — report only."""
     tuning: dict = {}
 
-    if not (cam_pref and cam_pref.get("available")):
+    # ── Phase 50B tuning pack (primary source) ─────────────────────────────
+    if cam_pref and cam_pref.get("available"):
+        tp = cam_pref.get("tuning_pack") or {}
+        if tp.get("applied") and not quality_flags["high_whip_pan"]:
+
+            def _clamp_f(val: Any, lo: float, hi: float) -> Optional[float]:
+                try:
+                    v = float(val)
+                    if v == 0.0:
+                        return None
+                    return max(lo, min(hi, v))
+                except (TypeError, ValueError):
+                    return None
+
+            def _clamp_i(val: Any, lo: int, hi: int) -> Optional[int]:
+                try:
+                    v = int(val)
+                    if v == 0:
+                        return None
+                    return max(lo, min(hi, v))
+                except (TypeError, ValueError):
+                    return None
+
+            scale = 0.5 if quality_flags["high_jitter"] else 1.0
+
+            dz = _clamp_f(
+                (tp.get("deadzone_delta") or 0.0) * scale,
+                -_MAX_DEADZONE_DELTA, _MAX_DEADZONE_DELTA,
+            )
+            if dz is not None:
+                tuning["deadzone_delta"] = round(dz, 4)
+
+            sm = _clamp_f(
+                (tp.get("ema_alpha_delta") or 0.0) * scale,
+                -_MAX_SMOOTHING_DELTA, _MAX_SMOOTHING_DELTA,
+            )
+            if sm is not None:
+                tuning["smoothing_delta"] = round(sm, 4)
+
+            hf = _clamp_i(
+                int((tp.get("hold_frames_delta") or 0) * scale),
+                -_MAX_SUBJECT_HOLD_DELTA, _MAX_SUBJECT_HOLD_DELTA,
+            )
+            if hf is not None:
+                tuning["subject_hold_delta"] = hf
+
+            pref_inner = cam_pref.get("camera_preference") or {}
+            crop_agg = str(pref_inner.get("crop_aggressiveness") or "").strip().lower()
+            if crop_agg in ("low", "medium", "high") and not quality_flags["high_jitter"]:
+                tuning["crop_aggressiveness"] = crop_agg
+
+    # If Phase 50B produced tuning data, use it — don't mix with archetype
+    if tuning:
         return tuning
 
-    tp = cam_pref.get("tuning_pack") or {}
-    if not tp.get("applied"):
-        return tuning
+    # ── Phase 61C archetype fallback (only when Phase 50B has no tuning) ───
+    if ccs_promo and ccs_promo.get("available") and not quality_flags["high_whip_pan"]:
+        bias = ccs_promo.get("bias") or {}
 
-    # whip_pan_risk high → block all aggressive tuning
-    if quality_flags["high_whip_pan"]:
-        return tuning
+        stability = str(bias.get("stability_priority") or "").strip().lower()
+        _HOLD_DELTA = {"high": 8, "medium": 4}
+        hold_delta = _HOLD_DELTA.get(stability)
+        if hold_delta and not quality_flags["high_jitter"]:
+            tuning["subject_hold_delta"] = min(hold_delta, _MAX_SUBJECT_HOLD_DELTA)
 
-    def _clamp_f(val: Any, lo: float, hi: float) -> Optional[float]:
-        try:
-            v = float(val)
-            if v == 0.0:
-                return None
-            return max(lo, min(hi, v))
-        except (TypeError, ValueError):
-            return None
-
-    def _clamp_i(val: Any, lo: int, hi: int) -> Optional[int]:
-        try:
-            v = int(val)
-            if v == 0:
-                return None
-            return max(lo, min(hi, v))
-        except (TypeError, ValueError):
-            return None
-
-    # Reduce tuning aggressiveness when jitter risk is high
-    scale = 0.5 if quality_flags["high_jitter"] else 1.0
-
-    dz = _clamp_f(
-        (tp.get("deadzone_delta") or 0.0) * scale,
-        -_MAX_DEADZONE_DELTA, _MAX_DEADZONE_DELTA,
-    )
-    if dz is not None:
-        tuning["deadzone_delta"] = round(dz, 4)
-
-    sm = _clamp_f(
-        (tp.get("ema_alpha_delta") or 0.0) * scale,
-        -_MAX_SMOOTHING_DELTA, _MAX_SMOOTHING_DELTA,
-    )
-    if sm is not None:
-        tuning["smoothing_delta"] = round(sm, 4)
-
-    hf = _clamp_i(
-        int((tp.get("hold_frames_delta") or 0) * scale),
-        -_MAX_SUBJECT_HOLD_DELTA, _MAX_SUBJECT_HOLD_DELTA,
-    )
-    if hf is not None:
-        tuning["subject_hold_delta"] = hf
-
-    # Crop aggressiveness from Phase 50B preference (advisory label, not numeric)
-    pref_inner = cam_pref.get("camera_preference") or {}
-    crop_agg = str(pref_inner.get("crop_aggressiveness") or "").strip().lower()
-    if crop_agg in ("low", "medium", "high") and not quality_flags["high_jitter"]:
-        tuning["crop_aggressiveness"] = crop_agg
+        crop_agg = str(bias.get("crop_aggressiveness") or "").strip().lower()
+        if crop_agg in ("low", "medium", "high") and not quality_flags["high_jitter"]:
+            tuning["crop_aggressiveness"] = crop_agg
 
     return tuning
 

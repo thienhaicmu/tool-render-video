@@ -84,6 +84,7 @@ def apply_ai_render_influence(
 
     try:
         _apply_camera_influence(payload, edit_plan, report)
+        _apply_creator_camera_style_context(payload, edit_plan, report)
         _apply_camera_promotion(payload, edit_plan, report)
         _apply_subtitle_influence(payload, edit_plan, report)
         _apply_creator_subtitle_style_context(payload, edit_plan, report)
@@ -194,6 +195,51 @@ def _apply_camera_influence(payload: Any, edit_plan: Any, report: dict) -> None:
         )
     except Exception as exc:
         report["skipped"].append(f"camera:set_failed:{type(exc).__name__}")
+
+
+# ── Creator camera style context (Phase 61C) ─────────────────────────────────
+
+def _apply_creator_camera_style_context(
+    payload: Any, edit_plan: Any, report: dict
+) -> None:
+    """Phase 61C — Build creator archetype camera style metadata.
+
+    Calls creator_camera_style_engine which reads Phase 61A archetype strategy
+    and produces a camera bias recommendation stored on edit_plan for Phase 59B
+    to use as a lowest-priority fallback signal. No payload mutation here.
+    """
+    if edit_plan is None:
+        report["skipped"].append("creator_camera_style:no_edit_plan_phase61c")
+        return
+
+    try:
+        from app.ai.creator_style.creator_camera_style_engine import (
+            build_creator_camera_style,
+        )
+        result = build_creator_camera_style(edit_plan, context={})
+        ccs_promo = result.get("creator_camera_style_promotion") or {}
+
+        try:
+            edit_plan.creator_camera_style_promotion = ccs_promo
+        except Exception:
+            pass
+
+        if ccs_promo.get("available"):
+            reframe_pref = ccs_promo.get("reframe_preference")
+            conf = ccs_promo.get("confidence", 0.0)
+            creator = ccs_promo.get("creator_type", "unknown")
+            report["skipped"].append(
+                f"creator_camera_style:phase61c_advisory"
+                f"(creator={creator!r},reframe_pref={reframe_pref!r},conf={conf:.3f})"
+            )
+        else:
+            reason = ccs_promo.get("reason", "unavailable")
+            report["skipped"].append(
+                f"creator_camera_style:phase61c_unavailable(reason={reason!r})"
+            )
+    except Exception as exc:
+        report["warnings"].append(f"creator_camera_style_error:{type(exc).__name__}")
+        logger.warning("creator_camera_style_context_failed: %s", exc)
 
 
 # ── Camera influence promotion (Phase 59B) ───────────────────────────────────

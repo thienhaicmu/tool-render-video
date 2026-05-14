@@ -5639,3 +5639,125 @@ All feedback text:
 
 - Focused: **30/30** passed
 - Regression (61A + 59A): **54/54** passed (0 regressions)
+
+---
+
+### 2026-05-14 — AI Intelligence v2 Phase 61C: Creator Camera Style Promotion
+
+**Implemented:**
+
+- `app/ai/creator_style/creator_camera_style_engine.py` (new) — `build_creator_camera_style(edit_plan, context=None) -> dict`; reads Phase 61A `creator_archetype_strategy.camera`; maps `motion_energy` to `reframe_preference` (None/subject/motion); maps `stability_priority` to `subject_hold` label; mode-gated confidence threshold; advisory metadata only — no payload mutation
+- `app/ai/director/edit_plan_schema.py` (updated) — `creator_camera_style_promotion: dict` field added after Phase 61B field; included in `to_dict()`; backward-compatible
+- `app/ai/director/render_influence.py` (updated) — `_apply_creator_camera_style_context()` inserted BEFORE `_apply_camera_promotion()` in `apply_ai_render_influence()`; builds and stores metadata on edit_plan before Phase 59B runs
+- `app/ai/camera_promotion/camera_promotion_engine.py` (updated) — `creator_camera_style_promotion` extracted in `_promote()`; added as 4th-priority in `_resolve_reframe_mode()` (optional param); extended `_resolve_tuning_advisory()` with Phase 61C archetype fallback for subject_hold_delta and crop_aggressiveness advisory (only when Phase 50B provides no tuning)
+- `tests/test_ai_phase61c_creator_camera_style.py` (new) — 37 tests covering all archetypes, motion→reframe mapping, mode thresholds, Phase 59B integration (priority ordering, quality gate, tuning advisory), safety/fallback
+
+**What Phase 61C adds:**
+
+- Creator archetype camera knowledge safely informs Phase 59B camera promotion
+- Conservative creators (podcast, talking_head, interview) produce `reframe_preference=None` — no reframe promotion, only stability tuning advisory
+- Dynamic creators (storytelling: `subject`, viral_short_form: `subject`, motivation: `motion`) surface a reframe recommendation as lowest-priority fallback
+- Quality gate still applies: `motion` → `subject` downgrade when `high_jitter` or `low_camera_fit`
+- Archetype-based advisory tuning (subject_hold_delta, crop_aggressiveness) only activates when Phase 50B provides no tuning pack — no signal mixing
+
+**motion_energy → reframe_preference mapping:**
+
+| motion_energy | reframe_preference | Archetypes |
+|---|---|---|
+| `low` | `null` | podcast, talking_head, educational, interview |
+| `low_medium` | `subject` | storytelling |
+| `medium` | `subject` | viral_short_form |
+| `medium_high` | `motion` | motivation |
+| `high` | `motion` | (future use) |
+
+**Archetype advisory tuning (Phase 59B fallback — only when Phase 50B has no tuning pack):**
+
+| stability_priority | subject_hold_delta | cap |
+|---|---|---|
+| `high` | +8 frames | ≤ 12 |
+| `medium` | +4 frames | ≤ 12 |
+| `standard` | no change | — |
+
+`crop_aggressiveness` from archetype passed through as advisory label when no jitter risk.
+
+**Priority order in Phase 59B `_resolve_reframe_mode()`:**
+
+| Priority | Source | Phase |
+|---|---|---|
+| 1 | Creator camera preference (`motion_style`) | 50B |
+| 2 | Platform render strategy (`motion_energy`) | 55E |
+| 3 | Platform strategy influence (`motion_energy`) | 56 |
+| **4** | **Creator archetype camera style (`reframe_preference`)** | **61C** |
+
+**Output shape (available):**
+
+```json
+{
+  "creator_camera_style_promotion": {
+    "available":          true,
+    "creator_type":       "podcast",
+    "supported":          true,
+    "bias": {
+      "motion_energy":       "low",
+      "stability_priority":  "high",
+      "crop_aggressiveness": "low",
+      "subject_hold":        "high",
+      "jitter_sensitivity":  "high"
+    },
+    "reframe_preference": null,
+    "confidence":         0.8200,
+    "mode":               "balanced",
+    "reasoning":          ["Podcast creator style favors stable framing and low camera aggressiveness"]
+  }
+}
+```
+
+**Fallback shape:**
+
+```json
+{
+  "creator_camera_style_promotion": {
+    "available":          false,
+    "creator_type":       "unknown",
+    "supported":          false,
+    "bias":               {},
+    "reframe_preference": null,
+    "confidence":         0.0,
+    "mode":               "unknown",
+    "reasoning":          [],
+    "reason":             "no_archetype_strategy"
+  }
+}
+```
+
+**Execution mode behavior:**
+
+| Mode | Threshold | Behavior |
+|---|---|---|
+| `off` | never | Phase 61C engine returns `available=False`; Phase 59B blocked at pipeline level |
+| `safe` | ≥ 0.88 | Activates only with high-confidence archetype signal |
+| `balanced` | ≥ 0.82 | Standard threshold |
+| `aggressive` | ≥ 0.76 | Lower threshold; all Phase 59B hard bounds still preserved |
+
+**Conflict handling:**
+
+- User explicit `reframe_mode` ≠ neutral → Phase 59B returns `user_override` before Phase 61C is consulted
+- `camera_ai_reframe_lock=True` → Phase 59B blocked entirely
+- Phase 50B creator camera preference (higher priority 1) always wins over archetype (priority 4)
+- Quality gate: `high_jitter_risk ≥ 60` → `motion` downgraded to `subject`; `high_whip_pan_risk ≥ 60` → all tuning advisory blocked
+
+**Safety contract:**
+
+- Never raises — returns fallback on any error
+- No payload mutation in Phase 61C engine
+- No motion_crop algorithm rewrite, tracking rewrite, scene detection rewrite
+- No FFmpeg mutation, no playback_speed mutation
+- All reframe_preference values validated against `ALLOWED_PROMOTION_MODES`
+- Archetype tuning advisory: subject_hold_delta bounded ≤ 12 frames (Phase 59B hard cap)
+- Phase 50B tuning wins — archetype tuning only activates as fallback when Phase 50B has no tuning pack
+- Backward-compatible: `_resolve_reframe_mode` and `_resolve_tuning_advisory` signature changes are optional parameters
+
+**Test Results:**
+
+- Focused: **37/37** passed
+- Full regression: **5279/5279** passed (0 regressions)
