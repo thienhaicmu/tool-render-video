@@ -17,6 +17,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return null;
     }
   },
+  /* ── Source / output pickers (used by desktop-adapter.js) ── */
+  pickVideoFile: async () => {
+    try {
+      const picked = await ipcRenderer.invoke('pick-video-file');
+      return picked || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  pickOutputDir: async () => {
+    try {
+      const picked = await ipcRenderer.invoke('open-folder-picker');
+      return picked || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  getAppVersion: async () => {
+    try {
+      return await ipcRenderer.invoke('app:getVersion');
+    } catch (_) {
+      return null;
+    }
+  },
+  onJobProgress: (handler) => {
+    try {
+      const listener = (_event, data) => handler(data);
+      ipcRenderer.on('job-progress', listener);
+      return () => ipcRenderer.removeListener('job-progress', listener);
+    } catch (_) {
+      return () => {};
+    }
+  },
   pathExists: async (targetPath) => {
     try {
       return await ipcRenderer.invoke('path:exists', String(targetPath || ''));

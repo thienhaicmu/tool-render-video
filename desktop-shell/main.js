@@ -467,6 +467,27 @@ app.on('window-all-closed', () => {
 
 // ── IPC handlers ──────────────────────────────────────────────────────────────
 
+ipcMain.handle('pick-video-file', async () => {
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null;
+  try {
+    const result = await dialog.showOpenDialog(win || undefined, {
+      title: 'Choose Video File',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Video Files', extensions: ['mp4', 'mov', 'mkv', 'avi', 'webm', 'wmv', 'm4v', 'flv'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled || !result.filePaths || !result.filePaths.length) return null;
+    return String(result.filePaths[0] || '');
+  } catch (err) {
+    console.error('[FilePicker] error:', err);
+    return null;
+  }
+});
+
+ipcMain.handle('app:getVersion', () => app.getVersion());
+
 ipcMain.handle('path:exists', (_event, targetPath) => {
   const p = String(targetPath || '').trim();
   return p ? fs.existsSync(p) : false;

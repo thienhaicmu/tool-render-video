@@ -1375,3 +1375,49 @@
   padding: var(--sp-6);
   text-align: center;
 }
+
+/* ── UI-FIX-1: path chip — selected file/folder display ─────────── */
+
+.path-chip {
+  align-items: center;
+  background: var(--color-surface-raised, rgba(255,255,255,.06));
+  border: 1px solid var(--color-border, rgba(255,255,255,.12));
+  border-radius: var(--radius-sm, 6px);
+  padding: 4px 8px 4px 10px;
+  margin-bottom: var(--sp-2, 6px);
+  overflow: hidden;
+}
+
+.path-chip__icon {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.path-chip__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--color-text-muted, #94a3b8);
+}
+
+.path-chip__clear {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--color-text-muted, #94a3b8);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: 3px;
+  transition: color 0.15s;
+}
+
+.path-chip__clear:hover {
+  color: var(--color-text, #e2e8f0);
+}

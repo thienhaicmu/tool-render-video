@@ -1238,6 +1238,115 @@ banner.querySelector('#banner-retry')?.addEventListener('click', () => {
 
 ---
 
-## 19. Next Phase
+## 19. UI-FIX-1 — Source File/Folder Usability
 
-_(pending)_
+**Date:** 2026-05-14  
+**Commit:** `fix(ui): make source file and folder selection usable`  
+**Scope:** Make Source screen actually usable — local video picker, output folder picker, Electron IPC wiring, browser fallback, path chip display, clear buttons, URL validation tightening.
+
+### Root Cause
+
+`preload.js` did not expose `pickVideoFile`, `pickOutputDir`, `getAppVersion`, or `onJobProgress`. `desktop-adapter.js` checked for `api?.pickVideoFile` and `api?.pickOutputDir` — both were always `undefined` — so `filePickerAvailable` and `folderPickerAvailable` were always `false`, even inside Electron. No browse button ever rendered.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `desktop-shell/preload.js` | Added `pickVideoFile`, `pickOutputDir`, `getAppVersion`, `onJobProgress` to `electronAPI` |
+| `desktop-shell/main.js` | Added `pick-video-file` IPC handler (native file dialog, video filter), `app:getVersion` IPC handler |
+| `backend/static-v2/assets/js/screens/source.js` | Enhanced `renderLocalInput`, `renderOutputDir`, `wireAll`, URL validation; added `_truncatePath` helper |
+| `backend/static-v2/assets/css/components.css` | Added `.path-chip` CSS |
+
+### Picker Behavior
+
+#### Local Video Picker (Electron)
+- `preload.js` → `pick-video-file` → `dialog.showOpenDialog({ filters: ['mp4','mov','mkv','avi','webm','wmv','m4v','flv'] })`
+- Returns selected path string or `null` on cancel
+- `desktop-adapter.pickVideoFile()` wraps in try/catch — never throws
+- On pick: updates `_s.localPath`, calls `rerenderForm()` to show path chip
+
+#### Local Video Picker (Browser)
+- `desktopAdapter.filePickerAvailable` = `false` — Browse button hidden
+- Input renders with placeholder "Paste file path here…"
+- Helper text: "Browse is available in desktop mode. Paste a local file path here."
+
+#### Output Folder Picker (Electron)
+- `preload.js` → `pick-output-dir` → reuses existing `open-folder-picker` IPC → `dialog.showOpenDialog({ properties: ['openDirectory'] })`
+- Returns path string or `null` on cancel
+- On pick: updates `_s.outputDir`, calls `rerenderForm()` to show folder chip
+
+#### Output Folder Picker (Browser)
+- `desktopAdapter.folderPickerAvailable` = `false` — Browse button hidden
+- Helper text: "Browse is available in desktop mode. Paste an output folder path here."
+
+### Path Chip
+- Shows when a file/folder is selected
+- Truncated monospace display with full path in `title` attribute (hover to see full path)
+- `_truncatePath(p, 52)` — preserves filename, ellipsises the middle of long paths
+- Clear button (`×`) sets `_s.localPath = ''` / `_s.outputDir = ''` and rerenders
+
+### Payload Mapping
+
+`PrepareSourceRequest` schema has no `output_dir` field — output dir is stored in `draftStore` and passed when the render job is submitted from Studio. Payload unchanged from prior implementation:
+
+```js
+// YouTube
+{ source_mode: "youtube", youtube_url: "https://youtube.com/…" }
+
+// Local
+{ source_mode: "local", source_video_path: "/path/to/video.mp4" }
+```
+
+Output dir stored via `draftStore.patch({ outputDir: _s.outputDir })` after prepare success.
+
+### Validation
+
+| Condition | Error message |
+|---|---|
+| YouTube mode, empty URL | "YouTube URL is required." |
+| YouTube mode, not youtube.com/youtu.be | "Enter a valid YouTube URL (youtube.com or youtu.be)." |
+| Local mode, no path | "Select a video file to continue." |
+| Missing output dir | "Output directory is required." |
+
+No `alert()`. Inline error card below form fields. Error cleared on mode switch.
+
+### Desktop Adapter Hardening
+
+`getAppVersion` and `onJobProgress` now properly wired in `preload.js`. `onJobProgress` returns an unsubscribe function that calls `ipcRenderer.removeListener`. All four new preload methods catch and return `null` on any IPC error.
+
+### Known Limitations
+
+- Browser manual path input: the backend must be able to resolve the pasted path — no client-side file existence check in browser context.
+- YouTube URL validation checks for `youtube.com` or `youtu.be` substring only — does not validate video ID format.
+- `onJobProgress` IPC event `'job-progress'` is wired on the preload side but no matching `mainWindow.webContents.send('job-progress', ...)` exists in `main.js` yet — bridge is ready for when that's added.
+
+### Verification Checklist
+
+```
+STATIC_UI_VERSION=v2
+
+# Syntax
+node --check backend/static-v2/assets/js/screens/source.js   → OK
+node --check backend/static-v2/assets/js/desktop-adapter.js  → OK
+node --check desktop-shell/preload.js                         → OK
+node --check desktop-shell/main.js                            → OK
+
+# Browser mode (#/source)
+- Local tab: Browse button absent, helper text shown       → ✓
+- Output: Browse button absent, helper text shown          → ✓
+- Paste local path: chip appears, clear button works       → manual
+- Invalid YouTube URL: inline error shown                  → manual
+- Missing output dir: inline error shown                   → manual
+
+# Electron mode
+- Local Browse… → native file dialog opens                → manual (requires Electron)
+- Output Browse… → native folder dialog opens             → manual (requires Electron)
+- Cancel → path unchanged                                  → manual
+- Pick file → chip appears, clear works                    → manual
+```
+
+---
+
+## 20. Next Phase
+
+_(pending — UI-FIX-2)_

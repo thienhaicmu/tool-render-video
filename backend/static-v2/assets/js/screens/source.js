@@ -80,34 +80,59 @@ function renderYouTubeInput() {
 }
 
 function renderLocalInput() {
+  const hasPath = !!_s.localPath;
+  const pickerAvailable = desktopAdapter.filePickerAvailable;
   return `
     <div class="form-field">
-      <label class="form-label">Video file path</label>
+      <label class="form-label">Video file</label>
+      ${hasPath ? `
+        <div class="path-chip row gap-2">
+          <span class="path-chip__icon" aria-hidden="true">&#127910;</span>
+          <span class="path-chip__text text-caption" title="${_esc(_s.localPath)}">${_esc(_truncatePath(_s.localPath, 52))}</span>
+          <button class="path-chip__clear" id="src-local-clear" aria-label="Clear selected file">&times;</button>
+        </div>
+      ` : ''}
       <div class="row gap-2">
         <input class="form-input flex-1" id="src-local-path" type="text"
-          placeholder="/path/to/video.mp4"
-          value="${_esc(_s.localPath)}" />
-        ${desktopAdapter.filePickerAvailable
-          ? `<button class="btn btn-secondary" id="src-browse-btn">Browse</button>`
+          placeholder="${pickerAvailable ? '/path/to/video.mp4' : 'Paste file path here…'}"
+          value="${_esc(_s.localPath)}" autocomplete="off" />
+        ${pickerAvailable
+          ? `<button class="btn btn-secondary" id="src-browse-btn">Browse…</button>`
           : ''}
       </div>
-      <div class="text-caption text-faint mt-2">MP4, MOV, MKV — must be a path readable by the backend.</div>
+      <div class="text-caption text-faint mt-2">
+        ${pickerAvailable
+          ? 'MP4, MOV, MKV and other formats — must be a path readable by the backend.'
+          : 'Browse is available in desktop mode. Paste a local file path here.'}
+      </div>
     </div>
   `;
 }
 
 function renderOutputDir() {
+  const hasDir = !!_s.outputDir;
+  const pickerAvailable = desktopAdapter.folderPickerAvailable;
   return `
     <div class="form-field">
-      <label class="form-label">Output directory</label>
+      <label class="form-label">Output folder</label>
+      ${hasDir ? `
+        <div class="path-chip row gap-2">
+          <span class="path-chip__icon" aria-hidden="true">&#128193;</span>
+          <span class="path-chip__text text-caption" title="${_esc(_s.outputDir)}">${_esc(_truncatePath(_s.outputDir, 52))}</span>
+          <button class="path-chip__clear" id="src-output-clear" aria-label="Clear selected folder">&times;</button>
+        </div>
+      ` : ''}
       <div class="row gap-2">
         <input class="form-input flex-1" id="src-output-dir" type="text"
-          placeholder="/path/to/output/"
+          placeholder="${pickerAvailable ? 'Choose a folder…' : 'Paste output folder path here…'}"
           value="${_esc(_s.outputDir)}" />
-        ${desktopAdapter.folderPickerAvailable
-          ? `<button class="btn btn-secondary" id="src-pick-output-btn">Choose</button>`
+        ${pickerAvailable
+          ? `<button class="btn btn-secondary" id="src-pick-output-btn">Browse…</button>`
           : ''}
       </div>
+      ${!pickerAvailable
+        ? `<div class="text-caption text-faint mt-2">Browse is available in desktop mode. Paste an output folder path here.</div>`
+        : ''}
     </div>
   `;
 }
@@ -228,17 +253,25 @@ function wireAll(el) {
     const file = await desktopAdapter.pickVideoFile();
     if (file) {
       _s.localPath = file;
-      const inp = el.querySelector('#src-local-path');
-      if (inp) inp.value = file;
+      rerenderForm(el);
     }
   });
   el.querySelector('#src-pick-output-btn')?.addEventListener('click', async () => {
     const dir = await desktopAdapter.pickOutputDir();
     if (dir) {
       _s.outputDir = dir;
-      const inp = el.querySelector('#src-output-dir');
-      if (inp) inp.value = dir;
+      rerenderForm(el);
     }
+  });
+
+  // Clear buttons
+  el.querySelector('#src-local-clear')?.addEventListener('click', () => {
+    _s.localPath = '';
+    rerenderForm(el);
+  });
+  el.querySelector('#src-output-clear')?.addEventListener('click', () => {
+    _s.outputDir = '';
+    rerenderForm(el);
   });
 
   // Output dir input
@@ -266,9 +299,11 @@ async function handlePrepare(el) {
 
   if (_s.sourceMode === 'youtube') {
     if (!_s.youtubeUrl) { _s.error = 'YouTube URL is required.'; rerenderForm(el); return; }
-    if (!_s.youtubeUrl.startsWith('http')) { _s.error = 'Enter a valid YouTube URL.'; rerenderForm(el); return; }
+    const isYtUrl = _s.youtubeUrl.startsWith('http') &&
+      (_s.youtubeUrl.includes('youtube.com') || _s.youtubeUrl.includes('youtu.be'));
+    if (!isYtUrl) { _s.error = 'Enter a valid YouTube URL (youtube.com or youtu.be).'; rerenderForm(el); return; }
   } else {
-    if (!_s.localPath) { _s.error = 'File path is required.'; rerenderForm(el); return; }
+    if (!_s.localPath) { _s.error = 'Select a video file to continue.'; rerenderForm(el); return; }
   }
   if (!_s.outputDir) { _s.error = 'Output directory is required.'; rerenderForm(el); return; }
 
@@ -318,7 +353,17 @@ export async function mount(el) {
 export const sourceScreen = { mount };
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
-function _esc(s) { return String(s ?? '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+function _esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+function _truncatePath(p, max) {
+  if (!p || p.length <= max) return p;
+  const sep = p.includes('/') ? '/' : '\\';
+  const parts = p.split(sep);
+  const name = parts[parts.length - 1];
+  if (name.length >= max - 5) return '…' + name.slice(-(max - 1));
+  const keep = max - name.length - 4;
+  return p.slice(0, keep) + '…' + sep + name;
+}
 
 function _errorCard(msg) {
   return `
