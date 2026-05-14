@@ -50,8 +50,8 @@ img, svg { display: block; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); }
 
 /* ── Typography utilities ───────────────────────────────────────────── */
-.text-screen   { font-size: var(--text-screen);   font-weight: 600; letter-spacing: -0.5px; }
-.text-section  { font-size: var(--text-section);  font-weight: 600; }
+.text-screen   { font-size: var(--text-screen);   font-weight: 700; letter-spacing: -0.5px; }
+.text-section  { font-size: var(--text-section);  font-weight: 700; }
 .text-body     { font-size: var(--text-body);     font-weight: 400; }
 .text-caption  { font-size: var(--text-caption);  font-weight: 400; color: var(--color-text-muted); }
 .text-metric   { font-size: var(--text-metric);   font-weight: 700; font-variant-numeric: tabular-nums; }

@@ -67,4 +67,10 @@
   --color-failed-soft:   rgba(255,124,124,0.10);
   --color-warning-soft:  rgba(242,198,110,0.10);
   --color-partial-soft:  rgba(241,154,91,0.10);
+
+  /* ── Shadows ─────────────────────────────────────────────────────────── */
+  --shadow-sm:           0 2px 8px  rgba(0,0,0,0.28);
+  --shadow-md:           0 4px 20px rgba(0,0,0,0.42);
+  --shadow-lg:           0 8px 40px rgba(0,0,0,0.60);
+  --shadow-glow-accent:  0 0 24px   rgba(118,224,192,0.16);
 }

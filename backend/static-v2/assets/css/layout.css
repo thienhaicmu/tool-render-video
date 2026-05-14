@@ -71,7 +71,7 @@
 
 .screen__title {
   font-size: var(--text-screen);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.5px;
   color: var(--color-text);
 }

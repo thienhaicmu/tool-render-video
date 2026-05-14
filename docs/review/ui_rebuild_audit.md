@@ -2056,3 +2056,93 @@ export const settingsScreen = systemScreen;
 
 ### Status
 Complete -- committed
+
+---
+
+# UI-R5C.1 — Creator Workspace Rebuild
+
+**Phase:** UI-R5C.1
+**Date:** 2026-05-14
+**Branch:** feature/ai-output-upgrade
+**Commit:** 39c30dc
+
+## Summary
+
+Replaced the two-column Create workspace (canvas + 300px brief sidebar) with a single-column preview-first layout. Shell right panel hidden for the Create route via CSS `data-route` selector.
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| `router.js` | Sets `shellEl.dataset.route = route.id` on every navigation |
+| `layout.css` | `shell[data-route="create"]` collapses right panel column to 0px |
+| `screens/create.js` | Full rewrite: `.cw` column → `.cw-hero` (flex-1) + `.cw-controls` + `.cw-cta` |
+| `components.css` | New `cw-*` creator workspace CSS block; nav label override (no uppercase) |
+
+## Creator Design Choices
+
+- **Hero fills all space** — import surface / preparing spinner / video preview
+- **Intent presets** — 4 full-width horizontal cards with top-accent active state
+- **Options strip** — format pills + subtitle toggle + Advanced collapse in compact row
+- **Generate button** — full-width at bottom, accent-coloured
+- **studio-toggle thumb** — rendered as sibling of input (not nested), fixing checked-state CSS
+- **No right panel on Create route** — layout.css route-specific override
+
+---
+
+# UI-R5C.2 — Productize Old Creator Soul
+
+**Phase:** UI-R5C.2
+**Date:** 2026-05-14
+**Branch:** feature/ai-output-upgrade
+
+## Summary
+
+CSS-only productization pass to restore the old UI's cinematic creator energy. No layout changes, no IA changes, no JS changes. Pure visual quality upgrade: depth, glow, gradient, and typographic hierarchy restored.
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| `tokens.css` | Added shadow tokens (`--shadow-sm/md/lg`, `--shadow-glow-accent`) |
+| `base.css` | `.text-screen` and `.text-section` weight raised 600→700 |
+| `layout.css` | `.screen__title` weight raised 600→700 |
+| `components.css` | 14 targeted CSS rule improvements (see below) |
+
+## Old UI Elements Restored
+
+- **Gradient buttons** — `btn-primary` and `btn-generate`/`cw-generate-btn` get gradient fill (`#5EC7AF → #76E0C0 → #91E8D3`) matching old blue-purple gradient energy
+- **Button glow + lift** — `box-shadow` teal glow + `translateY(-1px)` on hover (old UI had same pattern with blue)
+- **Card depth** — `linear-gradient(170deg)` fill + `border-top-color: border-strong` + `box-shadow: 0 4px 20px` (old UI: `0 6px 32px rgba(0,0,0,.52)`)
+- **Input focus glow** — strengthened from 0.12 → 0.18 opacity
+- **Active nav glow** — teal ambient background + `text-shadow` glow on active item
+- **Progress bar gradient** — linear gradient fill instead of flat accent colour
+- **Breathing generate button** — subtle `cw-btn-pulse` keyframe animation when enabled
+
+## Structural Fixes
+
+- `.text-screen` / `.text-section` / `.screen__title` all weight 700 — clear hierarchy
+- `.btn-secondary:hover` border becomes teal hint instead of hard grey
+- `.clip-rank-badge--best` glow strengthened (10px → 16px)
+- `.output-clip-card:hover` adds `translateY(-1px)` lift
+- `.monitor-progress-card` gets gradient + shadow
+- `.render-bar__progress-fill` gets gradient
+
+## Dashboard Feel Reductions
+
+- Buttons no longer look like flat coloured rectangles — they have gradient depth and glow
+- Cards no longer look like flat bordered boxes — they have gradient depth and directional shadow
+- Active nav item glows instead of just changing background colour
+- Generate moment has breathing animation — feels alive not inert
+
+## Verification
+
+- No JS files changed — CSS only
+- No layout changes — all structural CSS preserved
+- `node --check` on all JS modules: OK (no JS changes in this phase)
+
+## Remaining Gaps
+
+- Right panel (Settings/Context) still has enterprise feel — addressed in UI-R5E
+- Projects screen needs same pass — addressed in UI-R5D
+- Motion and page transitions not yet added — UI-R5F
