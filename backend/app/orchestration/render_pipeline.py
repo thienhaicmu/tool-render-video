@@ -2312,6 +2312,39 @@ def run_render_pipeline(
                     "render_success_patterns_failed job_id=%s: %s", job_id, _rsp_err
                 )
 
+        # ── Learning-Aware Influence Calibration (Phase 62D) — metadata only ─
+        # Calibrates bounded AI influence using patterns/reinforcement signals.
+        # No render mutation, no autonomous retraining, no external persistence.
+        if _ai_edit_plan is not None:
+            try:
+                from app.ai.outcome_tracking.learning_influence_calibration_engine import (
+                    build_learning_influence_calibration as _build_lic,
+                )
+                _lic_result = _build_lic(
+                    _ai_edit_plan, context={"job_id": job_id},
+                )
+                try:
+                    _ai_edit_plan.learning_influence_calibration = (
+                        _lic_result.get("learning_influence_calibration") or {}
+                    )
+                except Exception:
+                    pass
+                _lic = _lic_result.get("learning_influence_calibration") or {}
+                logger.info(
+                    "learning_influence_calibration_built job_id=%s available=%s "
+                    "mode=%s pos_domains=%d neg_entries=%d confidence=%.3f",
+                    job_id,
+                    _lic.get("available"),
+                    _lic.get("execution_mode", "unknown"),
+                    len(_lic.get("calibration") or {}),
+                    len(_lic.get("negative_calibration") or []),
+                    float(_lic.get("confidence") or 0.0),
+                )
+            except Exception as _lic_err:
+                logger.warning(
+                    "learning_influence_calibration_failed job_id=%s: %s", job_id, _lic_err
+                )
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()

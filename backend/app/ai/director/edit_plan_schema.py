@@ -265,6 +265,8 @@ class AIEditPlan:
     creator_preference_reinforcement: dict = field(default_factory=dict)
     # Phase 62C — Success pattern mining (pattern metadata only, no mutation)
     render_success_patterns: dict = field(default_factory=dict)
+    # Phase 62D — Learning-aware influence calibration (calibration metadata only)
+    learning_influence_calibration: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -393,4 +395,5 @@ class AIEditPlan:
             "render_outcome_tracking":            dict(self.render_outcome_tracking),
             "creator_preference_reinforcement":   dict(self.creator_preference_reinforcement),
             "render_success_patterns":            dict(self.render_success_patterns),
+            "learning_influence_calibration":     dict(self.learning_influence_calibration),
         }

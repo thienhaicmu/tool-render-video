@@ -6350,3 +6350,156 @@ for idx, seg in enumerate(scored)        ← DB commit loop
 - Focused: **34/34** passed (including 4 required execution tests)
 - Full regression: pending
 - `py_compile` passed on all changed modules
+
+---
+
+### 2026-05-14 — AI Intelligence Phase 62D: Learning-Aware Influence Calibration
+
+**Implemented:**
+
+- `app/ai/outcome_tracking/learning_influence_calibration_engine.py` (new) — `build_learning_influence_calibration(edit_plan, context=None) -> dict` public API; learning-aware calibration only; uses Phase 62B reinforcement and Phase 62C patterns to calibrate existing bounded influence; never raises — fallback-safe on any error
+- `app/ai/director/edit_plan_schema.py` (updated) — `learning_influence_calibration: dict = field(default_factory=dict)` added after Phase 62C field; included in `to_dict()`; backward-compatible
+- `app/orchestration/render_pipeline.py` (updated) — Phase 62D block inserted after Phase 62C, before `for idx, seg in enumerate(scored, start=1)` DB commit loop
+- `tests/test_ai_phase62d_learning_influence_calibration.py` (new) — 70+ tests covering required execution, required integration, fallback shape, available shape, positive calibration (subtitle/camera/segment), negative calibration (conflicting pattern, CPR signals), execution mode (off/safe/balanced/aggressive), user override exclusion, confidence delta bounds, total delta cap, confidence formula, action helpers, determinism, edge cases
+
+**What Phase 62D adds:**
+
+- Learning-aware calibration of existing bounded AI influence using Phase 62C success patterns and Phase 62B reinforcement signals
+- Positive calibration: supports subtitle/camera/segment influence when strong/moderate patterns confirm they work for this creator×platform combination
+- Negative calibration: softens camera and subtitle influence when conflicting patterns or negative reinforcement signals are detected
+- Execution mode-aware scaling: safe mode conservative (+50%), off mode metadata-only, aggressive mode stronger but still hard-capped
+- User override protection: excluded domains are tracked in `user_override_excluded`, never calibrated
+
+**Learning influence calibration output shape:**
+
+```json
+{
+  "learning_influence_calibration": {
+    "available":    true,
+    "creator_type": "podcast",
+    "platform":     "tiktok",
+    "execution_mode": "balanced",
+    "calibration": {
+      "subtitle": {
+        "confidence_delta": 0.03,
+        "action":           "support_clean_compact_subtitles",
+        "reason":           "clean_pro subtitle pattern improved podcast tiktok renders — supporting clean subtitle influence."
+      },
+      "camera": {
+        "confidence_delta": 0.04,
+        "action":           "support_stable_camera",
+        "reason":           "stable framing pattern showed strong outcomes for podcast tiktok — supporting stable camera influence."
+      },
+      "segment": {
+        "confidence_delta": 0.02,
+        "action":           "support_retention_creator_fit_ranking",
+        "reason":           "Retention creator-fit ranking correlated with strong pattern outcomes for podcast."
+      }
+    },
+    "negative_calibration": [],
+    "user_override_excluded": [],
+    "confidence": 0.82,
+    "reasoning": [
+      "Learning signals support subtitle and camera and segment influence for podcast on tiktok."
+    ]
+  }
+}
+```
+
+**Input signals read (Phase 62D):**
+
+| Signal | Source Phase | Field |
+|---|---|---|
+| `render_outcome_tracking` | 62A | Outcome, quality, ai_execution, creator_type |
+| `creator_preference_reinforcement` | 62B | Reinforced preferences, negative signals, confidence |
+| `render_success_patterns` | 62C | Pattern classification, signals, confidence |
+| `ai_execution_mode` | 60D | Resolved execution mode |
+| `subtitle_execution_promotion` | 59A/61B | User override detection |
+| `camera_execution_promotion` | 59B/61C | User override detection |
+| `creator_preference_profile` | 50D | Platform |
+
+**Positive calibration base deltas:**
+
+| Classification | Subtitle | Camera | Segment |
+|---|---|---|---|
+| `strong_pattern` | +0.03 | +0.04 | +0.02 |
+| `moderate_pattern` | +0.02 | +0.02 | +0.01 |
+| `weak_pattern` | none | none | none |
+| `conflicting_pattern` | none (negative only) | none (negative only) | none |
+
+**Execution mode multipliers:**
+
+| Mode | Positive scale | Negative scale |
+|---|---|---|
+| `off` | 0.0 (metadata only) | 0.0 |
+| `safe` | ×0.5 | ×1.0 |
+| `balanced` | ×1.0 | ×1.0 |
+| `aggressive` | ×1.2 (capped at 0.04) | ×0.8 |
+
+**Negative calibration rules:**
+
+| Trigger | Domain | Delta |
+|---|---|---|
+| `conflicting_pattern` (camera not overridden) | camera | −0.03 × mode_neg_scale |
+| `conflicting_pattern` (subtitle not overridden) | subtitle | −0.02 × mode_neg_scale |
+| CPR negative_signal (domain-matched) | matching domain | −min(0.04, \|delta\| × mode_neg_scale) |
+
+**Confidence delta bounds (strict):**
+
+| Bound | Value |
+|---|---|
+| Max positive per domain | +0.04 |
+| Max negative per domain | −0.04 |
+| Total absolute cap | 0.10 |
+
+**Confidence formula:**
+
+```
+blended      = pattern_confidence × 0.6 + cpr_confidence × 0.4
+class_scale  = {strong: 1.0, moderate: 0.8, conflicting: 0.5, weak: 0.0}
+mode_scale   = {safe: 0.9, other: 1.0}
+confidence   = clamp(blended × class_scale × mode_scale, 0.0, 1.0)
+```
+
+**Gate check (all required to produce available=True):**
+
+| Condition | Fallback reason |
+|---|---|
+| `rot_available == True` | `outcome_unavailable` |
+| `creator_type != "unknown"` | `creator_type_unknown` |
+| Any quality score > 0 | `quality_missing` |
+| `render_success_patterns.available == True` AND patterns non-empty | `patterns_unavailable` |
+
+**Execution order in render_pipeline.py:**
+
+```
+Phase 62A render outcome tracking
+Phase 62B creator preference reinforcement
+Phase 62C render success pattern mining
+Phase 62D learning-aware influence calibration  ← reads 62A/62B/62C + 60D + 59A/59B, no mutations
+for idx, seg in enumerate(scored)               ← DB commit loop
+```
+
+**Safety contract:**
+
+| Boundary | Status |
+|---|---|
+| No render mutation | ✅ |
+| No payload mutation | ✅ |
+| No autonomous retraining | ✅ |
+| No cloud learning / fine-tuning | ✅ |
+| No external persistence | ✅ |
+| No influence mutation | ✅ |
+| No new render knobs introduced | ✅ |
+| Confidence deltas bounded per domain and total | ✅ |
+| Execution mode authority respected | ✅ |
+| User overrides respected and tracked | ✅ |
+| Conflicting calibration advisory-only | ✅ |
+| Never raises — fallback on any error | ✅ |
+| Deterministic: same inputs → same output | ✅ |
+
+**Test Results:**
+
+- Focused: pending
+- Full regression: pending
+- `py_compile` passed on all changed modules
