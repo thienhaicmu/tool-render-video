@@ -2249,6 +2249,38 @@ def run_render_pipeline(
                     "render_outcome_tracking_failed job_id=%s: %s", job_id, _rot_err
                 )
 
+        # ── Creator Preference Reinforcement (Phase 62B) — metadata only ─────
+        # Converts positive/negative outcomes into bounded preference signals.
+        # No render mutation, no autonomous retraining, no external persistence.
+        if _ai_edit_plan is not None:
+            try:
+                from app.ai.outcome_tracking.creator_preference_reinforcement_engine import (
+                    build_creator_preference_reinforcement as _build_cpr,
+                )
+                _cpr_result = _build_cpr(
+                    _ai_edit_plan, context={"job_id": job_id},
+                )
+                try:
+                    _ai_edit_plan.creator_preference_reinforcement = (
+                        _cpr_result.get("creator_preference_reinforcement") or {}
+                    )
+                except Exception:
+                    pass
+                _cpr = _cpr_result.get("creator_preference_reinforcement") or {}
+                logger.info(
+                    "creator_preference_reinforcement_built job_id=%s available=%s "
+                    "domains_reinforced=%d negative_signals=%d confidence=%.3f",
+                    job_id,
+                    _cpr.get("available"),
+                    len(_cpr.get("reinforced_preferences") or {}),
+                    len(_cpr.get("negative_signals") or []),
+                    float(_cpr.get("confidence") or 0.0),
+                )
+            except Exception as _cpr_err:
+                logger.warning(
+                    "creator_preference_reinforcement_failed job_id=%s: %s", job_id, _cpr_err
+                )
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()

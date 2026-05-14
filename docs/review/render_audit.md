@@ -6045,3 +6045,153 @@ for idx, seg in enumerate(scored)    ← DB commit loop
 - Focused: **53/53** passed (including 4 required execution tests)
 - Full regression: **5362/5362** passed (0 regressions)
 - `py_compile` passed on all changed modules
+
+---
+
+### 2026-05-14 — AI Intelligence v2 Phase 62B: Creator Preference Reinforcement
+
+**Implemented:**
+
+- `app/ai/outcome_tracking/creator_preference_reinforcement_engine.py` (new) — `build_creator_preference_reinforcement(edit_plan, context=None)` public API; converts positive/negative render outcomes into bounded, deterministic preference reinforcement signals; reinforcement metadata only, never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `creator_preference_reinforcement: dict = field(default_factory=dict)` added after Phase 62A field; included in `to_dict()`; backward-compatible
+- `app/orchestration/render_pipeline.py` (updated) — Phase 62B block injected after Phase 62A; stores result on `edit_plan.creator_preference_reinforcement`; wrapped in try/except; never blocks render
+- `tests/test_ai_phase62b_creator_preference_reinforcement.py` (new) — 43 focused tests
+
+**What Phase 62B adds:**
+
+Phase 62B is reinforcement metadata only. It reads `render_outcome_tracking` (Phase 62A) plus AI metadata from Phases 50D, 60A, 60B, 60C, 61D and produces a structured `creator_preference_reinforcement` object with bounded positive deltas and advisory-only negative signals. No autonomous retraining, no cloud learning, no render mutation.
+
+**creator_preference_reinforcement model:**
+
+```json
+{
+  "creator_preference_reinforcement": {
+    "available":    true,
+    "creator_type": "podcast",
+    "reinforced_preferences": {
+      "subtitle": {
+        "style":              "clean_pro",
+        "density":            "balanced",
+        "keyword_emphasis":   "selective",
+        "confidence_delta":    0.042
+      },
+      "camera": {
+        "stability_priority":  "high",
+        "crop_aggressiveness": "low",
+        "confidence_delta":    0.0405
+      },
+      "ranking": {
+        "priority":          "retention_creator_fit",
+        "confidence_delta":  0.03
+      }
+    },
+    "negative_signals": [],
+    "confidence": 0.82,
+    "reasoning": [
+      "AI ON improved overall quality, reinforcing subtitle, camera preferences.",
+      "Creator fit is strong — ranking preference also reinforced."
+    ]
+  }
+}
+```
+
+**Fallback shape:**
+
+```json
+{
+  "creator_preference_reinforcement": {
+    "available":              false,
+    "reinforced_preferences": {},
+    "negative_signals":       [],
+    "confidence":             0.0,
+    "reasoning":              []
+  }
+}
+```
+
+**Positive reinforcement rules:**
+
+| Condition | Domain reinforced | Values reinforced |
+|---|---|---|
+| `overall_result=improved` AND `ai_effectiveness∈(strong,moderate)` AND `subtitle_applied=True` AND `subtitle_quality≥70` AND no user override | `subtitle` | `style`, `density`, `keyword_emphasis` from `creator_render_strategy.strategy.subtitle` |
+| Same as above for camera, `camera_quality≥70` | `camera` | `stability_priority`, `crop_aggressiveness` from `creator_render_strategy.strategy.camera` |
+| `ai_effectiveness=strong` AND `creator_fit=high` | `ranking` | `priority` from `creator_render_strategy.strategy.ranking` |
+
+**Negative signal rules:**
+
+| Condition | Signal | Advisory |
+|---|---|---|
+| `ab_available AND winner=ai_off` AND `subtitle_applied` AND `subtitle_quality<70` | `subtitle_underperformed` | ✅ never auto-applied |
+| `ab_available AND winner=ai_off` AND `camera_applied` AND `camera_quality<70` | `camera_underperformed` | ✅ never auto-applied |
+| `ab_available AND winner=ai_off` (no per-domain signal) | `ai_off_winner` | ✅ never auto-applied |
+| `overall_result=regression` | `overall_regression` | ✅ never auto-applied |
+| `pqf.camera_fit≤30` AND `camera_applied` | `platform_camera_fit_weak` | ✅ never auto-applied |
+
+**Confidence delta bounds (strict):**
+
+| Bound | Value |
+|---|---|
+| Max positive delta per domain | +0.05 |
+| Max negative delta per domain | −0.05 |
+| Total absolute delta cap | 0.12 (proportional scaling applied if exceeded) |
+
+**Confidence_delta formula (positive domains):**
+
+```python
+base = 0.05 if effectiveness == "strong" else 0.03
+delta = round(base * (domain_quality / 100), 4)
+delta = min(0.05, max(0.0, delta))
+```
+
+**Evidence gate (all must pass):**
+
+| Condition | Fallback reason |
+|---|---|
+| `render_outcome_tracking.available == True` | `outcome_unavailable` |
+| `creator_type != "unknown"` | `creator_type_unknown` |
+| At least one quality score > 0 | `quality_missing` |
+| `ai_execution_metrics` or `ai_execution_summary` present | `execution_metrics_missing` |
+| If A/B missing AND `confidence < 0.65` | `ab_missing_confidence_low` |
+
+**User override exclusion:**
+
+If `subtitle_execution_promotion.reason` contains `"user_override"` → subtitle excluded, noted in reasoning.
+If `camera_execution_promotion.reason` contains `"user_override"` → camera excluded, noted in reasoning.
+
+**Reinforcement confidence scaling:**
+
+| Condition | Confidence |
+|---|---|
+| `overall_result=improved` AND `ab_available` | `rot_confidence` (full) |
+| `overall_result=improved` AND `ab_missing` | `rot_confidence × 0.7` |
+| Other (`neutral` / `regression`) | `rot_confidence × 0.3` |
+
+**Execution order in render_pipeline.py:**
+
+```
+Phase 62A render outcome tracking
+Phase 62B creator preference reinforcement  ← reads 62A + prior Phase 60x/61x, no mutations
+for idx, seg in enumerate(scored)           ← DB commit loop
+```
+
+**Safety contract:**
+
+| Boundary | Status |
+|---|---|
+| No render mutation | ✅ |
+| No payload mutation | ✅ |
+| No autonomous retraining | ✅ |
+| No cloud learning / fine-tuning | ✅ |
+| No external persistence | ✅ |
+| No influence mutation | ✅ |
+| Negative signals advisory-only | ✅ |
+| Confidence delta bounded per domain and total | ✅ |
+| User overrides respected | ✅ |
+| Never raises — fallback on any error | ✅ |
+| Deterministic: same inputs → same output | ✅ |
+
+**Test Results:**
+
+- Focused: **43/43** passed (including 4 required execution tests)
+- Full regression: **5405/5405** passed (0 regressions)
+- `py_compile` passed on all changed modules
