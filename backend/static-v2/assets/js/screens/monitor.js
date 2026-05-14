@@ -1,15 +1,17 @@
 /* Monitor screen — live job stream, premium stage banner, transport badge,
-   part status table, terminal CTAs (View Results / Retry / Resume), logs drawer.
-   Route recovery: if jobId is present, always loads from transport even after refresh.
+   clip status table, terminal CTAs (View Results / Retry / Resume), logs drawer.
+   Route recovery: if no jobId given but renderSessionStore has an active render,
+   redirects immediately. If jobId present, always loads from transport.
    Loading timeout: 20s with inline retry if no data arrives.
 */
 
-import { monitorStore } from '../store/monitor.js';
-import { statusChip }   from '../components/status-chip.js';
-import { partStatusList } from '../components/part-status-list.js';
+import { monitorStore }       from '../store/monitor.js';
+import { renderSessionStore } from '../store/render-session.js';
+import { statusChip }         from '../components/status-chip.js';
+import { partStatusList }     from '../components/part-status-list.js';
 import { logDrawerShell, wireLogDrawer } from '../components/log-drawer.js';
-import { router }       from '../router.js';
-import { renderApi }    from '../api/render.js';
+import { router }             from '../router.js';
+import { renderApi }          from '../api/render.js';
 
 const TERMINAL       = new Set(['completed', 'completed_with_errors', 'failed', 'interrupted']);
 const CONNECT_TIMEOUT_MS = 20_000;
@@ -97,14 +99,20 @@ function renderTerminalBanner(state) {
   if (!status || !TERMINAL.has(status)) return '';
 
   if (status === 'completed' || status === 'completed_with_errors') {
+    const completedParts = state.summary?.completed_parts ?? 0;
+    const totalParts     = state.summary?.total_parts ?? 0;
+    const clipNote       = totalParts > 0
+      ? `${completedParts} of ${totalParts} clips ranked and ready.`
+      : 'Your ranked clips are ready to review.';
+
     return `
       <div class="card terminal-banner terminal-banner--success">
         <div class="row gap-4" style="align-items:center;flex-wrap:wrap">
           <div>
             <div class="terminal-banner__title" style="color:var(--color-success)">
-              ${status === 'completed' ? 'Render complete' : 'Render complete — some parts failed'}
+              ${status === 'completed' ? 'Render complete' : 'Render complete — some clips failed'}
             </div>
-            <div class="text-caption text-faint mt-1">Your ranked clips are ready to review.</div>
+            <div class="text-caption text-faint mt-1">${_esc(clipNote)}</div>
           </div>
           <span class="flex-1"></span>
           <button class="btn btn-primary" id="monitor-to-results">View Results →</button>
@@ -116,6 +124,11 @@ function renderTerminalBanner(state) {
   // failed | interrupted
   const canRetry  = status === 'failed';
   const canResume = status === 'interrupted';
+  const reasonMsg = state.job?.message ?? 'An error occurred during rendering.';
+  const hintMsg   = canResume
+    ? 'You can resume where it left off.'
+    : 'Check logs below for more detail.';
+
   return `
     <div class="card terminal-banner terminal-banner--failed">
       <div class="row gap-4" style="align-items:center;flex-wrap:wrap">
@@ -123,12 +136,13 @@ function renderTerminalBanner(state) {
           <div class="terminal-banner__title" style="color:var(--color-failed)">
             ${status === 'failed' ? 'Render failed' : 'Render interrupted'}
           </div>
-          <div class="text-caption text-faint mt-1">${_esc(state.job?.message ?? 'Check logs for details.')}</div>
+          <div class="text-caption text-faint mt-1">${_esc(reasonMsg)}</div>
+          <div class="text-caption text-faint">${hintMsg}</div>
         </div>
         <span class="flex-1"></span>
-        ${canResume ? `<button class="btn btn-secondary" id="monitor-resume-btn">Resume</button>` : ''}
-        ${canRetry  ? `<button class="btn btn-secondary" id="monitor-retry-btn">Retry</button>`  : ''}
-        <button class="btn btn-ghost" id="monitor-to-source">New source</button>
+        ${canResume ? `<button class="btn btn-secondary" id="monitor-resume-btn">Resume render</button>` : ''}
+        ${canRetry  ? `<button class="btn btn-secondary" id="monitor-retry-btn">Retry render</button>`  : ''}
+        <button class="btn btn-ghost" id="monitor-to-source">Start over</button>
       </div>
     </div>
   `;
@@ -197,7 +211,9 @@ export async function mount(el, params) {
         <div class="text-section" style="margin-bottom:var(--sp-3)">Clips</div>
         <div id="mon-parts"></div>
       </div>
-      ${logDrawerShell()}
+      <div style="margin-top:var(--sp-2)">
+        ${logDrawerShell()}
+      </div>
       <div id="mon-error" class="text-caption" style="color:var(--color-failed)"></div>
     </div>
   `;
@@ -205,17 +221,34 @@ export async function mount(el, params) {
   el.querySelector('#mon-back-btn')?.addEventListener('click', () => router.go('/studio'));
 
   if (!jobId) {
+    // Route recovery — redirect to active render if one is known
+    const session = renderSessionStore.getState();
+    if (session.jobId && session.active) {
+      router.go(`/monitor/${session.jobId}`);
+      return;
+    }
+
+    // No active render — show helpful empty state
     const prog = el.querySelector('#mon-progress');
-    if (prog) prog.innerHTML = `
-      <div class="card">
-        <div class="text-body" style="font-weight:600">No job selected</div>
-        <div class="text-caption text-faint mt-2">Navigate here from Studio after starting a render, or open a job from Library.</div>
-        <div class="row gap-3 mt-4">
-          <button class="btn btn-primary" onclick="window.location.hash='/studio'">← Studio</button>
-          <button class="btn btn-ghost" onclick="window.location.hash='/library'">Library</button>
+    if (prog) {
+      prog.innerHTML = `
+        <div class="monitor-no-job col gap-4" style="padding:var(--sp-8) 0;text-align:center">
+          <div style="font-size:40px;line-height:1;opacity:0.15" aria-hidden="true">▶</div>
+          <div>
+            <div class="text-body" style="font-weight:700;margin-bottom:var(--sp-1)">No render in progress</div>
+            <div class="text-caption text-faint" style="max-width:300px;margin:0 auto">
+              Start a render from Studio, or reopen a past job from Library.
+            </div>
+          </div>
+          <div class="row gap-3" style="justify-content:center">
+            <button class="btn btn-primary" id="mon-empty-studio">← Go to Studio</button>
+            <button class="btn btn-secondary" id="mon-empty-library">Open Library</button>
+          </div>
         </div>
-      </div>
-    `;
+      `;
+      prog.querySelector('#mon-empty-studio')?.addEventListener('click', () => router.go('/studio'));
+      prog.querySelector('#mon-empty-library')?.addEventListener('click', () => router.go('/library'));
+    }
     return;
   }
 

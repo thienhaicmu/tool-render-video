@@ -1,10 +1,23 @@
 /* Shell — mounts the 4-panel layout and wires up sub-components.
-   #shell-backend-banner lives inside #shell-workspace so it persists across
-   route changes. The router removes only .screen elements, not the banner.
+   #shell-backend-banner and #shell-render-bar both live inside #shell-workspace
+   so they persist across route changes. The router only removes .screen elements.
 */
 
-import { navRail }     from './nav-rail.js';
-import { systemStore } from '../store/system.js';
+import { navRail }            from './nav-rail.js';
+import { systemStore }        from '../store/system.js';
+import { renderSessionStore } from '../store/render-session.js';
+import { router }             from '../router.js';
+
+const _STAGE_LABELS = {
+  queued:             'Waiting to start',
+  downloading:        'Fetching video',
+  scene_detection:    'Finding scenes',
+  segment_building:   'Cutting clips',
+  transcribing_full:  'Transcribing speech',
+  rendering:          'Rendering clips',
+  rendering_parallel: 'Rendering clips',
+  writing_report:     'Finalising results',
+};
 
 function render() {
   return `
@@ -12,6 +25,7 @@ function render() {
       <nav class="shell__nav" id="shell-nav"></nav>
       <main class="shell__workspace" id="shell-workspace">
         <div id="shell-backend-banner" class="shell-backend-banner" style="display:none" role="alert" aria-live="polite"></div>
+        <div id="shell-render-bar" class="shell-render-bar" style="display:none" role="status" aria-live="polite"></div>
       </main>
       <aside class="shell__panel" id="shell-panel">
         <div class="panel-section">
@@ -35,6 +49,10 @@ function mount(root) {
   systemStore.subscribe(state => {
     _updateStrip(root, state);
     _updateBanner(root, state);
+  });
+
+  renderSessionStore.subscribe(state => {
+    _updateRenderBar(root, state);
   });
 }
 
@@ -73,6 +91,51 @@ function _updateBanner(root, state) {
   banner.querySelector('#banner-retry')?.addEventListener('click', () => {
     systemStore.refresh();
   });
+}
+
+function _updateRenderBar(root, state) {
+  const bar = root.querySelector('#shell-render-bar');
+  if (!bar) return;
+
+  if (!state.active) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+
+  const pct        = Math.round(state.progressPercent ?? 0);
+  const rawStage   = state.stage ?? '';
+  const stageLabel = _STAGE_LABELS[rawStage] || (rawStage ? rawStage.replace(/_/g, ' ') : 'Rendering');
+  const clipsText  = state.totalParts > 0
+    ? `${state.doneParts}/${state.totalParts} clips`
+    : '';
+
+  bar.style.display = '';
+  bar.innerHTML = `
+    <div class="render-bar row gap-3" style="align-items:center">
+      <div class="render-bar__progress-track" aria-hidden="true">
+        <div class="render-bar__progress-fill" style="width:${pct}%"></div>
+      </div>
+      <span class="render-bar__stage text-caption">${_esc(stageLabel)}</span>
+      ${clipsText ? `<span class="render-bar__sep text-caption text-faint" aria-hidden="true">·</span><span class="render-bar__clips text-caption text-faint">${_esc(clipsText)}</span>` : ''}
+      <span class="render-bar__sep text-caption text-faint" aria-hidden="true">·</span>
+      <span class="text-caption" style="font-variant-numeric:tabular-nums;font-weight:600">${pct}%</span>
+      <span class="flex-1"></span>
+      <button class="btn btn-ghost render-bar__btn" id="render-bar-open">Open Monitor</button>
+    </div>
+  `;
+
+  bar.querySelector('#render-bar-open')?.addEventListener('click', () => {
+    const { jobId } = renderSessionStore.getState();
+    if (jobId) router.go(`/monitor/${jobId}`);
+  });
+}
+
+function _esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function setActiveNav(id) {

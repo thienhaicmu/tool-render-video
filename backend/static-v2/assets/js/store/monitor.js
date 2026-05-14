@@ -1,8 +1,9 @@
-import { createStore } from './create-store.js';
-import { subscribeJob } from '../transport.js';
-import { normalizeJob } from '../entities/job.js';
-import { normalizePartList } from '../entities/part.js';
-import { jobsApi } from '../api/jobs.js';
+import { createStore }        from './create-store.js';
+import { subscribeJob }       from '../transport.js';
+import { normalizeJob }       from '../entities/job.js';
+import { normalizePartList }  from '../entities/part.js';
+import { jobsApi }            from '../api/jobs.js';
+import { renderSessionStore } from './render-session.js';
 
 const store = createStore({
   jobId:         null,
@@ -22,11 +23,14 @@ let _subscription = null;
 
 function _handleUpdate(data) {
   const update = {};
-  if (data.job)     update.job     = normalizeJob(data.job);
-  if (data.parts)   update.parts   = normalizePartList(data.parts);
-  if (data.summary) update.summary = data.summary;
+  if (data.job)        update.job          = normalizeJob(data.job);
+  if (data.parts)      update.parts        = normalizePartList(data.parts);
+  if (data.summary)    update.summary      = data.summary;
   if (data._transport) update.transportMode = data._transport;
-  if (Object.keys(update).length) store.set(update);
+  if (Object.keys(update).length) {
+    store.set(update);
+    renderSessionStore.sync(store.getState());
+  }
 }
 
 function start(jobId) {
@@ -36,18 +40,25 @@ function start(jobId) {
     transportMode: 'connecting', terminal: false, terminalStatus: null,
     logs: null, error: null,
   });
+  renderSessionStore.sync(store.getState());
 
   _subscription = subscribeJob(jobId, {
     onUpdate: _handleUpdate,
     onTerminal(status) {
       store.set({ terminal: true, terminalStatus: status });
-      // Authoritative final fetch
+      renderSessionStore.sync(store.getState());
       jobsApi.get(jobId)
-        .then(raw => { if (raw) store.set({ job: normalizeJob(raw) }); })
+        .then(raw => {
+          if (raw) {
+            store.set({ job: normalizeJob(raw) });
+            renderSessionStore.sync(store.getState());
+          }
+        })
         .catch(() => {});
     },
     onTransportChange(mode) {
       store.set({ transportMode: mode });
+      renderSessionStore.sync(store.getState());
     },
   });
 }
@@ -55,6 +66,7 @@ function start(jobId) {
 function stop() {
   if (_subscription) { _subscription.unsubscribe(); _subscription = null; }
   store.set({ transportMode: 'connecting' });
+  // renderSessionStore retains last known state — bar stays visible
 }
 
 async function loadLogs(lines = 120) {
@@ -72,6 +84,7 @@ async function loadLogs(lines = 120) {
 function clear() {
   stop();
   store.reset();
+  renderSessionStore.clear();
 }
 
 export const monitorStore = { ...store, start, stop, clear, loadLogs };

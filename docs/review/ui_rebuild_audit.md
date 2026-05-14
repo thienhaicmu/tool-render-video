@@ -1681,3 +1681,100 @@ UI-R4F-C — Persistent Render Experience (Monitor + Results continuity)
 
 ### Status
 ✓ Complete — committed
+
+---
+
+## 25. UI-R4F-C — Persistent Render Experience
+
+**Date:** 2026-05-14  
+**Commit:** feat(ui): improve persistent render experience  
+**Scope:** Global render session store, persistent render bar, monitor UX improvements
+
+### Problem statement
+
+After starting a render and leaving the Monitor screen, the app had no awareness of the ongoing render. Users navigating to Source, Library, or other screens saw no indication that a render was active. The Monitor empty state was unhelpful, and terminal banners lacked clip count context.
+
+### Changes
+
+**New file: `store/render-session.js`**
+
+Global reactive store tracking active render state across routes:
+- State: `jobId`, `status`, `progressPercent`, `stage`, `doneParts`, `totalParts`, `transportMode`, `active`
+- `active` = `true` only when status is `queued` or `running`, and `terminal` flag is not set
+- `sync(monitorState)` — called by monitorStore after every mutation to keep state current
+- `clear()` — called by monitorStore.clear() to reset (e.g. when starting fresh)
+
+**Modified: `store/monitor.js`**
+
+| Change | Purpose |
+|---|---|
+| Import `renderSessionStore` | Dependency for syncing |
+| `_handleUpdate` → calls `renderSessionStore.sync(store.getState())` after every partial state merge | Keeps render bar live during active render |
+| `start(jobId)` → calls `sync` after initial `store.set` | Initialises bar when monitor starts |
+| `onTerminal` → calls `sync` immediately (sets `active: false`) and again after authoritative fetch | Bar hides as soon as terminal status is known |
+| `onTransportChange` → calls `sync` | Keeps transportMode current |
+| `stop()` → does NOT call sync or clear | Render bar retains last known state when user navigates away |
+| `clear()` → calls `renderSessionStore.clear()` | Full reset on explicit clear |
+
+**Modified: `components/shell.js`**
+
+| Change | Purpose |
+|---|---|
+| Import `renderSessionStore` + `router` | Drive render bar |
+| Add `#shell-render-bar` element inside `#shell-workspace` | Persists across route changes (router only removes `.screen`) |
+| `_STAGE_LABELS` inline map | Human-readable stage names without importing monitor screen |
+| `renderSessionStore.subscribe(_updateRenderBar)` in `mount()` | Reactive bar updates |
+| `_updateRenderBar(root, state)` | Shows/hides bar; renders progress track, stage label, clip count, %, Open Monitor button |
+| `_esc()` helper added | XSS safety for stage labels |
+
+Render bar appearance:
+- Visible only when `state.active === true`
+- Contains: 72px animated progress track → stage label → clip count (if totalParts > 0) → % → [Open Monitor] button
+- "Open Monitor" routes to `/monitor/{jobId}`
+- Hides immediately when render reaches terminal state (completed/failed/interrupted)
+
+**Modified: `css/components.css` — UI-R4F-C block appended**
+
+| CSS | Effect |
+|---|---|
+| `.shell-render-bar` | Flex-shrink:0, accent-tinted background, accent border-bottom |
+| `.render-bar { padding, min-height }` | 38px compact bar with standard horizontal padding |
+| `.render-bar__progress-track` + `__progress-fill` | 72×3px animated progress track |
+| `.render-bar__stage { font-weight:600 }` | Stage label legible against bar background |
+| `.render-bar__sep { opacity: 0.35 }` | De-emphasised separator dots |
+| `.render-bar__btn` | Ghost-style accent-coloured button; hover fills accent-soft background |
+| `.monitor-no-job { align-items:center }` | Empty state centring helper |
+
+**Modified: `screens/monitor.js`**
+
+| Change | Purpose |
+|---|---|
+| Import `renderSessionStore` | Route recovery check |
+| Empty state (no jobId) — route recovery | If `renderSessionStore.getState().active`, redirects to `/monitor/{jobId}` |
+| Empty state (no jobId) — improved UI | Centred layout with play icon, "No render in progress" heading, "Start a render from Studio, or reopen a past job from Library." body, primary Studio CTA + secondary Library button. Replaces old inline-onclick plain card. |
+| `renderTerminalBanner` — completed | Clip count line: "N of M clips ranked and ready." (uses `summary.completed_parts` / `summary.total_parts`) |
+| `renderTerminalBanner` — completed_with_errors | "some parts failed" → "some clips failed" (R4F-A oversight fixed) |
+| `renderTerminalBanner` — failed/interrupted | Reason message from `job.message`; hint line "Check logs below for more detail." / "You can resume where it left off."; action buttons relabelled "Resume render" / "Retry render" / "Start over" |
+| Log drawer wrapper | Extra `margin-top: var(--sp-2)` wrapper keeps logs visually separated from clip table |
+
+### Architecture notes
+
+- **renderSessionStore is a thin projection of monitorStore.** It does not maintain its own transport subscription — it only knows what monitorStore last told it. If the user navigates away mid-render, the bar retains the last known progress values. Clicking "Open Monitor" reconnects to the live transport and resumes accurate updates.
+- **Why not a background subscription?** Adding a global background transport subscription would require importing `subscribeJob`, entity normalizers, and managing lifecycle outside the monitor screen — out of scope for this phase. The current approach covers the primary use case (bar visible while user briefly visits other screens) without adding complexity.
+- **The `stop()` / `clear()` split:** `stop()` disconnects transport (called on unmount, preserves bar state). `clear()` fully resets both stores (called when starting a new render or explicitly clearing the session).
+
+### Route recovery coverage
+
+| Entry point | Behaviour |
+|---|---|
+| `#/monitor` (no jobId), active render exists | Redirects to `#/monitor/{jobId}` |
+| `#/monitor` (no jobId), no active render | Shows "No render in progress" empty state |
+| `#/monitor/{jobId}` | Always connects to transport, renders live state |
+
+### Limitations
+
+- Render bar shows stale progress if render completes while user is on a non-monitor screen (bar stays visible). Resolved when user opens Monitor, which reconnects and sets terminal state.
+- No ETA estimate (not provided by backend API at this time).
+
+### Status
+✓ Complete — committed
