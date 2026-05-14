@@ -96,6 +96,13 @@
   cursor: not-allowed;
   pointer-events: none;
 }
+.nav-rail-item--utility {
+  opacity: 0.55;
+}
+.nav-rail-item--utility:hover,
+.nav-rail-item--utility.nav-rail-item--active {
+  opacity: 1;
+}
 
 .nav-rail-icon {
   width: 20px;
@@ -1475,15 +1482,6 @@
 /* Studio preview — cinematic stage shadow */
 .studio-preview {
   box-shadow: 0 8px 40px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3);
-}
-
-/* Draft section title — sentence case, less shouty */
-.draft-section__title {
-  text-transform: none;
-  letter-spacing: 0.01em;
-  font-size: var(--text-body);
-  font-weight: 600;
-  color: var(--color-text-muted);
 }
 
 /* Ratio + preset pills — active state glow ring */

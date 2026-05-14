@@ -15,15 +15,15 @@ const TERMINAL       = new Set(['completed', 'completed_with_errors', 'failed', 
 const CONNECT_TIMEOUT_MS = 20_000;
 
 const STAGE_LABELS = {
-  queued:              'In queue',
-  starting:            'Starting…',
-  downloading:         'Downloading source',
-  scene_detection:     'Detecting scenes',
-  segment_building:    'Building segments',
-  transcribing_full:   'Transcribing audio',
-  rendering:           'Rendering clips',
-  rendering_parallel:  'Rendering (parallel)',
-  writing_report:      'Writing report',
+  queued:              'Waiting to start',
+  starting:            'Starting up…',
+  downloading:         'Fetching your video',
+  scene_detection:     'Finding scenes',
+  segment_building:    'Cutting clips',
+  transcribing_full:   'Transcribing speech',
+  rendering:           'Rendering your clips',
+  rendering_parallel:  'Rendering clips',
+  writing_report:      'Finalising results',
   done:                'Done',
   failed:              'Failed',
 };
@@ -83,7 +83,7 @@ function renderProgressCard(state) {
 
       <div class="row gap-4 text-caption text-faint" style="flex-wrap:wrap">
         <span style="font-variant-numeric:tabular-nums;font-weight:600;color:var(--color-text)">${pct}%</span>
-        ${totalParts  > 0 ? `<span>${doneParts} / ${totalParts} parts</span>` : ''}
+        ${totalParts  > 0 ? `<span>${doneParts} / ${totalParts} clips</span>` : ''}
         ${activeParts > 0 ? `<span style="color:var(--color-running)">${activeParts} running</span>` : ''}
         ${failedParts > 0 ? `<span style="color:var(--color-failed)">${failedParts} failed</span>` : ''}
         ${job.message && stageLabel ? `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-text-muted)">${_esc(job.message)}</span>` : ''}
@@ -182,10 +182,10 @@ export async function mount(el, params) {
       <div class="row gap-3" style="align-items:center">
         <div>
           <div class="screen__title">Monitor</div>
-          <div class="screen__subtitle" style="font-family:monospace;font-size:11px;color:var(--color-text-faint)">${jobId ?? '—'}</div>
+          <div class="screen__subtitle">Live render progress</div>
         </div>
         <span class="flex-1"></span>
-        <button class="btn btn-secondary btn-sm" id="mon-cancel-btn" style="display:none">Cancel</button>
+        <button class="btn btn-secondary btn-sm" id="mon-cancel-btn" style="display:none">Cancel render</button>
         <button class="btn btn-ghost" id="mon-back-btn">← Studio</button>
       </div>
     </div>
@@ -194,7 +194,7 @@ export async function mount(el, params) {
       <div id="mon-timeout-banner" style="display:none"></div>
       <div id="mon-terminal"></div>
       <div>
-        <div class="text-section" style="margin-bottom:var(--sp-3)">Parts</div>
+        <div class="text-section" style="margin-bottom:var(--sp-3)">Clips</div>
         <div id="mon-parts"></div>
       </div>
       ${logDrawerShell()}

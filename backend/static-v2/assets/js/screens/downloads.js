@@ -32,14 +32,6 @@ function parseUrlInput(raw) {
   return { valid, invalid, dupes };
 }
 
-/* ── Quality options (UI-only; not sent to backend) ─────────────────── */
-
-const QUALITY_OPTIONS = [
-  { value: 'best',     label: 'Best',     note: 'Highest available resolution' },
-  { value: 'balanced', label: 'Balanced', note: 'Good quality, smaller file' },
-  { value: 'fast',     label: 'Fast',     note: 'Fastest, smallest file' },
-];
-
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
 function _esc(s) {
@@ -59,7 +51,6 @@ function _trunc(s, n) {
 
 let _urlRaw      = '';
 let _outputDir   = '';
-let _quality     = 'best';
 let _submitting  = false;
 let _checkingStatus = false;
 let _el          = null;
@@ -303,7 +294,6 @@ async function _handleSubmit() {
 export async function mount(el, _params) {
   _urlRaw         = '';
   _outputDir      = '';
-  _quality        = 'best';
   _submitting     = false;
   _checkingStatus = false;
   _lastJob        = null;
@@ -334,18 +324,7 @@ export async function mount(el, _params) {
       <!-- Options -->
       <div class="card col gap-4">
         <div id="dl-folder-section"></div>
-
-        <div class="col gap-2">
-          <div class="text-section">Quality preset</div>
-          <div class="row gap-2">
-            ${QUALITY_OPTIONS.map(opt => `
-              <button class="dl-quality-pill${_quality === opt.value ? ' dl-quality-pill--active' : ''}"
-                data-quality="${opt.value}" title="${_esc(opt.note)}">${_esc(opt.label)}</button>`).join('')}
-          </div>
-          <div class="text-caption text-faint" id="dl-quality-note">
-            ${_esc(QUALITY_OPTIONS.find(o => o.value === _quality)?.note ?? '')}
-          </div>
-        </div>
+        <div class="text-caption text-faint">Downloads use source quality defaults.</div>
       </div>
 
       <!-- Submit -->
@@ -369,18 +348,6 @@ export async function mount(el, _params) {
     const parsed = parseUrlInput(_urlRaw);
     _renderUrlFeedback(parsed);
     _updateSubmitBtn(parsed);
-  });
-
-  // Quality pills
-  el.querySelectorAll('.dl-quality-pill').forEach(btn => {
-    btn.addEventListener('click', () => {
-      _quality = btn.dataset.quality;
-      el.querySelectorAll('.dl-quality-pill').forEach(b =>
-        b.classList.toggle('dl-quality-pill--active', b.dataset.quality === _quality)
-      );
-      const noteEl = el.querySelector('#dl-quality-note');
-      if (noteEl) noteEl.textContent = QUALITY_OPTIONS.find(o => o.value === _quality)?.note ?? '';
-    });
   });
 
   // Submit

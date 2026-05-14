@@ -182,6 +182,43 @@ function renderSectionD(d) {
   `;
 }
 
+function updateStudioPanel(d) {
+  const panelEl = document.querySelector('#panel-content');
+  if (!panelEl) return;
+
+  const title  = d.sessionTitle ?? null;
+  const dur    = d.sessionDuration != null
+    ? `${Math.floor(d.sessionDuration / 60)}:${String(Math.floor(d.sessionDuration % 60)).padStart(2, '0')}`
+    : null;
+  const src    = d.sourceMode === 'youtube' ? 'YouTube' : d.sourceMode === 'local' ? 'Local file' : null;
+  const qty    = d.maxExportParts ?? 5;
+  const ar     = d.aspectRatio ?? '9:16';
+  const min    = d.minPartSec  ?? 15;
+  const max    = d.maxPartSec  ?? 60;
+  const sub    = d.subtitleEnabled
+    ? (d.subtitleStyle ?? 'viral_bold').replace(/_/g, ' ')
+    : 'no subtitles';
+  const ai     = d.aiEnabled ? (d.aiExecutionMode ?? 'balanced') : 'AI off';
+
+  panelEl.innerHTML = `
+    <div class="col gap-3">
+      ${title ? `<div class="text-body" style="font-weight:600;word-break:break-word">${_esc(title)}</div>` : ''}
+      <div class="col gap-1">
+        ${dur  ? `<div class="text-caption text-faint">Duration · ${_esc(dur)}</div>` : ''}
+        ${src  ? `<div class="text-caption text-faint">Source · ${_esc(src)}</div>`   : ''}
+      </div>
+      <div class="col gap-1">
+        <div class="text-caption" style="font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--color-text-faint);margin-bottom:var(--sp-1)">Render plan</div>
+        <div class="row gap-1" style="flex-wrap:wrap">
+          ${[ar, `≤${qty} clip${qty !== 1 ? 's' : ''}`, `${min}–${max}s`, sub, ai].map(c =>
+            `<span class="summary-chip">${_esc(c)}</span>`
+          ).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderDraftPanel(d) {
   return `
     <div id="studio-draft" class="studio-draft">
@@ -251,6 +288,7 @@ function rerender(el) {
   if (ctaEl) ctaEl.outerHTML = renderCTA(draft);
   wireDraft(el);
   wireCTA(el);
+  updateStudioPanel(draft);
 }
 
 function wireDraft(el) {
@@ -412,6 +450,12 @@ export async function mount(el) {
 
   wireDraft(el);
   wireCTA(el);
+  updateStudioPanel(draft);
+
+  el.addEventListener('unmount', () => {
+    const panelEl = document.querySelector('#panel-content');
+    if (panelEl) panelEl.textContent = 'Select a job to see details.';
+  });
 }
 
 export const studioScreen = { mount };

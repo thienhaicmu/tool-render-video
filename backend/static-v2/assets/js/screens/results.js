@@ -25,7 +25,7 @@ function updateRightPanel(state) {
   const components = clip.rankingComponents ?? {};
   panelEl.innerHTML = `
     <div class="col gap-3">
-      <div class="text-section">Part ${clip.partNo}</div>
+      <div class="text-section">Clip ${clip.partNo}</div>
       ${clip.isBest ? `<span class="best-label" style="width:fit-content">BEST CLIP</span>` : ''}
       ${clip.score > 0 ? scoreBadge(clip.score) : ''}
       ${clip.rankingReason ? `<div class="text-caption" style="color:var(--color-text-muted)">${_esc(clip.rankingReason)}</div>` : ''}
@@ -86,11 +86,11 @@ function renderFailedPanel(result) {
   return `
     <div class="failed-panel">
       <div class="text-body" style="font-weight:600;color:var(--color-failed);margin-bottom:var(--sp-2)">
-        ${result.failedCount} part${result.failedCount !== 1 ? 's' : ''} failed
+        ${result.failedCount} clip${result.failedCount !== 1 ? 's' : ''} failed
       </div>
       ${result.failedPartDetails.slice(0, 6).map(d => `
         <div class="failed-row">
-          <span class="text-caption text-faint" style="min-width:48px;flex-shrink:0">Part ${d.part_no ?? '?'}</span>
+          <span class="text-caption text-faint" style="min-width:48px;flex-shrink:0">Clip ${d.part_no ?? '?'}</span>
           <span class="text-caption" style="color:var(--color-text-muted)">${_esc(d.message ?? d.error ?? 'Failed')}</span>
         </div>
       `).join('')}

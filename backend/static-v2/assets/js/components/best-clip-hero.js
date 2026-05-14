@@ -41,10 +41,10 @@ export function heroMetaHtml(clip, jobId) {
   return `
     <div class="row gap-2" style="align-items:center;padding:var(--sp-3)">
       ${clip.isBest ? `<span class="best-label">BEST</span>` : ''}
-      <span class="text-caption text-faint">Part ${clip.partNo}</span>
+      <span class="text-caption text-faint">Clip ${clip.partNo}</span>
       ${clip.score > 0 ? scorePill(clip.score) : ''}
       <span class="flex-1"></span>
-      <a href="${url}" download="part_${clip.partNo}.mp4" class="btn btn-secondary btn-sm">↓ Download</a>
+      <a href="${url}" download="clip_${clip.partNo}.mp4" class="btn btn-secondary btn-sm">↓ Download</a>
     </div>
   `;
 }

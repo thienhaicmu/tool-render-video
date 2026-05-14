@@ -53,7 +53,7 @@ function normalizeHistoryItem(raw) {
 
   return {
     ...job,
-    displayTitle: title ? _trunc(title, 60) : `Job ${job.jobId.slice(0, 12)}`,
+    displayTitle: _normalizeDisplayTitle(title, job.jobId, job.createdAt),
     bestScore,
     hasAI,
     outputCount,
@@ -65,6 +65,32 @@ function normalizeHistoryItem(raw) {
 function _trunc(s, n) {
   const str = String(s ?? '');
   return str.length > n ? str.slice(0, n) + '…' : str;
+}
+
+function _fmtDateShort(str) {
+  if (!str) return null;
+  try {
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch { return null; }
+}
+
+function _normalizeDisplayTitle(rawTitle, jobId, createdAt) {
+  if (!rawTitle) {
+    const ds = _fmtDateShort(createdAt);
+    return ds ? `Untitled render · ${ds}` : `Render ${jobId.slice(0, 8)}`;
+  }
+  // YouTube URL → short video ID
+  const yt = rawTitle.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{6,12})/);
+  if (yt) return `YouTube · ${yt[1]}`;
+  // File path → filename without extension
+  if (/[/\\]/.test(rawTitle)) {
+    const parts = rawTitle.replace(/\\/g, '/').split('/');
+    const fname = parts[parts.length - 1] ?? rawTitle;
+    return _trunc(fname.replace(/\.[^.]+$/, '') || fname, 60);
+  }
+  return _trunc(rawTitle, 60);
 }
 
 function _esc(s) {

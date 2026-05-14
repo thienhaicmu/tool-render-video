@@ -21,7 +21,7 @@ export function outputCard(clip, { selected = false } = {}) {
         </div>
         <div class="col gap-1 flex-1" style="min-width:0">
           <div class="row gap-2" style="align-items:center;flex-wrap:wrap">
-            <span class="text-body" style="font-weight:600">Part ${clip.partNo}</span>
+            <span class="text-body" style="font-weight:600">Clip ${clip.partNo}</span>
             ${clip.isBest ? `<span class="best-label">BEST</span>` : ''}
             ${dur ? `<span class="dur-badge">${dur}</span>` : ''}
             <span class="flex-1"></span>

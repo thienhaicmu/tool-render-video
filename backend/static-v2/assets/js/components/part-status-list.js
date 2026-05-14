@@ -6,7 +6,7 @@ import { statusChip } from './status-chip.js';
 
 export function partStatusList(parts) {
   if (!Array.isArray(parts) || !parts.length) {
-    return `<div class="text-caption text-faint" style="padding:var(--sp-4) 0">Waiting for parts to start…</div>`;
+    return `<div class="text-caption text-faint" style="padding:var(--sp-4) 0">Waiting for clips to start…</div>`;
   }
   return `<div class="part-status-table">${parts.map(p => _partRow(p)).join('')}</div>`;
 }
@@ -20,7 +20,7 @@ function _partRow(part) {
       <div class="part-progress-row__no text-caption">${part.partNo}</div>
       <div class="col gap-1 flex-1" style="min-width:0">
         <div class="row gap-2" style="align-items:center">
-          <span class="part-item__title">${_esc(part.partName || `Part ${part.partNo}`)}</span>
+          <span class="part-item__title">${_esc(part.partName || `Clip ${part.partNo}`)}</span>
           ${statusChip(part.chipStatus)}
           ${isActive && pct > 0
             ? `<span class="text-caption text-faint" style="margin-left:auto;flex-shrink:0;font-variant-numeric:tabular-nums">${pct}%</span>`

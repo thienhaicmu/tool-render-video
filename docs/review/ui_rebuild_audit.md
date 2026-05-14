@@ -1596,6 +1596,28 @@ CSS: all selectors reference existing DOM classes; no new class names introduced
 
 ---
 
-## 23. Next Phase
+## 23. UI-R4F-A — Core UX Trust Fix
 
-_(pending)_
+**Date:** 2026-05-14
+**Scope:** Creator trust and clarity improvements — 8 highest-impact fixes from professional review
+
+### Changes
+
+| Fix | Priority | File(s) | Detail |
+|---|---|---|---|
+| Remove false download quality presets | P0-1 | `screens/downloads.js` | Removed QUALITY_OPTIONS, `_quality` state, quality pill HTML, pill event listeners; replaced with "Downloads use source quality defaults." helper text |
+| Fix cancel render button label | P0-2 | `screens/monitor.js` | "Cancel" → "Cancel render" |
+| Restore studio section title hierarchy | P0-3 | `css/components.css` | Removed R4D override that set `.draft-section__title` to `font-size:var(--text-body)` (13px) — restores original 11px/700/uppercase |
+| Part → Clip terminology | P0-4 | `components/part-status-list.js`, `components/output-card.js`, `components/best-clip-hero.js`, `screens/results.js` | All user-facing "Part N" → "Clip N"; "parts" → "clips"; download filename `part_N.mp4` → `clip_N.mp4` |
+| Studio right panel session context | P0-5 | `screens/studio.js` | Added `updateStudioPanel(draft)` — populates `#panel-content` with session title, duration, source type, and render-plan summary chips; called on mount and every rerender; cleared on unmount |
+| Creator-friendly monitor copy | P1-1 | `screens/monitor.js` | STAGE_LABELS rewritten to plain English ("Fetching your video", "Finding scenes", "Cutting clips", etc.); "Parts" section header → "Clips"; "N/N parts" → "N/N clips"; subtitle changed to "Live render progress" |
+| Library title normalization | P1-2 | `screens/library.js` | Added `_normalizeDisplayTitle()` and `_fmtDateShort()`: YouTube URLs → "YouTube · {videoId}", file paths → filename without extension, null titles → "Untitled render · {date}" |
+| System nav de-emphasis | P1-3 | `components/nav-rail.js`, `css/components.css` | Split NAV_ITEMS into WORKFLOW_ITEMS (Source→Library) and UTILITY_ITEMS (Downloads, System); added divider between groups; added `.nav-rail-item--utility` class (opacity 0.55, 1 on hover/active) |
+
+### Verification
+- `node --check` passed on all 9 changed JS files
+- No API contracts changed
+- No store schema changes
+
+### Status
+✓ Complete — committed
