@@ -317,3 +317,143 @@ Terminal detection checks `job.status` in every message (both WS and polling). D
 | Session list / restore previous session on Source screen | Future sprint |
 | Drag-and-drop file upload (browser, non-Electron) | Future sprint |
 | Right panel context for Source and Studio screens | Future sprint |
+
+---
+
+# UI-R2C — Render Experience Polish
+
+**Phase:** UI-R2C  
+**Date:** 2026-05-14  
+**Branch:** feature/ai-output-upgrade  
+**Scope:** Monitor + Results render experience polish; shared render components; entity hardening
+
+---
+
+## 1. Summary
+
+Polished the Monitor and Results screens to premium creator product quality. Key deliverables: stable video player in Results (clip selection never destroys the `<video>` element), premium stage banner on Monitor, AI insights panel in Results with compact preview chips, hardened `parseResultPackage()` to handle string input and legacy fallbacks, and 5 new shared render components.
+
+---
+
+## 2. New Components (5 files)
+
+| File | Exports | Purpose |
+|---|---|---|
+| `assets/js/components/score-badge.js` | `scoreColor`, `scoreBadge`, `scorePill` | Inline score bar, score pill; color-coded by tier (≥70 success / ≥40 warning / <40 failed) |
+| `assets/js/components/output-card.js` | `outputCard(clip, {selected})` | Ranked clip card: rank badge, best label, duration badge, score pill + bar, reason snippet |
+| `assets/js/components/best-clip-hero.js` | `bestClipHero`, `heroMetaHtml`, `wireHeroVideo`, `updateHeroClip` | Stable hero video wrapper; `updateHeroClip()` surgically updates `src` + meta strip without recreating the `<video>` element |
+| `assets/js/components/part-status-list.js` | `partStatusList(parts)` | Part progress table with status chip, inline bar, message; per-row color accent for running/completed/failed |
+| `assets/js/components/log-drawer.js` | `logDrawerShell`, `wireLogDrawer` | Collapsible log drawer; lazy-loads on first open via `loadFn`; `refresh()` for terminal state updates; never auto-polls |
+
+---
+
+## 3. Monitor Polish
+
+| Improvement | Details |
+|---|---|
+| Stage banner | Large `monitor-stage-text` (20px bold) showing humanized stage name (`transcribing_full` → "Transcribing audio") |
+| Progress bar | 6px height, animated pulse when running, percentage prominently displayed |
+| Transport badge | Inline in progress card header: `● Live` (success) / `○ Polling` (warning) / `⋯ Connecting` (faint) |
+| Part table | Uses `partStatusList()` component; running rows get a subtle blue tint; part number column color-codes by status |
+| Terminal CTAs | View Results → for success; Retry / Resume / New source for failed/interrupted |
+| Retry/Resume | Wires `renderApi.retry(jobId)` and `renderApi.resume(jobId)` via disable-on-click buttons |
+| Log drawer | Uses `logDrawerShell()` + `wireLogDrawer()`; lazy load on first open; terminal refresh via `ctrl.refresh()` |
+| Unmount cleanup | `monitorStore.stop()` called on `unmount` event — no transport leak |
+
+---
+
+## 4. Results Polish
+
+| Improvement | Details |
+|---|---|
+| Stable video player | `_prevResult` reference comparison: only full re-render when `result` object changes; clip selection triggers `_updateSelection()` which calls `updateHeroClip()` — no `<video>` destruction |
+| Hero section | `bestClipHero()` component: video with border-radius, error overlay, meta strip (best label, part number, score pill, download link) |
+| Clip list | `outputCard()` component: rank badge (★ for best), best label, duration badge, score bar, reason snippet, hover/active states |
+| Status bar | Partial success banner with `partial-banner` class; voice/subtitle summaries inline |
+| Failed parts panel | `failed-panel` with per-row detail; `rankingWarning` shown when present |
+| AI panel | Always rendered; advisory state when `ai.available`; compact preview chips from `ai.previewChips` (applied count, quality score, execution mode, beat sync); placeholder copy when unavailable |
+| Right panel | Score breakdown preserved; uses `scoreBadge()` component for component score bars |
+
+---
+
+## 5. Entity Hardening
+
+### `parseResultPackage()` changes
+
+| Change | Details |
+|---|---|
+| String input | Accepts `result_json` as string — calls `JSON.parse()` before processing |
+| Legacy `outputs` fallback | When `output_ranking` is empty but `outputs` array exists, builds synthetic ranking entries |
+| `renderQuality` field | Extracts `score` + `grade` from `ai_render_quality_evaluation`; exposed on `ResultPackage` |
+| Failed part normalization | Filters `failed_parts_detail` to only object entries; clamps `failedPartNumbers` to valid numbers |
+| No-throw guarantee | All paths either succeed or fall through to `_fallback()` |
+
+### `parseAIInsightSummary()` changes
+
+| Change | Details |
+|---|---|
+| `render_quality_v2` | Reads from `ai_director.render_quality_v2` or top-level; extracts `score`, `grade` |
+| `ai_execution_metrics` | Reads from `ai_director.ai_execution_metrics` or top-level |
+| `previewChips` | New field: compact chip array for Results AI panel; only populated when AI available |
+| `executionMode` | Extracted from `execMetrics.mode`, `influence.mode`, etc. |
+| `renderQuality` | Normalized `{score, grade}` object or `null` |
+| `_obj()` guard | Fixed to reject arrays (was accepting any truthy object) |
+
+---
+
+## 6. Media URL Rule
+
+All media URLs are derived as `/api/jobs/{jobId}/parts/{partNo}/stream`.
+
+- `parseOutputClip()` — derives `streamUrl` from `jobId + partNo`
+- `bestClipHero()` — builds URL from `jobId + clip.partNo`
+- `updateHeroClip()` — same derivation on surgical update
+- Raw `output_file` path is preserved in `clip._raw` for diagnostics only, never used for playback
+
+---
+
+## 7. CSS Additions (components.css)
+
+New classes appended before the Metric display section:
+
+| Class group | New classes |
+|---|---|
+| Score | `.score-pill`, `.score-pill--sm` |
+| Duration | `.dur-badge` |
+| Clip list | `.clip-reason` |
+| Hero video | `.hero-section`, `.hero-wrap`, `.hero-video-container`, `.hero-video`, `.hero-video-err`, `.hero-meta`, `.hero-empty` |
+| Log drawer | `.log-drawer`, `.log-drawer__toggle`, `.log-drawer__chevron`, `.log-drawer__content` |
+| Monitor | `.monitor-progress-card`, `.monitor-stage-text`, `.transport-badge` |
+| Part rows | `.part-row--running`, `.part-row--completed`, `.part-row--failed`, `.part-message`, `.part-status-table` |
+| Results | `.results-body-col` |
+| AI panel | `.ai-panel`, `.ai-panel--advisory`, `.ai-panel__header`, `.ai-panel__chips`, `.ai-chip`, `.ai-chip--applied`, `.ai-chip--advisory`, `.ai-chip--warning` |
+| Status | `.partial-banner`, `.failed-panel`, `.failed-row` |
+| Utility | `.btn-sm`, `.link-accent` |
+
+---
+
+## 8. Transport Cleanup
+
+| Contract | Verified |
+|---|---|
+| `monitorStore.stop()` on screen unmount | ✅ — called in `unmount` event listener |
+| No duplicate polling on re-mount | ✅ — `start()` calls `stop()` first |
+| No log spam | ✅ — log drawer loads once on first open; terminal refresh is one-shot |
+| No multiple autoplaying videos | ✅ — single `#hero-video` element; `updateHeroClip()` reuses it |
+| Polling fallback intact | ✅ — transport.js `subscribeJob()` unchanged |
+
+---
+
+## 9. Known Limitations (UI-R2C Scope)
+
+- AI panel shows `previewChips` only when `ai_director`/`ai_render_influence` data is present in `result_json`; placeholder copy shown otherwise.
+- Duration badge in output cards requires `duration`/`end_sec`/`start_sec` fields in the ranking entry `_raw`; hidden if missing.
+- Log drawer line count updates after first load only; no live count during loading.
+- Retry/Resume buttons disable on click but do not re-enable if the API call fails (user must reload).
+- Monitor right panel context not yet wired (Source/Studio screens).
+
+---
+
+## 10. Next Phase Recommendation
+
+**UI-R2D** or **Phase 63**: AI Copilot full wiring — populate `renderAIPanel()` with director decisions, subtitle/camera promotion report, segment selection reasoning, quality gate summary, and execution confidence metrics from `parseAIInsightSummary()` full output.

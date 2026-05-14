@@ -1,132 +1,18 @@
-/* Results screen — load job → parse ResultPackage → ranked clips + media stream */
+/* Results screen — load job → parse ResultPackage → ranked clips + stable hero video.
+   Video element is NEVER destroyed on clip selection: only src + meta strip update.
+   Media URLs are always /api/jobs/{jobId}/parts/{partNo}/stream — never raw file paths.
+*/
 
 import { resultsStore } from '../store/results.js';
 import { statusChip } from '../components/status-chip.js';
 import { aiBadge } from '../components/ai-badge.js';
 import { emptyState, ICONS } from '../components/empty-state.js';
+import { scoreBadge, scorePill, scoreColor } from '../components/score-badge.js';
+import { outputCard } from '../components/output-card.js';
+import { bestClipHero, heroMetaHtml, wireHeroVideo, updateHeroClip } from '../components/best-clip-hero.js';
 import { router } from '../router.js';
 
-/* ── Sub-renders ──────────────────────────────────────────────────── */
-
-function renderScoreFill(score) {
-  const pct = Math.round(Math.min(100, Math.max(0, Number(score ?? 0))));
-  const color = pct >= 70 ? 'var(--color-success)' : pct >= 40 ? 'var(--color-warning)' : 'var(--color-failed)';
-  return `
-    <div class="row gap-2" style="align-items:center">
-      <div class="progress-bar" style="flex:1;height:3px">
-        <div class="progress-bar__fill" style="width:${pct}%;background:${color}"></div>
-      </div>
-      <span class="text-caption" style="color:${color};min-width:28px;text-align:right;font-variant-numeric:tabular-nums">${pct}</span>
-    </div>
-  `;
-}
-
-function renderClipCard(clip, selected) {
-  return `
-    <div class="output-clip-card ${selected ? 'output-clip-card--selected' : ''}"
-      data-part-no="${clip.partNo}" style="cursor:pointer">
-      <div class="row gap-3" style="align-items:flex-start">
-        <div class="clip-rank-badge ${clip.isBest ? 'clip-rank-badge--best' : ''}">
-          ${clip.isBest ? '★' : `#${clip.rank}`}
-        </div>
-        <div class="col gap-1 flex-1" style="min-width:0">
-          <div class="row gap-2" style="align-items:center">
-            <span class="text-body" style="font-weight:600">Part ${clip.partNo}</span>
-            ${clip.isBest ? `<span class="best-label">BEST</span>` : ''}
-          </div>
-          ${clip.score > 0 ? renderScoreFill(clip.score) : ''}
-          ${clip.rankingReason
-            ? `<div class="text-caption text-faint" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(clip.rankingReason)}</div>`
-            : ''}
-        </div>
-        ${statusChip('completed')}
-      </div>
-    </div>
-  `;
-}
-
-function renderHeroVideo(clip, jobId) {
-  if (!clip) {
-    return `<div class="results-hero results-hero--empty"><div class="text-caption text-faint">Select a clip to preview</div></div>`;
-  }
-  const url = `/api/jobs/${encodeURIComponent(jobId)}/parts/${clip.partNo}/stream`;
-  return `
-    <div class="results-hero">
-      <video id="results-video" class="results-video"
-        src="${url}" controls preload="metadata"
-        style="width:100%;max-height:400px;object-fit:contain;border-radius:var(--radius-panel);background:#000">
-      </video>
-      <div id="results-video-err" style="display:none;padding:var(--sp-3) var(--sp-4);text-align:center">
-        <div class="text-caption" style="color:var(--color-failed)">Preview unavailable — output file may be missing.</div>
-        <a href="${url}" target="_blank" class="text-caption" style="color:var(--color-accent)">Try direct link ↗</a>
-      </div>
-      <div class="row gap-2 mt-2" style="padding:0 var(--sp-1)">
-        <span class="text-caption text-faint">Part ${clip.partNo}</span>
-        ${clip.isBest ? `<span class="best-label">BEST CLIP</span>` : ''}
-        <span class="flex-1"></span>
-        <a href="${url}" download="part_${clip.partNo}.mp4" class="btn btn-secondary btn-sm">Download</a>
-      </div>
-    </div>
-  `;
-}
-
-function renderStatusRow(result) {
-  const parts = [];
-  if (result.voiceSummary !== 'not used') {
-    const c = result.voiceSummary === 'applied' ? 'var(--color-success)' : 'var(--color-failed)';
-    parts.push(`<span class="text-caption" style="color:${c}">Voice: ${_esc(result.voiceSummary)}</span>`);
-  }
-  if (result.subtitleTranslateSummary !== 'not used') {
-    const c = result.subtitleTranslateSummary === 'applied' ? 'var(--color-success)'
-      : result.subtitleTranslateSummary === 'partial' ? 'var(--color-warning)' : 'var(--color-failed)';
-    parts.push(`<span class="text-caption" style="color:${c}">Translation: ${_esc(result.subtitleTranslateSummary)}</span>`);
-  }
-  return parts.length ? `<div class="row gap-4 results-status-row">${parts.join('')}</div>` : '';
-}
-
-function renderFailedPanel(result) {
-  if (!result.failedPartNumbers.length) return '';
-  return `
-    <div class="card" style="border-color:var(--color-failed)">
-      <div class="text-body" style="font-weight:600;color:var(--color-failed);margin-bottom:var(--sp-2)">
-        ${result.failedCount} part${result.failedCount !== 1 ? 's' : ''} failed
-      </div>
-      ${result.failedPartDetails.slice(0, 5).map(d => `
-        <div class="row gap-2 mt-2">
-          <span class="text-caption text-faint">Part ${d.part_no ?? '?'}</span>
-          <span class="text-caption">${_esc(d.message ?? d.error ?? 'Failed')}</span>
-        </div>
-      `).join('')}
-      ${result.rankingWarning
-        ? `<div class="text-caption" style="color:var(--color-warning);margin-top:var(--sp-2)">${_esc(result.rankingWarning)}</div>`
-        : ''}
-    </div>
-  `;
-}
-
-function renderAISection(result) {
-  const ai = result.ai;
-  if (!ai || (!ai.available && !ai.directorEnabled)) return '';
-  return `
-    <div class="card card--raised">
-      <div class="row gap-3" style="align-items:center;margin-bottom:var(--sp-3)">
-        <span style="color:var(--color-ai);font-size:16px">◈</span>
-        <span class="text-section">AI Insights</span>
-        ${aiBadge(ai.available ? 'advisory' : 'disabled')}
-      </div>
-      <div class="text-body" style="color:var(--color-text-muted)">
-        AI insights available after Phase 63 integration.
-      </div>
-      ${ai.summaryLines.length > 0 ? `
-        <div class="col gap-1 mt-3">
-          ${ai.summaryLines.map(l => `<div class="text-caption text-faint">• ${_esc(l)}</div>`).join('')}
-        </div>
-      ` : ''}
-    </div>
-  `;
-}
-
-/* ── Right panel (shell panel) ────────────────────────────────────── */
+/* ── Right panel (shell panel) ────────────────────────────────────────── */
 
 function updateRightPanel(state) {
   const panelEl = document.querySelector('#panel-content');
@@ -141,7 +27,7 @@ function updateRightPanel(state) {
     <div class="col gap-3">
       <div class="text-section">Part ${clip.partNo}</div>
       ${clip.isBest ? `<span class="best-label" style="width:fit-content">BEST CLIP</span>` : ''}
-      ${clip.score > 0 ? renderScoreFill(clip.score) : ''}
+      ${clip.score > 0 ? scoreBadge(clip.score) : ''}
       ${clip.rankingReason ? `<div class="text-caption" style="color:var(--color-text-muted)">${_esc(clip.rankingReason)}</div>` : ''}
       ${clip.reasons?.length ? `
         <div class="col gap-1 mt-2">
@@ -153,8 +39,8 @@ function updateRightPanel(state) {
           <div class="text-caption" style="font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--color-text-faint)">Score breakdown</div>
           ${Object.entries(components).map(([k, v]) => `
             <div class="row gap-2" style="align-items:center">
-              <span class="text-caption text-faint" style="min-width:110px">${k.replace(/_/g,' ')}</span>
-              ${renderScoreFill(Number(v) * 100)}
+              <span class="text-caption text-faint" style="min-width:110px;flex-shrink:0">${k.replace(/_/g, ' ')}</span>
+              ${scoreBadge(Number(v) * 100)}
             </div>
           `).join('')}
         </div>
@@ -163,38 +49,163 @@ function updateRightPanel(state) {
   `;
 }
 
-/* ── Full body render ─────────────────────────────────────────────── */
+/* ── Status bar ───────────────────────────────────────────────────────── */
 
-function renderBody(state) {
-  const { result, selectedClipIndex, job } = state;
-  const selectedClip = resultsStore.getSelectedClip();
-  const jobId = state.jobId;
+function renderStatusBar(result) {
+  const parts = [];
 
-  return `
-    <div id="results-hero-wrap">
-      ${renderHeroVideo(selectedClip, jobId)}
-    </div>
-
-    <div class="row gap-4 results-status-row" style="align-items:center;flex-wrap:wrap">
-      ${statusChip(result.isPartialSuccess ? 'partial' : 'completed')}
-      <span class="text-body">${result.successfulCount} clip${result.successfulCount !== 1 ? 's' : ''}</span>
-      ${result.isPartialSuccess ? `<span class="text-caption" style="color:var(--color-warning)">${result.failedCount} failed</span>` : ''}
-      ${renderStatusRow(result)}
-    </div>
-
-    <div>
-      <div class="text-section" style="margin-bottom:var(--sp-3)">Ranked outputs</div>
-      <div id="results-clip-list" class="col gap-2">
-        ${result.ranking.map((c, i) => renderClipCard(c, i === selectedClipIndex)).join('')}
+  if (result.isPartialSuccess) {
+    parts.push(`
+      <div class="partial-banner row gap-3" style="align-items:center">
+        <span class="text-caption" style="color:var(--color-partial);font-weight:600">⚠ Partial success</span>
+        <span class="text-caption text-faint">${result.successfulCount} clip${result.successfulCount !== 1 ? 's' : ''} ready · ${result.failedCount} failed</span>
       </div>
-    </div>
+    `);
+  } else {
+    const chips = [statusChip('completed')];
+    chips.push(`<span class="text-body">${result.successfulCount} clip${result.successfulCount !== 1 ? 's' : ''}</span>`);
+    if (result.voiceSummary !== 'not used') {
+      const c = result.voiceSummary === 'applied' ? 'var(--color-success)' : 'var(--color-failed)';
+      chips.push(`<span class="text-caption" style="color:${c}">Voice: ${_esc(result.voiceSummary)}</span>`);
+    }
+    if (result.subtitleTranslateSummary !== 'not used') {
+      const c = result.subtitleTranslateSummary === 'applied' ? 'var(--color-success)'
+        : result.subtitleTranslateSummary === 'partial' ? 'var(--color-warning)' : 'var(--color-failed)';
+      chips.push(`<span class="text-caption" style="color:${c}">Translation: ${_esc(result.subtitleTranslateSummary)}</span>`);
+    }
+    parts.push(`<div class="row gap-3" style="align-items:center;flex-wrap:wrap">${chips.join('')}</div>`);
+  }
 
-    ${renderFailedPanel(result)}
-    ${renderAISection(result)}
+  return parts.join('');
+}
+
+/* ── Failed parts panel ───────────────────────────────────────────────── */
+
+function renderFailedPanel(result) {
+  if (!result.failedPartNumbers.length) return '';
+  return `
+    <div class="failed-panel">
+      <div class="text-body" style="font-weight:600;color:var(--color-failed);margin-bottom:var(--sp-2)">
+        ${result.failedCount} part${result.failedCount !== 1 ? 's' : ''} failed
+      </div>
+      ${result.failedPartDetails.slice(0, 6).map(d => `
+        <div class="failed-row">
+          <span class="text-caption text-faint" style="min-width:48px;flex-shrink:0">Part ${d.part_no ?? '?'}</span>
+          <span class="text-caption" style="color:var(--color-text-muted)">${_esc(d.message ?? d.error ?? 'Failed')}</span>
+        </div>
+      `).join('')}
+      ${result.rankingWarning
+        ? `<div class="text-caption mt-2" style="color:var(--color-warning)">${_esc(result.rankingWarning)}</div>`
+        : ''}
+    </div>
   `;
 }
 
-/* ── Mount ────────────────────────────────────────────────────────── */
+/* ── AI panel ─────────────────────────────────────────────────────────── */
+
+function renderAIPanel(result) {
+  const ai = result.ai;
+  const isAdvisory = ai?.available || ai?.directorEnabled;
+  const hasMetics  = ai?.previewChips?.length > 0;
+
+  return `
+    <div class="ai-panel ${isAdvisory ? 'ai-panel--advisory' : ''}">
+      <div class="ai-panel__header">
+        <span style="color:var(--color-ai);font-size:15px">◈</span>
+        <span class="text-section">AI Insights</span>
+        <span class="flex-1"></span>
+        ${aiBadge(isAdvisory ? 'advisory' : 'disabled')}
+      </div>
+
+      ${isAdvisory && hasMetics ? `
+        <div class="ai-panel__chips">
+          ${ai.previewChips.map(chip => `
+            <span class="ai-chip ${chip.type === 'applied' ? 'ai-chip--applied' : chip.type === 'quality' ? 'ai-chip--advisory' : ''}">
+              ${_esc(chip.label)}
+            </span>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      ${isAdvisory && ai.summaryLines.length > 0 ? `
+        <div class="col gap-1 mt-3">
+          ${ai.summaryLines.slice(0, 3).map(l => `
+            <div class="text-caption text-faint">• ${_esc(l)}</div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      ${!isAdvisory ? `
+        <div class="text-body mt-2" style="color:var(--color-text-faint)">
+          AI Copilot summaries will appear here when connected.
+        </div>
+      ` : ''}
+
+      ${ai?.warnings?.length > 0 ? `
+        <div class="col gap-1 mt-2">
+          ${ai.warnings.map(w => `
+            <div class="ai-chip ai-chip--warning" style="display:inline-flex">⚠ ${_esc(w)}</div>
+          `).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+/* ── Full body render (called once per result load) ───────────────────── */
+
+function renderBody(state) {
+  const { result, selectedClipIndex, jobId } = state;
+  const clip = resultsStore.getSelectedClip();
+
+  return `
+    <div class="results-body-col">
+      <div id="results-hero-wrap" class="hero-section">
+        ${bestClipHero(clip, jobId)}
+      </div>
+
+      <div id="results-status-bar">
+        ${renderStatusBar(result)}
+      </div>
+
+      <div>
+        <div class="text-section" style="margin-bottom:var(--sp-3)">
+          Ranked outputs
+          <span class="text-caption text-faint" style="margin-left:var(--sp-2);font-weight:400">${result.ranking.length}</span>
+        </div>
+        <div id="results-clip-list" class="col gap-2">
+          ${result.ranking.map((c, i) =>
+            outputCard(c, { selected: i === selectedClipIndex })
+          ).join('')}
+        </div>
+      </div>
+
+      <div id="results-failed-panel">${renderFailedPanel(result)}</div>
+      <div id="results-ai-panel">${renderAIPanel(result)}</div>
+    </div>
+  `;
+}
+
+/* ── Surgical selection update (no video element recreation) ──────────── */
+
+function _updateSelection(bodyEl, state) {
+  const clip  = resultsStore.getSelectedClip();
+  const jobId = state.jobId;
+
+  // Update video src + meta strip without touching the <video> element structure
+  const heroWrap = bodyEl.querySelector('#results-hero-wrap');
+  if (heroWrap && clip) {
+    updateHeroClip(heroWrap, clip, jobId);
+  }
+
+  // Toggle selected class on clip cards (no innerHTML change)
+  bodyEl.querySelectorAll('.output-clip-card').forEach(card => {
+    const isSelected = Number(card.dataset.partNo) === clip?.partNo;
+    card.classList.toggle('output-clip-card--selected', isSelected);
+  });
+}
+
+/* ── Mount ────────────────────────────────────────────────────────────── */
 
 export async function mount(el, params) {
   const jobId = params[0];
@@ -236,11 +247,15 @@ export async function mount(el, params) {
     return;
   }
 
+  // Track previous result reference to distinguish "new result" vs "selection change"
+  let _prevResult = null;
+
   const unsub = resultsStore.subscribe(state => {
     const body = el.querySelector('#results-body');
     if (!body) return;
 
     if (state.loading) {
+      _prevResult = null;
       body.innerHTML = `
         <div class="skeleton-block" style="height:220px;border-radius:var(--radius-panel)"></div>
         <div class="skeleton-line" style="height:18px;width:45%"></div>
@@ -250,6 +265,7 @@ export async function mount(el, params) {
     }
 
     if (state.error) {
+      _prevResult = null;
       body.innerHTML = `
         <div class="card" style="border-color:var(--color-failed)">
           <div class="text-body" style="color:var(--color-failed)">Failed to load results</div>
@@ -259,7 +275,8 @@ export async function mount(el, params) {
       return;
     }
 
-    if (!state.result || !state.result.rawAvailable) {
+    if (!state.result?.rawAvailable) {
+      _prevResult = null;
       body.innerHTML = `
         <div class="card">
           <div class="text-body">Results not yet available</div>
@@ -267,27 +284,21 @@ export async function mount(el, params) {
           <button class="btn btn-secondary mt-4" id="res-back-to-monitor">← Back to Monitor</button>
         </div>
       `;
-      el.querySelector('#res-back-to-monitor')?.addEventListener('click', () => router.go(`/monitor/${jobId}`));
+      body.querySelector('#res-back-to-monitor')?.addEventListener('click', () =>
+        router.go(`/monitor/${jobId}`)
+      );
       return;
     }
 
-    body.innerHTML = renderBody(state);
-
-    // Wire video error
-    const vid = body.querySelector('#results-video');
-    const vidErr = body.querySelector('#results-video-err');
-    if (vid && vidErr) {
-      vid.addEventListener('error', () => { vid.style.display = 'none'; vidErr.style.display = ''; });
+    // Full re-render when result changes (new load)
+    if (state.result !== _prevResult) {
+      _prevResult = state.result;
+      body.innerHTML = renderBody(state);
+      _wireBody(body, state);
+    } else {
+      // Selection changed only — surgical update preserving video element
+      _updateSelection(body, state);
     }
-
-    // Wire clip selection
-    body.querySelector('#results-clip-list')?.addEventListener('click', e => {
-      const card = e.target.closest('[data-part-no]');
-      if (!card) return;
-      const partNo = Number(card.dataset.partNo);
-      const idx = state.result.ranking.findIndex(c => c.partNo === partNo);
-      if (idx >= 0) resultsStore.selectClip(idx);
-    });
 
     updateRightPanel(state);
   });
@@ -297,6 +308,21 @@ export async function mount(el, params) {
   el.addEventListener('unmount', () => { unsub(); });
 }
 
+function _wireBody(bodyEl, state) {
+  // Wire video error handler on the hero
+  const heroWrap = bodyEl.querySelector('#results-hero-wrap');
+  if (heroWrap) wireHeroVideo(heroWrap);
+
+  // Wire clip selection
+  bodyEl.querySelector('#results-clip-list')?.addEventListener('click', e => {
+    const card = e.target.closest('[data-part-no]');
+    if (!card) return;
+    const partNo = Number(card.dataset.partNo);
+    const idx = state.result.ranking.findIndex(c => c.partNo === partNo);
+    if (idx >= 0) resultsStore.selectClip(idx);
+  });
+}
+
 export const resultsScreen = { mount };
 
-function _esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function _esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }

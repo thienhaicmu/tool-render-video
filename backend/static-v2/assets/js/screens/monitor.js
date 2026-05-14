@@ -1,93 +1,92 @@
-/* Monitor screen — live job stream via subscribeJob + polling fallback + logs drawer */
+/* Monitor screen — live job stream, premium stage banner, transport badge,
+   part status table, terminal CTAs (View Results / Retry / Resume), logs drawer.
+*/
 
 import { monitorStore } from '../store/monitor.js';
 import { statusChip } from '../components/status-chip.js';
+import { partStatusList } from '../components/part-status-list.js';
+import { logDrawerShell, wireLogDrawer } from '../components/log-drawer.js';
 import { router } from '../router.js';
 import { renderApi } from '../api/render.js';
 
-const TERMINAL = new Set(['completed','completed_with_errors','failed','interrupted']);
+const TERMINAL = new Set(['completed', 'completed_with_errors', 'failed', 'interrupted']);
 
-/* ── Sub-renders ──────────────────────────────────────────────────── */
+const STAGE_LABELS = {
+  queued:              'In queue',
+  starting:            'Starting…',
+  downloading:         'Downloading source',
+  scene_detection:     'Detecting scenes',
+  segment_building:    'Building segments',
+  transcribing_full:   'Transcribing audio',
+  rendering:           'Rendering clips',
+  rendering_parallel:  'Rendering (parallel)',
+  writing_report:      'Writing report',
+  done:                'Done',
+  failed:              'Failed',
+};
+
+/* ── Sub-renders ──────────────────────────────────────────────────────── */
 
 function renderTransportBadge(mode) {
   const map = {
-    websocket: { label: '● Live',       color: 'var(--color-success)' },
-    polling:   { label: '○ Polling',    color: 'var(--color-warning)' },
-    connecting:{ label: '⋯ Connecting', color: 'var(--color-text-faint)' },
-    terminal_poll:{ label:'● Done',     color: 'var(--color-success)' },
+    websocket:     { label: '● Live',        color: 'var(--color-success)' },
+    polling:       { label: '○ Polling',     color: 'var(--color-warning)' },
+    connecting:    { label: '⋯ Connecting',  color: 'var(--color-text-faint)' },
+    terminal_poll: { label: '● Done',        color: 'var(--color-success)' },
   };
-  const { label, color } = map[mode] ?? { label: mode, color: 'var(--color-text-faint)' };
-  return `<span class="text-caption" style="color:${color};font-weight:600">${label}</span>`;
+  const { label, color } = map[mode] ?? { label: mode ?? '—', color: 'var(--color-text-faint)' };
+  return `<span class="transport-badge" style="color:${color}">${label}</span>`;
 }
 
-function renderJobSummary(state) {
+function renderProgressCard(state) {
   const { job, summary, transportMode } = state;
+
   if (!job) {
     return `
-      <div class="col gap-2">
-        <div class="skeleton-line" style="height:28px;width:40%"></div>
-        <div class="skeleton-line" style="height:6px"></div>
+      <div class="monitor-progress-card col gap-3">
+        <div class="skeleton-line" style="height:14px;width:40%"></div>
+        <div class="skeleton-block" style="height:6px;border-radius:3px"></div>
         <div class="skeleton-line" style="height:12px;width:30%"></div>
       </div>
     `;
   }
 
-  const rawStatus   = job.status === 'completed_with_errors' ? 'partial' : job.status;
-  const pct         = Math.min(100, job.progressPercent ?? summary?.overall_progress_percent ?? 0);
-  const stage       = (job.stage ?? summary?.current_stage ?? '').replace(/_/g, ' ');
-  const totalParts  = summary?.total_parts ?? 0;
-  const doneParts   = summary?.completed_parts ?? 0;
+  const rawStatus  = job.status === 'completed_with_errors' ? 'partial' : job.status;
+  const pct        = Math.min(100, job.progressPercent ?? summary?.overall_progress_percent ?? 0);
+  const stage      = job.stage ?? summary?.current_stage ?? '';
+  const stageLabel = STAGE_LABELS[stage] || (stage ? stage.replace(/_/g, ' ') : '');
+  const isRunning  = rawStatus === 'running';
+  const totalParts = summary?.total_parts ?? 0;
+  const doneParts  = summary?.completed_parts ?? 0;
   const failedParts = summary?.failed_parts ?? 0;
+  const activeParts = summary?.processing_parts ?? summary?.in_progress_count ?? 0;
 
   return `
-    <div class="col gap-3">
-      <div class="row gap-3" style="align-items:center;flex-wrap:wrap">
+    <div class="monitor-progress-card">
+      <div class="row gap-3" style="align-items:center;margin-bottom:var(--sp-3);flex-wrap:wrap">
         ${statusChip(rawStatus)}
-        <span class="text-body" style="font-weight:600;font-family:monospace;font-size:11px">${job.jobId}</span>
+        <code class="text-caption" style="font-family:monospace;color:var(--color-text-faint)">${job.jobId.slice(0, 14)}…</code>
         <span class="flex-1"></span>
         ${renderTransportBadge(transportMode)}
       </div>
-      ${stage ? `<div class="text-caption text-faint">${stage}</div>` : ''}
-      ${job.message ? `<div class="text-caption" style="color:var(--color-text-muted)">${_esc(job.message)}</div>` : ''}
-      <div class="progress-bar ${rawStatus === 'running' ? 'progress-bar--running' : ''}" style="height:5px">
+
+      ${stageLabel ? `<div class="monitor-stage-text">${_esc(stageLabel)}</div>` : ''}
+      ${job.message && !stageLabel ? `<div class="text-body" style="color:var(--color-text-muted)">${_esc(job.message)}</div>` : ''}
+
+      <div class="progress-bar ${isRunning ? 'progress-bar--running' : ''}"
+           style="height:6px;margin:var(--sp-3) 0">
         <div class="progress-bar__fill" style="width:${pct}%"></div>
       </div>
-      <div class="row gap-4 text-caption text-faint">
-        <span>${pct}%</span>
-        ${totalParts > 0 ? `<span>${doneParts}/${totalParts} parts done</span>` : ''}
+
+      <div class="row gap-4 text-caption text-faint" style="flex-wrap:wrap">
+        <span style="font-variant-numeric:tabular-nums;font-weight:600;color:var(--color-text)">${pct}%</span>
+        ${totalParts > 0 ? `<span>${doneParts} / ${totalParts} parts</span>` : ''}
+        ${activeParts > 0 ? `<span style="color:var(--color-running)">${activeParts} running</span>` : ''}
         ${failedParts > 0 ? `<span style="color:var(--color-failed)">${failedParts} failed</span>` : ''}
+        ${job.message && stageLabel ? `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-text-muted)">${_esc(job.message)}</span>` : ''}
       </div>
     </div>
   `;
-}
-
-function renderPartRow(part) {
-  const pct = Math.min(100, part.progressPercent ?? 0);
-  const active = ['cutting','transcribing','rendering','downloading'].includes(part.status);
-  return `
-    <div class="part-progress-row">
-      <span class="part-progress-row__no text-caption text-faint">${part.partNo}</span>
-      <div class="col gap-1 flex-1" style="min-width:0">
-        <div class="row gap-2" style="align-items:center">
-          <span class="part-item__title">${_esc(part.partName)}</span>
-          ${statusChip(part.chipStatus)}
-        </div>
-        ${active || pct > 0 ? `
-          <div class="progress-bar" style="height:2px">
-            <div class="progress-bar__fill ${active ? 'progress-bar--running' : ''}" style="width:${pct}%"></div>
-          </div>
-        ` : ''}
-        ${part.message ? `<div class="text-caption text-faint" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(part.message)}</div>` : ''}
-      </div>
-    </div>
-  `;
-}
-
-function renderPartsSection(parts) {
-  if (!parts.length) {
-    return `<div class="text-caption text-faint" style="padding:var(--sp-3) 0">Waiting for parts to start…</div>`;
-  }
-  return `<div class="card" style="padding:0;overflow:hidden">${parts.map(p => renderPartRow(p)).join('')}</div>`;
 }
 
 function renderTerminalBanner(state) {
@@ -110,7 +109,10 @@ function renderTerminalBanner(state) {
       </div>
     `;
   }
+
   // failed | interrupted
+  const canRetry  = status === 'failed';
+  const canResume = status === 'interrupted';
   return `
     <div class="card" style="border-color:var(--color-failed)">
       <div class="row gap-4" style="align-items:center;flex-wrap:wrap">
@@ -121,41 +123,53 @@ function renderTerminalBanner(state) {
           <div class="text-caption text-faint mt-1">${_esc(state.job?.message ?? 'Check logs for details.')}</div>
         </div>
         <span class="flex-1"></span>
+        ${canResume ? `<button class="btn btn-secondary" id="monitor-resume-btn">Resume</button>` : ''}
+        ${canRetry  ? `<button class="btn btn-secondary" id="monitor-retry-btn">Retry</button>` : ''}
         <button class="btn btn-ghost" id="monitor-to-source">New source</button>
       </div>
     </div>
   `;
 }
 
-function renderLogs(state) {
-  if (state.logsLoading) return '<div class="text-caption text-faint">Loading…</div>';
-  if (!state.logs || !state.logs.length) return '<div class="text-caption text-faint">No log entries.</div>';
-  return `<div class="logs-lines">${state.logs.map(l => `<div class="log-line">${_esc(l)}</div>`).join('')}</div>`;
-}
-
-/* ── UI update ────────────────────────────────────────────────────── */
+/* ── UI update (partial DOM patch — no full re-render) ────────────────── */
 
 function updateUI(el, state) {
-  const s = el.querySelector('#mon-summary');
-  if (s) s.innerHTML = renderJobSummary(state);
+  const prog = el.querySelector('#mon-progress');
+  if (prog) prog.innerHTML = renderProgressCard(state);
 
-  const p = el.querySelector('#mon-parts');
-  if (p) p.innerHTML = renderPartsSection(state.parts);
+  const parts = el.querySelector('#mon-parts');
+  if (parts) parts.innerHTML = partStatusList(state.parts);
 
-  const t = el.querySelector('#mon-terminal');
-  if (t) {
-    t.innerHTML = renderTerminalBanner(state);
-    el.querySelector('#monitor-to-results')?.addEventListener('click', () =>
-      router.go(`/results/${state.job?.jobId}`)
-    );
-    el.querySelector('#monitor-to-source')?.addEventListener('click', () => router.go('/source'));
+  const term = el.querySelector('#mon-terminal');
+  if (term) {
+    term.innerHTML = renderTerminalBanner(state);
+    _wireTerminalButtons(el, term, state);
   }
 
-  const e = el.querySelector('#mon-error');
-  if (e) e.textContent = state.error ?? '';
+  const errEl = el.querySelector('#mon-error');
+  if (errEl) errEl.textContent = state.error ?? '';
 }
 
-/* ── Mount ────────────────────────────────────────────────────────── */
+function _wireTerminalButtons(el, term, state) {
+  const jobId = state.job?.jobId ?? monitorStore.getState().jobId;
+
+  term.querySelector('#monitor-to-results')?.addEventListener('click', () =>
+    router.go(`/results/${jobId}`)
+  );
+  term.querySelector('#monitor-to-source')?.addEventListener('click', () =>
+    router.go('/source')
+  );
+  term.querySelector('#monitor-retry-btn')?.addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true;
+    try { await renderApi.retry(jobId); } catch { /* ignore — backend will report status */ }
+  });
+  term.querySelector('#monitor-resume-btn')?.addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true;
+    try { await renderApi.resume(jobId); } catch { /* ignore */ }
+  });
+}
+
+/* ── Mount ────────────────────────────────────────────────────────────── */
 
 export async function mount(el, params) {
   const jobId = params[0];
@@ -173,24 +187,13 @@ export async function mount(el, params) {
       </div>
     </div>
     <div class="screen__body col gap-5">
-      <div id="mon-summary"></div>
+      <div id="mon-progress"></div>
       <div id="mon-terminal"></div>
       <div>
         <div class="text-section" style="margin-bottom:var(--sp-3)">Parts</div>
         <div id="mon-parts"></div>
       </div>
-      <!-- Logs drawer -->
-      <div>
-        <button class="logs-toggle row gap-2" id="mon-logs-toggle"
-          style="align-items:center;width:100%;text-align:left;padding:var(--sp-3) var(--sp-4);background:var(--color-surface);border-radius:var(--radius-control);border:1px solid var(--color-border)">
-          <span class="text-body" style="font-weight:600">Logs</span>
-          <span class="flex-1"></span>
-          <span id="mon-logs-chevron" style="color:var(--color-text-faint);font-size:10px">▼</span>
-        </button>
-        <div id="mon-logs-body" style="display:none;margin-top:var(--sp-2)">
-          <div id="mon-logs-content" class="logs-content" style="font-family:monospace;font-size:11px;line-height:1.6;background:var(--color-surface);border-radius:var(--radius-control);padding:var(--sp-3);max-height:220px;overflow-y:auto;color:var(--color-text-muted)"></div>
-        </div>
-      </div>
+      ${logDrawerShell()}
       <div id="mon-error" class="text-caption" style="color:var(--color-failed)"></div>
     </div>
   `;
@@ -198,7 +201,8 @@ export async function mount(el, params) {
   el.querySelector('#mon-back-btn')?.addEventListener('click', () => router.go('/studio'));
 
   if (!jobId) {
-    el.querySelector('#mon-summary').innerHTML = `
+    const prog = el.querySelector('#mon-progress');
+    if (prog) prog.innerHTML = `
       <div class="card" style="border-color:var(--color-failed)">
         <div class="text-body" style="color:var(--color-failed)">No job ID provided.</div>
       </div>
@@ -213,34 +217,24 @@ export async function mount(el, params) {
     try { await renderApi.cancel(jobId); } catch { /* ignore */ }
   });
 
-  // Logs drawer — lazy load on first open
-  let logsOpened = false;
-  const logsToggle  = el.querySelector('#mon-logs-toggle');
-  const logsBody    = el.querySelector('#mon-logs-body');
-  const logsContent = el.querySelector('#mon-logs-content');
-  const chevron     = el.querySelector('#mon-logs-chevron');
-
-  logsToggle?.addEventListener('click', async () => {
-    const isOpen = logsBody.style.display !== 'none';
-    logsBody.style.display = isOpen ? 'none' : '';
-    if (chevron) chevron.textContent = isOpen ? '▼' : '▲';
-    if (!isOpen && !logsOpened) {
-      logsOpened = true;
-      await monitorStore.loadLogs();
-      if (logsContent) logsContent.innerHTML = renderLogs(monitorStore.getState());
-    }
+  // Log drawer — lazy load on first open, refresh when terminal
+  const logDrawerCtrl = wireLogDrawer(el, async () => {
+    await monitorStore.loadLogs();
+    return monitorStore.getState().logs ?? [];
   });
 
   // Subscribe
   const unsub = monitorStore.subscribe(state => {
     updateUI(el, state);
 
-    if (cancelBtn) cancelBtn.style.display = state.job?.status === 'running' ? '' : 'none';
+    if (cancelBtn) {
+      cancelBtn.style.display = state.job?.status === 'running' ? '' : 'none';
+    }
 
-    // Refresh logs if drawer is open and job is terminal
-    if (logsOpened && state.terminal && logsContent) {
+    // Refresh logs if terminal and drawer has already been opened
+    if (state.terminal && logDrawerCtrl?.isLoaded()) {
       monitorStore.loadLogs().then(() => {
-        logsContent.innerHTML = renderLogs(monitorStore.getState());
+        logDrawerCtrl.refresh(monitorStore.getState().logs ?? []);
       });
     }
   });
@@ -252,4 +246,4 @@ export async function mount(el, params) {
 
 export const monitorScreen = { mount };
 
-function _esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function _esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
