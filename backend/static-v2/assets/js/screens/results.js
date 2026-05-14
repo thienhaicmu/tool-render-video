@@ -1,13 +1,13 @@
 /* Results screen — load job → parse ResultPackage → ranked clips + stable hero video.
    Video element is NEVER destroyed on clip selection: only src + meta strip update.
    Media URLs are always /api/jobs/{jobId}/parts/{partNo}/stream — never raw file paths.
+   Layout order: hero → status banner → AI panel (if data) → clip list → failed clips.
 */
 
 import { resultsStore } from '../store/results.js';
-import { statusChip } from '../components/status-chip.js';
 import { aiBadge } from '../components/ai-badge.js';
 import { emptyState, ICONS } from '../components/empty-state.js';
-import { scoreBadge, scorePill, scoreColor } from '../components/score-badge.js';
+import { scoreBadge, scoreColor } from '../components/score-badge.js';
 import { outputCard } from '../components/output-card.js';
 import { bestClipHero, heroMetaHtml, wireHeroVideo, updateHeroClip } from '../components/best-clip-hero.js';
 import { router } from '../router.js';
@@ -22,12 +22,16 @@ function updateRightPanel(state) {
     panelEl.innerHTML = '<div class="text-caption text-faint">Select a clip to see details.</div>';
     return;
   }
+  const url = state.jobId
+    ? `/api/jobs/${encodeURIComponent(state.jobId)}/parts/${clip.partNo}/stream`
+    : null;
   const components = clip.rankingComponents ?? {};
   panelEl.innerHTML = `
     <div class="col gap-3">
       <div class="text-section">Clip ${clip.partNo}</div>
       ${clip.isBest ? `<span class="best-label" style="width:fit-content">BEST CLIP</span>` : ''}
       ${clip.score > 0 ? scoreBadge(clip.score) : ''}
+      ${url ? `<a href="${url}" download="clip_${clip.partNo}.mp4" class="btn btn-secondary btn-sm" style="align-self:flex-start">↓ Download clip</a>` : ''}
       ${clip.rankingReason ? `<div class="text-caption" style="color:var(--color-text-muted)">${_esc(clip.rankingReason)}</div>` : ''}
       ${clip.reasons?.length ? `
         <div class="col gap-1 mt-2">
@@ -49,44 +53,57 @@ function updateRightPanel(state) {
   `;
 }
 
-/* ── Status bar ───────────────────────────────────────────────────────── */
+/* ── Status banner ────────────────────────────────────────────────────── */
 
 function renderStatusBar(result) {
-  const parts = [];
-
   if (result.isPartialSuccess) {
-    parts.push(`
+    return `
       <div class="partial-banner row gap-3" style="align-items:center">
-        <span class="text-caption" style="color:var(--color-partial);font-weight:600">⚠ Partial success</span>
-        <span class="text-caption text-faint">${result.successfulCount} clip${result.successfulCount !== 1 ? 's' : ''} ready · ${result.failedCount} failed</span>
+        <span aria-hidden="true" style="color:var(--color-partial);font-size:15px">⚠</span>
+        <div class="col gap-1">
+          <span class="text-body" style="font-weight:600;color:var(--color-partial)">${result.successfulCount} clip${result.successfulCount !== 1 ? 's' : ''} ready</span>
+          <span class="text-caption text-faint">${result.failedCount} clip${result.failedCount !== 1 ? 's' : ''} couldn't be processed</span>
+        </div>
+        ${result.rankingWarning ? `<span class="flex-1"></span><span class="text-caption" style="color:var(--color-warning)">${_esc(result.rankingWarning)}</span>` : '<span class="flex-1"></span>'}
       </div>
-    `);
-  } else {
-    const chips = [statusChip('completed')];
-    chips.push(`<span class="text-body">${result.successfulCount} clip${result.successfulCount !== 1 ? 's' : ''}</span>`);
-    if (result.voiceSummary !== 'not used') {
-      const c = result.voiceSummary === 'applied' ? 'var(--color-success)' : 'var(--color-failed)';
-      chips.push(`<span class="text-caption" style="color:${c}">Voice: ${_esc(result.voiceSummary)}</span>`);
-    }
-    if (result.subtitleTranslateSummary !== 'not used') {
-      const c = result.subtitleTranslateSummary === 'applied' ? 'var(--color-success)'
-        : result.subtitleTranslateSummary === 'partial' ? 'var(--color-warning)' : 'var(--color-failed)';
-      chips.push(`<span class="text-caption" style="color:${c}">Translation: ${_esc(result.subtitleTranslateSummary)}</span>`);
-    }
-    parts.push(`<div class="results-complete-banner">${chips.join('')}</div>`);
+    `;
   }
 
-  return parts.join('');
+  const extras = [];
+  if (result.voiceSummary !== 'not used') {
+    const c = result.voiceSummary === 'applied' ? 'var(--color-success)' : 'var(--color-failed)';
+    extras.push(`<span class="text-caption" style="color:${c}">Voice ${_esc(result.voiceSummary)}</span>`);
+  }
+  if (result.subtitleTranslateSummary !== 'not used') {
+    const c = result.subtitleTranslateSummary === 'applied' ? 'var(--color-success)'
+      : result.subtitleTranslateSummary === 'partial' ? 'var(--color-warning)' : 'var(--color-failed)';
+    extras.push(`<span class="text-caption" style="color:${c}">Subtitles ${_esc(result.subtitleTranslateSummary)}</span>`);
+  }
+
+  return `
+    <div class="results-complete-banner">
+      <span class="results-ready-icon" aria-hidden="true">✓</span>
+      <div class="col gap-1">
+        <span class="text-body" style="font-weight:600">${result.successfulCount} clip${result.successfulCount !== 1 ? 's' : ''} ready</span>
+        ${extras.length ? `<div class="row gap-2">${extras.join('<span class="text-faint" style="opacity:0.4">·</span>')}</div>` : ''}
+      </div>
+      <span class="flex-1"></span>
+      <span class="text-caption text-faint">Ranked by AI</span>
+    </div>
+  `;
 }
 
-/* ── Failed parts panel ───────────────────────────────────────────────── */
+/* ── Failed clips panel ───────────────────────────────────────────────── */
 
-function renderFailedPanel(result) {
+function renderFailedPanel(result, jobId) {
   if (!result.failedPartNumbers.length) return '';
   return `
     <div class="failed-panel">
-      <div class="text-body" style="font-weight:600;color:var(--color-failed);margin-bottom:var(--sp-2)">
-        ${result.failedCount} clip${result.failedCount !== 1 ? 's' : ''} failed
+      <div class="row gap-2" style="align-items:center;margin-bottom:var(--sp-2)">
+        <div class="text-body" style="font-weight:600;color:var(--color-failed)">
+          ${result.failedCount} clip${result.failedCount !== 1 ? 's' : ''} couldn't be processed
+        </div>
+        ${jobId ? `<span class="flex-1"></span><a class="btn btn-ghost btn-sm" href="#/monitor/${jobId}">View logs →</a>` : ''}
       </div>
       ${result.failedPartDetails.slice(0, 6).map(d => `
         <div class="failed-row">
@@ -101,26 +118,14 @@ function renderFailedPanel(result) {
   `;
 }
 
-/* ── AI panel ─────────────────────────────────────────────────────────── */
+/* ── AI panel — only renders when intelligence data is present ────────── */
 
 function renderAIPanel(result) {
   const ai    = result.ai;
   const isActive = !!(ai?.available || ai?.directorEnabled);
   const intel = ai?.intelligence;
 
-  if (!isActive || !intel?.hasData) {
-    return `
-      <div class="ai-intel-panel">
-        <div class="ai-intel-header">
-          <span class="ai-intel-icon" aria-hidden="true">◈</span>
-          <span class="text-section">AI Intelligence</span>
-          <span class="flex-1"></span>
-          ${aiBadge(isActive ? 'advisory' : 'disabled')}
-        </div>
-        <div class="ai-intel-empty">AI insights will appear when metadata becomes available.</div>
-      </div>
-    `;
-  }
+  if (!isActive || !intel?.hasData) return '';
 
   const { appliedItems, creatorType, platform, platformFit, confidenceLabel,
           strategyNotes, qualityScores, creatorFit, learningItems, suggestions,
@@ -231,7 +236,8 @@ function renderAIPanel(result) {
 
 function renderBody(state) {
   const { result, selectedClipIndex, jobId } = state;
-  const clip = resultsStore.getSelectedClip();
+  const clip   = resultsStore.getSelectedClip();
+  const aiHtml = renderAIPanel(result);
 
   return `
     <div class="results-body-col">
@@ -243,10 +249,12 @@ function renderBody(state) {
         ${renderStatusBar(result)}
       </div>
 
+      ${aiHtml ? `<div id="results-ai-panel">${aiHtml}</div>` : ''}
+
       <div>
-        <div class="text-section" style="margin-bottom:var(--sp-3)">
-          Ranked outputs
-          <span class="text-caption text-faint" style="margin-left:var(--sp-2);font-weight:400">${result.ranking.length}</span>
+        <div class="row gap-2" style="align-items:baseline;margin-bottom:var(--sp-3)">
+          <span class="text-section">Your clips</span>
+          <span class="text-caption text-faint" style="font-weight:400">${result.ranking.length}</span>
         </div>
         <div id="results-clip-list" class="col gap-2">
           ${result.ranking.map((c, i) =>
@@ -255,8 +263,7 @@ function renderBody(state) {
         </div>
       </div>
 
-      <div id="results-failed-panel">${renderFailedPanel(result)}</div>
-      <div id="results-ai-panel">${renderAIPanel(result)}</div>
+      <div id="results-failed-panel">${renderFailedPanel(result, jobId)}</div>
     </div>
   `;
 }
@@ -267,13 +274,11 @@ function _updateSelection(bodyEl, state) {
   const clip  = resultsStore.getSelectedClip();
   const jobId = state.jobId;
 
-  // Update video src + meta strip without touching the <video> element structure
   const heroWrap = bodyEl.querySelector('#results-hero-wrap');
   if (heroWrap && clip) {
     updateHeroClip(heroWrap, clip, jobId);
   }
 
-  // Toggle selected class on clip cards (no innerHTML change)
   bodyEl.querySelectorAll('.output-clip-card').forEach(card => {
     const isSelected = Number(card.dataset.partNo) === clip?.partNo;
     card.classList.toggle('output-clip-card--selected', isSelected);
@@ -290,7 +295,7 @@ export async function mount(el, params) {
       <div class="row gap-3" style="align-items:center">
         <div>
           <div class="screen__title">Results</div>
-          <div class="screen__subtitle">${jobId ? `Job ${jobId.slice(0, 12)}…` : 'Completed render'}</div>
+          <div class="screen__subtitle" id="results-subtitle">${jobId ? 'Loading…' : 'Completed render'}</div>
         </div>
         <span class="flex-1"></span>
         <button class="btn btn-ghost" id="res-monitor-btn">← Monitor</button>
@@ -314,15 +319,16 @@ export async function mount(el, params) {
     if (body) {
       body.innerHTML = '';
       body.appendChild(emptyState({
-        icon: ICONS.empty,
-        title: 'No job selected',
-        body: 'Navigate here from Monitor after a render completes.',
+        icon: ICONS.video,
+        title: 'No results to show',
+        body: 'Start a render from Studio to see your clips here.',
+        ctaLabel: '← Back to Studio',
+        onCta: () => router.go('/studio'),
       }));
     }
     return;
   }
 
-  // Track previous result reference to distinguish "new result" vs "selection change"
   let _prevResult = null;
 
   const unsub = resultsStore.subscribe(state => {
@@ -341,37 +347,56 @@ export async function mount(el, params) {
 
     if (state.error) {
       _prevResult = null;
-      body.innerHTML = `
-        <div class="card" style="border-color:var(--color-failed)">
-          <div class="text-body" style="color:var(--color-failed)">Failed to load results</div>
-          <div class="text-caption text-faint mt-2">${_esc(state.error)}</div>
+      body.innerHTML = '';
+      const errNode = document.createElement('div');
+      errNode.className = 'results-error-card col gap-3';
+      errNode.innerHTML = `
+        <div class="text-body" style="font-weight:600;color:var(--color-failed)">Couldn't load results</div>
+        <div class="text-caption text-faint">${_esc(state.error)}</div>
+        <div class="row gap-2">
+          <button class="btn btn-secondary btn-sm" id="res-err-retry">Try again</button>
+          <button class="btn btn-ghost btn-sm" id="res-err-library">Open Library</button>
         </div>
       `;
+      errNode.querySelector('#res-err-retry')?.addEventListener('click', () => resultsStore.load(jobId));
+      errNode.querySelector('#res-err-library')?.addEventListener('click', () => router.go('/library'));
+      body.appendChild(errNode);
       return;
     }
 
     if (!state.result?.rawAvailable) {
       _prevResult = null;
-      body.innerHTML = `
-        <div class="card">
-          <div class="text-body">Results not yet available</div>
-          <div class="text-caption text-faint mt-2">${_esc(state.result?.parseError ?? 'The job may still be running or has no result data.')}</div>
-          <button class="btn btn-secondary mt-4" id="res-back-to-monitor">← Back to Monitor</button>
+      body.innerHTML = '';
+      const notAvailNode = document.createElement('div');
+      notAvailNode.className = 'card col gap-3';
+      notAvailNode.innerHTML = `
+        <div class="text-body" style="font-weight:600">Results not ready yet</div>
+        <div class="text-caption text-faint">${_esc(state.result?.parseError ?? 'The render may still be running.')}</div>
+        <div class="row gap-2">
+          <button class="btn btn-secondary btn-sm" id="res-back-to-monitor">← Open Monitor</button>
+          <button class="btn btn-ghost btn-sm" id="res-back-to-library">Library</button>
         </div>
       `;
-      body.querySelector('#res-back-to-monitor')?.addEventListener('click', () =>
-        router.go(`/monitor/${jobId}`)
-      );
+      notAvailNode.querySelector('#res-back-to-monitor')?.addEventListener('click', () => router.go(`/monitor/${jobId}`));
+      notAvailNode.querySelector('#res-back-to-library')?.addEventListener('click', () => router.go('/library'));
+      body.appendChild(notAvailNode);
       return;
     }
 
-    // Full re-render when result changes (new load)
     if (state.result !== _prevResult) {
       _prevResult = state.result;
       body.innerHTML = renderBody(state);
       _wireBody(body, state);
+
+      // Update subtitle to reflect actual clip count
+      const subtitle = el.querySelector('#results-subtitle');
+      if (subtitle) {
+        const count = state.result.ranking.length;
+        subtitle.textContent = state.result.isPartialSuccess
+          ? `${count} clip${count !== 1 ? 's' : ''} · partial`
+          : `${count} clip${count !== 1 ? 's' : ''} ready`;
+      }
     } else {
-      // Selection changed only — surgical update preserving video element
       _updateSelection(body, state);
     }
 
@@ -384,11 +409,9 @@ export async function mount(el, params) {
 }
 
 function _wireBody(bodyEl, state) {
-  // Wire video error handler on the hero
   const heroWrap = bodyEl.querySelector('#results-hero-wrap');
   if (heroWrap) wireHeroVideo(heroWrap);
 
-  // Wire clip selection
   bodyEl.querySelector('#results-clip-list')?.addEventListener('click', e => {
     const card = e.target.closest('[data-part-no]');
     if (!card) return;

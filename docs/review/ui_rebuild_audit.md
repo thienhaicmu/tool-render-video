@@ -1778,3 +1778,92 @@ Render bar appearance:
 
 ### Status
 ✓ Complete — committed
+
+---
+
+## 26. UI-R4F-D — Results Reward Experience
+
+**Date:** 2026-05-14  
+**Commit:** feat(ui): improve results reward experience  
+**Scope:** Results screen, hero component, clip cards, AI panel positioning, status copy, empty/error states
+
+### Problem statement
+
+Results felt like a job artifact list — output files with metadata. Users had no sense of accomplishment or "AI made something for me." The hero lacked reward framing, the AI intelligence panel was buried at the bottom after failed clips, clip cards were text-dense, and status/error states were technical rather than creator-friendly.
+
+### Changes
+
+**Modified: `components/best-clip-hero.js`**
+
+| Change | Purpose |
+|---|---|
+| Add `#hero-header` div above video container | Creates tri-part layout: reward header → video → meta strip |
+| New export `heroHeaderHtml(clip, jobId)` | Renders eyebrow label, score, and Download CTA; updated surgically on clip switch |
+| `heroHeaderHtml` — "★ Best Clip" eyebrow | Accent-colored, uppercase, star prefix; non-best clips show "Clip N" in muted style |
+| `heroHeaderHtml` — "Recommended result" subline | Only when `clip.isBest`; sets creator-friendly expectation |
+| `heroHeaderHtml` — score display (32px bold) | Large score number in tier color (success/warning/failed) with "score" label |
+| `heroHeaderHtml` — Download CTA as `btn btn-primary` | Promotes download to primary action in the hero, not buried in meta strip |
+| Remove download link from `heroMetaHtml` | Meta strip decluttered: Clip# + duration + reason (truncated) + score pill only |
+| `heroMetaHtml` — adds duration from `_raw.end_sec - start_sec` | Duration visible at a glance without opening details |
+| `heroMetaHtml` — ranking reason text, `.hero-reason-text` (truncated 1 line) | Shows AI's explanation inline under the video |
+| `updateHeroClip()` — now also updates `#hero-header` | Score/download stay current when switching clips without recreating `<video>` |
+| `wireHeroVideo` — unchanged | Error overlay logic preserved |
+| Import `scoreColor` from score-badge | Required for per-tier score coloring in header |
+
+**Modified: `components/output-card.js`**
+
+| Change | Purpose |
+|---|---|
+| `col gap-1` → `col gap-2` on card content column | More breathing room between clip title, score bar, and reason lines |
+| Rank badge: `#${rank}` → `${rank}` (remove "#" prefix) | Cleaner, more premium — number-only rank |
+| Fix `rawDur` calculation precedence bug | Original: `clip._raw?.duration ?? clip._raw?.end_sec != null ? ...` parsed incorrectly; fixed to proper null-coalescing fallback |
+
+**Modified: `screens/results.js`**
+
+| Area | Change |
+|---|---|
+| **Layout order** | hero → status banner → AI panel (if data) → clip list → failed clips (AI was previously at bottom after failed clips) |
+| **`renderAIPanel`** | Returns `''` when `!isActive \|\| !intel?.hasData` — empty placeholder removed entirely; panel only shows when there's real data |
+| **`renderStatusBar` — success** | "N clips ready · Ranked by AI" with ✓ icon; voice/subtitle extras in subtler inline format |
+| **`renderStatusBar` — partial** | "N clips ready" + "M clips couldn't be processed" stacked inside banner |
+| **`renderFailedPanel(result, jobId)`** | New `jobId` param; "failed" → "couldn't be processed"; "View logs →" link to `/monitor/{jobId}` |
+| **`updateRightPanel`** | Added `↓ Download clip` link for selected clip (uses `/api/jobs/{jobId}/parts/{partNo}/stream`) |
+| **Empty state (no jobId)** | Uses `emptyState()` component with video icon, "No results to show", "Start a render from Studio to see your clips here.", Back to Studio CTA |
+| **Error state** | DOM-built card with "Couldn't load results", error message, "Try again" + "Open Library" buttons — event listeners wired directly (no onclick attributes) |
+| **"Not available" state** | DOM-built card with "Results not ready yet", parse error message, "← Open Monitor" + "Library" buttons |
+| **Dynamic subtitle** | `#results-subtitle` starts as "Loading…", updates to "N clips ready" or "N clips · partial" on result load |
+| **"Ranked outputs" → "Your clips"** | Creator language in clip list section header |
+| **Import cleanup** | Removed unused `statusChip`, `scorePill` imports; removed `heroMetaHtml` import (used only internally in best-clip-hero.js) |
+
+**Modified: `css/components.css` — UI-R4F-D block appended**
+
+| CSS | Effect |
+|---|---|
+| `.hero-wrap` | `border-radius`, `overflow:hidden`, `border`, `box-shadow` — premium card frame around the full hero unit |
+| `.hero-wrap .hero-video-container { box-shadow: none }` | Removes R4E inner shadow (outer wrap handles elevation) |
+| `.hero-reward-header` | Surface background, border-bottom, padding — creates visual separation above video |
+| `.hero-reward-eyebrow` + `--secondary` | Accent-colored uppercase label for best clip; muted style for non-best |
+| `.hero-score-display` + `.hero-score-number` | 32px/800 weight score readout, tabular-nums |
+| `.hero-video { max-height: 480px; object-fit: contain }` | Taller player (was 420px inline); portrait clips feel larger |
+| `.hero-meta` | Surface background + border-top — visual closure below video |
+| `.hero-reason-text` | `flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap` — reason text truncated to one line |
+| `.hero-empty` | Centered placeholder with border + surface bg |
+| `.output-clip-card--selected { background: surface-selected }` | Unmistakable background tint on selected card (supplements existing border/shadow) |
+| `.clip-rank-badge` + `--best` | Redefined: 28×28px flex-centered square, clean number style; best variant has accent border/color |
+| `.results-ready-icon` | 18px green ✓ icon for success banner |
+| `.results-error-card` | Red-bordered surface card for error state |
+
+### Architecture notes
+
+- **Video element stability preserved.** `updateHeroClip()` updates `#hero-header`, `#hero-meta`, and `<video>.src` — never replaces the `<video>` element itself. Play state context is preserved on clip switch.
+- **AI panel conditional rendering.** If no AI intelligence data is available, no AI panel is inserted in the DOM at all. This avoids the previous "AI insights will appear when metadata becomes available" placeholder that added noise for non-AI renders.
+- **`heroHeaderHtml` export.** Added as a new export from `best-clip-hero.js`. Results.js does not import it directly — it's called internally by `updateHeroClip()`. The export is available if other consumers need it.
+
+### Remaining limitations
+
+- No video thumbnail generation — clip cards show text-only (no frame preview). Thumbnails would require a `/parts/{partNo}/thumbnail` endpoint not currently in the API.
+- Portrait video layout: `object-fit:contain` on a landscape-ratio container shows pillarboxing. This is correct behavior given we don't know the clip's aspect ratio before the video loads.
+- `heroHeaderHtml` re-wires download anchor on every clip switch — acceptable since the `<a>` is a native link, not a JS-bound button.
+
+### Status
+✓ Complete — committed

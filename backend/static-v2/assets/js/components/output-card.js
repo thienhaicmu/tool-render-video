@@ -7,9 +7,8 @@ import { scoreBadge, scorePill } from './score-badge.js';
 
 export function outputCard(clip, { selected = false } = {}) {
   if (!clip) return '';
-  const rawDur = clip._raw?.duration ?? clip._raw?.end_sec != null
-    ? (clip._raw.end_sec - (clip._raw.start_sec ?? 0))
-    : 0;
+  const rawDur = clip._raw?.duration
+    ?? (clip._raw?.end_sec != null ? (clip._raw.end_sec - (clip._raw.start_sec ?? 0)) : 0);
   const dur = rawDur > 0 ? _fmtDur(rawDur) : null;
 
   return `
@@ -17,9 +16,9 @@ export function outputCard(clip, { selected = false } = {}) {
          data-part-no="${clip.partNo}" style="cursor:pointer">
       <div class="row gap-3" style="align-items:flex-start">
         <div class="clip-rank-badge ${clip.isBest ? 'clip-rank-badge--best' : ''}">
-          ${clip.isBest ? '★' : `#${clip.rank || '?'}`}
+          ${clip.isBest ? '★' : String(clip.rank || '?')}
         </div>
-        <div class="col gap-1 flex-1" style="min-width:0">
+        <div class="col gap-2 flex-1" style="min-width:0">
           <div class="row gap-2" style="align-items:center;flex-wrap:wrap">
             <span class="text-body" style="font-weight:600">Clip ${clip.partNo}</span>
             ${clip.isBest ? `<span class="best-label">BEST</span>` : ''}
