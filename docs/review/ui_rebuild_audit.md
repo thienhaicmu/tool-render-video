@@ -865,6 +865,90 @@ Errors from retry or status check show inline below the action buttons. No `aler
 
 ---
 
-## 15. Next Phase
+## 15. UI-R4B — Result Intelligence UX
+
+**Date:** 2026-05-14  
+**Commit:** `feat(ui): add result intelligence experience`
+
+Exposes Phase 59-62 AI intelligence metadata in the Results screen. No new backend logic, no API changes — purely a UI extraction and display layer.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `entities/ai-insight.js` | Rewritten: added `intelligence` field + `_parseIntelligenceCore()` |
+| `screens/results.js` | `renderAIPanel()` completely replaced with 5-section premium panel |
+| `css/components.css` | ~170 lines of AI intelligence panel CSS appended |
+
+### `ai-insight.js` — Intelligence Extraction
+
+`parseAIInsightSummary()` now returns an `intelligence` object built by `_parseIntelligenceCore()`.
+
+**Source fields consumed (with priority fallback):**
+- Applied items: `ai_execution_metrics.{subtitle,camera,segment}` → `render_outcome_tracking.ai_execution`
+- Strategy: `creator_render_strategy` > `platform_render_strategy` > `creator_archetype_strategy`
+- Quality scores: `render_outcome_tracking.quality` → `render_quality_v2`
+- Creator fit: `render_outcome_tracking.benchmark_result.creator_fit` → `creator_benchmark_summary.benchmark_status`
+- Learning items: `creator_preference_reinforcement.reasoning` → `learning_influence_calibration.reasoning` → filtered `render_outcome_tracking.reasoning`
+- Suggestions: `platform_quality_feedback.improvement_opportunities`
+- Mode/assistance: `ai_execution_metrics.mode` / `ai_execution_summary.overall_ai_assistance`
+
+All fields optional/defensive. `_parseIntelligence()` wraps core in try/catch — never throws. Returns `_emptyIntelligence()` on any error.
+
+**`intelligence` shape:**
+```
+appliedItems[]     — { domain, label, detail }
+creatorType        — "Podcast" | "TikTok" | etc. (formatted)
+platform           — "TikTok" | "YouTube" | etc. (formatted)
+platformFit        — 0-100 | null
+confidence         — 0-1 | null
+confidenceLabel    — "High" | "Medium" | "Low" | null
+strategyNotes[]    — string[]
+qualityScores      — { overall, subtitle, camera, hook } | null
+creatorFit         — "High" | "Medium" | "Low" | null
+learningItems[]    — string[]
+suggestions[]      — string[]
+modeLabel          — "Off" | "Safe" | "Balanced" | "Aggressive" | null
+assistanceLabel    — "Full AI assistance" | "N improvements applied" | null
+assistanceDomains  — number
+aiEffectiveness    — string | null
+overallResult      — string | null
+hasData            — boolean
+```
+
+### `results.js` — New `renderAIPanel()`
+
+5-section premium panel (all sections conditional on data presence):
+1. **"What AI improved"** — applied items with ✓ check + detail
+2. **"Creator & Platform"** — type/platform/fit/confidence in key-value rows; strategy notes below
+3. **"Quality"** — tile grid with per-domain scores color-coded via `scoreColor()`
+4. **"AI learned"** — learning evidence items with ✓ marks
+5. **"Suggestions"** — compact cards, each labeled "Manual review"
+- Footer: mode + assistance level
+- Empty state: shown when `!isActive || !intel?.hasData`
+- Warnings: quality gate blocks shown as chips below footer
+
+### CSS — AI Intelligence Panel
+
+New classes appended to `components.css`:
+- `.ai-intel-panel` / `.ai-intel-panel--active` — container with accent border when active
+- `.ai-intel-header` / `.ai-intel-icon` — header row
+- `.ai-intel-section` / `.ai-intel-section__title` — section divider + label
+- `.ai-applied-item` / `.ai-applied-item__check` — applied item row with teal ✓
+- `.ai-strat-rows` / `.ai-strat-row` / `.ai-strat-row__key` / `.ai-strat-row__val` — key-value table rows; `__val--high/medium/low` variants
+- `.ai-conf-pill--high/medium/low` — inline confidence badge (green/yellow/red)
+- `.ai-quality-grid` / `.ai-quality-tile` / `.ai-quality-score` — score grid tiles
+- `.ai-learning-item` / `.ai-learning-item__check` — learning evidence rows
+- `.ai-suggest-list` / `.ai-suggest-card` / `.ai-suggest-label` — suggestion cards
+- `.ai-exec-footer` — execution transparency row
+- `.ai-intel-empty` — empty state text
+
+**Known limitations / deferred:**
+- Right panel per-clip detail does not yet show AI sub-metrics (deferred)
+- Suggestions `safe_apply_available` flag not surfaced (always shows "Manual review")
+
+---
+
+## 16. Next Phase
 
 _(pending)_

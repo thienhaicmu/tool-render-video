@@ -104,48 +104,123 @@ function renderFailedPanel(result) {
 /* ── AI panel ─────────────────────────────────────────────────────────── */
 
 function renderAIPanel(result) {
-  const ai = result.ai;
-  const isAdvisory = ai?.available || ai?.directorEnabled;
-  const hasMetics  = ai?.previewChips?.length > 0;
+  const ai    = result.ai;
+  const isActive = !!(ai?.available || ai?.directorEnabled);
+  const intel = ai?.intelligence;
+
+  if (!isActive || !intel?.hasData) {
+    return `
+      <div class="ai-intel-panel">
+        <div class="ai-intel-header">
+          <span class="ai-intel-icon" aria-hidden="true">◈</span>
+          <span class="text-section">AI Intelligence</span>
+          <span class="flex-1"></span>
+          ${aiBadge(isActive ? 'advisory' : 'disabled')}
+        </div>
+        <div class="ai-intel-empty">AI insights will appear when metadata becomes available.</div>
+      </div>
+    `;
+  }
+
+  const { appliedItems, creatorType, platform, platformFit, confidenceLabel,
+          strategyNotes, qualityScores, creatorFit, learningItems, suggestions,
+          modeLabel, assistanceLabel } = intel;
 
   return `
-    <div class="ai-panel ${isAdvisory ? 'ai-panel--advisory' : ''}">
-      <div class="ai-panel__header">
-        <span style="color:var(--color-ai);font-size:15px">◈</span>
-        <span class="text-section">AI Insights</span>
+    <div class="ai-intel-panel ai-intel-panel--active">
+      <div class="ai-intel-header">
+        <span class="ai-intel-icon" aria-hidden="true">◈</span>
+        <span class="text-section">AI Intelligence</span>
         <span class="flex-1"></span>
-        ${aiBadge(isAdvisory ? 'advisory' : 'disabled')}
+        ${aiBadge('advisory')}
       </div>
 
-      ${isAdvisory && hasMetics ? `
-        <div class="ai-panel__chips">
-          ${ai.previewChips.map(chip => `
-            <span class="ai-chip ${chip.type === 'applied' ? 'ai-chip--applied' : chip.type === 'quality' ? 'ai-chip--advisory' : ''}">
-              ${_esc(chip.label)}
-            </span>
-          `).join('')}
+      ${appliedItems.length > 0 ? `
+        <div class="ai-intel-section">
+          <div class="ai-intel-section__title">What AI improved</div>
+          <div class="col gap-2">
+            ${appliedItems.map(item => `
+              <div class="ai-applied-item">
+                <span class="ai-applied-item__check" aria-hidden="true">✓</span>
+                <span class="text-caption">${_esc(item.label)}${item.detail ? ` — <span class="text-faint">${_esc(item.detail)}</span>` : ''}</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
       ` : ''}
 
-      ${isAdvisory && ai.summaryLines.length > 0 ? `
-        <div class="col gap-1 mt-3">
-          ${ai.summaryLines.slice(0, 3).map(l => `
-            <div class="text-caption text-faint">• ${_esc(l)}</div>
-          `).join('')}
+      ${creatorType || platform || confidenceLabel ? `
+        <div class="ai-intel-section">
+          <div class="ai-intel-section__title">Creator &amp; Platform</div>
+          <div class="ai-strat-rows">
+            ${creatorType ? `<div class="ai-strat-row"><span class="ai-strat-row__key">Type</span><span class="ai-strat-row__val">${_esc(creatorType)}</span></div>` : ''}
+            ${platform    ? `<div class="ai-strat-row"><span class="ai-strat-row__key">Platform</span><span class="ai-strat-row__val">${_esc(platform)}</span></div>` : ''}
+            ${creatorFit  ? `<div class="ai-strat-row"><span class="ai-strat-row__key">Creator fit</span><span class="ai-strat-row__val ai-strat-row__val--${creatorFit.toLowerCase()}">${_esc(creatorFit)}</span></div>` : ''}
+            ${platformFit != null ? `<div class="ai-strat-row"><span class="ai-strat-row__key">Platform fit</span><span class="ai-strat-row__val">${platformFit}%</span></div>` : ''}
+            ${confidenceLabel ? `<div class="ai-strat-row"><span class="ai-strat-row__key">Confidence</span><span class="ai-conf-pill ai-conf-pill--${confidenceLabel.toLowerCase()}">${_esc(confidenceLabel)}</span></div>` : ''}
+          </div>
+          ${strategyNotes.length > 0 ? `
+            <div class="col gap-1 mt-3">
+              ${strategyNotes.map(n => `<div class="text-caption text-faint">• ${_esc(n)}</div>`).join('')}
+            </div>
+          ` : ''}
         </div>
       ` : ''}
 
-      ${!isAdvisory ? `
-        <div class="text-body mt-2" style="color:var(--color-text-faint)">
-          AI Copilot summaries will appear here when connected.
+      ${qualityScores ? `
+        <div class="ai-intel-section">
+          <div class="ai-intel-section__title">Quality</div>
+          <div class="ai-quality-grid">
+            <div class="ai-quality-tile">
+              <span class="ai-quality-score" style="color:${scoreColor(qualityScores.overall)}">${qualityScores.overall}</span>
+              <span class="text-caption text-faint">Overall</span>
+            </div>
+            ${qualityScores.subtitle != null ? `<div class="ai-quality-tile"><span class="ai-quality-score" style="color:${scoreColor(qualityScores.subtitle)}">${qualityScores.subtitle}</span><span class="text-caption text-faint">Subtitle</span></div>` : ''}
+            ${qualityScores.camera   != null ? `<div class="ai-quality-tile"><span class="ai-quality-score" style="color:${scoreColor(qualityScores.camera)}">${qualityScores.camera}</span><span class="text-caption text-faint">Camera</span></div>` : ''}
+            ${qualityScores.hook     != null ? `<div class="ai-quality-tile"><span class="ai-quality-score" style="color:${scoreColor(qualityScores.hook)}">${qualityScores.hook}</span><span class="text-caption text-faint">Hook</span></div>` : ''}
+          </div>
         </div>
       ` : ''}
 
-      ${ai?.warnings?.length > 0 ? `
+      ${learningItems.length > 0 ? `
+        <div class="ai-intel-section">
+          <div class="ai-intel-section__title">AI learned</div>
+          <div class="col gap-2">
+            ${learningItems.map(item => `
+              <div class="ai-learning-item">
+                <span class="ai-learning-item__check" aria-hidden="true">✓</span>
+                <span class="text-caption text-faint">${_esc(item)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${suggestions.length > 0 ? `
+        <div class="ai-intel-section">
+          <div class="ai-intel-section__title">Suggestions</div>
+          <div class="ai-suggest-list">
+            ${suggestions.map(s => `
+              <div class="ai-suggest-card">
+                <span class="text-caption">${_esc(s)}</span>
+                <span class="ai-suggest-label">Manual review</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${modeLabel || assistanceLabel ? `
+        <div class="ai-exec-footer">
+          ${modeLabel      ? `<span class="text-caption text-faint">Mode: ${_esc(modeLabel)}</span>` : ''}
+          ${modeLabel && assistanceLabel ? `<span class="text-caption text-faint">·</span>` : ''}
+          ${assistanceLabel ? `<span class="text-caption text-faint">${_esc(assistanceLabel)}</span>` : ''}
+        </div>
+      ` : ''}
+
+      ${ai.warnings?.length > 0 ? `
         <div class="col gap-1 mt-2">
-          ${ai.warnings.map(w => `
-            <div class="ai-chip ai-chip--warning" style="display:inline-flex">⚠ ${_esc(w)}</div>
-          `).join('')}
+          ${ai.warnings.map(w => `<div class="ai-chip ai-chip--warning" style="display:inline-flex">⚠ ${_esc(w)}</div>`).join('')}
         </div>
       ` : ''}
     </div>
