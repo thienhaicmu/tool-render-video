@@ -1999,3 +1999,60 @@ UI-R5C -- Create Workspace Rebuild: merge Source + Studio into a true single-sur
 
 ### Status
 Complete -- committed
+
+---
+
+## UI-FIX — R5C Router Export Boot Fix
+
+**Date:** 2026-05-14
+**Branch:** feature/ai-output-upgrade
+**Commit:** see below
+
+### Root Cause
+
+`router.js` (written in UI-R5B) imports `settingsScreen` from `./screens/system.js`, but `system.js` only exports `systemScreen`. ES module named imports are strict — the name must match exactly. Because the import failed at parse time, the entire module graph was rejected and the app rendered blank.
+
+```
+Uncaught SyntaxError: The requested module './screens/system.js'
+does not provide an export named 'settingsScreen'
+```
+
+### Fix Applied
+
+**Option B — alias export in system.js** (additive, zero risk).
+
+Added one line to the bottom of `backend/static-v2/assets/js/screens/system.js`:
+
+```js
+export const settingsScreen = systemScreen;
+```
+
+`router.js` was not modified. The canonical `systemScreen` export is preserved for any other code that references it. The alias satisfies the named import in router.js.
+
+### Routes Verified (syntax check)
+
+| File | Result |
+|---|---|
+| `screens/system.js` | OK |
+| `router.js` | OK |
+| `screens/create.js` | OK |
+| `screens/projects.js` | OK |
+
+### Route Table (post-fix)
+
+| Route | Screen | Nav highlight |
+|---|---|---|
+| `#/create` | createScreen | Create |
+| `#/projects` | projectsScreen | Projects |
+| `#/projects/:jobId` | projectsScreen | Projects |
+| `#/settings` | settingsScreen (= systemScreen) | Settings |
+| `#/source` | createScreen (legacy compat) | Create |
+| `#/studio` | createScreen (legacy compat) | Create |
+| `#/library` | projectsScreen (legacy compat) | Projects |
+| `#/results/:jobId` | projectsScreen (legacy compat) | Projects |
+| `#/system` | settingsScreen (legacy compat) | Settings |
+| `#/monitor/:jobId` | monitorScreen (utility) | none |
+| `#/downloads` | downloadsScreen (utility) | none |
+
+### Status
+Complete -- committed

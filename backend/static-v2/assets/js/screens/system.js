@@ -406,4 +406,5 @@ export async function mount(el, _params) {
   await _refresh();
 }
 
-export const systemScreen = { mount };
+export const systemScreen   = { mount };
+export const settingsScreen = systemScreen;
