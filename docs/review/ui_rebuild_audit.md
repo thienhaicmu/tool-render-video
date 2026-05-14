@@ -949,6 +949,132 @@ New classes appended to `components.css`:
 
 ---
 
-## 16. Next Phase
+## 16. UI-R4C — Desktop Quality Hardening
+
+**Date:** 2026-05-14  
+**Commit:** `feat/ui: harden desktop quality experience`
+
+Hardens static-v2 for real desktop usage. No new features, no backend changes.
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `components/error-boundary.js` | Per-screen crash recovery card |
+| `store/readiness.js` | Warmup/tool availability state |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `transport.js` | `withTimeout()`, `normalizeApiError()`, network error normalization |
+| `app.js` | Load readiness store; premium boot error screen |
+| `components/shell.js` | Backend unavailable banner; targeted screen clear |
+| `store/system.js` | Periodic health watch (30s interval) |
+| `router.js` | Targeted `.screen` removal; per-route error boundary |
+| `desktop-adapter.js` | `folderPickerAvailable`, `filePickerAvailable`; try/catch on all IPC calls |
+| `screens/source.js` | yt-dlp warning; 45s prepare timeout; file picker guard |
+| `screens/studio.js` | Session redirect; FFmpeg guard on render button; 30s submit timeout |
+| `screens/monitor.js` | 20s connection timeout with retry banner; no-job recovery |
+| `css/components.css` | `.eb-card`, `.backend-banner`, `.readiness-warning`, `.studio-video-err` |
+
+### Hardening Implemented
+
+**1. Global Screen Error Boundary**
+- Router wraps every `screen.mount()` call in a try/catch
+- On crash: renders `.eb-card` with "Reload screen" retry + "← Back to Source" link
+- `console.error` preserved for dev; no stack trace shown in UI
+- `components/error-boundary.js` also exports `withErrorBoundary()` for manual wrapping
+
+**2. Backend Availability Guard**
+- `store/system.js` polls `/api/health` every 30s
+- `components/shell.js` subscribes and shows `.backend-banner` strip when backend unavailable
+- Banner includes "Retry" button that calls `systemStore.refresh()`
+- Nav remains usable; only actions requiring backend are blocked
+- Boot failure shows inline "Backend is not ready yet" page with Retry button
+
+**3. Warmup / Readiness Guard**
+- `store/readiness.js` reads `/api/warmup/status` after boot (non-blocking)
+- Normalizes multi-key warmup items (`yt_dlp`/`ytdlp`/`yt-dlp`, etc.)
+- `ffmpegAvailable === false` → `renderBlocked = true` → Studio render button disabled with explanation
+- `ytdlpAvailable === false` → Source screen shows `.readiness-warning` + YouTube tab disabled
+- All values default `null` (unknown); fail-open on endpoint error — never hard-blocks
+
+**4. API Error Normalization**
+- `transport.js fetchJson` wraps network-level `fetch()` in try/catch — connection failures yield `"Backend is not reachable. Check your connection and try again."` instead of `TypeError: Failed to fetch`
+- `fetchJson` JSON parse errors no longer crash — returns `null` for unparseable 2xx
+- `normalizeApiError(err)` → `{ ok, status, message, code, details }` for any thrown error
+- `withTimeout(promise, ms, label)` exported utility — rejects with calm user message after timeout
+
+**5. Stuck Loading Timeouts**
+- Source prepare: 45s timeout (`PREPARE_TIMEOUT_MS`)
+- Render submit: 30s timeout (`RENDER_TIMEOUT_MS`)
+- Monitor initial connection: 20s timeout (`CONNECT_TIMEOUT_MS`) → shows retry banner
+- All timeouts yield inline recoverable error messages, never leave buttons permanently disabled
+
+**6. Transport Hardening**
+- WS → polling fallback already present; `closed` guard prevents duplicate subscriptions
+- `unsubscribe()` always clears polling timers
+- Terminal state stops polling immediately
+- Malformed WS messages caught and ignored in existing `try { JSON.parse } catch`
+- Transport mode exposed to Monitor via `renderTransportBadge()`
+
+**7. Media Load Hardening (Studio)**
+- Preview video `error` event → shows `.studio-video-err` overlay (positioned absolute over preview)
+- Retry button: hides overlay, calls `video.load()`
+- Studio preview: `position: relative` added to CSS for overlay to anchor correctly
+- Video retry always uses `/api/render/preview-video/{sessionId}` (stream endpoint), never raw path
+
+**8. Desktop Adapter Hardening**
+- Added `folderPickerAvailable` getter (checks `api?.pickOutputDir`)
+- Added `filePickerAvailable` getter (checks `api?.pickVideoFile`)
+- All IPC calls wrapped in try/catch — return `null` on failure, never crash
+- Browse/Choose buttons rendered only when respective picker is available
+- `openExternal` falls back to `window.open` if IPC fails
+
+**9. Route Recovery**
+- Studio: no `editSessionId` → shows recovery card "No source is loaded" + "← Go to Source"
+- Monitor: jobId always starts transport subscription (works after refresh)
+- Monitor: no jobId → shows "No job selected" with links to Studio and Library
+- Results: jobId always loads via `resultsStore.load()` (works after refresh)
+- Invalid jobId on Monitor: 20s timeout banner + retry; on Results: API error shown inline
+- Unknown routes: redirect to `/source`
+
+**10. UI Copy**
+- Boot failure: "Backend is not ready yet. Try again in a moment."
+- Backend banner: "Backend is not ready yet. Try again in a moment."
+- FFmpeg missing: "FFmpeg is unavailable, so rendering is disabled. Check System → Diagnostics for details."
+- yt-dlp missing: "yt-dlp is unavailable, so YouTube downloads are disabled. Use a local file instead."
+- Prepare timeout: "Source preparation timed out. Check your connection and try again."
+- Submit timeout: "Render submit timed out. Check your connection and try again."
+- Monitor timeout: "Taking longer than expected. No job data has arrived yet."
+- Screen crash: "The screen couldn't load. This is usually temporary."
+- Studio no session: "No source is loaded. Go back to Source to prepare a video."
+
+### Verification
+
+| Check | Result |
+|---|---|
+| No backend changes | ✓ |
+| No legacy UI changes | ✓ |
+| Backend unavailable does not crash UI | ✓ banner shown, nav works |
+| Invalid route recovers | ✓ redirects to /source |
+| Studio refresh without session redirects safely | ✓ recovery card shown |
+| Monitor refresh with jobId attempts load | ✓ transport starts on mount |
+| Results refresh with jobId attempts load | ✓ resultsStore.load() on mount |
+| WS failure falls back to polling | ✓ existing transport |
+| Media failure shows retry state | ✓ overlay + retry button |
+| Folder picker unavailable does not crash | ✓ try/catch + null return |
+| No infinite loading after failed fetch | ✓ timeout guard on all critical ops |
+| node --check passes all changed JS | ✓ 11/11 |
+
+**Known limitations / deferred:**
+- No automatic reconnect after backend recovers during active render (polling continues when backend comes back, WS does not reconnect)
+- Results page does not have a loading timeout (depends on store load which is already caught)
+- Library and Downloads screens not specifically hardened (deferred — lower failure surface)
+
+---
+
+## 17. Next Phase
 
 _(pending)_

@@ -125,10 +125,18 @@ export function subscribeJob(jobId, { onUpdate, onTerminal, onTransportChange } 
 
 /* Typed HTTP client */
 export async function fetchJson(url, options) {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    });
+  } catch (netErr) {
+    const err = new Error('Backend is not reachable. Check your connection and try again.');
+    err.status = null;
+    err.body   = null;
+    throw err;
+  }
   if (!res.ok) {
     let body = null;
     try { body = await res.json(); } catch { /* ignore */ }
@@ -141,9 +149,37 @@ export async function fetchJson(url, options) {
     }
     const err = new Error(msg);
     err.status = res.status;
-    err.body = body;
+    err.body   = body;
     throw err;
   }
   if (res.status === 204) return null;
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/* Race a promise against a timeout.
+   Rejects with a calm user-facing message if ms elapses first. */
+export function withTimeout(promise, ms, label = 'Request') {
+  let timerId;
+  const guard = new Promise((_, reject) => {
+    timerId = setTimeout(
+      () => reject(new Error(`${label} timed out. Check your connection and try again.`)),
+      ms
+    );
+  });
+  return Promise.race([promise, guard]).finally(() => clearTimeout(timerId));
+}
+
+/* Normalize any thrown error into a consistent shape for UI display. */
+export function normalizeApiError(err) {
+  return {
+    ok:      false,
+    status:  err?.status  ?? null,
+    message: err?.message ?? 'An unexpected error occurred.',
+    code:    err?.body?.code ?? null,
+    details: err?.body    ?? null,
+  };
 }

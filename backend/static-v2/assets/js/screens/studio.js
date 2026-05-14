@@ -1,10 +1,14 @@
 /* Studio screen — preview prepared source → configure RenderDraft → POST /api/render/process */
 
-import { draftStore } from '../store/draft.js';
-import { renderApi } from '../api/render.js';
-import { router } from '../router.js';
+import { draftStore }          from '../store/draft.js';
+import { renderApi }           from '../api/render.js';
+import { router }              from '../router.js';
 import { validateRenderDraft } from '../entities/render-request.js';
-import { emptyState, ICONS } from '../components/empty-state.js';
+import { emptyState, ICONS }   from '../components/empty-state.js';
+import { readinessStore }      from '../store/readiness.js';
+import { withTimeout }         from '../transport.js';
+
+const RENDER_TIMEOUT_MS = 30_000;
 
 const ASPECT_RATIOS = [
   { value: '9:16', label: '9:16' },
@@ -54,8 +58,12 @@ function renderPreviewArea(sessionId) {
         src="${url}" controls muted preload="metadata"
         style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-panel);background:#000">
       </video>
-      <div id="studio-video-err" style="display:none;padding:var(--sp-3);text-align:center">
-        <span class="text-caption" style="color:var(--color-failed)">Preview unavailable — source may still be processing.</span>
+      <div id="studio-video-err" class="studio-video-err" style="display:none">
+        <div class="col gap-3" style="align-items:center">
+          <div class="text-body" style="color:var(--color-text-muted)">Preview couldn't load</div>
+          <div class="text-caption text-faint">The source may still be processing. You can still configure and start the render.</div>
+          <button class="btn btn-ghost" id="studio-video-retry">Retry preview</button>
+        </div>
       </div>
     </div>
   `;
@@ -180,10 +188,17 @@ function renderDraftPanel(d) {
 }
 
 function renderCTA(d) {
+  const { renderBlocked, ffmpegAvailable } = readinessStore.getState();
   const { errors } = validateRenderDraft(d);
-  const canSubmit = errors.length === 0 && !_submitting;
+  const canSubmit  = errors.length === 0 && !_submitting && !renderBlocked;
+
+  const ffmpegWarning = ffmpegAvailable === false
+    ? `<div class="readiness-warning row gap-2"><span aria-hidden="true">⚠</span><span class="text-caption">FFmpeg is unavailable, so rendering is disabled. Check System → Diagnostics for details.</span></div>`
+    : '';
+
   return `
     <div id="studio-cta" class="studio-cta">
+      ${ffmpegWarning}
       ${errors.length > 0
         ? `<div class="col gap-1">${errors.map(e => `<div class="text-caption" style="color:var(--color-failed)">⚠ ${_esc(e)}</div>`).join('')}</div>`
         : ''}
@@ -256,18 +271,22 @@ async function handleRender(el) {
   const { valid, errors } = validateRenderDraft(draft);
   if (!valid) { _submitError = errors[0]; rerender(el); return; }
 
-  _submitting = true;
+  _submitting  = true;
   _submitError = null;
   rerender(el);
 
   try {
     const payload = draftStore.buildPayload();
-    const result  = await renderApi.process(payload);
-    const jobId   = result?.job_id ?? result?.id;
-    if (!jobId) throw new Error('No job_id in response.');
+    const result  = await withTimeout(
+      renderApi.process(payload),
+      RENDER_TIMEOUT_MS,
+      'Render submit'
+    );
+    const jobId = result?.job_id ?? result?.id;
+    if (!jobId) throw new Error('No job ID returned. The render may have started — check Library for status.');
     router.go(`/monitor/${jobId}`);
   } catch (err) {
-    _submitting = false;
+    _submitting  = false;
     _submitError = err.message;
     rerender(el);
   }
@@ -281,6 +300,25 @@ export async function mount(el) {
 
   const { draft } = draftStore.getState();
   const sessionId = draft.editSessionId;
+
+  // Route recovery: no session on refresh → show explanation and link to Source
+  if (!sessionId) {
+    el.innerHTML = `
+      <div class="screen__header">
+        <div class="screen__title">Studio</div>
+        <div class="screen__subtitle">No source loaded</div>
+      </div>
+      <div class="screen__body">
+        <div class="card col gap-3" style="max-width:420px">
+          <div class="text-body" style="font-weight:600">No source is loaded</div>
+          <div class="text-caption text-faint">Go back to Source to prepare a video before opening Studio.</div>
+          <button class="btn btn-primary" id="studio-no-session-btn" style="width:fit-content">← Go to Source</button>
+        </div>
+      </div>
+    `;
+    el.querySelector('#studio-no-session-btn')?.addEventListener('click', () => router.go('/source'));
+    return;
+  }
 
   el.innerHTML = `
     <div class="screen__header">
@@ -307,13 +345,18 @@ export async function mount(el) {
     </div>
   `;
 
-  // Video error handler
-  const video = el.querySelector('#studio-video');
+  // Video error + retry handler
+  const video    = el.querySelector('#studio-video');
   const videoErr = el.querySelector('#studio-video-err');
   if (video && videoErr) {
     video.addEventListener('error', () => {
       video.style.display = 'none';
       videoErr.style.display = '';
+    });
+    el.querySelector('#studio-video-retry')?.addEventListener('click', () => {
+      videoErr.style.display = 'none';
+      video.style.display = '';
+      video.load();
     });
   }
 

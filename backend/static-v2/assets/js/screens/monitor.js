@@ -1,15 +1,18 @@
 /* Monitor screen — live job stream, premium stage banner, transport badge,
    part status table, terminal CTAs (View Results / Retry / Resume), logs drawer.
+   Route recovery: if jobId is present, always loads from transport even after refresh.
+   Loading timeout: 20s with inline retry if no data arrives.
 */
 
 import { monitorStore } from '../store/monitor.js';
-import { statusChip } from '../components/status-chip.js';
+import { statusChip }   from '../components/status-chip.js';
 import { partStatusList } from '../components/part-status-list.js';
 import { logDrawerShell, wireLogDrawer } from '../components/log-drawer.js';
-import { router } from '../router.js';
-import { renderApi } from '../api/render.js';
+import { router }       from '../router.js';
+import { renderApi }    from '../api/render.js';
 
-const TERMINAL = new Set(['completed', 'completed_with_errors', 'failed', 'interrupted']);
+const TERMINAL       = new Set(['completed', 'completed_with_errors', 'failed', 'interrupted']);
+const CONNECT_TIMEOUT_MS = 20_000;
 
 const STAGE_LABELS = {
   queued:              'In queue',
@@ -29,10 +32,10 @@ const STAGE_LABELS = {
 
 function renderTransportBadge(mode) {
   const map = {
-    websocket:     { label: '● Live',        color: 'var(--color-success)' },
-    polling:       { label: '○ Polling',     color: 'var(--color-warning)' },
-    connecting:    { label: '⋯ Connecting',  color: 'var(--color-text-faint)' },
-    terminal_poll: { label: '● Done',        color: 'var(--color-success)' },
+    websocket:     { label: '● Live',       color: 'var(--color-success)'    },
+    polling:       { label: '○ Polling',    color: 'var(--color-warning)'    },
+    connecting:    { label: '⋯ Connecting', color: 'var(--color-text-faint)' },
+    terminal_poll: { label: '● Done',       color: 'var(--color-success)'    },
   };
   const { label, color } = map[mode] ?? { label: mode ?? '—', color: 'var(--color-text-faint)' };
   return `<span class="transport-badge" style="color:${color}">${label}</span>`;
@@ -51,13 +54,13 @@ function renderProgressCard(state) {
     `;
   }
 
-  const rawStatus  = job.status === 'completed_with_errors' ? 'partial' : job.status;
-  const pct        = Math.min(100, job.progressPercent ?? summary?.overall_progress_percent ?? 0);
-  const stage      = job.stage ?? summary?.current_stage ?? '';
-  const stageLabel = STAGE_LABELS[stage] || (stage ? stage.replace(/_/g, ' ') : '');
-  const isRunning  = rawStatus === 'running';
-  const totalParts = summary?.total_parts ?? 0;
-  const doneParts  = summary?.completed_parts ?? 0;
+  const rawStatus   = job.status === 'completed_with_errors' ? 'partial' : job.status;
+  const pct         = Math.min(100, job.progressPercent ?? summary?.overall_progress_percent ?? 0);
+  const stage       = job.stage ?? summary?.current_stage ?? '';
+  const stageLabel  = STAGE_LABELS[stage] || (stage ? stage.replace(/_/g, ' ') : '');
+  const isRunning   = rawStatus === 'running';
+  const totalParts  = summary?.total_parts ?? 0;
+  const doneParts   = summary?.completed_parts ?? 0;
   const failedParts = summary?.failed_parts ?? 0;
   const activeParts = summary?.processing_parts ?? summary?.in_progress_count ?? 0;
 
@@ -80,7 +83,7 @@ function renderProgressCard(state) {
 
       <div class="row gap-4 text-caption text-faint" style="flex-wrap:wrap">
         <span style="font-variant-numeric:tabular-nums;font-weight:600;color:var(--color-text)">${pct}%</span>
-        ${totalParts > 0 ? `<span>${doneParts} / ${totalParts} parts</span>` : ''}
+        ${totalParts  > 0 ? `<span>${doneParts} / ${totalParts} parts</span>` : ''}
         ${activeParts > 0 ? `<span style="color:var(--color-running)">${activeParts} running</span>` : ''}
         ${failedParts > 0 ? `<span style="color:var(--color-failed)">${failedParts} failed</span>` : ''}
         ${job.message && stageLabel ? `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-text-muted)">${_esc(job.message)}</span>` : ''}
@@ -124,7 +127,7 @@ function renderTerminalBanner(state) {
         </div>
         <span class="flex-1"></span>
         ${canResume ? `<button class="btn btn-secondary" id="monitor-resume-btn">Resume</button>` : ''}
-        ${canRetry  ? `<button class="btn btn-secondary" id="monitor-retry-btn">Retry</button>` : ''}
+        ${canRetry  ? `<button class="btn btn-secondary" id="monitor-retry-btn">Retry</button>`  : ''}
         <button class="btn btn-ghost" id="monitor-to-source">New source</button>
       </div>
     </div>
@@ -161,11 +164,11 @@ function _wireTerminalButtons(el, term, state) {
   );
   term.querySelector('#monitor-retry-btn')?.addEventListener('click', async (e) => {
     e.currentTarget.disabled = true;
-    try { await renderApi.retry(jobId); } catch { /* ignore — backend will report status */ }
+    try { await renderApi.retry(jobId); } catch { /* backend will report status */ }
   });
   term.querySelector('#monitor-resume-btn')?.addEventListener('click', async (e) => {
     e.currentTarget.disabled = true;
-    try { await renderApi.resume(jobId); } catch { /* ignore */ }
+    try { await renderApi.resume(jobId); } catch { /* backend will report status */ }
   });
 }
 
@@ -188,6 +191,7 @@ export async function mount(el, params) {
     </div>
     <div class="screen__body col gap-5">
       <div id="mon-progress"></div>
+      <div id="mon-timeout-banner" style="display:none"></div>
       <div id="mon-terminal"></div>
       <div>
         <div class="text-section" style="margin-bottom:var(--sp-3)">Parts</div>
@@ -203,8 +207,13 @@ export async function mount(el, params) {
   if (!jobId) {
     const prog = el.querySelector('#mon-progress');
     if (prog) prog.innerHTML = `
-      <div class="card" style="border-color:var(--color-failed)">
-        <div class="text-body" style="color:var(--color-failed)">No job ID provided.</div>
+      <div class="card">
+        <div class="text-body" style="font-weight:600">No job selected</div>
+        <div class="text-caption text-faint mt-2">Navigate here from Studio after starting a render, or open a job from Library.</div>
+        <div class="row gap-3 mt-4">
+          <button class="btn btn-primary" onclick="window.location.hash='/studio'">← Studio</button>
+          <button class="btn btn-ghost" onclick="window.location.hash='/library'">Library</button>
+        </div>
       </div>
     `;
     return;
@@ -217,6 +226,13 @@ export async function mount(el, params) {
     try { await renderApi.cancel(jobId); } catch { /* ignore */ }
   });
 
+  // Connection timeout — if no job data arrives in 20s, show retry option
+  let _connectTimer = setTimeout(() => {
+    if (!monitorStore.getState().job) {
+      _showTimeoutBanner(el, jobId);
+    }
+  }, CONNECT_TIMEOUT_MS);
+
   // Log drawer — lazy load on first open, refresh when terminal
   const logDrawerCtrl = wireLogDrawer(el, async () => {
     await monitorStore.loadLogs();
@@ -225,6 +241,14 @@ export async function mount(el, params) {
 
   // Subscribe
   const unsub = monitorStore.subscribe(state => {
+    // Clear timeout once first data arrives
+    if (state.job && _connectTimer) {
+      clearTimeout(_connectTimer);
+      _connectTimer = null;
+      const banner = el.querySelector('#mon-timeout-banner');
+      if (banner) banner.style.display = 'none';
+    }
+
     updateUI(el, state);
 
     if (cancelBtn) {
@@ -241,7 +265,35 @@ export async function mount(el, params) {
 
   monitorStore.start(jobId);
 
-  el.addEventListener('unmount', () => { unsub(); monitorStore.stop(); });
+  el.addEventListener('unmount', () => {
+    if (_connectTimer) { clearTimeout(_connectTimer); _connectTimer = null; }
+    unsub();
+    monitorStore.stop();
+  });
+}
+
+function _showTimeoutBanner(el, jobId) {
+  const banner = el.querySelector('#mon-timeout-banner');
+  if (!banner) return;
+  banner.style.display = '';
+  banner.innerHTML = `
+    <div class="card" style="border-color:var(--color-warning)">
+      <div class="row gap-3" style="align-items:center;flex-wrap:wrap">
+        <div>
+          <div class="text-body" style="font-weight:600;color:var(--color-warning)">Taking longer than expected</div>
+          <div class="text-caption text-faint mt-1">No job data has arrived yet. The backend may be busy or the job may not exist.</div>
+        </div>
+        <span class="flex-1"></span>
+        <button class="btn btn-secondary" id="mon-timeout-retry">Retry</button>
+        <button class="btn btn-ghost" onclick="window.location.hash='/library'">Library</button>
+      </div>
+    </div>
+  `;
+  banner.querySelector('#mon-timeout-retry')?.addEventListener('click', () => {
+    banner.style.display = 'none';
+    monitorStore.stop();
+    monitorStore.start(jobId);
+  });
 }
 
 export const monitorScreen = { mount };

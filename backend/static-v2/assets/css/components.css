@@ -423,6 +423,7 @@
   background: #000;
   border-radius: var(--radius-panel);
   border: 1px solid var(--color-border);
+  position: relative;
 }
 .studio-preview--empty {
   background: var(--color-surface);
@@ -1308,3 +1309,69 @@
 }
 
 .sys-timestamp { opacity: 0.55; font-size: 11px; }
+
+/* ── UI-R4C: Error Boundary Card ─────────────────────────────────── */
+
+.eb-card {
+  max-width: 460px;
+  padding: var(--sp-5);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+}
+
+.eb-card__icon {
+  font-size: 20px;
+  color: var(--color-warning);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ── UI-R4C: Backend Availability Banner ─────────────────────────── */
+
+.shell-backend-banner {
+  flex-shrink: 0;
+  background: rgba(242,198,110,0.08);
+  border-bottom: 1px solid rgba(242,198,110,0.25);
+}
+
+.backend-banner {
+  padding: var(--sp-2) var(--sp-4);
+  min-height: 36px;
+}
+
+.backend-banner__icon {
+  color: var(--color-warning);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+/* ── UI-R4C: Readiness / Warmup Warnings ─────────────────────────── */
+
+.readiness-warning {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  background: rgba(242,198,110,0.08);
+  border: 1px solid rgba(242,198,110,0.2);
+  color: var(--color-warning);
+  align-items: flex-start;
+}
+
+.readiness-warning .text-caption {
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+/* ── UI-R4C: Studio video error overlay ──────────────────────────── */
+
+.studio-video-err {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(14,17,23,0.85);
+  border-radius: var(--radius-panel);
+  padding: var(--sp-6);
+  text-align: center;
+}

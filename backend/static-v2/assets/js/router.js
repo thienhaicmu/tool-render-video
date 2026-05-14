@@ -50,12 +50,49 @@ async function navigate(path) {
   const workspace = document.querySelector('.shell__workspace');
   if (!workspace) return;
 
-  workspace.innerHTML = '';
+  // Unmount previous screen gracefully, preserving persistent shell elements
+  const prev = workspace.querySelector('.screen');
+  if (prev) {
+    try { prev.dispatchEvent(new Event('unmount')); } catch { /* ignore */ }
+    prev.remove();
+  }
+
   const el = document.createElement('div');
   el.className = 'screen';
   workspace.appendChild(el);
 
-  await route.screen.mount(el, params);
+  // Error boundary: screen crashes are caught and shown as recovery card
+  try {
+    await route.screen.mount(el, params);
+  } catch (err) {
+    console.error(`[router] Screen "${route.id}" crashed:`, err);
+    _renderBoundary(el, () => navigate(path));
+  }
+}
+
+function _renderBoundary(el, onRetry) {
+  el.innerHTML = `
+    <div class="screen__header">
+      <div class="screen__title">Something went wrong</div>
+      <div class="screen__subtitle">This screen encountered an unexpected problem.</div>
+    </div>
+    <div class="screen__body">
+      <div class="eb-card">
+        <div class="row gap-3" style="align-items:flex-start">
+          <span class="eb-card__icon" aria-hidden="true">⚠</span>
+          <div class="col gap-2">
+            <div class="text-body" style="font-weight:600">The screen couldn't load</div>
+            <div class="text-caption text-faint">This is usually temporary. Try reloading the screen, or go back to Source to start over.</div>
+          </div>
+        </div>
+        <div class="row gap-3 mt-4">
+          <button class="btn btn-primary" id="eb-retry">Reload screen</button>
+          <a class="btn btn-ghost" href="#/source">← Back to Source</a>
+        </div>
+      </div>
+    </div>
+  `;
+  el.querySelector('#eb-retry')?.addEventListener('click', onRetry);
 }
 
 function onHashChange() {

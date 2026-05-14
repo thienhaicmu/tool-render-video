@@ -1,10 +1,14 @@
 /* Source screen — YouTube or local file → POST /api/render/prepare-source → Studio */
 
-import { renderApi } from '../api/render.js';
-import { draftStore } from '../store/draft.js';
-import { desktopAdapter } from '../desktop-adapter.js';
-import { router } from '../router.js';
+import { renderApi }                from '../api/render.js';
+import { draftStore }               from '../store/draft.js';
+import { desktopAdapter }           from '../desktop-adapter.js';
+import { router }                   from '../router.js';
 import { parsePrepareSourceResponse } from '../entities/source-session.js';
+import { readinessStore }           from '../store/readiness.js';
+import { withTimeout }              from '../transport.js';
+
+const PREPARE_TIMEOUT_MS = 45_000;
 
 // Module-level UI state (resets on each mount)
 let _s = {};
@@ -29,12 +33,31 @@ function fmt(sec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+/* ── Readiness warnings ───────────────────────────────────────────── */
+
+function renderReadinessWarnings() {
+  const { ytdlpAvailable } = readinessStore.getState();
+  if (_s.sourceMode !== 'youtube') return '';
+  if (ytdlpAvailable === false) {
+    return `
+      <div class="readiness-warning row gap-2">
+        <span aria-hidden="true">⚠</span>
+        <span class="text-caption">yt-dlp is unavailable, so YouTube downloads are disabled. Use a local file instead.</span>
+      </div>
+    `;
+  }
+  return '';
+}
+
 /* ── Sub-renders ──────────────────────────────────────────────────── */
 
 function renderSourceTabs() {
+  const { ytdlpAvailable } = readinessStore.getState();
+  const ytDisabled = ytdlpAvailable === false;
   return `
     <div class="source-tabs row gap-1">
-      <button class="source-tab btn ${_s.sourceMode === 'youtube' ? 'source-tab--active btn-primary' : 'btn-ghost'}" data-mode="youtube">
+      <button class="source-tab btn ${_s.sourceMode === 'youtube' ? 'source-tab--active btn-primary' : 'btn-ghost'}"
+        data-mode="youtube" ${ytDisabled ? 'disabled title="yt-dlp is unavailable"' : ''}>
         YouTube
       </button>
       <button class="source-tab btn ${_s.sourceMode === 'local' ? 'source-tab--active btn-primary' : 'btn-ghost'}" data-mode="local">
@@ -64,7 +87,7 @@ function renderLocalInput() {
         <input class="form-input flex-1" id="src-local-path" type="text"
           placeholder="/path/to/video.mp4"
           value="${_esc(_s.localPath)}" />
-        ${desktopAdapter.isDesktop
+        ${desktopAdapter.filePickerAvailable
           ? `<button class="btn btn-secondary" id="src-browse-btn">Browse</button>`
           : ''}
       </div>
@@ -81,7 +104,7 @@ function renderOutputDir() {
         <input class="form-input flex-1" id="src-output-dir" type="text"
           placeholder="/path/to/output/"
           value="${_esc(_s.outputDir)}" />
-        ${desktopAdapter.isDesktop
+        ${desktopAdapter.folderPickerAvailable
           ? `<button class="btn btn-secondary" id="src-pick-output-btn">Choose</button>`
           : ''}
       </div>
@@ -94,6 +117,7 @@ function renderForm() {
   return `
     <div class="col gap-4 source-form">
       ${renderSourceTabs()}
+      ${renderReadinessWarnings()}
       ${_s.sourceMode === 'youtube' ? renderYouTubeInput() : renderLocalInput()}
       ${renderOutputDir()}
       <div id="src-error-area">
@@ -105,6 +129,7 @@ function renderForm() {
           ? '<span class="spinner" style="width:16px;height:16px;border-width:2px"></span>&nbsp;Preparing…'
           : 'Prepare source'}
       </button>
+      ${loading ? `<div class="text-caption text-faint" style="text-align:center">This may take up to a minute for YouTube videos.</div>` : ''}
     </div>
   `;
 }
@@ -185,6 +210,7 @@ function wireAll(el) {
   // Mode tabs
   el.querySelectorAll('.source-tab').forEach(btn =>
     btn.addEventListener('click', () => {
+      if (btn.disabled) return;
       _s.sourceMode = btn.dataset.mode;
       _s.error = null;
       rerenderForm(el);
@@ -227,16 +253,16 @@ function wireAll(el) {
 
 function rerenderForm(el) {
   const col = el.querySelector('#src-form-col');
-  if (col) { col.innerHTML = renderForm(); }
+  if (col) col.innerHTML = renderForm();
   const panel = el.querySelector('#src-panel-col');
-  if (panel) { panel.innerHTML = _s.mode === 'success' && _s.session ? renderReadyPanel() : renderInfoPanel(); }
+  if (panel) panel.innerHTML = _s.mode === 'success' && _s.session ? renderReadyPanel() : renderInfoPanel();
   wireAll(el);
 }
 
 async function handlePrepare(el) {
-  _s.outputDir = (el.querySelector('#src-output-dir')?.value ?? _s.outputDir).trim();
-  _s.youtubeUrl = (el.querySelector('#src-yt-url')?.value ?? _s.youtubeUrl).trim();
-  _s.localPath = (el.querySelector('#src-local-path')?.value ?? _s.localPath).trim();
+  _s.outputDir   = (el.querySelector('#src-output-dir')?.value  ?? _s.outputDir).trim();
+  _s.youtubeUrl  = (el.querySelector('#src-yt-url')?.value      ?? _s.youtubeUrl).trim();
+  _s.localPath   = (el.querySelector('#src-local-path')?.value  ?? _s.localPath).trim();
 
   if (_s.sourceMode === 'youtube') {
     if (!_s.youtubeUrl) { _s.error = 'YouTube URL is required.'; rerenderForm(el); return; }
@@ -246,30 +272,37 @@ async function handlePrepare(el) {
   }
   if (!_s.outputDir) { _s.error = 'Output directory is required.'; rerenderForm(el); return; }
 
-  _s.mode = 'loading';
+  _s.mode  = 'loading';
   _s.error = null;
   rerenderForm(el);
 
   try {
     const payload = { source_mode: _s.sourceMode };
-    if (_s.sourceMode === 'youtube') payload.youtube_url = _s.youtubeUrl;
-    else payload.source_video_path = _s.localPath;
+    if (_s.sourceMode === 'youtube') payload.youtube_url      = _s.youtubeUrl;
+    else                              payload.source_video_path = _s.localPath;
 
-    const raw     = await renderApi.prepareSource(payload);
+    const raw     = await withTimeout(
+      renderApi.prepareSource(payload),
+      PREPARE_TIMEOUT_MS,
+      'Source preparation'
+    );
     const session = parsePrepareSourceResponse(raw);
     if (!session) throw new Error('Invalid response from prepare-source.');
 
     draftStore.setSession(session);
-    draftStore.patch({ outputDir: _s.outputDir, sourceMode: _s.sourceMode,
-      youtubeUrl: _s.sourceMode === 'youtube' ? _s.youtubeUrl : '',
-      sourceVideoPath: _s.sourceMode === 'local' ? _s.localPath : '' });
+    draftStore.patch({
+      outputDir:       _s.outputDir,
+      sourceMode:      _s.sourceMode,
+      youtubeUrl:      _s.sourceMode === 'youtube' ? _s.youtubeUrl : '',
+      sourceVideoPath: _s.sourceMode === 'local'   ? _s.localPath  : '',
+    });
 
-    _s.mode = 'success';
+    _s.mode    = 'success';
     _s.session = session;
     rerenderForm(el);
   } catch (err) {
-    _s.mode = 'error';
-    _s.error = err.message ?? 'Preparation failed.';
+    _s.mode  = 'error';
+    _s.error = err.message ?? 'Preparation failed. Try again.';
     rerenderForm(el);
   }
 }
