@@ -5761,3 +5761,121 @@ All feedback text:
 
 - Focused: **37/37** passed
 - Full regression: **5279/5279** passed (0 regressions)
+
+---
+
+### 2026-05-14 — AI Intelligence v2 Phase 61D: Creator Render Strategy Fusion
+
+**Implemented:**
+
+- `app/ai/creator_style/creator_render_strategy_engine.py` (new) — `build_creator_render_strategy(edit_plan, context=None) -> dict`; fuses Phase 61A archetype strategy + `creator_preference_profile` (50D) + `platform_render_strategy` (55E) + `camera_quality_v2` (52B) + `render_quality_v2` (52D) + `platform_quality_feedback` (57); four-domain strategy output (subtitle, camera, hook, ranking); weighted confidence blend; advisory metadata only — no payload mutation
+- `app/ai/director/edit_plan_schema.py` (updated) — `creator_render_strategy: dict` field added after Phase 61C field; included in `to_dict()`; backward-compatible
+- `app/orchestration/render_pipeline.py` (updated) — Phase 61D block inserted after Phase 61A (line 2186); wired same pattern as Phase 61A; reads `creator_archetype_strategy` which Phase 61A just populated
+- `tests/test_ai_phase61d_creator_render_strategy.py` (new) — 30 tests covering all 7 archetypes, platform refinement (trust-safe vs. dynamic), quality risk softening, confidence blending, advisory-only verification, safety/fallback, determinism
+
+**What Phase 61D adds:**
+
+- First phase to fuse ALL creator-style signals into one coherent `creator_render_strategy` object
+- Platform only refines, never overrides — trust-safe creators (podcast, talking_head, interview, educational) are never pushed beyond their archetype style
+- Quality risk signals (high jitter, high whip_pan) automatically soften camera motion_energy by 1 level and raise stability
+- Confidence blends archetype (45%), profile (25%), platform (20%), quality (10%) — missing signals lower confidence
+- Fully advisory — zero payload mutation, zero execution promotion inside Phase 61D
+
+**Fused inputs:**
+
+| Input | Phase | Weight |
+|---|---|---|
+| `creator_archetype_strategy` | 61A | 45% |
+| `creator_preference_profile` | 50D | 25% |
+| `platform_render_strategy` | 55E | 20% |
+| `render_quality_v2` | 52D | 10% |
+| `camera_quality_v2` | 52B | Quality flags (no weight) |
+| `platform_quality_feedback` | 57 | Quality flags (no weight) |
+
+**Archetype fused strategy examples:**
+
+| Creator | subtitle.style | camera.motion_energy | hook.curiosity_style | ranking.priority |
+|---|---|---|---|---|
+| podcast | `clean_pro` | `low` | `soft_direct` | `retention_creator_fit` |
+| educational | `clean_pro` | `low` | `curiosity_driven` | `retention_readability` |
+| viral_short_form | `compact_dynamic` | `medium` | `pattern_interrupt` | `hook_strength_retention` |
+| storytelling | `clean_pro` | `low_medium` | `soft_direct` | `retention_narrative` |
+| interview | `clean_pro` | `low` | `trust_curiosity` | `trust_clarity` |
+| motivation | `bold_impact` | `medium_high` | `emotional` | `retention_emotional_moment` |
+
+**Conflict handling:**
+
+| Scenario | Resolution |
+|---|---|
+| Platform pushes high emphasis; podcast creator | Podcast is trust-safe → keeps archetype `selective` emphasis |
+| Platform pushes high emphasis; viral_short_form | Platform raises from `selective` to `strong` (allowed) |
+| Platform pushes motion `high`; motivation archetype `medium` | Raised by max +1 level → `medium_high` |
+| High jitter risk; motivation `medium_high` motion | Softened to `medium`; stability raised to `high` |
+| High whip_pan risk; motivation `high` crop | Crop capped at `medium` |
+
+**Output shape (available):**
+
+```json
+{
+  "creator_render_strategy": {
+    "available":    true,
+    "creator_type": "podcast",
+    "strategy": {
+      "subtitle": {
+        "style":               "clean_pro",
+        "density":             "balanced",
+        "keyword_emphasis":    "selective",
+        "readability_priority": "high"
+      },
+      "camera": {
+        "motion_energy":       "low",
+        "stability_priority":  "high",
+        "crop_aggressiveness": "low",
+        "subject_hold":        "high"
+      },
+      "hook": {
+        "hook_energy":        "moderate",
+        "curiosity_style":    "soft_direct",
+        "retention_priority": "medium_high"
+      },
+      "ranking": {
+        "priority": "retention_creator_fit"
+      }
+    },
+    "confidence": 0.86,
+    "reasoning": [
+      "Podcast creator style favors clean subtitles, stable framing, and trust-focused pacing"
+    ]
+  }
+}
+```
+
+**Fallback shape:**
+
+```json
+{
+  "creator_render_strategy": {
+    "available":    false,
+    "creator_type": "unknown",
+    "strategy":     {},
+    "confidence":   0.0,
+    "reasoning":    []
+  }
+}
+```
+
+**Safety contract:**
+
+- Never raises — returns fallback on any error
+- No payload mutation in Phase 61D engine
+- No execution promotion, no ffmpeg mutation, no subtitle timing/segmentation/ASS rewrite
+- No motion crop rewrite, no tracking rewrite, no executor override
+- All output values validated from allowed archetype sets
+- Confidence clamped to [0.0, 1.0]
+- Deterministic: same inputs → same output
+- Backward-compatible: new `creator_render_strategy` field in AIEditPlan with default empty dict
+
+**Test Results:**
+
+- Focused: **30/30** passed
+- Full regression: **5309/5309** passed (0 regressions)

@@ -2184,6 +2184,38 @@ def run_render_pipeline(
                     "creator_archetype_strategy_failed job_id=%s: %s", job_id, _arch_err
                 )
 
+        # ── Creator Render Strategy Fusion (Phase 61D) — advisory metadata only ──
+        # Fuses Phase 61A archetype + creator_preference_profile + platform strategy
+        # + quality metadata into a coherent creator-style render strategy.
+        # Does NOT mutate render execution. Metadata for UX and future influence.
+        if _ai_edit_plan is not None:
+            try:
+                from app.ai.creator_style.creator_render_strategy_engine import (
+                    build_creator_render_strategy as _build_creator_render_strategy,
+                )
+                _crs_result = _build_creator_render_strategy(
+                    _ai_edit_plan, context={"job_id": job_id},
+                )
+                try:
+                    _ai_edit_plan.creator_render_strategy = (
+                        _crs_result.get("creator_render_strategy") or {}
+                    )
+                except Exception:
+                    pass
+                _crs = _crs_result.get("creator_render_strategy") or {}
+                logger.info(
+                    "creator_render_strategy_built job_id=%s available=%s "
+                    "creator_type=%s confidence=%.3f",
+                    job_id,
+                    _crs.get("available"),
+                    _crs.get("creator_type", "unknown"),
+                    float(_crs.get("confidence") or 0.0),
+                )
+            except Exception as _crs_err:
+                logger.warning(
+                    "creator_render_strategy_failed job_id=%s: %s", job_id, _crs_err
+                )
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()
