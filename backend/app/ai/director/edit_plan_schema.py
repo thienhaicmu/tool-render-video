@@ -253,6 +253,8 @@ class AIEditPlan:
     ai_execution_rollback: dict = field(default_factory=dict)
     # Phase 61A — Creator archetype strategy (advisory metadata only)
     creator_archetype_strategy: dict = field(default_factory=dict)
+    # Phase 61B — Creator subtitle style promotion (advisory metadata only)
+    creator_subtitle_style_promotion: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -374,5 +376,6 @@ class AIEditPlan:
             "creator_benchmark_summary":     dict(self.creator_benchmark_summary),
             "ai_execution_mode":             dict(self.ai_execution_mode),
             "ai_execution_rollback":         dict(self.ai_execution_rollback),
-            "creator_archetype_strategy":    dict(self.creator_archetype_strategy),
+            "creator_archetype_strategy":         dict(self.creator_archetype_strategy),
+            "creator_subtitle_style_promotion":   dict(self.creator_subtitle_style_promotion),
         }

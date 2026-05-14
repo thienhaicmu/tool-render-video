@@ -164,6 +164,8 @@ def _promote(payload: Any, edit_plan: Any, job_id: str) -> dict:
     sub_pref      = _get_dict(edit_plan, "creator_subtitle_preference")
     prs           = _get_dict(edit_plan, "platform_render_strategy")
     psi           = _get_dict(edit_plan, "platform_strategy_influence")
+    # Phase 61B: archetype-derived style (lowest-priority fallback)
+    css_promo     = _get_dict(edit_plan, "creator_subtitle_style_promotion")
 
     # Primary confidence: Phase 50A inference confidence
     pref_inner  = (sub_pref.get("subtitle_preference") or {}) if sub_pref else {}
@@ -180,7 +182,7 @@ def _promote(payload: Any, edit_plan: Any, job_id: str) -> dict:
     preset_applied: Optional[str] = None
     if effective_conf >= _CONF_THRESHOLD_PRESET:
         preset_candidate, preset_reason = _resolve_preset(
-            sub_influence, pref_inner, prs, psi
+            sub_influence, pref_inner, prs, psi, css_promo
         )
         if preset_candidate and preset_candidate in ALLOWED_PROMOTION_PRESETS:
             try:
@@ -258,6 +260,7 @@ def _resolve_preset(
     pref_inner: dict,
     prs: dict,
     psi: dict,
+    css_promo: Optional[dict] = None,
 ) -> tuple[Optional[str], str]:
     """Priority-ordered preset resolution. Returns (preset_id | None, reason)."""
 
@@ -288,6 +291,13 @@ def _resolve_preset(
     pref_style = str(pref_inner.get("style") or "").strip().lower()
     if pref_style in ALLOWED_PROMOTION_PRESETS:
         return pref_style, f"Creator subtitle preference inferred {pref_style!r} style"
+
+    # 5. Phase 61B creator archetype style (lowest-priority fallback)
+    if css_promo and css_promo.get("available"):
+        arch_preset = str(css_promo.get("recommended_preset") or "").strip().lower()
+        if arch_preset in ALLOWED_PROMOTION_PRESETS:
+            creator = str(css_promo.get("creator_type") or "unknown")
+            return arch_preset, f"Creator archetype ({creator!r}) style recommended {arch_preset!r}"
 
     return None, ""
 

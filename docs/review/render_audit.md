@@ -5550,3 +5550,92 @@ All feedback text:
 
 - Focused: **76/76** passed
 - Full regression: **4640/4640** passed (0 regressions)
+
+---
+
+### 2026-05-14 — AI Intelligence v2 Phase 61B: Creator Subtitle Style Promotion
+
+**Implemented:**
+
+- `app/ai/creator_style/__init__.py` (new) — Phase 61B package
+- `app/ai/creator_style/creator_subtitle_style_engine.py` (new) — `build_creator_subtitle_style(edit_plan, context=None) -> dict`; reads Phase 61A `creator_archetype_strategy.subtitle.style_bias`; maps to allowed Phase 59A preset; mode-gated confidence threshold; advisory metadata only — no payload mutation
+- `app/ai/director/edit_plan_schema.py` (updated) — `creator_subtitle_style_promotion: dict` field added after Phase 61A field; included in `to_dict()`; backward-compatible
+- `app/ai/director/render_influence.py` (updated) — `_apply_creator_subtitle_style_context()` inserted before `_apply_subtitle_promotion()` in `apply_ai_render_influence()`; calls engine, stores result on edit_plan, all outcomes logged to report
+- `app/ai/subtitle_promotion/subtitle_promotion_engine.py` (updated) — `creator_subtitle_style_promotion` extracted in `_promote()`; passed to `_resolve_preset()` as new 5th-priority fallback parameter (optional, backward-compatible signature)
+- `tests/test_ai_phase61b_creator_subtitle_style.py` (new) — 30 tests covering all style mappings, mode thresholds, safety/fallback, determinism, Phase 59A integration (priority ordering)
+
+**What Phase 61B adds:**
+
+- Closes the loop from Phase 61A advisory metadata → concrete Phase 59A subtitle promotion signal
+- Archetype-derived preset recommendation surfaces only when no higher-priority signal (50C, 55E, 56, 50A) resolves to a valid preset
+- Mode-aware confidence gates prevent low-signal promotions (`safe≥0.88`, `balanced≥0.82`, `aggressive≥0.76`, `off=never`)
+- Zero-regression integration: all 84 existing Phase 59A + 61A tests continue to pass
+
+**Style bias → preset mapping:**
+
+| Archetype style_bias | Recommended preset | Archetypes |
+|---|---|---|
+| `clean_pro` | `clean_pro` | podcast, talking_head, educational, storytelling, interview |
+| `bold_impact` | `viral_bold` | motivation |
+| `compact_dynamic` | `viral_bold` | viral_short_form |
+| `minimal_clean` | `clean_pro` | (future use) |
+
+**Priority order in Phase 59A `_resolve_preset()`:**
+
+| Priority | Source | Phase |
+|---|---|---|
+| 1 | Creator subtitle influence (`preset_bias`) | 50C |
+| 2 | Platform render strategy (`style_bias`) | 55E |
+| 3 | Platform strategy influence (`bias.style`) | 56 |
+| 4 | Creator subtitle preference (`style`) | 50A |
+| **5** | **Creator archetype style (`recommended_preset`)** | **61B** |
+
+**Output shape (available):**
+
+```json
+{
+  "creator_subtitle_style_promotion": {
+    "available":           true,
+    "recommended_preset":  "clean_pro",
+    "archetype_style_bias": "clean_pro",
+    "keyword_emphasis":    "selective",
+    "confidence":          0.8200,
+    "mode":                "balanced",
+    "creator_type":        "podcast",
+    "reasoning":           ["Archetype style_bias 'clean_pro' maps to 'clean_pro' preset"]
+  }
+}
+```
+
+**Fallback shape:**
+
+```json
+{
+  "creator_subtitle_style_promotion": {
+    "available":           false,
+    "recommended_preset":  null,
+    "archetype_style_bias": null,
+    "keyword_emphasis":    null,
+    "confidence":          0.0,
+    "mode":                "unknown",
+    "creator_type":        "unknown",
+    "reasoning":           [],
+    "reason":              "no_archetype_strategy"
+  }
+}
+```
+
+**Safety contract:**
+
+- Never raises — returns fallback on any error
+- Advisory metadata only — no payload mutation in engine
+- Payload mutation only through existing Phase 59A gate (confidence thresholds, user lock, neutral-style check)
+- mode=off → engine returns `available=False`; Phase 59A blocked by pipeline execution mode gate
+- All recommended_preset values are members of `ALLOWED_PROMOTION_PRESETS`
+- Backward-compatible: `_resolve_preset` signature change is optional parameter; all prior callers unaffected
+- Deterministic: same inputs → same output
+
+**Test Results:**
+
+- Focused: **30/30** passed
+- Regression (61A + 59A): **54/54** passed (0 regressions)

@@ -86,6 +86,7 @@ def apply_ai_render_influence(
         _apply_camera_influence(payload, edit_plan, report)
         _apply_camera_promotion(payload, edit_plan, report)
         _apply_subtitle_influence(payload, edit_plan, report)
+        _apply_creator_subtitle_style_context(payload, edit_plan, report)
         _apply_subtitle_promotion(payload, edit_plan, report)
         _apply_quality_gate(payload, edit_plan, report)
         _apply_pacing_influence(payload, edit_plan, report)
@@ -287,6 +288,51 @@ def _apply_subtitle_influence(payload: Any, edit_plan: Any, report: dict) -> Non
         report["applied"].append("subtitle:highlight_per_word=true(keyword_highlight)")
     except Exception as exc:
         report["skipped"].append(f"subtitle:set_failed:{type(exc).__name__}")
+
+
+# ── Creator subtitle style context (Phase 61B) ───────────────────────────────
+
+def _apply_creator_subtitle_style_context(
+    payload: Any, edit_plan: Any, report: dict
+) -> None:
+    """Phase 61B — Build creator archetype subtitle style metadata.
+
+    Calls creator_subtitle_style_engine which reads Phase 61A archetype strategy
+    and produces a preset recommendation stored on edit_plan for Phase 59A to use
+    as a lowest-priority fallback signal. No payload mutation here.
+    """
+    if edit_plan is None:
+        report["skipped"].append("creator_subtitle_style:no_edit_plan_phase61b")
+        return
+
+    try:
+        from app.ai.creator_style.creator_subtitle_style_engine import (
+            build_creator_subtitle_style,
+        )
+        result = build_creator_subtitle_style(edit_plan, context={})
+        css_promo = result.get("creator_subtitle_style_promotion") or {}
+
+        try:
+            edit_plan.creator_subtitle_style_promotion = css_promo
+        except Exception:
+            pass
+
+        if css_promo.get("available"):
+            preset = css_promo.get("recommended_preset")
+            conf = css_promo.get("confidence", 0.0)
+            creator = css_promo.get("creator_type", "unknown")
+            report["skipped"].append(
+                f"creator_subtitle_style:phase61b_advisory"
+                f"(creator={creator!r},preset={preset!r},conf={conf:.3f})"
+            )
+        else:
+            reason = css_promo.get("reason", "unavailable")
+            report["skipped"].append(
+                f"creator_subtitle_style:phase61b_unavailable(reason={reason!r})"
+            )
+    except Exception as exc:
+        report["warnings"].append(f"creator_subtitle_style_error:{type(exc).__name__}")
+        logger.warning("creator_subtitle_style_context_failed: %s", exc)
 
 
 # ── Subtitle influence promotion (Phase 59A) ─────────────────────────────────
