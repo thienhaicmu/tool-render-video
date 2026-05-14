@@ -798,6 +798,73 @@ Errors from retry or status check show inline below the action buttons. No `aler
 
 ---
 
-## 14. Next Phase
+## 14. UI-R4A — Workspace Polish
+
+**Status:** Complete — 2026-05-14
+
+**Scope:** Visual/interaction polish only. No new screens, no backend changes, no workflow changes.
+
+**Files changed:**
+- `assets/css/tokens.css` — added `--transition-fast`, `--transition-base`, and 5 status soft-color aliases
+- `assets/css/base.css` — added `::selection`, `.sr-only`, focus ring glow
+- `assets/css/layout.css` — added `.gap-5`, `.mb-*` helpers, smooth scroll + overscroll on screen body, `.screen__body--padded`, `.screen__subtitle` → faint/slimmer
+- `assets/css/components.css` — targeted improvements across 14 sections (see below)
+- `assets/js/components/nav-rail.js` — accessibility: `aria-current="page"`, `aria-label`, `aria-hidden` on icons, `tabindex="-1"` on disabled items
+
+**Polish improvements by category:**
+
+**1. Spacing rhythm**
+- `.card` padding: `--sp-4` (16px) → `--sp-5` (20px) — more breathing room
+- New `.card--interactive` variant with hover state and box-shadow
+- New `.card--raised` gets `box-shadow: 0 2px 8px rgba(0,0,0,0.22)` for elevation
+
+**2. NavigationRail**
+- Item size: 48×48 → 52×52px (larger hit target)
+- Active: `box-shadow: inset 3px 0 0 var(--color-accent)` left-rail accent indicator (Linear-style)
+- Hover: subtle left accent hint `inset 2px 0 0 rgba(118,224,192,0.3)`
+- Disabled: opacity 0.35 → 0.28 (more ghost-like)
+- Transitions: now use `--transition-fast` token
+- `aria-current="page"` on active item, `aria-disabled` on disabled, `aria-label` on nav
+
+**3. Motion & Interactions**
+- Running status chip dot: pulse animation (`dot-pulse`, 1.4s ease-in-out)
+- Skeleton: opacity pulse → gradient shimmer sweep (`skeleton-shimmer`)
+- Progress bar (running): animated shimmer wash across fill
+- All buttons: `transition` now includes `transform`; `active:scale(0.97)` press micro-interaction
+- New `.btn-danger` variant
+
+**4. Surface & Elevation**
+- `.card--raised` gains elevation shadow
+- `.output-clip-card--selected`: accent ring + left accent bar `inset 3px 0 0`
+- `.clip-rank-badge--best`: teal ambient glow `box-shadow: 0 0 10px rgba(118,224,192,0.22)`
+- `.hero-video-container`: deep shadow `0 4px 24px rgba(0,0,0,0.42)` for media lift
+- Library card hover: adds `box-shadow: 0 2px 10px rgba(0,0,0,0.2)`
+- Output clip card hover: adds `box-shadow`
+
+**5. Typography**
+- `.screen__subtitle`: color muted → faint, `line-height: 1.4`
+- `.panel-section__title`: weight 600 → 700, tracking 0.06em → 0.08em
+- `.monitor-stage-text`: 20px → 22px, tighter letter-spacing
+
+**6. Form / Input**
+- Focus glow: `box-shadow: 0 0 0 3px rgba(118,224,192,0.12)` on `.form-input:focus`
+- Same glow applied to `.dl-url-textarea`, `.dl-path-input`, `.lib-search`
+
+**7. Scroll hardening**
+- `screen__body`: `scroll-behavior: smooth; overscroll-behavior-y: contain`
+- Part list selected state: left accent bar
+
+**8. System Diagnostics fix**
+- `.sys-badge`: `border-radius: var(--radius-sm)` (undefined token) → `4px` (fixed rendering bug)
+- Badge: weight 500 → 600, added `letter-spacing: 0.01em`
+
+**Known limitations / deferred:**
+- Right panel still empty for most screens (deferred to UI-R4B)
+- No route-transition animation (could be added with view-transitions API in a future phase)
+- Studio screen could benefit from config section grouping polish (deferred)
+
+---
+
+## 15. Next Phase
 
 _(pending)_

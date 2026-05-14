@@ -54,4 +54,15 @@
   --nav-rail-width:    72px;
   --right-panel-width: 300px;
   --bottom-strip-height: 52px;
+
+  /* ── Transitions ─────────────────────────────────────────────────── */
+  --transition-fast: 120ms ease;
+  --transition-base: 180ms ease;
+
+  /* ── Status soft backgrounds ─────────────────────────────────────── */
+  --color-running-soft:  rgba(121,184,255,0.10);
+  --color-success-soft:  rgba(116,212,143,0.10);
+  --color-failed-soft:   rgba(255,124,124,0.10);
+  --color-warning-soft:  rgba(242,198,110,0.10);
+  --color-partial-soft:  rgba(241,154,91,0.10);
 }

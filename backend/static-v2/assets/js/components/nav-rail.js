@@ -87,7 +87,9 @@ function renderItem(item, disabled = false) {
   el.className = cls;
   el.dataset.navId = item.id;
   el.setAttribute('title', item.label);
-  el.innerHTML = `<span class="nav-rail-icon">${item.icon}</span><span>${item.label}</span>`;
+  if (isActive)  el.setAttribute('aria-current', 'page');
+  if (disabled) { el.setAttribute('aria-disabled', 'true'); el.setAttribute('tabindex', '-1'); }
+  el.innerHTML = `<span class="nav-rail-icon" aria-hidden="true">${item.icon}</span><span>${item.label}</span>`;
 
   if (!disabled) {
     el.addEventListener('click', () => router.go(item.route));
@@ -114,6 +116,8 @@ function render() {
 
 function mount(container) {
   _container = container;
+  container.setAttribute('role', 'navigation');
+  container.setAttribute('aria-label', 'Main navigation');
   render();
 }
 
@@ -121,7 +125,10 @@ function setActive(id) {
   _activeId = id;
   if (!_container) return;
   _container.querySelectorAll('.nav-rail-item').forEach(el => {
-    el.classList.toggle('nav-rail-item--active', el.dataset.navId === id);
+    const isActive = el.dataset.navId === id;
+    el.classList.toggle('nav-rail-item--active', isActive);
+    if (isActive) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
   });
 }
 
