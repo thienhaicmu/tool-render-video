@@ -1,6 +1,6 @@
 /* NavRail — left 72px column.
-   6 enabled: source, studio, monitor, results, library, downloads
-   2 disabled: system, publish
+   7 enabled: source, studio, monitor, results, library, downloads, system
+   1 disabled: publish
 */
 
 import { router } from '../router.js';
@@ -59,10 +59,16 @@ const NAV_ITEMS = [
     enabled: true,
     icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3v9M6 8l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14v1a2 2 0 002 2h8a2 2 0 002-2v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   },
+  {
+    id: 'system',
+    label: 'System',
+    route: '/system',
+    enabled: true,
+    icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 3v1.5M10 15.5V17M3 10h1.5M15.5 10H17M4.93 4.93l1.06 1.06M13.01 13.01l1.06 1.06M15.07 4.93l-1.06 1.06M6.99 13.01l-1.06 1.06" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+  },
 ];
 
 const DISABLED_ITEMS = [
-  { id: 'system',  label: 'System',  icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 3v1.5M10 15.5V17M3 10h1.5M15.5 10H17M4.93 4.93l1.06 1.06M13.01 13.01l1.06 1.06M15.07 4.93l-1.06 1.06M6.99 13.01l-1.06 1.06" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>` },
   { id: 'publish', label: 'Publish', icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 13V4M6 7l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14v1a2 2 0 002 2h8a2 2 0 002-2v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>` },
 ];
 

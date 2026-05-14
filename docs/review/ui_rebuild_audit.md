@@ -761,6 +761,43 @@ Errors from retry or status check show inline below the action buttons. No `aler
 
 ---
 
-## 13. Next Phase
+## 13. UI-R3C — System / Diagnostics Screen
 
-**UI-R3C — System / Diagnostics Screen**: Display backend health, execution mode, tool availability (ffmpeg, yt-dlp, whisper, GPU), and queue status.
+**Status:** Complete — 2026-05-14
+
+**Route:** `#/system` (parameterless)
+
+**Files changed:**
+- `assets/js/api/system.js` — added `getWarmupStatus()` → `GET /api/warmup/status`, `getAIDiagnostics()` → `GET /api/render/ai-diagnostics`
+- `assets/js/screens/system.js` — created (System screen, ~230 lines)
+- `assets/js/router.js` — added `/system` route, imported `systemScreen`
+- `assets/js/components/nav-rail.js` — System moved from disabled to enabled (7th item); only Publish remains disabled
+- `assets/css/components.css` — appended System diagnostic styles
+
+**Sections:**
+
+1. **Runtime Readiness grid** — one card per warmup item (ffmpeg, gpu, yt_dlp, opencv_cascades, whisper_tiny/base/small, ollama_service, ollama_model) plus a Backend card from `GET /health`. Status badges: Ready / Running / Pending / Skipped / Error. Summary shows `X / Y ready` count.
+
+2. **AI Intelligence panel** — Core capabilities (startup_safe, embedding_available, vector_store FAISS, fallback_mode, SQLite memory) and optional library rows (sentence_transformers, faiss, librosa, mediapipe, faster_whisper, whisperx, deepfilternet). All from `GET /api/render/ai-diagnostics`.
+
+3. **Environment panel** — Backend URL (origin), execution mode, app version (when available), GPU available, FFmpeg available from `systemStore.getState()` + health data.
+
+4. **Troubleshooting panel** — Hidden when empty. Surfaces real detected errors only: warmup errors[], warmup items with status=error, AI diagnostics warnings[], memory warnings[]. No static tips.
+
+**Behaviour:**
+- `_refresh()` uses `Promise.allSettled([getWarmupStatus(), getAIDiagnostics(), getHealth()])` — partial failure allowed; any fulfilled response is shown.
+- Error shown only when all three endpoints fail.
+- "Refresh" button triggers `_refresh()` manually; disabled during in-flight request.
+- Timestamp shown after first successful fetch.
+- Module-level `_s` state object reset on every `mount()`.
+
+**Known limitations / deferred:**
+- No auto-refresh / polling interval — manual Refresh only.
+- `GET /api/system/info` and `GET /api/system/execution-mode` not found in backend routes; execution mode sourced from `systemStore` which calls `GET /health` / `GET /api/system/execution-mode` via `Promise.allSettled` (graceful on 404).
+- Right panel (`.shell__panel`) not wired to System screen.
+
+---
+
+## 14. Next Phase
+
+_(pending)_

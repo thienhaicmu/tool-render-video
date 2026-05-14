@@ -998,3 +998,83 @@
 .dl-item-part  { min-width: 52px; flex-shrink: 0; }
 .dl-item-source { min-width: 68px; flex-shrink: 0; color: var(--color-text-muted); }
 .dl-item-url   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── System / Diagnostics screen (UI-R3C) ────────────────────────────── */
+
+.sys-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-2);
+}
+
+.sys-status-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.sys-status-card__label {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sys-status-card__detail {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sys-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  width: fit-content;
+}
+.sys-badge--ok      { background: var(--color-success-soft, rgba(52,199,89,.12)); color: var(--color-success); }
+.sys-badge--running { background: var(--color-running-soft, rgba(0,122,255,.12));  color: var(--color-running, #007AFF); }
+.sys-badge--pending { background: var(--color-surface-raised); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+.sys-badge--skipped { background: var(--color-surface-raised); color: var(--color-text-faint, var(--color-text-muted)); border: 1px solid var(--color-border); }
+.sys-badge--error   { background: var(--color-failed-soft, rgba(255,59,48,.12)); color: var(--color-failed); }
+
+.sys-dep-row {
+  align-items: center;
+  padding: var(--sp-1) 0;
+  border-top: 1px solid var(--color-border);
+  min-height: 28px;
+}
+.sys-dep-row:first-child { border-top: none; }
+
+.sys-dep-label {
+  color: var(--color-text-muted);
+  min-width: 160px;
+}
+
+.sys-bool-yes { color: var(--color-success); font-weight: 600; }
+.sys-bool-no  { color: var(--color-text-faint, var(--color-text-muted)); }
+
+.sys-tip {
+  align-items: flex-start;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--color-failed-soft, rgba(255,59,48,.08));
+  border: 1px solid var(--color-failed-border, rgba(255,59,48,.2));
+}
+.sys-tip-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  color: var(--color-failed);
+  margin-top: 1px;
+}
+
+.sys-readiness-summary { margin-left: auto; }
+
+.sys-timestamp { opacity: 0.55; font-size: 11px; }

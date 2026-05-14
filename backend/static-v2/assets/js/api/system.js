@@ -13,6 +13,14 @@ export const systemApi = {
     return fetchJson('/api/system/execution-mode');
   },
 
+  async getWarmupStatus() {
+    return fetchJson('/api/warmup/status');
+  },
+
+  async getAIDiagnostics() {
+    return fetchJson('/api/render/ai-diagnostics');
+  },
+
   async getSessions() {
     return fetchJson('/api/sessions');
   },

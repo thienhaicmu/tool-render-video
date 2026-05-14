@@ -4,6 +4,7 @@ import { monitorScreen }   from './screens/monitor.js';
 import { resultsScreen }   from './screens/results.js';
 import { libraryScreen }   from './screens/library.js';
 import { downloadsScreen } from './screens/downloads.js';
+import { systemScreen }    from './screens/system.js';
 import { shell }           from './components/shell.js';
 
 const ROUTES = [
@@ -13,6 +14,7 @@ const ROUTES = [
   { pattern: /^\/results\/([^/]+)$/, screen: resultsScreen,   id: 'results'   },
   { pattern: /^\/library$/,          screen: libraryScreen,   id: 'library'   },
   { pattern: /^\/downloads$/,        screen: downloadsScreen, id: 'downloads' },
+  { pattern: /^\/system$/,           screen: systemScreen,    id: 'system'    },
 ];
 
 const DEFAULT_PATH = '/source';
