@@ -1867,3 +1867,135 @@ Results felt like a job artifact list — output files with metadata. Users had 
 
 ### Status
 ✓ Complete — committed
+
+
+---
+
+## UI-R5B — Information Architecture Rebuild
+
+**Phase:** UI-R5B
+**Date:** 2026-05-14
+**Branch:** feature/ai-output-upgrade
+**Scope:** Creator-first IA migration — new nav, wrapper routes, backward-compatible legacy routes. No screen-internal rewrites. No backend changes.
+
+---
+
+### Objective
+
+Shift the product mental model from pipeline-first (Source + Studio + Monitor + Results + Library) to creator-first (Create + Projects + Settings) without destabilising any working render flow, store logic, or API contract.
+
+---
+
+### New Navigation Model
+
+| Nav item | Route | Replaces | Position |
+|---|---|---|---|
+| Create | #/create | Source + Studio | Primary (top) |
+| Projects | #/projects | Results + Library | Primary (below Create) |
+| Settings | #/settings | System | Bottom (flex-pushed) |
+| (hidden) | #/monitor/:id | Monitor | Not in nav -- render bar only |
+| (hidden) | #/downloads | Downloads | Not in nav -- direct URL |
+
+The nav rail renders: Create, Projects, [flex spacer], Settings. Monitor and Downloads are fully functional routes but are no longer primary nav destinations.
+
+---
+
+### New Routes (Canonical)
+
+| Route | Screen | Behavior |
+|---|---|---|
+| #/create | createScreen | Smart wrapper: shows sourceScreen if no session, studioScreen if session exists |
+| #/projects | projectsScreen | Wrapper: shows libraryScreen (history) |
+| #/projects/:jobId | projectsScreen | Wrapper: shows resultsScreen for that job |
+| #/settings | settingsScreen | Alias for systemScreen (rename only, no logic change) |
+
+---
+
+### Legacy Route Compatibility
+
+All previous routes remain fully functional. No bookmarks are broken.
+
+| Old route | Maps to screen | Nav highlights |
+|---|---|---|
+| #/source | createScreen | Create |
+| #/studio | createScreen | Create |
+| #/results/:jobId | projectsScreen | Projects |
+| #/library | projectsScreen | Projects |
+| #/system | settingsScreen | Settings |
+| #/monitor/:jobId | monitorScreen | (none) |
+| #/downloads | downloadsScreen | (none) |
+
+The navId field on each route record drives shell.setActiveNav(). Legacy routes pass navId: 'create', 'projects', or 'settings' so the new 3-item nav always highlights the correct item regardless of which URL the creator arrived from.
+
+---
+
+### Create Wrapper Behavior
+
+File: assets/js/screens/create.js
+
+On mount, checks draftStore.getState().draft.editSessionId:
+- No session: mounts sourceScreen (Import phase -- YouTube URL / local file / output folder)
+- Session exists: mounts studioScreen (Brief phase -- preview + config + render CTA)
+
+After prepare-source succeeds, source.js now calls router.go('/create') instead of router.go('/studio'). The Create wrapper sees the new session and shows the Brief phase automatically. Internal screen logic is completely unchanged.
+
+---
+
+### Projects Wrapper Behavior
+
+File: assets/js/screens/projects.js
+
+On mount, checks params[0] (jobId from URL):
+- No jobId (#/projects): mounts libraryScreen (full job history with filter/search)
+- jobId present (#/projects/:jobId): mounts resultsScreen for that specific job
+
+libraryScreen internal navigation updated: View Results now navigates to /projects/:jobId instead of /results/:jobId. Card click navigation updated identically.
+
+---
+
+### Monitor Migration
+
+Monitor is no longer a primary nav item. Access paths:
+1. Render bar (always visible during active render) -- Open Monitor button
+2. Projects/Library -- Monitor button on active-status cards
+3. Direct URL -- #/monitor/:jobId still works
+
+Monitor empty state CTAs: Go to Studio -> Start Creating (/create), Open Library -> Open Projects (/projects).
+Monitor terminal CTAs: View Results -> /projects/:jobId, Start over -> /create.
+Monitor header back button: Studio -> Create.
+
+---
+
+### Files Changed
+
+New files:
+- assets/js/screens/create.js -- Create wrapper (22 lines)
+- assets/js/screens/projects.js -- Projects wrapper (20 lines)
+
+Modified files:
+- assets/js/router.js -- New ROUTES table with navId field, canonical + legacy routes, DEFAULT_PATH /create
+- assets/js/components/nav-rail.js -- Rebuilt: Create + Projects primary, Settings bottom, NAV_ID_MAP for legacy IDs
+- assets/js/screens/source.js -- router.go('/studio') -> router.go('/create') post-prepare
+- assets/js/screens/monitor.js -- 5 nav calls updated + empty state copy
+- assets/js/screens/library.js -- 2 nav calls updated + empty state copy
+- assets/js/screens/results.js -- 4 nav calls updated + button labels
+- assets/js/screens/downloads.js -- 1 nav call updated
+- assets/css/components.css -- .nav-rail-spacer { flex: 1 } added
+
+---
+
+### Known Limitations (Deferred to UI-R5C)
+
+- Create wrapper is not a unified workspace yet. After prepare-source, the creator sees the Studio screen header while the nav says Create. Full Create workspace rebuild in UI-R5C.
+- Studio back buttons go to /source (not /create). The legacy /source route maps to createScreen and shows Brief phase since session exists -- slightly circular. Resolved in UI-R5C when Create handles its own internal phase state.
+- Projects has no Active tab yet. Active renders surface via render bar. Tab structure in UI-R5D.
+- Downloads has no nav entry. Accessible via direct URL #/downloads only.
+
+---
+
+### Next Phase
+
+UI-R5C -- Create Workspace Rebuild: merge Source + Studio into a true single-surface workspace with left source zone, center video preview, right creative brief panel.
+
+### Status
+Complete -- committed

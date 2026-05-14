@@ -268,7 +268,7 @@ function _renderList() {
   if (visible.length === 0) {
     _listEl.innerHTML = '';
     const msg = _history.length === 0
-      ? 'No renders found. Start a render from Source to see history here.'
+      ? 'No renders found. Start a render from Create to see your projects here.'
       : 'No jobs match the current filter or search.';
     _listEl.appendChild(emptyState({ icon: ICONS.empty, title: 'Nothing here', body: msg }));
     return;
@@ -295,7 +295,7 @@ function _wireCards() {
       const id   = card.dataset.jobId;
       const item = _history.find(h => h.jobId === id);
       if (!item) return;
-      if (VIEW_STATUSES.has(item.status))        router.go(`/results/${id}`);
+      if (VIEW_STATUSES.has(item.status))        router.go(`/projects/${id}`);
       else if (ACTIVE_STATUSES.has(item.status)) router.go(`/monitor/${id}`);
     });
   });
@@ -305,7 +305,7 @@ function _wireCards() {
 
 async function _handleAction(action, jobId, btn) {
   if (!jobId) return;
-  if (action === 'results') { router.go(`/results/${jobId}`); return; }
+  if (action === 'results') { router.go(`/projects/${jobId}`); return; }
   if (action === 'monitor') { router.go(`/monitor/${jobId}`); return; }
 
   const isRetry = action === 'retry';

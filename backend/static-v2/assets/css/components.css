@@ -120,6 +120,12 @@
   flex-shrink: 0;
 }
 
+/* UI-R5B: spacer that pushes Settings to the bottom of the nav rail */
+.nav-rail-spacer {
+  flex: 1;
+  min-height: var(--sp-4);
+}
+
 /* ── EmptyState ──────────────────────────────────────────────────────── */
 .empty-state {
   display: flex;

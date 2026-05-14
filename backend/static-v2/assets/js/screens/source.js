@@ -307,7 +307,7 @@ function wireAll(el) {
   el.querySelector('#src-prepare-btn')?.addEventListener('click', () => handlePrepare(el));
 
   // Go to Studio (after success)
-  el.querySelector('#src-go-studio-btn')?.addEventListener('click', () => router.go('/studio'));
+  el.querySelector('#src-go-studio-btn')?.addEventListener('click', () => router.go('/create'));
 }
 
 function rerenderForm(el) {

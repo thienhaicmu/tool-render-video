@@ -171,10 +171,10 @@ function _wireTerminalButtons(el, term, state) {
   const jobId = state.job?.jobId ?? monitorStore.getState().jobId;
 
   term.querySelector('#monitor-to-results')?.addEventListener('click', () =>
-    router.go(`/results/${jobId}`)
+    router.go(`/projects/${jobId}`)
   );
   term.querySelector('#monitor-to-source')?.addEventListener('click', () =>
-    router.go('/source')
+    router.go('/create')
   );
   term.querySelector('#monitor-retry-btn')?.addEventListener('click', async (e) => {
     e.currentTarget.disabled = true;
@@ -200,7 +200,7 @@ export async function mount(el, params) {
         </div>
         <span class="flex-1"></span>
         <button class="btn btn-secondary btn-sm" id="mon-cancel-btn" style="display:none">Cancel render</button>
-        <button class="btn btn-ghost" id="mon-back-btn">← Studio</button>
+        <button class="btn btn-ghost" id="mon-back-btn">← Create</button>
       </div>
     </div>
     <div class="screen__body col gap-5">
@@ -218,7 +218,7 @@ export async function mount(el, params) {
     </div>
   `;
 
-  el.querySelector('#mon-back-btn')?.addEventListener('click', () => router.go('/studio'));
+  el.querySelector('#mon-back-btn')?.addEventListener('click', () => router.go('/create'));
 
   if (!jobId) {
     // Route recovery — redirect to active render if one is known
@@ -237,17 +237,17 @@ export async function mount(el, params) {
           <div>
             <div class="text-body" style="font-weight:700;margin-bottom:var(--sp-1)">No render in progress</div>
             <div class="text-caption text-faint" style="max-width:300px;margin:0 auto">
-              Start a render from Studio, or reopen a past job from Library.
+              Start a render from Create, or review a past job in Projects.
             </div>
           </div>
           <div class="row gap-3" style="justify-content:center">
-            <button class="btn btn-primary" id="mon-empty-studio">← Go to Studio</button>
-            <button class="btn btn-secondary" id="mon-empty-library">Open Library</button>
+            <button class="btn btn-primary" id="mon-empty-studio">← Start Creating</button>
+            <button class="btn btn-secondary" id="mon-empty-library">Open Projects</button>
           </div>
         </div>
       `;
-      prog.querySelector('#mon-empty-studio')?.addEventListener('click', () => router.go('/studio'));
-      prog.querySelector('#mon-empty-library')?.addEventListener('click', () => router.go('/library'));
+      prog.querySelector('#mon-empty-studio')?.addEventListener('click', () => router.go('/create'));
+      prog.querySelector('#mon-empty-library')?.addEventListener('click', () => router.go('/projects'));
     }
     return;
   }

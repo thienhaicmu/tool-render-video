@@ -152,7 +152,7 @@ function _renderJobPanel() {
   `;
 
   panel.querySelector('#dl-view-library')?.addEventListener('click', () => {
-    router.go('/library');
+    router.go('/projects');
   });
 
   panel.querySelector('#dl-check-status')?.addEventListener('click', _checkJobStatus);

@@ -1,23 +1,52 @@
-import { sourceScreen }    from './screens/source.js';
-import { studioScreen }    from './screens/studio.js';
-import { monitorScreen }   from './screens/monitor.js';
-import { resultsScreen }   from './screens/results.js';
-import { libraryScreen }   from './screens/library.js';
+import { createScreen }   from './screens/create.js';
+import { projectsScreen } from './screens/projects.js';
+import { monitorScreen }  from './screens/monitor.js';
+import { settingsScreen } from './screens/system.js';
 import { downloadsScreen } from './screens/downloads.js';
-import { systemScreen }    from './screens/system.js';
-import { shell }           from './components/shell.js';
+import { shell }          from './components/shell.js';
+
+/* ── Route table ────────────────────────────────────────────────────────
+   Each route has:
+     pattern — RegExp matched against the hash path
+     screen  — screen module with a mount(el, params) function
+     id      — internal route identifier (used for dedup)
+     navId   — which nav-rail item to highlight (null = no highlight)
+
+   Canonical routes (new IA):
+     /create          — Import phase (source) or Brief phase (studio)
+     /projects        — Project history (library)
+     /projects/:jobId — Clip review (results) for a specific job
+     /settings        — System settings and diagnostics
+
+   Legacy routes (preserved for backward compatibility, bookmarks, state recovery):
+     /source, /studio → createScreen  (same experience, backward compat)
+     /results/:jobId  → projectsScreen (clip review under new IA)
+     /library         → projectsScreen (history under new IA)
+     /system          → settingsScreen
+     /monitor/:jobId  → monitorScreen  (not in nav; accessible via render bar)
+     /downloads       → downloadsScreen (not in nav; accessible via direct URL)
+────────────────────────────────────────────────────────────────────── */
 
 const ROUTES = [
-  { pattern: /^\/source$/,           screen: sourceScreen,    id: 'source'    },
-  { pattern: /^\/studio$/,           screen: studioScreen,    id: 'studio'    },
-  { pattern: /^\/monitor\/([^/]+)$/, screen: monitorScreen,   id: 'monitor'   },
-  { pattern: /^\/results\/([^/]+)$/, screen: resultsScreen,   id: 'results'   },
-  { pattern: /^\/library$/,          screen: libraryScreen,   id: 'library'   },
-  { pattern: /^\/downloads$/,        screen: downloadsScreen, id: 'downloads' },
-  { pattern: /^\/system$/,           screen: systemScreen,    id: 'system'    },
+  // ── Canonical routes (new IA) ─────────────────────────────────────
+  { pattern: /^\/create$/,            screen: createScreen,   id: 'create',   navId: 'create'   },
+  { pattern: /^\/projects$/,          screen: projectsScreen, id: 'projects', navId: 'projects' },
+  { pattern: /^\/projects\/([^/]+)$/, screen: projectsScreen, id: 'projects', navId: 'projects' },
+  { pattern: /^\/settings$/,          screen: settingsScreen, id: 'settings', navId: 'settings' },
+
+  // ── Legacy routes (preserved, backward compatible) ─────────────────
+  { pattern: /^\/source$/,            screen: createScreen,   id: 'source',   navId: 'create'   },
+  { pattern: /^\/studio$/,            screen: createScreen,   id: 'studio',   navId: 'create'   },
+  { pattern: /^\/results\/([^/]+)$/,  screen: projectsScreen, id: 'results',  navId: 'projects' },
+  { pattern: /^\/library$/,           screen: projectsScreen, id: 'library',  navId: 'projects' },
+  { pattern: /^\/system$/,            screen: settingsScreen, id: 'system',   navId: 'settings' },
+
+  // ── Utility routes (not in nav) ────────────────────────────────────
+  { pattern: /^\/monitor\/([^/]+)$/,  screen: monitorScreen,  id: 'monitor',  navId: null       },
+  { pattern: /^\/downloads$/,         screen: downloadsScreen, id: 'downloads', navId: null     },
 ];
 
-const DEFAULT_PATH = '/source';
+const DEFAULT_PATH = '/create';
 
 function parsePath(hash) {
   return hash.replace(/^#/, '') || DEFAULT_PATH;
@@ -42,7 +71,7 @@ async function navigate(path) {
 
   const { route, params } = result;
 
-  shell.setActiveNav(route.id);
+  shell.setActiveNav(route.navId);
 
   if (_currentId === route.id && params.length === 0) return;
   _currentId = route.id;
@@ -82,12 +111,12 @@ function _renderBoundary(el, onRetry) {
           <span class="eb-card__icon" aria-hidden="true">⚠</span>
           <div class="col gap-2">
             <div class="text-body" style="font-weight:600">The screen couldn't load</div>
-            <div class="text-caption text-faint">This is usually temporary. Try reloading the screen, or go back to Source to start over.</div>
+            <div class="text-caption text-faint">This is usually temporary. Try reloading the screen, or go back to Create to start over.</div>
           </div>
         </div>
         <div class="row gap-3 mt-4">
           <button class="btn btn-primary" id="eb-retry">Reload screen</button>
-          <a class="btn btn-ghost" href="#/source">← Back to Source</a>
+          <a class="btn btn-ghost" href="#/create">← Start over</a>
         </div>
       </div>
     </div>

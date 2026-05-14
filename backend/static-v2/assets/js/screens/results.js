@@ -310,9 +310,9 @@ export async function mount(el, params) {
   `;
 
   el.querySelector('#res-monitor-btn')?.addEventListener('click', () =>
-    router.go(jobId ? `/monitor/${jobId}` : '/source')
+    router.go(jobId ? `/monitor/${jobId}` : '/create')
   );
-  el.querySelector('#res-new-btn')?.addEventListener('click', () => router.go('/source'));
+  el.querySelector('#res-new-btn')?.addEventListener('click', () => router.go('/create'));
 
   if (!jobId) {
     const body = el.querySelector('#results-body');
@@ -321,9 +321,9 @@ export async function mount(el, params) {
       body.appendChild(emptyState({
         icon: ICONS.video,
         title: 'No results to show',
-        body: 'Start a render from Studio to see your clips here.',
-        ctaLabel: '← Back to Studio',
-        onCta: () => router.go('/studio'),
+        body: 'Start a render from Create to see your clips here.',
+        ctaLabel: '← Back to Create',
+        onCta: () => router.go('/create'),
       }));
     }
     return;
@@ -355,11 +355,11 @@ export async function mount(el, params) {
         <div class="text-caption text-faint">${_esc(state.error)}</div>
         <div class="row gap-2">
           <button class="btn btn-secondary btn-sm" id="res-err-retry">Try again</button>
-          <button class="btn btn-ghost btn-sm" id="res-err-library">Open Library</button>
+          <button class="btn btn-ghost btn-sm" id="res-err-library">Open Projects</button>
         </div>
       `;
       errNode.querySelector('#res-err-retry')?.addEventListener('click', () => resultsStore.load(jobId));
-      errNode.querySelector('#res-err-library')?.addEventListener('click', () => router.go('/library'));
+      errNode.querySelector('#res-err-library')?.addEventListener('click', () => router.go('/projects'));
       body.appendChild(errNode);
       return;
     }
@@ -374,11 +374,11 @@ export async function mount(el, params) {
         <div class="text-caption text-faint">${_esc(state.result?.parseError ?? 'The render may still be running.')}</div>
         <div class="row gap-2">
           <button class="btn btn-secondary btn-sm" id="res-back-to-monitor">← Open Monitor</button>
-          <button class="btn btn-ghost btn-sm" id="res-back-to-library">Library</button>
+          <button class="btn btn-ghost btn-sm" id="res-back-to-library">Projects</button>
         </div>
       `;
       notAvailNode.querySelector('#res-back-to-monitor')?.addEventListener('click', () => router.go(`/monitor/${jobId}`));
-      notAvailNode.querySelector('#res-back-to-library')?.addEventListener('click', () => router.go('/library'));
+      notAvailNode.querySelector('#res-back-to-library')?.addEventListener('click', () => router.go('/projects'));
       body.appendChild(notAvailNode);
       return;
     }
