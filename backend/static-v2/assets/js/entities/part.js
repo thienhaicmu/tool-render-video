@@ -1,38 +1,50 @@
-/* Single entry-point for raw part JSON → normalized Part object. */
+/* normalizePart — raw job_parts row → normalized JobPart.
+   Backend fields: job_id, part_no, part_name, status, progress_percent,
+                   start_sec, end_sec, duration, viral_score, motion_score,
+                   hook_score, output_file, message
+   Part statuses: waiting, cutting, transcribing, rendering, downloading,
+                  done, failed, unsupported
+*/
 
-const VALID_STATUSES = new Set([
-  'queued','running','completed','partial','failed','interrupted','unsupported','unavailable',
-]);
+const ACTIVE_STATUSES = new Set(['waiting','cutting','transcribing','rendering','downloading']);
 
-const VALID_AI_STATES = new Set([
-  'disabled','advisory','applied','skipped','blocked','unavailable',
-]);
+/* Map raw part status to StatusChip state */
+export function mapPartChipStatus(raw) {
+  if (!raw) return 'unavailable';
+  if (raw === 'done')         return 'completed';
+  if (raw === 'failed')       return 'failed';
+  if (raw === 'unsupported')  return 'unsupported';
+  if (ACTIVE_STATUSES.has(raw)) return 'running';
+  if (raw === 'queued')       return 'queued';
+  return 'unavailable';
+}
 
 export function normalizePart(raw) {
   if (!raw || typeof raw !== 'object') return null;
-
-  const status  = VALID_STATUSES.has(raw.status)  ? raw.status  : 'unavailable';
-  const aiState = VALID_AI_STATES.has(raw.ai_state ?? raw.aiState)
-    ? (raw.ai_state ?? raw.aiState)
-    : 'unavailable';
-
+  const jobId  = String(raw.job_id ?? '');
+  const partNo = Number(raw.part_no ?? raw.index ?? 0);
   return {
-    id:          String(raw.id ?? raw.part_id ?? ''),
-    jobId:       String(raw.job_id ?? raw.jobId ?? ''),
-    index:       Number(raw.index ?? raw.part_index ?? 0),
-    status,
-    aiState,
-    title:       raw.title ?? raw.segment_title ?? `Part ${raw.index ?? ''}`,
-    startTime:   raw.start_time  ?? raw.startTime  ?? null,
-    endTime:     raw.end_time    ?? raw.endTime    ?? null,
-    outputFile:  raw.output_file ?? raw.outputFile ?? null,
-    errorMessage: raw.error_message ?? raw.errorMessage ?? null,
-    aiMetadata:  raw.ai_metadata ?? raw.aiMetadata ?? null,
+    jobId,
+    partNo,
+    partName:        raw.part_name ?? raw.title ?? `Part ${partNo}`,
+    status:          raw.status ?? null,
+    chipStatus:      mapPartChipStatus(raw.status),
+    progressPercent: Number(raw.progress_percent ?? 0),
+    startSec:        raw.start_sec  ?? null,
+    endSec:          raw.end_sec    ?? null,
+    duration:        raw.duration   ?? null,
+    viralScore:      Number(raw.viral_score  ?? 0),
+    motionScore:     Number(raw.motion_score ?? 0),
+    hookScore:       Number(raw.hook_score   ?? 0),
+    message:         raw.message    ?? null,
+    streamUrl:       jobId && partNo > 0
+      ? `/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream`
+      : null,
     _raw: raw,
   };
 }
 
 export function normalizePartList(rawList) {
-  if (!Array.isArray(rawList)) return [];
-  return rawList.map(normalizePart).filter(Boolean);
+  const list = Array.isArray(rawList) ? rawList : (rawList?.items ?? []);
+  return list.map(normalizePart).filter(Boolean);
 }

@@ -198,3 +198,122 @@ Polling fallback:    GET /api/jobs/{jobId}
 - No drag-and-drop from browser `<input type=file>` — Source screen relies on Electron `pickVideoFile()` for path resolution; browser drag-and-drop uses `file.name` as fallback (path only available in Electron).
 - Studio screen does not include subtitle/camera/segment advanced fields — basic platform/creator/mode/AI toggle only.
 - No offline/error boundary at the shell level — individual screens handle their own error states.
+
+---
+
+# UI-R2B — Core Creator Workflow
+
+**Phase:** UI-R2B  
+**Date:** 2026-05-14  
+**Branch:** feature/ai-output-upgrade  
+**Scope:** End-to-end creator workflow: Source → Studio → Monitor → Results
+
+---
+
+## 1. Summary
+
+All four product screens are now fully functional. A user can import a YouTube URL or local file path, configure clip settings, start a render, watch live progress, and review ranked output clips with score breakdowns. No backend or legacy frontend files were modified.
+
+---
+
+## 2. Files Changed / Added
+
+### New Entities (3 files)
+| File | Purpose |
+|---|---|
+| `assets/js/entities/ai-insight.js` | `parseAIInsightSummary(resultRaw)` — extracts AI director state, applied/skipped changes, confidence, summary lines |
+| `assets/js/entities/render-request.js` | `validateRenderDraft(draft)` → `{valid, errors[]}` and `buildRenderRequest(draft)` — only sends intentionally-set fields |
+| *(source-session.js extended)* | Added `parsePrepareSourceResponse()` for POST /api/render/prepare-source response |
+
+### Rewritten Entities (3 files)
+| File | Key change |
+|---|---|
+| `assets/js/entities/job.js` | Fixed field names: `raw.job_id`, `safeParse(raw.result_json)` for JSON string payload; added `TERMINAL_STATUSES` import |
+| `assets/js/entities/part.js` | Fixed field names: `raw.part_no`; backend `done` → chip `completed`; stream URL derived from jobId+partNo |
+| `assets/js/entities/result-package.js` | Full rewrite: `parseOutputClip()` derives `streamUrl` from part_no (never `output_file`); `parseResultPackage()` emits ranked clips, failed parts, voice/subtitle summaries, AI insights |
+
+### Rewritten Transport (1 file)
+| File | Key change |
+|---|---|
+| `assets/js/transport.js` | Added `subscribeJob(jobId, {onUpdate, onTerminal, onTransportChange})` high-level API; WS injects `_transport` marker; `fetchJson` handles Pydantic 422 array detail |
+
+### Rewritten APIs (2 files)
+| File | New endpoints |
+|---|---|
+| `assets/js/api/render.js` | `prepareSource()`, `getPreviewVideoUrl()`, `process()`, `retry()`, `resume()`, `cancel()` |
+| `assets/js/api/jobs.js` | `getLogs(jobId, lines)`, `getQueueStatus()` |
+
+### Rewritten Stores (3 files)
+| File | Key change |
+|---|---|
+| `assets/js/store/draft.js` | `DEFAULTS` object; `setSession(session)` from prepare-source; `clearSession()`; `buildPayload()` delegates to `buildRenderRequest()` |
+| `assets/js/store/monitor.js` | Uses `subscribeJob()` instead of `openJobStream()`; `loadLogs()` for lazy drawer; terminal flag + authoritative final poll |
+| `assets/js/store/results.js` | Loads job + parts, calls `parseResultPackage(jobId, job.resultRaw)`, auto-selects best clip, `selectClip(idx)` |
+
+### Rewritten Screens (4 files)
+| File | Key change |
+|---|---|
+| `assets/js/screens/source.js` | Module-level state machine (`idle/loading/success/error`), YouTube/Local tabs, `handlePrepare()`, info→readiness panel transition |
+| `assets/js/screens/studio.js` | Two-column layout (preview | draft+CTA); Sections A–D; `validateRenderDraft()` gate; navigates to `/monitor/:jobId` |
+| `assets/js/screens/monitor.js` | `subscribeJob()`, transport badge, part rows, terminal banners, lazy logs drawer |
+| `assets/js/screens/results.js` | Hero video via stream URL, ranked clip list, right-panel score breakdown, AI insights placeholder |
+
+### Extended CSS (1 file)
+`assets/css/components.css` — appended component styles for:
+- Skeleton states (`skeleton-line`, `skeleton-block`, `skeleton-pulse` keyframe)
+- Source layout (`.source-layout`, `.source-tabs`, `.source-tab`, `.source-ready-card`)
+- Studio layout (`.studio-body` grid, `.studio-preview`, `.studio-draft`, `.section-disabled`)
+- Draft controls (`.ratio-pill`, `.preset-pill`, `.camera-option`, `.exec-pill` and their `--active` variants)
+- Monitor rows (`.part-progress-row`, `.log-line`, `.logs-content`)
+- Results (`.output-clip-card`, `.clip-rank-badge`, `.best-label`, `.results-hero`)
+
+---
+
+## 3. API Contracts Used
+
+| Endpoint | Method | Used by |
+|---|---|---|
+| `/api/render/prepare-source` | POST | Source screen → `renderApi.prepareSource()` |
+| `/api/render/preview-video/{session_id}` | GET | Studio screen video `<src>` |
+| `/api/render/process` | POST | Studio screen → `renderApi.process()` |
+| `/api/jobs/{jobId}` | GET | Monitor final poll, Results load |
+| `/api/jobs/{jobId}/parts` | GET | Monitor polling fallback + Results load |
+| `/api/jobs/{jobId}/ws` | WS | Monitor live stream |
+| `/api/jobs/{jobId}/logs` | GET | Monitor logs drawer (lazy) |
+| `/api/jobs/{jobId}/parts/{partNo}/stream` | GET | Results hero video + Download link |
+
+---
+
+## 4. Transport Behavior
+
+| Mode | Trigger | UI indicator |
+|---|---|---|
+| `connecting` | Initial state | `⋯ Connecting` (faint) |
+| `websocket` | WS connection established | `● Live` (success green) |
+| `polling` | WS error or explicit fallback | `○ Polling` (warning) |
+| `terminal_poll` | Terminal status confirmed | `● Done` (success green) |
+
+Terminal detection checks `job.status` in every message (both WS and polling). Does **not** rely on WS close event. On terminal, fires `onTerminal(status)` and performs one authoritative GET 600ms later to capture final result.
+
+---
+
+## 5. Known Limitations (UI-R2B Scope)
+
+- AI insights section on Results screen shows a placeholder only — "AI insights available after Phase 63 integration." Full wiring deferred to Phase 63.
+- `result_json` ranking fallback: when `output_ranking` is absent, a synthetic single-clip fallback is built from `output_file` if present; score is 0 and reason is empty.
+- Log lines are plain text only — no colorization or log-level parsing implemented.
+- Cancel button on Monitor only fires the API request; no optimistic UI or confirmation dialog.
+- Right-panel score breakdown requires `ranking_components` in result JSON; displays empty otherwise.
+- Studio preview video requires `/api/render/preview-video/{session_id}` to succeed; shows inline error text on failure.
+
+---
+
+## 6. Deferred Screens / Features
+
+| Item | Deferred to |
+|---|---|
+| AI insights full wiring (director decisions, applied changes) | Phase 63 |
+| Toast notification system | Future sprint |
+| Session list / restore previous session on Source screen | Future sprint |
+| Drag-and-drop file upload (browser, non-Electron) | Future sprint |
+| Right panel context for Source and Studio screens | Future sprint |

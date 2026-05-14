@@ -1,147 +1,328 @@
-/* Studio screen — configure render settings, launch render job. */
+/* Studio screen — preview prepared source → configure RenderDraft → POST /api/render/process */
 
 import { draftStore } from '../store/draft.js';
 import { renderApi } from '../api/render.js';
 import { router } from '../router.js';
-import { sessionStore } from '../store/session.js';
+import { validateRenderDraft } from '../entities/render-request.js';
+import { emptyState, ICONS } from '../components/empty-state.js';
 
-const PLATFORMS = [
-  { value: 'youtube',  label: 'YouTube' },
-  { value: 'tiktok',   label: 'TikTok' },
-  { value: 'instagram',label: 'Instagram' },
-  { value: 'twitter',  label: 'X / Twitter' },
-  { value: 'facebook', label: 'Facebook' },
+const ASPECT_RATIOS = [
+  { value: '9:16', label: '9:16' },
+  { value: '1:1',  label: '1:1'  },
+  { value: '3:4',  label: '3:4'  },
+  { value: '16:9', label: '16:9' },
 ];
 
-const CREATOR_TYPES = [
-  { value: 'solo_creator',     label: 'Solo Creator' },
-  { value: 'studio_team',      label: 'Studio Team' },
-  { value: 'brand_channel',    label: 'Brand Channel' },
-  { value: 'news_media',       label: 'News Media' },
-  { value: 'educational',      label: 'Educational' },
+const SUBTITLE_PRESETS = [
+  { value: 'viral_bold',    label: 'Viral Bold'    },
+  { value: 'clean_pro',     label: 'Clean Pro'     },
+  { value: 'boxed_caption', label: 'Boxed Caption' },
+];
+
+const CAMERA_MODES = [
+  { value: 'center',  label: 'Center',  desc: 'Locked center crop' },
+  { value: 'motion',  label: 'Motion',  desc: 'Motion-aware reframe' },
+  { value: 'subject', label: 'Subject', desc: 'Subject-tracking crop' },
 ];
 
 const EXEC_MODES = [
+  { value: 'off',        label: 'Off'        },
   { value: 'safe',       label: 'Safe'       },
   { value: 'balanced',   label: 'Balanced'   },
   { value: 'aggressive', label: 'Aggressive' },
 ];
 
-function renderForm(draft) {
+let _submitting = false;
+let _submitError = null;
+
+/* ── Preview ──────────────────────────────────────────────────────── */
+
+function renderPreviewArea(sessionId) {
+  if (!sessionId) {
+    return `
+      <div class="studio-preview studio-preview--empty col" style="align-items:center;justify-content:center;gap:var(--sp-3)">
+        <div style="opacity:0.25;color:var(--color-text-muted);width:48px;height:48px">${ICONS.video}</div>
+        <div class="text-body text-muted">No source prepared</div>
+        <button class="btn btn-secondary" id="studio-no-source-btn">← Back to Source</button>
+      </div>
+    `;
+  }
+  const url = renderApi.getPreviewVideoUrl(sessionId);
   return `
-    <div style="max-width:560px">
-      <div class="col gap-4">
+    <div class="studio-preview">
+      <video id="studio-video" class="studio-video"
+        src="${url}" controls muted preload="metadata"
+        style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-panel);background:#000">
+      </video>
+      <div id="studio-video-err" style="display:none;padding:var(--sp-3);text-align:center">
+        <span class="text-caption" style="color:var(--color-failed)">Preview unavailable — source may still be processing.</span>
+      </div>
+    </div>
+  `;
+}
 
-        <div class="form-field">
-          <label class="form-label">Source file</label>
-          <input class="form-input" id="studio-source" type="text" placeholder="/path/to/video.mp4" value="${draft.sourceFile ?? ''}" />
-        </div>
+/* ── Draft section renderers ──────────────────────────────────────── */
 
-        <div class="form-field">
-          <label class="form-label">Output directory</label>
-          <input class="form-input" id="studio-output" type="text" placeholder="/path/to/output/" value="${draft.outputDir ?? ''}" />
-        </div>
-
-        <div class="row gap-4">
+function renderSectionA(d) {
+  return `
+    <div class="draft-section">
+      <div class="draft-section__title">A · Clip Setup</div>
+      <div class="col gap-3">
+        <div class="row gap-3">
           <div class="form-field flex-1">
-            <label class="form-label">Platform</label>
-            <select class="form-input" id="studio-platform">
-              ${PLATFORMS.map(p => `<option value="${p.value}" ${draft.platform === p.value ? 'selected' : ''}>${p.label}</option>`).join('')}
-            </select>
+            <label class="form-label">Min sec</label>
+            <input class="form-input" id="d-min" type="number" min="5" max="300" value="${d.minPartSec}" />
           </div>
-
           <div class="form-field flex-1">
-            <label class="form-label">Creator type</label>
-            <select class="form-input" id="studio-creator-type">
-              ${CREATOR_TYPES.map(c => `<option value="${c.value}" ${draft.creatorType === c.value ? 'selected' : ''}>${c.label}</option>`).join('')}
-            </select>
+            <label class="form-label">Max sec</label>
+            <input class="form-input" id="d-max" type="number" min="10" max="300" value="${d.maxPartSec}" />
+          </div>
+          <div class="form-field flex-1">
+            <label class="form-label">Max clips</label>
+            <input class="form-input" id="d-qty" type="number" min="1" max="20" value="${d.maxExportParts}" />
           </div>
         </div>
-
         <div class="form-field">
-          <label class="form-label">AI execution mode</label>
-          <div class="row gap-2">
-            ${EXEC_MODES.map(m => `
-              <label class="row gap-2" style="cursor:pointer;font-size:var(--text-body)">
-                <input type="radio" name="exec-mode" value="${m.value}" ${draft.executionMode === m.value ? 'checked' : ''} />
-                ${m.label}
-              </label>
+          <label class="form-label">Aspect ratio</label>
+          <div class="row gap-2" style="flex-wrap:wrap">
+            ${ASPECT_RATIOS.map(r => `
+              <button class="ratio-pill ${d.aspectRatio === r.value ? 'ratio-pill--active' : ''}"
+                data-ratio="${r.value}">${r.label}</button>
             `).join('')}
           </div>
-        </div>
-
-        <div class="row gap-3" style="align-items:center">
-          <label class="row gap-2" style="cursor:pointer">
-            <input type="checkbox" id="studio-ai-enabled" ${draft.aiEnabled ? 'checked' : ''} />
-            <span class="text-body">Enable AI analysis</span>
-          </label>
-        </div>
-
-        <div class="row gap-3 mt-4">
-          <button class="btn btn-primary" id="studio-render-btn">Start render</button>
-          <button class="btn btn-ghost" id="studio-back-btn">← Back</button>
-          <span class="flex-1"></span>
-          <span class="text-caption text-faint" id="studio-error"></span>
         </div>
       </div>
     </div>
   `;
 }
 
-async function mount(el) {
-  await draftStore.loadRemote();
-  const { draft } = draftStore.getState();
-
-  el.innerHTML = `
-    <div class="screen__header">
-      <div class="screen__title">Studio</div>
-      <div class="screen__subtitle">Configure render settings</div>
-    </div>
-    <div class="screen__body">
-      ${renderForm(draft)}
+function renderSectionB(d) {
+  const on = d.subtitleEnabled;
+  return `
+    <div class="draft-section">
+      <div class="draft-section__title row gap-3" style="align-items:center">
+        <span>B · Subtitles</span>
+        <label class="toggle-wrap" style="margin-left:auto;cursor:pointer;display:flex;align-items:center;gap:var(--sp-2)">
+          <input type="checkbox" id="d-sub-on" ${on ? 'checked' : ''} style="width:14px;height:14px" />
+          <span class="text-caption" style="color:${on ? 'var(--color-accent)' : 'var(--color-text-faint)'}">${on ? 'On' : 'Off'}</span>
+        </label>
+      </div>
+      <div class="col gap-3 ${on ? '' : 'section-disabled'}">
+        <div class="form-field">
+          <label class="form-label">Style preset</label>
+          <div class="row gap-2">
+            ${SUBTITLE_PRESETS.map(p => `
+              <button class="preset-pill ${d.subtitleStyle === p.value ? 'preset-pill--active' : ''} ${on ? '' : 'btn-ghost'}"
+                data-preset="${p.value}" ${on ? '' : 'disabled'}>${p.label}</button>
+            `).join('')}
+          </div>
+        </div>
+      </div>
     </div>
   `;
+}
 
-  const sourceInput     = el.querySelector('#studio-source');
-  const outputInput     = el.querySelector('#studio-output');
-  const platformSelect  = el.querySelector('#studio-platform');
-  const creatorSelect   = el.querySelector('#studio-creator-type');
-  const aiCheckbox      = el.querySelector('#studio-ai-enabled');
-  const renderBtn       = el.querySelector('#studio-render-btn');
-  const backBtn         = el.querySelector('#studio-back-btn');
-  const errorEl         = el.querySelector('#studio-error');
+function renderSectionC(d) {
+  return `
+    <div class="draft-section">
+      <div class="draft-section__title">C · Camera</div>
+      <div class="col gap-2">
+        ${CAMERA_MODES.map(m => `
+          <label class="camera-option ${d.reframeMode === m.value ? 'camera-option--active' : ''}">
+            <input type="radio" name="d-reframe" value="${m.value}" ${d.reframeMode === m.value ? 'checked' : ''} />
+            <div>
+              <div class="text-body" style="font-weight:600">${m.label}</div>
+              <div class="text-caption text-faint">${m.desc}</div>
+            </div>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
 
-  sourceInput?.addEventListener('input', () => draftStore.patch({ sourceFile: sourceInput.value }));
-  outputInput?.addEventListener('input', () => draftStore.patch({ outputDir: outputInput.value }));
-  platformSelect?.addEventListener('change', () => draftStore.patch({ platform: platformSelect.value }));
-  creatorSelect?.addEventListener('change', () => draftStore.patch({ creatorType: creatorSelect.value }));
-  aiCheckbox?.addEventListener('change', () => draftStore.patch({ aiEnabled: aiCheckbox.checked }));
+function renderSectionD(d) {
+  const on = d.aiEnabled;
+  return `
+    <div class="draft-section">
+      <div class="draft-section__title row gap-3" style="align-items:center">
+        <span>D · AI Analysis</span>
+        <label class="toggle-wrap" style="margin-left:auto;cursor:pointer;display:flex;align-items:center;gap:var(--sp-2)">
+          <input type="checkbox" id="d-ai-on" ${on ? 'checked' : ''} style="width:14px;height:14px" />
+          <span class="text-caption" style="color:${on ? 'var(--color-ai)' : 'var(--color-text-faint)'}">${on ? 'On' : 'Off'}</span>
+        </label>
+      </div>
+      <div class="col gap-3 ${on ? '' : 'section-disabled'}">
+        <div class="form-field">
+          <label class="form-label">Execution mode</label>
+          <div class="exec-mode-row row gap-1">
+            ${EXEC_MODES.map(m => `
+              <button class="exec-pill ${d.aiExecutionMode === m.value ? 'exec-pill--active' : ''}"
+                data-exec="${m.value}" ${on ? '' : 'disabled'}>${m.label}</button>
+            `).join('')}
+          </div>
+        </div>
+        <div class="text-caption text-faint">AI analyzes your source and explains ranking recommendations. Enable execution influence in advanced settings to allow bounded render changes.</div>
+      </div>
+    </div>
+  `;
+}
 
-  el.querySelectorAll('input[name="exec-mode"]').forEach(radio => {
-    radio.addEventListener('change', () => {
-      if (radio.checked) draftStore.patch({ executionMode: radio.value });
-    });
+function renderDraftPanel(d) {
+  return `
+    <div id="studio-draft" class="studio-draft">
+      ${renderSectionA(d)}
+      ${renderSectionB(d)}
+      ${renderSectionC(d)}
+      ${renderSectionD(d)}
+    </div>
+  `;
+}
+
+function renderCTA(d) {
+  const { errors } = validateRenderDraft(d);
+  const canSubmit = errors.length === 0 && !_submitting;
+  return `
+    <div id="studio-cta" class="studio-cta">
+      ${errors.length > 0
+        ? `<div class="col gap-1">${errors.map(e => `<div class="text-caption" style="color:var(--color-failed)">⚠ ${_esc(e)}</div>`).join('')}</div>`
+        : ''}
+      ${_submitError ? `<div class="text-caption" style="color:var(--color-failed)">✗ ${_esc(_submitError)}</div>` : ''}
+      <div class="row gap-3" style="align-items:center">
+        <button class="btn btn-ghost" id="studio-back-btn">← Source</button>
+        <span class="flex-1"></span>
+        <button class="btn btn-primary" id="studio-render-btn"
+          ${!canSubmit ? 'disabled' : ''} style="min-width:140px">
+          ${_submitting
+            ? '<span class="spinner" style="width:14px;height:14px;border-width:2px"></span>&nbsp;Starting…'
+            : 'Start render →'}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+/* ── Wiring ───────────────────────────────────────────────────────── */
+
+function rerender(el) {
+  const { draft } = draftStore.getState();
+  const draftEl = el.querySelector('#studio-draft');
+  if (draftEl) draftEl.outerHTML = renderDraftPanel(draft);
+  const ctaEl = el.querySelector('#studio-cta');
+  if (ctaEl) ctaEl.outerHTML = renderCTA(draft);
+  wireDraft(el);
+  wireCTA(el);
+}
+
+function wireDraft(el) {
+  el.querySelectorAll('.ratio-pill').forEach(b =>
+    b.addEventListener('click', () => { draftStore.patch({ aspectRatio: b.dataset.ratio }); rerender(el); })
+  );
+  el.querySelector('#d-sub-on')?.addEventListener('change', e => {
+    draftStore.patch({ subtitleEnabled: e.target.checked }); rerender(el);
   });
-
-  backBtn?.addEventListener('click', () => router.go('/source'));
-
-  renderBtn?.addEventListener('click', async () => {
-    renderBtn.disabled = true;
-    renderBtn.textContent = 'Starting…';
-    if (errorEl) errorEl.textContent = '';
-
-    try {
-      const payload = draftStore.buildPayload();
-      const result  = await renderApi.submit(payload);
-      const jobId   = result?.job_id ?? result?.id;
-      if (!jobId) throw new Error('No job_id in response');
-      router.go(`/monitor/${jobId}`);
-    } catch (err) {
-      if (errorEl) errorEl.textContent = err.message;
-      renderBtn.disabled = false;
-      renderBtn.textContent = 'Start render';
-    }
+  el.querySelectorAll('.preset-pill').forEach(b =>
+    b.addEventListener('click', () => { draftStore.patch({ subtitleStyle: b.dataset.preset }); rerender(el); })
+  );
+  el.querySelectorAll('input[name="d-reframe"]').forEach(r =>
+    r.addEventListener('change', () => { if (r.checked) { draftStore.patch({ reframeMode: r.value }); rerender(el); } })
+  );
+  el.querySelector('#d-ai-on')?.addEventListener('change', e => {
+    draftStore.patch({ aiEnabled: e.target.checked }); rerender(el);
+  });
+  el.querySelectorAll('.exec-pill').forEach(b =>
+    b.addEventListener('click', () => { draftStore.patch({ aiExecutionMode: b.dataset.exec }); rerender(el); })
+  );
+  ['d-min', 'd-max', 'd-qty'].forEach(id => {
+    el.querySelector(`#${id}`)?.addEventListener('change', e => {
+      const v = parseInt(e.target.value, 10);
+      if (!isNaN(v)) {
+        if (id === 'd-min') draftStore.patch({ minPartSec: v });
+        if (id === 'd-max') draftStore.patch({ maxPartSec: v });
+        if (id === 'd-qty') draftStore.patch({ maxExportParts: v });
+        rerender(el);
+      }
+    });
   });
 }
 
+function wireCTA(el) {
+  el.querySelector('#studio-back-btn')?.addEventListener('click', () => router.go('/source'));
+  el.querySelector('#studio-render-btn')?.addEventListener('click', () => handleRender(el));
+}
+
+async function handleRender(el) {
+  const { draft } = draftStore.getState();
+  const { valid, errors } = validateRenderDraft(draft);
+  if (!valid) { _submitError = errors[0]; rerender(el); return; }
+
+  _submitting = true;
+  _submitError = null;
+  rerender(el);
+
+  try {
+    const payload = draftStore.buildPayload();
+    const result  = await renderApi.process(payload);
+    const jobId   = result?.job_id ?? result?.id;
+    if (!jobId) throw new Error('No job_id in response.');
+    router.go(`/monitor/${jobId}`);
+  } catch (err) {
+    _submitting = false;
+    _submitError = err.message;
+    rerender(el);
+  }
+}
+
+/* ── Mount ────────────────────────────────────────────────────────── */
+
+export async function mount(el) {
+  _submitting  = false;
+  _submitError = null;
+
+  const { draft } = draftStore.getState();
+  const sessionId = draft.editSessionId;
+
+  el.innerHTML = `
+    <div class="screen__header">
+      <div class="row gap-3" style="align-items:center">
+        <div>
+          <div class="screen__title">Studio</div>
+          <div class="screen__subtitle">${
+            draft.sessionTitle ? _esc(draft.sessionTitle)
+              : sessionId ? `Session ${sessionId.slice(0, 8)}…`
+              : 'No source — go back to Source'
+          }</div>
+        </div>
+        ${draft.sessionDuration != null
+          ? `<span class="text-caption text-faint">${Math.floor(draft.sessionDuration/60)}:${String(Math.floor(draft.sessionDuration%60)).padStart(2,'0')} source</span>`
+          : ''}
+      </div>
+    </div>
+    <div class="studio-body">
+      <div class="studio-left">${renderPreviewArea(sessionId)}</div>
+      <div class="studio-right">
+        <div class="studio-right__scroll">${renderDraftPanel(draft)}</div>
+        ${renderCTA(draft)}
+      </div>
+    </div>
+  `;
+
+  // Video error handler
+  const video = el.querySelector('#studio-video');
+  const videoErr = el.querySelector('#studio-video-err');
+  if (video && videoErr) {
+    video.addEventListener('error', () => {
+      video.style.display = 'none';
+      videoErr.style.display = '';
+    });
+  }
+
+  el.querySelector('#studio-no-source-btn')?.addEventListener('click', () => router.go('/source'));
+
+  wireDraft(el);
+  wireCTA(el);
+}
+
 export const studioScreen = { mount };
+
+function _esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }

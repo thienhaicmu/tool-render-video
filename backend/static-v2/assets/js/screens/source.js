@@ -1,92 +1,299 @@
-/* Source screen — upload/select source video, configure session metadata. */
+/* Source screen — YouTube or local file → POST /api/render/prepare-source → Studio */
 
-import { sessionStore } from '../store/session.js';
+import { renderApi } from '../api/render.js';
 import { draftStore } from '../store/draft.js';
 import { desktopAdapter } from '../desktop-adapter.js';
 import { router } from '../router.js';
-import { emptyState, ICONS } from '../components/empty-state.js';
+import { parsePrepareSourceResponse } from '../entities/source-session.js';
 
-function renderDropZone() {
+// Module-level UI state (resets on each mount)
+let _s = {};
+
+function initState() {
+  const { draft } = draftStore.getState();
+  _s = {
+    mode:       'idle',           // idle | loading | success | error
+    sourceMode: draft.sourceMode ?? 'youtube',
+    youtubeUrl: draft.youtubeUrl ?? '',
+    localPath:  draft.sourceVideoPath ?? '',
+    outputDir:  draft.outputDir ?? '',
+    error:      null,
+    session:    null,
+  };
+}
+
+function fmt(sec) {
+  if (sec == null) return '';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/* ── Sub-renders ──────────────────────────────────────────────────── */
+
+function renderSourceTabs() {
   return `
-    <div class="card" id="source-dropzone" style="border:2px dashed var(--color-border);text-align:center;padding:var(--sp-16) var(--sp-8);cursor:pointer;transition:border-color 0.15s">
-      <div style="color:var(--color-text-faint);font-size:32px;margin-bottom:var(--sp-3)">⬆</div>
-      <div class="text-section">Drop video file here</div>
-      <div class="text-caption mt-2">MP4, MOV, MKV · up to 10 GB</div>
-      <button class="btn btn-secondary mt-4" id="source-browse-btn">Browse files</button>
+    <div class="source-tabs row gap-1">
+      <button class="source-tab btn ${_s.sourceMode === 'youtube' ? 'source-tab--active btn-primary' : 'btn-ghost'}" data-mode="youtube">
+        YouTube
+      </button>
+      <button class="source-tab btn ${_s.sourceMode === 'local' ? 'source-tab--active btn-primary' : 'btn-ghost'}" data-mode="local">
+        Local File
+      </button>
     </div>
   `;
 }
 
-function renderSessionList(sessions) {
-  if (!sessions.length) return '';
+function renderYouTubeInput() {
   return `
-    <div style="margin-top:var(--sp-6)">
-      <div class="text-section" style="margin-bottom:var(--sp-3)">Recent sources</div>
-      <div class="card" style="padding:0;overflow:hidden">
-        ${sessions.map(s => `
-          <div class="part-item session-item" data-session-id="${s.id}">
-            <div class="part-item__index">${s.id.slice(-4)}</div>
-            <div class="part-item__title">${s.sourceFile ?? s.id}</div>
-            <div class="text-caption">${s.platform ?? ''}</div>
-          </div>
-        `).join('')}
+    <div class="form-field">
+      <label class="form-label">YouTube URL</label>
+      <input class="form-input" id="src-yt-url" type="url"
+        placeholder="https://www.youtube.com/watch?v=…"
+        value="${_esc(_s.youtubeUrl)}" autocomplete="off" />
+      <div class="text-caption text-faint mt-2">Standard YouTube and youtu.be links supported.</div>
+    </div>
+  `;
+}
+
+function renderLocalInput() {
+  return `
+    <div class="form-field">
+      <label class="form-label">Video file path</label>
+      <div class="row gap-2">
+        <input class="form-input flex-1" id="src-local-path" type="text"
+          placeholder="/path/to/video.mp4"
+          value="${_esc(_s.localPath)}" />
+        ${desktopAdapter.isDesktop
+          ? `<button class="btn btn-secondary" id="src-browse-btn">Browse</button>`
+          : ''}
+      </div>
+      <div class="text-caption text-faint mt-2">MP4, MOV, MKV — must be a path readable by the backend.</div>
+    </div>
+  `;
+}
+
+function renderOutputDir() {
+  return `
+    <div class="form-field">
+      <label class="form-label">Output directory</label>
+      <div class="row gap-2">
+        <input class="form-input flex-1" id="src-output-dir" type="text"
+          placeholder="/path/to/output/"
+          value="${_esc(_s.outputDir)}" />
+        ${desktopAdapter.isDesktop
+          ? `<button class="btn btn-secondary" id="src-pick-output-btn">Choose</button>`
+          : ''}
       </div>
     </div>
   `;
 }
 
-async function mount(el) {
-  el.innerHTML = `
-    <div class="screen__header">
-      <div class="screen__title">Source</div>
-      <div class="screen__subtitle">Select a video to begin</div>
-    </div>
-    <div class="screen__body" id="source-body">
-      ${renderDropZone()}
-      <div id="source-sessions"></div>
+function renderForm() {
+  const loading = _s.mode === 'loading';
+  return `
+    <div class="col gap-4 source-form">
+      ${renderSourceTabs()}
+      ${_s.sourceMode === 'youtube' ? renderYouTubeInput() : renderLocalInput()}
+      ${renderOutputDir()}
+      <div id="src-error-area">
+        ${_s.error ? _errorCard(_s.error) : ''}
+      </div>
+      <button class="btn btn-primary" id="src-prepare-btn"
+        ${loading ? 'disabled' : ''} style="width:100%">
+        ${loading
+          ? '<span class="spinner" style="width:16px;height:16px;border-width:2px"></span>&nbsp;Preparing…'
+          : 'Prepare source'}
+      </button>
     </div>
   `;
+}
 
-  await sessionStore.load();
+function renderReadyPanel() {
+  const s = _s.session;
+  return `
+    <div class="card source-ready-card" style="border-color:var(--color-accent)">
+      <div class="row gap-2" style="align-items:center;margin-bottom:var(--sp-3)">
+        <span style="color:var(--color-accent);font-size:18px">✓</span>
+        <span class="text-section">Source ready</span>
+      </div>
+      <div class="col gap-2">
+        ${s.title ? `<div class="row gap-3"><span class="text-caption text-faint" style="min-width:64px">Title</span><span class="text-body" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(s.title)}</span></div>` : ''}
+        ${s.duration != null ? `<div class="row gap-3"><span class="text-caption text-faint" style="min-width:64px">Duration</span><span class="text-body">${fmt(s.duration)}</span></div>` : ''}
+        <div class="row gap-3"><span class="text-caption text-faint" style="min-width:64px">Session</span><span class="text-caption" style="font-family:monospace;color:var(--color-text-muted)">${s.sessionId.slice(0, 16)}…</span></div>
+      </div>
+      <button class="btn btn-primary" id="src-go-studio-btn" style="margin-top:var(--sp-5);width:100%">
+        Continue to Studio →
+      </button>
+    </div>
+  `;
+}
 
-  const { sessions } = sessionStore.getState();
-  const sessionsEl = el.querySelector('#source-sessions');
-  if (sessionsEl) sessionsEl.innerHTML = renderSessionList(sessions);
+function renderInfoPanel() {
+  return `
+    <div class="col gap-4">
+      <div class="text-section">What happens next</div>
+      <div class="card card--raised col gap-4">
+        <div class="row gap-3">
+          <span style="color:var(--color-accent);font-weight:700;font-size:15px">①</span>
+          <div>
+            <div class="text-body" style="font-weight:600">Source validation</div>
+            <div class="text-caption text-faint mt-1">URL or path is probed for duration, title, and viability.</div>
+          </div>
+        </div>
+        <div class="row gap-3">
+          <span style="color:var(--color-accent);font-weight:700;font-size:15px">②</span>
+          <div>
+            <div class="text-body" style="font-weight:600">Preview preparation</div>
+            <div class="text-caption text-faint mt-1">A browser-safe preview is generated for Studio playback.</div>
+          </div>
+        </div>
+        <div class="row gap-3">
+          <span style="color:var(--color-accent);font-weight:700;font-size:15px">③</span>
+          <div>
+            <div class="text-body" style="font-weight:600">Studio opens</div>
+            <div class="text-caption text-faint mt-1">Configure clips, subtitles, camera, and AI, then start the render.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
-  const browseBtn = el.querySelector('#source-browse-btn');
-  browseBtn?.addEventListener('click', async () => {
+function renderScreen() {
+  return `
+    <div class="screen__header">
+      <div class="screen__title">Source</div>
+      <div class="screen__subtitle">Import a video to begin</div>
+    </div>
+    <div class="screen__body">
+      <div class="source-layout row gap-8">
+        <div class="col gap-4 source-layout__main" id="src-form-col">
+          ${renderForm()}
+        </div>
+        <div class="source-layout__panel" id="src-panel-col">
+          ${_s.mode === 'success' && _s.session ? renderReadyPanel() : renderInfoPanel()}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ── Event wiring ─────────────────────────────────────────────────── */
+
+function wireAll(el) {
+  // Mode tabs
+  el.querySelectorAll('.source-tab').forEach(btn =>
+    btn.addEventListener('click', () => {
+      _s.sourceMode = btn.dataset.mode;
+      _s.error = null;
+      rerenderForm(el);
+    })
+  );
+
+  // YouTube URL
+  el.querySelector('#src-yt-url')?.addEventListener('input', e => { _s.youtubeUrl = e.target.value; });
+
+  // Local path
+  el.querySelector('#src-local-path')?.addEventListener('input', e => { _s.localPath = e.target.value; });
+
+  // Desktop pickers
+  el.querySelector('#src-browse-btn')?.addEventListener('click', async () => {
     const file = await desktopAdapter.pickVideoFile();
     if (file) {
-      draftStore.patch({ sourceFile: file });
-      router.go('/studio');
+      _s.localPath = file;
+      const inp = el.querySelector('#src-local-path');
+      if (inp) inp.value = file;
+    }
+  });
+  el.querySelector('#src-pick-output-btn')?.addEventListener('click', async () => {
+    const dir = await desktopAdapter.pickOutputDir();
+    if (dir) {
+      _s.outputDir = dir;
+      const inp = el.querySelector('#src-output-dir');
+      if (inp) inp.value = dir;
     }
   });
 
-  const dropzone = el.querySelector('#source-dropzone');
-  dropzone?.addEventListener('dragover', e => {
-    e.preventDefault();
-    dropzone.style.borderColor = 'var(--color-accent)';
-  });
-  dropzone?.addEventListener('dragleave', () => {
-    dropzone.style.borderColor = '';
-  });
-  dropzone?.addEventListener('drop', e => {
-    e.preventDefault();
-    dropzone.style.borderColor = '';
-    const file = e.dataTransfer?.files?.[0];
-    if (file) {
-      draftStore.patch({ sourceFile: file.path ?? file.name });
-      router.go('/studio');
-    }
-  });
+  // Output dir input
+  el.querySelector('#src-output-dir')?.addEventListener('input', e => { _s.outputDir = e.target.value; });
 
-  el.addEventListener('click', e => {
-    const item = e.target.closest('.session-item');
-    if (item?.dataset.sessionId) {
-      sessionStore.setActive(item.dataset.sessionId);
-      router.go('/studio');
-    }
-  });
+  // Prepare CTA
+  el.querySelector('#src-prepare-btn')?.addEventListener('click', () => handlePrepare(el));
+
+  // Go to Studio (after success)
+  el.querySelector('#src-go-studio-btn')?.addEventListener('click', () => router.go('/studio'));
+}
+
+function rerenderForm(el) {
+  const col = el.querySelector('#src-form-col');
+  if (col) { col.innerHTML = renderForm(); }
+  const panel = el.querySelector('#src-panel-col');
+  if (panel) { panel.innerHTML = _s.mode === 'success' && _s.session ? renderReadyPanel() : renderInfoPanel(); }
+  wireAll(el);
+}
+
+async function handlePrepare(el) {
+  _s.outputDir = (el.querySelector('#src-output-dir')?.value ?? _s.outputDir).trim();
+  _s.youtubeUrl = (el.querySelector('#src-yt-url')?.value ?? _s.youtubeUrl).trim();
+  _s.localPath = (el.querySelector('#src-local-path')?.value ?? _s.localPath).trim();
+
+  if (_s.sourceMode === 'youtube') {
+    if (!_s.youtubeUrl) { _s.error = 'YouTube URL is required.'; rerenderForm(el); return; }
+    if (!_s.youtubeUrl.startsWith('http')) { _s.error = 'Enter a valid YouTube URL.'; rerenderForm(el); return; }
+  } else {
+    if (!_s.localPath) { _s.error = 'File path is required.'; rerenderForm(el); return; }
+  }
+  if (!_s.outputDir) { _s.error = 'Output directory is required.'; rerenderForm(el); return; }
+
+  _s.mode = 'loading';
+  _s.error = null;
+  rerenderForm(el);
+
+  try {
+    const payload = { source_mode: _s.sourceMode };
+    if (_s.sourceMode === 'youtube') payload.youtube_url = _s.youtubeUrl;
+    else payload.source_video_path = _s.localPath;
+
+    const raw     = await renderApi.prepareSource(payload);
+    const session = parsePrepareSourceResponse(raw);
+    if (!session) throw new Error('Invalid response from prepare-source.');
+
+    draftStore.setSession(session);
+    draftStore.patch({ outputDir: _s.outputDir, sourceMode: _s.sourceMode,
+      youtubeUrl: _s.sourceMode === 'youtube' ? _s.youtubeUrl : '',
+      sourceVideoPath: _s.sourceMode === 'local' ? _s.localPath : '' });
+
+    _s.mode = 'success';
+    _s.session = session;
+    rerenderForm(el);
+  } catch (err) {
+    _s.mode = 'error';
+    _s.error = err.message ?? 'Preparation failed.';
+    rerenderForm(el);
+  }
+}
+
+/* ── Mount ────────────────────────────────────────────────────────── */
+
+export async function mount(el) {
+  initState();
+  el.innerHTML = renderScreen();
+  wireAll(el);
 }
 
 export const sourceScreen = { mount };
+
+/* ── Helpers ──────────────────────────────────────────────────────── */
+function _esc(s) { return String(s ?? '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+function _errorCard(msg) {
+  return `
+    <div class="card" style="border-color:var(--color-failed);padding:var(--sp-3) var(--sp-4)">
+      <div class="row gap-2">
+        <span style="color:var(--color-failed);flex-shrink:0">✗</span>
+        <div class="text-body" style="color:var(--color-text-muted)">${_esc(msg)}</div>
+      </div>
+    </div>
+  `;
+}

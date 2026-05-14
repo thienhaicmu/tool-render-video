@@ -1,30 +1,37 @@
-/* Single entry-point for raw job JSON → normalized Job object.
-   All consumers use this — no component-level JSON.parse for jobs.
+/* normalizeJob — raw job row → normalized Job.
+   Backend fields: job_id, kind, status, stage, progress_percent,
+                   message, payload_json (string), result_json (string),
+                   created_at, updated_at
 */
 
+import { TERMINAL_STATUSES } from '../transport.js';
+
 const VALID_STATUSES = new Set([
-  'queued','running','completed','partial','failed','interrupted','unsupported','unavailable',
+  'queued','running','completed','completed_with_errors',
+  'partial','failed','interrupted','unsupported','unavailable',
 ]);
+
+function safeParse(str) {
+  if (!str) return null;
+  if (typeof str === 'object') return str;
+  try { return JSON.parse(str); } catch { return null; }
+}
 
 export function normalizeJob(raw) {
   if (!raw || typeof raw !== 'object') return null;
-
   const status = VALID_STATUSES.has(raw.status) ? raw.status : 'unavailable';
-
   return {
-    id:          String(raw.id ?? raw.job_id ?? ''),
+    jobId:          String(raw.job_id ?? raw.id ?? ''),
+    kind:           raw.kind ?? 'render',
     status,
-    platform:    raw.platform   ?? raw.target_platform ?? null,
-    createdAt:   raw.created_at ?? raw.createdAt ?? null,
-    updatedAt:   raw.updated_at ?? raw.updatedAt ?? null,
-    finishedAt:  raw.finished_at ?? raw.finishedAt ?? null,
-    sourceFile:  raw.source_file ?? raw.sourceFile ?? null,
-    outputDir:   raw.output_dir  ?? raw.outputDir  ?? null,
-    partsTotal:  raw.parts_total ?? raw.total_parts ?? 0,
-    partsOk:     raw.parts_ok    ?? raw.completed_parts ?? 0,
-    errorMessage: raw.error_message ?? raw.errorMessage ?? null,
-    aiEnabled:   raw.ai_enabled ?? raw.aiEnabled ?? false,
-    executionMode: raw.execution_mode ?? raw.executionMode ?? 'balanced',
+    stage:          raw.stage ?? null,
+    progressPercent: Number(raw.progress_percent ?? 0),
+    message:        raw.message ?? null,
+    payload:        safeParse(raw.payload_json),
+    resultRaw:      safeParse(raw.result_json),
+    createdAt:      raw.created_at ?? null,
+    updatedAt:      raw.updated_at ?? null,
+    isTerminal:     TERMINAL_STATUSES.has(status),
     _raw: raw,
   };
 }

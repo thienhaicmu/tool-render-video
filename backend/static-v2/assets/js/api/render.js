@@ -1,8 +1,24 @@
 import { fetchJson } from '../transport.js';
 
 export const renderApi = {
-  async submit(payload) {
-    return fetchJson('/api/render', {
+  async prepareSource(payload) {
+    return fetchJson('/api/render/prepare-source', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /* Returns a URL string — used directly in <video src="..."> */
+  getPreviewVideoUrl(sessionId) {
+    return `/api/render/preview-video/${encodeURIComponent(sessionId)}`;
+  },
+
+  async getPreviewTranscript(sessionId) {
+    return fetchJson(`/api/render/preview-transcript/${encodeURIComponent(sessionId)}`);
+  },
+
+  async process(payload) {
+    return fetchJson('/api/render/process', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -14,22 +30,15 @@ export const renderApi = {
     });
   },
 
-  async getDraft() {
-    return fetchJson('/api/render/draft');
-  },
-
-  async saveDraft(payload) {
-    return fetchJson('/api/render/draft', {
-      method: 'PUT',
-      body: JSON.stringify(payload),
+  async retry(jobId) {
+    return fetchJson(`/api/render/retry/${encodeURIComponent(jobId)}`, {
+      method: 'POST',
     });
   },
 
-  async getSupportedPlatforms() {
-    return fetchJson('/api/render/platforms');
-  },
-
-  async getCreatorTypes() {
-    return fetchJson('/api/render/creator-types');
+  async resume(jobId) {
+    return fetchJson(`/api/render/resume/${encodeURIComponent(jobId)}`, {
+      method: 'POST',
+    });
   },
 };

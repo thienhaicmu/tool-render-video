@@ -14,12 +14,12 @@ export const jobsApi = {
     return fetchJson(`/api/jobs/${encodeURIComponent(jobId)}/parts`);
   },
 
-  async getResult(jobId) {
-    return fetchJson(`/api/jobs/${encodeURIComponent(jobId)}/result`);
+  async getLogs(jobId, lines = 120) {
+    return fetchJson(`/api/jobs/${encodeURIComponent(jobId)}/logs?lines=${lines}`);
   },
 
-  async getSummary(jobId) {
-    return fetchJson(`/api/jobs/${encodeURIComponent(jobId)}/summary`);
+  async getQueueStatus() {
+    return fetchJson('/api/jobs/queue/status');
   },
 
   async delete(jobId) {
