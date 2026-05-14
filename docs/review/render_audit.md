@@ -706,6 +706,110 @@ for idx, seg in enumerate(scored)    ← DB commit loop
 
 ---
 
+### 2026-05-14 — AI Intelligence v2 Phase 61A: Creator Archetype Strategy Foundation
+
+**Implemented:**
+
+- `app/ai/creator_archetype/__init__.py` (new) — package marker
+- `app/ai/creator_archetype/creator_archetype_engine.py` (new) — `build_creator_archetype_strategy(edit_plan, context)` maps creator type to deterministic render style strategy; advisory metadata only; no render mutation, never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `creator_archetype_strategy: dict` field added; included in `to_dict()`
+- `app/orchestration/render_pipeline.py` (updated) — Phase 61A block injected after Phase 60C; advisory-only; stores result on `edit_plan.creator_archetype_strategy`
+- `tests/test_ai_phase61a_creator_archetype_strategy.py` (new) — 22 tests including 3 required execution tests
+
+**What Phase 61A adds:**
+
+Phase 61A is advisory metadata only. It maps creator archetypes to deterministic style strategy preferences across 4 domains. No execution promotion, no render mutation. Future influence phases may read this strategy to guide bounded promotion.
+
+**Philosophy: "AI understands creator style safely" — NOT "AI owns render style."**
+
+**Supported creator archetypes:**
+| Archetype | Subtitle Bias | Camera Energy | Hook Energy | Ranking Priority |
+|-----------|--------------|---------------|-------------|-----------------|
+| `podcast` | clean_pro | low | moderate | retention_creator_fit |
+| `talking_head` | clean_pro | low | moderate | creator_fit_retention |
+| `educational` | clean_pro | low | moderate | retention_readability |
+| `viral_short_form` | compact_dynamic | medium | high | hook_strength_retention |
+| `storytelling` | clean_pro | low_medium | low_medium | retention_narrative |
+| `interview` | clean_pro | low | low_medium | trust_clarity |
+| `motivation` | bold_impact | medium_high | high | retention_emotional_moment |
+
+**Strategy model shape:**
+```json
+{
+  "creator_archetype_strategy": {
+    "available":    true,
+    "creator_type": "podcast",
+    "strategy": {
+      "subtitle": {"style_bias": "clean_pro", "density_bias": "balanced",
+                   "keyword_emphasis": "selective", "readability_priority": "high"},
+      "camera":   {"motion_energy": "low", "stability_priority": "high",
+                   "crop_aggressiveness": "low", "jitter_sensitivity": "high"},
+      "hook":     {"hook_energy": "moderate", "curiosity_style": "soft_direct",
+                   "retention_priority": "medium_high"},
+      "ranking":  {"priority": "retention_creator_fit"}
+    },
+    "confidence":  0.82,
+    "reasoning":   ["Podcast creator style favors clean subtitles and stable framing."],
+    "mode_compatibility": {
+      "off":        "advisory_only",
+      "safe":       "conservative_guidance",
+      "balanced":   "full_guidance",
+      "aggressive": "full_guidance_extended"
+    }
+  }
+}
+```
+
+**Archetype mappings (key style choices):**
+- `podcast` / `talking_head` / `interview` → clean_pro subtitle, low motion, high stability, trust/retention ranking
+- `educational` → clean_pro + moderate keyword emphasis for concept clarity
+- `viral_short_form` → compact_dynamic subtitle, strong emphasis, high hook energy, pattern_interrupt curiosity
+- `storytelling` → soft_direct curiosity, low_medium motion, narrative ranking
+- `motivation` → bold_impact subtitle, strong emphasis, high hook energy, emotional curiosity
+
+**Confidence calculation:**
+- Known archetype base: 0.82
+- Modulated with `creator_preference_profile.confidence` (Phase 50D): `base × 0.65 + profile_conf × 0.35`
+- Unknown archetype: 0.0
+- Clamped to [0.0, 1.0]
+
+**Conflict safety rules:**
+1. User explicit settings win over archetype strategy
+2. Phase 60D execution mode gates all strategy application
+3. Quality gates (Phase 59D) can block any risky influence
+4. `creator_preference_profile` (Phase 50D) is stronger than archetype defaults
+5. Platform strategy may refine but not override creator safety
+
+**Execution mode compatibility:**
+| Mode | Strategy Application |
+|------|---------------------|
+| `off` | advisory_only — strategy metadata produced but promotion blocked by mode |
+| `safe` | conservative_guidance — conservative bounded strategy |
+| `balanced` | full_guidance — standard strategy application |
+| `aggressive` | full_guidance_extended — stronger but still hard-capped |
+
+**Safety contract:**
+- Advisory-only in this phase — no render execution, no payload mutation
+- No execution flags, no internal fields exposed in strategy output
+- All strategy values validated against allowed sets
+- Never raises — fallback returns available=False for any error or unknown archetype
+- Deterministic: same creator_type → same strategy
+
+**Execution order in render_pipeline.py:**
+```
+Phase 60C creator benchmark
+Phase 61A creator archetype strategy  ← advisory metadata, no mutations
+for idx, seg in enumerate(scored)     ← DB commit loop
+```
+
+**Verification:**
+
+- Phase 61A focused tests: 22 passed (including 3 required execution tests)
+- Full suite: 5212 passed, 1 skipped
+- `py_compile` passed on all changed modules
+
+---
+
 ### 2026-05-14 — AI Intelligence v2 Phase 60D: AI Execution Modes & Rollback
 
 **Implemented:**

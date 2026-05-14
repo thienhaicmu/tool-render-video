@@ -2153,6 +2153,37 @@ def run_render_pipeline(
                     "creator_benchmark_failed job_id=%s: %s", job_id, _cb_err
                 )
 
+        # ── Creator Archetype Strategy (Phase 61A) — advisory metadata only ──────
+        # Maps creator type to deterministic style strategy preferences.
+        # Does NOT mutate render execution. Advisory guidance for future influence.
+        if _ai_edit_plan is not None:
+            try:
+                from app.ai.creator_archetype.creator_archetype_engine import (
+                    build_creator_archetype_strategy as _build_archetype_strategy,
+                )
+                _arch_result = _build_archetype_strategy(
+                    _ai_edit_plan, context={"job_id": job_id},
+                )
+                try:
+                    _ai_edit_plan.creator_archetype_strategy = (
+                        _arch_result.get("creator_archetype_strategy") or {}
+                    )
+                except Exception:
+                    pass
+                _arch = _arch_result.get("creator_archetype_strategy") or {}
+                logger.info(
+                    "creator_archetype_strategy_built job_id=%s available=%s "
+                    "creator_type=%s confidence=%.3f",
+                    job_id,
+                    _arch.get("available"),
+                    _arch.get("creator_type", "unknown"),
+                    float(_arch.get("confidence") or 0.0),
+                )
+            except Exception as _arch_err:
+                logger.warning(
+                    "creator_archetype_strategy_failed job_id=%s: %s", job_id, _arch_err
+                )
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()
