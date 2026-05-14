@@ -307,9 +307,154 @@ No direct density field exists on `RenderRequest`. Density bias from Phase 50C /
 - `py_compile` passed on all changed modules
 - `git diff --check` clean
 
-**Status:**
+---
 
-Phase 55E complete. Unified platform-aware render strategy is now available as a deterministic advisory metadata layer fusing subtitle, camera, and hook platform intelligence.
+### 2026-05-14 — Phase 59B: Camera Influence Promotion (second safe execution layer)
+
+**Implemented:**
+
+- `app/ai/camera_promotion/camera_promotion_engine.py` (new) — `promote_camera_influence(payload, edit_plan, context)` public API; promotes advisory camera signals to actual render config fields; quality-gated; never raises
+- `app/ai/camera_promotion/__init__.py` (new) — package marker
+- `app/ai/director/edit_plan_schema.py` (updated) — `camera_execution_promotion: dict` field added after Phase 59A field; included in `to_dict()`; backward-compatible
+- `app/ai/director/render_influence.py` (updated) — `_apply_camera_promotion()` wired immediately after `_apply_camera_influence()`; imports promotion engine, stores report on `edit_plan.camera_execution_promotion`, appends to `report["applied"]` / `report["skipped"]`
+- `tests/test_ai_phase59b_camera_promotion.py` (new) — 41 focused tests
+
+**What Phase 59B is:**
+
+Phase 59B is the second *safe execution promotion* layer. It promotes camera intelligence from Phases 50B, 55E, and 56 into two `RenderRequest` fields:
+
+| Field | Promotion action | When |
+|---|---|---|
+| `payload.reframe_mode` | `"center"` → `"motion"` / `"subject"` / `"face"` | AI flags enabled, user hasn't overridden, confidence ≥ 0.82 |
+| `payload.motion_aware_crop` | Enable (set to `True`) | Not already enabled, reframe eligible, confidence ≥ 0.85, quality gates pass |
+
+**Allowed reframe mode promotion targets:**
+
+- `motion` — dynamic subject following (high motion energy)
+- `subject` — stable subject tracking (smooth subject, moderate energy)
+- `face` — face-lock cropping
+
+`"center"` is the neutral default — AI promotes FROM it, never TO it.
+
+**Signal priority for reframe_mode resolution:**
+
+1. Phase 50B `creator_camera_preference.camera_preference.motion_style` (most creator-specific)
+   - `smooth_subject` → `subject`
+   - `dynamic_subject` → `motion`
+   - `static_center` → no change
+2. Phase 55E `platform_render_strategy.strategy.camera.motion_energy` (requires `available=True`)
+   - `high` / `medium_high` → `motion`
+   - `medium` / `low_medium` → `subject`
+   - `low` → no change
+3. Phase 56 `platform_strategy_influence.camera.bias.motion_energy`
+
+**Confidence gating:**
+
+- `effective_conf = max(pref_conf, prs_conf)` where `prs_conf` is only read when `platform_render_strategy.available = True`
+- Reframe promotion requires `effective_conf >= 0.82`
+- motion_aware_crop requires `effective_conf >= 0.85`
+- Advisory tuning requires `effective_conf >= 0.80`
+
+**User override rules:**
+
+| Condition | Behavior |
+|---|---|
+| `camera_ai_reframe_lock = True` | No promotion — user locked reframe |
+| `reframe_mode` not in `{"center", None, ""}` | No promotion — user explicitly chose a mode |
+| `reframe_mode` in neutral set | Promotion eligible |
+| `motion_aware_crop` already `True` | Kept; AI only enables, never disables |
+
+**Quality gates:**
+
+| Risk signal | Source | Trigger | Effect |
+|---|---|---|---|
+| `micro_jitter_risk >= 60` | `camera_quality_v2` (Phase 52B) | High jitter detected | Downgrade `motion` → `subject`; block `motion_aware_crop`; scale tuning × 0.5 |
+| `whip_pan_risk >= 60` | `camera_quality_v2` (Phase 52B) | High whip-pan detected | Block `motion_aware_crop`; block all advisory tuning |
+| `camera_fit <= 30` (available=True) | `platform_quality_feedback` (Phase 57) | Low platform camera fit | Downgrade `motion` → `subject` (same as jitter flag) |
+
+Quality gates NEVER force risky changes — they only restrict or downgrade.
+
+**Tuning — advisory only (no payload mutation):**
+
+MotionCropConfig parameters (deadzone, EMA alpha, hold_frames) do not exist on `RenderRequest`. Phase 59B reads `creator_camera_preference.tuning_pack` and stores bounded deltas in the promotion report's `tuning_applied` dict — no payload field is mutated.
+
+| Parameter | Hard bound | Source |
+|---|---|---|
+| `deadzone_delta` | ±0.05 | Phase 50B tuning_pack |
+| `smoothing_delta` | ±0.08 | Phase 50B ema_alpha_delta |
+| `subject_hold_delta` | ±12 frames | Phase 50B hold_frames_delta |
+| `crop_aggressiveness` | advisory label only | Phase 50B camera_preference |
+
+**Promotion report shape:**
+
+```json
+{
+  "camera_execution_promotion": {
+    "applied": true,
+    "reframe_mode_applied": "subject",
+    "motion_aware_crop_applied": true,
+    "tuning_applied": {
+      "deadzone_delta": 0.03,
+      "smoothing_delta": 0.05,
+      "subject_hold_delta": 6,
+      "crop_aggressiveness": "medium"
+    },
+    "confidence": 0.8800,
+    "reason": "promotion_applied",
+    "reasoning": [
+      "Creator camera preference motion_style='smooth_subject' → reframe='subject'",
+      "Reframe mode 'subject' justifies motion-aware crop with conf=0.880",
+      "Advisory tuning: deadzone_delta=0.03, smoothing_delta=0.05, subject_hold_delta=6, crop_aggressiveness=medium"
+    ]
+  }
+}
+```
+
+**Safety contract enforced:**
+
+| Boundary | Status |
+|---|---|
+| No motion_crop algorithm rewrite | ✅ |
+| No tracking logic rewrite | ✅ |
+| No scene detection rewrite | ✅ |
+| No FFmpeg mutation | ✅ |
+| No render pipeline rewrite | ✅ |
+| No playback_speed mutation | ✅ |
+| No executor override | ✅ |
+| No new reframe mode generation | ✅ |
+| Only promotes from AI-neutral default ("center") | ✅ |
+| Reframe validated against ALLOWED_PROMOTION_MODES | ✅ |
+| Confidence gates enforced before any mutation | ✅ |
+| Quality gates block risky promotions | ✅ |
+| User override respected | ✅ |
+| motion_aware_crop enable-only (never disabled) | ✅ |
+| Tuning deltas bounded by hard limits | ✅ |
+| Deterministic: same inputs → same output | ✅ |
+| Never raises — fallback-safe on any error | ✅ |
+
+**Fallback behavior:**
+
+| Condition | Result |
+|---|---|
+| `ai_director_enabled = False` | No promotion, reason `ai_director_disabled` |
+| `ai_render_influence_enabled = False` | No promotion, reason `ai_render_influence_disabled` |
+| `edit_plan = None` | No promotion, reason `no_edit_plan` |
+| `camera_ai_reframe_lock = True` | No promotion, reason `user_override` |
+| `reframe_mode` not neutral | No promotion, reason `user_override` |
+| Confidence below threshold | No promotion, reason `no_eligible_promotion` |
+| Any exception inside engine | Caught, fallback report returned, reason `promotion_error` |
+
+**Real render config impact:**
+
+Before Phase 59B: `payload.reframe_mode` always stayed as the frontend-set value (default `"center"`). Motion-aware crop required explicit user toggle. Camera intelligence from 50B/55E was metadata only.
+
+After Phase 59B: For creators with `smooth_subject` / `dynamic_subject` preference and ≥0.82 confidence, the render automatically uses subject or motion tracking reframe. For ≥0.85 confidence with no quality risks, motion_aware_crop (OpenCV optical-flow pre-pass) is also enabled for frame-accurate crop execution.
+
+**Verification:**
+
+- Phase 59B tests: 41 passed
+- Full suite: 5028 passed, 1 skipped
+- `py_compile` passed on all changed modules
 
 ---
 

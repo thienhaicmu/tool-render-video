@@ -84,6 +84,7 @@ def apply_ai_render_influence(
 
     try:
         _apply_camera_influence(payload, edit_plan, report)
+        _apply_camera_promotion(payload, edit_plan, report)
         _apply_subtitle_influence(payload, edit_plan, report)
         _apply_subtitle_promotion(payload, edit_plan, report)
         _apply_pacing_influence(payload, edit_plan, report)
@@ -191,6 +192,72 @@ def _apply_camera_influence(payload: Any, edit_plan: Any, report: dict) -> None:
         )
     except Exception as exc:
         report["skipped"].append(f"camera:set_failed:{type(exc).__name__}")
+
+
+# ── Camera influence promotion (Phase 59B) ───────────────────────────────────
+
+def _apply_camera_promotion(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Phase 59B — Promote advisory camera metadata to actual render config.
+
+    Calls camera_promotion_engine.promote_camera_influence() which may set:
+      - payload.reframe_mode          (center → motion/subject/face)
+      - payload.motion_aware_crop     (enable only, never disable)
+
+    Only fires when:
+      - ai_director_enabled and ai_render_influence_enabled are both True
+      - reframe_mode is the AI-neutral default ("center")
+      - confidence passes thresholds
+      - quality gates allow it
+
+    Results that change payload go to report["applied"].
+    All other outcomes go to report["skipped"].
+    """
+    if edit_plan is None:
+        report["skipped"].append("camera_promotion:no_edit_plan_phase59b")
+        return
+
+    try:
+        from app.ai.camera_promotion.camera_promotion_engine import (
+            promote_camera_influence,
+        )
+        _, promotion_report = promote_camera_influence(
+            payload, edit_plan, context={}
+        )
+        promo = promotion_report.get("camera_execution_promotion") or {}
+
+        # Store promotion result on the plan for visibility/UX consumers
+        try:
+            edit_plan.camera_execution_promotion = promo
+        except Exception:
+            pass
+
+        if promo.get("applied"):
+            entries: list[str] = []
+            if promo.get("reframe_mode_applied"):
+                entries.append(f"reframe={promo['reframe_mode_applied']!r}")
+            if promo.get("motion_aware_crop_applied"):
+                entries.append("motion_aware_crop=true")
+            if promo.get("tuning_applied"):
+                entries.append(f"tuning_advisory={list(promo['tuning_applied'].keys())!r}")
+            conf = promo.get("confidence", 0.0)
+            report["applied"].append(
+                f"camera_promotion:phase59b"
+                f"({','.join(entries)},confidence={conf:.3f})"
+            )
+            logger.info(
+                "ai_camera_promotion_applied reframe=%r crop=%s conf=%.3f",
+                promo.get("reframe_mode_applied"),
+                promo.get("motion_aware_crop_applied"),
+                conf,
+            )
+        else:
+            reason = promo.get("reason", "not_eligible")
+            report["skipped"].append(
+                f"camera_promotion:skipped_phase59b(reason={reason!r})"
+            )
+    except Exception as exc:
+        report["warnings"].append(f"camera_promotion_error:{type(exc).__name__}")
+        logger.warning("ai_camera_promotion_failed: %s", exc)
 
 
 # ── Subtitle influence ────────────────────────────────────────────────────────
