@@ -263,6 +263,8 @@ class AIEditPlan:
     render_outcome_tracking: dict = field(default_factory=dict)
     # Phase 62B — Creator preference reinforcement (reinforcement metadata only)
     creator_preference_reinforcement: dict = field(default_factory=dict)
+    # Phase 62C — Success pattern mining (pattern metadata only, no mutation)
+    render_success_patterns: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -390,4 +392,5 @@ class AIEditPlan:
             "creator_render_strategy":            dict(self.creator_render_strategy),
             "render_outcome_tracking":            dict(self.render_outcome_tracking),
             "creator_preference_reinforcement":   dict(self.creator_preference_reinforcement),
+            "render_success_patterns":            dict(self.render_success_patterns),
         }

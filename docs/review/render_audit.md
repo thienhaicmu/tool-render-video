@@ -6195,3 +6195,158 @@ for idx, seg in enumerate(scored)           ← DB commit loop
 - Focused: **43/43** passed (including 4 required execution tests)
 - Full regression: **5405/5405** passed (0 regressions)
 - `py_compile` passed on all changed modules
+
+---
+
+### 2026-05-14 — AI Intelligence Phase 62C: Success Pattern Mining
+
+**Implemented:**
+
+- `app/ai/outcome_tracking/render_success_pattern_engine.py` (new) — `build_render_success_patterns(edit_plan, context=None) -> dict` public API; pattern-mining-only module; discovers deterministic success patterns from a single render's outcome metadata; never raises — fallback-safe on any error
+- `app/ai/director/edit_plan_schema.py` (updated) — `render_success_patterns: dict = field(default_factory=dict)` added after Phase 62B field; included in `to_dict()`; backward-compatible
+- `app/orchestration/render_pipeline.py` (updated) — Phase 62C block inserted after Phase 62B, before `for idx, seg in enumerate(scored, start=1)` DB commit loop
+- `tests/test_ai_phase62c_render_success_patterns.py` (new) — 34 tests covering required execution, fallback shape, available shape, success score formula, evidence count, conflict detection, classification, camera style descriptor, pattern ID, strong/conflicting integration scenarios, determinism, edge cases
+
+**What Phase 62C adds:**
+
+- Single-render success pattern identification: what creator×platform×signal combination worked for this render
+- Deterministic classification into `strong_pattern`, `moderate_pattern`, `weak_pattern`, or `conflicting_pattern`
+- Structured `signals` dict capturing subtitle style/density, camera stability/motion, hook energy, ranking priority
+- Pattern ID as sanitized snake_case composite key for future pattern registry lookup
+- Advisory conflicting-pattern detection to flag contradictory positive/negative signals without blocking
+
+**Success pattern output shape:**
+
+```json
+{
+  "render_success_patterns": {
+    "available": true,
+    "patterns": [
+      {
+        "pattern_id":      "podcast_tiktok_clean_pro_stable",
+        "creator_type":    "podcast",
+        "platform":        "tiktok",
+        "signals": {
+          "subtitle_style":   "clean_pro",
+          "subtitle_density": "balanced",
+          "keyword_emphasis": "selective",
+          "camera_stability": "high",
+          "motion_energy":    "low",
+          "camera_style":     "stable",
+          "hook_style":       "moderate",
+          "ranking_priority": "retention_creator_fit"
+        },
+        "success_score":    0.815,
+        "evidence_count":   5,
+        "confidence":       0.807,
+        "classification":   "strong_pattern",
+        "reasoning": [
+          "Stable framing and clean subtitles consistently improved podcast content on tiktok.",
+          "A/B winner ai_on with delta +6 confirms positive signal.",
+          "Overall quality 84 supports this pattern."
+        ]
+      }
+    ],
+    "confidence": 0.807,
+    "reasoning": [
+      "Strong creator-focused pattern detected for podcast on tiktok.",
+      "Stable creator-focused subtitle/camera combinations perform consistently."
+    ]
+  }
+}
+```
+
+**Input signals read (Phase 62C):**
+
+| Signal | Source Phase | Field |
+|---|---|---|
+| `render_outcome_tracking` | 62A | Core outcome, quality, ai_execution, ab_result, benchmark_result |
+| `creator_render_strategy` | 61D | Strategy signals (subtitle, camera, hook, ranking) |
+| `ai_ab_evaluation` | 60B | A/B availability |
+| `creator_benchmark_summary` | 60C | Benchmark status |
+| `creator_preference_profile` | 50D | Platform |
+
+**Success score formula (weighted blend, deterministic):**
+
+| Component | Weight | Source |
+|---|---|---|
+| A/B component (delta-normalized) | 0.35 | ab_winner + ab_overall_delta |
+| Quality norm (overall/100) | 0.25 | render_outcome_tracking.quality.overall |
+| Benchmark score | 0.20 | bench_status → {best_fit:1.0, improving:0.7, needs_review:0.4, unknown:0.2} |
+| AI effectiveness | 0.20 | ai_effectiveness → {strong:1.0, moderate:0.7, weak:0.3} |
+
+A/B component rules:
+- `ab_winner = ai_on`: `min(1.0, delta / 10.0)`
+- `ab_winner = ai_off`: `max(0.0, 1 - min(1.0, |delta| / 10.0)) × 0.5`
+- `tie` or no baseline: `0.5`
+
+**Evidence count (0–6 confirming signals within this render):**
+
+| Signal | Condition |
+|---|---|
+| +1 | `ab_winner = ai_on` |
+| +1 | `ai_effectiveness ∈ {strong, moderate}` |
+| +1 | `creator_fit ∈ {high, medium}` |
+| +1 | `subtitle_quality ≥ 75` AND `subtitle_applied` |
+| +1 | `camera_quality ≥ 75` AND `camera_applied` |
+| +1 | `overall_quality ≥ 75` |
+
+**Pattern classification (deterministic, explicit thresholds):**
+
+| Classification | Condition |
+|---|---|
+| `conflicting_pattern` | Conflicting signals detected (takes precedence) |
+| `strong_pattern` | `success_score ≥ 0.80` AND `evidence_count ≥ 3` |
+| `moderate_pattern` | `success_score ≥ 0.65` AND `evidence_count ≥ 2` |
+| `weak_pattern` | Below above thresholds |
+
+**Conflicting signal detection (any of):**
+
+- `ab_winner = ai_on` AND `creator_fit = low`
+- `overall_result = improved` AND `bench_status = needs_review`
+
+**Pattern confidence formula:**
+
+```
+evidence_bonus = min(0.30, evidence_count × 0.06)
+pattern_conf   = clamp(success_score × 0.7 + evidence_bonus, 0.0, 1.0)
+```
+
+**Gate check (all required to produce available=True):**
+
+| Condition | Fallback reason |
+|---|---|
+| `rot_available == True` | `outcome_unavailable` |
+| `creator_type != "unknown"` | `creator_type_unknown` |
+| Any quality score > 0 | `quality_missing` |
+
+**Execution order in render_pipeline.py:**
+
+```
+Phase 62A render outcome tracking
+Phase 62B creator preference reinforcement
+Phase 62C render success pattern mining  ← reads 62A + 61D + 60B/60C/50D, no mutations
+for idx, seg in enumerate(scored)        ← DB commit loop
+```
+
+**Safety contract:**
+
+| Boundary | Status |
+|---|---|
+| No render mutation | ✅ |
+| No payload mutation | ✅ |
+| No autonomous optimization | ✅ |
+| No autonomous retraining | ✅ |
+| No external persistence | ✅ |
+| No influence mutation | ✅ |
+| Conflicting patterns advisory-only | ✅ |
+| Success scores and confidence clamped to [0.0, 1.0] | ✅ |
+| Never claims strong pattern without evidence | ✅ |
+| Never raises — fallback on any error | ✅ |
+| Deterministic: same inputs → same output | ✅ |
+
+**Test Results:**
+
+- Focused: **34/34** passed (including 4 required execution tests)
+- Full regression: pending
+- `py_compile` passed on all changed modules

@@ -2281,6 +2281,37 @@ def run_render_pipeline(
                     "creator_preference_reinforcement_failed job_id=%s: %s", job_id, _cpr_err
                 )
 
+        # ── Success Pattern Mining (Phase 62C) — pattern metadata only ──────
+        # Discovers deterministic success patterns from this render's outcome.
+        # No render mutation, no autonomous training, no external persistence.
+        if _ai_edit_plan is not None:
+            try:
+                from app.ai.outcome_tracking.render_success_pattern_engine import (
+                    build_render_success_patterns as _build_rsp,
+                )
+                _rsp_result = _build_rsp(
+                    _ai_edit_plan, context={"job_id": job_id},
+                )
+                try:
+                    _ai_edit_plan.render_success_patterns = (
+                        _rsp_result.get("render_success_patterns") or {}
+                    )
+                except Exception:
+                    pass
+                _rsp = _rsp_result.get("render_success_patterns") or {}
+                logger.info(
+                    "render_success_patterns_built job_id=%s available=%s "
+                    "pattern_count=%d confidence=%.3f",
+                    job_id,
+                    _rsp.get("available"),
+                    len(_rsp.get("patterns") or []),
+                    float(_rsp.get("confidence") or 0.0),
+                )
+            except Exception as _rsp_err:
+                logger.warning(
+                    "render_success_patterns_failed job_id=%s: %s", job_id, _rsp_err
+                )
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()
