@@ -27,4 +27,8 @@ export const jobsApi = {
       method: 'DELETE',
     });
   },
+
+  async getHistory() {
+    return fetchJson('/api/jobs/history');
+  },
 };

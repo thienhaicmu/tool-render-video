@@ -869,3 +869,65 @@
   font-size: var(--text-caption);
   color: var(--color-text-faint);
 }
+
+/* ── Library screen ──────────────────────────────────────────────────── */
+.lib-filter-bar {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.lib-filter-pills {
+  flex-wrap: wrap;
+}
+
+.lib-filter-pill {
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.lib-filter-pill:hover { border-color: var(--color-border-strong); color: var(--color-text); }
+.lib-filter-pill--active { border-color: var(--color-accent); color: var(--color-accent); background: var(--color-accent-soft); }
+
+.lib-search {
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-caption);
+  font-family: inherit;
+  min-width: 180px;
+  outline: none;
+  transition: border-color 0.12s;
+}
+.lib-search:focus { border-color: var(--color-accent); }
+.lib-search::placeholder { color: var(--color-text-faint); }
+
+.lib-card {
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.lib-card:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-raised);
+}
+
+.lib-card__title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lib-card__actions {
+  flex-shrink: 0;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}

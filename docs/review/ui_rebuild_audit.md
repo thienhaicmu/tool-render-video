@@ -457,3 +457,155 @@ New classes appended before the Metric display section:
 ## 10. Next Phase Recommendation
 
 **UI-R2D** or **Phase 63**: AI Copilot full wiring — populate `renderAIPanel()` with director decisions, subtitle/camera promotion report, segment selection reasoning, quality gate summary, and execution confidence metrics from `parseAIInsightSummary()` full output.
+
+---
+
+# UI-R3A — Library Screen
+
+**Phase:** UI-R3A
+**Date:** 2026-05-14
+**Branch:** feature/ai-output-upgrade
+**Scope:** First extended product screen — render history browser
+
+---
+
+## 1. Summary
+
+Added the Library screen under `backend/static-v2/`. Users can browse all past render jobs, filter by status, search by title or job ID, navigate directly to Results (completed/partial jobs) or Monitor (active jobs), and trigger Retry/Resume for failed/interrupted jobs. No backend files were modified.
+
+---
+
+## 2. Files Changed
+
+| File | Change |
+|---|---|
+| `assets/js/screens/library.js` | New — Library screen |
+| `assets/js/api/jobs.js` | Added `getHistory()` → `GET /api/jobs/history` |
+| `assets/js/router.js` | Added `#/library` route → `libraryScreen` |
+| `assets/js/components/nav-rail.js` | Library moved to enabled (5th item); disabled list replaced with Downloads, System, Publish |
+| `assets/css/components.css` | Appended Library-specific classes |
+
+---
+
+## 3. Route Added
+
+| Hash path | Screen | Params |
+|---|---|---|
+| `#/library` | libraryScreen | — |
+
+---
+
+## 4. APIs Used
+
+| Endpoint | Method | Wrapper | Purpose |
+|---|---|---|---|
+| `/api/jobs/history` | GET | `jobsApi.getHistory()` | Load render history list |
+| `/api/render/retry/{jobId}` | POST | `renderApi.retry(jobId)` | Retry failed job (reused from UI-R2B) |
+| `/api/render/resume/{jobId}` | POST | `renderApi.resume(jobId)` | Resume interrupted job (reused from UI-R2B) |
+
+Navigation to `/results/:jobId` and `/monitor/:jobId` uses `router.go()` — no additional API calls.
+
+---
+
+## 5. History Parsing Behavior
+
+`normalizeHistoryItem(raw)` wraps `normalizeJob()` and adds display-layer fields:
+
+| Field | Source | Fallback |
+|---|---|---|
+| `displayTitle` | `payload.title` → `source_url` → `source_path` | `"Job {jobId.slice(0,12)}"` |
+| `bestScore` | `result_json.output_ranking[0].score` | `null` (hidden) |
+| `outputCount` | `result_json.output_ranking.length` | `null` (hidden) |
+| `hasAI` | presence of `ai_director` / `ai_render_influence` / `ai_execution_metrics` | `false` |
+
+All extraction is wrapped in try/catch — null `result_json`, malformed JSON, or missing fields never throw.
+
+---
+
+## 6. Status / Action Rules
+
+| Status | Card click | Inline action |
+|---|---|---|
+| `completed` / `completed_with_errors` | → `/results/:jobId` | View Results button |
+| `partial` | → `/results/:jobId` | View Results button |
+| `queued` / `running` | → `/monitor/:jobId` | Monitor button |
+| `failed` | no navigation | Retry button → `/monitor/:newJobId` |
+| `interrupted` | no navigation | Resume button → `/monitor/:newJobId` |
+| `unsupported` / `unavailable` | no navigation | no action |
+
+Retry and Resume buttons disable on click and show inline error text on the card if the API call fails (no alert, no raw JSON).
+
+---
+
+## 7. Filter / Search
+
+- Filter pills: All, Running, Completed, Partial, Failed, Interrupted
+- Running filter matches `queued` and `running` statuses
+- Completed filter matches `completed` and `completed_with_errors` statuses
+- Search: case-insensitive substring match on `displayTitle` and `jobId`
+- Filters and search compose (both applied simultaneously)
+- Empty filter+search result shows "No jobs match" empty state (not "no renders found")
+
+---
+
+## 8. States
+
+| State | Rendered as |
+|---|---|
+| Loading | 4 skeleton blocks (88px height each) |
+| Error | Red-bordered card with message + "Try again" button → calls `_load()` |
+| Empty history | `emptyState` with clock icon: "No renders found. Start a render from Source." |
+| Empty filter result | `emptyState`: "No jobs match the current filter or search." |
+
+---
+
+## 9. Visual Style
+
+- Cards: `.lib-card.card` — inherit base card dark background, soft border
+- Hover: `border-color` elevates to `--color-border-strong`, `background` to `--color-surface-raised`
+- Status chip from shared `statusChip()` component (all 8 states)
+- AI badge from shared `aiBadge('advisory')` when AI metadata detected
+- Filter pills: identical visual language to `.ratio-pill` / `.preset-pill` (border/accent pattern)
+- Score color-coded: ≥70 success green / ≥40 warning amber / <40 failed red
+- No random inline colors — all values from `--color-*` tokens
+
+---
+
+## 10. NavRail Update
+
+| Slot | Before | After |
+|---|---|---|
+| Enabled 5 | (empty) | Library → `#/library` |
+| Disabled 1 | Analytics | Downloads |
+| Disabled 2 | Library | System |
+| Disabled 3 | Settings | Publish |
+| Disabled 4 | Help | (removed) |
+
+---
+
+## 11. Legacy Isolation
+
+| Constraint | Status |
+|---|---|
+| No edits to `backend/static/` | ✅ |
+| No edits to `backend/app/main.py` | ✅ |
+| No backend WebSocket contracts changed | ✅ |
+| No FFmpeg / render pipeline changes | ✅ |
+| No `alert()` calls | ✅ |
+| No raw JSON displayed to user | ✅ |
+
+---
+
+## 12. Known Limitations (UI-R3A Scope)
+
+- `GET /api/jobs/history` endpoint must exist on the backend; if absent the error state is shown with a retry button (no crash).
+- History list is sorted newest-first by `created_at`; if `created_at` is missing the item sorts to the bottom.
+- Retry/Resume re-enable buttons on failure but do not automatically reload history (user must click Refresh).
+- Right panel (`.shell__panel`) not wired to Library — shows default "Select a job to see details." copy.
+- No pagination — loads all history items in one request.
+
+---
+
+## 13. Next Phase
+
+**UI-R3B — Downloads Screen**: Let users manage downloaded output files, view download history, and trigger re-downloads from completed job parts.
