@@ -1913,3 +1913,335 @@
   border: 1px solid var(--color-failed);
   border-radius: var(--radius-panel);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Create Workspace (UI-R5C)
+   ══════════════════════════════════════════════════════════════════════ */
+
+.create-workspace {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.create-canvas {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  background: var(--color-background);
+}
+
+.create-brief-wrapper {
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-bg-raised);
+  overflow: hidden;
+}
+
+.create-brief {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.create-brief__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-5) var(--sp-4);
+  scrollbar-width: thin;
+}
+
+/* ── Import surface ───────────────────────────────────────────────────── */
+
+.create-import-surface {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--sp-8);
+  max-width: 540px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.create-import-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--sp-2);
+}
+
+.create-import-sub {
+  font-size: 13px;
+  color: var(--color-text-faint);
+}
+
+/* ── Source mode tabs ─────────────────────────────────────────────────── */
+
+.create-mode-tabs {
+  padding-bottom: var(--sp-1);
+}
+
+.create-mode-tab {
+  padding: 6px 16px;
+  border-radius: var(--radius-btn, 8px);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+
+.create-mode-tab:hover:not(:disabled) {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.create-mode-tab--active {
+  background: var(--color-surface);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.create-mode-tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── URL / path input ─────────────────────────────────────────────────── */
+
+.create-url-input {
+  width: 100%;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input, 8px);
+  color: var(--color-text);
+  font-size: 14px;
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color 120ms;
+}
+
+.create-url-input:focus {
+  border-color: var(--color-accent);
+}
+
+/* ── Inline error card ────────────────────────────────────────────────── */
+
+.create-error-card {
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-panel, 10px);
+  border: 1px solid var(--color-failed);
+  color: var(--color-failed);
+  font-size: 13px;
+}
+
+/* ── Loading state ────────────────────────────────────────────────────── */
+
+.create-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+/* ── Video preview ────────────────────────────────────────────────────── */
+
+.create-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.create-preview__video {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  object-fit: contain;
+  background: #000;
+}
+
+.create-preview--idle {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.create-session-bar {
+  flex-shrink: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Brief section label ──────────────────────────────────────────────── */
+
+.create-brief-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  margin-bottom: var(--sp-2);
+}
+
+/* ── Intent presets ───────────────────────────────────────────────────── */
+
+.intent-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+}
+
+.intent-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--sp-3);
+  border-radius: var(--radius-panel, 10px);
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 120ms, background 120ms;
+}
+
+.intent-pill:hover {
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+}
+
+.intent-pill--active {
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+}
+
+.intent-pill__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.intent-pill__desc {
+  font-size: 10px;
+  color: var(--color-text-faint);
+  line-height: 1.3;
+}
+
+/* ── Format pills ─────────────────────────────────────────────────────── */
+
+.format-pills {
+  display: flex;
+  gap: var(--sp-1);
+}
+
+.format-pill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-1);
+  border-radius: var(--radius-btn, 8px);
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  cursor: pointer;
+  align-items: center;
+  color: var(--color-text-muted);
+  transition: border-color 120ms, background 120ms, color 120ms;
+}
+
+.format-pill:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.format-pill--active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-surface);
+}
+
+/* ── Advanced collapse ────────────────────────────────────────────────── */
+
+.create-advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+}
+
+.create-advanced-arrow {
+  font-size: 16px;
+  color: var(--color-text-faint);
+}
+
+/* ── Generate CTA ─────────────────────────────────────────────────────── */
+
+.create-generate {
+  padding: var(--sp-4);
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.btn-generate {
+  width: 100%;
+  padding: 13px;
+  background: var(--color-accent);
+  color: #000;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  border-radius: var(--radius-btn, 8px);
+  cursor: pointer;
+  transition: opacity 140ms, transform 80ms;
+  letter-spacing: 0.01em;
+}
+
+.btn-generate:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-generate:active:not(:disabled) {
+  transform: none;
+}
+
+.btn-generate:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Summary chips ────────────────────────────────────────────────────── */
+
+.create-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  margin-bottom: var(--sp-2);
+}
+
+.create-summary-chip {
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
