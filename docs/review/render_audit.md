@@ -192,6 +192,119 @@
 - Phase 55E tests: 104 passed
 - Full suite: 4744 passed, 1 skipped
 - `py_compile` passed on all changed modules
+
+---
+
+### 2026-05-14 — Phase 59A: Subtitle Influence Promotion (first safe execution layer)
+
+**Implemented:**
+
+- `app/ai/subtitle_promotion/subtitle_promotion_engine.py` (new) — `promote_subtitle_influence(payload, edit_plan, context)` public API; promotes advisory subtitle signals to actual render config fields; never raises
+- `app/ai/subtitle_promotion/__init__.py` (new) — package marker
+- `app/ai/director/edit_plan_schema.py` (updated) — `subtitle_execution_promotion: dict` field added for promotion result storage; included in `to_dict()`
+- `app/ai/director/render_influence.py` (updated) — `_apply_subtitle_promotion()` wired into `apply_ai_render_influence()` between subtitle influence and pacing; imports promotion engine, stores report on `edit_plan.subtitle_execution_promotion`, appends to `report["applied"]` / `report["skipped"]`
+- `tests/test_ai_phase59a_subtitle_promotion.py` (new) — 32 tests
+
+**What Phase 59A is:**
+
+Phase 59A is the first *safe execution promotion* layer in the AI pipeline. All prior phases (10–57) produce advisory metadata that never touches the render pipeline. Phase 59A promotes two fields only:
+
+| Field | Promotion action | When |
+|---|---|---|
+| `payload.subtitle_style` | Set to allowed preset | `add_subtitle=True`, user hasn't locked style, confidence ≥ 0.80 |
+| `payload.highlight_per_word` | Enable (set to `True`) | Not already enabled, confidence ≥ 0.78, emphasis signal present |
+
+**Allowed subtitle presets (promotion targets):**
+
+Only these three canonical preset IDs may be promoted to `payload.subtitle_style`:
+- `viral_bold` — full-screen bold, designed for word-level bounce
+- `clean_pro` — minimal professional caption
+- `boxed_caption` — opaque background box, block subtitles
+
+Any other value (including Phase 50C outputs not in this set) is silently ignored.
+
+**Signal priority for preset resolution:**
+
+1. Phase 50C `creator_subtitle_influence.preset_bias` (most creator-specific)
+2. Phase 55E `platform_render_strategy.strategy.subtitle.style_bias`
+3. Phase 56 `platform_strategy_influence.subtitle.bias.style`
+4. Phase 50A `creator_subtitle_preference.subtitle_preference.style` (broadest signal)
+
+**Confidence gating:**
+
+- `effective_conf = max(pref_conf, prs_conf)` where `prs_conf` is only read when `platform_render_strategy.available = True`
+- Preset promotion requires `effective_conf >= 0.80`
+- Emphasis promotion requires `effective_conf >= 0.78`
+
+**User override rules:**
+
+| Condition | Behavior |
+|---|---|
+| `subtitle_ai_style_lock = True` | No promotion — user has locked style |
+| `subtitle_style` not in `{"pro_karaoke", None, ""}` | No promotion — user explicitly chose a style |
+| `subtitle_style` in neutral set | Promotion eligible |
+| `highlight_per_word` already `True` | No change (AI only enables, never disables) |
+
+The neutral set `{"pro_karaoke", None, ""}` treats the schema default `"pro_karaoke"` as "no explicit user preference," because the schema field defaults to `"pro_karaoke"` and there is no reliable way to distinguish that from an explicit user choice without the `subtitle_ai_style_lock` flag.
+
+**Density — advisory only:**
+
+No direct density field exists on `RenderRequest`. Density bias from Phase 50C / Phase 50A is stored in the promotion report's `density_applied` field as an advisory recommendation but does NOT mutate any payload field.
+
+**Promotion report shape:**
+
+```json
+{
+  "subtitle_execution_promotion": {
+    "applied": true,
+    "preset_applied": "viral_bold",
+    "density_applied": "medium",
+    "keyword_emphasis_applied": true,
+    "confidence": 0.8500,
+    "reason": "promotion_applied",
+    "reasoning": [
+      "Creator subtitle influence recommended 'viral_bold' style",
+      "Promoted preset 'viral_bold' is designed for word-level highlighting"
+    ]
+  }
+}
+```
+
+**Safety contract enforced:**
+
+| Boundary | Status |
+|---|---|
+| No subtitle timing rewrite | ✅ |
+| No ASS generation rewrite | ✅ |
+| No segmentation rewrite | ✅ |
+| No transcript mutation | ✅ |
+| No new subtitle preset generation | ✅ |
+| No FFmpeg mutation | ✅ |
+| No render pipeline rewrite | ✅ |
+| No playback_speed mutation | ✅ |
+| No executor override | ✅ |
+| Only promotes from AI-neutral default style | ✅ |
+| Preset validated against ALLOWED_PROMOTION_PRESETS | ✅ |
+| Confidence gates enforced before any mutation | ✅ |
+| Deterministic: same inputs → same output | ✅ |
+| User override respected | ✅ |
+| Never raises — fallback-safe on any error | ✅ |
+
+**Fallback behavior:**
+
+| Condition | Result |
+|---|---|
+| `add_subtitle = False` | No promotion, reason `subtitles_disabled` |
+| `edit_plan = None` | No promotion, reason `no_edit_plan` |
+| `subtitle_ai_style_lock = True` | No promotion, reason `user_override` |
+| `subtitle_style` not neutral | No promotion, reason `user_override` |
+| Confidence below threshold | No promotion, reason `no_eligible_promotion` |
+| Any exception inside engine | Caught, fallback report returned, reason `promotion_error` |
+
+**Verification:**
+
+- Phase 59A tests: 32 passed
+- `py_compile` passed on all changed modules
 - `git diff --check` clean
 
 **Status:**

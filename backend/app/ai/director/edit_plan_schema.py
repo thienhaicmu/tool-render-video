@@ -232,6 +232,8 @@ class AIEditPlan:
     platform_strategy_influence: dict = field(default_factory=dict)
     # Phase 57 — Platform-aware quality feedback loop (populated by platform_quality_feedback_evaluator module)
     platform_quality_feedback: dict = field(default_factory=dict)
+    # Phase 59A — Subtitle influence promotion result (populated by subtitle_promotion_engine module)
+    subtitle_execution_promotion: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -343,4 +345,5 @@ class AIEditPlan:
             "platform_render_strategy": dict(self.platform_render_strategy),
             "platform_strategy_influence": dict(self.platform_strategy_influence),
             "platform_quality_feedback": dict(self.platform_quality_feedback),
+            "subtitle_execution_promotion": dict(self.subtitle_execution_promotion),
         }

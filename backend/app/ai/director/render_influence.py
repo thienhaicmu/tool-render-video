@@ -85,6 +85,7 @@ def apply_ai_render_influence(
     try:
         _apply_camera_influence(payload, edit_plan, report)
         _apply_subtitle_influence(payload, edit_plan, report)
+        _apply_subtitle_promotion(payload, edit_plan, report)
         _apply_pacing_influence(payload, edit_plan, report)
         _apply_memory_influence(payload, edit_plan, report)
         _report_beat_visual_execution(payload, edit_plan, report)
@@ -218,6 +219,77 @@ def _apply_subtitle_influence(payload: Any, edit_plan: Any, report: dict) -> Non
         report["applied"].append("subtitle:highlight_per_word=true(keyword_highlight)")
     except Exception as exc:
         report["skipped"].append(f"subtitle:set_failed:{type(exc).__name__}")
+
+
+# ── Subtitle influence promotion (Phase 59A) ─────────────────────────────────
+
+def _apply_subtitle_promotion(payload: Any, edit_plan: Any, report: dict) -> None:
+    """Phase 59A — Promote advisory subtitle metadata to actual render config.
+
+    Calls subtitle_promotion_engine.promote_subtitle_influence() which may set:
+      - payload.subtitle_style     (preset selection)
+      - payload.highlight_per_word (keyword emphasis enable)
+
+    Only fires when:
+      - add_subtitle is True on the payload
+      - edit_plan is not None
+      - subtitle_style is the AI-neutral default
+      - confidence passes thresholds
+
+    Results that change payload go to report["applied"].
+    All other outcomes go to report["skipped"].
+    """
+    if not bool(getattr(payload, "add_subtitle", False)):
+        report["skipped"].append("subtitle_promotion:add_subtitle=false_phase59a")
+        return
+
+    if edit_plan is None:
+        report["skipped"].append("subtitle_promotion:no_edit_plan_phase59a")
+        return
+
+    try:
+        from app.ai.subtitle_promotion.subtitle_promotion_engine import (
+            promote_subtitle_influence,
+        )
+        _, promotion_report = promote_subtitle_influence(
+            payload, edit_plan, context={}
+        )
+        promo = promotion_report.get("subtitle_execution_promotion") or {}
+
+        # Store promotion result on the plan for visibility/UX consumers
+        try:
+            edit_plan.subtitle_execution_promotion = promo
+        except Exception:
+            pass
+
+        if promo.get("applied"):
+            entries: list[str] = []
+            if promo.get("preset_applied"):
+                entries.append(f"preset={promo['preset_applied']!r}")
+            if promo.get("keyword_emphasis_applied"):
+                entries.append("keyword_emphasis=true")
+            if promo.get("density_applied"):
+                entries.append(f"density_advisory={promo['density_applied']!r}")
+            conf = promo.get("confidence", 0.0)
+            report["applied"].append(
+                f"subtitle_promotion:phase59a"
+                f"({','.join(entries)},confidence={conf:.3f})"
+            )
+            logger.info(
+                "ai_subtitle_promotion_applied preset=%r emphasis=%s density_advisory=%r conf=%.3f",
+                promo.get("preset_applied"),
+                promo.get("keyword_emphasis_applied"),
+                promo.get("density_applied"),
+                conf,
+            )
+        else:
+            reason = promo.get("reason", "not_eligible")
+            report["skipped"].append(
+                f"subtitle_promotion:skipped_phase59a(reason={reason!r})"
+            )
+    except Exception as exc:
+        report["warnings"].append(f"subtitle_promotion_error:{type(exc).__name__}")
+        logger.warning("ai_subtitle_promotion_failed: %s", exc)
 
 
 # ── Pacing influence (Phase 11 beat execution integration) ───────────────────
