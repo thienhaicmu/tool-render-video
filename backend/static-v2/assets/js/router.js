@@ -1,16 +1,18 @@
-import { sourceScreen }  from './screens/source.js';
-import { studioScreen }  from './screens/studio.js';
-import { monitorScreen } from './screens/monitor.js';
-import { resultsScreen } from './screens/results.js';
-import { libraryScreen } from './screens/library.js';
-import { shell }         from './components/shell.js';
+import { sourceScreen }    from './screens/source.js';
+import { studioScreen }    from './screens/studio.js';
+import { monitorScreen }   from './screens/monitor.js';
+import { resultsScreen }   from './screens/results.js';
+import { libraryScreen }   from './screens/library.js';
+import { downloadsScreen } from './screens/downloads.js';
+import { shell }           from './components/shell.js';
 
 const ROUTES = [
-  { pattern: /^\/source$/,           screen: sourceScreen,  id: 'source'  },
-  { pattern: /^\/studio$/,           screen: studioScreen,  id: 'studio'  },
-  { pattern: /^\/monitor\/([^/]+)$/, screen: monitorScreen, id: 'monitor' },
-  { pattern: /^\/results\/([^/]+)$/, screen: resultsScreen, id: 'results' },
-  { pattern: /^\/library$/,          screen: libraryScreen, id: 'library' },
+  { pattern: /^\/source$/,           screen: sourceScreen,    id: 'source'    },
+  { pattern: /^\/studio$/,           screen: studioScreen,    id: 'studio'    },
+  { pattern: /^\/monitor\/([^/]+)$/, screen: monitorScreen,   id: 'monitor'   },
+  { pattern: /^\/results\/([^/]+)$/, screen: resultsScreen,   id: 'results'   },
+  { pattern: /^\/library$/,          screen: libraryScreen,   id: 'library'   },
+  { pattern: /^\/downloads$/,        screen: downloadsScreen, id: 'downloads' },
 ];
 
 const DEFAULT_PATH = '/source';

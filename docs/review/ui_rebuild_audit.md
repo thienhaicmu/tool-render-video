@@ -608,4 +608,159 @@ Retry and Resume buttons disable on click and show inline error text on the card
 
 ## 13. Next Phase
 
-**UI-R3B — Downloads Screen**: Let users manage downloaded output files, view download history, and trigger re-downloads from completed job parts.
+**UI-R3B — Downloads Screen**: Standalone batch download of public videos for later rendering — implemented in this phase.
+
+---
+
+# UI-R3B — Downloads Screen
+
+**Phase:** UI-R3B
+**Date:** 2026-05-14
+**Branch:** feature/ai-output-upgrade
+**Scope:** Standalone batch download workflow — separate from render pipeline
+
+---
+
+## 1. Summary
+
+Added the Downloads screen under `backend/static-v2/`. Users paste one URL per line, optionally set an output folder, and submit a batch download job via `POST /api/download/process`. The submitted job is tracked inline with status, a "Check Status" button (re-fetches via `GET /api/jobs/{id}`), and a "Retry failed items" button when the job status is failed. Navigation to Library is provided for full history. No backend files were modified.
+
+---
+
+## 2. Files Changed
+
+| File | Change |
+|---|---|
+| `assets/js/screens/downloads.js` | New — Downloads screen |
+| `assets/js/api/download.js` | New — download API wrappers |
+| `assets/js/router.js` | Added `#/downloads` route → `downloadsScreen` |
+| `assets/js/components/nav-rail.js` | Downloads moved to enabled (6th item); disabled list reduced to System, Publish |
+| `assets/css/components.css` | Appended Downloads CSS classes |
+
+---
+
+## 3. Route Added
+
+| Hash path | Screen | Params |
+|---|---|---|
+| `#/downloads` | downloadsScreen | — |
+
+---
+
+## 4. APIs Used
+
+| Endpoint | Method | Wrapper | Purpose |
+|---|---|---|---|
+| `/api/download/process` | POST | `downloadApi.processDownload(payload)` | Submit batch download job |
+| `/api/download/retry/{job_id}` | POST | `downloadApi.retryDownload(jobId, [])` | Retry failed download items |
+| `/api/jobs/{job_id}` | GET | `downloadApi.getDownloadJob(jobId)` | Refresh job status on demand |
+
+---
+
+## 5. Endpoint Limitations
+
+| Limitation | Detail |
+|---|---|
+| No history endpoint for downloads | `GET /api/jobs/history` returns all kinds including `download`; handled through Library screen, not Downloads screen |
+| Quality preset not in contract | `POST /api/download/process` only documents `urls` and `output_dir` (§9.1). Quality picker is UI-only preference, **not sent to backend**. If a `quality` field is added to the backend model, add it to the payload in `processDownload()`. |
+| Retry part_numbers | Empty array `[]` sent to backend = retry all failed items (§9.2: "Empty `part_numbers` retries failed parts") |
+| No status polling | Downloads screen does not auto-poll. Status updates only on manual "Check Status" click. Full history and status tracking via Library. |
+
+---
+
+## 6. URL Parsing Behavior
+
+`parseUrlInput(raw)` applies deterministic rules with no platform detection:
+
+| Step | Rule |
+|---|---|
+| Split | By `\n` |
+| Trim | Whitespace stripped per line |
+| Skip | Empty lines silently dropped |
+| Validate | Must start with `http://` or `https://` (case-insensitive) |
+| Dedupe | Exact URL string match; duplicates silently dropped |
+| Feedback | Valid count (green), invalid count (red), dupe count (faint) shown inline |
+
+Invalid URLs block submit. Only valid de-duped URLs are sent in the API payload.
+
+---
+
+## 7. Output Folder Behavior
+
+| Context | Behavior |
+|---|---|
+| Desktop (Electron) | `desktopAdapter.pickOutputDir()` — native folder picker, result shown inline |
+| Browser (no Electron) | Manual text input; placeholder describes expected path format |
+| Empty / not set | Field omitted from API payload; backend uses its configured default |
+
+---
+
+## 8. Job Result Panel
+
+Shown after successful submit. Contains:
+
+| Element | Behavior |
+|---|---|
+| Status chip | Shows job status from API response (`queued` initially) |
+| Job ID | Monospace display of returned `job_id` |
+| Item count / output dir | From API response |
+| Item rows | First 8 items: part_no, source platform, truncated URL |
+| View in Library | Navigates to `#/library` |
+| Check Status | Fetches `GET /api/jobs/{id}`, updates chip and retry button visibility |
+| Retry failed items | Shown only when status is `failed`; calls `POST /api/download/retry/{id}` with empty `part_numbers` |
+
+Errors from retry or status check show inline below the action buttons. No `alert()`, no modal.
+
+---
+
+## 9. Visual Style
+
+- Screen uses `.card.col.gap-3/4` sections consistent with Source/Library screens
+- Textarea: `.dl-url-textarea` — monospace font, resizable, focus ring matches accent
+- Quality pills: `.dl-quality-pill` / `--active` — same visual language as `.ratio-pill` / `.exec-pill`
+- Path input: `.dl-path-input` — same styling as other form inputs
+- Status note badge in header: `.dl-mode-note` — small bordered label
+- Item rows in result panel: `.dl-item-row` with part/source/url columns
+- All colors from `--color-*` tokens only
+
+---
+
+## 10. NavRail Update
+
+| Slot | Before | After |
+|---|---|---|
+| Enabled 6 | (empty) | Downloads → `#/downloads` |
+| Disabled 1 | Downloads | System |
+| Disabled 2 | System | Publish |
+| Disabled 3 | Publish | (removed) |
+
+---
+
+## 11. Legacy Isolation
+
+| Constraint | Status |
+|---|---|
+| No edits to `backend/static/` | ✅ |
+| No edits to `backend/app/main.py` | ✅ |
+| No backend WebSocket contracts changed | ✅ |
+| No FFmpeg / render pipeline changes | ✅ |
+| No `alert()` calls | ✅ |
+| No raw JSON displayed to user | ✅ |
+| Download workflow isolated from render workflow | ✅ — no shared state or store |
+
+---
+
+## 12. Known Limitations (UI-R3B Scope)
+
+- Quality preset selector is UI-only — not sent to backend because the documented contract (`§9.1`) does not include a quality field in `POST /api/download/process`. Add to payload when backend supports it.
+- No auto-polling — user must click "Check Status" to see status updates. Full progress tracking available in Library (which loads from `GET /api/jobs/history`).
+- "Check Status" calls `GET /api/jobs/{id}` using `normalizeJob()` — if the download job has an unknown status, it falls through to `'unavailable'` without crashing.
+- Retry sends empty `part_numbers` (retry all failed); per-part retry selection not implemented.
+- Right panel (`.shell__panel`) not wired to Downloads screen.
+- `output_dir` is optional — if omitted, backend uses its default path. Users in browser context must type a backend-readable path manually.
+
+---
+
+## 13. Next Phase
+
+**UI-R3C — System / Diagnostics Screen**: Display backend health, execution mode, tool availability (ffmpeg, yt-dlp, whisper, GPU), and queue status.
