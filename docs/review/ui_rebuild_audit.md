@@ -1075,6 +1075,113 @@ Hardens static-v2 for real desktop usage. No new features, no backend changes.
 
 ---
 
-## 17. Next Phase
+## 17. UI-R5 — Static-v2 Activation & Migration Gate
+
+**Date:** 2026-05-14  
+**Commit:** `feat(ui): add static-v2 activation gate`
+
+Adds a rollback-safe environment-variable gate to choose which static UI the backend serves. No render pipeline changes, no AI logic changes, no legacy UI deletion.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `backend/app/core/ui_gate.py` *(new)* | `resolve_static_directory()` helper |
+| `backend/app/main.py` | Import helper; conditional static mount; `ui_version` in `/health` |
+| `tests/test_ui_gate.py` *(new)* | 11 unit tests for the gate helper |
+
+### Activation Behavior
+
+**Environment variable:** `STATIC_UI_VERSION`
+
+| Value | Behavior |
+|---|---|
+| *(unset / empty)* | Serves `backend/static/` (legacy) — safe default |
+| `legacy` | Serves `backend/static/` (legacy) |
+| `v2` | Serves `backend/static-v2/` (new UI) |
+| any other value | Warns and falls back to legacy |
+| `v2` but `static-v2/` missing | Warns and falls back to legacy |
+
+### Static Mount Strategy
+
+- **Legacy:** mounts `backend/static/` at `/static` (existing absolute-path references in legacy `index.html` like `/static/css/app.css` continue to work)
+- **v2:** mounts `backend/static-v2/assets/` at `/assets` (static-v2 `index.html` uses relative paths `assets/css/…` → resolves to `/assets/css/…`)
+
+### Health Metadata
+
+`GET /health` now includes `ui_version`:
+```json
+{"status": "ok", "ui_version": "v2"}
+```
+
+### Rollback
+
+Switch to v2 then back to legacy instantly — no restart needed beyond env change + server restart:
+
+```powershell
+# Activate v2
+$env:STATIC_UI_VERSION = "v2"
+# Launch backend normally
+
+# Roll back to legacy
+$env:STATIC_UI_VERSION = "legacy"
+# Or simply unset it:
+Remove-Item Env:\STATIC_UI_VERSION
+```
+
+### Usage Examples
+
+```powershell
+# PowerShell — run legacy (default)
+$env:STATIC_UI_VERSION = "legacy"
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# PowerShell — run static-v2
+$env:STATIC_UI_VERSION = "v2"
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+```bash
+# Bash / shell — run v2
+STATIC_UI_VERSION=v2 uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### Backend / Render Behavior
+
+No changes to:
+- API routes or WebSocket endpoints
+- Render pipeline (FFmpeg, yt-dlp, Whisper)
+- AI director logic
+- Job manager, warmup, session management
+- Desktop shell launch URL (`http://127.0.0.1:8000`)
+
+### Test Checklist
+
+| Test | Status |
+|---|---|
+| Missing env → legacy | ✓ |
+| `STATIC_UI_VERSION=legacy` → legacy | ✓ |
+| `STATIC_UI_VERSION=v2` with `static-v2/` present → v2 | ✓ |
+| `STATIC_UI_VERSION=V2` (uppercase) → v2 | ✓ |
+| Invalid value → legacy fallback | ✓ |
+| `STATIC_UI_VERSION=v2` but dir missing → legacy fallback | ✓ |
+| Return type guarantees (`Path`, `str`) | ✓ |
+| Never raises on unusual input values | ✓ |
+| `py_compile backend/app/main.py` | ✓ |
+| `py_compile backend/app/core/ui_gate.py` | ✓ |
+| `pytest tests/test_ui_gate.py` — 11/11 passed | ✓ |
+
+### Manual Verification Checklist
+
+- [ ] Start backend without env → `http://127.0.0.1:8000` loads legacy UI
+- [ ] Start backend with `STATIC_UI_VERSION=v2` → loads static-v2 UI
+- [ ] `/health` returns `{"status":"ok","ui_version":"v2"}` in v2 mode
+- [ ] API routes (Source → Studio → Monitor → Results) still work
+- [ ] Library / Downloads / System routes work in v2
+- [ ] Legacy UI still works after unsetting env var
+
+---
+
+## 18. Next Phase
 
 _(pending)_

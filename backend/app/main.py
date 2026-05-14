@@ -20,6 +20,7 @@ from app.routes.viral import router as viral_router
 from app.routes.subtitle import router as subtitle_router
 from app.services.job_manager import recover_pending_render_jobs, shutdown as shutdown_job_manager
 from app.services.warmup import start_warmup, get_status as warmup_status
+from app.core.ui_gate import resolve_static_directory
 
 
 class _SuppressNoisyAccessFilter(logging.Filter):
@@ -63,7 +64,11 @@ def _configure_error_log_filter():
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_ROOT.parent
-STATIC_DIR = Path("/app/static") if Path("/app/static").exists() else (BACKEND_ROOT / "static")
+
+# ── UI activation gate ────────────────────────────────────────────────────────
+# Set STATIC_UI_VERSION=v2  to serve backend/static-v2/
+# Set STATIC_UI_VERSION=legacy (or leave unset) to serve backend/static/
+STATIC_DIR, _UI_VERSION = resolve_static_directory(BACKEND_ROOT)
 INDEX_FILE = STATIC_DIR / "index.html"
 
 # ── Redirect all model/cache dirs to a stable location ───────────────────────
@@ -100,7 +105,13 @@ app.include_router(devtools_router)
 app.include_router(voice_router)
 app.include_router(viral_router)
 app.include_router(subtitle_router)
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+# Static file mount — path and name vary by UI version so both can coexist safely
+if _UI_VERSION == "v2":
+    # static-v2 index.html uses relative paths (assets/…) so mount at /assets
+    app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="static_assets")
+else:
+    # Legacy index.html references /static/… absolute paths
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 @app.on_event("startup")
@@ -130,7 +141,7 @@ def shutdown():
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "ui_version": _UI_VERSION}
 
 
 @app.get("/")
