@@ -244,6 +244,8 @@ class AIEditPlan:
     ai_execution_metrics: dict = field(default_factory=dict)
     # Phase 60A — Compact AI execution summary (populated by ai_execution_metrics_engine)
     ai_execution_summary: dict = field(default_factory=dict)
+    # Phase 60B — A/B render evaluation result (populated by ab_evaluation_engine)
+    ai_ab_evaluation: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -361,4 +363,5 @@ class AIEditPlan:
             "quality_gated_influence":       dict(self.quality_gated_influence),
             "ai_execution_metrics":          dict(self.ai_execution_metrics),
             "ai_execution_summary":          dict(self.ai_execution_summary),
+            "ai_ab_evaluation":              dict(self.ai_ab_evaluation),
         }

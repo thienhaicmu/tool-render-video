@@ -2030,6 +2030,38 @@ def run_render_pipeline(
                     "ai_execution_metrics_failed job_id=%s: %s", job_id, _met_err
                 )
 
+        # ── A/B Render Evaluation (Phase 60B) — evaluation only ──────────
+        # baseline=None in single renders → returns available=False candidate summary.
+        # Full A/B comparison requires an explicit baseline from a prior AI-OFF render.
+        if _ai_edit_plan is not None:
+            try:
+                from app.ai.ab_evaluation.ab_evaluation_engine import (
+                    build_ab_evaluation as _build_ab_eval,
+                )
+                _ab_result = _build_ab_eval(
+                    _ai_edit_plan,
+                    baseline=None,
+                    context={"job_id": job_id},
+                )
+                try:
+                    _ai_edit_plan.ai_ab_evaluation = (
+                        _ab_result.get("ai_ab_evaluation") or {}
+                    )
+                except Exception:
+                    pass
+                _ab = _ab_result.get("ai_ab_evaluation") or {}
+                logger.info(
+                    "ai_ab_evaluation_collected job_id=%s available=%s winner=%s confidence=%.3f",
+                    job_id,
+                    _ab.get("available"),
+                    _ab.get("winner", "unknown"),
+                    float(_ab.get("confidence") or 0.0),
+                )
+            except Exception as _ab_err:
+                logger.warning(
+                    "ai_ab_evaluation_failed job_id=%s: %s", job_id, _ab_err
+                )
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()

@@ -706,6 +706,109 @@ for idx, seg in enumerate(scored)    ← DB commit loop
 
 ---
 
+### 2026-05-14 — AI Intelligence v2 Phase 60B: A/B Render Evaluation
+
+**Implemented:**
+
+- `app/ai/ab_evaluation/__init__.py` (new) — package marker
+- `app/ai/ab_evaluation/ab_evaluation_engine.py` (new) — `build_ab_evaluation(edit_plan, baseline, context)` compares AI-ON candidate render quality against an optional AI-OFF baseline; supports two modes (full comparison with baseline / candidate-summary without baseline); never raises, no render mutation
+- `app/ai/director/edit_plan_schema.py` (updated) — `ai_ab_evaluation: dict` field added after Phase 60A fields; included in `to_dict()`
+- `app/orchestration/render_pipeline.py` (updated) — Phase 60B block injected after Phase 60A metrics; passes `baseline=None` since single renders have no stored baseline; stores result on `edit_plan.ai_ab_evaluation`
+- `tests/test_ai_phase60b_ab_evaluation.py` (new) — 26 tests including 3 required execution tests
+
+**What Phase 60B adds:**
+
+Phase 60B is evaluation-only. No automatic rerender, no render behavior change. It reads quality metadata populated by Phases 52A–52D and 60A, computes per-dimension deltas, selects a winner, and generates honest creator-facing reasoning.
+
+**Two evaluation modes:**
+
+**Mode A — Full comparison** (baseline available):
+- Computes `delta = candidate - baseline` for subtitle, camera, hook, overall
+- Selects winner: `overall_delta >= +3 → ai_on`, `<= -3 → ai_off`, `-2..+2 → tie`
+- Confidence = weighted blend: base(0.40) + dim coverage(0.20) + quality signal(0.20) + execution metrics(0.20)
+- Returns `available=true` with full delta, winner, confidence, reasoning
+
+**Mode B — Candidate summary only** (no baseline):
+- Returns `available=false, reason="baseline_missing"`
+- Returns `candidate_summary` with current quality scores
+- `confidence=0.0`, `winner="unknown"`
+- Never claims improvement without baseline
+
+**Output shape — Mode A:**
+
+```json
+{
+  "ai_ab_evaluation": {
+    "available": true,
+    "baseline":  {"label": "ai_off",  "quality": {"subtitle": 78, "camera": 80, "hook": 76, "overall": 78}},
+    "candidate": {"label": "ai_on",   "quality": {"subtitle": 86, "camera": 84, "hook": 81, "overall": 84},
+                  "ai_assistance_level": "high"},
+    "delta":     {"subtitle": 8, "camera": 4, "hook": 5, "overall": 6},
+    "winner":    "ai_on",
+    "confidence": 0.82,
+    "reasoning": ["AI ON improved subtitle quality (+8) vs baseline.",
+                  "Overall quality improved by 6 points."]
+  }
+}
+```
+
+**Output shape — Mode B:**
+
+```json
+{
+  "ai_ab_evaluation": {
+    "available": false,
+    "reason":    "baseline_missing",
+    "candidate_summary": {
+      "label":               "ai_on",
+      "quality":             {"subtitle": 84, "camera": 82, "hook": 79, "overall": 82},
+      "ai_assistance_level": "medium"
+    },
+    "baseline":   {},
+    "candidate":  {},
+    "delta":      {},
+    "winner":     "unknown",
+    "confidence": 0.0,
+    "reasoning":  ["Baseline missing — A/B winner cannot be determined."]
+  }
+}
+```
+
+**Winner selection thresholds:**
+| overall_delta | Winner |
+|---------------|--------|
+| >= +3 | `ai_on` |
+| -2 to +2 | `tie` (dead-band) |
+| <= -3 | `ai_off` |
+| no comparable data | `unknown` |
+
+**Baseline input shapes supported:**
+- Shape A (flat): `{"quality": {"subtitle": int, "camera": int, "hook": int, "overall": int}, "label": "ai_off"}`
+- Shape B (raw): `{"render_quality_v2": {...}, "subtitle_quality_v2": {...}, "camera_quality_v2": {...}, "hook_quality_v2": {...}}`
+
+**Execution order in render_pipeline.py:**
+
+```
+Phase 60A metrics collection
+Phase 60B A/B evaluation  ← reads candidate quality + optional baseline, no mutations
+for idx, seg in enumerate(scored)  ← DB commit loop
+```
+
+**Safety contract:**
+- No render mutation, no payload change, no automatic rerender
+- Never raises — returns fallback on any error
+- Never claims AI improvement without a valid baseline
+- All scores clamped to [0, 100]; confidence clamped to [0.0, 1.0]
+- Deterministic: same inputs → same output
+
+**Verification:**
+
+- Phase 60B focused tests: 26 passed (including 3 required execution tests)
+- Full suite: 5140 passed, 1 skipped
+- `py_compile` passed on all changed modules
+
+---
+
 ### 2026-05-14 — AI Intelligence v2 Phase 59D: Quality-Gated Execution Influence
 
 **Implemented:**
