@@ -1467,6 +1467,58 @@ Monitor (#/monitor/:jobId):
 
 ---
 
-## 21. Next Phase
+## 21. UI-R4D — Premium Creator UX Transformation
 
-_(pending — UI-FIX-3)_
+**Date:** 2026-05-14
+**Commit:** `feat(ui): transform static-v2 premium creator experience`
+
+### Goal
+Transform static-v2 from "usable internal tool" to premium creator workstation feel (CapCut/Runway/Descript/Linear). Visual-only — no behavior, workflow, or backend changes.
+
+### Changes
+
+**`backend/static-v2/assets/css/tokens.css`**
+- Added missing `--radius-sm: 6px` and `--radius-md: 8px` (were referenced in components.css but never defined, causing silent fallback failures in `.sys-status-card`, `.ai-quality-tile`, `.sys-tip`, `.ai-suggest-card`)
+
+**`backend/static-v2/assets/css/components.css`** — appended `UI-R4D: Premium Creator Experience` block:
+- `@keyframes screen-enter` + `.screen` rule — 0.18s fade+slide-up entrance on every screen mount
+- `.btn-primary:hover` — replaced flat opacity fade with accent glow (`rgba(118,224,192,0.22)` shadow) + focus-visible ring
+- `.card--raised` — deeper ambient shadow (4px/20px blur)
+- `.nav-rail-item--active` — added -1px/14px accent glow radiating from left edge
+- `.studio-body` — draft panel widened 340px → 360px
+- `.studio-preview` — cinematic stage shadow (8px/40px + 2px/8px)
+- `.draft-section__title` — `text-transform: none`, `letter-spacing: 0.01em`, `--text-body`/600 weight; removes ALL-CAPS shouting from section headers
+- `.ratio-pill--active`, `.preset-pill--active` — 1px accent glow ring
+- `.camera-option--active` — 1px accent glow ring + 2px/10px diffuse glow
+- `.exec-pill--active` — subtle lift shadow
+- `.studio-cta` — gradient fade from `--color-bg-raised` to transparent for depth
+- `.monitor-stage-text` — 26px / 800 weight / −0.03em tracking (was 22px/700)
+- `.output-clip-card:hover` — deeper lift (4px/16px) + accent breath ring; `.output-clip-card--selected` — accent shadow breath
+- `.hero-video-wrap` — cinematic ambient shadow (12px/40px)
+- `.empty-state__icon` — opacity 0.3 → 0.4
+- `.form-input:focus` — deeper focus ring (3px rgba+15%, + 1px/4px depth shadow)
+
+**`backend/static-v2/assets/js/screens/studio.js`** — section label cleanup:
+- `"A · Clip Setup"` → `"Clips"`
+- `"B · Subtitles"` span → `"Subtitles"`
+- `"C · Camera"` → `"Camera"`
+- `"D · AI Analysis"` span → `"AI Guidance"`
+
+### Verification
+```
+node --check backend/static-v2/assets/js/screens/studio.js  → OK
+```
+
+CSS: no build step required; verified tokens referenced in overrides all resolve to defined values.
+
+### Scope constraints respected
+- No JS logic changed except section label strings
+- No API calls, store behavior, or routing modified
+- No new HTML structure introduced
+- All overrides are additive CSS; existing selectors remain intact
+
+---
+
+## 22. Next Phase
+
+_(pending)_

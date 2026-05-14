@@ -80,7 +80,7 @@ function renderPreviewArea(sessionId) {
 function renderSectionA(d) {
   return `
     <div class="draft-section">
-      <div class="draft-section__title">A · Clip Setup</div>
+      <div class="draft-section__title">Clips</div>
       <div class="col gap-3">
         <div class="row gap-3">
           <div class="form-field flex-1">
@@ -115,7 +115,7 @@ function renderSectionB(d) {
   return `
     <div class="draft-section">
       <div class="draft-section__title row gap-3" style="align-items:center">
-        <span>B · Subtitles</span>
+        <span>Subtitles</span>
         <label class="toggle-wrap" style="margin-left:auto;cursor:pointer;display:flex;align-items:center;gap:var(--sp-2)">
           <input type="checkbox" id="d-sub-on" ${on ? 'checked' : ''} style="width:14px;height:14px" />
           <span class="text-caption" style="color:${on ? 'var(--color-accent)' : 'var(--color-text-faint)'}">${on ? 'On' : 'Off'}</span>
@@ -139,7 +139,7 @@ function renderSectionB(d) {
 function renderSectionC(d) {
   return `
     <div class="draft-section">
-      <div class="draft-section__title">C · Camera</div>
+      <div class="draft-section__title">Camera</div>
       <div class="col gap-2">
         ${CAMERA_MODES.map(m => `
           <label class="camera-option ${d.reframeMode === m.value ? 'camera-option--active' : ''}">
@@ -160,7 +160,7 @@ function renderSectionD(d) {
   return `
     <div class="draft-section">
       <div class="draft-section__title row gap-3" style="align-items:center">
-        <span>D · AI Analysis</span>
+        <span>AI Guidance</span>
         <label class="toggle-wrap" style="margin-left:auto;cursor:pointer;display:flex;align-items:center;gap:var(--sp-2)">
           <input type="checkbox" id="d-ai-on" ${on ? 'checked' : ''} style="width:14px;height:14px" />
           <span class="text-caption" style="color:${on ? 'var(--color-ai)' : 'var(--color-text-faint)'}">${on ? 'On' : 'Off'}</span>
