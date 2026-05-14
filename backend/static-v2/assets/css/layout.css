@@ -1,0 +1,119 @@
+/* ── Shell: 4-panel grid ─────────────────────────────────────────────
+   nav-rail 72px | workspace 1fr | right-panel 300px
+   bottom strip fixed 52px
+   ─────────────────────────────────────────────────────────────────── */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--nav-rail-width) 1fr var(--right-panel-width);
+  grid-template-rows: 1fr var(--bottom-strip-height);
+  grid-template-areas:
+    "nav  workspace  panel"
+    "nav  strip      strip";
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--color-background);
+}
+
+.shell__nav {
+  grid-area: nav;
+  background: var(--color-bg-raised);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--sp-3) 0;
+  gap: var(--sp-1);
+  overflow: hidden;
+}
+
+.shell__workspace {
+  grid-area: workspace;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.shell__panel {
+  grid-area: panel;
+  background: var(--color-bg-raised);
+  border-left: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.shell__strip {
+  grid-area: strip;
+  background: var(--color-bg-raised);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-4);
+  gap: var(--sp-4);
+}
+
+/* ── Screen wrapper ─────────────────────────────────────────────────── */
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.screen__header {
+  padding: var(--sp-6) var(--sp-6) var(--sp-4);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.screen__title {
+  font-size: var(--text-screen);
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  color: var(--color-text);
+}
+
+.screen__subtitle {
+  font-size: var(--text-body);
+  color: var(--color-text-muted);
+  margin-top: var(--sp-1);
+}
+
+.screen__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-6);
+}
+
+/* ── Panel sections ─────────────────────────────────────────────────── */
+.panel-section {
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.panel-section__title {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+  margin-bottom: var(--sp-3);
+}
+
+/* ── Row / stack helpers ────────────────────────────────────────────── */
+.row    { display: flex; align-items: center; }
+.col    { display: flex; flex-direction: column; }
+.gap-1  { gap: var(--sp-1); }
+.gap-2  { gap: var(--sp-2); }
+.gap-3  { gap: var(--sp-3); }
+.gap-4  { gap: var(--sp-4); }
+.gap-6  { gap: var(--sp-6); }
+.flex-1 { flex: 1; }
+
+.mt-2 { margin-top: var(--sp-2); }
+.mt-3 { margin-top: var(--sp-3); }
+.mt-4 { margin-top: var(--sp-4); }
+.mt-6 { margin-top: var(--sp-6); }

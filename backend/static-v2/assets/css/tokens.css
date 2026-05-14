@@ -1,0 +1,57 @@
+:root {
+  /* ── Colors ─────────────────────────────────────────────────────── */
+  --color-background:       #101214;
+  --color-bg-raised:        #15181B;
+  --color-surface:          #1B2024;
+  --color-surface-raised:   #242A30;
+  --color-surface-selected: #2C343A;
+  --color-border:           #38414A;
+  --color-border-strong:    #4A5661;
+
+  --color-text:             #F4F7F9;
+  --color-text-muted:       #AAB4BE;
+  --color-text-faint:       #737F89;
+
+  --color-accent:           #76E0C0;
+  --color-accent-soft:      #1E5A4D;
+  --color-ai:               #B8A6FF;
+  --color-ai-soft:          #352D55;
+
+  /* ── Status semantics ────────────────────────────────────────────── */
+  --color-running:          #79B8FF;
+  --color-success:          #74D48F;
+  --color-warning:          #F2C66E;
+  --color-failed:           #FF7C7C;
+  --color-partial:          #F19A5B;
+  --color-unsupported:      #85818E;
+
+  /* ── Spacing ─────────────────────────────────────────────────────── */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ── Radii ───────────────────────────────────────────────────────── */
+  --radius-control: 8px;
+  --radius-panel:   10px;
+  --radius-media:   14px;
+
+  /* ── Typography ──────────────────────────────────────────────────── */
+  --font-family: Inter, Arial, sans-serif;
+  --text-screen:   28px;
+  --text-section:  17px;
+  --text-body:     13px;
+  --text-caption:  11px;
+  --text-metric:   24px;
+
+  /* ── Layout ──────────────────────────────────────────────────────── */
+  --nav-rail-width:    72px;
+  --right-panel-width: 300px;
+  --bottom-strip-height: 52px;
+}
