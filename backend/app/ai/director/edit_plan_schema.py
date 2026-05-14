@@ -248,6 +248,9 @@ class AIEditPlan:
     ai_ab_evaluation: dict = field(default_factory=dict)
     # Phase 60C — Creator benchmark validation (populated by creator_benchmark_engine)
     creator_benchmark_summary: dict = field(default_factory=dict)
+    # Phase 60D — AI execution mode and rollback control
+    ai_execution_mode: dict = field(default_factory=dict)
+    ai_execution_rollback: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -367,4 +370,6 @@ class AIEditPlan:
             "ai_execution_summary":          dict(self.ai_execution_summary),
             "ai_ab_evaluation":              dict(self.ai_ab_evaluation),
             "creator_benchmark_summary":     dict(self.creator_benchmark_summary),
+            "ai_execution_mode":             dict(self.ai_execution_mode),
+            "ai_execution_rollback":         dict(self.ai_execution_rollback),
         }

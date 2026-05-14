@@ -1850,9 +1850,65 @@ def run_render_pipeline(
                     kind="warning",
                 )
 
+        # ── AI Execution Mode Resolution (Phase 60D) — control only ─────────────
+        # Resolve BEFORE Phase 59 blocks so they can be gated correctly.
+        # mode=off blocks all Phase 59 promotion; other modes run Phase 59 normally.
+        _ai_exec_mode: str = "safe"
+        if _ai_edit_plan is not None:
+            try:
+                from app.ai.execution_mode.execution_mode_engine import (
+                    resolve_execution_mode as _resolve_exec_mode,
+                )
+                _mode_result = _resolve_exec_mode(payload, context={"job_id": job_id})
+                _mode_data = _mode_result.get("ai_execution_mode") or {}
+                _ai_exec_mode = str(_mode_data.get("effective_mode") or "safe")
+                try:
+                    _ai_edit_plan.ai_execution_mode = _mode_data
+                except Exception:
+                    pass
+                logger.info(
+                    "ai_execution_mode_resolved job_id=%s mode=%s source=%s",
+                    job_id, _ai_exec_mode, _mode_data.get("source", "unknown"),
+                )
+            except Exception as _mode_err:
+                _ai_exec_mode = "safe"
+                logger.warning(
+                    "ai_execution_mode_resolution_failed job_id=%s: %s", job_id, _mode_err
+                )
+
+        # mode=off: write rollback metadata + stub promotion reports, then skip Phase 59
+        if _ai_edit_plan is not None and _ai_exec_mode == "off":
+            _rollback = {
+                "active":          True,
+                "reason":          "mode_off",
+                "blocked_domains": ["subtitle", "camera", "segment"],
+            }
+            try:
+                _ai_edit_plan.ai_execution_rollback = _rollback
+            except Exception:
+                pass
+            _mode_off_stub = {
+                "applied":  False,
+                "eligible": True,
+                "reason":   "mode_off",
+                "blocked":  True,
+                "confidence": 0.0,
+            }
+            try:
+                _ai_edit_plan.subtitle_execution_promotion = dict(_mode_off_stub)
+                _ai_edit_plan.camera_execution_promotion   = dict(_mode_off_stub)
+                _ai_edit_plan.segment_selection_promotion  = dict(_mode_off_stub)
+            except Exception:
+                pass
+            logger.info(
+                "ai_execution_rollback_active job_id=%s reason=mode_off blocked=subtitle,camera,segment",
+                job_id,
+            )
+
         # ── AI Render Influence (Phase 10) — bounded opt-in payload adjustments ──
         _ai_influence_report: dict = {"enabled": False}
-        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False):
+        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False) \
+                and _ai_exec_mode != "off":
             try:
                 from app.ai.director.render_influence import apply_ai_render_influence as _apply_ai_influence
                 payload, _ai_influence_report = _apply_ai_influence(
@@ -1917,7 +1973,8 @@ def run_render_pipeline(
         _scored_original: list = list(scored)
 
         # ── AI Segment Selection Promotion (Phase 59C) ───────────────────────
-        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False):
+        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False) \
+                and _ai_exec_mode != "off":
             try:
                 from app.ai.segment_promotion.segment_promotion_engine import (
                     promote_segment_selection as _promote_segments,
@@ -1962,7 +2019,8 @@ def run_render_pipeline(
                 )
 
         # ── AI Quality Gate — Segment (Phase 59D) ────────────────────────────
-        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False):
+        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False) \
+                and _ai_exec_mode != "off":
             try:
                 from app.ai.quality_gate.quality_gate_engine import (
                     apply_segment_quality_gate as _segment_quality_gate,

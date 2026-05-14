@@ -153,6 +153,12 @@ def _build(edit_plan: Any, job_id: str) -> dict:
     cam_gate = quality.get("camera")   or {}
     seg_gate = quality.get("segment")  or {}
 
+    # ── Phase 60D: execution mode metadata ────────────────────────────────
+    exec_mode_data = _attr_dict(edit_plan, "ai_execution_mode")
+    exec_mode      = str(exec_mode_data.get("effective_mode") or exec_mode_data.get("mode") or "unknown")
+    rollback_data  = _attr_dict(edit_plan, "ai_execution_rollback")
+    rollback_active = bool(rollback_data.get("active"))
+
     # ── Per-domain metrics ─────────────────────────────────────────────────
     sub_metrics = _subtitle_metrics(sub_promo, sub_gate)
     cam_metrics = _camera_metrics(cam_promo, cam_gate)
@@ -185,12 +191,14 @@ def _build(edit_plan: Any, job_id: str) -> dict:
     agg_conf = round(sum(non_zero) / len(non_zero), 4) if non_zero else 0.0
 
     metrics = {
-        "subtitle":     sub_metrics,
-        "camera":       cam_metrics,
-        "segment":      seg_metrics,
-        "quality_gate": qg,
+        "subtitle":      sub_metrics,
+        "camera":        cam_metrics,
+        "segment":       seg_metrics,
+        "quality_gate":  qg,
         "user_override": uo,
-        "confidence":   agg_conf,
+        "confidence":    agg_conf,
+        "mode":          exec_mode,          # Phase 60D: effective execution mode
+        "rollback_active": rollback_active,  # Phase 60D: mode_off rollback active
     }
 
     # ── Summary ───────────────────────────────────────────────────────────
@@ -222,14 +230,15 @@ def _subtitle_metrics(promo: dict, gate: dict) -> dict:
     if not promo:
         return _empty_domain_metrics("not_attempted")
 
-    reason      = str(promo.get("reason") or "")
+    reason        = str(promo.get("reason") or "")
     promo_applied = bool(promo.get("applied"))
-    gate_blocked  = bool(gate.get("applied"))
+    # Phase 60D: promo.blocked=True when mode_off blocked the promotion
+    gate_blocked  = bool(gate.get("applied")) or bool(promo.get("blocked"))
     confidence    = _clamp_conf(promo.get("confidence"))
     fallback      = bool(promo.get("fallback_used", not promo_applied))
     eligible      = _is_eligible(reason)
 
-    # Net applied = promotion ran AND quality gate did not revert it
+    # Net applied = promotion ran AND neither quality gate nor mode blocked it
     net_applied = promo_applied and not gate_blocked
 
     return {
@@ -249,7 +258,8 @@ def _camera_metrics(promo: dict, gate: dict) -> dict:
 
     reason        = str(promo.get("reason") or "")
     promo_applied = bool(promo.get("applied"))
-    gate_blocked  = bool(gate.get("applied"))
+    # Phase 60D: promo.blocked=True when mode_off blocked the promotion
+    gate_blocked  = bool(gate.get("applied")) or bool(promo.get("blocked"))
     confidence    = _clamp_conf(promo.get("confidence"))
     fallback      = bool(promo.get("fallback_used", not promo_applied))
     eligible      = _is_eligible(reason)
@@ -278,7 +288,8 @@ def _segment_metrics(promo: dict, gate: dict) -> dict:
 
     reason        = str(promo.get("reason") or "")
     promo_applied = bool(promo.get("applied"))
-    gate_blocked  = bool(gate.get("applied"))
+    # Phase 60D: promo.blocked=True when mode_off blocked the promotion
+    gate_blocked  = bool(gate.get("applied")) or bool(promo.get("blocked"))
     confidence    = _clamp_conf(promo.get("confidence"))
     fallback      = bool(promo.get("fallback_used", not promo_applied))
     eligible      = _is_eligible(reason)
@@ -377,12 +388,14 @@ def _empty_domain_metrics(reason: str = "not_attempted") -> dict:
 def _fallback_metrics() -> dict:
     return {
         "ai_execution_metrics": {
-            "subtitle":     {},
-            "camera":       {},
-            "segment":      {},
-            "quality_gate": {},
+            "subtitle":      {},
+            "camera":        {},
+            "segment":       {},
+            "quality_gate":  {},
             "user_override": {},
-            "confidence":   0.0,
+            "confidence":    0.0,
+            "mode":          "unknown",
+            "rollback_active": False,
         },
         "ai_execution_summary": {
             "subtitle_apply":       False,

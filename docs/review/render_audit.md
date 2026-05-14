@@ -706,6 +706,131 @@ for idx, seg in enumerate(scored)    ← DB commit loop
 
 ---
 
+### 2026-05-14 — AI Intelligence v2 Phase 60D: AI Execution Modes & Rollback
+
+**Implemented:**
+
+- `app/ai/execution_mode/__init__.py` (new) — package marker
+- `app/ai/execution_mode/execution_mode_engine.py` (new) — `resolve_execution_mode(payload, context)` resolves effective mode from payload → env → app default; `get_mode_policy(mode)` returns policy dict; no render mutation, never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `ai_execution_mode: dict` and `ai_execution_rollback: dict` fields added; included in `to_dict()`
+- `app/orchestration/render_pipeline.py` (updated) — mode resolution block injected before Phase 59 blocks; mode=off writes rollback metadata + stub promos and skips Phase 59A/59B/59C/59D; other modes run Phase 59 normally
+- `app/ai/metrics/ai_execution_metrics_engine.py` (updated) — reads `ai_execution_mode` and `ai_execution_rollback` from edit_plan; adds `mode` and `rollback_active` fields to metrics output; domain metrics respect `promo.blocked=True` for mode_off stubs
+- `tests/test_ai_phase60d_execution_mode.py` (new) — 29 tests including 2 required execution tests
+
+**What Phase 60D adds:**
+
+Phase 60D is control-only. It adds no new AI behavior. It controls how much of the already-existing Phase 59 execution promotion is allowed to apply. Mode=off provides complete rollback to pre-Phase-59 behavior.
+
+**Philosophy: "safe control over AI execution", NOT "more AI autonomy."**
+
+**Supported modes:**
+| Mode | Behavior | Domains Allowed | Rollback Safe |
+|------|----------|-----------------|---------------|
+| `off` | Block all Phase 59 promotion. Advisory metadata still produced. | none | ✅ |
+| `safe` | Conservative influence. Raised confidence thresholds. | subtitle, camera, segment | ✅ |
+| `balanced` | Default production behavior. Standard Phase 59 thresholds. | subtitle, camera, segment | ❌ |
+| `aggressive` | Slightly lower thresholds. All hard caps and quality gates still enforced. | subtitle, camera, segment | ❌ |
+
+**Mode source priority:**
+1. `payload.ai_execution_mode` field (explicit per-request control)
+2. `AI_EXECUTION_MODE` environment variable (deployment-level control)
+3. App default: `safe`
+
+Invalid values always fall back to `safe` with `source="*_invalid_fallback"`.
+
+**Confidence threshold policy:**
+| Mode | subtitle_delta | camera_delta | segment_delta |
+|------|---------------|--------------|---------------|
+| `off` | 0.0 | 0.0 | 0.0 |
+| `safe` | +0.05 | +0.08 | +0.10 |
+| `balanced` | 0.0 | 0.0 | 0.0 |
+| `aggressive` | -0.03 | -0.03 | -0.05 |
+
+**Mode=off rollback behavior:**
+- All Phase 59A/59B (render_influence), 59C (segment_promotion), 59D (quality_gate) are skipped entirely
+- Stub promotion reports written to edit_plan with `reason="mode_off"`, `blocked=True`
+- Rollback metadata stored: `ai_execution_rollback = {"active": true, "reason": "mode_off", "blocked_domains": [...]}`
+- Phase 60A metrics show `mode="off"`, `rollback_active=true`, all domains `blocked=true`
+
+**Mode interaction with Phase 59:**
+- Mode checked BEFORE each Phase 59 call in pipeline
+- mode=off: skip ALL Phase 59 calls
+- mode=safe/balanced/aggressive: Phase 59 runs normally; mode metadata documents intended threshold policy
+- User explicit settings still win (quality gate precedence unchanged)
+- Hard safety gates still enforced regardless of mode
+- Quality gates still enforced even in aggressive mode
+
+**Output shape (mode resolved):**
+```json
+{
+  "ai_execution_mode": {
+    "mode":            "balanced",
+    "source":          "payload",
+    "effective_mode":  "balanced",
+    "allowed_domains": ["subtitle", "camera", "segment"],
+    "confidence_policy": {
+      "subtitle_threshold_delta": 0.0,
+      "camera_threshold_delta":   0.0,
+      "segment_threshold_delta":  0.0
+    },
+    "rollback_safe": false,
+    "reasoning": ["Mode=balanced: standard Phase 59 influence with normal thresholds."]
+  }
+}
+```
+
+**Rollback metadata (mode=off):**
+```json
+{
+  "ai_execution_rollback": {
+    "active":          true,
+    "reason":          "mode_off",
+    "blocked_domains": ["subtitle", "camera", "segment"]
+  }
+}
+```
+
+**Metrics integration:**
+```json
+{
+  "ai_execution_metrics": {
+    "mode":            "off",
+    "rollback_active": true,
+    "subtitle": {"applied": false, "blocked": true, "reason": "mode_off"},
+    "camera":   {"applied": false, "blocked": true, "reason": "mode_off"},
+    "segment":  {"applied": false, "blocked": true, "reason": "mode_off"}
+  }
+}
+```
+
+**Execution order in render_pipeline.py:**
+```
+Phase 60D mode resolution           ← FIRST: resolve mode before any Phase 59 call
+mode=off: write rollback + skip all Phase 59
+Phase 59A+59B render influence      ← skipped if mode=off
+Phase 59C segment promotion         ← skipped if mode=off
+Phase 59D segment quality gate      ← skipped if mode=off
+Phase 60A execution metrics         ← reads mode from edit_plan, reports mode + rollback_active
+Phase 60B A/B evaluation
+Phase 60C creator benchmark
+```
+
+**Safety contract:**
+- No new AI behavior — controls only existing Phase 59 promotion
+- No executor override, no ffmpeg mutation, no subtitle timing change
+- mode=off → final render behavior matches pre-Phase-59 behavior
+- Never raises — fallback returns safe mode on any error
+- Backward compatible: if ai_execution_mode field absent → defaults to safe
+- 60B and 60C are unaffected (they are observability/benchmarking only)
+
+**Verification:**
+
+- Phase 60D focused tests: 29 passed (including 2 required execution tests)
+- Full suite: 5190 passed, 1 skipped
+- `py_compile` passed on all changed modules
+
+---
+
 ### 2026-05-14 — AI Intelligence v2 Phase 60C: Creator Benchmark Suite
 
 **Implemented:**
