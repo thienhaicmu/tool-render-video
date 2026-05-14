@@ -1519,6 +1519,83 @@ CSS: no build step required; verified tokens referenced in overrides all resolve
 
 ---
 
-## 22. Next Phase
+## 22. UI-R4E — Premium UX Review & Gap Closure
+
+**Date:** 2026-05-14
+**Commit:** `feat(ui): close premium creator UX gaps`
+
+### Gap Audit
+
+| Dimension | Finding | Severity |
+|---|---|---|
+| Visual hierarchy | Studio section titles now sentence-case (R4D) — good | — |
+| CTA prominence | "Start render →" button at default size for primary action | High |
+| Monitor terminal | Success banner: green border only, no background — feels like a warning | High |
+| Monitor terminal | Failed banner: red border only, no urgency background | High |
+| Hero shadow | R4D targeted `.hero-video-wrap` (non-existent) — shadow not applying | High |
+| Results success | Completion chips in unstyled row — no celebration feel | Medium |
+| Clip card hover | `transform` missing from transition — lift wouldn't animate | Medium |
+| AI panel active | Active border override never applied from R4D (overridden by specificity) | Medium |
+| Hero meta seam | Border-top between video and meta strip visible and distracting | Low |
+| Card density | Output clip cards: reasonable density, minor layout gaps | Low |
+
+### Gaps Fixed
+
+**`backend/static-v2/assets/css/components.css`** — appended `UI-R4E: Premium UX Gap Closure` block:
+- `.hero-video-container` — corrects R4D bug (`.hero-video-wrap` was targeting non-existent class); cinematic shadow now applies: `0 8px 32px rgba(0,0,0,0.50)`
+- `.terminal-banner`, `.terminal-banner--success`, `.terminal-banner--failed` — semantic banner classes with subtle tinted background (success: `rgba(116,212,143,0.04)`, failed: `rgba(255,124,124,0.04)`) + forced border-color
+- `.terminal-banner__title` — 17px/700 weight title for terminal state clarity (replaces inline `font-weight:600`)
+- `.studio-cta .btn-primary` — 42px min-height, increased h-padding, 14px font; makes the primary render action visually dominant
+- `.output-clip-card:hover` — `transform: translateY(-1px)` (now animates properly because `transform` added to transition)
+- `.output-clip-card` — added `transform` to transition list and `will-change: transform` for GPU compositing
+- `.ai-intel-panel--active` — `border-color: rgba(184,166,255,0.35)` (previously overridden by original `.ai-intel-panel` specificity)
+- `.results-complete-banner` — success tinted container (`rgba(116,212,143,0.04)` + `rgba(116,212,143,0.18)` border) replaces unstyled row
+- `.hero-meta` — `border-top: 1px solid rgba(255,255,255,0.04)` softens the seam between video and meta strip
+
+**`backend/static-v2/assets/js/screens/monitor.js`** — `renderTerminalBanner()`:
+- Success case: `class="card terminal-banner terminal-banner--success"` (removed `style="border-color:var(--color-success)"`)
+- Used `.terminal-banner__title` for heading instead of inline `font-weight:600`
+- Failed/interrupted: `class="card terminal-banner terminal-banner--failed"` (removed `style="border-color:var(--color-failed)"`)
+
+**`backend/static-v2/assets/js/screens/results.js`** — `renderStatusBar()`:
+- Success completion: wrapped chips in `<div class="results-complete-banner">` (replaces `<div class="row gap-3" style="...">`)
+
+### Studio Improvements
+- "Start render →" CTA is now visually dominant: 42px tall, wider padding, 14px font — stands out against the draft configuration panel
+
+### Results Improvements
+- Completion state now has a celebration feel: soft green-tinted banner around status chips
+- Hero video shadow now actually applies (bug fix)
+- AI intelligence active panel now has distinct purple identity border
+
+### Monitor Improvements
+- Success terminal banner: green-tinted background + bold 17px title signals render completion as a moment, not just a state change
+- Failed terminal banner: red-tinted background creates appropriate urgency for recovery actions
+
+### Shell / Navigation
+No changes in this pass — NavRail, bottom strip, and right panel are stable and not blocking premium feel.
+
+### Remaining Limitations
+- Cancel button in Monitor header is never shown (behavioral — out of scope for this pass)
+- Right panel "Context" section is sparse on non-Results screens (scope: next iteration)
+- Source screen tab styling mixes `.btn-primary` semantics with tab behavior — functional but not ideal
+
+### Verification
+```
+node --check backend/static-v2/assets/js/screens/monitor.js → OK
+node --check backend/static-v2/assets/js/screens/results.js → OK
+```
+CSS: all selectors reference existing DOM classes; no new class names introduced in JS without CSS counterparts.
+
+### CapCut/Runway Standard Check
+- Does Studio feel like a creative workspace? → Yes — preview dominant, CTA is now prominent
+- Does Results feel like a successful render moment? → Yes — green completion banner + hero shadow
+- Does Monitor feel alive and trustworthy? → Yes — success/failure banners now semantically differentiated
+- Are primary actions obvious within 2 seconds? → Yes — "Start render →" is visually dominant; "View Results →" stands out in green-tinted success banner
+- Are technical details secondary? → Yes — job IDs, transport badges, and AI footnotes remain subordinate
+
+---
+
+## 23. Next Phase
 
 _(pending)_

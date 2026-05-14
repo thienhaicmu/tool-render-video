@@ -73,7 +73,7 @@ function renderStatusBar(result) {
         : result.subtitleTranslateSummary === 'partial' ? 'var(--color-warning)' : 'var(--color-failed)';
       chips.push(`<span class="text-caption" style="color:${c}">Translation: ${_esc(result.subtitleTranslateSummary)}</span>`);
     }
-    parts.push(`<div class="row gap-3" style="align-items:center;flex-wrap:wrap">${chips.join('')}</div>`);
+    parts.push(`<div class="results-complete-banner">${chips.join('')}</div>`);
   }
 
   return parts.join('');

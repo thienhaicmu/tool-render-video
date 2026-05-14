@@ -98,10 +98,10 @@ function renderTerminalBanner(state) {
 
   if (status === 'completed' || status === 'completed_with_errors') {
     return `
-      <div class="card" style="border-color:var(--color-success)">
+      <div class="card terminal-banner terminal-banner--success">
         <div class="row gap-4" style="align-items:center;flex-wrap:wrap">
           <div>
-            <div class="text-body" style="font-weight:600;color:var(--color-success)">
+            <div class="terminal-banner__title" style="color:var(--color-success)">
               ${status === 'completed' ? 'Render complete' : 'Render complete — some parts failed'}
             </div>
             <div class="text-caption text-faint mt-1">Your ranked clips are ready to review.</div>
@@ -117,10 +117,10 @@ function renderTerminalBanner(state) {
   const canRetry  = status === 'failed';
   const canResume = status === 'interrupted';
   return `
-    <div class="card" style="border-color:var(--color-failed)">
+    <div class="card terminal-banner terminal-banner--failed">
       <div class="row gap-4" style="align-items:center;flex-wrap:wrap">
         <div>
-          <div class="text-body" style="font-weight:600;color:var(--color-failed)">
+          <div class="terminal-banner__title" style="color:var(--color-failed)">
             ${status === 'failed' ? 'Render failed' : 'Render interrupted'}
           </div>
           <div class="text-caption text-faint mt-1">${_esc(state.job?.message ?? 'Check logs for details.')}</div>

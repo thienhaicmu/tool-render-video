@@ -589,8 +589,10 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
-  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+              box-shadow var(--transition-fast), transform var(--transition-fast);
   cursor: pointer;
+  will-change: transform;
 }
 .output-clip-card:hover { background: var(--color-surface-raised); border-color: var(--color-border-strong); box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
 .output-clip-card--selected {
@@ -1532,4 +1534,60 @@
 /* Form inputs — deeper focus ring */
 .form-input:focus {
   box-shadow: 0 0 0 3px rgba(118,224,192,0.15), 0 1px 4px rgba(0,0,0,0.2);
+}
+
+/* ── UI-R4E: Premium UX Gap Closure ─────────────────────────────── */
+
+/* Fix R4D class mismatch: cinematic shadow on the correct container */
+.hero-video-container {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.50), 0 2px 8px rgba(0,0,0,0.28);
+}
+
+/* Monitor terminal banners — success moment / urgency */
+.terminal-banner { border-radius: var(--radius-panel); }
+.terminal-banner--success {
+  border-color: var(--color-success) !important;
+  background: rgba(116,212,143,0.04);
+}
+.terminal-banner--failed {
+  border-color: var(--color-failed) !important;
+  background: rgba(255,124,124,0.04);
+}
+.terminal-banner__title {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* Studio CTA — primary action deserves more presence */
+.studio-cta .btn-primary {
+  min-height: 42px;
+  padding: var(--sp-3) var(--sp-5);
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+/* Output clip card — smooth hover lift */
+.output-clip-card:hover { transform: translateY(-1px); }
+
+/* AI intelligence panel active — distinct purple identity */
+.ai-intel-panel--active {
+  border-color: rgba(184,166,255,0.35);
+}
+
+/* Results: success completion banner */
+.results-complete-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: rgba(116,212,143,0.04);
+  border: 1px solid rgba(116,212,143,0.18);
+  border-radius: var(--radius-panel);
+}
+
+/* Hero meta — seamless bottom edge with video */
+.hero-meta {
+  border-top: 1px solid rgba(255,255,255,0.04);
 }
