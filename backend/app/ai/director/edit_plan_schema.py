@@ -246,6 +246,8 @@ class AIEditPlan:
     ai_execution_summary: dict = field(default_factory=dict)
     # Phase 60B — A/B render evaluation result (populated by ab_evaluation_engine)
     ai_ab_evaluation: dict = field(default_factory=dict)
+    # Phase 60C — Creator benchmark validation (populated by creator_benchmark_engine)
+    creator_benchmark_summary: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -364,4 +366,5 @@ class AIEditPlan:
             "ai_execution_metrics":          dict(self.ai_execution_metrics),
             "ai_execution_summary":          dict(self.ai_execution_summary),
             "ai_ab_evaluation":              dict(self.ai_ab_evaluation),
+            "creator_benchmark_summary":     dict(self.creator_benchmark_summary),
         }

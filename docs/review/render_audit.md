@@ -706,6 +706,96 @@ for idx, seg in enumerate(scored)    ← DB commit loop
 
 ---
 
+### 2026-05-14 — AI Intelligence v2 Phase 60C: Creator Benchmark Suite
+
+**Implemented:**
+
+- `app/ai/creator_benchmark/__init__.py` (new) — package marker
+- `app/ai/creator_benchmark/creator_benchmark_engine.py` (new) — `build_creator_benchmark(edit_plan, context)` evaluates AI quality performance against creator archetype benchmarks using Phase 60B A/B signals; no render mutation, no side effects, never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `creator_benchmark_summary: dict` field added after Phase 60B field; included in `to_dict()`
+- `app/orchestration/render_pipeline.py` (updated) — Phase 60C block injected after Phase 60B; stores result on `edit_plan.creator_benchmark_summary`
+- `tests/test_ai_phase60c_creator_benchmark.py` (new) — 21 tests including 3 required execution tests
+
+**What Phase 60C adds:**
+
+Phase 60C is benchmarking/validation-only. No render mutation, no rerender. It reads `creator_preference_profile` (Phase 50D) and `ai_ab_evaluation` (Phase 60B) to classify AI quality performance relative to the creator's archetype.
+
+**Supported creator archetypes:**
+`podcast`, `talking_head`, `educational`, `viral_short_form`, `storytelling`, `interview`, `motivation`
+
+**Benchmark status thresholds:**
+| Condition | Status |
+|-----------|--------|
+| `overall_delta >= +5` AND `winner_rate >= 0.70` | `best_fit` |
+| `overall_delta > +2` AND `winner_rate >= 0.60` (middle ground) | `improving` |
+| `overall_delta <= +2` OR `winner_rate < 0.60` | `needs_review` |
+| winner_rate unavailable or winner=unknown | `unknown` |
+
+**Winner-rate mapping (single render):**
+| winner | winner_rate |
+|--------|-------------|
+| `ai_on` | 1.0 |
+| `tie` | 0.5 |
+| `ai_off` | 0.0 |
+| `unknown` | None → `unknown` status |
+
+**Output shape (available):**
+
+```json
+{
+  "creator_benchmark_summary": {
+    "available":        true,
+    "creator_type":     "podcast",
+    "archetype_label":  "Podcast",
+    "benchmark_status": "best_fit",
+    "overall_delta":    6,
+    "winner":           "ai_on",
+    "winner_rate":      1.0,
+    "reasoning":        ["AI ON exceeded the benchmark threshold for Podcast (delta=+6, winner_rate=1.00)."]
+  }
+}
+```
+
+**Output shape (unavailable):**
+
+```json
+{
+  "creator_benchmark_summary": {
+    "available":        false,
+    "reason":           "baseline_missing",
+    "creator_type":     "educational",
+    "archetype_label":  "Educational",
+    "benchmark_status": "unknown",
+    "overall_delta":    null,
+    "winner":           "unknown",
+    "winner_rate":      null,
+    "reasoning":        ["A/B evaluation unavailable — benchmark cannot be assessed."]
+  }
+}
+```
+
+**Execution order in render_pipeline.py:**
+
+```
+Phase 60B A/B evaluation
+Phase 60C creator benchmark  ← reads creator_profile + ab_evaluation, no mutations
+for idx, seg in enumerate(scored)  ← DB commit loop
+```
+
+**Safety contract:**
+- No render mutation, no payload change, no rerender
+- Never raises — returns fallback on any error
+- Deterministic: same inputs → same output
+- Reads only: `edit_plan.creator_preference_profile`, `edit_plan.ai_ab_evaluation`
+
+**Verification:**
+
+- Phase 60C focused tests: 21 passed (including 3 required execution tests)
+- Full suite: 5161 passed, 1 skipped
+- `py_compile` passed on all changed modules
+
+---
+
 ### 2026-05-14 — AI Intelligence v2 Phase 60B: A/B Render Evaluation
 
 **Implemented:**

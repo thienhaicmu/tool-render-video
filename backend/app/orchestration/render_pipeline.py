@@ -2062,6 +2062,39 @@ def run_render_pipeline(
                     "ai_ab_evaluation_failed job_id=%s: %s", job_id, _ab_err
                 )
 
+        # ── Creator Benchmark Suite (Phase 60C) — benchmarking only ──────────
+        # Evaluates AI quality against creator archetype benchmarks using
+        # Phase 60B A/B evaluation signals. No render mutation.
+        if _ai_edit_plan is not None:
+            try:
+                from app.ai.creator_benchmark.creator_benchmark_engine import (
+                    build_creator_benchmark as _build_creator_benchmark,
+                )
+                _cb_result = _build_creator_benchmark(
+                    _ai_edit_plan,
+                    context={"job_id": job_id},
+                )
+                try:
+                    _ai_edit_plan.creator_benchmark_summary = (
+                        _cb_result.get("creator_benchmark_summary") or {}
+                    )
+                except Exception:
+                    pass
+                _cb = _cb_result.get("creator_benchmark_summary") or {}
+                logger.info(
+                    "creator_benchmark_collected job_id=%s available=%s "
+                    "creator_type=%s status=%s delta=%s",
+                    job_id,
+                    _cb.get("available"),
+                    _cb.get("creator_type", "unknown"),
+                    _cb.get("benchmark_status", "unknown"),
+                    _cb.get("overall_delta"),
+                )
+            except Exception as _cb_err:
+                logger.warning(
+                    "creator_benchmark_failed job_id=%s: %s", job_id, _cb_err
+                )
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()
