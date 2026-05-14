@@ -1589,3 +1589,142 @@
 .hero-meta {
   border-top: 1px solid rgba(255,255,255,0.04);
 }
+
+/* ── UI-R4F-B: Studio Workspace Redesign ─────────────────────────── */
+
+/* Compact studio header — workspace bar, not a page title */
+.studio-workspace-header {
+  padding: var(--sp-3) var(--sp-5);
+}
+.studio-workspace-title {
+  font-size: 18px;
+  letter-spacing: -0.3px;
+}
+
+/* Config panel — raised surface separates it from the cinematic preview */
+.studio-right {
+  background: var(--color-bg-raised);
+  border-left: 1px solid var(--color-border);
+}
+
+/* Scroll area — breathing room at bottom */
+.studio-right__scroll {
+  padding-bottom: var(--sp-4);
+}
+
+/* Draft sections — subtler separator, more whitespace */
+.studio-right .draft-section {
+  border-bottom-color: rgba(255,255,255,0.05);
+  padding-bottom: var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+
+/* ── Custom toggle switch ──────────────────────────────────────────── */
+.studio-toggle {
+  position: relative;
+  display: inline-flex;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.studio-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+  pointer-events: none;
+}
+.studio-toggle__track {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  transition: background var(--transition-base), border-color var(--transition-base);
+}
+.studio-toggle__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+  transition: transform var(--transition-base), background var(--transition-base);
+  pointer-events: none;
+}
+.studio-toggle input:checked ~ .studio-toggle__track {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+}
+.studio-toggle input:checked ~ .studio-toggle__thumb {
+  transform: translateX(16px);
+  background: var(--color-accent);
+}
+
+/* ── Number input with unit suffix ────────────────────────────────── */
+.studio-num-wrap {
+  position: relative;
+}
+.studio-num-unit {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--text-caption);
+  color: var(--color-text-faint);
+  pointer-events: none;
+  user-select: none;
+}
+.studio-number-input {
+  text-align: center;
+  padding-right: 20px !important;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.studio-number-input::-webkit-outer-spin-button,
+.studio-number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.studio-number-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Camera radio — smaller, accent-colored */
+.studio-radio {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+/* ── Render CTA area ───────────────────────────────────────────────── */
+.studio-cta {
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-4) var(--sp-5);
+}
+
+/* Full-width, tall render button — the action moment */
+.studio-render-btn {
+  width: 100%;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  justify-content: center;
+}
+
+/* Back link — subtle, secondary */
+.studio-back-link {
+  width: 100%;
+  justify-content: center;
+  font-size: var(--text-caption);
+  color: var(--color-text-faint);
+  padding: var(--sp-1) var(--sp-3);
+}
+.studio-back-link:hover:not(:disabled) {
+  color: var(--color-text-muted);
+  background: transparent;
+}

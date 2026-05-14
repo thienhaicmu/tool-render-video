@@ -1621,3 +1621,63 @@ CSS: all selectors reference existing DOM classes; no new class names introduced
 
 ### Status
 ✓ Complete — committed
+
+## 24. UI-R4F-B — Studio Workspace Redesign
+
+**Date:** 2026-05-14
+**Scope:** Full Studio screen redesign — creator workspace feel, preview dominance, premium controls
+
+### Changes
+
+**`screens/studio.js` — complete redesign of all render functions:**
+
+| Area | Before | After |
+|---|---|---|
+| Preview loading state | Text + body copy | Spinner + compact friendly copy |
+| Preview error state | "Preview unavailable" + technical copy | Calm, action-oriented copy |
+| Preview empty state | Small icon + "No source prepared" | Larger icon, "No source loaded", descriptive guidance |
+| Section A title | "Clips" | "Clip Strategy" |
+| Min/Max labels | "Min sec" / "Max sec" | "Min" / "Max" with "s" unit suffix; number inputs clean (no spinners) |
+| Max clips label | "Max clips" | "Count" |
+| Aspect ratio label | "Aspect ratio" | "Format" |
+| Subtitle toggle | Native checkbox + On/Off text | Custom CSS toggle switch (`.studio-toggle`) |
+| Subtitle style label | "Style preset" | "Caption style" |
+| AI toggle | Native checkbox + On/Off text | Custom CSS toggle switch (`.studio-toggle`) |
+| AI mode label | "Execution mode" | "Influence" |
+| AI helper text | Long technical explanation | "AI ranks your clips and explains why each was selected." |
+| CTA render button | 140px min-width, right-aligned | Full-width 44px, `.studio-render-btn` |
+| CTA back button | Ghost button left-aligned | Subtle full-width link below render button, `.studio-back-link` |
+| Screen header | Large 28px title, heavy padding | Compact `.studio-workspace-header` (18px title, tighter padding) |
+| No-session state | "No source is loaded" card | Improved copy, `text-section` size heading |
+| Right panel | Title + source + chips | Title + Source section + Output section + Render plan + Subtitles/AI rows |
+
+**`css/components.css` — UI-R4F-B block appended:**
+
+| CSS | Effect |
+|---|---|
+| `.studio-workspace-header` + `.studio-workspace-title` | Compact 18px header, frees vertical space for preview |
+| `.studio-right { background: var(--color-bg-raised) }` | Config panel raised surface — creates visual separation; preview stage feels cinematic |
+| `.studio-right__scroll { padding-bottom }` | Breathing room at bottom of scroll |
+| `.studio-right .draft-section { border-bottom-color: rgba(255,255,255,0.05) }` | Lighter section separators, less form-like |
+| `.studio-toggle` + `__track` + `__thumb` | Pure-CSS animated toggle switch replacing native checkbox |
+| `.studio-num-wrap` + `.studio-num-unit` | "s" unit suffix on min/max duration inputs |
+| `.studio-number-input` | Centered, tabular-nums, no browser spinner arrows |
+| `.studio-render-btn` | Full-width, 44px min-height, 700 weight — render moment CTA |
+| `.studio-back-link` | Muted full-width ghost link below render button |
+| `.studio-cta { gap, padding }` | Tighter vertical rhythm in CTA area |
+
+### Payload verification
+- `draftStore.buildPayload()` unchanged — no payload fields added/removed
+- All wiring IDs preserved: `#d-min`, `#d-max`, `#d-qty`, `#d-sub-on`, `#d-ai-on`, `#studio-render-btn`, `#studio-back-btn`, `#studio-draft`, `#studio-cta`
+- `rerender(el)` pattern unchanged
+
+### Remaining limitations
+- Preview aspect ratio fills black bars (correct — `object-fit:contain`); native `controls` bar still shows (acceptable for desktop)
+- Right panel width (300px shell) is fixed — can't expand for Studio context
+- Number inputs: `d-qty` (Count) has no unit suffix since clips count doesn't need "s"
+
+### Next phase
+UI-R4F-C — Persistent Render Experience (Monitor + Results continuity)
+
+### Status
+✓ Complete — committed
