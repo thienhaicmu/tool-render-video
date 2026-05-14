@@ -2216,6 +2216,39 @@ def run_render_pipeline(
                     "creator_render_strategy_failed job_id=%s: %s", job_id, _crs_err
                 )
 
+        # ── Render Outcome Tracking (Phase 62A) — tracking-only, no mutation ────
+        # Aggregates Phase 60A/60B/60C/61D metadata into a structured outcome
+        # record for audit, debug, and future learning. No render mutation.
+        if _ai_edit_plan is not None:
+            try:
+                from app.ai.outcome_tracking.render_outcome_tracking_engine import (
+                    build_render_outcome_tracking as _build_render_outcome_tracking,
+                )
+                _rot_result = _build_render_outcome_tracking(
+                    _ai_edit_plan, context={"job_id": job_id},
+                )
+                try:
+                    _ai_edit_plan.render_outcome_tracking = (
+                        _rot_result.get("render_outcome_tracking") or {}
+                    )
+                except Exception:
+                    pass
+                _rot = _rot_result.get("render_outcome_tracking") or {}
+                logger.info(
+                    "render_outcome_tracking_built job_id=%s available=%s "
+                    "overall_result=%s ai_effectiveness=%s creator_fit=%s confidence=%.3f",
+                    job_id,
+                    _rot.get("available"),
+                    _rot.get("overall_result", "unknown"),
+                    _rot.get("ai_effectiveness", "unknown"),
+                    (_rot.get("benchmark_result") or {}).get("creator_fit", "unknown"),
+                    float(_rot.get("confidence") or 0.0),
+                )
+            except Exception as _rot_err:
+                logger.warning(
+                    "render_outcome_tracking_failed job_id=%s: %s", job_id, _rot_err
+                )
+
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
             existing_status = (existing.get("status") or "").lower()

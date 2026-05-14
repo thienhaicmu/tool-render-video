@@ -5879,3 +5879,169 @@ All feedback text:
 
 - Focused: **30/30** passed
 - Full regression: **5309/5309** passed (0 regressions)
+
+---
+
+### 2026-05-14 — AI Intelligence v2 Phase 62A: Render Outcome Tracking
+
+**Implemented:**
+
+- `app/ai/outcome_tracking/__init__.py` (new) — package marker
+- `app/ai/outcome_tracking/render_outcome_tracking_engine.py` (new) — `build_render_outcome_tracking(edit_plan, context=None)` public API; aggregates Phase 60A/60B/60C/61D metadata into a deterministic render outcome tracking object; tracking-only, no render mutation, never raises
+- `app/ai/director/edit_plan_schema.py` (updated) — `render_outcome_tracking: dict = field(default_factory=dict)` added after Phase 61D field; included in `to_dict()`; backward-compatible
+- `app/orchestration/render_pipeline.py` (updated) — Phase 62A block injected after Phase 61D; stores result on `edit_plan.render_outcome_tracking`; wrapped in try/except; never blocks render
+- `tests/test_ai_phase62a_render_outcome_tracking.py` (new) — 53 focused tests
+
+**What Phase 62A adds:**
+
+Phase 62A is tracking-only. Zero render behavior change. It reads the AI metadata already populated by Phases 52D, 60A, 60B, 60C, 61D and produces a structured `render_outcome_tracking` object for audit, debug, and future learning. No autonomous learning occurs.
+
+**render_outcome_tracking model:**
+
+```json
+{
+  "render_outcome_tracking": {
+    "available":      true,
+    "render_id":      "rnd_3f8e1a2b",
+    "creator_type":   "podcast",
+    "platform":       "tiktok",
+    "execution_mode": "balanced",
+    "quality": {
+      "subtitle": 84,
+      "camera":   81,
+      "hook":     79,
+      "overall":  82
+    },
+    "ai_execution": {
+      "subtitle_applied":    true,
+      "camera_applied":      true,
+      "segment_applied":     false,
+      "quality_gate_blocks": 1
+    },
+    "ab_result": {
+      "winner":        "ai_on",
+      "overall_delta": 6
+    },
+    "benchmark_result": {
+      "creator_fit":     "high",
+      "benchmark_delta": 7
+    },
+    "ai_effectiveness": "strong",
+    "overall_result":   "improved",
+    "confidence": 0.84,
+    "reasoning": [
+      "AI ON delivered strong quality improvement vs baseline.",
+      "Creator fit is strong for this archetype and creator type.",
+      "Subtitle and camera quality both above threshold.",
+      "AI subtitle and camera promotion both applied."
+    ]
+  }
+}
+```
+
+**Fallback shape:**
+
+```json
+{
+  "render_outcome_tracking": {
+    "available":  false,
+    "confidence": 0.0,
+    "reasoning":  []
+  }
+}
+```
+
+**Classification logic (deterministic, explicit thresholds):**
+
+| Label | Field | Rules |
+|---|---|---|
+| `creator_fit` | `benchmark_result.creator_fit` | `best_fit` → `"high"`, `improving` → `"medium"`, `needs_review`/`unknown` → `"low"` |
+| `ai_effectiveness` | top-level | `ab_available AND ai_on AND delta≥5` → `"strong"`, `delta≥2` → `"moderate"`, all others → `"weak"` |
+| `overall_result` | top-level | `ab_available AND ai_off` → `"regression"`, `effectiveness in (strong, moderate)` → `"improved"`, else → `"neutral"` |
+
+**Confidence calculation:**
+
+Fixed-weight blend over four signals. Missing signals contribute 0.0, lowering total confidence:
+
+| Signal | Weight | Source |
+|---|---|---|
+| Quality confidence | 0.30 | `render_quality_v2.confidence` |
+| A/B confidence | 0.30 | `ai_ab_evaluation.confidence` (0 if not available) |
+| Benchmark confidence | 0.20 | Mapped from `benchmark_status`: `best_fit=0.90`, `improving=0.70`, `needs_review=0.40`, `unknown=0.00` |
+| Strategy confidence | 0.20 | `creator_render_strategy.confidence` |
+
+Result clamped to [0.0, 1.0].
+
+**Safe render reference:**
+
+```python
+render_id = "rnd_" + sha256(job_id)[:8]
+```
+
+- Never exposes internal job IDs, file paths, or user identifiers
+- One-way hash (SHA-256) — deterministic but non-reversible
+- Format: `rnd_{first8hex}` (e.g., `rnd_3f8e1a2b`)
+
+**Execution order in render_pipeline.py:**
+
+```
+Phase 61A creator archetype strategy
+Phase 61D creator render strategy fusion
+Phase 62A render outcome tracking    ← reads all prior Phase 60x/61x metadata, no mutations
+for idx, seg in enumerate(scored)    ← DB commit loop
+```
+
+**Input signals consumed:**
+
+| Input | Phase | Purpose |
+|---|---|---|
+| `ai_execution_summary` | 60A | subtitle/camera/segment applied flags, quality_gate_blocks |
+| `ai_execution_metrics` | 60A | quality_gate sub-dict (fallback for gate block count) |
+| `ai_ab_evaluation` | 60B | A/B winner, overall_delta, confidence |
+| `creator_benchmark_summary` | 60C | benchmark_status, overall_delta |
+| `creator_render_strategy` | 61D | creator_type, confidence |
+| `render_quality_v2` | 52D | quality scores, confidence |
+| `ai_execution_mode` | 60D | resolved execution mode |
+| `creator_preference_profile` | 50D | creator_type (fallback), platform |
+
+**Tracking-only behavior:**
+
+- Reads existing metadata only — no new render, no rerender
+- No external persistence, no database write
+- No autonomous learning — outcome tracked for future phases to use
+- No payload mutation
+- No influence mutation
+- No ffmpeg mutation
+
+**Safety contract:**
+
+| Boundary | Status |
+|---|---|
+| No render mutation | ✅ |
+| No payload mutation | ✅ |
+| No autonomous learning | ✅ |
+| No external persistence | ✅ |
+| No unsafe ID/path exposure | ✅ |
+| No execution promotion | ✅ |
+| No ffmpeg mutation | ✅ |
+| Tracking-only, metadata aggregation | ✅ |
+| Never raises — fallback on any error | ✅ |
+| Deterministic: same inputs → same output | ✅ |
+| Confidence clamped to [0.0, 1.0] | ✅ |
+| Quality scores clamped to [0, 100] | ✅ |
+
+**Fallback behavior:**
+
+| Condition | Result |
+|---|---|
+| `edit_plan = None` | `available=False`, empty reasoning |
+| Empty namespace / empty dict | `available=True`, all zeros, empty reasoning |
+| AB not available | `winner="unknown"`, `ai_effectiveness="weak"`, `overall_result="neutral"` |
+| No benchmark data | `creator_fit="low"`, benchmark_conf=0.0 |
+| Any exception inside engine | Caught, fallback returned, never blocks render |
+
+**Test Results:**
+
+- Focused: **53/53** passed (including 4 required execution tests)
+- Full regression: **5362/5362** passed (0 regressions)
+- `py_compile` passed on all changed modules

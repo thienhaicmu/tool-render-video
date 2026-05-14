@@ -259,6 +259,8 @@ class AIEditPlan:
     creator_camera_style_promotion: dict = field(default_factory=dict)
     # Phase 61D — Creator render strategy fusion (advisory metadata only)
     creator_render_strategy: dict = field(default_factory=dict)
+    # Phase 62A — Render outcome tracking (tracking-only, no mutation)
+    render_outcome_tracking: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -384,4 +386,5 @@ class AIEditPlan:
             "creator_subtitle_style_promotion":   dict(self.creator_subtitle_style_promotion),
             "creator_camera_style_promotion":     dict(self.creator_camera_style_promotion),
             "creator_render_strategy":            dict(self.creator_render_strategy),
+            "render_outcome_tracking":            dict(self.render_outcome_tracking),
         }
