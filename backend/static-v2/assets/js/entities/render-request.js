@@ -9,16 +9,27 @@ const VALID_REFRAME_MODES  = new Set(['center', 'motion', 'subject']);
 
 export function validateRenderDraft(draft) {
   const errors = [];
+
   if (!draft.editSessionId && !draft.youtubeUrl && !draft.sourceVideoPath) {
-    errors.push('Source required: prepare a source first or provide a YouTube URL.');
+    errors.push('No source loaded — go back to Source to prepare a video.');
   }
   if (!draft.outputDir) {
-    errors.push('Output directory is required.');
+    errors.push('Output folder is required — go back to Source to set it.');
   }
   if (draft.minPartSec != null && draft.maxPartSec != null &&
       Number(draft.minPartSec) > Number(draft.maxPartSec)) {
-    errors.push('Min clip duration must be ≤ max clip duration.');
+    errors.push(`Min clip duration (${draft.minPartSec}s) must be ≤ max clip duration (${draft.maxPartSec}s).`);
   }
+  if (draft.aspectRatio && !VALID_ASPECT_RATIOS.has(draft.aspectRatio)) {
+    errors.push(`Unknown aspect ratio "${draft.aspectRatio}" — choose 9:16, 1:1, 3:4, or 16:9.`);
+  }
+  if (draft.subtitleEnabled && draft.subtitleStyle && !VALID_SUBTITLE_STYLES.has(draft.subtitleStyle)) {
+    errors.push(`Unknown subtitle style "${draft.subtitleStyle}".`);
+  }
+  if (draft.reframeMode && !VALID_REFRAME_MODES.has(draft.reframeMode)) {
+    errors.push(`Unknown camera mode "${draft.reframeMode}".`);
+  }
+
   return { valid: errors.length === 0, errors };
 }
 

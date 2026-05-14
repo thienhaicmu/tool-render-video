@@ -58,10 +58,16 @@ function renderPreviewArea(sessionId) {
         src="${url}" controls muted preload="metadata"
         style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-panel);background:#000">
       </video>
+      <div id="studio-video-loading" class="studio-video-err">
+        <div class="col gap-3" style="align-items:center">
+          <div class="text-body" style="color:var(--color-text-muted)">Loading preview…</div>
+          <div class="text-caption text-faint">Configure your settings while the preview loads.</div>
+        </div>
+      </div>
       <div id="studio-video-err" class="studio-video-err" style="display:none">
         <div class="col gap-3" style="align-items:center">
-          <div class="text-body" style="color:var(--color-text-muted)">Preview couldn't load</div>
-          <div class="text-caption text-faint">The source may still be processing. You can still configure and start the render.</div>
+          <div class="text-body" style="color:var(--color-text-muted)">Preview unavailable</div>
+          <div class="text-caption text-faint">The source may still be processing. You can configure and start the render without it.</div>
           <button class="btn btn-ghost" id="studio-video-retry">Retry preview</button>
         </div>
       </div>
@@ -187,13 +193,31 @@ function renderDraftPanel(d) {
   `;
 }
 
+function renderRenderSummary(d) {
+  const qty  = d.maxExportParts ?? 5;
+  const ar   = d.aspectRatio ?? '9:16';
+  const min  = d.minPartSec  ?? 15;
+  const max  = d.maxPartSec  ?? 60;
+  const sub  = d.subtitleEnabled
+    ? (d.subtitleStyle ?? 'viral_bold').replace(/_/g, ' ')
+    : 'no subtitles';
+  const ai   = d.aiEnabled ? (d.aiExecutionMode ?? 'balanced') : 'AI off';
+  const dur  = d.sessionDuration != null
+    ? `${Math.floor(d.sessionDuration / 60)}:${String(Math.floor(d.sessionDuration % 60)).padStart(2, '0')} source`
+    : null;
+  const chips = [ar, `≤${qty} clip${qty !== 1 ? 's' : ''}`, `${min}–${max}s`, sub, ai, ...(dur ? [dur] : [])];
+  return `<div class="row gap-1" style="flex-wrap:wrap;margin-bottom:var(--sp-2)">${
+    chips.map(c => `<span class="summary-chip">${_esc(c)}</span>`).join('')
+  }</div>`;
+}
+
 function renderCTA(d) {
   const { renderBlocked, ffmpegAvailable } = readinessStore.getState();
   const { errors } = validateRenderDraft(d);
   const canSubmit  = errors.length === 0 && !_submitting && !renderBlocked;
 
   const ffmpegWarning = ffmpegAvailable === false
-    ? `<div class="readiness-warning row gap-2"><span aria-hidden="true">⚠</span><span class="text-caption">FFmpeg is unavailable, so rendering is disabled. Check System → Diagnostics for details.</span></div>`
+    ? `<div class="readiness-warning row gap-2"><span aria-hidden="true">⚠</span><span class="text-caption">FFmpeg is unavailable — rendering is disabled. Check System → Diagnostics.</span></div>`
     : '';
 
   return `
@@ -201,7 +225,7 @@ function renderCTA(d) {
       ${ffmpegWarning}
       ${errors.length > 0
         ? `<div class="col gap-1">${errors.map(e => `<div class="text-caption" style="color:var(--color-failed)">⚠ ${_esc(e)}</div>`).join('')}</div>`
-        : ''}
+        : renderRenderSummary(d)}
       ${_submitError ? `<div class="text-caption" style="color:var(--color-failed)">✗ ${_esc(_submitError)}</div>` : ''}
       <div class="row gap-3" style="align-items:center">
         <button class="btn btn-ghost" id="studio-back-btn">← Source</button>
@@ -210,7 +234,7 @@ function renderCTA(d) {
           ${!canSubmit ? 'disabled' : ''} style="min-width:140px">
           ${_submitting
             ? '<span class="spinner" style="width:14px;height:14px;border-width:2px"></span>&nbsp;Starting…'
-            : 'Start render →'}
+            : _submitError ? 'Retry render →' : 'Start render →'}
         </button>
       </div>
     </div>
@@ -345,17 +369,41 @@ export async function mount(el) {
     </div>
   `;
 
-  // Video error + retry handler
-  const video    = el.querySelector('#studio-video');
-  const videoErr = el.querySelector('#studio-video-err');
-  if (video && videoErr) {
-    video.addEventListener('error', () => {
-      video.style.display = 'none';
-      videoErr.style.display = '';
+  // Preview: loading overlay → ready or error (10 s timeout)
+  const video     = el.querySelector('#studio-video');
+  const videoLoad = el.querySelector('#studio-video-loading');
+  const videoErr  = el.querySelector('#studio-video-err');
+  if (video && videoLoad) {
+    let _previewTimer = null;
+
+    const _hideLoading = () => {
+      if (_previewTimer) { clearTimeout(_previewTimer); _previewTimer = null; }
+      videoLoad.style.display = 'none';
+    };
+    const _showPreviewErr = () => {
+      _hideLoading();
+      if (videoErr) videoErr.style.display = '';
+    };
+
+    video.addEventListener('canplay', _hideLoading);
+    video.addEventListener('loadedmetadata', _hideLoading);
+    video.addEventListener('error', _showPreviewErr);
+    _previewTimer = setTimeout(_showPreviewErr, 10_000);
+
+    // Already buffered (cached / fast load)
+    if (video.readyState >= 3) _hideLoading();
+
+    el.addEventListener('unmount', () => {
+      if (_previewTimer) clearTimeout(_previewTimer);
+      video.removeEventListener('canplay', _hideLoading);
+      video.removeEventListener('loadedmetadata', _hideLoading);
+      video.removeEventListener('error', _showPreviewErr);
     });
+
     el.querySelector('#studio-video-retry')?.addEventListener('click', () => {
-      videoErr.style.display = 'none';
-      video.style.display = '';
+      if (videoErr) videoErr.style.display = 'none';
+      videoLoad.style.display = '';
+      _previewTimer = setTimeout(_showPreviewErr, 10_000);
       video.load();
     });
   }

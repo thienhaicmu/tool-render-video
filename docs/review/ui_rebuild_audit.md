@@ -1347,6 +1347,126 @@ node --check desktop-shell/main.js                            → OK
 
 ---
 
-## 20. Next Phase
+## 20. UI-FIX-2 — Render Workflow Friction
 
-_(pending — UI-FIX-2)_
+**Date:** 2026-05-14  
+**Commit:** `fix(ui): reduce render workflow friction`  
+**Scope:** Source readiness checklist; Studio preview loading state; render summary chips in CTA; retry affordance; improved validation messages.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `backend/static-v2/assets/js/screens/source.js` | Added `renderReadinessSummary()`; updated `renderForm()` — readiness checklist, conditional helper text, "Prepare source →" label |
+| `backend/static-v2/assets/js/screens/studio.js` | Added loading overlay to `renderPreviewArea()`; replaced video event handler with timeout-safe loading handler; added `renderRenderSummary()`; updated `renderCTA()` with summary chips and retry label |
+| `backend/static-v2/assets/js/entities/render-request.js` | Improved validation error messages; added aspect ratio, subtitle style, reframe mode validation |
+| `backend/static-v2/assets/css/components.css` | Added `.summary-chip` |
+
+### Source Friction Fixes
+
+**Readiness checklist** — rendered between the output folder field and the error area:
+- ✓/○ Source entered (YouTube URL or video file, per active mode)
+- ✓/○ Output folder set
+- ✓/○ Backend reachable (proxy: `readinessStore.loaded`)
+
+**Helper text under CTA** — contextual:
+- When fields incomplete: "Complete the fields above, then prepare your source."
+- When all ready: "Ready — click to validate and open Studio."
+- When loading: "This may take up to a minute for YouTube videos."
+
+**CTA label** — "Prepare source" → "Prepare source →"
+
+### Studio Preview Readiness
+
+**Loading overlay** — shown immediately when Studio opens with a session:
+- Uses `studio-video-err` positioning class (absolute, inset:0, dark background)
+- Copy: "Loading preview… Configure your settings while the preview loads."
+- Dismissed on `canplay`, `loadedmetadata`, or immediate if `video.readyState >= 3`
+- 10 second timeout → shows error overlay if video never becomes playable
+- Timer cleared on `unmount` event to prevent post-navigation leaks
+
+**Preview error overlay** — improved copy:
+- "Preview unavailable" (was "Preview couldn't load")
+- "The source may still be processing. You can configure and start the render without it."
+
+**Retry preview** — existing button wired correctly; retry resets loading overlay and restarts 10s timer.
+
+### Render CTA Behavior
+
+**Render summary chips** — shown when draft is valid (no blocking errors):
+```
+[9:16]  [≤5 clips]  [15–60s]  [viral bold]  [AI off]  [2:34 source]
+```
+- `sessionDuration` chip shown when source duration is known
+- Chips hidden when there are validation errors (errors take that slot)
+
+**Retry affordance** — when `_submitError` is set:
+- Error message shown in red
+- "Start render →" button label changes to "Retry render →"
+- Button re-enabled (no separate retry button needed)
+
+**Duplicate submit guard** — `_submitting = true` while in-flight; button disabled.
+
+### Validation Rules (render-request.js)
+
+| Rule | Error message |
+|---|---|
+| No source identifier | "No source loaded — go back to Source to prepare a video." |
+| No output folder | "Output folder is required — go back to Source to set it." |
+| Min > max clip duration | "Min clip duration (Xs) must be ≤ max clip duration (Ys)." |
+| Invalid aspect ratio | "Unknown aspect ratio "X" — choose 9:16, 1:1, 3:4, or 16:9." |
+| Invalid subtitle style | "Unknown subtitle style "X"." |
+| Invalid reframe mode | "Unknown camera mode "X"." |
+
+### Monitor Entry Behavior
+
+No changes required — existing monitor screen already provides:
+- Skeleton loading cards while job data arrives
+- Transport badge: `● Live` / `○ Polling` / `⋯ Connecting`
+- 20s timeout banner with Retry + Library CTAs
+- Route recovery: no jobId → calm recovery card
+
+### Known Limitations
+
+- Readiness checklist "Backend reachable" uses `readinessStore.loaded` as proxy — becomes `true` once the warmup call returns (even on failure). This is intentional fail-open behavior.
+- Preview 10s timeout may be too aggressive for very large source files where FFmpeg preview generation takes longer. Acceptable for now — user can retry.
+- Render summary `sessionDuration` shows source duration, not estimated output duration. This is correct — output duration depends on clip selection.
+
+### Verification Checklist
+
+```
+node --check backend/static-v2/assets/js/screens/source.js   → OK
+node --check backend/static-v2/assets/js/screens/studio.js   → OK
+node --check backend/static-v2/assets/js/store/draft.js      → OK
+node --check backend/static-v2/assets/js/api/render.js       → OK
+node --check backend/static-v2/assets/js/entities/render-request.js → OK
+
+Source (#/source, STATIC_UI_VERSION=v2):
+- No fields: checklist shows 2× ○ (+ backend ✓ if loaded)  → manual
+- YT URL entered: first item becomes ✓                      → manual
+- Output set: second item becomes ✓                         → manual
+- All ready: helper text changes to "Ready — click…"        → manual
+- Invalid YT URL: inline error, no route change             → manual
+- Missing output: inline error                              → manual
+
+Studio (#/studio after prepare):
+- Loading overlay shown immediately                         → manual
+- Overlay disappears when video buffered                    → manual
+- After 10s without canplay: error overlay shown            → manual
+- Retry preview: resets loading state                       → manual
+- Summary chips visible when draft valid                    → manual
+- Chips hidden when error (e.g., no output dir)             → manual
+- Start render → submit → navigates #/monitor/:jobId        → manual
+- Network error → button becomes "Retry render →"           → manual
+
+Monitor (#/monitor/:jobId):
+- Job ID shown in header                                    → manual
+- Transport badge visible (connecting → live/polling)       → manual
+- No blank state                                            → manual
+```
+
+---
+
+## 21. Next Phase
+
+_(pending — UI-FIX-3)_

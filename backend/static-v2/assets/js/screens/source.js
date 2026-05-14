@@ -137,14 +137,34 @@ function renderOutputDir() {
   `;
 }
 
+function renderReadinessSummary(hasSource, hasOutput) {
+  const { loaded: backendOk } = readinessStore.getState();
+  const item = (ok, label) =>
+    `<div class="row gap-2" style="align-items:center">
+      <span style="font-size:11px;line-height:1;color:${ok ? 'var(--color-success,#22c55e)' : 'var(--color-text-faint,#64748b)'}">${ok ? '✓' : '○'}</span>
+      <span class="text-caption" style="color:${ok ? 'var(--color-text-muted,#94a3b8)' : 'var(--color-text-faint,#64748b)'}">${label}</span>
+    </div>`;
+  return `
+    <div class="col gap-1" style="border-top:1px solid var(--color-border,rgba(255,255,255,.08));padding-top:var(--sp-3)">
+      ${item(hasSource, _s.sourceMode === 'youtube' ? 'YouTube URL entered' : 'Video file selected')}
+      ${item(hasOutput, 'Output folder set')}
+      ${item(!!backendOk, 'Backend reachable')}
+    </div>
+  `;
+}
+
 function renderForm() {
   const loading = _s.mode === 'loading';
+  const hasSource = _s.sourceMode === 'youtube' ? !!_s.youtubeUrl.trim() : !!_s.localPath.trim();
+  const hasOutput = !!_s.outputDir.trim();
+  const allReady  = hasSource && hasOutput;
   return `
     <div class="col gap-4 source-form">
       ${renderSourceTabs()}
       ${renderReadinessWarnings()}
       ${_s.sourceMode === 'youtube' ? renderYouTubeInput() : renderLocalInput()}
       ${renderOutputDir()}
+      ${renderReadinessSummary(hasSource, hasOutput)}
       <div id="src-error-area">
         ${_s.error ? _errorCard(_s.error) : ''}
       </div>
@@ -152,9 +172,15 @@ function renderForm() {
         ${loading ? 'disabled' : ''} style="width:100%">
         ${loading
           ? '<span class="spinner" style="width:16px;height:16px;border-width:2px"></span>&nbsp;Preparing…'
-          : 'Prepare source'}
+          : 'Prepare source →'}
       </button>
-      ${loading ? `<div class="text-caption text-faint" style="text-align:center">This may take up to a minute for YouTube videos.</div>` : ''}
+      <div class="text-caption text-faint" style="text-align:center">
+        ${loading
+          ? 'This may take up to a minute for YouTube videos.'
+          : allReady
+            ? 'Ready — click to validate and open Studio.'
+            : 'Complete the fields above, then prepare your source.'}
+      </div>
     </div>
   `;
 }
