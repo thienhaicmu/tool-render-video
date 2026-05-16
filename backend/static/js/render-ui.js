@@ -9,7 +9,8 @@ let _renderMonitorLastParts = [];
 let _renderMonitorHeartbeatTimer = null;
 let _renderLogsUserToggled = false;
 let _selectedClipPaths = new Set();
-let _clipsSortOrder = 'score';
+let _clipsSortOrder        = 'score';
+let _uxr3AutoSelectedBest  = false;   // UX-R3-F: auto-preview best clip once per session
 let _logAutoScroll = true;
 let _rcLastActivePartNo = -1;
 let _rcScrollDebounceId = null;
@@ -3461,7 +3462,8 @@ function hideRenderOutputPanel() {
 }
 
 function clearRenderOutputPanel() {
-  _selectedClipPaths = new Set();
+  _selectedClipPaths       = new Set();
+  _uxr3AutoSelectedBest    = false;       // UX-R3-F
   resetAiStrategyPanel();
   const _sumEl = qs('mvRenderSummary');
   if (_sumEl) { _sumEl.innerHTML = ''; _sumEl.hidden = true; }
@@ -3614,6 +3616,107 @@ function centerPreviewClip(jobId, partNo, outputFile, partName) {
 
   document.querySelectorAll('.clipCard.isPreviewActive').forEach((el) => el.classList.remove('isPreviewActive'));
   if (card) card.classList.add('isPreviewActive');
+}
+
+// UX-R3: Tier classification + header injection.
+// Runs after list.innerHTML is built; safe to call on every re-render.
+// Sets data-uxr3-tier on each card; inserts .uxr3TierHeader divs
+// between tier groups (score-sort mode only).
+function _applyUxR3Tiers(list, ranking, done, failed, skipped) {
+  if (!list) return;
+
+  // ── Clean up any previous pass ────────────────────────
+  list.querySelectorAll('.uxr3TierHeader').forEach(function (el) { el.remove(); });
+  list.querySelectorAll('.clipCard[data-uxr3-tier]').forEach(function (c) {
+    delete c.dataset.uxr3Tier;
+  });
+
+  // ── Classify each card by tier ────────────────────────
+  var bestCards    = [];
+  var strongCards  = [];
+  var otherCards   = [];
+  var failedCards  = [];
+  var skippedCards = [];
+
+  Array.from(list.querySelectorAll('.clipCard')).forEach(function (card) {
+    var partNo = Number(card.dataset.partNo || 0);
+    var rk     = ranking.get(partNo) || {};
+    if (card.classList.contains('isBestClip') || rk.isBest) {
+      card.dataset.uxr3Tier = 'best';
+      bestCards.push(card);
+    } else if (card.classList.contains('isFailed')) {
+      card.dataset.uxr3Tier = 'failed';
+      failedCards.push(card);
+    } else if (card.classList.contains('isSkipped')) {
+      card.dataset.uxr3Tier = 'skipped';
+      skippedCards.push(card);
+    } else if (card.classList.contains('isDone')) {
+      var scoreEl = card.querySelector('.clipCardScore');
+      var tier    = (scoreEl && scoreEl.dataset.tier) || 'weak';
+      if (tier === 'high') {
+        card.dataset.uxr3Tier = 'strong';
+        strongCards.push(card);
+      } else {
+        card.dataset.uxr3Tier = 'other';
+        otherCards.push(card);
+      }
+    }
+  });
+
+  // ── Only insert headers in score-sort mode ───────────
+  if (_clipsSortOrder !== 'score') return;
+
+  function _makeHeader(label, count, extraClass) {
+    var div = document.createElement('div');
+    div.className = 'uxr3TierHeader' + (extraClass ? ' ' + extraClass : '');
+    div.innerHTML =
+      '<span class="uxr3TierLabel">' + label + '</span>' +
+      (count != null ? '<span class="uxr3TierCount">' + count + '</span>' : '');
+    return div;
+  }
+
+  // Strong Candidates header — only when there are both tiers above and below
+  if (strongCards.length && (bestCards.length || otherCards.length || failedCards.length || skippedCards.length)) {
+    list.insertBefore(_makeHeader('Strong Candidates', strongCards.length), strongCards[0]);
+  }
+
+  // Additional Results header — only when preceded by best or strong
+  if (otherCards.length && (bestCards.length || strongCards.length)) {
+    list.insertBefore(_makeHeader('Additional Results', otherCards.length), otherCards[0]);
+  }
+
+  // Needs Review header (collapsible) — failed + skipped
+  var firstProblem = failedCards[0] || skippedCards[0];
+  if (firstProblem) {
+    var fLen   = failedCards.length;
+    var sLen   = skippedCards.length;
+    var fPart  = fLen ? (fLen + ' failed')  : '';
+    var sPart  = sLen ? (sLen + ' skipped') : '';
+    var label  = [fPart, sPart].filter(Boolean).join(' · ') || 'Needs Review';
+    var header = _makeHeader(label, null, 'uxr3ProblemHeader');
+
+    var btn = document.createElement('button');
+    btn.className = 'uxr3TierToggle';
+    btn.type      = 'button';
+    btn.setAttribute('aria-label', 'Show or hide problem clips');
+    header.appendChild(btn);
+
+    // Start collapsed when there are successful clips
+    var startCollapsed = done.length > 0;
+    if (startCollapsed) {
+      header.classList.add('uxr3Collapsed');
+      btn.textContent = '▸';
+    } else {
+      btn.textContent = '▾';
+    }
+
+    btn.addEventListener('click', function () {
+      var collapsed = header.classList.toggle('uxr3Collapsed');
+      btn.textContent = collapsed ? '▸' : '▾';
+    });
+
+    list.insertBefore(header, firstProblem);
+  }
 }
 
 function populateRenderOutputPanel(job, parts) {
@@ -3781,6 +3884,31 @@ function populateRenderOutputPanel(job, parts) {
   renderAiStrategyPanel(job);
   // P2.9.1-A: Restore transient card classes wiped by full innerHTML replacement above
   if (typeof RenderAiRuntime !== 'undefined') RenderAiRuntime.reapplyTransientState();
+
+  // UX-R3-A/B/C/D/E: Tier classification + headers
+  _applyUxR3Tiers(list, ranking, done, failed, skipped);
+
+  // UX-R3-F: Auto-open best clip in center preview once on completion
+  if (!_uxr3AutoSelectedBest) {
+    var _r3Status   = String(job && job.status || '').toLowerCase();
+    var _r3Terminal = _r3Status === 'done' || _r3Status === 'completed' ||
+                      _r3Status === 'complete' || _r3Status === 'completed_with_errors';
+    if (_r3Terminal) {
+      var _r3BestEntry = null;
+      ranking.forEach(function (rk, pNo) { if (rk.isBest) _r3BestEntry = [pNo, rk]; });
+      if (_r3BestEntry) {
+        var _r3PartNo = _r3BestEntry[0];
+        var _r3Part   = done.find(function (p) { return Number(p.part_no || 0) === _r3PartNo; });
+        if (_r3Part && _r3Part.output_file && typeof centerPreviewClip === 'function') {
+          _uxr3AutoSelectedBest = true;
+          setTimeout(function () {
+            centerPreviewClip(currentJobId, _r3PartNo, _r3Part.output_file, _r3Part.part_name || ('Clip ' + _r3PartNo));
+          }, 900);
+        }
+      }
+    }
+  }
+
   showRenderOutputPanel();
   renderBottomActiveQueue(job, computeProgressSummary(items), items);
   const panel = qs('render_output_panel');

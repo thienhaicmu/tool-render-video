@@ -1603,3 +1603,177 @@
 /* =======================================================
    END OF P3.7 — CREATOR CO-PILOT & ADAPTIVE COLLABORATION
    ======================================================= */
+
+/* =======================================================
+   UX-R3 — REVIEW EXPERIENCE RE-ARCHITECTURE
+   Transforms clip grid into editorial review workspace.
+   Four tiers: best · strong · other · failed/skipped.
+   Tier headers injected by JS (_applyUxR3Tiers).
+   All rules target data-uxr3-tier attributes set by JS.
+   ======================================================= */
+
+/* ── UX-R3-A: Tier headers ─────────────────────────────── */
+/* Span full width within the auto-fill grid */
+.uxr3TierHeader {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0 6px;
+  margin-top: 4px;
+}
+
+.uxr3TierLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.32);
+  white-space: nowrap;
+}
+
+.uxr3TierCount {
+  font-size: 10px;
+  color: rgba(255,255,255,.20);
+}
+
+/* Separator line after label text */
+.uxr3TierHeader::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,.06);
+}
+
+/* Collapsible problem section toggle */
+.uxr3TierToggle {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,.28);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  order: -1;                    /* toggle before the label */
+  transition: color .15s ease;
+}
+.uxr3TierToggle:hover {
+  color: rgba(255,255,255,.60);
+}
+
+/* ── UX-R3-E: Collapse failed / skipped ────────────────── */
+.uxr3ProblemHeader.uxr3Collapsed ~ .clipCard[data-uxr3-tier="failed"],
+.uxr3ProblemHeader.uxr3Collapsed ~ .clipCard[data-uxr3-tier="skipped"] {
+  display: none;
+}
+
+/* ── UX-R3-B: Best clip — authoritative hero ───────────── */
+/* Builds on P2.8-F (full-width horizontal layout, 160px thumb).
+   UX-R3 upgrades thumb to 200px and score to 26px. */
+.clipsGrid .clipCard[data-uxr3-tier="best"] {
+  grid-template-columns: 200px 1fr;
+  border-color: rgba(99,102,241,.45);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.24), 0 20px 60px rgba(99,102,241,.18);
+}
+
+.clipsGrid .clipCard[data-uxr3-tier="best"] .clipCardThumbWrap {
+  width: 200px;
+}
+
+.clipsGrid .clipCard[data-uxr3-tier="best"] .clipCardScore {
+  font-size: 26px;
+}
+
+.clipsGrid .clipCard[data-uxr3-tier="best"] .clipCardReason {
+  font-size: 12.5px;
+  color: rgba(255,255,255,.70);
+  line-height: 1.5;
+}
+
+/* ── UX-R3-C: Strong candidates ─────────────────────────── */
+.clipCard[data-uxr3-tier="strong"] {
+  border-color: rgba(99,102,241,.18);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.08), 0 4px 16px rgba(0,0,0,.18);
+}
+
+.clipCard[data-uxr3-tier="strong"]:hover {
+  border-color: rgba(99,102,241,.34);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.18), 0 8px 24px rgba(99,102,241,.10);
+  transform: translateY(-2px);
+}
+
+.clipCard[data-uxr3-tier="strong"] .clipCardScore {
+  font-size: 16px;
+}
+
+/* ── UX-R3-D: Additional results — reduced emphasis ────── */
+.clipCard[data-uxr3-tier="other"] {
+  opacity: .80;
+}
+
+.clipCard[data-uxr3-tier="other"]:hover {
+  opacity: 1;
+  transition: opacity .2s ease;
+}
+
+/* ── UX-R3-E: Failed / skipped — low visual weight ─────── */
+/* Lower than existing isFailed/isSkipped to create clear hierarchy */
+.clipCard[data-uxr3-tier="failed"] {
+  opacity: .48;
+}
+
+.clipCard[data-uxr3-tier="failed"]:hover {
+  opacity: .70;
+  transition: opacity .2s ease;
+}
+
+.clipCard[data-uxr3-tier="skipped"] {
+  opacity: .30;
+}
+
+.clipCard[data-uxr3-tier="skipped"]:hover {
+  opacity: .48;
+  transition: opacity .2s ease;
+}
+
+/* ── UX-R3-H: Compare foundation ────────────────────────── */
+/* .isSelected is seeded by market viral top-3 auto-select.
+   UX-R3 makes the selection state visually explicit. */
+.renderOutputList.uxr2Complete .clipCard.isSelected:not(.isBestClip) {
+  border-color: rgba(77,124,255,.42);
+  box-shadow: 0 0 0 1px rgba(77,124,255,.20);
+}
+
+/* ── UX-R3-I: Responsive — 1366px ──────────────────────── */
+@media (max-width: 1366px) {
+  .clipsGrid .clipCard[data-uxr3-tier="best"] {
+    grid-template-columns: 160px 1fr;
+  }
+  .clipsGrid .clipCard[data-uxr3-tier="best"] .clipCardThumbWrap {
+    width: 160px;
+  }
+  .clipsGrid .clipCard[data-uxr3-tier="best"] .clipCardScore {
+    font-size: 22px;
+  }
+}
+
+/* ── UX-R3-I: Responsive — 1024px ──────────────────────── */
+@media (max-width: 1024px) {
+  .clipsGrid .clipCard[data-uxr3-tier="best"] {
+    grid-template-columns: 110px 1fr;
+  }
+  .clipsGrid .clipCard[data-uxr3-tier="best"] .clipCardThumbWrap {
+    width: 110px;
+  }
+  .clipsGrid .clipCard[data-uxr3-tier="best"] .clipCardScore {
+    font-size: 20px;
+  }
+  .uxr3TierHeader {
+    padding: 8px 0 4px;
+  }
+}
+
+/* =======================================================
+   END OF UX-R3 — REVIEW EXPERIENCE RE-ARCHITECTURE
+   ======================================================= */
