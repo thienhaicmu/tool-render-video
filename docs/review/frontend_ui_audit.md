@@ -2844,3 +2844,34 @@ CSS-only productization pass to restore the old UI's cinematic creator energy. N
 | F2-11 | AI score null fallback state in Results (show "AI scoring unavailable" empty state) | `screens/results.js` |
 | F2-12 | Add `createStore()` middleware layer for cross-cutting concerns | `store/create-store.js` |
 | F2-13 | Validate `output_dir` on client before sending (no traversal sequences) | `screens/downloads.js:259` |
+
+---
+
+## Section 26: Library Screen Pagination Fix — 2026-05-16
+
+### Problem
+
+The Library screen called `jobsApi.getHistory()` with no parameters and loaded all returned items at once. With the backend previously capping at 30 rows (and now supporting up to 100 per page with `offset`), there was no way for the user to see older jobs.
+
+### Fix
+
+**`library.js` changes:**
+
+- Added `_PAGE_SIZE = 20`, `_offset`, `_hasMore`, `_loadingMore` state variables
+- `_load()` now requests `{ limit: 20, offset: 0 }` and reads `has_more` from the response
+- New `_loadMore()` function fetches `{ limit: 20, offset: _offset }` and appends to `_history`
+- `_renderList()` appends a "Load more" / "Loading…" button below the card list when `_hasMore` is true
+- Removed the client-side `.sort()` in `_load()` — backend `ORDER BY updated_at DESC` is authoritative; re-sorting would break cross-page ordering
+- `mount()` resets new pagination state alongside existing vars
+
+**Existing features preserved:**
+- Filter pills (All / Running / Completed / Failed / Interrupted) operate on `_history` (the full in-memory loaded set) — unchanged
+- Search input filters the in-memory set — unchanged
+- Card actions (View Results, Monitor, Retry, Resume) — unchanged
+- Refresh button resets and re-loads from page 0 — unchanged
+
+**Behavior with filters active:**
+When a filter is active and the visible set is empty (all loaded items filtered out), "Load more" is still shown if `_hasMore` is true. This lets the user expand the loaded pool to find filtered items without clearing the filter.
+
+**`api/jobs.js` change:**
+`getHistory(params?)` now accepts an optional params object for `limit`/`offset`. Zero-argument call is backward compatible.

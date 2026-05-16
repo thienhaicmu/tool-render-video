@@ -8180,3 +8180,101 @@ if job.get("status") in (
 - **N+1 on history + no SQL LIMIT** (`routes/jobs.py:250-259`, `_normalize_history_item:153,161`) — `list_jobs()` fetches all rows, Python-slices to 30, calls `list_job_parts()` per row. Separate P1 fix required.
 - **No cancel mechanism** — cancel endpoint does not exist; FFmpeg subprocess cannot be killed from the API. Separate P1 fix required.
 - **DNS rebinding on download** (`routes/download.py`) — allowlisted domain could resolve to internal IP. Requires post-resolution IP check. P2.
+
+
+---
+
+## Section 28: History Performance Fixes — 2026-05-16
+
+### Problem
+
+`GET /api/jobs/history` had two compounding performance issues:
+
+1. **Full table scan with no SQL LIMIT**: `list_jobs()` executed `SELECT * FROM jobs ORDER BY created_at DESC`, fetching every row in the table into Python memory, then Python-sorted and sliced to the requested limit.
+
+2. **N+1 parts queries**: `_normalize_history_item()` called `list_job_parts(job_id)` individually per row. For a page of 20 jobs that was 1 (list_jobs) + 20 (parts per job) = **21 round-trips to SQLite** per request.
+
+At 1,000 jobs: 1,001 DB queries per `/history` call, all rows in memory.
+
+---
+
+### Fix
+
+#### `backend/app/services/db.py` — two new functions, nothing existing modified
+
+**`list_jobs_page(limit, offset)`**: executes one query with SQL-level `LIMIT`/`OFFSET`:
+```sql
+SELECT * FROM jobs ORDER BY updated_at DESC, created_at DESC LIMIT ? OFFSET ?
+```
+Only the requested rows are transferred from SQLite. The sort order (`updated_at DESC, created_at DESC`) matches the Python sort previously applied in the route, so ordering is preserved exactly.
+
+**`list_job_parts_bulk(job_ids)`**: fetches parts for all jobs in one `IN (...)` query:
+```sql
+SELECT * FROM job_parts WHERE job_id IN (?,?,…) ORDER BY job_id, part_no ASC
+```
+Returns `dict[job_id, list[part]]`. An empty list is pre-populated for any job_id with no parts.
+
+#### `backend/app/routes/jobs.py`
+
+- `_normalize_history_item(row, *, parts_lookup=None)`: added optional kwarg. When `parts_lookup` is provided, parts are looked up in the pre-fetched dict instead of issuing a query. Falls back to `list_job_parts()` for any caller that doesn't pass the lookup (backward compatible).
+
+- `api_jobs_history(limit=20, offset=0)`: rewrote with:
+  - `offset` query parameter (new, default 0)
+  - `safe_limit` clamped to 1–100 (was 1–30)
+  - Calls `list_jobs_page(limit+1, offset)` — fetches one extra row to detect `has_more` without a `COUNT(*)` query
+  - Calls `list_job_parts_bulk(job_ids)` once for all rows
+  - Returns `{items, limit, offset, has_more}`
+
+#### Query reduction
+
+| Scenario | Before | After |
+|---|---|---|
+| 20-job page, all render | 1 + 20 = **21 queries** | **2 queries** (jobs page + bulk parts) |
+| 20-job page, downloads with result totals | 1 + 0–20 = **1–21 queries** | **2 queries** |
+| 1,000-job table, 20-job page | 1,001 queries, all rows in memory | **2 queries**, 21 rows in memory |
+
+#### API compatibility
+
+The response shape is additive: `items` array is unchanged. Three new fields are added:
+```json
+{ "items": [...], "limit": 20, "offset": 0, "has_more": true }
+```
+Old callers that only read `items` (e.g. the previous `_load()` function) continue to work unmodified. The `limit` parameter default and behavior are backward compatible; old callers that passed `limit=N` get the same items, now with `offset` and `has_more` they can ignore.
+
+---
+
+#### `backend/static-v2/assets/js/api/jobs.js`
+
+`getHistory(params?)`: accepts an optional params object and appends it as a query string. Zero-param call `getHistory()` works identically to before.
+
+#### `backend/static-v2/assets/js/screens/library.js`
+
+**New state vars:** `_offset`, `_hasMore`, `_loadingMore`, `_PAGE_SIZE = 20`.
+
+**`_load()`** (initial page):
+- Resets all pagination state
+- Calls `getHistory({ limit: 20, offset: 0 })`
+- Reads `has_more` from response; sets `_offset = 20`
+- Removes the previous client-side `.sort()` — the backend `ORDER BY updated_at DESC` is now authoritative and sorting client-side would corrupt page ordering across pages
+
+**`_loadMore()`** (new function):
+- Guards against concurrent invocations (`_loadingMore` flag)
+- Calls `getHistory({ limit: 20, offset: _offset })`
+- Appends normalized items to `_history` with spread
+- Increments `_offset`, updates `_hasMore`
+
+**`_renderList()`**:
+- When `_hasMore` is true, appends a "Load more" / "Loading…" button below the card list
+- Button is disabled while `_loadingMore` is true
+- "Load more" is shown even when a filter produces an empty visible set, so the user can expand the loaded pool to find filtered items
+
+**`mount()`**: resets `_loadingMore`, `_hasMore`, `_offset` alongside existing vars.
+
+**Existing filter/search behavior:** unchanged. `_filterItems()` operates on `_history` (the in-memory set). "Load more" expands that set; filter/search re-applies immediately on the expanded set.
+
+---
+
+### Remaining open issues
+
+- `GET /api/jobs` (`api_list_jobs`) still calls `list_jobs()` (no LIMIT) — separate endpoint, not in scope
+- Library has no server-side filtered pagination (e.g. `?status=failed`) — all filtering is client-side on the loaded set. Acceptable for the current desktop use case.

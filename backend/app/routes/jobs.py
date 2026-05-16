@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from app.services.db import list_jobs, get_job, list_job_parts
+from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_parts_bulk, get_job
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR
 
@@ -134,7 +134,7 @@ def _history_output_dir(payload: dict, result: dict) -> str:
     return out
 
 
-def _normalize_history_item(row: dict) -> dict:
+def _normalize_history_item(row: dict, *, parts_lookup: "dict[str, list] | None" = None) -> dict:
     kind = str(row.get("kind") or "").lower()
     base_status = str(row.get("status") or "").lower()
     payload = _parse_json(row.get("payload_json"))
@@ -143,6 +143,13 @@ def _normalize_history_item(row: dict) -> dict:
     created_at = _to_iso_utc(row.get("created_at"))
     updated_at = _to_iso_utc(row.get("updated_at")) or created_at
 
+    # Use pre-fetched parts when available (eliminates per-row DB round-trip).
+    # Falls back to a direct query for callers that don't pass parts_lookup.
+    def _get_parts(job_id: str) -> list:
+        if parts_lookup is not None:
+            return parts_lookup.get(job_id, [])
+        return list_job_parts(job_id)
+
     completed = failed = unsupported = total = 0
     if kind == "download":
         completed = int(result.get("completed_items") or 0)
@@ -150,7 +157,7 @@ def _normalize_history_item(row: dict) -> dict:
         unsupported = int(result.get("unsupported_items") or 0)
         total = int(result.get("total_items") or 0)
         if total <= 0:
-            counts = _parts_counts(list_job_parts(row["job_id"]))
+            counts = _parts_counts(_get_parts(row["job_id"]))
             completed = counts["completed"]
             failed = counts["failed"]
             unsupported = counts["unsupported"]
@@ -158,7 +165,7 @@ def _normalize_history_item(row: dict) -> dict:
         title, source_hint = _download_title_and_hint(payload, completed, total)
         status, summary_text = _download_status_and_summary(base_status, completed, failed, unsupported)
     else:
-        counts = _parts_counts(list_job_parts(row["job_id"]))
+        counts = _parts_counts(_get_parts(row["job_id"]))
         completed = counts["completed"]
         failed = counts["failed"]
         total = counts["total"]
@@ -255,15 +262,25 @@ def api_list_jobs():
 
 
 @router.get("/history")
-def api_jobs_history(limit: int = 20):
-    safe_limit = max(1, min(30, int(limit or 20)))
-    rows = list_jobs()
-    rows = sorted(
-        rows,
-        key=lambda row: (_updated_at_ts(row.get("updated_at")), _updated_at_ts(row.get("created_at"))),
-        reverse=True,
-    )[:safe_limit]
-    return {"items": [_normalize_history_item(row) for row in rows]}
+def api_jobs_history(limit: int = 20, offset: int = 0):
+    safe_limit  = max(1, min(100, int(limit  or 20)))
+    safe_offset = max(0,          int(offset or 0))
+
+    # Fetch one extra row to detect has_more without a COUNT(*) round-trip.
+    rows = list_jobs_page(safe_limit + 1, safe_offset)
+    has_more = len(rows) > safe_limit
+    rows = rows[:safe_limit]
+
+    # Batch-fetch all parts in one query (eliminates N+1 — was one query per row).
+    job_ids      = [r["job_id"] for r in rows]
+    parts_lookup = list_job_parts_bulk(job_ids)
+
+    return {
+        "items":    [_normalize_history_item(r, parts_lookup=parts_lookup) for r in rows],
+        "limit":    safe_limit,
+        "offset":   safe_offset,
+        "has_more": has_more,
+    }
 
 
 @router.get("/queue/status")

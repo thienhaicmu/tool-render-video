@@ -28,7 +28,8 @@ export const jobsApi = {
     });
   },
 
-  async getHistory() {
-    return fetchJson('/api/jobs/history');
+  async getHistory(params) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return fetchJson(`/api/jobs/history${qs}`);
   },
 };

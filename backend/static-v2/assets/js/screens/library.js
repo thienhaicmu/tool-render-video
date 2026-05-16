@@ -193,42 +193,77 @@ function _renderCard(item) {
   `.trim();
 }
 
+const _PAGE_SIZE = 20;
+
 /* ── Module-level screen state (reset on each mount) ─────────────────── */
 
-let _history = [];
-let _filter  = 'all';
-let _search  = '';
-let _loading = false;
-let _error   = null;
-let _listEl  = null;
+let _history     = [];
+let _filter      = 'all';
+let _search      = '';
+let _loading     = false;
+let _loadingMore = false;
+let _hasMore     = false;
+let _offset      = 0;
+let _error       = null;
+let _listEl      = null;
 
-/* ── Load history from API ───────────────────────────────────────────── */
+/* ── Load history from API (initial page) ────────────────────────────── */
 
 async function _load() {
-  _loading = true;
-  _error   = null;
+  _history     = [];
+  _offset      = 0;
+  _hasMore     = false;
+  _loadingMore = false;
+  _loading     = true;
+  _error       = null;
   _renderList();
 
   try {
-    const raw   = await jobsApi.getHistory();
+    const raw   = await jobsApi.getHistory({ limit: _PAGE_SIZE, offset: 0 });
     const items = Array.isArray(raw)
       ? raw
       : (Array.isArray(raw?.items) ? raw.items : []);
 
+    // Backend returns items ordered by updated_at DESC — trust that ordering.
     _history = items
       .map(r => { try { return normalizeHistoryItem(r); } catch { return null; } })
-      .filter(Boolean)
-      .sort((a, b) => {
-        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return tb - ta;
-      });
+      .filter(Boolean);
 
+    _hasMore = raw?.has_more ?? false;
+    _offset  = _PAGE_SIZE;
     _loading = false;
     _renderList();
   } catch (err) {
     _loading = false;
     _error   = String(err?.message ?? 'Failed to load history');
+    _renderList();
+  }
+}
+
+/* ── Append the next page ─────────────────────────────────────────────── */
+
+async function _loadMore() {
+  if (_loadingMore || !_hasMore) return;
+  _loadingMore = true;
+  _renderList();
+
+  try {
+    const raw   = await jobsApi.getHistory({ limit: _PAGE_SIZE, offset: _offset });
+    const items = Array.isArray(raw)
+      ? raw
+      : (Array.isArray(raw?.items) ? raw.items : []);
+
+    const next = items
+      .map(r => { try { return normalizeHistoryItem(r); } catch { return null; } })
+      .filter(Boolean);
+
+    _history     = [..._history, ...next];
+    _hasMore     = raw?.has_more ?? false;
+    _offset     += _PAGE_SIZE;
+    _loadingMore = false;
+    _renderList();
+  } catch (err) {
+    _loadingMore = false;
     _renderList();
   }
 }
@@ -271,11 +306,27 @@ function _renderList() {
       ? 'No renders found. Start a render from Create to see your projects here.'
       : 'No jobs match the current filter or search.';
     _listEl.appendChild(emptyState({ icon: ICONS.empty, title: 'Nothing here', body: msg }));
+    // Still offer "Load more" below the empty state if there are server-side pages remaining.
+    if (_hasMore) {
+      const moreWrap = document.createElement('div');
+      moreWrap.className = 'col';
+      moreWrap.style.cssText = 'align-items:center;padding-top:var(--space-3)';
+      moreWrap.innerHTML = `<button class="btn btn-secondary btn-sm" id="lib-load-more" ${_loadingMore ? 'disabled' : ''}>${_loadingMore ? 'Loading…' : 'Load more'}</button>`;
+      moreWrap.querySelector('#lib-load-more')?.addEventListener('click', _loadMore);
+      _listEl.appendChild(moreWrap);
+    }
     return;
   }
 
-  _listEl.innerHTML = `<div class="col gap-2">${visible.map(_renderCard).join('')}</div>`;
+  const moreBtn = _hasMore
+    ? `<div class="col" style="align-items:center;padding-top:var(--space-3)">
+         <button class="btn btn-secondary btn-sm" id="lib-load-more" ${_loadingMore ? 'disabled' : ''}>${_loadingMore ? 'Loading…' : 'Load more'}</button>
+       </div>`
+    : '';
+
+  _listEl.innerHTML = `<div class="col gap-2">${visible.map(_renderCard).join('')}</div>${moreBtn}`;
   _wireCards();
+  _listEl.querySelector('#lib-load-more')?.addEventListener('click', _loadMore);
 }
 
 /* ── Wire card interactions ──────────────────────────────────────────── */
@@ -373,12 +424,15 @@ function _renderFilterBar(container) {
 /* ── Mount ───────────────────────────────────────────────────────────── */
 
 export async function mount(el, _params) {
-  _history = [];
-  _filter  = 'all';
-  _search  = '';
-  _loading = false;
-  _error   = null;
-  _listEl  = null;
+  _history     = [];
+  _filter      = 'all';
+  _search      = '';
+  _loading     = false;
+  _loadingMore = false;
+  _hasMore     = false;
+  _offset      = 0;
+  _error       = null;
+  _listEl      = null;
 
   el.innerHTML = `
     <div class="screen__header">

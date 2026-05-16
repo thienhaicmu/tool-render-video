@@ -1300,6 +1300,46 @@ def list_jobs():
     return [dict(r) for r in rows]
 
 
+def list_jobs_page(limit: int, offset: int) -> list[dict]:
+    """Return a page of jobs ordered by updated_at DESC, created_at DESC.
+
+    Executes a single query with SQL-level LIMIT/OFFSET so only the requested
+    rows are transferred from SQLite, regardless of total table size.
+    """
+    conn = get_conn()
+    rows = conn.execute(
+        'SELECT * FROM jobs ORDER BY updated_at DESC, created_at DESC LIMIT ? OFFSET ?',
+        (limit, offset),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def list_job_parts_bulk(job_ids: list[str]) -> dict[str, list[dict]]:
+    """Fetch parts for multiple jobs in a single query, keyed by job_id.
+
+    Replaces N individual list_job_parts() calls with one IN (...) query,
+    eliminating the N+1 problem in the history endpoint.
+    Returns an empty list for any job_id that has no parts.
+    """
+    if not job_ids:
+        return {}
+    placeholders = ','.join('?' * len(job_ids))
+    conn = get_conn()
+    rows = conn.execute(
+        f'SELECT * FROM job_parts WHERE job_id IN ({placeholders}) ORDER BY job_id, part_no ASC',
+        job_ids,
+    ).fetchall()
+    conn.close()
+    result: dict[str, list[dict]] = {jid: [] for jid in job_ids}
+    for r in rows:
+        d = dict(r)
+        jid = d.get('job_id', '')
+        if jid in result:
+            result[jid].append(d)
+    return result
+
+
 def list_job_parts(job_id: str):
     conn = get_conn()
     rows = conn.execute('SELECT * FROM job_parts WHERE job_id = ? ORDER BY part_no ASC', (job_id,)).fetchall()
