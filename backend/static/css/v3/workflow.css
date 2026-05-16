@@ -2337,3 +2337,299 @@ textarea.fieldInput {
    ======================================================= */
 
 
+/* ══════════════════════════════════════════════════════════════════════
+   UX-R4  Home Workspace Re-Architecture (2026-05-16)
+   Zones: momentum hero (A) | quick-start (B) | recent work (C)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Zone 1: Momentum Hero (UX-R4-A) ────────────────────────────── */
+
+.uxr4MomentumHero {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+
+.uxr4HeroAccent {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 120px;
+  background: linear-gradient(180deg, rgba(99,102,241,.08) 0%, transparent 100%);
+  pointer-events: none;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+
+.uxr4HeroInner {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-xl);
+  padding: var(--sp-xl);
+  z-index: 1;
+}
+
+/* Vertical separator between left and right zones */
+.uxr4HeroInner::before {
+  content: '';
+  position: absolute;
+  left: calc(50% - .5px);
+  top: var(--sp-xl);
+  bottom: var(--sp-xl);
+  width: 1px;
+  background: var(--border-subtle);
+}
+
+/* Left: continue zone */
+.uxr4ContinueZone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-sm);
+}
+
+.uxr4ContinueLabel {
+  font-size: var(--text-micro);
+  font-weight: var(--fw-semibold);
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.uxr4ContinueTitle {
+  font-size: var(--text-h1);
+  font-weight: var(--fw-bold);
+  color: var(--fg-100);
+  line-height: var(--lh-snug);
+  margin: 0;
+  /* long titles: truncate to one line */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uxr4ContinueSub {
+  font-size: var(--text-body);
+  color: var(--fg-200);
+  line-height: var(--lh-relaxed);
+}
+
+.uxr4ContinueMeta {
+  font-size: var(--text-micro);
+  color: var(--fg-300);
+  margin-top: var(--sp-xs);
+}
+
+.uxr4ContinueTime {
+  opacity: .6;
+  margin-left: var(--sp-xs);
+}
+
+.uxr4ContinueBtn {
+  margin-top: var(--sp-md);
+  padding: var(--sp-sm) var(--sp-lg);
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-md);
+  font-size: var(--text-body);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background var(--t-base), box-shadow var(--t-base);
+}
+
+.uxr4ContinueBtn:hover {
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-glow-primary);
+}
+
+/* Right: intelligence zone */
+.uxr4IntelZone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-sm);
+  padding-left: var(--sp-lg);
+}
+
+.uxr4IntelLabel {
+  font-size: var(--text-micro);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-400);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.uxr4IntelMsg {
+  font-size: var(--text-body);
+  color: var(--fg-200);
+  line-height: var(--lh-relaxed);
+}
+
+/* Taste model rows (UX-R4-D) */
+.uxr4IntelTaste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+}
+
+.uxr4IntelTasteRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md);
+  font-size: 12px;
+}
+
+.uxr4IntelTasteKey {
+  color: var(--fg-400);
+  min-width: 72px;
+  flex-shrink: 0;
+}
+
+.uxr4IntelTasteVal {
+  color: var(--fg-100);
+  font-weight: var(--fw-semibold);
+}
+
+
+/* ── Zone 2: Quick Start (UX-R4-B) ──────────────────────────────── */
+
+.uxr4QuickStart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-md);
+}
+
+/* Primary CTA — large, hero-level button */
+.uxr4QSPrimary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-lg);
+  padding: var(--sp-lg) var(--sp-xl);
+  background: rgba(99,102,241,.07);
+  border: 1px solid rgba(99,102,241,.18);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--t-base), border-color var(--t-base), box-shadow var(--t-base);
+}
+
+.uxr4QSPrimary:hover {
+  background: rgba(99,102,241,.13);
+  border-color: rgba(99,102,241,.38);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.12), var(--shadow-glow-primary);
+}
+
+.uxr4QSPrimaryIcon {
+  font-size: 28px;
+  font-weight: 200;
+  color: var(--primary);
+  line-height: 1;
+  flex-shrink: 0;
+  width: 36px;
+  text-align: center;
+}
+
+.uxr4QSPrimaryText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.uxr4QSPrimaryLabel {
+  font-size: var(--text-h2);
+  font-weight: var(--fw-bold);
+  color: var(--fg-100);
+  line-height: var(--lh-snug);
+  display: block;
+}
+
+.uxr4QSPrimarySub {
+  font-size: var(--text-micro);
+  color: var(--fg-300);
+  display: block;
+}
+
+/* Secondary: two source tiles side-by-side */
+.uxr4QSSecondary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-md);
+}
+
+/* Tertiary: minimal text utility actions */
+.uxr4QSTertiary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md);
+  padding-left: var(--sp-xs);
+}
+
+.uxr4QSTertiaryBtn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--fg-400);
+  cursor: pointer;
+  padding: var(--sp-xs) 0;
+  transition: color var(--t-base);
+}
+
+.uxr4QSTertiaryBtn:hover {
+  color: var(--fg-200);
+}
+
+
+/* ── Zone 3: Recent Work (UX-R4-C) ──────────────────────────────── */
+
+.uxr4RecentWork {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-md);
+}
+
+/* Override the legacy max-height cap so recent work breathes */
+.uxr4HistoryList {
+  max-height: none;
+}
+
+/* Top item slightly elevated — workspace memory feel */
+.uxr4HistoryList .renderHistoryItem.uxr4TopItem {
+  background: var(--bg-800);
+  border: 1px solid rgba(99,102,241,.14);
+  border-radius: var(--r-lg);
+  margin-bottom: var(--sp-xs);
+  border-bottom: 1px solid rgba(99,102,241,.14);
+}
+
+
+/* ── Responsive (UX-R4-G) ────────────────────────────────────────── */
+
+@media (max-width: 1366px) {
+  .uxr4HeroInner {
+    gap: var(--sp-lg);
+    padding: var(--sp-lg);
+  }
+  .uxr4QSPrimarySub { display: none; }
+}
+
+@media (max-width: 1024px) {
+  .uxr4HeroInner {
+    grid-template-columns: 1fr;
+    gap: var(--sp-md);
+  }
+  .uxr4HeroInner::before { display: none; }
+  .uxr4IntelZone {
+    padding-left: 0;
+    padding-top: var(--sp-md);
+    border-top: 1px solid var(--border-subtle);
+  }
+  .uxr4QSSecondary {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   END UX-R4
+   ══════════════════════════════════════════════════════════════════════ */
+
+

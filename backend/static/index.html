@@ -400,77 +400,83 @@
       <div id="partial_render_home">
         <div id="render_home_panel" class="rhPanel">
 
-          <!-- Hero onboarding card (Figma Frame 09) -->
-          <div class="rhHero card--elevated">
-            <div class="rhHeroAccent" aria-hidden="true"></div>
-            <div class="rhHeroContent">
+          <!-- Zone 1: Creator Momentum Hero (UX-R4-A) -->
+          <div class="uxr4MomentumHero card--elevated" id="uxr4_momentum_hero">
+            <div class="uxr4HeroAccent" aria-hidden="true"></div>
+            <div class="uxr4HeroInner">
 
-              <div class="rhHeroHead">
-                <h2 class="rhHeroTitle">Welcome back, Creator</h2>
-                <p class="rhHeroSub">Paste a video URL on the left, choose an output folder,
-                  then hit <strong>"Open Editor"</strong> to start cutting.</p>
+              <!-- Left: continue creating (populated by JS) -->
+              <div class="uxr4ContinueZone" id="uxr4_continue_zone">
+                <div class="uxr4ContinueLabel">Start creating</div>
+                <div class="uxr4ContinueSub">Create your first project. AI will learn your editing style as you work.</div>
               </div>
 
-              <div class="divider" style="margin:var(--sp-lg) 0"></div>
-
-              <!-- Quick-start tiles (3 columns) -->
-              <div class="rhTiles">
-
-                <div class="rhTile rhTile--youtube card--interactive"
-                     role="button" tabindex="0"
-                     onclick="document.getElementById('source_mode').value='youtube';syncSourceModeUI();"
-                     onkeydown="if(event.key==='Enter'||event.key===' '){this.click();}"
-                     title="Switch to YouTube / URL source mode">
-                  <div class="rhTileAccentBar" aria-hidden="true"></div>
-                  <div class="rhTileIcon">🔗</div>
-                  <div class="rhTileTitle">From YouTube</div>
-                  <div class="rhTileSub">Paste any public URL</div>
-                </div>
-
-                <div class="rhTile rhTile--local card--flat"
-                     role="button" tabindex="0"
-                     onclick="document.getElementById('source_mode').value='local';syncSourceModeUI();"
-                     onkeydown="if(event.key==='Enter'||event.key===' '){this.click();}"
-                     title="Switch to local video file mode">
-                  <div class="rhTileIcon">📁</div>
-                  <div class="rhTileTitle">From Local File</div>
-                  <div class="rhTileSub">Open a .mp4 / .mov</div>
-                </div>
-
-                <div class="rhTile rhTile--resume card--flat"
-                     role="button" tabindex="0"
-                     onclick="document.getElementById('resume_job_id').focus();"
-                     onkeydown="if(event.key==='Enter'||event.key===' '){this.click();}"
-                     title="Focus the Resume Job ID field in the sidebar">
-                  <div class="rhTileIcon">↺</div>
-                  <div class="rhTileTitle">Resume Job</div>
-                  <div class="rhTileSub">Continue last render</div>
-                </div>
-
-              </div><!-- /rhTiles -->
-
-              <!-- Tips block -->
-              <div class="rhTips">
-                <div class="section-head section-head--secondary">
-                  <span class="section-head__label">Tips</span>
-                </div>
-                <ul class="rhTipsList">
-                  <li>YouTube · TikTok · Reels · Facebook · Instagram all supported.</li>
-                  <li>Output folder must be writable. SSD recommended for speed.</li>
-                  <li>All render settings (aspect ratio, codec, subtitles) can be changed in the Editor.</li>
-                </ul>
+              <!-- Right: AI intelligence (populated by JS) -->
+              <div class="uxr4IntelZone">
+                <div class="uxr4IntelLabel">AI Workspace</div>
+                <div class="uxr4IntelMsg" id="uxr4_intel_msg">AI learns your editing style as you review clips.</div>
               </div>
 
-            </div><!-- /rhHeroContent -->
-          </div><!-- /rhHero -->
+            </div><!-- /uxr4HeroInner -->
+          </div><!-- /uxr4MomentumHero -->
 
-          <!-- Recent renders history -->
-          <div class="rhRecent">
-            <div class="section-head">
-              <span class="section-head__label">Recent Renders</span>
+          <!-- Zone 2: Quick Start (UX-R4-B) -->
+          <div class="uxr4QuickStart">
+
+            <!-- Primary: Create New Project -->
+            <button class="uxr4QSPrimary" type="button"
+                    onclick="document.getElementById('source_mode').value='youtube';syncSourceModeUI();">
+              <span class="uxr4QSPrimaryIcon">+</span>
+              <span class="uxr4QSPrimaryText">
+                <span class="uxr4QSPrimaryLabel">Create New Project</span>
+                <span class="uxr4QSPrimarySub">Start with a YouTube URL or local video file</span>
+              </span>
+            </button>
+
+            <!-- Secondary: source tiles -->
+            <div class="uxr4QSSecondary">
+
+              <div class="rhTile rhTile--youtube card--interactive"
+                   role="button" tabindex="0"
+                   onclick="document.getElementById('source_mode').value='youtube';syncSourceModeUI();"
+                   onkeydown="if(event.key==='Enter'||event.key===' '){this.click();}"
+                   title="Switch to YouTube / URL source mode">
+                <div class="rhTileAccentBar" aria-hidden="true"></div>
+                <div class="rhTileIcon">🔗</div>
+                <div class="rhTileTitle">From YouTube</div>
+                <div class="rhTileSub">Paste any public URL</div>
+              </div>
+
+              <div class="rhTile rhTile--local card--flat"
+                   role="button" tabindex="0"
+                   onclick="document.getElementById('source_mode').value='local';syncSourceModeUI();"
+                   onkeydown="if(event.key==='Enter'||event.key===' '){this.click();}"
+                   title="Switch to local video file mode">
+                <div class="rhTileIcon">📁</div>
+                <div class="rhTileTitle">From Local File</div>
+                <div class="rhTileSub">Open a .mp4 / .mov</div>
+              </div>
+
+            </div><!-- /uxr4QSSecondary -->
+
+            <!-- Tertiary: utility actions -->
+            <div class="uxr4QSTertiary">
+              <button class="uxr4QSTertiaryBtn" type="button"
+                      onclick="document.getElementById('resume_job_id').focus();"
+                      title="Focus the Resume Job ID field">
+                ↺ Resume from Job ID
+              </button>
             </div>
-            <div id="jobs_out" class="rhJobsList">
-              <div class="emptyState">No jobs yet.</div>
+
+          </div><!-- /uxr4QuickStart -->
+
+          <!-- Zone 3: Recent Work (UX-R4-C) -->
+          <div class="uxr4RecentWork">
+            <div class="section-head">
+              <span class="section-head__label">Recent Work</span>
+            </div>
+            <div id="render_history_list" class="renderHistoryList uxr4HistoryList">
+              <div class="renderHistoryEmpty">No recent renders yet<div>Your completed renders will appear here.</div></div>
             </div>
           </div>
 

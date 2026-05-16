@@ -111,8 +111,8 @@ function resetRenderSessionUi(){
   renderParts([]);
   renderPartFocus([], null);
   renderActivePartCard([], null);
-  if(RENDER_SESSION_ONLY && qs('jobs_out')){
-    qs('jobs_out').innerHTML = '<div class="emptyState">Session mode: old jobs are hidden.</div>';
+  if(RENDER_SESSION_ONLY && qs('render_history_list')){
+    qs('render_history_list').innerHTML = '<div class="emptyState">Session mode: old jobs are hidden.</div>';
   }
   hideRenderCompletionBar();
   const _pipelineMain = document.getElementById('mainArea');
@@ -2294,13 +2294,15 @@ function renderRenderHistory() {
   const items = _renderHistoryRead();
   if (!items.length) {
     box.innerHTML = '<div class="renderHistoryEmpty">No recent renders yet<div>Your completed renders will appear here.</div></div>';
+    _uxr4PopulateMomentumHero();
     return;
   }
-  box.innerHTML = items.map((entry) => {
+  box.innerHTML = items.map((entry, idx) => {
     const status = _renderHistoryStatusText(entry.status);
     const icon = entry.status === 'failed' ? '✕' : entry.status === 'partial' ? '⚠' : '✓';
     const openDisabled = entry.outputDir ? '' : ' disabled';
-    return `<div class="renderHistoryItem ${esc(entry.status || 'completed')}">
+    const elevatedClass = idx === 0 ? ' uxr4TopItem' : '';
+    return `<div class="renderHistoryItem ${esc(entry.status || 'completed')}${elevatedClass}">
       <div class="renderHistoryMain">
         <div class="renderHistoryTop">
           <span class="renderHistoryStatusIcon">${icon}</span>
@@ -2316,6 +2318,84 @@ function renderRenderHistory() {
     </div>`;
   }).join('');
   updateComparePanel();
+  _uxr4PopulateMomentumHero();
+}
+
+// UX-R4-A/D: Populate creator momentum hero with real history + CreatorMemory signals
+function _uxr4PopulateMomentumHero() {
+  var continueZone = document.getElementById('uxr4_continue_zone');
+  var intelMsg     = document.getElementById('uxr4_intel_msg');
+  if (!continueZone && !intelMsg) return;
+
+  var items = _renderHistoryRead();
+
+  // ── Left: continue or empty state ─────────────────────────────
+  if (continueZone) {
+    if (!items.length) {
+      continueZone.innerHTML =
+        '<div class="uxr4ContinueLabel">Start creating</div>' +
+        '<div class="uxr4ContinueSub">Create your first project. AI will learn your editing style as you work.</div>';
+    } else {
+      var last = items[0];
+      var clips  = Number(last.completedParts || 0);
+      var failed = Number(last.failedParts || 0);
+      var timeAgo = _renderHistoryRelativeTime(last.timestamp);
+      var metaParts = [];
+      if (clips > 0) metaParts.push(clips + ' clip' + (clips !== 1 ? 's' : '') + ' reviewed');
+      if (failed > 0) metaParts.push(failed + ' failed');
+      continueZone.innerHTML =
+        '<div class="uxr4ContinueLabel">Continue creating</div>' +
+        '<div class="uxr4ContinueTitle">' + esc(last.title || 'Last project') + '</div>' +
+        (metaParts.length
+          ? '<div class="uxr4ContinueMeta">' + esc(metaParts.join(' · ')) +
+            ' <span class="uxr4ContinueTime">' + esc(timeAgo) + '</span></div>'
+          : '') +
+        '<button class="uxr4ContinueBtn" type="button"' +
+        ' onclick="rerunRenderHistory(\'' + encodeURIComponent(last.jobId) + '\')">' +
+        'Continue Editing</button>';
+    }
+  }
+
+  // ── Right: AI intelligence from CreatorMemory ─────────────────
+  if (intelMsg) {
+    var html = 'AI learns your editing style as you review clips.';
+    if (typeof CreatorMemory !== 'undefined') {
+      try {
+        var taste = CreatorMemory.getTasteModel();
+        if (taste && taste.confident) {
+          var STYLE_LABELS = {
+            viral: 'Viral / High-energy', cinematic: 'Cinematic / Story',
+            educational: 'Educational / Clarity', balanced: 'Balanced'
+          };
+          var PACE_LABELS = { fast: 'Fast-paced', cinematic: 'Cinematic', balanced: 'Balanced' };
+          var HOOK_LABELS = { aggressive: 'Strong hooks', soft: 'Soft openings', moderate: 'Moderate' };
+          var rows = '';
+          if (taste.editStyle && taste.editStyle !== 'balanced') {
+            rows += '<div class="uxr4IntelTasteRow"><span class="uxr4IntelTasteKey">Edit style</span>' +
+                    '<span class="uxr4IntelTasteVal">' + esc(STYLE_LABELS[taste.editStyle] || taste.editStyle) + '</span></div>';
+          }
+          if (taste.paceConf > 0.4) {
+            rows += '<div class="uxr4IntelTasteRow"><span class="uxr4IntelTasteKey">Pacing</span>' +
+                    '<span class="uxr4IntelTasteVal">' + esc(PACE_LABELS[taste.pace] || taste.pace) + '</span></div>';
+          }
+          if (taste.hookConf > 0.4) {
+            rows += '<div class="uxr4IntelTasteRow"><span class="uxr4IntelTasteKey">Openings</span>' +
+                    '<span class="uxr4IntelTasteVal">' + esc(HOOK_LABELS[taste.hook] || taste.hook) + '</span></div>';
+          }
+          if (rows) html = '<div class="uxr4IntelTaste">' + rows + '</div>';
+        } else if (taste && !taste.confident) {
+          var prefs = (typeof CreatorMemory.getDerivedPreferences === 'function')
+            ? CreatorMemory.getDerivedPreferences() : null;
+          var total = prefs ? (prefs.totalSignals || 0) : 0;
+          if (total > 0) {
+            html = 'AI is learning your style&nbsp;&mdash;&nbsp;' + total +
+                   ' signal' + (total !== 1 ? 's' : '') + ' so far.';
+          }
+        }
+      } catch (_) {}
+    }
+    intelMsg.innerHTML = html;
+  }
 }
 
 // ── Compare Outputs (P2-4) ───────────────────────────────────────────────────
