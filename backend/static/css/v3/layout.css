@@ -1,0 +1,695 @@
+
+/* =======================================================
+   V3 — RESET & BASE
+   ======================================================= */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-base);
+  color: var(--fg-100);
+  background: var(--bg-900);
+  height: 100%;
+  overflow: hidden;
+  accent-color: var(--primary);
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+a:hover { text-decoration: underline; }
+
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button { cursor: pointer; }
+
+img, svg { display: block; max-width: 100%; }
+
+p { line-height: var(--lh-relaxed); }
+
+code, pre, .mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+}
+
+/* Utility classes */
+.hidden,
+.hiddenView,
+[hidden] {
+  display: none !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.flex-1     { flex: 1; }
+.flex-row   { display: flex; flex-direction: row; }
+.flex-col   { display: flex; flex-direction: column; }
+.items-center  { align-items: center; }
+.items-start   { align-items: flex-start; }
+.items-end     { align-items: flex-end; }
+.justify-start { justify-content: flex-start; }
+.justify-end   { justify-content: flex-end; }
+.justify-between { justify-content: space-between; }
+.gap-xs { gap: var(--sp-xs); }
+.gap-sm { gap: var(--sp-sm); }
+.gap-md { gap: var(--sp-md); }
+.gap-lg { gap: var(--sp-lg); }
+
+/* Text helpers */
+.text-display { font-size: var(--text-display); font-weight: var(--fw-extrabold); line-height: var(--lh-tight); }
+.text-h1      { font-size: var(--text-h1);      font-weight: var(--fw-bold);      line-height: var(--lh-snug); }
+.text-h2      { font-size: var(--text-h2);      font-weight: var(--fw-semibold);  line-height: var(--lh-snug); }
+.text-h3      { font-size: var(--text-h3);      font-weight: var(--fw-semibold);  line-height: var(--lh-base); }
+.text-body    { font-size: var(--text-body);    font-weight: var(--fw-regular); }
+.text-micro   { font-size: var(--text-micro);   font-weight: var(--fw-regular); }
+.text-label   { font-size: var(--text-label);   font-weight: var(--fw-medium); letter-spacing: .08em; text-transform: uppercase; }
+.text-mono    { font-family: var(--font-mono); }
+
+.text-primary   { color: var(--primary); }
+.text-secondary { color: var(--secondary); }
+.text-success   { color: var(--success); }
+.text-warning   { color: var(--warning); }
+.text-danger    { color: var(--danger); }
+.text-muted     { color: var(--fg-300); }
+.text-faint     { color: var(--fg-400); }
+
+/* Scrollbar base */
+::-webkit-scrollbar              { width: 4px; height: 4px; }
+::-webkit-scrollbar-track        { background: transparent; }
+::-webkit-scrollbar-thumb        { background: var(--bg-400); border-radius: var(--r-pill); }
+::-webkit-scrollbar-thumb:hover  { background: var(--bg-300); }
+
+
+/* =======================================================
+   V3 — APP ROOT
+   ======================================================= */
+
+#app {
+  width: 100%;
+  height: 100%;
+  display: contents;
+}
+
+
+/* =======================================================
+   V3 — APP SHELL (outer grid)
+   ======================================================= */
+
+/*
+  Row layout:
+    1 — topbar        48px
+    2 — rs-main       1fr   (sidebar | center | inspector)
+    3 — bottom panel  var(--abp-h) collapsed / var(--abp-h-expanded) expanded
+    4 — status bar    24px
+*/
+
+.appShell {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows:
+    var(--topbar-h)
+    minmax(0, 1fr)
+    var(--abp-h)
+    var(--statusbar-h);
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg-900);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Bottom panel expanded state */
+.appShell.abp-expanded {
+  grid-template-rows:
+    var(--topbar-h)
+    minmax(0, 1fr)
+    var(--abp-h-expanded)
+    var(--statusbar-h);
+}
+
+
+/* =======================================================
+   V3 — RS-MAIN (inner 3-column grid)
+   ======================================================= */
+
+.rs-main {
+  grid-row: 2;
+  grid-column: 1;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--inspector-w);
+  grid-template-rows: 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Collapsed sidebar variant */
+.rs-main.sidebar-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr) var(--inspector-w);
+}
+
+/* Collapsed inspector variant */
+.rs-main.inspector-collapsed {
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) 0;
+}
+
+/* Both collapsed */
+.rs-main.sidebar-collapsed.inspector-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+
+
+/* =======================================================
+   V3 — TOPBAR SHELL
+   ======================================================= */
+
+.appTopBar {
+  grid-row: 1;
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  height: var(--topbar-h);
+  padding: 0 var(--sp-md);
+  gap: var(--sp-sm);
+  background: var(--bg-800);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+/* Brand zone */
+.appTopBar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  flex-shrink: 0;
+  min-width: 0;
+  width: var(--sidebar-w);
+  padding-right: var(--sp-md);
+}
+
+.appTopBar__logo {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-md);
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: var(--fw-bold);
+  color: #fff;
+}
+
+.appTopBar__title {
+  font-size: var(--text-h3);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-100);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Nav zone (center) */
+.appTopBar__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  flex: 1;
+}
+
+/* Actions zone (right) */
+.appTopBar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+
+/* =======================================================
+   V3 — SIDEBAR SHELL
+   ======================================================= */
+
+.sidebar {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-800);
+  border-right: 1px solid var(--border-subtle);
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+}
+
+.sidebar__header {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 var(--sp-lg);
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--sp-sm);
+}
+
+.sidebar__body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--sp-md);
+}
+
+.sidebar__footer {
+  flex-shrink: 0;
+  padding: var(--sp-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Sidebar collapse — hide when grid column = 0 */
+.rs-main.sidebar-collapsed .sidebar {
+  width: 0;
+  overflow: hidden;
+  border-right: none;
+  padding: 0;
+}
+
+
+/* =======================================================
+   V3 — MAIN AREA (center column)
+   ======================================================= */
+
+.mainArea {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-900);
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+}
+
+.mainArea__toolbar {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 var(--sp-lg);
+  gap: var(--sp-sm);
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-800);
+}
+
+.mainArea__content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  position: relative;
+}
+
+/* View container — each routed view fills this */
+.mainArea__content > .view,
+.mainArea__content > [id$="-view"],
+.mainArea__content > [id$="_view"] {
+  min-height: 100%;
+}
+
+
+/* =======================================================
+   V3 — INSPECTOR SHELL
+   ======================================================= */
+
+.appInspector {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-800);
+  border-left: 1px solid var(--border-subtle);
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+}
+
+.appInspector__header {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 var(--sp-lg);
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--sp-sm);
+}
+
+.appInspector__body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.appInspector__footer {
+  flex-shrink: 0;
+  padding: var(--sp-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Inspector collapse */
+.rs-main.inspector-collapsed .appInspector {
+  width: 0;
+  overflow: hidden;
+  border-left: none;
+}
+
+
+/* =======================================================
+   V3 — BOTTOM PANEL SHELL
+   ======================================================= */
+
+/*
+  appBottomPanel lives inside .mainArea in HTML but is
+  grid-placed into row 3 of .appShell via absolute grid placement.
+  Its immediate grid parent resolves to .appShell because
+  .mainArea is not a grid container.
+*/
+
+.appBottomPanel {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-800);
+  border-top: 1px solid var(--border-subtle);
+  overflow: hidden;
+  min-height: 0;
+  z-index: 50;
+  position: relative;
+}
+
+.appBottomPanel__header {
+  display: flex;
+  align-items: center;
+  height: var(--abp-h);
+  padding: 0 var(--sp-lg);
+  flex-shrink: 0;
+  gap: var(--sp-sm);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  user-select: none;
+}
+
+.appBottomPanel__header:hover {
+  background: var(--bg-700);
+}
+
+.appBottomPanel__body {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  display: none;
+}
+
+/* Expanded state reveals the body */
+.appShell.abp-expanded .appBottomPanel__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.appBottomPanel__tabs {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 var(--sp-md);
+  gap: var(--sp-xs);
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-800);
+}
+
+.appBottomPanel__content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  padding: var(--sp-md);
+}
+
+/* Resize handle */
+.appBottomPanel__resizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: row-resize;
+  z-index: 10;
+}
+.appBottomPanel__resizer:hover::before {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 2px;
+  background: var(--primary);
+  border-radius: var(--r-pill);
+}
+
+
+/* =======================================================
+   V3 — STATUS BAR SHELL
+   ======================================================= */
+
+.appStatusBar {
+  grid-row: 4;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  height: var(--statusbar-h);
+  padding: 0 var(--sp-lg);
+  gap: var(--sp-md);
+  background: var(--bg-900);
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.appStatusBar__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  font-size: var(--text-micro);
+  color: var(--fg-400);
+  white-space: nowrap;
+}
+
+.appStatusBar__item--primary {
+  color: var(--fg-300);
+}
+
+.appStatusBar__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--fg-400);
+  flex-shrink: 0;
+}
+.appStatusBar__dot--ready   { background: var(--success); }
+.appStatusBar__dot--warning { background: var(--warning); }
+.appStatusBar__dot--error   { background: var(--danger); }
+.appStatusBar__dot--active  { background: var(--primary); }
+
+.appStatusBar__sep {
+  width: 1px;
+  height: 12px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
+
+
+/* =======================================================
+   V3 — TOAST ROOT SHELL
+   ======================================================= */
+
+#toastRoot,
+.toastRoot {
+  position: fixed;
+  bottom: calc(var(--statusbar-h) + var(--sp-lg));
+  right: var(--sp-xl);
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--sp-sm);
+  z-index: 9000;
+  pointer-events: none;
+  max-width: 380px;
+  width: 100%;
+}
+
+
+/* =======================================================
+   V3 — LEGACY SHELL COMPAT
+   (preserves old class names used by production JS)
+   ======================================================= */
+
+/* Old shell class names → map to V3 grid equivalents */
+.shell                  { display: contents; }
+.shell__workspace       { display: contents; }
+
+/* Old nav-rail inside topbar brand zone */
+.shell__nav             { display: contents; }
+
+/* Old footer strip → covered by .appStatusBar */
+.shell__strip {
+  grid-row: 4;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  height: var(--statusbar-h);
+  padding: 0 var(--sp-lg);
+  gap: var(--sp-md);
+  background: var(--bg-900);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--text-micro);
+  color: var(--fg-400);
+  z-index: 100;
+}
+
+/* nav-rail compat */
+.nav-rail {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+}
+
+/* old aside panel (shell__panel) */
+.shell__panel {
+  grid-column: 3;
+  grid-row: 1 / 4;
+  display: none; /* replaced by appInspector in V3 */
+}
+
+
+/* =======================================================
+   V3 — RENDER BAR & BACKEND BANNER SHELL
+   (existing elements injected by shell.js / render-ui.js)
+   ======================================================= */
+
+.shell-backend-banner {
+  grid-column: 1 / -1;
+  flex-shrink: 0;
+}
+
+.shell-render-bar {
+  grid-column: 1 / -1;
+  flex-shrink: 0;
+}
+
+/* These are injected into #shell-workspace which is .mainArea */
+/* They stack at top of center column */
+#shell-backend-banner,
+#shell-render-bar {
+  width: 100%;
+}
+
+/* Render bar inner layout */
+.render-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  padding: var(--sp-xs) var(--sp-lg);
+  background: var(--bg-700);
+  border-bottom: 1px solid var(--border-subtle);
+  min-height: 36px;
+}
+
+.render-bar__progress-track {
+  flex: 1;
+  max-width: 200px;
+  height: 3px;
+  background: var(--bg-500);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.render-bar__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  border-radius: var(--r-pill);
+  transition: width var(--t-slow);
+}
+
+/* Backend banner inner layout */
+.backend-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  padding: var(--sp-xs) var(--sp-lg);
+  background: var(--warning-muted);
+  border-bottom: 1px solid rgba(245,158,11,.2);
+  min-height: 36px;
+}
+
+
+/* =======================================================
+   V3 — LOADING OVERLAY SHELL
+   ======================================================= */
+
+#loading-overlay,
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-900);
+  z-index: 9999;
+  gap: var(--sp-lg);
+  transition: opacity var(--t-slow);
+}
+
+#loading-overlay.fade-out,
+.loading-overlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* =======================================================
+   END OF PHASE A — FOUNDATION SCAFFOLD
+   ======================================================= */
+
+

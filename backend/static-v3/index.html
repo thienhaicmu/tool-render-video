@@ -4,16 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>AI Clip Studio</title>
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
-  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="/static-v3/favicon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static-v3/icon-192.png">
+  <link rel="apple-touch-icon" href="/static-v3/icon-192.png">
   <!-- V3 fonts: Inter UI + JetBrains Mono for timecodes/logs -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <!-- Subtitle overlay fonts — used by editor-view.js subtitle renderer -->
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Anton&family=Montserrat:wght@700;900&family=Oswald:wght@700&family=Bebas+Neue&family=Roboto:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/v3/app.css">
+  <link rel="stylesheet" href="/static-v3/css/app.css">
 </head>
 <body>
 <div class="appShell">
@@ -997,7 +997,7 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
               <label class="field">
                 <span class="fieldLabel">Device</span>
-                <select class="fieldInput" id="evRenderDevice">
+                <select class="fieldInput" id="evSourceQualityMode">
                   <option value="auto" selected>Auto (GPU)</option>
                   <option value="cpu">CPU only</option>
                   <option value="gpu">GPU force</option>
@@ -1127,58 +1127,27 @@
      SECTION: script-includes
      !! DO NOT CHANGE SCRIPT ORDER !!
 ════════════════════════════════════════════════════════════════ -->
-<script src="/static/js/globals.js"></script>
-<script src="/static/js/warmup.js"></script>
-<script src="/static/js/smooth-progress.js"></script>
-<script src="/static/js/utils.js"></script>
-<script src="/static/js/log-utils.js"></script>
-<script src="/static/js/nav.js"></script>
-<script src="/static/js/render-config.js"></script>
-<script src="/static/js/upload-config.js"></script>
-<script src="/static/js/upload-manager.js"></script>
-<script src="/static/js/render-ui.js"></script>
-<script src="/static/js/render-engine.js"></script>
-<script src="/static/js/upload-engine.js"></script>
-<script src="/static/js/channels.js"></script>
-<script src="/static/js/editor-view.js"></script>
-<script src="/static/js/download-ui.js"></script>
-<script src="/static/js/history-ui.js"></script>
-<script src="/static/js/partials-loader.js"></script>
-<script src="/static/js/init.js"></script>
+<script src="/static-v3/js/globals.js"></script>
+<script src="/static-v3/js/warmup.js"></script>
+<script src="/static-v3/js/smooth-progress.js"></script>
+<script src="/static-v3/js/utils.js"></script>
+<script src="/static-v3/js/log-utils.js"></script>
+<script src="/static-v3/js/nav.js"></script>
+<script src="/static-v3/js/render-config.js"></script>
+<script src="/static-v3/js/upload-config.js"></script>
+<script src="/static-v3/js/upload-manager.js"></script>
+<script src="/static-v3/js/render-ui.js"></script>
+<script src="/static-v3/js/render-engine.js"></script>
+<script src="/static-v3/js/upload-engine.js"></script>
+<script src="/static-v3/js/channels.js"></script>
+<script src="/static-v3/js/editor-view.js"></script>
+<script src="/static-v3/js/download-ui.js"></script>
+<script src="/static-v3/js/history-ui.js"></script>
+<script src="/static-v3/js/partials-loader.js"></script>
+<script src="/static-v3/js/init.js"></script>
 <!-- /SECTION: script-includes -->
 
 <!-- Toast notification container -->
 <div id="toastRoot" class="toastRoot"></div>
-
-<!-- ═══════════════════════════════════════════════════════════════
-     SECTION: editor-compat-inputs
-     Hidden inputs that editor-view.js reads via qs(). These controls
-     were visible in v2 but moved out of the v3 editor inspector panel.
-     Keeping them as hidden inputs preserves all JS behavior without
-     requiring changes to editor-view.js.
-════════════════════════════════════════════════════════════════ -->
-<div id="evEditorCompat" style="display:none" aria-hidden="true">
-  <!-- Volume -->
-  <input type="range"  id="evVolume"       min="0" max="200" value="100" step="1">
-  <input type="number" id="evVolumeNum"    min="0" max="200" value="100" step="5">
-  <!-- Advanced render settings -->
-  <select id="evPlaybackSpeed"><option value="1.07" selected>1.07×</option><option value="1.0">1.0×</option><option value="1.05">1.05×</option><option value="1.1">1.1×</option><option value="1.15">1.15×</option></select>
-  <select id="evSourceQualityMode"><option value="standard_1080" selected>Standard 1080p</option><option value="high_1440">High 1440p</option><option value="best_available">Best Available</option></select>
-  <select id="evPartOrder"><option value="viral" selected>Best first</option><option value="timeline">Timeline</option></select>
-  <input type="number" id="evFrameScaleY"  value="106" min="80" max="130">
-  <!-- Feature toggles — unchecked = disabled by default in v3 UI -->
-  <input type="checkbox" id="evReupMode">
-  <input type="checkbox" id="evCleanupTemp" checked>
-  <input type="checkbox" id="evBgmEnable">
-  <input type="checkbox" id="evVoiceEnable">
-  <!-- BGM / Voice hidden fields -->
-  <input type="text"   id="evBgmPath"  value="">
-  <input type="number" id="evBgmGain"  value="0.18" min="0.01" max="1.0" step="0.01">
-  <!-- Containers toggled by JS show/hide -->
-  <div id="evBgmFields"></div>
-  <div id="evVoiceFields"></div>
-  <div id="evSectionMoreSettings"></div>
-</div>
-<!-- /SECTION: editor-compat-inputs -->
 </body>
 </html>

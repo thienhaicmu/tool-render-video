@@ -1,0 +1,656 @@
+   V3 — FINAL CLEANUP / HARDENING
+   Phase H: States · Responsive · Polish
+   Appended to app.css — never rewrites prior phases.
+   ======================================================================= */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-0  CRITICAL Z-INDEX FIXES
+   dropdown-menu (1000) must not exceed clipPreviewModal (900).
+   Elevate modal to 1100; toast stack stays at 9999.
+   ══════════════════════════════════════════════════════════════════════════ */
+.clipPreviewModal        { z-index: 1100; }
+.clipPreviewModalOverlay { z-index: 1099; }
+
+/* Dropdowns sit below modals */
+.dropdown-menu { z-index: 1000; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-1  VIEW STATE HARDENING
+   Explicit CSS safeguards so partials are hidden in wrong-view contexts,
+   independent of JS class-toggle ordering.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Render home hidden in download / history / settings / reports */
+body.is-download-active #partial_render_home,
+body.is-history-active  #partial_render_home {
+  display: none !important;
+}
+
+/* Workflow strip must not appear in download / history / reports / settings views */
+body.is-download-active #wfStrip,
+body.is-history-active  #wfStrip {
+  display: none !important;
+}
+
+/* Download view hidden unless download is active */
+body:not(.is-download-active) #partial_download_view { display: none !important; }
+
+/* History view hidden unless history is active */
+body:not(.is-history-active) #partial_history_view { display: none !important; }
+
+/* render_home_panel: never visible in editor / pipeline mode */
+.mainArea.editorMode  #render_home_panel,
+.mainArea.inPipeline  #render_home_panel { display: none !important; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-2  SCROLL CONTAINER HARDENING
+   Every overflow scroll container needs min-height: 0 so flex children
+   don't blow past parent boundaries. Targeted additions only.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* These containers had flex: 0 0 auto without min-height: 0 — fixed here */
+.downloadQueuePanel,
+.downloadQueueList,
+.historyList,
+.hwBody,
+.renderHomePanel,
+.renderHistoryList,
+.clipsGrid,
+.renderOutputList,
+.csTimeline {
+  min-height: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-3  SCROLLBAR NORMALIZATION
+   Standardize to two tiers: thin (4px, inside dense panels) and
+   wide (6px, primary scroll areas). Opacity: .09 thumb, .05 track.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Thin tier — dense panels (logs, part cards, inspector panes) */
+.evRightScroll.inspPaneBody::-webkit-scrollbar,
+.rcLogList::-webkit-scrollbar,
+.renderHistoryList::-webkit-scrollbar { width: 4px; height: 4px; }
+
+.evRightScroll.inspPaneBody::-webkit-scrollbar-track,
+.rcLogList::-webkit-scrollbar-track,
+.renderHistoryList::-webkit-scrollbar-track { background: transparent; }
+
+.evRightScroll.inspPaneBody::-webkit-scrollbar-thumb,
+.rcLogList::-webkit-scrollbar-thumb,
+.renderHistoryList::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.09);
+  border-radius: var(--r-pill);
+}
+
+/* Wide tier — primary content areas (download, history, render home, clips) */
+.downloadQueueList::-webkit-scrollbar,
+.hwBody::-webkit-scrollbar,
+.renderHomePanel::-webkit-scrollbar,
+#rc_part_cards.rcQueueGrid::-webkit-scrollbar { width: 6px; height: 6px; }
+
+.downloadQueueList::-webkit-scrollbar-track,
+.hwBody::-webkit-scrollbar-track,
+.renderHomePanel::-webkit-scrollbar-track,
+#rc_part_cards.rcQueueGrid::-webkit-scrollbar-track { background: transparent; }
+
+.downloadQueueList::-webkit-scrollbar-thumb,
+.hwBody::-webkit-scrollbar-thumb,
+.renderHomePanel::-webkit-scrollbar-thumb,
+#rc_part_cards.rcQueueGrid::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.09);
+  border-radius: var(--r-pill);
+}
+
+.downloadQueueList::-webkit-scrollbar-thumb:hover,
+.hwBody::-webkit-scrollbar-thumb:hover,
+.renderHomePanel::-webkit-scrollbar-thumb:hover,
+#rc_part_cards.rcQueueGrid::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,.16);
+}
+
+/* Firefox: normalize all to thin + consistent color */
+.downloadQueueList,
+.hwBody,
+.renderHomePanel,
+.renderHistoryList,
+.rcLogList,
+#rc_part_cards.rcQueueGrid {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.09) transparent;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-4  TRANSITION NORMALIZATION
+   Replace hardcoded .12s / .15s durations with CSS token references.
+   These override Phase F/G declarations at equal or higher specificity.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Phase F hardcoded transitions — override with token equivalents */
+.csTabBtn,
+.csTabBtn:hover                      { transition: background var(--t-fast), color var(--t-fast); }
+.csSideAction,
+.csSideAction:hover                  { transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast); }
+.aiSectionToggle                     { transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
+.aiSectionToggle.active              { transition: background var(--t-fast), color var(--t-fast); }
+.clipCardThumb,
+.clipCardThumb:hover                 { transition: background var(--t-fast); }
+.clipCardActionBtn,
+.clipCardActionBtn:hover             { transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
+
+/* Phase G hardcoded transitions — override with token equivalents */
+.downloadActionBtn,
+.downloadActionBtn:hover             { transition: background var(--t-fast), color var(--t-fast); }
+.hwActionBtn,
+.hwActionBtn:hover                   { transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
+.hwFilterChip,
+.hwFilterChip:hover                  { transition: background var(--t-fast), color var(--t-fast); }
+.downloadStatusBadge,
+.downloadSourceBadge                 { transition: opacity var(--t-base); }
+.hwCard                              { transition: background var(--t-fast); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-5  BUTTON HEIGHT NORMALIZATION
+   Enforce consistent action-button heights using design tokens.
+   Tier 1 (sm): 24px  — inline status/meta actions
+   Tier 2 (md): 28px  — standard card actions  ← default
+   Tier 3 (lg): 32px  — primary flow CTAs
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Download queue action buttons — standardize to 28px */
+.downloadActionBtn {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+
+/* History action buttons — standardize to 28px */
+.hwActionBtn.ghost {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Clip card action buttons — standardize to 24px (compact) */
+.clipCardActionBtn {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Render output action buttons — 28px */
+.renderOutputActionBtn,
+.csExportBtn {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 12px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: var(--r-sm);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-6  VIEW ENTER ANIMATION HARDENING
+   Ensure view-enter animation works from any starting view with no flicker.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes view-enter-h {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.mainArea.viewEntering {
+  animation: view-enter-h 120ms ease both;
+}
+
+/* Download / History workspace areas get the same enter animation */
+.downloadWorkspace.viewEntering,
+.historyWorkspace.viewEntering {
+  animation: view-enter-h 120ms ease both;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-7  BOTTOM PANEL TRANSITION POLISH
+   Smooth height transition when collapsing/expanding the bottom panel.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.appBottomPanel.rs-bottom-panel {
+  transition: height var(--t-base), min-height var(--t-base);
+}
+
+/* Collapse toggle button hover feedback */
+#abp_collapse_btn {
+  transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
+}
+#abp_collapse_btn:hover {
+  transform: scale(1.1);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-8  EMPTY / ERROR / LOADING STATES
+   Consistent treatment for all "no content" areas across views.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Universal empty state block */
+.emptyState,
+.v3-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-sm);
+  padding: var(--sp-3xl) var(--sp-xl);
+  text-align: center;
+  color: var(--fg-400);
+  min-height: 120px;
+}
+
+.emptyState__icon,
+.v3-empty-state__icon {
+  font-size: 28px;
+  opacity: .35;
+  margin-bottom: var(--sp-xs);
+}
+
+.emptyState__title,
+.v3-empty-state__title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-300);
+}
+
+.emptyState__body,
+.v3-empty-state__body {
+  font-size: 11px;
+  color: var(--fg-400);
+  line-height: 1.5;
+  max-width: 260px;
+}
+
+/* Error state variant */
+.emptyState--error .emptyState__icon,
+.v3-empty-state--error .v3-empty-state__icon {
+  color: var(--danger);
+  opacity: .6;
+}
+
+.emptyState--error .emptyState__title,
+.v3-empty-state--error .v3-empty-state__title {
+  color: var(--danger);
+}
+
+/* Loading state skeleton for list areas */
+.v3-loading-row {
+  height: 52px;
+  border-radius: var(--r-md);
+  background: var(--bg-800);
+  margin-bottom: 8px;
+  animation: skeleton-shimmer 1.4s ease infinite;
+  background-size: 400% 100%;
+  background-image: linear-gradient(
+    90deg,
+    var(--bg-800) 0%,
+    var(--bg-700) 40%,
+    var(--bg-800) 80%
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-9  RESPONSIVE — 1366×768  (laptop threshold)
+   At 1366px the inspector must shrink or collapse; sidebar narrows;
+   clip grid goes to smaller minimum.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1366px) {
+
+  /* Shrink inspector column */
+  :root {
+    --inspector-w: 320px;
+    --inspector-w-sm: 300px;
+    --sidebar-w: 252px;
+  }
+
+  /* Clip grid: tighter minimum card width */
+  .clipsGrid,
+  .renderOutputList {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+
+  /* Download queue row: reduce padding */
+  .downloadQueueRow {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  /* History card: tighten */
+  .hwCard {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  /* Center preview: reduce width cap for portrait clips */
+  .csPreviewArea[data-aspect="9:16"] .csPreviewVideoWrap {
+    width: clamp(160px, 28vh, 44%);
+  }
+
+  /* Render home product grid: 2 cols */
+  .renderProductGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Wf strip: shrink card labels */
+  .wfCard {
+    min-width: 64px;
+    padding: 5px 8px;
+  }
+  .wfCard .wfLabel { font-size: 9px; }
+
+  /* Bottom panel: tighter collapsed height in this breakpoint */
+  .appShell.abpCollapsed .appBottomPanel.rs-bottom-panel {
+    min-height: 48px;
+    max-height: 48px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-10  RESPONSIVE — 1600×900  (common office laptop)
+   Moderate adjustments — keep full layout but tighten spacing.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1600px) and (min-width: 1367px) {
+
+  :root {
+    --inspector-w: 350px;
+    --sidebar-w: 264px;
+  }
+
+  /* Clip grid: slightly tighter */
+  .clipsGrid,
+  .renderOutputList {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+
+  /* Render home product grid: max 3 cols */
+  .renderProductGrid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-11  RESPONSIVE — 1920×1080  (full HD monitors)
+   Allow wider layouts; clip grid gets bigger cards.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (min-width: 1920px) {
+
+  :root {
+    --inspector-w: 420px;
+    --sidebar-w: 300px;
+  }
+
+  /* Clip grid: larger cards on big monitors */
+  .clipsGrid,
+  .renderOutputList {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  /* Download queue: more breathing room */
+  .downloadQueueRow { padding: 14px 20px; }
+  .hwCard           { padding: 14px 18px; }
+
+  /* Render home product grid: up to 4 cols */
+  .renderProductGrid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-12  RESPONSIVE — ULTRA-NARROW (< 1024px)
+   Graceful degradation: collapse inspector, narrow sidebar.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1024px) {
+
+  /* Auto-collapse inspector at very narrow widths */
+  .rs-main {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr) 0 !important;
+  }
+  .appInspector { display: none !important; }
+
+  :root {
+    --sidebar-w: 220px;
+    --inspector-w: 0px;
+  }
+
+  /* Download queue: stack elements vertically for each row */
+  .downloadQueueRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .downloadQueueRowRight {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* History cards: reduce metadata density */
+  .hwCardRight { display: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-13  FOCUS / ACCESSIBILITY HARDENING
+   Ensure keyboard navigation remains visible in all views.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Global focus ring — consistent with design token colors */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Remove outline for mouse users only */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Interactive card focus states */
+.downloadQueueRow:focus-visible,
+.hwCard:focus-visible,
+.clipCard:focus-visible,
+.renderHistoryItem:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-radius: var(--r-md);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-14  HOVER STATE CONSISTENCY
+   Ensure all interactive rows have consistent hover feedback.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Rows that were missing hover transitions */
+.renderHistoryItem {
+  transition: background var(--t-fast);
+  cursor: pointer;
+}
+
+.downloadQueueRow {
+  transition: background var(--t-fast), border-left-color var(--t-fast);
+}
+
+.hwCard {
+  transition: background var(--t-fast), border-left-color var(--t-fast);
+  cursor: default;
+}
+
+/* Ensure wf strip cards have pointer */
+.wfCard { cursor: default; }
+.wfCard.is-active,
+.wfCard.is-done { cursor: default; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-15  RENDER FLOW BAR POLISH
+   Consistent with new responsive grid; ensure it never overflows.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+#render_flow_bar {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* wfStrip horizontal scroll at narrow widths */
+@media (max-width: 1366px) {
+  .wfStrip {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-16  PAGE HEADER POLISH
+   Consistent alignment and spacing at all breakpoints.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1366px) {
+  .pageHeader {
+    padding: 12px 16px 10px;
+  }
+  .pageHeaderTitle { font-size: 15px; }
+  .pageHeaderSub   { font-size: 11px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-17  SETTINGS / REPORTS — SINGLE COLUMN RESPONSIVE
+   layout_grid.singleCol should have a max-width cap at large screens.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.layout_grid.singleCol {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (max-width: 1366px) {
+  .layout_grid.singleCol { max-width: 100%; padding: 0 12px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-18  FINAL MICRO-POLISH
+   Small targeted overrides that don't belong in a larger section.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Prevent text selection on UI chrome elements */
+.navItem,
+.wfCard,
+.tabBtn,
+.csTabBtn,
+.hwFilterChip,
+.downloadActionBtn,
+.hwActionBtn,
+.clipCardActionBtn {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Ensure icons inside buttons don't block pointer events */
+.btn svg,
+.btn i,
+.downloadActionBtn svg,
+.downloadActionBtn i,
+.hwActionBtn svg,
+.hwActionBtn i {
+  pointer-events: none;
+}
+
+/* Clip preview modal: ensure it fills the viewport correctly */
+.clipPreviewModal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Render output panel: ensure flex children scroll correctly */
+.renderOutputPanel {
+  overflow: visible;
+}
+.renderOutputScrollArea {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   H-19  PRINT / REDUCED-MOTION SAFEGUARDS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  .appShell,
+  .appSidebar,
+  .appInspector,
+  .appBottomPanel { display: none !important; }
+  .mainArea { overflow: visible !important; }
+}
+
+/* =======================================================
+   H-HOTFIX-1  rs-preview-stage flex layout
+   -------------------------------------------------------
+   Problem: .rs-preview-stage has flex:1 from workflow.css
+   even when #view_editor is hidden (display:none), causing
+   it to consume all remaining flex space in .rs-center-stage
+   and leaving #partial_render_home with only ~155px of height.
+   Fix: default to flex:0 0 auto (content-driven = 0 when
+   editor is hidden). Only expand to flex:1 in editor mode.
+   ======================================================= */
+
+.rs-preview-stage {
+  flex: 0 0 auto;
+}
+.mainArea.editorMode .rs-preview-stage {
+  flex: 1;
+}
+
+/* =======================================================
+   H-HOTFIX-2  partial_render_home flex space during render
+   -------------------------------------------------------
+   When render_home_panel.hiddenView (active job / non-render
+   view), the wrapper #partial_render_home should not claim
+   flex space — otherwise it competes with renderActivePanel.
+   Uses :has() which is available in Electron/Chromium 105+.
+   ======================================================= */
+
+#partial_render_home:has(> .hiddenView) {
+  flex: 0 0 auto;
+}
+
+/* =======================================================
+   END OF PHASE H · FINAL CLEANUP / HARDENING
+   ======================================================= */

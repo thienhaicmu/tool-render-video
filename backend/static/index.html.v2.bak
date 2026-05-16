@@ -1,19 +1,15 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>AI Clip Studio</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Anton&family=Montserrat:wght@700;900&family=Oswald:wght@700&family=Bebas+Neue&family=Roboto:wght@700&display=swap" rel="stylesheet">
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
-  <!-- V3 fonts: Inter UI + JetBrains Mono for timecodes/logs -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <!-- Subtitle overlay fonts — used by editor-view.js subtitle renderer -->
-  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Anton&family=Montserrat:wght@700;900&family=Oswald:wght@700&family=Bebas+Neue&family=Roboto:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/v3/app.css">
+  <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
 <div class="appShell">
@@ -100,20 +96,18 @@
               <div class="formGrid">
                 <label class="field">
                   <span class="fieldLabel">Source Type</span>
-                  <select class="fieldInput form-select" id="source_mode" onchange="syncSourceModeUI()">
-                    <option value="youtube">Video URL</option>
-                    <option value="local" selected>Local Video File</option>
+                  <select class="fieldInput" id="source_mode">
+                    <option value="youtube" selected>Video URL</option>
+                    <option value="local">Local Video File</option>
                   </select>
                 </label>
                 <div></div>
-                <label class="field fieldSpan2 hiddenView" id="field_youtube_url">
+                <label class="field fieldSpan2" id="field_youtube_url">
                   <span class="fieldLabel">Video URL</span>
                   <input class="fieldInput" id="youtube_url" placeholder="YouTube, TikTok, Instagram or Facebook link">
                   <div class="sectionSubtitle" style="margin-top:4px">Use a public link here, or download first and reopen the saved file as a local source.</div>
                 </label>
-                <!-- field_youtube_urls: compat target for syncSourceModeUI() — hidden, no UI -->
-                <div id="field_youtube_urls" class="hiddenView" aria-hidden="true"></div>
-                <label class="field fieldSpan2" id="field_source_video_path">
+                <label class="field fieldSpan2 hiddenView" id="field_source_video_path">
                   <span class="fieldLabel">Local Video</span>
                   <div class="actionsRow" style="margin-top:0">
                     <input class="fieldInput" id="source_video_path" placeholder="No file selected" readonly>
@@ -227,43 +221,16 @@
   ════════════════════════════════════════════════════════════════ -->
   <main class="mainArea rs-center-panel" id="mainArea">
 
+    <!-- ═══════════════════════════════════════════════════════════════
+         SECTION: center-stage
+         Keep child sibling order stable; render/nav CSS and JS depend on it.
+    ════════════════════════════════════════════════════════════════ -->
     <div class="rs-center-stage">
-
-      <!-- ── SECTION: workflow-step-strip (editor mode only) ──────
-           Shown when mainArea.editorMode is set by nav.js.
-           Steps map to real screens — no fake panels.        ── -->
-      <nav class="wfStrip" id="wfStrip" aria-label="Workflow steps">
-        <div class="wfCard" data-wf-step="source">
-          <span class="wfCard__num">1</span>
-          <span class="wfCard__label">Source</span>
-        </div>
-        <div class="wfSep" aria-hidden="true"></div>
-        <div class="wfCard" data-wf-step="prepare">
-          <span class="wfCard__num">2</span>
-          <span class="wfCard__label">Prepare</span>
-        </div>
-        <div class="wfSep" aria-hidden="true"></div>
-        <div class="wfCard" data-wf-step="render">
-          <span class="wfCard__num">3</span>
-          <span class="wfCard__label">Render</span>
-        </div>
-        <div class="wfSep" aria-hidden="true"></div>
-        <div class="wfCard" data-wf-step="review">
-          <span class="wfCard__num">4</span>
-          <span class="wfCard__label">Review</span>
-        </div>
-        <div class="wfSep" aria-hidden="true"></div>
-        <div class="wfCard" data-wf-step="export">
-          <span class="wfCard__num">5</span>
-          <span class="wfCard__label">Export</span>
-        </div>
-      </nav>
-      <!-- /SECTION: workflow-step-strip -->
 
       <!-- ── SECTION: editor-preview-stage ──────────────────────── -->
       <div class="rs-preview-stage">
         <!-- ═══════════════════════════════════════════════════════════════
-             SECTION: editor-view
+             SECTION: editor-view — in-layout center-stage editor (local/YouTube)
         ════════════════════════════════════════════════════════════════ -->
         <div id="view_editor" class="evLayout hiddenView">
 
@@ -274,15 +241,20 @@
             <div class="evLeft">
               <!-- Aspect ratio indicator bar -->
               <div class="evAspectBar">
-                <span style="font-size:11px;color:var(--text-mut)">Aspect ratio:</span>
-                <span id="evAspectBadge" style="font-size:11px;font-weight:700;color:var(--primary-hi);background:rgba(77,124,255,.12);padding:2px 8px;border-radius:4px">9:16</span>
-                <span style="font-size:11px;color:var(--text-mut);margin-left:4px">— preview crop matches output framing</span>
+                <span style="font-size:11px;color:var(--text-muted)">Aspect ratio:</span>
+                <span id="evAspectBadge" style="font-size:11px;font-weight:700;color:#60a5fa;background:rgba(59,130,246,.12);padding:2px 8px;border-radius:4px">9:16</span>
+                <span style="font-size:11px;color:var(--text-muted);margin-left:4px">— preview crop matches output framing</span>
                 <button id="evGuideToggleBtn" class="evGuideToggle" onclick="evToggleGuides()">Guides</button>
               </div>
 
               <div class="evVideoBox" id="evVideoBox">
+                <!-- Frame with exact aspect ratio — video fills it with object-fit:cover -->
                 <div class="evVideoFrame" id="evVideoFrame">
+
+                  <!-- Video element -->
                   <video id="evVideo" class="evVideo" preload="metadata" style="display:none"></video>
+
+                  <!-- Subtitle preview overlay — inside frame, % relative to frame height -->
                   <div class="evSubOverlay" id="evSubOverlay" style="bottom:15%;display:none">
                     <div class="evSubInner" id="evSubInner" onmousedown="evSubOverlayDragStart(event)">
                       <span style="font-family:'Bungee',sans-serif;font-size:clamp(12px,4cqw,46px);color:#FFFF00;-webkit-text-stroke:2px #000;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000">POV: </span><span style="font-family:'Bungee',sans-serif;font-size:clamp(12px,4cqw,46px);color:#FFF;-webkit-text-stroke:2px #000;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000">never gonna</span>
@@ -293,19 +265,23 @@
                   <div id="evSelLabel" class="evSelLabel"></div>
                   <div id="evSubDragLabel"></div>
                   <div id="evSubModeLabel" class="evSubModeLabel demo">Preview sample</div>
+
+                  <!-- Loading overlay -->
                   <div class="evLoadingOverlay" id="evLoadingOverlay">
                     <div class="editorSpinner"></div>
                     <div id="evLoadingText" style="color:var(--text-dim);font-size:13px;font-weight:600">Loading video…</div>
-                    <div style="font-size:11px;color:var(--text-mut)">This can take a few seconds</div>
+                    <div style="font-size:11px;color:var(--text-muted)">This can take a few seconds</div>
                   </div>
+
                 </div><!-- /evVideoFrame -->
               </div>
 
             </div><!-- /evLeft -->
 
+
           </div><!-- /evWorkspace -->
 
-          <!-- Timeline -->
+          <!-- Timeline — full-width, anchored at bottom of editor -->
           <div class="evTimeline">
             <span class="evTimeText" id="evCurTime">0:00:00</span>
             <div class="evTimelineBarWrap" id="evTimelineBarWrap" onclick="evSeekClick(event)">
@@ -324,163 +300,107 @@
         </div><!-- /view_editor -->
         <!-- /SECTION: editor-view -->
       </div><!-- /rs-preview-stage -->
+      <!-- /SECTION: editor-preview-stage -->
 
-      <!-- SECTION: monitor-view-compat (hidden ghost IDs) -->
+      <!-- ═══════════════════════════════════════════════════════════════
+           SECTION: monitor-view-compat (DEAD — permanently hidden)
+           Ghost IDs below are still written by render-ui.js and render-engine.js.
+           Do not remove this block — remove the IDs from JS first.
+      ════════════════════════════════════════════════════════════════ -->
+      <!-- view_monitor: permanently hidden; remaining IDs silently updated by JS -->
       <div id="view_monitor" class="hiddenView" data-jm-status="idle" style="display:none">
-        <div class="actionTitle" id="action_title"></div>
-        <div class="actionState" id="action_state"></div>
-        <div class="actionMessage" id="action_message"></div>
-        <div class="actionMeta" id="action_meta"></div>
-        <div id="part_focus"></div>
-        <div class="stepsGrid" id="steps_grid"></div>
-        <!-- jobs_out relocated to #render_home_panel for display -->
+      <div class="actionTitle" id="action_title"></div>
+      <div class="actionState" id="action_state"></div>
+      <div class="actionMessage" id="action_message"></div>
+      <div class="actionMeta" id="action_meta"></div>
+      <div id="part_focus"></div>
+      <div class="stepsGrid" id="steps_grid"></div>
+      <div class="hiddenView" id="jobs_out"></div>
       </div>
+      <!-- /SECTION: monitor-view-compat -->
 
       <!-- ── SECTION: render-home-panel ──────────────────────────── -->
-      <div id="partial_render_home">
-        <div id="render_home_panel" class="rhPanel">
-
-          <!-- Hero onboarding card (Figma Frame 09) -->
-          <div class="rhHero card--elevated">
-            <div class="rhHeroAccent" aria-hidden="true"></div>
-            <div class="rhHeroContent">
-
-              <div class="rhHeroHead">
-                <h2 class="rhHeroTitle">Welcome back, Creator</h2>
-                <p class="rhHeroSub">Paste a video URL on the left, choose an output folder,
-                  then hit <strong>"Open Editor"</strong> to start cutting.</p>
-              </div>
-
-              <div class="divider" style="margin:var(--sp-lg) 0"></div>
-
-              <!-- Quick-start tiles (3 columns) -->
-              <div class="rhTiles">
-
-                <div class="rhTile rhTile--youtube card--interactive"
-                     role="button" tabindex="0"
-                     onclick="document.getElementById('source_mode').value='youtube';syncSourceModeUI();"
-                     onkeydown="if(event.key==='Enter'||event.key===' '){this.click();}"
-                     title="Switch to YouTube / URL source mode">
-                  <div class="rhTileAccentBar" aria-hidden="true"></div>
-                  <div class="rhTileIcon">🔗</div>
-                  <div class="rhTileTitle">From YouTube</div>
-                  <div class="rhTileSub">Paste any public URL</div>
-                </div>
-
-                <div class="rhTile rhTile--local card--flat"
-                     role="button" tabindex="0"
-                     onclick="document.getElementById('source_mode').value='local';syncSourceModeUI();"
-                     onkeydown="if(event.key==='Enter'||event.key===' '){this.click();}"
-                     title="Switch to local video file mode">
-                  <div class="rhTileIcon">📁</div>
-                  <div class="rhTileTitle">From Local File</div>
-                  <div class="rhTileSub">Open a .mp4 / .mov</div>
-                </div>
-
-                <div class="rhTile rhTile--resume card--flat"
-                     role="button" tabindex="0"
-                     onclick="document.getElementById('resume_job_id').focus();"
-                     onkeydown="if(event.key==='Enter'||event.key===' '){this.click();}"
-                     title="Focus the Resume Job ID field in the sidebar">
-                  <div class="rhTileIcon">↺</div>
-                  <div class="rhTileTitle">Resume Job</div>
-                  <div class="rhTileSub">Continue last render</div>
-                </div>
-
-              </div><!-- /rhTiles -->
-
-              <!-- Tips block -->
-              <div class="rhTips">
-                <div class="section-head section-head--secondary">
-                  <span class="section-head__label">Tips</span>
-                </div>
-                <ul class="rhTipsList">
-                  <li>YouTube · TikTok · Reels · Facebook · Instagram all supported.</li>
-                  <li>Output folder must be writable. SSD recommended for speed.</li>
-                  <li>All render settings (aspect ratio, codec, subtitles) can be changed in the Editor.</li>
-                </ul>
-              </div>
-
-            </div><!-- /rhHeroContent -->
-          </div><!-- /rhHero -->
-
-          <!-- Recent renders history -->
-          <div class="rhRecent">
-            <div class="section-head">
-              <span class="section-head__label">Recent Renders</span>
-            </div>
-            <div id="jobs_out" class="rhJobsList">
-              <div class="emptyState">No jobs yet.</div>
-            </div>
-          </div>
-
-        </div><!-- /render_home_panel -->
-      </div><!-- /partial_render_home -->
+      <!-- partial: partials/render-home.html -->
+      <div id="partial_render_home"></div>
+      <!-- /SECTION: render-home-panel -->
 
       <!-- ── SECTION: render-active-panel ────────────────────────── -->
       <div id="render_active_panel" class="renderActivePanel hiddenView" aria-live="polite">
-        <div class="renderActiveCompatTargets" hidden>
-          <span id="render_active_state"></span>
-          <span id="render_active_bar"></span>
-          <span id="render_workspace_source"></span>
-          <span id="render_workspace_output"></span>
-          <span id="render_workspace_stage"></span>
-          <div id="render_workspace_preview">
-            <span id="render_workspace_preview_badge"></span>
-            <span id="render_workspace_preview_title"></span>
-            <span id="render_workspace_preview_text"></span>
-          </div>
+      <!-- SECTION: render-active-compat-targets
+           Ghost IDs: updateRenderMainState still writes to these; hidden from view. -->
+      <div class="renderActiveCompatTargets" hidden>
+        <span id="render_active_state"></span>
+        <span id="render_active_bar"></span>
+        <span id="render_workspace_source"></span>
+        <span id="render_workspace_output"></span>
+        <span id="render_workspace_stage"></span>
+        <div id="render_workspace_preview">
+          <span id="render_workspace_preview_badge"></span>
+          <span id="render_workspace_preview_title"></span>
+          <span id="render_workspace_preview_text"></span>
         </div>
+      </div>
 
-        <div class="rdCard" id="rd_card" data-state="idle">
-          <div class="rdCardHead">
-            <div class="rdHeadLeft">
-              <div class="rdBadge" id="rd_badge" data-state="idle">Idle</div>
-              <div class="rdTitle" id="rd_title">Preparing render…</div>
-            </div>
-            <button class="rdLogBtn" type="button" onclick="focusRenderLogPanel()">View Logs</button>
+      <!-- SECTION: render-active-summary-card -->
+      <div class="rdCard" id="rd_card" data-state="idle">
+        <div class="rdCardHead">
+          <div class="rdHeadLeft">
+            <div class="rdBadge" id="rd_badge" data-state="idle">Idle</div>
+            <div class="rdTitle" id="rd_title">Preparing render…</div>
           </div>
-          <div class="rdStep" id="render_active_title">Initializing…</div>
-          <div class="rdSegBar" id="rd_seg_bar" hidden></div>
-          <div class="rdMeta">
-            <span class="rdPct" id="render_active_pct">0%</span>
-            <span class="rdMetaSub" id="render_active_meta">Clips will appear below as they finish.</span>
-          </div>
-          <div class="rdDoneActions hiddenView" id="render_active_actions">
-            <button class="primaryButton" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
-          </div>
+          <button class="rdLogBtn" type="button" onclick="focusRenderLogPanel()">View Logs</button>
         </div>
-
-        <div id="ai_insights_panel" class="aiInsightsPanel hiddenView" aria-label="AI Insights">
-          <div class="aiInHeader">
-            <span class="aiInLabel">AI Insights</span>
-            <span class="aiInConfBadge" id="ai_conf_badge">–</span>
-          </div>
-          <div id="ai_insights_body" class="aiInBody"></div>
+        <div class="rdStep" id="render_active_title">Initializing…</div>
+        <div class="rdSegBar" id="rd_seg_bar" hidden></div>
+        <div class="rdMeta">
+          <span class="rdPct" id="render_active_pct">0%</span>
+          <span class="rdMetaSub" id="render_active_meta">Clips will appear below as they finish.</span>
         </div>
+        <div class="rdDoneActions hiddenView" id="render_active_actions">
+          <button class="primaryButton" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
+        </div>
+      </div>
 
-        <div id="render_runtime_mount" class="renderRuntimeMount"></div>
+      <!-- SECTION: render-active-ai-insights -->
+      <div id="ai_insights_panel" class="aiInsightsPanel hiddenView" aria-label="AI Insights">
+        <div class="aiInHeader">
+          <span class="aiInLabel">AI Insights</span>
+          <span class="aiInConfBadge" id="ai_conf_badge">–</span>
+        </div>
+        <div id="ai_insights_body" class="aiInBody">
+          <!-- Populated by renderAiInsights() -->
+        </div>
+      </div>
+
+      <!-- Runtime mount target:
+           mountRenderRuntimePanel() moves the visible runtime UI here.
+           #appBottomPanel remains only as a hidden compatibility wrapper. -->
+      <div id="render_runtime_mount" class="renderRuntimeMount"></div>
+
       </div>
       <!-- /SECTION: render-active-panel -->
 
       <!-- ── SECTION: render-completion-banner ──────────────────── -->
       <div id="render_completion_bar" class="renderCompletionBar hiddenView">
-        <div class="rcbLeft">
-          <div class="rcbIcon" id="rcb_icon">✓</div>
-          <div class="rcbCopy">
-            <div class="renderCompletionMsg" id="render_completion_msg">Render complete — 0 clips ready</div>
-            <div class="renderCompletionSummary" id="render_completion_summary"></div>
-          </div>
-        </div>
-        <div class="renderCompletionActions">
-          <button class="ghostButton rcbBtn" type="button" id="back_to_editor_btn" onclick="backToEditorFromCompletion()">← Back to Editor</button>
-          <button class="ghostButton rcbBtn" type="button" onclick="reviewClipsFromBanner()">Review Clips</button>
-          <button class="primaryButton rcbBtn" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
+      <div class="rcbLeft">
+        <div class="rcbIcon" id="rcb_icon">✓</div>
+        <div class="rcbCopy">
+          <div class="renderCompletionMsg" id="render_completion_msg">Render complete — 0 clips ready</div>
+          <div class="renderCompletionSummary" id="render_completion_summary"></div>
         </div>
       </div>
+      <div class="renderCompletionActions">
+        <button class="ghostButton rcbBtn" type="button" id="back_to_editor_btn" onclick="backToEditorFromCompletion()">← Back to Editor</button>
+        <button class="ghostButton rcbBtn" type="button" onclick="reviewClipsFromBanner()">Review Clips</button>
+        <button class="primaryButton rcbBtn" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
+      </div>
+      </div>
+      <!-- /SECTION: render-completion-banner -->
 
       <!-- ── SECTION: render-output-panel ────────────────────────── -->
+      <!-- Render Output Panel — clips list, shown after render completes. -->
       <div id="render_output_panel" class="renderOutputPanel hiddenView">
+        <!-- SECTION: render-output-header -->
         <div class="renderOutputHeader">
           <div class="renderOutputTitle">
             <span id="render_output_panel_title">Clips</span>
@@ -494,8 +414,14 @@
             <button class="ghostButton renderOutputBtn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
           </div>
         </div>
+        <!-- /SECTION: render-output-header -->
+
+        <!-- SECTION: render-output-status -->
         <div id="render_output_path" class="renderOutputPath"></div>
         <div id="mvRenderSummary" hidden></div>
+        <!-- /SECTION: render-output-status -->
+
+        <!-- SECTION: render-output-center-preview -->
         <div id="cs_preview_area" class="csPreviewArea hiddenView">
           <div class="csPreviewVideoWrap">
             <div id="cs_preview_empty" class="csPreviewEmpty">Select a clip to preview.</div>
@@ -515,16 +441,22 @@
             </div>
           </div>
         </div>
+        <!-- /SECTION: render-output-center-preview -->
+
+        <!-- SECTION: render-output-clips-list -->
         <div id="render_output_list" class="renderOutputList clipsGrid">
           <div class="renderOutputEmpty">Clips will appear here when render completes.</div>
         </div>
+        <!-- /SECTION: render-output-clips-list -->
       </div>
+      <!-- /SECTION: render-output-panel -->
 
       <!-- ═══════════════════════════════════════════════════════════════
            SECTION: render-runtime-monitor — Process Timeline + Live Log
       ════════════════════════════════════════════════════════════════ -->
       <section class="appBottomPanel rs-bottom-panel" id="appBottomPanel">
 
+        <!-- Toolbar: job status summary + Source Setup toggle -->
         <div class="abpToolbar">
           <div class="abpToolbarJob">
             <div class="abpJobTitle" id="job_title">No active job</div>
@@ -616,7 +548,6 @@
                 </div>
                 <div id="rc_compare_diff" class="rcCompareDiff hiddenView"></div>
               </div>
-
             </section>
 
             <!-- RIGHT 40%: log panel -->
@@ -677,60 +608,83 @@
         </div><!-- /rcBottom -->
 
       </section><!-- /appBottomPanel -->
+      <!-- /SECTION: render-runtime-monitor -->
 
       <!-- ── SECTION: clip-preview-modal ─────────────────────────── -->
+      <!-- Clip Preview Modal -->
       <div id="clip_preview_modal" class="clipPreviewModal hiddenView" onclick="closeClipPreview(event)">
-        <div class="clipPreviewDialog">
-          <div class="clipPreviewTitleBar">
-            <span id="clip_preview_title" class="clipPreviewName"></span>
-            <button class="clipPreviewClose" type="button" onclick="closeClipPreview()">&#x2715;</button>
-          </div>
-          <video id="clip_preview_video" class="clipPreviewVideo" controls preload="metadata"></video>
-          <div class="clipPreviewFooter">
-            <button class="ghostButton" type="button" onclick="openCurrentClipFolder()">Open Folder</button>
-          </div>
+      <div class="clipPreviewDialog">
+        <div class="clipPreviewTitleBar">
+          <span id="clip_preview_title" class="clipPreviewName"></span>
+          <button class="clipPreviewClose" type="button" onclick="closeClipPreview()">&#x2715;</button>
+        </div>
+        <video id="clip_preview_video" class="clipPreviewVideo" controls preload="metadata"></video>
+        <div class="clipPreviewFooter">
+          <button class="ghostButton" type="button" onclick="openCurrentClipFolder()">Open Folder</button>
         </div>
       </div>
+      </div>
+      <!-- /SECTION: clip-preview-modal -->
 
     </div><!-- /rs-center-stage -->
+    <!-- /SECTION: center-stage -->
 
     <!-- ── SECTION: download-view ──────────────────────────────── -->
+    <!-- partial: partials/download-view.html -->
     <div id="partial_download_view"></div>
+    <!-- /SECTION: download-view -->
 
     <!-- ── SECTION: history-view ────────────────────────────────── -->
+    <!-- partial: partials/history-view.html -->
     <div id="partial_history_view"></div>
+    <!-- /SECTION: history-view -->
 
+    <!-- ═══════════════════════════════════════════════════════════════
+         SECTION: main-content-scroll — upload, channels, settings/reports
+    ════════════════════════════════════════════════════════════════ -->
     <!-- ── Normal page header + grid ─────────────────────────────── -->
     <div class="mainContentScroll">
-      <header class="pageHeader">
-        <div>
-          <div class="pageTitle" id="page_title_text">AI Clip Studio</div>
-          <div class="pageSubtitle" id="page_subtitle_text">Creator-ready render, download, and history workspace.</div>
-        </div>
-        <div class="headerChips">
-          <div class="pill primaryPill" id="job_chip">No active job</div>
-        </div>
-      </header>
-
-      <div class="layoutGrid" id="layout_grid">
-        <div class="leftColumn" id="left_column">
-          <section class="card hiddenView" id="card_logs"></section>
-          <div id="partial_settings_view"></div>
-        </div>
-        <div class="rightColumn" id="right_column">
-          <section class="card hiddenView" id="card_progress"></section>
-          <section class="card hiddenView" id="card_parts"></section>
-          <section class="card hiddenView" id="card_jobs"></section>
-        </div>
+    <header class="pageHeader">
+      <div>
+        <div class="pageTitle" id="page_title_text">AI Clip Studio</div>
+        <div class="pageSubtitle" id="page_subtitle_text">Creator-ready render, download, and history workspace.</div>
       </div>
+      <div class="headerChips">
+        <div class="pill primaryPill" id="job_chip">No active job</div>
+      </div>
+    </header>
+
+    <div class="layoutGrid" id="layout_grid">
+
+      <!-- card_render_setup is mounted into the render sidebar by JS. -->
+
+      <div class="leftColumn" id="left_column">
+
+
+        <section class="card hiddenView" id="card_logs"></section>
+
+
+        <!-- ── SECTION: reports-card + settings-card ───────────── -->
+        <!-- partial: partials/settings-view.html -->
+        <div id="partial_settings_view"></div>
+        <!-- /SECTION: reports-card + settings-card -->
+      </div>
+
+      <div class="rightColumn" id="right_column">
+        <section class="card hiddenView" id="card_progress"></section>
+        <section class="card hiddenView" id="card_parts"></section>
+        <section class="card hiddenView" id="card_jobs"></section>
+      </div>
+    </div>
     </div><!-- /mainContentScroll -->
-
+    <!-- /SECTION: main-content-scroll -->
+  <!-- /SECTION: main-area -->
   </main>
-
   <!-- ═══════════════════════════════════════════════════════════════
        SECTION: inspector
   ════════════════════════════════════════════════════════════════ -->
   <aside class="appInspector rs-right-panel" id="appInspector">
+    <!-- Right panel header -->
     <div class="evRightHeader">
       <div style="min-width:0;flex:1">
         <div class="evRightTitle">Video Editor</div>
@@ -750,6 +704,7 @@
       <button class="ghostButton" style="font-size:12px;padding:5px 10px" onclick="cancelEditorView()">← Cancel</button>
     </div>
 
+    <!-- Inspector tab bar -->
     <div class="rs-insp-tabbar" id="inspTabbar">
       <button class="insp-tab active" data-insp-tab="mode"        onclick="setInspectorTab('mode')">Cut</button>
       <button class="insp-tab"        data-insp-tab="subtitle"    onclick="setInspectorTab('subtitle')">Subtitles</button>
@@ -758,9 +713,13 @@
       <button class="insp-tab"        data-insp-tab="performance" onclick="setInspectorTab('performance')">Render</button>
     </div>
 
+    <!-- Scrollable body: 4-group inspector -->
     <div class="evRightScroll inspPaneBody">
 
+      <!-- Context bar: shows selected object -->
       <div id="inspContextBar" class="inspContextBar">Editor</div>
+
+      <!-- ══ BASIC ════════════════════════════════════════════ -->
 
       <!-- Trim -->
       <div class="evSection insp-panel-active" id="evSectionTrim" data-section-type="trim" data-insp-panel="mode">
@@ -828,11 +787,11 @@
         <input type="hidden" id="evLoudnormEnabled" value="0">
       </div>
 
-      <!-- Output settings -->
+      <!-- Output settings (pre-defined; JS skips recreating it) -->
       <div class="evSection insp-panel-active" id="evSectionBasic" data-insp-panel="mode">
         <div class="evSectionTitle">Output</div>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:7px 10px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid rgba(148,163,184,.12)">
-          <span style="font-size:12px;color:var(--text-mut);white-space:nowrap;flex-shrink:0">Strategy Preset</span>
+          <span style="font-size:12px;color:rgba(148,163,184,.6);white-space:nowrap;flex-shrink:0">Strategy Preset</span>
           <select id="evOutputPreset" class="fieldInput" style="flex:1;margin-bottom:0;font-size:12px" onchange="evApplyOutputPreset(this.value)">
             <option value="custom" selected>Manual / Custom</option>
             <option value="tiktok_us_viral">TikTok US Viral</option>
@@ -841,9 +800,9 @@
             <option value="clean_subtitle_focus">Clean Subtitle Focus</option>
             <option value="fast_batch_ranking">Fast Batch Ranking</option>
           </select>
-          <span id="evPresetHint" style="font-size:11px;color:var(--primary-hi);white-space:nowrap;min-width:0"></span>
+          <span id="evPresetHint" style="font-size:11px;color:rgba(94,234,212,.6);white-space:nowrap;min-width:0"></span>
         </div>
-        <div id="evPresetSummary" style="display:none;margin:-2px 0 10px;padding:0 2px;font-size:11px;color:var(--text-mut);line-height:1.35"></div>
+        <div id="evPresetSummary" style="display:none;margin:-2px 0 10px;padding:0 2px;font-size:11px;color:rgba(148,163,184,.62);line-height:1.35"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <label class="field">
             <span class="fieldLabel">Aspect Ratio</span>
@@ -876,7 +835,7 @@
             <span class="inspHint">0 = no limit</span>
           </label>
           <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
-            <input type="checkbox" id="evAddTitleOverlay" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0" onchange="var ti=document.getElementById('evTitleOverlayText');if(ti)ti.disabled=!this.checked;">
+            <input type="checkbox" id="evAddTitleOverlay" style="width:15px;height:15px;accent-color:#3b82f6;flex-shrink:0" onchange="var ti=document.getElementById('evTitleOverlayText');if(ti)ti.disabled=!this.checked;">
             <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Title Overlay</span>
           </label>
           <label class="field" style="grid-column:1/-1">
@@ -885,15 +844,16 @@
         </div>
       </div>
 
-      <div class="inspGroupSep" data-insp-panel="_sep"><span>Language &amp; Voice</span></div>
+      <!-- ══ LANGUAGE & VOICE ══════════════════════════════════ -->
+      <div class="inspGroupSep" data-insp-panel="_sep"><span data-i18n="language_voice_section">Language &amp; Voice</span></div>
 
       <!-- Subtitle Style -->
       <div class="evSection" id="inspSubtitlePane" data-section-type="subtitle" data-insp-panel="subtitle">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <div class="evSectionTitle" style="margin-bottom:0">💬 Subtitle Style</div>
+          <div class="evSectionTitle" style="margin-bottom:0">💬 <span data-i18n="subtitle_style">Subtitle Style</span></div>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer" title="Enable or disable auto subtitles">
-            <span style="font-size:11px;color:var(--text-mut)">Auto subtitles</span>
-            <input type="checkbox" id="evAddSubtitle" checked style="width:15px;height:15px;accent-color:var(--primary)">
+            <span style="font-size:11px;color:var(--text-muted)" data-i18n="auto_subtitles">Auto subtitles</span>
+            <input type="checkbox" id="evAddSubtitle" checked style="width:15px;height:15px;accent-color:#3b82f6">
           </label>
         </div>
         <div id="inspSubModeRow" class="inspSubModeRow demo">Preview sample · AI subtitle will be generated on render</div>
@@ -917,33 +877,37 @@
               <option value="Oswald">Oswald (Compact)</option>
               <option value="Impact">Impact (Punchy)</option>
               <option value="Arial Black">Arial Black (Heavy)</option>
+              <option value="Segoe UI Black">Segoe UI Black (Bold)</option>
+              <option value="Archivo Black">Archivo Black (Viral)</option>
+              <option value="Teko">Teko (Tall)</option>
+              <option value="Luckiest Guy">Luckiest Guy (Fun)</option>
               <option value="Montserrat">Montserrat (Clean)</option>
               <option value="Roboto">Roboto (Modern)</option>
             </select>
           </label>
           <label class="field">
             <span class="fieldLabel">Size: <strong id="evSubSizeVal">46</strong>px</span>
-            <input type="range" id="evSubSize" min="24" max="120" value="46" step="1" style="width:100%;accent-color:var(--primary);margin-top:8px" oninput="evUpdateSubPreview()">
+            <input type="range" id="evSubSize" min="24" max="120" value="46" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
           </label>
           <label class="field">
             <span class="fieldLabel">Color / Highlight</span>
             <div class="inspColorRow">
               <input type="color" id="evSubColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSubPreview()" title="Text color">
               <input type="color" id="evSubHighlight" value="#ffff00" class="evColorPicker" oninput="evUpdateSubPreview()" title="Highlight color">
-              <span style="font-size:10px;color:var(--text-mut)">Text / Highlight</span>
+              <span style="font-size:10px;color:var(--text-muted)">Text / Highlight</span>
             </div>
           </label>
           <label class="field">
             <span class="fieldLabel">Y Pos: <strong id="evSubPosVal">15</strong>%</span>
-            <input type="range" id="evSubPos" min="5" max="60" value="15" step="1" style="width:100%;accent-color:var(--primary);margin-top:8px" oninput="evUpdateSubPreview()">
+            <input type="range" id="evSubPos" min="5" max="60" value="15" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
           </label>
           <label class="field">
             <span class="fieldLabel">X Pos: <strong id="evSubPosXVal">50</strong>%</span>
-            <input type="range" id="evSubPosX" min="5" max="95" value="50" step="1" style="width:100%;accent-color:var(--primary);margin-top:8px" oninput="evSubPosXChange()">
+            <input type="range" id="evSubPosX" min="5" max="95" value="50" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evSubPosXChange()">
           </label>
           <label class="field">
             <span class="fieldLabel">Outline: <strong id="evSubOutlineVal">3</strong>px</span>
-            <input type="range" id="evSubOutline" min="0" max="8" value="3" step="1" style="width:100%;accent-color:var(--primary);margin-top:8px" oninput="evUpdateSubPreview()">
+            <input type="range" id="evSubOutline" min="0" max="8" value="3" step="1" style="width:100%;accent-color:#3b82f6;margin-top:8px" oninput="evUpdateSubPreview()">
           </label>
         </div>
         <div class="inspSubPreview" id="evSubStaticPreview">
@@ -952,12 +916,12 @@
         </div>
         <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
-            <input type="checkbox" id="evSubTranslate" style="width:14px;height:14px;accent-color:var(--secondary)" onchange="evOnSubTranslateChange()">
-            <span style="font-size:12px;color:var(--text)">Translate subtitles</span>
+            <input type="checkbox" id="evSubTranslate" style="width:14px;height:14px;accent-color:#8b5cf6" onchange="evOnSubTranslateChange()">
+            <span style="font-size:12px;color:var(--text)" data-i18n="translate_subtitles">Translate subtitles</span>
           </label>
           <div id="evSubTranslateFields" style="display:none">
             <label class="field">
-              <span class="fieldLabel">Target language</span>
+              <span class="fieldLabel" data-i18n="target_language">Target language</span>
               <select class="fieldInput" id="evSubTranslateTarget" onchange="evToggleVoiceSourceMode()">
                 <option value="vi">Vietnamese</option>
                 <option value="en" selected>English</option>
@@ -973,47 +937,336 @@
         <div class="evSectionTitle">📝 Text Layers</div>
         <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
           <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evAddTextLayer()">+ Add Layer</button>
+          <span style="font-size:11px;color:var(--text-muted)">Max 8 layers.</span>
         </div>
-        <div id="evLayerList" class="evLayerList"></div>
-        <div id="evLayerControls" class="evLayerControls hiddenView">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <label class="field">
-              <span class="fieldLabel">X pos %</span>
-              <input class="fieldInput" type="number" id="evLayerX" min="0" max="100" step="1" oninput="evSetLayerX(this.value)">
+        <div id="evTextLayerList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+        <div id="evTextLayerEditor" style="display:none">
+          <!-- Style Presets -->
+          <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+            <span style="font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;flex:0 0 auto">Preset:</span>
+            <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('default')">Default</button>
+            <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('bold_white')">Bold White</button>
+            <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('yellow_sub')">Yellow Sub</button>
+            <button class="ghostButton" style="font-size:10px;padding:3px 8px" onclick="evApplyStylePreset('meme')">Meme</button>
+          </div>
+          <div class="inspSubGroupLabel">Text</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <label class="field" style="grid-column:1 / -1">
+              <span class="fieldLabel">Content</span>
+              <textarea class="fieldInput" id="evTxtContent" rows="2" placeholder="Type overlay text..." oninput="evUpdateSelectedTextLayer()"></textarea>
             </label>
+            <label class="field">
+              <span class="fieldLabel">Font</span>
+              <select class="fieldInput" id="evTxtFont" onchange="evUpdateSelectedTextLayer()">
+                <option value="Bungee" selected>Bungee (Viral 🔥)</option>
+                <option value="Anton">Anton (Bold)</option>
+                <option value="Bebas Neue">Bebas Neue (Caps)</option>
+                <option value="Oswald">Oswald (Compact)</option>
+                <option value="Impact">Impact (Punchy)</option>
+                <option value="Arial Black">Arial Black (Heavy)</option>
+                <option value="Segoe UI Black">Segoe UI Black (Bold)</option>
+                <option value="Archivo Black">Archivo Black (Viral)</option>
+                <option value="Teko">Teko (Tall)</option>
+                <option value="Luckiest Guy">Luckiest Guy (Fun)</option>
+                <option value="Montserrat">Montserrat (Clean)</option>
+                <option value="Roboto">Roboto (Modern)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Size</span>
+              <input class="fieldInput" type="number" id="evTxtSize" min="12" max="300" value="48" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Color</span>
+              <input type="color" id="evTxtColor" value="#ffffff" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <div style="display:none">
+              <label class="field">
+                <span class="fieldLabel">Alignment</span>
+                <select class="fieldInput" id="evTxtAlign" onchange="evUpdateSelectedTextLayer()">
+                  <option value="left">left</option>
+                  <option value="center" selected>center</option>
+                  <option value="right">right</option>
+                </select>
+              </label>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;align-self:end;padding-bottom:4px">
+              <input type="checkbox" id="evTxtBold" onchange="evUpdateSelectedTextLayer()">
+              <span style="font-size:12px;color:var(--text)">Bold</span>
+            </label>
+          </div>
+          <div class="inspSubGroupLabel">Timing</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <label class="field">
+              <span class="fieldLabel">Start (s)</span>
+              <input class="fieldInput" type="number" id="evTxtStartTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">End (s, 0=full)</span>
+              <input class="fieldInput" type="number" id="evTxtEndTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
+            </label>
+          </div>
+          <div class="inspSubGroupLabel">Position</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <label class="field">
+              <span class="fieldLabel">Preset</span>
+              <select class="fieldInput" id="evTxtPos" onchange="evApplyLayerPresetPosition()">
+                <option value="top-left">top-left</option>
+                <option value="top-center">top-center</option>
+                <option value="top-right">top-right</option>
+                <option value="center">center</option>
+                <option value="bottom-left">bottom-left</option>
+                <option value="bottom-center" selected>bottom-center</option>
+                <option value="bottom-right">bottom-right</option>
+              </select>
+            </label>
+            <div></div>
+            <label class="field">
+              <span class="fieldLabel">X (%)</span>
+              <input class="fieldInput" type="number" id="evTxtX" min="0" max="100" step="1" value="50" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Y (%)</span>
+              <input class="fieldInput" type="number" id="evTxtY" min="0" max="100" step="1" value="90" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <div style="grid-column:1 / -1;display:flex;gap:6px;align-items:center">
+              <span style="font-size:10px;color:var(--text-dim);flex:0 0 auto">Align X:</span>
+              <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="evSetLayerX(5)">Left</button>
+              <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="evSetLayerX(50)">Center</button>
+              <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="evSetLayerX(95)">Right</button>
+            </div>
+          </div>
+          <div class="inspSubGroupLabel">Style</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <label style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="evTxtOutlineEnabled" checked onchange="evUpdateSelectedTextLayer()">
+              <span style="font-size:12px;color:var(--text)">Outline</span>
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Outline px</span>
+              <input class="fieldInput" type="number" id="evTxtOutlineThickness" min="0" max="8" value="2" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="evTxtShadowEnabled" onchange="evUpdateSelectedTextLayer()">
+              <span style="font-size:12px;color:var(--text)">Shadow</span>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <label class="field">
+                <span class="fieldLabel">Shadow X</span>
+                <input class="fieldInput" type="number" id="evTxtShadowX" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">Shadow Y</span>
+                <input class="fieldInput" type="number" id="evTxtShadowY" min="-20" max="20" value="2" oninput="evUpdateSelectedTextLayer()">
+              </label>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="evTxtBgEnabled" onchange="evUpdateSelectedTextLayer()">
+              <span style="font-size:12px;color:var(--text)">Background box</span>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <label class="field">
+                <span class="fieldLabel">BG color</span>
+                <input type="color" id="evTxtBgColor" value="#000000" class="evColorPicker" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label class="field">
+                <span class="fieldLabel">BG padding</span>
+                <input class="fieldInput" type="number" id="evTxtBgPadding" min="0" max="64" value="10" oninput="evUpdateSelectedTextLayer()">
+              </label>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Performance (collapsed) -->
+      <!-- ══ AI NARRATION ══════════════════════════════════════ -->
+      <div class="evSection" id="evSectionVoice" data-section-type="voice-narration" data-insp-panel="text">
+        <div class="evSectionTitle">🎙️ <span data-i18n="ai_narration">AI Narration</span></div>
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer;margin-bottom:10px">
+          <input type="checkbox" id="evVoiceEnable" style="width:16px;height:16px;accent-color:#8b5cf6" onchange="evToggleVoiceFields()">
+          <span style="font-size:13px;color:var(--text)" data-i18n="enable_ai_narration">Enable AI narration</span>
+        </label>
+        <div id="evVoiceFields" style="display:none;flex-direction:column;gap:10px">
+          <label class="field">
+            <span class="fieldLabel" data-i18n="narration_source">Narration source</span>
+            <select class="fieldInput" id="evVoiceSource" onchange="evToggleVoiceSourceMode()">
+              <option value="manual" selected data-i18n="manual_text_option">Manual text</option>
+              <option value="subtitle" data-i18n="use_subtitles_option">Use subtitles</option>
+              <option value="translated_subtitle" data-i18n="use_translated_subtitles_option">Use translated subtitles</option>
+            </select>
+          </label>
+          <input type="hidden" id="evVoiceGender" value="female">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label class="field"><span class="fieldLabel" data-i18n="language">Language</span>
+              <select class="fieldInput" id="evVoiceLanguage" onchange="evOnVoiceLanguageChange()">
+                <option value="vi-VN" selected>Vietnamese</option>
+                <option value="ja-JP">Japanese</option>
+                <option value="en-US">English US</option>
+                <option value="en-GB">English UK</option>
+              </select>
+            </label>
+            <label class="field"><span class="fieldLabel" data-i18n="voice_preset">Voice preset</span>
+              <select class="fieldInput" id="evVoicePreset" onchange="evOnVoicePresetChange()">
+              </select>
+            </label>
+            <label class="field"><span class="fieldLabel" data-i18n="speed">Speed</span>
+              <select class="fieldInput" id="evVoiceSpeed">
+                <option value="slow" data-i18n="speed_slow">Slow</option>
+                <option value="normal" selected data-i18n="speed_normal">Normal</option>
+                <option value="energetic" data-i18n="speed_energetic">Energetic</option>
+              </select>
+            </label>
+            <label class="field"><span class="fieldLabel" data-i18n="audio_mode">Audio mode</span>
+              <select class="fieldInput" id="evVoiceMixMode">
+                <option value="replace_original" selected data-i18n="audio_mode_replace">Replace original audio</option>
+                <option value="keep_original_low" data-i18n="audio_mode_mix">Keep original audio low + add narration</option>
+              </select>
+            </label>
+          </div>
+          <div id="evVoiceManualArea" style="display:flex;flex-direction:column;gap:10px">
+            <label class="field">
+              <span class="fieldLabel" data-i18n="what_should_be_narrated">What should be narrated?</span>
+              <textarea class="fieldInput" id="evVoiceText" rows="5" data-i18n-placeholder="voice_text_placeholder" placeholder='e.g. "This short clip shows how to..."' oninput="evUpdateVoiceCharCount()"></textarea>
+            </label>
+            <div style="display:flex;justify-content:flex-end">
+              <button type="button" class="ghostButton" style="font-size:11px;padding:4px 10px" onclick="evImproveNarrationText()"><span data-i18n="improve_narration_tone">✨ Improve narration tone</span></button>
+            </div>
+            <div id="evVoiceReuseWarning" style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:6px;padding:6px 10px" data-i18n="manual_text_reused_warning">
+              ⚠️ This narration text will be used for all rendered clips.
+            </div>
+            <div id="evVoiceCharCount" style="font-size:11px;color:var(--text-muted);text-align:right">0 characters</div>
+          </div>
+          <div id="evVoiceSubtitleHint" style="display:none;font-size:11px;color:#60a5fa;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:6px;padding:6px 10px" data-i18n="subtitle_source_hint">
+            ℹ️ Each clip uses original subtitle text.
+          </div>
+          <div id="evVoiceTranslatedHint" style="display:none;font-size:11px;color:#a78bfa;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.25);border-radius:6px;padding:6px 10px" data-i18n="translated_subtitle_source_hint">
+            ℹ️ Each clip uses translated subtitle text.
+          </div>
+          <div id="evVoiceTranslateOffWarn" style="display:none;font-size:11px;color:#f59e0b;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:6px;padding:6px 10px" data-i18n="turn_on_translate_warning">
+            ⚠️ Turn on Translate subtitles to use translated subtitle narration.
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ AUDIO (collapsed) ════════════════════════════════ -->
+      <div class="inspCollapsedGroup" data-insp-panel="audio">
+        <div class="inspGroupHdr" id="inspGroupAudioHdr" onclick="evToggleInspGroup('audio')">
+          <span>🔊 Audio</span>
+          <span id="inspGroupAudioArrow" class="inspGroupArrow">▸</span>
+        </div>
+        <div class="inspGroupBody" id="inspGroupAudioBody">
+          <div class="evSection" id="evSectionVolume" data-section-type="volume">
+            <div class="evSectionTitle">Audio Volume</div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <input type="range" id="evVolume" min="0" max="200" value="100" step="1" style="flex:1;accent-color:#3b82f6" oninput="evVolumeSliderChange()">
+              <input class="fieldInput" type="number" id="evVolumeNum" min="0" max="200" value="100" step="5" style="width:68px;text-align:center;padding:6px 8px" oninput="evVolumeNumChange()">
+              <span style="color:var(--text-muted);font-size:12px">%</span>
+            </div>
+            <div class="inspHint" style="margin-top:4px">100% = original volume. Values above 100% re-encode audio.</div>
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(50)">50%</button>
+              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(80)">80%</button>
+              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(100)">100%</button>
+              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(120)">+20%</button>
+              <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evSetVolume(150)">+50%</button>
+            </div>
+          </div>
+          <div class="evSection" data-section-type="bgm">
+            <div class="evSectionTitle">Background Music</div>
+            <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer;margin-bottom:10px">
+              <input type="checkbox" id="evBgmEnable" style="width:16px;height:16px;accent-color:#f59e0b" onchange="evToggleBgmFields()">
+              <span style="font-size:13px;color:var(--text)">Enable BGM</span>
+            </label>
+            <div id="evBgmFields" style="display:none;flex-direction:column;gap:8px">
+              <div style="display:flex;gap:8px;align-items:center">
+                <input class="fieldInput" id="evBgmPath" placeholder="No BGM file selected" readonly style="flex:1">
+                <button class="ghostButton" style="white-space:nowrap" onclick="evPickBgmFile()">Choose BGM</button>
+              </div>
+              <input id="ev_bgm_file_picker" type="file" accept="audio/*" style="display:none" onchange="evOnBgmPicked(event)">
+              <label class="field">
+                <span class="fieldLabel">BGM Volume (0.01–1.0)</span>
+                <input class="fieldInput" type="number" id="evBgmGain" value="0.18" min="0.01" max="1.0" step="0.01">
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ PERFORMANCE (collapsed) ═════════════════════════ -->
       <div class="inspCollapsedGroup" data-insp-panel="performance">
         <div class="inspGroupHdr" id="inspGroupPerfHdr" onclick="evToggleInspGroup('performance')">
           <span>Performance</span>
           <span id="inspGroupPerfArrow" class="inspGroupArrow">▸</span>
         </div>
         <div class="inspGroupBody" id="inspGroupPerfBody">
-          <div class="evSection" data-section-type="performance" data-insp-panel="performance">
-            <div class="evSectionTitle">Render Settings</div>
+          <div class="evSection" data-section-type="render-settings">
+            <div class="evSectionTitle">Render Options</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <label class="field">
-                <span class="fieldLabel">Device</span>
+              <label class="field"><span class="fieldLabel">Playback Speed</span>
+                <select class="fieldInput" id="evPlaybackSpeed">
+                  <option value="1.0">1.0× (original)</option>
+                  <option value="1.05">1.05×</option>
+                  <option value="1.07" selected>1.07× (+7%)</option>
+                  <option value="1.1">1.1× (+10%)</option>
+                  <option value="1.15">1.15× (+15%)</option>
+                </select>
+                <span class="inspHint">Changes video/audio speed. Subtitles must stay synced.</span>
+              </label>
+              <label class="field"><span class="fieldLabel">Encoder</span>
                 <select class="fieldInput" id="evRenderDevice">
                   <option value="auto" selected>Auto (GPU)</option>
+                  <option value="gpu">GPU (NVENC)</option>
                   <option value="cpu">CPU only</option>
-                  <option value="gpu">GPU force</option>
                 </select>
               </label>
-              <label class="field">
-                <span class="fieldLabel">FPS</span>
+              <label class="field"><span class="fieldLabel">FPS</span>
                 <select class="fieldInput" id="evOutputFps">
                   <option value="30">30 fps</option>
+                  <option value="48">48 fps</option>
                   <option value="60" selected>60 fps</option>
                 </select>
               </label>
-              <label class="field">
-                <span class="fieldLabel">Transform Preset</span>
+              <label class="field"><span class="fieldLabel">Clip order</span>
+                <select class="fieldInput" id="evPartOrder">
+                  <option value="viral" selected>Best first</option>
+                  <option value="timeline">Timeline</option>
+                </select>
+              </label>
+              <label class="field"><span class="fieldLabel">Scale Y (%)</span>
+                <input class="fieldInput" type="number" id="evFrameScaleY" value="106" min="80" max="130">
+                <span class="inspHint">Vertical zoom (100=original)</span>
+              </label>
+              <label class="field" style="grid-column:1/-1">
+                <span class="fieldLabel">Source Quality</span>
+                <select class="fieldInput" id="evSourceQualityMode">
+                  <option value="standard_1080" selected>Standard 1080p</option>
+                  <option value="high_1440">High 1440p</option>
+                  <option value="best_available">Best Available</option>
+                </select>
+                <span class="inspHint">Higher quality improves crop/reframe but may download slower.</span>
+              </label>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
+                <input type="checkbox" id="evCleanupTemp" checked style="width:16px;height:16px;accent-color:#10b981">
+                <span style="font-size:13px;color:var(--text)">Clean temp files</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ ADVANCED (collapsed) ═════════════════════════════ -->
+      <div class="inspCollapsedGroup" data-insp-panel="performance">
+        <div class="inspGroupHdr" id="inspGroupAdvHdr" onclick="evToggleInspGroup('advanced')">
+          <span>⚙️ Advanced</span>
+          <span id="inspGroupAdvArrow" class="inspGroupArrow">▸</span>
+        </div>
+        <div class="inspGroupBody" id="inspGroupAdvBody">
+          <div class="evSection" data-section-type="transform">
+            <div class="evSectionTitle">Transform &amp; Enhance</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+              <label class="field"><span class="fieldLabel">Transform</span>
                 <select class="fieldInput" id="evTransformPreset">
-                  <option value="none">None</option>
                   <option value="slight" selected>Slightly Different</option>
                   <option value="strong">Strong Transform</option>
                 </select>
@@ -1025,24 +1278,35 @@
                   <option value="motion">Motion Tracking</option>
                   <option value="subject">Subject Tracking</option>
                 </select>
-                <span class="inspHint">Fast = fastest · Motion = slower · Subject = slowest</span>
+                <span class="inspHint">Fast = fastest · Motion = slower · Subject = slowest (best for face/body)</span>
+              </label>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--input-bg);border-radius:8px;cursor:pointer">
+                <input type="checkbox" id="evReupMode" style="width:16px;height:16px;accent-color:#8b5cf6">
+                <span style="font-size:13px;color:var(--text)">🔄 Reup Mode (color enhance)</span>
               </label>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Market Viral panel -->
+      <!-- ══ MARKET VIRAL ════════════════════════════════════ -->
       <div class="evSection mvPanel" id="evSectionMarket" data-insp-panel="market">
-        <div class="evSectionTitle">🌍 Market Viral (All Clips)</div>
-        <div class="mvPanelDesc">Market scoring, subtitle tone, and hook optimization for every exported clip.</div>
+        <div class="evSectionTitle">&#127758; Market Viral (All Clips)</div>
+        <div class="mvPanelDesc">Applies market scoring, subtitle tone, and hook optimization to every exported clip.</div>
+        <div style="display:inline-flex;align-items:center;gap:5px;margin:2px 0 8px;font-size:10px;color:rgba(94,234,212,.6);letter-spacing:.04em">
+          <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:rgba(94,234,212,.5)"></span>
+          Scope: All Outputs
+        </div>
+
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <label class="field">
             <span class="fieldLabel">Target Market</span>
             <select class="fieldInput" id="mvMarket" onchange="mvHandleChange()">
-              <option value="US" selected>🇺🇸 US</option>
-              <option value="EU">🇪🇺 EU</option>
-              <option value="JP">🇯🇵 JP</option>
+              <option value="US" selected>&#127482;&#127480; US</option>
+              <option value="EU">&#127466;&#127482; EU</option>
+              <option value="JP">&#127471;&#127477; JP</option>
             </select>
           </label>
           <label class="field">
@@ -1054,53 +1318,129 @@
             </select>
           </label>
         </div>
+
         <div class="mvToggleGroup">
-          <label class="mvToggleRow">
+          <label class="mvToggleRow mvAutoBestRow" id="mvAutoBestRow">
             <input type="checkbox" id="mvAutoBestClips" onchange="mvHandleAutoBestClips()">
-            <span class="mvToggleLabel">✨ Auto Best Clips</span>
+            <span class="mvToggleLabel">&#10024; Auto Best Clips (All Clips)</span>
           </label>
+          <div style="font-size:11px;color:rgba(148,163,184,.45);margin:-2px 0 4px 22px">Ranks and optimizes every output clip using motion, market, and hook scoring.</div>
+          <div class="mvAutoBestDivider"></div>
           <label class="mvToggleRow">
             <input type="checkbox" id="mvKeywordHighlight" onchange="mvHandleChange()">
-            <span class="mvToggleLabel">🔑 Keyword Highlight</span>
+            <span class="mvToggleLabel">&#128273; Keyword Highlight</span>
           </label>
           <label class="mvToggleRow">
-            <input type="checkbox" id="mvBestExportEnabled" onchange="mvHandleChange()">
-            <span class="mvToggleLabel">📦 Auto Best Export</span>
+            <input type="checkbox" id="mvCombinedScoring" onchange="mvHandleChange()">
+            <span class="mvToggleLabel">&#9889; Use Combined Ranking</span>
           </label>
+          <div style="font-size:11px;color:rgba(148,163,184,.45);margin:-2px 0 4px 22px">Uses combined scoring for all clips, not just the first one. Experimental.</div>
+          <label class="mvToggleRow" id="mvAdaptiveRow" style="opacity:0.38;pointer-events:none">
+            <input type="checkbox" id="mvAdaptiveScoring" onchange="mvHandleChange()" disabled>
+            <span class="mvToggleLabel">&#128200; Adaptive Weights</span>
+          </label>
+          <div id="mvAdaptiveHint" style="font-size:11px;color:rgba(148,163,184,.3);margin:-2px 0 0 22px">Automatically adjusts scoring weights per clip based on market and content.</div>
+          <div style="border-top:1px solid rgba(148,163,184,.1);margin:8px 0 6px"></div>
+          <label class="mvToggleRow" id="mvBestExportRow">
+            <input type="checkbox" id="mvBestExportEnabled" onchange="mvHandleChange()">
+            <span class="mvToggleLabel">&#128230; Auto Best Export</span>
+          </label>
+          <div style="font-size:11px;color:rgba(148,163,184,.45);margin:-2px 0 4px 22px">Copies top-ranked outputs into a <code style="font-size:10px;opacity:.7">best/</code> folder after render.</div>
+          <div id="mvBestExportCountRow" style="display:flex;align-items:center;gap:8px;padding:2px 0 2px 22px;opacity:0.38;pointer-events:none">
+            <span style="font-size:12px;color:rgba(148,163,184,.7)">Best Export Count</span>
+            <input type="number" id="mvBestExportCount" min="1" max="10" value="3" disabled
+              style="width:52px;padding:2px 6px;background:rgba(255,255,255,.07);border:1px solid rgba(148,163,184,.2);border-radius:4px;color:rgba(148,163,184,.8);font-size:12px;text-align:center">
+          </div>
         </div>
-        <div id="mvHookCard" class="mvHookCard hiddenView">
-          <div id="mvHookCardInner"></div>
+
+        <div id="mvPreviewHint" class="mvPreviewHint">
+          <div class="mvHintBullets" id="mvHintBullets"></div>
+          <div class="mvHintToneRow" id="mvHintToneRow"></div>
+          <div class="mvHintHookRow" id="mvHintHookRow"></div>
         </div>
-        <button class="ghostButton" id="mvAnalyzeBtn" style="width:100%;margin-top:8px;font-size:12px" onclick="mvAnalyzeMarket()">Analyze Market</button>
-        <div id="aiux_strategy_panel" class="aiuxStrategyPanel hiddenView"></div>
+
+        <div class="mvHookCard" id="mvHookCard">
+          <div class="mvHookHeader">
+            <span class="mvHookLabel">&#9889; Hook (Text)</span>
+            <span class="mvHookScore" id="mvHookScore">&#8212;</span>
+          </div>
+          <div class="mvHookStrengthRow" id="mvHookStrengthRow"></div>
+          <div class="mvHookIssue" id="mvHookIssue"></div>
+          <div class="mvHookSuggestion" id="mvHookSuggestion"></div>
+          <div class="mvHookScoreMeta" id="mvHookScoreMeta">Analyzing hook excerpt</div>
+        </div>
+
+        <div class="mvHookSuggestSec hiddenView" id="mvHookSuggestSec">
+          <div class="mvHookSuggestHeader">
+            <span class="mvHookSuggestLabel" id="mvHookSuggestLabel">Preview hook ideas</span>
+          </div>
+          <div class="mvHookSuggestList" id="mvHookSuggestList"></div>
+        </div>
+
+        <div class="mvHookCompareSec hiddenView" id="mvHookCompareSec">
+          <div class="mvHookCompareHeader">
+            <span class="mvHookCompareLabel">&#9878; Compare Hook</span>
+          </div>
+          <div class="mvHookCompareGrid">
+            <div class="mvHookCompareCard" id="mvHookCompareOrigCard">
+              <div class="mvHookCompareCardLabel">Original</div>
+              <div class="mvHookCompareCardScore">
+                <span class="mvHookCompareScore" id="mvHookCompareOrigScore">&#8212;</span>
+                <span class="mvHookCompareStrength" id="mvHookCompareOrigStrength"></span>
+              </div>
+              <div class="mvHookCompareText" id="mvHookCompareOrigText"></div>
+              <button type="button" class="mvHookCompareUse" id="mvHookCompareOrigUse" data-label="Use Original" onclick="mvCompareUse(this)">Use Original</button>
+            </div>
+            <div class="mvHookCompareCard" id="mvHookCompareSugCard">
+              <div class="mvHookCompareCardLabel">Suggested</div>
+              <div class="mvHookCompareCardScore">
+                <span class="mvHookCompareScore" id="mvHookCompareSugScore">&#8212;</span>
+                <span class="mvHookCompareStrength" id="mvHookCompareSugStrength"></span>
+                <span class="mvHookCompareDelta" id="mvHookCompareDelta"></span>
+              </div>
+              <div class="mvHookCompareText" id="mvHookCompareSugText"></div>
+              <button type="button" class="mvHookCompareUse" id="mvHookCompareSugUse" data-label="Use Suggested" onclick="mvCompareUse(this)">Use Suggested</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mvRecommendCard">
+          <div class="mvRecHeader">
+            <span class="mvRecLabel">&#128270; Analyze best market</span>
+            <button type="button" class="mvRecBtn" id="mvAnalyzeBtn" onclick="mvAnalyzeMarket()">Analyze</button>
+          </div>
+          <div id="mvMarketRec" class="mvMarketRec"></div>
+        </div>
+        <div class="mvSubEditsIndicator hiddenView" id="mvSubEditsIndicator"></div>
+        <div class="mvPanelFooter">Previewed hook edits are included when you start render.</div>
       </div>
 
-      <!-- Batch mode panel -->
-      <div id="evBatchPanel" style="border-top:1px solid var(--border);padding:7px 12px 6px;flex-shrink:0">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
-          <input type="checkbox" id="evBatchMode" onchange="evToggleBatchMode()" style="width:14px;height:14px;accent-color:var(--primary);flex-shrink:0">
-          <span style="font-size:12px;color:var(--text-mut);font-weight:500">⚡ Batch Mode</span>
-          <span id="evBatchStatus" style="font-size:11px;color:var(--primary-hi);margin-left:auto;white-space:nowrap"></span>
-        </label>
-        <div id="evBatchBody" style="display:none;flex-direction:column;gap:4px;margin-top:6px">
-          <textarea id="evBatchUrls" rows="4"
-            placeholder="One YouTube URL per line (max 10)"
-            style="width:100%;box-sizing:border-box;background:rgba(255,255,255,.06);border:1px solid var(--border-hi);border-radius:6px;color:var(--text);font-size:11px;padding:6px 8px;resize:vertical;min-height:72px;font-family:inherit;line-height:1.5"></textarea>
-          <div style="font-size:10px;color:var(--text-dim)">One URL per line · Max 10 · Each creates a separate job with current settings.</div>
-        </div>
-      </div>
+    </div><!-- /evRightScroll.inspPaneBody -->
 
-    </div><!-- /evRightScroll inspPaneBody -->
+    <!-- P6-2 Batch Mode panel -->
+    <div id="evBatchPanel" style="border-top:1px solid rgba(148,163,184,.1);padding:7px 12px 6px;flex-shrink:0">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+        <input type="checkbox" id="evBatchMode" onchange="evToggleBatchMode()" style="width:14px;height:14px;accent-color:#3b82f6;flex-shrink:0">
+        <span style="font-size:12px;color:rgba(148,163,184,.65);font-weight:500">⚡ Batch Mode</span>
+        <span id="evBatchStatus" style="font-size:11px;color:rgba(94,234,212,.6);margin-left:auto;white-space:nowrap"></span>
+      </label>
+      <div id="evBatchBody" style="display:none;flex-direction:column;gap:4px;margin-top:6px">
+        <textarea id="evBatchUrls" rows="4"
+          placeholder="One YouTube URL per line (max 10)"
+          style="width:100%;box-sizing:border-box;background:rgba(255,255,255,.06);border:1px solid rgba(148,163,184,.2);border-radius:6px;color:rgba(203,213,225,.9);font-size:11px;padding:6px 8px;resize:vertical;min-height:72px;font-family:inherit;line-height:1.5"></textarea>
+        <div style="font-size:10px;color:rgba(148,163,184,.38)">One URL per line · Max 10 · Each creates a separate job with current settings · Local multi-file batch will be added later.</div>
+      </div>
+    </div>
 
     <!-- Right panel footer -->
     <div class="evFooter">
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
         <div id="evReadinessBar" class="evReadinessBar"></div>
-        <span id="evStatusLine" style="font-size:12px;color:var(--text-mut)">Preparing editor...</span>
-        <span id="evStatusDetail" style="font-size:10px;color:var(--text-mut);opacity:.8"></span>
+        <span id="evStatusLine" style="font-size:12px;color:var(--text-muted)">Preparing editor...</span>
+        <span id="evStatusDetail" style="font-size:10px;color:var(--text-muted);opacity:.8"></span>
       </div>
       <button class="ghostButton" id="evReopenBtn" onclick="evReopenEditor()" style="display:none;font-size:12px;padding:5px 10px">↺ Re-open Editor</button>
-      <button class="primaryButton" id="evStartBtn" onclick="startRenderFromEditor()" disabled>▶ Start Render</button>
+      <button class="primaryButton" id="evStartBtn" onclick="startRenderFromEditor()" disabled data-i18n="start_render">▶ Start Render</button>
     </div>
   </aside>
   <!-- /SECTION: inspector -->
@@ -1126,6 +1466,11 @@
 <!-- ═══════════════════════════════════════════════════════════════
      SECTION: script-includes
      !! DO NOT CHANGE SCRIPT ORDER !!
+     Each file depends on globals.js (position 1) and files before it.
+     init.js must be last — it calls init functions from every prior file.
+     _formatApiError() lives in utils.js (pos 4) — used by render-config,
+     render-engine, upload-engine, editor-view. partials-loader.js runs
+     before init.js and must define loadPartials() before the async IIFE.
 ════════════════════════════════════════════════════════════════ -->
 <script src="/static/js/globals.js"></script>
 <script src="/static/js/warmup.js"></script>
@@ -1146,39 +1491,7 @@
 <script src="/static/js/partials-loader.js"></script>
 <script src="/static/js/init.js"></script>
 <!-- /SECTION: script-includes -->
-
-<!-- Toast notification container -->
+<!-- Toast notification container — populated by showToast() in log-utils.js -->
 <div id="toastRoot" class="toastRoot"></div>
-
-<!-- ═══════════════════════════════════════════════════════════════
-     SECTION: editor-compat-inputs
-     Hidden inputs that editor-view.js reads via qs(). These controls
-     were visible in v2 but moved out of the v3 editor inspector panel.
-     Keeping them as hidden inputs preserves all JS behavior without
-     requiring changes to editor-view.js.
-════════════════════════════════════════════════════════════════ -->
-<div id="evEditorCompat" style="display:none" aria-hidden="true">
-  <!-- Volume -->
-  <input type="range"  id="evVolume"       min="0" max="200" value="100" step="1">
-  <input type="number" id="evVolumeNum"    min="0" max="200" value="100" step="5">
-  <!-- Advanced render settings -->
-  <select id="evPlaybackSpeed"><option value="1.07" selected>1.07×</option><option value="1.0">1.0×</option><option value="1.05">1.05×</option><option value="1.1">1.1×</option><option value="1.15">1.15×</option></select>
-  <select id="evSourceQualityMode"><option value="standard_1080" selected>Standard 1080p</option><option value="high_1440">High 1440p</option><option value="best_available">Best Available</option></select>
-  <select id="evPartOrder"><option value="viral" selected>Best first</option><option value="timeline">Timeline</option></select>
-  <input type="number" id="evFrameScaleY"  value="106" min="80" max="130">
-  <!-- Feature toggles — unchecked = disabled by default in v3 UI -->
-  <input type="checkbox" id="evReupMode">
-  <input type="checkbox" id="evCleanupTemp" checked>
-  <input type="checkbox" id="evBgmEnable">
-  <input type="checkbox" id="evVoiceEnable">
-  <!-- BGM / Voice hidden fields -->
-  <input type="text"   id="evBgmPath"  value="">
-  <input type="number" id="evBgmGain"  value="0.18" min="0.01" max="1.0" step="0.01">
-  <!-- Containers toggled by JS show/hide -->
-  <div id="evBgmFields"></div>
-  <div id="evVoiceFields"></div>
-  <div id="evSectionMoreSettings"></div>
-</div>
-<!-- /SECTION: editor-compat-inputs -->
 </body>
 </html>

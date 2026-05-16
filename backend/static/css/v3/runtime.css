@@ -1,0 +1,1455 @@
+/* =======================================================
+   V3 — PHASE E · RENDER RUNTIME
+   Figma Frames 14, 15, 07, 05, 19
+   Center-stage rdCard · bottom toolbar · queue/log panels
+   ======================================================= */
+
+/* ── E-0: Compat wrappers ────────────────────────────────
+   appBottomPanel.renderCompatWrapper: emptied by JS mount.
+   renderActiveCompatTargets / rcCompatHidden: hidden spans.
+   ─────────────────────────────────────────────────────── */
+.appBottomPanel.renderCompatWrapper {
+  height: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden;
+  pointer-events: none;
+}
+.renderActiveCompatTargets { display: none !important; }
+.rcCompatHidden             { display: none !important; }
+
+/* ── E-1: renderActivePanel — full center-stage flex column
+   Fills center stage when a render job is active.
+   rdCard header → optional aiInsights → renderRuntimeMount
+   ─────────────────────────────────────────────────────── */
+.renderActivePanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-900);
+}
+.renderActivePanel > .rdCard        { flex-shrink: 0; }
+.renderActivePanel > .aiInsightsPanel { flex-shrink: 0; }
+.renderActivePanel > .renderRuntimeMount { flex: 1; min-height: 0; }
+
+/* ── E-2: rdCard — dominant render status summary card ───
+   Figma Frame 14/15: top strip inside center stage.
+   bg-850 surface, bottom border, 14px vertical padding.
+   ─────────────────────────────────────────────────────── */
+.rdCard {
+  background: var(--bg-850);
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  padding: 12px 20px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.rdCardHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rdHeadLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* rdBadge: state-colored label */
+.rdBadge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  background: rgba(148,163,184,.1);
+  color: var(--fg-400);
+  transition: background var(--t-base), color var(--t-base);
+}
+.rdBadge[data-state="idle"]      { background: rgba(148,163,184,.08); color: var(--fg-400); }
+.rdBadge[data-state="queued"]    { background: rgba(148,163,184,.12); color: var(--fg-300); }
+.rdBadge[data-state="running"]   { background: rgba(77,124,255,.18);  color: var(--primary); }
+.rdBadge[data-state="completed"] { background: rgba(34,197,94,.15);   color: #4ade80; }
+.rdBadge[data-state="partial"]   { background: rgba(234,179,8,.15);   color: #fbbf24; }
+.rdBadge[data-state="failed"]    { background: rgba(239,68,68,.15);   color: #f87171; }
+
+/* rdTitle: source video title (truncates) */
+.rdTitle {
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-100);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+/* rdLogBtn: right-side jump-to-logs link */
+.rdLogBtn {
+  flex-shrink: 0;
+  appearance: none;
+  background: none;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--r-sm);
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  color: var(--fg-300);
+  cursor: pointer;
+  transition: color var(--t-base), border-color var(--t-base);
+}
+.rdLogBtn:hover { color: var(--fg-100); border-color: rgba(255,255,255,.2); }
+
+/* rdStep: current stage line */
+.rdStep {
+  font-size: 12px;
+  color: var(--fg-300);
+  line-height: var(--lh-snug);
+}
+.rdCard[data-state="running"] .rdStep   { color: var(--primary); }
+.rdCard[data-state="failed"]  .rdStep   { color: #f87171; }
+
+/* rdSegBar: per-clip segmented progress strip */
+.rdSegBar {
+  display: flex;
+  height: 4px;
+  gap: 2px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.rdSegItem {
+  flex: 1;
+  border-radius: 2px;
+  background: rgba(148,163,184,.15);
+  transition: background var(--t-base);
+}
+.rdSegItem--waiting   { background: rgba(148,163,184,.15); }
+.rdSegItem--rendering {
+  background: rgba(77,124,255,.7);
+  animation: segPulse 1.4s ease-in-out infinite;
+}
+.rdSegItem--completed { background: #4ade80; }
+.rdSegItem--failed    { background: #f87171; }
+
+@keyframes segPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .4; }
+}
+
+/* rdMeta: pct + detail row */
+.rdMeta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.rdPct {
+  font-size: 15px;
+  font-weight: var(--fw-bold);
+  color: var(--fg-100);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.rdCard[data-state="completed"] .rdPct { color: #4ade80; }
+.rdCard[data-state="partial"]   .rdPct { color: #fbbf24; }
+.rdCard[data-state="failed"]    .rdPct { color: #f87171; }
+
+.rdMetaSub {
+  font-size: 11px;
+  color: var(--fg-400);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* rdDoneActions: buttons revealed on completion */
+.rdDoneActions {
+  display: flex;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+/* rdQueueRow: clip rows rendered by renderRdClipQueue */
+.rdQueueRow {
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  border-left: 2px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: background var(--t-base);
+}
+.rdQueueRow--waiting   { border-left-color: rgba(148,163,184,.15); }
+.rdQueueRow--rendering { border-left-color: var(--primary); background: rgba(77,124,255,.04); }
+.rdQueueRow--completed { border-left-color: rgba(34,197,94,.35); }
+.rdQueueRow--failed    { border-left-color: rgba(239,68,68,.35); }
+
+.rdQueueRowHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rdQueueRowName {
+  font-size: 11px;
+  color: var(--fg-200);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rdQueueRowBadge {
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  padding: 2px 6px;
+  border-radius: var(--r-pill);
+  flex-shrink: 0;
+  background: rgba(148,163,184,.08);
+  color: var(--fg-400);
+}
+.rdQueueRowBadge[data-state="completed"] { background: rgba(34,197,94,.12); color: #4ade80; }
+.rdQueueRowBadge[data-state="failed"]    { background: rgba(239,68,68,.12); color: #f87171; }
+.rdQueueRowBadge[data-state="rendering"] { background: rgba(77,124,255,.12); color: var(--primary); }
+.rdQueueRowPath {
+  font-size: 10px;
+  color: var(--fg-400);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rdQueueRowActions { display: flex; gap: 6px; }
+.rdQueueBtn {
+  appearance: none;
+  background: none;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--r-sm);
+  padding: 3px 8px;
+  font-size: 10px;
+  color: var(--fg-300);
+  cursor: pointer;
+  transition: color var(--t-base), background var(--t-base);
+}
+.rdQueueBtn:hover { background: rgba(255,255,255,.05); color: var(--fg-100); }
+.rdQueueRowError {
+  font-size: 10px;
+  color: #f87171;
+}
+.rdQueueRowProg {
+  font-size: 10px;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── E-3: AI Insights panel ──────────────────────────────
+   Compact strip below rdCard — insight label + body.
+   ─────────────────────────────────────────────────────── */
+.aiInsightsPanel {
+  background: var(--bg-800);
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  padding: 8px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.aiInHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.aiInLabel {
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  color: var(--secondary);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.aiInConfBadge {
+  font-size: 10px;
+  color: var(--fg-400);
+  background: rgba(255,255,255,.06);
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+}
+.aiInBody {
+  font-size: 11px;
+  color: var(--fg-300);
+  line-height: var(--lh-relaxed);
+}
+
+/* ── E-4: renderRuntimeMount — bottom runtime container ──
+   After JS mount, holds .abpToolbar + #rc_bottom.
+   Flex column taking remaining height in renderActivePanel.
+   ─────────────────────────────────────────────────────── */
+.renderRuntimeMount {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── E-5: abpToolbar — 48px runtime status bar ───────────
+   Figma Frame 15: bg-850, 1px top primary accent border.
+   Three sections: job info | progress track | pct + pill + btn
+   ─────────────────────────────────────────────────────── */
+.abpToolbar {
+  flex-shrink: 0;
+  height: 48px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  background: var(--bg-850);
+  border-top: 1px solid var(--primary);
+  overflow: hidden;
+}
+
+/* Left: job title + meta */
+.abpToolbarJob {
+  flex: 0 0 auto;
+  max-width: 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+.abpJobTitle {
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-100);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.abpJobMeta {
+  font-size: 9px;
+  color: var(--fg-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  line-height: 1.4;
+}
+
+/* Center: progress bar + message */
+.abpToolbarProgress {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+}
+.abpProgressBar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255,255,255,.1);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+/* #job_bar: width set directly by JS (style.width) */
+.abpProgressBar > .progressValue {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+  transition: width .35s ease;
+  min-width: 0;
+  box-shadow: 0 0 8px rgba(77,124,255,.4);
+}
+.abpProgressBar > .progressValue.isWaitingActive {
+  background: linear-gradient(
+    90deg,
+    var(--primary) 0%,
+    rgba(168,85,247,.9) 50%,
+    var(--primary) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmerBar 1.6s linear infinite;
+  width: 100% !important;
+  box-shadow: none;
+}
+
+@keyframes shimmerBar {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.abpJobMsg {
+  font-size: 10px;
+  color: var(--fg-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+}
+
+/* Right: pct + pill + collapse btn */
+.abpToolbarRight {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+.abpPct {
+  font-size: 12px;
+  font-weight: var(--fw-bold);
+  color: var(--fg-100);
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: right;
+}
+
+/* Stage pill — #job_stage_pill ────────────────────────── */
+#job_stage_pill {
+  font-size: 9px;
+  font-weight: var(--fw-bold);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  background: rgba(148,163,184,.1);
+  color: var(--fg-400);
+  white-space: nowrap;
+  transition: background var(--t-base), color var(--t-base);
+}
+/* Stage-based coloring */
+#job_stage_pill[data-stage="queued"],
+#job_stage_pill[data-stage="starting"],
+#job_stage_pill[data-stage="downloading"] {
+  background: rgba(148,163,184,.1);
+  color: var(--fg-300);
+}
+#job_stage_pill[data-stage="scene_detection"],
+#job_stage_pill[data-stage="segment_building"],
+#job_stage_pill[data-stage="transcribing_full"] {
+  background: rgba(168,85,247,.15);
+  color: #c084fc;
+}
+#job_stage_pill[data-stage="rendering"],
+#job_stage_pill[data-stage="rendering_parallel"] {
+  background: rgba(77,124,255,.18);
+  color: var(--primary);
+}
+#job_stage_pill[data-stage="writing_report"] {
+  background: rgba(34,197,94,.12);
+  color: #4ade80;
+}
+#job_stage_pill[data-stage="done"] { background: rgba(34,197,94,.15); color: #4ade80; }
+#job_stage_pill[data-state="complete"] { background: rgba(34,197,94,.15); color: #4ade80; }
+#job_stage_pill[data-state="failed"]   { background: rgba(239,68,68,.15); color: #f87171; }
+#job_stage_pill[data-state="stalled"]  { background: rgba(234,179,8,.15); color: #fbbf24; }
+#job_stage_pill[data-state="running"]  { background: rgba(77,124,255,.15); color: var(--primary); }
+
+/* Flash animation when stage changes */
+#job_stage_pill.stageChanged {
+  animation: stagePillFlash .3s ease;
+}
+@keyframes stagePillFlash {
+  0%   { opacity: .35; transform: scale(.88); }
+  60%  { opacity: 1;   transform: scale(1.05); }
+  100% { opacity: 1;   transform: scale(1); }
+}
+
+.abpCollapseBtn {
+  appearance: none;
+  background: none;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--r-sm);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--fg-400);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--t-base), border-color var(--t-base);
+}
+.abpCollapseBtn:hover { color: var(--fg-100); border-color: rgba(255,255,255,.22); }
+
+/* ── E-6: rcBottom — expanded queue + log body ───────────
+   Figma Frame 14: flex row below toolbar.
+   Left ~62%: rcQueuePanel (bg-850) | Right ~38%: rcLogStrip (bg-900)
+   Hidden when appShell.abpCollapsed.
+   ─────────────────────────────────────────────────────── */
+.rcBottom {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Collapse: hide queue/log body, leave only toolbar visible */
+.appShell.abpCollapsed .rcBottom {
+  display: none;
+}
+
+.rcAQMain {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Queue panel — left ~62% */
+.rcQueuePanel {
+  flex: 0 0 62%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-850);
+  border-right: 1px solid rgba(255,255,255,.07);
+  overflow: hidden;
+}
+
+/* Log strip — right ~38% */
+.rcLogStrip {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-900);
+  overflow: hidden;
+}
+
+/* logsCollapsed: hide log panel */
+.renderActivePanel.logsCollapsed .rcLogStrip,
+.appBottomPanel.logsCollapsed    .rcLogStrip {
+  display: none;
+}
+.renderActivePanel.logsCollapsed .rcQueuePanel,
+.appBottomPanel.logsCollapsed    .rcQueuePanel {
+  flex: 0 0 100%;
+  border-right: none;
+}
+
+/* ── E-7: Panel headers ──────────────────────────────────
+   rcPanelHeader: 42px queue panel header row
+   rcLogStripHeader: log panel header (two-row layout)
+   ─────────────────────────────────────────────────────── */
+.rcPanelHeader {
+  flex-shrink: 0;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.rcPanelHeader > strong {
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-200);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  white-space: nowrap;
+}
+.rcPanelMeta {
+  font-size: 10px;
+  color: var(--fg-400);
+  font-family: var(--font-mono);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rcPanelBadge {
+  font-size: 9px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-300);
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: rgba(148,163,184,.1);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.rcPanelBadge[data-state="rendering"] { background: rgba(77,124,255,.15); color: var(--primary); }
+.rcPanelBadge[data-state="completed"] { background: rgba(34,197,94,.12); color: #4ade80; }
+.rcPanelBadge[data-state="failed"]    { background: rgba(239,68,68,.12); color: #f87171; }
+.rcPanelBadge[data-state="warning"]   { background: rgba(234,179,8,.12); color: #fbbf24; }
+
+.rcLogStripHeader {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.rcLogStripHeader > strong {
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-200);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+.rcLogToolbarActions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+}
+/* Filter row: forced to full width */
+.rcLogFilterRow {
+  width: 100%;
+  display: flex;
+  gap: 4px;
+  padding: 5px 0 6px;
+  border-top: 1px solid rgba(255,255,255,.04);
+  margin-top: 2px;
+}
+.rcLogFilterBtn {
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--fg-400);
+  cursor: pointer;
+  transition: color var(--t-base), border-color var(--t-base), background var(--t-base);
+}
+.rcLogFilterBtn:hover { color: var(--fg-200); }
+.rcLogFilterBtn.isActive {
+  background: rgba(77,124,255,.1);
+  color: var(--primary);
+  border-color: rgba(77,124,255,.2);
+}
+
+/* rcLogBtn: small utility buttons in panel headers */
+.rcLogBtn {
+  appearance: none;
+  background: none;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--r-sm);
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: var(--fw-medium);
+  color: var(--fg-400);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color var(--t-base), border-color var(--t-base);
+}
+.rcLogBtn:hover  { color: var(--fg-100); border-color: rgba(255,255,255,.2); }
+.rcLogBtn.isActive { color: var(--primary); border-color: rgba(77,124,255,.3); }
+
+/* ── E-8: rcActiveCard — current job card in queue panel ─
+   Figma: 72px interactive card at top of queue panel.
+   bg-800 surface, shows active clip title + stage + bar.
+   ─────────────────────────────────────────────────────── */
+.rcActiveCard {
+  flex-shrink: 0;
+  margin: 7px 8px;
+  border-radius: var(--r-md);
+  background: var(--bg-800);
+  border: 1px solid rgba(255,255,255,.09);
+  padding: 7px 10px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: default;
+  transition: border-color var(--t-base), background var(--t-base);
+}
+.rcActiveCard:hover {
+  background: var(--bg-750);
+  border-color: rgba(255,255,255,.13);
+}
+
+/* Card header: job ID + status badge */
+.rcCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rcCardJobTitle {
+  font-size: 10px;
+  color: var(--fg-400);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.rcCardStatusBadge {
+  font-size: 9px;
+  font-weight: var(--fw-semibold);
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  flex-shrink: 0;
+  background: rgba(148,163,184,.1);
+  color: var(--fg-400);
+}
+.rcCardStatusBadge[data-state="running"]   { background: rgba(77,124,255,.14); color: var(--primary); }
+.rcCardStatusBadge[data-state="completed"] { background: rgba(34,197,94,.12);  color: #4ade80; }
+.rcCardStatusBadge[data-state="warning"]   { background: rgba(234,179,8,.12);  color: #fbbf24; }
+.rcCardStatusBadge[data-state="failed"]    { background: rgba(239,68,68,.12);  color: #f87171; }
+
+/* Active title + percent row */
+.rcActiveTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+.rcActiveCopy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rcActiveTitle {
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-100);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rcActiveSubtitle {
+  font-size: 10px;
+  color: var(--fg-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rcActiveEta {
+  font-size: 10px;
+  color: var(--fg-400);
+  font-family: var(--font-mono);
+}
+.rcActivePercent {
+  font-size: 13px;
+  font-weight: var(--fw-bold);
+  color: var(--fg-100);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* 4px progress bar — CSS var --progress set by JS */
+.rcActiveProgress {
+  height: 4px;
+  background: rgba(255,255,255,.1);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.rcActiveProgress > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--progress, 0%);
+  background: var(--primary);
+  border-radius: 2px;
+  transition: width .3s ease;
+  box-shadow: 0 0 6px rgba(77,124,255,.45);
+}
+.rcActiveProgress > span.isWaitingActive {
+  background: linear-gradient(
+    90deg,
+    var(--primary) 0%,
+    rgba(168,85,247,.9) 50%,
+    var(--primary) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmerBar 1.6s linear infinite;
+  width: 100% !important;
+  box-shadow: none;
+}
+
+/* Stage timeline dots */
+.rcStageTimeline {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  flex-wrap: nowrap;
+}
+.rcStageItem {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.rcStageDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: rgba(148,163,184,.18);
+  transition: background var(--t-base), box-shadow var(--t-base);
+}
+.rcStageDot[data-state="done"]   { background: #4ade80; }
+.rcStageDot[data-state="active"] {
+  background: var(--primary);
+  animation: dotPulse 1.2s ease-in-out infinite;
+}
+.rcStageDot[data-state="failed"] { background: #f87171; }
+
+@keyframes dotPulse {
+  0%, 100% { box-shadow: 0 0 0   rgba(77,124,255,.3); }
+  50%       { box-shadow: 0 0 7px rgba(77,124,255,.8); }
+}
+
+.rcStageLabel {
+  font-size: 9px;
+  color: var(--fg-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.rcStageArrow {
+  color: rgba(148,163,184,.18);
+  font-size: 9px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.rcStageArrow::after { content: '›'; }
+
+.rcActiveStage {
+  font-size: 10px;
+  color: var(--fg-400);
+  font-family: var(--font-mono);
+}
+.rcActiveMessage {
+  font-size: 10px;
+  color: var(--fg-400);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* rcActiveCard state variants */
+.rcActiveCard.isRendering             { border-color: rgba(77,124,255,.22); }
+.rcActiveCard.isRendering .rcActivePercent { color: var(--primary); }
+.rcActiveCard.isCompleted             { border-color: rgba(34,197,94,.18); }
+.rcActiveCard.isCompleted .rcActivePercent { color: #4ade80; }
+.rcActiveCard.isFailed                { border-color: rgba(239,68,68,.18); }
+.rcActiveCard.isFailed .rcActivePercent    { color: #f87171; }
+.rcActiveCard.isNoJob .rcActiveTitle  { color: var(--fg-400); }
+.rcActiveCard.isIdle .rcActivePercent { color: var(--fg-400); }
+
+/* Stall warning banner inside active card */
+.rcStallBanner {
+  font-size: 10px;
+  color: #fbbf24;
+  background: rgba(234,179,8,.08);
+  border: 1px solid rgba(234,179,8,.18);
+  border-radius: var(--r-sm);
+  padding: 3px 8px;
+  margin-top: 2px;
+}
+
+/* ── E-9: rcQueueGrid / rcQueueRow — clip queue rows ─────
+   Scrollable grid below rcActiveCard in queue panel.
+   Each row: clip label · progress bar · status text.
+   State-colored left border.
+   ─────────────────────────────────────────────────────── */
+#rc_part_cards.rcQueueGrid {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.09) transparent;
+}
+#rc_part_cards.rcQueueGrid::-webkit-scrollbar { width: 4px; }
+#rc_part_cards.rcQueueGrid::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.1);
+  border-radius: 2px;
+}
+
+.rcQueueRow {
+  display: flex;
+  flex-direction: column;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  border-left: 2px solid transparent;
+  min-height: 34px;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.rcQueueRow:hover           { background: rgba(255,255,255,.025); }
+.rcQueueRow.isWaiting       { border-left-color: rgba(148,163,184,.18); }
+.rcQueueRow.isRendering     { border-left-color: var(--primary); background: rgba(77,124,255,.04); }
+.rcQueueRow.isCompleted     { border-left-color: rgba(34,197,94,.38); }
+.rcQueueRow.isFailed        { border-left-color: rgba(239,68,68,.4);  background: rgba(239,68,68,.03); }
+.rcQueueRow.isWarning       { border-left-color: rgba(234,179,8,.4);  background: rgba(234,179,8,.03); }
+.rcQueueRow.isSelected      { background: rgba(77,124,255,.06); }
+.rcQueueRow[data-active="1"]{ background: rgba(77,124,255,.05); }
+
+/* Best-clip accent: thin right-edge gradient */
+.rcQueueRow.rcBestPart { position: relative; }
+.rcQueueRow.rcBestPart::after {
+  content: '';
+  position: absolute;
+  right: 0; top: 0; bottom: 0; width: 2px;
+  background: linear-gradient(180deg, var(--primary) 0%, rgba(168,85,247,.5) 100%);
+}
+
+.rcQueueTop {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.rcQueueLeft {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+.rcClipCheck {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.rcClipLabel {
+  font-size: 11px;
+  color: var(--fg-200);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.rcRankChip {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  background: rgba(148,163,184,.1);
+  color: var(--fg-400);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.rcRankBest { background: rgba(77,124,255,.14); color: var(--primary); }
+
+.rcQueueRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.rcScoreBadge {
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  background: rgba(148,163,184,.08);
+  color: var(--fg-300);
+  white-space: nowrap;
+}
+.rcScoreBadge[data-tier="hot"]  { background: rgba(239,68,68,.12);  color: #f87171; }
+.rcScoreBadge[data-tier="warm"] { background: rgba(234,179,8,.12);  color: #fbbf24; }
+
+.rcQualityBadge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  background: rgba(234,179,8,.1);
+  color: #fbbf24;
+  cursor: help;
+}
+
+/* 2px progress bar inside each queue row */
+.rcQueueBar {
+  height: 2px;
+  background: rgba(255,255,255,.07);
+  border-radius: 1px;
+  overflow: hidden;
+  margin: 3px 0;
+}
+.rcQueueBar > span {
+  display: block;
+  height: 100%;
+  width: var(--progress, 0%);
+  background: var(--primary);
+  border-radius: 1px;
+  transition: width .3s ease;
+}
+.rcQueueRow.isCompleted .rcQueueBar > span { background: #4ade80; }
+.rcQueueRow.isFailed    .rcQueueBar > span { background: #f87171; }
+.rcQueueRow.isWarning   .rcQueueBar > span { background: #fbbf24; }
+
+/* Status text at bottom of row */
+.rcQueueBottom {
+  font-size: 10px;
+  color: var(--fg-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rcQueueRow.isCompleted .rcQueueBottom { color: rgba(74,222,128,.7); }
+.rcQueueRow.isFailed    .rcQueueBottom { color: rgba(248,113,113,.7); }
+.rcQueueRow.isWarning   .rcQueueBottom { color: rgba(251,191,36,.7); }
+.rcQueueRow.isRendering .rcQueueBottom { color: var(--primary); }
+
+/* ── E-10: Log list — event_log_render ───────────────────
+   Figma: 22px row height, 10px mono, newest at top.
+   .logLine children: .logTime (dimmed) + .logMessage (semantic)
+   ─────────────────────────────────────────────────────── */
+.rcLogList {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  padding: 2px 0;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.07) transparent;
+}
+.rcLogList::-webkit-scrollbar { width: 4px; }
+.rcLogList::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.08);
+  border-radius: 2px;
+}
+.rcLogEmpty {
+  padding: 14px 12px;
+  font-size: 11px;
+  color: var(--fg-400);
+  text-align: center;
+  font-style: italic;
+}
+
+.logLine {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 10px;
+  min-height: 22px;
+  line-height: 22px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-300);
+  flex-shrink: 0;
+  transition: background var(--t-fast);
+}
+.logLine:hover { background: rgba(255,255,255,.025); }
+.logTime {
+  flex-shrink: 0;
+  color: var(--fg-400);
+  opacity: .55;
+  min-width: 56px;
+  font-size: 9px;
+}
+.logMessage {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-300);
+}
+.logLine.isError  .logMessage,
+.logLine.error    .logMessage { color: #f87171; }
+.logLine.isWarning .logMessage { color: #fbbf24; }
+.logLine.success  .logMessage { color: #4ade80; }
+.logLine.isError  { background: rgba(239,68,68,.04); }
+.logLine.success  { background: rgba(34,197,94,.04); }
+
+/* ── E-11: Render completion bar ─────────────────────────
+   Figma Frame 05/19: narrow strip shown on job completion.
+   Success (green top border) or warning (yellow) state.
+   ─────────────────────────────────────────────────────── */
+.renderCompletionBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 16px;
+  background: var(--bg-850);
+  border-top: 2px solid #4ade80;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.renderCompletionBar[data-state="warning"] { border-top-color: #fbbf24; }
+
+.rcbLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.rcbIcon {
+  font-size: 15px;
+  flex-shrink: 0;
+  color: #4ade80;
+}
+.renderCompletionBar[data-state="warning"] .rcbIcon { color: #fbbf24; }
+
+.rcbCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.renderCompletionMsg {
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-100);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.renderCompletionSummary {
+  font-size: 10px;
+  color: var(--fg-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.renderCompletionActions {
+  display: flex;
+  gap: 7px;
+  flex-shrink: 0;
+}
+.rcbBtn {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 11px;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+
+/* ── E-12: Output preview panel ──────────────────────────
+   Shown on job completion inside queue panel.
+   ─────────────────────────────────────────────────────── */
+.rcOutputPreview {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255,255,255,.06);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.rcPreviewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rcPreviewTitle {
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-300);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+.rcPreviewHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.rcPreviewPartSelect {
+  font-size: 10px;
+  color: var(--fg-200);
+  background: var(--bg-750);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
+}
+.rcPreviewOpenBtn {
+  appearance: none;
+  background: none;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--r-sm);
+  padding: 3px 8px;
+  font-size: 10px;
+  color: var(--fg-300);
+  cursor: pointer;
+  transition: color var(--t-base), border-color var(--t-base);
+}
+.rcPreviewOpenBtn:hover { color: var(--fg-100); border-color: rgba(255,255,255,.2); }
+.rcPreviewVideo {
+  width: 100%;
+  max-height: 180px;
+  border-radius: var(--r-sm);
+  background: #000;
+  object-fit: contain;
+}
+.rcPreviewUnavailable {
+  font-size: 11px;
+  color: var(--fg-400);
+  text-align: center;
+  padding: 14px;
+  font-style: italic;
+}
+.rcPreviewMeta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.rcPreviewFilename {
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-200);
+}
+.rcPreviewPartNo,
+.rcPreviewPath {
+  font-size: 10px;
+  color: var(--fg-400);
+  font-family: var(--font-mono);
+}
+
+/* ── E-13: Benchmark / Render Insights panel ─────────────
+   Compact timing + clip stats panel shown after completion.
+   ─────────────────────────────────────────────────────── */
+.rcBenchmarkPanel {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255,255,255,.06);
+  padding: 9px 12px;
+  background: var(--bg-850);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.rcBenchmarkHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rcBenchmarkTitle {
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-300);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  flex: 1;
+}
+.rcBenchmarkBadge {
+  font-size: 9px;
+  font-weight: var(--fw-bold);
+  padding: 2px 6px;
+  border-radius: var(--r-pill);
+  background: rgba(77,124,255,.14);
+  color: var(--primary);
+}
+.rcBenchmarkBadge[data-state="done"] { background: rgba(34,197,94,.12); color: #4ade80; }
+.rcBenchmarkGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 10px;
+}
+.rcBenchmarkLabel {
+  font-size: 10px;
+  color: var(--fg-400);
+}
+.rcBenchmarkValue {
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-200);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.rcBenchmarkInsight {
+  font-size: 10px;
+  color: var(--fg-400);
+  font-style: italic;
+  border-top: 1px solid rgba(255,255,255,.05);
+  padding-top: 5px;
+}
+
+/* ── E-14: Error block ───────────────────────────────────
+   Render failure / clip-error block shown above part cards.
+   ─────────────────────────────────────────────────────── */
+.renderRuntimeErrorBlock {
+  margin: 5px 8px;
+  padding: 7px 10px;
+  background: rgba(239,68,68,.06);
+  border: 1px solid rgba(239,68,68,.2);
+  border-radius: var(--r-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+#abp_error_text {
+  font-size: 11px;
+  color: #f87171;
+  line-height: var(--lh-relaxed);
+}
+
+/* Slot pill */
+#rc_slot_pill {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: rgba(77,124,255,.12);
+  color: var(--primary);
+}
+#rc_slot_pill[data-active="0"] { background: rgba(148,163,184,.08); color: var(--fg-400); }
+
+/* ETA element in active card */
+#rc_eta {
+  font-size: 10px;
+  color: var(--fg-400);
+  font-family: var(--font-mono);
+}
+
+/* ── E-15: Runtime animation states ─────────────────────
+   renderStartPulse: inset glow burst on render start.
+   isWaitingActive: shimmer bar during early/stall stages.
+   ─────────────────────────────────────────────────────── */
+.renderActivePanel.renderStartPulse {
+  animation: renderPanelPulse .55s ease;
+}
+@keyframes renderPanelPulse {
+  0%   { box-shadow: inset 0 0 0 1px rgba(77,124,255,.0); }
+  40%  { box-shadow: inset 0 0 0 1px rgba(77,124,255,.5); }
+  100% { box-shadow: inset 0 0 0 1px rgba(77,124,255,.0); }
+}
+
+/* render_active_panel[data-render-state] border tint */
+#render_active_panel[data-render-state="running"] .rdCard {
+  border-bottom-color: rgba(77,124,255,.2);
+}
+#render_active_panel[data-render-state="complete"] .rdCard {
+  border-bottom-color: rgba(34,197,94,.18);
+}
+#render_active_panel[data-render-state="failed"] .rdCard {
+  border-bottom-color: rgba(239,68,68,.18);
+}
+
+/* ── E-16: Market Viral summary ──────────────────────────
+   Inline MV summary rendered by _renderMvSummary().
+   ─────────────────────────────────────────────────────── */
+.mvSumTitle {
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-200);
+  margin-bottom: 5px;
+}
+.mvSumRow { display: flex; gap: 12px; flex-wrap: wrap; }
+.mvSumCell { display: flex; flex-direction: column; gap: 2px; }
+.mvSumLabel {
+  font-size: 9px;
+  color: var(--fg-400);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.mvSumValue {
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-100);
+}
+.mvSumTierBadge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  background: rgba(148,163,184,.1);
+  color: var(--fg-400);
+}
+.mvSumTierBadge[data-tier="hot"]  { background: rgba(239,68,68,.14); color: #f87171; }
+.mvSumTierBadge[data-tier="warm"] { background: rgba(234,179,8,.14); color: #fbbf24; }
+.mvSumReasons { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.mvSumReason {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: var(--r-pill);
+  background: rgba(168,85,247,.1);
+  color: #c084fc;
+}
+
+/* ── E-17: rcPartCard — legacy clip card path ────────────
+   Used by renderBottomControlCenter() fallback.
+   ─────────────────────────────────────────────────────── */
+.rcPartCard {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  border-left: 2px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rcPartCard.isWaiting   { border-left-color: rgba(148,163,184,.18); }
+.rcPartCard.isRendering { border-left-color: var(--primary); background: rgba(77,124,255,.03); }
+.rcPartCard.isCompleted { border-left-color: rgba(34,197,94,.35); }
+.rcPartCard.isFailed    { border-left-color: rgba(239,68,68,.38); }
+.rcPartTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rcPartTitle {
+  font-size: 11px;
+  color: var(--fg-200);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rcPartStatus {
+  font-size: 10px;
+  color: var(--fg-400);
+  flex-shrink: 0;
+}
+.rcPartCard.isCompleted .rcPartStatus { color: rgba(74,222,128,.7); }
+.rcPartCard.isFailed    .rcPartStatus { color: rgba(248,113,113,.7); }
+.rcPartCard.isRendering .rcPartStatus { color: var(--primary); }
+.rcPartMessage {
+  font-size: 10px;
+  color: var(--fg-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rcMiniProgress {
+  height: 3px;
+  background: rgba(255,255,255,.07);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.rcMiniProgress > span {
+  display: block;
+  height: 100%;
+  width: var(--progress, 0%);
+  background: var(--primary);
+  border-radius: 2px;
+  transition: width .3s ease;
+}
+.rcPartCard.isCompleted .rcMiniProgress > span { background: #4ade80; }
+.rcPartCard.isFailed    .rcMiniProgress > span { background: #f87171; }
+.rcPartMeta {
+  font-size: 10px;
+  color: var(--fg-400);
+  font-variant-numeric: tabular-nums;
+}
+
+/* =======================================================
+   END OF PHASE E · RENDER RUNTIME
+   ======================================================= */
+
