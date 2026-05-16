@@ -2,6 +2,7 @@
 import json
 import re
 import shutil
+import threading
 import traceback
 import uuid
 import logging
@@ -662,7 +663,24 @@ def create_render_batch(payload: RenderRequest):
                     progress_percent=0,
                     message=f"Queued by batch {batch_id[:8]} ({idx}/{len(urls)})",
                 )
-                process_render(child_id, child_payload, False)
+                # Route child through submit_job so it is tracked by job_manager
+                # (appears in _active_job_ids, respects MAX_CONCURRENT_JOBS).
+                # A threading.Event lets the batch coordinator wait for this child
+                # to finish before moving to the next without busy-polling.
+                # The try/finally inside _child_fn guarantees _done is always set,
+                # even if process_render raises an exception.
+                _done = threading.Event()
+                def _child_fn(_id=child_id, _p=child_payload, _ev=_done):
+                    try:
+                        process_render(_id, _p, False)
+                    finally:
+                        _ev.set()
+                submitted = submit_job(child_id, _child_fn)
+                if submitted:
+                    _done.wait()
+                # If submit_job returned False the child_id was already tracked
+                # (duplicate submission guard) — skip the wait; the DB status
+                # reflects the real outcome when batch progress is written below.
                 pct = int((idx / len(urls)) * 100)
                 upsert_job(
                     batch_id,

@@ -409,7 +409,11 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
             parts   = list_job_parts(job_id)
             summary = _compute_progress_summary(parts)
             await websocket.send_json({"job": job, "parts": parts, "summary": summary})
-            if job.get("status") in ("completed", "failed"):
+            # Close WS on any terminal status so the stream doesn't linger.
+            # Must match TERMINAL_STATUSES in frontend transport.js.
+            if job.get("status") in (
+                "completed", "completed_with_errors", "failed", "interrupted", "cancelled"
+            ):
                 break
             await asyncio.sleep(0.5)
     except WebSocketDisconnect:

@@ -36,6 +36,12 @@ logger = logging.getLogger(__name__)
 _NVENC_SEM_VALUE: int = max(1, int(os.getenv("NVENC_MAX_SESSIONS", "3")))
 NVENC_SEMAPHORE = threading.Semaphore(_NVENC_SEM_VALUE)
 
+# Maximum wall-clock seconds a single FFmpeg encode call is allowed to run.
+# A hung FFmpeg (codec bug, I/O stall, corrupted input) would otherwise hold a
+# JOB_SEMAPHORE slot forever, stalling all further renders.
+# Override with FFMPEG_TIMEOUT_SECONDS env var (e.g. for very long source files).
+_FFMPEG_TIMEOUT_SEC: int = max(60, int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "3600")))
+
 # ---------------------------------------------------------------------------
 # ffprobe metadata cache — keyed by (abspath, mtime_ns, size_bytes)
 # ---------------------------------------------------------------------------
@@ -161,7 +167,20 @@ def _run_ffmpeg_with_retry(command: list[str], retry_count: int = 2, wait_sec: f
     while True:
         attempt += 1
         try:
-            return subprocess.run(command, check=True, capture_output=True, text=True)
+            return subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=_FFMPEG_TIMEOUT_SEC,
+            )
+        except subprocess.TimeoutExpired as exc:
+            # Timeout is not retried — if FFmpeg hung once it will hang again.
+            # The subprocess is automatically killed by Python after TimeoutExpired.
+            raise RuntimeError(
+                f"FFmpeg timed out after {_FFMPEG_TIMEOUT_SEC}s and was killed. "
+                "Increase FFMPEG_TIMEOUT_SECONDS env var for very long source files."
+            ) from exc
         except subprocess.CalledProcessError as exc:
             if attempt > retry_count:
                 stderr = exc.stderr or ""

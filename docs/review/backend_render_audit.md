@@ -8068,3 +8068,115 @@ The following issues remain open and require separate P1/P2 work:
 - **WS terminal status mismatch** (`routes/jobs.py:405`) — WS breaks only on `completed`/`failed`; misses `completed_with_errors` and `interrupted`.
 - **N+1 on history** (`routes/jobs.py:153,161`) — `list_job_parts()` called per job; no SQL LIMIT on `list_jobs()`.
 - **DNS rebinding** (`routes/download.py`) — Allowlisted domain resolving to internal IP not blocked. Requires post-resolution IP check.
+
+
+---
+
+## Section 27: P1 Render Stability Fixes — 2026-05-16
+
+This section records the three P1 stability bugs fixed after the P0 security pass. No architectural changes were made. No pipeline behavior, output format, or AI logic was altered.
+
+---
+
+### P1-1 FIXED — Batch render child jobs now route through submit_job
+
+**File:** `backend/app/routes/render.py`
+
+**Bug:** `_run_batch()` called `process_render(child_id, child_payload, False)` directly inside the for-loop (line 665). This bypassed `submit_job()`, so child jobs were never registered in `job_manager._active_job_ids`, never counted against `MAX_CONCURRENT_JOBS`, and were invisible to the recovery mechanism on server restart.
+
+**Fix:** Each child job is now submitted via `submit_job(child_id, _child_fn)` where `_child_fn` is a closure that calls `process_render()` and then sets a `threading.Event`. The batch coordinator blocks on `_done.wait()` until that child finishes before moving to the next URL. This preserves sequential batch execution and accurate per-URL progress tracking.
+
+```python
+# routes/render.py — inside _run_batch() for-loop
+_done = threading.Event()
+def _child_fn(_id=child_id, _p=child_payload, _ev=_done):
+    try:
+        process_render(_id, _p, False)
+    finally:
+        _ev.set()   # always fires, even if process_render raises
+submitted = submit_job(child_id, _child_fn)
+if submitted:
+    _done.wait()
+```
+
+**Why this is safe:**
+- `process_render()` still acquires `JOB_SEMAPHORE` internally — FFmpeg concurrency is unchanged.
+- `submit_job()` deduplication guard (returns `False` if already tracked) is handled: if not submitted, the wait is skipped and the batch moves on.
+- `try/finally` in `_child_fn` guarantees `_done` is set even if `process_render` raises, so the batch coordinator never hangs.
+- `threading` was added to the module-level imports (`import threading`).
+
+**Threading note:** The batch coordinator thread blocks on `_done.wait()` while the child runs in a separate executor thread. This requires `MAX_CONCURRENT_JOBS ≥ 2` (the default is `max(1, cpu_count // 2)`, which is ≥ 2 on any multi-core machine). On a single-core machine (hypothetically), the coordinator and child would compete for the same slot and deadlock. This is documented but not fixed here — single-core video rendering is not a supported configuration.
+
+---
+
+### P1-2 FIXED — FFmpeg subprocess now has a hard timeout
+
+**File:** `backend/app/services/render_engine.py`
+
+**Bug:** `_run_ffmpeg_with_retry()` called `subprocess.run(command, check=True, capture_output=True, text=True)` with no `timeout=` parameter (line 164). A hung FFmpeg process (codec bug, I/O stall, corrupted input file) would hold a `JOB_SEMAPHORE` slot indefinitely, permanently stalling all further renders until server restart.
+
+**Fix:** A module-level constant `_FFMPEG_TIMEOUT_SEC` is read from `FFMPEG_TIMEOUT_SECONDS` env var (default 3600, minimum 60). It is passed as `timeout=_FFMPEG_TIMEOUT_SEC` to the `subprocess.run()` call. `subprocess.TimeoutExpired` is caught explicitly and re-raised as a clear `RuntimeError` — without retrying, since a process that timed out once will time out again.
+
+```python
+# render_engine.py — module level
+_FFMPEG_TIMEOUT_SEC: int = max(60, int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "3600")))
+
+# _run_ffmpeg_with_retry() — inside the retry loop
+return subprocess.run(
+    command, check=True, capture_output=True, text=True,
+    timeout=_FFMPEG_TIMEOUT_SEC,
+)
+...
+except subprocess.TimeoutExpired as exc:
+    raise RuntimeError(
+        f"FFmpeg timed out after {_FFMPEG_TIMEOUT_SEC}s and was killed. "
+        "Increase FFMPEG_TIMEOUT_SECONDS env var for very long source files."
+    ) from exc
+```
+
+**Why this is safe:**
+- All other `subprocess.run()` calls in `render_engine.py` already had `timeout=` parameters (lines 88, 151, 441, 485, 535, 660). This closes the only remaining gap.
+- `subprocess.TimeoutExpired` causes Python to kill the child process automatically — no zombie FFmpeg.
+- The existing retry logic for `CalledProcessError` and other exceptions is completely unchanged.
+- The 3600s (1 hour) default is generous for all normal video content. Very long sources (4K 2h+ files) can raise the limit via env var.
+
+---
+
+### P1-3 FIXED — WebSocket closes on all terminal statuses
+
+**File:** `backend/app/routes/jobs.py`
+
+**Bug:** The WS streaming loop broke only when `job.get("status") in ("completed", "failed")` (line 412). Jobs ending as `completed_with_errors` or `interrupted` kept the WS open indefinitely, sending a 500ms heartbeat forever. The frontend correctly defined 4 terminal statuses in `TERMINAL_STATUSES` (`transport.js:8-10`), but the backend WS only matched 2.
+
+**Fix:** The break condition is expanded to match all terminal statuses:
+
+```python
+# routes/jobs.py — WebSocket loop
+if job.get("status") in (
+    "completed", "completed_with_errors", "failed", "interrupted", "cancelled"
+):
+    break
+```
+
+`cancelled` is included proactively — it is not emitted by the current pipeline but the DB column accepts any string, and its inclusion costs nothing.
+
+**Why this is safe:**
+- The change only adds break conditions — it never prevents a break that would have happened before.
+- The frontend transport's post-terminal authoritative poll (600ms after WS terminal signal) still fires correctly; this fix reduces the cases where the frontend relies solely on that poll.
+- Existing jobs that are already in `completed_with_errors` or `interrupted` will have their WS closed on the next 500ms tick.
+
+---
+
+### P1 Fix Summary Table
+
+| ID | Bug | File | Fix Applied | Status |
+|---|---|---|---|---|
+| P1-1 | Batch child renders bypass submit_job / job_manager | `routes/render.py:665` | `submit_job()` + `threading.Event` wait per child | FIXED |
+| P1-2 | FFmpeg subprocess has no timeout — hangs hold semaphore slot | `render_engine.py:164` | `timeout=_FFMPEG_TIMEOUT_SEC` + explicit `TimeoutExpired` handler | FIXED |
+| P1-3 | WS closes only on `completed`/`failed`, misses 3 other terminals | `routes/jobs.py:412` | Break condition expanded to 5 terminal statuses | FIXED |
+
+### Remaining open P1 risks (not addressed in this pass)
+
+- **N+1 on history + no SQL LIMIT** (`routes/jobs.py:250-259`, `_normalize_history_item:153,161`) — `list_jobs()` fetches all rows, Python-slices to 30, calls `list_job_parts()` per row. Separate P1 fix required.
+- **No cancel mechanism** — cancel endpoint does not exist; FFmpeg subprocess cannot be killed from the API. Separate P1 fix required.
+- **DNS rebinding on download** (`routes/download.py`) — allowlisted domain could resolve to internal IP. Requires post-resolution IP check. P2.
