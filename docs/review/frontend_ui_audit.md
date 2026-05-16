@@ -3082,3 +3082,94 @@ After intent resolves, `CreatorMemory.getDerivedPreferences()` is checked:
 - No multi-step conversation (each input is independent, previous context doesn't inform next parse)
 - No undo from conversation panel (must use Cut tab or keyboard shortcut)
 - Example chips disappear after first message but don't come back
+
+---
+
+## Section 30 — P3.3: Taste Model & Adaptive Intent
+
+**Date:** 2026-05-16
+**Branch:** feature/ai-output-upgrade
+**Scope:** `backend/static/js/`, `backend/static/css/v3/`
+
+### What This Phase Addressed
+
+P3.2's intent parser was generic — "make it stronger" always failed (no keyword match), "too slow" always triggered clarification despite the taste model having a clear signal. P3.3 makes the system creator-aware: vague requests resolve differently based on accumulated taste signals, and tied keyword scores are broken using taste profile instead of always showing a disambiguation prompt.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `backend/static/js/creator-memory.js` | Added `getTasteModel()` — pace/hook/editStyle dimensional inference. Extended `_renderKnown()` to show taste rows (requires ≥8 signals) |
+| `backend/static/js/editor-converse.js` | Full P3.3 additions: `_ctx` micro-memory state, `_tryContextResolve()`, `_breakTieWithTaste()`, `_resolveWithTaste()`, expanded keyword lists, `explainText` threading through `_fireIntent`/`_addTurn`/`_render` |
+| `backend/static/css/v3/review.css` | Added `.convExplain` (explainability text style) and `.cmTasteVal` (taste dimension value style) |
+
+### Taste Model Math (getTasteModel)
+
+**Pace dimension** — Fast signals: `fasterPacing` + `removeDeadSpace` accepted; cinematic signals: `cinematicMode` accepted
+```
+paceRaw = (fastAcc + slowRej − fastRej − slowAcc) / paceObs  ∈ [-1, 1]
+pace = 'fast' if > 0.2, 'cinematic' if < -0.2, else 'balanced'
+```
+
+**Hook dimension** — `strongerHook` + `viralMode` accepted = aggressive; rejected = soft
+```
+hookRaw = (hookAcc − hookRej) / hookObs  ∈ [-1, 1]
+hook = 'aggressive' if > 0.3, 'soft' if < -0.3, else 'moderate'
+```
+
+**Edit style (composite)**
+- `viral`: paceRaw > 0.2 AND hookRaw > 0.2
+- `cinematic`: paceRaw < -0.2 AND hookRaw ≤ 0.1
+- `educational`: edu signals net ≥ 2 AND paceRaw ≥ -0.1
+- `balanced`: everything else
+
+Taste model requires `MIN_TASTE_SIG = 8` signals for `confident = true`.
+
+### Adaptive Intent Resolution Order
+
+```
+user text
+  1. _tryContextResolve()       ← "again", "just the intro", "a bit less"
+  2. keyword scoring            ← existing 7 rules (expanded keyword lists)
+  3. clear winner?              → fire
+  4. tied?                      → _breakTieWithTaste()  ← taste breaks tie
+  5. still tied?                → show clarification
+  6. no keyword match?          → _resolveWithTaste()   ← vague power words
+  7. vague + no taste model?    → show fallback chips
+```
+
+### Micro Conversation Memory (P3.3-C)
+
+`_ctx = { lastAction, lastIntent, lastRaw }` persists within a session.
+
+| Pattern | Resolution |
+|---|---|
+| "again" / "repeat" / "more of that" | Repeat `_ctx.lastAction` |
+| "just the intro" / "intro only" | Force `strongerHook` |
+| "just the subtitles" / "captions only" | Force `subtitleCleanup` |
+| "a bit less" / "dial it back" | Apply opposite of `_ctx.lastAction` |
+
+On reject: `_ctx.lastAction` is cleared — "discarded" signals the user wants a different direction.
+
+### Explainability (P3.3-D)
+
+When taste or context resolution is used, an `explainText` string is generated:
+- Vague power + viral style: `"Your high-energy editing style shaped this — I read 'stronger' as a tighter opening hook."`
+- Tie-broken by taste: `"Your cinematic tendency resolved this."`
+- Context scope: `"Scoping to the intro based on context."`
+
+Displayed in `.convExplain` below the AI response — muted, italic, unobtrusive.
+
+### Inspector Taste Surface (P3.3-E)
+
+`_renderKnown()` now shows taste rows when `taste.confident` (≥8 signals):
+- Pace tendency: Fast / Balanced / Cinematic
+- Hook tendency: Aggressive / Moderate / Soft
+- Edit tendency: shown if not 'balanced' (Viral / High-energy, Cinematic / Story, Educational / Clarity)
+
+### What Remains Weak
+
+- Taste model resets on `CreatorMemory.reset()` — no decay, no partial forget
+- `editStyle` composite is overly binary (once in 'viral' bucket, stays there unless signals reverse)
+- Context resolution uses regex patterns — "just the very beginning of the intro" may not match
+- Vague power resolution requires taste confidence (≥8 signals) — new users always get clarification

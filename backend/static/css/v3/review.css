@@ -1484,3 +1484,28 @@
 /* =======================================================
    END OF P3.2 — CONVERSATIONAL EDITING PANEL
    ======================================================= */
+
+
+/* =======================================================
+   P3.3 — TASTE MODEL & ADAPTIVE INTENT
+   ======================================================= */
+
+/* Explainability text under AI turn (P3.3-D) */
+.convExplain {
+  font-size: 10px;
+  color: var(--primary-hi, #818cf8);
+  opacity: .75;
+  margin-top: 3px;
+  line-height: 1.35;
+  font-style: italic;
+}
+
+/* Taste dimension values in creator memory panel (P3.3-E) */
+.cmTasteVal {
+  color: #a5b4fc;
+  font-size: 10.5px;
+}
+
+/* =======================================================
+   END OF P3.3 — TASTE MODEL & ADAPTIVE INTENT
+   ======================================================= */
