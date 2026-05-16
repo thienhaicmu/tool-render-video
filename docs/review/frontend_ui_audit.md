@@ -2875,3 +2875,72 @@ When a filter is active and the visible set is empty (all loaded items filtered 
 
 **`api/jobs.js` change:**
 `getHistory(params?)` now accepts an optional params object for `limit`/`offset`. Zero-argument call is backward compatible.
+
+---
+
+## Historical (resolved) / Current State (P2.9)
+
+> The sections above this line document `backend/static-v2/` — the prototype V2 shell.
+> The sections below document `backend/static/` — the production app shell — and the P2.5–P2.9 runtime intelligence phases.
+> These are separate codebases. The V2 shell is not served in production.
+
+---
+
+## Section 27: Production Shell — P2.5–P2.9 Runtime Intelligence
+
+**Codebase:** `backend/static/`  
+**Phase range:** P2.5 → P2.9  
+**Date range:** pre-2026-05-14 → 2026-05-16  
+**Branch:** `feature/ai-output-upgrade`
+
+### Historical (resolved) — Pre-P2.5 state
+
+Before P2.5, `backend/static/` had a functional render dashboard:
+- rdCard header with progress bar and status label
+- `#rc_part_cards` grid of pending part rows
+- `#event_log_render` raw event log
+- `#render_output_list.clipsGrid` output clip grid
+
+Status surfaces overlapped. No AI editorial voice. No narrative or causality. The UI communicated state accurately but not meaningfully.
+
+### Current State (P2.9) — 2026-05-16
+
+The runtime is now a three-surface AI orchestration system layered on the same DOM without restructuring it. All changes are additive.
+
+**New surfaces introduced:**
+
+| Surface | DOM ID | Role |
+|---|---|---|
+| AI Process Card | `#rc_ai_process_cards` | 12-stage editorial pipeline status |
+| Clip Evolution Feed | `#rc_ai_evolution_feed` | per-clip completion narrative with tier-based editorial copy |
+| AI Reasoning Stream | `#rc_ai_reason_feed` | stage-transition editorial sentences |
+| Completion Intelligence | `#rc_benchmark_insight` | avg/top viral score + editorial summary |
+
+**Behavioral changes:**
+- Stage transitions: morph animation instead of hard innerHTML replacement
+- Clip completion: causal elevation on output card (`p29Elevated`) + optional green editorial highlight (`p29Causal`)
+- Confidence evolution: `data-p29-confidence` attribute on best card (emerging → rising → strong → peak)
+- Completion arrival: one-shot cinematic transition (output rises, runtime recedes)
+- Territory switching: `[data-render-state]` CSS controls which zone dominates
+
+**Language changes:**
+- All 12 stage labels changed from engineering to editorial copy ("Rendering" → "Rendering" stays, but "Scene Detection" → "Mapping the Story", etc.)
+- All 12 reasoning sentences changed to human editorial voice
+- Evolution feed uses tier-specific message pools (3 messages × 3 tiers)
+- Completion bar becomes editorial creative outcome summary
+
+**What improved vs. P2.5 baseline:**
+- No more hard stage replacement cuts
+- Output cards have visible consequence when clips complete
+- Best clip confidence is observable and data-driven
+- Runtime and output compete appropriately by lifecycle state
+- Cognitive load reduced: duplicate % displays suppressed during running
+
+**What remains weak:**
+- `populateRenderOutputPanel` full re-render can wipe transient elevation classes mid-animation
+- Confidence evolution uses `parts.length` as total count (may undercount early in pipeline)
+- Raw `#rc_part_cards` still visible — partly redundant with `.clipsGrid`
+- Log strip shows raw events with no editorial filtering
+- `pointer-events: none` on receded runtime mount is not discoverable
+
+**Full technical documentation:** `docs/review/frontend/RUNTIME_ORCHESTRATION.md`
