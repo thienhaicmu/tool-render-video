@@ -1,7 +1,517 @@
 # Render System — Full Architecture Audit
 
-> **Living document.** Original audit generated 2026-05-07. Patch notes appended below.
+> **Living document.** Original audit generated 2026-05-07. Updated 2026-05-16 with full production audit.
 > All findings are grounded in actual file content with exact line references.
+
+---
+
+## Production System Audit — 2026-05-16
+
+### Audit Scope
+
+This section covers the full backend render system as implemented in the current codebase. All findings reference specific files and line numbers. Severity levels: **P0** (crash/data-loss risk), **P1** (production reliability), **P2** (improvement).
+
+---
+
+### 1. Queue & Job Lifecycle
+
+#### 1.1 Dual Semaphore Mismatch — P0
+
+**Files:** `backend/app/services/job_manager.py`, `backend/app/orchestration/render_pipeline.py:380-382`
+
+**Current behavior:**
+- `job_manager.py` dispatches up to `MAX_CONCURRENT_JOBS` (default: `cpu_count // 2`) jobs from the priority heap into the `ThreadPoolExecutor`.
+- `render_pipeline.py` has a separate `JOB_SEMAPHORE = threading.Semaphore(_JOB_SEM_VALUE)` with `_JOB_SEM_VALUE = int(os.getenv("MAX_RENDER_JOBS", "2"))`.
+
+**Problem:**
+These two controls are completely independent. If `MAX_CONCURRENT_JOBS=8` and `_JOB_SEM_VALUE=2`, six dispatched threads sit blocked on `JOB_SEMAPHORE.acquire()`, consuming thread pool slots and stack memory while doing no work.
+
+The `/api/render/queue-status` endpoint reads `_render_active_count` which is only incremented **after** semaphore acquisition. It shows `active=0` while 6 threads are actively blocked, giving false monitoring data.
+
+**Risk:** Silent thread pool exhaustion. Under heavy load, all worker threads are blocked waiting for the semaphore, and the queue appears empty to monitoring while the system is stalled.
+
+**Fix:** Set `MAX_CONCURRENT_JOBS = _JOB_SEM_VALUE` via env vars, or merge both into a single env-var (`MAX_RENDER_JOBS`) and have `job_manager` read it directly. Document the dependency in `docker-compose.yml` and `.env.example`.
+
+---
+
+#### 1.2 Batch Render Bypasses Concurrency Control — P0
+
+**File:** `backend/app/routes/render.py:652-666`
+
+**Current behavior:**
+`_run_batch()` calls `process_render(child_id, child_payload, False)` directly in a loop — synchronously — without going through `submit_job()`.
+
+**Problem:**
+- Child renders are not governed by `MAX_CONCURRENT_JOBS` or `JOB_SEMAPHORE`.
+- All child renders run serially in the single batch worker thread, which itself holds one thread pool slot for the entire batch duration.
+- Two concurrent batch submissions (`POST /api/render/process/batch` called twice) can launch unlimited parallel render pipelines — each batch runs its child renders synchronously in its own worker thread, bypassing all throttling.
+- A batch of 10 renders on a 4-core machine with `_JOB_SEM_VALUE=2` will still launch 10 FFmpeg processes simultaneously.
+
+**Risk:** CPU and memory saturation. On a desktop machine this causes system-level unresponsiveness and render failures.
+
+**Fix:** Inside `_run_batch()`, replace direct `process_render()` calls with `submit_job(child_id, process_render, child_id, child_payload, False)` and use a `threading.Event` or join loop to wait for each child before moving to the next progress update.
+
+---
+
+#### 1.3 `_queue_render_job()` Race Condition — P1
+
+**File:** `backend/app/routes/render.py:547-586`
+
+**Current flow:**
+```python
+if is_running(job_id):           # check (non-atomic)
+    raise HTTPException(409)
+upsert_job(job_id, ..., "queued")  # write DB
+submit_job(job_id, ...)            # enqueue
+```
+
+**Problem:**
+Two concurrent POST requests for the same `resume_job_id` can both pass the `is_running()` check before either calls `submit_job()`. The second call to `submit_job()` is idempotent (returns False), but both calls will have run `upsert_job()` — the second overwriting the first's DB state with the same payload. This is benign in most cases but can corrupt in-progress job state if a resume and a retry both land simultaneously.
+
+**Risk:** Rare but causes confusing job state corruption under concurrent user activity (e.g., two browser tabs hitting resume at the same time).
+
+**Fix:** Use a DB-level optimistic lock: `UPDATE jobs SET status='queued' WHERE job_id=? AND status IN ('interrupted','failed')` and check `rowcount > 0` before proceeding.
+
+---
+
+#### 1.4 WebSocket Never Closes for `interrupted`/`completed_with_errors` — P1
+
+**File:** `backend/app/routes/jobs.py:405`
+
+**Current code:**
+```python
+if job.get("status") in ("completed", "failed"):
+    break
+```
+
+**Frontend terminal set** (`backend/static-v2/assets/js/transport.js:8-11`):
+```javascript
+export const TERMINAL_STATUSES = new Set([
+  'completed', 'completed_with_errors', 'failed', 'interrupted',
+]);
+```
+
+**Problem:**
+The backend WS loop only breaks on `"completed"` or `"failed"`. Jobs that reach `"interrupted"` (server restart) or `"completed_with_errors"` keep the WS loop running at 500ms tick indefinitely until the client disconnects. With multiple historical jobs in `interrupted` state (common after restarts), any client that monitors them holds live WS connections that never terminate server-side.
+
+**Risk:** WS connection accumulation over time. After several restarts with in-progress jobs, a monitoring client re-visiting the history will open N WS connections that never close.
+
+**Fix:**
+```python
+TERMINAL_STATUSES = {"completed", "completed_with_errors", "failed", "interrupted", "cancelled"}
+if job.get("status") in TERMINAL_STATUSES:
+    break
+```
+
+---
+
+#### 1.5 `list_jobs()` Has No LIMIT — P1
+
+**File:** `backend/app/services/db.py:1296-1300`
+
+```python
+def list_jobs():
+    rows = conn.execute('SELECT * FROM jobs ORDER BY created_at DESC').fetchall()
+```
+
+**Problem:**
+Called by `api_list_jobs()`, `api_jobs_history()`, and `recover_pending_render_jobs()` on every startup. With `payload_json` and `result_json` JSON blobs, each row can be 5-20 KB. After 6 months of daily use (10 renders/day), that's ~1800 rows × ~10 KB = ~18 MB loaded and deserialized per call.
+
+**Fix:**
+```python
+def list_jobs(limit: int = 500):
+    rows = conn.execute(
+        'SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?', (limit,)
+    ).fetchall()
+```
+Add DB index: `CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC)`.
+
+---
+
+#### 1.6 History API: N+1 Query Pattern — P1
+
+**File:** `backend/app/routes/jobs.py:251-259`, `_normalize_history_item()` at line 152-157
+
+**Current behavior:**
+`api_jobs_history()` calls `list_jobs()` (fetches all rows), then for each row in the result set, `_normalize_history_item()` calls `list_job_parts(row["job_id"])`. With `safe_limit=30`, this is 30 additional `get_conn()` open/query/close cycles per history request.
+
+**Risk:** Every history page load = 31 DB connections. Under concurrent use (two browsers) = 62 connections per second. SQLite WAL mode handles concurrent reads, but the overhead of 31 connection open/close cycles is ~150-300ms of pure overhead per request.
+
+**Fix:** Batch-fetch all parts in a single query:
+```python
+job_ids = [row["job_id"] for row in rows]
+placeholders = ",".join(["?"] * len(job_ids))
+all_parts = conn.execute(
+    f"SELECT * FROM job_parts WHERE job_id IN ({placeholders})", job_ids
+).fetchall()
+parts_by_job = defaultdict(list)
+for p in all_parts:
+    parts_by_job[p["job_id"]].append(dict(p))
+```
+
+---
+
+#### 1.7 Pending Heap Dedup: O(n) Scan — P2
+
+**File:** `backend/app/services/job_manager.py:178`
+
+```python
+if any(entry[2] == job_id for entry in _pending):
+```
+
+Linear scan of the entire pending heap on every `submit_job()` call. At 100 queued jobs this costs 100 comparisons per submission under lock.
+
+**Fix:** Maintain a parallel `_pending_set: set[str]` alongside the heap. Add/remove atomically with heap push/pop inside the same `_cond` lock.
+
+---
+
+### 2. Render Pipeline
+
+#### 2.1 FFmpeg Has No Subprocess Timeout — P0
+
+**File:** `backend/app/services/render_engine.py:159-178`
+
+```python
+def _run_ffmpeg_with_retry(command, retry_count=2, wait_sec=0.8):
+    ...
+    return subprocess.run(command, check=True, capture_output=True, text=True)
+    # No timeout parameter
+```
+
+**Problem:**
+If FFmpeg hangs (GPU driver deadlock, corrupted input, pipe broken by OS), the render worker thread is blocked forever. The job stays in `"running"` state indefinitely. The WS client polls forever. With `_JOB_SEM_VALUE=2`, a single hung FFmpeg process blocks all future renders until the server restarts.
+
+The progress timer thread (`_render_progress_timer`) has stall detection logic that logs a warning after `expected_duration * 10` seconds — but it only logs; it does not kill the FFmpeg process or mark the job failed.
+
+**Risk:** Full render pipeline stall with no automatic recovery. Requires server restart.
+
+**Fix:**
+1. Add `timeout=max(300, int(expected_duration * 12))` to every `subprocess.run()` in render path.
+2. On `subprocess.TimeoutExpired`: kill the process, raise `RuntimeError`, let the job be marked `failed`.
+3. In progress timer: call `_cancel_event.set()` if stall detected, and have the render thread check it.
+
+---
+
+#### 2.2 Progress Timer Stall Detection Does Not Kill FFmpeg — P1
+
+**File:** `backend/app/orchestration/render_pipeline.py:463-499`
+
+The progress timer thread detects potential stalls (elapsed > `expected_duration * 10`) and emits a warning log. However:
+- It does not kill the FFmpeg subprocess.
+- It does not set any cancel event.
+- It does not transition the job to `failed`.
+
+The `stop_event` is only set by the parent render thread **after** `render_part_smart()` returns — which it never does if FFmpeg is hung.
+
+**Fix:** Pass a `cancel_callback` to the progress timer. When stall is confirmed, invoke it to kill the FFmpeg pid and set a `failed` status on the part.
+
+---
+
+#### 2.3 Resume Skips Parts Without Verifying Output File Exists — P1
+
+**File:** `backend/app/orchestration/render_pipeline.py` (resume logic)
+
+**Current behavior:**
+Resume mode reads `list_job_parts(job_id)` and skips parts with `status="done"`. It does not verify that the `output_file` path still exists on disk.
+
+**Problem:**
+If the user deleted the output directory between the original render and the resume, or if the disk was cleaned, parts are marked `done` but their files are missing. The final job status shows `completed` but some output files don't exist. Downstream operations (download, upload queue) silently fail with file-not-found.
+
+**Fix:** Before skipping a `done` part in resume mode:
+```python
+if status == "done" and output_file:
+    if not Path(output_file).exists():
+        # Re-render this part
+        continue
+```
+
+---
+
+#### 2.4 Subtitle Edit Silent Skip — P2
+
+**File:** `backend/app/orchestration/render_pipeline.py:425-438`
+
+User subtitle edits with a start-time drift > 0.5s from the stored value are silently dropped. No log entry, no user notification. The rendered video uses the original AI-generated text without telling the user their edit was ignored.
+
+**Fix:** Log at WARNING level when an edit is skipped, and include the edit index and measured drift in the render job log so the user can investigate via the Log drawer.
+
+---
+
+### 3. File System & Storage
+
+#### 3.1 `_PREVIEW_SESSIONS` Dict Grows Without Eviction — P1
+
+**File:** `backend/app/routes/render.py:71`
+
+```python
+_PREVIEW_SESSIONS: dict[str, dict] = {}  # module-level, never evicted
+```
+
+Sessions are added on `POST /api/render/prepare-source` and only removed by `_cleanup_preview_session()` which is called when a render actually starts. If a user prepares a source (YouTube download + preview transcode) but abandons the configure step (closes tab, navigates away, changes mind), the session dict entry lives in memory forever alongside its work_dir on disk.
+
+`prune_preview_dirs()` runs at startup only (not during operation), cleaning preview dirs older than 6h. But `_PREVIEW_SESSIONS` is never cleaned between startups.
+
+**Risk:** Long-running server (desktop app, days/weeks uptime) with active users accumulates hundreds of in-memory session entries. Each entry holds paths and metadata; the actual preview videos on disk are pruned by startup cleanup, but the dict entries remain.
+
+**Fix:** Use `functools.lru_cache` with maxsize or a time-aware dict wrapper. On each `_load_session()` call, check the session's `work_dir` mtime and evict if older than 6h.
+
+---
+
+#### 3.2 Temp Dir Cleanup: Only Preview Dirs at Startup — P1
+
+**Files:** `backend/app/services/maintenance.py`, `backend/app/main.py:126`
+
+`prune_preview_dirs()` is called once at startup and cleans `TEMP_DIR/preview/` dirs older than 6h. The main render pipeline creates additional temp directories for intermediate subtitle, audio, and segment files — these are NOT cleaned by `prune_preview_dirs()`.
+
+`quick-process` does clean up: `finally: shutil.rmtree(work_dir, ignore_errors=True)`. The main pipeline's per-part temp work is cleaned inside `render_part_smart()` but any temp dirs created at the job level (not part level) accumulate.
+
+**Risk:** On a machine used for weeks without restart, temp disk usage grows unbounded.
+
+**Fix:** Add a startup prune for all `TEMP_DIR` subdirs not matching active job IDs. Add a post-render cleanup hook in `run_render_pipeline()` that runs in a `finally:` block.
+
+---
+
+#### 3.3 Download: `_unique_output_path()` TOCTOU Race — P1
+
+**File:** `backend/app/routes/download.py:74-81`
+
+```python
+def _unique_output_path(output_dir: Path, src_path: Path) -> Path:
+    while candidate.exists():
+        candidate = output_dir / f"{stem}_{idx}{suffix}"
+        idx += 1
+    return candidate
+```
+
+`_MAX_PARALLEL_DOWNLOADS = 2`, so two downloads of the same title running concurrently can both see `stem.mp4` as non-existing and return the same path. Both then call `shutil.move()` racing to write to the same file. The second `shutil.move()` silently overwrites the first.
+
+**Risk:** Duplicate downloads overwrite each other. UI shows both as `done` with different DB records pointing to the same file. When the first completed download is opened, it may show incorrect video content.
+
+**Fix:** Use atomic temp-then-rename: download to a UUID-named temp file, then `os.link()` or `shutil.move()` to the final path with an `O_EXCL`-equivalent check.
+
+---
+
+### 4. Database Layer
+
+#### 4.1 Connection-Per-Operation Pattern — P1
+
+**File:** `backend/app/services/db.py:82-89`
+
+```python
+def get_conn():
+    conn = sqlite3.connect(str(db_path), timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode=WAL;')
+    conn.execute('PRAGMA synchronous=NORMAL;')
+    conn.execute('PRAGMA foreign_keys=ON;')
+    return conn
+```
+
+Every DB function (`upsert_job`, `update_job_progress`, `upsert_job_part`, `get_job`, `list_job_parts`) opens a new SQLite connection, executes its query, and closes. A single render job's "starting" stage triggers: `_mark_job_running()` → `update_job_progress()` → `get_conn()`. A full render pipeline for 5 parts may call 50+ DB functions, each creating a new connection.
+
+SQLite `connect()` on Windows includes file lock acquisition overhead — typical 2-5ms per call. For 50 calls that's 100-250ms of pure connect overhead per render.
+
+**Fix:** Use a `threading.local()` connection cache — one persistent connection per thread, reused across calls within a thread's lifetime:
+```python
+_thread_local = threading.local()
+
+def get_conn():
+    if not hasattr(_thread_local, 'conn') or _thread_local.conn is None:
+        _thread_local.conn = _make_conn()
+    return _thread_local.conn
+```
+
+---
+
+#### 4.2 WS Endpoint: 500ms DB Poll Per Connected Client — P1
+
+**File:** `backend/app/routes/jobs.py:388-411`
+
+```python
+async def ws_job_progress(websocket: WebSocket, job_id: str):
+    while True:
+        job = get_job(job_id)        # DB read
+        parts = list_job_parts(job_id)  # DB read
+        summary = _compute_progress_summary(parts)
+        await websocket.send_json(...)
+        await asyncio.sleep(0.5)
+```
+
+Each connected WS client = 2 DB reads every 500ms = 4 reads/sec. With 3 active render jobs and 2 browser tabs each: 6 WS connections × 4 reads/sec = **24 DB reads/second** from WS alone, plus render pipeline writes.
+
+**Risk:** Under even moderate load, DB read pressure from WS polling dominates. SQLite's WAL mode handles concurrent reads, but 24 `get_conn()` open/close cycles/second is significant overhead.
+
+**Fix:** Use an in-process event bus. The render pipeline publishes a `JobUpdateEvent` to an `asyncio.Queue` keyed by `job_id`. The WS handler awaits the queue instead of polling DB. This reduces DB reads from O(clients × jobs × 2/sec) to O(actual_state_changes/sec).
+
+---
+
+#### 4.3 Schema Migration: ADD-only, No Remove/Rename — P2
+
+**File:** `backend/app/services/db.py:288-437`
+
+`_ensure_columns()` only adds missing columns via `ALTER TABLE ... ADD COLUMN`. Column renames, type changes, and index additions require manual intervention or a versioned migration system.
+
+**Risk:** As the schema evolves, stale/renamed columns accumulate. Index additions for performance cannot be automated through the current system.
+
+**Fix:** Add a `schema_version` table and a versioned migration runner. SQLite supports `CREATE INDEX IF NOT EXISTS` without schema version tracking, so index creation can be added immediately to `init_db()`.
+
+---
+
+### 5. API Design
+
+#### 5.1 No LIMIT on `GET /api/jobs` — P1
+
+**File:** `backend/app/routes/jobs.py:245-247`
+
+```python
+@router.get("")
+def api_list_jobs():
+    return {"items": list_jobs()}
+```
+
+Returns all jobs with no pagination. After months of use, this returns MB-scale JSON responses. The frontend receives the full payload and must process it in JavaScript.
+
+**Fix:** Add `limit: int = 100, offset: int = 0` query params. Pass to `list_jobs(limit, offset)`.
+
+---
+
+#### 5.2 History Hard Cap at 30 Items, No Pagination — P1
+
+**File:** `backend/app/routes/jobs.py:251`
+
+```python
+safe_limit = max(1, min(30, int(limit or 20)))
+```
+
+Users with > 30 jobs cannot see older entries. No cursor, no offset. The cap is enforced in Python after fetching all rows from DB, so the DB always returns the full dataset regardless.
+
+**Fix:** Implement cursor-based pagination with `before_id` parameter.
+
+---
+
+#### 5.3 Duplicate Endpoints for Same Data — P2
+
+`GET /api/render/jobs/{job_id}` (render.py:1115) and `GET /api/jobs/{job_id}` (jobs.py:273) both call `get_job()` and return the raw row. These can diverge if one is extended. Frontend should use exactly one.
+
+**Fix:** Remove `/api/render/jobs/{job_id}`. All job reads go through `/api/jobs/{job_id}`.
+
+---
+
+#### 5.4 No SPA Catch-All Route — P1
+
+**File:** `backend/app/main.py:147-149`
+
+Only `GET /` returns `index.html`. Browser-refreshing on `/monitor/abc123` or `/create` returns a 404 from FastAPI's route matching. This breaks direct links and browser history navigation.
+
+**Fix:**
+```python
+@app.get("/{path:path}")
+def spa_fallback(path: str):
+    if path.startswith("api/") or path.startswith("assets/"):
+        raise HTTPException(status_code=404)
+    return FileResponse(str(INDEX_FILE))
+```
+
+---
+
+### 6. Security
+
+#### 6.1 `video_filter` Passes to FFmpeg Without Sanitization — P1
+
+**File:** `backend/app/routes/render.py:901-906`
+
+```python
+if (payload.video_filter or "").strip():
+    vf_parts.append((payload.video_filter or "").strip())
+```
+
+`video_filter` is a free-text field from `QuickProcessRequest`. Any value is appended directly to the FFmpeg `-vf` filter chain. An attacker with API access can inject arbitrary FFmpeg filters including `movie=` (file read side-channel), `zmq=` (external control), or `sendcmd=` (dynamic command injection).
+
+**Risk:** For a local desktop app with no network exposure, low practical impact. But if the API is ever exposed on a LAN or via reverse proxy, this is a command injection vector.
+
+**Fix:** Allowlist valid filter names before use:
+```python
+ALLOWED_FILTERS = frozenset({"scale", "crop", "transpose", "hflip", "vflip", "eq", "colorchannelmixer"})
+def _validate_filter(f: str) -> bool:
+    name = f.split("=")[0].strip().lower()
+    return name in ALLOWED_FILTERS
+```
+
+---
+
+#### 6.2 API Fully Open on All Network Interfaces — P1
+
+No authentication middleware. FastAPI listens on all interfaces by default (`0.0.0.0`). Any peer on the same LAN can:
+- Trigger renders with arbitrary YouTube URLs (bandwidth abuse)
+- Read all job history, output file paths, and channel configurations
+- Call `/api/devtools/` endpoints
+- Trigger `quick-process` to write files to any path writable by the backend process
+
+**Fix (minimal):** Generate a random API key on first startup, write to `APP_DATA_DIR/api.key`. Require it as an `X-API-Key` header. The desktop Electron shell passes it automatically; LAN attackers don't have it.
+
+---
+
+#### 6.3 Job Log Path Resolved from User-Controlled `payload_json` — P2
+
+**File:** `backend/app/routes/jobs.py:204-242`
+
+`_resolve_job_log_path()` constructs a log file path using `output_dir` from the job's stored `payload_json`. A carefully crafted `output_dir` value in a submitted render request could cause the log endpoint to read and return arbitrary `.log` files from the filesystem.
+
+The `.log` suffix requirement limits blast radius (can't read `.env` or `app.db`), but could expose system log files if symlinks are present.
+
+**Fix:** Validate that the resolved log path is under `CHANNELS_DIR` or `LOGS_DIR` before serving it.
+
+---
+
+#### 6.4 Proxy Credentials in Plaintext SQLite — P2
+
+**File:** `backend/app/services/db.py:1668-1697`
+
+`upload_proxy_pool` table stores `username` and `password` columns in plaintext. `upload_accounts` stores TikTok credentials via `credential_line`. If `app.db` is exfiltrated (symlink, backup misconfiguration), all credentials are exposed.
+
+**Fix:** Encrypt credential fields using a machine-derived key (e.g., OS keychain or a key derived from machine UUID + app secret).
+
+---
+
+### 7. Performance
+
+#### 7.1 `nvenc_available()` Cache Cannot Be Invalidated — P2
+
+**File:** `backend/app/services/render_engine.py:187-198`
+
+```python
+@lru_cache(maxsize=1)
+def nvenc_available() -> bool:
+```
+
+Cached for process lifetime. If the GPU becomes unavailable mid-session (driver crash, GPU reset, power event), the cached `True` causes all subsequent renders to attempt NVENC. FFmpeg then fails with "no NVENC capable devices found" and the retry path falls back to software encoding — but only after 2-3 failed attempts, wasting 5-10 seconds per part.
+
+**Fix:** Cache with a TTL (re-probe after 10 minutes) using a `_nvenc_last_check` timestamp. Or expose a `/api/render/invalidate-gpu-cache` devtools endpoint.
+
+---
+
+#### 7.2 `ffprobe` Metadata Cache Unbounded Growth — P2
+
+**File:** `backend/app/services/render_engine.py:44-46`
+
+```python
+_PROBE_CACHE: dict[tuple, dict] = {}
+```
+
+The probe cache is a plain dict with no size limit. On a system processing thousands of unique video files, this grows unbounded. Cache key includes `(abspath, mtime_ns, size)` so old entries for deleted files are never evicted.
+
+**Fix:** Use `functools.lru_cache(maxsize=512)` or a size-limited dict with LRU eviction.
+
+---
+
+### 8. Known Correct Behaviors (Not Bugs)
+
+The following were initially suspected as issues but are implemented correctly:
+
+- **`_handlePrepare()` error recovery:** `_phase` IS reset to `'import'` in the catch block (`create.js:380`). Stuck preparing state does not occur.
+- **Generate button double-click protection:** `_handleGenerate()` checks `if (_generating) return` at line 389. Double-clicks are blocked.
+- **Monitor screen cleanup:** `el.addEventListener('unmount', ...)` in `monitor.js:301-305` calls `unsub()` and `monitorStore.stop()`. The subscription leak only occurs if the router fails to fire the `unmount` event.
+- **Subtitle edit validation:** The 0.5s drift tolerance is intentional to handle SRT timestamp rounding. Silent skip is the correct behavior for minor timestamp drift; only large drifts indicate real mismatches.
 
 ---
 

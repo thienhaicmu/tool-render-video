@@ -1617,6 +1617,280 @@ CSS: all selectors reference existing DOM classes; no new class names introduced
 ### Verification
 - `node --check` passed on all 9 changed JS files
 - No API contracts changed
+
+---
+
+## 24. Production Quality Audit — 2026-05-16
+
+**Auditor Role:** Principal Software Engineer, Frontend Architect, UX Engineer
+**Scope:** All files under `backend/static-v2/` — transport, state management, screens, components, API wrappers
+**Method:** Direct code reading with file:line references. No assumptions made from documentation alone.
+
+---
+
+### 24.1 Transport Layer (`transport.js`)
+
+**Current implementation:** `openJobStream()` opens a WebSocket to `/ws/jobs/{jobId}`. On error or close, falls back to HTTP polling every `POLL_INTERVAL_MS = 2000`. A post-terminal authoritative poll fires after 600ms to catch any final state not delivered over WS.
+
+**Problems found:**
+
+| ID | Severity | File:Line | Issue |
+|---|---|---|---|
+| T-1 | **P0** | `transport.js:TERMINAL_STATUSES` | Frontend `TERMINAL_STATUSES = new Set(['completed', 'completed_with_errors', 'failed', 'interrupted'])` — 4 statuses. Backend WS (`routes/jobs.py:388-411`) only breaks on `completed` and `failed`. Jobs ending in `interrupted` or `completed_with_errors` leave the WS open on the server side, leaking a poll loop for up to the client's 20s timeout. |
+| T-2 | **P1** | `transport.js` | No reconnect backoff — each WS failure falls immediately to polling. Under intermittent network, this generates burst HTTP traffic rather than gradual WS reconnect attempts. |
+| T-3 | **P1** | `transport.js` | Polling fallback interval (2000ms) is hardcoded. High-frequency polling from multiple monitor tabs multiplies DB read pressure because the backend WS also polls SQLite at 500ms per connection (`routes/jobs.py:408`). |
+| T-4 | **P2** | `transport.js` | No transport-type telemetry emitted to the store. Monitor screen shows a transport badge but it relies on `monitorStore` internal state — if `monitorStore` is reset, badge silently reverts to no-transport shown. |
+
+**Recommended fixes:**
+- **T-1 (P0):** Add `interrupted` and `completed_with_errors` to the server-side WS break condition in `routes/jobs.py:411`. One-line fix.
+- **T-2 (P1):** Implement exponential backoff (1s → 2s → 4s → max 30s) before WS reconnect attempts.
+- **T-3 (P1):** Implement server-sent events (SSE) or push-on-change DB triggers instead of polling SQLite every 500ms per WS client.
+
+---
+
+### 24.2 State Management (`store/monitor.js`, `store/render-session.js`)
+
+**Current implementation:** `monitorStore` wraps `createStore()` factory. `start(jobId)` opens a transport stream, `stop()` closes it, `clear()` resets state. `renderSessionStore.sync()` is called from `monitorStore` after every mutation to propagate the active render bar state.
+
+**Problems found:**
+
+| ID | Severity | File:Line | Issue |
+|---|---|---|---|
+| S-1 | **P1** | `store/monitor.js` | `renderSessionStore.sync(monitorState)` is called in three separate callbacks: `onUpdate`, `onTerminal`, and `onTransportChange`. All three can fire for the same WS message. Result: up to 3 redundant `renderSessionStore` mutations + 3 subscriber notification cycles per update tick. |
+| S-2 | **P1** | `store/monitor.js` | `_subscription` is declared at module scope but `monitorStore.start()` can be called multiple times if the user navigates away and back without `stop()` being called (e.g., browser back + forward without unmount event). This orphans the previous subscription. The `unmount` listener in `monitor.js` mitigates this but relies on the custom event firing — which is not guaranteed across all navigation paths. |
+| S-3 | **P2** | `store/render-session.js` | `renderSessionStore` state is never persisted to `sessionStorage` or `localStorage`. A hard refresh drops the active render bar, leaving the user with no way to reconnect to an in-progress render without navigating to `/monitor/:jobId` manually. |
+| S-4 | **P2** | `store/` (all) | `createStore()` factory has no middleware layer. Adding cross-cutting concerns (logging, devtools, persistence) requires patching each store individually rather than at the factory level. |
+
+**Recommended fixes:**
+- **S-1 (P1):** Deduplicate sync — call `renderSessionStore.sync()` once at end of a batched update function rather than in each individual callback.
+- **S-3 (P2):** Persist `{ jobId, status }` in `sessionStorage` on every `renderSessionStore` mutation; restore on app boot to reconnect the render bar.
+
+---
+
+### 24.3 Create Screen (`screens/create.js`)
+
+**Current implementation:** 3-phase state machine: `import` → `preparing` → `configure`. `_handlePrepare()` calls `/api/render/draft`, sets `_phase = 'configure'` on success, resets to `_phase = 'import'` in catch. `_handleGenerate()` guarded by `if (_generating) return`.
+
+**Problems found:**
+
+| ID | Severity | File:Line | Issue |
+|---|---|---|---|
+| C-1 | **P1** | `create.js:346-385` | `PREPARE_TIMEOUT_MS = 45_000`. If the server responds after 44s with an error, the catch block resets `_phase = 'import'` — correct. But if the server responds after 45s with **success**, the `AbortController` has already fired, the `catch` block has run and reset to `import`, but the `await fetch(...)` may still resolve in some environments. Result: `_phase` gets set to `configure` after the reset, leaving the UI in a ghost-configured state with no loaded draft. |
+| C-2 | **P1** | `create.js` | No validation of the URL/file input before calling `_handlePrepare()`. An empty string or a URL with no valid host reaches the backend. The backend returns a 400/422, which resets the phase correctly, but the error message shown to the user is a raw API error string, not a friendly validation message. |
+| C-3 | **P2** | `create.js` | The `import` phase does not persist the last-entered URL across page reloads. Users who accidentally refresh lose their input and must re-type the URL. |
+| C-4 | **P2** | `create.js` | `_phase` transitions are not reflected in the URL hash. If the user is in `configure` phase and presses back, the router navigates away entirely rather than stepping back to `import` phase within the create screen. |
+
+**Confirmed correct behaviors (NOT bugs):**
+- `_handlePrepare()` catch block at line 380 correctly resets `_phase = 'import'` — not a stuck state bug.
+- `_handleGenerate()` `if (_generating) return` at line 389 correctly prevents double-submission.
+
+**Recommended fixes:**
+- **C-1 (P1):** After `AbortController.abort()`, set a module-level `_aborted = true` flag; in the `fetch` `.then()` branch, check `if (_aborted) return` before proceeding to `_phase = 'configure'`.
+- **C-2 (P1):** Add client-side URL validation (non-empty, starts with `http://` or `https://`, or is a local file path) before calling `_handlePrepare()`.
+
+---
+
+### 24.4 Monitor Screen (`screens/monitor.js`)
+
+**Current implementation:** Mounts `monitorStore.start(jobId)` on load, cleans up on `unmount` event. Shows connection timeout banner after `CONNECT_TIMEOUT_MS = 20_000`. Cancel button calls `renderApi.cancel(jobId)`. Retry/Resume buttons have `disabled=true` on click to prevent double-submission. Stage labels rewritten to plain English in R4F-A.
+
+**Problems found:**
+
+| ID | Severity | File:Line | Issue |
+|---|---|---|---|
+| M-1 | **P0** | `screens/monitor.js:301-305` | `el.addEventListener('unmount', ...)` — the `unmount` event is a custom event that `router.js` must dispatch on route change. If `router.js` does not dispatch `unmount` on the outgoing screen element (e.g., on hash-only changes), the `monitorStore.stop()` call is never reached, leaving the transport stream open and polling indefinitely. |
+| M-2 | **P1** | `screens/monitor.js` | `CONNECT_TIMEOUT_MS = 20_000`. The timeout banner is shown but the transport stream is NOT cancelled when the banner appears. The WS connection and poll loop continue running. The banner is purely cosmetic — it does not stop the underlying resource consumption. |
+| M-3 | **P1** | `screens/monitor.js` | Stage label map (`STAGE_LABELS`) is a static client-side dict keyed on backend stage name strings. If backend adds or renames a stage, the frontend silently falls back to the raw stage key (e.g., `"SCENE_DETECT_V2"`) rather than a friendly label. No fallback humanization (e.g., replace `_` with space, title-case) is applied. |
+| M-4 | **P2** | `screens/monitor.js` | No deep-link validation. If `jobId` in the URL is malformed or references a deleted job, the monitor screen makes a WS connection that immediately errors, falls to polling, polling returns 404, and then the screen sits on the "Connecting…" state indefinitely with no "Job not found" message. |
+| M-5 | **P2** | `screens/monitor.js` | Clip count display (`"N/N clips"`) relies on `normalizePartList` output. If the backend returns an empty parts array mid-render (before any parts are scored), the clip counter shows `"0/0 clips"` which looks like a bug to users rather than "render in progress". |
+
+**Confirmed correct behaviors (NOT bugs):**
+- `el.addEventListener('unmount', () => { unsub(); monitorStore.stop(); })` — cleanup IS implemented. The question is whether `router.js` always dispatches the event.
+
+**Recommended fixes:**
+- **M-1 (P0):** Audit `router.js` to confirm `unmount` is dispatched on the outgoing element for every navigation case. Add a fallback: `window.addEventListener('hashchange', () => { if (!stillMounted) monitorStore.stop(); })`.
+- **M-2 (P1):** When the timeout banner fires, call `monitorStore.stop()` to halt the stream and polling loop.
+- **M-3 (P1):** Add a fallback in the stage label lookup: `STAGE_LABELS[key] ?? key.replace(/_/g, ' ').toLowerCase()`.
+- **M-4 (P2):** On 404 poll response, set store status to a synthetic `"not_found"` and render a friendly "Job not found" empty state with a "Go to Library" CTA.
+
+---
+
+### 24.5 Download Screen (`screens/downloads.js`)
+
+**Current implementation:** Post R4F-A: removed false quality presets, replaced with "Downloads use source quality defaults." helper text. Batch download dispatches directly to backend.
+
+**Problems found:**
+
+| ID | Severity | File:Line | Issue |
+|---|---|---|---|
+| D-1 | **P1** | `screens/downloads.js` | No per-file download progress indication. Downloads are dispatched and the UI shows no progress bar or spinner per file — only a bulk "downloading" state. Large files (multi-GB renders) appear frozen to the user. |
+| D-2 | **P1** | `screens/downloads.js` | No retry on failed download item. If one file in a batch fails, the whole batch shows "failed" with no way to retry just the failed item. |
+| D-3 | **P2** | `screens/downloads.js` | Filename shown in the download list is the raw backend path (e.g., `/tmp/renders/abc123/clip_1.mp4`) rather than a human-readable name based on session title + clip number. |
+| D-4 | **P2** | `screens/downloads.js` | No download history persistence. Closing the tab clears all download state. Users who close and reopen cannot see what was downloaded or re-download without navigating back to Results. |
+
+**Recommended fixes:**
+- **D-1 (P1):** Use `fetch` with `ReadableStream` body to track download progress, or stream via `<a href>` and use the `progress` event from the `Content-Length` header.
+- **D-2 (P1):** Add per-item retry button that re-dispatches only the failed item's download request.
+
+---
+
+### 24.6 Library Screen (`screens/library.js`)
+
+**Current implementation:** Post R4F-A: `_normalizeDisplayTitle()` humanizes YouTube URLs and file paths. Hard cap of 30 history items from backend (`routes/jobs.py:251`). No pagination.
+
+**Problems found:**
+
+| ID | Severity | File:Line | Issue |
+|---|---|---|---|
+| L-1 | **P0** | `routes/jobs.py:251` | Backend `api_jobs_history()` returns `safe_limit = max(1, min(30, ...))` — hard cap of 30 with no pagination. Library screen has no "load more" affordance. Users with >30 renders see a silently truncated list. |
+| L-2 | **P1** | `screens/library.js` | `_normalizeDisplayTitle()` handles YouTube URLs and file paths but not other supported sources (Vimeo, Twitch, direct MP4 links). These display as raw URLs. |
+| L-3 | **P1** | `screens/library.js` | No search or filter in Library. With 30 items visible and a growing render history, finding a specific render requires scrolling the entire list. |
+| L-4 | **P2** | `screens/library.js` | Delete action calls `jobsApi.deleteJob(jobId)` with no undo affordance. Deleting a render is permanent; no confirmation dialog or undo toast is shown. |
+
+**Recommended fixes:**
+- **L-1 (P0):** Add `offset` + `limit` pagination to `api_jobs_history()` in `routes/jobs.py` and implement "Load more" in `library.js`. Remove the hard `safe_limit = 30` cap.
+- **L-4 (P2):** Add a confirmation dialog ("Delete this render? This cannot be undone.") before calling `deleteJob`.
+
+---
+
+### 24.7 Results Screen (`screens/results.js`)
+
+**Current implementation:** Displays best-clip hero, AI scores, full clip list. "View Results →" CTA in green-tinted success banner. Clip download dispatches to download screen. Part → Clip terminology applied globally.
+
+**Problems found:**
+
+| ID | Severity | File:Line | Issue |
+|---|---|---|---|
+| R-1 | **P1** | `screens/results.js` | AI score display is a raw float (e.g., `0.873`). No normalization to a 0-100 scale or qualitative label ("Excellent", "Good", "Fair") — the number is meaningless to non-technical users. |
+| R-2 | **P1** | `screens/results.js` | If the render completed but all AI scores are null (AI Director disabled or failed), the best-clip hero section is blank. No "AI scoring unavailable" fallback state is shown — the section simply disappears. |
+| R-3 | **P2** | `screens/results.js` | No share/export affordance. Users can only download clips locally. No copy-link, no social share, no export-to-cloud option. |
+| R-4 | **P2** | `screens/results.js` | `normalizePartList` is called on every render of the results screen, even when data has not changed. For renders with 20+ clips, this is a non-trivial re-normalization on every state update. |
+
+**Recommended fixes:**
+- **R-1 (P1):** Normalize AI scores to 0-100 (`Math.round(score * 100)`) and add qualitative tier labels (≥80: "Excellent", 60-79: "Good", <60: "Fair").
+- **R-2 (P1):** Add an "AI scoring unavailable" empty state with an icon and explanation when all scores are null.
+
+---
+
+### 24.8 Component Layer
+
+**Problems found:**
+
+| ID | Severity | File:Line | Issue |
+|---|---|---|---|
+| CO-1 | **P1** | `components/part-status-list.js` | `PartItem` component re-renders the entire list when any single clip status changes. No keyed diffing — all DOM nodes are replaced on each update. For renders with 20+ clips, this causes visible flash on status updates. |
+| CO-2 | **P1** | `components/output-card.js` | `OutputCard` does not handle the `cancelled` clip status — falls through to the default case which renders no card at all, silently hiding cancelled clips from the results view. |
+| CO-3 | **P2** | `components/best-clip-hero.js` | Hero card shows the first clip in the scored list. If the AI Director reorders clips (Phase 59C), the hero is correct. But if AI Director is disabled, clips are shown in source order — the "best" label is misleading. |
+| CO-4 | **P2** | `components/nav-rail.js` | Active route detection uses `window.location.hash === item.href`. If the router adds query params or fragments within a route, the active state breaks. |
+
+**Recommended fixes:**
+- **CO-1 (P1):** Implement keyed list rendering: maintain a `Map<clipId, element>` and update/insert/remove individual nodes rather than replacing the entire list.
+- **CO-2 (P1):** Add a `cancelled` case to `OutputCard` that renders a "Cancelled" status chip rather than returning null.
+
+---
+
+### 24.9 API Wrapper Layer (`api/render.js`, `api/jobs.js`, `api/system.js`)
+
+**Problems found:**
+
+| ID | Severity | File:Line | Issue |
+|---|---|---|---|
+| A-1 | **P1** | `api/render.js` | `POST /api/render` has no client-side timeout. A hung backend render submission will leave the create screen in `preparing` phase until the browser's default network timeout (~2 minutes). `PREPARE_TIMEOUT_MS = 45_000` applies to the draft preparation endpoint, not the render submission. |
+| A-2 | **P1** | `api/jobs.js` | `deleteJob(jobId)` does not check if the job is currently running before calling DELETE. Deleting an in-progress job from Library will delete the DB record but leave the render process running — orphaning the FFmpeg subprocess and temp files. |
+| A-3 | **P2** | `api/render.js`, `api/jobs.js` | No request deduplication. If the user clicks "Start render" while a previous request is still in-flight (e.g., slow network), two identical POST requests can be dispatched. The `_generating` flag in `create.js` mitigates this for the render submit, but draft preparation (`_handlePrepare`) has no equivalent guard after the initial abort. |
+| A-4 | **P2** | `api/system.js` | `GET /api/sessions` is polled on the Source screen to show active session count. Polling interval not confirmed — if it matches transport poll (2000ms), this adds a second 2s polling loop layered on top of the job stream poll. |
+
+**Recommended fixes:**
+- **A-1 (P1):** Add an `AbortController` with a 30s timeout to the render submission `fetch` call in `api/render.js`.
+- **A-2 (P1):** In `Library`, before calling `deleteJob`, check job status via `jobsApi.getJob(jobId)` and block deletion if `status` is `queued` or `running`, showing a warning: "Cancel the render before deleting."
+
+---
+
+### 24.10 Performance Concerns
+
+| ID | Severity | Finding |
+|---|---|---|
+| P-1 | **P1** | No virtual scrolling in Library or Results clip list. At 30 items (Library cap) or 20+ clips (Results), all DOM nodes are rendered simultaneously. On low-end hardware this causes jank during scroll. |
+| P-2 | **P1** | `renderSessionStore.sync()` called up to 3× per WS message (see S-1). Each sync triggers all `renderSessionStore` subscribers (render bar re-render). This is a hidden multiplier on UI update cost. |
+| P-3 | **P2** | No asset caching strategy. CSS and JS files are served without cache-busting hashes. A deploy that updates `transport.js` will not invalidate cached copies in the browser until cache TTL expires (default: browser heuristic, typically hours). |
+| P-4 | **P2** | `normalizeJob`, `normalizePartList`, `parseResultPackage` run on every store subscription update. Results screen calls `normalizePartList` on every `monitorStore` mutation even when parts have not changed. |
+
+---
+
+### 24.11 Security Issues (Frontend)
+
+| ID | Severity | Finding | File |
+|---|---|---|---|
+| SEC-1 | **P1** | `innerHTML` used in component rendering without sanitization. If backend returns a job title or stage name containing `<script>` or `<img onerror>`, it is injected directly into the DOM. | `components/*.js`, `screens/*.js` |
+| SEC-2 | **P1** | `_resolve_job_log_path()` in `routes/jobs.py:*` constructs file paths from `payload_json.output_dir` — user-controlled data. Frontend `GET /api/jobs/:id/log` can be used to read arbitrary files if `output_dir` is manipulated. This is a backend issue but the frontend API wrapper exposes the endpoint without any path validation. | `api/jobs.js` |
+| SEC-3 | **P2** | No CSRF protection on mutating API calls (POST /api/render, DELETE /api/jobs/:id). Frontend uses `fetchJson()` which does not add a CSRF token header. | `transport.js:fetchJson` |
+
+**Recommended fixes:**
+- **SEC-1 (P1):** Audit all `innerHTML` assignments. Replace with `textContent` for text-only values; use `DOMPurify` or manual sanitization for HTML that must be rendered.
+- **SEC-3 (P2):** Add a CSRF token (e.g., a cookie-to-header pattern using `X-CSRF-Token`) to all state-mutating requests.
+
+---
+
+### 24.12 Missing Features (Frontend)
+
+| Feature | Priority | Status | Notes |
+|---|---|---|---|
+| SPA catch-all route | **P0** | Missing | Server returns 404 on browser refresh to `/monitor/abc`. `main.py` only serves `index.html` on `GET /`. Fix: add `GET /{path:path}` catch-all that returns `index.html` for non-API, non-static paths. |
+| Pagination in Library | **P0** | Missing | Hard 30-item cap from backend, no "Load more" in frontend. |
+| Job not-found error state | **P1** | Missing | Monitor screen has no "Job not found" state; shows infinite spinner on invalid/deleted job IDs. |
+| Render reconnect after refresh | **P1** | Missing | Refreshing during an active render loses the render bar and requires manual navigation to `/monitor/:jobId`. |
+| Per-clip retry in Downloads | **P1** | Missing | Batch download failure has no per-item retry. |
+| AI score humanization | **P1** | Missing | Raw floats shown; no 0-100 scale or qualitative labels. |
+| Delete confirmation dialog | **P2** | Missing | Library delete is instant and permanent with no confirmation. |
+| Virtual scrolling | **P2** | Missing | Results and Library render all DOM nodes; degrades on low-end hardware with many items. |
+| Cache-busting | **P2** | Missing | No content hash in static asset URLs; deploys may serve stale JS/CSS. |
+| CSRF protection | **P2** | Missing | No CSRF token on mutating requests. |
+
+---
+
+### 24.13 Priority Roadmap
+
+#### P0 — Critical (production blockers)
+
+| ID | Item | File(s) |
+|---|---|---|
+| P0-A | Fix server WS break condition to include `interrupted` and `completed_with_errors` | `routes/jobs.py:411` |
+| P0-B | Add SPA catch-all route to serve `index.html` for all non-API paths | `app/main.py` |
+| P0-C | Add Library pagination — remove 30-item hard cap | `routes/jobs.py:251`, `screens/library.js` |
+| P0-D | Audit `router.js` unmount dispatch to guarantee `monitorStore.stop()` is always called | `assets/js/router.js`, `screens/monitor.js` |
+
+#### P1 — High (significant UX degradation or resource waste)
+
+| ID | Item | File(s) |
+|---|---|---|
+| P1-A | Stop transport stream when timeout banner fires | `screens/monitor.js` |
+| P1-B | Deduplicate `renderSessionStore.sync()` — call once per tick not 3× | `store/monitor.js` |
+| P1-C | Add client-side URL validation before `_handlePrepare()` | `screens/create.js` |
+| P1-D | Fix AbortController race in `_handlePrepare()` post-timeout success | `screens/create.js` |
+| P1-E | Add `innerHTML` sanitization across all component renderers | `components/*.js`, `screens/*.js` |
+| P1-F | Add render submission timeout via AbortController | `api/render.js` |
+| P1-G | Block `deleteJob` if job is active; show cancel-first warning | `screens/library.js`, `api/jobs.js` |
+| P1-H | Add per-clip retry in Downloads screen | `screens/downloads.js` |
+| P1-I | AI score humanization (0-100 + qualitative label) | `screens/results.js` |
+| P1-J | AI score null fallback state in Results | `screens/results.js` |
+| P1-K | Keyed list rendering in `PartItem` to prevent full-list re-render flash | `components/part-status-list.js` |
+| P1-L | Add `cancelled` case to `OutputCard` | `components/output-card.js` |
+| P1-M | Stage label fallback humanization (replace `_`, title-case) | `screens/monitor.js` |
+
+#### P2 — Medium (polish and scalability)
+
+| ID | Item | File(s) |
+|---|---|---|
+| P2-A | Persist `{ jobId, status }` in `sessionStorage` for render bar reconnect | `store/render-session.js` |
+| P2-B | WS reconnect with exponential backoff | `transport.js` |
+| P2-C | Add "Job not found" state to Monitor screen | `screens/monitor.js` |
+| P2-D | Persist last-entered URL in `sessionStorage` across page reloads | `screens/create.js` |
+| P2-E | Add delete confirmation dialog in Library | `screens/library.js` |
+| P2-F | Virtual scrolling for Library and Results clip list | `screens/library.js`, `screens/results.js` |
+| P2-G | Content-hash cache-busting for static assets | `index.html`, build process |
+| P2-H | CSRF token on mutating requests | `transport.js:fetchJson`, `app/main.py` |
+| P2-I | `createStore()` middleware layer for cross-cutting concerns | `assets/js/store/` |
+| P2-J | `_normalizeDisplayTitle()` extended to cover Vimeo, Twitch, direct MP4 URLs | `screens/library.js` |
 - No store schema changes
 
 ### Status
