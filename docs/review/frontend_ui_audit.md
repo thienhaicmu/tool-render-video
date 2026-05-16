@@ -3173,3 +3173,67 @@ Displayed in `.convExplain` below the AI response — muted, italic, unobtrusive
 - `editStyle` composite is overly binary (once in 'viral' bucket, stays there unless signals reverse)
 - Context resolution uses regex patterns — "just the very beginning of the intro" may not match
 - Vague power resolution requires taste confidence (≥8 signals) — new users always get clarification
+
+---
+
+## Section 31 — P3.4: Adaptive Runtime Intelligence (2026-05-16)
+
+**Branch:** `feature/ai-output-upgrade`
+**Files changed:** `editor-runtime-intelligence.js` (new), `render-ui.js`, `runtime.css`, `index.html`
+
+### What Changed
+
+Before P3.4, `RenderAiRuntime` showed the same editorial messages for every creator regardless of their taste profile. "Strong hook from the first frame — this one is a keeper." was served identically to a viral creator expecting aggressive hooks and a cinematic creator preferring narrative pacing. Completion intelligence used generic tier text with no creator context.
+
+P3.4 adds `RuntimeIntelligence` — a new lightweight IIFE that bridges `CreatorMemory.getTasteModel()` into the render runtime. Three functions, no DOM access, no invented signals.
+
+### RuntimeIntelligence Module (P3.4-A)
+
+New file: `editor-runtime-intelligence.js` — `window.RuntimeIntelligence` IIFE.
+
+**`getEvolutionContext(pNo, pct, tier)`**
+- Returns `{ why: string, tasteNote: string|null }`
+- `why` is the main editorial message — taste-adapted when `taste.confident`
+- `tasteNote` is a short italic annotation (e.g. "Aligned with your high-energy editing profile.") or null
+- When taste not confident (< 8 signals): returns generic messages identical to prior behavior
+
+**`getConcerns(parts)`**
+- Returns `[{ type, label, msg }]` — at most 2
+- Detects two real-signal conditions:
+  - **Hook risk**: first clip scored < 45% AND creator `hook === 'aggressive'`
+  - **Pacing signal**: batch avg < 45% (≥3 clips) AND creator `editStyle === 'viral'` or `pace === 'fast'`
+- Returns empty array when `taste.confident` is false — no hallucinated concerns
+
+**`getCompletionNarrative(avgPct, topPct, completedCount)`**
+- Returns `{ summaryMsg, bits, tasteNote }`
+- `summaryMsg` is creator-aware: "High-energy output — signal density aligns with your viral editing profile." vs. "Output follows your cinematic rhythm — narrative signal is strong."
+- `bits` array for the completion summary line — includes "high-energy profile matched" for confident creators
+- `tasteNote` is an italic footer in the completion card — shown only when taste is confident
+
+### Evolution Feed Upgrades (P3.4-D)
+
+`_updateEvolutionFeed()` now calls `RuntimeIntelligence.getEvolutionContext()` instead of the static `_evolEditorialMsg()` pool. Taste-adaptive "why" messages appear per clip. When tasteNote is non-null, a `.p34EvolTaste` span renders below the main message — italic, muted, unobtrusive.
+
+Generic `_evolEditorialMsg()` function removed.
+
+### Concern System (P3.4-E)
+
+`_renderConcernItems(parts)` is called from `update()` after each render heartbeat. Concerns render as `.p34ConcernItem` entries appended to `rc_ai_evolution_list` (after clip items). Deduplication: `_lastConcernHash` prevents re-renders when concerns haven't changed. Cleared by `reset()`.
+
+Visual design: amber left-border, muted amber label in small caps, standard body text. Non-alarmist — "Retention Risk" / "Pacing Signal", not "Warning" / "Error".
+
+### Completion Intelligence Upgrade (P3.4-G)
+
+`showCompletionIntelligence()` now calls `RuntimeIntelligence.getCompletionNarrative()`. Taste-aware `summaryMsg` replaces generic text. `bits` array replaces hardcoded completion line. `.p34TasteNote` div added below `.rcAiCompSummary` when creator has taste data.
+
+### Failure Safety (P3.4-I)
+
+- Every `RuntimeIntelligence` call is wrapped in `typeof RuntimeIntelligence !== 'undefined'` — if the module fails to load, `RenderAiRuntime` falls back to prior static messages
+- `getConcerns()` returns `[]` when `taste.confident` is false — no intelligence hallucinated for new creators
+- `getEvolutionContext()` returns identical messages to prior behavior when taste is not confident
+
+### What Remains Weak
+
+- Concern system has no "resolved" state — a concern stays visible until cleared by the next hash change or reset
+- No hook_score or motion_score available — all scoring is `viral_score` based
+- `getCompletionNarrative` compares scores against taste expectations (high-energy vs. cinematic) but can't compare against prior render history (no historical avg per creator)

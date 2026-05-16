@@ -4272,26 +4272,6 @@ const RenderAiRuntime = (() => {
     export:   'Delivery complete. Your clips are ready to review and export.',
   };
 
-  function _evolEditorialMsg(pNo, tier) {
-    const high = [
-      'Strong hook from the first frame — this one is a keeper.',
-      'Retention signal is above threshold — cleared the bar.',
-      'Pacing and hook both hit — this clip will earn attention.',
-    ];
-    const mid = [
-      'Solid clip — good bones, room to sharpen the hook.',
-      'Mid-tier signal — watchable, not yet viral.',
-      'Decent retention — worth reviewing in the gallery.',
-    ];
-    const low = [
-      'Lower signal — may not crack the top picks.',
-      'Below threshold — deprioritised in the output gallery.',
-      'Consider whether the source moment has a strong hook.',
-    ];
-    const pool = tier === 'high' ? high : tier === 'mid' ? mid : low;
-    return pool[Number(pNo || 0) % pool.length];
-  }
-
   let _mounted                = false;
   let _lastStageIdx           = -1;
   let _reasonItems            = [];
@@ -4302,6 +4282,7 @@ const RenderAiRuntime = (() => {
   let _maxKnownTotal          = 0;        // P2.9.1-B: stable denominator
   let _lastConfidenceLevel    = '';       // P2.9.1-B: monotonic advance only
   const _transientCards       = new Map(); // P2.9.1-A: partNo → {elevated,causal,expiresAt}
+  let _lastConcernHash        = '';       // P3.4: dedup concern renders
 
   function mountPanels() {
     if (_mounted) return;
@@ -4361,6 +4342,7 @@ const RenderAiRuntime = (() => {
     }
     _updateProcessCard(newIdx, isFailed);
     _updateEvolutionFeed(parts);
+    _renderConcernItems(parts);
   }
 
   function _updateProcessCard(idx, isFailed) {
@@ -4425,8 +4407,12 @@ const RenderAiRuntime = (() => {
       const rawSc = p.viral_score != null ? Number(p.viral_score) : null;
       const pct   = rawSc !== null ? Math.round(rawSc * 100) : null;
       const tier  = pct !== null ? (pct >= 75 ? 'high' : pct >= 50 ? 'mid' : 'low') : 'low';
-      const why   = _evolEditorialMsg(pNo, tier);
+      // P3.4: Taste-aware editorial context
+      const ctx   = (typeof RuntimeIntelligence !== 'undefined')
+        ? RuntimeIntelligence.getEvolutionContext(pNo, pct, tier)
+        : { why: tier === 'high' ? 'Strong hook from the first frame — this one is a keeper.' : tier === 'mid' ? 'Solid clip — good bones, room to sharpen the hook.' : 'Lower signal — may not crack the top picks.', tasteNote: null };
       const scoreHtml = pct !== null ? '<span class="p28EvolScore">' + pct + '%</span>' : '';
+      const tasteHtml = ctx.tasteNote ? '<span class="p34EvolTaste">' + esc(ctx.tasteNote) + '</span>' : '';
       const row = document.createElement('div');
       row.className = 'p28EvolItem tier-' + tier;
       row.innerHTML =
@@ -4436,14 +4422,44 @@ const RenderAiRuntime = (() => {
             '<span class="p28EvolName">Clip ' + esc(String(pNo)) + '</span>' +
             scoreHtml +
           '</div>' +
-          '<div class="p28EvolWhy">' + esc(why) + '</div>' +
+          '<div class="p28EvolWhy">' + esc(ctx.why) + tasteHtml + '</div>' +
         '</div>';
       listEl.insertBefore(row, listEl.firstChild);
-      while (listEl.children.length > 6) listEl.removeChild(listEl.lastChild);
+      // Keep max 6 clip items; concern items are excluded from count
+      const clipItems = listEl.querySelectorAll('.p28EvolItem');
+      while (clipItems.length > 6) listEl.removeChild(clipItems[clipItems.length - 1]);
       _syncOutputCard(pNo, tier);
     });
     // P2.9-F: Apply confidence evolution to best card after each batch
     _applyConfidenceEvolution(done.length, parts.length);
+  }
+
+  // P3.4: Render editorial concern items inside the evolution list.
+  // Concerns are taste-aware and based on real signals only.
+  function _renderConcernItems(parts) {
+    const listEl = document.getElementById('rc_ai_evolution_list');
+    if (!listEl) return;
+    const concerns = (typeof RuntimeIntelligence !== 'undefined')
+      ? RuntimeIntelligence.getConcerns(parts) : [];
+    const hash = concerns.map(c => c.type).join(',');
+    if (hash === _lastConcernHash) return;
+    _lastConcernHash = hash;
+    listEl.querySelectorAll('.p34ConcernItem').forEach(el => el.remove());
+    if (!concerns.length) return;
+    const feedEl = document.getElementById('rc_ai_evolution_feed');
+    if (feedEl) feedEl.classList.remove('hiddenView');
+    concerns.forEach(c => {
+      const el = document.createElement('div');
+      el.className = 'p34ConcernItem';
+      el.dataset.concernType = c.type;
+      el.innerHTML =
+        '<div class="p34ConcernSignal"></div>' +
+        '<div class="p34ConcernBody">' +
+          '<div class="p34ConcernLabel">' + esc(c.label) + '</div>' +
+          '<div class="p34ConcernMsg">' + esc(c.msg) + '</div>' +
+        '</div>';
+      listEl.appendChild(el);
+    });
   }
 
   function _pushReason(stageKey) {
@@ -4551,11 +4567,16 @@ const RenderAiRuntime = (() => {
     const tier     = avgPct >= 70 ? 'high' : avgPct >= 50 ? 'mid' : 'low';
     const topTier  = topPct >= 70 ? 'high' : topPct >= 50 ? 'mid' : 'low';
     const totalAll = allParts.length || Number(summary?.total_parts || 0);
-    const summaryMsg = avgPct >= 70
-      ? 'Strong output batch — average viral signal is above retention threshold.'
-      : avgPct >= 50
-      ? 'Solid batch with room to optimize — hook selection could be refined.'
-      : 'Output complete — consider re-scoring with tighter clip selection.';
+
+    // P3.4: Taste-aware completion narrative
+    const narrative = (typeof RuntimeIntelligence !== 'undefined')
+      ? RuntimeIntelligence.getCompletionNarrative(avgPct, topPct, completed.length)
+      : { summaryMsg: avgPct >= 70 ? 'Strong output batch — average viral signal is above retention threshold.' : avgPct >= 50 ? 'Solid batch with room to optimize — hook selection could be refined.' : 'Output complete — consider re-scoring with tighter clip selection.', bits: [], tasteNote: null };
+
+    const tasteNoteHtml = narrative.tasteNote
+      ? '<div class="p34TasteNote">' + esc(narrative.tasteNote) + '</div>'
+      : '';
+
     insightEl.classList.remove('hiddenView');
     insightEl.innerHTML =
       '<div class="rcAiCompCard">' +
@@ -4571,7 +4592,8 @@ const RenderAiRuntime = (() => {
           '<span class="rcAiCompLabel">Clips Rendered</span>' +
           '<span class="rcAiCompCount">' + completed.length + ' / ' + totalAll + '</span>' +
         '</div>' +
-        '<div class="rcAiCompSummary">' + esc(summaryMsg) + '</div>' +
+        '<div class="rcAiCompSummary">' + esc(narrative.summaryMsg) + '</div>' +
+        tasteNoteHtml +
       '</div>';
 
     // P2.9-E: Trigger cinematic completion arrival moment once
@@ -4586,11 +4608,15 @@ const RenderAiRuntime = (() => {
         msgEl.textContent = 'AI finished shaping your output.';
       }
       if (summaryEl) {
-        const bits = [];
-        if (topPct >= 75)       bits.push('Best clip ' + topPct + '% — strong hook');
-        else if (topPct >= 55)  bits.push('Top clip scored ' + topPct + '%');
-        if (completed.length)   bits.push(completed.length + ' clips AI-scored');
-        bits.push('avg ' + avgPct + '%');
+        // P3.4: Use taste-aware bits if available, else build fallback
+        const bits = narrative.bits.length ? narrative.bits : (() => {
+          const b = [];
+          if (topPct >= 75)      b.push('Best clip ' + topPct + '% — strong hook');
+          else if (topPct >= 55) b.push('Top clip scored ' + topPct + '%');
+          if (completed.length)  b.push(completed.length + ' clips AI-scored');
+          b.push('avg ' + avgPct + '%');
+          return b;
+        })();
         summaryEl.textContent = bits.join(' · ');
       }
 
@@ -4609,6 +4635,7 @@ const RenderAiRuntime = (() => {
     _maxKnownTotal          = 0;       // P2.9.1-B
     _lastConfidenceLevel    = '';      // P2.9.1-B
     _transientCards.clear();           // P2.9.1-A
+    _lastConcernHash        = '';      // P3.4
     // Clear P2.9 confidence state from any lingering best card
     const bestCard = document.querySelector('.clipCard.isBestClip');
     if (bestCard) delete bestCard.dataset.p29Confidence;
@@ -4623,6 +4650,7 @@ const RenderAiRuntime = (() => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = '';
     });
+    // P3.4: concern items live inside evolution list (cleared above)
     const insightEl = document.getElementById('rc_benchmark_insight');
     if (insightEl) { insightEl.classList.add('hiddenView'); insightEl.innerHTML = ''; }
   }
