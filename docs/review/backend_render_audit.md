@@ -8302,3 +8302,34 @@ Old callers that only read `items` (e.g. the previous `_load()` function) contin
 
 - `GET /api/jobs` (`api_list_jobs`) still calls `list_jobs()` (no LIMIT) — separate endpoint, not in scope
 - Library has no server-side filtered pagination (e.g. `?status=failed`) — all filtering is client-side on the loaded set. Acceptable for the current desktop use case.
+
+---
+
+### 2026-05-16 — Cleanup Lifecycle Hardening
+
+**Implemented:**
+
+- `backend/app/services/maintenance.py` (updated) — added `prune_render_temp_dirs(temp_dir)`; scans TEMP_DIR for UUID-named subdirs, queries DB to detect active jobs, deletes only non-active dirs with full logging; added `logging` and `import re` imports; added log lines to `prune_preview_dirs`
+- `backend/app/routes/render.py` (updated) — added `import os`, `import time`; added `_SESSION_TTL_HOURS` env-configurable constant (default 6 h); `_save_session()` now stamps `created_at: time.time()` on every session; added `evict_stale_preview_sessions()` that evicts from `_PREVIEW_SESSIONS` dict and calls `_cleanup_preview_session()` with logging
+- `backend/app/main.py` (updated) — added `import threading`; imports `prune_render_temp_dirs`; startup event now calls `prune_render_temp_dirs(TEMP_DIR)`; new `_run_periodic_cleanup()` daemon thread (`CLEANUP_INTERVAL_SEC` env, default 1800 s) calls `evict_stale_preview_sessions`, `prune_preview_dirs`, `prune_render_temp_dirs` every 30 min
+- `backend/app/services/db.py` (updated) — added `delete_job(job_id)`; explicitly deletes `job_parts` then `jobs` rows in one transaction
+- `backend/app/routes/jobs.py` (updated) — added `import logging`; added `TEMP_DIR` to config import; added `delete_job` to DB import; new `DELETE /api/jobs/{job_id}` endpoint: rejects running/queued jobs (409), resolves and validates output file paths against allowed roots (CHANNELS_DIR, TEMP_DIR), deletes safe files with per-file logging, then deletes DB record
+
+**Cleanup lifecycle:**
+1. **Preview sessions (memory):** `_save_session` stamps `created_at`; periodic thread calls `evict_stale_preview_sessions()` every 30 min and removes sessions older than `PREVIEW_SESSION_TTL_HOURS` (default 6 h); `_cleanup_preview_session` deletes the work dir and logs the action
+2. **Preview dirs (disk):** `prune_preview_dirs` runs at startup and every 30 min; removes dirs under `TEMP_DIR/preview/` older than 6 h by mtime
+3. **Render temp dirs (disk):** `prune_render_temp_dirs` runs at startup and every 30 min; scans `TEMP_DIR` for UUID-named subdirs; checks DB status — skips `running`/`queued` jobs; removes all others (completed, failed, cancelled, orphaned)
+4. **Job output files (on demand):** `DELETE /api/jobs/{job_id}` resolves each `job_parts.output_file` path, validates it is inside `CHANNELS_DIR` or `TEMP_DIR`, deletes with logging; then removes the DB record
+
+**Safety checks:**
+- `prune_render_temp_dirs` only removes dirs whose name matches UUID format; non-UUID dirs (`preview/`, `downloads/`, `tmp/`) are always skipped
+- `prune_render_temp_dirs` queries DB before deleting; active-status jobs (`running`, `queued`) are kept unconditionally
+- DELETE endpoint resolves all paths with `Path.resolve()` and checks `is_relative_to()` against allowed roots before any `unlink()`; paths outside roots are skipped with a warning log
+- All cleanup operations catch exceptions individually and log warnings; one failure does not block remaining cleanup
+
+**Intentionally NOT deleted:**
+- `render_report.xlsx` and other non-part ancillary files in output directories (not tracked in `job_parts`)
+- Render temp dirs for active (running/queued) jobs
+- Output files whose paths resolve outside `CHANNELS_DIR` / `TEMP_DIR`
+- Job log files (managed by `prune_job_logs` separately with its own retention policy)
+- Per-part intermediate files during render (controlled by per-job `cleanup_temp_files` payload flag in render_pipeline.py — not changed)

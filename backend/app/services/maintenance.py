@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+import logging
+import re
 import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+logger = logging.getLogger("app.maintenance")
+
+# Matches standard UUID4 format used for job_id values.
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
+_ACTIVE_STATUSES = frozenset({"running", "queued"})
 
 
 def prune_preview_dirs(temp_dir: Path, max_age_hours: int = 6):
@@ -19,12 +30,47 @@ def prune_preview_dirs(temp_dir: Path, max_age_hours: int = 6):
             mtime = datetime.fromtimestamp(d.stat().st_mtime, tz=timezone.utc)
             if mtime < cutoff:
                 shutil.rmtree(d, ignore_errors=True)
+                logger.info("maintenance: removed stale preview dir %s (age > %dh)", d.name, max_age_hours)
                 removed += 1
             else:
                 kept += 1
         except Exception:
             pass
     return {"removed": removed, "kept": kept}
+
+
+def prune_render_temp_dirs(temp_dir: Path) -> dict:
+    """Remove render temp dirs for non-active jobs.
+
+    Scans TEMP_DIR for UUID-named subdirectories (one per job). Skips dirs for
+    jobs that are still running or queued. Deletes dirs for finished, failed,
+    cancelled, or orphaned jobs (not found in DB).
+
+    Directories whose names are NOT UUID-format (e.g. preview/, downloads/, tmp/)
+    are always left untouched.
+    """
+    from app.services.db import get_job
+    removed = kept = skipped = 0
+    if not temp_dir.exists():
+        return {"removed": removed, "kept": kept, "skipped": skipped}
+    for d in temp_dir.iterdir():
+        if not d.is_dir():
+            continue
+        if not _UUID_RE.match(d.name):
+            skipped += 1
+            continue
+        job = get_job(d.name)
+        if job and str(job.get("status") or "").lower() in _ACTIVE_STATUSES:
+            kept += 1  # active job — never touch its work dir
+            continue
+        try:
+            shutil.rmtree(d, ignore_errors=True)
+            logger.info("maintenance: removed render temp dir job_id=%s", d.name)
+            removed += 1
+        except Exception as exc:
+            logger.warning("maintenance: failed to remove render temp dir job_id=%s: %s", d.name, exc)
+            kept += 1
+    return {"removed": removed, "kept": kept, "skipped": skipped}
 
 
 def prune_job_logs(channels_dir: Path, keep_last: int = 30, older_than_days: int = 10):

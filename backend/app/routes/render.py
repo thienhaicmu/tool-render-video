@@ -1,8 +1,10 @@
 
 import json
+import os
 import re
 import shutil
 import threading
+import time
 import traceback
 import uuid
 import logging
@@ -69,12 +71,16 @@ def get_ai_diagnostics():
 #           NOT written to error.log
 # ─────────────────────────────────────────────────────────────────────────────
 
-_PREVIEW_SESSIONS: dict[str, dict] = {}  # session_id -> {video_path, duration, title, work_dir}
+_PREVIEW_SESSIONS: dict[str, dict] = {}  # session_id -> {video_path, duration, title, work_dir, created_at}
 _PREVIEW_DIR = TEMP_DIR / "preview"
+# Sessions idle longer than this are evicted from memory and their dirs pruned from disk.
+_SESSION_TTL_HOURS: int = int(os.getenv("PREVIEW_SESSION_TTL_HOURS", "6"))
 
 
 def _save_session(session_id: str, data: dict):
     """Persist session to memory + JSON file (survives server restart)."""
+    if "created_at" not in data:
+        data = {**data, "created_at": time.time()}
     _PREVIEW_SESSIONS[session_id] = data
     try:
         meta_path = Path(data["work_dir"]) / "session.json"
@@ -106,8 +112,26 @@ def _cleanup_preview_session(session_id: str):
     if preview_dir.exists():
         try:
             shutil.rmtree(preview_dir, ignore_errors=True)
+            logger.info("cleanup: removed preview session dir session_id=%s", session_id)
         except Exception:
             pass
+
+
+def evict_stale_preview_sessions() -> int:
+    """Evict in-memory sessions older than _SESSION_TTL_HOURS. Returns evicted count.
+
+    Called periodically by the background cleanup thread in main.py so that
+    abandoned sessions do not accumulate in the _PREVIEW_SESSIONS dict.
+    """
+    cutoff = time.time() - _SESSION_TTL_HOURS * 3600
+    stale = [
+        sid for sid, s in list(_PREVIEW_SESSIONS.items())
+        if s.get("created_at", 0) < cutoff
+    ]
+    for sid in stale:
+        logger.info("cleanup: evicting stale preview session session_id=%s", sid)
+        _cleanup_preview_session(sid)
+    return len(stale)
 
 
 def _emit_request_event(

@@ -1,15 +1,18 @@
 
 import asyncio
 import json
+import logging
 import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_parts_bulk, get_job
+from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_parts_bulk, get_job, delete_job
 from app.services.maintenance import prune_job_logs
-from app.core.config import CHANNELS_DIR
+from app.core.config import CHANNELS_DIR, TEMP_DIR
+
+logger = logging.getLogger("app.jobs")
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -442,3 +445,67 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
 @router.post("/cleanup/logs")
 def api_cleanup_logs(keep_last: int = 30, older_than_days: int = 10):
     return prune_job_logs(CHANNELS_DIR, keep_last=keep_last, older_than_days=older_than_days)
+
+
+@router.delete("/{job_id}")
+def delete_job_endpoint(job_id: str, delete_files: bool = True):
+    """Delete a completed/failed/cancelled job and optionally its output files.
+
+    Output files are only deleted when their resolved path is inside an allowed
+    root (CHANNELS_DIR or TEMP_DIR). Files outside those roots are skipped with
+    a warning log — they are never deleted.
+    """
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    status = (row.get("status") or "").lower()
+    if status in ("running", "queued"):
+        raise HTTPException(status_code=409, detail="Cannot delete a running or queued job")
+
+    deleted_files = 0
+    skipped_files = 0
+
+    if delete_files:
+        _safe_roots = tuple(
+            r.resolve() for r in [CHANNELS_DIR, TEMP_DIR]
+            if r.exists()
+        )
+        parts = list_job_parts(job_id)
+        for part in parts:
+            out = str(part.get("output_file") or "").strip()
+            if not out:
+                continue
+            try:
+                p = Path(out).resolve()
+            except Exception:
+                skipped_files += 1
+                continue
+            if not any(p == r or p.is_relative_to(r) for r in _safe_roots):
+                logger.warning(
+                    "delete_job: skipping file outside allowed roots job_id=%s path=%s",
+                    job_id, p,
+                )
+                skipped_files += 1
+                continue
+            try:
+                p.unlink(missing_ok=True)
+                logger.info("delete_job: removed output file job_id=%s path=%s", job_id, p)
+                deleted_files += 1
+            except Exception as exc:
+                logger.warning(
+                    "delete_job: failed to remove file job_id=%s path=%s: %s",
+                    job_id, p, exc,
+                )
+                skipped_files += 1
+
+    delete_job(job_id)
+    logger.info(
+        "delete_job: removed job from DB job_id=%s deleted_files=%d skipped_files=%d",
+        job_id, deleted_files, skipped_files,
+    )
+    return {
+        "job_id": job_id,
+        "deleted": True,
+        "deleted_files": deleted_files,
+        "skipped_files": skipped_files,
+    }

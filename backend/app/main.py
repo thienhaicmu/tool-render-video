@@ -5,9 +5,10 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 import os
 import logging
+import threading
 from app.services.db import init_db
 from app.services.channel_service import ensure_channel
-from app.services.maintenance import prune_job_logs, prune_preview_dirs
+from app.services.maintenance import prune_job_logs, prune_preview_dirs, prune_render_temp_dirs
 from app.core.config import APP_DATA_DIR, CHANNELS_DIR, TEMP_DIR
 from app.routes.channels import router as channels_router
 from app.routes.download import router as download_router
@@ -117,6 +118,30 @@ else:
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+_CLEANUP_INTERVAL_SEC: int = int(os.getenv("CLEANUP_INTERVAL_SEC", "1800"))  # default 30 min
+_cleanup_logger = logging.getLogger("app.cleanup")
+
+
+def _run_periodic_cleanup():
+    """Periodic background cleanup: evict stale preview sessions + prune disk dirs."""
+    import time as _time
+    while True:
+        _time.sleep(_CLEANUP_INTERVAL_SEC)
+        try:
+            from app.routes.render import evict_stale_preview_sessions
+            evicted = evict_stale_preview_sessions()
+            result_preview = prune_preview_dirs(TEMP_DIR, max_age_hours=6)
+            result_render = prune_render_temp_dirs(TEMP_DIR)
+            _cleanup_logger.info(
+                "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d",
+                evicted,
+                result_preview.get("removed", 0),
+                result_render.get("removed", 0),
+            )
+        except Exception as exc:
+            _cleanup_logger.warning("periodic cleanup error: %s", exc)
+
+
 @app.on_event("startup")
 def startup():
     _configure_access_log_filter()
@@ -127,9 +152,11 @@ def startup():
     older_days = int(os.getenv("LOG_KEEP_DAYS", "10"))
     prune_job_logs(CHANNELS_DIR, keep_last=keep_last, older_than_days=older_days)
     prune_preview_dirs(TEMP_DIR, max_age_hours=6)
+    prune_render_temp_dirs(TEMP_DIR)  # clean leftover render temp dirs from previous run
     # Re-queue any render jobs that were interrupted by a previous server restart
     recover_pending_render_jobs()
     start_warmup()  # pre-download Whisper models + check deps in background
+    threading.Thread(target=_run_periodic_cleanup, daemon=True, name="cleanup-loop").start()
 
 
 @app.get("/api/warmup/status")

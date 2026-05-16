@@ -1256,6 +1256,17 @@ def update_job_progress(job_id: str, stage: str, progress_percent: int, message:
     conn.close()
 
 
+def delete_job(job_id: str) -> None:
+    """Permanently delete a job and all its parts from the database."""
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM job_parts WHERE job_id = ?", (job_id,))
+        conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def upsert_job_part(job_id: str, part_no: int, part_name: str, status: str,
                     progress_percent: int = 0, start_sec: float = 0, end_sec: float = 0,
                     duration: float = 0, viral_score: float = 0, motion_score: float = 0,
