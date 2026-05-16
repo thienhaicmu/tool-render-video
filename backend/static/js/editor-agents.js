@@ -220,8 +220,8 @@ window.EditorAgents = (() => {
   // Assembles signals from live data sources.
   // parts: optional array of render parts (for Viral Agent).
   function buildSignals(parts) {
-    const scene  = (typeof EditorSceneIntelligence  !== 'undefined') ? EditorSceneIntelligence.getLatest()     : {};
-    const review = (typeof EditorReviewIntelligence !== 'undefined') ? EditorReviewIntelligence.getReviewData() : null;
+    const scene  = (typeof EditorSceneIntelligence  !== 'undefined') ? (EditorSceneIntelligence.getLatest()     || {}) : {};
+    const review = (typeof EditorReviewIntelligence !== 'undefined') ? (EditorReviewIntelligence.getReviewData() || null) : null;
     const taste  = (typeof CreatorMemory            !== 'undefined') ? CreatorMemory.getTasteModel()            : null;
     return {
       markers:  scene.markers  || [],
