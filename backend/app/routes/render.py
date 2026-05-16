@@ -717,9 +717,16 @@ def create_render_batch(payload: RenderRequest):
                 message=f"Batch failed: {exc}",
             )
 
-    submitted = submit_job(batch_id, _run_batch)
-    if not submitted:
-        raise HTTPException(status_code=409, detail="Render batch is already running")
+    # The batch coordinator is a supervisor, not a render worker: it submits
+    # child jobs and waits for each one — it does no CPU/GPU work itself.
+    # Running it via submit_job() would occupy a job_manager slot, causing
+    # deadlock when MAX_CONCURRENT_JOBS=1 (coordinator holds the only slot;
+    # no slot is free for children to be dispatched).
+    # A daemon thread avoids this: the coordinator is never in _active_job_ids,
+    # so children submitted via submit_job() can be dispatched at any concurrency
+    # level. All FFmpeg-level limits (JOB_SEMAPHORE, MAX_CONCURRENT_JOBS) still
+    # apply to each child through the normal submit_job path.
+    threading.Thread(target=_run_batch, daemon=True, name=f"batch-{batch_id[:8]}").start()
     return {"batch_id": batch_id, "job_ids": child_job_ids, "count": len(urls), "status": "queued"}
 
 
