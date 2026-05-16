@@ -2284,3 +2284,192 @@
    END OF P3.4 — ADAPTIVE RUNTIME INTELLIGENCE
    ======================================================= */
 
+/* =======================================================
+   UX-R1 — RUNTIME CENTER STAGE RE-ARCHITECTURE
+   Promotes AI orchestration to hero zone.
+   Demotes rdCard to compact status strip.
+   All additions — zero removals from prior phases.
+   ======================================================= */
+
+/* ── Hero zone ─────────────────────────────────────────── */
+.uxr1AiHero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 22px 16px;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  overflow: hidden;
+}
+
+/* Left accent bar — pulses during active render */
+.uxr1AiHero::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, #a78bfa 0%, #7c3aed 100%);
+  border-radius: 0 2px 2px 0;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+#render_active_panel[data-render-state="running"] .uxr1AiHero::before {
+  opacity: 1;
+  animation: uxr1HeroEdge 2.4s ease-in-out infinite;
+}
+
+@keyframes uxr1HeroEdge {
+  0%, 100% { opacity: 0.55; }
+  50%       { opacity: 1;    }
+}
+
+/* ── Stage row ──────────────────────────────────────────── */
+.uxr1HeroStage {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.uxr1StageIcon {
+  font-size: 15px;
+  color: rgba(167, 139, 250, 0.80);
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: color 0.3s ease;
+}
+
+#render_active_panel[data-render-state="running"] .uxr1StageIcon {
+  color: #a78bfa;
+  animation: uxr1IconPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes uxr1IconPulse {
+  0%, 100% { opacity: 0.70; }
+  50%       { opacity: 1;    }
+}
+
+.uxr1StageBody {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.uxr1StageLabel {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.90);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uxr1StageMsg {
+  font-size: 12.5px;
+  color: rgba(255,255,255,0.44);
+  line-height: 1.4;
+}
+
+/* ── Concern items ──────────────────────────────────────── */
+.uxr1Concerns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.uxr1ConcernItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-left: 2px solid rgba(167, 139, 250, 0.35);
+  background: rgba(167, 139, 250, 0.04);
+  border-radius: 0 4px 4px 0;
+  animation: uxr1ConcernIn 0.28s ease both;
+}
+
+@keyframes uxr1ConcernIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+.uxr1ConcernLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(167, 139, 250, 0.75);
+  font-weight: 600;
+}
+
+.uxr1ConcernMsg {
+  font-size: 12.5px;
+  color: rgba(255,255,255,0.58);
+  line-height: 1.4;
+}
+
+/* ── Completion fade ────────────────────────────────────── */
+#render_active_panel[data-render-state="complete"] .uxr1AiHero {
+  opacity: 0.80;
+  transition: opacity 0.6s ease;
+}
+
+/* ── rdCard demotion — compact status strip ─────────────── */
+/* Higher specificity than P2.8 .rdCard alone — wins cleanly */
+#render_active_panel > .rdCard {
+  padding: 9px 18px 8px;
+  background: rgba(255,255,255,0.025);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  flex-shrink: 0;
+}
+
+/* Suppress rdCard ::before glow during running */
+#render_active_panel[data-render-state="running"] > .rdCard::before {
+  opacity: 0 !important;
+}
+
+/* Suppress rdCard completion animation — hero owns the moment */
+#render_active_panel[data-render-state="complete"] > .rdCard {
+  animation: none !important;
+}
+
+/* ── Log strip recede during active render ──────────────── */
+#render_active_panel[data-render-state="running"] .rcLogStrip {
+  opacity: 0.60;
+  transition: opacity 0.4s ease;
+}
+
+/* ── Responsive: 1366px ─────────────────────────────────── */
+@media (max-width: 1366px) {
+  .uxr1AiHero {
+    padding: 14px 18px 12px;
+  }
+  .uxr1StageLabel {
+    font-size: 16px;
+  }
+}
+
+/* ── Responsive: 1024px ─────────────────────────────────── */
+@media (max-width: 1024px) {
+  .uxr1AiHero {
+    padding: 12px 14px 10px;
+    gap: 8px;
+  }
+  .uxr1StageLabel {
+    font-size: 14px;
+  }
+  .uxr1StageMsg {
+    font-size: 11.5px;
+  }
+  .uxr1ConcernMsg {
+    font-size: 11.5px;
+  }
+}
+
+/* =======================================================
+   END OF UX-R1 — RUNTIME CENTER STAGE RE-ARCHITECTURE
+   ======================================================= */
+

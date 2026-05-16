@@ -4283,6 +4283,7 @@ const RenderAiRuntime = (() => {
   let _lastConfidenceLevel    = '';       // P2.9.1-B: monotonic advance only
   const _transientCards       = new Map(); // P2.9.1-A: partNo → {elevated,causal,expiresAt}
   let _lastConcernHash        = '';       // P3.4: dedup concern renders
+  let _lastHeroConcernHash   = '';       // UX-R1: dedup hero concern renders
 
   function mountPanels() {
     if (_mounted) return;
@@ -4343,6 +4344,7 @@ const RenderAiRuntime = (() => {
     _updateProcessCard(newIdx, isFailed);
     _updateEvolutionFeed(parts);
     _renderConcernItems(parts);
+    _updateHero(newIdx, isFailed, parts);
   }
 
   function _updateProcessCard(idx, isFailed) {
@@ -4387,6 +4389,37 @@ const RenderAiRuntime = (() => {
       el.classList.remove('p29Morphing');
       _morphPending = false;
     });
+  }
+
+  function _updateHero(idx, isFailed, parts) {
+    const heroEl = document.getElementById('uxr1_ai_hero');
+    if (!heroEl) return;
+    const stgIcon  = document.getElementById('uxr1_stage_icon');
+    const stgLabel = document.getElementById('uxr1_stage_label');
+    const stgMsg   = document.getElementById('uxr1_stage_msg');
+    if (idx >= 0 && _STAGES[idx]) {
+      const stg = _STAGES[idx];
+      if (stgIcon)  stgIcon.textContent  = stg.icon;
+      if (stgLabel) stgLabel.textContent = stg.label;
+      if (stgMsg)   stgMsg.textContent   = stg.msg;
+      heroEl.dataset.stage  = stg.key;
+      heroEl.dataset.failed = isFailed ? '1' : '';
+    }
+    const concernsEl = document.getElementById('uxr1_concerns');
+    if (!concernsEl) return;
+    const concerns = (typeof RuntimeIntelligence !== 'undefined')
+      ? RuntimeIntelligence.getConcerns(Array.isArray(parts) ? parts : [])
+      : [];
+    const hash = concerns.map(c => c.type + ':' + c.label).join('|');
+    if (hash === _lastHeroConcernHash) return;
+    _lastHeroConcernHash = hash;
+    if (!concerns.length) { concernsEl.innerHTML = ''; return; }
+    concernsEl.innerHTML = concerns.map(c =>
+      '<div class="uxr1ConcernItem" data-concern-type="' + esc(c.type) + '">' +
+        '<div class="uxr1ConcernLabel">' + esc(c.label) + '</div>' +
+        '<div class="uxr1ConcernMsg">'   + esc(c.msg)   + '</div>' +
+      '</div>'
+    ).join('');
   }
 
   function _updateEvolutionFeed(parts) {
@@ -4636,6 +4669,22 @@ const RenderAiRuntime = (() => {
     _lastConfidenceLevel    = '';      // P2.9.1-B
     _transientCards.clear();           // P2.9.1-A
     _lastConcernHash        = '';      // P3.4
+    _lastHeroConcernHash   = '';      // UX-R1
+    {
+      const heroEl = document.getElementById('uxr1_ai_hero');
+      if (heroEl) {
+        heroEl.dataset.stage  = '';
+        heroEl.dataset.failed = '';
+        const ic = document.getElementById('uxr1_stage_icon');
+        const lb = document.getElementById('uxr1_stage_label');
+        const mg = document.getElementById('uxr1_stage_msg');
+        const cc = document.getElementById('uxr1_concerns');
+        if (ic) ic.textContent = _STAGES[0] ? _STAGES[0].icon  : '◉';
+        if (lb) lb.textContent = _STAGES[0] ? _STAGES[0].label : 'Reading the Room';
+        if (mg) mg.textContent = _STAGES[0] ? _STAGES[0].msg   : '';
+        if (cc) cc.innerHTML   = '';
+      }
+    }
     // Clear P2.9 confidence state from any lingering best card
     const bestCard = document.querySelector('.clipCard.isBestClip');
     if (bestCard) delete bestCard.dataset.p29Confidence;
