@@ -3631,6 +3631,13 @@ function _applyUxR3Tiers(list, ranking, done, failed, skipped) {
     delete c.dataset.uxr3Tier;
   });
 
+  // ── Relative strong threshold (UX-R3.1-A) ───────────
+  // Strong = within 15% of best clip's score. Fallback: DOM data-tier when ranking unavailable.
+  var _bestScore = 0;
+  ranking.forEach(function (rk) { if (rk.isBest && rk.score > _bestScore) _bestScore = rk.score; });
+  if (!_bestScore) ranking.forEach(function (rk) { if (rk.score > _bestScore) _bestScore = rk.score; });
+  var _strongThreshold = _bestScore > 0 ? _bestScore * 0.85 : -1;
+
   // ── Classify each card by tier ────────────────────────
   var bestCards    = [];
   var strongCards  = [];
@@ -3651,9 +3658,15 @@ function _applyUxR3Tiers(list, ranking, done, failed, skipped) {
       card.dataset.uxr3Tier = 'skipped';
       skippedCards.push(card);
     } else if (card.classList.contains('isDone')) {
-      var scoreEl = card.querySelector('.clipCardScore');
-      var tier    = (scoreEl && scoreEl.dataset.tier) || 'weak';
-      if (tier === 'high') {
+      var isStrong;
+      if (_strongThreshold > 0) {
+        isStrong = (rk.score || 0) >= _strongThreshold;
+      } else {
+        // No ranking data: fall back to DOM data-tier="high"
+        var scoreEl = card.querySelector('.clipCardScore');
+        isStrong = scoreEl ? scoreEl.dataset.tier === 'high' : false;
+      }
+      if (isStrong) {
         card.dataset.uxr3Tier = 'strong';
         strongCards.push(card);
       } else {
@@ -3902,6 +3915,8 @@ function populateRenderOutputPanel(job, parts) {
         if (_r3Part && _r3Part.output_file && typeof centerPreviewClip === 'function') {
           _uxr3AutoSelectedBest = true;
           setTimeout(function () {
+            // UX-R3.1-C: Skip if creator already opened a preview manually
+            if (_csPreviewJobId !== null || _cardHoverActiveVid !== null) return;
             centerPreviewClip(currentJobId, _r3PartNo, _r3Part.output_file, _r3Part.part_name || ('Clip ' + _r3PartNo));
           }, 900);
         }
@@ -3978,6 +3993,17 @@ function sortClipsView(val) {
   _clipsSortOrder = val || 'score';
   if (_renderMonitorLastJob) {
     populateRenderOutputPanel(_renderMonitorLastJob, _renderMonitorLastParts);
+  } else {
+    // UX-R3.1-B: DOM-only fallback when job data unavailable — rebuild tier headers in-place
+    var _r31List = document.getElementById('render_output_list');
+    if (_r31List) {
+      _applyUxR3Tiers(
+        _r31List, new Map(),
+        Array.from(_r31List.querySelectorAll('.clipCard.isDone')),
+        Array.from(_r31List.querySelectorAll('.clipCard.isFailed')),
+        Array.from(_r31List.querySelectorAll('.clipCard.isSkipped'))
+      );
+    }
   }
 }
 
