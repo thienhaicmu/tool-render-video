@@ -2473,3 +2473,322 @@
    END OF UX-R1 — RUNTIME CENTER STAGE RE-ARCHITECTURE
    ======================================================= */
 
+/* =======================================================
+   UX-R2 — COMPLETION EXPERIENCE RE-ARCHITECTURE
+   Transforms "render finished" into "creative outcome delivered."
+   Three spatial surfaces:
+     1. #uxr1_ai_hero  — morphs to outcome confirmation
+     2. #uxr2_completion_hero — editorial hero (thumb|narrative|CTAs)
+     3. render_output_panel — clip grid, best clip elevated
+   All additive. Zero removals from prior phases.
+   ======================================================= */
+
+/* ── UX-R2-A: Hero morph — orchestration → outcome ─────── */
+.uxr1AiHero.uxr2OutcomeMode {
+  background: rgba(74,222,128,.03);
+  border-bottom-color: rgba(74,222,128,.12);
+  transition: background .6s ease, border-bottom-color .6s ease;
+}
+
+.uxr1AiHero.uxr2OutcomeMode::before {
+  background: linear-gradient(180deg, #4ade80 0%, #22c55e 100%);
+  opacity: 1;
+  animation: none;
+}
+
+.uxr1AiHero.uxr2OutcomeMode .uxr1StageIcon {
+  color: rgba(74,222,128,.85);
+  animation: none;
+}
+
+.uxr1AiHero.uxr2OutcomeMode .uxr1StageLabel {
+  color: rgba(255,255,255,.92);
+}
+
+/* Override UX-R1 completion fade — outcome mode stays fully visible */
+#render_active_panel[data-render-state="complete"] .uxr1AiHero.uxr2OutcomeMode {
+  opacity: 1;
+  transition: background .6s ease, border-bottom-color .6s ease;
+}
+
+/* ── UX-R2-B: Completion hero card ──────────────────────── */
+.uxr2CompletionHero {
+  display: grid;
+  grid-template-columns: 180px 1fr auto;
+  background: rgba(255,255,255,.02);
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  overflow: hidden;
+}
+
+/* Reveal animation — triggered when JS adds .uxr2HeroActive */
+.uxr2CompletionHero.uxr2HeroActive {
+  animation: uxr2HeroReveal .65s cubic-bezier(.22,1,.36,1) both;
+}
+
+@keyframes uxr2HeroReveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* ── Thumb column ──────────────────────────────────────── */
+.uxr2HeroThumb {
+  position: relative;
+  background: rgba(0,0,0,.3);
+  aspect-ratio: 9 / 16;
+  width: 180px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.uxr2ThumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: opacity .3s ease;
+}
+.uxr2ThumbImg.is-error { display: none; }
+
+.uxr2ThumbVid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.uxr2ThumbVid.uxr2VidActive { opacity: 1; }
+
+.uxr2ThumbScore {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0,0,0,.72);
+  color: rgba(99,102,241,.95);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+}
+
+.uxr2ThumbPlaceholder {
+  font-size: 28px;
+  color: rgba(255,255,255,.12);
+}
+
+/* ── Narrative column ──────────────────────────────────── */
+.uxr2HeroNarrative {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 22px 26px;
+  justify-content: center;
+  min-width: 0;
+}
+
+.uxr2NarrativeLabel {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: rgba(74,222,128,.70);
+}
+
+.uxr2NarrativeMsg {
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255,255,255,.88);
+  line-height: 1.45;
+}
+
+.uxr2NarrativeReason {
+  font-size: 12px;
+  color: rgba(167,139,250,.72);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.uxr2NarrativeBits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 1px;
+}
+
+.uxr2Bit {
+  font-size: 10.5px;
+  color: rgba(255,255,255,.44);
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 3px;
+  padding: 1px 7px;
+}
+
+/* No-best / failure fallback */
+.uxr2CompletionHero[data-state="no-best"] .uxr2NarrativeLabel {
+  color: rgba(251,191,36,.70);
+}
+.uxr2CompletionHero[data-state="no-best"] .uxr2HeroThumb {
+  opacity: .4;
+}
+
+/* ── CTA column ────────────────────────────────────────── */
+.uxr2HeroCTA {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 22px;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 164px;
+  border-left: 1px solid rgba(255,255,255,.05);
+}
+
+.uxr2CtaPrimary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(99,102,241,.88);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background .15s ease, transform .15s ease;
+  white-space: nowrap;
+}
+.uxr2CtaPrimary:hover {
+  background: rgba(99,102,241,1);
+  transform: translateY(-1px);
+}
+
+.uxr2CtaSecondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.15);
+  background: transparent;
+  color: rgba(255,255,255,.70);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+  white-space: nowrap;
+}
+.uxr2CtaSecondary:hover {
+  background: rgba(255,255,255,.07);
+  border-color: rgba(255,255,255,.28);
+  color: rgba(255,255,255,.90);
+}
+
+.uxr2CtaTertiary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,.40);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color .15s ease;
+  white-space: nowrap;
+}
+.uxr2CtaTertiary:hover {
+  color: rgba(255,255,255,.65);
+}
+
+/* ── UX-R2-C: Completion bar demotion ──────────────────── */
+/* JS adds .uxr2BarDemoted when hero is active */
+.renderCompletionBar.uxr2BarDemoted {
+  padding: 7px 16px;
+  background: rgba(255,255,255,.01);
+}
+
+/* Hide redundant actions — hierarchy lives in the hero */
+.renderCompletionBar.uxr2BarDemoted .renderCompletionActions .rcbBtn:not(#back_to_editor_btn) {
+  display: none;
+}
+
+/* ── UX-R2-D: Best clip elevated at completion ──────────── */
+/* JS adds .uxr2Complete to render_output_list */
+.renderOutputList.uxr2Complete .clipCard.isBestClip {
+  box-shadow: 0 0 0 1px rgba(99,102,241,.48),
+              0 18px 56px rgba(99,102,241,.2);
+}
+
+/* ── UX-R2-G: Responsive — 1366px ──────────────────────── */
+@media (max-width: 1366px) {
+  .uxr2CompletionHero {
+    grid-template-columns: 140px 1fr auto;
+  }
+  .uxr2HeroThumb {
+    width: 140px;
+  }
+  .uxr2HeroNarrative {
+    padding: 18px 20px;
+  }
+  .uxr2NarrativeMsg {
+    font-size: 14px;
+  }
+  .uxr2HeroCTA {
+    padding: 18px 18px;
+    min-width: 148px;
+  }
+  .uxr2CtaPrimary {
+    height: 33px;
+    font-size: 12px;
+  }
+}
+
+/* ── UX-R2-G: Responsive — 1024px ──────────────────────── */
+@media (max-width: 1024px) {
+  .uxr2CompletionHero {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+  }
+  .uxr2HeroThumb {
+    width: 100%;
+    aspect-ratio: 16 / 5;
+  }
+  .uxr2HeroThumb .uxr2ThumbImg,
+  .uxr2HeroThumb .uxr2ThumbVid {
+    object-position: center top;
+  }
+  .uxr2HeroNarrative {
+    padding: 14px 16px 10px;
+  }
+  .uxr2NarrativeMsg {
+    font-size: 13px;
+  }
+  .uxr2HeroCTA {
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 10px 16px 14px;
+    border-left: none;
+    border-top: 1px solid rgba(255,255,255,.05);
+    gap: 6px;
+    min-width: 0;
+  }
+}
+
+/* =======================================================
+   END OF UX-R2 — COMPLETION EXPERIENCE RE-ARCHITECTURE
+   ======================================================= */
+

@@ -4582,6 +4582,122 @@ const RenderAiRuntime = (() => {
     if (header) header.textContent = 'Creative Outcome';
   }
 
+  // UX-R2-A: Morph #uxr1_ai_hero from orchestration to outcome reveal
+  function _morphHeroToOutcome(narrative) {
+    const heroEl = document.getElementById('uxr1_ai_hero');
+    if (!heroEl) return;
+    heroEl.classList.add('uxr2OutcomeMode');
+    const iconEl  = document.getElementById('uxr1_stage_icon');
+    const labelEl = document.getElementById('uxr1_stage_label');
+    const msgEl   = document.getElementById('uxr1_stage_msg');
+    const concEl  = document.getElementById('uxr1_concerns');
+    if (iconEl)  iconEl.textContent  = '✓';
+    if (labelEl) labelEl.textContent = 'Creative Outcome';
+    if (msgEl)   msgEl.textContent   = narrative.summaryMsg || '';
+    if (concEl)  concEl.innerHTML    = '';
+  }
+
+  // UX-R2-B/C/D/E/F: Populate and reveal #uxr2_completion_hero
+  function _showCompletionHero(job, parts, narrative, completed, topPct) {
+    const heroEl = document.getElementById('uxr2_completion_hero');
+    if (!heroEl) return;
+
+    const jobId      = String(job?.id || job?.job_id || '');
+    const rk         = (typeof _rankMap === 'function') ? _rankMap(job) : new Map();
+    const bestEntry  = [...rk.entries()].find(([, r]) => r.isBest);
+    const bestPartNo = bestEntry ? bestEntry[0] : null;
+    const bestRkData = bestEntry ? bestEntry[1] : null;
+    const bestPart   = bestPartNo != null
+      ? completed.find(p => Number(p.part_no || 0) === bestPartNo)
+      : null;
+    const hasBest    = !!(bestPart && jobId && bestPartNo != null);
+
+    // ── Thumb ──────────────────────────────────────────────
+    const thumbEl = document.getElementById('uxr2_hero_thumb');
+    if (thumbEl) {
+      if (hasBest) {
+        const thumbBase    = '/api/render/jobs/' + encodeURIComponent(jobId) + '/parts/' + bestPartNo;
+        const bestViralPct = Math.round(Number(bestPart.viral_score || 0) * 100) || topPct;
+        thumbEl.innerHTML =
+          '<img class="uxr2ThumbImg" src="' + thumbBase + '/thumbnail?t=1" alt="" onerror="this.classList.add(\'is-error\')">' +
+          '<video class="uxr2ThumbVid" data-src="' + thumbBase + '/media" preload="none" muted playsinline></video>' +
+          '<div class="uxr2ThumbScore">' + bestViralPct + '%</div>';
+        const vidEl = thumbEl.querySelector('.uxr2ThumbVid');
+        if (vidEl) {
+          thumbEl.addEventListener('mouseenter', function () {
+            if (!vidEl.src && vidEl.dataset.src) vidEl.src = vidEl.dataset.src;
+            vidEl.classList.add('uxr2VidActive');
+            vidEl.play().catch(function () {});
+          });
+          thumbEl.addEventListener('mouseleave', function () {
+            vidEl.classList.remove('uxr2VidActive');
+            vidEl.pause();
+          });
+        }
+      } else {
+        heroEl.dataset.state = 'no-best';
+      }
+    }
+
+    // ── Narrative ───────────────────────────────────────────
+    const narrativeMsgEl = document.getElementById('uxr2_narrative_msg');
+    if (narrativeMsgEl) {
+      narrativeMsgEl.textContent = !completed.length
+        ? 'AI could not confidently identify a strongest result.'
+        : (narrative.summaryMsg || '');
+    }
+    const narrativeReasonEl = document.getElementById('uxr2_narrative_reason');
+    if (narrativeReasonEl && bestRkData && bestRkData.reason) {
+      narrativeReasonEl.textContent = bestRkData.reason;
+      narrativeReasonEl.hidden      = false;
+    }
+    const narrativeBitsEl = document.getElementById('uxr2_narrative_bits');
+    if (narrativeBitsEl && narrative.bits && narrative.bits.length) {
+      narrativeBitsEl.innerHTML = narrative.bits
+        .map(function (b) { return '<span class="uxr2Bit">' + esc(b) + '</span>'; })
+        .join('');
+    }
+
+    // ── CTAs ────────────────────────────────────────────────
+    const reviewBtn = document.getElementById('uxr2_cta_review');
+    if (reviewBtn) {
+      if (hasBest) {
+        reviewBtn.onclick = function () {
+          if (typeof centerPreviewClip === 'function') {
+            centerPreviewClip(jobId, bestPartNo, bestPart.output_file || '', bestPart.part_name || ('Clip ' + bestPartNo));
+          }
+        };
+      } else {
+        reviewBtn.textContent = 'Review Clips';
+        reviewBtn.onclick = function () {
+          const panel = document.getElementById('render_output_panel');
+          if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
+      }
+    }
+    const exportLink = document.getElementById('uxr2_cta_export');
+    if (exportLink && hasBest) {
+      exportLink.href = '/api/jobs/' + encodeURIComponent(jobId) + '/parts/' + bestPartNo + '/stream';
+      exportLink.removeAttribute('hidden');
+    }
+    const folderBtn = document.getElementById('uxr2_cta_folder');
+    if (folderBtn) {
+      folderBtn.onclick = function () {
+        if (typeof openRenderOutputFolder === 'function') openRenderOutputFolder();
+      };
+    }
+
+    // ── Demote completion bar; elevate output list ──────────
+    const bar = document.getElementById('render_completion_bar');
+    if (bar) bar.classList.add('uxr2BarDemoted');
+    const listEl = document.getElementById('render_output_list');
+    if (listEl) listEl.classList.add('uxr2Complete');
+
+    // ── Reveal ──────────────────────────────────────────────
+    heroEl.classList.remove('hiddenView');
+    requestAnimationFrame(function () { heroEl.classList.add('uxr2HeroActive'); });
+  }
+
   function showCompletionIntelligence(job, summary, parts) {
     const insightEl  = document.getElementById('rc_benchmark_insight');
     const benchPanel = document.getElementById('rc_benchmark_panel');
@@ -4655,6 +4771,10 @@ const RenderAiRuntime = (() => {
 
       // Lock in peak confidence on the best card
       setTimeout(() => _applyConfidenceEvolution(completed.length, completed.length), 200);
+
+      // UX-R2: Hero morph + completion hero reveal
+      _morphHeroToOutcome(narrative);
+      _showCompletionHero(job, parts, narrative, completed, topPct);
     }
   }
 
@@ -4670,6 +4790,31 @@ const RenderAiRuntime = (() => {
     _transientCards.clear();           // P2.9.1-A
     _lastConcernHash        = '';      // P3.4
     _lastHeroConcernHash   = '';      // UX-R1
+    {
+      // UX-R2: reset completion hero
+      const h2 = document.getElementById('uxr2_completion_hero');
+      if (h2) {
+        h2.classList.add('hiddenView');
+        h2.classList.remove('uxr2HeroActive');
+        h2.dataset.state = '';
+        const thumbEl = document.getElementById('uxr2_hero_thumb');
+        if (thumbEl) thumbEl.innerHTML = '<div class="uxr2ThumbPlaceholder">◎</div>';
+        const msgEl2 = document.getElementById('uxr2_narrative_msg');
+        if (msgEl2) msgEl2.textContent = '';
+        const reasonEl = document.getElementById('uxr2_narrative_reason');
+        if (reasonEl) { reasonEl.textContent = ''; reasonEl.hidden = true; }
+        const bitsEl = document.getElementById('uxr2_narrative_bits');
+        if (bitsEl) bitsEl.innerHTML = '';
+        const exportLink = document.getElementById('uxr2_cta_export');
+        if (exportLink) { exportLink.removeAttribute('href'); exportLink.setAttribute('hidden', ''); }
+      }
+      const uxr1Hero = document.getElementById('uxr1_ai_hero');
+      if (uxr1Hero) uxr1Hero.classList.remove('uxr2OutcomeMode');
+      const bar2 = document.getElementById('render_completion_bar');
+      if (bar2) bar2.classList.remove('uxr2BarDemoted');
+      const listEl2 = document.getElementById('render_output_list');
+      if (listEl2) listEl2.classList.remove('uxr2Complete');
+    }
     {
       const heroEl = document.getElementById('uxr1_ai_hero');
       if (heroEl) {
