@@ -594,8 +594,8 @@ window.EditorAiActions = (() => {
         reasonHtml +
         confHtml +
         `<div class="evAiSummaryActions">` +
-          `<button class="evAiAcceptBtn" onclick="EditorAiActions?.acceptPreview?.()">✓ Apply</button>` +
-          `<button class="evAiRejectBtn" onclick="EditorAiActions?.rejectPreview?.()">✕ Discard</button>` +
+          `<button class="evAiAcceptBtn" onclick="EditorAiActions?.acceptPreview?.();EditorConverse?._onAccept?.()">✓ Apply</button>` +
+          `<button class="evAiRejectBtn" onclick="EditorAiActions?.rejectPreview?.();EditorConverse?._onReject?.()">✕ Discard</button>` +
         `</div>` +
       `</div>`;
   }

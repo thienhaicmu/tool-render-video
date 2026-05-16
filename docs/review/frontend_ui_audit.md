@@ -3013,3 +3013,72 @@ _buildReasoning (editor-ai-actions.js)
 - `creator_prefs` is installation-scoped (no user accounts) — one profile per machine
 
 **Next phase:** P3.2 would add conversational AI or render-output feedback (download signal, preview signal)
+
+---
+
+## Section 29 — P3.2: Conversational Editing
+
+**Date:** 2026-05-16
+**Branch:** feature/ai-output-upgrade
+**Scope:** `backend/static/js/`, `backend/static/index.html`, `backend/static/css/v3/`
+
+### What This Phase Addressed
+
+The editor had AI intelligence (P2.x) and creator memory (P3.1), but interaction was still button-driven. Every creative intent required finding the right control. P3.2 adds a natural-language layer: type what you want changed, and the system converts it to a patch preview.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `backend/static/js/editor-converse.js` | New file: `EditorConverse` IIFE — intent parser, conversation history, memory-aware responses |
+| `backend/static/js/editor-view.js` | Added 'ai' tab to `validTabs` and `tabTitles`; `EditorConverse.init()` + `reset()` in editor lifecycle |
+| `backend/static/js/editor-ai-actions.js` | Preview card accept/reject buttons now call `EditorConverse._onAccept()` / `_onReject()` |
+| `backend/static/index.html` | Added "Talk" tab button; added `.convPanel` with history, example chips, input field; added script tag |
+| `backend/static/css/v3/review.css` | Added conversation panel styles (history feed, user/AI turns, clarify buttons, example chips, input row) |
+
+### Conversation Architecture
+
+```
+user text → _parseIntent()
+  → keyword scoring per rule (multi-word matches = 2pts, single = 1pt)
+  → if tied top-2 → clarify options shown
+  → if no match → suggest 4 quick actions
+  → if clear winner → _fireIntent(action, interpretation, desc)
+
+_fireIntent():
+  → memory context from CreatorMemory.getDerivedPreferences()
+  → _addTurn('ai', interpretationMsg)
+  → EditorAiActions.previewAction(action)   ← uses EXISTING patch system
+  → ghost overlay on timeline + preview card in #evInspAiPanel
+
+user clicks Accept/Discard (in existing #evInspAiPanel card):
+  → EditorAiActions.acceptPreview() / rejectPreview()   ← unchanged
+  → EditorConverse._onAccept() / _onReject()            ← adds follow-up turn
+```
+
+### Intent Rules (7 mapped to existing actions)
+
+| User language | Matched action | Keywords |
+|---|---|---|
+| "slow intro", "hook weak" | `strongerHook` | hook, intro, opening, start, beginning |
+| "too slow", "boring", "pace" | `fasterPacing` | slow, boring, dragging, pace, pacing, tighten |
+| "silence", "dead air", "gaps" | `removeDeadSpace` | silence, dead, gap, pauses, quiet, air |
+| "viral", "energy", "algorithm" | `viralMode` | viral, algorithm, tiktok, energy, energetic |
+| "too jumpy", "cinematic", "flow" | `cinematicMode` | cinematic, emotional, story, jumpy, choppy, calm |
+| "subtitle", "captions", "messy" | `subtitleCleanup` | subtitle, caption, hard to read, messy text |
+| "best clips", "rank", "quality" | `smartClipPrioritization` | best, rank, quality, priority, highlight |
+
+### Memory Integration (P3.2-E)
+
+After intent resolves, `CreatorMemory.getDerivedPreferences()` is checked:
+- If `confident` (≥5 signals) and action is in `favored` → "You usually keep this one."
+- If action is in `avoided` → "You've skipped this before — still worth a look."
+- If not confident → no memory prefix (clean signal, not guessing)
+
+### What Remains Weak
+
+- Intent parser is keyword-based heuristics — no NLP or semantic understanding
+- "too slow" is ambiguous (could be hook OR pacing) — tied score shows clarification, may frustrate users who expect instant result
+- No multi-step conversation (each input is independent, previous context doesn't inform next parse)
+- No undo from conversation panel (must use Cut tab or keyboard shortcut)
+- Example chips disappear after first message but don't come back

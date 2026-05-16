@@ -816,6 +816,7 @@
       <button class="insp-tab"        data-insp-tab="text"        onclick="setInspectorTab('text')">Text &amp; Voice</button>
       <button class="insp-tab"        data-insp-tab="audio"       onclick="setInspectorTab('audio')">Audio</button>
       <button class="insp-tab"        data-insp-tab="performance" onclick="setInspectorTab('performance')">Render</button>
+      <button class="insp-tab"        data-insp-tab="ai"          onclick="setInspectorTab('ai')">Talk</button>
     </div>
 
     <div class="evRightScroll inspPaneBody">
@@ -825,6 +826,22 @@
 
       <!-- P3.1: Creator Memory panel — shown in Cut tab -->
       <div id="cmPrefsPanel" class="cmPrefsPanel" data-insp-panel="mode"></div>
+
+      <!-- P3.2: Conversational editing panel — shown in Talk tab -->
+      <div class="convPanel" data-insp-panel="ai">
+        <div class="convHistory" id="convHistory"></div>
+        <div class="convExamples" id="convExamples">
+          <button class="convExampleBtn" onclick="EditorConverse.quickInput('make intro stronger')">make intro stronger</button>
+          <button class="convExampleBtn" onclick="EditorConverse.quickInput('too slow')">too slow</button>
+          <button class="convExampleBtn" onclick="EditorConverse.quickInput('clean subtitles')">clean subtitles</button>
+          <button class="convExampleBtn" onclick="EditorConverse.quickInput('more energy')">more energy</button>
+          <button class="convExampleBtn" onclick="EditorConverse.quickInput('less jumpy')">less jumpy</button>
+        </div>
+        <div class="convInputRow">
+          <input type="text" id="convInputField" placeholder="e.g. intro feels slow…" autocomplete="off" spellcheck="false" />
+          <button class="convSendBtn" onclick="EditorConverse.handleInput()">↵</button>
+        </div>
+      </div>
 
       <!-- Trim -->
       <div class="evSection insp-panel-active" id="evSectionTrim" data-section-type="trim" data-insp-panel="mode">
@@ -1491,6 +1508,7 @@
 <script src="/static/js/editor-scene-intelligence.js"></script>
 <script src="/static/js/editor-ai-actions.js"></script>
 <script src="/static/js/creator-memory.js"></script>
+<script src="/static/js/editor-converse.js"></script>
 <script src="/static/js/editor-review-intelligence.js"></script>
 <script src="/static/js/editor-ai-sessions.js"></script>
 <script src="/static/js/editor-view.js"></script>

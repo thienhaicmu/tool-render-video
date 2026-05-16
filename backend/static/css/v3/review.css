@@ -1335,3 +1335,152 @@
 /* =======================================================
    END OF P3.1 — CREATOR MEMORY INSPECTOR PANEL
    ======================================================= */
+
+
+/* =======================================================
+   P3.2 — CONVERSATIONAL EDITING PANEL
+   ======================================================= */
+
+/* Panel container — fills Talk tab */
+.convPanel {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px 0;
+  gap: 0;
+}
+
+/* Conversation history feed */
+.convHistory {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 220px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-bottom: 4px;
+  scroll-behavior: smooth;
+}
+.convHistory::-webkit-scrollbar { width: 3px; }
+.convHistory::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
+
+/* User turn */
+.convTurnUser {
+  font-size: 11px;
+  color: var(--text-muted, #8b8fa8);
+  text-align: right;
+  padding: 2px 0 2px 24px;
+  line-height: 1.4;
+}
+.convTurnUser::before {
+  content: 'You — ';
+  font-size: 9px;
+  color: var(--text-dim, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* AI turn */
+.convTurnAi {
+  font-size: 11px;
+  color: var(--text, #e2e8f0);
+  background: rgba(99,102,241,.07);
+  border: 1px solid rgba(99,102,241,.15);
+  border-radius: 7px;
+  padding: 6px 9px;
+  line-height: 1.45;
+  transition: opacity .3s ease;
+}
+.convTurnAi strong {
+  color: var(--primary-hi, #818cf8);
+  font-weight: 600;
+}
+
+/* Action description under AI message */
+.convDesc {
+  font-size: 10px;
+  color: var(--text-dim, #6b7280);
+  margin-top: 3px;
+  line-height: 1.35;
+}
+
+/* Clarification buttons */
+.convClarifyRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.convClarifyBtn {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(99,102,241,.12);
+  border: 1px solid rgba(99,102,241,.28);
+  color: var(--primary-hi, #818cf8);
+  cursor: pointer;
+  transition: background .15s;
+}
+.convClarifyBtn:hover { background: rgba(99,102,241,.24); }
+
+/* Example chips — shown only when history is empty */
+.convExamples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 0 4px;
+}
+.convExampleBtn {
+  font-size: 10px;
+  color: var(--text-dim, #6b7280);
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  padding: 3px 9px;
+  cursor: pointer;
+  transition: color .15s, background .15s;
+  white-space: nowrap;
+}
+.convExampleBtn:hover { color: var(--text, #e2e8f0); background: rgba(255,255,255,.09); }
+
+/* Input row */
+.convInputRow {
+  display: flex;
+  gap: 5px;
+  padding: 7px 0 10px;
+  border-top: 1px solid rgba(255,255,255,.06);
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+#convInputField {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  padding: 6px 8px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 6px;
+  color: var(--text, #e2e8f0);
+  outline: none;
+  font-family: inherit;
+  transition: border-color .15s;
+}
+#convInputField:focus { border-color: rgba(99,102,241,.45); }
+#convInputField::placeholder { color: var(--text-dim, #6b7280); font-style: italic; }
+
+.convSendBtn {
+  padding: 5px 10px;
+  background: rgba(99,102,241,.18);
+  border: 1px solid rgba(99,102,241,.32);
+  border-radius: 6px;
+  color: var(--primary-hi, #818cf8);
+  cursor: pointer;
+  font-size: 13px;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.convSendBtn:hover { background: rgba(99,102,241,.32); }
+
+/* =======================================================
+   END OF P3.2 — CONVERSATIONAL EDITING PANEL
+   ======================================================= */

@@ -878,6 +878,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   evUpdateAspectRatio();  // apply aspect ratio frame from dropdown
   evInitVoiceFields(pendingPayload);
   if (typeof CreatorMemory !== 'undefined') CreatorMemory.init();
+  if (typeof EditorConverse !== 'undefined') EditorConverse.init();
 
   try {
     const pr = await fetch('/api/render/prepare-source', {
@@ -1720,6 +1721,7 @@ function cancelEditorView() {
   if (_aiPanel) { _aiPanel.innerHTML = ''; _aiPanel.dataset.context = 'empty'; }
   const _cmPanel = document.getElementById('cmPrefsPanel');
   if (_cmPanel) _cmPanel.innerHTML = '';
+  if (typeof EditorConverse !== 'undefined') EditorConverse.reset();
   const _pane = document.querySelector('.inspPaneBody');
   if (_pane) delete _pane.dataset.inspContext;
   const video = qs('evVideo');
@@ -2234,13 +2236,14 @@ async function startRenderFromEditor() {
 
 // ── Inspector tab system ─────────────────────────────────────────────────────
 function setInspectorTab(tab) {
-  const validTabs = ['mode', 'subtitle', 'text', 'audio', 'performance'];
+  const validTabs = ['mode', 'subtitle', 'text', 'audio', 'performance', 'ai'];
   const tabTitles = {
     mode:        'Cut',
     subtitle:    'Subtitles',
     text:        'Text & Voice',
     audio:       'Audio',
     performance: 'Render',
+    ai:          'Talk',
   };
   const activeTab = validTabs.includes(tab) ? tab : 'mode';
   const insp = document.getElementById('appInspector');
