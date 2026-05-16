@@ -662,3 +662,88 @@ body:not(.is-history-active) #partial_history_view { display: none !important; }
 /* =======================================================
    END OF PHASE H · FINAL CLEANUP / HARDENING
    ======================================================= */
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   UX-R5  STABILIZATION & CSS ARCHITECTURE HARDENING (2026-05-16)
+   ══════════════════════════════════════════════════════════════════════
+
+   STATE PRIORITY HIERARCHY — .clipCard modifiers
+   ===============================================
+   Authority decreases from top to bottom. When a card holds multiple
+   state classes/attributes, higher-priority rules win via specificity
+   or cascade order.
+
+   1. [data-uxr3-tier="best"]  — absolute editorial authority
+      Source: _applyUxR3Tiers() after ranking
+      CSS: clipsGrid .clipCard[data-uxr3-tier="best"] (review.css)
+
+   2. .isBestClip              — best-clip hero (P2.8-F)
+      Source: populateRenderOutputPanel() class injection
+      CSS: .clipCard.isBestClip (review.css ~989)
+      NOTE: review.css ~616 gold rule is superseded — P2.8 indigo wins.
+
+   3. .isPreviewActive          — center-stage preview open
+      Source: centerPreviewClip()
+      CSS: .clipCard.isPreviewActive (indigo border + double ring)
+
+   4. [data-p29-confidence]    — confidence evolution state (P2.9)
+      Source: _applyConfidenceEvolution()
+      CSS: .clipCard[data-p29-confidence="peak"] etc.
+
+   5. [data-uxr3-tier="strong/other"] — tier positioning
+      Source: _applyUxR3Tiers()
+      CSS: review.css UX-R3 section
+
+   6. [data-uxr3-tier="failed/skipped"] — problem tier
+      Source: _applyUxR3Tiers()
+      CSS: opacity .48 / .30 — wins over .isFailed (.6) / .isSkipped (.52)
+
+   7. .isSelected              — compare selection marker
+      Source: viral auto-select or manual
+      CSS: .clipCard.isSelected (not .isBestClip)
+
+   8. .isFailed / .isSkipped   — base status (P2.x era)
+      Source: populateRenderOutputPanel()
+      CSS: .clipCard.isFailed / .clipCard.isSkipped
+
+   9. :hover                   — interactive response
+      Source: browser
+      CSS: .clipCard:hover (review.css)
+
+   TRANSITION TOKEN REFERENCE
+   ==========================
+   --t-fast:   80ms ease    ← instant UI feedback (toggle, active state)
+   --t-base:   150ms ease   ← standard hover/focus transitions
+   --t-slow:   250ms ease   ← content reveal, opacity fades
+   --t-spring: 200ms cubic-bezier(.34,1.56,.64,1) ← spring pop-in
+
+   All UX-R* sections normalized to these tokens in UX-R5.
+   Pre-UX-R sections (P2.x) retain original values — touch only if
+   there is a specific regression to fix.
+
+   KNOWN REMAINING DEBT
+   ====================
+   - review.css ~616: .clipCardThumbWrap::after gold gradient (now
+     recolored to indigo in UX-R5). Original selector block comment
+     marks it as superseded by P2.8.
+   - history.css, download.css, editor-engine.css: 35+ hardcoded
+     transition durations remain. Safe to leave — they are in base
+     P2.x code that is stable and not actively edited.
+   - updateComparePanel(): no debounce on rapid select changes.
+     Acceptable for v1 — coalesce with requestAnimationFrame if frame
+     drops are observed in large clip sets.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── UX-R5: Ensure tier opacity overrides legacy status opacity ───── */
+/* Prevents edge case where JS sets both .isFailed AND [data-uxr3-tier="failed"]
+   on the same card — attribute selector already wins by specificity, but
+   this comment documents the intent for future maintainers. */
+
+/* State isolation guard: clip card state classes must not stack visually.
+   If _applyUxR3Tiers() runs, it removes tier attrs before re-classifying —
+   stale attrs from a prior render are cleaned before new ones are set. */
+
+/* =======================================================
+   END OF UX-R5 · STABILIZATION
+   ======================================================= */

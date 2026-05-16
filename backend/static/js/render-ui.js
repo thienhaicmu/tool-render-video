@@ -4049,7 +4049,8 @@ function _bindCardHoverPreviews(container) {
     const vid       = card.querySelector('.clipCardThumbVid');
     if (!thumbWrap || !vid) return;
 
-    thumbWrap.addEventListener('mouseenter', () => {
+    // UX-R5: Direct assignment prevents listener accumulation on re-render
+    thumbWrap.onmouseenter = () => {
       if (!vid._cardInView) return;
       if (_cardHoverActiveVid === vid) return;
       _stopCardHoverVideo();
@@ -4061,11 +4062,11 @@ function _bindCardHoverPreviews(container) {
       vid.muted = true;
       vid.play().catch(() => {});
       card.classList.add('is-preview-playing');
-    });
+    };
 
-    thumbWrap.addEventListener('mouseleave', () => {
+    thumbWrap.onmouseleave = () => {
       if (_cardHoverActiveVid === vid) _stopCardHoverVideo();
-    });
+    };
   });
 }
 
@@ -4858,15 +4859,16 @@ const RenderAiRuntime = (() => {
           '<div class="uxr2ThumbScore">' + bestViralPct + '%</div>';
         const vidEl = thumbEl.querySelector('.uxr2ThumbVid');
         if (vidEl) {
-          thumbEl.addEventListener('mouseenter', function () {
+          // UX-R5: Direct assignment prevents listener accumulation across completion sessions
+          thumbEl.onmouseenter = function () {
             if (!vidEl.src && vidEl.dataset.src) vidEl.src = vidEl.dataset.src;
             vidEl.classList.add('uxr2VidActive');
             vidEl.play().catch(function () {});
-          });
-          thumbEl.addEventListener('mouseleave', function () {
+          };
+          thumbEl.onmouseleave = function () {
             vidEl.classList.remove('uxr2VidActive');
             vidEl.pause();
-          });
+          };
         }
       } else {
         heroEl.dataset.state = 'no-best';

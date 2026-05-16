@@ -613,15 +613,13 @@
   border-color: rgba(77,124,255,.5);
   box-shadow: 0 0 0 1px rgba(77,124,255,.25);
 }
-.clipCard.isBestClip {
-  border-color: rgba(234,179,8,.38);
-  box-shadow: 0 0 0 1px rgba(234,179,8,.18);
-}
+/* UX-R5: border-color and box-shadow here are superseded by P2.8 (line ~989).
+   Only the thumb ::after gradient remains active from this block. */
 .clipCard.isBestClip .clipCardThumbWrap::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(234,179,8,.1) 0%, transparent 42%);
+  background: linear-gradient(180deg, rgba(99,102,241,.08) 0%, transparent 42%);
   pointer-events: none;
   z-index: 1;
 }
@@ -1656,7 +1654,7 @@
   line-height: 1;
   flex-shrink: 0;
   order: -1;                    /* toggle before the label */
-  transition: color .15s ease;
+  transition: color var(--t-base);
 }
 .uxr3TierToggle:hover {
   color: rgba(255,255,255,.60);
@@ -1714,7 +1712,7 @@
 
 .clipCard[data-uxr3-tier="other"]:hover {
   opacity: 1;
-  transition: opacity .2s ease;
+  transition: opacity var(--t-base);
 }
 
 /* ── UX-R3-E: Failed / skipped — low visual weight ─────── */
@@ -1725,7 +1723,7 @@
 
 .clipCard[data-uxr3-tier="failed"]:hover {
   opacity: .70;
-  transition: opacity .2s ease;
+  transition: opacity var(--t-base);
 }
 
 .clipCard[data-uxr3-tier="skipped"] {
@@ -1734,7 +1732,7 @@
 
 .clipCard[data-uxr3-tier="skipped"]:hover {
   opacity: .48;
-  transition: opacity .2s ease;
+  transition: opacity var(--t-base);
 }
 
 /* ── UX-R3-H: Compare foundation ────────────────────────── */

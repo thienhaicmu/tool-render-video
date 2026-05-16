@@ -2338,7 +2338,7 @@
   color: rgba(167, 139, 250, 0.80);
   flex-shrink: 0;
   margin-top: 2px;
-  transition: color 0.3s ease;
+  transition: color var(--t-slow);
 }
 
 #render_active_panel[data-render-state="running"] .uxr1StageIcon {
@@ -2549,7 +2549,7 @@
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: opacity .3s ease;
+  transition: opacity var(--t-slow);
 }
 .uxr2ThumbImg.is-error { display: none; }
 
@@ -2560,7 +2560,7 @@
   height: 100%;
   object-fit: cover;
   opacity: 0;
-  transition: opacity .25s ease;
+  transition: opacity var(--t-slow);
 }
 .uxr2ThumbVid.uxr2VidActive { opacity: 1; }
 
@@ -2665,7 +2665,7 @@
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
-  transition: background .15s ease, transform .15s ease;
+  transition: background var(--t-base), transform var(--t-base);
   white-space: nowrap;
 }
 .uxr2CtaPrimary:hover {
@@ -2686,7 +2686,7 @@
   font-size: 12px;
   cursor: pointer;
   text-decoration: none;
-  transition: background .15s ease, border-color .15s ease, color .15s ease;
+  transition: background var(--t-base), border-color var(--t-base), color var(--t-base);
   white-space: nowrap;
 }
 .uxr2CtaSecondary:hover {
@@ -2707,7 +2707,7 @@
   color: rgba(255,255,255,.40);
   font-size: 11px;
   cursor: pointer;
-  transition: color .15s ease;
+  transition: color var(--t-base);
   white-space: nowrap;
 }
 .uxr2CtaTertiary:hover {
