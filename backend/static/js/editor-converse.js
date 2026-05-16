@@ -24,11 +24,13 @@ window.EditorConverse = (() => {
   let _initialized  = false;
   let _waitingForResult = false;
 
-  // Micro conversation context (P3.3-C)
+  // Micro conversation context (P3.3-C / P3.7)
   let _ctx = {
-    lastAction: null,   // last resolved action id
-    lastIntent: null,   // last resolved interpretation string
-    lastRaw:    null,   // last user text
+    lastAction:          null,   // last resolved action id
+    lastIntent:          null,   // last resolved interpretation string
+    lastRaw:             null,   // last user text
+    lastWasAgentRouted:  false,  // P3.7: true when last intent came from _resolveWithAgents
+    lastAgentDir:        null,   // P3.7: creative direction of last agent-routed turn
   };
 
   // ── Intent rules ─────────────────────────────────────────
@@ -225,6 +227,13 @@ window.EditorConverse = (() => {
     };
   }
 
+  // ── P3.7: Direction lookup — mirrors EditorConsensus ─────
+  function _dirOf(action) {
+    if (['fasterPacing', 'strongerHook', 'viralMode', 'removeDeadSpace'].indexOf(action) >= 0) return 'aggressive';
+    if (action === 'cinematicMode') return 'narrative';
+    return 'clarity';
+  }
+
   // ── P3.6: Consensus debate resolution ────────────────────
   // Runs the full agent debate via EditorConsensus.
   // Falls back to single-agent resolution (P3.5) when consensus unavailable.
@@ -247,20 +256,38 @@ window.EditorConverse = (() => {
 
       const rule = _RULES.find(r => r.id === debate.action);
       if (!rule) return null;
-      const tier = debate.confidence >= 0.80 ? 'high' : 'moderate';
+      const tier      = debate.confidence >= 0.80 ? 'high' : 'moderate';
+      const debateDir = _dirOf(debate.action);
+
+      // P3.7: Co-pilot reasoning — explain when recommendation diverges from collab history
+      let copilotNote = null;
+      if (typeof CreatorMemory !== 'undefined') {
+        const collab = CreatorMemory.getCollabProfile();
+        if (collab.confident && collab.preferredDir && collab.preferredDir !== debateDir) {
+          if (debateDir === 'aggressive') {
+            copilotNote = 'You tend to preserve emotional pacing. Applied a conservative adjustment.';
+          } else if (debateDir === 'narrative') {
+            copilotNote = 'You usually favor high-energy edits. Cinematic approach taken — signal was compelling.';
+          }
+        } else if (collab.confident && collab.compromiseTolerant && debate.compromiseNote) {
+          copilotNote = 'Balanced compromise applied — aligns with how you usually resolve these.';
+        }
+      }
+
       return {
         action:         debate.action,
         interpretation: rule.interpretation,
         desc:           rule.desc,
         ambiguous:      false,
-        explainText:    null, // debate meta renders the reasoning
+        explainText:    null,
         agentMeta: {
-          label:         debate.allyLabel,
+          label:          debate.allyLabel,
           tier,
-          consensus:     debate.consensus,
-          dissent:       debate.dissent,
+          consensus:      debate.consensus,
+          dissent:        debate.dissent,
           compromiseNote: debate.compromiseNote,
           agreementScore: debate.agreementScore,
+          copilotNote,
         },
       };
     }
@@ -394,9 +421,11 @@ window.EditorConverse = (() => {
 
     _addTurn(‘ai’, intro, action, desc, null, explainText || null, agentMeta || null);
 
-    // Update micro context (P3.3-C)
-    _ctx.lastAction = action;
-    _ctx.lastIntent = interpretation;
+    // Update micro context (P3.3-C / P3.7)
+    _ctx.lastAction         = action;
+    _ctx.lastIntent         = interpretation;
+    _ctx.lastWasAgentRouted = !!agentMeta;
+    _ctx.lastAgentDir       = agentMeta ? _dirOf(action) : null;
 
     _waitingForResult = true;
     if (typeof EditorAiActions !== ‘undefined’) EditorAiActions.previewAction(action);
@@ -406,13 +435,23 @@ window.EditorConverse = (() => {
   function _onAccept() {
     if (!_waitingForResult) return;
     _waitingForResult = false;
+    // P3.7: Record debate direction preference when last intent was agent-routed
+    if (_ctx.lastWasAgentRouted && _ctx.lastAgentDir && typeof CreatorMemory !== 'undefined') {
+      CreatorMemory.recordDebateChoice(_ctx.lastAgentDir, true);
+    }
     _addTurn('ai', 'Applied. What else would you like to change?');
   }
 
   function _onReject() {
     if (!_waitingForResult) return;
     _waitingForResult = false;
-    _ctx.lastAction = null; // reset context on reject — user wants a different direction
+    // P3.7: Record debate direction rejection
+    if (_ctx.lastWasAgentRouted && _ctx.lastAgentDir && typeof CreatorMemory !== 'undefined') {
+      CreatorMemory.recordDebateChoice(_ctx.lastAgentDir, false);
+    }
+    _ctx.lastAction         = null; // reset context on reject — user wants a different direction
+    _ctx.lastWasAgentRouted = false;
+    _ctx.lastAgentDir       = null;
     _addTurn('ai', 'Discarded. Try a different direction, or describe it another way.');
   }
 
@@ -458,9 +497,10 @@ window.EditorConverse = (() => {
           : _esc(m.label) + ' · ' + _esc(m.tier) + ' confidence';
         inner += '<div class="p35AgentPill" data-tier="' + m.tier + '">' + pillText + '</div>';
         // P3.6: Consensus message (replaces plain explainText when debate ran)
-        if (m.consensus)      inner += '<div class="convExplain">'   + _esc(m.consensus)      + '</div>';
-        if (m.dissent)        inner += '<div class="p36Dissent">'    + _esc(m.dissent)        + '</div>';
-        if (m.compromiseNote) inner += '<div class="p36Compromise">' + _esc(m.compromiseNote) + '</div>';
+        if (m.consensus)      inner += '<div class="convExplain">'    + _esc(m.consensus)      + '</div>';
+        if (m.dissent)        inner += '<div class="p36Dissent">'     + _esc(m.dissent)        + '</div>';
+        if (m.compromiseNote) inner += '<div class="p36Compromise">'  + _esc(m.compromiseNote) + '</div>';
+        if (m.copilotNote)    inner += '<div class="p37CopilotNote">' + _esc(m.copilotNote)    + '</div>';
       }
       // P3.3-D: Explainability text (only when no debate consensus covers it)
       if (t.explainText && !(t.agentMeta && t.agentMeta.consensus)) {
@@ -505,7 +545,7 @@ window.EditorConverse = (() => {
 
   function reset() {
     _turns  = [];
-    _ctx    = { lastAction: null, lastIntent: null, lastRaw: null };
+    _ctx    = { lastAction: null, lastIntent: null, lastRaw: null, lastWasAgentRouted: false, lastAgentDir: null };
     _waitingForResult = false;
     _render();
   }

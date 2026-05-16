@@ -99,6 +99,22 @@ window.RuntimeIntelligence = (() => {
         });
       }
 
+      // P3.7: Adapt primary concern with collab history note
+      if (concerns.length && typeof CreatorMemory !== 'undefined') {
+        const collab = CreatorMemory.getCollabProfile();
+        if (collab.confident && collab.preferredDir && concerns[0].type === 'consensus') {
+          const _AGG = new Set(['fasterPacing', 'strongerHook', 'viralMode', 'removeDeadSpace']);
+          const debateDir = debate.action && _AGG.has(debate.action) ? 'aggressive' : (debate.action === 'cinematicMode' ? 'narrative' : null);
+          if (debateDir && collab.preferredDir !== debateDir) {
+            if (debateDir === 'aggressive') {
+              concerns[0].msg += ' You usually prefer lighter adjustments.';
+            } else if (debateDir === 'narrative') {
+              concerns[0].msg += ' Note: you usually favor high-energy edits.';
+            }
+          }
+        }
+      }
+
       return concerns.slice(0, 2);
     }
 

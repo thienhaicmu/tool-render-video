@@ -103,6 +103,16 @@ window.EditorConsensus = (() => {
     confidence    *= (1 - conflictLevel * 0.10);     // max -10% for conflict pressure
     confidence     = Math.min(0.97, confidence);
 
+    // P3.7: Soft collab weighting — nudge confidence using creator's debate history.
+    // Weak signal only: never overrides real agent evidence.
+    const _collab = (typeof CreatorMemory !== 'undefined') ? CreatorMemory.getCollabProfile() : null;
+    if (_collab && _collab.confident) {
+      if (_collab.preferredDir === bestDir) {
+        // Creator repeatedly sided with this direction — slight reinforcement
+        confidence = Math.min(0.97, confidence * 1.04);
+      }
+    }
+
     // Build ally label — names the agents on the winning side
     const allyLabel = agreeCount >= 2
       ? bestGroup.slice(0, 2).map(r => r.agentLabel).join(' + ')
@@ -120,7 +130,9 @@ window.EditorConsensus = (() => {
     let dissentMsg    = null;
     let compromiseNote = null;
     let finalAction   = topAgent.action;
-    const isExtremeConflict = conflictLevel > 0.45 && opposers.length && opposers[0].confidence >= 0.60;
+    // P3.7: Lower extreme conflict threshold when creator tolerates compromise
+    const _extremeThreshold = (_collab && _collab.confident && _collab.compromiseTolerant) ? 0.38 : 0.45;
+    const isExtremeConflict = conflictLevel > _extremeThreshold && opposers.length && opposers[0].confidence >= 0.60;
 
     if (opposers.length) {
       const mainOpposer = opposers[0];

@@ -18,7 +18,10 @@ window.CreatorMemory = (() => {
 
   // ── Profile shape ─────────────────────────────────────────
   function _empty() {
-    return { accepted: {}, rejected: {}, aggressiveness: 0.5, totalSignals: 0, lastUpdated: null };
+    return {
+      accepted: {}, rejected: {}, aggressiveness: 0.5, totalSignals: 0, lastUpdated: null,
+      collab: { aggressiveWins: 0, narrativeWins: 0, compromiseWins: 0, aggressiveRejects: 0, narrativeRejects: 0, lastDebateResult: null },
+    };
   }
 
   function _loadLS() {
@@ -99,6 +102,51 @@ window.CreatorMemory = (() => {
     _saveLS(_profile);
     _scheduleSync();
     _refreshPanel();
+  }
+
+  // ── Public: recordDebateChoice ────────────────────────────
+  // P3.7: Track how creator resolves creative tradeoffs in agent debates.
+  // direction: 'aggressive' | 'narrative' | 'compromise'
+  // accepted: true when creator kept the AI recommendation, false when rejected.
+  function recordDebateChoice(direction, accepted) {
+    if (!direction) return;
+    const base   = { aggressiveWins: 0, narrativeWins: 0, compromiseWins: 0, aggressiveRejects: 0, narrativeRejects: 0, lastDebateResult: null };
+    const collab = Object.assign(base, _profile.collab || {});
+    if (accepted) {
+      if (direction === 'aggressive')  collab.aggressiveWins++;
+      else if (direction === 'narrative')  collab.narrativeWins++;
+      else if (direction === 'compromise') collab.compromiseWins++;
+      collab.lastDebateResult = direction;
+    } else {
+      if (direction === 'aggressive') collab.aggressiveRejects++;
+      else if (direction === 'narrative') collab.narrativeRejects++;
+      collab.lastDebateResult = null;
+    }
+    _profile = Object.assign({}, _profile, { collab });
+    _saveLS(_profile);
+    _scheduleSync();
+    _refreshPanel();
+  }
+
+  // ── Public: getCollabProfile ──────────────────────────────
+  // P3.7: Derives collaboration preference from debate history.
+  // Requires ≥3 debate decisions for confident output.
+  function getCollabProfile() {
+    const base = { aggressiveWins: 0, narrativeWins: 0, compromiseWins: 0, aggressiveRejects: 0, narrativeRejects: 0, lastDebateResult: null };
+    const c    = Object.assign(base, _profile.collab || {});
+    const totalDebates = c.aggressiveWins + c.narrativeWins + c.compromiseWins + c.aggressiveRejects + c.narrativeRejects;
+    const confident    = totalDebates >= 3;
+
+    let preferredDir      = null;
+    let compromiseTolerant = false;
+    if (confident) {
+      const aggNet = c.aggressiveWins - c.aggressiveRejects;
+      const narNet = c.narrativeWins  - c.narrativeRejects;
+      if (aggNet >= 2 && aggNet > narNet)       preferredDir = 'aggressive';
+      else if (narNet >= 2 && narNet > aggNet)  preferredDir = 'narrative';
+      compromiseTolerant = c.compromiseWins >= 2;
+    }
+    return Object.assign({ confident, totalDebates, preferredDir, compromiseTolerant }, c);
   }
 
   // ── Public: getProfile ────────────────────────────────────
@@ -231,6 +279,18 @@ window.CreatorMemory = (() => {
       }
     }
 
+    // P3.7: Collaboration profile rows — shown when 3+ debate decisions exist
+    const collab = getCollabProfile();
+    if (collab.confident) {
+      const DIR_LABELS = { aggressive: 'Dynamic / High-energy', narrative: 'Narrative / Cinematic' };
+      if (collab.preferredDir) {
+        html += '<div class="cmPrefRow p37CollabRow"><span class="cmPrefLabel">Debate tendency</span><span class="cmPrefVal cmTasteVal">' + (DIR_LABELS[collab.preferredDir] || collab.preferredDir) + '</span></div>';
+      }
+      if (collab.compromiseTolerant) {
+        html += '<div class="cmPrefRow p37CollabRow"><span class="cmPrefLabel">Compromise</span><span class="cmPrefVal cmTasteVal">Accepts balanced solutions</span></div>';
+      }
+    }
+
     if (prefs.favored.length) {
       html += '<div class="cmPrefRow"><span class="cmPrefLabel">Prefers</span>' +
         '<span class="cmPrefVal cmFavored">' + prefs.favored.map(_label).join(', ') + '</span></div>';
@@ -244,6 +304,6 @@ window.CreatorMemory = (() => {
     return html;
   }
 
-  return { init, recordSignal, getProfile, getDerivedPreferences, getTasteModel, reset };
+  return { init, recordSignal, recordDebateChoice, getCollabProfile, getProfile, getDerivedPreferences, getTasteModel, reset };
 
 })();

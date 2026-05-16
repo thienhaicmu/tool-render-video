@@ -3389,3 +3389,81 @@ Fallback: if `EditorConsensus` is undefined → P3.5 agent layer → P3.4 taste 
 - `conflictLevel > 0.45` threshold is fixed — can't adapt to creator risk tolerance
 - Compromise always resolves to `removeDeadSpace` for aggressive/narrative conflict — limited to one compromise action regardless of which specific agents are conflicting
 - Agents within the same direction group don't debate each other — only cross-direction conflict is detected
+
+## Section 34 — P3.7: Creator Co-Pilot & Adaptive Collaboration (2026-05-16)
+
+### Overview
+
+P3.7 transforms the AI from a static expert system into an adaptive creator co-pilot. The system now remembers HOW the creator resolves creative tradeoffs across debate sessions, and uses that history to adapt consensus behavior, co-pilot reasoning text, and runtime concern messaging.
+
+### Collaboration Memory (`creator-memory.js`)
+
+`_profile` extended with `collab` sub-object:
+
+```js
+collab: {
+  aggressiveWins: 0, narrativeWins: 0, compromiseWins: 0,
+  aggressiveRejects: 0, narrativeRejects: 0,
+  lastDebateResult: null
+}
+```
+
+New public functions:
+- `recordDebateChoice(direction, accepted)` — called when creator accepts/rejects an agent-routed recommendation
+- `getCollabProfile()` — derives `{ confident, preferredDir, compromiseTolerant }` from debate history. Requires ≥3 decisions for confidence.
+
+`_renderKnown()` extended with P3.7 collab rows when `collab.confident`:
+- "Debate tendency: Dynamic / High-energy" or "Debate tendency: Narrative / Cinematic"
+- "Compromise: Accepts balanced solutions"
+
+### Adaptive Consensus (`editor-consensus.js`)
+
+`resolve()` reads `CreatorMemory.getCollabProfile()` and applies soft adjustments:
+- `confidence × 1.04` when creator repeatedly chose the winning direction (reinforcement)
+- Extreme conflict threshold lowered from `0.45` → `0.38` when `compromiseTolerant` (more synthesis-first behavior)
+
+Adjustments are additive on top of real agent signals — they never dominate.
+
+### Co-Pilot Reasoning (`editor-converse.js`)
+
+`_ctx` extended with:
+- `lastWasAgentRouted: false` — tracks when intent came from `_resolveWithAgents()`
+- `lastAgentDir: null` — creative direction of last agent-routed turn
+
+`_dirOf(action)` helper added — mirrors consensus direction groups, used to determine the direction of a fired action.
+
+`_resolveWithAgents()` now computes `copilotNote` when debate direction diverges from collab history:
+- "You tend to preserve emotional pacing. Applied a conservative adjustment."
+- "You usually favor high-energy edits. Cinematic approach taken — signal was compelling."
+- "Balanced compromise applied — aligns with how you usually resolve these."
+
+`copilotNote` flows through `agentMeta` → `_addTurn` → `_render` → `.p37CopilotNote` (warm amber italic).
+
+`_onAccept()` and `_onReject()` call `CreatorMemory.recordDebateChoice()` when `_ctx.lastWasAgentRouted` is true.
+
+### Runtime Co-Pilot (`editor-runtime-intelligence.js`)
+
+`getConcerns()` P3.6 path now appends a soft collab note to the primary concern message when the consensus direction conflicts with creator's debate history:
+- "You usually prefer lighter adjustments." (aggressive rec, narrative creator)
+- "Note: you usually favor high-energy edits." (narrative rec, aggressive creator)
+
+### CSS (`review.css`)
+
+P3.7 section appended:
+- `.p37CopilotNote` — warm amber (#FFC35A at 55% opacity), italic, 11px, below compromise note
+- `.p37CollabRow .cmPrefVal` — purple accent (`#c4b5fd`) for collab tendency rows in panel
+
+### Failure Safety
+
+- `getCollabProfile().confident = false` until 3+ debate decisions — zero adaptive behavior before threshold
+- Collab weighting is bounded: max +4% confidence boost, -0.07 threshold adjustment
+- All functions guard `typeof CreatorMemory !== 'undefined'`
+- `Object.assign(base, _profile.collab || {})` handles old profiles without collab key
+- Reset wipes collab data via `_empty()` which includes zero-state collab sub-object
+
+### What Remains Weak
+
+- `_dirOf()` is duplicated in `editor-converse.js` and `editor-consensus.js` — could drift
+- Compromise action is still fixed (`removeDeadSpace`) for aggressive/narrative conflict
+- Collab memory cannot distinguish "accepted despite dissent" from "accepted because of dissent"
+- No graduated confidence decay in collab memory — old decisions weigh equally with recent ones

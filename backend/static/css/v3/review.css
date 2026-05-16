@@ -1578,3 +1578,28 @@
 /* =======================================================
    END OF P3.6 — AGENT DEBATE & CONSENSUS INTELLIGENCE
    ======================================================= */
+
+/* =======================================================
+   P3.7 — CREATOR CO-PILOT & ADAPTIVE COLLABORATION
+   Co-pilot reasoning note in conversation turns.
+   Collaboration tendency rows in Creator Memory panel.
+   ======================================================= */
+
+/* Co-pilot reasoning note — warm amber, explains adaptation */
+.p37CopilotNote {
+  font-size: 11px;
+  color: rgba(255, 195, 90, 0.55);
+  font-style: italic;
+  margin-top: 3px;
+  line-height: 1.4;
+  padding-left: 1px;
+}
+
+/* Collaboration preference rows in Creator Memory panel */
+.p37CollabRow .cmPrefVal {
+  color: #c4b5fd;
+}
+
+/* =======================================================
+   END OF P3.7 — CREATOR CO-PILOT & ADAPTIVE COLLABORATION
+   ======================================================= */
