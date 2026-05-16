@@ -368,15 +368,17 @@ function startPolling(jobId = null){
 }
 
 async function loadJobs(){
+  const jobsOut = qs('jobs_out');
+  if(!jobsOut) return;
   if(RENDER_SESSION_ONLY){
-    qs('jobs_out').innerHTML = '<div class="emptyState">Session mode: old jobs are hidden.</div>';
+    jobsOut.innerHTML = '<div class="emptyState">Session mode: old jobs are hidden.</div>';
     return;
   }
   const res = await fetch('/api/jobs');
   const data = await res.json();
   const items = (data.items || []).slice(0, 12);
-  if(!items.length){ qs('jobs_out').innerHTML = '<div class="emptyState">No jobs yet.</div>'; return; }
-  qs('jobs_out').innerHTML = items.map(j => `
+  if(!items.length){ jobsOut.innerHTML = '<div class="emptyState">No jobs yet.</div>'; return; }
+  jobsOut.innerHTML = items.map(j => `
     <div class="partRow">
       <div class="partLeft"><div class="rankBadge">J</div><div><div class="partName">${esc(j.job_id)}</div><div class="partMeta">${esc(j.updated_at || '')}</div></div></div>
       <div><div class="miniProgress"><div class="miniProgressValue" style="width:${Number(j.progress_percent || 0)}%"></div></div><div class="partMeta">${Number(j.progress_percent || 0)}%</div></div>
