@@ -25,7 +25,8 @@ from app.services.subtitle_engine import (
     subtitle_emphasis_pass, parse_srt_blocks, write_srt_blocks,
 )
 from app.services.subtitle_transcription_adapters import transcribe_with_adapter
-from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame
+from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event
+from app.services import cancel_registry
 from app.services.viral_scorer import score_segments
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
 from app.services.report_service import append_rows
@@ -2374,6 +2375,15 @@ def run_render_pipeline(
             translated_srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.{_sub_target_lang}.srt"
             _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} start", kind="debug")
 
+            # Bail out immediately if job was cancelled before this part started
+            if cancel_registry.is_cancelled(job_id):
+                raise cancel_registry.JobCancelledError()
+            # Expose the cancel event to _run_ffmpeg_with_retry via thread-local so
+            # FFmpeg Popen can be killed mid-encode without changing every call site.
+            _cancel_ev = cancel_registry.get_event(job_id)
+            if _cancel_ev is not None:
+                set_thread_cancel_event(_cancel_ev)
+
             _existing_part_info = existing_parts.get(idx, {})
             if (
                 payload.resume_from_last
@@ -3613,6 +3623,8 @@ def run_render_pipeline(
 
             if max_workers == 1:
                 for idx, seg in enumerate(scored, start=1):
+                    if cancel_registry.is_cancelled(job_id):
+                        raise cancel_registry.JobCancelledError()
                     try:
                         result = _process_one_part(idx, seg)
                         if result["output"]:
@@ -3651,6 +3663,8 @@ def run_render_pipeline(
                 future_map = {}
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     for idx, seg in enumerate(scored, start=1):
+                        if cancel_registry.is_cancelled(job_id):
+                            break  # stop submitting; running futures will self-cancel
                         future_map[executor.submit(_process_one_part, idx, seg)] = idx
 
                     for future in as_completed(future_map):
@@ -3662,6 +3676,8 @@ def run_render_pipeline(
                                 outputs.append(result["output"])
                             if result["row"]:
                                 rows.append(result["row"])
+                        except cancel_registry.JobCancelledError:
+                            raise  # propagate immediately; executor.__exit__ waits for running futures
                         except Exception as part_err:
                             failure_detail = _render_part_failure_detail(idx, part_err)
                             failed_parts.append(failure_detail)
@@ -3690,6 +3706,9 @@ def run_render_pipeline(
                         completed_parts += 1
                         progress = 30 + int((completed_parts / total_parts) * 60)
                         _set_stage(JobStage.RENDERING_PARALLEL, progress, f"Processed {completed_parts}/{total_parts} parts")
+                # Catch cancel that completed all futures before propagating (e.g. last part cancelled)
+                if cancel_registry.is_cancelled(job_id):
+                    raise cancel_registry.JobCancelledError()
 
             _render_loop_ms = int((time.perf_counter() - _t_render_loop) * 1000)
             _job_log(

@@ -42,6 +42,16 @@ NVENC_SEMAPHORE = threading.Semaphore(_NVENC_SEM_VALUE)
 # Override with FFMPEG_TIMEOUT_SECONDS env var (e.g. for very long source files).
 _FFMPEG_TIMEOUT_SEC: int = max(60, int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "3600")))
 
+# Thread-local slot for the per-job cancel event.
+# render_pipeline sets it at the start of each part so _run_ffmpeg_with_retry can
+# kill the FFmpeg Popen when a cancel is requested without needing an extra argument.
+_tls = threading.local()
+
+
+def set_thread_cancel_event(ev) -> None:
+    """Register a cancel threading.Event for the current worker thread."""
+    _tls.cancel_event = ev
+
 # ---------------------------------------------------------------------------
 # ffprobe metadata cache — keyed by (abspath, mtime_ns, size_bytes)
 # ---------------------------------------------------------------------------
@@ -163,29 +173,62 @@ def extract_thumbnail_frame(
 
 
 def _run_ffmpeg_with_retry(command: list[str], retry_count: int = 2, wait_sec: float = 0.8):
+    # Pick up the cancel event registered by render_pipeline for this worker thread.
+    cancel_event = getattr(_tls, 'cancel_event', None)
     attempt = 0
     while True:
         attempt += 1
         try:
-            return subprocess.run(
+            proc = subprocess.Popen(
                 command,
-                check=True,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=_FFMPEG_TIMEOUT_SEC,
             )
-        except subprocess.TimeoutExpired as exc:
-            # Timeout is not retried — if FFmpeg hung once it will hang again.
-            # The subprocess is automatically killed by Python after TimeoutExpired.
-            raise RuntimeError(
-                f"FFmpeg timed out after {_FFMPEG_TIMEOUT_SEC}s and was killed. "
-                "Increase FFMPEG_TIMEOUT_SECONDS env var for very long source files."
-            ) from exc
+            # Run communicate in a daemon thread so the main loop can poll for
+            # cancel/timeout without risking pipe-buffer deadlock.
+            _done = threading.Event()
+            _result: list = [None, None, None]  # [stdout, stderr, returncode]
+
+            def _communicate(_p=proc, _d=_done, _r=_result):
+                out, err = _p.communicate()
+                _r[0] = out
+                _r[1] = err
+                _r[2] = _p.returncode
+                _d.set()
+
+            threading.Thread(target=_communicate, daemon=True).start()
+
+            deadline = time.monotonic() + _FFMPEG_TIMEOUT_SEC
+            while not _done.wait(timeout=1.0):
+                if cancel_event is not None and cancel_event.is_set():
+                    proc.terminate()
+                    if not _done.wait(timeout=5):
+                        proc.kill()
+                        _done.wait(timeout=2)
+                    raise RuntimeError("FFmpeg cancelled")
+                if time.monotonic() > deadline:
+                    proc.terminate()
+                    if not _done.wait(timeout=5):
+                        proc.kill()
+                        _done.wait(timeout=2)
+                    raise RuntimeError(
+                        f"FFmpeg timed out after {_FFMPEG_TIMEOUT_SEC}s and was killed. "
+                        "Increase FFMPEG_TIMEOUT_SECONDS env var for very long source files."
+                    )
+
+            stdout = _result[0] or ""
+            stderr = _result[1] or ""
+            if _result[2] != 0:
+                raise subprocess.CalledProcessError(_result[2], command, stdout, stderr)
+            return subprocess.CompletedProcess(command, _result[2], stdout, stderr)
+        except RuntimeError:
+            raise
         except subprocess.CalledProcessError as exc:
             if attempt > retry_count:
-                stderr = exc.stderr or ""
-                diag = _summarize_ffmpeg_stderr(stderr)
-                stderr_tail = stderr[-2000:].strip()
+                stderr_text = exc.stderr or ""
+                diag = _summarize_ffmpeg_stderr(stderr_text)
+                stderr_tail = stderr_text[-2000:].strip()
                 raise RuntimeError(
                     f"FFmpeg render failed: {diag} (exit={exc.returncode})"
                     + (f"\n{stderr_tail}" if stderr_tail else "")

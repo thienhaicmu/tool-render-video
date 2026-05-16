@@ -13,7 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import FileResponse, StreamingResponse
 from app.models.schemas import RenderRequest, DownloadHealthRequest, PrepareSourceRequest, QuickProcessRequest
-from app.services.db import upsert_job, get_job, list_job_parts
+from app.services.db import upsert_job, get_job, list_job_parts, update_job_progress
 from app.services.job_manager import submit_job, is_running
 from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify, check_youtube_download_health
@@ -536,13 +536,23 @@ def preview_transcript(session_id: str):
 
 
 def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = False):
-    run_render_pipeline(
-        job_id=job_id,
-        payload=payload,
-        resume_mode=resume_mode,
-        load_session_fn=_load_session,
-        cleanup_session_fn=_cleanup_preview_session,
-    )
+    from app.services import cancel_registry
+    ev = cancel_registry.register(job_id)
+    try:
+        # A cancel requested while the job was still queued pre-sets the event
+        if ev.is_set():
+            raise cancel_registry.JobCancelledError()
+        run_render_pipeline(
+            job_id=job_id,
+            payload=payload,
+            resume_mode=resume_mode,
+            load_session_fn=_load_session,
+            cleanup_session_fn=_cleanup_preview_session,
+        )
+    except cancel_registry.JobCancelledError:
+        update_job_progress(job_id, "cancelled", 0, "Job cancelled by user", status="cancelled")
+    finally:
+        cancel_registry.unregister(job_id)
 
 
 def _queue_render_job(job_id: str, effective_channel: str, payload: RenderRequest, *, resume_mode: bool, queued_message: str):
@@ -1149,6 +1159,25 @@ def retry_failed_parts(job_id: str):
         queued_message=f"Retrying {len(failed)} failed part(s)",
     )
     return {"job_id": job_id, "status": "queued", "failed_parts_count": len(failed)}
+
+
+@router.post("/{job_id}/cancel")
+def cancel_render_job(job_id: str):
+    """Signal a running or queued render job to stop.
+
+    Returns immediately with status='cancelling'. The job transitions to
+    status='cancelled' asynchronously once the current FFmpeg call is
+    terminated (within ~1 s of receiving the signal).
+    """
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    status = (row.get("status") or "").lower()
+    if status not in ("running", "queued"):
+        raise HTTPException(status_code=409, detail=f"Job is not cancellable (status={status})")
+    from app.services import cancel_registry
+    cancel_registry.request_cancel(job_id)
+    return {"job_id": job_id, "status": "cancelling"}
 
 
 @router.get("/jobs/{job_id}")

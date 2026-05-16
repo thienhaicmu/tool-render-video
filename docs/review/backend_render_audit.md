@@ -6288,6 +6288,30 @@ All feedback text:
 - First phase to fuse ALL creator-style signals into one coherent `creator_render_strategy` object
 - Platform only refines, never overrides — trust-safe creators (podcast, talking_head, interview, educational) are never pushed beyond their archetype style
 - Quality risk signals (high jitter, high whip_pan) automatically soften camera motion_energy by 1 level and raise stability
+
+---
+
+### 2026-05-16 — Real Render Cancellation
+
+**Implemented:**
+
+- `backend/app/services/cancel_registry.py` (new) — in-memory `{job_id: threading.Event}` registry; `register()`, `request_cancel()`, `is_cancelled()`, `get_event()`, `unregister()`; pending-cancel set handles jobs cancelled while still queued; `JobCancelledError` exception class
+- `backend/app/services/render_engine.py` — `_FFMPEG_TIMEOUT_SEC` block extended with `_tls = threading.local()` and `set_thread_cancel_event(ev)`; `_run_ffmpeg_with_retry()` rewritten from `subprocess.run` to `Popen` + background `communicate` thread, polling `_tls.cancel_event` every 1 s; on cancel: `proc.terminate()` → 5 s wait → `proc.kill()`; raises `RuntimeError("FFmpeg cancelled")`; timeout path identical
+- `backend/app/orchestration/render_pipeline.py` — imports `cancel_registry` and `set_thread_cancel_event`; `_process_one_part` checks `is_cancelled()` at start and sets thread-local cancel event via `set_thread_cancel_event`; sequential loop checks cancel before each part; parallel loop checks cancel before submitting each future, re-raises `JobCancelledError` from futures, post-loop guard for late-cancel
+- `backend/app/routes/render.py` — `process_render()` wrapped with `cancel_registry.register/unregister` + `except JobCancelledError → update_job_progress(..., status="cancelled")`; new `POST /{job_id}/cancel` endpoint: validates job is running/queued, calls `cancel_registry.request_cancel()`, returns `{"status": "cancelling"}`
+
+**Cancellation flow:**
+1. Client calls `POST /api/render/{job_id}/cancel`
+2. `cancel_registry.request_cancel(job_id)` sets the `threading.Event` (or marks pending if job not yet started)
+3. In the render worker thread, `_run_ffmpeg_with_retry` poll loop detects the event within ≤1 s and calls `proc.terminate()` on the FFmpeg Popen; escalates to `proc.kill()` after 5 s
+4. FFmpeg raises `RuntimeError("FFmpeg cancelled")` → `_process_one_part` propagates `JobCancelledError` up through the render loop → `process_render` catches it → `update_job_progress(..., status="cancelled")`
+5. WebSocket terminal status `"cancelled"` (added in P1-3) triggers the monitor to stop polling
+6. Frontend cancel button (already wired) shows the cancelled state
+
+**Remaining limitations:**
+- Non-FFmpeg stages (scene detection, transcription, download) are not cancellable; cancel takes effect at the next FFmpeg call
+- Already-submitted parallel futures cannot be recalled from the ThreadPoolExecutor; they run to their next cancel check point
+- Server restart clears in-memory registry; jobs queued at restart resume normally (pending cancel is lost)
 - Confidence blends archetype (45%), profile (25%), platform (20%), quality (10%) — missing signals lower confidence
 - Fully advisory — zero payload mutation, zero execution promotion inside Phase 61D
 
