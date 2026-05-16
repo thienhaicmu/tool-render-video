@@ -225,6 +225,27 @@ window.EditorConverse = (() => {
     };
   }
 
+  // ── P3.5: Agent-based intent resolution ──────────────────
+  // Called when no keyword rule matches and no vague power word found.
+  // Routes to EditorAgents consensus — returns result only at confidence ≥ 0.65.
+  function _resolveWithAgents() {
+    if (typeof EditorAgents === 'undefined') return null;
+    const signals = EditorAgents.buildSignals();
+    const rec     = EditorAgents.getTopRecommendation(signals);
+    if (!rec || rec.confidence < 0.65) return null;
+    const rule = _RULES.find(r => r.id === rec.action);
+    if (!rule) return null;
+    const tier = rec.confidence >= 0.80 ? 'high' : 'moderate';
+    return {
+      action:         rec.action,
+      interpretation: rule.interpretation,
+      desc:           rule.desc,
+      ambiguous:      false,
+      explainText:    rec.agentLabel + ' identified this — ' + rec.reason,
+      agentMeta:      { label: rec.agentLabel, tier },
+    };
+  }
+
   function _sanitizeQuote(s) {
     return String(s).substring(0, 40).replace(/[<>"']/g, '');
   }
@@ -280,7 +301,11 @@ window.EditorConverse = (() => {
     const vagueResult = _resolveWithTaste(text);
     if (vagueResult) return vagueResult;
 
-    // 4. Complete no-match
+    // 4. No keyword, no vague power → try agent consensus (P3.5)
+    const agentResult = _resolveWithAgents();
+    if (agentResult) return agentResult;
+
+    // 5. Complete no-match
     return { action: null, ambiguous: false };
   }
 
@@ -321,23 +346,23 @@ window.EditorConverse = (() => {
       return;
     }
 
-    _fireIntent(result.action, result.interpretation, result.desc, result.explainText || null);
+    _fireIntent(result.action, result.interpretation, result.desc, result.explainText || null, result.agentMeta || null);
   }
 
-  function _fireIntent(action, interpretation, desc, explainText) {
+  function _fireIntent(action, interpretation, desc, explainText, agentMeta) {
     const mem   = _memCtx(action);
-    let   intro = 'I understood: <strong>' + _esc(interpretation) + '</strong>.';
-    if (mem) intro += ' ' + _esc(mem);
-    intro += ' Here’s a preview — accept or discard above.';
+    let   intro = ‘I understood: <strong>’ + _esc(interpretation) + ‘</strong>.’;
+    if (mem) intro += ‘ ‘ + _esc(mem);
+    intro += ‘ Here’s a preview — accept or discard above.’;
 
-    _addTurn('ai', intro, action, desc, null, explainText || null);
+    _addTurn(‘ai’, intro, action, desc, null, explainText || null, agentMeta || null);
 
     // Update micro context (P3.3-C)
     _ctx.lastAction = action;
     _ctx.lastIntent = interpretation;
 
     _waitingForResult = true;
-    if (typeof EditorAiActions !== 'undefined') EditorAiActions.previewAction(action);
+    if (typeof EditorAiActions !== ‘undefined’) EditorAiActions.previewAction(action);
   }
 
   // Callbacks from accept/reject buttons (P3.2)
@@ -369,8 +394,8 @@ window.EditorConverse = (() => {
   }
 
   // ── Turn rendering ────────────────────────────────────────
-  function _addTurn(role, html, action, desc, clarifyOpts, explainText) {
-    _turns.push({ role, html, action, desc, clarifyOpts: clarifyOpts || null, explainText: explainText || null });
+  function _addTurn(role, html, action, desc, clarifyOpts, explainText, agentMeta) {
+    _turns.push({ role, html, action, desc, clarifyOpts: clarifyOpts || null, explainText: explainText || null, agentMeta: agentMeta || null });
     if (_turns.length > MAX_TURNS) _turns.shift();
     _render();
   }
@@ -388,6 +413,10 @@ window.EditorConverse = (() => {
       }
 
       let inner = '<div class="convTurnAi" ' + fade + '>' + t.html;
+      // P3.5: Agent attribution pill
+      if (t.agentMeta) {
+        inner += '<div class="p35AgentPill" data-tier="' + t.agentMeta.tier + '">' + _esc(t.agentMeta.label) + ' · ' + _esc(t.agentMeta.tier) + ' confidence</div>';
+      }
       // P3.3-D: Explainability text
       if (t.explainText) {
         inner += '<div class="convExplain">' + _esc(t.explainText) + '</div>';

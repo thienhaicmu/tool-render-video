@@ -1509,3 +1509,43 @@
 /* =======================================================
    END OF P3.3 — TASTE MODEL & ADAPTIVE INTENT
    ======================================================= */
+
+/* =======================================================
+   P3.5 — MULTI-AGENT EDITING SYSTEM
+   Agent pill badges in conversation turns
+   ======================================================= */
+
+/* ── Agent attribution pill ──────────────────────────── */
+.p35AgentPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin-bottom: 5px;
+  user-select: none;
+}
+
+.p35AgentPill[data-tier="high"] {
+  background: rgba(100, 210, 130, 0.10);
+  color: rgba(100, 215, 130, 0.88);
+  border: 1px solid rgba(100, 210, 130, 0.22);
+}
+
+.p35AgentPill[data-tier="moderate"] {
+  background: rgba(255, 175, 45, 0.09);
+  color: rgba(255, 178, 50, 0.82);
+  border: 1px solid rgba(255, 175, 45, 0.20);
+}
+
+.p35AgentPill[data-tier="low"] {
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,.42);
+  border: 1px solid rgba(255,255,255,.09);
+}
+
+/* =======================================================
+   END OF P3.5 — MULTI-AGENT EDITING SYSTEM
+   ======================================================= */

@@ -67,10 +67,25 @@ window.RuntimeIntelligence = (() => {
   }
 
   // ── getConcerns ───────────────────────────────────────────
-  // Detects editorial concerns from real signals + creator taste.
+  // P3.5: Delegates concern detection to EditorAgents system.
+  // Falls back to P3.4 taste-based logic if agents unavailable.
   // Returns array of { type, label, msg } — at most 2 entries.
-  // Returns empty array when taste not confident or signals too weak.
   function getConcerns(parts) {
+    // P3.5: Agent-based concerns — richer signals from scene + review intelligence
+    if (typeof EditorAgents !== 'undefined') {
+      const signals = EditorAgents.buildSignals(Array.isArray(parts) ? parts : []);
+      const results = EditorAgents.runAll(signals).filter(r => r.confidence >= 0.65);
+      if (results.length) {
+        return results.slice(0, 2).map(r => ({
+          type:  r.agentName,
+          label: r.agentLabel,
+          msg:   r.reason,
+        }));
+      }
+      return [];
+    }
+
+    // P3.4 fallback: taste-based concerns (when EditorAgents not loaded)
     if (!Array.isArray(parts) || !parts.length) return [];
     const taste = _taste();
     if (!taste || !taste.confident) return [];
@@ -83,33 +98,19 @@ window.RuntimeIntelligence = (() => {
 
     const concerns = [];
 
-    // Hook risk: first clip scored low + creator expects aggressive hooks
     const firstClip = done.find(p => Number(p.part_no) === 1);
     if (firstClip) {
       const firstPct = Math.round((Number(firstClip.viral_score) || 0) * 100);
       if (firstPct < 45 && taste.hook === 'aggressive') {
-        concerns.push({
-          type:  'hook-risk',
-          label: 'Retention Risk',
-          msg:   'Opening clip at ' + firstPct + '% — below your typical hook threshold.',
-        });
+        concerns.push({ type: 'hook-risk', label: 'Retention Risk', msg: 'Opening clip at ' + firstPct + '% — below your typical hook threshold.' });
       }
     }
-
-    // Pacing signal: batch avg low + viral/fast creator expectation
     if (done.length >= 3) {
-      const avg = Math.round(
-        done.reduce((s, p) => s + (Number(p.viral_score) || 0), 0) / done.length * 100
-      );
+      const avg = Math.round(done.reduce((s, p) => s + (Number(p.viral_score) || 0), 0) / done.length * 100);
       if (avg < 45 && (taste.editStyle === 'viral' || taste.pace === 'fast')) {
-        concerns.push({
-          type:  'pacing-mismatch',
-          label: 'Pacing Signal',
-          msg:   'Avg score ' + avg + '% — softer than your high-energy editing pace.',
-        });
+        concerns.push({ type: 'pacing-mismatch', label: 'Pacing Signal', msg: 'Avg score ' + avg + '% — softer than your high-energy editing pace.' });
       }
     }
-
     return concerns.slice(0, 2);
   }
 

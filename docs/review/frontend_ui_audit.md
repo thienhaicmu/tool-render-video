@@ -3237,3 +3237,78 @@ Visual design: amber left-border, muted amber label in small caps, standard body
 - Concern system has no "resolved" state — a concern stays visible until cleared by the next hash change or reset
 - No hook_score or motion_score available — all scoring is `viral_score` based
 - `getCompletionNarrative` compares scores against taste expectations (high-energy vs. cinematic) but can't compare against prior render history (no historical avg per creator)
+
+---
+
+## Section 32 — P3.5: Multi-Agent Editing System (2026-05-16)
+
+**Branch:** `feature/ai-output-upgrade`
+**Files changed:** `editor-agents.js` (new), `editor-converse.js`, `editor-runtime-intelligence.js`, `review.css`, `index.html`
+
+### What Changed
+
+Before P3.5, all AI editing intelligence ran through one generalized brain. Every intent — hook, pacing, subtitle, emotion, viral — was handled by the same keyword-scoring parser and the same taste model. Recommendations were generic tradeoffs across all dimensions.
+
+P3.5 introduces five specialized editing agents as pure-data functions. Each agent reads only from real signal sources (scene markers, review scores, creator taste), analyzes one editing dimension, and produces a `{ action, confidence, reason, agentLabel }` output. A consensus engine ranks them by confidence. No LLM, no orchestration bus, no fake data.
+
+### Agent System (P3.5-A/B)
+
+New file: `editor-agents.js` — `window.EditorAgents` IIFE.
+
+**Signal sources used by agents:**
+- `EditorSceneIntelligence.getLatest()` → `markers`, `scenes`, `silences`
+- `EditorReviewIntelligence.getReviewData()` → `hookScore`, `retentionScore`, `retentionRisks`, `badSubCount`, `partScores` (emotion dimension)
+- `CreatorMemory.getTasteModel()` → `pace`, `hook`, `editStyle`, `confident`
+- `parts[]` → `viral_score` per completed render part (Viral Agent only)
+
+**Five agents:**
+
+| Agent | Action | Primary Signals | Confidence Baseline |
+|---|---|---|---|
+| Hook Agent | `strongerHook` | `weak-intro` marker, `hookScore < 0.55` | 0.82–0.87 |
+| Pacing Agent | `fasterPacing` / `removeDeadSpace` | `pacing-drop` marker, silence zones > 0.8s | 0.74–0.88 |
+| Subtitle Agent | `subtitleCleanup` | `subtitle-overload` marker, `badSubCount >= 3` | 0.65–0.84 |
+| Emotion Agent | `cinematicMode` | `emotional-shift` count ≥ 2, avg emotion < 0.55 | 0.58–0.70 |
+| Viral Agent | `viralMode` / `smartClipPrioritization` | `retentionRisks >= 2`, avg viral score < 50% | 0.63–0.78 |
+
+**Taste weighting (soft, not hardcoded):**
+- Hook Agent + `taste.hook === 'aggressive'` → +9% confidence
+- Pacing Agent + `taste.pace === 'fast'` → +8% confidence
+- Subtitle Agent + `taste.editStyle === 'educational'` → +12% confidence
+- Emotion Agent + `taste.editStyle === 'cinematic'` → +12% confidence
+- Viral Agent + `taste.editStyle === 'viral'` → +10% confidence
+
+**Silence safety:** Agents return `null` when their signals are absent or below threshold. `runAll()` filters nulls. `getConcerns()` returns `[]` when no agent reaches ≥ 0.65 confidence.
+
+### Consensus Engine (P3.5-C)
+
+`EditorAgents.runAll(signals)` — runs all 5 agents, filters nulls, sorts by confidence descending.
+`EditorAgents.getTopRecommendation(signals)` — returns highest-confidence agent or null.
+`EditorAgents.getPillLabels(signals)` — returns up to 3 `{ agentLabel, tier, action }` objects for UI display.
+`EditorAgents.buildSignals(parts)` — assembles live signal object from the 3 real data sources.
+
+### Conversational Routing (P3.5-F)
+
+`_parseIntent()` now has a 5th resolution step: after keyword scoring, tie-breaking, and vague power resolution all fail, `_resolveWithAgents()` runs the agent consensus. If the top agent reaches ≥ 0.65 confidence, it fires the recommendation.
+
+When an agent fires via this path, a `.p35AgentPill` badge appears in the conversation turn above the explain text — e.g., "Hook Agent · high confidence". The `explainText` reads: "Hook Agent identified this — Opening clip is below engagement threshold — first impression needs a stronger hook."
+
+`agentMeta` flows through: `_resolveWithAgents()` → `_parseIntent()` → `handleInput()` → `_fireIntent()` → `_addTurn()` → `_render()`.
+
+### Runtime Integration (P3.5-E)
+
+`RuntimeIntelligence.getConcerns()` now delegates to `EditorAgents.runAll()` when the module is available. Concern items in the render evolution feed now show agent labels: "Hook Agent" / "Pacing Agent" instead of generic "Retention Risk" / "Pacing Signal". Falls back to P3.4 taste-based logic when `EditorAgents` is undefined.
+
+### Agent Pill UI (P3.5-H)
+
+`.p35AgentPill` — small inline pill with tier coloring:
+- `data-tier="high"` → green accent (confidence ≥ 0.80)
+- `data-tier="moderate"` → amber (0.65–0.79)
+- `data-tier="low"` → muted (< 0.65, only shown in evolution feed concerns)
+
+### What Remains Weak
+
+- No cross-agent conflict resolution — if Hook Agent and Emotion Agent both fire in the conversation, only the top one is routed; the second is silent (not surfaced as a secondary suggestion)
+- `_resolveWithAgents()` is only called when ALL prior resolution steps fail — keyword matches bypass agents entirely even when an agent agrees
+- Pacing Agent uses silence data from EditorSceneIntelligence which requires the editor to have been opened and analyzed; agents return empty in render-only mode
+- No "agent memory" — agents are stateless and re-evaluate from scratch on every call
