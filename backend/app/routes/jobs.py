@@ -218,15 +218,22 @@ def _resolve_job_log_path(row: dict, job_id: str) -> Path:
             out_path = (Path.cwd() / out_path).resolve()
         else:
             out_path = out_path.resolve()
-        if mode == "channel" and channel:
+        # Security: prevent path traversal when resolving log file paths from user-supplied
+        # output_dir. Only honour paths under the user's home directory or CHANNELS_DIR;
+        # reject anything pointing at system directories (/etc, /proc, C:\Windows, etc.).
+        _safe_roots = (Path.home().resolve(), CHANNELS_DIR.resolve())
+        if not any(out_path == r or out_path.is_relative_to(r) for r in _safe_roots):
+            out_path = None  # unsafe path — skip log candidates derived from this input
+        if out_path is not None and mode == "channel" and channel:
             chan = channel.lower()
             for p in [out_path, *out_path.parents]:
                 if p.name.strip().lower() == chan:
                     candidates.insert(0, p / "logs" / f"{job_id}.log")
                     break
-        if out_path.name.strip().lower() in ("video_output", "video_out") and out_path.parent.name.strip().lower() == "upload":
+        if out_path is not None and out_path.name.strip().lower() in ("video_output", "video_out") and out_path.parent.name.strip().lower() == "upload":
             candidates.append(out_path.parent.parent / "logs" / f"{job_id}.log")
-        candidates.append(out_path / "logs" / f"{job_id}.log")
+        if out_path is not None:
+            candidates.append(out_path / "logs" / f"{job_id}.log")
 
     seen = set()
     uniq: list[Path] = []

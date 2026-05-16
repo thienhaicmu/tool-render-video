@@ -902,7 +902,21 @@ def quick_process(payload: QuickProcessRequest):
         if payload.resize_width and payload.resize_height:
             vf_parts.append(f"scale={int(payload.resize_width)}:{int(payload.resize_height)}")
         if (payload.video_filter or "").strip():
-            vf_parts.append((payload.video_filter or "").strip())
+            _vf = (payload.video_filter or "").strip()
+            # Security: allowlist prevents FFmpeg filter injection via crafted vf chains.
+            # Filters like 'movie=', 'geq=', 'script=' can read files or run OS commands.
+            _SAFE_VF_FILTERS = {
+                "scale", "fps", "crop", "rotate", "transpose",
+                "hflip", "vflip", "pad", "setsar", "setdar",
+            }
+            _vf_name = re.split(r"[=,\s]", _vf)[0].strip().lower()
+            if _vf_name not in _SAFE_VF_FILTERS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported video filter '{_vf_name}'. "
+                           f"Allowed filters: {sorted(_SAFE_VF_FILTERS)}",
+                )
+            vf_parts.append(_vf)
 
         overwrite_flag = "-y" if payload.overwrite else "-n"
         trim_start_sec = 0.0

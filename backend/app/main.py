@@ -14,7 +14,6 @@ from app.routes.download import router as download_router
 from app.routes.render import router as render_router
 from app.routes.upload import router as upload_router
 from app.routes.jobs import router as jobs_router
-from app.routes.devtools import router as devtools_router
 from app.routes.voice import router as voice_router
 from app.routes.viral import router as viral_router
 from app.routes.subtitle import router as subtitle_router
@@ -101,7 +100,11 @@ app.include_router(download_router)
 app.include_router(render_router)
 app.include_router(upload_router)
 app.include_router(jobs_router)
-app.include_router(devtools_router)
+# Security: POST /api/dev/command executes arbitrary shell commands with no auth.
+# Disabled by default. Set ENABLE_DEVTOOLS=1 only in trusted local dev environments.
+if os.getenv("ENABLE_DEVTOOLS") == "1":
+    from app.routes.devtools import router as devtools_router
+    app.include_router(devtools_router)
 app.include_router(voice_router)
 app.include_router(viral_router)
 app.include_router(subtitle_router)

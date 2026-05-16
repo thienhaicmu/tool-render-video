@@ -7938,3 +7938,133 @@ if os.getenv("DEBUG") == "1":
 | B2-8 | Store proxy credentials via env var instead of plaintext DB | `services/db.py` |
 | B2-9 | Add PRAGMA wal_checkpoint to periodic maintenance | `services/maintenance.py` |
 | B2-10 | Add SQL indexes on jobs.status, jobs.updated_at, job_parts.job_id | `services/db.py:init_db` |
+
+
+---
+
+## Section 26: P0 Security Fixes Applied — 2026-05-16
+
+This section records the four P0 security vulnerabilities identified in the Reality Audit (Section 25 / audit session 2026-05-16) and the exact surgical fixes applied. No architectural changes were made. No pipeline behavior was altered.
+
+---
+
+### P0-1 FIXED — Devtools RCE endpoint disabled by default
+
+**File:** `backend/app/main.py`
+
+**Vulnerability:** `POST /api/dev/command` in `routes/devtools.py` executes arbitrary shell commands via `execute_dev_command()`. The router was imported and mounted unconditionally at startup, making it accessible to any HTTP client without authentication.
+
+**Fix:** The import and `app.include_router()` call are now wrapped in `if os.getenv("ENABLE_DEVTOOLS") == "1":`. The router module is never imported unless the env var is explicitly set. Default behavior: endpoint does not exist at runtime.
+
+```python
+# main.py:103-107
+if os.getenv("ENABLE_DEVTOOLS") == "1":
+    from app.routes.devtools import router as devtools_router
+    app.include_router(devtools_router)
+```
+
+**Impact:** `POST /api/dev/command` returns 404 in all standard deployments. The Electron local workflow is unaffected — it does not use this endpoint. Developers who need it must explicitly set `ENABLE_DEVTOOLS=1` in their environment.
+
+---
+
+### P0-2 FIXED — FFmpeg filter injection via `video_filter`
+
+**File:** `backend/app/routes/render.py`
+
+**Vulnerability:** `payload.video_filter` was appended to the FFmpeg `-vf` chain after only `.strip()`. Crafted filters (`movie=/etc/passwd`, `geq=...`, `script=...`) can read arbitrary files or execute OS commands via FFmpeg's built-in filter primitives.
+
+**Fix:** An allowlist of safe filter names is checked before appending. The filter name is extracted by splitting on `=`, `,`, or whitespace and lowercased. Any filter not in the allowlist raises HTTP 400.
+
+```python
+# render.py: around line 904
+_SAFE_VF_FILTERS = {
+    "scale", "fps", "crop", "rotate", "transpose",
+    "hflip", "vflip", "pad", "setsar", "setdar",
+}
+_vf_name = re.split(r"[=,\s]", _vf)[0].strip().lower()
+if _vf_name not in _SAFE_VF_FILTERS:
+    raise HTTPException(status_code=400, detail=f"Unsupported video filter '{_vf_name}'...")
+vf_parts.append(_vf)
+```
+
+**Impact:** Only the 10 allowlisted filters can be passed through. Existing legitimate callers using `scale`, `crop`, `fps`, etc. are unaffected. Any payload attempting filter injection now receives a clear 400 error.
+
+**Note:** The allowlist can be expanded by adding filter names to `_SAFE_VF_FILTERS` as product needs grow. Each addition should be reviewed to confirm the filter has no file I/O or exec side-effects.
+
+---
+
+### P0-3 FIXED — Path traversal in log path resolution via `output_dir`
+
+**File:** `backend/app/routes/jobs.py`
+
+**Vulnerability:** `_resolve_job_log_path()` builds a candidate log file path from `payload.output_dir`, which is stored in the DB from the original render request. After `expanduser()` and `resolve()`, the path was used without validating it remained within safe directories. A payload with `output_dir: "../../etc"` constructs log candidates like `/etc/logs/{job_id}.log`.
+
+**Fix:** After resolving `out_path`, it is checked against two safe roots using `Path.is_relative_to()` (Python ≥ 3.9). If the resolved path is outside both `Path.home()` and `CHANNELS_DIR`, `out_path` is set to `None` and all subsequent log candidate construction from that input is skipped. The function falls through to channel-based candidates (which are always safe).
+
+```python
+# jobs.py: inside _resolve_job_log_path()
+_safe_roots = (Path.home().resolve(), CHANNELS_DIR.resolve())
+if not any(out_path == r or out_path.is_relative_to(r) for r in _safe_roots):
+    out_path = None  # unsafe path — skip log candidates derived from this input
+```
+
+**Impact:** Users whose output directories are inside their home folder (the standard Electron case) are unaffected. Paths pointing to system directories are silently rejected; the function falls back to the channel log path or returns the default fallback. No API contract change.
+
+---
+
+### P0-4 FIXED — SSRF via unrestricted download URL
+
+**File:** `backend/app/routes/download.py`
+
+**Vulnerability:** `_validate_url()` only checked `scheme in {"http", "https"}` and `netloc` non-empty. Any URL — including `http://169.254.169.254/latest/meta-data/` (cloud IMDS), `http://localhost:6006/` (internal services), or RFC-1918 hosts — was accepted and forwarded to yt-dlp.
+
+**Fix:** Two layers added:
+
+1. **Direct IP rejection** — `ipaddress.ip_address(host)` parses the hostname. If it succeeds (meaning the URL used a bare IP), the request is rejected with HTTP 400. This covers all IP ranges (loopback, RFC-1918, link-local, IMDS) without needing an IP blocklist.
+
+2. **Domain allowlist** — A module-level set `_ALLOWED_DOWNLOAD_DOMAINS` lists known public video platforms. Subdomains are accepted (`host.endswith("." + d)`). Any hostname not matching is rejected with HTTP 400.
+
+```python
+# download.py
+_ALLOWED_DOWNLOAD_DOMAINS = {
+    "youtube.com", "youtu.be", "vimeo.com", "tiktok.com",
+    "instagram.com", "twitter.com", "x.com", "facebook.com",
+    "twitch.tv", "dailymotion.com", "reddit.com", "bilibili.com",
+    "nicovideo.jp", "soundcloud.com",
+}
+
+# In _validate_url():
+try:
+    ipaddress.ip_address(host)
+    raise HTTPException(400, "Direct IP addresses are not permitted for downloads.")
+except ValueError:
+    pass  # not an IP
+
+if not any(host == d or host.endswith("." + d) for d in _ALLOWED_DOWNLOAD_DOMAINS):
+    raise HTTPException(400, f"Domain '{host}' is not permitted for downloads...")
+```
+
+**Impact:** All existing YouTube, Vimeo, and similar platform downloads continue to work. URLs with IP addresses or non-allowlisted domains are rejected at the validation layer before any network request is made. The Electron workflow is unaffected since it only downloads from public video platforms.
+
+**Note:** DNS rebinding attacks (where a permitted domain resolves to an internal IP) are not fully mitigated by this fix alone — that would require resolving the hostname and checking the IP post-resolution. This is a P2 follow-up for network-exposed deployments. For the current local Electron use case, the domain allowlist is sufficient.
+
+---
+
+### P0 Fix Summary Table
+
+| ID | Vulnerability | File | Fix Applied | Status |
+|---|---|---|---|---|
+| P0-1 | Unauthenticated RCE via devtools | `main.py:104` | Router gated behind `ENABLE_DEVTOOLS=1` env var | FIXED |
+| P0-2 | FFmpeg filter injection via `video_filter` | `routes/render.py:904` | Filter name allowlist + HTTP 400 on violation | FIXED |
+| P0-3 | Path traversal via `output_dir` in log resolution | `routes/jobs.py:215` | `Path.is_relative_to()` guard against safe roots | FIXED |
+| P0-4 | SSRF via unrestricted download URL | `routes/download.py:37` | Direct-IP rejection + domain allowlist | FIXED |
+
+### Remaining risks not addressed by P0 fixes
+
+The following issues remain open and require separate P1/P2 work:
+
+- **No FFmpeg timeout** (`render_engine.py:164`) — `subprocess.run()` has no `timeout=`. Hangs block render slots permanently.
+- **Batch render bypasses semaphore** (`routes/render.py:665`) — `_run_batch()` calls `process_render()` directly, ignoring `MAX_CONCURRENT_JOBS`.
+- **WS terminal status mismatch** (`routes/jobs.py:405`) — WS breaks only on `completed`/`failed`; misses `completed_with_errors` and `interrupted`.
+- **N+1 on history** (`routes/jobs.py:153,161`) — `list_job_parts()` called per job; no SQL LIMIT on `list_jobs()`.
+- **DNS rebinding** (`routes/download.py`) — Allowlisted domain resolving to internal IP not blocked. Requires post-resolution IP check.

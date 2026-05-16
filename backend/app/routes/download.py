@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import ipaddress
 import json
 import shutil
 import threading
@@ -34,10 +35,48 @@ def _clean_urls(urls: list[str]) -> list[str]:
     return out
 
 
+# Security: allowlist of permitted download domains.
+# Prevents SSRF against internal services, cloud metadata endpoints (169.254.169.254),
+# and localhost. Only well-known public video platforms are accepted.
+_ALLOWED_DOWNLOAD_DOMAINS = {
+    "youtube.com", "youtu.be",
+    "vimeo.com",
+    "tiktok.com",
+    "instagram.com",
+    "twitter.com", "x.com",
+    "facebook.com",
+    "twitch.tv",
+    "dailymotion.com",
+    "reddit.com",
+    "bilibili.com",
+    "nicovideo.jp",
+    "soundcloud.com",
+}
+
+
 def _validate_url(url: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise HTTPException(status_code=400, detail=f"Invalid URL: {url}")
+
+    host = (parsed.hostname or "").lower()
+
+    # Security: reject bare IP addresses — they bypass the domain allowlist and
+    # allow direct access to private/internal network hosts (SSRF).
+    try:
+        ipaddress.ip_address(host)
+        raise HTTPException(status_code=400, detail="Direct IP addresses are not permitted for downloads.")
+    except ValueError:
+        pass  # not an IP — proceed to domain check
+
+    # Security: enforce domain allowlist. Subdomains of allowed domains are accepted
+    # (e.g. www.youtube.com, music.youtube.com).
+    if not any(host == d or host.endswith("." + d) for d in _ALLOWED_DOWNLOAD_DOMAINS):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Domain '{host}' is not permitted for downloads. Only public video platforms are supported.",
+        )
+
     return detect_public_video_source(url)
 
 
