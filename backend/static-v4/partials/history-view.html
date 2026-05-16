@@ -1,0 +1,30 @@
+<section id="view_history" class="historyWorkspace historyProductWorkspace hiddenView" aria-live="polite">
+
+  <div class="hwHeader">
+    <div class="hwHeaderLeft">
+      <div class="productKicker">History</div>
+      <div class="hwTitle">Recent render activity</div>
+      <div class="sectionSubtitle">Past jobs, with score, channel, and source.</div>
+    </div>
+    <div class="hwHeaderRight">
+      <input type="text" placeholder="Search by job, URL, channel…" style="width:240px" />
+      <button class="ghostButton sm">Export CSV</button>
+    </div>
+  </div>
+
+  <div id="history_filter_bar">
+    <button class="hwFilterBtn active" data-filter="all">All</button>
+    <button class="hwFilterBtn" data-filter="done">Completed</button>
+    <button class="hwFilterBtn" data-filter="failed">Failed</button>
+    <button class="hwFilterBtn" data-filter="cancelled">Cancelled</button>
+  </div>
+
+  <div id="history_status_text" class="fieldHint mono" style="padding:8px 24px"></div>
+
+  <div id="history_list">
+    <div class="emptyState">
+      <div class="icon">📜</div>
+      <div>No history yet. Render jobs will appear here after your first export.</div>
+    </div>
+  </div>
+</section>

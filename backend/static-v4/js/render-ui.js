@@ -47,7 +47,6 @@ function mountRenderRuntimePanel() {
     if (retryBtn && retryBtn.parentElement !== errorBlock) errorBlock.appendChild(retryBtn);
     queuePanel.insertBefore(errorBlock, partCards || null);
   }
-  RenderAiRuntime.mountPanels();
 }
 
 function setHeaderJob(text){ qs('job_chip').textContent = text; }
@@ -114,8 +113,6 @@ function resetRenderSessionUi(){
     qs('jobs_out').innerHTML = '<div class="emptyState">Session mode: old jobs are hidden.</div>';
   }
   hideRenderCompletionBar();
-  const _pipelineMain = document.getElementById('mainArea');
-  if (_pipelineMain) _pipelineMain.classList.remove('inPipeline');
   resetRenderMonitorHeartbeat();
   _renderLogsUserToggled = false;
   setRenderLogsCollapsed(false);
@@ -136,7 +133,6 @@ function resetRenderSessionUi(){
   renderBottomActiveQueue(null, null, []);
   updateRenderMainState(null, null, []);
   resetAiInsightsPanel();
-  RenderAiRuntime.reset();
 }
 function fmtElapsed(ms){
   const sec = Math.max(0, Math.floor(ms / 1000));
@@ -671,7 +667,6 @@ function showRenderCompletionBar(text, detail) {
   if (iconEl) iconEl.textContent = isPartial ? '⚠' : '✓';
 
   bar.classList.remove('hiddenView');
-  if (typeof updateWfStrip === 'function') updateWfStrip();
 }
 
 function hideRenderCompletionBar() {
@@ -681,7 +676,6 @@ function hideRenderCompletionBar() {
   delete bar.dataset.state;
   const summary = qs('render_completion_summary');
   if (summary) summary.textContent = '';
-  if (typeof updateWfStrip === 'function') updateWfStrip();
 }
 
 function reviewClipsFromBanner() {
@@ -1973,10 +1967,7 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !(completedStatus || String(outputText || '').trim());
   if (qs('render_active_actions')) qs('render_active_actions').classList.toggle('hiddenView', !completedStatus);
   renderAiInsights(job);
-  RenderAiRuntime.update(job?.stage || 'queued', status, parts || []);
-  if (terminal && completedStatus) RenderAiRuntime.showCompletionIntelligence(job, s, parts || []);
   updateRdCard(job, s, parts || []);
-  if (typeof updateWfStrip === 'function') updateWfStrip();
 }
 
 // ── RD — Dominant Active Render Card helpers ──────────────────────────────────
@@ -3710,11 +3701,8 @@ function populateRenderOutputPanel(job, parts) {
     const scoreVal = Number(rk.score || 0);
     const hasScore = !!(rk.rank || rk.score);
     const scoreTier = scoreVal >= 8 ? 'high' : scoreVal >= 6 ? 'mid' : scoreVal >= 4 ? 'low' : 'weak';
-    // P1.7-F: static JPEG thumbnail (cached 24h) + lazy video for hover preview
-    const _thumbBase = `/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}`;
     const thumbHtml = isDone && hasFile && jobId
-      ? `<img class="clipCardThumbImg" src="${_thumbBase}/thumbnail?t=1" loading="lazy" alt="" onerror="this.classList.add('is-error')">`
-        + `<video class="clipCardThumbVid" data-src="${_thumbBase}/media" preload="none" muted playsinline></video>`
+      ? `<video class="clipCardThumbVid" src="/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/media#t=1" preload="metadata" muted playsinline></video>`
       : `<div class="clipCardThumbPlaceholder">${isFailed ? '✗' : isSkipped ? '—' : '⋯'}</div>`;
     const thumbAttrs = (isDone && hasFile && jobId)
       ? ` data-previewable="true" onclick="centerPreviewClip(${JSON.stringify(jobId)},${partNo},${JSON.stringify(p.output_file || '')},${JSON.stringify(p.part_name || `Clip ${partNo}`)})" style="cursor:pointer"`
@@ -3766,82 +3754,11 @@ function populateRenderOutputPanel(job, parts) {
     }
   }
 
-  // P1.6-E: bind hover video previews on freshly rendered cards
-  _bindCardHoverPreviews(list);
-
-  // P2-C: inject AI review badges into output cards
-  if (typeof EditorReviewIntelligence !== 'undefined') {
-    const _rClips = (typeof EditorState !== 'undefined') ? EditorState.getState().clips     : [];
-    const _rSubs  = (typeof EditorState !== 'undefined') ? EditorState.getState().subtitles : [];
-    const _rDur   = (typeof EditorState !== 'undefined') ? EditorState.getState().duration  : 0;
-    EditorReviewIntelligence.analyze(all, _rClips, _rSubs, _rDur);
-    EditorReviewIntelligence.annotateCards(list);
-  }
-
   renderAiStrategyPanel(job);
   showRenderOutputPanel();
   renderBottomActiveQueue(job, computeProgressSummary(items), items);
   const panel = qs('render_output_panel');
   if (panel) setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
-}
-
-// ── P1.6-E: Hover video preview on output cards ──────────────────────────────
-// Plays clip thumbnail video silently on hover; pauses and resets on leave.
-// IntersectionObserver prevents activation for off-screen cards.
-let _cardHoverObserver = null;
-let _cardHoverActiveVid = null;
-
-function _stopCardHoverVideo() {
-  if (_cardHoverActiveVid) {
-    _cardHoverActiveVid.pause();
-    _cardHoverActiveVid.currentTime = 1;
-    const card = _cardHoverActiveVid.closest?.('.clipCard');
-    if (card) card.classList.remove('is-preview-playing');
-    _cardHoverActiveVid = null;
-  }
-}
-
-function _bindCardHoverPreviews(container) {
-  if (!container) return;
-
-  // Disconnect stale observer from previous render
-  if (_cardHoverObserver) { _cardHoverObserver.disconnect(); _cardHoverObserver = null; }
-  _stopCardHoverVideo();
-
-  _cardHoverObserver = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      const vid = entry.target.querySelector('.clipCardThumbVid');
-      if (vid) vid._cardInView = entry.isIntersecting;
-      // Pause if card scrolls out of view while playing
-      if (!entry.isIntersecting && _cardHoverActiveVid === vid) _stopCardHoverVideo();
-    });
-  }, { threshold: 0.2 });
-
-  container.querySelectorAll('.clipCard').forEach(card => {
-    _cardHoverObserver.observe(card);
-
-    const thumbWrap = card.querySelector('.clipCardThumbWrap');
-    const vid       = card.querySelector('.clipCardThumbVid');
-    if (!thumbWrap || !vid) return;
-
-    thumbWrap.addEventListener('mouseenter', () => {
-      if (!vid._cardInView) return;
-      if (_cardHoverActiveVid === vid) return;
-      _stopCardHoverVideo();
-      // Lazy-set src on first hover so browser doesn't download until needed
-      if (!vid.getAttribute('src') && vid.dataset.src) vid.src = vid.dataset.src;
-      _cardHoverActiveVid = vid;
-      vid.currentTime = 0;
-      vid.loop = true;
-      vid.muted = true;
-      vid.play().catch(() => {});
-      card.classList.add('is-preview-playing');
-    });
-
-    thumbWrap.addEventListener('mouseleave', () => {
-      if (_cardHoverActiveVid === vid) _stopCardHoverVideo();
-    });
-  });
 }
 
 function sortClipsView(val) {
@@ -4074,7 +3991,6 @@ function renderAiInsights(job) {
 }
 
 function resetAiInsightsPanel() {
-  if (typeof EditorReviewIntelligence !== 'undefined') EditorReviewIntelligence.reset();
   const panel = qs('ai_insights_panel');
   if (panel) panel.classList.add('hiddenView');
   const body = qs('ai_insights_body');
@@ -4231,273 +4147,3 @@ function resetAiStrategyPanel() {
     if (panel) panel.remove();
   } catch (_) {}
 }
-
-/* =======================================================
-   P2.6 — Render Intelligence Runtime
-   Non-destructive overlay: AI process card, clip evolution
-   feed, AI reasoning stream, completion intelligence.
-   ======================================================= */
-const RenderAiRuntime = (() => {
-  'use strict';
-
-  const _STAGES = [
-    { key: 'init',     label: 'Workspace Init',       backends: ['queued', 'starting'],               icon: '◉', msg: 'Allocating render workspace and validating job config' },
-    { key: 'source',   label: 'Source Analysis',      backends: ['downloading'],                      icon: '⬇', msg: 'Fetching source and validating stream compatibility' },
-    { key: 'scene',    label: 'Scene Detection',      backends: ['scene_detection'],                  icon: '⬜', msg: 'Detecting natural scene boundaries and cut points' },
-    { key: 'audio',    label: 'Audio Transcription',  backends: ['transcribing_full'],                icon: '♪', msg: 'Building temporal word map from speech signal' },
-    { key: 'beat',     label: 'Beat Mapping',         backends: ['transcribing_full'],                icon: '♩', msg: 'Mapping audio cadence to clip scoring weights' },
-    { key: 'segment',  label: 'Content Segmentation', backends: ['segment_building'],                 icon: '▦', msg: 'Identifying clip windows from scene and audio data' },
-    { key: 'scoring',  label: 'Scoring Pipeline',     backends: ['segment_building', 'rendering'],    icon: '▤', msg: 'Computing viral retention signal per candidate' },
-    { key: 'assembly', label: 'Clip Assembly',        backends: ['rendering'],                        icon: '◧', msg: 'Applying editorial ordering to clip sequence' },
-    { key: 'encode',   label: 'Render Encoding',      backends: ['rendering', 'rendering_parallel'],  icon: '▶', msg: 'FFmpeg encoding with visual and audio transforms' },
-    { key: 'validate', label: 'Quality Validation',   backends: ['rendering_parallel'],               icon: '✓', msg: 'Checking output integrity against quality thresholds' },
-    { key: 'report',   label: 'Report Generation',    backends: ['writing_report'],                   icon: '▤', msg: 'Compiling per-clip analytics and editorial summary' },
-    { key: 'export',   label: 'Export & Delivery',    backends: ['done', 'completed'],                icon: '⬆', msg: 'Packaging outputs for delivery destination' },
-  ];
-
-  const _REASONING = {
-    init:     'Render workspace initialized — job parameters validated against source constraints.',
-    source:   'Source video decoded — format profile and stream quality confirmed.',
-    scene:    'Scene graph built — boundary detection located natural editorial cut points.',
-    audio:    'Transcription active — temporal word alignment maps speech rhythm to clip windows.',
-    beat:     'Audio cadence extracted — rhythm weights applied to scoring model.',
-    segment:  'Content segmentation complete — candidate clip windows ranked by density.',
-    scoring:  'Viral scoring pipeline active — retention signal computed across all candidates.',
-    assembly: 'Clip sequence assembled — editorial ordering applied from AI director blueprint.',
-    encode:   'FFmpeg render active — visual transforms and audio normalization in progress.',
-    validate: 'Output validation running — quality gates checking bitrate, duration, and sync.',
-    report:   'Analytics pipeline active — per-clip scores and editorial summary being written.',
-    export:   'Finalizing delivery package — outputs written to destination workspace.',
-  };
-
-  const _EVOL_MSGS = [
-    'Clip {n} encoded — viral signal committed to output',
-    'Part {n} complete — editorial review passed quality gate',
-    'Clip {n} ready — retention score measured and recorded',
-    'Output {n} validated — integrity check passed',
-  ];
-
-  let _mounted                = false;
-  let _lastStageIdx           = -1;
-  let _reasonItems            = [];
-  let _lastPartCount          = 0;
-  let _completionNarrativeSet = false;
-
-  function mountPanels() {
-    if (_mounted) return;
-    _mounted = true;
-    const queuePanel = document.querySelector('.rcQueuePanel');
-    const partCards  = document.getElementById('rc_part_cards');
-    if (queuePanel && !document.getElementById('rc_ai_process_cards')) {
-      const el = document.createElement('div');
-      el.id = 'rc_ai_process_cards';
-      el.className = 'rcAiProcessCards hiddenView';
-      if (partCards) queuePanel.insertBefore(el, partCards);
-      else queuePanel.appendChild(el);
-    }
-    if (queuePanel && !document.getElementById('rc_ai_evolution_feed') && partCards) {
-      const el = document.createElement('div');
-      el.id = 'rc_ai_evolution_feed';
-      el.className = 'rcAiEvolutionFeed hiddenView';
-      el.innerHTML =
-        '<div class="rcAiEvolutionHeader"><span>AI Production Feed</span></div>' +
-        '<div id="rc_ai_evolution_list" class="rcAiEvolutionList"></div>';
-      queuePanel.insertBefore(el, partCards);
-    }
-    const logList = document.getElementById('event_log_render');
-    if (logList && !document.getElementById('rc_ai_reason_feed')) {
-      const el = document.createElement('div');
-      el.id = 'rc_ai_reason_feed';
-      el.className = 'rcAiReasonFeed hiddenView';
-      el.innerHTML =
-        '<div class="rcAiReasonHeader">' +
-          '<span class="rcAiReasonLabel">AI Reasoning</span>' +
-          '<span class="rcAiReasonBadge">Live</span>' +
-        '</div>' +
-        '<div id="rc_ai_reason_list" class="rcAiReasonList"></div>';
-      logList.parentElement.insertBefore(el, logList);
-    }
-  }
-
-  function _stageIdx(backendStage) {
-    if (!backendStage) return -1;
-    const s = String(backendStage).toLowerCase();
-    for (let i = 0; i < _STAGES.length; i++) {
-      if (_STAGES[i].backends.includes(s)) return i;
-    }
-    return -1;
-  }
-
-  function update(backendStage, status, parts) {
-    mountPanels();
-    const isComplete = status === 'done' || status === 'completed' || status === 'completed_with_errors';
-    const isFailed   = status === 'failed' || status === 'interrupted';
-    const rawIdx     = _stageIdx(backendStage);
-    const newIdx     = isComplete ? _STAGES.length - 1 : rawIdx;
-    if (newIdx >= 0 && newIdx !== _lastStageIdx) {
-      _lastStageIdx = newIdx;
-      _pushReason(_STAGES[newIdx].key);
-      _showReasonFeed();
-    }
-    _updateProcessCard(newIdx, isFailed);
-    _updateEvolutionFeed(parts);
-  }
-
-  function _updateProcessCard(idx, isFailed) {
-    const el = document.getElementById('rc_ai_process_cards');
-    if (!el) return;
-    if (idx < 0) { el.classList.add('hiddenView'); return; }
-    const stg = _STAGES[idx];
-    if (!stg) { el.classList.add('hiddenView'); return; }
-    el.classList.remove('hiddenView');
-    const pct = Math.round((idx / (_STAGES.length - 1)) * 100);
-    const state = isFailed ? 'failed' : idx === _STAGES.length - 1 ? 'done' : 'running';
-    el.innerHTML =
-      '<div class="rcAiProcCard" data-state="' + state + '">' +
-        '<div class="rcAiProcIcon">' + stg.icon + '</div>' +
-        '<div class="rcAiProcBody">' +
-          '<div class="rcAiProcLabel">' + esc(stg.label) + '</div>' +
-          '<div class="rcAiProcMsg">' + esc(stg.msg) + '</div>' +
-        '</div>' +
-        '<div class="rcAiProcMeta">' +
-          '<span class="rcAiProcPct">' + pct + '%</span>' +
-          '<div class="rcAiProcBar"><div class="rcAiProcFill" style="--w:' + pct + '%"></div></div>' +
-        '</div>' +
-      '</div>';
-  }
-
-  function _updateEvolutionFeed(parts) {
-    if (!Array.isArray(parts) || !parts.length) return;
-    const done = parts.filter(p => {
-      const st = String(p.status || '').toLowerCase();
-      return st === 'done' || st === 'completed' || st === 'complete';
-    });
-    if (done.length <= _lastPartCount) return;
-    const newOnes = done.slice(_lastPartCount);
-    _lastPartCount = done.length;
-    const listEl = document.getElementById('rc_ai_evolution_list');
-    const feedEl = document.getElementById('rc_ai_evolution_feed');
-    if (!listEl || !feedEl) return;
-    feedEl.classList.remove('hiddenView');
-    newOnes.forEach(p => {
-      const pNo  = Number(p.part_no || 0);
-      const rawSc = p.viral_score != null ? Number(p.viral_score) : null;
-      const pct  = rawSc !== null ? Math.round(rawSc * 100) : null;
-      const tpl  = _EVOL_MSGS[pNo % _EVOL_MSGS.length];
-      const msg  = tpl.replace('{n}', pNo || '?');
-      const tier = pct !== null ? (pct >= 75 ? 'high' : pct >= 50 ? 'mid' : 'low') : '';
-      const scoreHtml = pct !== null
-        ? '<span class="rcAiEvolScore" data-tier="' + tier + '">' + pct + '%</span>'
-        : '';
-      const row = document.createElement('div');
-      row.className = 'rcAiEvolItem';
-      row.innerHTML =
-        '<span class="rcAiEvolDot"></span>' +
-        '<span class="rcAiEvolText">' + esc(msg) + '</span>' +
-        scoreHtml;
-      listEl.insertBefore(row, listEl.firstChild);
-      while (listEl.children.length > 8) listEl.removeChild(listEl.lastChild);
-    });
-  }
-
-  function _pushReason(stageKey) {
-    const msg = _REASONING[stageKey];
-    if (!msg) return;
-    _reasonItems.push({ stageKey, msg });
-    if (_reasonItems.length > 10) _reasonItems.shift();
-    _renderReasonFeed();
-  }
-
-  function _renderReasonFeed() {
-    const el = document.getElementById('rc_ai_reason_list');
-    if (!el) return;
-    el.innerHTML = _reasonItems.slice().reverse().map(item =>
-      '<div class="rcAiReasonItem" data-stage="' + item.stageKey + '">' +
-        '<span class="rcAiReasonDot"></span>' +
-        '<span class="rcAiReasonText">' + esc(item.msg) + '</span>' +
-      '</div>'
-    ).join('');
-  }
-
-  function _showReasonFeed() {
-    const el = document.getElementById('rc_ai_reason_feed');
-    if (el) el.classList.remove('hiddenView');
-  }
-
-  function showCompletionIntelligence(job, summary, parts) {
-    const insightEl  = document.getElementById('rc_benchmark_insight');
-    const benchPanel = document.getElementById('rc_benchmark_panel');
-    if (!insightEl || !benchPanel) return;
-    const allParts  = Array.isArray(parts) ? parts : [];
-    const completed = allParts.filter(p => {
-      const st = String(p.status || '').toLowerCase();
-      return st === 'done' || st === 'completed' || st === 'complete';
-    });
-    if (!completed.length) return;
-    const scores   = completed.map(p => Number(p.viral_score || 0));
-    const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-    const topScore = Math.max(...scores);
-    const avgPct   = Math.round(avgScore * 100);
-    const topPct   = Math.round(topScore * 100);
-    const tier     = avgPct >= 70 ? 'high' : avgPct >= 50 ? 'mid' : 'low';
-    const topTier  = topPct >= 70 ? 'high' : topPct >= 50 ? 'mid' : 'low';
-    const totalAll = allParts.length || Number(summary?.total_parts || 0);
-    const summaryMsg = avgPct >= 70
-      ? 'Strong output batch — average viral signal is above retention threshold.'
-      : avgPct >= 50
-      ? 'Solid batch with room to optimize — hook selection could be refined.'
-      : 'Output complete — consider re-scoring with tighter clip selection.';
-    insightEl.classList.remove('hiddenView');
-    insightEl.innerHTML =
-      '<div class="rcAiCompCard">' +
-        '<div class="rcAiCompRow">' +
-          '<span class="rcAiCompLabel">Avg Viral Score</span>' +
-          '<span class="rcAiCompScore" data-tier="' + tier + '">' + avgPct + '%</span>' +
-        '</div>' +
-        '<div class="rcAiCompRow">' +
-          '<span class="rcAiCompLabel">Top Clip</span>' +
-          '<span class="rcAiCompScore" data-tier="' + topTier + '">' + topPct + '%</span>' +
-        '</div>' +
-        '<div class="rcAiCompRow">' +
-          '<span class="rcAiCompLabel">Clips Rendered</span>' +
-          '<span class="rcAiCompCount">' + completed.length + ' / ' + totalAll + '</span>' +
-        '</div>' +
-        '<div class="rcAiCompSummary">' + esc(summaryMsg) + '</div>' +
-      '</div>';
-
-    // P2.7-G: Layer editorial improvement text onto completion bar summary once
-    if (!_completionNarrativeSet) {
-      _completionNarrativeSet = true;
-      const summaryEl = document.querySelector('.renderCompletionSummary');
-      if (summaryEl) {
-        const improvements = [];
-        if (completed.length > 0) improvements.push(completed.length + ' clips AI-scored');
-        if (topPct >= 75) improvements.push('peak ' + topPct + '% viral signal');
-        else if (topPct >= 55) improvements.push('top clip ' + topPct + '%');
-        improvements.push('avg score ' + avgPct + '%');
-        const existing = summaryEl.textContent.trim();
-        const editorial = improvements.join(' · ');
-        summaryEl.textContent = existing ? existing + ' · ' + editorial : editorial;
-      }
-    }
-  }
-
-  function reset() {
-    _lastStageIdx           = -1;
-    _reasonItems            = [];
-    _lastPartCount          = 0;
-    _completionNarrativeSet = false;
-    ['rc_ai_process_cards', 'rc_ai_evolution_feed', 'rc_ai_reason_feed'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.classList.add('hiddenView');
-    });
-    ['rc_ai_evolution_list', 'rc_ai_reason_list'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = '';
-    });
-    const insightEl = document.getElementById('rc_benchmark_insight');
-    if (insightEl) { insightEl.classList.add('hiddenView'); insightEl.innerHTML = ''; }
-  }
-
-  return { mountPanels, update, reset, showCompletionIntelligence };
-})();

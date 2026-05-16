@@ -348,9 +348,16 @@ body:not(.is-history-active) #partial_history_view { display: none !important; }
     width: clamp(160px, 28vh, 44%);
   }
 
-  /* Render home product grid: 2 cols */
+  /* Render home product grid: 2 cols at 1366px */
   .renderProductGrid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    padding: 16px 18px;
+  }
+  /* Featured card: collapse to single column */
+  .renderHomeCard.is-featured {
+    grid-column: span 1;
+    min-height: 260px;
   }
 
   /* Wf strip: shrink card labels */
@@ -385,9 +392,9 @@ body:not(.is-history-active) #partial_history_view { display: none !important; }
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   }
 
-  /* Render home product grid: max 3 cols */
+  /* Render home product grid: max 3 cols at 1600px */
   .renderProductGrid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   }
 }
 
@@ -414,9 +421,10 @@ body:not(.is-history-active) #partial_history_view { display: none !important; }
   .downloadQueueRow { padding: 14px 20px; }
   .hwCard           { padding: 14px 18px; }
 
-  /* Render home product grid: up to 4 cols */
+  /* Render home product grid: up to 4 cols at 1920px */
   .renderProductGrid {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
   }
 }
 

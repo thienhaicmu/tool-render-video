@@ -130,6 +130,32 @@ def probe_video_metadata(path: str, timeout: int = 15) -> dict:
     return result
 
 
+def extract_thumbnail_frame(
+    path: str,
+    offset_sec: float = 0.5,
+    width: int = 320,
+    timeout: int = 10,
+) -> "bytes | None":
+    """Extract one JPEG frame at offset_sec from path. Returns raw JPEG bytes or None."""
+    try:
+        cmd = [
+            get_ffmpeg_bin(), "-y",
+            "-ss", str(max(0.0, offset_sec)),
+            "-i", str(path),
+            "-frames:v", "1",
+            "-vf", f"scale={max(32, width)}:-2",
+            "-f", "image2",
+            "-vcodec", "mjpeg",
+            "pipe:1",
+        ]
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        if r.returncode == 0 and len(r.stdout) > 100:
+            return bytes(r.stdout)
+    except Exception:
+        pass
+    return None
+
+
 def _run_ffmpeg_with_retry(command: list[str], retry_count: int = 2, wait_sec: float = 0.8):
     attempt = 0
     while True:

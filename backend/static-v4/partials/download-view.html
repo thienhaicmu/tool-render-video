@@ -1,0 +1,65 @@
+<section id="view_download" class="downloadWorkspace downloadProductWorkspace hiddenView" aria-live="polite">
+
+  <div class="downloadWorkspaceHeader">
+    <div class="downloadHeaderCopy">
+      <div class="productKicker">Download workspace</div>
+      <div class="downloadWorkspaceTitle">Collect source videos before rendering.</div>
+      <div class="downloadWorkspaceSub">Paste any number of YouTube, TikTok, Reels, or Facebook links. Files land in your chosen folder, ready to be opened in the editor.</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="ghostButton sm" onclick="cancelYtDownload()">Cancel All</button>
+      <button class="primaryButton sm" onclick="setView('render')">→ Render</button>
+    </div>
+  </div>
+
+  <div class="downloadWorkspaceBody">
+
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start">
+      <section class="card">
+        <div class="sectionHeader">
+          <div>
+            <div class="sectionTitle">Add Links</div>
+            <div class="sectionSubtitle">One URL per line.</div>
+          </div>
+          <button class="ghostButton sm" onclick="clearDownloadLinks()">Clear</button>
+        </div>
+        <textarea id="youtube_urls" placeholder="https://www.youtube.com/watch?v=...&#10;https://www.tiktok.com/@user/video/..."></textarea>
+        <div style="display:flex;gap:8px">
+          <button class="primaryButton" id="add_youtube_url_btn">+ Queue Links</button>
+          <button class="secondaryButton" id="youtube_health_btn">Test connectivity</button>
+        </div>
+        <div class="fieldHint mono" id="youtube_health_hint"></div>
+        <div class="fieldHint mono hiddenView" id="youtube_urls_box"></div>
+      </section>
+
+      <section class="card">
+        <div class="sectionHeader">
+          <div>
+            <div class="sectionTitle">Status</div>
+            <div class="sectionSubtitle">Live download stats.</div>
+          </div>
+        </div>
+        <div class="mono fieldHint">Queue: <span id="download_queue_meta">—</span></div>
+        <div class="mono fieldHint">Batch: <span id="download_batch_meta">—</span></div>
+        <div class="mono fieldHint">Summary: <span id="download_summary_text">—</span></div>
+        <div class="mono fieldHint" id="download_batch_status">Idle</div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:16px">
+      <div class="sectionHeader">
+        <div>
+          <div class="sectionTitle">Queue</div>
+          <div class="sectionSubtitle">Active and recent downloads.</div>
+        </div>
+      </div>
+      <div id="download_queue_list" class="downloadQueue">
+        <div class="emptyState">
+          <div class="icon">📥</div>
+          <div>No downloads yet. Add links above to begin.</div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</section>

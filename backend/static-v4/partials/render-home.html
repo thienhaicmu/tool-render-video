@@ -1,0 +1,29 @@
+<div id="render_home_panel" class="renderHomePanel renderProductHome hiddenView">
+  <section class="renderHeroPanel">
+    <div class="renderHeroCopy">
+      <div class="productKicker">Render workspace</div>
+      <h1 class="renderHeroTitle">Turn one source into ranked short clips.</h1>
+      <p class="renderHeroSub">Paste a video URL or open a local file on the left. The AI will analyze the source, suggest the best moments, and let you trim, restyle, and render in seconds.</p>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="primaryButton" onclick="setView('editor')">Start a new render</button>
+      <button class="ghostButton" onclick="setView('history')">View history</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="sectionHeader">
+      <div>
+        <div class="sectionTitle">Recent renders</div>
+        <div class="sectionSubtitle">Pick up where you left off, or compare past jobs.</div>
+      </div>
+      <button class="ghostButton sm" onclick="setView('history')">See all →</button>
+    </div>
+    <div id="render_history_list">
+      <div class="emptyState">
+        <div class="icon">🎬</div>
+        <div>No recent renders yet.</div>
+      </div>
+    </div>
+  </section>
+</div>

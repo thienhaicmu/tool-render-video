@@ -1,0 +1,1245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Clip Studio</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Bungee&family=Anton&family=Montserrat:wght@700;900&family=Oswald:wght@700&family=Bebas+Neue&family=Roboto:wght@700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<div class="appShell">
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION: topbar
+  ════════════════════════════════════════════════════════════════ -->
+  <header class="appTopBar">
+    <div class="appTopBarBrand">
+      <div class="brandBadge">AI</div>
+      <div class="brandStack">
+        <div class="brandTitle">AI Clip Studio</div>
+        <div class="brandSub">Creator-ready short video workspace</div>
+      </div>
+    </div>
+    <nav class="appTopBarNav">
+      <button class="navItem active" data-view="render" onclick="setView('render')">Render</button>
+      <button class="navItem" data-view="download" onclick="setView('download')">Download</button>
+      <button class="navItem" data-view="history" onclick="setView('history')">History</button>
+    </nav>
+    <div class="appTopBarChips">
+      <div class="pill productModePill">Local AI render engine</div>
+      <div class="pill loading" id="warmup_chip" title="Click to see details" onclick="toggleWarmupPanel()" style="cursor:pointer">Loading models...</div>
+      <button class="topBarIconBtn" type="button" onclick="setView('settings')" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 8.25a3.75 3.75 0 1 0 0 7.5a3.75 3.75 0 0 0 0-7.5Z" fill="currentColor"></path>
+          <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.75.75 0 0 0 .18-.96l-1.92-3.32a.75.75 0 0 0-.9-.33l-2.39.96a7.08 7.08 0 0 0-1.63-.94l-.36-2.54A.75.75 0 0 0 13.41 1h-3.82a.75.75 0 0 0-.74.63l-.36 2.54c-.58.22-1.13.54-1.63.94l-2.39-.96a.75.75 0 0 0-.9.33L1.65 8.2a.75.75 0 0 0 .18.96l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L1.83 14.2a.75.75 0 0 0-.18.96l1.92 3.32a.75.75 0 0 0 .9.33l2.39-.96c.5.4 1.05.72 1.63.94l.36 2.54a.75.75 0 0 0 .74.63h3.82a.75.75 0 0 0 .74-.63l.36-2.54c.58-.22 1.13-.54 1.63-.94l2.39.96a.75.75 0 0 0 .9-.33l1.92-3.32a.75.75 0 0 0-.18-.96l-2.03-1.58Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <!-- /SECTION: topbar -->
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION: sidebar (Render Setup / Download Setup / etc.)
+  ════════════════════════════════════════════════════════════════ -->
+  <aside class="rs-sidebar">
+    <div class="rs-sidebar-scroll">
+
+      <!-- Render Setup card -->
+      <section class="card" id="card_render_setup">
+        <div class="sectionHeader">
+          <div>
+            <div class="productKicker">Render Setup</div>
+            <div class="sectionTitle">Source → Plan → Editor</div>
+            <div class="sectionSubtitle">Paste a URL or pick a local file to begin.</div>
+          </div>
+        </div>
+
+        <div class="fieldGroup">
+          <label class="fieldLabel" for="source_mode">Source Type</label>
+          <select id="source_mode">
+            <option value="youtube">Video URL (YouTube / TikTok / FB)</option>
+            <option value="local">Local Video File</option>
+          </select>
+        </div>
+
+        <div class="fieldGroup" id="field_youtube_url">
+          <label class="fieldLabel" for="youtube_url">Video URL</label>
+          <input type="url" id="youtube_url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" />
+          <div class="fieldHint">Public videos only. Auto-downloads to your output folder.</div>
+        </div>
+
+        <div class="fieldGroup hiddenView" id="field_source_video_path">
+          <label class="fieldLabel" for="source_video_path">Local Video</label>
+          <input type="text" id="source_video_path" class="mono" readonly placeholder="No file selected" />
+          <div id="source_video_name" class="fieldHint mono"></div>
+          <button class="secondaryButton sm" id="pick_local_video_btn" onclick="browseLocalVideo()">📁 Choose Video</button>
+          <input type="file" id="local_video_file_picker" accept="video/*" style="display:none" />
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="fieldGroup" id="field_manual_output_dir">
+          <label class="fieldLabel" for="manual_output_dir">Output Folder</label>
+          <input type="text" id="manual_output_dir" class="mono" placeholder="D:\videos\output" />
+          <div id="manual_output_dir_hint" class="fieldHint">Folder where clips, reports, exports are saved.</div>
+          <button class="secondaryButton sm" id="btn_pick_output_dir">📁 Browse</button>
+        </div>
+
+        <div class="fieldGroup">
+          <label class="fieldLabel" for="channel_code">Channel Code (optional)</label>
+          <input type="text" id="channel_code" placeholder="e.g. creator_x" />
+        </div>
+
+        <div class="fieldGroup">
+          <label class="fieldLabel" for="resume_job_id">Resume Job ID (optional)</label>
+          <input type="text" id="resume_job_id" class="mono" placeholder="leave blank for new job" />
+        </div>
+
+        <button class="primaryButton lg fullWidth" id="start_render_btn">Open Editor →</button>
+      </section>
+
+      <!-- Download Setup card -->
+      <section class="card hiddenView" id="card_download_setup">
+        <div class="sectionHeader">
+          <div>
+            <div class="productKicker">Download Setup</div>
+            <div class="sectionTitle">Fetch source videos</div>
+            <div class="sectionSubtitle">Paste links to download into your inbox.</div>
+          </div>
+        </div>
+
+        <div class="fieldGroup">
+          <label class="fieldLabel" for="download_links_input">Video URLs (one per line)</label>
+          <textarea id="download_links_input" placeholder="https://www.youtube.com/watch?v=...&#10;https://www.tiktok.com/@..."></textarea>
+        </div>
+
+        <div class="fieldGroup">
+          <label class="fieldLabel" for="download_output_dir">Save To</label>
+          <input type="text" id="download_output_dir" class="mono" placeholder="D:\downloads" />
+        </div>
+
+        <button class="primaryButton lg fullWidth" id="download_start_btn">↓ Start Download</button>
+        <button class="ghostButton sm" id="download_retry_failed_btn">Retry Failed</button>
+      </section>
+
+    </div>
+  </aside>
+  <!-- /SECTION: sidebar -->
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION: main-area (center workspace)
+       Houses: render_flow_bar, view_editor, view_download, view_history,
+               render_home_panel, layout_grid
+  ════════════════════════════════════════════════════════════════ -->
+  <main class="rs-main mainArea" id="mainArea">
+
+    <!-- Render Flow Bar (stepper) -->
+    <div id="render_flow_bar">
+      <div class="flowBarSteps">
+        <div class="flowStep done"><div class="flowStepDot">✓</div><div class="flowStepLabel">Source</div></div>
+        <div class="flowStepConnector"></div>
+        <div class="flowStep active"><div class="flowStepDot">2</div><div class="flowStepLabel">Plan</div></div>
+        <div class="flowStepConnector"></div>
+        <div class="flowStep"><div class="flowStepDot">3</div><div class="flowStepLabel">Editor</div></div>
+        <div class="flowStepConnector"></div>
+        <div class="flowStep"><div class="flowStepDot">4</div><div class="flowStepLabel">Render</div></div>
+        <div class="flowStepConnector"></div>
+        <div class="flowStep"><div class="flowStepDot">5</div><div class="flowStepLabel">Review</div></div>
+      </div>
+      <div class="headerChips">
+        <span class="pill mono" id="resume_job_id_chip"></span>
+      </div>
+    </div>
+
+    <!-- Page Header (only visible for reports/settings) -->
+    <div class="pageHeader hiddenView">
+      <div id="page_title_text" class="pageTitle">Reports</div>
+      <div id="page_subtitle_text" class="pageSubtitle">Review render reporting output.</div>
+    </div>
+
+    <!-- Render Home Panel mount point (partials-loader injects render-home.html here) -->
+    <div id="partial_render_home"></div>
+
+    <!-- Editor View (#view_editor) -->
+    <section id="view_editor" class="hiddenView">
+      <div class="evHeader">
+        <div class="evHeaderLeft">
+          <div>
+            <div class="evTitle" id="evSourceName">source_video.mp4</div>
+            <div class="evMeta" id="evInfoSession">— · — · —</div>
+          </div>
+          <div id="evAspectBadge">9:16</div>
+        </div>
+        <div class="evHeaderRight">
+          <button class="ghostButton sm" id="evReopenBtn" onclick="evReopenEditor()">↺ Reopen</button>
+          <button class="ghostButton sm" id="evGuideToggleBtn" onclick="evToggleGuides()">Guides</button>
+          <button class="secondaryButton sm" onclick="cancelEditorView()">← Back</button>
+        </div>
+      </div>
+
+      <div class="evBody">
+
+        <!-- Preview wrap -->
+        <div class="evPreviewWrap">
+          <video id="evVideo" preload="metadata"></video>
+          <div id="evVideoFrame"></div>
+          <div id="evSubOverlay">
+            <div id="evSubInner"></div>
+          </div>
+          <div id="evTextLayersOverlay"></div>
+          <div id="evAiOverlayLayer"></div>
+          <div id="evAiTimelineLegend"></div>
+
+          <div id="evLoadingOverlay" class="evLoadingOverlay hidden">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+              <div class="editorSpinner"></div>
+              <div id="evLoadingText">Loading video…</div>
+            </div>
+          </div>
+
+          <div class="evToolbar">
+            <button id="evPlayBtn" onclick="evTogglePlay()">▶</button>
+            <div class="evTimeDisplay">
+              <span id="evCurTime">00:00.000</span>
+              <span>/</span>
+              <span id="evTotalTime">00:00.000</span>
+            </div>
+            <div style="flex:1"></div>
+            <span id="evSelLabel" class="mono" style="font-size:10px;color:var(--text-mut)">Selection: —</span>
+            <div id="evPlaybackSpeed" class="mono" style="font-size:11px;color:var(--text-mid)">1.0×</div>
+            <div id="evSessionDot" style="width:8px;height:8px;border-radius:50%;background:var(--success)"></div>
+          </div>
+        </div>
+
+        <!-- Timeline below preview -->
+        <div id="evTimelineBarWrap">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:10px;font-weight:700;color:var(--text-mut);text-transform:uppercase;letter-spacing:0.05em">Timeline</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span class="mono" style="font-size:11px;color:var(--text-mut)" id="evTrimInfo">— / —</span>
+              <span class="mono" style="font-size:11px;color:var(--primary-hi)" id="evTrimRegionLabel"></span>
+              <button class="ghostButton sm" onclick="evResetTrim()">Reset Trim</button>
+            </div>
+          </div>
+          <div id="evTimelineProgress" onclick="evSeekClick(event)">
+            <div id="evTrimRegion"></div>
+            <div id="evTrimFill"></div>
+            <div id="evTrimInSlider" style="left:0%"></div>
+            <div id="evTrimOutSlider" style="left:100%"></div>
+          </div>
+          <div id="evTimelineLayers"></div>
+          <input type="hidden" id="evTrimInSec" value="0" />
+          <input type="hidden" id="evTrimOutSec" value="0" />
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="ghostButton sm" onclick="evSetTrimIn()">Set In</button>
+            <button class="ghostButton sm" onclick="evSetTrimOut()">Set Out</button>
+            <span id="evReadinessBar" style="margin-left:auto;font-size:11px;color:var(--text-mut)"></span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Download View mount point (partials-loader injects download-view.html here) -->
+    <div id="partial_download_view"></div>
+
+    <!-- History View mount point (partials-loader injects history-view.html here) -->
+    <div id="partial_history_view"></div>
+
+    <!-- Settings card mount point (partials-loader injects settings-view.html here) -->
+    <div id="partial_settings_view"></div>
+
+    <!-- Generic 2-column layout (reports/settings) -->
+    <div id="layout_grid" class="hiddenView">
+      <div id="render_workspace_main">
+        <!-- Card slot for reports/settings (injected from partials) -->
+      </div>
+      <div id="right_column" class="hiddenView"></div>
+    </div>
+
+  </main>
+  <!-- /SECTION: main-area -->
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION: inspector (#appInspector) — Editor tabs + settings
+  ════════════════════════════════════════════════════════════════ -->
+  <aside id="appInspector">
+
+    <!-- Header -->
+    <div class="evRightHeader">
+      <div>
+        <div class="inspectorTitle">Editor</div>
+        <div class="inspectorSub mono" id="evStatusLine">No video loaded</div>
+        <div class="inspectorSub mono" id="evStatusDetail" style="font-size:10px"></div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="iconBtn" id="evDivider" onclick="cancelEditorView()" title="Close">×</button>
+      </div>
+    </div>
+
+    <!-- Context bar -->
+    <div id="inspContextBar">
+      <span id="evInfoOutput" class="mono" style="font-size:11px;color:var(--text-mut)">Output: —</span>
+    </div>
+
+    <!-- Tabs -->
+    <nav class="inspTabBar">
+      <button class="insp-tab active" data-insp-tab="cut" data-insp-panel="panel-cut" onclick="evToggleInspGroup('cut')">Cut</button>
+      <button class="insp-tab" data-insp-tab="subtitle" data-insp-panel="panel-subtitle" onclick="evToggleInspGroup('subtitle')">Subtitle</button>
+      <button class="insp-tab" data-insp-tab="text" data-insp-panel="panel-text" onclick="evToggleInspGroup('text')">Text</button>
+      <button class="insp-tab" data-insp-tab="audio" data-insp-panel="panel-audio" onclick="evToggleInspGroup('audio')">Audio</button>
+      <button class="insp-tab" data-insp-tab="render" data-insp-panel="panel-render" onclick="evToggleInspGroup('render')">Render</button>
+    </nav>
+
+    <!-- Body -->
+    <div class="inspPaneBody evRightScroll">
+
+      <!-- ===== CUT PANEL ===== -->
+      <div class="evRight" data-insp-panel="cut">
+
+        <!-- Quick presets -->
+        <div>
+          <div class="evSectionTitle">Quick Presets</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="evOutputPreset">
+            <div class="evPresetCard isActive" data-preset="tiktok">
+              <div class="ttl">TikTok / Reels</div>
+              <div class="sub">9:16 · 60s</div>
+            </div>
+            <div class="evPresetCard" data-preset="podcast">
+              <div class="ttl">Podcast Clip</div>
+              <div class="sub">1:1 · 90s</div>
+            </div>
+            <div class="evPresetCard" data-preset="business">
+              <div class="ttl">Business Pro</div>
+              <div class="sub">16:9 · clean</div>
+            </div>
+            <div class="evPresetCard" data-preset="quality">
+              <div class="ttl">High Quality</div>
+              <div class="sub">4K · slow</div>
+            </div>
+          </div>
+          <div class="fieldHint" id="evPresetHint" style="margin-top:8px">TikTok-ready · 9:16 vertical · captioned</div>
+          <div class="fieldHint mono" id="evPresetSummary" style="font-size:10px;margin-top:4px"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Output settings -->
+        <div>
+          <div class="evSectionTitle">Output</div>
+          <div class="fieldRow">
+            <div class="fieldGroup">
+              <label class="fieldLabel" for="evAspectRatio">Aspect</label>
+              <select id="evAspectRatio">
+                <option value="9:16">9:16 Vertical</option>
+                <option value="1:1">1:1 Square</option>
+                <option value="3:4">3:4 Portrait</option>
+                <option value="16:9">16:9 Landscape</option>
+              </select>
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel" for="evRenderProfile">Profile</label>
+              <select id="evRenderProfile">
+                <option value="balanced">Balanced</option>
+                <option value="fast">Fast</option>
+                <option value="quality">Quality</option>
+              </select>
+            </div>
+          </div>
+          <div class="fieldRow" style="margin-top:8px">
+            <div class="fieldGroup">
+              <label class="fieldLabel" for="evOutputFps">FPS</label>
+              <select id="evOutputFps">
+                <option>30</option><option selected>60</option>
+              </select>
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel" for="evRenderDevice">Device</label>
+              <select id="evRenderDevice">
+                <option value="auto">Auto (GPU)</option>
+                <option value="gpu">GPU</option>
+                <option value="cpu">CPU</option>
+              </select>
+            </div>
+          </div>
+          <div class="fieldRow" style="margin-top:8px">
+            <div class="fieldGroup">
+              <label class="fieldLabel" for="evReframeStrategy">Reframe</label>
+              <select id="evReframeStrategy">
+                <option value="auto">Auto (motion crop)</option>
+                <option value="center">Center crop</option>
+                <option value="manual">Manual</option>
+              </select>
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel" for="evSourceQualityMode">Source Q</label>
+              <select id="evSourceQualityMode">
+                <option value="best">Best</option>
+                <option value="1080p">1080p</option>
+                <option value="720p">720p</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Parts settings -->
+        <div>
+          <div class="evSectionTitle alt">Parts</div>
+          <div class="fieldRow">
+            <div class="fieldGroup">
+              <label class="fieldLabel" for="evMinPart">Min Length (s)</label>
+              <input type="number" id="evMinPart" value="30" min="5" />
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel" for="evMaxPart">Max Length (s)</label>
+              <input type="number" id="evMaxPart" value="90" min="10" />
+            </div>
+          </div>
+          <div class="fieldRow" style="margin-top:8px">
+            <div class="fieldGroup">
+              <label class="fieldLabel" for="evMaxExportParts">Max Parts</label>
+              <input type="number" id="evMaxExportParts" value="5" min="1" />
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel" for="evPartOrder">Order</label>
+              <select id="evPartOrder">
+                <option value="score">By Score</option>
+                <option value="time">By Time</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Toggles -->
+        <div class="evCollapseSummary"><span class="evSectionTitle" style="margin:0">More Settings</span></div>
+        <div>
+          <div class="evMoreSettingItem">
+            <div class="label">
+              <div class="t1">Motion-aware crop</div>
+              <div class="t2">Track speaker face automatically</div>
+            </div>
+            <span class="toggle on"></span>
+          </div>
+          <div class="evMoreSettingItem">
+            <div class="label">
+              <div class="t1">Cleanup temp files</div>
+              <div class="t2">Free disk after render</div>
+            </div>
+            <label class="checkbox"><input type="checkbox" id="evCleanupTemp" checked /></label>
+          </div>
+          <div class="evMoreSettingItem">
+            <div class="label">
+              <div class="t1">Loudnorm</div>
+              <div class="t2">EBU R128 audio normalization</div>
+            </div>
+            <label class="checkbox"><input type="checkbox" id="evLoudnormEnabled" checked /></label>
+          </div>
+          <div class="evMoreSettingItem">
+            <div class="label">
+              <div class="t1">Frame scale Y</div>
+              <div class="t2">Vertical scale adjustment</div>
+            </div>
+            <input type="number" id="evFrameScaleY" value="1.0" step="0.05" style="width:80px" />
+          </div>
+          <div class="evMoreSettingItem">
+            <div class="label">
+              <div class="t1">Effect preset</div>
+              <div class="t2">Visual filter chain</div>
+            </div>
+            <select id="evEffectPreset" style="width:120px">
+              <option value="none">None</option>
+              <option value="warm">Warm</option>
+              <option value="cool">Cool</option>
+              <option value="vivid">Vivid</option>
+            </select>
+          </div>
+          <div class="evMoreSettingItem">
+            <div class="label">
+              <div class="t1">Transform preset</div>
+              <div class="t2">Pan/zoom motion preset</div>
+            </div>
+            <select id="evTransformPreset" style="width:120px">
+              <option value="none">Static</option>
+              <option value="kenburns">Ken Burns</option>
+              <option value="zoom-in">Zoom In</option>
+            </select>
+          </div>
+          <div class="evMoreSettingItem">
+            <div class="label">
+              <div class="t1">Re-upload mode</div>
+              <div class="t2">Output for re-publishing</div>
+            </div>
+            <select id="evReupMode" style="width:120px">
+              <option value="off">Off</option>
+              <option value="raw">Raw</option>
+              <option value="processed">Processed</option>
+            </select>
+          </div>
+        </div>
+
+      </div>
+      <!-- /CUT PANEL -->
+
+      <!-- ===== SUBTITLE PANEL ===== -->
+      <div class="evRight hiddenView" data-insp-panel="subtitle">
+        <div id="inspSubModeRow" style="display:flex;gap:8px;margin-bottom:12px">
+          <span id="evSubModeLabel" class="pill" style="font-size:10px">Auto · Whisper</span>
+        </div>
+
+        <div class="evSectionTitle">Style</div>
+        <div class="fieldGroup">
+          <label class="fieldLabel" for="evSubFont">Font</label>
+          <select id="evSubFont">
+            <option>Inter Display</option>
+            <option>Bungee</option>
+            <option>Anton</option>
+            <option>Bebas Neue</option>
+            <option>Montserrat</option>
+            <option>Oswald</option>
+            <option>Roboto</option>
+          </select>
+        </div>
+        <div class="fieldRow" style="margin-top:8px">
+          <div class="fieldGroup">
+            <label class="fieldLabel">Size</label>
+            <input type="range" id="evSubSize" min="20" max="80" value="38" />
+            <div class="mono fieldHint"><span id="evSubSizeVal">38</span>px</div>
+          </div>
+          <div class="fieldGroup">
+            <label class="fieldLabel">Outline</label>
+            <input type="range" id="evSubOutline" min="0" max="10" value="3" />
+            <div class="mono fieldHint"><span id="evSubOutlineVal">3</span>px</div>
+          </div>
+        </div>
+
+        <div class="evSectionTitle alt" style="margin-top:16px">Colors</div>
+        <div class="colorSwatchRow" id="evSubColor">
+          <div class="colorSwatch selected" style="background:#ffffff" data-color="#ffffff"></div>
+          <div class="colorSwatch" style="background:#f59e0b" data-color="#f59e0b"></div>
+          <div class="colorSwatch" style="background:#4d7cff" data-color="#4d7cff"></div>
+          <div class="colorSwatch" style="background:#a855f7" data-color="#a855f7"></div>
+          <div class="colorSwatch" style="background:#22c55e" data-color="#22c55e"></div>
+          <div class="colorSwatch" style="background:#ef4444" data-color="#ef4444"></div>
+        </div>
+
+        <div class="evSectionTitle" style="margin-top:16px">Highlight (karaoke)</div>
+        <div class="fieldGroup">
+          <label class="fieldLabel" for="evSubHighlight">Highlight color</label>
+          <select id="evSubHighlight">
+            <option value="warn">Warm yellow</option>
+            <option value="primary">Adobe blue</option>
+            <option value="secondary">Purple</option>
+          </select>
+        </div>
+
+        <div class="evSectionTitle alt" style="margin-top:16px">Position</div>
+        <div class="fieldRow">
+          <div class="fieldGroup">
+            <label class="fieldLabel" for="evSubPos">Y Position</label>
+            <input type="range" id="evSubPos" min="0" max="100" value="80" />
+            <div class="mono fieldHint"><span id="evSubPosVal">80</span>%</div>
+          </div>
+          <div class="fieldGroup">
+            <label class="fieldLabel" for="evSubPosX">X Position</label>
+            <input type="range" id="evSubPosX" min="0" max="100" value="50" />
+            <div class="mono fieldHint"><span id="evSubPosXVal">50</span>%</div>
+          </div>
+        </div>
+        <div id="evSubDragLabel" class="fieldHint" style="margin-top:6px">Drag the subtitle in preview to fine-tune.</div>
+
+        <div class="evSectionTitle" style="margin-top:16px">Style preset</div>
+        <select id="evSubStyle">
+          <option value="default">Default · clean</option>
+          <option value="bold-stroke">Bold + stroke</option>
+          <option value="karaoke">Karaoke (word-by-word)</option>
+          <option value="popup">Popup animation</option>
+        </select>
+
+        <div class="evSectionTitle alt" style="margin-top:16px">Translation</div>
+        <div class="evMoreSettingItem">
+          <div class="label">
+            <div class="t1">Translate subtitles</div>
+            <div class="t2">Generate dual-language captions</div>
+          </div>
+          <label class="checkbox"><input type="checkbox" id="evSubTranslate" /></label>
+        </div>
+        <div class="fieldGroup hiddenView" id="evSubTranslateFields">
+          <label class="fieldLabel" for="evSubTranslateTarget">Target language</label>
+          <select id="evSubTranslateTarget">
+            <option value="en">English</option>
+            <option value="vi">Vietnamese</option>
+            <option value="zh">Chinese</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+          </select>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="evSectionTitle">Preview</div>
+        <img id="evSubPreviewImg" alt="subtitle preview" src="" />
+        <div id="evSubStaticText" style="margin-top:8px">And the moment I realized that…</div>
+
+        <button class="secondaryButton sm" id="evAddSubtitle" style="margin-top:12px">+ Add Custom Subtitle</button>
+      </div>
+      <!-- /SUBTITLE PANEL -->
+
+      <!-- ===== TEXT PANEL ===== -->
+      <div class="evRight hiddenView" data-insp-panel="text">
+        <div class="evSectionTitle">Text Layers</div>
+        <div id="evSectionTextLayers"></div>
+        <div id="evTextLayerList"></div>
+        <button class="secondaryButton sm" id="evAddTitleOverlay" onclick="evAddTextLayer()" style="margin-top:12px">+ Add Title Overlay</button>
+
+        <div id="evTextLayerEditor" class="hiddenView" style="margin-top:16px">
+          <div class="evSectionTitle alt">Edit Layer</div>
+          <div class="fieldGroup">
+            <label class="fieldLabel">Content</label>
+            <textarea id="evTxtContent" rows="2" placeholder="Type text…"></textarea>
+          </div>
+          <div class="fieldRow">
+            <div class="fieldGroup">
+              <label class="fieldLabel">Font</label>
+              <select id="evTxtFont">
+                <option>Inter</option>
+                <option>Bungee</option>
+                <option>Anton</option>
+                <option>Bebas Neue</option>
+              </select>
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel">Size</label>
+              <input type="number" id="evTxtSize" value="24" />
+            </div>
+          </div>
+          <div class="fieldRow" style="margin-top:8px">
+            <div class="fieldGroup">
+              <label class="fieldLabel">Color</label>
+              <input type="color" id="evTxtColor" value="#ffffff" />
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel">Align</label>
+              <select id="evTxtAlign">
+                <option value="left">Left</option>
+                <option value="center" selected>Center</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
+          </div>
+          <div class="fieldRow" style="margin-top:8px">
+            <div class="fieldGroup">
+              <label class="fieldLabel">Position</label>
+              <select id="evTxtPos">
+                <option value="top">Top</option>
+                <option value="center">Center</option>
+                <option value="bottom">Bottom</option>
+              </select>
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel">X / Y</label>
+              <div style="display:flex;gap:4px">
+                <input type="number" id="evTxtX" value="50" onclick="evSetLayerX(event)" />
+                <input type="number" id="evTxtY" value="50" />
+              </div>
+            </div>
+          </div>
+          <div class="fieldRow" style="margin-top:8px">
+            <div class="fieldGroup">
+              <label class="fieldLabel">Start (s)</label>
+              <input type="number" id="evTxtStartTime" value="0" step="0.1" />
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel">End (s)</label>
+              <input type="number" id="evTxtEndTime" value="3" step="0.1" />
+            </div>
+          </div>
+          <div class="evMoreSettingItem">
+            <div class="label"><div class="t1">Bold</div></div>
+            <label class="checkbox"><input type="checkbox" id="evTxtBold" /></label>
+          </div>
+          <div class="evMoreSettingItem">
+            <div class="label"><div class="t1">Outline</div></div>
+            <label class="checkbox"><input type="checkbox" id="evTxtOutlineEnabled" /></label>
+          </div>
+          <div class="fieldGroup hiddenView" id="evTxtOutlineFields">
+            <label class="fieldLabel">Outline thickness</label>
+            <input type="number" id="evTxtOutlineThickness" value="2" />
+          </div>
+          <div class="evMoreSettingItem">
+            <div class="label"><div class="t1">Background</div></div>
+            <label class="checkbox"><input type="checkbox" id="evTxtBgEnabled" /></label>
+          </div>
+          <div class="fieldRow">
+            <div class="fieldGroup">
+              <label class="fieldLabel">BG Color</label>
+              <input type="color" id="evTxtBgColor" value="#000000" />
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel">BG Padding</label>
+              <input type="number" id="evTxtBgPadding" value="8" />
+            </div>
+          </div>
+          <div class="evMoreSettingItem">
+            <div class="label"><div class="t1">Shadow</div></div>
+            <label class="checkbox"><input type="checkbox" id="evTxtShadowEnabled" /></label>
+          </div>
+          <div class="fieldRow">
+            <div class="fieldGroup">
+              <label class="fieldLabel">Shadow X</label>
+              <input type="number" id="evTxtShadowX" value="2" />
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel">Shadow Y</label>
+              <input type="number" id="evTxtShadowY" value="2" />
+            </div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="evSectionTitle alt">AI Title Suggestion</div>
+        <div class="fieldGroup">
+          <label class="fieldLabel">AI suggested overlay</label>
+          <input type="text" id="evTitleOverlayText" placeholder="(AI will fill after analysis)" />
+        </div>
+      </div>
+      <!-- /TEXT PANEL -->
+
+      <!-- ===== AUDIO PANEL ===== -->
+      <div class="evRight hiddenView" data-insp-panel="audio">
+        <div class="evSectionTitle">Volume</div>
+        <input type="range" id="evVolume" min="0" max="200" value="100" oninput="evSetVolume()" />
+        <div class="mono fieldHint"><span id="evVolumeNum">100</span>%</div>
+
+        <div class="divider"></div>
+
+        <div class="evSectionTitle alt">Background Music</div>
+        <div class="evMoreSettingItem">
+          <div class="label">
+            <div class="t1">Enable BGM</div>
+            <div class="t2">Mix a track under the voice</div>
+          </div>
+          <label class="checkbox"><input type="checkbox" id="evBgmEnable" /></label>
+        </div>
+        <div class="hiddenView" id="evBgmFields">
+          <div class="fieldGroup">
+            <label class="fieldLabel">BGM File</label>
+            <input type="text" id="evBgmPath" class="mono" readonly placeholder="No file" />
+            <button class="secondaryButton sm" onclick="evPickBgmFile()">📁 Choose Audio</button>
+            <input type="file" id="ev_bgm_file_picker" accept="audio/*" style="display:none" />
+          </div>
+          <div class="fieldGroup">
+            <label class="fieldLabel">BGM Volume</label>
+            <input type="range" id="evBgmGain" min="0" max="100" value="20" />
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="evSectionTitle">Voiceover</div>
+        <div class="evMoreSettingItem">
+          <div class="label">
+            <div class="t1">Enable AI Voice</div>
+            <div class="t2">Generate narration from text</div>
+          </div>
+          <label class="checkbox"><input type="checkbox" id="evVoiceEnable" /></label>
+        </div>
+        <div class="hiddenView" id="evVoiceFields">
+          <div class="fieldRow">
+            <div class="fieldGroup">
+              <label class="fieldLabel">Language</label>
+              <select id="evVoiceLanguage">
+                <option value="en">English</option>
+                <option value="vi">Vietnamese</option>
+              </select>
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel">Gender</label>
+              <select id="evVoiceGender">
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+              </select>
+            </div>
+          </div>
+          <div class="fieldRow" style="margin-top:8px">
+            <div class="fieldGroup">
+              <label class="fieldLabel">Voice Preset</label>
+              <select id="evVoicePreset"></select>
+            </div>
+            <div class="fieldGroup">
+              <label class="fieldLabel">Speed</label>
+              <input type="number" id="evVoiceSpeed" value="1.0" step="0.05" min="0.5" max="2.0" />
+            </div>
+          </div>
+          <div class="fieldGroup" style="margin-top:8px">
+            <label class="fieldLabel">Mix Mode</label>
+            <select id="evVoiceMixMode">
+              <option value="replace">Replace original audio</option>
+              <option value="duck">Duck original audio</option>
+              <option value="overlay">Overlay (no ducking)</option>
+            </select>
+          </div>
+          <div class="fieldGroup" style="margin-top:8px">
+            <label class="fieldLabel">Source</label>
+            <select id="evVoiceSource">
+              <option value="auto">Auto from subtitles</option>
+              <option value="manual">Manual script</option>
+            </select>
+          </div>
+          <div class="fieldGroup hiddenView" id="evVoiceManualArea">
+            <label class="fieldLabel">Manual narration</label>
+            <textarea id="evVoiceText" rows="4" placeholder="Type narration script…" oninput="evImproveNarrationText()"></textarea>
+            <div class="fieldHint mono"><span id="evVoiceCharCount">0</span> chars</div>
+          </div>
+          <div class="fieldHint hiddenView" id="evVoiceSubtitleHint">Hint: voice will follow subtitle timing.</div>
+          <div class="fieldHint hiddenView" id="evVoiceTranslatedHint">Hint: using translated text.</div>
+          <div class="fieldHint warn hiddenView" id="evVoiceTranslateOffWarn">⚠ Translate is OFF — voice will use original language.</div>
+        </div>
+      </div>
+      <!-- /AUDIO PANEL -->
+
+      <!-- ===== RENDER PANEL ===== -->
+      <div class="evRight hiddenView" data-insp-panel="render">
+        <div class="evSectionTitle">Job Status</div>
+        <div id="mvRenderSummary" style="background:var(--bg-850);border:1px solid var(--border);border-radius:var(--r-md);padding:12px">
+          <div class="mono" style="font-size:11px;color:var(--text-mut)">No active render</div>
+        </div>
+
+        <div class="evSectionTitle alt" style="margin-top:16px">AI Insights</div>
+        <div id="ai_insights_panel">
+          <div id="ai_conf_badge">AI · ready</div>
+          <div id="ai_insights_body" class="fieldHint" style="margin-top:8px">Run analyze to see hook strength &amp; pacing insights.</div>
+        </div>
+
+        <div class="evSectionTitle" style="margin-top:16px">Hook Card</div>
+        <div id="mvHookCard">
+          <div style="display:flex;justify-content:space-between;align-items:flex-end">
+            <div>
+              <div id="mvHookScore">—</div>
+              <div id="mvHookScoreMeta">No analysis yet</div>
+            </div>
+            <button class="accentButton sm" id="mvAnalyzeBtn" onclick="mvAnalyzeMarket()">⚡ Analyze</button>
+          </div>
+          <div class="mvHookStrengthBar" style="margin-top:12px"><div class="fill" id="mvHookStrengthRow" style="width:0%"></div></div>
+          <div id="mvHookIssue" class="fieldHint warn hiddenView" style="margin-top:8px"></div>
+        </div>
+
+        <div id="mvHookSuggestSec" class="hiddenView" style="margin-top:12px">
+          <div id="mvHookSuggestLabel" class="fieldLabel">Suggestions</div>
+          <div id="mvHookSuggestList"></div>
+          <div id="mvHookSuggestion" class="fieldHint"></div>
+        </div>
+
+        <div id="mvHookCompareSec" class="hiddenView" style="margin-top:16px">
+          <div class="evSectionTitle alt">A / B Compare</div>
+          <div class="mvHookCompareGrid">
+            <div class="mvHookCompareCard" id="mvHookCompareOrigCard">
+              <div class="fieldLabel">Original</div>
+              <div id="mvHookCompareOrigText" class="fieldHint"></div>
+              <div style="display:flex;justify-content:space-between;margin-top:8px">
+                <div class="mono" id="mvHookCompareOrigScore">—</div>
+                <div class="mono" id="mvHookCompareOrigStrength">—</div>
+              </div>
+              <button class="ghostButton sm" id="mvHookCompareOrigUse" onclick="mvCompareUse('orig')" style="margin-top:8px">Use this</button>
+            </div>
+            <div class="mvHookCompareCard mvHookCompareWinner" id="mvHookCompareSugCard">
+              <div class="fieldLabel">Suggested</div>
+              <div id="mvHookCompareSugText" class="fieldHint"></div>
+              <div style="display:flex;justify-content:space-between;margin-top:8px">
+                <div class="mono" id="mvHookCompareSugScore">—</div>
+                <div class="mono" id="mvHookCompareSugStrength">—</div>
+              </div>
+              <button class="primaryButton sm" id="mvHookCompareSugUse" onclick="mvCompareUse('sug')" style="margin-top:8px">Use this</button>
+            </div>
+          </div>
+          <div class="mono fieldHint" id="mvHookCompareDelta" style="margin-top:8px"></div>
+        </div>
+
+        <div class="hiddenView">
+          <div class="fieldHint" id="mvHintBullets"></div>
+          <div class="fieldHint" id="mvHintHookRow"></div>
+          <div class="fieldHint" id="mvHintToneRow"></div>
+          <div class="fieldHint" id="mvMarketRec"></div>
+          <div class="fieldHint" id="mvSubEditsIndicator"></div>
+        </div>
+      </div>
+      <!-- /RENDER PANEL -->
+
+    </div>
+    <!-- /inspector body -->
+
+    <!-- Inspector footer (Start Render CTA) -->
+    <div class="evRightFooter">
+      <button class="primaryButton lg fullWidth" id="evStartBtn">Start Render</button>
+    </div>
+  </aside>
+  <!-- /SECTION: inspector -->
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION: bottom panel (#appBottomPanel) — Render monitor
+  ════════════════════════════════════════════════════════════════ -->
+  <section id="appBottomPanel">
+
+    <!-- Toolbar (always visible) -->
+    <div class="abpToolbar">
+      <div class="abpToolbarJob">
+        <div class="t1" id="job_title">No active render</div>
+        <div class="t2" id="job_meta_1">Channel — · Source —</div>
+      </div>
+      <div class="abpToolbarProgress">
+        <div class="progressTrack" id="job_bar">
+          <div class="progressFill" id="rc_progress" style="width:0%"></div>
+        </div>
+        <div class="mono" id="job_percent" style="font-size:14px;font-weight:700;color:var(--text-mut)">0%</div>
+      </div>
+      <div class="abpToolbarRight">
+        <span id="job_chip" class="pill">Idle</span>
+        <span id="job_stage_pill" class="hiddenView">stage</span>
+        <span id="job_message" class="fieldHint hiddenView"></span>
+        <span id="job_meta_2" class="mono" style="font-size:10px;color:var(--text-mut)"></span>
+        <button class="iconBtn" id="rc_log_panel_btn" title="Toggle logs" onclick="focusRenderLogPanel()">📜</button>
+        <button class="iconBtn" id="rc_log_autoscroll_btn" title="Auto-scroll">↓</button>
+        <button class="iconBtn" id="rc_toggle_logs_btn" title="Collapse logs">▾</button>
+        <button class="iconBtn" id="abp_collapse_btn" title="Collapse panel">▾</button>
+      </div>
+    </div>
+
+    <!-- Monitor header (sub-header below toolbar) -->
+    <div class="abpMonitorHeader hiddenView" id="render_monitor_header">
+      <div class="monitorTextBlock abpMonitorMain">
+        <div class="t1" id="render_monitor_primary">—</div>
+        <div class="t2" id="render_monitor_secondary">—</div>
+      </div>
+      <span class="mono" id="render_monitor_heartbeat" style="font-size:10px;color:var(--text-mut)"></span>
+    </div>
+
+    <!-- Body: Queue + Logs split -->
+    <div class="abpBody">
+
+      <!-- Queue (left) -->
+      <div class="abpQueue abpSummaryRail" id="rc_bottom">
+
+        <div class="abpQueueHead">
+          <div class="ttl">Render Queue</div>
+          <span class="pill mono" id="rc_queue_summary">—</span>
+          <span class="pill" id="rc_active_badge">Idle</span>
+          <span class="mono fieldHint" id="rc_status">—</span>
+          <span class="mono fieldHint" id="rc_eta" style="margin-left:auto"></span>
+          <button class="ghostButton sm" id="rc_open_output_btn" onclick="openCsPreviewFolder()">Open Output</button>
+          <button class="ghostButton sm" id="rc_retry_btn" onclick="rcRetry()">Retry</button>
+        </div>
+
+        <!-- Summary -->
+        <div class="abpSummaryCard hiddenView" id="rc_active">
+          <div class="ttl" id="rc_card_job_title">—</div>
+          <div class="sub">
+            <span id="rc_card_status_badge"></span>
+            <span id="abp_summary_primary"></span>
+            <span id="abp_summary_meta"></span>
+          </div>
+          <div class="sub">
+            <span id="abp_summary_active"></span>
+            <span id="abp_summary_latest"></span>
+            <span id="abp_summary_stage"></span>
+            <span id="abp_summary_parts"></span>
+          </div>
+          <div class="progressBar skinny">
+            <div class="fill" id="abp_summary_progress" style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- Active card -->
+        <div id="rc_active_card" class="hiddenView">
+          <div id="rc_active_title">—</div>
+          <div id="rc_active_subtitle" class="mono">—</div>
+          <div id="rc_active_stage" class="mono"></div>
+          <div id="rc_active_message" class="mono"></div>
+          <div id="rc_stage" class="mono fieldHint"></div>
+          <div id="rc_stage_timeline" class="mono"></div>
+          <div id="rc_active_bar"><div style="width:0%"></div></div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px">
+            <span class="fieldHint">Progress</span>
+            <span id="rc_active_percent" class="mono">0%</span>
+          </div>
+        </div>
+
+        <!-- Error / Retry block -->
+        <div id="abp_error_block" class="hiddenView" style="background:var(--danger-soft);border:1px solid var(--danger);border-radius:var(--r-md);padding:12px;margin-bottom:12px">
+          <div id="abp_error_text" style="color:var(--danger);font-size:12px"></div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="dangerButton sm" id="abp_retry_btn">Retry Job</button>
+          </div>
+        </div>
+
+        <!-- Output info -->
+        <div class="hiddenView" id="render_workspace_output">
+          <div id="render_output_badge" class="pill"></div>
+          <div id="render_output_path" class="mono fieldHint"></div>
+          <div id="abp_output_text" class="mono fieldHint"></div>
+          <div id="abp_output_meta" class="mono fieldHint"></div>
+        </div>
+
+        <!-- Output preview snippet -->
+        <div class="hiddenView" id="rc_output_preview">
+          <div class="evSectionTitle alt">Output Preview</div>
+          <video id="rc_preview_video" controls></video>
+          <div id="rc_preview_filename" class="mono fieldHint"></div>
+          <div id="rc_preview_path" class="mono fieldHint"></div>
+          <div id="rc_preview_partno" class="mono fieldHint"></div>
+          <div id="rc_preview_part_select"></div>
+          <div id="rc_preview_unavailable" class="fieldHint hiddenView">Preview not available yet.</div>
+        </div>
+
+        <!-- Part cards -->
+        <div id="rc_part_cards"></div>
+        <div id="rc_parts" class="hiddenView"></div>
+        <div id="part_focus" class="hiddenView"></div>
+        <div id="parts_wrap" class="hiddenView"></div>
+
+        <!-- Latest event -->
+        <div id="rc_latest" class="fieldHint mono" style="margin-top:12px"></div>
+
+        <!-- Benchmark / Compare panels -->
+        <div id="rc_benchmark_panel" class="hiddenView" style="margin-top:16px">
+          <div class="evSectionTitle">Benchmark</div>
+          <span id="rc_benchmark_badge" class="pill"></span>
+          <div id="rc_benchmark_grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"></div>
+          <div id="rc_benchmark_insight" class="fieldHint"></div>
+        </div>
+
+        <div id="rc_compare_panel" class="hiddenView" style="margin-top:16px">
+          <div class="evSectionTitle alt">Compare A / B</div>
+          <div id="rc_compare_grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div id="rc_compare_col_a"></div>
+            <div id="rc_compare_col_b"></div>
+          </div>
+          <div id="rc_compare_diff" class="mono fieldHint"></div>
+          <div id="rc_compare_empty" class="fieldHint hiddenView">No comparison data.</div>
+        </div>
+
+        <!-- Completion bar -->
+        <div id="render_completion_bar" class="hiddenView" style="margin-top:16px;background:var(--success-soft);border:1px solid var(--success);border-radius:var(--r-md);padding:12px">
+          <div id="render_completion_msg" style="font-weight:700;color:var(--success)">All clips ready</div>
+          <div id="render_completion_summary" class="fieldHint mono"></div>
+        </div>
+
+        <!-- Active panel and runtime mount moved out of #rc_bottom (see below, sibling of .abpBody) -->
+
+        <!-- Output panel + list -->
+        <div id="render_output_panel" class="hiddenView">
+          <div class="evSectionTitle">Clips</div>
+          <div id="clips_section_label" class="fieldHint">Sorted by AI score</div>
+          <div id="render_output_dir" class="mono fieldHint"></div>
+          <div id="render_output_list" class="clipGalleryGrid"></div>
+        </div>
+
+        <!-- Workspace overview -->
+        <div id="render_workspace_source" class="hiddenView fieldHint mono"></div>
+        <div id="render_workspace_stage" class="hiddenView fieldHint mono"></div>
+        <div id="render_workspace_preview" class="hiddenView">
+          <span id="render_workspace_preview_badge" class="pill"></span>
+          <div id="render_workspace_preview_title" class="fieldHint"></div>
+          <div id="render_workspace_preview_text" class="fieldHint"></div>
+        </div>
+
+        <!-- Channels root + jobs out -->
+        <div id="render_channels_root" class="hiddenView"></div>
+        <div id="jobs_out" class="hiddenView"></div>
+
+        <!-- Action message block — 4 siblings (NOT nested), so JS textContent assignments don't wipe children -->
+        <div class="hiddenView" id="action_title" style="font-weight:700;color:var(--text)"></div>
+        <div class="hiddenView" id="action_state" style="background:var(--bg-850);border:1px solid var(--border);border-radius:var(--r-md);padding:12px;margin-top:12px"></div>
+        <div class="hiddenView" id="action_message" class="fieldHint"></div>
+        <div class="hiddenView" id="action_meta" class="mono fieldHint"></div>
+
+        <!-- Re-upload BGM fields (used by upload-engine) -->
+        <div class="hiddenView">
+          <input type="checkbox" id="reup_bgm_enable" />
+          <input type="text" id="reup_bgm_path" />
+          <input type="text" id="bgm_file_picker" />
+          <input type="text" id="bgm_fields" />
+        </div>
+
+      </div>
+
+      <!-- Logs (right) -->
+      <div class="abpLog">
+        <div class="abpLogHead">
+          <div class="ttl">Live Log</div>
+          <span class="pill mono" style="font-size:9px">event_log_render</span>
+          <div class="right">
+            <button class="ghostButton sm" onclick="filterRenderLogs('all')">Auto</button>
+            <button class="ghostButton sm" onclick="copyRenderLogs()">Copy</button>
+            <button class="ghostButton sm" onclick="copyRenderDiagnostics()">Diag</button>
+          </div>
+        </div>
+        <div class="abpLogBox" id="event_log_render"></div>
+      </div>
+
+    </div>
+    <!-- /abpBody -->
+
+    <!-- Active panel + runtime mount — siblings of .abpBody.
+         JS (render-ui.js → mountRenderRuntimePanel) moves #rc_bottom + .abpToolbar
+         into #render_runtime_mount on first init. They MUST live outside #rc_bottom
+         or the DOM throws HierarchyRequestError. -->
+    <div id="render_active_panel" class="hiddenView">
+      <div id="render_active_title"></div>
+      <div id="render_active_meta" class="mono fieldHint"></div>
+      <div id="render_active_state" class="mono fieldHint"></div>
+      <div id="render_active_pct" class="mono"></div>
+      <div id="render_active_bar" class="progressBar skinny"><div class="fill"></div></div>
+      <div id="render_active_actions"></div>
+    </div>
+    <div id="render_runtime_mount"></div>
+
+    <!-- Bottom-bar mini-summary (used by render-ui when collapsed) -->
+    <div class="hiddenView">
+      <span id="sbDot"></span>
+      <span id="sbLabel">Idle</span>
+      <span id="sbPct">0%</span>
+      <span id="sbSummary"></span>
+      <span id="sbJobArea"></span>
+      <span id="rcb_icon"></span>
+    </div>
+
+  </section>
+  <!-- /SECTION: bottom panel -->
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION: status bar (#statusSystem)
+  ════════════════════════════════════════════════════════════════ -->
+  <footer id="statusSystem">
+    <div class="left">
+      <span class="dot"></span>
+      <span class="strong">Ready</span>
+      <span class="sep">·</span>
+      <span>FFmpeg 7.1</span>
+      <span class="sep">·</span>
+      <span>CUDA · RTX 4070</span>
+      <span class="sep">·</span>
+      <span>Whisper loaded</span>
+    </div>
+    <div class="right">
+      <span>4.2 / 16 GB</span>
+      <span class="sep">·</span>
+      <span>AI Clip Studio v3.0 · Electron + FastAPI</span>
+    </div>
+  </footer>
+  <!-- /SECTION: status bar -->
+
+</div>
+<!-- /appShell -->
+
+<!-- ═══════════════════════════════════════════════════════════════
+     Cross-cutting overlays: clip preview modal, toast root, output preview pane
+════════════════════════════════════════════════════════════════ -->
+
+<!-- Clip preview modal -->
+<div id="clip_preview_modal" class="modalBackdrop hiddenView" onclick="closeClipPreview()">
+  <div class="modalDialog" onclick="event.stopPropagation()">
+    <div class="modalHeader">
+      <div>
+        <div id="clip_preview_title" class="modalTitle">Clip preview</div>
+        <div class="modalSub mono"></div>
+      </div>
+      <button class="modalClose" onclick="closeClipPreview()">×</button>
+    </div>
+    <div class="modalBody">
+      <video id="clip_preview_video" controls></video>
+    </div>
+  </div>
+</div>
+
+<!-- Center stage preview (#cs_preview_*) -->
+<div id="cs_preview_area" class="hiddenView modalBackdrop" onclick="closeCenterPreview()">
+  <div class="modalDialog" onclick="event.stopPropagation()">
+    <div class="modalHeader">
+      <div>
+        <div id="cs_preview_name" class="modalTitle">Preview</div>
+        <div id="cs_preview_meta" class="modalSub mono"></div>
+      </div>
+      <button class="modalClose" onclick="closeCenterPreview()">×</button>
+    </div>
+    <div class="modalBody">
+      <video id="cs_preview_video" controls></video>
+      <div id="cs_preview_bar" class="progressBar skinny" style="margin-top:8px"><div class="fill" style="width:0%"></div></div>
+      <div id="cs_preview_loading" class="fieldHint hiddenView">Loading…</div>
+      <div id="cs_preview_error" class="fieldHint error hiddenView"></div>
+      <div id="cs_preview_empty" class="emptyState hiddenView">No preview available.</div>
+    </div>
+    <div class="modalFooter">
+      <button class="primaryButton sm" id="cs_preview_download">↓ Download</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden infrastructure fields (used by various JS modules, not in main UI) -->
+<div class="hiddenView">
+  <input type="text" id="output_mode" value="standard" />
+  <input type="text" id="yt_dl_msg" />
+  <input type="text" id="yt_dl_progress" />
+  <input type="text" id="yt_dl_elapsed" />
+  <input type="text" id="rd_card" />
+  <input type="text" id="rd_seg_bar" />
+  <input type="text" id="rd_badge" />
+  <input type="text" id="rd_title" />
+  <input type="text" id="aiux_strategy_panel" />
+  <input type="text" id="audit_log_list" />
+  <input type="text" id="warmup_panel" />
+
+  <!-- Batch URL mode (used by upload-engine when reup_mode=batch) -->
+  <div id="evBatchBody">
+    <select id="evBatchMode"><option value="off">Off</option><option value="urls">From URLs</option></select>
+    <textarea id="evBatchUrls"></textarea>
+    <div id="evBatchStatus" class="mono fieldHint"></div>
+  </div>
+
+  <!-- Pipeline + steps grid (legacy render-engine UI) -->
+  <div id="pipeline_wrap"></div>
+  <div id="steps_grid"></div>
+</div>
+
+<!-- Toast notification container — populated by showToast() in log-utils.js -->
+<div id="toastRoot" class="toastRoot"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION: script-includes
+     !! DO NOT CHANGE SCRIPT ORDER !!
+     Each file depends on globals.js (position 1) and files before it.
+     init.js must be last — it calls init functions from every prior file.
+═══════════════════════════════════════════════════════════════ -->
+<script src="/static/js/globals.js"></script>
+<script src="/static/js/warmup.js"></script>
+<script src="/static/js/smooth-progress.js"></script>
+<script src="/static/js/utils.js"></script>
+<script src="/static/js/log-utils.js"></script>
+<script src="/static/js/nav.js"></script>
+<script src="/static/js/render-config.js"></script>
+<script src="/static/js/upload-config.js"></script>
+<script src="/static/js/upload-manager.js"></script>
+<script src="/static/js/render-ui.js"></script>
+<script src="/static/js/render-engine.js"></script>
+<script src="/static/js/upload-engine.js"></script>
+<script src="/static/js/channels.js"></script>
+<script src="/static/js/editor-view.js"></script>
+<script src="/static/js/download-ui.js"></script>
+<script src="/static/js/history-ui.js"></script>
+<script src="/static/js/partials-loader.js"></script>
+<script src="/static/js/init.js"></script>
+<!-- /SECTION: script-includes -->
+
+</body>
+</html>

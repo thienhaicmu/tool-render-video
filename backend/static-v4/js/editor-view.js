@@ -232,7 +232,6 @@ function evSelectTextLayer(index) {
   evRenderTextLayerList();
   evRenderTextLayerPreview();
   _evFlashSelectedLayer();
-  if (typeof EditorTextRuntime !== 'undefined') EditorTextRuntime.syncToSelection();
 }
 
 function _evFlashSelectedLayer() {
@@ -336,10 +335,6 @@ function evRenderTextLayerList() {
   qs('evTxtBgEnabled').checked = !!cur.background?.enabled;
   qs('evTxtBgColor').value = String(cur.background?.color || '#00000099').slice(0, 7);
   qs('evTxtBgPadding').value = Number(cur.background?.padding ?? 10);
-
-  // ── P1: Push text layers into timeline ───────────────────────────
-  if (typeof EditorState !== 'undefined') EditorState.setTextLayers(_ev.textLayers);
-  if (typeof EditorTimeline !== 'undefined') EditorTimeline.renderTextLayers(_ev.textLayers);
 }
 
 function evUpdateSelectedTextLayer() {
@@ -992,45 +987,6 @@ function _evLoadVideo(src) {
     video.addEventListener('timeupdate', _evOnTimeUpdate);
     // Fetch real transcript in background — updates overlay once ready
     if (_ev.sessionId) _evFetchTranscript(_ev.sessionId);
-    // ── P1: Boot the editor engines ──────────────────────────────
-    if (typeof EditorState    !== 'undefined') EditorState.setEditorState({ duration: _ev.duration, sessionId: _ev.sessionId });
-    if (typeof PlaybackRuntime !== 'undefined') PlaybackRuntime.attach(video);  // P1.6-A: stable RAF clock
-    if (typeof EditorPlayback !== 'undefined') EditorPlayback.attach(video);
-    if (typeof EditorTimeline !== 'undefined') { EditorTimeline.init('evRichTimeline'); EditorTimeline.setDuration(_ev.duration); EditorTimeline.setVideoSrc(src); }
-    if (typeof EditorInteractions !== 'undefined') EditorInteractions.init('evRichTimeline');
-    // ── P1-G: Inspector binding — react to clip selection ────────
-    if (typeof EditorState !== 'undefined') {
-      EditorState.subscribeEditorState(state => {
-        const bar    = document.getElementById('inspContextBar');
-        const layout = document.querySelector('.evLayout');
-        if (!bar) return;
-        const ctx = state.selectedClipId ? 'clip' : 'empty';
-        bar.dataset.context = ctx;
-        const pane = document.querySelector('.inspPaneBody');
-        if (pane) pane.dataset.inspContext = ctx;
-        if (state.selectedClipId) {
-          const clip = state.clips.find(c => c.id === state.selectedClipId);
-          if (clip) {
-            const dur  = (clip.end - clip.start).toFixed(1);
-            const pct  = clip.score != null ? ` · ${Math.round(clip.score * 100)}%` : '';
-            const lbl  = clip.label ? ` · ${clip.label}` : '';
-            bar.textContent = `Clip ${clip.start.toFixed(1)}s → ${clip.end.toFixed(1)}s (${dur}s)${pct}${lbl}`;
-            bar.style.color = 'var(--primary-hi, #7fa4ff)';
-          }
-          if (layout) layout.classList.add('has-clip-selected');
-        } else {
-          bar.textContent = 'Editor';
-          bar.style.color = '';
-          if (layout) layout.classList.remove('has-clip-selected');
-        }
-        _evUpdateInspAiPanel(state);
-      });
-      // P2.4: refresh panel after a preview is discarded (rejectPreview clears lock
-      // then emits this event — state subscription guard would otherwise block refresh)
-      EditorState.on('ai:preview-end', () => {
-        _evUpdateInspAiPanel(EditorState.getState());
-      });
-    }
   };
   video.onerror = () => {
     qs('evLoadingText').textContent = 'Preview unavailable';
@@ -1251,19 +1207,12 @@ async function _evFetchTranscript(sessionId) {
     _ev.subtitleSegments = segs.map(s => ({ ...s }));
     _ev.subtitleOriginalSegments = segs.map(s => ({ ...s }));
     if (typeof _mvResetHookRenderState === 'function') _mvResetHookRenderState();
-    // ── P1: Push subtitles into timeline ─────────────────────────
-    if (typeof EditorState    !== 'undefined') EditorState.setSubtitles(_ev.subtitleSegments);
-    if (typeof EditorTimeline !== 'undefined') EditorTimeline.renderSubtitles(_ev.subtitleSegments);
     _ev.subtitleMode = 'real';
     if (_ev.subAnimTimer) { clearInterval(_ev.subAnimTimer); _ev.subAnimTimer = null; }
     _evUpdateSubLabel();
     mvUpdateHookQuality();
     const vid = qs('evVideo');
     if (vid) _evSyncSubTime(vid.currentTime || 0);
-    // ── P2-A: Re-run analysis now that subtitles are available ──
-    if (typeof EditorSceneIntelligence !== 'undefined' && typeof EditorState !== 'undefined') {
-      EditorSceneIntelligence.runAnalysis(EditorState.getState());
-    }
   } catch (_) {
     // silently ignore — demo fallback stays active
   }
@@ -1527,88 +1476,6 @@ function _evUpdateSelLabel() {
   if (label) label.classList.add('visible');
 }
 
-/* ── P2.3: AI Inspector Panel ────────────────────────────── */
-function _evUpdateInspAiPanel(state) {
-  const panel = document.getElementById('evInspAiPanel');
-  if (!panel) return;
-  // P2.4: don't overwrite accept/reject UI while a preview is pending
-  if (panel.dataset.context === 'preview') return;
-  const ctx     = (state.selectedClipId) ? 'clip' : 'empty';
-  panel.dataset.context = ctx;
-
-  const clips   = Array.isArray(state.clips)      ? state.clips      : [];
-  const markers = Array.isArray(state.aiMarkers)  ? state.aiMarkers  : [];
-  const scenes  = Array.isArray(state.sceneGraph) ? state.sceneGraph : [];
-
-  if (ctx === 'clip') {
-    const clip = clips.find(c => c.id === state.selectedClipId);
-    if (!clip) { panel.innerHTML = ''; return; }
-    const score     = clip.score != null ? Math.round(clip.score * 100) : null;
-    const dur       = ((clip.end || 0) - (clip.start || 0)).toFixed(1);
-    const tier      = score >= 75 ? 'high' : score >= 45 ? 'mid' : 'low';
-    const tierLabel = score >= 75 ? 'Strong hook' : score >= 45 ? 'Moderate' : 'Weak signal';
-    const pct       = score != null ? score + '%' : '—';
-    panel.innerHTML =
-      `<div class="evAiCard evAiCard--clip">` +
-        `<div class="evAiCardHead">` +
-          `<span class="evAiCardBadge evAiCardBadge--${tier}">${tierLabel}</span>` +
-          `<span class="evAiCardMeta">${dur}s</span>` +
-        `</div>` +
-        `<div class="evAiConfRow">` +
-          `<span class="evAiConfLabel">Quality</span>` +
-          `<div class="evAiConfBar"><div class="evAiConfBarFill" style="--pct:${pct}"></div></div>` +
-          `<span class="evAiConfVal">${pct}</span>` +
-        `</div>` +
-        `<div class="evAiCardActions">` +
-          `<button class="evAiQuickBtn" onclick="EditorAiActions?.previewAction?.('strongerHook')">↑ Boost Hook</button>` +
-          `<button class="evAiQuickBtn" onclick="EditorAiActions?.previewAction?.('removeDeadSpace')">✂ Tighten</button>` +
-        `</div>` +
-      `</div>`;
-    return;
-  }
-
-  if (!clips.length) {
-    panel.innerHTML =
-      `<div class="evAiEmptyState">` +
-        `<div class="evAiEmptyIcon">◈</div>` +
-        `<div class="evAiEmptyLabel">AI analysis ready</div>` +
-        `<div class="evAiEmptyHint">Load an AI plan to see insights</div>` +
-      `</div>`;
-    return;
-  }
-
-  const avgScore  = Math.round(clips.reduce((s, c) => s + (c.score || 0), 0) / clips.length * 100);
-  const silences  = markers.filter(m => m.type === 'silence').length;
-  const weak      = markers.filter(m => m.type === 'weak-intro' || m.type === 'pacing-drop').length;
-  const tier      = avgScore >= 70 ? 'high' : avgScore >= 45 ? 'mid' : 'low';
-  const energyLbl = avgScore >= 70 ? 'Strong energy' : avgScore >= 45 ? 'Moderate energy' : 'Low energy';
-  const action    = weak > 0
-    ? `<button class="evAiQuickBtn" onclick="EditorAiActions?.previewAction?.('viralMode')">⚡ Viral Mode</button>`
-    : silences > 1
-    ? `<button class="evAiQuickBtn" onclick="EditorAiActions?.previewAction?.('removeDeadSpace')">✂ Tighten</button>`
-    : `<button class="evAiQuickBtn" onclick="EditorAiActions?.previewAction?.('cinematicMode')">✦ Cinematic</button>`;
-  const silRow  = silences > 0
-    ? `<div class="evAiInsightRow"><span class="evAiInsightDot evAiInsightDot--warn"></span>${silences} silence gap${silences > 1 ? 's' : ''}</div>`
-    : '';
-  const weakRow = weak > 0
-    ? `<div class="evAiInsightRow"><span class="evAiInsightDot evAiInsightDot--warn"></span>${weak} pacing issue${weak > 1 ? 's' : ''}</div>`
-    : '';
-  panel.innerHTML =
-    `<div class="evAiCard evAiCard--overview">` +
-      `<div class="evAiCardHead">` +
-        `<span class="evAiCardBadge evAiCardBadge--${tier}">${energyLbl}</span>` +
-        `<span class="evAiCardMeta">${clips.length} clips · ${scenes.length} scenes</span>` +
-      `</div>` +
-      `<div class="evAiConfRow">` +
-        `<span class="evAiConfLabel">Energy</span>` +
-        `<div class="evAiConfBar"><div class="evAiConfBarFill" style="--pct:${avgScore}%"></div></div>` +
-        `<span class="evAiConfVal">${avgScore}%</span>` +
-      `</div>` +
-      silRow + weakRow +
-      `<div class="evAiCardActions">${action}</div>` +
-    `</div>`;
-}
-
 /* ── Phase 5: Duplicate text layer ──────────────────────── */
 function evDuplicateTextLayer(index) {
   if ((_ev.textLayers || []).length >= EV_MAX_TEXT_LAYERS) {
@@ -1668,10 +1535,9 @@ function _evUpdateReadiness() {
 /* ── Inspector group collapse ────────────────────────────── */
 function evToggleInspGroup(group) {
   const groupMap = {
-    audio:       { body: 'inspGroupAudioBody',   hdr: 'inspGroupAudioHdr' },
-    performance: { body: 'inspGroupPerfBody',    hdr: 'inspGroupPerfHdr' },
-    advanced:    { body: 'inspGroupAdvBody',     hdr: 'inspGroupAdvHdr' },
-    'ai-edit':   { body: 'inspGroupAiEditBody',  hdr: 'inspGroupAiEditHdr' },
+    audio:       { body: 'inspGroupAudioBody', hdr: 'inspGroupAudioHdr' },
+    performance: { body: 'inspGroupPerfBody',  hdr: 'inspGroupPerfHdr' },
+    advanced:    { body: 'inspGroupAdvBody',   hdr: 'inspGroupAdvHdr' },
   };
   const ids = groupMap[group];
   if (!ids) return;
@@ -1684,10 +1550,9 @@ function evToggleInspGroup(group) {
 
 function evSetInspGroupOpen(group, open) {
   const groupMap = {
-    audio:       { body: 'inspGroupAudioBody',   hdr: 'inspGroupAudioHdr' },
-    performance: { body: 'inspGroupPerfBody',    hdr: 'inspGroupPerfHdr' },
-    advanced:    { body: 'inspGroupAdvBody',     hdr: 'inspGroupAdvHdr' },
-    'ai-edit':   { body: 'inspGroupAiEditBody',  hdr: 'inspGroupAiEditHdr' },
+    audio:       { body: 'inspGroupAudioBody', hdr: 'inspGroupAudioHdr' },
+    performance: { body: 'inspGroupPerfBody',  hdr: 'inspGroupPerfHdr' },
+    advanced:    { body: 'inspGroupAdvBody',   hdr: 'inspGroupAdvHdr' },
   };
   const ids = groupMap[group];
   if (!ids) return;
@@ -1701,24 +1566,6 @@ function evSetInspGroupOpen(group, open) {
 /* ── Cancel / close ───────────────────────────────────────── */
 function cancelEditorView() {
   if (_ev.subAnimTimer) { clearInterval(_ev.subAnimTimer); _ev.subAnimTimer = null; }
-  // ── P1: Tear down editor engines ─────────────────────────────────
-  if (typeof PlaybackRuntime !== 'undefined') PlaybackRuntime.detach();
-  if (typeof EditorPlayback  !== 'undefined') EditorPlayback.detach();
-  if (typeof EditorTimeline !== 'undefined') EditorTimeline.destroy();
-  if (typeof EditorInteractions !== 'undefined') EditorInteractions.destroy();
-  if (typeof EditorTextRuntime         !== 'undefined') EditorTextRuntime.reset();
-  if (typeof EditorAudioRuntime        !== 'undefined') EditorAudioRuntime.reset();
-  if (typeof EditorPerformanceRuntime  !== 'undefined') EditorPerformanceRuntime.reset();
-  // P2: AI runtime cleanup
-  if (typeof EditorSceneIntelligence   !== 'undefined') EditorSceneIntelligence.reset();
-  if (typeof EditorAiActions           !== 'undefined') EditorAiActions.reset();
-  if (typeof EditorAiSessions          !== 'undefined') EditorAiSessions.reset();
-  if (typeof EditorReviewIntelligence  !== 'undefined') EditorReviewIntelligence.reset();
-  if (typeof EditorState               !== 'undefined') EditorState.reset();
-  const _aiPanel = document.getElementById('evInspAiPanel');
-  if (_aiPanel) { _aiPanel.innerHTML = ''; _aiPanel.dataset.context = 'empty'; }
-  const _pane = document.querySelector('.inspPaneBody');
-  if (_pane) delete _pane.dataset.inspContext;
   const video = qs('evVideo');
   if (video) {
     video.removeEventListener('timeupdate', _evOnTimeUpdate);
@@ -2062,37 +1909,6 @@ async function startRenderFromEditor() {
     payload.subtitle_edits = edits;
   }
 
-  // ── P1.5-I: Editor clip plan override (trims + moves from timeline) ──────
-  // If the user interacted with the timeline, EditorState clips reflect those
-  // edits. Serialize them so the backend can use them as a manual clip plan.
-  if (typeof EditorState !== 'undefined') {
-    const edClips = EditorState.getState().clips;
-    if (edClips && edClips.length > 0) {
-      payload.editor_clip_plan = edClips
-        .filter(c => !c.muted)
-        .map(c => ({
-          id:    c.id,
-          start: parseFloat(c.start.toFixed(3)),
-          end:   parseFloat(c.end.toFixed(3)),
-          score: parseFloat((c.score || 0).toFixed(4)),
-          label: c.label || '',
-        }));
-    }
-  }
-
-  // ── P1.8-I: Editor text layer runtime (enabled layers only) ──────────────────
-  if (typeof EditorTextRuntime !== 'undefined') {
-    const rtLayers = EditorTextRuntime.serializeForRender();
-    if (rtLayers && rtLayers.length > 0) {
-      payload.editor_text_layers = rtLayers;
-    }
-  }
-
-  // ── P1.8-J: Editor audio plan ────────────────────────────────────────────────
-  if (typeof EditorAudioRuntime !== 'undefined') {
-    payload.editor_audio_plan = EditorAudioRuntime.serializeForRender();
-  }
-
   // ── Output dir override (editor→render: bypass channel selection) ────────────
   {
     let raw = (payload.output_dir || '').replace(/\\/g, '/').trim();
@@ -2259,20 +2075,11 @@ function setInspectorTab(tab) {
 
   if (activeTab === 'audio') {
     evSetInspGroupOpen('audio', true);
-    if (typeof EditorAudioRuntime !== 'undefined') EditorAudioRuntime.onTabActivate();
   }
   if (activeTab === 'performance') {
+    // Render tab contains both collapsed groups — open both
     evSetInspGroupOpen('performance', true);
     evSetInspGroupOpen('advanced', true);
-    if (typeof EditorPerformanceRuntime !== 'undefined') EditorPerformanceRuntime.onTabActivate();
-  } else {
-    if (typeof EditorPerformanceRuntime !== 'undefined') EditorPerformanceRuntime.onTabDeactivate();
-  }
-  if (activeTab === 'text') {
-    if (typeof EditorTextRuntime !== 'undefined') EditorTextRuntime.onTabActivate();
-  }
-  if (typeof EditorState !== 'undefined') {
-    EditorState.setEditorState({ activeInspectorTab: activeTab });
   }
 }
 
@@ -3438,14 +3245,6 @@ function _evRenderAiTimeline() {
       (hasHook ? `<span class="evAiLegendItem evAiLegendHook">Hook</span>` : '') +
       `<span class="evAiLegendItem evAiLegendEnergy" data-energy="${energyTier}">${emotion} · ${energyPct}% energy</span>`;
     legend.classList.remove('hiddenView');
-  }
-
-  // ── P1: Push AI clips into timeline + state ───────────────
-  if (typeof EditorState !== 'undefined') EditorState.setClips(segs);
-  if (typeof EditorTimeline !== 'undefined') EditorTimeline.renderClips(EditorState.getState().clips);
-  // ── P2-A: Scene intelligence analysis ─────────────────────
-  if (typeof EditorSceneIntelligence !== 'undefined' && typeof EditorState !== 'undefined') {
-    EditorSceneIntelligence.runAnalysis(EditorState.getState());
   }
 }
 

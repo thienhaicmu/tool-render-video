@@ -321,6 +321,66 @@
           </div>
           <div id="evAiTimelineLegend" class="evAiTimelineLegend hiddenView" aria-hidden="true"></div>
 
+          <!-- ── Rich multi-track timeline (P1-C) ──────────────────── -->
+          <div id="evRichTimeline" class="evRichTimeline">
+            <!-- Zoom controls -->
+            <div class="evTLCtrl">
+              <span class="evTLCtrlLabel">Timeline</span>
+              <button class="evTLZBtn is-wide" onclick="EditorTimeline.fit()" title="Fit full video">Fit</button>
+              <button class="evTLZBtn" onclick="EditorTimeline.zoom(-1)" title="Zoom out">−</button>
+              <button class="evTLZBtn" onclick="EditorTimeline.zoom(1)" title="Zoom in">+</button>
+            </div>
+            <!-- Scrollable timeline body -->
+            <div class="evTLScroll" id="evTLScrollBody">
+              <div class="evTLInner" id="evTLInner">
+                <!-- Ruler row -->
+                <div class="evTLRow is-ruler">
+                  <div class="evTLRowLbl" style="font-size:8px;color:var(--fg-500)">time</div>
+                  <div class="evTLRowContent" id="evTLRulerContent"></div>
+                </div>
+                <!-- Source video track -->
+                <div class="evTLRow" data-track="source">
+                  <div class="evTLRowLbl">Video</div>
+                  <div class="evTLRowContent" id="evTLTrackSource"></div>
+                </div>
+                <!-- P2-A: Energy heatmap band -->
+                <div class="evTLRow is-heat" data-track="heat">
+                  <div class="evTLRowLbl" style="font-size:9px;color:var(--fg-400)">Energy</div>
+                  <div class="evTLRowContent" id="evTLTrackHeat"></div>
+                </div>
+                <!-- Waveform track (P1.7-C) -->
+                <div class="evTLRow is-wave" data-track="wave">
+                  <div class="evTLRowLbl">Wave</div>
+                  <div class="evTLRowContent" id="evTLTrackWave"></div>
+                </div>
+                <!-- AI clips track -->
+                <div class="evTLRow" data-track="clips">
+                  <div class="evTLRowLbl">Clips</div>
+                  <div class="evTLRowContent" id="evTLTrackClips"></div>
+                </div>
+                <!-- P2-A: AI markers row -->
+                <div class="evTLRow is-markers" data-track="markers">
+                  <div class="evTLRowLbl" style="font-size:9px;color:var(--fg-400)">AI</div>
+                  <div class="evTLRowContent" id="evTLTrackMarkers"></div>
+                </div>
+                <!-- Subtitles track -->
+                <div class="evTLRow" data-track="subs">
+                  <div class="evTLRowLbl">Subs</div>
+                  <div class="evTLRowContent" id="evTLTrackSubs"></div>
+                </div>
+                <!-- Text layers track -->
+                <div class="evTLRow" data-track="text">
+                  <div class="evTLRowLbl">Text</div>
+                  <div class="evTLRowContent" id="evTLTrackText"></div>
+                </div>
+                <!-- Playhead (spans all rows via absolute positioning) -->
+                <div id="evTLPlayhead"></div>
+              </div>
+            </div>
+            <span class="evKbHint">Space play/pause · ←/→ seek · Shift+← 5s · J/K/L</span>
+          </div>
+          <!-- /rich timeline -->
+
         </div><!-- /view_editor -->
         <!-- /SECTION: editor-view -->
       </div><!-- /rs-preview-stage -->
@@ -761,6 +821,7 @@
     <div class="evRightScroll inspPaneBody">
 
       <div id="inspContextBar" class="inspContextBar">Editor</div>
+      <div id="evInspAiPanel" class="evInspAiPanel" data-context="empty"></div>
 
       <!-- Trim -->
       <div class="evSection insp-panel-active" id="evSectionTrim" data-section-type="trim" data-insp-panel="mode">
@@ -786,6 +847,51 @@
           <button class="evTinyBtn" onclick="evSetTrimOut()">Set OUT</button>
           <button class="evTinyBtn" onclick="evResetTrim()">↺ Reset</button>
           <span id="evTrimInfo" class="inspMeta">Full video</span>
+        </div>
+      </div>
+
+      <!-- P2: AI Assist bar — suggestion chips + activity rail -->
+      <div class="evSection insp-panel-active" id="evSectionAiAssist" data-insp-panel="mode">
+        <div class="aiAssistHead">
+          <span class="aiAssistTitle">AI Assist</span>
+          <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="EditorAiActions?.undo?.()" title="Undo last AI action">Undo</button>
+        </div>
+        <div id="aiSuggestionChips" class="aiSuggestionChips"></div>
+        <div id="aiActivityRail" class="aiActivityRail"><span class="aiActivityEmpty">AI ready</span></div>
+      </div>
+
+      <!-- P2: AI Edit actions (collapsible) -->
+      <div class="inspCollapsedGroup insp-panel-active" data-insp-panel="mode" id="inspGroupAiEdit">
+        <div class="inspGroupHdr" id="inspGroupAiEditHdr" onclick="evToggleInspGroup('ai-edit')">
+          <span>AI Edit Actions</span>
+          <span class="inspGroupArrow">▸</span>
+        </div>
+        <div class="inspGroupBody" id="inspGroupAiEditBody">
+          <div class="aiActionGrid">
+            <button class="aiActionBtn" onclick="EditorAiActions?.removeDeadSpace?.()">Tighten Cuts</button>
+            <button class="aiActionBtn" onclick="EditorAiActions?.strongerHook?.()">Stronger Hook</button>
+            <button class="aiActionBtn" onclick="EditorAiActions?.fasterPacing?.()">Faster Pacing</button>
+            <button class="aiActionBtn" onclick="EditorAiActions?.smartClipPrioritization?.()">Best First</button>
+            <button class="aiActionBtn" onclick="EditorAiActions?.viralMode?.()">Viral Mode</button>
+            <button class="aiActionBtn" onclick="EditorAiActions?.cinematicMode?.()">Cinematic</button>
+            <button class="aiActionBtn" onclick="EditorAiActions?.subtitleCleanup?.()">Fix Subs</button>
+            <button class="aiActionBtn is-undo" onclick="EditorAiActions?.undo?.()">↩ Undo</button>
+          </div>
+          <!-- Variant slots -->
+          <div style="margin-top:10px">
+            <div class="aiSectionLabel">Timeline Variants</div>
+            <div class="aiVariantGrid">
+              <button class="aiVariantBtn" id="aiVariant_viral"       onclick="EditorAiSessions?.applyVariant?.('viral')">Viral</button>
+              <button class="aiVariantBtn" id="aiVariant_cinematic"   onclick="EditorAiSessions?.applyVariant?.('cinematic')">Cinematic</button>
+              <button class="aiVariantBtn" id="aiVariant_aggressive"  onclick="EditorAiSessions?.applyVariant?.('aggressive')">Aggressive</button>
+              <button class="aiVariantBtn" id="aiVariant_balanced"    onclick="EditorAiSessions?.applyVariant?.('balanced')">Balanced</button>
+            </div>
+          </div>
+          <!-- Snapshot list -->
+          <div style="margin-top:10px">
+            <div class="aiSectionLabel">Snapshots</div>
+            <div id="aiSnapshotList" class="aiSnapshotList"><div class="aiSnapshotEmpty">No snapshots yet</div></div>
+          </div>
         </div>
       </div>
 
@@ -968,24 +1074,211 @@
         </div>
       </div>
 
-      <!-- Text Overlay Layers -->
+      <!-- P1.8-I: Text Overlay Layers (full runtime editor) -->
       <div class="evSection" id="evSectionTextLayers" data-section-type="text-layers" data-insp-panel="text">
-        <div class="evSectionTitle">📝 Text Layers</div>
-        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
-          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evAddTextLayer()">+ Add Layer</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div class="evSectionTitle" style="margin-bottom:0">Text Layers</div>
+          <span id="evSummaryTextLayers" style="font-size:10px;color:var(--text-mut)"></span>
         </div>
-        <div id="evLayerList" class="evLayerList"></div>
-        <div id="evLayerControls" class="evLayerControls hiddenView">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+          <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evAddTextLayer()">+ Layer</button>
+          <div id="edTxtStylePresets" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+        </div>
+        <div id="evTextLayerList" class="evLayerList"></div>
+        <div id="evTextLayerEditor" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+          <label class="field">
+            <span class="fieldLabel">Text content</span>
+            <textarea class="fieldInput" id="evTxtContent" rows="2" oninput="evUpdateSelectedTextLayer()" style="resize:vertical;min-height:40px;font-family:inherit"></textarea>
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
             <label class="field">
-              <span class="fieldLabel">X pos %</span>
-              <input class="fieldInput" type="number" id="evLayerX" min="0" max="100" step="1" oninput="evSetLayerX(this.value)">
+              <span class="fieldLabel">Font</span>
+              <select class="fieldInput" id="evTxtFont" onchange="evUpdateSelectedTextLayer()">
+                <option value="Bungee">Bungee (Viral)</option>
+                <option value="Anton">Anton (Bold)</option>
+                <option value="Bebas Neue">Bebas Neue</option>
+                <option value="Oswald">Oswald</option>
+                <option value="Montserrat">Montserrat</option>
+                <option value="Roboto">Roboto</option>
+                <option value="Impact">Impact</option>
+                <option value="Arial Black">Arial Black</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Size (px)</span>
+              <input class="fieldInput" type="number" id="evTxtSize" min="12" max="300" value="48" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Color</span>
+              <input type="color" class="evColorPicker" id="evTxtColor" value="#ffffff" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Align</span>
+              <select class="fieldInput" id="evTxtAlign" onchange="evUpdateSelectedTextLayer()">
+                <option value="left">Left</option>
+                <option value="center" selected>Center</option>
+                <option value="right">Right</option>
+              </select>
+            </label>
+            <label class="field" style="grid-column:1/-1">
+              <span class="fieldLabel">Position</span>
+              <select class="fieldInput" id="evTxtPos" onchange="evUpdateSelectedTextLayer()">
+                <option value="top-left">Top Left</option>
+                <option value="top-center">Top Center</option>
+                <option value="top-right">Top Right</option>
+                <option value="center">Center</option>
+                <option value="bottom-left">Bottom Left</option>
+                <option value="bottom-center" selected>Bottom Center</option>
+                <option value="bottom-right">Bottom Right</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="fieldLabel">X %</span>
+              <input class="fieldInput" type="number" id="evTxtX" min="0" max="100" value="50" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Y %</span>
+              <input class="fieldInput" type="number" id="evTxtY" min="0" max="100" value="90" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Start (s)</span>
+              <input class="fieldInput" type="number" id="evTxtStartTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">End (s)</span>
+              <input class="fieldInput" type="number" id="evTxtEndTime" min="0" step="0.1" value="0" oninput="evUpdateSelectedTextLayer()">
+              <span class="inspHint">0 = full video</span>
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="checkbox" id="evTxtBold" onchange="evUpdateSelectedTextLayer()" style="width:13px;height:13px;accent-color:var(--primary)">
+              <span class="fieldLabel" style="margin:0">Bold</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="checkbox" id="evTxtOutlineEnabled" onchange="evUpdateSelectedTextLayer()" style="width:13px;height:13px;accent-color:var(--primary)">
+              <span class="fieldLabel" style="margin:0">Outline</span>
+            </label>
+            <label class="field" style="grid-column:1/-1;margin-top:2px">
+              <span class="fieldLabel">Outline px</span>
+              <input class="fieldInput" type="number" id="evTxtOutlineThickness" min="0" max="8" value="2" oninput="evUpdateSelectedTextLayer()">
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="checkbox" id="evTxtShadowEnabled" onchange="evUpdateSelectedTextLayer()" style="width:13px;height:13px;accent-color:var(--primary)">
+              <span class="fieldLabel" style="margin:0">Shadow</span>
+            </label>
+            <div style="display:flex;gap:4px">
+              <input class="fieldInput" type="number" id="evTxtShadowX" value="2" min="-20" max="20" step="1" oninput="evUpdateSelectedTextLayer()" placeholder="X" style="margin:0">
+              <input class="fieldInput" type="number" id="evTxtShadowY" value="2" min="-20" max="20" step="1" oninput="evUpdateSelectedTextLayer()" placeholder="Y" style="margin:0">
+            </div>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="checkbox" id="evTxtBgEnabled" onchange="evUpdateSelectedTextLayer()" style="width:13px;height:13px;accent-color:var(--primary)">
+              <span class="fieldLabel" style="margin:0">BG box</span>
+            </label>
+            <div style="display:flex;align-items:center;gap:4px">
+              <input type="color" class="evColorPicker" id="evTxtBgColor" value="#000000" oninput="evUpdateSelectedTextLayer()">
+              <input class="fieldInput" type="number" id="evTxtBgPadding" min="0" max="64" value="10" oninput="evUpdateSelectedTextLayer()" placeholder="Pad" style="width:50px;margin:0">
+            </div>
+          </div>
+          <!-- P1.8-I: Animation preset + enabled/locked runtime controls -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
+            <label class="field" style="grid-column:1/-1">
+              <span class="fieldLabel">Animation</span>
+              <select class="fieldInput" id="edTxtAnimPreset" onchange="EditorTextRuntime?.onAnimPresetChange?.()">
+                <option value="none" selected>None</option>
+                <option value="fade-in">Fade In</option>
+                <option value="slide-up">Slide Up</option>
+                <option value="scale-in">Scale In</option>
+                <option value="typewriter">Typewriter</option>
+              </select>
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="checkbox" id="edTxtLayerEnabled" checked onchange="EditorTextRuntime?.onLayerEnabledChange?.()" style="width:13px;height:13px;accent-color:var(--primary)">
+              <span class="fieldLabel" style="margin:0">Enabled</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="checkbox" id="edTxtLayerLocked" onchange="EditorTextRuntime?.onLayerLockedChange?.()" style="width:13px;height:13px;accent-color:var(--secondary)">
+              <span class="fieldLabel" style="margin:0">Locked</span>
             </label>
           </div>
         </div>
       </div>
 
-      <!-- Performance (collapsed) -->
+      <!-- P1.8-J: Audio Tracks (collapsed) -->
+      <div class="inspCollapsedGroup" data-insp-panel="audio">
+        <div class="inspGroupHdr" id="inspGroupAudioHdr" onclick="evToggleInspGroup('audio')">
+          <span>Audio Tracks</span>
+          <span id="inspGroupAudioArrow" class="inspGroupArrow">▸</span>
+        </div>
+        <div class="inspGroupBody" id="inspGroupAudioBody">
+          <div class="evSection" data-section-type="audio" data-insp-panel="audio">
+            <!-- Source audio -->
+            <div class="edAudioTrack">
+              <div class="edAudioTrackHdr">
+                <span class="edAudioTrackName">Source Audio</span>
+                <label class="edAudioEnableToggle">
+                  <input type="checkbox" id="edAudioSourceEnabled" checked onchange="EditorAudioRuntime?.onSourceToggle?.()">
+                  <span class="fieldLabel" style="margin:0">On</span>
+                </label>
+              </div>
+              <label class="field" style="display:flex;align-items:center;gap:8px;margin-top:6px">
+                <span class="fieldLabel" style="white-space:nowrap;margin:0">Volume</span>
+                <input type="range" id="evVolume" min="0" max="200" value="100" step="1" style="flex:1;accent-color:var(--primary)" oninput="EditorAudioRuntime?.onVolumeSlider?.('source',+this.value)">
+                <input type="number" id="evVolumeNum" min="0" max="200" value="100" step="5" class="fieldInput" style="width:52px;margin:0" oninput="EditorAudioRuntime?.onVolumeNum?.('source',+this.value)">
+              </label>
+            </div>
+            <!-- BGM -->
+            <div class="edAudioTrack" style="margin-top:10px">
+              <div class="edAudioTrackHdr">
+                <span class="edAudioTrackName">Background Music</span>
+                <label class="edAudioEnableToggle">
+                  <input type="checkbox" id="evBgmEnable" onchange="EditorAudioRuntime?.onBgmToggle?.()">
+                  <span class="fieldLabel" style="margin:0">On</span>
+                </label>
+              </div>
+              <div id="edBgmControls" style="display:none;margin-top:6px">
+                <label class="field" style="display:flex;align-items:center;gap:8px">
+                  <span class="fieldLabel" style="white-space:nowrap;margin:0">Volume</span>
+                  <input type="range" id="edBgmGainSlider" min="0" max="100" value="18" step="1" style="flex:1;accent-color:var(--primary)" oninput="EditorAudioRuntime?.onVolumeSlider?.('bgm',this.value/100)">
+                  <input type="number" id="evBgmGain" min="0.01" max="1.0" value="0.18" step="0.01" class="fieldInput" style="width:52px;margin:0" oninput="EditorAudioRuntime?.onBgmGainInput?.(+this.value)">
+                </label>
+                <label class="field" style="margin-top:6px">
+                  <span class="fieldLabel">File</span>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <input class="fieldInput" type="text" id="evBgmPath" placeholder="Path to audio file…" style="flex:1;margin:0" readonly>
+                    <button class="ghostButton" style="font-size:11px;padding:3px 8px;white-space:nowrap" onclick="EditorAudioRuntime?.pickBgmFile?.()">Browse</button>
+                  </div>
+                </label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+                  <label class="field">
+                    <span class="fieldLabel">Fade In (s)</span>
+                    <input class="fieldInput" type="number" id="edBgmFadeIn" min="0" max="10" step="0.5" value="1">
+                  </label>
+                  <label class="field">
+                    <span class="fieldLabel">Fade Out (s)</span>
+                    <input class="fieldInput" type="number" id="edBgmFadeOut" min="0" max="10" step="0.5" value="2">
+                  </label>
+                </div>
+              </div>
+            </div>
+            <!-- Voice -->
+            <div class="edAudioTrack" style="margin-top:10px">
+              <div class="edAudioTrackHdr">
+                <span class="edAudioTrackName">AI Narration</span>
+                <label class="edAudioEnableToggle">
+                  <input type="checkbox" id="evVoiceEnable" onchange="EditorAudioRuntime?.onVoiceToggle?.()">
+                  <span class="fieldLabel" style="margin:0">On</span>
+                </label>
+              </div>
+              <div id="edVoiceControls" style="display:none;margin-top:6px">
+                <div id="evVoiceFields"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- P1.8-K: Performance / Render (collapsed) -->
       <div class="inspCollapsedGroup" data-insp-panel="performance">
         <div class="inspGroupHdr" id="inspGroupPerfHdr" onclick="evToggleInspGroup('performance')">
           <span>Performance</span>
@@ -1027,6 +1320,46 @@
                 </select>
                 <span class="inspHint">Fast = fastest · Motion = slower · Subject = slowest</span>
               </label>
+            </div>
+          </div>
+          <!-- P1.8-K: Runtime diagnostics (populated by EditorPerformanceRuntime) -->
+          <div class="evSection" id="edPerfDiagSection" data-section-type="perf-diag" data-insp-panel="performance" style="border-top:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div class="evSectionTitle" style="margin-bottom:0">Runtime Diagnostics</div>
+              <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.refresh?.()" title="Refresh metrics">↻</button>
+            </div>
+            <div id="edPerfMetrics" class="edPerfMetrics">
+              <div class="edPerfRow"><span class="edPerfKey">FPS</span><span class="edPerfVal" id="edPerfFps">—</span></div>
+              <div class="edPerfRow"><span class="edPerfKey">Dropped</span><span class="edPerfVal" id="edPerfDropped">—</span></div>
+              <div class="edPerfRow"><span class="edPerfKey">TL nodes</span><span class="edPerfVal" id="edPerfNodes">—</span></div>
+              <div class="edPerfRow"><span class="edPerfKey">Clips DOM</span><span class="edPerfVal" id="edPerfClipsDom">—</span></div>
+              <div class="edPerfRow"><span class="edPerfKey">Subs DOM</span><span class="edPerfVal" id="edPerfSubsDom">—</span></div>
+              <div class="edPerfRow"><span class="edPerfKey">Thumb cache</span><span class="edPerfVal" id="edPerfThumbCache">—</span></div>
+              <div class="edPerfRow"><span class="edPerfKey">Wave cache</span><span class="edPerfVal" id="edPerfWaveCache">—</span></div>
+              <div class="edPerfRow"><span class="edPerfKey">Hover vids</span><span class="edPerfVal" id="edPerfHoverVids">—</span></div>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+              <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.clearThumbCache?.()">Clear thumbs</button>
+              <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.clearWaveCache?.()">Clear waves</button>
+              <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.toggleDevOverlay?.()">Dev overlay</button>
+            </div>
+            <!-- Adaptive quality toggles -->
+            <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+              <div class="fieldLabel" style="margin-bottom:6px">Quality Controls</div>
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                  <input type="checkbox" id="edPerfHoverPreview" checked onchange="EditorPerformanceRuntime?.onHoverPreviewToggle?.(this.checked)" style="width:13px;height:13px;accent-color:var(--primary)">
+                  <span class="fieldLabel" style="margin:0">Hover video previews</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                  <input type="checkbox" id="edPerfFilmstrip" checked onchange="EditorPerformanceRuntime?.onFilmstripToggle?.(this.checked)" style="width:13px;height:13px;accent-color:var(--primary)">
+                  <span class="fieldLabel" style="margin:0">Timeline filmstrip</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                  <input type="checkbox" id="edPerfWaveform" checked onchange="EditorPerformanceRuntime?.onWaveformToggle?.(this.checked)" style="width:13px;height:13px;accent-color:var(--primary)">
+                  <span class="fieldLabel" style="margin:0">Waveform lane</span>
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -1140,6 +1473,22 @@
 <script src="/static/js/render-engine.js"></script>
 <script src="/static/js/upload-engine.js"></script>
 <script src="/static/js/channels.js"></script>
+<script src="/static/js/editor-state.js"></script>
+<script src="/static/js/editor-playback-runtime.js"></script>
+<script src="/static/js/editor-playback.js"></script>
+<script src="/static/js/editor-coordinates.js"></script>
+<script src="/static/js/editor-virtualization.js"></script>
+<script src="/static/js/editor-thumbnail-cache.js"></script>
+<script src="/static/js/editor-waveform.js"></script>
+<script src="/static/js/editor-timeline.js"></script>
+<script src="/static/js/editor-interactions.js"></script>
+<script src="/static/js/editor-text-runtime.js"></script>
+<script src="/static/js/editor-audio-runtime.js"></script>
+<script src="/static/js/editor-performance-runtime.js"></script>
+<script src="/static/js/editor-scene-intelligence.js"></script>
+<script src="/static/js/editor-ai-actions.js"></script>
+<script src="/static/js/editor-review-intelligence.js"></script>
+<script src="/static/js/editor-ai-sessions.js"></script>
 <script src="/static/js/editor-view.js"></script>
 <script src="/static/js/download-ui.js"></script>
 <script src="/static/js/history-ui.js"></script>
@@ -1158,23 +1507,15 @@
      requiring changes to editor-view.js.
 ════════════════════════════════════════════════════════════════ -->
 <div id="evEditorCompat" style="display:none" aria-hidden="true">
-  <!-- Volume -->
-  <input type="range"  id="evVolume"       min="0" max="200" value="100" step="1">
-  <input type="number" id="evVolumeNum"    min="0" max="200" value="100" step="5">
   <!-- Advanced render settings -->
   <select id="evPlaybackSpeed"><option value="1.07" selected>1.07×</option><option value="1.0">1.0×</option><option value="1.05">1.05×</option><option value="1.1">1.1×</option><option value="1.15">1.15×</option></select>
   <select id="evSourceQualityMode"><option value="standard_1080" selected>Standard 1080p</option><option value="high_1440">High 1440p</option><option value="best_available">Best Available</option></select>
   <select id="evPartOrder"><option value="viral" selected>Best first</option><option value="timeline">Timeline</option></select>
   <input type="number" id="evFrameScaleY"  value="106" min="80" max="130">
-  <!-- Feature toggles — unchecked = disabled by default in v3 UI -->
+  <!-- Feature toggles -->
   <input type="checkbox" id="evReupMode">
   <input type="checkbox" id="evCleanupTemp" checked>
-  <input type="checkbox" id="evBgmEnable">
-  <input type="checkbox" id="evVoiceEnable">
-  <!-- BGM / Voice hidden fields -->
-  <input type="text"   id="evBgmPath"  value="">
-  <input type="number" id="evBgmGain"  value="0.18" min="0.01" max="1.0" step="0.01">
-  <!-- Containers toggled by JS show/hide -->
+  <!-- Legacy BGM container (kept for backward-compat; edBgmControls is the live panel) -->
   <div id="evBgmFields"></div>
   <div id="evVoiceFields"></div>
   <div id="evSectionMoreSettings"></div>

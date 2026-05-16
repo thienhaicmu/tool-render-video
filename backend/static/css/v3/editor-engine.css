@@ -1,0 +1,1920 @@
+/*
+ * editor-engine.css — P1: Real Editor Engine
+ * Styles for the rich timeline, playhead, clip segments.
+ * Appended to v3 CSS via app.css @import.
+ */
+
+/* ── Rich timeline container ─────────────────────────────────────── */
+.evRichTimeline {
+  flex-shrink: 0;
+  height: 182px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-900, #0a0a0c);
+  border-top: 1px solid rgba(255,255,255,.08);
+  overflow: hidden;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Toolbar: zoom controls ──────────────────────────────────────── */
+.evTLCtrl {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  gap: 4px;
+  flex-shrink: 0;
+  background: var(--bg-850, #111115);
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.evTLCtrlLabel {
+  flex: 1;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--fg-400, #666);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.evTLZBtn {
+  width: 20px;
+  height: 18px;
+  border-radius: 3px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.08);
+  color: var(--fg-300, #888);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  transition: background var(--t-fast, 80ms ease), color var(--t-fast, 80ms ease);
+}
+.evTLZBtn:hover { background: rgba(255,255,255,.1); color: var(--fg-100, #eee); }
+.evTLZBtn.is-wide { width: auto; padding: 0 6px; font-size: 9px; }
+
+/* ── Scroll container ────────────────────────────────────────────── */
+.evTLScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.1) transparent;
+  position: relative;
+}
+.evTLScroll::-webkit-scrollbar { height: 4px; }
+.evTLScroll::-webkit-scrollbar-track { background: transparent; }
+.evTLScroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.1);
+  border-radius: 2px;
+}
+
+/* ── Inner (sized to total duration * pps) ───────────────────────── */
+.evTLInner {
+  position: relative;
+  height: 100%;
+  min-width: 100%;
+}
+
+/* ── Rows (ruler + tracks) ───────────────────────────────────────── */
+.evTLRow {
+  display: flex;
+  height: 26px;
+  position: relative;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.evTLRow:last-child { border-bottom: none; }
+
+/* First row: ruler — slightly shorter */
+.evTLRow.is-ruler {
+  height: 22px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+/* ── Track label (sticky left) ───────────────────────────────────── */
+.evTLRowLbl {
+  position: sticky;
+  left: 0;
+  width: 52px;
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--fg-500, #555);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  background: var(--bg-850, #111115);
+  border-right: 1px solid rgba(255,255,255,.06);
+  z-index: 3;
+}
+
+/* ── Track content area ──────────────────────────────────────────── */
+.evTLRowContent {
+  flex: 1;
+  position: relative;
+  overflow: visible;
+  cursor: crosshair;
+}
+
+/* ── Time ruler ──────────────────────────────────────────────────── */
+#evTLRulerContent {
+  cursor: crosshair;
+  height: 100%;
+  overflow: visible;
+}
+
+.evTLTick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255,255,255,.08);
+  pointer-events: none;
+}
+.evTLTick.is-major {
+  background: rgba(255,255,255,.18);
+}
+.evTLTick span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  font-size: 8.5px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  color: var(--fg-400, #666);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── Source video bar ────────────────────────────────────────────── */
+.evTLSourceBar {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  height: calc(100% - 6px);
+  background: rgba(77,124,255,.12);
+  border: 1px solid rgba(77,124,255,.22);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* ── AI clip segments ────────────────────────────────────────────── */
+.evTLClip {
+  position: absolute;
+  top: 2px;
+  height: calc(100% - 4px);
+  border-radius: 3px;
+  background: rgba(77,124,255,.22);
+  border: 1px solid rgba(77,124,255,.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  transition: border-color var(--t-fast, 80ms ease), box-shadow var(--t-fast, 80ms ease);
+  min-width: 4px;
+}
+
+.evTLClip.is-high { background: rgba(34,197,94,.18);  border-color: rgba(34,197,94,.42); }
+.evTLClip.is-mid  { background: rgba(234,179,8,.15);  border-color: rgba(234,179,8,.38); }
+.evTLClip.is-low  { background: rgba(249,115,22,.13); border-color: rgba(249,115,22,.32); }
+.evTLClip.is-weak { background: rgba(107,114,128,.1); border-color: rgba(107,114,128,.25); }
+
+.evTLClip.is-selected {
+  border-color: var(--primary, #4d7cff) !important;
+  box-shadow: 0 0 0 2px rgba(77,124,255,.28), inset 0 0 0 1px rgba(77,124,255,.2);
+}
+.evTLClip.is-hovered { filter: brightness(1.18); }
+.evTLClip.is-high.is-selected {
+  border-color: var(--success, #22c55e) !important;
+  box-shadow: 0 0 0 2px rgba(34,197,94,.25);
+}
+
+.evTLClipLabel {
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(255,255,255,.7);
+  padding: 0 10px;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  flex: 1;
+  text-align: center;
+}
+
+/* Resize handles */
+.evTLClipResize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+  z-index: 2;
+  flex-shrink: 0;
+}
+.evTLClipResize.is-left  { left: 0; }
+.evTLClipResize.is-right { right: 0; }
+.evTLClipResize::after {
+  content: '';
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  border-radius: 1px;
+  background: rgba(255,255,255,.35);
+}
+.evTLClipResize.is-left::after  { left: 2px; }
+.evTLClipResize.is-right::after { right: 2px; }
+.evTLClipResize:hover::after { background: rgba(255,255,255,.7); }
+
+/* ── Subtitle segments ───────────────────────────────────────────── */
+.evTLSub {
+  position: absolute;
+  top: 2px;
+  height: calc(100% - 4px);
+  background: rgba(168,85,247,.16);
+  border: 1px solid rgba(168,85,247,.35);
+  border-radius: 2px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  min-width: 3px;
+}
+.evTLSub:hover { background: rgba(168,85,247,.24); }
+
+.evTLSubLabel {
+  font-size: 8px;
+  color: rgba(255,255,255,.55);
+  padding: 0 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Text layer segments ─────────────────────────────────────────── */
+.evTLTextLayer {
+  position: absolute;
+  top: 2px;
+  height: calc(100% - 4px);
+  background: rgba(245,158,11,.14);
+  border: 1px solid rgba(245,158,11,.3);
+  border-radius: 2px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  min-width: 4px;
+}
+
+/* ── Playhead ────────────────────────────────────────────────────── */
+#evTLPlayhead {
+  position: absolute;
+  top: 0;
+  left: calc(52px + var(--ph-x, 0px));
+  width: 2px;
+  height: 100%;
+  background: var(--primary, #4d7cff);
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 0 8px rgba(77,124,255,.55);
+  will-change: left;
+}
+#evTLPlayhead::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -4px;
+  width: 10px;
+  height: 10px;
+  background: var(--primary, #4d7cff);
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+}
+
+/* ── Clip selected inspector state highlight ─────────────────────── */
+.evLayout.has-clip-selected .evTLClip:not(.is-selected) {
+  opacity: 0.5;
+}
+
+/* ── Keyboard hint bar (shown briefly on first use) ─────────────── */
+.evKbHint {
+  position: absolute;
+  bottom: 4px;
+  right: 8px;
+  font-size: 9px;
+  color: var(--fg-500, #555);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .3s;
+}
+.evRichTimeline:hover .evKbHint { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   P1.5 — INTERACTION STATES
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Cursor modes during operations ─────────────────────────────── */
+.evRichTimeline.is-scrubbing    { cursor: col-resize !important; }
+.evRichTimeline.is-scrubbing *  { pointer-events: none !important; }
+.evRichTimeline.is-trimming     { cursor: ew-resize  !important; }
+.evRichTimeline.is-clip-dragging { cursor: grabbing !important; }
+.evRichTimeline.is-clip-dragging * { pointer-events: none !important; }
+
+/* ── Track row hover glow ────────────────────────────────────────── */
+.evTLRowContent:hover {
+  background: rgba(255,255,255,.015);
+}
+
+/* ── Clip interaction states ─────────────────────────────────────── */
+.evTLClip.is-dragging {
+  opacity: .88;
+  box-shadow: 0 4px 20px rgba(0,0,0,.5), 0 0 0 2px rgba(77,124,255,.4);
+  z-index: 20;
+  cursor: grabbing;
+  will-change: transform;
+}
+
+.evTLClip.is-trim-active {
+  box-shadow: 0 0 0 2px rgba(77,124,255,.6), 0 0 12px rgba(77,124,255,.25);
+  z-index: 15;
+}
+
+/* Active trim edge glow */
+.evTLClip.is-trim-active .evTLClipResize.is-left::after {
+  background: var(--primary, #4d7cff);
+  box-shadow: 0 0 6px rgba(77,124,255,.8);
+}
+.evTLClip.is-trim-active .evTLClipResize.is-right::after {
+  background: var(--primary, #4d7cff);
+  box-shadow: 0 0 6px rgba(77,124,255,.8);
+}
+
+/* Clip grab cursor on body (not handles) */
+.evTLClip { cursor: grab; }
+.evTLClip .evTLClipLabel { cursor: grab; }
+
+/* ── Playhead drag state ─────────────────────────────────────────── */
+#evTLPlayhead.is-dragging {
+  box-shadow: 0 0 16px rgba(77,124,255,.8), 0 0 4px rgba(77,124,255,1);
+  width: 3px;
+}
+#evTLPlayhead.is-dragging::before {
+  transform: scale(1.3);
+  background: #fff;
+}
+
+/* ── Hover time tooltip ──────────────────────────────────────────── */
+.evTLTooltip {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  background: var(--bg-800, #18181c);
+  border: 1px solid rgba(255,255,255,.12);
+  color: var(--fg-100, #eee);
+  font-size: 10px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,.4);
+  transition: none;
+}
+
+/* ── Clip muted state ────────────────────────────────────────────── */
+.evTLClip.is-muted {
+  opacity: .35;
+  filter: grayscale(.7);
+}
+
+/* ── Clip locked state ───────────────────────────────────────────── */
+.evTLClip.is-locked {
+  cursor: not-allowed !important;
+}
+.evTLClip.is-locked .evTLClipResize { display: none; }
+
+/* ── Smooth transitions (except during drag — use will-change) ───── */
+.evTLClip:not(.is-dragging):not(.is-trim-active) {
+  transition:
+    opacity      var(--t-fast, 80ms ease),
+    box-shadow   var(--t-fast, 80ms ease),
+    border-color var(--t-fast, 80ms ease);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   P1.6-E — OUTPUT CARD REALITY LAYER
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Hover video play state ──────────────────────────────────────── */
+.clipCard.is-preview-playing .clipCardThumbWrap {
+  outline: 2px solid var(--primary, #4d7cff);
+  outline-offset: -2px;
+}
+
+/* Playing indicator — pulsing dot in top-right corner */
+.clipCard.is-preview-playing .clipCardThumbWrap::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary, #4d7cff);
+  box-shadow: 0 0 6px rgba(77,124,255,.8);
+  animation: ccPlayPulse .9s ease-in-out infinite alternate;
+  z-index: 4;
+}
+
+@keyframes ccPlayPulse {
+  from { opacity: .5; transform: scale(.85); }
+  to   { opacity: 1;  transform: scale(1.1); }
+}
+
+/* Thumbnail video scales very slightly on hover (depth feel) */
+.clipCardThumbWrap .clipCardThumbVid {
+  transition: transform .18s ease, opacity .18s ease;
+}
+.clipCard.is-preview-playing .clipCardThumbVid {
+  transform: scale(1.02);
+}
+
+/* ── Card hover depth ────────────────────────────────────────────── */
+.clipCard {
+  transition:
+    transform   .14s ease,
+    box-shadow  .14s ease;
+}
+.clipCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+.clipCard.isBestClip:hover {
+  box-shadow: 0 6px 24px rgba(34,197,94,.2), 0 2px 8px rgba(0,0,0,.3);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   P1.7 — MEDIA PIPELINE + TIMELINE FIDELITY
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── P1.7-B: Filmstrip thumbnails inside timeline clips ──────────── */
+.evTLFilmstrip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.evTLFilmFrame {
+  position: absolute;
+  top: 0;
+  object-fit: cover;
+  opacity: 0;
+  animation: evFilmFadeIn .25s ease forwards;
+}
+
+@keyframes evFilmFadeIn {
+  from { opacity: 0; }
+  to   { opacity: .55; }
+}
+
+/* Clip content layers on top of filmstrip */
+.evTLClipResize,
+.evTLClipLabel {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── P1.7-C: Waveform track ──────────────────────────────────────── */
+.evTLRow.is-wave {
+  height: 30px;
+}
+
+.evTLRow.is-wave .evTLRowLbl {
+  font-size: 8px;
+}
+
+.evTLWaveLoading {
+  background: linear-gradient(
+    90deg,
+    rgba(77,124,255,.04) 25%,
+    rgba(77,124,255,.1)  50%,
+    rgba(77,124,255,.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: evWaveSkeleton 1.4s linear infinite;
+  border-radius: 2px;
+}
+
+@keyframes evWaveSkeleton {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── P1.7-F: Output card thumbnail upgrade ───────────────────────── */
+.clipCardThumbWrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.clipCardThumbImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: opacity .15s ease;
+}
+
+.clipCardThumbImg.is-error {
+  display: none;
+}
+
+/* Video overlays the thumbnail img; hidden until hover preview starts */
+.clipCardThumbVid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+/* When preview is playing, show video on top of thumbnail */
+.clipCard.is-preview-playing .clipCardThumbVid {
+  opacity: 1;
+  transform: scale(1.02);
+}
+
+/* Shimmer skeleton while thumbnail is loading */
+.clipCardThumbWrap:not(:has(.clipCardThumbImg.is-error)):not(:has(img[src])) .clipCardThumbPlaceholder {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,.03) 25%,
+    rgba(255,255,255,.07) 50%,
+    rgba(255,255,255,.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: evCardSkeleton 1.4s linear infinite;
+}
+
+@keyframes evCardSkeleton {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* =========================================================
+   P1.8 — Audio Track Panel
+   ========================================================= */
+
+.edAudioTrack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border, rgba(255,255,255,.08));
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.edAudioTrackHdr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--bg-300, rgba(255,255,255,.05));
+  cursor: default;
+  user-select: none;
+}
+
+.edAudioTrackHdr:hover {
+  background: var(--bg-400, rgba(255,255,255,.08));
+}
+
+.edAudioTrackName {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-100, #e8e8e8);
+  letter-spacing: .3px;
+}
+
+.edAudioEnableToggle {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--fg-400, #666);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.edAudioEnableToggle:checked {
+  background: var(--primary, #6c63ff);
+  border-color: var(--primary, #6c63ff);
+}
+
+.edAudioEnableToggle:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 5px;
+  height: 8px;
+  border: 2px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
+.edAudioTrackBody {
+  padding: 8px 10px 10px;
+  background: var(--bg-200, rgba(0,0,0,.2));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* =========================================================
+   P1.8 — Performance Metrics Panel
+   ========================================================= */
+
+.edPerfMetrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border, rgba(255,255,255,.07));
+  border: 1px solid var(--border, rgba(255,255,255,.07));
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.edPerfRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--bg-200, rgba(0,0,0,.25));
+}
+
+.edPerfKey {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--fg-400, #666);
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+
+.edPerfVal {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg-100, #e8e8e8);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* Warning state when TL is heavy */
+.edPerfWarning .edPerfVal[id="edPerfNodes"],
+.edPerfWarning .edPerfVal[id="edPerfClipsDom"],
+.edPerfWarning .edPerfVal[id="edPerfSubsDom"] {
+  color: var(--warning, #f5a623);
+}
+
+.edPerfWarning::before {
+  content: '⚠ Heavy timeline — consider reducing clip count or disabling filmstrip/waveform.';
+  display: block;
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--warning, #f5a623);
+  background: rgba(245,166,35,.08);
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(245,166,35,.2);
+}
+
+/* =========================================================
+   P1.8 — Text Layer List States
+   ========================================================= */
+
+.evTxtLayerItem.edTxtDisabled {
+  opacity: .4;
+  pointer-events: none;
+}
+
+.evTxtLayerItem.edTxtLocked {
+  cursor: not-allowed;
+}
+
+.evTxtLayerItem.edTxtLocked::after {
+  content: '🔒';
+  font-size: 10px;
+  margin-left: auto;
+  opacity: .6;
+  flex-shrink: 0;
+}
+
+/* Style preset buttons row */
+#edTxtStylePresets {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.edTxtStyleBtn {
+  padding: 4px 9px;
+  border-radius: 4px;
+  border: 1px solid var(--border, rgba(255,255,255,.1));
+  background: var(--bg-300, rgba(255,255,255,.05));
+  color: var(--fg-200, #ccc);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+  white-space: nowrap;
+}
+
+.edTxtStyleBtn:hover {
+  background: var(--bg-400, rgba(255,255,255,.1));
+  border-color: var(--fg-400, #555);
+}
+
+.edTxtStyleBtn.is-active {
+  background: var(--primary, #6c63ff);
+  border-color: var(--primary, #6c63ff);
+  color: #fff;
+}
+
+/* =========================================================
+   P1.8 — Text Layer Animation Preview Classes
+   ========================================================= */
+
+.edTxtAnim-fade-in {
+  animation: edTxtFadeIn .5s ease forwards !important;
+}
+
+.edTxtAnim-slide-up {
+  animation: edTxtSlideUp .45s cubic-bezier(.22,1,.36,1) forwards !important;
+}
+
+.edTxtAnim-scale-in {
+  animation: edTxtScaleIn .35s cubic-bezier(.34,1.56,.64,1) forwards !important;
+}
+
+.edTxtAnim-typewriter {
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  animation: edTxtTypewriter .8s steps(30, end) forwards !important;
+}
+
+@keyframes edTxtFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes edTxtSlideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes edTxtScaleIn {
+  from { opacity: 0; transform: scale(.7); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes edTxtTypewriter {
+  from { max-width: 0; }
+  to   { max-width: 100%; }
+}
+
+/* =========================================================
+   P2 — Timeline Intelligence: Heatmap + Markers
+   ========================================================= */
+
+/* Energy heatmap row — thin band below source track */
+.evTLRow.is-heat {
+  height: 8px;
+  min-height: 8px;
+  flex-shrink: 0;
+  opacity: .75;
+}
+
+.evTLRow.is-heat .evTLRowContent {
+  overflow: hidden;
+}
+
+/* AI markers row — lightweight pip strip */
+.evTLRow.is-markers {
+  height: 18px;
+  min-height: 18px;
+  flex-shrink: 0;
+}
+
+/* Individual marker pip */
+.evTLMarker {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 1px;
+  cursor: default;
+  transition: transform .1s;
+}
+
+.evTLMarker:hover {
+  transform: scaleX(2);
+  z-index: 5;
+}
+
+/* Marker type colors */
+.evTLMk-hook            { background: var(--success, #10b981); }
+.evTLMk-weak-intro      { background: var(--warning, #f59e0b); }
+.evTLMk-energy-spike    { background: #a78bfa; }
+.evTLMk-silence         { background: rgba(255,255,255,.25); width: 4px; }
+.evTLMk-pacing-drop     { background: #fb923c; }
+.evTLMk-emotional-shift { background: #818cf8; }
+.evTLMk-subtitle-overload { background: #f87171; }
+.evTLMk-default         { background: var(--fg-400, #666); }
+
+/* =========================================================
+   P2 — AI Assist Inspector Panel
+   ========================================================= */
+
+/* Section header row */
+.aiAssistHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.aiAssistTitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--primary-hi, #7fa4ff);
+}
+
+/* Suggestion chips */
+.aiSuggestionChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 0;
+  margin-bottom: 6px;
+}
+
+.aiSuggestionChip {
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--primary, #6c63ff);
+  background: rgba(108,99,255,.12);
+  color: var(--primary-hi, #7fa4ff);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s, transform .1s;
+  white-space: nowrap;
+}
+
+.aiSuggestionChip:hover {
+  background: rgba(108,99,255,.28);
+  transform: translateY(-1px);
+}
+
+/* Activity rail */
+.aiActivityRail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 18px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.06);
+}
+
+.aiActivityItem {
+  font-size: 10px;
+  color: var(--fg-300, #aaa);
+  padding: 1px 6px;
+  background: rgba(255,255,255,.06);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.aiActivityEmpty {
+  font-size: 10px;
+  color: var(--fg-400, #666);
+  font-style: italic;
+}
+
+.aiActivityRail.has-activity {
+  border-color: rgba(108,99,255,.2);
+}
+
+/* Section sub-label */
+.aiSectionLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--fg-400, #666);
+  margin-bottom: 6px;
+}
+
+/* AI action button grid */
+.aiActionGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.aiActionBtn {
+  padding: 6px 4px;
+  border-radius: 5px;
+  border: 1px solid var(--border, rgba(255,255,255,.1));
+  background: var(--bg-300, rgba(255,255,255,.05));
+  color: var(--fg-200, #ccc);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.aiActionBtn:hover {
+  background: rgba(108,99,255,.18);
+  border-color: var(--primary, #6c63ff);
+  color: var(--fg-100, #eee);
+}
+
+.aiActionBtn.is-undo {
+  border-color: rgba(255,255,255,.15);
+  color: var(--fg-300, #aaa);
+}
+
+.aiActionBtn.is-undo:hover {
+  background: rgba(255,255,255,.08);
+  border-color: rgba(255,255,255,.25);
+  color: var(--fg-100, #eee);
+}
+
+/* Variant buttons */
+.aiVariantGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.aiVariantBtn {
+  padding: 5px 4px;
+  border-radius: 5px;
+  border: 1px solid var(--border, rgba(255,255,255,.1));
+  background: var(--bg-300, rgba(255,255,255,.05));
+  color: var(--fg-200, #ccc);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+  text-align: center;
+}
+
+.aiVariantBtn:hover {
+  background: rgba(168,139,250,.18);
+  border-color: #a78bfa;
+  color: #c4b5fd;
+}
+
+/* Variant button with saved state */
+.aiVariantBtn.has-save {
+  border-color: rgba(168,139,250,.4);
+  color: #c4b5fd;
+}
+
+/* Snapshot list */
+.aiSnapshotList {
+  max-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aiSnapshotItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--bg-200, rgba(255,255,255,.04));
+  cursor: pointer;
+  transition: background .1s;
+  gap: 8px;
+}
+
+.aiSnapshotItem:hover {
+  background: rgba(108,99,255,.14);
+}
+
+.aiSnapshotLabel {
+  font-size: 11px;
+  color: var(--fg-200, #ccc);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aiSnapshotTime {
+  font-size: 10px;
+  color: var(--fg-400, #666);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.aiSnapshotEmpty {
+  font-size: 11px;
+  color: var(--fg-400, #666);
+  padding: 4px 0;
+  font-style: italic;
+}
+
+/* =========================================================
+   P2 — Review Intelligence: Output Card Badges
+   ========================================================= */
+
+.aiReviewBadge {
+  margin: 5px 0 4px;
+  padding: 5px 8px;
+  background: rgba(108,99,255,.07);
+  border: 1px solid rgba(108,99,255,.18);
+  border-radius: 5px;
+}
+
+.aiReviewRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.aiReviewChip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  letter-spacing: .3px;
+}
+
+.aiReviewChip[data-tier="high"] {
+  background: rgba(16,185,129,.18);
+  color: #34d399;
+}
+
+.aiReviewChip[data-tier="mid"] {
+  background: rgba(245,158,11,.15);
+  color: #fbbf24;
+}
+
+.aiReviewChip[data-tier="low"] {
+  background: rgba(255,255,255,.07);
+  color: var(--fg-300, #aaa);
+}
+
+.aiReviewEnergy {
+  font-size: 10px;
+  color: var(--fg-400, #666);
+}
+
+.aiReviewList {
+  margin: 0;
+  padding-left: 12px;
+  list-style: disc;
+}
+
+.aiReviewList li {
+  font-size: 10px;
+  color: var(--fg-300, #aaa);
+  line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   P2.2 — CINEMATIC EDITOR PASS
+   Visual confidence, depth layering, editorial feel.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── P2.2-A: Video Stage Hero ─────────────────────────────────────── */
+
+/* Allow ambient glow to bleed beyond the box bounds */
+.evVideoBox {
+  position: relative;
+  overflow: visible;
+}
+/* Soft radial glow behind the video frame */
+.evVideoBox::before {
+  content: '';
+  position: absolute;
+  inset: -32px;
+  background: radial-gradient(circle at 50% 50%, rgba(77,124,255,.2), transparent 68%);
+  filter: blur(36px);
+  opacity: .75;
+  pointer-events: none;
+  z-index: 0;
+}
+/* Frame sits above glow layer, deeper shadow for separation */
+.evVideoFrame {
+  z-index: 1;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.1),
+    0 10px 48px rgba(0,0,0,.7),
+    0 2px 10px rgba(0,0,0,.45);
+}
+
+/* ── P2.2-B: Background Depth Layers ─────────────────────────────── */
+
+/* Preview workspace: one step brighter than the darkest timeline floor */
+.evLeft {
+  background: var(--bg-800, #111116);
+}
+/* Timeline toolbar: anchor at darkest surface */
+.evTLCtrl {
+  background: var(--bg-900, #0a0a0c);
+  border-bottom-color: rgba(255,255,255,.07);
+}
+
+/* ── P2.2-C: Timeline Cinematic Readability ───────────────────────── */
+
+/* Slightly more vertical breathing room on standard tracks */
+.evTLRow {
+  height: 28px;
+}
+/* Softer row separators */
+.evTLRow {
+  border-bottom-color: rgba(255,255,255,.032);
+}
+/* Row label column: wider and quieter */
+.evTLRowLbl {
+  width: 56px;
+  color: var(--fg-500, #444);
+  font-size: 8.5px;
+  letter-spacing: .05em;
+}
+/* Track-content hover glow: slightly more visible */
+.evTLRowContent:hover {
+  background: rgba(255,255,255,.022);
+}
+/* Active clips track: low glow when a clip is focused */
+.evLayout.has-clip-selected .evTLRow[data-track="clips"] {
+  background: rgba(77,124,255,.02);
+}
+
+/* ── P2.2-D: Clip Visual Language ─────────────────────────────────── */
+
+/* Top-lighting shimmer — editorial depth on all clips */
+.evTLClip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 42%;
+  background: linear-gradient(to bottom, rgba(255,255,255,.1), transparent);
+  pointer-events: none;
+  z-index: 1;
+  border-radius: inherit;
+}
+
+/* Filmstrip: slightly more present */
+@keyframes evFilmFadeIn {
+  from { opacity: 0; }
+  to   { opacity: .65; }
+}
+
+/* Clip labels: more legible over filmstrip */
+.evTLClipLabel {
+  font-size: 8.5px;
+  font-weight: 800;
+  color: rgba(255,255,255,.88);
+  text-shadow: 0 1px 4px rgba(0,0,0,.85);
+  letter-spacing: .02em;
+}
+
+/* Selected clip: confident elevation, not just outlined */
+.evTLClip.is-selected {
+  box-shadow:
+    0 0 0 2px rgba(77,124,255,.45),
+    inset 0 0 0 1px rgba(77,124,255,.28),
+    0 3px 16px rgba(0,0,0,.5) !important;
+  filter: brightness(1.1);
+}
+
+/* Subtitle segments: stronger purple presence */
+.evTLSub {
+  background: rgba(168,85,247,.22);
+  border-color: rgba(168,85,247,.45);
+}
+
+/* ── P2.2-E: Playhead Presence ────────────────────────────────────── */
+
+#evTLPlayhead {
+  box-shadow: 0 0 10px rgba(77,124,255,.7), 0 0 3px rgba(77,124,255,1);
+  animation: p22PlayheadPulse 2.8s ease-in-out infinite;
+}
+#evTLPlayhead::before {
+  width: 12px;
+  height: 12px;
+  left: -5px;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(77,124,255,.85), 0 0 2px #fff;
+}
+
+@keyframes p22PlayheadPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(77,124,255,.55), 0 0 2px rgba(77,124,255,.9); }
+  50%       { box-shadow: 0 0 18px rgba(77,124,255,.8), 0 0 5px rgba(77,124,255,1); }
+}
+/* Stronger during drag — override base + animation */
+#evTLPlayhead.is-dragging {
+  box-shadow: 0 0 22px rgba(77,124,255,.95), 0 0 6px rgba(77,124,255,1) !important;
+  animation: none !important;
+}
+
+/* ── P2.2-F: Inspector Section Rhythm ─────────────────────────────── */
+
+.evSection .evSectionTitle {
+  padding-top: 4px;
+  margin-bottom: 12px;
+}
+.evSection + .evSection {
+  padding-top: 4px;
+}
+
+/* ── P2.2-G: AI Assist Premiumization ─────────────────────────────── */
+
+/* Suggestion chips: gradient intelligence feel */
+.aiSuggestionChip {
+  background: linear-gradient(135deg, rgba(77,124,255,.2), rgba(77,124,255,.09));
+  border-color: rgba(77,124,255,.48);
+  letter-spacing: .15px;
+  padding: 5px 12px;
+}
+.aiSuggestionChip:hover {
+  background: linear-gradient(135deg, rgba(77,124,255,.34), rgba(77,124,255,.18));
+  transform: translateY(-1px);
+}
+
+/* AI title: gradient text */
+.aiAssistTitle {
+  background: linear-gradient(90deg, var(--primary, #4d7cff) 30%, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 11px;
+}
+
+/* Activity items: left accent for "AI origin" signal */
+.aiActivityItem {
+  border-left: 2px solid rgba(77,124,255,.45);
+  border-radius: 0 10px 10px 0;
+  padding-left: 8px;
+  color: var(--fg-200, #ccc);
+  font-size: 10.5px;
+}
+
+/* Activity rail: slow pulse when live */
+@keyframes p22RailPulse {
+  0%, 100% { border-color: rgba(77,124,255,.15); }
+  50%       { border-color: rgba(77,124,255,.35); }
+}
+.aiActivityRail.has-activity {
+  animation: p22RailPulse 3.2s ease-in-out infinite;
+}
+
+/* Action buttons: more visual weight */
+.aiActionBtn {
+  padding: 7px 4px;
+  letter-spacing: .1px;
+}
+.aiActionBtn:hover {
+  background: linear-gradient(135deg, rgba(77,124,255,.24), rgba(77,124,255,.1));
+  border-color: rgba(77,124,255,.55);
+}
+
+/* ── P2.2-H: Focus Mode (clip selected) ───────────────────────────── */
+
+/* Dim peripheral chrome when focused deep on a clip */
+.evLayout.has-clip-selected .evAspectBar {
+  opacity: .55;
+  transition: opacity .22s ease;
+}
+.evLayout.has-clip-selected .evTLCtrl {
+  opacity: .8;
+  transition: opacity .22s ease;
+}
+/* Video frame gains stronger prominence in focus mode */
+.evLayout.has-clip-selected .evVideoFrame {
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.13),
+    0 14px 56px rgba(0,0,0,.78),
+    0 0 48px rgba(77,124,255,.07);
+}
+/* Restore on chrome hover (undo dim so user can still interact) */
+.evLayout.has-clip-selected .evAspectBar:hover,
+.evLayout.has-clip-selected .evTLCtrl:hover {
+  opacity: 1;
+  transition: opacity .1s ease;
+}
+
+/* ── P2.2-I: Motion Cohesion ──────────────────────────────────────── */
+
+/* Normalize interactive controls to consistent 120ms easing */
+.aiSuggestionChip,
+.aiActionBtn,
+.aiVariantBtn,
+.aiSnapshotItem {
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 100ms ease;
+}
+.evTLZBtn,
+.evGuideToggle,
+.edTxtStyleBtn,
+.evTLZBtn.is-wide {
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+/* ── P2.2-J: Micro-Polish ─────────────────────────────────────────── */
+
+/* Refined timeline scrollbar — thinner and softer */
+.evTLScroll::-webkit-scrollbar { height: 3px; }
+.evTLScroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.16);
+  border-radius: 3px;
+}
+/* Resize handle dots: slightly softer inactive */
+.evTLClipResize::after {
+  background: rgba(255,255,255,.22);
+  transition: background 100ms ease;
+}
+/* Keyboard hint: slightly more legible */
+.evKbHint {
+  font-size: 9.5px;
+  letter-spacing: .03em;
+  bottom: 5px;
+}
+/* Waveform skeleton: match new bg depth */
+.evTLWaveLoading {
+  background: linear-gradient(
+    90deg,
+    rgba(77,124,255,.03) 25%,
+    rgba(77,124,255,.09)  50%,
+    rgba(77,124,255,.03) 75%
+  );
+}
+/* Source bar: slightly stronger primary hint */
+.evTLSourceBar {
+  background: rgba(77,124,255,.14);
+  border-color: rgba(77,124,255,.28);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   P2.3 — INTELLIGENT INSPECTOR SYSTEM
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── P2.3-A: Context bar adaptive styling ─────────────────────────── */
+.inspContextBar {
+  transition: color .18s ease, background .18s ease;
+}
+.inspContextBar[data-context="clip"] {
+  background: rgba(77,124,255,.06);
+  color: var(--primary-hi, #7fa4ff) !important;
+}
+.inspContextBar[data-context="empty"] {
+  background: transparent;
+}
+
+/* ── P2.3-B/F: AI Insight Panel container ─────────────────────────── */
+
+/* Always renders just below context bar */
+#inspContextBar { order: -100; }
+#evInspAiPanel  { order: -10; }
+
+.evInspAiPanel {
+  padding: 8px 16px 6px;
+}
+.evInspAiPanel:empty { display: none; }
+
+/* AI insight card — base */
+.evAiCard {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: p23CardReveal .2s ease both;
+}
+.evAiCard--clip {
+  background: rgba(77,124,255,.06);
+  border-color: rgba(77,124,255,.2);
+}
+
+@keyframes p23CardReveal {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Card head: badge + meta */
+.evAiCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.evAiCardBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.evAiCardBadge--high { background: rgba(34,197,94,.16);  color: #4ade80; }
+.evAiCardBadge--mid  { background: rgba(245,158,11,.15); color: #fbbf24; }
+.evAiCardBadge--low  { background: rgba(249,115,22,.14); color: #fb923c; }
+.evAiCardMeta {
+  font-size: 10px;
+  color: var(--fg-400);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Confidence bar row */
+.evAiConfRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.evAiConfLabel {
+  font-size: 10px;
+  color: var(--fg-400);
+  flex-shrink: 0;
+  width: 40px;
+}
+.evAiConfBar {
+  flex: 1;
+  height: 3px;
+  background: rgba(255,255,255,.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.evAiConfBarFill {
+  height: 100%;
+  width: var(--pct, 0%);
+  background: linear-gradient(90deg, var(--primary, #4d7cff), #7fa4ff);
+  border-radius: 2px;
+  transition: width .5s ease;
+}
+.evAiConfVal {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--fg-200);
+  font-variant-numeric: tabular-nums;
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Insight rows: dot + text */
+.evAiInsightRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  color: var(--fg-300);
+  line-height: 1.3;
+}
+.evAiInsightDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.evAiInsightDot--warn { background: var(--warning, #f59e0b); }
+.evAiInsightDot--ok   { background: var(--success, #22c55e); }
+
+/* Quick action buttons */
+.evAiCardActions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.evAiQuickBtn {
+  padding: 4px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--primary-hi, #7fa4ff);
+  background: rgba(77,124,255,.1);
+  border: 1px solid rgba(77,124,255,.28);
+  border-radius: 6px;
+  cursor: pointer;
+  letter-spacing: .1px;
+  line-height: 1.35;
+  transition: background 120ms ease, border-color 120ms ease, transform 100ms ease;
+}
+.evAiQuickBtn:hover {
+  background: rgba(77,124,255,.22);
+  border-color: rgba(77,124,255,.5);
+  transform: translateY(-1px);
+}
+
+/* Empty / ready state */
+.evAiEmptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  text-align: center;
+}
+.evAiEmptyIcon {
+  font-size: 20px;
+  opacity: .3;
+  line-height: 1;
+  margin-bottom: 2px;
+  font-style: normal;
+}
+.evAiEmptyLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-300);
+}
+.evAiEmptyHint {
+  font-size: 10px;
+  color: var(--fg-400);
+  line-height: 1.4;
+}
+
+/* ── P2.3-D: Smart Preset Card Upgrade ────────────────────────────── */
+.evPresetCard,
+.ev-option-card {
+  min-height: 56px;
+  border-radius: 10px;
+  transition: background 130ms ease, border-color 130ms ease, transform 100ms ease, box-shadow 130ms ease;
+}
+.evPresetCard:hover,
+.ev-option-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 12px rgba(0,0,0,.32);
+  border-color: rgba(77,124,255,.38);
+}
+.evPresetCard[data-active="true"],
+.evPresetCard.is-active,
+.ev-option-card.is-active {
+  background: rgba(77,124,255,.14);
+  border-color: rgba(77,124,255,.55);
+  box-shadow: 0 0 0 1px rgba(77,124,255,.25);
+}
+.evPresetName {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.evPresetDesc {
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: normal;
+  margin-top: 3px;
+}
+
+/* ── P2.3-E: Context-driven Section Priority ──────────────────────── */
+
+/* Clip selected: AI Assist section surfaces above trim */
+.inspPaneBody[data-insp-context="clip"] #evSectionAiAssist {
+  order: -5;
+}
+/* Clip selected: gentle tint on trim section (most relevant control) */
+.inspPaneBody[data-insp-context="clip"] #evSectionTrim {
+  background: rgba(77,124,255,.02);
+  border-radius: 8px;
+}
+
+/* ── P2.3-J: Inspector Visual Hierarchy ───────────────────────────── */
+
+/* AI sections: left accent bar to signal intelligence origin */
+#evSectionAiAssist,
+#inspGroupAiEdit {
+  position: relative;
+}
+#evSectionAiAssist::before,
+#inspGroupAiEdit::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: linear-gradient(to bottom, rgba(77,124,255,.7), rgba(77,124,255,.1));
+  border-radius: 0 1px 1px 0;
+}
+
+/* Section separator: quieter */
+.inspGroupSep {
+  font-size: 9px;
+  letter-spacing: .08em;
+  opacity: .65;
+}
+
+/* Field labels: lower emphasis vs AI content */
+.evSection .fieldLabel {
+  color: var(--fg-400);
+  font-size: 10.5px;
+}
+
+/* Section spacing: AI assist section gets a bit more room */
+#evSectionAiAssist {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   P2.4 — Direct Manipulation AI Editing
+   Ghost overlay + summary card + action chip states
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── P2.4-A: Ghost overlay layer ─────────────────────────── */
+.evTLGhostLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 8;
+}
+
+.evTLGhost {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 4px;
+}
+
+/* Hatched band = region being trimmed away */
+.evTLGhost--trim {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(251,191,36,.12) 0px, rgba(251,191,36,.12) 3px,
+    transparent 3px, transparent 6px
+  );
+  border: 1px dashed rgba(251,191,36,.5);
+}
+
+/* Dashed outline = proposed new boundary */
+.evTLGhost--proposed {
+  border: 2px dashed rgba(77,124,255,.75);
+  background: rgba(77,124,255,.07);
+}
+
+/* Purple outline = clip moving to new position */
+.evTLGhost--reorder {
+  border: 1.5px dashed rgba(167,139,250,.75);
+  background: rgba(167,139,250,.08);
+}
+
+.evTLGhostBadge {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #a78bfa;
+  line-height: 1;
+  font-style: normal;
+}
+
+/* ── P2.4-B: AI Edit Summary card ───────────────────────── */
+.evAiCard--summary {
+  background: rgba(77,124,255,.07);
+  border-color: rgba(77,124,255,.28);
+}
+
+.evAiSummaryTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--fg-100, #f0f2f5);
+  letter-spacing: .1px;
+}
+
+.evAiSummaryStats {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.evAiStatChip {
+  font-size: 10px;
+  color: var(--fg-300, #8a93a6);
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-variant-numeric: tabular-nums;
+}
+.evAiStatChip--pos { color: #4ade80; border-color: rgba(74,222,128,.25); background: rgba(74,222,128,.06); }
+.evAiStatChip--neg { color: #fb923c; border-color: rgba(251,146,60,.25);  background: rgba(251,146,60,.06); }
+
+.evAiSummaryActions {
+  display: flex;
+  gap: 6px;
+}
+
+.evAiAcceptBtn {
+  flex: 1;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary, #4d7cff) 0%, #7fa4ff 100%);
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  letter-spacing: .1px;
+  transition: opacity 120ms ease, transform 100ms ease;
+}
+.evAiAcceptBtn:hover {
+  opacity: .88;
+  transform: translateY(-1px);
+}
+
+.evAiRejectBtn {
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-300, #8a93a6);
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.evAiRejectBtn:hover {
+  background: rgba(255,255,255,.11);
+  color: var(--fg-200, #c8cfe0);
+}
+
+/* ── P2.4-C: Action chip states ──────────────────────────── */
+.aiSuggestionChip[data-state="generating"] {
+  opacity: .6;
+  pointer-events: none;
+  animation: p24ChipPulse 1.2s ease-in-out infinite;
+}
+.aiSuggestionChip[data-state="previewing"] {
+  background: rgba(167,139,250,.18);
+  border-color: rgba(167,139,250,.5);
+  color: #c4b5fd;
+}
+.aiSuggestionChip[data-state="accepted"] {
+  background: rgba(34,197,94,.12);
+  border-color: rgba(34,197,94,.38);
+  color: #4ade80;
+  pointer-events: none;
+}
+.aiSuggestionChip[data-state="rejected"] {
+  opacity: .4;
+  pointer-events: none;
+}
+
+@keyframes p24ChipPulse {
+  0%, 100% { opacity: .6; }
+  50%       { opacity: .3; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   P2.5 — Explainable AI Editing
+   Reasoning cards · Before/after deltas · Confidence labels
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── P2.5-A/B: Before/after delta chips ──────────────────── */
+.evAiBeforeAfterRow {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.evAiDeltaChip {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 5px;
+  color: var(--fg-300, #8a93a6);
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.09);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+.evAiDeltaChip--pos {
+  color: #4ade80;
+  background: rgba(74,222,128,.07);
+  border-color: rgba(74,222,128,.2);
+}
+.evAiDeltaChip--neg {
+  color: #fb923c;
+  background: rgba(251,146,60,.07);
+  border-color: rgba(251,146,60,.2);
+}
+
+/* ── P2.5-B/G: Reasoning bullet list ──────────────────────── */
+.evAiReasonList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.evAiReasonItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+.evAiReasonDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.evAiReasonDot--silence,
+.evAiReasonDot--warn     { background: var(--warning, #f59e0b); }
+.evAiReasonDot--hook,
+.evAiReasonDot--ok       { background: var(--success, #22c55e); }
+.evAiReasonDot--pacing,
+.evAiReasonDot--neutral  { background: rgba(77,124,255,.75); }
+.evAiReasonDot--efficiency { background: rgba(167,139,250,.8); }
+.evAiReasonText {
+  color: var(--fg-200, #c8cfe0);
+  flex: 1;
+}
+.evAiReasonImpact {
+  font-size: 9.5px;
+  color: var(--fg-400, #5a6476);
+  flex-shrink: 0;
+  font-style: italic;
+  align-self: flex-end;
+}
+
+/* ── P2.5-E: Confidence label ──────────────────────────────── */
+.evAiConfidenceLabel {
+  font-size: 10px;
+  color: var(--fg-400, #5a6476);
+  line-height: 1.5;
+  border-top: 1px solid rgba(255,255,255,.06);
+  padding-top: 7px;
+  font-style: italic;
+}
+
+/* ── P2.5-C: Marker color extensions ─────────────────────── */
+.evTLMk-attention-recovery {
+  background: rgba(34,197,94,.75);
+  box-shadow: 0 0 4px rgba(34,197,94,.4);
+}
+.evTLMk-reaction-emphasis {
+  background: rgba(251,191,36,.85);
+  box-shadow: 0 0 4px rgba(251,191,36,.4);
+}
+
+/* ── P2.5-I: Review badge editorial summary ──────────────── */
+.aiReviewSummary {
+  font-size: 10.5px;
+  color: var(--fg-300, #8a93a6);
+  line-height: 1.45;
+  font-style: italic;
+  margin-bottom: 3px;
+}
+
+/* ── P2.5-F: Preference indicator (subtle, on AI assist section) ── */
+.evAiPrefTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  color: var(--fg-400);
+  background: rgba(167,139,250,.08);
+  border: 1px solid rgba(167,139,250,.2);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-style: normal;
+}

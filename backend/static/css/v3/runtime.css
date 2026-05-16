@@ -1450,6 +1450,372 @@
 }
 
 /* =======================================================
+   P2.6 — RENDER INTELLIGENCE RUNTIME
+   AI process card, clip evolution feed, reasoning stream,
+   completion intelligence. Non-destructive overlays only.
+   ======================================================= */
+
+/* ── AI Process Card ──────────────────────────────────── */
+.rcAiProcessCards {
+  padding: 0 12px 6px;
+}
+.rcAiProcCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: rgba(99,102,241,.06);
+  border: 1px solid rgba(99,102,241,.18);
+  border-radius: 8px;
+  transition: border-color .3s;
+}
+.rcAiProcCard[data-state="running"] { border-color: rgba(99,102,241,.36); }
+.rcAiProcCard[data-state="done"]    { border-color: rgba(74,222,128,.28); }
+.rcAiProcCard[data-state="failed"]  { border-color: rgba(248,113,113,.28); }
+.rcAiProcIcon {
+  font-size: 14px;
+  color: #818cf8;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+.rcAiProcBody {
+  flex: 1;
+  min-width: 0;
+}
+.rcAiProcLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--fg-200, #e2e8f0);
+  letter-spacing: .4px;
+  text-transform: uppercase;
+}
+.rcAiProcMsg {
+  font-size: 10px;
+  color: var(--fg-500, #64748b);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rcAiProcMeta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+.rcAiProcPct {
+  font-size: 11px;
+  font-weight: 700;
+  color: #818cf8;
+  font-variant-numeric: tabular-nums;
+  width: 30px;
+  text-align: right;
+}
+.rcAiProcBar {
+  width: 44px;
+  height: 3px;
+  background: rgba(255,255,255,.07);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.rcAiProcFill {
+  height: 100%;
+  width: var(--w, 0%);
+  background: #818cf8;
+  border-radius: 2px;
+  transition: width .6s ease;
+}
+.rcAiProcCard[data-state="done"]   .rcAiProcFill { background: #4ade80; }
+.rcAiProcCard[data-state="failed"] .rcAiProcFill { background: #f87171; }
+.rcAiProcCard[data-state="done"]   .rcAiProcPct  { color: #4ade80; }
+.rcAiProcCard[data-state="failed"] .rcAiProcPct  { color: #f87171; }
+
+/* ── Clip Evolution Feed ──────────────────────────────── */
+.rcAiEvolutionFeed {
+  padding: 0 12px 8px;
+}
+.rcAiEvolutionHeader {
+  display: flex;
+  align-items: center;
+  padding: 6px 0 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--fg-500, #64748b);
+}
+.rcAiEvolutionList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rcAiEvolItem {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0;
+  animation: p26FadeIn .22s ease;
+}
+.rcAiEvolDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #818cf8;
+  flex-shrink: 0;
+  opacity: .6;
+}
+.rcAiEvolText {
+  font-size: 11px;
+  color: var(--fg-400, #94a3b8);
+  flex: 1;
+}
+.rcAiEvolScore {
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.rcAiEvolScore[data-tier="high"] { background: rgba(74,222,128,.14);  color: #4ade80; }
+.rcAiEvolScore[data-tier="mid"]  { background: rgba(251,191,36,.12);  color: #fbbf24; }
+.rcAiEvolScore[data-tier="low"]  { background: rgba(248,113,113,.11); color: #f87171; }
+
+/* ── AI Reasoning Feed ────────────────────────────────── */
+.rcAiReasonFeed {
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  margin-bottom: 2px;
+  max-height: 128px;
+  overflow: hidden;
+}
+.rcAiReasonHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px 3px;
+}
+.rcAiReasonLabel {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--fg-500, #64748b);
+}
+.rcAiReasonBadge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(99,102,241,.16);
+  color: #818cf8;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+}
+.rcAiReasonList {
+  padding: 0 12px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rcAiReasonItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  animation: p26FadeIn .22s ease;
+}
+.rcAiReasonItem:not(:first-child) { opacity: .48; }
+.rcAiReasonDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #818cf8;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.rcAiReasonText {
+  font-size: 11px;
+  color: var(--fg-400, #94a3b8);
+  line-height: 1.45;
+}
+
+/* ── Completion Intelligence Card ─────────────────────── */
+.rcAiCompCard {
+  padding: 10px 12px;
+  background: rgba(99,102,241,.05);
+  border: 1px solid rgba(99,102,241,.14);
+  border-radius: 8px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rcAiCompRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rcAiCompLabel {
+  font-size: 11px;
+  color: var(--fg-400, #94a3b8);
+}
+.rcAiCompScore {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rcAiCompScore[data-tier="high"] { color: #4ade80; }
+.rcAiCompScore[data-tier="mid"]  { color: #fbbf24; }
+.rcAiCompScore[data-tier="low"]  { color: #f87171; }
+.rcAiCompCount {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-200, #e2e8f0);
+  font-variant-numeric: tabular-nums;
+}
+.rcAiCompSummary {
+  font-size: 11px;
+  color: var(--fg-500, #64748b);
+  line-height: 1.45;
+  border-top: 1px solid rgba(255,255,255,.06);
+  padding-top: 6px;
+}
+
+/* ── P2.6 shared animation ─────────────────────────────── */
+@keyframes p26FadeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* =======================================================
+   P2.7 — RUNTIME UX CONSOLIDATION
+   Hierarchy correction. Not a feature addition.
+   Targeted overrides only — base runtime intact.
+   ======================================================= */
+
+/* ── P2.7-C: AI Process Card → hero (running state) ─── */
+.rcAiProcessCards {
+  padding: 6px 12px 8px;
+}
+.rcAiProcCard {
+  padding: 11px 14px;
+}
+.rcAiProcLabel {
+  font-size: 11px;
+  letter-spacing: .3px;
+}
+.rcAiProcMsg {
+  font-size: 11px;
+}
+.rcAiProcCard[data-state="running"] {
+  animation: p27ProcGlow 2.6s ease-in-out infinite;
+}
+.rcAiProcCard[data-state="running"] .rcAiProcIcon {
+  animation: p27IconPulse 1.8s ease-in-out infinite;
+}
+@keyframes p27ProcGlow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(99,102,241,.24), 0 4px 18px rgba(99,102,241,.07); }
+  50%       { box-shadow: 0 0 0 1px rgba(99,102,241,.42), 0 6px 28px rgba(99,102,241,.16); }
+}
+@keyframes p27IconPulse {
+  0%, 100% { opacity: .6; }
+  50%       { opacity: 1;  }
+}
+
+/* ── P2.7-C: rdCard running ambient glow ────────────── */
+#render_active_panel[data-render-state="running"] .rdCard {
+  box-shadow: inset 0 -1px 0 rgba(77,124,255,.18);
+}
+
+/* ── P2.7-D: Evolution feed — latest item prominence ── */
+.rcAiEvolItem:first-child .rcAiEvolText {
+  color: var(--fg-200);
+  font-size: 12px;
+}
+.rcAiEvolItem:first-child .rcAiEvolDot {
+  opacity: 1;
+  width: 6px;
+  height: 6px;
+}
+
+/* ── P2.7-F: AI Reasoning — elevated but calm ───────── */
+.rcAiReasonFeed {
+  max-height: 165px;
+}
+.rcAiReasonItem:first-child .rcAiReasonText {
+  color: var(--fg-200);
+  font-size: 12px;
+}
+
+/* ── P2.7-E: Queue rows demoted ─────────────────────── */
+.rcQueueRow {
+  border-left-width: 1px;
+}
+.rcClipLabel {
+  font-size: 10px;
+  color: var(--fg-300);
+}
+.rcQueueBottom {
+  font-size: 9px;
+}
+.rcQueueBar {
+  height: 1px;
+}
+.rcRankChip {
+  font-size: 8px;
+}
+.rcScoreBadge {
+  font-size: 9px;
+}
+.rcPanelHeader > strong {
+  color: var(--fg-400);
+}
+.rcLogStripHeader > strong {
+  color: var(--fg-400);
+}
+
+/* Idle active card recedes — only active state should dominate */
+.rcActiveCard.isIdle,
+.rcActiveCard.isNoJob {
+  opacity: .72;
+  border-color: rgba(255,255,255,.06);
+}
+
+/* ── P2.7-F: Log rows demoted to tertiary ───────────── */
+.logLine {
+  font-size: 9px;
+  min-height: 18px;
+  line-height: 18px;
+}
+.logMessage {
+  color: var(--fg-400);
+}
+.logTime {
+  opacity: .35;
+  font-size: 8px;
+}
+.logLine.isError  .logMessage,
+.logLine.error    .logMessage { color: #f87171; }
+.logLine.success  .logMessage { color: rgba(74,222,128,.8); }
+
+/* ── P2.7-G: Completion bar editorial ───────────────── */
+.renderCompletionMsg {
+  font-size: 13px;
+}
+.renderCompletionSummary {
+  font-size: 11px;
+  color: var(--fg-300);
+}
+
+/* ── P2.7-I: Cognitive load — suppress noisy motion ─── */
+/* Only AI stage card uses strong motion; queue and logs quiet */
+.rcQueueRow.isRendering {
+  transition: background .3s, border-color .3s;
+}
+/* Kill queue render shimmer — it's distracting vs. AI card pulse */
+.rcQueueBar > span { transition: width .5s ease; }
+
+/* =======================================================
    END OF PHASE E · RENDER RUNTIME
    ======================================================= */
 

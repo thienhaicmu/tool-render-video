@@ -1204,3 +1204,32 @@ def stream_render_part_media(job_id: str, part_no: int, request: Request):
             "Cache-Control": "no-store",
         },
     )
+
+
+@router.get("/jobs/{job_id}/parts/{part_no}/thumbnail")
+def get_render_part_thumbnail(job_id: str, part_no: int, t: float = 0.5, w: int = 320):
+    """Return a JPEG thumbnail frame extracted from the rendered clip at offset t seconds.
+
+    Cached by the browser for 24 hours (Cache-Control: public, max-age=86400).
+    Security: file path is resolved from DB, never from user input.
+    """
+    from fastapi.responses import Response
+    from app.services.render_engine import extract_thumbnail_frame
+    parts = list_job_parts(job_id)
+    part = next((p for p in parts if int(p.get("part_no", -1)) == part_no), None)
+    if not part or not part.get("output_file"):
+        raise HTTPException(status_code=404, detail="Part not found")
+    path = Path(part["output_file"])
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Output file not found on disk")
+    jpeg = extract_thumbnail_frame(str(path), offset_sec=max(0.0, t), width=max(32, min(640, w)))
+    if not jpeg:
+        raise HTTPException(status_code=500, detail="Thumbnail extraction failed")
+    return Response(
+        content=jpeg,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "public, max-age=86400",
+            "Content-Length": str(len(jpeg)),
+        },
+    )

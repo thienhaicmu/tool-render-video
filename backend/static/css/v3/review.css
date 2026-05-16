@@ -981,3 +981,42 @@
    ======================================================= */
 
 /* =======================================================
+   P2.7-H — OUTPUT CARD STORYTELLING HIERARCHY
+   Best clip hero · failed recede · skipped mute.
+   ======================================================= */
+
+/* Best clip: hero scale + editorial glow */
+.clipCard.isBestClip {
+  border-color: rgba(99,102,241,.32);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.18), 0 8px 28px rgba(99,102,241,.1);
+  position: relative;
+}
+.clipCard.isBestClip:hover {
+  border-color: rgba(99,102,241,.52);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.3), 0 12px 36px rgba(99,102,241,.15);
+  transform: translateY(-2px);
+}
+.clipCard.isBestClip .clipCardBestFlag {
+  background: linear-gradient(135deg, rgba(99,102,241,.92) 0%, rgba(168,85,247,.92) 100%);
+  color: #fff;
+}
+
+/* Failed clips: visually recede, indicate problem without noise */
+.clipCard.isFailed {
+  opacity: .6;
+  border-color: rgba(239,68,68,.12);
+}
+.clipCard.isFailed:hover {
+  opacity: .78;
+}
+
+/* Skipped: very muted, not the story */
+.clipCard.isSkipped {
+  opacity: .4;
+  filter: grayscale(.55);
+}
+.clipCard.isSkipped:hover {
+  opacity: .55;
+}
+
+/* =======================================================
