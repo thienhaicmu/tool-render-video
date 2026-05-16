@@ -2091,3 +2091,124 @@
    END OF P2.8 — RUNTIME SPATIAL ORCHESTRATION
    ======================================================= */
 
+/* =======================================================
+   P2.9 — RUNTIME CONTINUITY & CREATIVE OUTCOME
+   Causal output sync · Territory switching · Completion
+   arrival · Confidence evolution · Motion continuity.
+   ======================================================= */
+
+/* ── P2.9-C: Process card morph continuity ──────────── */
+.rcAiProcessCards {
+  transition: opacity .2s ease, transform .2s ease;
+}
+.rcAiProcessCards.p29Morphing {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+/* ── P2.9-B: Territory switching — running state ─────── */
+/* Output gallery secondary while AI orchestration runs */
+#render_active_panel[data-render-state="running"] #render_output_panel {
+  opacity: .78;
+  transition: opacity .6s ease;
+}
+/* Completion bar invisible during running (not yet relevant) */
+#render_active_panel[data-render-state="running"] .renderCompletionBar {
+  display: none;
+}
+
+/* ── P2.9-B: Territory switching — complete state ────── */
+/* Runtime zones recede; output takes visual ownership */
+#render_active_panel[data-render-state="complete"] #render_runtime_mount {
+  opacity: .38;
+  transition: opacity .8s ease;
+  pointer-events: none;
+}
+#render_active_panel[data-render-state="complete"] #render_runtime_mount:hover {
+  opacity: .72;
+  pointer-events: auto;
+  transition: opacity .3s ease;
+}
+#render_active_panel[data-render-state="complete"] .rdCard {
+  opacity: .55;
+  transition: opacity .8s ease;
+}
+#render_active_panel[data-render-state="complete"] #render_output_panel {
+  opacity: 1;
+  transition: opacity .6s ease;
+}
+
+/* ── P2.9-B: Territory switching — failed state ──────── */
+/* Failure: runtime surfaces stay visible for recovery guidance */
+#render_active_panel[data-render-state="failed"] #render_runtime_mount {
+  opacity: 1;
+}
+#render_active_panel[data-render-state="failed"] .rcLogStrip {
+  opacity: .88;
+}
+
+/* ── P2.9-E: Completion arrival moment ───────────────── */
+/* Output rises as runtime recedes — one cinematic beat */
+#render_active_panel.p29Arrival #render_output_panel {
+  animation: p29OutputRise .75s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes p29OutputRise {
+  from { transform: translateY(8px); opacity: .55; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+#render_active_panel.p29Arrival #render_runtime_mount {
+  animation: p29RuntimeRecede .75s ease both;
+}
+@keyframes p29RuntimeRecede {
+  from { opacity: 1; }
+  to   { opacity: .38; }
+}
+/* Completion bar arrival */
+#render_active_panel.p29Arrival .renderCompletionBar:not(.hiddenView) {
+  animation: p29CompBarArrival .6s cubic-bezier(.22,1,.36,1) .15s both;
+}
+@keyframes p29CompBarArrival {
+  from { opacity: 0; transform: scale(.98) translateY(4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── P2.9-G: Status deduplication — role clarity ─────── */
+/* rcActiveCard: always infrastructure, never primary */
+#render_active_panel[data-render-state="running"] #rc_active_card .rcActiveTitle {
+  font-size: 9px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--fg-400);
+  font-weight: 700;
+}
+/* rdCard identity: Creative Director label via rdStep reuse */
+#render_active_panel[data-render-state="running"] .rdCard .rdActiveState {
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: rgba(139,92,246,.65);
+  font-weight: 700;
+}
+
+/* ── P2.9-H: Motion restraint — kill noisy shimmer ───── */
+/* Queue bar fill should animate only on value change, no loop */
+.rcQueueBar > span { animation: none !important; }
+/* Evolution items are the ONLY loop-animated elements */
+
+/* ── P2.9-I: Cognitive calm — further dedup surfaces ─── */
+/* Hide raw % from rdCard during running — rcAiProcCard owns it */
+#render_active_panel[data-render-state="running"] #render_active_pct {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .4s ease;
+}
+#render_active_panel[data-render-state="complete"] #render_active_pct,
+#render_active_panel[data-render-state="failed"]   #render_active_pct {
+  opacity: 1;
+  transition: opacity .4s ease;
+}
+
+/* =======================================================
+   END OF P2.9 — RUNTIME CONTINUITY
+   ======================================================= */
+

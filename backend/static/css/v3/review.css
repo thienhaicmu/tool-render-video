@@ -1110,3 +1110,74 @@
 /* =======================================================
    END OF P2.8-F — HERO OUTPUT CARD
    ======================================================= */
+
+/* =======================================================
+   P2.9 — OUTPUT CAUSALITY & CONFIDENCE EVOLUTION
+   Causal elevation · editorial consequence ·
+   live confidence progression on best card.
+   ======================================================= */
+
+/* ── P2.9-A: Causal elevation when clip completes ────── */
+/* JS adds p29Elevated + p29Causal for ~2.6s after completion */
+.clipCard.p29Elevated {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 28px rgba(0,0,0,.28), 0 0 0 1px rgba(139,92,246,.25);
+  z-index: 2;
+  position: relative;
+  transition: transform .35s cubic-bezier(.22,1,.36,1),
+              box-shadow .35s cubic-bezier(.22,1,.36,1);
+}
+
+/* P2.9-D: Editorial consequence — high-tier clip gets green confirmation */
+.clipCard.p29Causal {
+  border-color: rgba(74,222,128,.5);
+  transition: border-color .4s ease;
+}
+/* Settle back naturally */
+.clipCard:not(.p29Elevated) {
+  transition: transform .5s ease, box-shadow .5s ease, border-color .5s ease;
+}
+
+/* ── P2.9-F: Recommendation Confidence Evolution ─────── */
+/* Best clip confidence grows as more clips complete.
+   JS sets data-p29-confidence = emerging|rising|strong|peak */
+
+.clipCard.isBestClip[data-p29-confidence="emerging"] {
+  border-color: rgba(99,102,241,.22);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.1);
+  transition: border-color .6s ease, box-shadow .6s ease;
+}
+.clipCard.isBestClip[data-p29-confidence="rising"] {
+  border-color: rgba(99,102,241,.36);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.18), 0 6px 20px rgba(99,102,241,.09);
+  transition: border-color .6s ease, box-shadow .6s ease;
+}
+.clipCard.isBestClip[data-p29-confidence="strong"] {
+  border-color: rgba(99,102,241,.52);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.26), 0 10px 32px rgba(99,102,241,.13);
+  transition: border-color .6s ease, box-shadow .6s ease;
+}
+.clipCard.isBestClip[data-p29-confidence="peak"] {
+  border-color: rgba(99,102,241,.68);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.38), 0 14px 44px rgba(99,102,241,.18);
+  transition: border-color .4s ease, box-shadow .4s ease;
+  animation: p29ConfidencePeak .55s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes p29ConfidencePeak {
+  0%  { box-shadow: 0 0 0 0 rgba(99,102,241,.0); }
+  45% { box-shadow: 0 0 0 7px rgba(99,102,241,.28); }
+  100%{ box-shadow: 0 0 0 1px rgba(99,102,241,.38), 0 14px 44px rgba(99,102,241,.18); }
+}
+
+/* Confidence label suffix on the hero card at peak */
+.clipsGrid .clipCard.isBestClip[data-p29-confidence="peak"] .clipCardBestFlag {
+  background: linear-gradient(135deg, rgba(74,222,128,.9) 0%, rgba(99,102,241,.9) 100%);
+}
+
+/* ── P2.9-B: Output panel territory transitions ──────── */
+/* When runtime is running, output panel is slightly secondary */
+/* (selector lives in runtime.css using #render_active_panel ancestor) */
+
+/* =======================================================
+   END OF P2.9 — OUTPUT CAUSALITY & CONFIDENCE EVOLUTION
+   ======================================================= */

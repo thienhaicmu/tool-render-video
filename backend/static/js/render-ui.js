@@ -4363,20 +4363,36 @@ const RenderAiRuntime = (() => {
     const stg = _STAGES[idx];
     if (!stg) { el.classList.add('hiddenView'); return; }
     el.classList.remove('hiddenView');
-    const pct = Math.round((idx / (_STAGES.length - 1)) * 100);
+    const pct   = Math.round((idx / (_STAGES.length - 1)) * 100);
     const state = isFailed ? 'failed' : idx === _STAGES.length - 1 ? 'done' : 'running';
-    el.innerHTML =
-      '<div class="rcAiProcCard" data-state="' + state + '">' +
-        '<div class="rcAiProcIcon">' + stg.icon + '</div>' +
-        '<div class="rcAiProcBody">' +
-          '<div class="rcAiProcLabel">' + esc(stg.label) + '</div>' +
-          '<div class="rcAiProcMsg">' + esc(stg.msg) + '</div>' +
-        '</div>' +
-        '<div class="rcAiProcMeta">' +
-          '<span class="rcAiProcPct">' + pct + '%</span>' +
-          '<div class="rcAiProcBar"><div class="rcAiProcFill" style="--w:' + pct + '%"></div></div>' +
-        '</div>' +
-      '</div>';
+
+    // P2.9-C: Continuity — same stage → only update progress bar, no hard replace
+    const prevCard = el.querySelector('.rcAiProcCard');
+    if (prevCard && prevCard.querySelector('.rcAiProcLabel')?.textContent === stg.label) {
+      const fill  = prevCard.querySelector('.rcAiProcFill');
+      const pctEl = prevCard.querySelector('.rcAiProcPct');
+      if (fill)  fill.style.setProperty('--w', pct + '%');
+      if (pctEl) pctEl.textContent = pct + '%';
+      return;
+    }
+
+    // Stage changed — morph transition: fade out → swap → fade in
+    if (prevCard) el.classList.add('p29Morphing');
+    requestAnimationFrame(() => {
+      el.innerHTML =
+        '<div class="rcAiProcCard" data-state="' + state + '">' +
+          '<div class="rcAiProcIcon">' + stg.icon + '</div>' +
+          '<div class="rcAiProcBody">' +
+            '<div class="rcAiProcLabel">' + esc(stg.label) + '</div>' +
+            '<div class="rcAiProcMsg">' + esc(stg.msg) + '</div>' +
+          '</div>' +
+          '<div class="rcAiProcMeta">' +
+            '<span class="rcAiProcPct">' + pct + '%</span>' +
+            '<div class="rcAiProcBar"><div class="rcAiProcFill" style="--w:' + pct + '%"></div></div>' +
+          '</div>' +
+        '</div>';
+      el.classList.remove('p29Morphing');
+    });
   }
 
   function _updateEvolutionFeed(parts) {
@@ -4412,8 +4428,10 @@ const RenderAiRuntime = (() => {
         '</div>';
       listEl.insertBefore(row, listEl.firstChild);
       while (listEl.children.length > 6) listEl.removeChild(listEl.lastChild);
-      _syncOutputCard(pNo);
+      _syncOutputCard(pNo, tier);
     });
+    // P2.9-F: Apply confidence evolution to best card after each batch
+    _applyConfidenceEvolution(done.length, parts.length);
   }
 
   function _pushReason(stageKey) {
@@ -4440,13 +4458,37 @@ const RenderAiRuntime = (() => {
     if (el) el.classList.remove('hiddenView');
   }
 
-  function _syncOutputCard(partNo) {
+  function _syncOutputCard(partNo, tier) {
     const card = document.querySelector('.clipCard[data-part-no="' + partNo + '"]');
     if (!card) return;
+    // P2.8-B: pulse
     card.classList.remove('p28ClipMoment');
     void card.offsetWidth;
     card.classList.add('p28ClipMoment');
-    setTimeout(() => card.classList.remove('p28ClipMoment'), 1000);
+    // P2.9-A: causal elevation + editorial consequence
+    card.classList.add('p29Elevated');
+    if (tier === 'high') card.classList.add('p29Causal');
+    setTimeout(() => {
+      card.classList.remove('p28ClipMoment', 'p29Elevated', 'p29Causal');
+    }, 2600);
+  }
+
+  function _applyConfidenceEvolution(doneCount, totalCount) {
+    const bestCard = document.querySelector('.clipCard.isBestClip');
+    if (!bestCard) return;
+    const ratio = totalCount > 0 ? doneCount / totalCount : 0;
+    const level  = ratio < 0.3 ? 'emerging' : ratio < 0.62 ? 'rising' : ratio < 0.88 ? 'strong' : 'peak';
+    bestCard.dataset.p29Confidence = level;
+  }
+
+  function _triggerCompletionArrival() {
+    const panel = document.getElementById('render_active_panel');
+    if (panel) {
+      panel.classList.add('p29Arrival');
+      setTimeout(() => panel.classList.remove('p29Arrival'), 1500);
+    }
+    const header = document.querySelector('.rcAiEvolutionHeader span');
+    if (header) header.textContent = 'Creative Outcome';
   }
 
   function showCompletionIntelligence(job, summary, parts) {
@@ -4490,20 +4532,28 @@ const RenderAiRuntime = (() => {
         '<div class="rcAiCompSummary">' + esc(summaryMsg) + '</div>' +
       '</div>';
 
-    // P2.7-G: Layer editorial improvement text onto completion bar summary once
+    // P2.9-E: Trigger cinematic completion arrival moment once
     if (!_completionNarrativeSet) {
       _completionNarrativeSet = true;
+      _triggerCompletionArrival();
+
+      // Completion bar becomes creative outcome summary
+      const msgEl     = document.querySelector('.renderCompletionMsg');
       const summaryEl = document.querySelector('.renderCompletionSummary');
-      if (summaryEl) {
-        const improvements = [];
-        if (completed.length > 0) improvements.push(completed.length + ' clips AI-scored');
-        if (topPct >= 75) improvements.push('peak ' + topPct + '% viral signal');
-        else if (topPct >= 55) improvements.push('top clip ' + topPct + '%');
-        improvements.push('avg score ' + avgPct + '%');
-        const existing = summaryEl.textContent.trim();
-        const editorial = improvements.join(' · ');
-        summaryEl.textContent = existing ? existing + ' · ' + editorial : editorial;
+      if (msgEl && avgPct >= 70) {
+        msgEl.textContent = 'AI finished shaping your output.';
       }
+      if (summaryEl) {
+        const bits = [];
+        if (topPct >= 75)       bits.push('Best clip ' + topPct + '% — strong hook');
+        else if (topPct >= 55)  bits.push('Top clip scored ' + topPct + '%');
+        if (completed.length)   bits.push(completed.length + ' clips AI-scored');
+        bits.push('avg ' + avgPct + '%');
+        summaryEl.textContent = bits.join(' · ');
+      }
+
+      // Lock in peak confidence on the best card
+      setTimeout(() => _applyConfidenceEvolution(completed.length, completed.length), 200);
     }
   }
 
@@ -4512,6 +4562,12 @@ const RenderAiRuntime = (() => {
     _reasonItems            = [];
     _lastPartCount          = 0;
     _completionNarrativeSet = false;
+    // Clear P2.9 confidence state from any lingering best card
+    const bestCard = document.querySelector('.clipCard.isBestClip');
+    if (bestCard) delete bestCard.dataset.p29Confidence;
+    // Clear evolution header back to default
+    const header = document.querySelector('.rcAiEvolutionHeader span');
+    if (header) header.textContent = 'Clip Intelligence';
     ['rc_ai_process_cards', 'rc_ai_evolution_feed', 'rc_ai_reason_feed'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.add('hiddenView');
