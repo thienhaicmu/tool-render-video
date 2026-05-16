@@ -3467,3 +3467,68 @@ P3.7 section appended:
 - Compromise action is still fixed (`removeDeadSpace`) for aggressive/narrative conflict
 - Collab memory cannot distinguish "accepted despite dissent" from "accepted because of dissent"
 - No graduated confidence decay in collab memory — old decisions weigh equally with recent ones
+
+---
+
+## Section 35 — UX-R1: Runtime Center Stage Re-Architecture (2026-05-16)
+
+**Phase:** UX-R1  
+**Branch:** `feature/ai-output-upgrade`  
+**Commit:** `feat(ui): UX-R1 runtime center stage re-architecture`
+
+### What Changed
+
+Transforms the render runtime from a "render monitor" (rdCard as hero) into an "AI orchestration experience" (`#uxr1_ai_hero` as hero). No DOM elements removed, no backward compatibility broken.
+
+**HTML (`index.html`)**
+
+Added `#uxr1_ai_hero` div directly before `#rd_card` inside `#render_active_panel`. Sits outside `#render_runtime_mount` so it is never affected by the P2.9-B territory-switching opacity fade (which targets `#render_runtime_mount` only). Contains:
+- `.uxr1HeroStage` — icon + label + message row (populated live from `_STAGES[idx]`)
+- `#uxr1_concerns` — populated live from `RuntimeIntelligence.getConcerns(parts)` via `_updateHero()`
+
+**JS (`render-ui.js`)**
+
+- `_lastHeroConcernHash` — dedup variable, prevents DOM churn when concern content hasn't changed
+- `_updateHero(idx, isFailed, parts)` — new function in `RenderAiRuntime`:
+  - Updates hero icon/label/msg from `_STAGES[idx]`; sets `heroEl.dataset.stage` and `dataset.failed`
+  - Calls `RuntimeIntelligence.getConcerns(parts)` and renders `.uxr1ConcernItem` rows with hash dedup
+- `update()` calls `_updateHero(newIdx, isFailed, parts)` after `_renderConcernItems(parts)` — same cadence as existing concern rendering
+- `reset()` clears `_lastHeroConcernHash` and restores hero to `_STAGES[0]` defaults
+
+**CSS (`runtime.css`)**
+
+UX-R1 section appended (all additive — no prior rules removed):
+
+| Rule | Effect |
+|---|---|
+| `.uxr1AiHero` | Flex column, `flex-shrink:0`, subtle bg, bottom border |
+| `.uxr1AiHero::before` | 3px purple gradient accent bar; pulses via `uxr1HeroEdge` animation when `[data-render-state="running"]` |
+| `.uxr1StageLabel` | 18px, weight 600, 90% opacity |
+| `.uxr1StageMsg` | 12.5px, 44% opacity |
+| `.uxr1ConcernItem` | Left border accent, fade-in via `uxr1ConcernIn` |
+| `.uxr1ConcernLabel` | 10px uppercase, purple 75% opacity |
+| `.uxr1ConcernMsg` | 12.5px, 58% opacity |
+| `#render_active_panel > .rdCard` | Demoted — compact padding (9px 18px 8px), low background |
+| `[data-render-state="running"] > .rdCard::before` | `opacity: 0 !important` — suppresses P2.8 glow |
+| `[data-render-state="complete"] > .rdCard` | `animation: none !important` — suppresses P2.8 `p28CardComplete` |
+| `[data-render-state="complete"] .uxr1AiHero` | `opacity: 0.80` — hero fades slightly at completion |
+| `[data-render-state="running"] .rcLogStrip` | `opacity: 0.60` — log strip recedes during render |
+| `@media (max-width: 1366px)` | Hero padding 14px 18px, label 16px |
+| `@media (max-width: 1024px)` | Hero padding 12px 14px, label 14px, msg 11.5px |
+
+### Spatial Plane Architecture
+
+```
+Plane 1 — AI Hero     #uxr1_ai_hero         always-visible, stage + P3.x concerns
+Plane 2 — Status      .rdCard               demoted strip (badge, title, %, meta)
+Plane 3 — Queue       .rcQueuePanel         existing; unchanged
+Plane 4 — Logs        .rcLogStrip           receded to 60% during active render
+```
+
+### What Was NOT Changed
+
+- `#render_runtime_mount` mounting logic — untouched
+- P2.9-B territory switching (`[data-render-state="complete"] #render_runtime_mount { opacity: 0.38 }`) — preserved; hero is a sibling of `#render_runtime_mount`, not a child
+- `RenderAiRuntime.mountPanels()`, `_updateProcessCard()`, `_updateEvolutionFeed()` — untouched
+- `#ai_insights_panel` — untouched (remains backend `ai_director.enabled` only)
+- All existing P2.x / P3.x CSS rules — untouched (UX-R1 appended last, wins on specificity for rdCard only)
