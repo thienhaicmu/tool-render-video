@@ -3312,3 +3312,80 @@ When an agent fires via this path, a `.p35AgentPill` badge appears in the conver
 - `_resolveWithAgents()` is only called when ALL prior resolution steps fail — keyword matches bypass agents entirely even when an agent agrees
 - Pacing Agent uses silence data from EditorSceneIntelligence which requires the editor to have been opened and analyzed; agents return empty in render-only mode
 - No "agent memory" — agents are stateless and re-evaluate from scratch on every call
+
+---
+
+## Section 33 — P3.6: Agent Debate & Consensus Intelligence (2026-05-16)
+
+**Branch:** `feature/ai-output-upgrade`
+**Files changed:** `editor-consensus.js` (new), `editor-converse.js`, `editor-runtime-intelligence.js`, `review.css`, `index.html`
+
+### What Changed
+
+Before P3.6, the agent system was winner-takes-all: `runAll()` sorted by confidence and the top result was used. Agreement between agents was invisible. Conflict between agents was invisible. The creative tradeoffs that specialized agents detect — fast cuts vs. emotional pacing, viral energy vs. cinematic rhythm — were never surfaced.
+
+P3.6 adds `EditorConsensus` — a lightweight debate engine that groups agent outputs by creative direction, scores multi-agent agreement, detects opposing conflict, and produces a consensus recommendation with explainable reasoning.
+
+### Consensus Engine (P3.6-A through P3.6-D)
+
+New file: `editor-consensus.js` — `window.EditorConsensus` IIFE.
+
+**Creative direction groups:**
+- `aggressive`: fasterPacing, strongerHook, viralMode, removeDeadSpace — "tighten and energize"
+- `narrative`: cinematicMode — "preserve and deepen"
+- `clarity`: subtitleCleanup, smartClipPrioritization — "structure and clarify"
+
+**Agreement scoring:**
+- Agents in the same direction form an "ally group"
+- Multi-agent weight bonus: +10% per extra agent in the winning group
+- Confidence boosted: +8% per extra agreeing agent (e.g., Hook + Viral → +8%)
+- `allyLabel`: "Hook Agent + Viral Agent" (up to 2 names joined)
+- `consensusMsg`: "Hook Agent + Viral Agent agree — opening needs a stronger hook."
+
+**Conflict detection:**
+- Opposing direction pair: aggressive vs. narrative
+- `conflictLevel`: opposing group confidence sum / winning group confidence sum (0–1)
+- `dissentMsg`: "Emotion Agent preferred Cinematic Flow."
+
+**Compromise (extreme conflict: conflictLevel > 0.45, opposer ≥ 0.60 confidence):**
+- aggressive vs. narrative → compromise action: `removeDeadSpace` (least aggressive, preserves intent)
+- Note: "Removed dead air only — intentional pacing preserved for emotional impact."
+- Confidence reduced by 7% when compromise applied
+- If no compromise action available: "X's priority maintained — Y's concern noted."
+
+**Creator clarification (P3.6-I):** When extreme conflict exists, `resolve()` returns `isExtremeConflict: true` with `conflictOptions: [{label, action, interpretation}]`. `_resolveWithAgents()` surfaces this as `ambiguous: true` → existing clarification button rendering — "Two valid directions detected."
+
+### Conversation Debate (P3.6-G)
+
+`_resolveWithAgents()` now calls `EditorConsensus.resolve()` instead of `EditorAgents.getTopRecommendation()`. The agentMeta object gains `consensus`, `dissent`, `compromiseNote`, `agreementScore`.
+
+`_render()` renders the debate context in 3 tiers:
+1. `.p35AgentPill` — ally label: "Hook Agent + Viral Agent" (no "· confidence" text when consensus follows)
+2. `.convExplain` — consensus message: "Hook Agent and Viral Agent agree — opening needs a stronger hook."
+3. `.p36Dissent` — "Emotion Agent preferred Cinematic Flow." (only when conflict > 0.30)
+4. `.p36Compromise` — "Removed dead air only — intentional pacing preserved." (only when compromise applied)
+
+Example turn output:
+```
+[Hook Agent + Viral Agent]
+Hook Agent and Viral Agent agree — opening clip is below engagement threshold.
+Emotion Agent preferred Cinematic Flow.
+Compromise: Removed dead air only — intentional pacing preserved for emotional impact.
+```
+
+P3.5 path (no consensus module) still works via fallback in `_resolveWithAgents()`.
+
+### Runtime Debate Feed (P3.6-F)
+
+`getConcerns()` now produces consensus-aware concern items:
+- Primary item: `label = debate.allyLabel`, `msg = debate.consensus` — shows "Hook Agent + Viral Agent" if both fired
+- Secondary item (when `conflictLevel > 0.30`): compromise note or dissent message from opposing agent
+
+Fallback: if `EditorConsensus` is undefined → P3.5 agent layer → P3.4 taste layer.
+
+### What Remains Weak
+
+- Clarity direction (subtitle, prioritization) has no natural conflict with other directions — clarity agents never trigger the compromise path
+- `conflictLevel > 0.45` threshold is fixed — can't adapt to creator risk tolerance
+- Compromise always resolves to `removeDeadSpace` for aggressive/narrative conflict — limited to one compromise action regardless of which specific agents are conflicting
+- Agents within the same direction group don't debate each other — only cross-direction conflict is detected

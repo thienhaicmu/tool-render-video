@@ -225,10 +225,47 @@ window.EditorConverse = (() => {
     };
   }
 
-  // ── P3.5: Agent-based intent resolution ──────────────────
-  // Called when no keyword rule matches and no vague power word found.
-  // Routes to EditorAgents consensus — returns result only at confidence ≥ 0.65.
+  // ── P3.6: Consensus debate resolution ────────────────────
+  // Runs the full agent debate via EditorConsensus.
+  // Falls back to single-agent resolution (P3.5) when consensus unavailable.
   function _resolveWithAgents() {
+    // P3.6: Full debate consensus
+    if (typeof EditorConsensus !== 'undefined' && typeof EditorAgents !== 'undefined') {
+      const signals = EditorAgents.buildSignals();
+      const debate  = EditorConsensus.resolve(signals);
+      if (!debate || debate.confidence < 0.65) return null;
+
+      // Extreme conflict — surface both directions and ask creator to choose
+      if (debate.isExtremeConflict && debate.conflictOptions) {
+        return {
+          action:      null,
+          ambiguous:   true,
+          options:     debate.conflictOptions,
+          explainText: debate.consensus,
+        };
+      }
+
+      const rule = _RULES.find(r => r.id === debate.action);
+      if (!rule) return null;
+      const tier = debate.confidence >= 0.80 ? 'high' : 'moderate';
+      return {
+        action:         debate.action,
+        interpretation: rule.interpretation,
+        desc:           rule.desc,
+        ambiguous:      false,
+        explainText:    null, // debate meta renders the reasoning
+        agentMeta: {
+          label:         debate.allyLabel,
+          tier,
+          consensus:     debate.consensus,
+          dissent:       debate.dissent,
+          compromiseNote: debate.compromiseNote,
+          agreementScore: debate.agreementScore,
+        },
+      };
+    }
+
+    // P3.5 fallback: single-agent resolution
     if (typeof EditorAgents === 'undefined') return null;
     const signals = EditorAgents.buildSignals();
     const rec     = EditorAgents.getTopRecommendation(signals);
@@ -413,12 +450,20 @@ window.EditorConverse = (() => {
       }
 
       let inner = '<div class="convTurnAi" ' + fade + '>' + t.html;
-      // P3.5: Agent attribution pill
+      // P3.5/P3.6: Agent attribution pill + debate context
       if (t.agentMeta) {
-        inner += '<div class="p35AgentPill" data-tier="' + t.agentMeta.tier + '">' + _esc(t.agentMeta.label) + ' · ' + _esc(t.agentMeta.tier) + ' confidence</div>';
+        const m        = t.agentMeta;
+        const pillText = m.consensus
+          ? _esc(m.label)
+          : _esc(m.label) + ' · ' + _esc(m.tier) + ' confidence';
+        inner += '<div class="p35AgentPill" data-tier="' + m.tier + '">' + pillText + '</div>';
+        // P3.6: Consensus message (replaces plain explainText when debate ran)
+        if (m.consensus)      inner += '<div class="convExplain">'   + _esc(m.consensus)      + '</div>';
+        if (m.dissent)        inner += '<div class="p36Dissent">'    + _esc(m.dissent)        + '</div>';
+        if (m.compromiseNote) inner += '<div class="p36Compromise">' + _esc(m.compromiseNote) + '</div>';
       }
-      // P3.3-D: Explainability text
-      if (t.explainText) {
+      // P3.3-D: Explainability text (only when no debate consensus covers it)
+      if (t.explainText && !(t.agentMeta && t.agentMeta.consensus)) {
         inner += '<div class="convExplain">' + _esc(t.explainText) + '</div>';
       }
       if (t.desc) {

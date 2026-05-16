@@ -1549,3 +1549,32 @@
 /* =======================================================
    END OF P3.5 — MULTI-AGENT EDITING SYSTEM
    ======================================================= */
+
+/* =======================================================
+   P3.6 — AGENT DEBATE & CONSENSUS INTELLIGENCE
+   Dissent and compromise lines in conversation turns
+   ======================================================= */
+
+/* Agent disagreement note — muted italic, below consensus */
+.p36Dissent {
+  font-size: 11px;
+  color: rgba(255,255,255,.38);
+  font-style: italic;
+  margin-top: 3px;
+  line-height: 1.4;
+  padding-left: 1px;
+}
+
+/* Compromise resolution note — soft blue, signals synthesis */
+.p36Compromise {
+  font-size: 11px;
+  color: rgba(140, 195, 255, 0.52);
+  font-style: italic;
+  margin-top: 2px;
+  line-height: 1.4;
+  padding-left: 1px;
+}
+
+/* =======================================================
+   END OF P3.6 — AGENT DEBATE & CONSENSUS INTELLIGENCE
+   ======================================================= */

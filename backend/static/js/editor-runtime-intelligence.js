@@ -67,20 +67,47 @@ window.RuntimeIntelligence = (() => {
   }
 
   // ── getConcerns ───────────────────────────────────────────
-  // P3.5: Delegates concern detection to EditorAgents system.
-  // Falls back to P3.4 taste-based logic if agents unavailable.
+  // P3.6: Delegates to EditorConsensus for debate-aware concerns.
+  // Falls back through P3.5 agent layer then P3.4 taste logic.
   // Returns array of { type, label, msg } — at most 2 entries.
   function getConcerns(parts) {
-    // P3.5: Agent-based concerns — richer signals from scene + review intelligence
+    // P3.6: Consensus-based concerns — agreement and conflict context
+    if (typeof EditorConsensus !== 'undefined' && typeof EditorAgents !== 'undefined') {
+      const signals = EditorAgents.buildSignals(Array.isArray(parts) ? parts : []);
+      const debate  = EditorConsensus.resolve(signals);
+      if (!debate) return [];
+
+      const concerns = [];
+
+      // Primary: consensus recommendation with ally label
+      if (debate.confidence >= 0.65) {
+        concerns.push({
+          type:  'consensus',
+          label: debate.allyLabel,
+          msg:   debate.consensus,
+        });
+      }
+
+      // Secondary: conflict note when meaningful disagreement exists
+      if (debate.dissent && debate.conflictLevel > 0.30) {
+        const msg      = debate.compromiseNote ? 'Compromise: ' + debate.compromiseNote : debate.dissent;
+        const opposer  = debate.agentResults.find(r => r.action !== debate.action);
+        concerns.push({
+          type:  opposer ? opposer.agentName : 'dissent',
+          label: opposer ? opposer.agentLabel : 'Counterpoint',
+          msg,
+        });
+      }
+
+      return concerns.slice(0, 2);
+    }
+
+    // P3.5 fallback: single-agent concerns (no consensus module)
     if (typeof EditorAgents !== 'undefined') {
       const signals = EditorAgents.buildSignals(Array.isArray(parts) ? parts : []);
       const results = EditorAgents.runAll(signals).filter(r => r.confidence >= 0.65);
       if (results.length) {
-        return results.slice(0, 2).map(r => ({
-          type:  r.agentName,
-          label: r.agentLabel,
-          msg:   r.reason,
-        }));
+        return results.slice(0, 2).map(r => ({ type: r.agentName, label: r.agentLabel, msg: r.reason }));
       }
       return [];
     }
