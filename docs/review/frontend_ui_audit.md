@@ -3832,3 +3832,65 @@ UX-R5 section appended with:
 | 35+ hardcoded transitions in P2.x CSS | Stable code, high change/reward ratio |
 | `updateComparePanel()` no RAF debounce | User-paced only; no frame-drop evidence |
 | `200px`/`26px` hardcoded in UX-R3 | Intentional fixed values; breakpoints handle scaling |
+
+---
+
+## Section 41 — UX-R6: Backend-Driven Redesign Audit (2026-05-16)
+
+**Phase:** UX-R6  
+**Branch:** `feature/ai-output-upgrade`  
+**Status:** Audit only — no implementation  
+**Full audit:** `docs/review/PRODUCT_STATE_UX_R6_AUDIT.md`
+
+### Methodology
+
+Full read of backend source (`render.py`, `render_engine.py`, DB schema, `viral_scoring.py`, WS handler) and frontend signal inventory. Every finding is file-confirmed.
+
+### Key Discoveries
+
+**Backend signals present but not used by frontend:**
+
+| Signal | Field | Location | Frontend Status |
+|---|---|---|---|
+| Motion score per clip | `parts[].motion_score` | DB + WS payload | Completely ignored |
+| Hook score per clip | `parts[].hook_score` | DB + WS payload | Completely ignored |
+| Stuck clip detection | `summary.stuck_parts[]` | WS summary | Never surfaced |
+| Backend part name | `parts[].part_name` | DB + WS | Used in cards; ignored in evolution feed |
+| Server history API | `GET /api/jobs/history` | Backend route | Workspace uses localStorage instead |
+| `can_retry` / `can_rerun` flags | API response | Backend route | Not used for CTA semantics |
+| AI director enabled flag | `payload_json.ai_director_enabled` | payload_json | Not checked before showing ranking UI |
+
+**Fake / misleading signals in current UI:**
+
+| Signal | Reality |
+|---|---|
+| "AI learns your editing style" in workspace | CreatorMemory is editor-scoped (AI suggestion accept/reject). Does NOT learn from render outcomes |
+| "Continue Editing" CTA | Calls `rerunRenderHistory()` — full re-render, not editing |
+| Empty UX-R3 tier headers when AI Director off | Silent degradation; creator sees empty "Strong Candidates" with no content |
+| Score display inconsistency | Hero thumb shows viral %, cards show rank/10 — different scales |
+
+**Confirmed non-existent backend signals (do not design for):**
+
+`scene_type`, retention curve, creator alignment score, recommendation engine, A/B comparison endpoint, trend aggregation, "saved projects", started_at/completed_at, agent debate in render pipeline
+
+### Prioritized Roadmap (from full audit)
+
+**P0 (immediate, no new backend):**
+- Add `motion_score` + `hook_score` to clip cards (three scores exist, one shown)
+- Gate tier headers behind `ai_director_enabled` check
+- Use `part_name` in evolution feed
+- Surface `stuck_parts` warning
+- Unify score display (%, /10)
+- Replace localStorage history with `/api/jobs/history` API
+
+**P1 (contained scope):**
+- Humanize 9 pipeline stage labels
+- Fix "Continue Editing" → "Retry Failed" / "Rerun" based on `can_retry`/`can_rerun`
+- Show last render settings from `payload_json`
+- Promote failed clip error text
+- AI Director off state in completion hero
+
+**P2 (optional):**
+- Remove dead `#view_monitor` panel
+- "Download Best" rename
+- `job.message` as stage sub-label
