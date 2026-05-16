@@ -3532,3 +3532,80 @@ Plane 4 — Logs        .rcLogStrip           receded to 60% during active rende
 - `RenderAiRuntime.mountPanels()`, `_updateProcessCard()`, `_updateEvolutionFeed()` — untouched
 - `#ai_insights_panel` — untouched (remains backend `ai_director.enabled` only)
 - All existing P2.x / P3.x CSS rules — untouched (UX-R1 appended last, wins on specificity for rdCard only)
+
+---
+
+## Section 36 — UX-R2: Completion Experience Re-Architecture (2026-05-16)
+
+**Phase:** UX-R2  
+**Branch:** `feature/ai-output-upgrade`  
+**Commit:** `feat(ui): UX-R2 completion experience re-architecture`
+
+### What Changed
+
+Transforms render completion from a utility event into a creative outcome delivery. No DOM destruction; all prior completion flow (P2.9 arrival, P2.8-F hero card, confidence evolution) is preserved.
+
+**HTML (`index.html`)**
+
+`#uxr2_completion_hero` div inserted between `render_completion_bar` and `render_output_panel`. Starts `hiddenView`. Three columns:
+- `.uxr2HeroThumb` — best clip thumbnail + hover video + score badge (populated by JS at completion)
+- `.uxr2HeroNarrative` — `Creative Outcome` label, narrative msg (from `RuntimeIntelligence.getCompletionNarrative()`), AI selection reason (from ranking), stat bits
+- `.uxr2HeroCTA` — 3-level CTA: primary (`uxr2_cta_review`), secondary (`uxr2_cta_export` — `<a>` with download href), tertiary (`uxr2_cta_folder`)
+
+**JS (`render-ui.js`) — RenderAiRuntime IIFE**
+
+- `_morphHeroToOutcome(narrative)` — adds `uxr2OutcomeMode` class to `#uxr1_ai_hero`; updates icon to '✓', label to 'Creative Outcome', msg to `narrative.summaryMsg`; clears concerns
+- `_showCompletionHero(job, parts, narrative, completed, topPct)`:
+  - Calls `_rankMap(job)` to find best part
+  - Populates thumb with static JPEG + hover-video (same URL pattern as clip cards: `/api/render/jobs/{id}/parts/{no}/thumbnail` + `/media`)
+  - Populates narrative msg, reason (from `bestRkData.reason`), and stat bits
+  - Wires up CTA buttons: Review Best Clip → `centerPreviewClip()`, Export Best → `/api/jobs/{id}/parts/{no}/stream` download href, Open Folder → `openRenderOutputFolder()`
+  - Falls back gracefully when no best clip exists: `dataset.state = 'no-best'`, "AI could not confidently identify a strongest result.", "Review Clips" scroll action
+  - Demotes `render_completion_bar` via `uxr2BarDemoted` class
+  - Elevates output list via `uxr2Complete` class
+  - Reveals hero with `requestAnimationFrame` + `uxr2HeroActive` class (triggers `uxr2HeroReveal` animation)
+- Both called inside the `if (!_completionNarrativeSet)` guard in `showCompletionIntelligence()` — idempotent, fires once per render session
+- `reset()` extended: clears hero to initial state, removes `uxr2OutcomeMode` / `uxr2BarDemoted` / `uxr2Complete` classes
+
+**CSS (`runtime.css`) — UX-R2 section appended**
+
+| Rule | Effect |
+|---|---|
+| `.uxr1AiHero.uxr2OutcomeMode` | Green accent bar, green icon, removes pulse animation |
+| `[data-render-state="complete"] .uxr2OutcomeMode` | Overrides UX-R1 opacity 0.80 fade — outcome mode stays at opacity 1 |
+| `.uxr2CompletionHero` | `display: grid; grid-template-columns: 180px 1fr auto` |
+| `.uxr2CompletionHero.uxr2HeroActive` | `uxr2HeroReveal` animation (translateY + opacity, 0.65s ease) |
+| `.uxr2HeroThumb` | Relative, 9/16 aspect, overflow hidden, hover video wired |
+| `.uxr2ThumbScore` | Position absolute, bottom-right, blur backdrop |
+| `.uxr2NarrativeLabel` | 9.5px uppercase green (`rgba(74,222,128,.70)`) |
+| `.uxr2NarrativeMsg` | 15px, weight 500, 88% opacity |
+| `.uxr2CtaPrimary` | Indigo filled button (36px) |
+| `.uxr2CtaSecondary` | Ghost border link (30px) |
+| `.uxr2CtaTertiary` | Minimal text button (26px) |
+| `.renderCompletionBar.uxr2BarDemoted` | Reduced padding; hides redundant CTA buttons (keeps `#back_to_editor_btn`) |
+| `.renderOutputList.uxr2Complete .isBestClip` | Stronger glow (box-shadow) |
+| `@media (max-width: 1366px)` | Thumb 140px, padding reduced |
+| `@media (max-width: 1024px)` | Single-column stack; thumb 16/5 aspect; CTA row wrap |
+
+### Completion Arrival Sequence (updated)
+
+```
+render done → showCompletionIntelligence() [guarded by _completionNarrativeSet]
+  ├── _triggerCompletionArrival()     → p29Arrival class → OutputRise + RuntimeRecede animations
+  ├── completion bar text updated
+  ├── _applyConfidenceEvolution()     → best clip confidence → "peak"
+  ├── _morphHeroToOutcome(narrative)  → #uxr1_ai_hero morphs: green accent, "Creative Outcome"
+  └── _showCompletionHero(...)        → #uxr2_completion_hero revealed with uxr2HeroReveal animation
+```
+
+### What Was NOT Changed
+
+- `showRenderCompletionBar()` — untouched; still sets msg/summary/icon/state
+- `_triggerCompletionArrival()` — untouched; p29Arrival + evolution header still fire
+- P2.8-F hero card layout (`.clipsGrid .clipCard.isBestClip`) — untouched; UX-R2 only adds stronger glow
+- P2.9 territory switching CSS — preserved (rdCard fades, runtime mount recedes)
+- All P3.x intelligence paths — untouched
+
+### Audit Note: P2.9-B CSS Dead Selectors
+
+The CSS rules `#render_active_panel[data-render-state] #render_output_panel` and similar are **dead** — `render_output_panel` is a sibling of `render_active_panel`, not a descendant, so the descendant selector never matches. These rules exist from a prior design iteration. They have no effect in the live DOM. UX-R2 does not remove them (no DOM destruction policy) but does not rely on them.
