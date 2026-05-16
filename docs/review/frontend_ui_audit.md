@@ -3676,3 +3676,40 @@ When `_clipsSortOrder === 'part_no'` (user selected "In order"): `data-uxr3-tier
 - P2.8-F hero card (`grid-column: 1 / -1`, `grid-template-columns: 160px 1fr`) — `[data-uxr3-tier="best"]` overrides to 200px via later CSS rule (same specificity, later wins)
 - P2.9 confidence evolution (`data-p29-confidence`) — untouched
 - All existing clip card classes (`isDone`, `isSelected`, `p29Elevated`, etc.) — preserved
+
+---
+
+## Section 38 — UX-R3.1: Review Hardening (2026-05-16)
+
+**Phase:** UX-R3.1  
+**Branch:** `feature/ai-output-upgrade`  
+**Commit:** `fix(ui): UX-R3.1 review hierarchy hardening`
+
+Three targeted fixes. No new DOM elements, no CSS changes, no HTML changes.
+
+### Fix A — Relative strong-tier threshold (`_applyUxR3Tiers`)
+
+**Before:** `isStrong = scoreEl.dataset.tier === 'high'` — absolute threshold; clips scoring 5–7 never enter Strong tier even if they're the top performers.
+
+**After:** `_strongThreshold = _bestScore * 0.85`. `_bestScore` is derived from the ranking Map (isBest entry first, then max across all). When no ranking Map data exists, falls back to DOM `data-tier="high"`.
+
+**Effect:** A batch where best clip scores 6.4 and second-best scores 5.6 — second-best now qualifies as Strong (5.6 ≥ 6.4 × 0.85 = 5.44).
+
+### Fix B — Sort-stability DOM fallback (`sortClipsView`)
+
+**Before:** `sortClipsView()` skipped `_applyUxR3Tiers()` entirely when `_renderMonitorLastJob` was null — tier headers orphaned in edge state (grid present but job object cleared).
+
+**After:** `else` branch added. Calls `_applyUxR3Tiers()` directly with cards from DOM querySelectorAll and an empty `new Map()` for ranking. Safe fallback — no score-relative tiering, but headers rebuild correctly.
+
+### Fix C — Preview safety guard (auto-preview setTimeout)
+
+**Before:** 900ms auto-preview called `centerPreviewClip()` unconditionally — could override a clip the creator manually opened in the 900ms window.
+
+**After:** Guard at top of setTimeout: `if (_csPreviewJobId !== null || _cardHoverActiveVid !== null) return`. Skips auto-preview if any preview is already active.
+
+### What Was NOT Changed
+
+- `_applyUxR3Tiers()` structure — same function signature, same header injection logic
+- CSS — no changes
+- HTML — no changes
+- P2.x / P3.x — untouched

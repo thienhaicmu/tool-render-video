@@ -128,13 +128,68 @@ The `.uxr3ProblemHeader.uxr3Collapsed ~ [data-uxr3-tier="failed"]` CSS only hide
 
 ---
 
+---
+
+## UX-R3.1 — Review Hardening (2026-05-16)
+
+Three targeted stability fixes applied to `render-ui.js`. No DOM redesign. No new HTML.
+
+### Fix A — Relative strong-tier threshold
+
+**Problem:** Absolute `data-tier="high"` (score ≥ 8) meant all clips scoring 5–7 fell into "Additional Results" with no Strong tier — hierarchy misleading when spread is tight.
+
+**Fix:** `_strongThreshold = _bestScore * 0.85`. Computed from `ranking` Map: first from `rk.isBest`, then from max across all entries as fallback. When no ranking data exists (`_strongThreshold <= 0`), falls back to DOM `data-tier="high"` check on `.clipCardScore`.
+
+```js
+var _bestScore = 0;
+ranking.forEach(function (rk) { if (rk.isBest && rk.score > _bestScore) _bestScore = rk.score; });
+if (!_bestScore) ranking.forEach(function (rk) { if (rk.score > _bestScore) _bestScore = rk.score; });
+var _strongThreshold = _bestScore > 0 ? _bestScore * 0.85 : -1;
+```
+
+### Fix B — Sort-stability DOM fallback
+
+**Problem:** `sortClipsView()` only re-ran `_applyUxR3Tiers()` via `populateRenderOutputPanel()` when `_renderMonitorLastJob` was set. In the edge case where job state was cleared (page reload with persisted grid), tier headers orphaned on sort change.
+
+**Fix:** Added `else` branch that runs `_applyUxR3Tiers()` directly using DOM-queried cards, with an empty ranking Map.
+
+```js
+} else {
+  var _r31List = document.getElementById('render_output_list');
+  if (_r31List) {
+    _applyUxR3Tiers(
+      _r31List, new Map(),
+      Array.from(_r31List.querySelectorAll('.clipCard.isDone')),
+      Array.from(_r31List.querySelectorAll('.clipCard.isFailed')),
+      Array.from(_r31List.querySelectorAll('.clipCard.isSkipped'))
+    );
+  }
+}
+```
+
+### Fix C — Preview safety guard
+
+**Problem:** Auto-preview setTimeout unconditionally called `centerPreviewClip()` after 900ms, even if the creator had already clicked a clip manually. Overrode explicit intent.
+
+**Fix:** Guard at the top of the setTimeout callback: bail if `_csPreviewJobId !== null` (manual preview active) or `_cardHoverActiveVid !== null` (hover video in progress).
+
+```js
+setTimeout(function () {
+  if (_csPreviewJobId !== null || _cardHoverActiveVid !== null) return;
+  centerPreviewClip(…);
+}, 900);
+```
+
+### Maturity Impact
+
+Strong-tier now reflects relative editorial merit rather than absolute scoring. Sort changes no longer orphan headers in edge state. Auto-preview now respects creator intent. UI score: **9.5 / 10**.
+
+---
+
 ## Next Phase Direction
 
-### UX-R3.1 — Relative strong tier
-Replace absolute score-8 threshold with relative: top N non-best done clips (where N = min(3, floor(doneCount × 0.33))). Fixes the case where all clips score 5-7.
-
-### UX-R3.2 — Sort-change tier refresh
-Add `_applyUxR3Tiers()` call to `sortClipsView()` after DOM re-sort, so headers re-appear when switching back to score-sort.
+### UX-R3.2 — Sort-change tier refresh (full path)
+The Fix B fallback handles edge cases but uses an empty ranking Map (no score data). To fix the common case of sort-change mid-session, cache the last ranking Map in a module-level variable so Fix B can use real scores when `_renderMonitorLastJob` is unavailable but sort changes happen.
 
 ### UX-R3.3 — Compare tool
 Build a side-by-side compare view. UX-R3-H seeded the `.isSelected` infrastructure. Compare would:
