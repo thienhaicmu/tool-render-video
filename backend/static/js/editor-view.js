@@ -877,6 +877,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   evInitTextLayers();
   evUpdateAspectRatio();  // apply aspect ratio frame from dropdown
   evInitVoiceFields(pendingPayload);
+  if (typeof CreatorMemory !== 'undefined') CreatorMemory.init();
 
   try {
     const pr = await fetch('/api/render/prepare-source', {
@@ -1717,6 +1718,8 @@ function cancelEditorView() {
   if (typeof EditorState               !== 'undefined') EditorState.reset();
   const _aiPanel = document.getElementById('evInspAiPanel');
   if (_aiPanel) { _aiPanel.innerHTML = ''; _aiPanel.dataset.context = 'empty'; }
+  const _cmPanel = document.getElementById('cmPrefsPanel');
+  if (_cmPanel) _cmPanel.innerHTML = '';
   const _pane = document.querySelector('.inspPaneBody');
   if (_pane) delete _pane.dataset.inspContext;
   const video = qs('evVideo');

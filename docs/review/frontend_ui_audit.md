@@ -2944,3 +2944,72 @@ The runtime is now a three-surface AI orchestration system layered on the same D
 - `pointer-events: none` on receded runtime mount is not discoverable
 
 **Full technical documentation:** `docs/review/frontend/RUNTIME_ORCHESTRATION.md`
+
+---
+
+## Section 28 — P3.1: Creator Memory & Preference Intelligence
+
+**Date:** 2026-05-16
+**Branch:** feature/ai-output-upgrade
+**Scope:** `backend/static/js/`, `backend/app/`, `backend/static/css/v3/`
+
+### What This Phase Addressed
+
+The editor's AI suggestion system was session-only: accept/reject signals from `_trackPreference` accumulated in `aiPreferenceProfile` within EditorState but were discarded on every page load. `feedback_learning.py` (Phase 43) did backend preference learning at render level, but was never connected to the editor UI. This phase adds the persistence bridge and surfaces what the AI has learned.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `backend/app/services/db.py` | Added `creator_prefs` table (singleton row, JSON blob); added `get_creator_prefs()` and `upsert_creator_prefs()` CRUD functions |
+| `backend/app/routes/creator.py` | New file: `GET /api/creator/preferences` and `PUT /api/creator/preferences` |
+| `backend/app/main.py` | Registered `creator_router` |
+| `backend/static/js/creator-memory.js` | New file: `CreatorMemory` IIFE — localStorage cache + debounced backend sync + inspector panel render |
+| `backend/static/js/editor-ai-actions.js` | `_trackPreference` now calls `CreatorMemory.recordSignal()`; `_buildReasoning` injects preference-aware copy when memory is confident |
+| `backend/static/js/editor-view.js` | `CreatorMemory.init()` called on editor open; panel cleared on cancel |
+| `backend/static/index.html` | Added `#cmPrefsPanel` div in inspector; added `<script>` tag for `creator-memory.js` |
+| `backend/static/css/v3/review.css` | Added creator memory panel styles (learning state, known state, prefRow) |
+
+### Architecture
+
+```
+accept/reject action
+        │
+        ▼
+_trackPreference (editor-ai-actions.js)
+  └── EditorState.setEditorState({ aiPreferenceProfile })   ← session memory (unchanged)
+  └── CreatorMemory.recordSignal(name, accepted)            ← P3.1: persistent memory
+          │
+          ├── updates in-memory _profile
+          ├── saves to localStorage (LS_KEY='cm_prefs_v1')
+          ├── schedules debounced PUT /api/creator/preferences
+          └── calls _refreshPanel() → updates #cmPrefsPanel DOM
+
+editor open (editor-view.js)
+  └── CreatorMemory.init()
+          ├── GET /api/creator/preferences
+          ├── merges remote prefs (higher totalSignals wins)
+          ├── seeds EditorState.aiPreferenceProfile if totalSignals > 0
+          └── renders #cmPrefsPanel
+
+_buildReasoning (editor-ai-actions.js)
+  └── if CreatorMemory.getDerivedPreferences().confident:
+          ├── favored action → "Based on your history, you tend to keep this."
+          └── avoided action → "You've passed on this before — worth a second look."
+```
+
+### Safety Design
+
+- `MIN_SIG = 5` — no preference-aware copy injected until ≥5 accept/reject signals
+- Monotonic UI: panel starts in "learning" state with progress bar, graduates to "known" state
+- Reset button in "known" state clears localStorage, pushes empty prefs to backend, clears EditorState
+- `aggressiveness` field already drives trim ratios in patch generators (pre-existing wiring via `_getAggressiveness()`)
+
+### What Remains Weak
+
+- No feedback loop from render output (what clips the user downloads, previews) — only editor accept/reject signals
+- `feedback_learning.py` (Phase 43) backend learning is still disconnected from the creator_prefs table
+- No taste model per content type (short-form comedy vs. long tutorial behave differently)
+- `creator_prefs` is installation-scoped (no user accounts) — one profile per machine
+
+**Next phase:** P3.2 would add conversational AI or render-output feedback (download signal, preview signal)

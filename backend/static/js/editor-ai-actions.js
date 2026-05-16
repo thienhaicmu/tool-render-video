@@ -356,7 +356,18 @@ window.EditorAiActions = (() => {
     const dataSignal = silences.length + markers.length;
     const conf       = Math.min(0.97, Math.max(0.38, baseConf + (dataSignal > 5 ? 0.06 : dataSignal > 2 ? 0.02 : -0.06)));
     const tier       = conf >= 0.82 ? 'high' : conf >= 0.62 ? 'mid' : 'low';
-    const confText   = (_CONF_TEXT[name] || {})[tier] || (tier === 'high' ? 'Strong signal detected.' : tier === 'mid' ? 'Moderate signal — edit likely to improve flow.' : 'Limited signal detected.');
+    let confText     = (_CONF_TEXT[name] || {})[tier] || (tier === 'high' ? 'Strong signal detected.' : tier === 'mid' ? 'Moderate signal — edit likely to improve flow.' : 'Limited signal detected.');
+    // P3.1: inject preference-aware prefix when memory is confident
+    if (typeof CreatorMemory !== 'undefined') {
+      const _cm = CreatorMemory.getDerivedPreferences();
+      if (_cm.confident) {
+        if (_cm.favored.includes(name)) {
+          confText = 'Based on your history, you tend to keep this. ' + confText;
+        } else if (_cm.avoided.includes(name)) {
+          confText = 'You\'ve passed on this before — worth a second look. ' + confText;
+        }
+      }
+    }
 
     // Before / after deltas
     const beforeAfter = [];
@@ -402,6 +413,7 @@ window.EditorAiActions = (() => {
       next.aggressiveness = Math.max(0.25, Math.min(0.88, 0.5 + (totalAcc - totalRej) / (total * 5)));
     }
     EditorState.setEditorState({ aiPreferenceProfile: next });
+    if (typeof CreatorMemory !== 'undefined') CreatorMemory.recordSignal(name, accepted);
   }
 
   // ── P2.4: Action labels ───────────────────────────────────
