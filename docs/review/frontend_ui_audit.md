@@ -3713,3 +3713,67 @@ Three targeted fixes. No new DOM elements, no CSS changes, no HTML changes.
 - CSS — no changes
 - HTML — no changes
 - P2.x / P3.x — untouched
+
+---
+
+## Section 39 — UX-R4: Home Workspace Re-Architecture (2026-05-16)
+
+**Phase:** UX-R4  
+**Branch:** `feature/ai-output-upgrade`  
+**Commit:** `feat(ui): UX-R4 home workspace re-architecture`
+
+### What Changed
+
+Replaces the flat feature dashboard with a four-zone creator workspace. No panels removed, no existing CSS overwritten, no JS functions renamed.
+
+**HTML (`index.html`) — `#partial_render_home` section replaced**
+
+| Before | After |
+|---|---|
+| `.rhHero` — generic welcome + 3 equal tiles + tips | Zone 1: `.uxr4MomentumHero` — 2-col hero (continue + intel) |
+| `.rhTiles` — YouTube / Local / Resume (equal weight) | Zone 2: `.uxr4QuickStart` — primary btn + 2 tiles + tertiary |
+| `.rhTips` — 3 static platform tips | Removed (replaced by AI intelligence zone) |
+| `.rhRecent` + `#jobs_out` — history (broken) | Zone 3: `.uxr4RecentWork` + `#render_history_list` (fixed) |
+
+**JS (`render-ui.js`)**
+
+- `renderRenderHistory()` — adds `idx` parameter to item map; first item gets `.uxr4TopItem` class; calls `_uxr4PopulateMomentumHero()` at end (and in early-return empty path)
+- `_uxr4PopulateMomentumHero()` — new function; reads `_renderHistoryRead()` + `CreatorMemory.getTasteModel()`; populates `#uxr4_continue_zone` and `#uxr4_intel_msg`
+- `RENDER_SESSION_ONLY` guard: `qs('jobs_out')` → `qs('render_history_list')` (fixes mismatch)
+
+**CSS (`workflow.css`) — UX-R4 section appended**
+
+| Class | Purpose |
+|---|---|
+| `.uxr4MomentumHero` | `card--elevated` wrapper; relative overflow hidden |
+| `.uxr4HeroAccent` | Indigo gradient top edge |
+| `.uxr4HeroInner` | `grid-template-columns: 1fr 1fr`; `::before` 1px separator |
+| `.uxr4ContinueZone` | Left column; flex column |
+| `.uxr4ContinueLabel` | Primary-color uppercase micro label |
+| `.uxr4ContinueTitle` | h1-size bold; `text-overflow: ellipsis` for long titles |
+| `.uxr4ContinueMeta` | Clips + time metadata in micro text |
+| `.uxr4ContinueBtn` | Primary filled button; hover glow |
+| `.uxr4IntelZone` | Right column; `padding-left: var(--sp-lg)` |
+| `.uxr4IntelLabel` | Muted uppercase micro label |
+| `.uxr4IntelTaste` | Flex column of taste rows |
+| `.uxr4IntelTasteRow` | Key/value pair at 12px |
+| `.uxr4QSPrimary` | Full-width primary action button (indigo-bordered) |
+| `.uxr4QSSecondary` | `grid-template-columns: 1fr 1fr` — 2 `.rhTile` cards |
+| `.uxr4QSTertiary` | Minimal text utility button row |
+| `.uxr4RecentWork` | Replaces `.rhRecent` |
+| `.uxr4HistoryList` | `max-height: none` override |
+| `.uxr4TopItem` | Elevated first history item (indigo border + bg-800) |
+| `@media ≤1366px` | Remove `.uxr4QSPrimarySub`; tighter hero padding |
+| `@media ≤1024px` | Hero stacks to 1-col; remove separator; tiles stack |
+
+### Bug Fix
+
+`renderRenderHistory()` targeted `qs('render_history_list')` but HTML used `id="jobs_out"` — history never rendered. ID in HTML renamed to `render_history_list`.
+
+### What Was NOT Changed
+
+- `.rhPanel`, `#render_home_panel` — IDs and outer wrapper preserved
+- `.rhTile` CSS system — tiles reused in Zone 2 secondary slot
+- `nav.js` visibility toggle — `render_home_panel` show/hide logic untouched
+- `hardening.css` — `editorMode`/`inPipeline` overrides untouched
+- `_renderHistoryRead()`, `buildRenderHistoryEntry()` — untouched
