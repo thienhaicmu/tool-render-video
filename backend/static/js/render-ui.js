@@ -4241,41 +4241,54 @@ const RenderAiRuntime = (() => {
   'use strict';
 
   const _STAGES = [
-    { key: 'init',     label: 'Workspace Init',       backends: ['queued', 'starting'],               icon: '◉', msg: 'Allocating render workspace and validating job config' },
-    { key: 'source',   label: 'Source Analysis',      backends: ['downloading'],                      icon: '⬇', msg: 'Fetching source and validating stream compatibility' },
-    { key: 'scene',    label: 'Scene Detection',      backends: ['scene_detection'],                  icon: '⬜', msg: 'Detecting natural scene boundaries and cut points' },
-    { key: 'audio',    label: 'Audio Transcription',  backends: ['transcribing_full'],                icon: '♪', msg: 'Building temporal word map from speech signal' },
-    { key: 'beat',     label: 'Beat Mapping',         backends: ['transcribing_full'],                icon: '♩', msg: 'Mapping audio cadence to clip scoring weights' },
-    { key: 'segment',  label: 'Content Segmentation', backends: ['segment_building'],                 icon: '▦', msg: 'Identifying clip windows from scene and audio data' },
-    { key: 'scoring',  label: 'Scoring Pipeline',     backends: ['segment_building', 'rendering'],    icon: '▤', msg: 'Computing viral retention signal per candidate' },
-    { key: 'assembly', label: 'Clip Assembly',        backends: ['rendering'],                        icon: '◧', msg: 'Applying editorial ordering to clip sequence' },
-    { key: 'encode',   label: 'Render Encoding',      backends: ['rendering', 'rendering_parallel'],  icon: '▶', msg: 'FFmpeg encoding with visual and audio transforms' },
-    { key: 'validate', label: 'Quality Validation',   backends: ['rendering_parallel'],               icon: '✓', msg: 'Checking output integrity against quality thresholds' },
-    { key: 'report',   label: 'Report Generation',    backends: ['writing_report'],                   icon: '▤', msg: 'Compiling per-clip analytics and editorial summary' },
-    { key: 'export',   label: 'Export & Delivery',    backends: ['done', 'completed'],                icon: '⬆', msg: 'Packaging outputs for delivery destination' },
+    { key: 'init',     label: 'Reading the Room',      backends: ['queued', 'starting'],               icon: '◉', msg: 'Calibrating your workspace to the source material' },
+    { key: 'source',   label: 'Studying the Source',   backends: ['downloading'],                      icon: '⬇', msg: 'Understanding what you gave us — format, quality, and length' },
+    { key: 'scene',    label: 'Mapping the Story',     backends: ['scene_detection'],                  icon: '⬜', msg: 'Finding where scenes breathe and cuts want to happen' },
+    { key: 'audio',    label: 'Listening for Hooks',   backends: ['transcribing_full'],                icon: '♪', msg: 'Speech becomes a map — every word timed to the frame' },
+    { key: 'beat',     label: 'Feeling the Rhythm',    backends: ['transcribing_full'],                icon: '♩', msg: 'Matching cadence to clip scoring — pacing defines the cut' },
+    { key: 'segment',  label: 'Spotting the Moments',  backends: ['segment_building'],                 icon: '▦', msg: 'Candidate clips surfaced and ranked by density of strong material' },
+    { key: 'scoring',  label: 'Scoring the Clips',     backends: ['segment_building', 'rendering'],    icon: '▤', msg: 'Retention signal measured — which clips earn their place' },
+    { key: 'assembly', label: 'Building the Cut',      backends: ['rendering'],                        icon: '◧', msg: 'AI director ordering the sequence for maximum impact' },
+    { key: 'encode',   label: 'Rendering',             backends: ['rendering', 'rendering_parallel'],  icon: '▶', msg: 'Your clips are being born — transforms, color, and audio applied' },
+    { key: 'validate', label: 'Checking Quality',      backends: ['rendering_parallel'],               icon: '✓', msg: 'Every clip verified against your quality bar before delivery' },
+    { key: 'report',   label: 'Writing the Brief',     backends: ['writing_report'],                   icon: '▤', msg: 'Per-clip intelligence compiled — the story of your render' },
+    { key: 'export',   label: 'Finishing',             backends: ['done', 'completed'],                icon: '⬆', msg: 'Packaging your clips — ready to review and export' },
   ];
 
   const _REASONING = {
-    init:     'Render workspace initialized — job parameters validated against source constraints.',
-    source:   'Source video decoded — format profile and stream quality confirmed.',
-    scene:    'Scene graph built — boundary detection located natural editorial cut points.',
-    audio:    'Transcription active — temporal word alignment maps speech rhythm to clip windows.',
-    beat:     'Audio cadence extracted — rhythm weights applied to scoring model.',
-    segment:  'Content segmentation complete — candidate clip windows ranked by density.',
-    scoring:  'Viral scoring pipeline active — retention signal computed across all candidates.',
-    assembly: 'Clip sequence assembled — editorial ordering applied from AI director blueprint.',
-    encode:   'FFmpeg render active — visual transforms and audio normalization in progress.',
-    validate: 'Output validation running — quality gates checking bitrate, duration, and sync.',
-    report:   'Analytics pipeline active — per-clip scores and editorial summary being written.',
-    export:   'Finalizing delivery package — outputs written to destination workspace.',
+    init:     'Workspace open. Source parameters locked and ready to begin.',
+    source:   'Source ingested — stream quality and duration confirmed.',
+    scene:    'Natural cuts mapped — editorial boundaries found in your footage.',
+    audio:    'Every word timed to the frame. Speech rhythm captured as a scoring map.',
+    beat:     'Audio cadence feeds the scoring model — pacing will match your material.',
+    segment:  'Clip windows identified and ranked by concentration of strong material.',
+    scoring:  'Retention signal live — AI scoring each candidate against viral thresholds.',
+    assembly: 'Sequence decided. AI director assembled the edit order for impact.',
+    encode:   'Clips rendering now — your vision is being written to file.',
+    validate: 'Quality check running — timing, sync, and bitrate verified per clip.',
+    report:   'Intelligence compiled — your per-clip scores and editorial brief are ready.',
+    export:   'Delivery complete. Your clips are ready to review and export.',
   };
 
-  const _EVOL_MSGS = [
-    'Clip {n} encoded — viral signal committed to output',
-    'Part {n} complete — editorial review passed quality gate',
-    'Clip {n} ready — retention score measured and recorded',
-    'Output {n} validated — integrity check passed',
-  ];
+  function _evolEditorialMsg(pNo, tier) {
+    const high = [
+      'Strong hook from the first frame — this one is a keeper.',
+      'Retention signal is above threshold — cleared the bar.',
+      'Pacing and hook both hit — this clip will earn attention.',
+    ];
+    const mid = [
+      'Solid clip — good bones, room to sharpen the hook.',
+      'Mid-tier signal — watchable, not yet viral.',
+      'Decent retention — worth reviewing in the gallery.',
+    ];
+    const low = [
+      'Lower signal — may not crack the top picks.',
+      'Below threshold — deprioritised in the output gallery.',
+      'Consider whether the source moment has a strong hook.',
+    ];
+    const pool = tier === 'high' ? high : tier === 'mid' ? mid : low;
+    return pool[Number(pNo || 0) % pool.length];
+  }
 
   let _mounted                = false;
   let _lastStageIdx           = -1;
@@ -4300,7 +4313,7 @@ const RenderAiRuntime = (() => {
       el.id = 'rc_ai_evolution_feed';
       el.className = 'rcAiEvolutionFeed hiddenView';
       el.innerHTML =
-        '<div class="rcAiEvolutionHeader"><span>AI Production Feed</span></div>' +
+        '<div class="rcAiEvolutionHeader"><span>Clip Intelligence</span></div>' +
         '<div id="rc_ai_evolution_list" class="rcAiEvolutionList"></div>';
       queuePanel.insertBefore(el, partCards);
     }
@@ -4380,23 +4393,26 @@ const RenderAiRuntime = (() => {
     if (!listEl || !feedEl) return;
     feedEl.classList.remove('hiddenView');
     newOnes.forEach(p => {
-      const pNo  = Number(p.part_no || 0);
+      const pNo   = Number(p.part_no || 0);
       const rawSc = p.viral_score != null ? Number(p.viral_score) : null;
-      const pct  = rawSc !== null ? Math.round(rawSc * 100) : null;
-      const tpl  = _EVOL_MSGS[pNo % _EVOL_MSGS.length];
-      const msg  = tpl.replace('{n}', pNo || '?');
-      const tier = pct !== null ? (pct >= 75 ? 'high' : pct >= 50 ? 'mid' : 'low') : '';
-      const scoreHtml = pct !== null
-        ? '<span class="rcAiEvolScore" data-tier="' + tier + '">' + pct + '%</span>'
-        : '';
+      const pct   = rawSc !== null ? Math.round(rawSc * 100) : null;
+      const tier  = pct !== null ? (pct >= 75 ? 'high' : pct >= 50 ? 'mid' : 'low') : 'low';
+      const why   = _evolEditorialMsg(pNo, tier);
+      const scoreHtml = pct !== null ? '<span class="p28EvolScore">' + pct + '%</span>' : '';
       const row = document.createElement('div');
-      row.className = 'rcAiEvolItem';
+      row.className = 'p28EvolItem tier-' + tier;
       row.innerHTML =
-        '<span class="rcAiEvolDot"></span>' +
-        '<span class="rcAiEvolText">' + esc(msg) + '</span>' +
-        scoreHtml;
+        '<div class="p28EvolSignal"></div>' +
+        '<div class="p28EvolContent">' +
+          '<div class="p28EvolHead">' +
+            '<span class="p28EvolName">Clip ' + esc(String(pNo)) + '</span>' +
+            scoreHtml +
+          '</div>' +
+          '<div class="p28EvolWhy">' + esc(why) + '</div>' +
+        '</div>';
       listEl.insertBefore(row, listEl.firstChild);
-      while (listEl.children.length > 8) listEl.removeChild(listEl.lastChild);
+      while (listEl.children.length > 6) listEl.removeChild(listEl.lastChild);
+      _syncOutputCard(pNo);
     });
   }
 
@@ -4422,6 +4438,15 @@ const RenderAiRuntime = (() => {
   function _showReasonFeed() {
     const el = document.getElementById('rc_ai_reason_feed');
     if (el) el.classList.remove('hiddenView');
+  }
+
+  function _syncOutputCard(partNo) {
+    const card = document.querySelector('.clipCard[data-part-no="' + partNo + '"]');
+    if (!card) return;
+    card.classList.remove('p28ClipMoment');
+    void card.offsetWidth;
+    card.classList.add('p28ClipMoment');
+    setTimeout(() => card.classList.remove('p28ClipMoment'), 1000);
   }
 
   function showCompletionIntelligence(job, summary, parts) {

@@ -1819,3 +1819,275 @@
    END OF PHASE E · RENDER RUNTIME
    ======================================================= */
 
+/* =======================================================
+   P2.8 — RUNTIME SPATIAL ORCHESTRATION
+   Four zones: Hero → Evolution Heart → AI Thinking →
+   Infrastructure. Lifecycle geometry. Live output sync.
+   ======================================================= */
+
+/* ── Zone markers (comment-only; DOM zones are existing IDs) ──
+   Zone 1 Hero       : .rdCard + .rcAiProcCard (abpToolbar)
+   Zone 2 Heart      : .rcAiEvolutionFeed
+   Zone 3 Thinking   : #rc_ai_reason_feed
+   Zone 4 Infrastructure: .rcQueuePanel rows · .rcLogStrip
+   ─────────────────────────────────────────────────────── */
+
+/* P2.8-C: Lifecycle ambient field */
+#render_active_panel[data-render-state="running"] {
+  background: radial-gradient(ellipse 90% 32% at 50% -4%, rgba(77,124,255,.052) 0%, var(--bg-900) 60%);
+}
+#render_active_panel[data-render-state="complete"] {
+  background: radial-gradient(ellipse 80% 28% at 50% -4%, rgba(74,222,128,.042) 0%, var(--bg-900) 56%);
+}
+#render_active_panel[data-render-state="failed"] {
+  background: radial-gradient(ellipse 70% 22% at 50% -4%, rgba(248,113,113,.032) 0%, var(--bg-900) 52%);
+}
+
+/* P2.8-A Zone 1: rdCard hero elevation */
+.rdCard {
+  padding: 15px 20px 13px;
+  position: relative;
+}
+.rdCard::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(77,124,255,.55) 40%, rgba(139,92,246,.55) 70%, transparent 100%);
+  border-radius: 10px 10px 0 0;
+  opacity: 0;
+  transition: opacity .5s ease;
+}
+#render_active_panel[data-render-state="running"] .rdCard::before { opacity: 1; }
+#render_active_panel[data-render-state="complete"] .rdCard::before {
+  background: linear-gradient(90deg, transparent 0%, rgba(74,222,128,.6) 40%, rgba(16,185,129,.5) 70%, transparent 100%);
+  opacity: 1;
+}
+
+/* rdCard step copy — slightly elevated */
+.rdStep {
+  font-size: 13px;
+  color: var(--fg-200);
+  font-weight: 500;
+}
+
+/* P2.8-C: Completion flash on rdCard */
+#render_active_panel[data-render-state="complete"] .rdCard {
+  animation: p28CardComplete .6s ease forwards;
+}
+@keyframes p28CardComplete {
+  0%   { box-shadow: 0 0 0 0 rgba(74,222,128,.0); }
+  40%  { box-shadow: 0 0 0 8px rgba(74,222,128,.18); }
+  100% { box-shadow: 0 0 0 0 rgba(74,222,128,.0); }
+}
+
+/* P2.8-A Zone 1: abpToolbar animated presence edge */
+.abpToolbar {
+  position: relative;
+}
+.abpToolbar::after {
+  content: "";
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(77,124,255,.28) 50%, transparent 100%);
+  animation: p28ToolbarEdge 4s ease-in-out infinite;
+  opacity: 0;
+}
+#render_active_panel[data-render-state="running"] .abpToolbar::after { opacity: 1; }
+@keyframes p28ToolbarEdge {
+  0%, 100% { opacity: .18; }
+  50%       { opacity: .55; }
+}
+
+/* P2.8-H: Cognitive load — rcActiveCard recedes during running
+   (rcAiProcCard is the primary status surface) */
+#render_active_panel[data-render-state="running"] #rc_active_card {
+  opacity: .52;
+  transition: opacity .4s ease;
+}
+#render_active_panel[data-render-state="complete"] #rc_active_card,
+#render_active_panel[data-render-state="failed"]   #rc_active_card {
+  opacity: 1;
+  transition: opacity .4s ease;
+}
+
+/* P2.8-H: Suppress duplicate status surfaces during running */
+#render_active_panel[data-render-state="running"] .abpPct,
+#render_active_panel[data-render-state="running"] #rc_active_card .rcActivePercent {
+  opacity: .35;
+  transition: opacity .4s ease;
+}
+#render_active_panel[data-render-state="running"] .rcPanelHeader {
+  font-size: 10px;
+  opacity: .45;
+  letter-spacing: .04em;
+  transition: opacity .4s ease;
+}
+
+/* P2.8-A Zone 1: rcAiProcessCards territory */
+.rcAiProcessCards {
+  border-left: 2px solid rgba(77,124,255,.18);
+  padding-left: 8px;
+  background: rgba(77,124,255,.022);
+  border-radius: 0 8px 8px 0;
+  margin-left: 2px;
+}
+
+/* P2.8-A Zone 2: Evolution Heart territory */
+.rcAiEvolutionFeed {
+  border-left: 2px solid rgba(139,92,246,.22);
+  padding-left: 8px;
+  background: rgba(139,92,246,.018);
+  border-radius: 0 8px 8px 0;
+  margin-left: 2px;
+}
+
+/* Evolution section label */
+.rcAiEvolutionHeader {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: rgba(139,92,246,.7);
+  margin-bottom: 8px;
+}
+
+/* P2.8-G Zone 2: p28EvolItem — rich editorial evolution items */
+.p28EvolItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  animation: p28EvolIn .35s cubic-bezier(.22,1,.36,1) both;
+}
+.p28EvolItem:last-child { border-bottom: none; }
+
+/* Opacity cascade: newest entry = full, older = recede */
+.p28EvolItem:nth-child(1) { opacity: 1; }
+.p28EvolItem:nth-child(2) { opacity: .52; }
+.p28EvolItem:nth-child(n+3) { opacity: .28; }
+
+@keyframes p28EvolIn {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Signal dot */
+.p28EvolSignal {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(139,92,246,.8);
+  flex-shrink: 0;
+  margin-top: 5px;
+  box-shadow: 0 0 0 2px rgba(139,92,246,.18);
+}
+.p28EvolItem.tier-high   .p28EvolSignal { background: rgba(74,222,128,.85); box-shadow: 0 0 0 2px rgba(74,222,128,.22); }
+.p28EvolItem.tier-mid    .p28EvolSignal { background: rgba(251,191,36,.75); box-shadow: 0 0 0 2px rgba(251,191,36,.18); }
+.p28EvolItem.tier-low    .p28EvolSignal { background: rgba(156,163,175,.55); box-shadow: none; }
+
+.p28EvolContent { flex: 1; min-width: 0; }
+
+.p28EvolHead {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.p28EvolName {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-100);
+  white-space: nowrap;
+}
+.p28EvolScore {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(74,222,128,.85);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.p28EvolItem.tier-mid  .p28EvolScore { color: rgba(251,191,36,.8); }
+.p28EvolItem.tier-low  .p28EvolScore { color: var(--fg-400); }
+
+.p28EvolWhy {
+  font-size: 10px;
+  color: var(--fg-300);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* P2.8-A Zone 3: AI Thinking territory */
+#rc_ai_reason_feed {
+  border-left: 2px solid rgba(77,124,255,.12);
+  padding-left: 8px;
+  background: rgba(77,124,255,.012);
+  border-radius: 0 8px 8px 0;
+  margin-left: 2px;
+}
+
+/* Reasoning items opacity cascade */
+.rcAiReasonItem:nth-child(1) { opacity: .9; }
+.rcAiReasonItem:nth-child(2) { opacity: .55; }
+.rcAiReasonItem:nth-child(n+3) { opacity: .3; }
+
+/* P2.8-A Zone 4: Infrastructure demotion during active render */
+#render_active_panel[data-render-state="running"] .rcQueueRow:not(.isRendering) {
+  opacity: .55;
+  transition: opacity .4s ease;
+}
+#render_active_panel[data-render-state="running"] .rcLogStrip {
+  opacity: .48;
+  transition: opacity .4s ease;
+}
+#render_active_panel[data-render-state="running"] .rcLogStrip:hover {
+  opacity: .82;
+  transition: opacity .2s ease;
+}
+
+/* P2.8-D: Terrain separators between zones */
+.rcAiProcessCards + .rcAiEvolutionFeed {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,.05);
+}
+.rcAiEvolutionFeed + #rc_ai_reason_feed,
+.rcAiEvolutionFeed ~ #rc_ai_reason_feed {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,.04);
+}
+
+/* P2.8-C: Lifecycle flex-basis transitions */
+#render_runtime_mount {
+  transition: background .6s ease;
+}
+
+/* P2.8-D: Completion bar cinematic slide-in */
+.renderCompletionBar:not(.hiddenView) {
+  animation: p28CompletionReveal .5s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes p28CompletionReveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* P2.8-B: Live output sync — clip moment pulse
+   Applied by JS _syncOutputCard() when clip completes */
+.p28ClipMoment {
+  animation: p28ClipPulse .9s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes p28ClipPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(139,92,246,.0),  0 0 0 0 rgba(139,92,246,.0); }
+  30%  { box-shadow: 0 0 0 5px rgba(139,92,246,.35), 0 0 12px 4px rgba(139,92,246,.18); }
+  100% { box-shadow: 0 0 0 0 rgba(139,92,246,.0),  0 0 0 0 rgba(139,92,246,.0); }
+}
+
+/* =======================================================
+   END OF P2.8 — RUNTIME SPATIAL ORCHESTRATION
+   ======================================================= */
+

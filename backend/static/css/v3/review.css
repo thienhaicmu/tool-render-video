@@ -1020,3 +1020,93 @@
 }
 
 /* =======================================================
+   P2.8-F — HERO OUTPUT CARD (isBestClip horizontal layout)
+   Best clip becomes a full-width editorial recommendation.
+   All other cards stay in the standard 9/16 grid.
+   ======================================================= */
+
+/* Hero card: break out of the card grid, span full row */
+.clipsGrid .clipCard.isBestClip {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  grid-template-rows: auto;
+  aspect-ratio: unset;
+  min-height: 140px;
+  border-color: rgba(99,102,241,.38);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.22), 0 12px 40px rgba(99,102,241,.14);
+  animation: p28HeroReveal .55s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes p28HeroReveal {
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Thumb stays 9/16 in a fixed-width column */
+.clipsGrid .clipCard.isBestClip .clipCardThumbWrap {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  aspect-ratio: 9 / 16;
+  width: 160px;
+  border-radius: 8px 0 0 8px;
+  overflow: hidden;
+}
+
+/* Body sits in the right column, laid out vertically */
+.clipsGrid .clipCard.isBestClip .clipCardBody {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 18px;
+}
+
+/* Hero editorial label above the clip name */
+.clipsGrid .clipCard.isBestClip .clipCardBestFlag {
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  font-weight: 700;
+  align-self: flex-start;
+}
+
+/* Hero clip reason — full text, not truncated */
+.clipsGrid .clipCard.isBestClip .clipCardReason {
+  font-size: 11.5px;
+  color: var(--fg-200);
+  line-height: 1.5;
+  white-space: normal;
+  -webkit-line-clamp: unset;
+}
+
+/* Hero clip score — larger display */
+.clipsGrid .clipCard.isBestClip .clipCardScore {
+  font-size: 22px;
+  font-weight: 700;
+  color: rgba(99,102,241,.95);
+  letter-spacing: -.02em;
+}
+
+/* Hero hover: subtle lift only */
+.clipsGrid .clipCard.isBestClip:hover {
+  border-color: rgba(99,102,241,.55);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.32), 0 16px 48px rgba(99,102,241,.18);
+  transform: translateY(-2px);
+}
+
+/* P2.8-B: Live sync pulse — applied by JS _syncOutputCard */
+/* (also defined in runtime.css; review.css version scoped to clipCard context) */
+.clipCard.p28ClipMoment {
+  animation: p28ClipPulse .9s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes p28ClipPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(139,92,246,.0),  0 0 0 0 rgba(139,92,246,.0); }
+  30%  { box-shadow: 0 0 0 5px rgba(139,92,246,.35), 0 0 14px 4px rgba(139,92,246,.2); }
+  100% { box-shadow: 0 0 0 0 rgba(139,92,246,.0),  0 0 0 0 rgba(139,92,246,.0); }
+}
+
+/* =======================================================
+   END OF P2.8-F — HERO OUTPUT CARD
+   ======================================================= */
