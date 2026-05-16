@@ -3609,3 +3609,70 @@ render done → showCompletionIntelligence() [guarded by _completionNarrativeSet
 ### Audit Note: P2.9-B CSS Dead Selectors
 
 The CSS rules `#render_active_panel[data-render-state] #render_output_panel` and similar are **dead** — `render_output_panel` is a sibling of `render_active_panel`, not a descendant, so the descendant selector never matches. These rules exist from a prior design iteration. They have no effect in the live DOM. UX-R2 does not remove them (no DOM destruction policy) but does not rely on them.
+
+---
+
+## Section 37 — UX-R3: Review Experience Re-Architecture (2026-05-16)
+
+**Phase:** UX-R3  
+**Branch:** `feature/ai-output-upgrade`  
+**Commit:** `feat(ui): UX-R3 review experience re-architecture`
+
+### What Changed
+
+Transforms the flat clip grid into an editorial review workspace with a four-tier visual hierarchy. No DOM element removed, no existing CSS overwritten, no JS functions replaced.
+
+**JS (`render-ui.js`) — module scope + `populateRenderOutputPanel()`**
+
+- `let _uxr3AutoSelectedBest = false` — module-level flag for auto-preview idempotency
+- `_applyUxR3Tiers(list, ranking, done, failed, skipped)` — new function called after `RenderAiRuntime.reapplyTransientState()` in `populateRenderOutputPanel()`. Runs on every panel re-render; safe to call multiple times (cleans up previous pass first).
+- Auto-preview logic — after tier application, when render is in terminal status and `_uxr3AutoSelectedBest` is false: finds best part from `ranking`, calls `centerPreviewClip()` after 900ms delay
+- `clearRenderOutputPanel()` — resets `_uxr3AutoSelectedBest = false`
+
+**`_applyUxR3Tiers()` detail:**
+1. Removes existing `.uxr3TierHeader` elements; clears `data-uxr3-tier` attributes
+2. Classifies each `.clipCard` by reading `isBestClip` class, `isFailed`/`isSkipped` classes, or `.clipCardScore[data-tier]` attribute for done cards:
+   - `best` — `isBestClip` (or `ranking.isBest`)
+   - `strong` — done, not best, score tier "high" (≥8)
+   - `other` — done, not best, score tier mid/low/weak
+   - `failed` — `isFailed`
+   - `skipped` — `isSkipped`
+3. In score-sort mode (`_clipsSortOrder === 'score'`), inserts `<div class="uxr3TierHeader">` elements:
+   - "Strong Candidates (N)" — before first strong card, only when there are tiers on both sides
+   - "Additional Results (N)" — before first other card, only when preceded by best or strong cards
+   - "N failed · N skipped" — before first problem card, with collapsible toggle button
+4. Problem section starts collapsed when `done.length > 0`; toggle button shows ▸/▾
+
+**CSS (`review.css`) — UX-R3 section appended**
+
+| Selector | Effect |
+|---|---|
+| `.uxr3TierHeader` | `grid-column: 1 / -1`, flex row with label + count + `::after` separator line |
+| `.uxr3TierLabel` | 10px uppercase, 32% opacity — low-profile section label |
+| `.uxr3TierToggle` | Minimal button, `order: -1` (before label) |
+| `.uxr3ProblemHeader.uxr3Collapsed ~ .clipCard[data-uxr3-tier="failed"]` | `display: none` (collapse) |
+| `.uxr3ProblemHeader.uxr3Collapsed ~ .clipCard[data-uxr3-tier="skipped"]` | `display: none` (collapse) |
+| `[data-uxr3-tier="best"]` | 200px thumb, 26px score, stronger indigo glow — overrides P2.8-F 160px |
+| `[data-uxr3-tier="strong"]` | Subtle indigo border + hover lift |
+| `[data-uxr3-tier="other"]` | `opacity: 0.80`, recovers to 1 on hover |
+| `[data-uxr3-tier="failed"]` | `opacity: 0.48` |
+| `[data-uxr3-tier="skipped"]` | `opacity: 0.30` |
+| `@media (max-width: 1366px)` | Best thumb → 160px, score → 22px |
+| `@media (max-width: 1024px)` | Best thumb → 110px, score → 20px |
+
+### Tier header insertion conditions
+
+Headers only inserted when they add meaning:
+- "Strong Candidates" only appears if there are ≥1 strong cards AND other groups exist
+- "Additional Results" only appears if preceded by best or strong cards
+- "Needs Review" always appears if any failed/skipped clips exist
+
+When `_clipsSortOrder === 'part_no'` (user selected "In order"): `data-uxr3-tier` attributes are still set (CSS differentiation applies) but no headers are inserted (order-based view has no tier semantics).
+
+### What Was NOT Changed
+
+- `populateRenderOutputPanel()` HTML template — untouched; no card structure modified
+- `_rankMap()`, `sortClipsView()`, `_bindCardHoverPreviews()` — untouched
+- P2.8-F hero card (`grid-column: 1 / -1`, `grid-template-columns: 160px 1fr`) — `[data-uxr3-tier="best"]` overrides to 200px via later CSS rule (same specificity, later wins)
+- P2.9 confidence evolution (`data-p29-confidence`) — untouched
+- All existing clip card classes (`isDone`, `isSelected`, `p29Elevated`, etc.) — preserved
