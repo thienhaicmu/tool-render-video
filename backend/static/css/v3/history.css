@@ -804,6 +804,30 @@
   text-align: center;
   padding: 16px 0;
   line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+/* R7.4: structured empty state for new creators */
+.renderHistoryEmptyIcon {
+  font-size: 24px;
+  opacity: .35;
+  margin-bottom: 4px;
+}
+
+.renderHistoryEmptyTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-300);
+}
+
+.renderHistoryEmptySub {
+  font-size: 10.5px;
+  color: var(--fg-500);
+  max-width: 280px;
+  line-height: 1.55;
 }
 
 /* =======================================================

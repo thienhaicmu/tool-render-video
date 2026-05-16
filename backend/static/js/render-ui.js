@@ -81,11 +81,10 @@ function resetRenderSessionUi(){
   qs('job_bar').style.width = '0%';
   qs('job_bar').classList.remove('isWaitingActive');
   if (qs('render_active_bar')) qs('render_active_bar').classList.remove('isWaitingActive');
-  qs('action_title').textContent = 'Waiting for job';
-  qs('action_state').textContent = 'idle';
-  if (qs('action_state')) qs('action_state').dataset.status = 'idle';
-  qs('action_message').textContent = 'No active processing task.';
-  qs('action_meta').textContent = 'Elapsed 00:00 | Updated -';
+  if (qs('action_title'))   qs('action_title').textContent = 'Waiting for job';
+  if (qs('action_state'))   { qs('action_state').textContent = 'idle'; qs('action_state').dataset.status = 'idle'; }
+  if (qs('action_message')) qs('action_message').textContent = 'No active processing task.';
+  if (qs('action_meta'))    qs('action_meta').textContent = 'Elapsed 00:00 | Updated -';
   if (qs('abp_summary_primary')) qs('abp_summary_primary').textContent = 'Ready';
   if (qs('abp_summary_progress')) qs('abp_summary_progress').textContent = '0%';
   if (qs('abp_summary_meta')) qs('abp_summary_meta').textContent = 'No active render job.';
@@ -594,13 +593,12 @@ function setActionState(job){
   const elapsed = fmtElapsed(Date.now() - (activeJobStartedAt || Date.now()));
   const friendly = friendlyJobMessage(job);
   const backendDetail = String(job.message || '').trim();
-  qs('action_title').textContent = stageLabel(stage);
-  qs('action_state').textContent = status || 'running';
-  qs('action_message').textContent = friendly;
-  qs('action_meta').textContent = `Running for ${elapsed} | Updated ${new Date().toLocaleTimeString()}${backendDetail ? ` | Detail: ${backendDetail}` : ''}`;
+  if (qs('action_title'))   qs('action_title').textContent = stageLabel(stage);
+  if (qs('action_message')) qs('action_message').textContent = friendly;
+  if (qs('action_meta'))    qs('action_meta').textContent = `Running for ${elapsed} | Updated ${new Date().toLocaleTimeString()}${backendDetail ? ` | Detail: ${backendDetail}` : ''}`;
   // propagate status/stage as data attributes for CSS visual state
   const _stEl = qs('action_state');
-  if (_stEl) _stEl.dataset.status = status || 'running';
+  if (_stEl) { _stEl.textContent = status || 'running'; _stEl.dataset.status = status || 'running'; }
   const _pill = qs('job_stage_pill');
   if (_pill) {
     if (_pill.dataset.stage && _pill.dataset.stage !== stage) {
@@ -1974,7 +1972,7 @@ function updateRenderMainState(job, summary, parts = []) {
   if (qs('rc_open_output_btn')) qs('rc_open_output_btn').disabled = !(completedStatus || String(outputText || '').trim());
   if (qs('render_active_actions')) qs('render_active_actions').classList.toggle('hiddenView', !completedStatus);
   renderAiInsights(job);
-  RenderAiRuntime.update(job?.stage || 'queued', status, parts || []);
+  RenderAiRuntime.update(job?.stage || 'queued', status, parts || [], s);
   if (terminal && completedStatus) RenderAiRuntime.showCompletionIntelligence(job, s, parts || []);
   updateRdCard(job, s, parts || []);
   if (typeof updateWfStrip === 'function') updateWfStrip();
@@ -2293,7 +2291,13 @@ function renderRenderHistory() {
   if (!box) return;
   const items = _renderHistoryRead();
   if (!items.length) {
-    box.innerHTML = '<div class="renderHistoryEmpty">No recent renders yet<div>Your completed renders will appear here.</div></div>';
+    // R7.4: Honest empty state — don't claim AI learns until user actually starts
+    box.innerHTML =
+      '<div class="renderHistoryEmpty">' +
+        '<div class="renderHistoryEmptyIcon">&#127916;</div>' +
+        '<div class="renderHistoryEmptyTitle">No renders yet</div>' +
+        '<div class="renderHistoryEmptySub">Start a render to see your history here. Review clips after each render to help AI learn your preferences.</div>' +
+      '</div>';
     _uxr4PopulateMomentumHero();
     return;
   }
@@ -2321,44 +2325,87 @@ function renderRenderHistory() {
   _uxr4PopulateMomentumHero();
 }
 
-// UX-R4-A/D: Populate creator momentum hero with real history + CreatorMemory signals
-function _uxr4PopulateMomentumHero() {
+// UX-R4-A/D / R7.3: Populate creator momentum hero.
+// Continue zone reads from /api/jobs/history (real can_rerun semantics);
+// falls back to localStorage when API is unavailable.
+async function _uxr4PopulateMomentumHero() {
   var continueZone = document.getElementById('uxr4_continue_zone');
   var intelMsg     = document.getElementById('uxr4_intel_msg');
   if (!continueZone && !intelMsg) return;
 
-  var items = _renderHistoryRead();
-
-  // ── Left: continue or empty state ─────────────────────────────
+  // ── Left: real API continuity ─────────────────────────────────
   if (continueZone) {
-    if (!items.length) {
-      continueZone.innerHTML =
-        '<div class="uxr4ContinueLabel">Start creating</div>' +
-        '<div class="uxr4ContinueSub">Create your first project. AI will learn your editing style as you work.</div>';
-    } else {
-      var last = items[0];
-      var clips  = Number(last.completedParts || 0);
-      var failed = Number(last.failedParts || 0);
-      var timeAgo = _renderHistoryRelativeTime(last.timestamp);
-      var metaParts = [];
-      if (clips > 0) metaParts.push(clips + ' clip' + (clips !== 1 ? 's' : '') + ' reviewed');
-      if (failed > 0) metaParts.push(failed + ' failed');
+    var _apiFailed = false;
+    var apiLast = null;
+    try {
+      var res = await fetch('/api/jobs/history?limit=3&kind=render');
+      var data = await res.json();
+      var apiItems = res.ok && Array.isArray(data.items) ? data.items : [];
+      apiLast = apiItems[0] || null;
+    } catch (_) {
+      _apiFailed = true;
+    }
+
+    if (apiLast && !_apiFailed) {
+      // R7.3: use API fields — title, summary_text, can_rerun, can_retry, timestamps
+      var ts = Date.parse(String(apiLast.timestamp || apiLast.updated_at || apiLast.created_at || ''));
+      var timeAgo = _renderHistoryRelativeTime(ts || 0);
+      var summaryText = String(apiLast.summary_text || '').trim();
+      var canRerun = !!apiLast.can_rerun;
+      var canRetry = !!apiLast.can_retry;
+      var ctaHtml = canRerun
+        ? '<button class="uxr4ContinueBtn" type="button"' +
+          ' onclick="rerunRenderHistory(\'' + encodeURIComponent(apiLast.job_id) + '\')">' +
+          'Continue Editing</button>'
+        : canRetry
+        ? '<button class="uxr4ContinueBtn" type="button"' +
+          ' onclick="(typeof retryHistoryDownload===\'function\')&&retryHistoryDownload(\'' + encodeURIComponent(apiLast.job_id) + '\')">' +
+          'Retry</button>'
+        : '';
       continueZone.innerHTML =
         '<div class="uxr4ContinueLabel">Continue creating</div>' +
-        '<div class="uxr4ContinueTitle">' + esc(last.title || 'Last project') + '</div>' +
-        (metaParts.length
-          ? '<div class="uxr4ContinueMeta">' + esc(metaParts.join(' · ')) +
-            ' <span class="uxr4ContinueTime">' + esc(timeAgo) + '</span></div>'
+        '<div class="uxr4ContinueTitle">' + esc(apiLast.title || 'Last project') + '</div>' +
+        (summaryText || timeAgo
+          ? '<div class="uxr4ContinueMeta">' +
+            (summaryText ? esc(summaryText) : '') +
+            (summaryText && timeAgo ? ' &middot; ' : '') +
+            (timeAgo ? '<span class="uxr4ContinueTime">' + esc(timeAgo) + '</span>' : '') +
+            '</div>'
           : '') +
-        '<button class="uxr4ContinueBtn" type="button"' +
-        ' onclick="rerunRenderHistory(\'' + encodeURIComponent(last.jobId) + '\')">' +
-        'Continue Editing</button>';
+        ctaHtml;
+    } else {
+      // Fallback: localStorage shape
+      var lsItems = _renderHistoryRead();
+      if (!lsItems.length) {
+        continueZone.innerHTML =
+          '<div class="uxr4ContinueLabel">Start creating</div>' +
+          '<div class="uxr4ContinueSub">Create your first project. Review clips to help AI learn your style.</div>';
+      } else {
+        var last = lsItems[0];
+        var clips  = Number(last.completedParts || 0);
+        var failed = Number(last.failedParts || 0);
+        var timeAgo = _renderHistoryRelativeTime(last.timestamp);
+        var metaParts = [];
+        if (clips > 0) metaParts.push(clips + ' clip' + (clips !== 1 ? 's' : '') + ' reviewed');
+        if (failed > 0) metaParts.push(failed + ' failed');
+        continueZone.innerHTML =
+          '<div class="uxr4ContinueLabel">Continue creating</div>' +
+          '<div class="uxr4ContinueTitle">' + esc(last.title || 'Last project') + '</div>' +
+          (metaParts.length
+            ? '<div class="uxr4ContinueMeta">' + esc(metaParts.join(' · ')) +
+              ' <span class="uxr4ContinueTime">' + esc(timeAgo) + '</span></div>'
+            : '') +
+          '<button class="uxr4ContinueBtn" type="button"' +
+          ' onclick="rerunRenderHistory(\'' + encodeURIComponent(last.jobId) + '\')">' +
+          'Continue Editing</button>';
+      }
     }
   }
 
   // ── Right: AI intelligence from CreatorMemory ─────────────────
   if (intelMsg) {
-    var html = 'AI learns your editing style as you review clips.';
+    // R7.3: truthful copy — only claim learning after real signals exist
+    var html = 'Review clips to help AI understand your preferences.';
     if (typeof CreatorMemory !== 'undefined') {
       try {
         var taste = CreatorMemory.getTasteModel();
@@ -3049,7 +3096,9 @@ function stepStatus(index, progress){
 
 function renderSteps(progress){
   const stateLabel = { pending: 'Waiting', running: 'In Progress', done: 'Done' };
-  qs('steps_grid').innerHTML = steps.map((s, i) => {
+  const _sgEl = qs('steps_grid');
+  if (!_sgEl) return;
+  _sgEl.innerHTML = steps.map((s, i) => {
     const st = stepStatus(i, progress || 0);
     return `<div class="stepCard ${st}"><div class="stepIconWrap">${st === 'done' ? 'OK' : st === 'running' ? 'RUN' : '...'}</div><div><div class="stepTitle">${s.label}</div><div class="stepStatus">${stateLabel[st] || st}</div></div></div>`;
   }).join('');
@@ -3698,18 +3747,84 @@ function centerPreviewClip(jobId, partNo, outputFile, partName) {
   if (card) card.classList.add('isPreviewActive');
 }
 
+// R7.1: Generate truthful clip reason from AI director output + raw signals + taste model.
+// Prefers rk.reason when present; falls back to signal-derived text.
+function _r7TruthfulReason(rk, motionScore, hookScore) {
+  if (rk.reason) {
+    var r = String(rk.reason);
+    return r.length > 80 ? r.slice(0, 77) + '…' : r;
+  }
+  if (motionScore === null && hookScore === null) return null;
+  var parts = [];
+  if (hookScore !== null) {
+    parts.push(hookScore >= 0.7 ? 'Strong opening hook' : hookScore >= 0.5 ? 'Moderate hook' : 'Weak hook');
+  }
+  if (motionScore !== null) {
+    parts.push(motionScore >= 0.7 ? 'high motion energy' : motionScore >= 0.5 ? 'moderate motion' : 'low motion');
+  }
+  if (typeof CreatorMemory !== 'undefined') {
+    try {
+      var taste = CreatorMemory.getTasteModel();
+      if (taste && taste.confident) {
+        if (taste.hook === 'aggressive' && hookScore !== null && hookScore >= 0.65) {
+          parts.push('matches your hook preference');
+        } else if (taste.editStyle === 'cinematic' && motionScore !== null && motionScore < 0.5) {
+          parts.push('fits your cinematic pace');
+        }
+      }
+    } catch (_) {}
+  }
+  return parts.length ? parts.join(', ') + '.' : null;
+}
+
+// R7.1: Build signal chip row HTML for hook + motion scores.
+// Tradeoff labels ("Stronger hook", "Better motion") appear when this non-best clip
+// beats the best clip's score by a meaningful margin.
+function _r7SignalRow(motionScore, hookScore, isBest, bestMotion, bestHook) {
+  var chips = [];
+  var tradeoffs = [];
+  if (hookScore !== null) {
+    var hp = Math.round(hookScore * 100);
+    var hc = hookScore >= 0.7 ? 'sig-high' : hookScore >= 0.5 ? 'sig-mid' : 'sig-low';
+    chips.push('<span class="clipCardSig ' + hc + '" data-sig="hook">Hook ' + hp + '%</span>');
+    if (!isBest && bestHook !== null && hookScore > bestHook + 0.08) tradeoffs.push('Stronger hook');
+  }
+  if (motionScore !== null) {
+    var mp = Math.round(motionScore * 100);
+    var mc = motionScore >= 0.7 ? 'sig-high' : motionScore >= 0.5 ? 'sig-mid' : 'sig-low';
+    chips.push('<span class="clipCardSig ' + mc + '" data-sig="motion">Motion ' + mp + '%</span>');
+    if (!isBest && bestMotion !== null && motionScore > bestMotion + 0.08) tradeoffs.push('Better motion');
+  }
+  if (!chips.length) return '';
+  var tradeoffHtml = tradeoffs.length
+    ? '<div class="clipCardTradeoff">' + tradeoffs.join(' · ') + '</div>' : '';
+  return '<div class="clipCardSignals">' + chips.join('') + tradeoffHtml + '</div>';
+}
+
 // UX-R3: Tier classification + header injection.
 // Runs after list.innerHTML is built; safe to call on every re-render.
 // Sets data-uxr3-tier on each card; inserts .uxr3TierHeader divs
 // between tier groups (score-sort mode only).
-function _applyUxR3Tiers(list, ranking, done, failed, skipped) {
+function _applyUxR3Tiers(list, ranking, done, failed, skipped, aiDirectorEnabled) {
   if (!list) return;
 
   // ── Clean up any previous pass ────────────────────────
   list.querySelectorAll('.uxr3TierHeader').forEach(function (el) { el.remove(); });
+  list.querySelectorAll('.uxr7NoRankBanner').forEach(function (el) { el.remove(); });
   list.querySelectorAll('.clipCard[data-uxr3-tier]').forEach(function (c) {
     delete c.dataset.uxr3Tier;
   });
+
+  // R7.1: Honest fallback when AI Director explicitly disabled
+  if (aiDirectorEnabled === false) {
+    if (_clipsSortOrder === 'score') {
+      var noRankBanner = document.createElement('div');
+      noRankBanner.className = 'uxr7NoRankBanner';
+      noRankBanner.textContent = 'AI ranking unavailable. Showing render order.';
+      list.insertBefore(noRankBanner, list.firstChild);
+    }
+    return;
+  }
 
   // ── Relative strong threshold (UX-R3.1-A) ───────────
   // Strong = within 15% of best clip's score. Fallback: DOM data-tier when ranking unavailable.
@@ -3874,7 +3989,17 @@ function populateRenderOutputPanel(job, parts) {
 
   if (!all.length) {
     if (qs('abp_output_meta')) qs('abp_output_meta').textContent = 'Latest file will appear here.';
-    list.innerHTML = '<div class="renderOutputEmpty">Clips will appear here when rendering starts</div>';
+    // R7.4: status-aware empty message — no misleading "will appear" when render already failed
+    const _emptyJobStatus = String(job?.status || '').toLowerCase();
+    const _emptyIsFailed  = _emptyJobStatus === 'failed' || _emptyJobStatus === 'interrupted';
+    const _emptyIsRunning = !_emptyIsFailed && _emptyJobStatus !== 'done' && _emptyJobStatus !== 'completed'
+                            && _emptyJobStatus !== 'complete' && _emptyJobStatus !== 'completed_with_errors';
+    const _emptyMsg = _emptyIsFailed
+      ? 'Render stopped before any clips completed.'
+      : _emptyIsRunning
+      ? 'Clips will appear here as rendering progresses.'
+      : 'Clips will appear here when rendering starts.';
+    list.innerHTML = '<div class="renderOutputEmpty">' + _emptyMsg + '</div>';
     showRenderOutputPanel();
     return;
   }
@@ -3889,6 +4014,17 @@ function populateRenderOutputPanel(job, parts) {
   const _bestExportWhy = _cardAiUx && _cardAiUx.best_export && _cardAiUx.best_export.enabled
     ? _aiSafeList(_cardAiUx.best_export.why, 100, 3)
     : [];
+
+  // R7.1: Read AI Director flag; precompute best clip signals for tradeoff comparison
+  const _aiDirectorEnabled = _jobPayload.ai_director_enabled;
+  let _bestMotion = null, _bestHook = null;
+  all.forEach(function(bp) {
+    const bpRk = ranking.get(Number(bp.part_no || 0)) || {};
+    if (bpRk.isBest) {
+      _bestMotion = bp.motion_score != null ? Number(bp.motion_score) : null;
+      _bestHook   = bp.hook_score   != null ? Number(bp.hook_score)   : null;
+    }
+  });
 
   list.innerHTML = all.map((p) => {
     const partNo = Number(p.part_no || 0);
@@ -3906,6 +4042,10 @@ function populateRenderOutputPanel(job, parts) {
     const scoreVal = Number(rk.score || 0);
     const hasScore = !!(rk.rank || rk.score);
     const scoreTier = scoreVal >= 8 ? 'high' : scoreVal >= 6 ? 'mid' : scoreVal >= 4 ? 'low' : 'weak';
+    // R7.1: raw signal scores from parts payload
+    const motionScore = p.motion_score != null ? Number(p.motion_score) : null;
+    const hookScore   = p.hook_score   != null ? Number(p.hook_score)   : null;
+    const _clipReason = _r7TruthfulReason(rk, motionScore, hookScore);
     // P1.7-F: static JPEG thumbnail (cached 24h) + lazy video for hover preview
     const _thumbBase = `/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}`;
     const thumbHtml = isDone && hasFile && jobId
@@ -3943,7 +4083,8 @@ function populateRenderOutputPanel(job, parts) {
             : `<span class="clipCardScore" data-tier="weak">—</span>`}
           <span class="clipCardStatusDot" data-status="${esc(statusText)}" title="${esc(statusText)}"></span>
         </div>
-        ${rk.reason ? `<div class="clipCardReason">${esc(rk.reason.length > 64 ? rk.reason.slice(0, 61) + '…' : rk.reason)}</div>` : ''}
+        ${_clipReason ? `<div class="clipCardReason">${esc(_clipReason)}</div>` : ''}
+        ${(motionScore !== null || hookScore !== null) && (rk.isBest || scoreVal >= 6) ? _r7SignalRow(motionScore, hookScore, rk.isBest, _bestMotion, _bestHook) : ''}
         ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
         ${_shouldRenderBestExport(_cardAiUx, rk.isBest) ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">&#x2713;</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}
         <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}</div>
@@ -3979,7 +4120,7 @@ function populateRenderOutputPanel(job, parts) {
   if (typeof RenderAiRuntime !== 'undefined') RenderAiRuntime.reapplyTransientState();
 
   // UX-R3-A/B/C/D/E: Tier classification + headers
-  _applyUxR3Tiers(list, ranking, done, failed, skipped);
+  _applyUxR3Tiers(list, ranking, done, failed, skipped, _aiDirectorEnabled);
 
   // UX-R3-F: Auto-open best clip in center preview once on completion
   if (!_uxr3AutoSelectedBest) {
@@ -4565,7 +4706,7 @@ const RenderAiRuntime = (() => {
     return -1;
   }
 
-  function update(backendStage, status, parts) {
+  function update(backendStage, status, parts, summary) {
     mountPanels();
     const isComplete = status === 'done' || status === 'completed' || status === 'completed_with_errors';
     const isFailed   = status === 'failed' || status === 'interrupted';
@@ -4579,7 +4720,7 @@ const RenderAiRuntime = (() => {
     _updateProcessCard(newIdx, isFailed);
     _updateEvolutionFeed(parts);
     _renderConcernItems(parts);
-    _updateHero(newIdx, isFailed, parts);
+    _updateHero(newIdx, isFailed, parts, summary);
   }
 
   function _updateProcessCard(idx, isFailed) {
@@ -4626,7 +4767,7 @@ const RenderAiRuntime = (() => {
     });
   }
 
-  function _updateHero(idx, isFailed, parts) {
+  function _updateHero(idx, isFailed, parts, summary) {
     const heroEl = document.getElementById('uxr1_ai_hero');
     if (!heroEl) return;
     const stgIcon  = document.getElementById('uxr1_stage_icon');
@@ -4640,6 +4781,34 @@ const RenderAiRuntime = (() => {
       heroEl.dataset.stage  = stg.key;
       heroEl.dataset.failed = isFailed ? '1' : '';
     }
+
+    // R7.2: Soft stall warning from stuck_parts[] — non-intrusive amber notice
+    const stuckMap = _stuckPartsMap(summary, parts);
+    let stallEl = heroEl.querySelector('.uxr1StallWarn');
+    if (stuckMap.size > 0 && !isFailed) {
+      const stuckCount = stuckMap.size;
+      const maxSecs = Math.max(...stuckMap.values());
+      const mins = Math.floor(maxSecs / 60);
+      const timeStr = mins > 0 ? mins + ' min' : 'a while';
+      const stuckLabel = stuckCount === 1
+        ? '1 clip has been processing for ' + timeStr
+        : stuckCount + ' clips stalled for ' + timeStr;
+      const doneParts = (parts || []).filter(function(p) {
+        const st = String(p.status || '').toLowerCase();
+        return st === 'done' || st === 'completed' || st === 'complete';
+      });
+      const guidance = doneParts.length > 0
+        ? ' You can continue reviewing completed clips.' : '';
+      if (!stallEl) {
+        stallEl = document.createElement('div');
+        stallEl.className = 'uxr1StallWarn';
+        heroEl.appendChild(stallEl);
+      }
+      stallEl.textContent = stuckLabel + '.' + guidance;
+    } else if (stallEl) {
+      stallEl.remove();
+    }
+
     const concernsEl = document.getElementById('uxr1_concerns');
     if (!concernsEl) return;
     const concerns = (typeof RuntimeIntelligence !== 'undefined')

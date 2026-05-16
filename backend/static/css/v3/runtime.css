@@ -2792,3 +2792,23 @@
    END OF UX-R2 — COMPLETION EXPERIENCE RE-ARCHITECTURE
    ======================================================= */
 
+/* =======================================================
+   UX-R7.2 — RUNTIME STALL AWARENESS
+   Soft amber stall notice inside #uxr1_ai_hero when stuck_parts > 0.
+   ======================================================= */
+
+.uxr1StallWarn {
+  font-size: 11px;
+  color: rgba(251,191,36,.80);
+  background: rgba(251,191,36,.07);
+  border: 1px solid rgba(251,191,36,.16);
+  border-radius: 4px;
+  padding: 5px 9px;
+  margin-top: 8px;
+  line-height: 1.45;
+}
+
+/* =======================================================
+   END OF UX-R7.2 — RUNTIME STALL AWARENESS
+   ======================================================= */
+
