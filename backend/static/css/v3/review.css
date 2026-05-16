@@ -1181,3 +1181,66 @@
 /* =======================================================
    END OF P2.9 — OUTPUT CAUSALITY & CONFIDENCE EVOLUTION
    ======================================================= */
+
+/* =======================================================
+   P2.9.1 — HERO CARD RESPONSIVE HARDENING (P2.9.1-D)
+   Preserves horizontal hero feel at 1366px.
+   Graceful collapse at ≤1024px. Stack at ≤768px.
+   ======================================================= */
+
+@media (max-width: 1366px) {
+  .clipsGrid .clipCard.isBestClip {
+    grid-template-columns: 130px 1fr;
+  }
+  .clipsGrid .clipCard.isBestClip .clipCardThumbWrap {
+    width: 130px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .clipsGrid .clipCard.isBestClip {
+    grid-template-columns: 110px 1fr;
+    min-height: 120px;
+  }
+  .clipsGrid .clipCard.isBestClip .clipCardThumbWrap {
+    width: 110px;
+  }
+  .clipsGrid .clipCard.isBestClip .clipCardBody {
+    padding: 12px 14px;
+    gap: 4px;
+  }
+  .clipsGrid .clipCard.isBestClip .clipCardScore {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Stack vertically — hero feeling preserved via full-width thumb */
+  .clipsGrid .clipCard.isBestClip {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    min-height: unset;
+    aspect-ratio: unset;
+  }
+  .clipsGrid .clipCard.isBestClip .clipCardThumbWrap {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    aspect-ratio: 16 / 5; /* wide cinematic crop — not 9/16 portrait */
+    border-radius: 8px 8px 0 0;
+    overflow: hidden;
+    object-fit: cover;
+  }
+  .clipsGrid .clipCard.isBestClip .clipCardBody {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 14px 16px;
+  }
+  .clipsGrid .clipCard.isBestClip .clipCardScore {
+    font-size: 20px;
+  }
+}
+
+/* =======================================================
+   END OF P2.9.1 — HERO CARD RESPONSIVE HARDENING
+   ======================================================= */

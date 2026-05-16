@@ -2,7 +2,7 @@
 
 **Codebase:** `backend/static/` (production app shell)
 **Branch:** `feature/ai-output-upgrade`
-**Last updated:** 2026-05-16 (post-P2.9)
+**Last updated:** 2026-05-16 (post-P2.9.1)
 **Scope:** `render-ui.js`, `runtime.css`, `review.css`
 
 > This document covers only the runtime intelligence system introduced in P2.5–P2.9.
@@ -323,15 +323,83 @@ Suppressed:
 
 ## Known Weaknesses (post-P2.9)
 
-1. **Card re-render wipes transient classes** — `populateRenderOutputPanel` does a full `innerHTML` replace. If re-render fires within the 2600ms window, `p29Elevated`/`p29Causal` are lost before the timeout fires. Low frequency issue (re-renders only happen on new WS message with part changes).
+> Items 1–3 below were resolved in P2.9.1. Items 4–5 remain open.
 
-2. **`_applyConfidenceEvolution` uses `parts.length` as total** — but `parts` at early stages may be incomplete (not all parts are known yet). Confidence may read `peak` too early if parts array grows incrementally.
+### Historical (resolved in P2.9.1)
 
-3. **Hero card layout assumes clipsGrid is a CSS Grid** — the 9/16 `aspect-ratio` override on `.clipCardThumbWrap` within the hero card depends on the grid column being exactly 160px. If the grid container is narrower than 160px (small viewports), the thumb will overflow.
+1. **Card re-render wipes transient classes** — `populateRenderOutputPanel` does a full `innerHTML` replace. ~~If re-render fires within the 2600ms window, `p29Elevated`/`p29Causal` are lost.~~
+   - **Fixed P2.9.1-A**: `_transientCards` Map tracks active transient state. `reapplyTransientState()` is called at the end of `populateRenderOutputPanel` to re-apply classes after re-render.
 
-4. **`_triggerCompletionArrival` silently no-ops** if `#render_active_panel` doesn't exist or `showCompletionIntelligence` fires when the element is hidden. The editorial completion bar copy is never set.
+2. **Confidence evolution denominator unstable** — ~~`_applyConfidenceEvolution` uses `parts.length` which can shrink between ticks, causing confidence to regress.~~
+   - **Fixed P2.9.1-B**: `_maxKnownTotal` ratchets upward only. Confidence level is monotonic (`emerging → rising → strong → peak`) — never regresses.
 
-5. **`pointer-events: none` on runtime mount at complete** prevents intentional log inspection without hover. Users who want to read the log must hover over the receded zone — not obvious.
+3. **Hero card layout breaks at narrow viewports** — ~~160px fixed thumb column overflows at ≤768px.~~
+   - **Fixed P2.9.1-D**: Responsive breakpoints at 1366px (130px), 1024px (110px), and 768px (vertical stack with 16:5 cinematic crop).
+
+### Current (open)
+
+4. **`_triggerCompletionArrival` no-ops if DOM missing** — if `#render_active_panel` doesn't exist when `showCompletionIntelligence` fires (e.g., view switched), the arrival animation never runs. The editorial completion bar copy is never set. Low frequency in normal use.
+
+5. **`pointer-events: none` on runtime mount at complete** — users must hover the receded zone to interact with logs. Not discoverable.
+
+---
+
+## P2.9.1 — Runtime Stability Hardening
+
+**Date:** 2026-05-16
+
+### P2.9.1-A — Output Card State Preservation
+
+**Problem:** `populateRenderOutputPanel` replaces `list.innerHTML` completely on every WS tick, destroying transient classes (`p29Elevated`, `p29Causal`, `p28ClipMoment`) before their 2600ms window expires.
+
+**Fix:** 
+- `_transientCards = new Map()` tracks active elevations: `partNo → { elevated, causal, expiresAt }`
+- `_syncOutputCard` registers each new card state into the map
+- `reapplyTransientState()` iterates the map after re-render and re-applies live classes
+- `populateRenderOutputPanel` calls `RenderAiRuntime.reapplyTransientState()` before `showRenderOutputPanel()`
+- Expired entries are pruned on access
+- `reset()` calls `_transientCards.clear()`
+
+### P2.9.1-B — Confidence Evolution Stability
+
+**Problem:** `_applyConfidenceEvolution(done.length, parts.length)` used `parts.length` as the total denominator. If parts arrive incrementally, the denominator can grow between ticks, causing ratio to drop and confidence to regress (e.g., peak → strong).
+
+**Fix:**
+- `_maxKnownTotal` ratchets upward only: `_maxKnownTotal = Math.max(_maxKnownTotal, totalCount)`
+- `_lastConfidenceLevel` tracks the last applied level
+- Level progression is monotonic: `ORDER.indexOf(newLevel) <= ORDER.indexOf(_lastConfidenceLevel)` → return without applying
+- Both are reset in `reset()`
+
+### P2.9.1-C — Completion Arrival Idempotency
+
+**Problem:** `_triggerCompletionArrival` was called inside the `!_completionNarrativeSet` guard (already idempotent via that flag), but the function itself had no internal guard — a future caller or edge case could double-fire the animation.
+
+**Fix:**
+- `_arrivalTriggered = false` flag added to IIFE state
+- `_triggerCompletionArrival` guards with `if (_arrivalTriggered) return; _arrivalTriggered = true;`
+- Reset in `reset()`
+
+### P2.9.1-D — Hero Responsive Hardening
+
+**Problem:** `.clipsGrid .clipCard.isBestClip { grid-template-columns: 160px 1fr }` — fixed 160px breaks at narrow viewports.
+
+**Fix (review.css):**
+- `@media (max-width: 1366px)`: 130px thumb column
+- `@media (max-width: 1024px)`: 110px thumb, reduced padding, 18px score
+- `@media (max-width: 768px)`: vertical stack — `grid-template-columns: 1fr`, thumb uses 16:5 cinematic aspect-ratio crop (wide, not portrait), body below
+
+### P2.9.1-E — WS Update Resilience (morph guard)
+
+**Problem:** Rapid WS ticks with stage changes could stack `p29Morphing` class additions before the `requestAnimationFrame` callback cleared the previous one. Double-morph causes a visual stutter.
+
+**Fix:**
+- `_morphPending = false` flag in IIFE state
+- `_updateProcessCard` only adds `p29Morphing` when `!_morphPending`; sets `_morphPending = true`
+- `requestAnimationFrame` callback clears `p29Morphing` and resets `_morphPending = false`
+
+### P2.9.1-F — Null Safety
+
+All `querySelector` results already guarded with null checks across P2.8/P2.9. The `reapplyTransientState()` function guards each card lookup. The `setTimeout` callback in `_triggerCompletionArrival` checks `if (panel)` before class removal (ref to captured variable, not re-queried).
 
 ---
 

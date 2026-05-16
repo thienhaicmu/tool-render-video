@@ -3779,6 +3779,8 @@ function populateRenderOutputPanel(job, parts) {
   }
 
   renderAiStrategyPanel(job);
+  // P2.9.1-A: Restore transient card classes wiped by full innerHTML replacement above
+  if (typeof RenderAiRuntime !== 'undefined') RenderAiRuntime.reapplyTransientState();
   showRenderOutputPanel();
   renderBottomActiveQueue(job, computeProgressSummary(items), items);
   const panel = qs('render_output_panel');
@@ -4295,6 +4297,11 @@ const RenderAiRuntime = (() => {
   let _reasonItems            = [];
   let _lastPartCount          = 0;
   let _completionNarrativeSet = false;
+  let _arrivalTriggered       = false;    // P2.9.1-C: idempotent arrival
+  let _morphPending           = false;    // P2.9.1-E: no overlapping morphs
+  let _maxKnownTotal          = 0;        // P2.9.1-B: stable denominator
+  let _lastConfidenceLevel    = '';       // P2.9.1-B: monotonic advance only
+  const _transientCards       = new Map(); // P2.9.1-A: partNo → {elevated,causal,expiresAt}
 
   function mountPanels() {
     if (_mounted) return;
@@ -4377,7 +4384,11 @@ const RenderAiRuntime = (() => {
     }
 
     // Stage changed — morph transition: fade out → swap → fade in
-    if (prevCard) el.classList.add('p29Morphing');
+    // P2.9.1-E: Skip morph class if one is already pending (rapid WS ticks)
+    if (prevCard && !_morphPending) {
+      _morphPending = true;
+      el.classList.add('p29Morphing');
+    }
     requestAnimationFrame(() => {
       el.innerHTML =
         '<div class="rcAiProcCard" data-state="' + state + '">' +
@@ -4392,6 +4403,7 @@ const RenderAiRuntime = (() => {
           '</div>' +
         '</div>';
       el.classList.remove('p29Morphing');
+      _morphPending = false;
     });
   }
 
@@ -4461,6 +4473,9 @@ const RenderAiRuntime = (() => {
   function _syncOutputCard(partNo, tier) {
     const card = document.querySelector('.clipCard[data-part-no="' + partNo + '"]');
     if (!card) return;
+    // P2.9.1-A: Register transient state so reapplyTransientState() can restore after re-renders
+    const expiresAt = Date.now() + 2600;
+    _transientCards.set(partNo, { elevated: true, causal: tier === 'high', expiresAt });
     // P2.8-B: pulse
     card.classList.remove('p28ClipMoment');
     void card.offsetWidth;
@@ -4469,23 +4484,50 @@ const RenderAiRuntime = (() => {
     card.classList.add('p29Elevated');
     if (tier === 'high') card.classList.add('p29Causal');
     setTimeout(() => {
-      card.classList.remove('p28ClipMoment', 'p29Elevated', 'p29Causal');
+      _transientCards.delete(partNo);
+      const c = document.querySelector('.clipCard[data-part-no="' + partNo + '"]');
+      if (c) c.classList.remove('p28ClipMoment', 'p29Elevated', 'p29Causal');
     }, 2600);
   }
 
+  function reapplyTransientState() {
+    // P2.9.1-A: Called by populateRenderOutputPanel after full re-render to restore transient classes
+    const now = Date.now();
+    _transientCards.forEach((state, partNo) => {
+      if (state.expiresAt <= now) { _transientCards.delete(partNo); return; }
+      const card = document.querySelector('.clipCard[data-part-no="' + partNo + '"]');
+      if (!card) return;
+      if (state.elevated) card.classList.add('p29Elevated');
+      if (state.causal)   card.classList.add('p29Causal');
+    });
+    if (_lastConfidenceLevel) {
+      const bestCard = document.querySelector('.clipCard.isBestClip');
+      if (bestCard) bestCard.dataset.p29Confidence = _lastConfidenceLevel;
+    }
+  }
+
   function _applyConfidenceEvolution(doneCount, totalCount) {
+    // P2.9.1-B: Stable denominator — never shrink the known total across ticks
+    _maxKnownTotal = Math.max(_maxKnownTotal, totalCount);
+    const denominator = _maxKnownTotal || 1;
+    const ratio    = doneCount / denominator;
+    const newLevel = ratio < 0.3 ? 'emerging' : ratio < 0.62 ? 'rising' : ratio < 0.88 ? 'strong' : 'peak';
+    // P2.9.1-B: Monotonic advance — never regress (emerging→rising→strong→peak only)
+    const ORDER = ['', 'emerging', 'rising', 'strong', 'peak'];
+    if (ORDER.indexOf(newLevel) <= ORDER.indexOf(_lastConfidenceLevel)) return;
+    _lastConfidenceLevel = newLevel;
     const bestCard = document.querySelector('.clipCard.isBestClip');
-    if (!bestCard) return;
-    const ratio = totalCount > 0 ? doneCount / totalCount : 0;
-    const level  = ratio < 0.3 ? 'emerging' : ratio < 0.62 ? 'rising' : ratio < 0.88 ? 'strong' : 'peak';
-    bestCard.dataset.p29Confidence = level;
+    if (bestCard) bestCard.dataset.p29Confidence = newLevel;
   }
 
   function _triggerCompletionArrival() {
+    // P2.9.1-C: Idempotent — once per render session, safe across WS reconnects
+    if (_arrivalTriggered) return;
+    _arrivalTriggered = true;
     const panel = document.getElementById('render_active_panel');
     if (panel) {
       panel.classList.add('p29Arrival');
-      setTimeout(() => panel.classList.remove('p29Arrival'), 1500);
+      setTimeout(() => { if (panel) panel.classList.remove('p29Arrival'); }, 1500);
     }
     const header = document.querySelector('.rcAiEvolutionHeader span');
     if (header) header.textContent = 'Creative Outcome';
@@ -4562,6 +4604,11 @@ const RenderAiRuntime = (() => {
     _reasonItems            = [];
     _lastPartCount          = 0;
     _completionNarrativeSet = false;
+    _arrivalTriggered       = false;   // P2.9.1-C
+    _morphPending           = false;   // P2.9.1-E
+    _maxKnownTotal          = 0;       // P2.9.1-B
+    _lastConfidenceLevel    = '';      // P2.9.1-B
+    _transientCards.clear();           // P2.9.1-A
     // Clear P2.9 confidence state from any lingering best card
     const bestCard = document.querySelector('.clipCard.isBestClip');
     if (bestCard) delete bestCard.dataset.p29Confidence;
@@ -4580,5 +4627,5 @@ const RenderAiRuntime = (() => {
     if (insightEl) { insightEl.classList.add('hiddenView'); insightEl.innerHTML = ''; }
   }
 
-  return { mountPanels, update, reset, showCompletionIntelligence };
+  return { mountPanels, update, reset, showCompletionIntelligence, reapplyTransientState };
 })();
