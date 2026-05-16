@@ -3777,3 +3777,58 @@ Replaces the flat feature dashboard with a four-zone creator workspace. No panel
 - `nav.js` visibility toggle — `render_home_panel` show/hide logic untouched
 - `hardening.css` — `editorMode`/`inPipeline` overrides untouched
 - `_renderHistoryRead()`, `buildRenderHistoryEntry()` — untouched
+
+---
+
+## Section 40 — UX-R5: Stabilization & CSS Architecture Hardening (2026-05-16)
+
+**Phase:** UX-R5  
+**Branch:** `feature/ai-output-upgrade`  
+**Commit:** `refactor(ui): UX-R5 stabilization and css architecture hardening`
+
+### What Changed
+
+Stabilization pass — no new product surfaces, no visual redesign. Four targeted fixes.
+
+**JS (`render-ui.js`)**
+
+| Fix | Location | Before | After |
+|---|---|---|---|
+| A — card hover | `_bindCardHoverPreviews()` | `thumbWrap.addEventListener(...)` (accumulates) | `thumbWrap.onmouseenter = ...` (overwrites) |
+| B — completion thumb | `_showCompletionHero()` | `thumbEl.addEventListener(...)` (accumulates) | `thumbEl.onmouseenter = ...` (overwrites) |
+
+Both fixes resolve listener accumulation: each render/completion now writes exactly one handler per element, regardless of how many times the function is called in a session.
+
+**CSS (`review.css`)**
+
+- Line ~616: Removed dead `.clipCard.isBestClip` border-color + box-shadow (superseded by P2.8 indigo at ~989). Added comment. Recolored `::after` gradient from gold to indigo.
+
+**CSS (`runtime.css`, `review.css`) — transition normalization**
+
+10 hardcoded transition values in UX-R1/R2/R3 sections replaced with tokens:
+- `.3s ease` / `.25s ease` → `var(--t-slow)`
+- `.15s ease` / `.2s ease` → `var(--t-base)`
+
+Only UX-R* sections touched — base P2.x code untouched.
+
+**CSS (`hardening.css`) — state priority documentation**
+
+UX-R5 section appended with:
+1. 9-level clip card state priority hierarchy
+2. Transition token reference
+3. Known remaining debt with rationale
+
+### What Was NOT Changed
+
+- No visual changes
+- All P2.x / P3.x CSS — untouched
+- `populateRenderOutputPanel()` — untouched
+- Only `_bindCardHoverPreviews()` and `_showCompletionHero()` modified in JS
+
+### Audit Findings Not Fixed (Accepted Debt)
+
+| Issue | Rationale |
+|---|---|
+| 35+ hardcoded transitions in P2.x CSS | Stable code, high change/reward ratio |
+| `updateComparePanel()` no RAF debounce | User-paced only; no frame-drop evidence |
+| `200px`/`26px` hardcoded in UX-R3 | Intentional fixed values; breakpoints handle scaling |
