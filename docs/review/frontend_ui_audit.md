@@ -2420,3 +2420,427 @@ CSS-only productization pass to restore the old UI's cinematic creator energy. N
 - Right panel (Settings/Context) still has enterprise feel — addressed in UI-R5E
 - Projects screen needs same pass — addressed in UI-R5D
 - Motion and page transitions not yet added — UI-R5F
+
+---
+
+## Section 25: Feature-Level Frontend Audit — 2026-05-16
+
+> **Method:** Direct code reading of all files under `backend/static-v2/`. Every finding references a specific file and line number. Severity: P0=crash/security, P1=production reliability, P2=improvement.
+
+---
+
+### Verified Tech Stack (Frontend, from actual code)
+
+| Layer | Technology | Source |
+|---|---|---|
+| Framework | Vanilla ES modules — no framework, no build step | All .js files, package.json `{"type":"module"}` |
+| State management | `createStore()` factory — pub/sub with `set/update/subscribe/reset` | `store/create-store.js` |
+| Routing | Hash-based router (`#/create`, `#/monitor/:jobId`, etc.) | `router.js` |
+| Transport | WebSocket primary (`/ws/jobs/{jobId}`) + HTTP polling fallback (3s) | `transport.js` |
+| API layer | `fetchJson()` typed HTTP client + module-level API wrappers | `transport.js`, `api/*.js` |
+| Entity normalization | `normalizeJob`, `normalizePart`, `parseResultPackage`, `parsePrepareSourceResponse` | `entities/*.js` |
+| Desktop integration | Electron `contextBridge` adapter with safe no-op fallbacks | `desktop-adapter.js` |
+| Stores | `draftStore`, `monitorStore`, `renderSessionStore`, `resultsStore`, `systemStore`, `readinessStore` | `store/*.js` |
+| UI components | `StatusChip`, `AIBadge`, `NavRail`, `EmptyState`, `LogDrawer`, `ScoreBadge`, `PartStatusList`, `BestClipHero`, `OutputCard`, `ErrorBoundary` | `components/*.js` |
+| CSS | 4 files: tokens.css, base.css, layout.css, components.css — design token–driven | `assets/css/` |
+| Static serving | Served from `backend/static-v2/` via FastAPI StaticFiles | `main.py` |
+
+---
+
+### Feature 37 — Frontend Create Flow (Source + Studio)
+
+**Purpose:** Guide the user from URL/file input through source validation to render configuration and submission.
+
+**Files:** `screens/source.js`, `screens/studio.js`, `api/render.js`, `store/draft.js`, `entities/source-session.js`, `entities/render-request.js`
+
+**State:** Module-level `_s` object in source.js + `_submitting`/`_submitError` in studio.js + `draftStore` (shared)
+
+**Actual flow:**
+1. Source screen: user enters YouTube URL or local path + output dir
+2. Client-side validation in source.js:
+   - YouTube URL: basic `https://` prefix check (line 328-329) — does NOT validate domain
+   - Local path: non-empty check only
+3. `renderApi.prepareSource(payload)` with 45s timeout (PREPARE_TIMEOUT_MS:11) — AbortController
+4. Response parsed by `parsePrepareSourceResponse()` → `draftStore.setSession()`
+5. User navigates to Studio: `#/studio`
+6. Studio renders 4 config sections: clip strategy, subtitles, camera, AI guidance
+7. `buildRenderRequest(draft)` converts `draftStore` state to API payload
+8. `validateRenderDraft(draft)` checks: session present, output dir set, min ≤ max part sec
+9. `renderApi.process(payload)` with 30s timeout (RENDER_TIMEOUT_MS:11) → receives `{ job_id }`
+10. Navigates to `#/monitor/{jobId}`
+
+**What works correctly:**
+- AbortController on prepare-source (45s) and render submit (30s) prevent stuck loading states
+- `if (_submitting) return` guard in studio.js prevents double-submit
+- `draftStore.patch()` tracks form changes without full re-render of shell
+- `buildRenderRequest()` only sends intentionally-set fields (no spurious defaults)
+
+**Problems found:**
+- **P1:** AbortController race in source.js: if 45s abort fires and then server responds with success within ~100ms of the abort, `_phase` could be set to 'configure' after the catch block already reset it to 'import', leaving UI in a ghost-configured state. (Confirmed prior finding C-1.)
+- **P1:** YouTube URL validation: `https://` prefix check only — `https://evil.internal/` accepted. No domain validation.
+- **P1:** source.js module state (`_s` object) reset on every mount (line 374) — user navigating back from Studio loses their URL input and must re-type.
+- **P2:** Studio screen renders full HTML on every `draftStore` change — no incremental DOM patching. For fast typists in studio config inputs, this generates many reflows.
+- **P2:** Studio preview video: 10s hardcoded timeout (studio.js:471) fires even while browser buffers on slow connections.
+- **P2:** Studio timer (preview load 10s) NOT cleared in unmount handler — potential 10s timer firing after user navigated away.
+
+**Missing functionality:**
+- No multi-URL batch source input in source screen (batch render exists on backend, not wired in UI)
+- No subtitle preview before render (transcript endpoint exists but unused)
+
+**Edge cases:**
+- User opens two browser tabs on Source screen → both share same `draftStore` module singleton → tab B overwrites tab A's draft on prepare-source success
+- User navigates source → studio → back → source: source screen re-mounts with fresh state; any session from tab A is lost
+
+**Recommended fixes:**
+- Add flag `_aborted = true` before AbortController.abort(); in fetch then-branch check `if (_aborted) return` (P1)
+- Add YouTube domain validation (youtube.com, youtu.be, m.youtube.com) in source.js (P1)
+- Persist last URL in `sessionStorage` and restore on mount (P2)
+- Clear preview timer in studio.js unmount handler (P2)
+
+**Priority:** P1
+
+---
+
+### Feature 38 — Frontend Monitor Flow
+
+**Purpose:** Show real-time render progress, stage labels, clip status, and terminal actions (cancel, retry, resume).
+
+**Files:** `screens/monitor.js`, `store/monitor.js`, `store/render-session.js`, `transport.js`, `components/part-status-list.js`, `components/log-drawer.js`
+
+**Constants:** `CONNECT_TIMEOUT_MS = 20_000` (line 17), `TERMINAL = new Set([...4 statuses])` (line 16), `STAGE_LABELS` dict (lines 19-31)
+
+**Actual flow:**
+1. `monitor.js:mount(el, params)` → `monitorStore.start(jobId)` → `transport.subscribeJob(jobId, callbacks)`
+2. `openJobStream()` opens WS; falls back to polling on error
+3. On each state update → `monitorStore` set → `renderSessionStore.sync()` → shell render bar updates
+4. 20s connect timeout (lines 263-267) → shows timeout banner if no data arrives
+5. Terminal status → shows terminal banner with context-sensitive CTAs:
+   - `completed` → "View Results" button
+   - `failed` → "Retry" button
+   - `interrupted` → "Resume" button
+   - `completed_with_errors` → "View Results" + failed clip info
+6. Cancel button: `POST /api/render/{jobId}/cancel`, disabled after click
+7. Unmount: `el.addEventListener('unmount', () => { unsub(); monitorStore.stop(); })` (lines 301-305)
+
+**What works correctly:**
+- Cleanup IS implemented (confirmed not a bug — unmount event dispatched by router.js:88)
+- Cancel button disabled after click (prevents double-cancel)
+- Retry/Resume buttons disabled on click
+- Log drawer lazy-loads on first open via `wireLogDrawer()`
+- Correct 4-status TERMINAL set on frontend
+
+**Problems found:**
+- **P1:** 20s connect timeout banner is purely cosmetic — `monitorStore.stop()` is NOT called when banner displays (monitor.js:265). The transport stream (WS + poll loop) continues running indefinitely even after user sees timeout message. Resource leak.
+- **P1:** `STAGE_LABELS` is a static client-side dict keyed on backend stage name strings (lines 19-31). If backend renames or adds a stage, frontend silently falls back to raw stage key (e.g., `"SCENE_DETECT_V2"`) with no humanization.
+- **P1:** No error handling on Retry/Resume button API call (monitor.js:179-185). Button is disabled but if the API call fails, user gets no error feedback — button stays disabled permanently with no explanation.
+- **P2:** 20s connect timeout timer (lines 263-267) NOT cleared on unmount if no data arrives — fires and modifies DOM after user navigated away.
+- **P2:** `monitorStore.stop()` retains last state in `renderSessionStore` (store/monitor.js:67-70) — correct for render bar persistence, but renderSessionStore is never cleared if user navigates to Library without viewing results. Stale render bar persists.
+- **P2:** Deep-link validation missing: invalid/deleted jobId causes WS error → polling 404 → screen shows infinite "Connecting…" spinner with no "Job not found" message.
+- **P2:** `renderSessionStore.sync()` called 3× per WS message — once each from `onUpdate`, `onTerminal`, and `onTransportChange` callbacks (store/monitor.js:32, 52, 62). Each sync triggers all renderSessionStore subscribers (shell render bar re-render). 3× redundant re-renders per WS tick.
+
+**Edge cases:**
+- User opens monitor for job that's already completed → immediate terminal state → terminal banner shows without any progress display → user sees abrupt state
+- User navigates away mid-render (back to Source) → unmount event fires → monitorStore.stop() called → render bar persists via renderSessionStore → correct behavior
+
+**Recommended fixes:**
+- Call `monitorStore.stop()` when timeout banner fires (P1)
+- Add fallback stage label humanization: `STAGE_LABELS[key] ?? key.replace(/_/g, ' ').toLowerCase()` (P1)
+- Add error toast/message on retry/resume API call failure (P1)
+- Clear timeout timer in unmount handler (P2)
+- Deduplicate `renderSessionStore.sync()` — call once per store update cycle (P2)
+- Add "Job not found" synthetic state on 404 poll response (P2)
+
+**Priority:** P1
+
+---
+
+### Feature 39 — Frontend History Flow (Library)
+
+**Purpose:** Display list of past render jobs with filtering, search, and navigation actions.
+
+**Files:** `screens/library.js`, `screens/projects.js` (router wrapper), `api/jobs.js`, `entities/job.js`
+
+**State:** Module-level `_history`, `_filter`, `_search`, `_loading`, `_error`, `_listEl`
+
+**Actual flow:**
+1. `GET /api/jobs/history` → normalize each item via `normalizeHistoryItem(raw)` (library.js:28-61)
+2. Sort by `createdAt` descending
+3. Filter bar: 6 pills (all, running, completed, partial, failed, interrupted) — client-side only
+4. Search input: filters display name client-side — no server-side search
+5. Card actions: "View Results" → `#/projects/{jobId}`, "Monitor" → `#/monitor/{jobId}`, "Retry" → POST → navigate, "Resume" → POST → navigate
+6. Delete action: `jobsApi.delete(jobId)` — DB record only, no file cleanup, no confirmation
+
+**What works correctly:**
+- `_normalizeDisplayTitle()` humanizes YouTube URLs and raw file paths
+- `_filterItems()` and `_renderCard()` are clean separation of concerns
+- Error card shows retry button for failed API load
+
+**Problems found:**
+- **P0 (pagination):** History screen has no "Load more" affordance. Backend caps at 30 items. Users with >30 renders see silently truncated list.
+- **P1:** `normalizeHistoryItem()` (lines 28-61) calls `JSON.parse(raw.result_json)` inside a try/catch — returns null on malformed JSON. Malformed result_json silently hides score/AI data from Library card.
+- **P1:** Delete action calls `jobsApi.delete(jobId)` immediately with NO confirmation dialog. Permanently deletes DB record (but not files). Accidental delete has no undo.
+- **P1:** Library action buttons (retry/resume) have no error feedback — button shows "Retrying..." then re-enables on error but no error message is persisted to the card.
+- **P2:** `CSS.escape()` called on jobId for DOM querying (line 331) — safe but unnecessary if IDs are always UUIDs.
+- **P2:** `_normalizeDisplayTitle()` only handles YouTube and file paths — Vimeo, Twitch, direct MP4 URLs display as raw URLs.
+- **P2:** No search filtering at API level — all 30 items loaded, filtered client-side. With larger caps, this degrades.
+
+**Recommended fixes:**
+- Add "Load more" with offset pagination to library screen and backend history API (P0)
+- Add confirmation dialog before `jobsApi.delete()` (P1)
+- Show inline error message on retry/resume failure (P1)
+- Extend `_normalizeDisplayTitle()` to handle more URL types (P2)
+
+**Priority:** P0 (pagination), P1
+
+---
+
+### Feature 40 — Frontend Download Flow
+
+**Purpose:** Let users download public videos (YouTube/Instagram/Facebook) and view batch job status.
+
+**Files:** `screens/downloads.js`, `api/download.js`
+
+**State:** Module-level `_urlRaw`, `_outputDir`, `_submitting`, `_checkingStatus`, `_lastJob`, `_el`
+
+**Actual flow:**
+1. User pastes URL(s) — `parseUrlInput()` splits on newlines, validates `https?://` protocol, dedupes
+2. Optional output dir selection (native picker on desktop, text input on web)
+3. `POST /api/download/process` with `{ urls, output_dir? }` → receives `{ job_id, items }`
+4. Job panel shows up to 8 items with status chips; "...and N more" if exceeded
+5. "Check Status" → `GET /api/jobs/{jobId}` → updates `_lastJob.status`
+6. "Retry" → `POST /api/download/retry/{jobId}` with `{ part_numbers: [] }` (always empty)
+
+**What works correctly:** URL deduplication. Native picker integration via desktopAdapter. Submit disables button.
+
+**Problems found:**
+- **P1:** `output_dir` sent to backend without path validation. User can direct downloads to arbitrary filesystem locations.
+- **P1:** "Retry" always sends empty `part_numbers` — no per-item retry UI. A 10-URL batch where 1 fails retries all 10 items.
+- **P1:** No per-file download progress indication. Large file downloads appear frozen to user with no bytes-received feedback.
+- **P2:** Hardcoded max 8 items display (lines 119-128) — large batch jobs show truncated info.
+- **P2:** State reset on each mount — closing and reopening downloads tab loses last job info.
+- **P2:** No download history persistence — cannot see previously downloaded files after tab close.
+
+**Missing functionality:**
+- Per-item retry selection
+- Per-file progress (bytes received / total)
+- Download history across sessions
+
+**Priority:** P1
+
+---
+
+### Feature 41 — Frontend State Management
+
+**Purpose:** Coordinate state across screens, the shell, and transport layer using reactive pub/sub stores.
+
+**Files:** `store/create-store.js`, `store/draft.js`, `store/monitor.js`, `store/render-session.js`, `store/results.js`, `store/session.js`, `store/system.js`, `store/readiness.js`
+
+**Store inventory:**
+
+| Store | Purpose | Lifetime |
+|---|---|---|
+| `draftStore` | Render config form state | Persists across routes (module-level) |
+| `monitorStore` | Live job stream (WS/poll) | Reset on `clear()` |
+| `renderSessionStore` | Derived active-render bar state | Synced from monitorStore |
+| `resultsStore` | Completed result package | Reset on new load |
+| `systemStore` | Backend health + execution mode | Permanent (set at boot) |
+| `readinessStore` | Tool availability (ffmpeg, yt-dlp, whisper) | Loaded at boot, not refreshed |
+| `sessionStore` | Source sessions list | Per-load |
+
+**What works correctly:**
+- `createStore()` factory is clean minimal pub/sub with `set/update/subscribe/reset`
+- `renderSessionStore.sync()` correctly derives active-render bar state from monitorStore
+- `systemStore._startHealthWatch()` adjusts poll interval (30s unavailable, 60s ready)
+
+**Problems found:**
+- **P1:** `renderSessionStore.sync()` called 3× per WS message (from `onUpdate`, `onTerminal`, `onTransportChange` in store/monitor.js) → 3 shell render bar re-renders per tick. Should batch into one call per update cycle.
+- **P1:** `systemStore._startHealthWatch()` (store/system.js:50-61) starts an async interval timer that is NEVER cleared — polls indefinitely for the lifetime of the session. No cleanup on tab close.
+- **P1:** `renderSessionStore` state never persisted to `sessionStorage` or `localStorage`. Hard refresh during active render loses render bar — user has no way to reconnect without navigating to `/monitor/{jobId}` manually.
+- **P2:** `draftStore.dirty` flag set to `true` on any `patch()` call but NEVER cleared. Cannot reliably detect if form was actually modified vs just mounted.
+- **P2:** `readinessStore.load()` fetches readiness once at boot and never refreshes. If FFmpeg becomes unavailable after boot, readinessStore still shows `ffmpegAvailable=true`.
+- **P2:** `createStore()` has no middleware layer — adding cross-cutting concerns (logging, devtools, persistence) requires patching each store individually.
+- **P2:** Store subscriptions from screens are unsubscribed on unmount (via returned unsubscribe function) — correct. But `systemStore` and `renderSessionStore` subscriptions in `shell.js` are permanent (never unsubscribed) — intentional but undocumented.
+
+**Recommended fixes:**
+- Deduplicate `renderSessionStore.sync()` — move to end of each monitorStore update batch (P1)
+- Persist `{ jobId, status }` in `sessionStorage` in `renderSessionStore.sync()` and restore on boot (P1)
+- Clear `systemStore` health watch on page `unload` event (P2)
+
+**Priority:** P1
+
+---
+
+### Feature 42 — Frontend Transport Layer
+
+**Purpose:** Manage WebSocket and HTTP polling transport for real-time job updates.
+
+**Files:** `transport.js`
+
+**Exported API:**
+- `openJobStream(jobId, callbacks)` → `{ close(), usingPolling }` (lines 18-92)
+- `subscribeJob(jobId, { onUpdate, onTerminal, onTransportChange })` → `{ getTransportMode(), unsubscribe() }` (lines 95-124)
+- `fetchJson(url, options)` → typed HTTP client with error normalization (lines 127-161)
+- `withTimeout(promise, ms, label)` → AbortController-based timeout (lines 165-174)
+- `normalizeApiError(err)` → `{ ok, status, message, code, details }` (lines 177-185)
+
+**WebSocket lifecycle:**
+1. `wsUrl()` builds `ws://` or `wss://` from `window.location`
+2. `tryWs()` creates WebSocket, wires `onmessage`/`onerror`/`onclose`
+3. `onmessage`: parses JSON, fires `onMessage(data)`, checks terminal status
+4. On terminal: fires `onTerminal(data)`, triggers 600ms authoritative poll
+5. On error/close: sets `usingPolling=true`, starts `doPoll()` immediately
+6. `doPoll()`: fetches `GET /api/jobs/{jobId}` + `GET /api/jobs/{jobId}/parts` every 3000ms
+
+**What works correctly:**
+- Post-terminal authoritative poll (600ms delay) catches any final state not in WS last message
+- `normalizeApiError()` provides consistent error shape to callers
+- `fetchJson()` handles non-JSON 2xx gracefully (returns null)
+- `withTimeout()` provides clean AbortController integration
+
+**Problems found:**
+- **P1:** `TERMINAL_STATUSES` on frontend = 4 statuses (`completed`, `completed_with_errors`, `failed`, `interrupted`). Backend WS breaks on 2 (`completed`, `failed`). Frontend closes WS client-side after receiving terminal status but server-side loop continues for `interrupted`/`completed_with_errors` until client disconnects. (Confirmed prior finding — server-side fix needed in routes/jobs.py:411.)
+- **P2:** No WS reconnect backoff. Immediate fallback to polling on ANY WS failure (transient network blip, server restart). No attempt to reconnect WS after delay.
+- **P2:** WS `close` always triggers polling even on clean shutdown (job completed and server closed WS). Unnecessary polling for already-terminal jobs.
+- **P2:** Poll errors silently caught (lines 46-47) — 5xx responses from backend silently swallowed; UI shows stale state indefinitely with no error toast.
+- **P2:** No transport-type telemetry exposed outside the subscribeJob closure. `monitorStore` knows transportMode but only via callback; no global transport health observable.
+- **P2:** Multiple simultaneous calls to `subscribeJob` for the same jobId each create independent WS connections and poll loops (no connection sharing).
+
+**Recommended fixes:**
+- Implement WS reconnect with exponential backoff (1s → 2s → 4s → max 30s) (P2)
+- On WS `close` with terminal job status, skip polling fallback (P2)
+- Surface poll errors to UI via `onError` callback after N consecutive failures (P2)
+
+**Priority:** P1 (WS terminal mismatch — server fix needed), P2 (reconnect)
+
+---
+
+### Feature 43 — Frontend Error Handling
+
+**Purpose:** Catch and display errors at transport, store, screen, and component levels.
+
+**Files:** `transport.js` (normalizeApiError), `components/error-boundary.js` (withErrorBoundary), `router.js` (screen mount error recovery), `screens/*.js` (per-screen error states)
+
+**Error boundary:**
+- `withErrorBoundary(mountFn)` (error-boundary.js:7-15) wraps screen mounts in try/catch
+- On error: renders recovery UI with "Retry" and "Back to Source" buttons
+- Console.error only — no error reporting to backend
+- Retry calls original mountFn again — could loop if error is persistent
+
+**Transport errors:**
+- `fetchJson()` (transport.js:127-161): normalizes all HTTP + network errors to `{ ok, status, message }`
+- `withTimeout()` (lines 165-174): generates AbortError with user-friendly label
+- Poll errors (lines 46-47): silently caught — not surfaced to UI
+
+**Screen-level error states:**
+- source.js: `_s.error` string displayed below form
+- studio.js: `_submitError` string displayed in CTA area
+- library.js: error card with retry button
+- results.js: error card with retry/library CTAs
+- monitor.js: connection timeout banner (but does not stop transport)
+
+**What works correctly:**
+- `normalizeApiError()` provides consistent error shape across all API calls
+- Error boundaries prevent full-page crashes on screen mount failures
+- Most screens have dedicated error states
+
+**Problems found:**
+- **P1:** Poll errors silently swallowed in `doPoll()` (transport.js:46-47). If backend consistently returns 5xx during a render, monitor screen shows last-known state indefinitely with no indication of poll failure.
+- **P1:** `withErrorBoundary` retry can loop on persistent errors (e.g., screen tries to access undefined store state). No max retry count.
+- **P1:** monitor.js retry/resume button API failures: button disabled indefinitely with no error message. User must refresh page to retry.
+- **P2:** No centralized error tracking / reporting. Errors only go to console.error — no telemetry.
+- **P2:** `_esc()` helper in source.js (line 382), studio.js (line 504), library.js (line 96) escapes `&`, `"`, `<` but NOT `>`. Incomplete HTML escaping — `>` in user content could close tags in attribute values.
+
+**Edge cases:**
+- Backend returns 503 during render → poll errors silently swallowed → UI frozen at last state, user does not know backend is down
+- Screen throws on mount AND on retry → error boundary shows recovery UI on top of broken DOM — CSS may conflict
+
+**Recommended fixes:**
+- Surface poll errors to UI after 3 consecutive failures: show yellow warning banner "Having trouble connecting..." (P1)
+- Add max retry count (3) to error boundary `withErrorBoundary` (P1)
+- Add `>` to `_esc()` entity escaping (P2)
+- Add `onError` callback to `doPoll()` (P2)
+
+**Priority:** P1
+
+---
+
+### Additional Frontend Production Risks (cross-cutting)
+
+#### Memory Management
+
+| Issue | Severity | File:Line |
+|---|---|---|
+| `systemStore._startHealthWatch()` timer never cleared | P1 | `store/system.js:50-61` |
+| Studio preview load timeout (10s) not cleared on unmount | P2 | `screens/studio.js:471` |
+| Monitor connect timeout (20s) not cleared on unmount | P2 | `screens/monitor.js:263` |
+| Shell subscriptions to systemStore + renderSessionStore permanent | P2 (intentional) | `components/shell.js:49-56` |
+
+#### XSS / Injection
+
+| Issue | Severity | File:Line |
+|---|---|---|
+| `_esc()` missing `>` entity — incomplete HTML escaping | P2 | `screens/source.js:382`, `screens/studio.js:504`, `screens/library.js:96` |
+| Error boundary innerHTML uses hardcoded HTML — safe but not maintainable | P3 | `components/error-boundary.js:18-41` |
+| router.js error recovery uses innerHTML — safe (hardcoded) | P3 | `router.js:106` |
+
+#### Race Conditions
+
+| Issue | Severity | File:Line |
+|---|---|---|
+| AbortController race: server success after 45s abort → ghost-configured state | P1 | `screens/source.js:340-368` |
+| Studio preview timeout fires after unmount | P2 | `screens/studio.js:471` |
+| resultsStore `_prevResult` tracking could miss rapid state transitions | P2 | `screens/results.js:386` |
+
+#### Data Validation
+
+| Issue | Severity | File:Line |
+|---|---|---|
+| transport.js onmessage: no schema validation of received WS data before normalizing | P2 | `transport.js:63-73` |
+| render-request.js buildPayload: no runtime type check that built payload matches contract | P2 | `entities/render-request.js:36-74` |
+| downloads.js: `output_dir` sent without path validation | P1 | `screens/downloads.js:259` |
+
+---
+
+### Consolidated Frontend Roadmap
+
+#### P0 — Critical (production blockers)
+
+| ID | Fix | File |
+|---|---|---|
+| F0-1 | Add Library pagination ("Load more" with offset) | `screens/library.js`, `api/jobs.js` |
+| F0-2 | Fix WS terminal mismatch (server-side fix, already in B1-1) | `backend/routes/jobs.py:411` |
+
+#### P1 — High (significant UX degradation or resource waste)
+
+| ID | Fix | File |
+|---|---|---|
+| F1-1 | Call `monitorStore.stop()` when timeout banner fires | `screens/monitor.js:265` |
+| F1-2 | Add stage label fallback humanization (`key.replace(/_/g,' ').toLowerCase()`) | `screens/monitor.js:STAGE_LABELS` |
+| F1-3 | Add error feedback on retry/resume button failure | `screens/monitor.js:179-185` |
+| F1-4 | Deduplicate `renderSessionStore.sync()` to once per update cycle | `store/monitor.js:32,52,62` |
+| F1-5 | Persist `{ jobId, status }` in sessionStorage for render bar reconnect after refresh | `store/render-session.js` |
+| F1-6 | Fix AbortController race in source.js (set `_aborted` flag) | `screens/source.js:340` |
+| F1-7 | Add YouTube domain validation in source.js | `screens/source.js:328-329` |
+| F1-8 | Add per-item retry selection UI in downloads screen | `screens/downloads.js` |
+| F1-9 | Surface poll errors to UI after 3 consecutive failures | `transport.js:46-47` |
+| F1-10 | Add delete confirmation dialog in Library | `screens/library.js` |
+| F1-11 | Add max retry count to error boundary | `components/error-boundary.js` |
+| F1-12 | Stop systemStore health watch on page unload | `store/system.js:50-61` |
+
+#### P2 — Medium (polish and scalability)
+
+| ID | Fix | File |
+|---|---|---|
+| F2-1 | Add `>` to `_esc()` entity escaping | `screens/source.js:382`, `studio.js:504`, `library.js:96` |
+| F2-2 | WS reconnect with exponential backoff | `transport.js` |
+| F2-3 | Add "Job not found" state in Monitor for invalid/deleted jobIds | `screens/monitor.js` |
+| F2-4 | Persist last-entered URL in sessionStorage across source screen mounts | `screens/source.js:374` |
+| F2-5 | Clear studio preview timeout on unmount | `screens/studio.js:471` |
+| F2-6 | Clear monitor connect timeout on unmount | `screens/monitor.js:263` |
+| F2-7 | Extend `_normalizeDisplayTitle()` to Vimeo, Twitch, direct MP4 URLs | `screens/library.js` |
+| F2-8 | Virtual scrolling for Library (30+ items) and Results clip list (20+ clips) | `screens/library.js`, `screens/results.js` |
+| F2-9 | Content-hash cache-busting for static assets | `index.html`, deploy process |
+| F2-10 | AI score humanization in Results (raw float → 0-100 + qualitative label) | `screens/results.js` |
+| F2-11 | AI score null fallback state in Results (show "AI scoring unavailable" empty state) | `screens/results.js` |
+| F2-12 | Add `createStore()` middleware layer for cross-cutting concerns | `store/create-store.js` |
+| F2-13 | Validate `output_dir` on client before sending (no traversal sequences) | `screens/downloads.js:259` |

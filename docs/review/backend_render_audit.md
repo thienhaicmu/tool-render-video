@@ -7013,3 +7013,928 @@ for idx, seg in enumerate(scored)               ← DB commit loop
 - Focused: pending
 - Full regression: pending
 - `py_compile` passed on all changed modules
+
+---
+
+## Feature-Level Production Audit — 2026-05-16
+
+> **Method:** Direct code reading of all implementation files. Every finding references a specific file and function. Severity: P0=crash/data-loss/security, P1=production reliability, P2=improvement/polish.
+
+---
+
+### Verified Tech Stack (from actual code)
+
+| Layer | Technology | Source |
+|---|---|---|
+| Language | Python 3.x | All .py files |
+| Framework | FastAPI + Uvicorn | main.py, all routes |
+| Database | SQLite (WAL mode, synchronous=NORMAL) | db.py:81-88 |
+| Job queue | Min-heap + ThreadPoolExecutor + threading.Condition | job_manager.py |
+| Concurrency | Dual semaphore: JOB_SEMAPHORE + NVENC_SEMAPHORE | render_pipeline.py:381, render_engine.py:37 |
+| Video download | yt-dlp (10-strategy YouTube fallback) | downloader.py:329-680 |
+| Scene detection | scenedetect (ContentDetector + optional AdaptiveDetector) + OpenCV | scene_detector.py |
+| Transcription | Whisper / WhisperX (adapter, model selectable per profile) | render_pipeline.py:1770 |
+| FFmpeg | subprocess.run() — **NO timeout parameter** | render_engine.py:159-178 |
+| GPU encoding | NVENC (h264_nvenc/hevc_nvenc) with CPU fallback | render_engine.py:187-216 |
+| Browser automation | Playwright (chromium, persistent profile, TikTok upload) | routes/upload.py |
+| AI caption | Claude API (haiku-4-5) → Ollama → template fallback chain | caption_engine.py |
+| TTS | Platform TTS via voice_profiles.py | services/tts_service.py |
+| Audio enhancement | deepfilternet (optional noise reduction) | render_pipeline.py:1545 |
+| Storage | Local filesystem: APP_DATA_DIR / TEMP_DIR / CHANNELS_DIR | core/config.py |
+| Realtime | WebSocket (FastAPI) + 500ms SQLite poll per WS connection | routes/jobs.py:388-411 |
+
+**Infrastructure assumptions:** FFmpeg in PATH or bundled (no version check), Playwright chromium installed separately, single-process (no horizontal scaling), no auth layer.
+
+---
+
+### Feature 1 — Source Import / prepare-source
+
+**Purpose:** Convert a YouTube URL or local file into a validated preview session ready for render configuration.
+
+**Backend files:** `routes/render.py` (POST /api/render/prepare-source), `services/downloader.py` (check_youtube_download_health), `services/render_engine.py` (probe_video_metadata), `orchestration/render_pipeline.py` (lines 1251-1423)
+
+**Frontend files:** `screens/source.js`, `api/render.js` (prepareSource), `entities/source-session.js`
+
+**API:** `POST /api/render/prepare-source`
+
+**DB tables:** None — stored in `_PREVIEW_SESSIONS: dict` (routes/render.py:71)
+
+**Libraries:** yt-dlp (health probe only, no download), ffprobe (subprocess, 15s timeout)
+
+**Actual flow:**
+1. Frontend validates URL format client-side (basic `https://` prefix check in source.js)
+2. POST sent with `{ source_mode, youtube_url | source_video_path, output_dir }`
+3. Backend creates `session_id` (UUID), allocates `work_dir` in `TEMP_DIR/preview/`
+4. YouTube: `check_youtube_download_health()` probes format availability without downloading
+5. Local file: validates path exists on server filesystem
+6. `probe_video_metadata()` via ffprobe (15s timeout) — extracts duration/fps/resolution
+7. Session stored in `_PREVIEW_SESSIONS[session_id]`
+8. Returns `{ session_id, duration, title, preview_url, export_dir }`
+9. Frontend stores via `parsePrepareSourceResponse()` → `draftStore.setSession()` → navigates to `#/studio`
+
+**What works correctly:** YouTube health check detects age restrictions and geo-blocks. Local file probe extracts accurate metadata. 45s frontend timeout (PREPARE_TIMEOUT_MS) prevents stuck state.
+
+**Problems found:**
+- **P1:** `_PREVIEW_SESSIONS` dict has NO eviction. Sessions from abandoned configure steps accumulate indefinitely. `prune_preview_dirs()` cleans disk dirs at startup (6h TTL) but the in-memory dict is never pruned.
+- **P1:** Sessions not in DB. Server restart loses all sessions — users get 404 on preview-video URL with no explanation.
+- **P2:** `source_video_path` has no path scope validation. Crafted request can reference any server filesystem path; ffprobe will gracefully fail but the existence probe is a side-channel.
+- **P2:** No domain allowlist for YouTube URLs — any `https://` URL accepted; potential SSRF if yt-dlp follows redirects to internal addresses.
+
+**Recommended fixes:** Replace `_PREVIEW_SESSIONS` with `cachetools.TTLCache(maxsize=500, ttl=7200)`. Validate `source_video_path` is within allowed directories.
+
+**Priority:** P1
+
+---
+
+### Feature 2 — Preview Session (video streaming)
+
+**Purpose:** Stream the prepared source video to the browser for preview in Studio.
+
+**APIs:** `GET /api/render/preview-video/{session_id}`, `GET /api/render/preview-transcript/{session_id}`
+
+**Problems found:**
+- **P2:** HTTP byte-range (206 Partial Content) support for seeking not confirmed. Without it, browser video is not seekable.
+- **P2:** `GET /api/render/preview-transcript/{session_id}` exists and `parsePreviewTranscript()` entity is defined in source-session.js — but NO frontend screen displays the transcript. Users cannot review auto-generated subtitles before rendering.
+- **P2:** Preview-video URL unauthenticated — any client knowing a session_id can access source video.
+- **P2:** Studio screen 10s preview timeout (studio.js:471) hardcoded — fires even while browser buffers on slow connections, showing a false "unavailable" message.
+
+**Missing functionality:** Transcript preview UI; seekable video range requests.
+
+**Priority:** P2
+
+---
+
+### Feature 3 — Timeline / Segment Generation
+
+**Purpose:** Build an ordered list of candidate video segments from scene detection + viral scoring.
+
+**Backend files:** `orchestration/render_pipeline.py` (lines 1593-1683), `services/segment_builder.py`
+
+**Actual flow:**
+1. `build_segments_from_scenes_with_subtitles()` enriches scenes with `speech_density` from SRT
+2. `_generate_candidates()` sliding-window expansion: O(n²) on scene count — for each start scene, expand forward until duration > max_len
+3. Each candidate scored by `_score_candidate()` with 13 metrics (hook, scene quality, pacing, ending, continuity, duration_fit, speech_density, silence_penalty)
+4. `_select_non_overlapping()` greedy selection (>45% overlap threshold)
+5. Sorted by `part_order`: "timeline" (chronological), "viral" (score), "combined" (hook-first via Phase 59C)
+
+**What works correctly:** 13-metric viral scoring v3 is sophisticated. Early-video bonus rewards compelling openings. Non-overlapping selection prevents duplicate content.
+
+**Problems found:**
+- **P2:** O(n²) candidate generation. 2-hour video at 5 scenes/min = 600 scenes → ~180,000 candidates. No progress reporting during this computation.
+- **P2:** No user control to include/exclude individual scenes. Timeline is fully algorithmic.
+
+**Missing functionality:** Manual timeline editor; preview of segments before render.
+
+**Priority:** P2
+
+---
+
+### Feature 4 — Scene Detection
+
+**Purpose:** Identify scene cuts using pixel-level frame analysis.
+
+**Backend files:** `services/scene_detector.py`, `orchestration/render_pipeline.py` (lines 1569-1591)
+
+**Libraries:** `scenedetect` (ContentDetector + optional AdaptiveDetector), `cv2` (OpenCV), `ffprobe`
+
+**Actual flow:**
+1. `_get_video_fps()` via ffprobe subprocess — fallback to 30.0 FPS on any error (line 35)
+2. `_auto_frame_skip()` targets ~8-10 FPS analysis rate
+3. `scene_manager.detect_scenes()` with ContentDetector (threshold=28.0)
+4. `_compute_transition_scores()` opens video with `cv2.VideoCapture`, samples frame pairs at cuts
+
+**Problems found:**
+- **P1:** `cv2.VideoCapture` has NO timeout. Corrupted or exotic container formats can hang indefinitely, blocking the pipeline thread without releasing JOB_SEMAPHORE.
+- **P2:** Silent FPS fallback to 30.0 on ffprobe failure — incorrect timings if real FPS differs.
+- **P2:** AdaptiveDetector silently disabled via `try/except` if scenedetect version lacks it — no log warning.
+
+**Recommended fix:** Wrap cv2.VideoCapture in a thread with `join(timeout=60)`, kill if timeout exceeds.
+
+**Priority:** P1
+
+---
+
+### Feature 5 — Subtitle Generation
+
+**Purpose:** Generate SRT subtitle files from audio transcription for embedding into rendered clips.
+
+**Backend files:** `orchestration/render_pipeline.py` (lines 1715-1815), transcription adapter
+
+**Libraries:** Whisper / WhisperX (adapter pattern, model selectable per render profile)
+
+**Actual flow:**
+1. `has_audio_stream()` check — skips transcription for silent video
+2. Heartbeat thread starts (12s tick, prevents stall reporting)
+3. Transcription adapter called with source path + model (tiny/base/small/medium per profile)
+4. `full_srt` path existence + size checked (lines 1786-1788)
+5. On failure: `full_srt_available = False`, render continues WITHOUT subtitles (silent degradation)
+6. During part rendering: SRT sliced per-segment via `slice_srt_by_time(full_srt, start, end)`
+
+**What works correctly:** Non-blocking failure. Heartbeat prevents stall. Model quality follows render profile.
+
+**Problems found:**
+- **P1:** Transcription failure is SILENT in the UI. Job status message does not say "subtitles unavailable." User receives video without subtitles and may not understand why.
+- **P1:** `full_srt_available` not persisted to `result_json` — cannot distinguish "user disabled subtitles" vs "transcription silently failed."
+- **P1:** Full video transcribed even when `max_export_parts=1` and only a short segment of a long video will be used.
+- **P2:** No manual SRT upload path — users with high-quality transcripts cannot inject them.
+
+**Recommended fixes:** Write `subtitle_status: "failed"|"disabled"|"applied"` to result_json. Log WARNING when transcription fails. Pre-trim source to max_export range before transcription.
+
+**Priority:** P1
+
+---
+
+### Feature 6 — Subtitle Editing
+
+**Purpose:** Apply user-provided text edits to auto-generated subtitles before rendering.
+
+**Backend files:** `orchestration/render_pipeline.py` (lines 386-445: `_apply_subtitle_edits_to_srt()`), `routes/subtitle.py`, `models/schemas.py`
+
+**Frontend files:** **None — no subtitle editor screen exists in static-v2.**
+
+**Actual flow (backend only):**
+1. `subtitle_edits: list[dict]` in RenderRequest
+2. `_apply_subtitle_edits_to_srt()` finds SRT block by index, verifies timestamp ±0.5s
+3. If within tolerance: patches text. If drift > 0.5s: **silently skips edit with no log or user notification**
+
+**Problems found:**
+- **P1 (missing feature):** No subtitle editing UI. Backend infrastructure (edit API, preview PNG endpoint, edit application) fully implemented but not exposed to users.
+- **P1:** Silent edit skip on >0.5s timestamp drift — user's edit discarded without any feedback.
+- **P2:** `POST /api/subtitle/preview` returns base64 PNG — not wired to any frontend screen.
+
+**Missing functionality:** Subtitle editor screen, edit validation, styled preview.
+
+**Priority:** P1
+
+---
+
+### Feature 7 — Text Overlay Rendering
+
+**Purpose:** Render custom text overlays on clips using FFmpeg `drawtext` filter.
+
+**Backend files:** `services/text_overlay.py`, `services/render_engine.py` (render_part:799), `models/schemas.py` (TextLayerConfig)
+
+**Actual flow:**
+1. `normalize_text_layers()` validates up to 8 layers (font, size, color, position, timing)
+2. Each layer: SHA1-named temp `.txt` file for drawtext `textfile=` deduplication
+3. `append_text_layer_filters()` builds `drawtext=...` filter per layer, appended to FFmpeg filtergraph
+
+**What works correctly:** 8-layer MAX enforced. 14-font validation. Safe-zone clamping (3-97%). Subtitle zone collision avoidance. SHA1 deduplication.
+
+**Problems found:**
+- **P0:** `video_filter: Optional[str]` field concatenated UNSANITIZED to FFmpeg vf chain (routes/render.py:901-906). Allows injection of arbitrary FFmpeg filters.
+- **P1:** `_safe_text()` does not escape `;`, `[`, `]` — specially crafted overlay text could escape the drawtext filter context.
+- **P2:** Text overlay temp files in `data/temp/text_overlays/` NEVER cleaned up. Accumulate indefinitely.
+- **P2:** Text truncated at 4 lines by `_wrap_text_for_drawtext()` with no user warning.
+
+**Recommended fix (P0):** Validate `video_filter` against an allowlist of safe FFmpeg filter names, or remove the field from RenderRequest entirely.
+
+**Priority:** P0 (FFmpeg injection)
+
+---
+
+### Feature 8 — HTML Rendering
+
+**Not present in codebase.** No HTML-to-video rendering found. Not applicable.
+
+---
+
+### Feature 9 — Playwright Rendering (TikTok Upload Automation)
+
+**Purpose:** Automate TikTok video uploads using Playwright browser with persistent user profiles.
+
+**Backend files:** `routes/upload.py` (login-check endpoint, upload execution), `services/upload_engine.py`
+
+**Libraries:** Playwright (chromium, persistent profile)
+
+**Actual flow:**
+1. Each account has unique `profile_path` (Chromium user data dir)
+2. Login-check: Playwright opens profile, checks TikTok session cookies → updates `login_state`
+3. Upload: `upload_one_video(cfg, video_path)` automates upload flow with same profile
+4. Runtime locks acquired: `account_id` + `profile_path` (prevents concurrent same-account uploads)
+5. Locks released in `finally` block (upload.py:1134-1142)
+
+**What works correctly:** Dual lock prevents concurrent same-account uploads. Lock auto-recovery for stale/crashed processes. Categorized error codes (PLAYWRIGHT_BROWSER_MISSING, PROFILE_IN_USE, LOGIN_CHECK_FAILED).
+
+**Problems found:**
+- **P0:** `POST /api/dev/command` executes arbitrary dev commands with no auth — if accessible on LAN or via port-forward, this is RCE via Playwright and system.
+- **P1:** No explicit Playwright timeout in login-check or upload. Browser hang on headless Linux (no X display, corrupted profile) blocks worker thread indefinitely.
+- **P1:** Profile-in-use detection uses string matching on error message (upload.py:580-583) — fragile across Playwright versions.
+
+**Priority:** P0 (devtools RCE), P1 (Playwright hang)
+
+---
+
+### Feature 10 — FFmpeg Encoding
+
+**Purpose:** Encode each video segment with codec, quality settings, and filter chain.
+
+**Backend files:** `services/render_engine.py` (render_part, render_part_smart, _run_ffmpeg_with_retry), `orchestration/render_pipeline.py`
+
+**Libraries:** FFmpeg (subprocess), NVENC GPU encoder (NVENC_SEMAPHORE max=3)
+
+**Actual flow:**
+1. Video filter chain: scale+crop → zoom → padding → optional denoiser → effect preset → cinematic color/sharpen → format=yuv420p → optional fade-in → subtitle ASS → title drawtext → custom text layers → FPS
+2. Audio filter chain: loudnorm → acompressor (2:1, -18dB) → alimiter → optional atempo
+3. Codec: `_resolve_codec()` tries NVENC first (if `nvenc_available()` returns True), falls back to CPU
+4. `_run_ffmpeg_with_retry()`: 2 retries, 0.8s wait — **NO timeout parameter**
+
+**What works correctly:** CPU fallback on NVENC exception. Effect preset library (6 presets). Dynamic FPS cap (never upscales). NVENC_SEMAPHORE prevents GPU session overflow.
+
+**Critical problems:**
+- **P0:** `subprocess.run()` has NO `timeout=` parameter (render_engine.py:159-178). Hung FFmpeg holds JOB_SEMAPHORE indefinitely, blocking ALL future renders.
+- **P1:** `nvenc_available()` is `@lru_cache(maxsize=1)` (line 187) — computed once, never refreshed. GPU driver crash after startup → returns True → every render hits expensive NVENC→CPU fallback loop.
+- **P2:** `_PROBE_CACHE` (line 45) unbounded dict — accumulates probe results for every processed file.
+
+**Recommended fixes:**
+- `subprocess.run(command, ..., timeout=3600)` in `_run_ffmpeg_with_retry()` (P0)
+- Replace `@lru_cache` on `nvenc_available()` with `cachetools.TTLCache(maxsize=1, ttl=3600)` (P1)
+- Add `maxsize=200` LRU to `_PROBE_CACHE` (P2)
+
+**Priority:** P0
+
+---
+
+### Feature 11 — Audio Mixing
+
+**Purpose:** Mix optional TTS narration audio with original video audio track.
+
+**Backend files:** `services/audio_mix_service.py`, `orchestration/render_pipeline.py` (lines 1505-1567)
+
+**Libraries:** FFmpeg (amix filter), optional deepfilternet
+
+**Actual flow:**
+- `replace_original` mode: video + narration audio only
+- `keep_original_low` mode: `amix` — original at volume=0.25, narration at 1.0
+- `_has_audio_stream()` check prevents amix failure on silent video
+- `duration=first` limits output duration to video (narration truncated silently if longer)
+
+**Problems found:** No timeout on FFmpeg subprocess. deepfilternet silently skipped if not installed. TTS failure non-blocking but silent.
+
+**Priority:** P2
+
+---
+
+### Feature 12 — Video Part Rendering Loop
+
+**Purpose:** Render each selected segment as an independent output clip.
+
+**Backend files:** `orchestration/render_pipeline.py` (part loop), `services/render_engine.py` (render_part_smart), `core/stage.py` (JobPartStage), `services/db.py` (upsert_job_part)
+
+**DB tables:** job_parts (QUEUED → RENDERING → DONE/FAILED)
+
+**Problems found:**
+- **P1:** `_render_active_count` incremented AFTER JOB_SEMAPHORE.acquire() — monitoring shows active=0 while threads block on semaphore. False monitoring data.
+- **P1:** `_render_progress_timer()` detects stalls but only logs — no kill action (existing finding 2.2).
+- **P2:** Partial FFmpeg output left on disk if killed mid-encode. No cleanup before resume.
+
+**Priority:** P1
+
+---
+
+### Feature 13 — Part Merge / Concat
+
+**Purpose:** Optionally concatenate multiple rendered parts into a single output file.
+
+**Backend files:** `orchestration/render_pipeline.py` (concat stage), `services/render_engine.py`
+
+**Problems found:**
+- **P2:** No validation that all parts have matching codec/resolution/FPS before concat. Mismatched parameters produce corrupted output silently.
+- **P2:** No concat progress reporting to UI.
+
+**Priority:** P2
+
+---
+
+### Feature 14 — Final Output Generation
+
+**Purpose:** Compile ranked output list and quality assessment metadata into result_json.
+
+**Backend files:** `orchestration/render_pipeline.py` (`_compute_output_ranking_entry()`: lines 316-368, `_assess_output_quality()`: lines 894-1016)
+
+**Actual flow:**
+1. Weighted output score per part: viral(35%) + hook(20%) + retention(20%) + speech_density(10%) + market(10%) + duration_fit(5%)
+2. `_assess_output_quality()`: blackdetect + blurdetect FFmpeg subprocesses per part (no timeout)
+3. Full result_json written to `jobs` table (unbounded TEXT field)
+
+**Problems found:**
+- **P2:** result_json unbounded — 20-part render with full AI Phase 59-61 metadata can exceed 1MB per record.
+- **P2:** blackdetect/blurdetect subprocess calls have no timeout.
+
+**Priority:** P2
+
+---
+
+### Feature 15 — Render Job Creation
+
+**Purpose:** Validate a render request, create a DB record, and enqueue it.
+
+**Backend files:** `routes/render.py` (`POST /api/render/process`, `_queue_render_job()`: lines 547-586), `models/schemas.py`, `services/db.py`, `services/job_manager.py`
+
+**DB tables:** jobs (job_id, status="queued", payload_json)
+
+**Problems found:**
+- **P0:** `video_filter: Optional[str]` field has NO Pydantic validator — any string passes, including FFmpeg filter injection payloads.
+- **P0:** `source_video_path` and `output_dir` have no path scope validation.
+- **P1:** Non-atomic check-then-act in `_queue_render_job()` (lines 547-586) — two concurrent resume/retry requests can both pass `is_running()` before either calls `submit_job()`.
+- **P2:** No request body size limit — `subtitle_edits` list could have 100,000 items.
+
+**Priority:** P0
+
+---
+
+### Feature 16 — Render Queue
+
+**Purpose:** Maintain ordered priority queue with concurrency control.
+
+**Backend files:** `services/job_manager.py`, `routes/jobs.py` (GET /api/jobs/queue/status)
+
+**State:** `_pending` min-heap, `_active_job_ids` set, `_cond` Condition, `_lock` mutex
+
+**Problems found:**
+- **P1:** O(n) deduplication check (line 178): linear scan of entire heap on every `submit_job()`. Degrades at 1,000+ pending jobs.
+- **P1:** Queue not persisted — restart clears all pending jobs.
+- **P2:** No priority aging — low-priority jobs can starve indefinitely.
+
+**Priority:** P1
+
+---
+
+### Feature 17 — Job Lifecycle
+
+**Purpose:** Track and enforce status transitions throughout a job's lifecycle.
+
+**Problems found:**
+- **P2:** No DB-level transition enforcement. Any status can be written from any state.
+- **P2:** `completed_with_errors` status defined in frontend TERMINAL_STATUSES but exact backend write conditions unclear from code.
+- **P2:** No job transition audit log — single status field, no history.
+
+**Priority:** P2
+
+---
+
+### Feature 18 — Job Progress Updates
+
+**Purpose:** Update render progress percentage and stage label in real-time.
+
+**Backend files:** `orchestration/render_pipeline.py` (`_emit_render_event()`, heartbeat thread:1737-1753, `_render_progress_timer()`:463-554), `services/db.py`
+
+**Problems found:**
+- **P1:** `_render_progress_timer()` detects stalls but only logs — no action taken (existing finding 2.2). Stalled FFmpeg continues consuming JOB_SEMAPHORE slot.
+- **P1:** Progress estimation during FFmpeg is time-based (70%→99%) — not actual encode progress. Long encodes show 99% for extended periods.
+- **P2:** 500ms DB poll per WS connection — 10 concurrent tabs = 20 DB reads/sec.
+
+**Priority:** P1
+
+---
+
+### Feature 19 — WebSocket Monitoring
+
+**Purpose:** Push real-time job status updates to browser clients.
+
+**Backend files:** `routes/jobs.py` (WebSocket endpoint: lines 388-411)
+
+**Frontend files:** `transport.js` (openJobStream, tryWs), `store/monitor.js`
+
+**API:** `WebSocket /ws/jobs/{jobId}`
+
+**Actual flow:**
+1. Client opens WS; backend sends current state immediately
+2. Backend: 500ms poll → send state → `if status in {"completed","failed"}: break`
+3. Client: onmessage → normalize → update monitorStore → sync renderSessionStore
+
+**Problems found:**
+- **P1 (confirmed):** Backend WS only breaks on `{"completed","failed"}` — NOT `interrupted` or `completed_with_errors`. WS server-side loop leaks for these statuses until client disconnects. After N restarts with interrupted jobs, history page opens N non-terminating WS connections.
+- **P1:** No WS authentication — any client knowing a job_id can monitor it.
+- **P2:** Full state sent every 500ms tick regardless of whether anything changed.
+- **P2:** No rate limit on WS connections per job_id.
+
+**Fix (one line):** `if job.get("status") in ("completed", "failed", "interrupted", "completed_with_errors"): break`
+
+**Priority:** P1
+
+---
+
+### Feature 20 — Polling Fallback
+
+**Purpose:** Fall back to HTTP polling when WebSocket unavailable.
+
+**Frontend files:** `transport.js` (`doPoll()`: lines 25-56)
+
+**Actual flow:** WS `error`/`close` → `usingPolling=true` → `doPoll()` every 3000ms
+
+**Problems found:**
+- **P2:** No WS reconnect backoff — falls immediately to polling with no WS reconnect attempts.
+- **P2:** WS `close` always triggers polling, even on clean server-side job completion.
+- **P2:** Poll errors silently caught (lines 46-47) — 5xx responses leave UI showing stale state.
+
+**Priority:** P2
+
+---
+
+### Feature 21 — Job Recovery After Restart
+
+**Purpose:** Handle jobs that were in-progress when server was killed.
+
+**Backend files:** `services/job_manager.py` (`recover_pending_render_jobs()`: lines 225-263), `main.py` (startup:128)
+
+**Actual flow:** On startup: marks queued/running jobs as `interrupted` with resume message. Does NOT auto-restart.
+
+**Problems found:**
+- **P2:** No auto-restart. Server deploy kills all in-progress renders; users must manually resume each.
+- **P1:** No partial output checkpoint. If temp dirs pruned at startup before recovery, resume re-renders all parts from scratch.
+
+**Priority:** P1
+
+---
+
+### Feature 22 — Resume Render
+
+**Purpose:** Resume an interrupted render from last checkpoint.
+
+**Backend files:** `routes/render.py` (`POST /api/render/resume/{job_id}`), `orchestration/render_pipeline.py` (resume_mode=True)
+
+**Actual flow:**
+1. Loads original payload from DB, calls `run_render_pipeline(resume_mode=True)`
+2. Skips re-transcription if `full_srt` exists on disk
+3. Skips parts with status=DONE in job_parts
+
+**Problems found:**
+- **P1:** Resume skips DONE parts without verifying `output_file` exists on disk (existing finding 2.3). Missing files → result_json has bad paths → download silently fails.
+- **P1:** If YouTube source temp download was pruned, resume must re-download — fails if video made private.
+- **P2:** `_PREVIEW_SESSIONS` not preserved across restarts — session-based sources fail on resume.
+
+**Priority:** P1
+
+---
+
+### Feature 23 — Retry Render
+
+**Purpose:** Re-render a failed job with original configuration.
+
+**Backend files:** `routes/render.py` (`POST /api/render/retry/{job_id}`)
+
+**Problems found:**
+- **P2:** Old failed job DB record not deleted — Library accumulates failed + retried pairs.
+- **P2:** No partial result carry-over — starts from scratch even if some parts succeeded.
+- **P2:** No pre-retry cleanup of failed job's temp files.
+
+**Priority:** P2
+
+---
+
+### Feature 24 — Cancel Render
+
+**Purpose:** Immediately stop an in-progress render.
+
+**Backend files:** `routes/render.py` (`POST /api/render/{job_id}/cancel`)
+
+**Critical problem:**
+- **P1:** Cancel marks DB record as `interrupted` but does NOT kill the running FFmpeg subprocess. Process continues consuming CPU/GPU and JOB_SEMAPHORE slot until naturally completing. For a long encode, cancelling is effectively a no-op for resource consumption.
+- **P1:** No PID tracking for active FFmpeg processes.
+
+**Fix:** Maintain `_ACTIVE_PROCS: dict[str, subprocess.Popen]` and call `_ACTIVE_PROCS[job_id].kill()` on cancel.
+
+**Priority:** P1
+
+---
+
+### Feature 25 — Batch Render
+
+**Purpose:** Render multiple video configurations in a single API call.
+
+**Backend files:** `routes/render.py` (`POST /api/render/process/batch`, `_run_batch()`: lines 652-666)
+
+**Critical problems (confirmed):**
+- **P0:** `_run_batch()` calls `process_render(child_id, ...)` directly — bypasses JOB_SEMAPHORE and MAX_CONCURRENT_JOBS. A batch of 10 launches 10 simultaneous FFmpeg processes regardless of configured limits.
+- **P0:** Two concurrent batch submissions = unlimited FFmpeg processes.
+
+**Fix:** Replace direct `process_render()` calls with `submit_job()` inside `_run_batch()`.
+
+**Priority:** P0
+
+---
+
+### Feature 26 — Download System
+
+**Purpose:** Download public videos (YouTube, Facebook, Instagram) via yt-dlp.
+
+**Backend files:** `routes/download.py`, `services/downloader.py`
+
+**Frontend files:** `screens/downloads.js`, `api/download.js`
+
+**Libraries:** yt-dlp (10-strategy YouTube fallback, 4 concurrent fragments, 8 retries per attempt)
+
+**Actual flow:**
+1. Frontend submits `{ urls: string[], output_dir?: string }`
+2. Protocol-only URL validation (no domain allowlist)
+3. `process_download_batch()` — ThreadPoolExecutor with `_MAX_PARALLEL_DOWNLOADS=2`
+4. `_unique_output_path()` builds collision-safe path (TOCTOU race)
+5. Result stored as job in DB
+
+**Problems found:**
+- **P0 (SSRF):** No domain allowlist for download URLs. yt-dlp accepts any URL including internal network addresses (`http://169.254.169.254/`, `http://10.0.0.1/`).
+- **P1 (TOCTOU):** `_unique_output_path()` (lines 74-81): check-then-create race. Two concurrent downloads can pick the same path before either writes.
+- **P1 (path traversal):** `output_dir` user-controlled, no path scope validation. Downloads can be directed to arbitrary filesystem locations.
+
+**Recommended fixes:**
+- Allowlist: youtube.com, instagram.com, facebook.com, tiktok.com (P0)
+- Atomic create: `open(path, 'x')` in loop (P1)
+- Validate `output_dir` within APP_DATA_DIR or user home (P1)
+
+**Priority:** P0 (SSRF), P1 (TOCTOU, path traversal)
+
+---
+
+### Feature 27 — Download Retry
+
+**Purpose:** Retry failed downloads within a batch.
+
+**Problems found:**
+- **P2:** Frontend always sends empty `part_numbers=[]` (downloads.js:195) — no per-item retry UI.
+- **P2:** No exponential backoff between retry attempts.
+
+**Priority:** P2
+
+---
+
+### Feature 28 — Download Path Handling
+
+**Purpose:** Determine collision-safe output file path for downloads.
+
+**Backend files:** `routes/download.py` (`_unique_output_path()`: lines 74-81)
+
+**Confirmed TOCTOU race:** See Feature 26. Fix: `open(candidate, 'x')` atomic create in loop.
+
+**Priority:** P1
+
+---
+
+### Feature 29 — History System
+
+**Purpose:** Display list of past render jobs with status and results.
+
+**Backend files:** `routes/jobs.py` (`GET /api/jobs/history`:251), `services/db.py` (`list_jobs()`)
+
+**Frontend files:** `screens/library.js`, `api/jobs.js`
+
+**Critical problems:**
+- **P0:** Hard 30-item cap (`safe_limit = max(1, min(30, requested_limit))`) with NO pagination. >30 renders silently truncated.
+- **P1 (unbounded SELECT):** `list_jobs()` in db.py has no SQL LIMIT clause — fetches ENTIRE jobs table into memory. On 10,000 jobs: loads 10,000 rows before Python slices to 30.
+- **P1 (N+1):** 1 list_jobs + N list_job_parts calls = 1+30 sequential queries per history page.
+- **P2:** No server-side search or status filter — all filtering client-side only.
+
+**Recommended fixes:**
+- Add `LIMIT ? OFFSET ?` to `list_jobs()` SQL (P1)
+- Add pagination to history API endpoint (P0)
+- JOIN job_parts in single query using GROUP BY aggregate (P1)
+
+**Priority:** P0, P1
+
+---
+
+### Feature 30 — Job Parts History
+
+**Purpose:** Show per-segment scores, status, and output files for a completed job.
+
+**DB tables:** job_parts (part_no, status, viral_score, motion_score, hook_score, output_file)
+
+**Problems found:**
+- **P2:** `output_file` stored as absolute filesystem path — stale if disk remounted or files moved.
+- **P2:** `streamUrl` derived client-side from jobId + partNo (not from DB) — breaks if stream endpoint path changes.
+- **P2:** No file size or actual duration stored per part.
+
+**Priority:** P2
+
+---
+
+### Feature 31 — Re-run from History
+
+**Purpose:** Start new render from stored configuration of past job.
+
+**Problems found:**
+- **P2:** No payload pre-validation — fails mid-render if YouTube URL is now private/deleted.
+- **P2:** No configuration modification UI — re-run uses original settings verbatim.
+
+**Priority:** P2
+
+---
+
+### Feature 32 — Logs Viewing
+
+**Purpose:** View render process log for a job in the monitor screen's log drawer.
+
+**Backend files:** `routes/jobs.py` (`GET /api/jobs/{jobId}/logs`, `_resolve_job_log_path()`)
+
+**Frontend files:** `components/log-drawer.js`, `screens/monitor.js`
+
+**Critical security problem:**
+- **P0:** `_resolve_job_log_path()` builds file path from `payload_json.output_dir` — user-controlled input from original render request. Crafted `output_dir` value (e.g., `../../../../../../`) allows path traversal to read arbitrary server files via the logs endpoint.
+
+**Fix:** Validate resolved log path is within `APP_DATA_DIR` using `Path.resolve().is_relative_to(allowed_base)`.
+
+**Priority:** P0 (arbitrary file read)
+
+---
+
+### Feature 33 — Temp File Cleanup
+
+**Purpose:** Remove temporary files from render and download operations.
+
+**Backend files:** `services/maintenance.py`, `main.py` (startup), `routes/download.py` (finally block)
+
+**Critical problems:**
+- **P1:** Render temp dirs (TEMP_DIR root) NOT pruned by maintenance.py — only `TEMP_DIR/preview/` is cleaned. Downloaded YouTube sources, intermediate audio, and per-job working dirs accumulate indefinitely.
+- **P1:** `data/temp/text_overlays/*.txt` files (text_overlay.py) NEVER cleaned up.
+- **P1:** Both prune functions run at STARTUP ONLY — not during operation. Long-running server accumulates between restarts.
+
+**Recommended fixes:** Add `prune_render_temp_dirs()` to maintenance.py. Schedule periodic cleanup (every 6h). Add cleanup to `run_render_pipeline()` finally block.
+
+**Priority:** P1
+
+---
+
+### Feature 34 — Preview Cleanup
+
+**Backend files:** `services/maintenance.py` (`prune_preview_dirs()`), `main.py` (startup:126)
+
+**Problems found:**
+- **P1:** `_PREVIEW_SESSIONS` dict NOT cleaned — memory leak persists after disk cleanup removes work_dirs.
+- **P2:** 6h TTL could prune active session dirs during long renders.
+
+**Priority:** P1
+
+---
+
+### Feature 35 — Output Cleanup
+
+**Purpose:** Remove output files when job deleted from history.
+
+**Problems found:**
+- **P1:** `DELETE /api/jobs/{jobId}` removes DB record only — output MP4/SRT files orphaned on disk.
+- **P2:** No delete confirmation dialog in frontend — permanent delete with no undo.
+
+**Priority:** P1 (orphaned files), P2 (no confirmation)
+
+---
+
+### Feature 36 — Static File Serving
+
+**Backend files:** `main.py` (StaticFiles mount, root handler)
+
+**Critical problem:**
+- **P0:** SPA catch-all route missing. `GET /` returns index.html but `GET /projects/abc` returns 404. Browser refresh on any deep route fails.
+
+**Fix:**
+```python
+@app.get("/{path:path}", include_in_schema=False)
+async def spa_fallback(path: str):
+    if not (path.startswith("api/") or path.startswith("ws/")):
+        return FileResponse("backend/static-v2/index.html")
+    raise HTTPException(404)
+```
+
+- **P2:** No content-hash cache-busting on static assets.
+- **P2:** `STATIC_UI_VERSION` env var undocumented.
+
+**Priority:** P0
+
+---
+
+### Feature 44 — API Validation
+
+**Backend files:** `models/schemas.py`, all route files
+
+**What works:** Pydantic validates most fields. Font, aspect ratio, codec, preset all constrained.
+
+**Critical gaps:**
+- **P0:** `video_filter: Optional[str]` — NO validator. FFmpeg injection possible.
+- **P0:** `source_video_path: Optional[str]` — NO path scope validation.
+- **P0:** `output_dir: Optional[str]` — NO path scope validation.
+- **P1:** `subtitle_edits: list` — NO max length.
+- **P1:** No global request body size limit on FastAPI app.
+- **P2:** `youtube_url` validated only as non-empty string — accepts internal addresses.
+
+**Priority:** P0
+
+---
+
+### Feature 45 — Database Schema
+
+**Tables from `db.py` `init_db()`:**
+
+| Table | Notes |
+|---|---|
+| jobs | payload_json + result_json unbounded TEXT |
+| job_parts | UNIQUE(job_id, part_no); output_file as absolute path |
+| upload_accounts | login_state, daily_limit, cooldown |
+| upload_queue | status, scheduled_at, attempt_count, max_attempts=3 |
+| upload_runtime_locks | UNIQUE(lock_type, resource_key, active); TTL via expires_at |
+| upload_proxy_pool | **credentials stored plaintext** |
+| upload_scheduler_state | singleton row "main" |
+| upload_history | completed upload records |
+
+**Problems found:**
+- **P1:** Proxy credentials stored plaintext in upload_proxy_pool.
+- **P2:** No index on `jobs.status` or `jobs.updated_at` — full table scan on every list_jobs().
+- **P2:** No index on `job_parts.job_id` — full scan per list_job_parts() call.
+- **P2:** `_ensure_columns()` migration is ADD-only. Column renames require manual schema migration.
+
+**Priority:** P1 (plaintext creds), P2 (missing indexes)
+
+---
+
+### Feature 46 — Database Performance
+
+**Confirmed patterns from `db.py`:**
+- Per-call connection creation: `get_conn()` opens + configures new connection on every query. No pool.
+- WAL mode: allows concurrent reads. Writes serialize.
+- N+1 in history API: 1 + 30 queries per page (Feature 29).
+- Unbounded `list_jobs()` SELECT: no LIMIT clause.
+
+**Performance projections:**
+- 1-10 concurrent renders: acceptable
+- 10-50 concurrent renders: connection setup overhead noticeable
+- 1,000+ jobs: `list_jobs()` becomes bottleneck
+
+**Priority:** P1 (unbounded SELECT), P2 (connection overhead)
+
+---
+
+### Feature 47 — Security Model
+
+**Overall: Designed as single-user local desktop tool. NOT safe for multi-user or internet-facing deployment.**
+
+| Severity | Issue | Location |
+|---|---|---|
+| **P0** | FFmpeg injection via `video_filter` (unsanitized concat to vf_parts) | `routes/render.py:901-906` |
+| **P0** | Arbitrary file read via log endpoint (`output_dir` used in path construction) | `routes/jobs.py:_resolve_job_log_path` |
+| **P0** | `POST /api/dev/command` — no auth, executes arbitrary commands | `routes/devtools.py:14-23` |
+| **P0** | SSRF via download URL — no domain allowlist | `routes/download.py` |
+| **P0** | Path traversal via `output_dir` + `source_video_path` | `models/schemas.py` |
+| **P1** | No authentication on ANY endpoint | All routes |
+| **P1** | No CSRF protection on mutating endpoints | All mutating routes |
+| **P1** | Proxy credentials stored plaintext in SQLite | `db.py:upload_proxy_pool` |
+| **P1** | WS endpoints unauthenticated | `routes/jobs.py`, `routes/upload.py` |
+| **P2** | No rate limiting | All routes |
+| **P2** | No API key rotation mechanism | `services/caption_engine.py` |
+
+**Minimum hardening before any external exposure:** authenticated reverse proxy + gate devtools to DEBUG=1 + validate `video_filter`/`output_dir`/`source_video_path` + fix log path traversal + download URL allowlist.
+
+**Priority:** P0
+
+---
+
+### Feature 48 — Environment / Config Handling
+
+**Backend files:** `core/config.py`, `main.py`
+
+**What works:** All key paths configurable via env vars. PyInstaller frozen mode detected. Cache dirs redirected at startup.
+
+**Problems found:**
+- **P2:** No `.env.example` — developers must read config.py to discover available env vars.
+- **P2:** No startup env var validation — misspelled env vars silently use defaults.
+- **P2:** `MAX_CONCURRENT_JOBS` and `MAX_RENDER_JOBS` must match (finding 1.1) — dependency undocumented and unenforced.
+- **P2:** `STATIC_UI_VERSION` gate undocumented.
+
+**Priority:** P2
+
+---
+
+### Feature 49 — Devtools / Debug Endpoints
+
+**Backend files:** `routes/devtools.py`, `services/dev_commands.py`
+
+**Critical finding:**
+- **P0:** `POST /api/dev/command` accepts `{ command: str }` and executes arbitrary Python/system commands with NO authentication, NO authorization, NO network restriction. Router included unconditionally in `main.py` — always active.
+- If accessible beyond localhost (LAN, port-forward, permissive reverse proxy) → unauthenticated RCE.
+
+**Fix:**
+```python
+# main.py — gate to DEBUG mode only
+if os.getenv("DEBUG") == "1":
+    app.include_router(devtools_router)
+```
+
+**Priority:** P0
+
+---
+
+### Feature 50 — Production Deployment Readiness
+
+| Requirement | Status | Risk |
+|---|---|---|
+| Single-user localhost tool | ✅ Works as designed | — |
+| Multi-user server | ❌ No auth layer | P0 |
+| Internet-facing deployment | ❌ Critical security gaps | P0 |
+| Horizontal scaling | ❌ In-memory state (job_manager, _PREVIEW_SESSIONS) | P1 |
+| Process restart resilience | ⚠️ Jobs interrupted, no auto-restart | P1 |
+| Disk space management | ⚠️ Render temp dirs not cleaned | P1 |
+| FFmpeg subprocess safety | ❌ No timeout | P0 |
+| Database scaling | ⚠️ SQLite, no connection pool, unbounded queries | P2 |
+| Static asset caching | ❌ No content hash | P2 |
+| Health check | ✅ `/api/health` exists | — |
+| Graceful shutdown | ⚠️ `shutdown(wait=False)` — active renders interrupted | P1 |
+| Log rotation | ✅ `prune_job_logs()` handles | — |
+| Observability / metrics | ⚠️ AI execution metrics only | P2 |
+| Environment documentation | ❌ No .env.example | P2 |
+
+**P0 blockers for any external deployment:**
+1. Gate `devtools_router` to `DEBUG=1`
+2. Add `timeout=3600` to FFmpeg subprocess calls
+3. Validate `video_filter`, `output_dir`, `source_video_path`
+4. Fix `_resolve_job_log_path()` path traversal
+5. Add domain allowlist for download URLs
+6. Deploy behind authenticated reverse proxy
+
+**Priority:** P0
+
+---
+
+### Consolidated Roadmap (Backend)
+
+#### P0 — Must fix before any external access
+
+| ID | Fix | File |
+|---|---|---|
+| B0-1 | Add subprocess timeout to all FFmpeg calls | `render_engine.py:159-178` |
+| B0-2 | Gate devtools router to DEBUG=1 | `main.py`, `routes/devtools.py` |
+| B0-3 | Validate/remove `video_filter` field | `models/schemas.py`, `routes/render.py:901` |
+| B0-4 | Fix `_resolve_job_log_path()` path traversal | `routes/jobs.py` |
+| B0-5 | Add domain allowlist for download URLs (SSRF) | `routes/download.py` |
+| B0-6 | Validate `output_dir` and `source_video_path` path scope | `models/schemas.py` |
+| B0-7 | Fix batch render to use submit_job() | `routes/render.py:652-666` |
+| B0-8 | Add SPA catch-all route | `main.py` |
+| B0-9 | Add Library pagination | `routes/jobs.py:251`, `db.py:list_jobs` |
+
+#### P1 — Fix for production reliability
+
+| ID | Fix | File |
+|---|---|---|
+| B1-1 | Fix WS break condition for interrupted/completed_with_errors | `routes/jobs.py:411` |
+| B1-2 | Evict `_PREVIEW_SESSIONS` with TTLCache | `routes/render.py:71` |
+| B1-3 | Prune render temp dirs + schedule periodic cleanup | `services/maintenance.py` |
+| B1-4 | Delete output files on job delete | `routes/jobs.py:DELETE` |
+| B1-5 | Kill FFmpeg on cancel (PID tracking) | `routes/render.py:cancel`, `render_engine.py` |
+| B1-6 | Verify output_file exists before skipping in resume | `render_pipeline.py:1689` |
+| B1-7 | Add LIMIT to list_jobs() SQL | `services/db.py` |
+| B1-8 | Fix N+1 in history API with JOIN aggregate | `routes/jobs.py:_normalize_history_item` |
+| B1-9 | Add timeout to cv2.VideoCapture in scene_detector | `services/scene_detector.py` |
+| B1-10 | Add stall → kill action in _render_progress_timer | `render_pipeline.py:463-554` |
+| B1-11 | Replace nvenc_available() lru_cache with TTL cache | `render_engine.py:187` |
+| B1-12 | Atomic job submission (DB optimistic lock) | `routes/render.py:547-586` |
+
+#### P2 — Polish and scalability
+
+| ID | Fix | File |
+|---|---|---|
+| B2-1 | Add .env.example | root |
+| B2-2 | Log transcription failure in job status message | `render_pipeline.py:1798` |
+| B2-3 | Add LRU eviction to _PROBE_CACHE (maxsize=200) | `render_engine.py:45` |
+| B2-4 | Add range request support to preview-video endpoint | `routes/render.py` |
+| B2-5 | Build subtitle editor UI | new screen |
+| B2-6 | Optional auto-restart of interrupted jobs on startup | `services/job_manager.py` |
+| B2-7 | Content-hash cache-busting for static assets | `main.py`, build process |
+| B2-8 | Store proxy credentials via env var instead of plaintext DB | `services/db.py` |
+| B2-9 | Add PRAGMA wal_checkpoint to periodic maintenance | `services/maintenance.py` |
+| B2-10 | Add SQL indexes on jobs.status, jobs.updated_at, job_parts.job_id | `services/db.py:init_db` |
