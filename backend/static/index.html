@@ -918,22 +918,23 @@
             <button class="aiActionBtn" onclick="EditorAiActions?.smartClipPrioritization?.()">Best First</button>
             <button class="aiActionBtn" onclick="EditorAiActions?.viralMode?.()">Viral Mode</button>
             <button class="aiActionBtn" onclick="EditorAiActions?.cinematicMode?.()">Cinematic</button>
-            <button class="aiActionBtn" onclick="EditorAiActions?.subtitleCleanup?.()">Fix Subs</button>
+          </div>
+          <div class="evStorySubtleAction">
+            <button class="evTinyBtn" onclick="EditorAiActions?.subtitleCleanup?.()">quick subtitle fix →</button>
           </div>
         </div>
       </div>
 
       <!-- Timeline Variants & Snapshots — promoted (was inside collapsed AI group) -->
-      <div class="evSection insp-panel-active" id="evSectionVariants" data-insp-panel="mode">
-        <div class="aiSectionLabel" style="margin-bottom:6px">Timeline Variants</div>
+      <div class="evCompactRail insp-panel-active" id="evSectionVariants" data-insp-panel="mode">
         <div class="aiVariantGrid">
           <button class="aiVariantBtn" id="aiVariant_viral"       onclick="EditorAiSessions?.applyVariant?.('viral')">Viral</button>
           <button class="aiVariantBtn" id="aiVariant_cinematic"   onclick="EditorAiSessions?.applyVariant?.('cinematic')">Cinematic</button>
           <button class="aiVariantBtn" id="aiVariant_aggressive"  onclick="EditorAiSessions?.applyVariant?.('aggressive')">Aggressive</button>
           <button class="aiVariantBtn" id="aiVariant_balanced"    onclick="EditorAiSessions?.applyVariant?.('balanced')">Balanced</button>
         </div>
-        <div style="margin-top:10px">
-          <div class="aiSectionLabel" style="margin-bottom:4px">Snapshots</div>
+        <div style="margin-top:6px">
+          <div class="aiSectionLabel" style="margin-bottom:4px;opacity:.55">Snapshots</div>
           <div id="aiSnapshotList" class="aiSnapshotList"><div class="aiSnapshotEmpty">No snapshots yet</div></div>
         </div>
       </div>
@@ -978,6 +979,49 @@
         </div>
         <input type="hidden" id="evEffectPreset" value="">
         <input type="hidden" id="evLoudnormEnabled" value="0">
+      </div>
+
+      <!-- Market / Target — where are you publishing? (before technical output config) -->
+      <div class="evSection mvPanel" id="evSectionMarket" data-insp-panel="performance">
+        <div class="evSectionTitle">🌍 Market &amp; Target</div>
+        <div class="mvPanelDesc">Market scoring, subtitle tone, and hook optimization for every exported clip.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <label class="field">
+            <span class="fieldLabel">Target Market</span>
+            <select class="fieldInput" id="mvMarket" onchange="mvHandleChange()">
+              <option value="US" selected>🇺🇸 US</option>
+              <option value="EU">🇪🇺 EU</option>
+              <option value="JP">🇯🇵 JP</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="fieldLabel">Subtitle Tone</span>
+            <select class="fieldInput" id="mvSubtitleTone" onchange="mvHandleChange()">
+              <option value="clean" selected>Clean</option>
+              <option value="bold">Bold</option>
+              <option value="karaoke">Karaoke</option>
+            </select>
+          </label>
+        </div>
+        <div class="mvToggleGroup">
+          <label class="mvToggleRow">
+            <input type="checkbox" id="mvAutoBestClips" onchange="mvHandleAutoBestClips()">
+            <span class="mvToggleLabel">✨ Auto Best Clips</span>
+          </label>
+          <label class="mvToggleRow">
+            <input type="checkbox" id="mvKeywordHighlight" onchange="mvHandleChange()">
+            <span class="mvToggleLabel">🔑 Keyword Highlight</span>
+          </label>
+          <label class="mvToggleRow">
+            <input type="checkbox" id="mvBestExportEnabled" onchange="mvHandleChange()">
+            <span class="mvToggleLabel">📦 Auto Best Export</span>
+          </label>
+        </div>
+        <div id="mvHookCard" class="mvHookCard hiddenView">
+          <div id="mvHookCardInner"></div>
+        </div>
+        <button class="ghostButton" id="mvAnalyzeBtn" style="width:100%;margin-top:8px;font-size:12px" onclick="mvAnalyzeMarket()">Analyze Market</button>
+        <div id="aiux_strategy_panel" class="aiuxStrategyPanel hiddenView"></div>
       </div>
 
       <!-- Output settings — moved to Export tab -->
@@ -1133,12 +1177,14 @@
         </div>
       </div>
 
-      <!-- P1.8-I: Text Overlay Layers (full runtime editor) -->
-      <div class="evSection" id="evSectionTextLayers" data-section-type="text-layers" data-insp-panel="text">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <div class="evSectionTitle" style="margin-bottom:0">Text Layers</div>
-          <span id="evSummaryTextLayers" style="font-size:10px;color:var(--text-mut)"></span>
+      <!-- P1.8-I: Text Overlay Layers — collapsible (opens when layers exist) -->
+      <div class="inspCollapsedGroup" data-insp-panel="text">
+        <div class="inspGroupHdr" id="inspGroupTextLayersHdr" onclick="evToggleInspGroup('text-layers')">
+          <span>Text Layers <span id="evSummaryTextLayers" style="font-size:10px;opacity:.45;font-weight:400"></span></span>
+          <span class="inspGroupArrow">▸</span>
         </div>
+        <div class="inspGroupBody" id="inspGroupTextLayersBody">
+      <div class="evSection" id="evSectionTextLayers" data-section-type="text-layers" data-insp-panel="text">
         <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
           <button class="ghostButton" style="font-size:11px;padding:4px 8px" onclick="evAddTextLayer()">+ Layer</button>
           <div id="edTxtStylePresets" style="display:flex;gap:4px;flex-wrap:wrap"></div>
@@ -1260,6 +1306,8 @@
               <span class="fieldLabel" style="margin:0">Locked</span>
             </label>
           </div>
+        </div>
+      </div>
         </div>
       </div>
 
@@ -1425,49 +1473,6 @@
             </div>
           </div>
         </div>
-      </div>
-
-      <!-- Market Viral panel — surfaced in Export tab -->
-      <div class="evSection mvPanel" id="evSectionMarket" data-insp-panel="performance">
-        <div class="evSectionTitle">🌍 Market Viral (All Clips)</div>
-        <div class="mvPanelDesc">Market scoring, subtitle tone, and hook optimization for every exported clip.</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-          <label class="field">
-            <span class="fieldLabel">Target Market</span>
-            <select class="fieldInput" id="mvMarket" onchange="mvHandleChange()">
-              <option value="US" selected>🇺🇸 US</option>
-              <option value="EU">🇪🇺 EU</option>
-              <option value="JP">🇯🇵 JP</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="fieldLabel">Subtitle Tone</span>
-            <select class="fieldInput" id="mvSubtitleTone" onchange="mvHandleChange()">
-              <option value="clean" selected>Clean</option>
-              <option value="bold">Bold</option>
-              <option value="karaoke">Karaoke</option>
-            </select>
-          </label>
-        </div>
-        <div class="mvToggleGroup">
-          <label class="mvToggleRow">
-            <input type="checkbox" id="mvAutoBestClips" onchange="mvHandleAutoBestClips()">
-            <span class="mvToggleLabel">✨ Auto Best Clips</span>
-          </label>
-          <label class="mvToggleRow">
-            <input type="checkbox" id="mvKeywordHighlight" onchange="mvHandleChange()">
-            <span class="mvToggleLabel">🔑 Keyword Highlight</span>
-          </label>
-          <label class="mvToggleRow">
-            <input type="checkbox" id="mvBestExportEnabled" onchange="mvHandleChange()">
-            <span class="mvToggleLabel">📦 Auto Best Export</span>
-          </label>
-        </div>
-        <div id="mvHookCard" class="mvHookCard hiddenView">
-          <div id="mvHookCardInner"></div>
-        </div>
-        <button class="ghostButton" id="mvAnalyzeBtn" style="width:100%;margin-top:8px;font-size:12px" onclick="mvAnalyzeMarket()">Analyze Market</button>
-        <div id="aiux_strategy_panel" class="aiuxStrategyPanel hiddenView"></div>
       </div>
 
       <!-- Batch mode panel -->

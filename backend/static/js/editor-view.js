@@ -1670,10 +1670,11 @@ function _evUpdateReadiness() {
 /* ── Inspector group collapse ────────────────────────────── */
 function evToggleInspGroup(group) {
   const groupMap = {
-    audio:       { body: 'inspGroupAudioBody',   hdr: 'inspGroupAudioHdr' },
-    performance: { body: 'inspGroupPerfBody',    hdr: 'inspGroupPerfHdr' },
-    advanced:    { body: 'inspGroupAdvBody',     hdr: 'inspGroupAdvHdr' },
-    'ai-edit':   { body: 'inspGroupAiEditBody',  hdr: 'inspGroupAiEditHdr' },
+    audio:         { body: 'inspGroupAudioBody',      hdr: 'inspGroupAudioHdr' },
+    performance:   { body: 'inspGroupPerfBody',       hdr: 'inspGroupPerfHdr' },
+    advanced:      { body: 'inspGroupAdvBody',        hdr: 'inspGroupAdvHdr' },
+    'ai-edit':     { body: 'inspGroupAiEditBody',     hdr: 'inspGroupAiEditHdr' },
+    'text-layers': { body: 'inspGroupTextLayersBody', hdr: 'inspGroupTextLayersHdr' },
   };
   const ids = groupMap[group];
   if (!ids) return;
@@ -1686,10 +1687,11 @@ function evToggleInspGroup(group) {
 
 function evSetInspGroupOpen(group, open) {
   const groupMap = {
-    audio:       { body: 'inspGroupAudioBody',   hdr: 'inspGroupAudioHdr' },
-    performance: { body: 'inspGroupPerfBody',    hdr: 'inspGroupPerfHdr' },
-    advanced:    { body: 'inspGroupAdvBody',     hdr: 'inspGroupAdvHdr' },
-    'ai-edit':   { body: 'inspGroupAiEditBody',  hdr: 'inspGroupAiEditHdr' },
+    audio:         { body: 'inspGroupAudioBody',      hdr: 'inspGroupAudioHdr' },
+    performance:   { body: 'inspGroupPerfBody',       hdr: 'inspGroupPerfHdr' },
+    advanced:      { body: 'inspGroupAdvBody',        hdr: 'inspGroupAdvHdr' },
+    'ai-edit':     { body: 'inspGroupAiEditBody',     hdr: 'inspGroupAiEditHdr' },
+    'text-layers': { body: 'inspGroupTextLayersBody', hdr: 'inspGroupTextLayersHdr' },
   };
   const ids = groupMap[group];
   if (!ids) return;
@@ -2275,6 +2277,8 @@ function setInspectorTab(tab) {
   }
   if (activeTab === 'text') {
     if (typeof EditorTextRuntime !== 'undefined') EditorTextRuntime.onTabActivate();
+    const hasLayers = typeof _ev !== 'undefined' && Array.isArray(_ev.textLayers) && _ev.textLayers.length > 0;
+    evSetInspGroupOpen('text-layers', hasLayers);
   }
   if (typeof EditorState !== 'undefined') {
     EditorState.setEditorState({ activeInspectorTab: activeTab });

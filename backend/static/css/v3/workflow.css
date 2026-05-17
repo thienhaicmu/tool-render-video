@@ -2716,3 +2716,34 @@ textarea.fieldInput {
 /* =======================================================
    END OF UX-R8.3.1 - CREATOR JOURNEY & MOMENTUM
    ======================================================= */
+
+/* =======================================================
+   UX-IA2.2 — EDITOR WORKFLOW POLISH
+   ======================================================= */
+
+/* IA2.2-D: Compact variant rail — no card chrome, tight padding */
+.evCompactRail {
+  padding: 4px 2px 6px;
+}
+
+/* IA2.2-E: De-emphasize the Story tab's subtle subtitle fix shortcut */
+.evStorySubtleAction {
+  margin-top: 4px;
+  text-align: right;
+}
+.evStorySubtleAction .evTinyBtn {
+  background: none;
+  border: none;
+  font-size: 10px;
+  color: rgba(255,255,255,.28);
+  padding: 2px 4px;
+  letter-spacing: .02em;
+}
+.evStorySubtleAction .evTinyBtn:hover {
+  background: none;
+  color: rgba(255,255,255,.5);
+}
+
+/* =======================================================
+   END OF UX-IA2.2 - EDITOR WORKFLOW POLISH
+   ======================================================= */
