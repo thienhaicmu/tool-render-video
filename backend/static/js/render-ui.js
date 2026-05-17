@@ -509,6 +509,17 @@ function updateRenderMonitorHeartbeat(job, summary, parts = []){
   }
   const pill = qs('job_stage_pill');
   if (pill) pill.dataset.state = monitorState;
+
+  // P0-A: alive signal — set data-alive-state only; renderBottomActiveQueue owns text/hidden
+  const etaAliveEl = qs('rc_eta');
+  if (etaAliveEl) {
+    if (running) {
+      const secsSince = _renderMonitorLastProgressAt ? Math.floor((now - _renderMonitorLastProgressAt) / 1000) : 0;
+      etaAliveEl.dataset.aliveState = stalled ? 'stalled' : secsSince >= 10 ? 'slow' : 'ok';
+    } else {
+      delete etaAliveEl.dataset.aliveState;
+    }
+  }
 }
 function friendlyJobMessage(job){
   const stage = normalizeRenderStage(job?.stage, job?.status);
@@ -821,12 +832,9 @@ function renderBottomControlCenter(job, summary, parts = []) {
   const statusText = !job ? 'Ready' : status === 'failed' ? 'Failed' : terminal ? 'Completed' : 'Rendering';
   const stageText = job ? renderUxStageLabel(job, s, items) : 'Idle';
   const waitingCount = Math.max(0, total - done - active - failed);
-  const queueSummary = [
-    `${done} completed`,
-    active > 0 ? `${active} rendering` : null,
-    waitingCount > 0 ? `${waitingCount} waiting` : null,
-    failed > 0 ? `${failed} failed` : null
-  ].filter(Boolean).join(' · ') || 'Waiting for render...';
+  const queueSummary = total > 0
+    ? `${done} of ${total} done${active > 0 ? ` · ${active} active` : ''}${waitingCount > 0 ? ` · ${waitingCount} waiting` : ''}${failed > 0 ? ` · ${failed} failed` : ''}`
+    : 'Waiting for render...';
 
   if (qs('rc_status')) {
     qs('rc_status').textContent = statusText;
@@ -865,7 +873,7 @@ function renderBottomControlCenter(job, summary, parts = []) {
     const rawMsg = String(p?.message || '').trim();
     const isDebugMsg = !rawMsg || /_ms=|\bpart_render\b|\w+=\w+/.test(rawMsg);
     const message = isDebugMsg
-      ? (cls === 'isWaiting' ? 'Waiting in queue' : cls === 'isCompleted' ? 'Ready in output folder' : cls === 'isFailed' ? 'Needs review' : 'Processing')
+      ? (cls === 'isWaiting' ? 'Waiting in queue' : cls === 'isCompleted' ? 'Ready in output folder' : cls === 'isFailed' ? 'Needs review' : 'Rendering…')
       : rawMsg;
     return `<article class="rcPartCard ${cls}" data-part-status="${esc(st || 'queued')}">
       <div class="rcPartTop">
@@ -1490,12 +1498,9 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     : overallState === 'failed'
     ? 'Active: Failed'
     : 'Active: Waiting';
-  const queueSummary = [
-    completed > 0 ? `${completed} done` : null,
-    renderingParts.length > 0 ? `${renderingParts.length} active` : null,
-    waiting > 0 ? `${waiting} queued` : null,
-    failed > 0 ? `${failed} failed` : null
-  ].filter(Boolean).join(' · ') || (job ? stageText : '');
+  const queueSummary = parts.length > 0
+    ? `${completed} of ${parts.length} done${renderingParts.length > 0 ? ` · ${renderingParts.length} active` : ''}${waiting > 0 ? ` · ${waiting} waiting` : ''}${failed > 0 ? ` · ${failed} failed` : ''}`
+    : (job ? stageText : '');
   const statusLabel = overallState === 'failed'
     ? 'Failed'
     : overallState === 'completed'
@@ -1598,7 +1603,10 @@ function renderBottomActiveQueue(job, summary, parts = []) {
     if (activePercent) activePercent.textContent = `${activeCardPct}%`;
     if (activeBar) activeBar.style.setProperty('--progress', `${activeCardPct}%`);
     if (activeStage) activeStage.textContent = stageLine;
-    if (activeMessage) activeMessage.textContent = message;
+    if (activeMessage) {
+      activeMessage.textContent = message;
+      delete activeMessage.dataset.aliveState;
+    }
 
     // Stall warning banner — shown inside active card when stall is detected
     const _stallMsg = (!terminal && job) ? _detectStallSignal(job) : '';
@@ -1607,7 +1615,7 @@ function renderBottomActiveQueue(job, summary, parts = []) {
       if (!_stallBanner) {
         _stallBanner = document.createElement('div');
         _stallBanner.className = 'rcStallBanner';
-        activeCard.appendChild(_stallBanner);
+        activeCard.insertBefore(_stallBanner, activeCard.firstChild);
       }
       _stallBanner.textContent = _stallMsg;
     } else if (_stallBanner) {
@@ -1645,10 +1653,14 @@ function renderBottomActiveQueue(job, summary, parts = []) {
         }
       } else if (total > 0 && waiting > 0) {
         etaText = 'estimating…';
+      } else if (overallState === 'running') {
+        etaText = 'Rendering…';
       }
     }
     etaEl.textContent = etaText;
     etaEl.hidden = !etaText;
+    if (etaText) etaEl.dataset.aliveState = etaEl.dataset.aliveState || 'ok';
+    else delete etaEl.dataset.aliveState;
   }
 
   updateOutputPreview(job, items);

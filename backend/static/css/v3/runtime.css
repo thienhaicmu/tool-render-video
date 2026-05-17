@@ -896,7 +896,7 @@
   transition: background var(--t-fast), border-color var(--t-fast);
 }
 .rcQueueRow:hover           { background: rgba(255,255,255,.025); }
-.rcQueueRow.isWaiting       { border-left-color: rgba(148,163,184,.18); }
+.rcQueueRow.isWaiting       { border-left-color: rgba(148,163,184,.38); }
 .rcQueueRow.isRendering     { border-left-color: var(--primary); background: rgba(77,124,255,.08); }
 .rcQueueRow.isCompleted     { border-left-color: rgba(34,197,94,.38); }
 .rcQueueRow.isFailed        { border-left-color: rgba(239,68,68,.4);  background: rgba(239,68,68,.03); }
@@ -1393,7 +1393,7 @@
   flex-direction: column;
   gap: 3px;
 }
-.rcPartCard.isWaiting   { border-left-color: rgba(148,163,184,.18); }
+.rcPartCard.isWaiting   { border-left-color: rgba(148,163,184,.38); }
 .rcPartCard.isRendering { border-left-color: var(--primary); background: rgba(77,124,255,.03); }
 .rcPartCard.isCompleted { border-left-color: rgba(34,197,94,.35); }
 .rcPartCard.isFailed    { border-left-color: rgba(239,68,68,.38); }
@@ -2914,4 +2914,23 @@
 
 /* =======================================================
    END OF UX-R8.1.1 - RUNTIME CONVERSATIONAL AGENCY
+   ======================================================= */
+
+/* =======================================================
+   UX-RUNTIME-A2.1 — RUNTIME TRUTH LAYER
+   ======================================================= */
+
+/* ── P0-A: Alive signal (rc_eta freshness indicator) ── */
+#rc_eta[data-alive-state="ok"]      { color: var(--fg-400); }
+#rc_eta[data-alive-state="slow"]    { color: var(--fg-300); }
+#rc_eta[data-alive-state="stalled"] { color: var(--warning); }
+
+/* ── P0-D: Rendering part message readability ── */
+.rcPartCard.isRendering .rcPartMessage { color: var(--fg-300); }
+
+/* ── P1: Log strip narrowed during active render (more queue territory) ── */
+#render_active_panel[data-render-state="running"] .rcQueuePanel { flex: 0 0 70%; }
+
+/* =======================================================
+   END OF UX-RUNTIME-A2.1
    ======================================================= */
