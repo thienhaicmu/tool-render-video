@@ -1511,25 +1511,24 @@ def run_render_pipeline(
             # If output is a typical "video_output/video_out" folder, keep source as sibling under upload/source.
             if output_dir.name.lower() in ("video_output", "video_out"):
                 keep_source_dir = output_dir.parent / "source"
-            keep_path = _reserve_source_path_in_dir(keep_source_dir, source["slug"], ext=ext)
-            if not keep_path.exists():
-                # Move instead of copy when source is in temp dir (instant on same drive, saves I/O + disk)
-                is_temp_source = str(source_path).startswith(str(TEMP_DIR))
-                if is_temp_source:
+            # Only temp-origin files (YouTube downloads, edited locals) need to be
+            # persisted into source/. A user's original local file is already permanent —
+            # copying it would waste disk space (10 GB+) and slow render startup.
+            is_temp_source = str(source_path).startswith(str(TEMP_DIR))
+            if is_temp_source:
+                keep_path = _reserve_source_path_in_dir(keep_source_dir, source["slug"], ext=ext)
+                if not keep_path.exists():
+                    # Move instead of copy when source is in temp dir (instant on same drive, saves I/O + disk)
                     try:
                         shutil.move(str(source_path), str(keep_path))
                         _job_log(effective_channel, job_id, f"Source moved (zero-copy) to: {keep_path}")
                     except Exception:
                         shutil.copy2(source_path, keep_path)
                         _job_log(effective_channel, job_id, f"Source copied to: {keep_path}")
-                else:
-                    try:
-                        os.link(source_path, keep_path)
-                        _job_log(effective_channel, job_id, f"local_source.copy_skipped path={source_path} hardlink={keep_path}")
-                    except OSError:
-                        shutil.copy2(source_path, keep_path)
-                        _job_log(effective_channel, job_id, f"local_source.copy_required path={source_path} dest={keep_path}")
-            source_path = keep_path
+                source_path = keep_path
+            else:
+                # Local original (not temp): render directly from user's file — no copy, no hardlink.
+                _job_log(effective_channel, job_id, f"local_source.passthrough path={source_path} (source copy skipped)")
 
         voice_audio_path = None
         _voice_tts_failed = False
