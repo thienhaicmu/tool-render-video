@@ -3223,7 +3223,11 @@ def run_render_pipeline(
                 _paced_part = work_dir / f"{source['slug']}_part_{idx:03d}_paced.mp4"
                 _t_mp = time.perf_counter()
                 try:
-                    _pacing = apply_micro_pacing(str(final_part), str(_paced_part))
+                    _seg_content_type = seg.get("content_type_hint", "vlog")
+                    _pacing = apply_micro_pacing(
+                        str(final_part), str(_paced_part),
+                        content_type=_seg_content_type,
+                    )
                     _micro_pacing_ms = int((time.perf_counter() - _t_mp) * 1000)
                     if _pacing["applied"] and _paced_part.exists() and _paced_part.stat().st_size > 0:
                         os.replace(str(_paced_part), str(final_part))
@@ -3232,7 +3236,8 @@ def run_render_pipeline(
                         _job_log(
                             effective_channel, job_id,
                             f"Part {idx} micro pacing: {_pacing['segments_trimmed']} segments, "
-                            f"{_pacing['total_trim_ms']}ms trimmed",
+                            f"{_pacing['total_trim_ms']}ms trimmed, "
+                            f"content_type={_seg_content_type}",
                         )
                         _emit_render_event(
                             channel_code=effective_channel,
@@ -3249,6 +3254,7 @@ def run_render_pipeline(
                                 "segments_trimmed": _pacing["segments_trimmed"],
                                 "total_trim_ms": _pacing["total_trim_ms"],
                                 "method": _pacing["method"],
+                                "content_type": _seg_content_type,
                             },
                         )
                     else:

@@ -622,15 +622,18 @@ def apply_micro_pacing(
     input_path: str,
     output_path: str,
     noise_db: float = -30.0,
-    min_silence_dur: float = 0.3,
+    min_silence_dur: float = 0.4,
     max_total_trim: float = 2.0,
     min_clip_dur: float = 5.0,
+    content_type: str = "vlog",
 ) -> dict:
-    """Compress mid-clip silences to improve pacing without altering speech.
+    """Compress mid-clip silences with human-feeling rhythm.
 
-    Detects silence regions inside the clip (ignoring the first/last 0.5s),
-    trims each region down to a minimal breathing pause, and stitches the
-    result via a single FFmpeg filter_complex pass.
+    Silence thresholds, kept durations, and max trim budget are adjusted per
+    content type (interview / commentary / vlog / tutorial / montage). Short
+    breath pauses are preserved; genuine dead air is trimmed. The last 2s of
+    each clip (payoff zone) receive gentler trimming to protect reactions and
+    reveals. Splices saving less than 100ms are skipped to prevent over-cutting.
 
     Returns {"applied": bool, "segments_trimmed": int, "total_trim_ms": int, "method": str}.
     Raises on FFmpeg error so the caller can fall back to the original file.
@@ -641,30 +644,59 @@ def apply_micro_pacing(
     if clip_dur is None or clip_dur < min_clip_dur:
         return _NO_OP
 
-    silences = _detect_silence_segments(input_path, noise_db=noise_db, min_dur=min_silence_dur)
-    # Only consider mid-clip silences — leave boundaries intact
-    silences = [(s, e) for s, e in silences if s >= 0.5 and e <= clip_dur - 0.3]
+    # Content-aware pacing parameters (PART D)
+    _type_params: dict[str, dict] = {
+        "interview":  {"db_adj": -5.0, "dur_adj":  0.10, "target_mul": 1.50, "max_trim": 1.5},
+        "commentary": {"db_adj": -3.0, "dur_adj":  0.05, "target_mul": 1.25, "max_trim": 1.8},
+        "vlog":       {"db_adj":  0.0, "dur_adj":  0.00, "target_mul": 1.00, "max_trim": 2.0},
+        "tutorial":   {"db_adj": -4.0, "dur_adj":  0.10, "target_mul": 1.40, "max_trim": 1.5},
+        "montage":    {"db_adj":  2.0, "dur_adj": -0.10, "target_mul": 0.80, "max_trim": 2.5},
+    }
+    _p = _type_params.get(content_type, _type_params["vlog"])
+    effective_noise_db = noise_db + _p["db_adj"]
+    effective_min_dur = max(0.25, min_silence_dur + _p["dur_adj"])
+    target_multiplier: float = _p["target_mul"]
+    effective_max_trim: float = _p["max_trim"]
+
+    silences = _detect_silence_segments(input_path, noise_db=effective_noise_db, min_dur=effective_min_dur)
+    # PART A: protect clip boundaries — 0.6s start buffer (was 0.5s), 0.3s end buffer
+    silences = [(s, e) for s, e in silences if s >= 0.6 and e <= clip_dur - 0.3]
     if not silences:
         return _NO_OP
 
-    def _target_dur(dur: float) -> float:
-        if dur <= 0.7:
-            return 0.15
-        elif dur <= 1.2:
-            return 0.25
-        return 0.4
+    # PART E: payoff zone — last 2s may contain a reaction/reveal; trim more gently there
+    _payoff_zone_start = max(0.0, clip_dur - 2.0)
+
+    def _target_dur(dur: float, mul: float = 1.0) -> float:
+        # PART A+B: preserve more of medium/long silences — they are more likely intentional.
+        # Short (≤0.5s): breath pause     → keep 0.20s  (was 0.15s for ≤0.7s)
+        # Medium (≤0.9s): rhythm pause    → keep 0.30s  (was 0.25s for ≤1.2s)
+        # Long (≤1.5s): emphasis/sentence → keep 0.45s  (was 0.40s for >1.2s)
+        # Dead air (>1.5s): genuine gap   → keep 0.50s
+        if dur <= 0.5:
+            base = 0.20
+        elif dur <= 0.9:
+            base = 0.30
+        elif dur <= 1.5:
+            base = 0.45
+        else:
+            base = 0.50
+        return min(dur - 0.05, base * mul)
 
     # Build a list of (keep_start, keep_end) timeline segments
     keeps: list[tuple[float, float]] = []
     prev_end = 0.0
     total_trim = 0.0
     segments_trimmed = 0
+    _MIN_TRIM = 0.10  # PART C: skip splice if saving < 100ms (over-cut prevention)
 
     for s_start, s_end in silences:
         s_dur = s_end - s_start
-        trim = s_dur - _target_dur(s_dur)
-        remaining = max_total_trim - total_trim
-        if remaining <= 0 or trim <= 0:
+        # PART E: apply gentler multiplier inside the payoff zone
+        _eff_mul = target_multiplier * (1.5 if s_start >= _payoff_zone_start else 1.0)
+        trim = s_dur - _target_dur(s_dur, _eff_mul)
+        remaining = effective_max_trim - total_trim
+        if remaining <= 0 or trim < _MIN_TRIM:  # PART C: skip tiny trims
             continue
         trim = min(trim, remaining)
         # Keep speech up to the silence, plus the kept portion of the silence
