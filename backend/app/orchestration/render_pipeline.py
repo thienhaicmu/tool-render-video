@@ -1,6 +1,7 @@
 
 import json
 import os
+import re
 import shutil
 import threading
 import time
@@ -42,6 +43,30 @@ from app.services.remotion_adapter import generate_hook_intro, prepend_intro_cli
 from app.ai.visibility.ai_visibility_summary import attach_ai_visibility_summaries
 
 logger = logging.getLogger("app.render")
+
+
+def _safe_output_name(text: str) -> str:
+    """Human-readable safe filename stem. Preserves case and apostrophes."""
+    if not text:
+        return ""
+    text = text.strip()
+    text = re.sub(r'[\\/:*?"<>|]', '-', text)
+    text = re.sub(r'[\r\n\t]+', ' ', text)
+    text = re.sub(r'-{2,}', '-', text)
+    text = re.sub(r' {2,}', ' ', text)
+    text = text.strip('- ')
+    if len(text) > 80:
+        text = text[:80].rsplit(' ', 1)[0] or text[:80]
+    return text.strip('- ')
+
+
+def _smart_output_stem(hook_text: str, source_title: str, job_id: str) -> str:
+    """Fallback chain: AI hook → source title → render_{job_id[:8]}."""
+    for candidate in [hook_text, source_title]:
+        safe = _safe_output_name(candidate)
+        if safe:
+            return safe
+    return f"render_{job_id[:8]}"
 
 
 _PLAY_RES_Y_MAP = {"9:16": 1920, "1:1": 1080, "3:4": 1440, "4:5": 1440, "16:9": 1080}
@@ -1423,6 +1448,9 @@ def run_render_pipeline(
             context={"source_mode": detected_source_mode, "source_path": str(source_path)},
         )
 
+        # Compute once; captured by _process_one_part closure and auto_best_export
+        _output_stem = _smart_output_stem(_hook_applied_text, source.get("title", ""), job_id)
+
         # Apply editor edits: trim and/or volume adjustment
         trim_in = float(getattr(payload, "edit_trim_in", 0) or 0)
         trim_out = float(getattr(payload, "edit_trim_out", 0) or 0)
@@ -2369,8 +2397,8 @@ def run_render_pipeline(
             raw_part = work_dir / f"{source['slug']}_part_{idx:03d}_raw.mp4"
             srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.srt"
             ass_part = work_dir / f"{source['slug']}_part_{idx:03d}.ass"
-            final_part = output_dir / f"{source['slug']}_part_{idx:03d}.mp4"
-            part_name = f"{source['slug']}_part_{idx:03d}.mp4"
+            final_part = output_dir / f"{_output_stem}_part_{idx:03d}.mp4"
+            part_name = f"{_output_stem}_part_{idx:03d}.mp4"
             _sub_target_lang = getattr(payload, "subtitle_target_language", "en")
             translated_srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.{_sub_target_lang}.srt"
             _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} start", kind="debug")
@@ -3878,7 +3906,7 @@ def run_render_pipeline(
                     _best_dir.mkdir(parents=True, exist_ok=True)
                     for _abe in _abe_top:
                         _abe_src = Path(_abe["output_file"])
-                        _abe_dst = _best_dir / f"rank_{_abe['output_rank']:02d}_part_{_abe['part_no']:03d}.mp4"
+                        _abe_dst = _best_dir / f"{_output_stem}_rank_{_abe['output_rank']:02d}.mp4"
                         try:
                             shutil.copy2(str(_abe_src), str(_abe_dst))
                             _best_exports_list.append({
