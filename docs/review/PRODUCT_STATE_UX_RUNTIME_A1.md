@@ -188,14 +188,62 @@ Story/Subtitles/Words inspector sections had equal visual weight. No signal dist
   ├── .appStage            [1fr — center, absorbs inspector gain]
   └── .appInspector        [420px default, 352px ≤1366px]
         └── .inspPaneBody
-              ├── inspContextBar         [no panel attr — always visible]
-              ├── evInspAiPanel          [mode — Story only]
-              ├── evSectionTrim          [mode — PRIMARY bg tint]
-              ├── evSectionAiAssist      [mode — SECONDARY unchanged]
-              ├── inspGroupAiEdit        [mode — SECONDARY unchanged]
-              ├── evSectionVariants      [mode — SECONDARY unchanged]
-              └── cmPrefsPanel           [mode — TERTIARY muted]
+              ├── inspContextBar               [no panel attr — always visible]
+              │
+              ├── [Story / mode]
+              │   ├── evInspAiPanel            [mode — dynamic AI status]
+              │   ├── evSectionTrim            [mode — PRIMARY bg tint]
+              │   ├── evSectionAiAssist        [mode — SECONDARY unchanged]
+              │   ├── inspGroupAiEdit          [mode — SECONDARY unchanged]
+              │   ├── evSectionVariants        [mode — SECONDARY compact rail]
+              │   └── cmPrefsPanel             [mode — TERTIARY muted]
+              │
+              ├── [Subtitles / subtitle]
+              │   └── inspSubtitlePane         [subtitle — secondary accent, full tab]
+              │
+              ├── [Words / text]
+              │   ├── evSectionNarration       [text — SECONDARY (purple accent)]
+              │   └── inspGroupTextLayers      [text — PRIMARY when open (blue tint)]
+              │
+              ├── [Audio / audio]
+              │   └── inspGroupAudio           [audio — single collapsible]
+              │
+              └── [Export / performance]
+                  ├── evPresetSection          [performance — SECONDARY unchanged]
+                  ├── evSectionMarket          [performance — PRIMARY bg tint]
+                  ├── evSectionBasic           [performance — primary accent title]
+                  ├── inspGroupPerf            [performance — Render Settings]
+                  └── inspGroupAdv             [performance — TERTIARY muted header]
 ```
+
+---
+
+## UX-RUNTIME-A1.1 — Hierarchy Depth Extension (2026-05-17)
+
+Continuation of Part D and Part A after full inspector HTML audit.
+
+### Words Tab Hierarchy
+
+`evSectionNarration` (AI Narration) — SECONDARY signal (purple accent on title). AI narration is an enhancement layer over the primary editing task, not the workspace itself.
+
+Text layers collapsible open state — PRIMARY signal when active. When the creator expands the text layers editor, the header gets a blue bg tint + stronger border and the body gets a matching bg tint. This matches the pattern used for `evSectionTrim` in Story.
+
+```css
+#evSectionNarration .evSectionTitle { color: var(--secondary); }
+#evSectionNarration .evSectionTitle::before { background: var(--secondary); }
+#inspGroupTextLayersHdr.open { background: rgba(77,124,255,.028); border-bottom-color: rgba(77,124,255,.15); }
+#inspGroupTextLayersBody.open { background: rgba(77,124,255,.013); }
+```
+
+### Export Tab Hierarchy
+
+`evSectionMarket` (Market & Target) — PRIMARY signal. Intent declaration ("where are you publishing?") precedes all technical configuration. Gets same blue bg tint + primary accent title as `evSectionTrim`.
+
+`inspGroupAdvHdr` (Advanced Debug) — TERTIARY signal. Muted color (`fg-400`) and reduced font size (10.5px). This is a developer/diagnostic tool, not a creator workflow step.
+
+### Runtime Queue Row (Part A extension)
+
+`rcQueueRow.isRendering` background boosted `.04` → `.08`. Previously at `.04`, the active rendering row was barely distinguishable from hover state (`.025`). At `.08`, it reads clearly as "this is what's running" within the queue column.
 
 ---
 
@@ -203,8 +251,8 @@ Story/Subtitles/Words inspector sections had equal visual weight. No signal dist
 
 ### Runtime Spatial Clarity
 
-**Before:** Active card border at `.22` opacity — easy to miss against bg-800 surface.  
-**After:** `.38` border + `.035` tint — active state reads clearly from the queue rows below.
+**Before:** Active card border at `.22` opacity, queue row at `.04` bg.  
+**After:** `.38` border + `.035` card tint, `.08` queue row bg — active state reads clearly at both the card level and the row level within Plane 2.
 
 ### Inspector Workspace
 
@@ -217,18 +265,24 @@ Story/Subtitles/Words inspector sections had equal visual weight. No signal dist
 
 ### Selection UX
 
-**Before:** All Story sections equal weight — Trim controls visually indistinguishable from memory/preferences config.  
-**After:** Trim section has a clear "active workspace" reading. Preferences section recedes as ambient config.
+**Before:** All sections equal weight across all tabs — no signal distinguishing workspace from tools from config.  
+**After:** Four-tab hierarchy complete:
+- Story: Trim=PRIMARY, AiAssist/Actions/Variants=SECONDARY, Prefs=TERTIARY
+- Words: TextLayers(open)=PRIMARY, Narration=SECONDARY
+- Export: Market&Target=PRIMARY, Output/Presets=SECONDARY, AdvDebug=TERTIARY
+- Subtitles: Full tab is PRIMARY (secondary-accented, single workspace)
 
-**UI Score: 9.6 / 10** (up from 9.5 post-UX-R3.2)
+**UI Score: 9.7 / 10** (up from 9.6 post-A1 initial)
 
 ---
 
 ## Known Limitations
 
-- **Part D is subtle by design.** The hierarchy signal is intentionally low-contrast — a `0.018` opacity tint and muted title on preferences, not bold differentiation. Creators may not consciously notice, but the visual gravity is present.
-- **Words tab has no PRIMARY designation.** Text layers collapsible auto-opens when layers exist (UX-IA2.2-C), but there's no equivalent bg tint on the primary text editing section. Would require identifying the correct section ID for the Words primary workspace.
-- **cmPrefsPanel title size reduction (11px vs 12px)** is a minor inconsistency if creator memory panel is actively used. If it becomes primary workflow, the TERTIARY treatment should be removed.
+- **Hierarchy is subtle by design.** Signals are intentionally low-contrast — `.018` opacity tints, muted label colors. Visual gravity is present without visual noise.
+- **Audio tab has no internal hierarchy.** Single collapsible group with three sections (Source Audio, Background Music, Loudness Normalization). Normalization is arguably TERTIARY but has no wrapper ID to target without HTML changes.
+- **Subtitles tab has no internal hierarchy.** Translation controls at the bottom of `inspSubtitlePane` are set-once/forget (SECONDARY candidate) but have no wrapper ID for CSS-only targeting.
+- **cmPrefsPanel title size reduction (11px vs 12px)** is a minor inconsistency if creator memory panel is actively used. Revert the TERTIARY treatment if usage data shows it's a frequent workflow step.
+- **Text layers PRIMARY signal only activates when the collapsible is open.** When collapsed (no layers exist), the Words tab has no PRIMARY section — both narration (SECONDARY) and the collapsed group header appear with equal subdued weight. This is correct behavior: when there's no primary task, secondary tools should all be available at equal reach.
 
 ---
 
@@ -238,5 +292,5 @@ Story/Subtitles/Words inspector sections had equal visual weight. No signal dist
 |------|--------|
 | `backend/static/css/v3/tokens.css` | `--inspector-w: 380px → 420px`, `--inspector-w-sm: 360px → 400px` |
 | `backend/static/css/v3/hardening.css` | `--inspector-w: 320px → 352px`, `--inspector-w-sm: 300px → 332px` at ≤1366px |
-| `backend/static/css/v3/runtime.css` | `rcActiveCard.isRendering` border `.22→.38` + bg tint; `.isCompleted` border `.18→.25` |
-| `backend/static/css/v3/workflow.css` | PRIMARY bg tint on `evSectionTrim`; TERTIARY muted label on `cmPrefsPanel` |
+| `backend/static/css/v3/runtime.css` | `rcActiveCard.isRendering` border `.22→.38` + bg tint; `.isCompleted` `.18→.25`; `rcQueueRow.isRendering` bg `.04→.08` |
+| `backend/static/css/v3/workflow.css` | Story: `evSectionTrim`=PRIMARY, `cmPrefsPanel`=TERTIARY; Words: `evSectionNarration`=SECONDARY, text layers open=PRIMARY; Export: `evSectionMarket`=PRIMARY, `inspGroupAdvHdr`=TERTIARY |
