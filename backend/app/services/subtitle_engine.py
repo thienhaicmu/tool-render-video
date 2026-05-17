@@ -463,6 +463,54 @@ _PRESETS: dict[str, ASSPreset] = {
         alignment=2, margin_l=20, margin_r=20, wrap_max_em=16.0,
         bounce_fx=False, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
     ),
+
+    # ── Creator personality presets (QUALITY-UP6) ────────────────────────────
+    # Four content-type-native styles. Each has a distinct visual identity
+    # while using the bundled Bungee font for render safety.
+
+    # viral: TikTok/Reels-native. Bold, thick outline, short punchy lines.
+    # Good for: commentary, reaction, hook-heavy shorts.
+    "viral": ASSPreset(
+        id="viral", font_default="Bungee", base_font_size=50,
+        primary_color="&H00FFFFFF", secondary_color="&H0000E5FF",
+        outline_color="&H00000000", back_color="&H00000000",
+        bold=-1, border_style=1, outline_default=7, shadow_default=1,
+        alignment=2, margin_l=20, margin_r=20, wrap_max_em=13.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.22,
+    ),
+
+    # clean: minimal, premium readability. Thin outline, no bounce, wide margins.
+    # Good for: education, tutorial, podcast clips.
+    "clean": ASSPreset(
+        id="clean", font_default="Bungee", base_font_size=34,
+        primary_color="&H00FFFFFF", secondary_color="&H0080CCFF",
+        outline_color="&H00000000", back_color="&H40000000",
+        bold=0, border_style=1, outline_default=3, shadow_default=1,
+        alignment=2, margin_l=60, margin_r=60, wrap_max_em=18.0,
+        bounce_fx=False, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
+    ),
+
+    # story: cinematic, soft. Off-white text, minimal outline, serene pacing.
+    # Good for: vlog, storytelling, emotional content.
+    "story": ASSPreset(
+        id="story", font_default="Bungee", base_font_size=33,
+        primary_color="&H00EBEBEB", secondary_color="&H0066CCFF",
+        outline_color="&H00000000", back_color="&H20000000",
+        bold=0, border_style=1, outline_default=2, shadow_default=1,
+        alignment=2, margin_l=55, margin_r=55, wrap_max_em=19.0,
+        bounce_fx=False, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
+    ),
+
+    # gaming: caption-box style for fast-motion readability. Bold, box-backed.
+    # Good for: gaming, sports, montage clips.
+    "gaming": ASSPreset(
+        id="gaming", font_default="Bungee", base_font_size=44,
+        primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
+        outline_color="&H00000000", back_color="&HB0000000",
+        bold=-1, border_style=3, outline_default=14, shadow_default=0,
+        alignment=2, margin_l=20, margin_r=20, wrap_max_em=13.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.20,
+    ),
 }
 
 # Legacy alias table — maps removed/renamed style IDs to canonical preset IDs.
@@ -1377,6 +1425,11 @@ def _emphasis_level(preset_id: str) -> str:
         "clean_pro":        "subtle",
         "boxed_caption":    "minimal",
         "pro_karaoke":      "word_only",
+        # QUALITY-UP6 personality presets
+        "viral":            "strong",
+        "clean":            "subtle",
+        "story":            "medium",
+        "gaming":           "strong",
     }
     return _MAP.get(normalize_subtitle_style_id(preset_id), "medium")
 

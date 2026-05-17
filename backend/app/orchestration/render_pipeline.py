@@ -2770,6 +2770,24 @@ def run_render_pipeline(
                                 "lines_count": _hook_blocks,
                             },
                         )
+                # Content-type subtitle auto-default — fires only when no explicit style set.
+                # Creator's explicit choice (any non-empty subtitle_style) always wins.
+                _CONTENT_TYPE_SUB_DEFAULTS: dict[str, str] = {
+                    "interview":  "clean",
+                    "commentary": "viral",
+                    "vlog":       "story",
+                    "tutorial":   "clean",
+                    "montage":    "gaming",
+                }
+                _raw_sub_style = (payload.subtitle_style or "").strip()
+                _effective_subtitle_style = (
+                    _CONTENT_TYPE_SUB_DEFAULTS.get(
+                        seg.get("content_type_hint", "vlog"), "tiktok_bounce_v1"
+                    )
+                    if not _raw_sub_style
+                    else _raw_sub_style
+                )
+
                 # S4: Subtitle emphasis — semantic wrap + keyword uppercase + highlight markers
                 if _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
                     try:
@@ -2777,7 +2795,7 @@ def run_render_pipeline(
                         if _emph_blocks:
                             subtitle_emphasis_pass(
                                 _emph_blocks,
-                                preset_id=payload.subtitle_style,
+                                preset_id=_effective_subtitle_style,
                                 market=_mv_market,
                                 language=_sub_target_lang,
                             )
@@ -2786,7 +2804,7 @@ def run_render_pipeline(
                             _job_log(
                                 effective_channel, job_id,
                                 f"subtitle_emphasis_applied part={idx} "
-                                f"style={payload.subtitle_style} market={_mv_market} "
+                                f"style={_effective_subtitle_style} market={_mv_market} "
                                 f"lang={_sub_target_lang} blocks={len(_emph_blocks)}",
                                 kind="info",
                             )
@@ -2794,13 +2812,13 @@ def run_render_pipeline(
                             _job_log(
                                 effective_channel, job_id,
                                 f"subtitle_emphasis_skipped part={idx} reason=empty_blocks "
-                                f"style={payload.subtitle_style}",
+                                f"style={_effective_subtitle_style}",
                                 kind="debug",
                             )
                     except Exception:
                         _job_log(
                             effective_channel, job_id,
-                            f"subtitle_emphasis_error part={idx} style={payload.subtitle_style} "
+                            f"subtitle_emphasis_error part={idx} style={_effective_subtitle_style} "
                             f"market={_mv_market} — emphasis pass skipped, render continues",
                             kind="warning",
                         )
@@ -2808,7 +2826,7 @@ def run_render_pipeline(
                     _play_res_y = _aspect_play_res_y(payload.aspect_ratio)
                     _margin_v = getattr(payload, "sub_margin_v", 180)
                     _t_sub = time.perf_counter()
-                    if payload.subtitle_style == "pro_karaoke":
+                    if _effective_subtitle_style == "pro_karaoke":
                         from app.services.subtitle_engine import _hex_to_ass
                         srt_to_ass_karaoke(
                             str(_ass_srt_source), str(ass_part),
@@ -2826,7 +2844,7 @@ def run_render_pipeline(
                         srt_to_ass_bounce(
                             str(_ass_srt_source),
                             str(ass_part),
-                            subtitle_style=payload.subtitle_style,
+                            subtitle_style=_effective_subtitle_style,
                             scale_y=payload.frame_scale_y,
                             highlight_per_word=payload.highlight_per_word,
                             font_name=getattr(payload, "sub_font", "Bungee"),
@@ -2836,10 +2854,15 @@ def run_render_pipeline(
                             font_size=getattr(payload, "sub_font_size", 0),
                         )
                     _subtitle_ass_ms = int((time.perf_counter() - _t_sub) * 1000)
-                    logger.info("subtitle_ass_ms=%d part=%d style=%s", _subtitle_ass_ms, idx, payload.subtitle_style)
+                    logger.info(
+                        "subtitle_ass_ms=%d part=%d style=%s content_type=%s",
+                        _subtitle_ass_ms, idx, _effective_subtitle_style,
+                        seg.get("content_type_hint", ""),
+                    )
                     _job_log(
                         effective_channel, job_id,
-                        f"Part {idx} subtitle: style={payload.subtitle_style} "
+                        f"Part {idx} subtitle: style={_effective_subtitle_style} "
+                        f"(payload={payload.subtitle_style or 'auto'}) "
                         f"font_size={getattr(payload, 'sub_font_size', 0)} "
                         f"margin_v={_margin_v} x_pct={getattr(payload, 'sub_x_percent', 50.0):.1f} "
                         f"play_res_y={_play_res_y} aspect={payload.aspect_ratio}",
@@ -2850,11 +2873,13 @@ def run_render_pipeline(
                         job_id=job_id,
                         event="subtitle_style_applied",
                         level="INFO",
-                        message=f"Subtitle style applied for part {idx}: {payload.subtitle_style}",
+                        message=f"Subtitle style applied for part {idx}: {_effective_subtitle_style}",
                         step="render.subtitle",
                         context={
                             "part_no": idx,
-                            "subtitle_style": payload.subtitle_style,
+                            "subtitle_style": _effective_subtitle_style,
+                            "subtitle_style_source": "auto" if not _raw_sub_style else "explicit",
+                            "content_type_hint": seg.get("content_type_hint", ""),
                             "font_size": getattr(payload, "sub_font_size", 0),
                             "margin_v": _margin_v,
                             "play_res_y": _play_res_y,
