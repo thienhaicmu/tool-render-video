@@ -276,13 +276,84 @@ Text layers collapsible open state — PRIMARY signal when active. When the crea
 
 ---
 
+## UX-RUNTIME-A1.2 — AI Ownership Enforcement (2026-05-17)
+
+P0 regression fix. AI panels visible on all tabs due to CSS gap in v3.
+
+### Root Cause
+
+The v3 CSS migrated from `app.css` with only three element-type-specific hide rules:
+
+```css
+.evSection[data-insp-panel]:not(.insp-panel-active)        { display: none; }
+.inspGroupSep[data-insp-panel]:not(.insp-panel-active)     { display: none; }
+.inspCollapsedGroup[data-insp-panel]:not(.insp-panel-active) { display: none; }
+```
+
+The old `app.css` had a broad rule (`.inspPaneBody [data-insp-panel]:not(.insp-panel-active) { display: none !important; }`) that was never migrated. The three v3 rules only covered elements that happened to have those exact CSS classes. Four elements used custom classes and were completely uncovered:
+
+| Element | Class | data-insp-panel | Effect |
+|---------|-------|-----------------|--------|
+| `evInspAiPanel` | `evInspAiPanel` | `mode` | AI action cards visible on ALL tabs |
+| `convPanel` | `convPanel` | `ai` | AI conversation visible on ALL tabs |
+| `cmPrefsPanel` | `cmPrefsPanel` | `mode` | Creator memory visible on ALL tabs |
+| `evSectionVariants` | `evCompactRail` | `mode` | Variants/Snapshots visible on ALL tabs |
+
+### How it appeared to "work" before
+
+`evInspAiPanel` was empty (class `evInspAiPanel:empty { display: none !important; }`) on initial load and most tab views. The empty rule suppressed it. When an AI action was run and cards were rendered into it, the empty rule no longer applied — the AI card became visible everywhere. The others (`convPanel`, `cmPrefsPanel`, `evSectionVariants`) were globally visible at all times.
+
+### Fix
+
+**`backend/static/css/v3/workflow.css` — single broad rule:**
+
+```css
+.inspPaneBody [data-insp-panel]:not(.insp-panel-active) {
+  display: none !important;
+}
+```
+
+This matches ANY element inside `.inspPaneBody` with `data-insp-panel` that doesn't have `.insp-panel-active`. The three element-specific rules are retained as documentation but are functionally superseded.
+
+No JS changes — `setInspectorTab()` already correctly manages `.insp-panel-active` on all `[data-insp-panel]` elements via querySelectorAll. The CSS system was the gap.
+
+### Tab Ownership Matrix (Canonical Post-Fix)
+
+| Tab | Shows | Must NOT Show |
+|-----|-------|--------------|
+| Story | Trim, AiAssist, AI Edit Actions, Variants, Snapshots, Creator Memory, AI panel cards | AI conversation, subtitle editor, text layers, audio, export |
+| AI | Conversation, copilot, history, example chips | Everything else |
+| Subtitles | Subtitle style, preview, translate, Fix Subs | AI chips, variants, creator memory, prompt input |
+| Words | AI Narration, voice controls, text layers | Story AI, creator memory, editing chips |
+| Audio | Source audio, BGM, loudness | AI prompt, chips, creator memory, variants |
+| Export | Presets, Market & Target, Output, Render Settings, Advanced Debug | Editing AI, chips, creator memory, variants |
+
+### Cross-Tab Behavior
+
+AI action card (Accept/Discard) rendered on Story tab → switch to Subtitles → card hidden by CSS (not destroyed) → return to Story → card restored. No regression.
+
+### QA Checklist
+
+- [ ] Open editor on Story tab — AI chips, trim controls, variants visible
+- [ ] Switch to Subtitles — subtitle editor only; no AI chips, no creator memory, no variants
+- [ ] Switch to Words — narration + text layers only; no Story AI elements
+- [ ] Switch to Audio — audio controls only; no AI contamination
+- [ ] Switch to Export — export sections only; no editing AI, no variants, no creator memory
+- [ ] Switch to AI tab — conversation only; no Story editing elements
+- [ ] Run AI action on Story → Accept/Discard card appears
+- [ ] Switch to Subtitles — card hidden (not destroyed)
+- [ ] Return to Story — card visible again
+- [ ] No console errors
+
+---
+
 ## Known Limitations
 
 - **Hierarchy is subtle by design.** Signals are intentionally low-contrast — `.018` opacity tints, muted label colors. Visual gravity is present without visual noise.
 - **Audio tab has no internal hierarchy.** Single collapsible group with three sections (Source Audio, Background Music, Loudness Normalization). Normalization is arguably TERTIARY but has no wrapper ID to target without HTML changes.
 - **Subtitles tab has no internal hierarchy.** Translation controls at the bottom of `inspSubtitlePane` are set-once/forget (SECONDARY candidate) but have no wrapper ID for CSS-only targeting.
 - **cmPrefsPanel title size reduction (11px vs 12px)** is a minor inconsistency if creator memory panel is actively used. Revert the TERTIARY treatment if usage data shows it's a frequent workflow step.
-- **Text layers PRIMARY signal only activates when the collapsible is open.** When collapsed (no layers exist), the Words tab has no PRIMARY section — both narration (SECONDARY) and the collapsed group header appear with equal subdued weight. This is correct behavior: when there's no primary task, secondary tools should all be available at equal reach.
+- **Text layers PRIMARY signal only activates when the collapsible is open.** When collapsed (no layers exist), the Words tab has no PRIMARY section — this is correct behavior.
 
 ---
 
@@ -293,4 +364,4 @@ Text layers collapsible open state — PRIMARY signal when active. When the crea
 | `backend/static/css/v3/tokens.css` | `--inspector-w: 380px → 420px`, `--inspector-w-sm: 360px → 400px` |
 | `backend/static/css/v3/hardening.css` | `--inspector-w: 320px → 352px`, `--inspector-w-sm: 300px → 332px` at ≤1366px |
 | `backend/static/css/v3/runtime.css` | `rcActiveCard.isRendering` border `.22→.38` + bg tint; `.isCompleted` `.18→.25`; `rcQueueRow.isRendering` bg `.04→.08` |
-| `backend/static/css/v3/workflow.css` | Story: `evSectionTrim`=PRIMARY, `cmPrefsPanel`=TERTIARY; Words: `evSectionNarration`=SECONDARY, text layers open=PRIMARY; Export: `evSectionMarket`=PRIMARY, `inspGroupAdvHdr`=TERTIARY |
+| `backend/static/css/v3/workflow.css` | **A1.2 (P0):** broad `[data-insp-panel]:not(.insp-panel-active)` rule; A1/A1.1: hierarchy tints for Story/Words/Export |
