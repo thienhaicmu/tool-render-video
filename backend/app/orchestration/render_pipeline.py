@@ -1582,6 +1582,7 @@ def run_render_pipeline(
                     rate=payload.voice_rate,
                     job_id=job_id,
                     voice_id=getattr(payload, "voice_id", None),
+                    content_type="vlog",
                 )
                 update_job_progress(job_id, current_stage, current_progress, "AI voice generated")
                 _job_log(effective_channel, job_id, f"AI narration audio ready: {voice_audio_path}")
@@ -3130,6 +3131,7 @@ def run_render_pipeline(
                                 job_id=job_id,
                                 voice_id=getattr(payload, "voice_id", None),
                                 output_path=_part_mp3,
+                                content_type=str(seg.get("content_type_hint") or "vlog"),
                             )
                             _emit_render_event(
                                 channel_code=effective_channel,
@@ -3220,6 +3222,7 @@ def run_render_pipeline(
                                 job_id=job_id,
                                 voice_id=getattr(payload, "voice_id", None),
                                 output_path=_part_mp3,
+                                content_type=str(seg.get("content_type_hint") or "vlog"),
                             )
                             _emit_render_event(
                                 channel_code=effective_channel,
