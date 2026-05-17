@@ -2718,6 +2718,19 @@ textarea.fieldInput {
    ======================================================= */
 
 /* =======================================================
+   UX-IA2.2.1 — VISIBILITY SCOPE REGRESSION FIX
+   ======================================================= */
+
+/* evInspAiPanel had no data-insp-panel — visible on every tab.
+   Scoped to mode tab. Empty-state rule gets !important to stay
+   hidden when Story tab is active but panel has no content. */
+.evInspAiPanel:empty { display: none !important; }
+
+/* =======================================================
+   END OF UX-IA2.2.1
+   ======================================================= */
+
+/* =======================================================
    UX-IA2.2 — EDITOR WORKFLOW POLISH
    ======================================================= */
 
