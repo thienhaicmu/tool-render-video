@@ -2291,6 +2291,44 @@ textarea.fieldInput {
   border-bottom-color: rgba(255,255,255,.03);
 }
 
+/* ── [UX-RUNTIME-A1-D ext] Words tab hierarchy ───────────
+   Narration = AI enhancement, SECONDARY (purple accent).
+   Text layers open state = PRIMARY workspace (blue tint).
+   ─────────────────────────────────────────────────────── */
+#evSectionNarration .evSectionTitle {
+  color: var(--secondary);
+}
+#evSectionNarration .evSectionTitle::before {
+  background: var(--secondary);
+}
+#inspGroupTextLayersHdr.open {
+  color: var(--fg-200);
+  background: rgba(77,124,255,.028);
+  border-bottom-color: rgba(77,124,255,.15);
+}
+#inspGroupTextLayersBody.open {
+  background: rgba(77,124,255,.013);
+}
+
+/* ── [UX-RUNTIME-A1-D ext] Export tab hierarchy ──────────
+   Market & Target = intent declaration, PRIMARY bg tint.
+   Quick Start Presets = convenience, SECONDARY (no accent).
+   Advanced Debug = developer-only, TERTIARY muted header.
+   ─────────────────────────────────────────────────────── */
+#evSectionMarket {
+  background: rgba(77,124,255,.018);
+}
+#evSectionMarket .evSectionTitle {
+  color: var(--primary);
+}
+#evSectionMarket .evSectionTitle::before {
+  background: var(--primary);
+}
+#inspGroupAdvHdr {
+  color: var(--fg-400);
+  font-size: 10.5px;
+}
+
 /* ── [F10] Aspect bar aligns with preview width ──────────
    Remove max-width cap so it spans the full preview width.
    ─────────────────────────────────────────────────────── */
