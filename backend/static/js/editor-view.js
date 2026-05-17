@@ -2238,12 +2238,12 @@ async function startRenderFromEditor() {
 function setInspectorTab(tab) {
   const validTabs = ['mode', 'subtitle', 'text', 'audio', 'performance', 'ai'];
   const tabTitles = {
-    mode:        'Cut',
+    mode:        'Story',
     subtitle:    'Subtitles',
-    text:        'Text & Voice',
+    text:        'Words',
     audio:       'Audio',
-    performance: 'Render',
-    ai:          'Talk',
+    performance: 'Export',
+    ai:          'AI',
   };
   const activeTab = validTabs.includes(tab) ? tab : 'mode';
   const insp = document.getElementById('appInspector');
@@ -2269,7 +2269,6 @@ function setInspectorTab(tab) {
   }
   if (activeTab === 'performance') {
     evSetInspGroupOpen('performance', true);
-    evSetInspGroupOpen('advanced', true);
     if (typeof EditorPerformanceRuntime !== 'undefined') EditorPerformanceRuntime.onTabActivate();
   } else {
     if (typeof EditorPerformanceRuntime !== 'undefined') EditorPerformanceRuntime.onTabDeactivate();

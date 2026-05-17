@@ -837,12 +837,12 @@
     </div>
 
     <div class="rs-insp-tabbar" id="inspTabbar">
-      <button class="insp-tab active" data-insp-tab="mode"        onclick="setInspectorTab('mode')">Cut</button>
+      <button class="insp-tab active" data-insp-tab="mode"        onclick="setInspectorTab('mode')">Story</button>
       <button class="insp-tab"        data-insp-tab="subtitle"    onclick="setInspectorTab('subtitle')">Subtitles</button>
-      <button class="insp-tab"        data-insp-tab="text"        onclick="setInspectorTab('text')">Text &amp; Voice</button>
+      <button class="insp-tab"        data-insp-tab="text"        onclick="setInspectorTab('text')">Words</button>
       <button class="insp-tab"        data-insp-tab="audio"       onclick="setInspectorTab('audio')">Audio</button>
-      <button class="insp-tab"        data-insp-tab="performance" onclick="setInspectorTab('performance')">Render</button>
-      <button class="insp-tab"        data-insp-tab="ai"          onclick="setInspectorTab('ai')">Talk</button>
+      <button class="insp-tab"        data-insp-tab="performance" onclick="setInspectorTab('performance')">Export</button>
+      <button class="insp-tab"        data-insp-tab="ai"          onclick="setInspectorTab('ai')">AI</button>
     </div>
 
     <div class="evRightScroll inspPaneBody">
@@ -850,11 +850,9 @@
       <div id="inspContextBar" class="inspContextBar">Editor</div>
       <div id="evInspAiPanel" class="evInspAiPanel" data-context="empty"></div>
 
-      <!-- P3.1: Creator Memory panel — shown in Cut tab -->
-      <div id="cmPrefsPanel" class="cmPrefsPanel" data-insp-panel="mode"></div>
-
-      <!-- P3.2: Conversational editing panel — shown in Talk tab -->
+      <!-- P3.2: Conversational editing panel — shown in AI tab -->
       <div class="convPanel" data-insp-panel="ai">
+        <div class="convAiBridge" style="font-size:10px;color:rgba(255,255,255,.28);padding:6px 0 2px;text-align:center">Same editing assistant used in Story · richer reasoning here</div>
         <div class="convHistory" id="convHistory"></div>
         <div class="convExamples" id="convExamples">
           <button class="convExampleBtn" onclick="EditorConverse.quickInput('make intro stronger')">make intro stronger</button>
@@ -906,7 +904,7 @@
         <div id="aiActivityRail" class="aiActivityRail"><span class="aiActivityEmpty">AI ready</span></div>
       </div>
 
-      <!-- P2: AI Edit actions (collapsible) -->
+      <!-- AI Edit actions (collapsible) — Undo lives in AI Assist header above -->
       <div class="inspCollapsedGroup insp-panel-active" data-insp-panel="mode" id="inspGroupAiEdit">
         <div class="inspGroupHdr" id="inspGroupAiEditHdr" onclick="evToggleInspGroup('ai-edit')">
           <span>AI Edit Actions</span>
@@ -921,28 +919,30 @@
             <button class="aiActionBtn" onclick="EditorAiActions?.viralMode?.()">Viral Mode</button>
             <button class="aiActionBtn" onclick="EditorAiActions?.cinematicMode?.()">Cinematic</button>
             <button class="aiActionBtn" onclick="EditorAiActions?.subtitleCleanup?.()">Fix Subs</button>
-            <button class="aiActionBtn is-undo" onclick="EditorAiActions?.undo?.()">↩ Undo</button>
-          </div>
-          <!-- Variant slots -->
-          <div style="margin-top:10px">
-            <div class="aiSectionLabel">Timeline Variants</div>
-            <div class="aiVariantGrid">
-              <button class="aiVariantBtn" id="aiVariant_viral"       onclick="EditorAiSessions?.applyVariant?.('viral')">Viral</button>
-              <button class="aiVariantBtn" id="aiVariant_cinematic"   onclick="EditorAiSessions?.applyVariant?.('cinematic')">Cinematic</button>
-              <button class="aiVariantBtn" id="aiVariant_aggressive"  onclick="EditorAiSessions?.applyVariant?.('aggressive')">Aggressive</button>
-              <button class="aiVariantBtn" id="aiVariant_balanced"    onclick="EditorAiSessions?.applyVariant?.('balanced')">Balanced</button>
-            </div>
-          </div>
-          <!-- Snapshot list -->
-          <div style="margin-top:10px">
-            <div class="aiSectionLabel">Snapshots</div>
-            <div id="aiSnapshotList" class="aiSnapshotList"><div class="aiSnapshotEmpty">No snapshots yet</div></div>
           </div>
         </div>
       </div>
 
-      <!-- Quick Start Presets -->
-      <div class="evSection evPresetSection ev-panel-card ev-option-panel insp-panel-active" id="evPresetSection" data-insp-panel="mode">
+      <!-- Timeline Variants & Snapshots — promoted (was inside collapsed AI group) -->
+      <div class="evSection insp-panel-active" id="evSectionVariants" data-insp-panel="mode">
+        <div class="aiSectionLabel" style="margin-bottom:6px">Timeline Variants</div>
+        <div class="aiVariantGrid">
+          <button class="aiVariantBtn" id="aiVariant_viral"       onclick="EditorAiSessions?.applyVariant?.('viral')">Viral</button>
+          <button class="aiVariantBtn" id="aiVariant_cinematic"   onclick="EditorAiSessions?.applyVariant?.('cinematic')">Cinematic</button>
+          <button class="aiVariantBtn" id="aiVariant_aggressive"  onclick="EditorAiSessions?.applyVariant?.('aggressive')">Aggressive</button>
+          <button class="aiVariantBtn" id="aiVariant_balanced"    onclick="EditorAiSessions?.applyVariant?.('balanced')">Balanced</button>
+        </div>
+        <div style="margin-top:10px">
+          <div class="aiSectionLabel" style="margin-bottom:4px">Snapshots</div>
+          <div id="aiSnapshotList" class="aiSnapshotList"><div class="aiSnapshotEmpty">No snapshots yet</div></div>
+        </div>
+      </div>
+
+      <!-- P3.1: Creator Memory panel — demoted below editing tools -->
+      <div id="cmPrefsPanel" class="cmPrefsPanel" data-insp-panel="mode"></div>
+
+      <!-- Quick Start Presets — moved to Export tab -->
+      <div class="evSection evPresetSection ev-panel-card ev-option-panel" id="evPresetSection" data-insp-panel="performance">
         <div class="evSectionTitle ev-panel-card-head">Quick Start Preset</div>
         <div class="ev-panel-card-body">
           <div class="evPresetGrid ev-option-grid" id="evQuickStartPreset" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%">
@@ -980,8 +980,8 @@
         <input type="hidden" id="evLoudnormEnabled" value="0">
       </div>
 
-      <!-- Output settings -->
-      <div class="evSection insp-panel-active" id="evSectionBasic" data-insp-panel="mode">
+      <!-- Output settings — moved to Export tab -->
+      <div class="evSection" id="evSectionBasic" data-insp-panel="performance">
         <div class="evSectionTitle">Output</div>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:7px 10px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid rgba(148,163,184,.12)">
           <span style="font-size:12px;color:var(--text-mut);white-space:nowrap;flex-shrink:0">Strategy Preset</span>
@@ -1036,8 +1036,6 @@
           </label>
         </div>
       </div>
-
-      <div class="inspGroupSep" data-insp-panel="_sep"><span>Language &amp; Voice</span></div>
 
       <!-- Subtitle Style -->
       <div class="evSection" id="inspSubtitlePane" data-section-type="subtitle" data-insp-panel="subtitle">
@@ -1103,6 +1101,7 @@
           <span id="evSubStaticText" style="font-family:'Bungee';font-size:28px;color:#fff;-webkit-text-stroke:2px #000">Preview subtitle</span>
         </div>
         <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+          <button class="aiActionBtn" style="width:100%;margin-bottom:10px" onclick="EditorAiActions?.subtitleCleanup?.()">✦ Fix Subs — AI cleanup</button>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
             <input type="checkbox" id="evSubTranslate" style="width:14px;height:14px;accent-color:var(--secondary)" onchange="evOnSubTranslateChange()">
             <span style="font-size:12px;color:var(--text)">Translate subtitles</span>
@@ -1117,6 +1116,20 @@
               </select>
             </label>
           </div>
+        </div>
+      </div>
+
+      <!-- AI Narration — moved from Audio to Words tab -->
+      <div class="evSection" id="evSectionNarration" data-insp-panel="text">
+        <div class="edAudioTrackHdr" style="margin-bottom:6px">
+          <span class="edAudioTrackName" style="font-size:12px;font-weight:600;color:var(--fg-100)">AI Narration</span>
+          <label class="edAudioEnableToggle">
+            <input type="checkbox" id="evVoiceEnable" onchange="EditorAudioRuntime?.onVoiceToggle?.()">
+            <span class="fieldLabel" style="margin:0">On</span>
+          </label>
+        </div>
+        <div id="edVoiceControls" style="display:none">
+          <div id="evVoiceFields"></div>
         </div>
       </div>
 
@@ -1307,32 +1320,26 @@
                 </div>
               </div>
             </div>
-            <!-- Voice -->
+            <!-- Loudness normalization — surfaced from hidden compat input -->
             <div class="edAudioTrack" style="margin-top:10px">
-              <div class="edAudioTrackHdr">
-                <span class="edAudioTrackName">AI Narration</span>
-                <label class="edAudioEnableToggle">
-                  <input type="checkbox" id="evVoiceEnable" onchange="EditorAudioRuntime?.onVoiceToggle?.()">
-                  <span class="fieldLabel" style="margin:0">On</span>
-                </label>
-              </div>
-              <div id="edVoiceControls" style="display:none;margin-top:6px">
-                <div id="evVoiceFields"></div>
-              </div>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" id="edAudioLoudnorm" onchange="var h=document.getElementById('evLoudnormEnabled');if(h)h.value=this.checked?'1':'0'" style="width:13px;height:13px;accent-color:var(--primary)">
+                <span class="edAudioTrackName">Loudness normalization</span>
+              </label>
+              <div style="font-size:10px;color:var(--text-mut);margin-top:3px;padding-left:21px">Normalize final output to broadcast level</div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- P1.8-K: Performance / Render (collapsed) -->
+      <!-- Export tab: Render hardware settings (auto-opens on tab switch) -->
       <div class="inspCollapsedGroup" data-insp-panel="performance">
         <div class="inspGroupHdr" id="inspGroupPerfHdr" onclick="evToggleInspGroup('performance')">
-          <span>Performance</span>
+          <span>Render Settings</span>
           <span id="inspGroupPerfArrow" class="inspGroupArrow">▸</span>
         </div>
         <div class="inspGroupBody" id="inspGroupPerfBody">
           <div class="evSection" data-section-type="performance" data-insp-panel="performance">
-            <div class="evSectionTitle">Render Settings</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
               <label class="field">
                 <span class="fieldLabel">Device</span>
@@ -1350,7 +1357,7 @@
                 </select>
               </label>
               <label class="field">
-                <span class="fieldLabel">Transform Preset</span>
+                <span class="fieldLabel">Transform</span>
                 <select class="fieldInput" id="evTransformPreset">
                   <option value="none">None</option>
                   <option value="slight" selected>Slightly Different</option>
@@ -1368,8 +1375,17 @@
               </label>
             </div>
           </div>
-          <!-- P1.8-K: Runtime diagnostics (populated by EditorPerformanceRuntime) -->
-          <div class="evSection" id="edPerfDiagSection" data-section-type="perf-diag" data-insp-panel="performance" style="border-top:1px solid var(--border)">
+        </div>
+      </div>
+
+      <!-- Export tab: Advanced Debug (collapsed by default — not auto-opened) -->
+      <div class="inspCollapsedGroup" data-insp-panel="performance">
+        <div class="inspGroupHdr" id="inspGroupAdvHdr" onclick="evToggleInspGroup('advanced')">
+          <span>Advanced Debug</span>
+          <span class="inspGroupArrow">▸</span>
+        </div>
+        <div class="inspGroupBody" id="inspGroupAdvBody">
+          <div class="evSection" id="edPerfDiagSection" data-section-type="perf-diag" data-insp-panel="performance">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
               <div class="evSectionTitle" style="margin-bottom:0">Runtime Diagnostics</div>
               <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.refresh?.()" title="Refresh metrics">↻</button>
@@ -1389,7 +1405,7 @@
               <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.clearWaveCache?.()">Clear waves</button>
               <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.toggleDevOverlay?.()">Dev overlay</button>
             </div>
-            <!-- Adaptive quality toggles -->
+            <!-- Quality toggles -->
             <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
               <div class="fieldLabel" style="margin-bottom:6px">Quality Controls</div>
               <div style="display:flex;flex-direction:column;gap:5px">
@@ -1411,8 +1427,8 @@
         </div>
       </div>
 
-      <!-- Market Viral panel -->
-      <div class="evSection mvPanel" id="evSectionMarket" data-insp-panel="market">
+      <!-- Market Viral panel — surfaced in Export tab -->
+      <div class="evSection mvPanel" id="evSectionMarket" data-insp-panel="performance">
         <div class="evSectionTitle">🌍 Market Viral (All Clips)</div>
         <div class="mvPanelDesc">Market scoring, subtitle tone, and hook optimization for every exported clip.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
@@ -1568,7 +1584,6 @@
   <input type="checkbox" id="evCleanupTemp" checked>
   <!-- Legacy BGM container (kept for backward-compat; edBgmControls is the live panel) -->
   <div id="evBgmFields"></div>
-  <div id="evVoiceFields"></div>
   <div id="evSectionMoreSettings"></div>
 </div>
 <!-- /SECTION: editor-compat-inputs -->
