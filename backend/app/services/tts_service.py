@@ -1,7 +1,10 @@
 import asyncio
+import logging
 from pathlib import Path
 
 import edge_tts
+
+logger = logging.getLogger(__name__)
 
 from app.core.config import TEMP_DIR
 from app.services.voice_profiles import resolve_voice_profile
@@ -39,6 +42,7 @@ def generate_narration_mp3(
     try:
         asyncio.run(_run())
     except Exception as exc:
+        logger.error("tts_generation_failed job_id=%s voice_id=%s: %s", job_id, profile.get("voice_id"), exc)
         raise RuntimeError(f"AI voice generation failed: {exc}") from exc
 
     if not mp3_path.exists() or mp3_path.stat().st_size <= 0:

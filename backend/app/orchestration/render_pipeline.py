@@ -710,7 +710,7 @@ def _resolve_profile(payload: RenderRequest):
     profile = (payload.render_profile or "quality").lower()
     defaults = {
         # fast: quick turnaround, acceptable quality
-        "fast":     {"video_preset": "veryfast", "video_crf": 23, "whisper_model": "tiny",  "transition_sec": 0.05},
+        "fast":     {"video_preset": "veryfast", "video_crf": 23, "whisper_model": "base",  "transition_sec": 0.05},
         # balanced: good quality/speed tradeoff — medium is ~3-4x faster than slow with <5% quality delta
         "balanced": {"video_preset": "medium",   "video_crf": 18, "whisper_model": "base",  "transition_sec": 0.06},
         # quality: high quality — slow preset gives meaningful gains over medium for large screens
@@ -2613,6 +2613,13 @@ def run_render_pipeline(
                                 _job_log(effective_channel, job_id, f"subtitle_translate_block_failed part_no={idx} block={_bfi} target={_sub_target_lang}", kind="warning")
                             if _block_failures:
                                 _sub_translate_partial.append(idx)
+                                _job_log(
+                                    effective_channel, job_id,
+                                    f"Translation partially failed for {_sub_target_lang} export — "
+                                    f"{len(_block_failures)} subtitle block(s) could not be translated. "
+                                    f"Original text preserved for those blocks.",
+                                    kind="warning",
+                                )
                             else:
                                 _sub_translate_clean.append(idx)
                             _job_log(effective_channel, job_id, f"subtitle_translate_completed part_no={idx} output={translated_srt_part}")
@@ -2629,6 +2636,12 @@ def run_render_pipeline(
                         except Exception as _trans_exc:
                             _sub_translate_failed_parts.append(idx)
                             _job_log(effective_channel, job_id, f"subtitle_translate_failed part_no={idx}: {_trans_exc}", kind="warning")
+                            _job_log(
+                                effective_channel, job_id,
+                                f"Translation failed for {_sub_target_lang} export (part {idx}). "
+                                f"Subtitles will use original language.",
+                                kind="warning",
+                            )
                             _emit_render_event(
                                 channel_code=effective_channel,
                                 job_id=job_id,
@@ -3009,6 +3022,7 @@ def run_render_pipeline(
                         except Exception as _part_tts_exc:
                             _part_subtitle_voice_path = None
                             _job_log(effective_channel, job_id, f"voice_part_tts_failed part_no={idx}: {_part_tts_exc}", kind="error")
+                            _job_log(effective_channel, job_id, f"Narration generation failed for part {idx}. Continuing without narration.", kind="warning")
                             _emit_render_event(
                                 channel_code=effective_channel,
                                 job_id=job_id,
@@ -3098,6 +3112,7 @@ def run_render_pipeline(
                         except Exception as _part_tts_exc:
                             _part_subtitle_voice_path = None
                             _job_log(effective_channel, job_id, f"voice_translated_subtitle_tts_failed part_no={idx}: {_part_tts_exc}", kind="error")
+                            _job_log(effective_channel, job_id, f"Narration generation failed for part {idx}. Continuing without narration.", kind="warning")
                             _emit_render_event(
                                 channel_code=effective_channel,
                                 job_id=job_id,

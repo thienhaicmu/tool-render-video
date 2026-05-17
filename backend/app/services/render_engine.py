@@ -317,7 +317,7 @@ def _build_audio_filter(loudnorm_enabled: bool, reup_mode: bool, speed: float) -
         # Creator-grade audio polish: rumble removal → loudness target → gentle compression → limiter.
         # acompressor ratio=2 at -18dB threshold: natural dynamic control without pumping.
         parts.append("highpass=f=80")
-        parts.append("loudnorm=I=-16:LRA=11:TP=-1.5")
+        parts.append("loudnorm=I=-14:LRA=11:TP=-1.0")
         parts.append("acompressor=threshold=-18dB:ratio=2:attack=40:release=300:makeup=1.5")
         parts.append("alimiter=limit=0.95")
     if reup_mode:

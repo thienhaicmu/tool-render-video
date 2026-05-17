@@ -74,7 +74,7 @@ def extract_features(seg: Dict, scenes: List[Dict], total_segments: int, seg_ind
     # Position in video: earlier is often better (more viewer energy), but
     # position 2-3 can be good too (past the intro).
     position_ratio = seg_index / max(1, total_segments - 1) if total_segments > 1 else 0.0
-    position_score = max(0.0, 1.0 - position_ratio * 0.55)  # linear decay, 45% penalty for last
+    position_score = max(0.25, 1.0 - position_ratio * 0.55)  # linear decay, 45% penalty, 0.25 floor
 
     # Scene quality
     scene_quality = float(seg.get("scene_quality_avg", 55.0)) / 100.0
