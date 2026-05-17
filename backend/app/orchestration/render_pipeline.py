@@ -1745,6 +1745,79 @@ def run_render_pipeline(
                 context={"reason": "combined_disabled", "total_clips": len(scored)},
             )
 
+        # ── Story arc sequencing ─────────────────────────────────────────────
+        # Lightweight hook → build → payoff reorder applied after score-based
+        # selection.  Deterministic heuristic — predictable and explainable.
+        #
+        # Conditions: non-timeline mode, 3+ clips, non-montage dominant type.
+        # For montage: energy-first order is already correct — skip.
+        # For 1-2 clips: no meaningful arc — skip.
+        if part_order != "timeline" and len(scored) >= 3:
+            _ct_counts: dict[str, int] = {}
+            for _s in scored:
+                _ct = str(_s.get("content_type_hint") or "vlog")
+                _ct_counts[_ct] = _ct_counts.get(_ct, 0) + 1
+            _dominant_ct = max(_ct_counts, key=_ct_counts.get)
+
+            if _dominant_ct != "montage":
+                # Hook: clip with strongest opening signal (starts at scene cut,
+                # early position, correct duration).  hook_score = starts_at_cut×40
+                # + position_score×40 + duration_score×20.
+                _arc_hook = max(scored, key=lambda s: float(s.get("hook_score", 0) or 0))
+
+                # Payoff: latest clip in source video that is not the hook.
+                # Protects reveals, answers, punchlines, before/after moments
+                # from being buried in the middle of the export.
+                _arc_non_hook = [s for s in scored if s is not _arc_hook]
+                _arc_payoff = max(_arc_non_hook, key=lambda s: float(s.get("start", 0) or 0))
+
+                # Build: everything between hook and payoff.
+                _arc_build = [s for s in scored if s is not _arc_hook and s is not _arc_payoff]
+
+                # Build order by content type:
+                #   interview/tutorial/vlog — source chronological preserves the
+                #     original logic/explanation/narrative structure
+                #   commentary — descending viral score: strongest supporting
+                #     evidence before diminishing evidence
+                if _dominant_ct in ("interview", "tutorial", "vlog"):
+                    _arc_build.sort(key=lambda s: float(s.get("start", 0) or 0))
+                else:
+                    _arc_build.sort(key=lambda s: float(s.get("viral_score", 0) or 0), reverse=True)
+
+                scored = [_arc_hook] + _arc_build + [_arc_payoff]
+
+                _job_log(
+                    effective_channel, job_id,
+                    f"story_arc_applied dominant={_dominant_ct} clips={len(scored)} "
+                    f"hook_start={float(_arc_hook.get('start', 0) or 0):.1f}s "
+                    f"payoff_start={float(_arc_payoff.get('start', 0) or 0):.1f}s "
+                    f"hook_score={float(_arc_hook.get('hook_score', 0) or 0):.1f}",
+                )
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="story_arc_applied",
+                    level="INFO",
+                    message=(
+                        f"Story arc: hook=part1 payoff=part{len(scored)} "
+                        f"dominant={_dominant_ct}"
+                    ),
+                    step="render.story_arc",
+                    context={
+                        "dominant_content_type": _dominant_ct,
+                        "total_clips": len(scored),
+                        "hook_start_sec": round(float(_arc_hook.get("start", 0) or 0), 1),
+                        "hook_score": round(float(_arc_hook.get("hook_score", 0) or 0), 1),
+                        "payoff_start_sec": round(float(_arc_payoff.get("start", 0) or 0), 1),
+                        "build_order": "chronological" if _dominant_ct in ("interview", "tutorial", "vlog") else "score_desc",
+                    },
+                )
+            else:
+                _job_log(
+                    effective_channel, job_id,
+                    f"story_arc_skipped reason=montage clips={len(scored)}",
+                )
+
         if not scored:
             raise RuntimeError("No exportable segments were created")
 
