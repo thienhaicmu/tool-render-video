@@ -594,6 +594,9 @@ def _detect_silence_segments(
         "-f", "null", "-",
     ]
     try:
+        cancel_ev = getattr(_tls, 'cancel_event', None)
+        if cancel_ev is not None and cancel_ev.is_set():
+            return []
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         segments: list[tuple[float, float]] = []
         pending_start: float | None = None
@@ -719,7 +722,7 @@ def apply_micro_pacing(
         *audio_args,
         output_path,
     ]
-    subprocess.run(cmd, capture_output=True, text=True, timeout=150, check=True)
+    _run_ffmpeg_with_retry(cmd, retry_count=0)
 
     return {
         "applied": True,

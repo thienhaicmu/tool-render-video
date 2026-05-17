@@ -1539,6 +1539,8 @@ def run_render_pipeline(
         _sub_translate_partial = []
         _sub_translate_failed_parts = []
         if getattr(payload, "voice_enabled", False) and getattr(payload, "voice_source", "manual") == "manual":
+            if cancel_registry.is_cancelled(job_id):
+                raise cancel_registry.JobCancelledError()
             try:
                 update_job_progress(job_id, current_stage, current_progress, "Generating AI voice...")
                 _job_log(effective_channel, job_id, "Generating AI narration audio")
@@ -1603,6 +1605,8 @@ def run_render_pipeline(
             message="Detecting scenes",
             step="render.scene.detect",
         )
+        if cancel_registry.is_cancelled(job_id):
+            raise cancel_registry.JobCancelledError()
         _t_scene = time.perf_counter()
         scenes = detect_scenes(str(source_path)) if payload.auto_detect_scene else []
         _scene_ms = int((time.perf_counter() - _t_scene) * 1000)
@@ -1620,6 +1624,8 @@ def run_render_pipeline(
 
         _set_stage(JobStage.SEGMENT_BUILDING, 25, "Building smart segments")
         segments = build_segments_from_scenes(scenes, source["duration"], payload.min_part_sec, payload.max_part_sec)
+        if cancel_registry.is_cancelled(job_id):
+            raise cancel_registry.JobCancelledError()
         scored = score_segments(segments, scenes)
         # Fixed mode: High motion priority (no UI option). Keep enough parts to avoid empty output.
         high_motion = [s for s in scored if int(s.get("motion_score", 0)) >= HIGH_MOTION_MIN_SCORE]
@@ -1791,6 +1797,8 @@ def run_render_pipeline(
                     )
                     _hb = threading.Thread(target=_hb_thread_fn, daemon=True, name=f"transcribe_hb_{job_id[:8]}")
                     _hb.start()
+                    if cancel_registry.is_cancelled(job_id):
+                        raise cancel_registry.JobCancelledError()
                     try:
                         _transcription_result = transcribe_with_adapter(
                             str(source_path),
@@ -2584,6 +2592,8 @@ def run_render_pipeline(
                     _needs_translated = not (payload.resume_from_last and translated_srt_part.exists() and translated_srt_part.stat().st_size > 0)
                     if _needs_translated:
                         _sub_translate_attempts.append(idx)
+                        if cancel_registry.is_cancelled(job_id):
+                            raise cancel_registry.JobCancelledError()
                         try:
                             _job_log(effective_channel, job_id, f"subtitle_translate_started part_no={idx} target={_sub_target_lang}", kind="debug")
                             _emit_render_event(
@@ -2954,6 +2964,8 @@ def run_render_pipeline(
                     if _part_narration_text.strip():
                         _voice_part_tts_attempts.append(idx)
                         _part_mp3 = str(TEMP_DIR / job_id / "voice" / f"part_{idx:03d}.mp3")
+                        if cancel_registry.is_cancelled(job_id):
+                            raise cancel_registry.JobCancelledError()
                         try:
                             _job_log(effective_channel, job_id, f"Generating AI narration for part {idx}/{total_parts} from subtitle", kind="debug")
                             _emit_render_event(
@@ -3157,6 +3169,8 @@ def run_render_pipeline(
             # P4-4: Micro pacing — compress mid-clip silences (all output clips)
             _micro_pacing_applied = False
             _micro_pacing_trim_sec = 0.0
+            if cancel_registry.is_cancelled(job_id):
+                raise cancel_registry.JobCancelledError()
             if final_part.exists() and final_part.stat().st_size > 0:
                 _paced_part = work_dir / f"{source['slug']}_part_{idx:03d}_paced.mp4"
                 _t_mp = time.perf_counter()
@@ -3851,6 +3865,8 @@ def run_render_pipeline(
                 _re["partial_failure_warning"] = _partial_warning
             if _best_rank_entry:
                 _best_rank_entry["partial_failure_warning"] = _partial_warning
+        if cancel_registry.is_cancelled(job_id):
+            raise cancel_registry.JobCancelledError()
         _rank_entries_ordered = attach_ai_visibility_summaries(_rank_entries_ordered)
         _best_rank_entry = next(
             (_entry for _entry in _rank_entries_ordered if bool(_entry.get("is_best_clip"))),

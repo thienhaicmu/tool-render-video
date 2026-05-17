@@ -1199,6 +1199,7 @@ def cancel_render_job(job_id: str):
     status = (row.get("status") or "").lower()
     if status not in ("running", "queued"):
         raise HTTPException(status_code=409, detail=f"Job is not cancellable (status={status})")
+    update_job_progress(job_id, "cancelling", 0, "Cancelling…", status="cancelling")
     from app.services import cancel_registry
     cancel_registry.request_cancel(job_id)
     return {"job_id": job_id, "status": "cancelling"}
