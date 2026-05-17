@@ -2812,3 +2812,66 @@
    END OF UX-R7.2 — RUNTIME STALL AWARENESS
    ======================================================= */
 
+/* =======================================================
+   UX-R8.1 — RUNTIME THINKING SPACE REDESIGN
+   Editorial narrative replaces stgMsg as primary content.
+   Concerns demoted to subtle support notes.
+   ======================================================= */
+
+/* ── Narrative block ────────────────────────────────────── */
+.uxr1Narrative {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.uxr1NarrL1 {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.82);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.uxr1NarrL2 {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.44);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Stall context in L2 — amber tint ──────────────────── */
+.uxr1NarrL2.is-stall {
+  color: rgba(251,191,36,0.72);
+}
+
+/* ── Concern items — demoted to subtle support notes ────── */
+.uxr1ConcernItem {
+  padding: 4px 8px;
+  border-left: 1px solid rgba(167,139,250,0.22);
+  background: transparent;
+  border-radius: 0;
+  gap: 1px;
+}
+
+.uxr1ConcernLabel {
+  font-size: 9px;
+  color: rgba(167,139,250,0.50);
+}
+
+.uxr1ConcernMsg {
+  font-size: 11px;
+  color: rgba(255,255,255,0.38);
+}
+
+/* ── Stage message hidden when narrative present ────────── */
+.uxr1AiHero .uxr1StageMsg[hidden] {
+  display: none;
+}
+
+/* =======================================================
+   END OF UX-R8.1 — RUNTIME THINKING SPACE REDESIGN
+   ======================================================= */
+

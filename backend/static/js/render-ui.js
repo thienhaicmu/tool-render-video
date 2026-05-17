@@ -4767,6 +4767,83 @@ const RenderAiRuntime = (() => {
     });
   }
 
+  // R8.1: Build one editorial narrative from real signals — stage, live completions, stall, taste.
+  // Returns { line1, line2 } — two sentences, one voice, no fragments.
+  function _r8BuildNarrative(stgKey, parts, summary) {
+    const safeParts = Array.isArray(parts) ? parts : [];
+    const done = safeParts.filter(p => {
+      const st = String(p.status || '').toLowerCase();
+      return st === 'done' || st === 'completed' || st === 'complete';
+    });
+    const total = safeParts.length;
+    const stuckMap = _stuckPartsMap(summary, safeParts);
+
+    // Line 1: what the AI is doing right now (stage-driven, counts-aware)
+    const stageNarr = {
+      init:     'Setting up your creative workspace.',
+      source:   'Studying the source — format, quality, and duration.',
+      scene:    'Mapping where scenes breathe and cuts want to happen.',
+      audio:    'Reading the transcript rhythm to align pacing.',
+      beat:     'Matching audio cadence to clip scoring.',
+      segment:  'Surfacing your strongest moments from the source.',
+      scoring:  (total - done.length) > 0
+                  ? 'Scoring ' + (total - done.length) + ' remaining clip' + ((total - done.length) !== 1 ? 's' : '') + '.'
+                  : 'Measuring retention signal across clips.',
+      assembly: 'Sequencing clips for maximum opening impact.',
+      encode:   (done.length > 0 && total > 0)
+                  ? done.length + ' of ' + total + ' clip' + (total !== 1 ? 's' : '') + ' rendered.'
+                  : 'Encoding your clips.',
+      validate: 'Verifying each clip meets your quality bar.',
+      report:   'Compiling per-clip intelligence.',
+      export:   'Packaging your clips — ready to review.',
+    };
+    var line1 = stageNarr[stgKey] || 'Processing.';
+    var line2 = '';
+
+    // Priority 1: stall — editorial context, not a warning
+    if (stuckMap.size > 0) {
+      const firstKey = stuckMap.keys().next().value;
+      const stuckSecs = stuckMap.get(firstKey);
+      const mins = Math.floor(stuckSecs / 60);
+      const stuckPart = safeParts.find(function(p) { return String(p.part_no ?? '') === String(firstKey); });
+      const stuckName = stuckPart ? (stuckPart.part_name || ('Clip ' + firstKey)) : ('Clip ' + firstKey);
+      line2 = esc(stuckName) + ' is taking ' + (mins > 1 ? mins + ' minutes' : 'longer than expected') +
+              '. Review can continue while recovery completes.';
+      return { line1, line2 };
+    }
+
+    // Priority 2: last completed clip with signal context
+    if (done.length > 0) {
+      const last = done[done.length - 1];
+      const name = last.part_name ? esc(last.part_name) : ('Clip ' + Number(last.part_no || 0));
+      const hook   = last.hook_score   != null ? Number(last.hook_score)   : null;
+      const motion = last.motion_score != null ? Number(last.motion_score) : null;
+      if (hook !== null && motion !== null) {
+        if (hook >= 0.7 && motion >= 0.65)      line2 = name + ' completed — strong hook and motion.';
+        else if (hook >= 0.7)                   line2 = name + ' completed — strong opening hook.';
+        else if (motion >= 0.7)                 line2 = name + ' completed — high motion energy.';
+        else if (hook < 0.35)                   line2 = name + ' completed — lower hook, ranking adjusted.';
+        else                                     line2 = name + ' completed.';
+      } else {
+        line2 = name + ' completed.';
+      }
+      return { line1, line2 };
+    }
+
+    // Priority 3: taste model alignment when no live clip context yet
+    if (typeof CreatorMemory !== 'undefined') {
+      try {
+        const taste = CreatorMemory.getTasteModel();
+        if (taste && taste.confident && taste.editStyle && taste.editStyle !== 'balanced') {
+          const styleMap = { viral: 'viral energy', cinematic: 'cinematic pacing', educational: 'clarity-first editing' };
+          line2 = 'Prioritizing ' + (styleMap[taste.editStyle] || taste.editStyle) + ' based on your recent review patterns.';
+        }
+      } catch (_) {}
+    }
+
+    return { line1, line2 };
+  }
+
   function _updateHero(idx, isFailed, parts, summary) {
     const heroEl = document.getElementById('uxr1_ai_hero');
     if (!heroEl) return;
@@ -4777,37 +4854,30 @@ const RenderAiRuntime = (() => {
       const stg = _STAGES[idx];
       if (stgIcon)  stgIcon.textContent  = stg.icon;
       if (stgLabel) stgLabel.textContent = stg.label;
-      if (stgMsg)   stgMsg.textContent   = stg.msg;
+      // R8.1: stgMsg is suppressed; editorial narrative takes its place
+      if (stgMsg) stgMsg.hidden = true;
       heroEl.dataset.stage  = stg.key;
       heroEl.dataset.failed = isFailed ? '1' : '';
+
+      // R8.1: Inject single editorial narrative into .uxr1StageBody
+      const narr = _r8BuildNarrative(stg.key, parts, summary);
+      var narrEl = heroEl.querySelector('#uxr1_narrative');
+      if (!narrEl) {
+        narrEl = document.createElement('div');
+        narrEl.id = 'uxr1_narrative';
+        narrEl.className = 'uxr1Narrative';
+        const bodyEl = heroEl.querySelector('.uxr1StageBody');
+        if (bodyEl) bodyEl.appendChild(narrEl);
+        else heroEl.appendChild(narrEl);
+      }
+      narrEl.innerHTML =
+        '<p class="uxr1NarrL1">' + narr.line1 + '</p>' +
+        (narr.line2 ? '<p class="uxr1NarrL2">' + narr.line2 + '</p>' : '');
     }
 
-    // R7.2: Soft stall warning from stuck_parts[] — non-intrusive amber notice
-    const stuckMap = _stuckPartsMap(summary, parts);
-    let stallEl = heroEl.querySelector('.uxr1StallWarn');
-    if (stuckMap.size > 0 && !isFailed) {
-      const stuckCount = stuckMap.size;
-      const maxSecs = Math.max(...stuckMap.values());
-      const mins = Math.floor(maxSecs / 60);
-      const timeStr = mins > 0 ? mins + ' min' : 'a while';
-      const stuckLabel = stuckCount === 1
-        ? '1 clip has been processing for ' + timeStr
-        : stuckCount + ' clips stalled for ' + timeStr;
-      const doneParts = (parts || []).filter(function(p) {
-        const st = String(p.status || '').toLowerCase();
-        return st === 'done' || st === 'completed' || st === 'complete';
-      });
-      const guidance = doneParts.length > 0
-        ? ' You can continue reviewing completed clips.' : '';
-      if (!stallEl) {
-        stallEl = document.createElement('div');
-        stallEl.className = 'uxr1StallWarn';
-        heroEl.appendChild(stallEl);
-      }
-      stallEl.textContent = stuckLabel + '.' + guidance;
-    } else if (stallEl) {
-      stallEl.remove();
-    }
+    // R7.2/R8.1: Stall is surfaced in the editorial narrative (line2). Remove any old .uxr1StallWarn.
+    const _oldStall = heroEl.querySelector('.uxr1StallWarn');
+    if (_oldStall) _oldStall.remove();
 
     const concernsEl = document.getElementById('uxr1_concerns');
     if (!concernsEl) return;
@@ -4840,14 +4910,27 @@ const RenderAiRuntime = (() => {
     if (!listEl || !feedEl) return;
     feedEl.classList.remove('hiddenView');
     newOnes.forEach(p => {
-      const pNo   = Number(p.part_no || 0);
-      const rawSc = p.viral_score != null ? Number(p.viral_score) : null;
-      const pct   = rawSc !== null ? Math.round(rawSc * 100) : null;
-      const tier  = pct !== null ? (pct >= 75 ? 'high' : pct >= 50 ? 'mid' : 'low') : 'low';
-      // P3.4: Taste-aware editorial context
-      const ctx   = (typeof RuntimeIntelligence !== 'undefined')
+      const pNo    = Number(p.part_no || 0);
+      // R8.1: Use part_name when available, not generic "Clip N"
+      const pName  = p.part_name ? esc(p.part_name) : ('Clip ' + esc(String(pNo)));
+      const rawSc  = p.viral_score != null ? Number(p.viral_score) : null;
+      const pct    = rawSc !== null ? Math.round(rawSc * 100) : null;
+      const hook   = p.hook_score   != null ? Number(p.hook_score)   : null;
+      const motion = p.motion_score != null ? Number(p.motion_score) : null;
+      const tier   = pct !== null ? (pct >= 75 ? 'high' : pct >= 50 ? 'mid' : 'low') : 'low';
+      // R8.1: Generate editorial context from hook+motion signals; fall back to RuntimeIntelligence
+      var editWhy = '';
+      if (hook !== null && motion !== null) {
+        if (hook >= 0.7 && motion >= 0.65)    editWhy = 'Strong hook and motion — a keeper.';
+        else if (hook >= 0.7)                 editWhy = 'Opens strong — hook above threshold.';
+        else if (motion >= 0.7)               editWhy = 'High motion energy — holds attention.';
+        else if (hook < 0.35 && motion < 0.4) editWhy = 'Lower signal — unlikely to lead the cut.';
+        else                                   editWhy = 'Moderate signal — solid candidate.';
+      }
+      const ctx = (typeof RuntimeIntelligence !== 'undefined')
         ? RuntimeIntelligence.getEvolutionContext(pNo, pct, tier)
         : { why: tier === 'high' ? 'Strong hook from the first frame — this one is a keeper.' : tier === 'mid' ? 'Solid clip — good bones, room to sharpen the hook.' : 'Lower signal — may not crack the top picks.', tasteNote: null };
+      const why = editWhy || ctx.why;
       const scoreHtml = pct !== null ? '<span class="p28EvolScore">' + pct + '%</span>' : '';
       const tasteHtml = ctx.tasteNote ? '<span class="p34EvolTaste">' + esc(ctx.tasteNote) + '</span>' : '';
       const row = document.createElement('div');
@@ -4856,10 +4939,10 @@ const RenderAiRuntime = (() => {
         '<div class="p28EvolSignal"></div>' +
         '<div class="p28EvolContent">' +
           '<div class="p28EvolHead">' +
-            '<span class="p28EvolName">Clip ' + esc(String(pNo)) + '</span>' +
+            '<span class="p28EvolName">' + pName + '</span>' +
             scoreHtml +
           '</div>' +
-          '<div class="p28EvolWhy">' + esc(ctx.why) + tasteHtml + '</div>' +
+          '<div class="p28EvolWhy">' + esc(why) + tasteHtml + '</div>' +
         '</div>';
       listEl.insertBefore(row, listEl.firstChild);
       // Keep max 6 clip items; concern items are excluded from count
