@@ -40,7 +40,7 @@ from app.services.tts_service import generate_narration_mp3
 from app.services.audio_mix_service import mix_narration_audio
 from app.services.audio_cleanup_adapters import cleanup_audio_with_adapter
 from app.services.translation_service import translate_srt_file
-from app.services.remotion_adapter import generate_hook_intro, prepend_intro_clip
+from app.services.remotion_adapter import generate_hook_intro, prepend_intro_clip, resolve_intro_preset
 from app.ai.visibility.ai_visibility_summary import attach_ai_visibility_summaries
 
 logger = logging.getLogger("app.render")
@@ -183,10 +183,26 @@ def _maybe_prepend_remotion_hook_intro(
     job_id: str,
     part_no: int,
     headline_text: str | None = None,
-    duration_sec: float = 1.0,
+    content_type: str = "vlog",
+    hook_text: str | None = None,
+    source_title: str | None = None,
 ) -> float:
     if not bool(getattr(payload, "remotion_hook_intro", False)):
         return 0.0
+
+    _preset = resolve_intro_preset(
+        content_type,
+        override=str(getattr(payload, "intro_preset", "") or "").strip() or None,
+    )
+    # Per-preset duration — drives both the intro clip length and the return value
+    # which feeds _expected_final_duration in the part timing calculation.
+    _preset_durations = {
+        "viral_pop": 1.0,
+        "clean_creator": 1.2,
+        "story_cinematic": 1.5,
+        "gaming_energy": 1.0,
+    }
+    _duration = _preset_durations.get(_preset, 1.0)
 
     started = time.perf_counter()
     intro_path = final_part.with_name(f"{final_part.stem}.hook_intro.mp4")
@@ -194,20 +210,23 @@ def _maybe_prepend_remotion_hook_intro(
     _job_log(
         effective_channel,
         job_id,
-        f"remotion_requested part={part_no} duration_sec={duration_sec:.2f}",
+        f"hook_intro_requested part={part_no} preset={_preset} duration_sec={_duration:.2f}",
     )
     try:
         intro = generate_hook_intro(
             str(intro_path),
             aspect_ratio=str(getattr(payload, "aspect_ratio", "3:4") or "3:4"),
-            duration_sec=duration_sec,
+            duration_sec=_duration,
             headline_text=headline_text,
+            preset_id=_preset,
+            hook_text=hook_text,
+            source_title=source_title,
         )
         if not intro:
             _job_log(
                 effective_channel,
                 job_id,
-                f"remotion_failed part={part_no} reason=intro_generation_failed",
+                f"hook_intro_failed part={part_no} reason=intro_generation_failed",
                 kind="warning",
             )
             return 0.0
@@ -216,7 +235,7 @@ def _maybe_prepend_remotion_hook_intro(
             _job_log(
                 effective_channel,
                 job_id,
-                f"remotion_failed part={part_no} reason=concat_failed",
+                f"hook_intro_failed part={part_no} reason=concat_failed",
                 kind="warning",
             )
             return 0.0
@@ -225,14 +244,14 @@ def _maybe_prepend_remotion_hook_intro(
         _job_log(
             effective_channel,
             job_id,
-            f"remotion_generated part={part_no} intro_duration_ms={int(duration_sec * 1000)} elapsed_ms={elapsed_ms}",
+            f"hook_intro_generated part={part_no} preset={_preset} intro_duration_ms={int(_duration * 1000)} elapsed_ms={elapsed_ms}",
         )
-        return duration_sec
+        return _duration
     except Exception as exc:
         _job_log(
             effective_channel,
             job_id,
-            f"remotion_failed part={part_no} error={type(exc).__name__}: {exc}",
+            f"hook_intro_failed part={part_no} error={type(exc).__name__}: {exc}",
             kind="warning",
         )
         return 0.0
@@ -3422,8 +3441,9 @@ def run_render_pipeline(
                 effective_channel=effective_channel,
                 job_id=job_id,
                 part_no=idx,
-                headline_text="STOP SCROLLING",
-                duration_sec=1.0,
+                content_type=str(seg.get("content_type_hint") or "vlog"),
+                hook_text=_hook_applied_text or None,
+                source_title=str(source.get("title") or ""),
             )
             _expected_final_duration = max(
                 0.0,
