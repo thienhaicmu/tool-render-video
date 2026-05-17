@@ -290,8 +290,6 @@ function _inspectorHealthPanelHtml(account){
             ${openProfileDisabled ? `disabled title="${esc(openProfileTitle)}"` : `title="${esc(openProfileTitle)}"`}
             onclick="openAccountProfile('${id}')">Open Profile</button>
           <button class="ghostButton" style="font-size:11px;padding:2px 8px;min-height:0" type="button"
-            onclick="checkUploadAccountLogin('${id}')">Check Login</button>
-          <button class="ghostButton" style="font-size:11px;padding:2px 8px;min-height:0" type="button"
             onclick="markAccountLoggedIn('${id}')">Mark Logged In</button>
         </div>
       </div>
@@ -730,9 +728,6 @@ function renderUploadAccounts(items){
         <div class="uamCardActions">
           <button class="uamBtnPrimary" type="button"
                   onclick="event.stopPropagation(); openAccountProfile('${esc(item.account_id)}')">Open</button>
-          <button class="uamBtn" type="button"
-                  onclick="event.stopPropagation(); checkUploadAccountLogin('${esc(item.account_id)}')"
-                  ${disabled ? 'disabled' : ''}>Login</button>
           <button class="uamBtn" type="button"
                   onclick="event.stopPropagation(); console.warn('queueUploadForAccount not implemented')">Upload</button>
         </div>
@@ -1862,12 +1857,6 @@ async function stopSelectedAccountQueue(){
   showToast(changed ? `Held ${changed} upload item${changed === 1 ? '' : 's'} for this account` : 'Nothing changed', changed ? 'success' : 'info');
 }
 
-function checkSelectedAccountLogin(){
-  const account = _selectedAccountWorkspaceItem();
-  if(!account){ showToast('Select an account first', 'info'); return; }
-  checkUploadAccountLogin(account.account_id);
-}
-
 function openSelectedAccountQueueFlow(){
   const account = _selectedAccountWorkspaceItem();
   if(!account){ showToast('Select an account first', 'info'); return; }
@@ -2111,10 +2100,6 @@ function bindSimpleActions(){
     if(!acc?.profile_path) return;
     openAccountProfile(acc.account_id);
   };
-  qs('spCheckLogin').onclick = () => {
-    if(!acc) return;
-    checkUploadAccountLogin(acc.account_id);
-  };
   qs('spAutoPlan').onclick   = () => autoPlanReadyVideos?.();
   qs('spStartUpload').onclick = () => startUploadScheduler?.();
 }
@@ -2179,7 +2164,6 @@ function renderUploadWizardCTA() {
   if (state.step === 'login') {
     el.innerHTML = `
       <button class="wizardPrimary" onclick="openAccountProfile('${state.acc.account_id}')">Open Profile</button>
-      <button class="wizardSecondary" onclick="checkUploadAccountLogin('${state.acc.account_id}')">Check Login</button>
       <button class="wizardSecondary" onclick="markAccountLoggedIn('${state.acc.account_id}')">Mark Logged In</button>
     `;
     return;
@@ -2217,15 +2201,10 @@ function renderSimpleSummary(){
   const todayCount = Number(acc.today_count || 0);
   const dailyLimit = Number(acc.daily_limit || 0) || '-';
   el.innerHTML = `<b>${esc(acc.display_name || acc.account_key || acc.account_id)}</b> · ${esc(platform)} · ${esc(loginLabel)} · Today ${todayCount}/${dailyLimit}`;
-  if(__loginCheckHint && __loginCheckHint.accountId === String(acc.account_id)){
-    const _hintMsgs = {PLAYWRIGHT_BROWSER_MISSING:'Login check tool not installed.', PROFILE_IN_USE:'Close the browser profile, then check again.'};
-    next.innerHTML = esc(_hintMsgs[__loginCheckHint.errorCode] || 'Login check unavailable.');
-    return;
-  }
   if(!acc.profile_path){
     next.innerHTML = 'Set profile folder.';
   }else if(acc.login_state !== 'logged_in'){
-    next.innerHTML = 'Open Profile, log in, then Check Login.';
+    next.innerHTML = 'Open Profile, log in, then Mark Logged In.';
   }else if(!uploadVideoLibraryItems.length){
     next.innerHTML = 'Add a video.';
   }else{
@@ -2246,12 +2225,10 @@ function renderSimpleStats(){
 function _bindWorkspaceActions(){
   const acc = _getSelectedAccount();
   const openBtn  = qs('uwOpenProfileBtn');
-  const loginBtn = qs('uwLoginCheckBtn');
   const addBtn   = qs('uwAddVideoBtn');
   const autoBtn  = qs('uwAutoPlanBtn');
   const startBtn = qs('uwStartBtn');
   if(openBtn)  openBtn.onclick  = acc ? () => openAccountProfile(acc.account_id) : null;
-  if(loginBtn) loginBtn.onclick = acc ? () => checkUploadAccountLogin(acc.account_id) : null;
   if(addBtn)   addBtn.onclick   = () => openUploadEditor('video');
   if(autoBtn)  autoBtn.onclick  = () => autoPlanReadyVideos?.();
   if(startBtn) startBtn.onclick = () => startUploadScheduler?.();
@@ -2262,26 +2239,6 @@ function renderWorkspaceContext(){
   const el = qs('uwContextPanel');
   if(!el) return;
 
-  // Show login-check hint for the current account if one is active
-  if(__loginCheckHint && acc && __loginCheckHint.accountId === String(acc.account_id)){
-    const isBrowserMissing = __loginCheckHint.errorCode === 'PLAYWRIGHT_BROWSER_MISSING';
-    const isInUse          = __loginCheckHint.errorCode === 'PROFILE_IN_USE';
-    let html = `<div class="loginCheckError">${esc(__loginCheckHint.message)}</div>`;
-    if(isBrowserMissing){
-      html += `<div class="loginCheckSetupHint">Setup: run <code>.venv\\Scripts\\playwright install chromium</code></div>`;
-    }
-    if(isBrowserMissing || isInUse){
-      html += `<div class="loginCheckFallback"><b>Alternative manual flow:</b><ol>
-        <li>Click <b>Open Profile</b></li>
-        <li>Log in manually in the browser</li>
-        <li>Close the browser window</li>
-        <li>Click <b>Mark Logged In</b></li>
-      </ol></div>`;
-    }
-    el.innerHTML = html;
-    return;
-  }
-
   if(!acc){
     el.innerHTML = '<div class="uwHint">Select an account to begin</div>';
     return;
@@ -2291,7 +2248,7 @@ function renderWorkspaceContext(){
     return;
   }
   if(acc.login_state !== 'logged_in'){
-    el.innerHTML = '<div class="uwWarning">Not logged in → Click <b>Open Profile</b> → login → then <b>Check Login</b></div>';
+    el.innerHTML = '<div class="uwWarning">Not logged in → Click <b>Open Profile</b>, log in, then click <b>Mark Logged In</b></div>';
     return;
   }
   if(!uploadVideoLibraryItems.length){
@@ -2423,50 +2380,6 @@ async function disableUploadAccount(accountId){
     showToast('Upload account disabled', 'success');
   }catch(e){
     showToast(`Disable failed: ${e.message || e}`, 'error');
-  }
-}
-
-let __loginCheckHint = null; // { accountId, errorCode, message }
-
-function _showLoginCheckHint(accountId, errorCode, message){
-  __loginCheckHint = errorCode ? {accountId, errorCode, message} : null;
-}
-
-async function checkUploadAccountLogin(accountId){
-  const item = uploadAccountManagerItems.find((x) => x.account_id === accountId);
-  if(!item) return;
-  if(!guardRapidAction()) return;
-  try{
-    const res = await fetch(`/api/upload/accounts/${encodeURIComponent(accountId)}/login-check`, {method: 'POST'});
-    const data = await res.json();
-
-    // Structured error: backend returned error_code on a 200 response
-    if(data?.error_code){
-      const errorMsgs = {
-        PLAYWRIGHT_BROWSER_MISSING: 'Login check tool is not installed. Run: playwright install chromium.',
-        PROFILE_IN_USE:             'Close the browser profile, then check again.',
-        LOGIN_CHECK_FAILED:         'Login check failed. You can still use Mark Logged In if you confirmed manually.',
-      };
-      const msg = errorMsgs[data.error_code] || data.message || 'Login check failed.';
-      // Setup/config errors are not fatal — use info, not error toast
-      const toastKind = data.error_code === 'LOGIN_CHECK_FAILED' ? 'error' : 'info';
-      showToast(msg, toastKind);
-      _showLoginCheckHint(accountId, data.error_code, msg);
-      await loadUploadAccounts();
-      return;
-    }
-
-    // HTTP error fallback (unexpected server error)
-    if(!res.ok) throw new Error(_formatApiError(data.detail || data.message));
-
-    await loadUploadAccounts();
-    const loginState = data?.item?.login_state || (data?.result?.logged_in ? 'logged_in' : 'logged_out');
-    const loginMsgs = {logged_in: 'Login OK', logged_out: 'Session Expired', challenge: 'Captcha Required', expired: 'Session Expired', unknown: 'Login state unknown'};
-    const toastType = loginState === 'logged_in' ? 'success' : (loginState === 'unknown' ? 'info' : 'error');
-    if(loginState === 'logged_in') _showLoginCheckHint(accountId, null, null); // clear hint on confirmed success
-    showToast(loginMsgs[loginState] || data.message || 'Login check completed', toastType);
-  }catch(e){
-    showToast(`Login check failed: ${e.message || e}`, 'error');
   }
 }
 
@@ -5404,25 +5317,6 @@ if(!window.__stabilityLayerStarted){
 
 // --- SMART SYSTEM BEHAVIOR ---
 
-async function autoDetectLoginState(){
-  for(const acc of uploadAccountManagerItems || []){
-    if(!acc.profile_path) continue;
-    try{
-      const res = await fetch(`/api/upload/accounts/${acc.account_id}/login-check`);
-      const data = await res.json();
-      if(data?.logged_in && acc.login_state !== 'logged_in'){
-        acc.login_state = 'logged_in';
-      }
-      if(!data?.logged_in && acc.login_state === 'logged_in'){
-        acc.login_state = 'expired';
-      }
-    }catch(e){
-      console.warn('auto login detect failed', acc.account_id);
-    }
-  }
-  UploadStore.setAccounts([...uploadAccountManagerItems]);
-}
-
 function smartRetryFailed(){
   const retryable = (uploadQueueManagerItems || []).filter((i) => shouldRetry(i));
   if(!retryable.length) return;
@@ -5455,7 +5349,6 @@ function detectAggressiveSchedule(){
 
 if(!window.__smartBehaviorStarted){
   window.__smartBehaviorStarted = true;
-  setInterval(autoDetectLoginState,    60000);
   setInterval(smartRetryFailed,        45000);
   setInterval(suggestProxyRotation,    90000);
   setInterval(detectAggressiveSchedule, 60000);
