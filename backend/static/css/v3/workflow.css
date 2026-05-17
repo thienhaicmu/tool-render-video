@@ -2633,3 +2633,39 @@ textarea.fieldInput {
    ══════════════════════════════════════════════════════════════════════ */
 
 
+
+
+/* =======================================================
+   UX-R8.3 - CREATOR DESK REDESIGN
+   Visual weight shift: hero card dominates, quick-start
+   zone recedes to secondary. Honest workspace language
+   enforced via HTML label change ("Your Workspace").
+   ======================================================= */
+
+/* Quick start zone - demoted to secondary surface */
+.uxr4QuickStart {
+  opacity: .92;
+}
+
+.uxr4QSPrimaryLabel {
+  font-weight: var(--fw-semibold);
+  color: var(--fg-200);
+}
+
+.uxr4QSPrimary {
+  border-color: rgba(99,102,241,.12);
+}
+
+.uxr4QSPrimary:hover {
+  border-color: rgba(99,102,241,.30);
+}
+
+/* Intelligence zone - desk label styling */
+.uxr4IntelLabel {
+  color: rgba(255,255,255,.22);
+  letter-spacing: .08em;
+}
+
+/* =======================================================
+   END OF UX-R8.3 - CREATOR DESK REDESIGN
+   ======================================================= */

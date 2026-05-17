@@ -2362,8 +2362,10 @@ async function _uxr4PopulateMomentumHero() {
           ' onclick="(typeof retryHistoryDownload===\'function\')&&retryHistoryDownload(\'' + encodeURIComponent(apiLast.job_id) + '\')">' +
           'Retry</button>'
         : '';
+      // R8.3: creator desk — contextual label based on action available
+      var continueLabel = canRerun ? 'Pick up where you left off' : 'Last project';
       continueZone.innerHTML =
-        '<div class="uxr4ContinueLabel">Continue creating</div>' +
+        '<div class="uxr4ContinueLabel">' + continueLabel + '</div>' +
         '<div class="uxr4ContinueTitle">' + esc(apiLast.title || 'Last project') + '</div>' +
         (summaryText || timeAgo
           ? '<div class="uxr4ContinueMeta">' +
@@ -2378,8 +2380,8 @@ async function _uxr4PopulateMomentumHero() {
       var lsItems = _renderHistoryRead();
       if (!lsItems.length) {
         continueZone.innerHTML =
-          '<div class="uxr4ContinueLabel">Start creating</div>' +
-          '<div class="uxr4ContinueSub">Create your first project. Review clips to help AI learn your style.</div>';
+          '<div class="uxr4ContinueLabel">Set up your workspace</div>' +
+          '<div class="uxr4ContinueSub">Start a render to see your projects here.</div>';
       } else {
         var last = lsItems[0];
         var clips  = Number(last.completedParts || 0);
@@ -2404,8 +2406,8 @@ async function _uxr4PopulateMomentumHero() {
 
   // ── Right: AI intelligence from CreatorMemory ─────────────────
   if (intelMsg) {
-    // R7.3: truthful copy — only claim learning after real signals exist
-    var html = 'Review clips to help AI understand your preferences.';
+    // R8.3: creator desk default — honest workspace language
+    var html = 'Your creative workspace. Start a render to see intelligence here.';
     if (typeof CreatorMemory !== 'undefined') {
       try {
         var taste = CreatorMemory.getTasteModel();
