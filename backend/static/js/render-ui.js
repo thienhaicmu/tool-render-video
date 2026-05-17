@@ -5074,18 +5074,33 @@ const RenderAiRuntime = (() => {
     });
   }
 
-  // R8.1: Build one editorial narrative from real signals — stage, live completions, stall, taste.
-  // Returns { line1, line2 } — two sentences, one voice, no fragments.
+  // R8.1.1: Co-pilot action map — EditorConsensus action → first-person reason + expected impact.
+  // All entries derive from real agent signals. No invented copy.
+  const _COPILOT_ACTION = {
+    strongerHook:            { doing: "I'm tightening the opening",     because: 'opening retention is below your recent edits',      impact: 'stronger opening hold' },
+    fasterPacing:            { doing: "I'm reducing slower moments",    because: 'pacing is softer than your recent editing style',    impact: 'steadier viewing rhythm' },
+    removeDeadSpace:         { doing: "I'm trimming dead air",          because: 'silences are extending beyond natural beat points',  impact: 'tighter overall cut' },
+    viralMode:               { doing: "I'm amplifying signal density",  because: 'overall energy is below your viral threshold',       impact: 'higher retention curve' },
+    cinematicMode:           { doing: "I'm preserving narrative beats", because: 'pacing aligns with your cinematic edit profile',     impact: 'stronger story rhythm' },
+    subtitleCleanup:         { doing: "I'm clearing subtitle clutter",  because: 'text density is reducing visual clarity',            impact: 'cleaner visual focus' },
+    smartClipPrioritization: { doing: "I'm reordering by signal",      because: 'hook scores suggest a stronger opening sequence',    impact: 'better opening impact' },
+  };
+
+  // R8.1.1: Build co-pilot narrative from real signals.
+  // Returns { line1, line2, impact } — one collaborative voice, no fragments.
+  // line1  = what stage / how many clips  (always shown)
+  // line2  = WHY the AI is doing what it's doing (co-pilot action or clip signal)
+  // impact = expected outcome (shown only when co-pilot action is active)
   function _r8BuildNarrative(stgKey, parts, summary) {
     const safeParts = Array.isArray(parts) ? parts : [];
-    const done = safeParts.filter(p => {
+    const done = safeParts.filter(function (p) {
       const st = String(p.status || '').toLowerCase();
       return st === 'done' || st === 'completed' || st === 'complete';
     });
-    const total = safeParts.length;
+    const total    = safeParts.length;
     const stuckMap = _stuckPartsMap(summary, safeParts);
 
-    // Line 1: what the AI is doing right now (stage-driven, counts-aware)
+    // line1: stage context with live counts
     const stageNarr = {
       init:     'Setting up your creative workspace.',
       source:   'Studying the source — format, quality, and duration.',
@@ -5104,51 +5119,89 @@ const RenderAiRuntime = (() => {
       report:   'Compiling per-clip intelligence.',
       export:   'Packaging your clips — ready to review.',
     };
-    var line1 = stageNarr[stgKey] || 'Processing.';
-    var line2 = '';
+    var line1  = stageNarr[stgKey] || 'Processing.';
+    var line2  = '';
+    var impact = '';
 
-    // Priority 1: stall — editorial context, not a warning
+    // Priority 1: stall — calm, collaborative, never alarmist
     if (stuckMap.size > 0) {
-      const firstKey = stuckMap.keys().next().value;
+      const firstKey  = stuckMap.keys().next().value;
       const stuckSecs = stuckMap.get(firstKey);
-      const mins = Math.floor(stuckSecs / 60);
-      const stuckPart = safeParts.find(function(p) { return String(p.part_no ?? '') === String(firstKey); });
+      const mins      = Math.floor(stuckSecs / 60);
+      const stuckPart = safeParts.find(function (p) { return String(p.part_no ?? '') === String(firstKey); });
       const stuckName = stuckPart ? (stuckPart.part_name || ('Clip ' + firstKey)) : ('Clip ' + firstKey);
-      line2 = esc(stuckName) + ' is taking ' + (mins > 1 ? mins + ' minutes' : 'longer than expected') +
-              '. Review can continue while recovery completes.';
-      return { line1, line2 };
+      line2 = esc(stuckName) + ' is taking ' + (mins > 1 ? mins + ' min' : 'longer than expected') +
+              '. You can continue reviewing completed clips while recovery continues.';
+      return { line1, line2, impact };
     }
 
-    // Priority 2: last completed clip with signal context
-    if (done.length > 0) {
-      const last = done[done.length - 1];
-      const name = last.part_name ? esc(last.part_name) : ('Clip ' + Number(last.part_no || 0));
-      const hook   = last.hook_score   != null ? Number(last.hook_score)   : null;
-      const motion = last.motion_score != null ? Number(last.motion_score) : null;
-      if (hook !== null && motion !== null) {
-        if (hook >= 0.7 && motion >= 0.65)      line2 = name + ' completed — strong hook and motion.';
-        else if (hook >= 0.7)                   line2 = name + ' completed — strong opening hook.';
-        else if (motion >= 0.7)                 line2 = name + ' completed — high motion energy.';
-        else if (hook < 0.35)                   line2 = name + ' completed — lower hook, ranking adjusted.';
-        else                                     line2 = name + ' completed.';
-      } else {
-        line2 = name + ' completed.';
-      }
-      return { line1, line2 };
-    }
-
-    // Priority 3: taste model alignment when no live clip context yet
-    if (typeof CreatorMemory !== 'undefined') {
+    // Priority 2: active agent consensus action → co-pilot action reasoning
+    // Only fires when confidence >= 0.65 and EditorConsensus is loaded.
+    if (typeof EditorConsensus !== 'undefined') {
       try {
-        const taste = CreatorMemory.getTasteModel();
-        if (taste && taste.confident && taste.editStyle && taste.editStyle !== 'balanced') {
-          const styleMap = { viral: 'viral energy', cinematic: 'cinematic pacing', educational: 'clarity-first editing' };
-          line2 = 'Prioritizing ' + (styleMap[taste.editStyle] || taste.editStyle) + ' based on your recent review patterns.';
+        const debate = EditorConsensus.resolveFromLive(safeParts);
+        if (debate && debate.action && debate.confidence >= 0.65) {
+          const cp = _COPILOT_ACTION[debate.action];
+          if (cp) {
+            line2  = cp.doing + ' — ' + cp.because + '.';
+            impact = cp.impact;
+            return { line1, line2, impact };
+          }
         }
       } catch (_) {}
     }
 
-    return { line1, line2 };
+    // Priority 3: last completed clip with co-pilot clip-action voice
+    if (done.length > 0) {
+      const last   = done[done.length - 1];
+      const name   = last.part_name ? esc(last.part_name) : ('Clip ' + Number(last.part_no || 0));
+      const hook   = last.hook_score   != null ? Number(last.hook_score)   : null;
+      const motion = last.motion_score != null ? Number(last.motion_score) : null;
+      var clipLine = '';
+      try {
+        const taste = (typeof CreatorMemory !== 'undefined') ? CreatorMemory.getTasteModel() : null;
+        if (hook !== null && motion !== null) {
+          if (hook >= 0.7 && motion >= 0.65) {
+            clipLine = taste && taste.confident && taste.hook === 'aggressive'
+              ? "I'm moving this toward the front — matches your hook profile."
+              : "I'm keeping this — strong hook and motion.";
+          } else if (hook >= 0.7) {
+            clipLine = "I'm keeping this toward the top — opening retention is strong.";
+          } else if (motion >= 0.7) {
+            clipLine = taste && taste.confident && taste.pace === 'fast'
+              ? "I'm preserving this energy — fits your fast-pacing profile."
+              : "I'm preserving this — high motion holds attention.";
+          } else if (hook < 0.35) {
+            clipLine = taste && taste.confident && taste.hook === 'aggressive'
+              ? "I'm ranking this lower — hook falls below your usual threshold."
+              : "I'm ranking this lower — hook signal is weak.";
+          } else {
+            clipLine = "I'm scoring this as a solid candidate.";
+          }
+        } else {
+          clipLine = "I'm scoring this for the output.";
+        }
+      } catch (_) { clipLine = ''; }
+      line2 = name + ' completed. ' + clipLine;
+      return { line1, line2, impact };
+    }
+
+    // Priority 4: taste alignment before any clips arrive
+    if (typeof CreatorMemory !== 'undefined') {
+      try {
+        const taste = CreatorMemory.getTasteModel();
+        if (taste && taste.confident && taste.editStyle && taste.editStyle !== 'balanced') {
+          const styleMap = {
+            viral:       "I'm prioritizing viral energy — based on your recent review patterns.",
+            cinematic:   "I'm preserving cinematic pacing — based on your recent review patterns.",
+            educational: "I'm prioritizing clarity-first editing — based on your recent review patterns.",
+          };
+          line2 = styleMap[taste.editStyle] || '';
+        }
+      } catch (_) {}
+    }
+
+    return { line1, line2, impact };
   }
 
   function _updateHero(idx, isFailed, parts, summary) {
@@ -5179,7 +5232,8 @@ const RenderAiRuntime = (() => {
       }
       narrEl.innerHTML =
         '<p class="uxr1NarrL1">' + narr.line1 + '</p>' +
-        (narr.line2 ? '<p class="uxr1NarrL2">' + narr.line2 + '</p>' : '');
+        (narr.line2 ? '<p class="uxr1NarrL2">' + narr.line2 + '</p>' : '') +
+        (narr.impact ? '<p class="uxr1NarrImpact">' + esc(narr.impact) + '</p>' : '');
     }
 
     // R7.2/R8.1: Stall is surfaced in the editorial narrative (line2). Remove any old .uxr1StallWarn.
@@ -5195,12 +5249,15 @@ const RenderAiRuntime = (() => {
     if (hash === _lastHeroConcernHash) return;
     _lastHeroConcernHash = hash;
     if (!concerns.length) { concernsEl.innerHTML = ''; return; }
-    concernsEl.innerHTML = concerns.map(c =>
-      '<div class="uxr1ConcernItem" data-concern-type="' + esc(c.type) + '">' +
-        '<div class="uxr1ConcernLabel">' + esc(c.label) + '</div>' +
-        '<div class="uxr1ConcernMsg">'   + esc(c.msg)   + '</div>' +
-      '</div>'
-    ).join('');
+    // R8.1.1-E: Concerns are supporting evidence, not competing cards
+    concernsEl.innerHTML =
+      '<div class="uxr1ConcernsLabel">Supporting signals</div>' +
+      concerns.map(function (c) {
+        return '<div class="uxr1ConcernItem" data-concern-type="' + esc(c.type) + '">' +
+          '<div class="uxr1ConcernLabel">' + esc(c.label) + '</div>' +
+          '<div class="uxr1ConcernMsg">'   + esc(c.msg)   + '</div>' +
+          '</div>';
+      }).join('');
   }
 
   function _updateEvolutionFeed(parts) {
@@ -5225,15 +5282,30 @@ const RenderAiRuntime = (() => {
       const hook   = p.hook_score   != null ? Number(p.hook_score)   : null;
       const motion = p.motion_score != null ? Number(p.motion_score) : null;
       const tier   = pct !== null ? (pct >= 75 ? 'high' : pct >= 50 ? 'mid' : 'low') : 'low';
-      // R8.1: Generate editorial context from hook+motion signals; fall back to RuntimeIntelligence
+      // R8.1.1-D: Co-pilot voice — "I'm [action]ing this" from real signals + taste
       var editWhy = '';
-      if (hook !== null && motion !== null) {
-        if (hook >= 0.7 && motion >= 0.65)    editWhy = 'Strong hook and motion — a keeper.';
-        else if (hook >= 0.7)                 editWhy = 'Opens strong — hook above threshold.';
-        else if (motion >= 0.7)               editWhy = 'High motion energy — holds attention.';
-        else if (hook < 0.35 && motion < 0.4) editWhy = 'Lower signal — unlikely to lead the cut.';
-        else                                   editWhy = 'Moderate signal — solid candidate.';
-      }
+      try {
+        const _evTaste = (typeof CreatorMemory !== 'undefined') ? CreatorMemory.getTasteModel() : null;
+        if (hook !== null && motion !== null) {
+          if (hook >= 0.7 && motion >= 0.65) {
+            editWhy = _evTaste && _evTaste.confident && _evTaste.hook === 'aggressive'
+              ? "I'm moving this toward the front — matches your hook profile."
+              : "I'm keeping this — strong hook and motion.";
+          } else if (hook >= 0.7) {
+            editWhy = "I'm keeping this toward the top — opening retention is strong.";
+          } else if (motion >= 0.7) {
+            editWhy = _evTaste && _evTaste.confident && _evTaste.pace === 'fast'
+              ? "I'm preserving this energy — fits your fast-pacing profile."
+              : "I'm preserving this — high motion holds attention.";
+          } else if (hook < 0.35 && motion < 0.4) {
+            editWhy = _evTaste && _evTaste.confident && _evTaste.hook === 'aggressive'
+              ? "I'm ranking this lower — falls below your hook threshold."
+              : "I'm ranking this lower — weaker opening signal.";
+          } else {
+            editWhy = "I'm scoring this as a solid candidate.";
+          }
+        }
+      } catch (_) {}
       const ctx = (typeof RuntimeIntelligence !== 'undefined')
         ? RuntimeIntelligence.getEvolutionContext(pNo, pct, tier)
         : { why: tier === 'high' ? 'Strong hook from the first frame — this one is a keeper.' : tier === 'mid' ? 'Solid clip — good bones, room to sharpen the hook.' : 'Lower signal — may not crack the top picks.', tasteNote: null };

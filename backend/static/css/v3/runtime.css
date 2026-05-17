@@ -2875,3 +2875,43 @@
    END OF UX-R8.1 — RUNTIME THINKING SPACE REDESIGN
    ======================================================= */
 
+
+
+/* =======================================================
+   UX-R8.1.1 - RUNTIME CONVERSATIONAL AGENCY
+   Co-pilot voice: impact line + supporting signals label.
+   Hero owns the narrative; concerns are secondary evidence.
+   ======================================================= */
+
+/* Expected impact line (shown when agent consensus active) */
+.uxr1NarrImpact {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(129,140,248,.68);
+  line-height: 1.45;
+  margin: 2px 0 0;
+}
+.uxr1NarrImpact::before {
+  content: 'Expected: ';
+  color: rgba(255,255,255,.24);
+  font-weight: 400;
+}
+
+/* Supporting signals section label */
+.uxr1ConcernsLabel {
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .10em;
+  color: rgba(255,255,255,.16);
+  margin-bottom: 5px;
+}
+
+/* Responsive */
+@media (max-width: 1366px) {
+  .uxr1NarrImpact { font-size: 9.5px; }
+}
+
+/* =======================================================
+   END OF UX-R8.1.1 - RUNTIME CONVERSATIONAL AGENCY
+   ======================================================= */
