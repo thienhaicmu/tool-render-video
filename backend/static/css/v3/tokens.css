@@ -127,8 +127,8 @@
   --topbar-h:         48px;
   --statusbar-h:      24px;
   --sidebar-w:        280px;
-  --inspector-w:      380px;
-  --inspector-w-sm:   360px;
+  --inspector-w:      420px;
+  --inspector-w-sm:   400px;
   --abp-h:            56px;          /* bottom panel collapsed height */
   --abp-h-expanded:   clamp(260px, 40vh, 420px);
 

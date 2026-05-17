@@ -2272,6 +2272,25 @@ textarea.fieldInput {
 #inspSubtitlePane .evSectionTitle { color: var(--secondary); }
 #inspSubtitlePane .evSectionTitle::before { background: var(--secondary); }
 
+/* ── [UX-RUNTIME-A1-D] Inspector selection hierarchy ─────
+   PRIMARY (current task): Trim — active workspace signal.
+   TERTIARY (configure): cmPrefsPanel — deprioritised chrome.
+   ─────────────────────────────────────────────────────── */
+#evSectionTrim {
+  background: rgba(77,124,255,.018);
+}
+#cmPrefsPanel .evSectionTitle {
+  color: var(--fg-400);
+  font-size: 11px;
+}
+#cmPrefsPanel .evSectionTitle::before {
+  background: var(--fg-400);
+  opacity: .5;
+}
+#cmPrefsPanel {
+  border-bottom-color: rgba(255,255,255,.03);
+}
+
 /* ── [F10] Aspect bar aligns with preview width ──────────
    Remove max-width cap so it spans the full preview width.
    ─────────────────────────────────────────────────────── */

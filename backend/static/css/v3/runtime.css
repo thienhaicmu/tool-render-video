@@ -847,9 +847,9 @@
 }
 
 /* rcActiveCard state variants */
-.rcActiveCard.isRendering             { border-color: rgba(77,124,255,.22); }
+.rcActiveCard.isRendering             { border-color: rgba(77,124,255,.38); background: rgba(77,124,255,.035); }
 .rcActiveCard.isRendering .rcActivePercent { color: var(--primary); }
-.rcActiveCard.isCompleted             { border-color: rgba(34,197,94,.18); }
+.rcActiveCard.isCompleted             { border-color: rgba(34,197,94,.25); }
 .rcActiveCard.isCompleted .rcActivePercent { color: #4ade80; }
 .rcActiveCard.isFailed                { border-color: rgba(239,68,68,.18); }
 .rcActiveCard.isFailed .rcActivePercent    { color: #f87171; }

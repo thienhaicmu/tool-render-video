@@ -320,8 +320,8 @@ body:not(.is-history-active) #partial_history_view { display: none !important; }
 
   /* Shrink inspector column */
   :root {
-    --inspector-w: 320px;
-    --inspector-w-sm: 300px;
+    --inspector-w: 352px;
+    --inspector-w-sm: 332px;
     --sidebar-w: 252px;
   }
 
