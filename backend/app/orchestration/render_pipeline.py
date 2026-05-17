@@ -28,6 +28,7 @@ from app.services.subtitle_engine import (
 from app.services.subtitle_transcription_adapters import transcribe_with_adapter
 from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event
 from app.services import cancel_registry
+from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
 from app.services.viral_scorer import score_segments
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
 from app.services.report_service import append_rows
@@ -402,8 +403,10 @@ _PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes to update progress
 # JOB_SEMAPHORE caps how many render pipelines can be in the FFmpeg-encode
 # section simultaneously.  This prevents CPU saturation when multiple jobs
 # are dispatched by the scheduler at the same time.
-# Override with MAX_RENDER_JOBS env var (e.g. MAX_RENDER_JOBS=3 for 32-core).
-_JOB_SEM_VALUE: int = max(1, int(os.getenv("MAX_RENDER_JOBS", "2")))
+# Default derives from MAX_CONCURRENT_JOBS so the semaphore never silently
+# under-utilises slots that the scheduler has already granted.
+# Override with MAX_RENDER_JOBS env var to set an explicit ceiling.
+_JOB_SEM_VALUE: int = max(1, int(os.getenv("MAX_RENDER_JOBS", str(_MAX_CONCURRENT_JOBS))))
 JOB_SEMAPHORE = threading.Semaphore(_JOB_SEM_VALUE)
 _render_active_lock = threading.Lock()
 _render_active_count: list[int] = [0]   # mutable int; guarded by _render_active_lock
