@@ -20,6 +20,9 @@ let _rcPreviewJobId = '';
 let _rcPreviewPartNo = 0;
 let _rcCompareSelA = '';
 let _rcCompareSelB = '';
+// R8.2.1: in-panel clip compare state
+let _r821CompareRefPartNo  = null;
+let _r821CompareChalPartNo = null;
 let _rcBenchmark = { jobId: '', logsLoaded: false, totalElapsedMs: 0, sceneDetectionMs: null, sceneCount: null, transcriptionMs: null, transcriptionModel: null, transcriptionLiveSec: null, totalParts: 0, completedParts: 0, failedParts: 0, failedStage: '', outputSizes: [] };
 const RENDER_MONITOR_STALL_MS = 45000;
 let _queueStatusTimer = null;
@@ -3803,6 +3806,174 @@ function _r7SignalRow(motionScore, hookScore, isBest, bestMotion, bestHook) {
   return '<div class="clipCardSignals">' + chips.join('') + tradeoffHtml + '</div>';
 }
 
+// R8.2.1: Builds the tradeoff panel HTML for two-clip comparison.
+// Uses ONLY real signals: hook_score, motion_score, output_rank_score, AI reason.
+// refRk and chalRk are entries from _rankMap(); refPart/chalPart from WS payload.
+function _r821BuildTradeoffHtml(refPart, refRk, chalPart, chalRk) {
+  // Scores are on 0–10 scale (per _rankMap / card display)
+  const refScoreRaw  = Number(refRk.score  || 0);
+  const chalScoreRaw = Number(chalRk.score || 0);
+  const refScore  = refScoreRaw.toFixed(1);
+  const chalScore = chalScoreRaw.toFixed(1);
+  const refHook   = refPart.hook_score   != null ? Math.round(Number(refPart.hook_score)   * 100) : null;
+  const chalHook  = chalPart.hook_score  != null ? Math.round(Number(chalPart.hook_score)  * 100) : null;
+  const refMot    = refPart.motion_score != null ? Math.round(Number(refPart.motion_score) * 100) : null;
+  const chalMot   = chalPart.motion_score!= null ? Math.round(Number(chalPart.motion_score)* 100) : null;
+  const refName   = refPart.part_name  ? esc(refPart.part_name)  : ('Clip ' + Number(refPart.part_no  || 0));
+  const chalName  = chalPart.part_name ? esc(chalPart.part_name) : ('Clip ' + Number(chalPart.part_no || 0));
+
+  // Signal comparison rows — only show signals that exist on both clips
+  var rows = '';
+  if (refHook !== null && chalHook !== null) {
+    const rW = refHook >= chalHook;
+    rows += '<div class="r821TradeoffRow">' +
+      '<span class="r821TradeoffSig">Hook</span>' +
+      '<span class="r821TradeoffA' + (rW ? ' r821Wins' : '') + '">' + refHook  + '%</span>' +
+      '<span class="r821TradeoffVs">vs</span>' +
+      '<span class="r821TradeoffB' + (!rW ? ' r821Wins' : '') + '">' + chalHook + '%</span>' +
+      '</div>';
+  }
+  if (refMot !== null && chalMot !== null) {
+    const rW = refMot >= chalMot;
+    rows += '<div class="r821TradeoffRow">' +
+      '<span class="r821TradeoffSig">Motion</span>' +
+      '<span class="r821TradeoffA' + (rW ? ' r821Wins' : '') + '">' + refMot  + '%</span>' +
+      '<span class="r821TradeoffVs">vs</span>' +
+      '<span class="r821TradeoffB' + (!rW ? ' r821Wins' : '') + '">' + chalMot + '%</span>' +
+      '</div>';
+  }
+  // Score row always shown — ref is always the higher-scored clip (0–10 scale)
+  rows += '<div class="r821TradeoffRow">' +
+    '<span class="r821TradeoffSig">Score</span>' +
+    '<span class="r821TradeoffA r821Wins">' + refScore  + '/10</span>' +
+    '<span class="r821TradeoffVs">vs</span>' +
+    '<span class="r821TradeoffB">' + chalScore + '/10</span>' +
+    '</div>';
+
+  // Reasoning — prefer AI director reason; synthesize from signals otherwise
+  var reasoning = '';
+  if (refRk.reason) {
+    var _rr = String(refRk.reason);
+    reasoning = _rr.length > 140 ? _rr.slice(0, 137) + '…' : _rr;
+  } else {
+    var _parts = [];
+    if (refHook !== null && chalHook !== null) {
+      if (refHook > chalHook)      _parts.push('Stronger opening retention.');
+      else if (chalHook > refHook) _parts.push(chalName + ' has a stronger hook — AI score still favors ' + refName + '.');
+    }
+    if (refMot !== null && chalMot !== null && chalMot > refMot + 5) {
+      _parts.push(chalName + ' carries more motion energy, but hook quality outweighed it.');
+    }
+    reasoning = _parts.join(' ') || 'AI score reflects combined hook, motion, and quality signals.';
+  }
+
+  // Taste alignment — only when CreatorMemory is confident
+  var tasteHtml = '';
+  if (typeof CreatorMemory !== 'undefined') {
+    try {
+      var taste = CreatorMemory.getTasteModel();
+      if (taste && taste.confident) {
+        if (taste.hook === 'aggressive' && refHook !== null && chalHook !== null) {
+          if (refHook > chalHook)
+            tasteHtml = '<div class="r821TasteNote">Your profile favors strong openings — aligns with this result.</div>';
+          else if (chalHook > refHook)
+            tasteHtml = '<div class="r821TasteNote">Your profile favors strong openings — worth a second look at ' + chalName + '.</div>';
+        } else if (taste.editStyle === 'cinematic' && refMot !== null && refMot < 40) {
+          tasteHtml = '<div class="r821TasteNote">Your cinematic profile may favor lower-motion clips.</div>';
+        }
+      }
+    } catch (_) {}
+  }
+
+  return '<div class="r821TradeoffSignals">' + rows + '</div>' +
+    '<div class="r821Reasoning">' +
+      '<div class="r821ReasoningLabel">Why ' + refName + ' ranked higher</div>' +
+      '<div class="r821ReasoningText">' + esc(reasoning) + '</div>' +
+    '</div>' +
+    tasteHtml;
+}
+
+// R8.2.1: Enter in-panel clip compare mode.
+// refPartNo = lead (best) clip; chalPartNo = challenger (strong candidate).
+// No modal, no route change — injects compare strip above clips grid.
+function r821EnterCompare(refPartNo, chalPartNo) {
+  const panel = qs('render_output_panel');
+  if (!panel) return;
+
+  const job   = _renderMonitorLastJob;
+  const parts = _renderMonitorLastParts;
+  if (!job || !parts) return;
+
+  const ranking = _rankMap(job);
+  const refPart  = parts.find(function (p) { return Number(p.part_no || 0) === refPartNo;  }) || null;
+  const chalPart = parts.find(function (p) { return Number(p.part_no || 0) === chalPartNo; }) || null;
+  if (!refPart || !chalPart) return;
+
+  const refRk  = ranking.get(refPartNo)  || { score: 0, reason: '' };
+  const chalRk = ranking.get(chalPartNo) || { score: 0, reason: '' };
+
+  _r821CompareRefPartNo  = refPartNo;
+  _r821CompareChalPartNo = chalPartNo;
+
+  // Remove any previous strip before rebuilding
+  const prev = document.getElementById('r821_compare_strip');
+  if (prev) prev.remove();
+
+  const jId     = encodeURIComponent(String(job.job_id || ''));
+  const refName = refPart.part_name  ? esc(refPart.part_name)  : ('Clip ' + refPartNo);
+  const chalName= chalPart.part_name ? esc(chalPart.part_name) : ('Clip ' + chalPartNo);
+  const refSrc  = jId && refPart.output_file
+    ? '/api/render/jobs/' + jId + '/parts/' + refPartNo  + '/media' : '';
+  const chalSrc = jId && chalPart.output_file
+    ? '/api/render/jobs/' + jId + '/parts/' + chalPartNo + '/media' : '';
+
+  const refVid  = refSrc
+    ? '<video class="r821CompareVid" src="' + refSrc  + '" controls playsinline muted></video>'
+    : '<div class="r821CompareVidFallback">No preview available</div>';
+  const chalVid = chalSrc
+    ? '<video class="r821CompareVid" src="' + chalSrc + '" controls playsinline muted></video>'
+    : '<div class="r821CompareVidFallback">No preview available</div>';
+
+  const strip = document.createElement('div');
+  strip.id = 'r821_compare_strip';
+  strip.className = 'r821CompareStrip';
+  strip.innerHTML =
+    '<div class="r821CompareHeader">' +
+      '<span class="r821CompareTitle">Side-by-side comparison</span>' +
+      '<button class="r821ExitBtn" type="button" onclick="r821ExitCompare()">Back to review</button>' +
+    '</div>' +
+    '<div class="r821CompareBody">' +
+      '<div class="r821CompareLeft">' +
+        '<div class="r821ClipLabel r821ClipLabelRef">Lead &middot; ' + refName + '</div>' +
+        refVid +
+      '</div>' +
+      '<div class="r821CompareMid">' +
+        _r821BuildTradeoffHtml(refPart, refRk, chalPart, chalRk) +
+      '</div>' +
+      '<div class="r821CompareRight">' +
+        '<div class="r821ClipLabel">Candidate &middot; ' + chalName + '</div>' +
+        chalVid +
+      '</div>' +
+    '</div>';
+
+  const list = qs('render_output_list');
+  if (list) panel.insertBefore(strip, list);
+  else panel.appendChild(strip);
+
+  panel.classList.add('r821Active');
+  setTimeout(function () { strip.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 80);
+}
+
+// R8.2.1: Exit compare mode — removes strip, restores panel.
+function r821ExitCompare() {
+  const panel = qs('render_output_panel');
+  const strip = document.getElementById('r821_compare_strip');
+  if (strip) strip.remove();
+  if (panel) panel.classList.remove('r821Active');
+  _r821CompareRefPartNo  = null;
+  _r821CompareChalPartNo = null;
+}
+
 // R8.2: Builds HTML for the editorial notes sidebar.
 // Uses only real signals: ranking scores, hook/motion per clip, tier distribution.
 // Returns empty string when AI director is off or no ranking data.
@@ -3846,12 +4017,12 @@ function _r8BuildEditorialNotes(job, all, ranking) {
   // Lead clip section
   if (bestPart && bestRk) {
     const bName = bestPart.part_name ? esc(bestPart.part_name) : ('Clip ' + Number(bestPart.part_no || 0));
-    const bPct  = Math.round(Number(bestRk.score || 0) * 100);
+    const bScore  = Number(bestRk.score || 0).toFixed(1);   // 0–10 scale, display as X.X/10
     const bRaw  = String(bestRk.reason || '');
     const bReason = bRaw.length > 70 ? bRaw.slice(0, 67) + '…' : bRaw;
     html += '<div class="r8NotesSection">';
     html += '<div class="r8NotesSectionLabel">Lead Clip</div>';
-    html += '<div class="r8NotesBestName">' + bName + '<span class="r8NotesBestScore">' + bPct + '%</span></div>';
+    html += '<div class="r8NotesBestName">' + bName + '<span class="r8NotesBestScore">' + bScore + '</span></div>';
     if (bReason) html += '<div class="r8NotesBestReason">' + esc(bReason) + '</div>';
     html += '</div>';
   }
@@ -4111,6 +4282,26 @@ function populateRenderOutputPanel(job, parts) {
     }
   });
 
+  // R8.2.1: Pre-compute compare-eligible tiers (best + strong candidates)
+  // Best clip is the reference; strong candidates show Compare vs best.
+  var _r821BestPartNo    = null;
+  var _r821SecondPartNo  = null;
+  var _r821BestScore     = 0;
+  var _r821SecondScore   = 0;
+  ranking.forEach(function (rk, pNo) {
+    if (rk.isBest) { _r821BestPartNo = pNo; _r821BestScore = Number(rk.score || 0); }
+  });
+  const _r821StrongThresh = _r821BestScore * 0.85;
+  ranking.forEach(function (rk, pNo) {
+    if (!rk.isBest && Number(rk.score || 0) >= _r821StrongThresh && Number(rk.score || 0) > _r821SecondScore) {
+      _r821SecondScore = Number(rk.score || 0);
+      _r821SecondPartNo = pNo;
+    }
+  });
+  // Best clip Compare button compares best vs second-ranked strong candidate (if exists)
+  // Strong candidate Compare button compares best vs that clip
+  const _r821HasRankingData = ranking.size > 0 && _r821BestPartNo !== null;
+
   list.innerHTML = all.map((p) => {
     const partNo = Number(p.part_no || 0);
     const st = String(p?.status || '').toLowerCase();
@@ -4149,6 +4340,19 @@ function populateRenderOutputPanel(job, parts) {
     const openBtn = hasFile
       ? `<button class="clipCardBtn" type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Folder</button>`
       : '';
+    // R8.2.1: Compare button — best clip (vs second) or strong candidate (vs best)
+    // scoreVal and _r821StrongThresh are both 0–10 scale
+    const _r821IsRef    = _r821HasRankingData && rk.isBest;
+    const _r821IsStrong = _r821HasRankingData && !rk.isBest && scoreVal >= _r821StrongThresh;
+    const _r821RefPNo   = _r821IsRef ? partNo : _r821BestPartNo;
+    const _r821ChalPNo  = _r821IsRef ? _r821SecondPartNo : partNo;
+    const _r821ShowCmp  = isDone && hasFile && (
+      (_r821IsRef && _r821SecondPartNo !== null) ||
+      (_r821IsStrong && _r821BestPartNo !== null && partNo !== _r821BestPartNo)
+    );
+    const compareBtn = _r821ShowCmp
+      ? `<button class="clipCardBtn clipCardBtnCompare" type="button" onclick="r821EnterCompare(${_r821RefPNo},${_r821ChalPNo})">Compare</button>`
+      : '';
     if (qs('abp_output_meta') && hasFile) qs('abp_output_meta').textContent = `Latest file: ${String(p.output_file || '').split(/[\\\\/]/).pop()}`;
     const isSelected = isDone && hasFile && _selectedClipPaths.has(p.output_file);
     const cardClass = `clipCard${isFailed ? ' isFailed' : ''}${isSkipped ? ' isSkipped' : ''}${isDone ? ' isDone' : ''}${isSelected ? ' isSelected' : ''}${rk.isBest ? ' isBestClip' : ''}`;
@@ -4172,7 +4376,7 @@ function populateRenderOutputPanel(job, parts) {
         ${(motionScore !== null || hookScore !== null) && (rk.isBest || scoreVal >= 6) ? _r7SignalRow(motionScore, hookScore, rk.isBest, _bestMotion, _bestHook) : ''}
         ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
         ${_shouldRenderBestExport(_cardAiUx, rk.isBest) ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">&#x2713;</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}
-        <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}</div>
+        <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}${compareBtn}</div>
       </div>
     </div>`;
   }).join('');
