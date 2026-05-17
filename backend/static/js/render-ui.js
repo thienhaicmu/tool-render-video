@@ -3801,6 +3801,89 @@ function _r7SignalRow(motionScore, hookScore, isBest, bestMotion, bestHook) {
   return '<div class="clipCardSignals">' + chips.join('') + tradeoffHtml + '</div>';
 }
 
+// R8.2: Builds HTML for the editorial notes sidebar.
+// Uses only real signals: ranking scores, hook/motion per clip, tier distribution.
+// Returns empty string when AI director is off or no ranking data.
+function _r8BuildEditorialNotes(job, all, ranking) {
+  const aiEnabled = job && job.ai_director_enabled === true;
+  const done = all.filter(function (p) {
+    return ['done','completed','complete'].includes(String(p.status||'').toLowerCase());
+  });
+  if (!aiEnabled || ranking.size === 0 || done.length === 0) return '';
+
+  // Locate best clip
+  var bestPart = null, bestRk = null;
+  ranking.forEach(function (rk, pNo) {
+    if (rk.isBest) {
+      bestPart = done.find(function (p) { return Number(p.part_no || 0) === pNo; }) || null;
+      bestRk = rk;
+    }
+  });
+
+  // Tier distribution (mirrors _applyUxR3Tiers threshold)
+  const bestScore = bestRk ? Number(bestRk.score || 0) : 0;
+  const strongThresh = bestScore * 0.85;
+  var nBest = 0, nStrong = 0, nOther = 0;
+  done.forEach(function (p) {
+    const rk = ranking.get(Number(p.part_no || 0));
+    if (!rk) { nOther++; return; }
+    if (rk.isBest) { nBest++; return; }
+    if (Number(rk.score || 0) >= strongThresh) nStrong++;
+    else nOther++;
+  });
+
+  // Signal counts (real hook/motion scores from WS payload)
+  var highHook = 0, highMotion = 0;
+  done.forEach(function (p) {
+    if (p.hook_score   != null && Number(p.hook_score)   >= 0.7) highHook++;
+    if (p.motion_score != null && Number(p.motion_score) >= 0.7) highMotion++;
+  });
+
+  var html = '';
+
+  // Lead clip section
+  if (bestPart && bestRk) {
+    const bName = bestPart.part_name ? esc(bestPart.part_name) : ('Clip ' + Number(bestPart.part_no || 0));
+    const bPct  = Math.round(Number(bestRk.score || 0) * 100);
+    const bRaw  = String(bestRk.reason || '');
+    const bReason = bRaw.length > 70 ? bRaw.slice(0, 67) + '…' : bRaw;
+    html += '<div class="r8NotesSection">';
+    html += '<div class="r8NotesSectionLabel">Lead Clip</div>';
+    html += '<div class="r8NotesBestName">' + bName + '<span class="r8NotesBestScore">' + bPct + '%</span></div>';
+    if (bReason) html += '<div class="r8NotesBestReason">' + esc(bReason) + '</div>';
+    html += '</div>';
+  }
+
+  // Tier breakdown + editing direction
+  if (done.length > 1) {
+    const direction = (nBest + nStrong >= 3)
+      ? 'Strong field — lead first, cut from strong.'
+      : (nStrong === 0)
+        ? 'Single standout — lead clip dominates the cut.'
+        : 'Review strong candidates before locking an order.';
+    html += '<div class="r8NotesSection">';
+    html += '<div class="r8NotesSectionLabel">Tier Breakdown</div>';
+    html += '<div class="r8NotesTierRow">';
+    html += '<span class="r8NotesTierChip r8NotesTierBest">' + nBest + ' best</span>';
+    if (nStrong > 0) html += '<span class="r8NotesTierChip r8NotesTierStrong">' + nStrong + ' strong</span>';
+    if (nOther  > 0) html += '<span class="r8NotesTierChip r8NotesTierOther">'  + nOther  + ' other</span>';
+    html += '</div>';
+    html += '<div class="r8NotesDirection">' + direction + '</div>';
+    html += '</div>';
+  }
+
+  // Signal summary
+  if (highHook > 0 || highMotion > 0) {
+    html += '<div class="r8NotesSection">';
+    html += '<div class="r8NotesSectionLabel">Signals</div>';
+    if (highHook   > 0) html += '<div class="r8NotesSignalLine">' + highHook   + ' clip' + (highHook   !== 1 ? 's' : '') + ' strong hook (≥70%)</div>';
+    if (highMotion > 0) html += '<div class="r8NotesSignalLine">' + highMotion + ' clip' + (highMotion !== 1 ? 's' : '') + ' high motion (≥70%)</div>';
+    html += '</div>';
+  }
+
+  return html;
+}
+
 // UX-R3: Tier classification + header injection.
 // Runs after list.innerHTML is built; safe to call on every re-render.
 // Sets data-uxr3-tier on each card; inserts .uxr3TierHeader divs
@@ -4121,6 +4204,24 @@ function populateRenderOutputPanel(job, parts) {
 
   // UX-R3-A/B/C/D/E: Tier classification + headers
   _applyUxR3Tiers(list, ranking, done, failed, skipped, _aiDirectorEnabled);
+
+  // R8.2: Editorial studio notes — real signals sidebar
+  const _r8Panel = qs('render_output_panel');
+  var _r8NotesEl = _r8Panel ? _r8Panel.querySelector('#r8_editorial_notes') : null;
+  const _r8NotesBody = _r8BuildEditorialNotes(job, all, ranking);
+  if (_r8NotesBody && _r8Panel) {
+    if (!_r8NotesEl) {
+      _r8NotesEl = document.createElement('div');
+      _r8NotesEl.id = 'r8_editorial_notes';
+      _r8NotesEl.className = 'r8EditorialNotes';
+      _r8Panel.appendChild(_r8NotesEl);
+    }
+    _r8NotesEl.innerHTML = '<div class="r8NotesHeader">Editorial</div><div class="r8NotesSections">' + _r8NotesBody + '</div>';
+    _r8Panel.classList.add('r8StudioActive');
+  } else {
+    if (_r8NotesEl) _r8NotesEl.innerHTML = '';
+    if (_r8Panel) _r8Panel.classList.remove('r8StudioActive');
+  }
 
   // UX-R3-F: Auto-open best clip in center preview once on completion
   if (!_uxr3AutoSelectedBest) {

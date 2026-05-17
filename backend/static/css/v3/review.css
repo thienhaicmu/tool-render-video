@@ -1846,3 +1846,161 @@
 /* =======================================================
    END OF UX-R7.1 — REVIEW INTELLIGENCE TRUTHFULNESS
    ======================================================= */
+
+/* =======================================================
+   UX-R8.2 — REVIEW STUDIO REDESIGN
+   Editorial sidebar alongside clips grid when AI director
+   has ranking data. Grid layout via .r8StudioActive.
+   ======================================================= */
+
+/* ── Studio layout — activates when ranking data present ── */
+.renderOutputPanel.r8StudioActive {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  grid-template-rows: auto;
+  align-items: start;
+}
+
+/* Full-width rows above the side-by-side area */
+.renderOutputPanel.r8StudioActive .renderOutputHeader,
+.renderOutputPanel.r8StudioActive #render_output_path,
+.renderOutputPanel.r8StudioActive #mvRenderSummary,
+.renderOutputPanel.r8StudioActive .csPreviewArea {
+  grid-column: 1 / -1;
+}
+
+/* Clips grid occupies left column */
+.renderOutputPanel.r8StudioActive #render_output_list {
+  grid-column: 1;
+  min-width: 0;
+}
+
+/* Editorial notes occupy right column */
+.renderOutputPanel.r8StudioActive #r8_editorial_notes {
+  grid-column: 2;
+  align-self: start;
+}
+
+/* ── Editorial notes panel ──────────────────────────────── */
+.r8EditorialNotes {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 12px 14px;
+  border-left: 1px solid rgba(255,255,255,.06);
+  background: rgba(255,255,255,.018);
+  border-radius: 0 0 6px 0;
+  min-height: 120px;
+  position: sticky;
+  top: 0;
+}
+
+.r8NotesHeader {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .10em;
+  color: rgba(255,255,255,.28);
+  margin-bottom: 12px;
+}
+
+.r8NotesSections {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.r8NotesSection {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.r8NotesSectionLabel {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: rgba(255,255,255,.30);
+  margin-bottom: 2px;
+}
+
+/* ── Lead clip ──────────────────────────────────────────── */
+.r8NotesBestName {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255,255,255,.82);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.35;
+}
+
+.r8NotesBestScore {
+  font-size: 17px;
+  font-weight: 700;
+  color: rgba(99,102,241,.90);
+  line-height: 1;
+}
+
+.r8NotesBestReason {
+  font-size: 10.5px;
+  color: rgba(255,255,255,.42);
+  line-height: 1.5;
+}
+
+/* ── Tier breakdown ─────────────────────────────────────── */
+.r8NotesTierRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.r8NotesTierChip {
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.r8NotesTierBest   { background: rgba(99,102,241,.12); color: rgba(129,140,248,.90); }
+.r8NotesTierStrong { background: rgba(74,222,128,.08); color: rgba(74,222,128,.80);  }
+.r8NotesTierOther  { background: rgba(255,255,255,.05); color: rgba(255,255,255,.40); }
+
+.r8NotesDirection {
+  font-size: 10px;
+  color: rgba(255,255,255,.36);
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
+/* ── Signal summary ─────────────────────────────────────── */
+.r8NotesSignalLine {
+  font-size: 10px;
+  color: rgba(255,255,255,.38);
+  line-height: 1.5;
+}
+
+/* ── Responsive — collapse sidebar below 1200px ─────────── */
+@media (max-width: 1200px) {
+  .renderOutputPanel.r8StudioActive {
+    display: flex;
+    flex-direction: column;
+  }
+  .renderOutputPanel.r8StudioActive #r8_editorial_notes {
+    border-left: none;
+    border-top: 1px solid rgba(255,255,255,.06);
+    border-radius: 0;
+    padding: 10px 14px;
+    position: static;
+  }
+  .renderOutputPanel.r8StudioActive #r8_editorial_notes .r8NotesSections {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+}
+
+/* =======================================================
+   END OF UX-R8.2 — REVIEW STUDIO REDESIGN
+   ======================================================= */
