@@ -312,21 +312,34 @@ def _first_score(seg: dict, names: list[str], default: float = 50.0) -> float:
 
 def _output_ranking_reason(components: dict) -> str:
     reasons: list[str] = []
+    content_type = str(components.get("content_type_hint") or "")
 
     if components["hook_score"] >= 70:
-        reasons.append("Strong hook")
+        if content_type in ("interview", "commentary", "podcast"):
+            reasons.append("Strong spoken hook")
+        else:
+            reasons.append("Strong hook")
     elif components["hook_score"] < 40:
         reasons.append("Weak hook")
 
     if components["retention_score"] >= 70:
-        reasons.append("High retention")
+        if content_type == "interview":
+            reasons.append("High engagement energy")
+        else:
+            reasons.append("High retention")
     elif components.get("continuity_score", 50.0) >= 70:
         reasons.append("Stable pacing")
 
     if components["speech_density_score"] >= 60:
-        reasons.append("Speech-heavy segment")
+        if content_type in ("interview", "commentary", "podcast"):
+            reasons.append("Dense spoken content")
+        else:
+            reasons.append("Speech-heavy segment")
     elif components["speech_density_score"] < 25:
-        reasons.append("Low speech density")
+        if content_type == "montage":
+            reasons.append("Visual montage")
+        else:
+            reasons.append("Low speech density")
 
     if components["market_score"] >= 65:
         reasons.append("Good market match")
@@ -335,7 +348,12 @@ def _output_ranking_reason(components: dict) -> str:
         reasons.append("Good duration fit")
 
     if not reasons:
-        reasons.append("Balanced clip signals")
+        if content_type == "montage":
+            reasons.append("High-energy montage")
+        elif content_type in ("interview", "commentary"):
+            reasons.append("Quality spoken content")
+        else:
+            reasons.append("Balanced clip signals")
 
     return ", ".join(reasons[:3])
 
@@ -370,6 +388,7 @@ def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, pay
         "market_score": round(market_score, 1),
         "duration_fit_score": round(duration_fit_score, 1),
         "continuity_score": round(continuity_score, 1),
+        "content_type_hint": str(seg.get("content_type_hint") or ""),
     }
 
     return {
@@ -1630,11 +1649,16 @@ def run_render_pipeline(
         if cancel_registry.is_cancelled(job_id):
             raise cancel_registry.JobCancelledError()
         scored = score_segments(segments, scenes)
-        # Fixed mode: High motion priority (no UI option). Keep enough parts to avoid empty output.
-        high_motion = [s for s in scored if int(s.get("motion_score", 0)) >= HIGH_MOTION_MIN_SCORE]
-        if len(high_motion) >= HIGH_MOTION_MIN_KEEP:
-            scored = high_motion
-        # Sort by viral/motion score first for selection (top N), then re-order for output numbering
+        # High-motion preference: boost high-energy clips without hard eviction.
+        # Talking-head, interview, and commentary content remain competitive in the pool.
+        _high_motion_count = sum(1 for s in scored if int(s.get("motion_score", 0)) >= HIGH_MOTION_MIN_SCORE)
+        _apply_motion_boost = _high_motion_count >= HIGH_MOTION_MIN_KEEP
+        if _apply_motion_boost:
+            _job_log(effective_channel, job_id,
+                     f"high_motion_preference: {_high_motion_count} high-energy clips detected — "
+                     f"preference boost applied (no eviction); low-motion clips remain in pool")
+        # Sort by viral/motion score first for selection (top N), then re-order for output numbering.
+        # viral_score is primary — it now incorporates transition quality, not just cut density.
         _combined_enabled = bool(getattr(payload, "combined_scoring_enabled", False))
         if _combined_enabled:
             def _provisional_combined(s):
@@ -1645,7 +1669,13 @@ def run_render_pipeline(
                 return vs * 0.80 + hs * 0.20
             scored.sort(key=_provisional_combined, reverse=True)
         else:
-            scored.sort(key=lambda x: (int(x.get("motion_score", 0)), int(x.get("viral_score", 0))), reverse=True)
+            scored.sort(
+                key=lambda x: (
+                    int(x.get("viral_score", 0)) + (8 if _apply_motion_boost and int(x.get("motion_score", 0)) >= HIGH_MOTION_MIN_SCORE else 0),
+                    int(x.get("motion_score", 0)),
+                ),
+                reverse=True,
+            )
         if payload.max_export_parts and payload.max_export_parts > 0:
             scored = scored[:payload.max_export_parts]
         # Re-order for output numbering: timeline = chronological, viral/combined = by score

@@ -67,6 +67,14 @@ def extract_features(seg: Dict, scenes: List[Dict], total_segments: int, seg_ind
         second_half_density = (len(seg_scenes) - half) / max(1.0, (seg_scenes[-1]["end"] - seg_scenes[half]["start"]))
         pacing_accel = max(0.0, second_half_density - first_half_density)
 
+    # Transition quality: average visual abruptness of scene cuts in segment.
+    # High = energetic/sharp cuts; 0.0 = no cuts (talking head / continuous content).
+    # Uses transition_score already computed by scene_detector._compute_transition_scores.
+    if seg_scenes:
+        avg_transition_quality = sum(s.get("transition_score", 0.5) for s in seg_scenes) / len(seg_scenes)
+    else:
+        avg_transition_quality = 0.0
+
     # Duration: TikTok sweet spot 55-85s → peak score, penalize outside
     # Using a Gaussian-shaped score centered at 70s, σ=15s
     duration_score = math.exp(-0.5 * ((duration - 70.0) / 20.0) ** 2)
@@ -80,16 +88,17 @@ def extract_features(seg: Dict, scenes: List[Dict], total_segments: int, seg_ind
     scene_quality = float(seg.get("scene_quality_avg", 55.0)) / 100.0
 
     return {
-        "scene_density": min(1.0, scene_density * 8.0),       # normalized: 0.125 cuts/s → 1.0
-        "n_scenes_norm": min(1.0, n_scenes / 20.0),            # normalized: 20 cuts → 1.0
-        "starts_at_cut": float(starts_at_cut),
-        "ends_at_cut": float(ends_at_cut),
-        "pacing_accel": min(1.0, pacing_accel * 5.0),
-        "duration_score": duration_score,
-        "position_score": position_score,
-        "scene_quality": scene_quality,
-        "is_first": float(seg_index == 0),
-        "is_second": float(seg_index == 1),
+        "scene_density":          min(1.0, scene_density * 8.0),  # normalized: 0.125 cuts/s → 1.0
+        "n_scenes_norm":          min(1.0, n_scenes / 20.0),      # normalized: 20 cuts → 1.0
+        "avg_transition_quality": avg_transition_quality,          # cut energy quality [0, 1]
+        "starts_at_cut":          float(starts_at_cut),
+        "ends_at_cut":            float(ends_at_cut),
+        "pacing_accel":           min(1.0, pacing_accel * 5.0),
+        "duration_score":         duration_score,
+        "position_score":         position_score,
+        "scene_quality":          scene_quality,
+        "is_first":               float(seg_index == 0),
+        "is_second":              float(seg_index == 1),
     }
 
 
@@ -97,22 +106,23 @@ def extract_features(seg: Dict, scenes: List[Dict], total_segments: int, seg_ind
 # Heuristic scorer (improved)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Weights calibrated for TikTok content patterns:
-#   - Fast pacing (scene density) matters most
+# Weights calibrated for multi-signal content quality:
 #   - Duration fit (55-85s sweet spot) is critical
-#   - Starting at a scene cut = strong hook
-#   - Earlier segments slightly favored
+#   - Starting at a scene cut = strong hook entry
+#   - Transition quality (avg_transition_quality) reflects cut energy, not just frequency
+#   - scene_density reduced: raw cut count alone does not equal content quality
 _HEURISTIC_WEIGHTS = {
-    "scene_density":  0.28,
-    "n_scenes_norm":  0.06,
-    "starts_at_cut":  0.14,
-    "ends_at_cut":    0.05,
-    "pacing_accel":   0.09,
-    "duration_score": 0.20,
-    "position_score": 0.08,
-    "scene_quality":  0.06,
-    "is_first":       0.02,
-    "is_second":      0.02,
+    "scene_density":          0.18,  # was 0.28 — cut frequency alone ≠ quality
+    "n_scenes_norm":          0.04,  # was 0.06
+    "avg_transition_quality": 0.10,  # NEW — visual cut energy (transition_score avg)
+    "starts_at_cut":          0.16,  # was 0.14
+    "ends_at_cut":            0.04,  # was 0.05
+    "pacing_accel":           0.07,  # was 0.09
+    "duration_score":         0.20,  # unchanged
+    "position_score":         0.08,  # unchanged
+    "scene_quality":          0.09,  # was 0.06 — content quality matters more
+    "is_first":               0.02,  # unchanged
+    "is_second":              0.02,  # unchanged
 }
 assert abs(sum(_HEURISTIC_WEIGHTS.values()) - 1.0) < 1e-6, "Weights must sum to 1.0"
 
@@ -128,7 +138,14 @@ def _heuristic_score(features: Dict[str, float]) -> float:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _ml_model = None  # Lazy-loaded Ridge model
-_FEATURE_KEYS = list(_HEURISTIC_WEIGHTS.keys())
+# Fixed feature key order for ML model backward-compatibility.
+# New heuristic features (e.g. avg_transition_quality) live in _HEURISTIC_WEIGHTS
+# but NOT here — adding here would break any saved model's input dimensions.
+_FEATURE_KEYS = [
+    "scene_density", "n_scenes_norm", "starts_at_cut", "ends_at_cut",
+    "pacing_accel", "duration_score", "position_score", "scene_quality",
+    "is_first", "is_second",
+]
 
 
 def _features_to_vector(features: Dict[str, float]) -> list:
@@ -247,9 +264,38 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
         seg_scenes = [s for s in scenes if float(s.get("start", 0)) >= seg.get("start", 0)
                       and float(s.get("end", seg.get("start", 0))) <= seg.get("end", 0)]
         scene_density = len(seg_scenes) / duration
-        motion_score = min(100, int(scene_density * 1100))
+        # Improved motion_score: cut frequency × transition quality.
+        # Rewards energetic editing rather than raw cut count.
+        # Talking-head / no-cut content scores 0 (by design — PART B handles ranking).
+        avg_trans_val = features.get("avg_transition_quality", 0.0)
+        motion_score = min(100, int(scene_density * 660 * max(0.1, avg_trans_val))) if seg_scenes else 0
         hook_timing_score = round(features["starts_at_cut"] * 40 + features["position_score"] * 40
                                   + features["duration_score"] * 20, 1)
+
+        # Content type hint from scene statistics — informs ranking explainability (PART C).
+        if scene_density < 0.03:
+            content_type_hint = "interview"
+        elif scene_density < 0.08:
+            content_type_hint = "commentary"
+        elif scene_density < 0.18:
+            content_type_hint = "vlog"
+        else:
+            content_type_hint = "montage"
+
+        # Selection reason: human-readable signal summary for UI (PART E).
+        _sel: list[str] = []
+        if features.get("starts_at_cut", 0.0) >= 0.5:
+            _sel.append("Strong opening hook")
+        if content_type_hint in ("interview", "commentary"):
+            if features.get("scene_quality", 0.0) >= 0.65:
+                _sel.append("High-quality spoken content")
+        elif features.get("scene_density", 0.0) >= 0.5:
+            _sel.append("Fast-paced editing")
+        if features.get("duration_score", 0.0) >= 0.85:
+            _sel.append("Ideal duration")
+        elif features.get("position_score", 0.0) >= 0.85:
+            _sel.append("Strong early position")
+        selection_reason = ", ".join(_sel[:2]) if _sel else ""
 
         scored.append({
             **seg,
@@ -261,6 +307,8 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
             "scene_quality_score": round(float(seg.get("scene_quality_avg", 55.0)), 2),
             "speech_density_score": min(100, 45 + len(seg_scenes) * 3),
             "scene_change_score": min(100, len(seg_scenes) * 6),
+            "content_type_hint": content_type_hint,
+            "selection_reason": selection_reason,
             "_features": features,       # stored for feedback recording
             "_scoring_mode": scoring_mode,
         })
