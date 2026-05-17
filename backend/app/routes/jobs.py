@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 _STUCK_THRESHOLD_S = 120   # seconds with no DB update before a part is flagged stuck
 _ACTIVE_STATUSES   = {"waiting", "cutting", "transcribing", "rendering", "downloading"}
+_TERMINAL_STATUSES = frozenset({"completed", "completed_with_errors", "failed", "interrupted", "cancelled"})
 
 
 def _parse_json(raw):
@@ -412,6 +413,27 @@ def stream_part(job_id: str, part_no: int):
     return FileResponse(str(path), media_type="video/mp4", headers={"Accept-Ranges": "bytes"})
 
 
+def _ws_fingerprint(job: dict, parts: list, summary: dict) -> tuple:
+    """Cheap comparable tuple of material render state for change detection.
+
+    Excludes timestamps so a pure heartbeat tick (updated_at only) is not
+    treated as a meaningful change.  Terminal status always bypasses this check.
+    """
+    return (
+        job.get('status'),
+        job.get('stage'),
+        job.get('progress_percent'),
+        job.get('message'),
+        tuple(
+            (p.get('part_no'), p.get('status'), p.get('progress_percent'))
+            for p in parts
+        ),
+        summary.get('completed_parts'),
+        summary.get('failed_parts'),
+        len(summary.get('stuck_parts', [])),
+    )
+
+
 @router.websocket("/{job_id}/ws")
 async def ws_job_progress(websocket: WebSocket, job_id: str):
     """
@@ -421,6 +443,7 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
     """
     await websocket.accept()
     try:
+        last_fp = None
         while True:
             job = get_job(job_id)
             if not job:
@@ -428,12 +451,16 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
                 break
             parts   = list_job_parts(job_id)
             summary = _compute_progress_summary(parts)
-            await websocket.send_json({"job": job, "parts": parts, "summary": summary})
+            is_terminal = job.get("status") in _TERMINAL_STATUSES
+            fp = _ws_fingerprint(job, parts, summary)
+            # Always send when something material changed or on terminal — never
+            # suppress terminal events even if fingerprint matches a prior tick.
+            if fp != last_fp or is_terminal:
+                await websocket.send_json({"job": job, "parts": parts, "summary": summary})
+                last_fp = fp
             # Close WS on any terminal status so the stream doesn't linger.
             # Must match TERMINAL_STATUSES in frontend transport.js.
-            if job.get("status") in (
-                "completed", "completed_with_errors", "failed", "interrupted", "cancelled"
-            ):
+            if is_terminal:
                 break
             await asyncio.sleep(0.5)
     except WebSocketDisconnect:

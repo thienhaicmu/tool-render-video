@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable
 from fastapi import HTTPException
 from app.models.schemas import RenderRequest
-from app.services.db import upsert_job, update_job_progress, upsert_job_part, list_job_parts
+from app.services.db import upsert_job, update_job_progress, upsert_job_part, list_job_parts, close_thread_conn
 from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
@@ -4201,5 +4201,9 @@ def run_render_pipeline(
                 _job_log(effective_channel, job_id, f"Temp cleanup warning: {cleanup_err}")
         # Cleanup preview session (video already moved/copied to output)
         if edit_session_id:
-            cleanup_session_fn(edit_session_id)
+            try:
+                cleanup_session_fn(edit_session_id)
+            except Exception:
+                pass
         _JOB_LOG_DIRS.pop(job_id, None)
+        close_thread_conn()  # release render thread's cached DB connection

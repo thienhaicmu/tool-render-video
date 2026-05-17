@@ -50,3 +50,16 @@ def unregister(job_id: str) -> None:
     with _LOCK:
         _EVENTS.pop(job_id, None)
         _PENDING.discard(job_id)
+
+
+def prune_pending(active_job_ids: "frozenset[str]") -> int:
+    """Remove _PENDING entries whose job_id is not in active_job_ids.
+
+    Call with the current set of queued+running job IDs so stale pending cancel
+    signals (e.g. for jobs that were removed from the queue without ever running)
+    are discarded.  Returns the count of pruned entries.
+    """
+    with _LOCK:
+        stale = _PENDING - active_job_ids
+        _PENDING.difference_update(stale)
+        return len(stale)

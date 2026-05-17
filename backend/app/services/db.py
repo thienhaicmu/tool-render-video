@@ -89,6 +89,46 @@ def get_conn():
     return conn
 
 
+# Thread-local connection cache — used only by high-frequency render-path writers
+# (update_job_progress, upsert_job_part). Each render worker thread holds one
+# open connection for the duration of its job instead of open/close per write.
+_tls = threading.local()
+
+
+def _thread_conn() -> sqlite3.Connection:
+    """Return this thread's cached DB connection, re-opening if stale."""
+    conn = getattr(_tls, 'conn', None)
+    if conn is not None:
+        try:
+            conn.execute("SELECT 1")
+            return conn
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            _tls.conn = None
+    db_path = _resolve_db_path()
+    conn = sqlite3.connect(str(db_path), timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode=WAL;')
+    conn.execute('PRAGMA synchronous=NORMAL;')
+    conn.execute('PRAGMA foreign_keys=ON;')
+    _tls.conn = conn
+    return conn
+
+
+def close_thread_conn() -> None:
+    """Explicitly close this thread's cached connection (call from render finally)."""
+    conn = getattr(_tls, 'conn', None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _tls.conn = None
+
+
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
@@ -1250,7 +1290,7 @@ def upsert_job(job_id: str, kind: str, channel_code: str, status: str,
 
 
 def update_job_progress(job_id: str, stage: str, progress_percent: int, message: str = '', status: str | None = None):
-    conn = get_conn()
+    conn = _thread_conn()
     cur = conn.cursor()
     if status:
         cur.execute(
@@ -1263,7 +1303,6 @@ def update_job_progress(job_id: str, stage: str, progress_percent: int, message:
             (stage, progress_percent, message, job_id),
         )
     conn.commit()
-    conn.close()
 
 
 def delete_job(job_id: str) -> None:
@@ -1281,7 +1320,7 @@ def upsert_job_part(job_id: str, part_no: int, part_name: str, status: str,
                     progress_percent: int = 0, start_sec: float = 0, end_sec: float = 0,
                     duration: float = 0, viral_score: float = 0, motion_score: float = 0,
                     hook_score: float = 0, output_file: str = '', message: str = ''):
-    conn = get_conn()
+    conn = _thread_conn()
     cur = conn.cursor()
     cur.execute(
         """
@@ -1304,7 +1343,6 @@ def upsert_job_part(job_id: str, part_no: int, part_name: str, status: str,
         (job_id, part_no, part_name, status, progress_percent, start_sec, end_sec, duration, viral_score, motion_score, hook_score, output_file, message)
     )
     conn.commit()
-    conn.close()
 
 
 def get_job(job_id: str):

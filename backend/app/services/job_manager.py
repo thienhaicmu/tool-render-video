@@ -128,6 +128,14 @@ def _scheduler_loop() -> None:
                 with _cond:
                     _active_job_ids.discard(jid)
                     _cond.notify_all()  # a slot just opened — wake the scheduler
+                    # Snapshot valid IDs while holding the lock for prune below
+                    _valid_ids = frozenset(_active_job_ids) | frozenset(e[2] for e in _pending)
+                # Prune stale _PENDING cancel signals for jobs no longer alive
+                try:
+                    from app.services import cancel_registry
+                    cancel_registry.prune_pending(_valid_ids)
+                except Exception:
+                    pass
 
         _get_executor().submit(_run)
         logger.debug(
