@@ -33,6 +33,98 @@ logger = logging.getLogger(__name__)
 _TRACKER_CAPABILITY_LOGGED = False
 
 # ---------------------------------------------------------------------------
+# MediaPipe face detection — optional, CPU-safe, replaces Haar cascade
+# ---------------------------------------------------------------------------
+
+_mp_face_detector = None
+_mp_face_detector_initialized = False
+
+
+def _get_mp_detector():
+    """Lazy-load MediaPipe FaceDetection. Returns None if unavailable (graceful fallback)."""
+    global _mp_face_detector, _mp_face_detector_initialized
+    if _mp_face_detector_initialized:
+        return _mp_face_detector
+    _mp_face_detector_initialized = True
+    try:
+        import mediapipe as mp  # noqa: PLC0415
+        _mp_face_detector = mp.solutions.face_detection.FaceDetection(
+            model_selection=0,           # short-range model (≤2m), fastest CPU inference
+            min_detection_confidence=0.5,
+        )
+        logger.info("mediapipe_face_detection_loaded model=short_range confidence_threshold=0.5")
+    except Exception as exc:
+        logger.info("mediapipe_unavailable fallback=haar reason=%s", exc)
+        _mp_face_detector = None
+    return _mp_face_detector
+
+
+def _detect_mediapipe_faces(
+    frame_bgr_small: np.ndarray,
+    scale: float,
+) -> List[Tuple[int, int, int, int]]:
+    """
+    Run MediaPipe Face Detection on a downscaled BGR frame.
+    Returns (x, y, w, h) boxes in _det_frame coordinates (divided by scale).
+    Returns [] if MediaPipe is unavailable or detects nothing.
+    """
+    detector = _get_mp_detector()
+    if detector is None:
+        return []
+    try:
+        h_s, w_s = frame_bgr_small.shape[:2]
+        frame_rgb = cv2.cvtColor(frame_bgr_small, cv2.COLOR_BGR2RGB)
+        results = detector.process(frame_rgb)
+        if not results.detections:
+            return []
+        boxes = []
+        for det in results.detections:
+            rb = det.location_data.relative_bounding_box
+            # Convert relative → absolute in small-frame space, then → _det_frame space
+            x = int((rb.xmin * w_s) / scale)
+            y = int((rb.ymin * h_s) / scale)
+            w = int((rb.width * w_s) / scale)
+            h = int((rb.height * h_s) / scale)
+            if w > 4 and h > 4:
+                boxes.append((x, y, w, h))
+        return boxes
+    except Exception as exc:
+        logger.debug("mediapipe_detection_error: %s", exc)
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Content-type-aware tracking parameter overrides
+# ---------------------------------------------------------------------------
+
+_CONTENT_TYPE_TRACKING: dict[str, dict] = {
+    # interview/tutorial: subject barely moves — detect less often, pan slower, smoother camera
+    "interview":  {"detect_interval_mul": 2.0, "ema_mul": 0.65, "pan_speed_mul": 0.70},
+    "commentary": {"detect_interval_mul": 1.5, "ema_mul": 0.80, "pan_speed_mul": 0.85},
+    "vlog":       {"detect_interval_mul": 1.0, "ema_mul": 1.00, "pan_speed_mul": 1.00},
+    "tutorial":   {"detect_interval_mul": 2.0, "ema_mul": 0.65, "pan_speed_mul": 0.70},
+    # montage: subject moves fast — detect more often, pan faster, more reactive
+    "montage":    {"detect_interval_mul": 0.5, "ema_mul": 1.30, "pan_speed_mul": 1.40},
+}
+
+
+def _apply_content_type_to_cfg(cfg: MotionCropConfig, content_type: str) -> MotionCropConfig:
+    """Return a shallow copy of cfg with content-type-adjusted tracking parameters."""
+    import dataclasses as _dc
+    p = _CONTENT_TYPE_TRACKING.get(content_type) or _CONTENT_TYPE_TRACKING["vlog"]
+    di_mul = p["detect_interval_mul"]
+    ema_mul = p["ema_mul"]
+    pan_mul = p["pan_speed_mul"]
+    return _dc.replace(
+        cfg,
+        subject_detect_interval=max(1, int(round(cfg.subject_detect_interval * di_mul))),
+        ema_alpha_slow=min(0.30, cfg.ema_alpha_slow * ema_mul),
+        ema_alpha_normal=min(0.40, cfg.ema_alpha_normal * ema_mul),
+        ema_alpha_fast=min(0.50, cfg.ema_alpha_fast * ema_mul),
+        max_pan_speed_ratio=min(0.025, cfg.max_pan_speed_ratio * pan_mul),
+    )
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
@@ -512,11 +604,19 @@ def _detect_subjects_in_frame(
     face_cascade: Optional[cv2.CascadeClassifier],
     body_cascade: Optional[cv2.CascadeClassifier],
     scale: float,
+    frame_bgr_small: Optional[np.ndarray] = None,
 ) -> Tuple[List[Tuple[int, int, int, int]], str]:
     """
-    Detect faces first, then bodies as fallback.
-    Returns (list of (x,y,w,h) in original-frame coords, kind).
+    Detect faces (MediaPipe primary → Haar cascade fallback) then bodies as fallback.
+    Returns (list of (x,y,w,h) in _det_frame coords, kind).
     """
+    # MediaPipe primary path — neural, confidence-based, angle/lighting tolerant
+    if frame_bgr_small is not None:
+        mp_boxes = _detect_mediapipe_faces(frame_bgr_small, scale)
+        if mp_boxes:
+            return mp_boxes, "face"
+
+    # Haar cascade fallback (used when MediaPipe unavailable or returns nothing)
     if face_cascade is not None:
         min_dim = max(20, int(gray_small.shape[1] * 0.05))
         faces = face_cascade.detectMultiScale(
@@ -720,6 +820,7 @@ def build_subject_path(
     crop_h: int,
     cfg: MotionCropConfig,
     _scene_ranges=None,
+    content_type: str = "vlog",
 ) -> Tuple[List[Tuple[int, int]], float]:
     """
     CapCut Auto Reframe equivalent.
@@ -748,6 +849,7 @@ def build_subject_path(
                 scene_centers, fps = build_subject_path_scene(
                     video_path, crop_w, crop_h, cfg, start_sec, end_sec,
                     scene_index=index, warmup_center=_warmup_center,
+                    content_type=content_type,
                 )
             except Exception:
                 fallback_used = True
@@ -788,6 +890,7 @@ def build_subject_path(
 
         return all_centers, fps
 
+    cfg = _apply_content_type_to_cfg(cfg, content_type)
     face_cascade = _load_cascade("haarcascade_frontalface_default.xml")
     body_cascade = _load_cascade("haarcascade_fullbody.xml") if cfg.use_body_fallback else None
 
@@ -875,7 +978,7 @@ def build_subject_path(
             small = cv2.resize(_det_frame, None, fx=detect_scale, fy=detect_scale)
             gray_small = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
             detected, _kind = _detect_subjects_in_frame(
-                gray_small, face_cascade, body_cascade, detect_scale
+                gray_small, face_cascade, body_cascade, detect_scale, small
             )
             if _det_sx != 1.0:
                 detected = [
@@ -1006,12 +1109,14 @@ def build_subject_path_scene(
     end_sec: float,
     scene_index: int = 0,
     warmup_center: Optional[Tuple[float, float]] = None,
+    content_type: str = "vlog",
 ) -> Tuple[List[Tuple[int, int]], float]:
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open video: {video_path}")
 
     try:
+        cfg = _apply_content_type_to_cfg(cfg, content_type)
         face_cascade = _load_cascade("haarcascade_frontalface_default.xml")
         body_cascade = _load_cascade("haarcascade_fullbody.xml") if cfg.use_body_fallback else None
 
@@ -1135,7 +1240,7 @@ def build_subject_path_scene(
                 small = cv2.resize(_det_frame, None, fx=detect_scale, fy=detect_scale)
                 gray_small = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
                 detected, detected_kind = _detect_subjects_in_frame(
-                    gray_small, face_cascade, body_cascade, detect_scale
+                    gray_small, face_cascade, body_cascade, detect_scale, small
                 )
                 if _det_sx != 1.0:
                     detected = [
@@ -1698,6 +1803,7 @@ def build_motion_path(
     crop_h: int,
     cfg: MotionCropConfig,
     _scene_ranges=None,
+    content_type: str = "vlog",
 ) -> Tuple[List[Tuple[int, int]], float]:
     """
     Route to the appropriate tracking algorithm based on cfg.reframe_mode.
@@ -1706,7 +1812,10 @@ def build_motion_path(
     - "motion":            legacy pixel-diff motion tracking
     """
     if cfg.reframe_mode == "subject":
-        return build_subject_path(video_path, crop_w, crop_h, cfg, _scene_ranges=_scene_ranges)
+        return build_subject_path(
+            video_path, crop_w, crop_h, cfg,
+            _scene_ranges=_scene_ranges, content_type=content_type,
+        )
     return _build_motion_path_legacy(video_path, crop_w, crop_h, cfg)
 
 
@@ -1743,6 +1852,7 @@ def render_motion_aware_crop(
     ffmpeg_threads: int | None = None,
     cfg: MotionCropConfig | None = None,
     subtitle_safe_bottom_ratio: float | None = None,
+    content_type: str = "vlog",
 ) -> str:
     layer_count = len(text_layers or [])
     if layer_count:
@@ -1809,6 +1919,7 @@ def render_motion_aware_crop(
         crop_h_src,
         cfg,
         _scene_ranges=scene_ranges,
+        content_type=content_type,
     )
 
     # Build ffmpeg video filter chain

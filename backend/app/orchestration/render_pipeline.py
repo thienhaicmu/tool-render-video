@@ -2983,6 +2983,7 @@ def run_render_pipeline(
                     text_layers=_part_text_layers,
                     loudnorm_enabled=getattr(payload, "loudnorm_enabled", False),
                     ffmpeg_threads=_ffmpeg_threads,
+                    content_type=seg.get("content_type_hint", "vlog"),
                 )
             finally:
                 _encode_stop.set()
