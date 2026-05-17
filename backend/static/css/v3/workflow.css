@@ -1602,8 +1602,23 @@ textarea.fieldInput {
   margin-bottom: 8px;
 }
 
-/* Section visibility: panels hidden when not matching active tab
-   JS (editor-view.js) manages .insp-panel-active class */
+/* ── [UX-RUNTIME-A1.2] Inspector panel visibility enforcement ─────────────
+   P0 FIX: v3 CSS only had three element-type-specific hide rules covering
+   .evSection, .inspGroupSep, and .inspCollapsedGroup. Elements using custom
+   classes — evInspAiPanel (class="evInspAiPanel"), convPanel, cmPrefsPanel,
+   evSectionVariants (class="evCompactRail") — had NO matching rule and were
+   globally visible on all tabs regardless of data-insp-panel scope.
+
+   This single broad rule is the authoritative enforcement. It matches ANY
+   [data-insp-panel] element inside .inspPaneBody that lacks .insp-panel-active.
+   JS (editor-view.js setInspectorTab) manages the .insp-panel-active class.
+   ─────────────────────────────────────────────────────────────────────────── */
+.inspPaneBody [data-insp-panel]:not(.insp-panel-active) {
+  display: none !important;
+}
+
+/* Element-type specific rules — kept for documentation clarity.
+   Functionally superseded by the broad rule above. */
 .evSection[data-insp-panel]:not(.insp-panel-active) { display: none; }
 
 /* Group separator (language/voice etc.) */
