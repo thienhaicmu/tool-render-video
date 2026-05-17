@@ -4511,7 +4511,7 @@ function _bindCardHoverPreviews(container) {
 
     // UX-R5: Direct assignment prevents listener accumulation on re-render
     thumbWrap.onmouseenter = () => {
-      if (!vid._cardInView) return;
+      if (vid._cardInView === false) return;
       if (_cardHoverActiveVid === vid) return;
       _stopCardHoverVideo();
       // Lazy-set src on first hover so browser doesn't download until needed

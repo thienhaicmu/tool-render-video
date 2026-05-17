@@ -186,12 +186,77 @@ Strong-tier now reflects relative editorial merit rather than absolute scoring. 
 
 ---
 
+---
+
+## UX-R3.2 — Output Preview Recovery (2026-05-17)
+
+P0 regression fix. Hover video preview and click-to-center-preview were silently blocked on all output cards immediately after DOM refresh and on the first panel show.
+
+### Root Cause
+
+`_bindCardHoverPreviews` guards hover with:
+
+```javascript
+if (!vid._cardInView) return;
+```
+
+`vid._cardInView` is set by an `IntersectionObserver` callback that fires **asynchronously** (one animation frame after `observe()` is called). Before the callback fires, `_cardInView` is `undefined`. The guard `!undefined` evaluates to `true` — returning early and blocking hover.
+
+This means every DOM refresh (`list.innerHTML = cards` wipes all card elements; `_bindCardHoverPreviews` re-observes fresh elements) leaves a window where all cards are blocked, and the first panel show always starts in the blocked state.
+
+The IO guard was intended only to pause playback when a card **scrolls out of view**. It was never meant to block the initial hover. Using `!value` instead of `value === false` conflated "not yet determined" with "confirmed off-screen."
+
+### Fix
+
+**`render-ui.js` — `_bindCardHoverPreviews`, `onmouseenter` handler:**
+
+```javascript
+// Before:
+if (!vid._cardInView) return;
+
+// After:
+if (vid._cardInView === false) return;
+```
+
+`undefined` (initial, IO not yet fired) → hover allowed.  
+`false` (IO confirmed card is off-screen) → hover blocked.  
+`true` (IO confirmed card is on-screen) → hover allowed.
+
+The IO scroll-out-of-view pause at line 4501 is unchanged:
+```javascript
+if (!entry.isIntersecting && _cardHoverActiveVid === vid) _stopCardHoverVideo();
+```
+
+### Systems Preserved Without Change
+
+| System | Status |
+|--------|--------|
+| `centerPreviewClip()` click path — `onclick` on `clipCardThumbWrap` | ✓ unchanged |
+| `_stopCardHoverVideo()` — pause, reset, remove `is-preview-playing` | ✓ unchanged |
+| UX-R3-F auto-preview of best clip (900ms, guarded by R3.1-C fix) | ✓ unchanged |
+| R8.2.1 compare mode (`r821EnterCompare`, `r821ExitCompare`) | ✓ unchanged |
+| UX-R3 tier classification (`_applyUxR3Tiers`) | ✓ unchanged |
+| UX-R3.1 tier collapse/toggle | ✓ unchanged |
+| `is-preview-playing` CSS opacity transition | ✓ unchanged |
+
+### Manual QA Checklist
+
+- [ ] Hover over a done clip thumbnail → video starts playing (opacity 1, `is-preview-playing` class on card)
+- [ ] Move mouse off → video pauses, opacity returns to 0
+- [ ] Click thumbnail → `cs_preview_area` opens with video loading
+- [ ] Hover on card while it scrolls off-screen → video pauses
+- [ ] Click Compare button → compare strip opens, both videos load
+- [ ] After render completes → best clip auto-opens in center preview after 900ms
+- [ ] No console errors during any of the above
+
+---
+
 ## Next Phase Direction
 
-### UX-R3.2 — Sort-change tier refresh (full path)
-The Fix B fallback handles edge cases but uses an empty ranking Map (no score data). To fix the common case of sort-change mid-session, cache the last ranking Map in a module-level variable so Fix B can use real scores when `_renderMonitorLastJob` is unavailable but sort changes happen.
+### UX-R3.3 — Sort-change tier refresh (full path)
+The R3.1 Fix B fallback handles edge cases but uses an empty ranking Map (no score data). To fix the common case of sort-change mid-session, cache the last ranking Map in a module-level variable so Fix B can use real scores when `_renderMonitorLastJob` is unavailable but sort changes happen.
 
-### UX-R3.3 — Compare tool
+### UX-R3.4 — Compare tool
 Build a side-by-side compare view. UX-R3-H seeded the `.isSelected` infrastructure. Compare would:
 1. Add explicit "Compare" toggle buttons to non-best cards
 2. Show a split-view panel (2 center previews) when exactly 2 clips are selected
