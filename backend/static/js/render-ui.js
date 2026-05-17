@@ -2305,10 +2305,15 @@ function renderRenderHistory() {
     return;
   }
   box.innerHTML = items.map((entry, idx) => {
-    const status = _renderHistoryStatusText(entry.status);
     const icon = entry.status === 'failed' ? '✕' : entry.status === 'partial' ? '⚠' : '✓';
     const openDisabled = entry.outputDir ? '' : ' disabled';
     const elevatedClass = idx === 0 ? ' uxr4TopItem' : '';
+    // R8.3.1-D: Status-aware continuity narrative — resume-oriented for partial, gentle for failed
+    const histMeta = entry.status === 'partial'
+      ? 'Resume · ' + _renderHistoryClipSummary(entry)
+      : entry.status === 'failed'
+      ? 'Ready to retry'
+      : _renderHistoryStatusText(entry.status) + ' · ' + _renderHistoryClipSummary(entry);
     return `<div class="renderHistoryItem ${esc(entry.status || 'completed')}${elevatedClass}">
       <div class="renderHistoryMain">
         <div class="renderHistoryTop">
@@ -2316,7 +2321,7 @@ function renderRenderHistory() {
           <span class="renderHistoryTitle" title="${_renderHistoryAttr(entry.sourceValue)}">${esc(entry.title || 'Untitled render')}</span>
           <span class="renderHistoryTime">${_renderHistoryRelativeTime(entry.timestamp)}</span>
         </div>
-        <div class="renderHistoryMeta">${status} · ${esc(_renderHistoryClipSummary(entry))}</div>
+        <div class="renderHistoryMeta">${esc(histMeta)}</div>
       </div>
       <div class="renderHistoryActions">
         <button class="ghostButton" type="button"${openDisabled} onclick="openRenderHistoryOutput('${encodeURIComponent(entry.jobId)}')">Open Output Folder</button>
@@ -2328,15 +2333,16 @@ function renderRenderHistory() {
   _uxr4PopulateMomentumHero();
 }
 
-// UX-R4-A/D / R7.3: Populate creator momentum hero.
+// UX-R4-A/D / R7.3 / R8.3.1: Populate creator momentum hero.
 // Continue zone reads from /api/jobs/history (real can_rerun semantics);
 // falls back to localStorage when API is unavailable.
+// R8.3.1: Status-aware narrative, purposeful CTAs, momentum strip.
 async function _uxr4PopulateMomentumHero() {
   var continueZone = document.getElementById('uxr4_continue_zone');
   var intelMsg     = document.getElementById('uxr4_intel_msg');
   if (!continueZone && !intelMsg) return;
 
-  // ── Left: real API continuity ─────────────────────────────────
+  // ── Left: creative momentum continue zone ─────────────────────
   if (continueZone) {
     var _apiFailed = false;
     var apiLast = null;
@@ -2350,33 +2356,36 @@ async function _uxr4PopulateMomentumHero() {
     }
 
     if (apiLast && !_apiFailed) {
-      // R7.3: use API fields — title, summary_text, can_rerun, can_retry, timestamps
       var ts = Date.parse(String(apiLast.timestamp || apiLast.updated_at || apiLast.created_at || ''));
       var timeAgo = _renderHistoryRelativeTime(ts || 0);
       var summaryText = String(apiLast.summary_text || '').trim();
       var canRerun = !!apiLast.can_rerun;
       var canRetry = !!apiLast.can_retry;
+
+      // R8.3.1-A: Status-aware creative narrative — what happened, not just a label
+      var narrative = '';
+      if (canRetry) {
+        narrative = 'Render paused mid-way. Resume where you left off.';
+      } else if (summaryText) {
+        narrative = esc(summaryText);
+      } else if (timeAgo) {
+        narrative = 'Finished ' + esc(timeAgo) + '.';
+      }
+
+      // R8.3.1-B: Single purposeful CTA
       var ctaHtml = canRerun
         ? '<button class="uxr4ContinueBtn" type="button"' +
           ' onclick="rerunRenderHistory(\'' + encodeURIComponent(apiLast.job_id) + '\')">' +
-          'Continue Editing</button>'
+          'Try another render pass</button>'
         : canRetry
         ? '<button class="uxr4ContinueBtn" type="button"' +
           ' onclick="(typeof retryHistoryDownload===\'function\')&&retryHistoryDownload(\'' + encodeURIComponent(apiLast.job_id) + '\')">' +
-          'Retry</button>'
+          'Retry interrupted render</button>'
         : '';
-      // R8.3: creator desk — contextual label based on action available
-      var continueLabel = canRerun ? 'Pick up where you left off' : 'Last project';
+
       continueZone.innerHTML =
-        '<div class="uxr4ContinueLabel">' + continueLabel + '</div>' +
         '<div class="uxr4ContinueTitle">' + esc(apiLast.title || 'Last project') + '</div>' +
-        (summaryText || timeAgo
-          ? '<div class="uxr4ContinueMeta">' +
-            (summaryText ? esc(summaryText) : '') +
-            (summaryText && timeAgo ? ' &middot; ' : '') +
-            (timeAgo ? '<span class="uxr4ContinueTime">' + esc(timeAgo) + '</span>' : '') +
-            '</div>'
-          : '') +
+        (narrative ? '<div class="uxr4ContinueNarrative">' + narrative + '</div>' : '') +
         ctaHtml;
     } else {
       // Fallback: localStorage shape
@@ -2389,59 +2398,62 @@ async function _uxr4PopulateMomentumHero() {
         var last = lsItems[0];
         var clips  = Number(last.completedParts || 0);
         var failed = Number(last.failedParts || 0);
-        var timeAgo = _renderHistoryRelativeTime(last.timestamp);
+        var lsTimeAgo = _renderHistoryRelativeTime(last.timestamp);
         var metaParts = [];
         if (clips > 0) metaParts.push(clips + ' clip' + (clips !== 1 ? 's' : '') + ' reviewed');
         if (failed > 0) metaParts.push(failed + ' failed');
         continueZone.innerHTML =
-          '<div class="uxr4ContinueLabel">Continue creating</div>' +
           '<div class="uxr4ContinueTitle">' + esc(last.title || 'Last project') + '</div>' +
           (metaParts.length
-            ? '<div class="uxr4ContinueMeta">' + esc(metaParts.join(' · ')) +
-              ' <span class="uxr4ContinueTime">' + esc(timeAgo) + '</span></div>'
+            ? '<div class="uxr4ContinueNarrative">' + esc(metaParts.join(' · ')) +
+              ' <span class="uxr4ContinueTime">' + esc(lsTimeAgo) + '</span></div>'
             : '') +
           '<button class="uxr4ContinueBtn" type="button"' +
           ' onclick="rerunRenderHistory(\'' + encodeURIComponent(last.jobId) + '\')">' +
-          'Continue Editing</button>';
+          'Try another render pass</button>';
       }
     }
   }
 
-  // ── Right: AI intelligence from CreatorMemory ─────────────────
+  // ── Right: creative momentum strip ────────────────────────────
   if (intelMsg) {
-    // R8.3: creator desk default — honest workspace language
+    // R8.3.1-C: Momentum tendency sentence from CreatorMemory taste model
     var html = 'Your creative workspace. Start a render to see intelligence here.';
     if (typeof CreatorMemory !== 'undefined') {
       try {
         var taste = CreatorMemory.getTasteModel();
         if (taste && taste.confident) {
-          var STYLE_LABELS = {
-            viral: 'Viral / High-energy', cinematic: 'Cinematic / Story',
-            educational: 'Educational / Clarity', balanced: 'Balanced'
-          };
-          var PACE_LABELS = { fast: 'Fast-paced', cinematic: 'Cinematic', balanced: 'Balanced' };
-          var HOOK_LABELS = { aggressive: 'Strong hooks', soft: 'Soft openings', moderate: 'Moderate' };
-          var rows = '';
-          if (taste.editStyle && taste.editStyle !== 'balanced') {
-            rows += '<div class="uxr4IntelTasteRow"><span class="uxr4IntelTasteKey">Edit style</span>' +
-                    '<span class="uxr4IntelTasteVal">' + esc(STYLE_LABELS[taste.editStyle] || taste.editStyle) + '</span></div>';
+          var tendencies = [];
+          if (taste.hook === 'aggressive' && taste.hookConf > 0.4) tendencies.push('stronger openings');
+          if (taste.pace === 'fast'       && taste.paceConf > 0.4) tendencies.push('faster pacing');
+          if (taste.editStyle === 'viral')      tendencies.push('high-energy edits');
+          else if (taste.editStyle === 'cinematic') tendencies.push('cinematic storytelling');
+          if (tendencies.length) {
+            html = '<div class="uxr4MomentumStrip">' +
+                   '<div class="uxr4MomentumLabel">Recent tendency</div>' +
+                   '<div class="uxr4MomentumTendency">' + esc(tendencies.slice(0, 2).join(' · ')) + '</div>' +
+                   '</div>';
+          } else {
+            var STYLE_LABELS = {
+              viral: 'Viral / High-energy', cinematic: 'Cinematic / Story',
+              educational: 'Educational / Clarity', balanced: 'Balanced'
+            };
+            var stRows = '';
+            if (taste.editStyle && taste.editStyle !== 'balanced') {
+              stRows += '<div class="uxr4IntelTasteRow"><span class="uxr4IntelTasteKey">Edit style</span>' +
+                        '<span class="uxr4IntelTasteVal">' + esc(STYLE_LABELS[taste.editStyle] || taste.editStyle) + '</span></div>';
+            }
+            if (stRows) html = '<div class="uxr4IntelTaste">' + stRows + '</div>';
           }
-          if (taste.paceConf > 0.4) {
-            rows += '<div class="uxr4IntelTasteRow"><span class="uxr4IntelTasteKey">Pacing</span>' +
-                    '<span class="uxr4IntelTasteVal">' + esc(PACE_LABELS[taste.pace] || taste.pace) + '</span></div>';
-          }
-          if (taste.hookConf > 0.4) {
-            rows += '<div class="uxr4IntelTasteRow"><span class="uxr4IntelTasteKey">Openings</span>' +
-                    '<span class="uxr4IntelTasteVal">' + esc(HOOK_LABELS[taste.hook] || taste.hook) + '</span></div>';
-          }
-          if (rows) html = '<div class="uxr4IntelTaste">' + rows + '</div>';
         } else if (taste && !taste.confident) {
           var prefs = (typeof CreatorMemory.getDerivedPreferences === 'function')
             ? CreatorMemory.getDerivedPreferences() : null;
           var total = prefs ? (prefs.totalSignals || 0) : 0;
           if (total > 0) {
-            html = 'AI is learning your style&nbsp;&mdash;&nbsp;' + total +
-                   ' signal' + (total !== 1 ? 's' : '') + ' so far.';
+            html = '<div class="uxr4MomentumStrip">' +
+                   '<div class="uxr4MomentumLearning">Still learning your preferences — ' + total +
+                   ' signal' + (total !== 1 ? 's' : '') + ' so far</div>' +
+                   '</div>';
           }
         }
       } catch (_) {}

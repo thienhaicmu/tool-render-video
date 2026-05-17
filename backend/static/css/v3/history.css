@@ -835,3 +835,37 @@
    ======================================================= */
 
 /* =======================================================================
+
+
+/* =======================================================
+   UX-R8.3.1 - HISTORY STATUS VISUAL AUTHORITY
+   Completed: calm authority, partial: resume-oriented
+   amber accent, failed: gentle recovery softening.
+   ======================================================= */
+
+/* First/top item — elevated title weight */
+.renderHistoryItem.uxr4TopItem {
+  padding-top: 10px;
+}
+.renderHistoryItem.uxr4TopItem .renderHistoryTitle {
+  font-size: 12px;
+  color: var(--fg-100);
+}
+
+/* Partial — resume-oriented amber left accent */
+.renderHistoryItem.partial {
+  border-left: 2px solid rgba(251,191,36,.35);
+  padding-left: 8px;
+}
+
+/* Failed — gentle recovery: dimmer icon and title */
+.renderHistoryItem.failed .renderHistoryStatusIcon {
+  opacity: .55;
+}
+.renderHistoryItem.failed .renderHistoryTitle {
+  color: var(--fg-400);
+}
+
+/* =======================================================
+   END OF UX-R8.3.1 - HISTORY STATUS VISUAL AUTHORITY
+   ======================================================= */

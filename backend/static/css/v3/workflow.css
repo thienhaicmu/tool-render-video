@@ -2669,3 +2669,50 @@ textarea.fieldInput {
 /* =======================================================
    END OF UX-R8.3 - CREATOR DESK REDESIGN
    ======================================================= */
+
+
+/* =======================================================
+   UX-R8.3.1 - CREATOR JOURNEY & MOMENTUM
+   Continue zone narrative, momentum strip tendency
+   sentence, momentum learning state.
+   ======================================================= */
+
+/* Continue zone — creative momentum narrative line */
+.uxr4ContinueNarrative {
+  font-size: 10.5px;
+  color: rgba(255,255,255,.44);
+  line-height: 1.55;
+  margin: 4px 0 10px;
+}
+
+/* Momentum strip — tendency sentence (confident taste) */
+.uxr4MomentumStrip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.uxr4MomentumLabel {
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: rgba(255,255,255,.22);
+}
+
+.uxr4MomentumTendency {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(129,140,248,.85);
+}
+
+/* Momentum strip — still learning state */
+.uxr4MomentumLearning {
+  font-size: 10.5px;
+  color: rgba(255,255,255,.35);
+  font-style: italic;
+}
+
+/* =======================================================
+   END OF UX-R8.3.1 - CREATOR JOURNEY & MOMENTUM
+   ======================================================= */
