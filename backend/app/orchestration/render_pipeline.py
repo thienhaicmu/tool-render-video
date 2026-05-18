@@ -1,8 +1,10 @@
 
+import hashlib
 import json
 import os
 import re
 import shutil
+import tempfile
 import threading
 import time
 import traceback
@@ -71,6 +73,76 @@ def _smart_output_stem(hook_text: str, source_title: str, job_id: str) -> str:
         if safe:
             return safe
     return f"render_{job_id[:8]}"
+
+
+# UP28 — Render cache helpers (transcription + scene detection)
+_RENDER_CACHE_TTL_SEC = 72 * 3600  # 72 h
+
+
+def _render_cache_key(*parts) -> str:
+    return hashlib.md5("|".join(str(p) for p in parts).encode()).hexdigest()
+
+
+def _scene_cache_get(source_path: str) -> list | None:
+    try:
+        sp = Path(source_path)
+        if not sp.exists():
+            return None
+        st = sp.stat()
+        key = _render_cache_key(source_path, st.st_mtime, st.st_size)
+        cache_file = Path(tempfile.gettempdir()) / "render_cache" / "scene_detect" / f"{key}.json"
+        if not cache_file.exists():
+            return None
+        if time.time() - cache_file.stat().st_mtime > _RENDER_CACHE_TTL_SEC:
+            cache_file.unlink(missing_ok=True)
+            return None
+        return json.loads(cache_file.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _scene_cache_put(source_path: str, scenes: list) -> None:
+    try:
+        sp = Path(source_path)
+        st = sp.stat()
+        key = _render_cache_key(source_path, st.st_mtime, st.st_size)
+        cache_dir = Path(tempfile.gettempdir()) / "render_cache" / "scene_detect"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        (cache_dir / f"{key}.json").write_text(json.dumps(scenes), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _transcription_cache_get(source_path: str, model_name: str, cache_suffix: str) -> Path | None:
+    try:
+        sp = Path(source_path)
+        if not sp.exists():
+            return None
+        st = sp.stat()
+        key = _render_cache_key(source_path, st.st_mtime, st.st_size, model_name, cache_suffix)
+        cache_file = Path(tempfile.gettempdir()) / "render_cache" / "transcription" / f"{key}.srt"
+        if not cache_file.exists():
+            return None
+        if time.time() - cache_file.stat().st_mtime > _RENDER_CACHE_TTL_SEC:
+            cache_file.unlink(missing_ok=True)
+            return None
+        return cache_file
+    except Exception:
+        return None
+
+
+def _transcription_cache_put(source_path: str, model_name: str, cache_suffix: str, srt_path: Path) -> None:
+    try:
+        if not srt_path.exists() or srt_path.stat().st_size == 0:
+            return
+        sp = Path(source_path)
+        st = sp.stat()
+        key = _render_cache_key(source_path, st.st_mtime, st.st_size, model_name, cache_suffix)
+        cache_dir = Path(tempfile.gettempdir()) / "render_cache" / "transcription"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(srt_path), str(cache_dir / f"{key}.srt"))
+    except Exception:
+        pass
 
 
 _PLAY_RES_Y_MAP = {"9:16": 1920, "1:1": 1080, "3:4": 1440, "4:5": 1440, "16:9": 1080}
@@ -2142,7 +2214,17 @@ def run_render_pipeline(
         if cancel_registry.is_cancelled(job_id):
             raise cancel_registry.JobCancelledError()
         _t_scene = time.perf_counter()
-        scenes = detect_scenes(str(source_path)) if payload.auto_detect_scene else []
+        _scene_cache_hit = False
+        if payload.auto_detect_scene:
+            _cached_scenes = _scene_cache_get(str(source_path))
+            if _cached_scenes is not None:
+                scenes = _cached_scenes
+                _scene_cache_hit = True
+            else:
+                scenes = detect_scenes(str(source_path))
+                _scene_cache_put(str(source_path), scenes)
+        else:
+            scenes = []
         _scene_ms = int((time.perf_counter() - _t_scene) * 1000)
         _emit_render_event(
             channel_code=effective_channel,
@@ -2151,9 +2233,10 @@ def run_render_pipeline(
             level="INFO",
             message=f"Detected {len(scenes)} scenes",
             step="render.scene.detect",
-            context={"scene_count": len(scenes), "duration_ms": _scene_ms},
+            context={"scene_count": len(scenes), "duration_ms": _scene_ms, "cache_hit": _scene_cache_hit},
             duration_ms=_scene_ms,
         )
+        _job_log(effective_channel, job_id, f"{'cache_hit' if _scene_cache_hit else 'cache_miss'} type=scene_detect scenes={len(scenes)} elapsed_ms={_scene_ms}")
         _job_log(effective_channel, job_id, f"Scene detection done: {len(scenes)} scenes in {_scene_ms}ms")
 
         _set_stage(JobStage.SEGMENT_BUILDING, 25, "Building smart segments")
@@ -2511,99 +2594,116 @@ def run_render_pipeline(
                 else:
                     _whisper_model = tuned["whisper_model"]
                     _src_name = Path(source_path).name
-                    _t_transcribe = time.perf_counter()
-                    _hb_stop = threading.Event()
-
-                    def _hb_thread_fn(_stop=_hb_stop, _m=_whisper_model, _s=_src_name):
-                        _pct = 29
-                        while not _stop.wait(12):
-                            _elapsed = round(time.perf_counter() - _t_transcribe)
-                            update_job_progress(job_id, JobStage.TRANSCRIBING_FULL, _pct, f"Still transcribing… ({_elapsed}s)")
-                            _job_log(effective_channel, job_id, f"subtitle_transcription_progress elapsed_sec={_elapsed} model={_m} source={_s}")
-                            _emit_render_event(
-                                channel_code=effective_channel, job_id=job_id,
-                                event="subtitle_transcription_progress",
-                                level="INFO",
-                                message=f"Still transcribing… elapsed={_elapsed}s",
-                                step="subtitle.transcribe",
-                                context={"elapsed_sec": _elapsed, "whisper_model": _m, "source": _s},
-                            )
-                            _pct = _pct + 1 if _pct < 34 else (33 if _pct == 34 else 34)
-
-                    _job_log(effective_channel, job_id, f"subtitle_transcription_started model={_whisper_model} source={_src_name}")
-                    _emit_render_event(
-                        channel_code=effective_channel, job_id=job_id,
-                        event="subtitle_transcription_started",
-                        level="INFO",
-                        message=f"Transcription started: model={_whisper_model}",
-                        step="subtitle.transcribe",
-                        context={"whisper_model": _whisper_model, "source": _src_name},
-                    )
-                    _hb = threading.Thread(target=_hb_thread_fn, daemon=True, name=f"transcribe_hb_{job_id[:8]}")
-                    _hb.start()
-                    if cancel_registry.is_cancelled(job_id):
-                        raise cancel_registry.JobCancelledError()
-                    try:
-                        _transcription_result = transcribe_with_adapter(
-                            str(source_path),
-                            str(full_srt),
-                            engine=getattr(payload, "subtitle_transcription_engine", "default"),
-                            model_name=_whisper_model,
-                            retry_count=retry_count,
-                            highlight_per_word=payload.highlight_per_word,
-                            logger=logger,
-                        )
-                        if _transcription_result.warnings:
-                            _job_log(
-                                effective_channel,
-                                job_id,
-                                "subtitle_transcription_adapter_warning "
-                                f"requested={getattr(payload, 'subtitle_transcription_engine', 'default')} "
-                                f"used={_transcription_result.engine} "
-                                f"warnings={','.join(_transcription_result.warnings)}",
-                                kind="warning",
-                            )
+                    # UP28: check transcription cache before running Whisper
+                    _transcribe_engine = getattr(payload, "subtitle_transcription_engine", "default")
+                    _transcribe_cache_key = f"{_transcribe_engine}_{int(bool(payload.highlight_per_word))}"
+                    _cached_srt = _transcription_cache_get(str(source_path), _whisper_model, _transcribe_cache_key)
+                    if _cached_srt is not None:
+                        shutil.copy2(str(_cached_srt), str(full_srt))
                         full_srt_available = bool(full_srt.exists() and full_srt.stat().st_size > 0)
-                        _transcribe_ms = int((time.perf_counter() - _t_transcribe) * 1000)
-                        _srt_size = full_srt.stat().st_size if full_srt_available else 0
-                        _job_log(effective_channel, job_id, f"subtitle_transcription_completed model={_whisper_model} elapsed_ms={_transcribe_ms} srt_exists={full_srt_available} size_bytes={_srt_size}")
+                        _job_log(effective_channel, job_id, f"cache_hit type=transcription model={_whisper_model} srt_exists={full_srt_available}")
                         _emit_render_event(
                             channel_code=effective_channel, job_id=job_id,
-                            event="subtitle_transcription_completed",
-                            level="INFO",
-                            message=f"Transcription complete: model={_whisper_model} elapsed={_transcribe_ms}ms",
+                            event="cache_hit", level="INFO",
+                            message=f"Transcription cache hit: model={_whisper_model}",
                             step="subtitle.transcribe",
-                            context={"whisper_model": _whisper_model, "elapsed_ms": _transcribe_ms, "srt_path": str(full_srt), "file_exists": full_srt_available, "size_bytes": _srt_size},
+                            context={"type": "transcription", "whisper_model": _whisper_model, "srt_exists": full_srt_available},
                         )
-                    except Exception as transcribe_exc:
-                        full_srt_available = False
-                        _safe_unlink(full_srt)
-                        _transcribe_ms = int((time.perf_counter() - _t_transcribe) * 1000)
-                        _job_log(effective_channel, job_id, f"subtitle_transcription_failed source={source_path} model={_whisper_model} elapsed_ms={_transcribe_ms}: {transcribe_exc}", kind="warning")
+                    else:
+                        _t_transcribe = time.perf_counter()
+                        _hb_stop = threading.Event()
+
+                        def _hb_thread_fn(_stop=_hb_stop, _m=_whisper_model, _s=_src_name):
+                            _pct = 29
+                            while not _stop.wait(12):
+                                _elapsed = round(time.perf_counter() - _t_transcribe)
+                                update_job_progress(job_id, JobStage.TRANSCRIBING_FULL, _pct, f"Still transcribing… ({_elapsed}s)")
+                                _job_log(effective_channel, job_id, f"subtitle_transcription_progress elapsed_sec={_elapsed} model={_m} source={_s}")
+                                _emit_render_event(
+                                    channel_code=effective_channel, job_id=job_id,
+                                    event="subtitle_transcription_progress",
+                                    level="INFO",
+                                    message=f"Still transcribing… elapsed={_elapsed}s",
+                                    step="subtitle.transcribe",
+                                    context={"elapsed_sec": _elapsed, "whisper_model": _m, "source": _s},
+                                )
+                                _pct = _pct + 1 if _pct < 34 else (33 if _pct == 34 else 34)
+
+                        _job_log(effective_channel, job_id, f"subtitle_transcription_started model={_whisper_model} source={_src_name}")
                         _emit_render_event(
-                            channel_code=effective_channel,
-                            job_id=job_id,
-                            event="subtitle_transcription_failed",
-                            level="WARNING",
-                            message=f"Subtitle transcription failed: {transcribe_exc}",
-                            step="subtitle.transcribe",
-                            context={"source_path": str(source_path), "whisper_model": _whisper_model, "elapsed_ms": _transcribe_ms},
-                            exception=transcribe_exc,
-                        )
-                        # UP24: recovery — subtitles optional, render continues without them
-                        _recovery_notes.append("Subtitle transcription failed — rendered without subtitles")
-                        _emit_render_event(
-                            channel_code=effective_channel,
-                            job_id=job_id,
-                            event="recovery_success",
+                            channel_code=effective_channel, job_id=job_id,
+                            event="subtitle_transcription_started",
                             level="INFO",
-                            message="Recovery: subtitle transcription failed, rendering without subtitles",
+                            message=f"Transcription started: model={_whisper_model}",
                             step="subtitle.transcribe",
-                            context={"recovery_strategy": "skip_subtitles"},
+                            context={"whisper_model": _whisper_model, "source": _src_name},
                         )
-                    finally:
-                        _hb_stop.set()
-                        _hb.join(timeout=2)
+                        _hb = threading.Thread(target=_hb_thread_fn, daemon=True, name=f"transcribe_hb_{job_id[:8]}")
+                        _hb.start()
+                        if cancel_registry.is_cancelled(job_id):
+                            raise cancel_registry.JobCancelledError()
+                        try:
+                            _transcription_result = transcribe_with_adapter(
+                                str(source_path),
+                                str(full_srt),
+                                engine=_transcribe_engine,
+                                model_name=_whisper_model,
+                                retry_count=retry_count,
+                                highlight_per_word=payload.highlight_per_word,
+                                logger=logger,
+                            )
+                            if _transcription_result.warnings:
+                                _job_log(
+                                    effective_channel,
+                                    job_id,
+                                    "subtitle_transcription_adapter_warning "
+                                    f"requested={_transcribe_engine} "
+                                    f"used={_transcription_result.engine} "
+                                    f"warnings={','.join(_transcription_result.warnings)}",
+                                    kind="warning",
+                                )
+                            full_srt_available = bool(full_srt.exists() and full_srt.stat().st_size > 0)
+                            _transcribe_ms = int((time.perf_counter() - _t_transcribe) * 1000)
+                            _srt_size = full_srt.stat().st_size if full_srt_available else 0
+                            _job_log(effective_channel, job_id, f"subtitle_transcription_completed model={_whisper_model} elapsed_ms={_transcribe_ms} srt_exists={full_srt_available} size_bytes={_srt_size}")
+                            _emit_render_event(
+                                channel_code=effective_channel, job_id=job_id,
+                                event="subtitle_transcription_completed",
+                                level="INFO",
+                                message=f"Transcription complete: model={_whisper_model} elapsed={_transcribe_ms}ms",
+                                step="subtitle.transcribe",
+                                context={"whisper_model": _whisper_model, "elapsed_ms": _transcribe_ms, "srt_path": str(full_srt), "file_exists": full_srt_available, "size_bytes": _srt_size},
+                            )
+                            _transcription_cache_put(str(source_path), _whisper_model, _transcribe_cache_key, full_srt)
+                        except Exception as transcribe_exc:
+                            full_srt_available = False
+                            _safe_unlink(full_srt)
+                            _transcribe_ms = int((time.perf_counter() - _t_transcribe) * 1000)
+                            _job_log(effective_channel, job_id, f"subtitle_transcription_failed source={source_path} model={_whisper_model} elapsed_ms={_transcribe_ms}: {transcribe_exc}", kind="warning")
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="subtitle_transcription_failed",
+                                level="WARNING",
+                                message=f"Subtitle transcription failed: {transcribe_exc}",
+                                step="subtitle.transcribe",
+                                context={"source_path": str(source_path), "whisper_model": _whisper_model, "elapsed_ms": _transcribe_ms},
+                                exception=transcribe_exc,
+                            )
+                            # UP24: recovery — subtitles optional, render continues without them
+                            _recovery_notes.append("Subtitle transcription failed — rendered without subtitles")
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="recovery_success",
+                                level="INFO",
+                                message="Recovery: subtitle transcription failed, rendering without subtitles",
+                                step="subtitle.transcribe",
+                                context={"recovery_strategy": "skip_subtitles"},
+                            )
+                        finally:
+                            _hb_stop.set()
+                            _hb.join(timeout=2)
 
         # ── AI Director Phase 1 — safe edit plan (observation only, no override) ──
         _ai_edit_plan = None
