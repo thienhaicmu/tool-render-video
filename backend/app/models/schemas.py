@@ -173,9 +173,9 @@ class RenderRequest(BaseModel):
     add_title_overlay: bool = False
     title_overlay_text: Optional[str] = ""
     effect_preset: str = "slay_soft_01"
-    loudnorm_enabled: bool = False
+    loudnorm_enabled: bool = True
     audio_cleanup_engine: Literal["none", "deepfilternet"] = "none"
-    remotion_hook_intro: bool = False
+    remotion_hook_intro: bool = True
 
     # Reup mode
     reup_mode: bool = False

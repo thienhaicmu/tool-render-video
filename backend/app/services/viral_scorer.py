@@ -273,6 +273,7 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
                                   + features["duration_score"] * 20, 1)
 
         # Content type hint from scene statistics — informs ranking explainability (PART C).
+        # Four primary buckets inferred from scene density alone.
         if scene_density < 0.03:
             content_type_hint = "interview"
         elif scene_density < 0.08:
@@ -282,6 +283,26 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
         else:
             content_type_hint = "montage"
 
+        # Tutorial detection pass (QUALITY-UP10B):
+        # Fires within the "vlog" (0.08–0.18) and "commentary" (0.03–0.08) density buckets.
+        # Signal: steady editing rhythm (low pacing_accel) + sharp/hard cuts (high avg_transition_quality).
+        # Screen recordings and explainer content have abrupt uniform cuts and flat pacing.
+        # Natural vlog/commentary has softer or more variable cuts.
+        # Requires ≥3 scene cuts so the transition quality signal is meaningful.
+        if content_type_hint in ("vlog", "commentary") and len(seg_scenes) >= 3:
+            _steady = max(0.0, 1.0 - features["pacing_accel"] / 0.40)  # 1.0 = flat rhythm
+            _sharp  = min(1.0, avg_trans_val / 0.65)                    # 1.0 = very abrupt cuts
+            _tutorial_likelihood = 0.60 * _sharp + 0.40 * _steady
+            _tut_threshold = 0.70 if content_type_hint == "vlog" else 0.75
+            if _tutorial_likelihood >= _tut_threshold:
+                content_type_hint = "tutorial"
+                logger.debug(
+                    "content_type_hint=tutorial inferred seg=[%.1f,%.1f] "
+                    "scene_density=%.3f avg_tq=%.2f pacing_accel=%.2f likelihood=%.2f",
+                    float(seg.get("start", 0)), float(seg.get("end", 0)),
+                    scene_density, avg_trans_val, features["pacing_accel"], _tutorial_likelihood,
+                )
+
         # Selection reason: human-readable signal summary for UI (PART E).
         _sel: list[str] = []
         if features.get("starts_at_cut", 0.0) >= 0.5:
@@ -289,6 +310,8 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
         if content_type_hint in ("interview", "commentary"):
             if features.get("scene_quality", 0.0) >= 0.65:
                 _sel.append("High-quality spoken content")
+        elif content_type_hint == "tutorial":
+            _sel.append("Steady instructional pacing")
         elif features.get("scene_density", 0.0) >= 0.5:
             _sel.append("Fast-paced editing")
         if features.get("duration_score", 0.0) >= 0.85:
@@ -296,6 +319,12 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
         elif features.get("position_score", 0.0) >= 0.85:
             _sel.append("Strong early position")
         selection_reason = ", ".join(_sel[:2]) if _sel else ""
+
+        # speech_density_score: use real speech data from segment builder when available
+        # (populated by build_segments_from_scenes_with_subtitles via SRT coverage ratio).
+        # Fall back to scene-count proxy when no speech data has been computed yet.
+        _real_speech = float(seg.get("speech_density_score", 0.0))
+        _speech_density_score = int(_real_speech) if _real_speech > 0 else min(100, 45 + len(seg_scenes) * 3)
 
         scored.append({
             **seg,
@@ -305,7 +334,7 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
             "hook_timing_score": hook_timing_score,
             "hook_score": hook_timing_score,  # DB backward-compat alias
             "scene_quality_score": round(float(seg.get("scene_quality_avg", 55.0)), 2),
-            "speech_density_score": min(100, 45 + len(seg_scenes) * 3),
+            "speech_density_score": _speech_density_score,
             "scene_change_score": min(100, len(seg_scenes) * 6),
             "content_type_hint": content_type_hint,
             "selection_reason": selection_reason,

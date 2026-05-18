@@ -334,7 +334,7 @@ def _output_ranking_reason(components: dict) -> str:
     content_type = str(components.get("content_type_hint") or "")
 
     if components["hook_score"] >= 70:
-        if content_type in ("interview", "commentary", "podcast"):
+        if content_type in ("interview", "commentary", "tutorial", "podcast"):
             reasons.append("Strong spoken hook")
         else:
             reasons.append("Strong hook")
@@ -342,7 +342,7 @@ def _output_ranking_reason(components: dict) -> str:
         reasons.append("Weak hook")
 
     if components["retention_score"] >= 70:
-        if content_type == "interview":
+        if content_type in ("interview", "tutorial"):
             reasons.append("High engagement energy")
         else:
             reasons.append("High retention")
@@ -350,7 +350,7 @@ def _output_ranking_reason(components: dict) -> str:
         reasons.append("Stable pacing")
 
     if components["speech_density_score"] >= 60:
-        if content_type in ("interview", "commentary", "podcast"):
+        if content_type in ("interview", "commentary", "tutorial", "podcast"):
             reasons.append("Dense spoken content")
         else:
             reasons.append("Speech-heavy segment")
@@ -369,7 +369,7 @@ def _output_ranking_reason(components: dict) -> str:
     if not reasons:
         if content_type == "montage":
             reasons.append("High-energy montage")
-        elif content_type in ("interview", "commentary"):
+        elif content_type in ("interview", "commentary", "tutorial"):
             reasons.append("Quality spoken content")
         else:
             reasons.append("Balanced clip signals")
@@ -1594,6 +1594,14 @@ def run_render_pipeline(
                     step="voice.tts",
                     context={"language": payload.voice_language, "gender": payload.voice_gender},
                 )
+                # Infer content type from subtitle_style since manual voice fires before
+                # segment scoring. subtitle_style is the best available creator-intent signal.
+                _manual_voice_ct = {
+                    "viral":   "commentary",
+                    "clean":   "tutorial",
+                    "story":   "vlog",
+                    "gaming":  "montage",
+                }.get((payload.subtitle_style or "").strip().lower(), "vlog")
                 voice_audio_path = generate_narration_mp3(
                     text=str(payload.voice_text or ""),
                     language=payload.voice_language,
@@ -1601,7 +1609,7 @@ def run_render_pipeline(
                     rate=payload.voice_rate,
                     job_id=job_id,
                     voice_id=getattr(payload, "voice_id", None),
-                    content_type="vlog",
+                    content_type=_manual_voice_ct,
                 )
                 update_job_progress(job_id, current_stage, current_progress, "AI voice generated")
                 _job_log(effective_channel, job_id, f"AI narration audio ready: {voice_audio_path}")
