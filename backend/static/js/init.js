@@ -36,7 +36,7 @@ syncSourceModeUI();
 syncOutputModeUI();
 if (typeof mountRenderRuntimePanel === 'function') mountRenderRuntimePanel();
 renderYoutubeUrlBatch();
-setView('render');
+setView('workspace');
 resetRenderSessionUi();
 renderRenderHistory();
 if (typeof renderDownloadQueue === 'function') renderDownloadQueue();

@@ -29,10 +29,10 @@
       </div>
     </div>
     <nav class="appTopBarNav">
-      <button class="navItem active" data-view="render">Render</button>
-      <button class="navItem" data-view="download">Download</button>
-      <button class="navItem" data-view="history">History</button>
+      <button class="navItem active" data-view="workspace">Home</button>
+      <button class="navItem" data-view="render">Create</button>
       <button class="navItem" data-view="review">Review<span id="rqNavBadge"></span></button>
+      <button class="navItem" data-view="download">Batch</button>
     </nav>
     <div class="appTopBarChips">
       <div class="pill productModePill">Local AI render engine</div>
@@ -783,6 +783,9 @@
 
     <!-- ── SECTION: download-view ──────────────────────────────── -->
     <div id="partial_download_view"></div>
+
+    <!-- ── SECTION: workspace-view ──────────────────────────────── -->
+    <div id="partial_workspace_view"></div>
 
     <!-- ── SECTION: history-view ────────────────────────────────── -->
     <div id="partial_history_view"></div>
@@ -1733,6 +1736,7 @@
 <script src="/static/js/creator-feedback.js"></script>
 <script src="/static/js/review-queue.js"></script>
 <script src="/static/js/creator-series.js"></script>
+<script src="/static/js/workspace.js"></script>
 <script src="/static/js/creator-dna.js"></script>
 <script src="/static/js/creator-presets.js"></script>
 <script src="/static/js/batch-queue.js"></script>

@@ -1,13 +1,14 @@
 function setView(view){
   // ── Standard view routing ──────────────────────────────────────────────────
   currentView = view;
-  const isRender   = view === 'render';
-  const isDownload = view === 'download';
-  const isHistory  = view === 'history';
-  const isReports  = view === 'reports';
-  const isSettings = view === 'settings';
-  const isEditor   = view === 'editor';
-  const isReview   = view === 'review';
+  const isRender    = view === 'render';
+  const isDownload  = view === 'download';
+  const isHistory   = view === 'history';
+  const isReports   = view === 'reports';
+  const isSettings  = view === 'settings';
+  const isEditor    = view === 'editor';
+  const isReview    = view === 'review';
+  const isWorkspace = view === 'workspace';
   // monitor view retired — bottom panel is always visible
 
   // Editor view: take over mainArea entirely (CSS :has rules + editorMode class)
@@ -26,11 +27,13 @@ function setView(view){
   if (historyView) historyView.classList.toggle('hiddenView', !isHistory);
   const reviewView = qs('view_review');
   if (reviewView) reviewView.classList.toggle('hiddenView', !isReview);
+  const wsView = qs('view_workspace');
+  if (wsView) wsView.classList.toggle('hiddenView', !isWorkspace);
   const flowBar = qs('render_flow_bar');
   if (flowBar) flowBar.classList.toggle('hiddenView', !(isRender || isEditor));
 
   // pageHeader + layout_grid only visible for reports/settings
-  const showMainContent = !isRender && !isEditor && !isDownload && !isHistory && !isReview;
+  const showMainContent = !isRender && !isEditor && !isDownload && !isHistory && !isReview && !isWorkspace;
   const pageHeader = document.querySelector('.pageHeader');
   if (pageHeader) pageHeader.classList.toggle('hiddenView', !showMainContent);
   qs('layout_grid').classList.toggle('hiddenView', !showMainContent);
@@ -79,7 +82,8 @@ function setView(view){
   if (isRender && typeof renderRenderHistory === 'function') renderRenderHistory();
   if (isDownload && typeof renderDownloadQueue === 'function') renderDownloadQueue();
   if (isHistory && typeof loadHistoryView === 'function') loadHistoryView();
-  if (isReview  && typeof ReviewQueue !== 'undefined') { ReviewQueue.init(); ReviewQueue.renderView(); }
+  if (isReview    && typeof ReviewQueue       !== 'undefined') { ReviewQueue.init(); ReviewQueue.renderView(); }
+  if (isWorkspace && typeof CreatorWorkspace  !== 'undefined') { CreatorWorkspace.init(); }
   if (!isRender && !isEditor && typeof hideRenderCompletionBar === 'function') hideRenderCompletionBar();
   // Output panel: hide when leaving render, restore visibility state when returning
   if (typeof qs === 'function') {
@@ -105,9 +109,10 @@ function setView(view){
   }
 
   syncRenderBottomPanelVisibility(view);
-  document.body.classList.toggle('is-history-active',  isHistory);
-  document.body.classList.toggle('is-download-active', isDownload);
-  document.body.classList.toggle('is-review-active',   isReview);
+  document.body.classList.toggle('is-history-active',   isHistory);
+  document.body.classList.toggle('is-download-active',  isDownload);
+  document.body.classList.toggle('is-review-active',    isReview);
+  document.body.classList.toggle('is-workspace-active', isWorkspace);
   if (typeof updateWfStrip === 'function') updateWfStrip();
 }
 

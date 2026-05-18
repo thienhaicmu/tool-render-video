@@ -5,6 +5,7 @@ async function loadPartials() {
     partial_history_view:   '/static/partials/history-view.html',
     partial_settings_view:  '/static/partials/settings-view.html',
     partial_review_view:    '/static/partials/review-view.html',
+    partial_workspace_view: '/static/partials/workspace-view.html',
   };
   for (const id in map) {
     const res = await fetch(map[id]);
