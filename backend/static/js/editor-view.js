@@ -164,6 +164,13 @@ function evSyncQsBar() {
     seriesHintEl.textContent = sh || '';
     seriesHintEl.style.display = sh ? '' : 'none';
   }
+  const consistencyHintEl = document.getElementById('cpConsistencyHint');
+  if (consistencyHintEl) {
+    let ch = null;
+    if (typeof CreatorConsistency !== 'undefined') ch = CreatorConsistency.getAppliedHint();
+    consistencyHintEl.textContent = ch || '';
+    consistencyHintEl.style.display = ch ? '' : 'none';
+  }
   v3RefreshSteeringPanel();
 }
 
@@ -185,6 +192,10 @@ function v3RefreshSteeringPanel() {
   const seriesHintEl2 = document.getElementById('cpSeriesHint');
   if (seriesHintEl2 && seriesHintEl2.textContent && seriesHintEl2.style.display !== 'none') {
     parts.push({ label: 'Series', cls: 'v3Chip v3ChipSeries', title: seriesHintEl2.textContent });
+  }
+  const consistencyHintEl2 = document.getElementById('cpConsistencyHint');
+  if (consistencyHintEl2 && consistencyHintEl2.textContent && consistencyHintEl2.style.display !== 'none') {
+    parts.push({ label: 'Consistent', cls: 'v3Chip v3ChipConsistency', title: consistencyHintEl2.textContent });
   }
 
   const sb = (document.getElementById('qsStructureBias')?.value || 'balanced');
@@ -1055,8 +1066,9 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   if (typeof CreatorDNA      !== 'undefined') CreatorDNA.init();
   if (typeof CreatorPresets  !== 'undefined') CreatorPresets.init();
   if (typeof BatchQueue      !== 'undefined') BatchQueue.init();
-  if (typeof CreatorAssets   !== 'undefined') CreatorAssets.init();
-  if (typeof CreatorSeries   !== 'undefined') CreatorSeries.init();
+  if (typeof CreatorAssets       !== 'undefined') CreatorAssets.init();
+  if (typeof CreatorSeries       !== 'undefined') CreatorSeries.init();
+  if (typeof CreatorConsistency  !== 'undefined') CreatorConsistency.init();
   evSyncQsBar();
   if (typeof EditorConverse !== 'undefined') EditorConverse.init();
 
@@ -1146,8 +1158,9 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   if (typeof CreatorDNA      !== 'undefined') CreatorDNA.init();
   if (typeof CreatorPresets  !== 'undefined') CreatorPresets.init();
   if (typeof BatchQueue      !== 'undefined') BatchQueue.init();
-  if (typeof CreatorAssets   !== 'undefined') CreatorAssets.init();
-  if (typeof CreatorSeries   !== 'undefined') CreatorSeries.init();
+  if (typeof CreatorAssets       !== 'undefined') CreatorAssets.init();
+  if (typeof CreatorSeries       !== 'undefined') CreatorSeries.init();
+  if (typeof CreatorConsistency  !== 'undefined') CreatorConsistency.init();
   evSyncQsBar();
   if (typeof mvUpdatePreviewHint === 'function') mvUpdatePreviewHint();
 
@@ -2103,8 +2116,9 @@ async function startRenderFromEditor() {
   payload.subtitle_style = qs('evSubStyle')?.value || 'pro_karaoke';
   if (typeof CreatorTaste    !== 'undefined') CreatorTaste.recordSubtitleStyle(payload.subtitle_style);
   if (typeof CreatorFeedback !== 'undefined') CreatorFeedback.recordPlatformChoice(payload.target_platform || 'youtube_shorts');
-  if (typeof CreatorDNA      !== 'undefined') payload.creator_dna    = CreatorDNA.getDNAContext();
-  if (typeof CreatorSeries   !== 'undefined') payload.creator_series = CreatorSeries.getSeriesContext();
+  if (typeof CreatorDNA          !== 'undefined') payload.creator_dna         = CreatorDNA.getDNAContext();
+  if (typeof CreatorSeries       !== 'undefined') payload.creator_series      = CreatorSeries.getSeriesContext();
+  if (typeof CreatorConsistency  !== 'undefined') payload.creator_consistency = CreatorConsistency.getConsistencyContext();
   if (typeof CreatorPresets  !== 'undefined') {
     const _cp = CreatorPresets.getActive();
     if (_cp && typeof addEvent === 'function') addEvent(`preset_applied: ${_cp.name}`, 'render');

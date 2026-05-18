@@ -2768,3 +2768,27 @@
 /* =======================================================
    END OF UP32 — CREATOR WORKSPACE
    ======================================================= */
+
+/* =======================================================
+   UP34 — QUALITY CONSISTENCY: consistency chip styles
+   ======================================================= */
+
+/* Steering panel chip — Consistency (amber/gold) */
+.v3ChipConsistency { color:#fbbf24; border-color:rgba(251,191,36,.3);  background:rgba(251,191,36,.08); }
+
+/* Output trust bar chip — Consistent creator style */
+.v3TrustConsistency { color:#fbbf24; border-color:rgba(251,191,36,.25); background:rgba(251,191,36,.07); }
+
+/* Consistency hint text — same styling as cpDnaHint / cpSeriesHint */
+#cpConsistencyHint {
+  font-size: 11px;
+  font-style: italic;
+  color: #fbbf24;
+  opacity: 0.80;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* =======================================================
+   END OF UP34 — QUALITY CONSISTENCY
+   ======================================================= */

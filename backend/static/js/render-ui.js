@@ -4401,6 +4401,10 @@ function populateRenderOutputPanel(job, parts) {
     const _v3SeriesChip = CreatorSeries.getAppliedChip();
     if (_v3SeriesChip) _v3TrustChips.push(`<span class="v3TrustChip v3TrustSeries">${esc(_v3SeriesChip)}</span>`);
   }
+  if (typeof CreatorConsistency !== 'undefined') {
+    const _v3ConsistencyChip = CreatorConsistency.getAppliedChip();
+    if (_v3ConsistencyChip) _v3TrustChips.push(`<span class="v3TrustChip v3TrustConsistency">${esc(_v3ConsistencyChip)}</span>`);
+  }
   const _v3Sb = _v3JobPayload.structure_bias;
   if (_v3Sb && _v3Sb !== 'balanced') _v3TrustChips.push(`<span class="v3TrustChip v3TrustSteer">${_v3Sb === 'hook' ? 'More Hook' : 'More Story'}</span>`);
   if (typeof ClipSteering !== 'undefined') {
