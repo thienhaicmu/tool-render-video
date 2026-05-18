@@ -1085,6 +1085,23 @@
             </select>
             <span class="inspHint">Subtle editorial bias per platform</span>
           </label>
+          <!-- UP16: CTA / Series Intelligence — optional subtitle end card. Default OFF. -->
+          <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
+            <input type="checkbox" id="evCtaEnabled" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0"
+              onchange="var cs=document.getElementById('evCtaTypeWrap');if(cs)cs.style.display=this.checked?'':'none';">
+            <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Add ending CTA</span>
+            <span style="font-size:11px;color:#888;font-style:italic">Tasteful end card — comment / part 2 / follow</span>
+          </label>
+          <div id="evCtaTypeWrap" class="field" style="grid-column:1/-1;display:none">
+            <span class="fieldLabel">CTA Type</span>
+            <select class="fieldInput" id="evCtaType">
+              <option value="auto">Auto (by content type)</option>
+              <option value="comment">Comment prompt</option>
+              <option value="part_2">Series / Part 2</option>
+              <option value="follow">Follow</option>
+            </select>
+            <span class="inspHint">Auto picks the right type based on content</span>
+          </div>
           <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
             <input type="checkbox" id="evAddTitleOverlay" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0" onchange="var ti=document.getElementById('evTitleOverlayText');if(ti)ti.disabled=!this.checked;">
             <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Title Overlay</span>

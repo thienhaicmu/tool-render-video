@@ -977,6 +977,8 @@ function _rankMap(job) {
           targetPlatform: String(r.target_platform || '').trim(),
           coverOffset:    Number(r.cover_frame_offset || 0),
           coverFile:      String(r.cover_file || '').trim(),
+          ctaApplied:     !!(r.cta_applied),
+          ctaText:        String(r.cta_text || '').trim(),
         });
       }
     });
@@ -4432,6 +4434,7 @@ function populateRenderOutputPanel(job, parts) {
           rk.variantType === 'balanced'   ? 'Balanced'   :
           rk.variantType === 'story_first'? 'Story-first': esc(rk.variantType)
         }${_cfVariantPref && rk.variantType === _cfVariantPref ? '<span class="cfVariantPref"> · recent</span>' : ''}</div>` : ''}
+        ${(isDone && rk.ctaApplied && rk.ctaText) ? `<div class="clipCardCtaChip" title="CTA end card: ${esc(rk.ctaText)}">CTA · ${esc(rk.ctaText)}</div>` : ''}
         <div class="clipCardScoreRow">
           ${hasScore
             ? `<span class="clipCardScore" data-tier="${scoreTier}">${scoreVal.toFixed(1)}<span class="clipCardScoreMax"> /10</span></span><span class="clipCardRankTag">#${rk.rank || '?'}</span>`

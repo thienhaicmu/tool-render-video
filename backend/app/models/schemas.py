@@ -242,6 +242,10 @@ class RenderRequest(BaseModel):
     # Options: "tiktok" | "youtube_shorts" | "instagram_reels". Default: youtube_shorts.
     # Creator explicit settings always win; this is fallback guidance only.
     target_platform: str = "youtube_shorts"
+    # CTA / Series Intelligence (UP16) — optional subtitle end card. Default OFF.
+    # cta_type: "auto" | "comment" | "part_2" | "follow". Auto picks by content type.
+    cta_enabled: bool = False
+    cta_type: str = "auto"
     # AI Variant Planning (Phase 21) — opt-in; plans advisory variants, never auto-renders.
     ai_variant_planning_enabled: bool = False
     ai_variant_count: int = 3

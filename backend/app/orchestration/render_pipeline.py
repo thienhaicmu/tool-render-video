@@ -175,6 +175,83 @@ def _select_cover_frame_time(
     return best_t, best_reason
 
 
+# UP16 — CTA / Series Intelligence: deterministic end-card text library.
+# Content-type keys match content_type_hint values. cta_type keys: comment / part_2 / follow.
+# All text is neutral and platform-agnostic — no hype language, no emojis, no cringe.
+_CTA_TEXTS: dict[str, dict[str, list[str]]] = {
+    "tutorial":   {
+        "comment": ["Let me know if this helped.", "Questions? Drop them below."],
+        "part_2":  ["Want part 2? Let me know.", "More in the next one."],
+        "follow":  ["Follow for more tips.", "More creator tips coming."],
+    },
+    "commentary": {
+        "comment": ["Agree or disagree?", "What would you do?", "Thoughts?"],
+        "part_2":  ["More on this coming.", "Continued next."],
+        "follow":  ["Follow for more.", "More takes soon."],
+    },
+    "vlog": {
+        "comment": ["What do you think?", "Would you do this?"],
+        "part_2":  ["More soon.", "Next part coming."],
+        "follow":  ["Follow for more.", "More coming."],
+    },
+    "interview":  {
+        "comment": ["Thoughts on this?", "What's your take?"],
+        "part_2":  ["More soon.", "Continued next."],
+        "follow":  ["Follow for more.", "More interviews soon."],
+    },
+    "montage":    {
+        "comment": ["What's your favorite moment?", "Which clip?"],
+        "part_2":  ["More clips coming.", "Next one soon."],
+        "follow":  ["Follow for more.", "More clips soon."],
+    },
+    "gaming":     {
+        "comment": ["What would you have done?", "Which play?"],
+        "part_2":  ["More clips coming.", "Next session soon."],
+        "follow":  ["Follow for more clips.", "More gaming soon."],
+    },
+}
+
+# Auto-type: which CTA type fits each content type by default when cta_type=="auto".
+_CTA_AUTO_TYPE: dict[str, str] = {
+    "tutorial": "part_2", "commentary": "comment", "vlog": "comment",
+    "interview": "comment", "montage": "follow", "gaming": "follow",
+}
+
+
+def _select_cta_text(content_type: str, target_platform: str, cta_type: str) -> str:
+    """Return a deterministic CTA string. Pure function — no I/O, no randomness."""
+    ct = str(content_type or "vlog").lower()
+    if cta_type == "auto":
+        cta_type = _CTA_AUTO_TYPE.get(ct, "follow")
+    if cta_type not in ("comment", "part_2", "follow"):
+        cta_type = "follow"
+    ct_texts = _CTA_TEXTS.get(ct, _CTA_TEXTS["vlog"])
+    options = ct_texts.get(cta_type, ct_texts.get("follow", ["More soon."]))
+    # TikTok prefers shorter text — use second option when available.
+    if str(target_platform).lower() == "tiktok" and len(options) > 1:
+        return options[1]
+    return options[0]
+
+
+def _append_cta_block_to_srt(
+    srt_path: str, cta_text: str, after_sec: float, clip_end_sec: float
+) -> bool:
+    """Append a CTA subtitle block to an existing SRT file. Returns True on success."""
+    try:
+        blocks = parse_srt_blocks(srt_path)
+        if not blocks:
+            return False
+        cta_start = max(float(after_sec) + 0.3, float(clip_end_sec) - 3.0)
+        cta_end = min(cta_start + 2.5, float(clip_end_sec) - 0.1)
+        if cta_end <= cta_start or cta_start >= float(clip_end_sec):
+            return False
+        blocks.append({"start": cta_start, "end": cta_end, "text": cta_text})
+        write_srt_blocks(blocks, srt_path)
+        return True
+    except Exception:
+        return False
+
+
 def _build_variant_segments(scored: list[dict], payload) -> list[dict]:
     """Select three purposeful segments from the scored pool (aggressive, balanced, story-first).
 
@@ -3198,6 +3275,52 @@ def run_render_pipeline(
                             f"market={_mv_market} — emphasis pass skipped, render continues",
                             kind="warning",
                         )
+
+                # UP16: Smart CTA ending — optional subtitle end card.
+                # Default OFF. Creator must explicitly enable via cta_enabled.
+                # Appended AFTER emphasis (CTA text is not formatted) and BEFORE ASS conversion.
+                _cta_enabled = bool(getattr(payload, "cta_enabled", False))
+                if _cta_enabled and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
+                    try:
+                        _cta_type = str(getattr(payload, "cta_type", "auto") or "auto").strip().lower()
+                        _ct_hint  = str(seg.get("content_type_hint") or "vlog")
+                        _cta_text = _select_cta_text(_ct_hint, _target_platform, _cta_type)
+                        _last_sub_end = float(_srt_meta.get("last_end") or 0)
+                        _eff_speed    = float(
+                            seg.get("variant_playback_speed")
+                            or getattr(payload, "playback_speed", 1.07)
+                            or 1.07
+                        )
+                        _raw_dur  = float(seg.get("duration") or 0)
+                        _eff_dur  = max(5.0, _raw_dur / _eff_speed) - 0.5
+                        if _cta_text and _append_cta_block_to_srt(
+                            str(_ass_srt_source), _cta_text, _last_sub_end, _eff_dur
+                        ):
+                            needs_ass = True
+                            seg["cta_applied"] = True
+                            seg["cta_text"]    = _cta_text
+                            _emit_render_event(
+                                channel_code=effective_channel, job_id=job_id,
+                                event="cta_appended", level="INFO",
+                                message=f"CTA appended: part {idx} text={_cta_text!r}",
+                                step="render.cta",
+                                context={
+                                    "part_no":        idx,
+                                    "cta_text":       _cta_text,
+                                    "cta_type":       _cta_type,
+                                    "content_type":   _ct_hint,
+                                    "target_platform": _target_platform,
+                                    "last_sub_end":   _last_sub_end,
+                                },
+                            )
+                            _job_log(
+                                effective_channel, job_id,
+                                f"cta_appended part_no={idx} text={_cta_text!r} "
+                                f"type={_cta_type} platform={_target_platform} ct={_ct_hint}",
+                            )
+                    except Exception as _cta_exc:
+                        logger.warning("cta_append_failed part=%d: %s", idx, _cta_exc)
+
                 if needs_ass:
                     _play_res_y = _aspect_play_res_y(payload.aspect_ratio)
                     _margin_v = getattr(payload, "sub_margin_v", 180)
@@ -4381,6 +4504,10 @@ def run_render_pipeline(
             if _r_cover_file:
                 _rank_entry["cover_file"]         = _r_cover_file
                 _rank_entry["cover_frame_offset"] = round(_r_cover_offset, 3)
+            # UP16: CTA — propagate cta_applied / cta_text from segment dict
+            if _r_seg.get("cta_applied"):
+                _rank_entry["cta_applied"] = True
+                _rank_entry["cta_text"]    = str(_r_seg.get("cta_text") or "")
             # Apply quality penalty from per-part validator
             _rank_raw_score = float(_rank_entry["output_score"])
             _rank_q_penalty = int(_r_seg.get("quality_penalty", 0))
