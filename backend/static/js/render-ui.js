@@ -2288,6 +2288,7 @@ function buildRenderHistoryEntry(job, summary, parts) {
     profile: String(payload.render_profile || 'quality').trim(),
     sourceQualityMode: String(payload.source_quality_mode || 'standard_1080').trim(),
     reframeMode: payload.motion_aware_crop ? String(payload.reframe_mode || 'center').trim() : 'none',
+    subtitleStyle: String(payload.subtitle_style || '').trim(),
     firstPartNo: firstPart ? Number(firstPart.part_no) : null,
     firstPartFile: firstPart ? String(firstPart.output_file || '') : null,
     firstPartDurationSec: firstPart ? Math.max(0, Number(firstPart.end_sec || 0) - Number(firstPart.start_sec || 0)) : null,
@@ -4375,7 +4376,7 @@ function populateRenderOutputPanel(job, parts) {
       ? `<button class="clipCardBtn clipCardBtnPreview" type="button" onclick="centerPreviewClip(${JSON.stringify(jobId)},${partNo},${JSON.stringify(p.output_file || '')},${JSON.stringify(p.part_name || `Clip ${partNo}`)})">Preview</button>`
       : '';
     const downloadBtn = (!isFailed && hasFile && jobId)
-      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download>Download</a>`
+      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download onclick="if(typeof CreatorTaste!=='undefined'&&${rk.rank||0}>0)CreatorTaste.recordDownload(${rk.rank||0})">Download</a>`
       : '';
     const openBtn = hasFile
       ? `<button class="clipCardBtn" type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Folder</button>`

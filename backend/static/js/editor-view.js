@@ -878,6 +878,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   evUpdateAspectRatio();  // apply aspect ratio frame from dropdown
   evInitVoiceFields(pendingPayload);
   if (typeof CreatorMemory !== 'undefined') CreatorMemory.init();
+  if (typeof CreatorTaste  !== 'undefined') CreatorTaste.init();
   if (typeof EditorConverse !== 'undefined') EditorConverse.init();
 
   try {
@@ -961,6 +962,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   evInitTextLayers();
   evUpdateAspectRatio();
   evInitVoiceFields(pendingPayload);
+  if (typeof CreatorTaste  !== 'undefined') CreatorTaste.init();
   if (typeof mvUpdatePreviewHint === 'function') mvUpdatePreviewHint();
 
   if (pendingPayload) pendingPayload.edit_session_id = pd.session_id;
@@ -1913,6 +1915,7 @@ async function startRenderFromEditor() {
   const _playResY = _PLAY_RES_Y_MAP[qs('evAspectRatio').value] || 1440;
   payload.sub_margin_v   = Math.round((posY / 100) * _playResY);
   payload.subtitle_style = qs('evSubStyle')?.value || 'pro_karaoke';
+  if (typeof CreatorTaste !== 'undefined') CreatorTaste.recordSubtitleStyle(payload.subtitle_style);
   if (payload.subtitle_style === 'pro_karaoke') payload.highlight_per_word = true;
   payload.sub_x_percent  = Math.max(5, Math.min(95, Number(qs('evSubPosX')?.value ?? _ev.subXPercent ?? 50)));
   // Editor mode: user expects subtitle on all exported parts.
