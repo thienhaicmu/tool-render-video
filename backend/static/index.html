@@ -1027,6 +1027,18 @@
       <!-- Output settings — moved to Export tab -->
       <div class="evSection" id="evSectionBasic" data-insp-panel="performance">
         <div class="evSectionTitle">Output</div>
+        <!-- UP21: Creator Style Presets — 1-click workflow bundle -->
+        <div class="cpBar" id="cpBar">
+          <select class="fieldInput cpSelect" id="cpPresetSelect"
+            onchange="if(typeof CreatorPresets!=='undefined')CreatorPresets.applyPreset(this.value)">
+            <option value="">— No Preset —</option>
+          </select>
+          <button class="ghostButton cpSaveBtn" id="cpSaveBtn" type="button"
+            onclick="if(typeof CreatorPresets!=='undefined')CreatorPresets.promptSave()">Save</button>
+          <button class="ghostButton cpDeleteBtn" id="cpDeleteBtn" type="button"
+            style="display:none"
+            onclick="if(typeof CreatorPresets!=='undefined')CreatorPresets.deleteActive()">✕</button>
+        </div>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:7px 10px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid rgba(148,163,184,.12)">
           <span style="font-size:12px;color:var(--text-mut);white-space:nowrap;flex-shrink:0">Strategy Preset</span>
           <select id="evOutputPreset" class="fieldInput" style="flex:1;margin-bottom:0;font-size:12px" onchange="evApplyOutputPreset(this.value)">
@@ -1590,6 +1602,7 @@
 <script src="/static/js/creator-taste.js"></script>
 <script src="/static/js/creator-feedback.js"></script>
 <script src="/static/js/creator-dna.js"></script>
+<script src="/static/js/creator-presets.js"></script>
 <script src="/static/js/editor-converse.js"></script>
 <script src="/static/js/editor-review-intelligence.js"></script>
 <script src="/static/js/editor-agents.js"></script>

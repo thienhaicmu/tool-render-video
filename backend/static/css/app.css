@@ -17400,6 +17400,43 @@ body:not(.is-render-studio-active) .rs-center-stage > #appBottomPanel.renderRunt
   cursor: default;
 }
 
+/* ── UP21: Creator Style Presets ─────────────────────────────────────────── */
+.cpBar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  padding: 5px 8px;
+  background: rgba(255,255,255,.03);
+  border-radius: 8px;
+  border: 1px solid rgba(148,163,184,.10);
+}
+
+.cpBar .cpSelect {
+  flex: 1;
+  margin-bottom: 0;
+  font-size: 12px;
+}
+
+.cpBar .cpSaveBtn {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+.cpBar .cpDeleteBtn {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 5px 8px;
+  color: #f87171;
+  border-color: rgba(248,113,113,.4);
+}
+
+.cpBar .cpDeleteBtn:hover {
+  background: rgba(248,113,113,.12);
+}
+
 /* ── UP20: Creator DNA hint ───────────────────────────────────────────────── */
 .clipsDnaHint {
   font-size: 10px;
