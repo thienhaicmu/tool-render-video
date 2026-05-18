@@ -1,8 +1,8 @@
 # PRODUCT STATE — QUALITY-UP20: Creator Style DNA
 
 **Branch:** `feature/ai-output-upgrade`
-**Commit:** `feat(render): creator style dna`
-**Status:** Shipped
+**Commits:** `feat(render): creator style dna` → `fix(render): harden creator dna` (UP20.1)
+**Status:** Shipped + Hardened
 
 ---
 
@@ -174,7 +174,7 @@ Not per-clip — one note for the entire render session.
 |---|---|
 | Independent raw signal tracking in creator-dna.js | DNA derives from UP12+UP18 — no duplicate storage |
 | Speed nudges from DNA | Platform handles pacing; DNA adding a second speed delta would compound unpredictably |
-| Hook bonus for combined_scoring path | Combined scoring has its own pool sort; DNA nudge applies only to the standard sort |
+| Hook bonus for combined_scoring path | ~~Excluded~~ — **Fixed in UP20.1**: `_provisional_combined()` now applies DNA hook bonus |
 | DNA-based max_export_parts override | Creator controls clip count explicitly |
 | DNA-driven variant selection weights | Variant formula is purposeful by design; DNA doesn't override it |
 | "Reset DNA" UI button | `reset()` exists for programmatic use; UI reset is part of a broader preference panel |
@@ -230,13 +230,51 @@ Not per-clip — one note for the entire render session.
 
 ---
 
+## UP20.1 — Hardening Changes
+
+### Part A — Combined Scoring Alignment (gap closed)
+
+`_provisional_combined()` in the combined scoring path now includes the DNA hook bonus:
+```python
+return vs * 0.80 + hs * (0.20 + _dna_hook_bonus / 100)
+```
+`_dna_hook_bonus` is captured via closure. The formula is additive and bounded: for
+hook_score=84, dna_hook_bonus=3 → adds 2.52 to the 0-100 combined score (~2.5% nudge).
+
+### Part B — Observability
+
+DNA logging is now always emitted per render, not just when a nudge fires:
+
+| Log event | When emitted | Contents |
+|---|---|---|
+| `dna_confidence` | Every render | `confident`, `action_count`, all three dimension scores, `suppressed_signals` |
+| `dna_applied` | When ≥1 nudge fires | Which nudges: `hook_bonus=3`, `subtitle_clean_bias=active` |
+| `dna_suppressed` | Confident but no nudge fires | Dimension values, threshold reason |
+| `dna_sub_suppressed` | Per-part when clean_visual suppressed by higher layer | `reason=variant|creator|platform` (debug level) |
+
+### Part C — Overfit Protection
+
+`hook_forward` now has a stricter session gate: `DNA_MIN_HOOK_SESS = 15` (separate from
+`DNA_MIN_ACTIONS = 10`). A burst of 2-3 aggressive downloads won't fire the hook bonus
+until the creator has 15 total sessions of history. The `clean_visual` dimension requires
+2/3 signals simultaneously — already a sufficient multi-signal stability gate at 10 actions.
+
+When `hook_forward` is suppressed by the session gate, `suppressed_signals: ['hook_forward_needs_more_sessions']`
+is emitted in the DNA context and logged in `dna_confidence`.
+
+### Part D — Conflict Guard
+
+No structural changes — hierarchy was already correct. Added `dna_sub_suppressed` debug
+log per part when `clean_visual` DNA is active but suppressed by a higher subtitle layer.
+
+### Part E — Trust Hint
+
+Hint text changed from "Adapted to recent creator style" → **"Using recent creator style"**.
+Applied in both `creator-dna.js` `getAppliedHint()` and `render-ui.js` clip output panel.
+
+---
+
 ## Audit Notes
-
-### Remaining gap: hook bonus not applied in combined_scoring path
-
-When `combined_scoring_enabled=True`, the pool sort uses `_provisional_combined()` instead
-of the standard sort key. `_dna_hook_bonus` is NOT applied in that path. Impact: low —
-combined scoring is a separate opt-in feature. Acceptable as a known gap.
 
 ### DNA dimensions are binary-to-sparse
 

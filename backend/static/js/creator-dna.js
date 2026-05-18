@@ -20,8 +20,10 @@
 
 window.CreatorDNA = (() => {
 
-  const LS_KEY          = 'creator_dna_v1';
-  const DNA_MIN_ACTIONS = 10;   // meaningful actions before DNA activates
+  const LS_KEY             = 'creator_dna_v1';
+  const DNA_MIN_ACTIONS    = 10;   // total sessions before DNA is considered confident
+  const DNA_MIN_HOOK_SESS  = 15;   // stricter gate for hook_forward — more history required
+                                   // to resist overfit from a short burst of aggressive renders
 
   // Subtitle styles associated with a "clean visual" editing identity
   const CLEAN_STYLES = ['story_clean_01', 'minimal_clean', 'clean_karaoke'];
@@ -41,15 +43,24 @@ window.CreatorDNA = (() => {
     const platformPref = feedbackPrefs.platformPreference?.platform || null;
     const subtitlePref = tastePrefs.subtitleStyle?.style            || null;
 
+    const suppressed_signals = [];
+
     // hook_forward: 0.0 / 0.5 / 1.0
     //   0.5 → one of: aggressive variant preference OR TikTok platform preference
     //   1.0 → both signals present
+    //   Overfit protection: requires DNA_MIN_HOOK_SESS (15) before firing — a burst of
+    //   2-3 aggressive downloads should not make someone a "hook-forward creator."
     const hookCount    = (variantPref  === 'aggressive' ? 1 : 0)
                        + (platformPref === 'tiktok'     ? 1 : 0);
-    const hook_forward = _r2(hookCount / 2);
+    const hook_forward = (hookCount > 0 && action_count >= DNA_MIN_HOOK_SESS)
+      ? _r2(hookCount / 2) : 0;
+    if (hookCount > 0 && action_count < DNA_MIN_HOOK_SESS) {
+      suppressed_signals.push('hook_forward_needs_more_sessions');
+    }
 
     // clean_visual: 0.0 / 0.33 / 0.67 / 1.0
     //   signals: story_first variant + instagram_reels platform + clean subtitle style
+    //   Requires 2/3 signals to reach the 0.67 threshold — already a stable multi-signal gate.
     const cleanCount   = (variantPref  === 'story_first'           ? 1 : 0)
                        + (platformPref === 'instagram_reels'        ? 1 : 0)
                        + (CLEAN_STYLES.includes(subtitlePref)       ? 1 : 0);
@@ -64,6 +75,7 @@ window.CreatorDNA = (() => {
       hook_forward,
       clean_visual,
       narrative_structure,
+      suppressed_signals,
     };
   }
 
@@ -84,7 +96,7 @@ window.CreatorDNA = (() => {
     const fires = (c.hook_forward          >= 0.5)
                || (c.clean_visual          >= 0.67)
                || (c.narrative_structure   >= 1.0);
-    return fires ? 'Adapted to recent creator style' : null;
+    return fires ? 'Using recent creator style' : null;
   }
 
   // ── Public: lifecycle ─────────────────────────────────────────────────────

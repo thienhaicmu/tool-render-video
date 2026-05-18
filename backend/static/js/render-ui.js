@@ -4365,7 +4365,7 @@ function populateRenderOutputPanel(job, parts) {
     ((_jobDNA.clean_visual         || 0) >= 0.67) ||
     ((_jobDNA.narrative_structure  || 0) >= 1.0)
   );
-  const _dnaHint = _dnaFired ? `<div class="clipsDnaHint">Adapted to recent creator style</div>` : '';
+  const _dnaHint = _dnaFired ? `<div class="clipsDnaHint">Using recent creator style</div>` : '';
   list.innerHTML = _platformBanner + _dnaHint + all.map((p) => {
     const partNo = Number(p.part_no || 0);
     const st = String(p?.status || '').toLowerCase();

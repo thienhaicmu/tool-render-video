@@ -2042,7 +2042,8 @@ def run_render_pipeline(
                 hs = float(s.get("hook_text_score") or s.get("hook_timing_score") or
                            s.get("hook_opening_score") or s.get("hook_score") or 0)
                 # mv not yet computed; fallback = vs → vs*0.50 + vs*0.30 + hs*0.20 = vs*0.80 + hs*0.20
-                return vs * 0.80 + hs * 0.20
+                # UP20.1 Part A: DNA hook bonus — same gentle nudge as standard sort path.
+                return vs * 0.80 + hs * (0.20 + _dna_hook_bonus / 100)
             scored.sort(key=_provisional_combined, reverse=True)
         else:
             scored.sort(
@@ -2102,15 +2103,33 @@ def run_render_pipeline(
         )
         _job_log(effective_channel, job_id,
                  f"platform_bias: target={_target_platform} hook_bonus={_platform_hook_bonus}")
-        # UP20: DNA nudge logging
+        # UP20.1 Part B: DNA observability — always emit confidence; log applied/suppressed separately.
+        _dna_hf = float(_dna.get("hook_forward", 0) or 0)
+        _dna_cv = float(_dna.get("clean_visual", 0) or 0)
+        _dna_ns = float(_dna.get("narrative_structure", 0) or 0)
+        _dna_suppressed_signals = _dna.get("suppressed_signals") or []
+        _job_log(
+            effective_channel, job_id,
+            f"dna_confidence: confident={_dna_confident} action_count={_dna_action_count} "
+            f"hook_forward={_dna_hf:.2f} clean_visual={_dna_cv:.2f} "
+            f"narrative_structure={_dna_ns:.2f} "
+            f"suppressed_signals={_dna_suppressed_signals}",
+            kind="info",
+        )
         if _dna_confident and (_dna_hook_bonus > 0 or _dna_clean_visual):
+            _nudges = []
+            if _dna_hook_bonus > 0:       _nudges.append(f"hook_bonus={_dna_hook_bonus}")
+            if _dna_clean_visual:         _nudges.append("subtitle_clean_bias=active")
             _job_log(
                 effective_channel, job_id,
-                f"dna_applied: action_count={_dna_action_count} "
-                f"hook_forward={float(_dna.get('hook_forward', 0) or 0):.2f} "
-                f"hook_bonus={_dna_hook_bonus} "
-                f"clean_visual={float(_dna.get('clean_visual', 0) or 0):.2f} "
-                f"clean_visual_active={_dna_clean_visual}",
+                f"dna_applied: {' '.join(_nudges)}",
+                kind="info",
+            )
+        elif _dna_confident:
+            _job_log(
+                effective_channel, job_id,
+                f"dna_suppressed: all nudges below threshold — "
+                f"hook_forward={_dna_hf:.2f}(<0.5) clean_visual={_dna_cv:.2f}(<0.67)",
                 kind="info",
             )
         # Re-order for output numbering: timeline = chronological, viral/combined = by score
@@ -3311,6 +3330,18 @@ def run_render_pipeline(
                      "tutorial": "clean", "montage": "gaming"}.get(
                         str(seg.get("content_type_hint") or "vlog"), "")
                 ) if (not _raw_sub_style and not _platform_sub_bias and _dna_clean_visual) else ""
+                # UP20.1 Part D: log when clean_visual DNA was suppressed by a higher layer.
+                if _dna_clean_visual and not _dna_sub_bias_val:
+                    _sub_suppress_reason = (
+                        "variant"  if str(seg.get("variant_subtitle_style") or "").strip() else
+                        "creator"  if (payload.subtitle_style or "").strip() else
+                        "platform" if _platform_sub_bias else "n/a"
+                    )
+                    _job_log(
+                        effective_channel, job_id,
+                        f"dna_sub_suppressed: reason={_sub_suppress_reason} part={idx}",
+                        kind="debug",
+                    )
                 _effective_subtitle_style = (
                     _raw_sub_style
                     or _platform_sub_bias
