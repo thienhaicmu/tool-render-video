@@ -43,6 +43,22 @@ def _append_unique(items: list[str], value: str) -> None:
         items.append(value)
 
 
+_CONFIDENCE_LABELS: dict[str, str] = {
+    "strong":        "Strong candidate",
+    "worth_testing": "Worth testing",
+    "experimental":  "Experimental pick",
+}
+
+_SIGNAL_BADGE_LABELS: dict[str, str] = {
+    "hook_score":           "Strong hook",
+    "retention_score":      "Good retention",
+    "market_score":         "Market fit",
+    "duration_fit_score":   "Good duration",
+    "segment_viral_score":  "High energy",
+    "speech_density_score": "Speech density",
+}
+
+
 def build_ai_visibility_summary(part: dict, *, is_best: bool = False) -> dict:
     """Build UI-ready explainability from existing output metadata only."""
     if not isinstance(part, dict) or not part:
@@ -71,27 +87,24 @@ def build_ai_visibility_summary(part: dict, *, is_best: bool = False) -> dict:
         if value is not None:
             signals[key] = round(value, 3)
 
-    if hook_score is not None and hook_score >= 70:
-        _append_unique(badges, "Strong hook")
-        _append_unique(reasons, "High hook score")
-    if retention_score is not None and retention_score >= 70:
-        _append_unique(badges, "Good retention")
-        _append_unique(reasons, "Good retention score")
-    if market_score is not None and market_score >= 65:
-        _append_unique(badges, "Market fit")
-        _append_unique(reasons, "Good market score")
-    if duration_fit_score is not None and duration_fit_score >= 75:
-        _append_unique(badges, "Good duration")
-        _append_unique(reasons, "Good duration fit")
-    if output_score is not None and output_score >= 70:
-        _append_unique(badges, "Strong output rank")
-        _append_unique(reasons, "Strong output score")
+    # Max 2 badges — dominant signal first, then one suppressed signal that scored highly
+    dominant = str(part.get("dominant_signal") or "")
+    if dominant and dominant in _SIGNAL_BADGE_LABELS:
+        dom_val = _first_score(part, [dominant])
+        if dom_val is not None and dom_val >= 60:
+            _append_unique(badges, _SIGNAL_BADGE_LABELS[dominant])
 
-    rank = _as_int(part.get("output_rank"))
-    if is_best or rank == 1 or bool(part.get("is_best_clip")) or bool(part.get("is_best_output")):
-        if part.get("part_no") is not None or output_score is not None or part.get("output_file"):
-            _append_unique(reasons, "Top ranked output")
+    suppressed = part.get("suppressed_signals")
+    if isinstance(suppressed, list) and len(badges) < 2:
+        for sup in suppressed[:2]:
+            if sup in _SIGNAL_BADGE_LABELS and sup != dominant:
+                sup_val = _first_score(part, [sup])
+                if sup_val is not None and sup_val >= 65:
+                    _append_unique(badges, _SIGNAL_BADGE_LABELS[sup])
+                    if len(badges) >= 2:
+                        break
 
+    # Ranking reason is the primary reason — already contribution-weighted from _output_ranking_reason
     ranking_reason = str(part.get("ranking_reason") or "").strip()
     if ranking_reason:
         _append_unique(reasons, ranking_reason)
@@ -119,8 +132,13 @@ def build_ai_visibility_summary(part: dict, *, is_best: bool = False) -> dict:
         summary["is_best"] = True
         summary["headline"] = "AI recommended clip"
 
+    confidence_tier = str(part.get("confidence_tier") or "").strip()
+    if confidence_tier and confidence_tier in _CONFIDENCE_LABELS:
+        summary["confidence_tier"] = confidence_tier
+        summary["confidence_label"] = _CONFIDENCE_LABELS[confidence_tier]
+
     if badges:
-        summary["badges"] = badges
+        summary["badges"] = badges[:2]
     if reasons:
         summary["reasons"] = reasons
     if warnings:

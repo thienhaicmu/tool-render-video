@@ -329,42 +329,72 @@ def _first_score(seg: dict, names: list[str], default: float = 50.0) -> float:
     return default
 
 
+_RANKING_WEIGHTS: dict[str, float] = {
+    "segment_viral_score":  0.35,
+    "hook_score":           0.20,
+    "retention_score":      0.20,
+    "speech_density_score": 0.10,
+    "market_score":         0.10,
+    "duration_fit_score":   0.05,
+}
+
+
+def _output_ranking_detail(components: dict) -> dict:
+    contribs = {k: components.get(k, 50.0) * w for k, w in _RANKING_WEIGHTS.items()}
+    total = sum(contribs.values()) or 1.0
+    ranked = sorted(contribs.items(), key=lambda x: x[1], reverse=True)
+    top_signal, top_contrib = ranked[0]
+    material = [s for s, c in ranked if c >= top_contrib * 0.60]
+    suppressed = [s for s, c in ranked[1:] if c < top_contrib * 0.60 and components.get(s, 50.0) >= 65]
+    return {
+        "dominant_signal": top_signal,
+        "dominant_pct": round(top_contrib / total * 100, 1),
+        "material_signals": material,
+        "suppressed_signals": suppressed,
+    }
+
+
 def _output_ranking_reason(components: dict) -> str:
-    reasons: list[str] = []
     content_type = str(components.get("content_type_hint") or "")
+    detail = _output_ranking_detail(components)
 
-    if components["hook_score"] >= 70:
-        if content_type in ("interview", "commentary", "tutorial", "podcast"):
-            reasons.append("Strong spoken hook")
-        else:
-            reasons.append("Strong hook")
-    elif components["hook_score"] < 40:
-        reasons.append("Weak hook")
+    def _label(signal: str, raw: float) -> "str | None":
+        if signal == "segment_viral_score":
+            if raw >= 65:
+                if content_type == "montage":
+                    return "High visual energy"
+                if content_type in ("interview", "tutorial"):
+                    return "Strong spoken segment"
+                return "Strong segment"
+        elif signal == "hook_score":
+            if raw >= 60:
+                return ("Strong spoken hook" if content_type in ("interview", "commentary", "tutorial", "podcast")
+                        else "Strong opening hook")
+            if raw < 40:
+                return "Weak opening"
+        elif signal == "retention_score":
+            if raw >= 65:
+                return ("High engagement energy" if content_type in ("interview", "tutorial") else "Good retention")
+        elif signal == "speech_density_score":
+            if raw >= 60 and content_type in ("interview", "commentary", "tutorial", "podcast"):
+                return "Dense spoken content"
+            if raw < 20 and content_type == "montage":
+                return "Pure visual"
+        elif signal == "market_score":
+            if raw >= 65:
+                return "Good market match"
+        elif signal == "duration_fit_score":
+            if raw >= 75:
+                return "Ideal duration"
+        return None
 
-    if components["retention_score"] >= 70:
-        if content_type in ("interview", "tutorial"):
-            reasons.append("High engagement energy")
-        else:
-            reasons.append("High retention")
-    elif components.get("continuity_score", 50.0) >= 70:
-        reasons.append("Stable pacing")
-
-    if components["speech_density_score"] >= 60:
-        if content_type in ("interview", "commentary", "tutorial", "podcast"):
-            reasons.append("Dense spoken content")
-        else:
-            reasons.append("Speech-heavy segment")
-    elif components["speech_density_score"] < 25:
-        if content_type == "montage":
-            reasons.append("Visual montage")
-        else:
-            reasons.append("Low speech density")
-
-    if components["market_score"] >= 65:
-        reasons.append("Good market match")
-
-    if components["duration_fit_score"] >= 75 and len(reasons) < 3:
-        reasons.append("Good duration fit")
+    reasons: list[str] = []
+    for sig in detail["material_signals"]:
+        if len(reasons) >= 2:
+            break
+        label = _label(sig, components.get(sig, 50.0))
+        if label and label not in reasons:
+            reasons.append(label)
 
     if not reasons:
         if content_type == "montage":
@@ -374,7 +404,7 @@ def _output_ranking_reason(components: dict) -> str:
         else:
             reasons.append("Balanced clip signals")
 
-    return ", ".join(reasons[:3])
+    return ", ".join(reasons[:2])
 
 
 def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, payload_hook_score=None) -> dict:
@@ -410,6 +440,7 @@ def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, pay
         "content_type_hint": str(seg.get("content_type_hint") or ""),
     }
 
+    _detail = _output_ranking_detail(components)
     return {
         "part_no": part_no,
         "output_file": output_file,
@@ -418,6 +449,8 @@ def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, pay
         "is_best_clip": False,
         "ranking_reason": _output_ranking_reason(components),
         "ranking_components": components,
+        "dominant_signal": _detail["dominant_signal"],
+        "suppressed_signals": _detail["suppressed_signals"],
         "selection_reason": seg.get("selection_reason", ""),
         # Backward-compatible aliases consumed by existing render UI.
         "output_rank_score": output_score,
@@ -4073,6 +4106,24 @@ def run_render_pipeline(
                 },
             )
         _rank_entries.sort(key=lambda x: x["output_score"], reverse=True)
+        if len(_rank_entries) >= 2:
+            _conf_margin = _rank_entries[0]["output_score"] - _rank_entries[1]["output_score"]
+        else:
+            _conf_margin = 50.0
+        _confidence_tier = (
+            "strong" if _conf_margin >= 8 else
+            "worth_testing" if _conf_margin >= 4 else
+            "experimental"
+        )
+        if _rank_entries:
+            _rank_entries[0]["confidence_tier"] = _confidence_tier
+            _rank_entries[0]["score_margin"] = round(_conf_margin, 1)
+        logger.info(
+            "ranking_truth_audit job=%s confidence=%s margin=%.1f dominant=%s suppressed=%s",
+            job_id, _confidence_tier, _conf_margin,
+            _rank_entries[0].get("dominant_signal", "") if _rank_entries else "",
+            _rank_entries[0].get("suppressed_signals", []) if _rank_entries else [],
+        )
         for _ri, _re in enumerate(_rank_entries, start=1):
             _re["output_rank"]    = _ri
             _re["is_best_clip"]   = (_ri == 1)

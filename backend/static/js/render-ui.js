@@ -967,10 +967,12 @@ function _rankMap(job) {
     ranking.forEach(r => {
       if (r?.part_no != null) {
         map.set(Number(r.part_no), {
-          rank:   Number(r.output_rank || 0),
-          score:  Number(r.output_score ?? r.output_rank_score ?? 0),
-          isBest: !!(r.is_best_clip ?? r.is_best_output),
-          reason: String(r.ranking_reason || r.reasons || '').trim(),
+          rank:           Number(r.output_rank || 0),
+          score:          Number(r.output_score ?? r.output_rank_score ?? 0),
+          isBest:         !!(r.is_best_clip ?? r.is_best_output),
+          reason:         String(r.ranking_reason || r.reasons || '').trim(),
+          confidenceTier: String(r.confidence_tier || '').trim(),
+          dominantSignal: String(r.dominant_signal || '').trim(),
         });
       }
     });
@@ -3881,14 +3883,28 @@ function _r821BuildTradeoffHtml(refPart, refRk, chalPart, chalRk) {
     reasoning = _rr.length > 140 ? _rr.slice(0, 137) + '…' : _rr;
   } else {
     var _parts = [];
+    const _confTier = refRk.confidenceTier || '';
+    const _scoreGap = Math.round((refScoreRaw - chalScoreRaw) * 10) / 10;
     if (refHook !== null && chalHook !== null) {
-      if (refHook > chalHook)      _parts.push('Stronger opening retention.');
-      else if (chalHook > refHook) _parts.push(chalName + ' has a stronger hook — AI score still favors ' + refName + '.');
+      const hookDelta = refHook - chalHook;
+      if (Math.abs(hookDelta) >= 5) {
+        _parts.push(hookDelta > 0
+          ? 'Hook +' + hookDelta + '% advantage.'
+          : 'Challenger leads hook by ' + (-hookDelta) + '%.');
+      }
     }
-    if (refMot !== null && chalMot !== null && chalMot > refMot + 5) {
-      _parts.push(chalName + ' carries more motion energy, but hook quality outweighed it.');
+    if (refMot !== null && chalMot !== null) {
+      const motDelta = refMot - chalMot;
+      if (Math.abs(motDelta) >= 8) {
+        _parts.push(motDelta > 0
+          ? 'Motion +' + motDelta + '% advantage.'
+          : 'Challenger leads motion by ' + (-motDelta) + '%.');
+      }
     }
-    reasoning = _parts.join(' ') || 'AI score reflects combined hook, motion, and quality signals.';
+    var confPrefix = '';
+    if (_confTier === 'experimental') confPrefix = 'Close call (+' + _scoreGap.toFixed(1) + ' pts). ';
+    else if (_confTier === 'worth_testing') confPrefix = 'Slight edge (+' + _scoreGap.toFixed(1) + ' pts). ';
+    reasoning = confPrefix + (_parts.join(' ') || 'Score reflects combined hook, motion, and quality signals.');
   }
 
   // Taste alignment — only when CreatorMemory is confident
