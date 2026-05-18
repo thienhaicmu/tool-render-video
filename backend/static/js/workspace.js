@@ -102,7 +102,7 @@ window.CreatorWorkspace = (() => {
     <div class="wsCardSub">Start a new clip</div>
   </div>
   ${presetLine}
-  <button class="wsBtn wsBtnPrimary" onclick="CreatorWorkspace._onQuickCreate()">New Clip</button>
+  <button class="wsBtn wsBtnPrimary" onclick="CreatorWorkspace._onQuickCreate()">Start Creating</button>
 </div>`;
   }
 

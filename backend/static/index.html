@@ -32,7 +32,7 @@
       <button class="navItem active" data-view="workspace">Home</button>
       <button class="navItem" data-view="render">Create</button>
       <button class="navItem" data-view="review">Review<span id="rqNavBadge"></span></button>
-      <button class="navItem" data-view="download">Batch</button>
+      <button class="navItem" data-view="download">Sources</button>
     </nav>
     <div class="appTopBarChips">
       <div class="pill productModePill">Local AI render engine</div>
@@ -952,6 +952,7 @@
       <!-- Quick Start Presets — moved to Export tab -->
       <div class="evSection evPresetSection ev-panel-card ev-option-panel" id="evPresetSection" data-insp-panel="performance">
         <div class="evSectionTitle ev-panel-card-head">Quick Start Preset</div>
+        <div style="font-size:11px;color:var(--text-mut);margin-bottom:8px;line-height:1.4">Applies a starting setup. You can still customize everything.</div>
         <div class="ev-panel-card-body">
           <div class="evPresetGrid ev-option-grid" id="evQuickStartPreset" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%">
             <button type="button" class="evPresetCard ev-option-card" data-preset="tiktok" onclick="evApplyPreset('tiktok')">
@@ -1002,7 +1003,7 @@
             </select>
           </label>
           <label class="field">
-            <span class="fieldLabel">Subtitle Tone</span>
+            <span class="fieldLabel">Market Tone</span>
             <select class="fieldInput" id="mvSubtitleTone" onchange="mvHandleChange()">
               <option value="clean" selected>Clean</option>
               <option value="bold">Bold</option>
@@ -1103,7 +1104,7 @@
         <div class="qsAdvHeader" id="qsAdvHeader" onclick="evToggleAdvancedOutput()">Advanced <span id="qsAdvArrow" class="qsAdvArrow">▸</span></div>
         <div class="qsAdvBody" id="qsAdvBody">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:7px 10px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid rgba(148,163,184,.12)">
-            <span style="font-size:12px;color:var(--text-mut);white-space:nowrap;flex-shrink:0">Strategy Preset</span>
+            <span style="font-size:12px;color:var(--text-mut);white-space:nowrap;flex-shrink:0">Expert Preset</span>
             <select id="evOutputPreset" class="fieldInput" style="flex:1;margin-bottom:0;font-size:12px" onchange="evApplyOutputPreset(this.value)">
               <option value="custom" selected>Manual / Custom</option>
               <option value="tiktok_us_viral">TikTok US Viral</option>
@@ -1146,20 +1147,13 @@
               <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
               <span class="inspHint">0 = no limit</span>
             </label>
-            <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
-              <input type="checkbox" id="evMultiVariant" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0" onchange="evSyncQsBar()">
-              <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Multi-variant</span>
-              <span style="font-size:11px;color:#888;font-style:italic">Aggressive · Balanced · Story-first</span>
-            </label>
-            <label class="field">
-              <span class="fieldLabel">Platform</span>
-              <select class="fieldInput" id="evTargetPlatform" onchange="evSyncQsBar()">
-                <option value="youtube_shorts">YouTube Shorts</option>
-                <option value="tiktok">TikTok</option>
-                <option value="instagram_reels">Instagram Reels</option>
-              </select>
-              <span class="inspHint">Subtle editorial bias per platform</span>
-            </label>
+            <!-- Multi-variant and Platform controlled by qsBar pills above — hidden here to avoid duplication -->
+            <input type="checkbox" id="evMultiVariant" style="display:none" onchange="evSyncQsBar()">
+            <select id="evTargetPlatform" style="display:none" onchange="evSyncQsBar()">
+              <option value="youtube_shorts">YouTube Shorts</option>
+              <option value="tiktok">TikTok</option>
+              <option value="instagram_reels">Instagram Reels</option>
+            </select>
             <!-- UP16: CTA / Series Intelligence — optional subtitle end card. Default OFF. -->
             <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
               <input type="checkbox" id="evCtaEnabled" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0"
@@ -1272,7 +1266,7 @@
           <label class="field" style="grid-column:1/-1">
             <span class="fieldLabel">Style</span>
             <select class="fieldInput" id="evSubStyle" onchange="evUpdateSubPreview()">
-              <option value="tiktok_bounce_v1">Viral Bounce — Fast TikTok/Reels captions</option>
+              <option value="tiktok_bounce_v1">Viral — Fast TikTok/Reels captions</option>
               <option value="pro_karaoke" selected>Karaoke — Word-highlight story captions</option>
               <option value="bold_cap">Bold Cap — Large podcast/interview captions</option>
               <option value="boxed_caption">Boxed — Educational/documentary captions</option>

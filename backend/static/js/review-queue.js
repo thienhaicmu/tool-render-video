@@ -68,15 +68,43 @@ window.ReviewQueue = (() => {
     _log('review_dismissed', jobId, item.name);
     _steeringFeedback(item, 'dismiss');
     if (typeof CreatorSeries !== 'undefined') CreatorSeries.recordReviewAction(jobId, 'dismiss');
-    _showToast('Dismissed', 'info');
+    _showToast('Dismissed — undo in Dismissed section', 'info');
     _refreshView();
   }
 
-  function retry(jobId) {
+  async function retry(jobId) {
     const item = _items.find(it => it.jobId === jobId);
     if (!item) return;
+    if (!item.payload) {
+      _showToast('No settings stored — open Create to start a new render', 'info');
+      if (typeof setView === 'function') setView('render');
+      return;
+    }
     _log('review_retry', jobId, item.name);
-    _showToast('Switch to the Render tab to retry', 'info');
+    try {
+      const res  = await fetch('/api/render/process', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(item.payload) });
+      const data = await res.json();
+      if (!res.ok) {
+        const err = (typeof _formatApiError === 'function') ? _formatApiError(data.detail) : String(data.detail || 'Failed');
+        _showToast(`Retry failed: ${err}`, 'error');
+        return;
+      }
+      item.jobId = data.job_id || jobId;
+      item.state = STATE.NEW;
+      _save();
+      _showToast('Retrying… check Review when complete', 'success');
+      _refreshView();
+    } catch (e) {
+      _showToast('Retry error — check connection', 'error');
+    }
+  }
+
+  function undismiss(jobId) {
+    const item = _setState(jobId, STATE.NEW);
+    if (!item) return;
+    _log('review_undismissed', jobId, item.name);
+    _showToast('Restored to Ready to Review', 'success');
+    _refreshView();
   }
 
   function openFolder(jobId) {
@@ -168,11 +196,15 @@ window.ReviewQueue = (() => {
     </div>
     ${chipsHtml ? `<div class="rqChips">${chipsHtml}</div>` : ''}
     <div class="rqCardActions">
-      <button class="rqBtn rqBtnKeep"    onclick="ReviewQueue.keep('${jid}')"        title="Keep  K">K</button>
+      ${item.state === 'dismissed'
+        ? `<button class="rqBtn rqBtnUndo" onclick="ReviewQueue.undismiss('${jid}')" title="Undo dismiss">Undo</button>
+      <button class="rqBtn rqBtnOpen" onclick="ReviewQueue.openFolder('${jid}')" title="Open Folder">&#128193;</button>`
+        : `<button class="rqBtn rqBtnKeep"    onclick="ReviewQueue.keep('${jid}')"        title="Keep  K">K</button>
       <button class="rqBtn rqBtnFav"     onclick="ReviewQueue.favorite('${jid}')"    title="Favorite  F">&#9733;</button>
       <button class="rqBtn rqBtnDismiss" onclick="ReviewQueue.dismiss('${jid}')"     title="Dismiss  D">D</button>
       <button class="rqBtn rqBtnRetry"   onclick="ReviewQueue.retry('${jid}')"       title="Retry  R">&#8635;</button>
-      <button class="rqBtn rqBtnOpen"    onclick="ReviewQueue.openFolder('${jid}')"  title="Open Folder">&#128193;</button>
+      <button class="rqBtn rqBtnOpen"    onclick="ReviewQueue.openFolder('${jid}')"  title="Open Folder">&#128193;</button>`
+      }
     </div>
   </div>
 </div>`;
@@ -220,12 +252,13 @@ window.ReviewQueue = (() => {
       if (byState[it.state]) byState[it.state].push(it);
     });
 
-    const newSection  = _sectionHtml('new',       'Ready to Review', byState.new,       { emptyMsg: 'All caught up — no new clips.' });
-    const favSection  = _sectionHtml('favorited', 'Favorites',       byState.favorited, {});
-    const keptSection = _sectionHtml('kept',      'Kept',            byState.kept,      { collapsed: true });
-    const failSection = _sectionHtml('failed',    'Needs Retry',     byState.failed,    {});
+    const newSection      = _sectionHtml('new',       'Ready to Review', byState.new,       { emptyMsg: 'All caught up — no new clips.' });
+    const favSection      = _sectionHtml('favorited', 'Favorites',       byState.favorited, {});
+    const keptSection     = _sectionHtml('kept',      'Kept',            byState.kept,      { collapsed: true });
+    const failSection     = _sectionHtml('failed',    'Needs Retry',     byState.failed,    {});
+    const dismissedSection= _sectionHtml('dismissed', 'Dismissed',       byState.dismissed, { collapsed: true });
 
-    container.innerHTML = newSection + favSection + keptSection + failSection
+    container.innerHTML = newSection + favSection + keptSection + failSection + dismissedSection
       || '<div class="rqEmpty rqEmptyFull">No clips in the review queue yet.<br>Clips appear here after each completed render.</div>';
   }
 
@@ -267,5 +300,5 @@ window.ReviewQueue = (() => {
     _refreshBadge();
   }
 
-  return { init, addJob, keep, favorite, dismiss, retry, openFolder, renderView, handleKey, getNewCount, STATE };
+  return { init, addJob, keep, favorite, dismiss, undismiss, retry, openFolder, renderView, handleKey, getNewCount, STATE };
 })();

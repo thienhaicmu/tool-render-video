@@ -2826,3 +2826,52 @@
 /* =======================================================
    END OF UP35 — RELIABILITY+
    ======================================================= */
+
+/* =======================================================
+   MAP-UI-FINAL — elevated steer row (P1-5)
+   Keep / Avoid / Rerender are the primary rerender-loop
+   actions — they get real visual weight, not tiny links.
+   ======================================================= */
+
+.clipCardSteerRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 7px 8px;
+  background: rgba(255,255,255,.04);
+  border-radius: 6px;
+  border: 1px solid rgba(148,163,184,.12);
+}
+
+.clipCardSteerLabel {
+  font-size: 10px;
+  color: var(--fg-400, #7a8fa8);
+  white-space: nowrap;
+  margin-right: 2px;
+}
+
+.clipCardBtnKeep,
+.clipCardBtnAvoid,
+.clipCardBtnSimilar {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid;
+  cursor: pointer;
+  background: transparent;
+  transition: background .15s, opacity .15s;
+  white-space: nowrap;
+}
+
+.clipCardBtnKeep   { color: #34d399; border-color: rgba(52,211,153,.4); }
+.clipCardBtnKeep:hover   { background: rgba(52,211,153,.14); }
+.clipCardBtnAvoid  { color: #f87171; border-color: rgba(248,113,113,.4); }
+.clipCardBtnAvoid:hover  { background: rgba(248,113,113,.14); }
+.clipCardBtnSimilar { color: #a78bfa; border-color: rgba(167,139,250,.4); background: rgba(167,139,250,.06); }
+.clipCardBtnSimilar:hover { background: rgba(167,139,250,.18); }
+
+/* =======================================================
+   END OF MAP-UI-FINAL steer row
+   ======================================================= */

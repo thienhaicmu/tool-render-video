@@ -1,6 +1,7 @@
 // ── Warmup status ──────────────────────────────────────────────────────────
 let _warmupInterval = null;
 let _warmupPanelVisible = false;
+let _warmupResolved = false;
 
 function toggleWarmupPanel(){
   let panel = document.getElementById('warmup_panel');
@@ -18,6 +19,7 @@ async function pollWarmupStatus(){
 
     const { ready_count, total_count, all_ready, items, errors } = data;
 
+    _warmupResolved = true;
     if(all_ready){
       chip.textContent = '✅ Ready';
       chip.style.background = '#22c55e22';
@@ -74,5 +76,14 @@ function initWarmup(){
   }
   pollWarmupStatus();
   _warmupInterval = setInterval(pollWarmupStatus, 3000);
+
+  // Fallback: if no successful API response after 5s, clear "Loading models..."
+  setTimeout(() => {
+    if (_warmupResolved) return;
+    const chip = document.getElementById('warmup_chip');
+    if (chip && chip.textContent.includes('Loading')) {
+      chip.textContent = 'AI engine active';
+    }
+  }, 5000);
 }
 // ── End warmup ─────────────────────────────────────────────────────────────
