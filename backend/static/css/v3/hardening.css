@@ -596,14 +596,14 @@ body:not(.is-history-active) #partial_history_view { display: none !important; }
   justify-content: center;
 }
 
-/* Render output panel: ensure flex children scroll correctly */
-.renderOutputPanel {
-  overflow: visible;
-}
-.renderOutputScrollArea {
-  flex: 1 1 auto;
+/* H-HOTFIX-2: render_output_panel — restore scroll after flex: 0 0 auto was
+   preventing height bounds. Panel is the sole scroll owner for the clips grid. */
+#render_output_panel {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
