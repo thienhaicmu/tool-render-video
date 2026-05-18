@@ -369,6 +369,16 @@ def _append_cta_block_to_srt(
         return False
 
 
+def _get_effective_playback_speed(payload, target_platform: str) -> float:
+    """Single source of truth for the playback speed used by both the renderer and the validator.
+
+    Combines the creator-selected base speed with the platform speed delta so that
+    expected_duration in output validation matches the actual render output duration.
+    """
+    platform_delta = _PLATFORM_PROFILES.get(target_platform, {}).get("speed_delta", 0.0)
+    return max(0.5, min(1.5, float(payload.playback_speed or 1.0) + platform_delta))
+
+
 def _read_srt_meta(srt_path: str) -> dict:
     """Read timing metadata from an existing per-part SRT — mirrors slice_srt_by_time return shape.
 
@@ -3471,8 +3481,7 @@ def run_render_pipeline(
                 if needs_srt:
                     # P2: match subtitle slice speed to the platform-adjusted render speed so
                     # timing aligns on TikTok (+0.08) and Instagram Reels (-0.06).
-                    _platform_speed_delta = _PLATFORM_PROFILES.get(_target_platform, {}).get("speed_delta", 0.0)
-                    _eff_speed = max(0.5, min(1.5, float(payload.playback_speed or 1.0) + _platform_speed_delta))
+                    _eff_speed = _get_effective_playback_speed(payload, _target_platform)
                     _visual_apply_speed = False
                     _srt_meta = slice_srt_by_time(
                         str(full_srt),
@@ -4445,7 +4454,7 @@ def run_render_pipeline(
             _encode_ms = int((time.perf_counter() - _t_encode) * 1000)
             _total_part_ms = int((time.perf_counter() - _t_part_start) * 1000)
             _effective_duration = max(0.0, float(seg["end"]) - float(_effective_start))
-            _render_speed = max(0.5, min(1.5, float(payload.playback_speed or 1.0)))
+            _render_speed = _get_effective_playback_speed(payload, _target_platform)
             _remotion_intro_sec = _maybe_prepend_remotion_hook_intro(
                 final_part,
                 payload,
@@ -4468,6 +4477,17 @@ def run_render_pipeline(
                 (_effective_duration / _render_speed) - _micro_pacing_trim_sec + _remotion_intro_sec,
             )
             _speed_ratio = round(_expected_final_duration * 1000 / max(_encode_ms, 1), 2)
+            _job_log(
+                effective_channel, job_id,
+                f"playback_speed_resolution part={idx} "
+                f"payload_speed={float(payload.playback_speed or 1.0):.4f} "
+                f"platform_delta={_PLATFORM_PROFILES.get(_target_platform, {}).get('speed_delta', 0.0):.4f} "
+                f"effective_speed={_render_speed:.4f} "
+                f"target_platform={_target_platform} "
+                f"effective_duration={_effective_duration:.3f}s "
+                f"expected_duration={_expected_final_duration:.3f}s",
+                kind="debug",
+            )
             logger.info(
                 "total_part_render_ms=%d part=%d "
                 "cut_ms=%d first_frame_ms=%d subtitle_ass_ms=%d "
