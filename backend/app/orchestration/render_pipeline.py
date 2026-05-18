@@ -466,6 +466,76 @@ def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, pay
     }
 
 
+# ---------------------------------------------------------------------------
+# Multi-variant intelligence (UP13)
+# ---------------------------------------------------------------------------
+
+_VARIANT_AGGRESSIVE_SUB: dict[str, str] = {
+    "interview":  "viral",
+    "commentary": "viral",
+    "vlog":       "viral",
+    "tutorial":   "viral",
+    "montage":    "gaming",
+}
+_VARIANT_STORY_SUB: dict[str, str] = {
+    "interview":  "clean",
+    "commentary": "story",
+    "vlog":       "story",
+    "tutorial":   "clean",
+    "montage":    "story",
+}
+
+
+def _build_variant_segments(all_scored: list[dict], base_speed: float) -> list[dict]:
+    """Return one best segment per variant (aggressive / balanced / story-first).
+
+    Uses existing score fields only — no re-scoring, no external calls.
+    Each returned dict is annotated with variant_type, variant_subtitle_style,
+    and variant_playback_speed for the render loop to consume.
+    """
+    if not all_scored:
+        return all_scored
+
+    def _f(seg: dict, key: str) -> float:
+        return float(seg.get(key) or 0)
+
+    max_start = max((_f(s, "start") for s in all_scored), default=1.0) or 1.0
+
+    aggressive_seg = dict(max(all_scored, key=lambda s: (
+        _f(s, "hook_score") * 0.50 + _f(s, "viral_score") * 0.30 + _f(s, "motion_score") * 0.20
+    )))
+    balanced_seg = dict(max(all_scored, key=lambda s: (
+        _f(s, "viral_score") * 0.35 + _f(s, "hook_score") * 0.20
+        + _f(s, "retention_score") * 0.20 + _f(s, "speech_density_score") * 0.10
+        + _f(s, "market_score") * 0.10 + _f(s, "duration_fit_score") * 0.05
+    )))
+    story_seg = dict(max(all_scored, key=lambda s: (
+        _f(s, "retention_score") * 0.45
+        + (_f(s, "start") / max_start) * 0.35
+        + _f(s, "viral_score") * 0.20
+    )))
+
+    aggressive_seg.update({
+        "variant_type":           "aggressive",
+        "variant_subtitle_style": _VARIANT_AGGRESSIVE_SUB.get(
+            str(aggressive_seg.get("content_type_hint") or "vlog"), "viral"),
+        "variant_playback_speed": round(min(1.15, base_speed + 0.05), 3),
+    })
+    balanced_seg.update({
+        "variant_type":           "balanced",
+        "variant_subtitle_style": None,  # inherited from payload.subtitle_style (taste-aware)
+        "variant_playback_speed": round(base_speed, 3),
+    })
+    story_seg.update({
+        "variant_type":           "story_first",
+        "variant_subtitle_style": _VARIANT_STORY_SUB.get(
+            str(story_seg.get("content_type_hint") or "vlog"), "story"),
+        "variant_playback_speed": round(max(0.95, base_speed - 0.05), 3),
+    })
+
+    return [aggressive_seg, balanced_seg, story_seg]
+
+
 _PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes to update progress
 
 # ---------------------------------------------------------------------------
@@ -1739,6 +1809,37 @@ def run_render_pipeline(
             )
         if payload.max_export_parts and payload.max_export_parts > 0:
             scored = scored[:payload.max_export_parts]
+        # ── Multi-variant: replace pool with 3 purposeful single-clip selections ──
+        _multi_variant = bool(getattr(payload, "multi_variant", False))
+        if _multi_variant:
+            scored = _build_variant_segments(scored, float(payload.playback_speed or 1.07))
+            _job_log(
+                effective_channel, job_id,
+                f"multi_variant: {len(scored)} variants selected "
+                f"(aggressive/balanced/story_first) "
+                f"segments={[s.get('variant_type') for s in scored]}",
+            )
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="multi_variant_selected",
+                level="INFO",
+                message=f"Multi-variant mode: {len(scored)} purposeful variants",
+                step="render.multi_variant",
+                context={
+                    "variant_types": [s.get("variant_type") for s in scored],
+                    "variants": [
+                        {
+                            "variant": s.get("variant_type"),
+                            "start": round(float(s.get("start") or 0), 1),
+                            "hook_score": round(float(s.get("hook_score") or 0), 1),
+                            "speed": s.get("variant_playback_speed"),
+                            "subtitle": s.get("variant_subtitle_style"),
+                        }
+                        for s in scored
+                    ],
+                },
+            )
         # Re-order for output numbering: timeline = chronological, viral/combined = by score
         part_order = str(getattr(payload, "part_order", "viral") or "viral").strip().lower()
         if part_order == "timeline":
@@ -1813,7 +1914,7 @@ def run_render_pipeline(
         # Conditions: non-timeline mode, 3+ clips, non-montage dominant type.
         # For montage: energy-first order is already correct — skip.
         # For 1-2 clips: no meaningful arc — skip.
-        if part_order != "timeline" and len(scored) >= 3:
+        if part_order != "timeline" and len(scored) >= 3 and not _multi_variant:
             _ct_counts: dict[str, int] = {}
             for _s in scored:
                 _ct = str(_s.get("content_type_hint") or "vlog")
@@ -2571,8 +2672,13 @@ def run_render_pipeline(
             raw_part = work_dir / f"{source['slug']}_part_{idx:03d}_raw.mp4"
             srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.srt"
             ass_part = work_dir / f"{source['slug']}_part_{idx:03d}.ass"
-            final_part = output_dir / f"{_output_stem}_part_{idx:03d}.mp4"
-            part_name = f"{_output_stem}_part_{idx:03d}.mp4"
+            _variant_type = str(seg.get("variant_type") or "")
+            if _variant_type:
+                final_part = output_dir / f"{_output_stem}_{_variant_type}.mp4"
+                part_name  = f"{_output_stem}_{_variant_type}.mp4"
+            else:
+                final_part = output_dir / f"{_output_stem}_part_{idx:03d}.mp4"
+                part_name  = f"{_output_stem}_part_{idx:03d}.mp4"
             _sub_target_lang = getattr(payload, "subtitle_target_language", "en")
             translated_srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.{_sub_target_lang}.srt"
             _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} start", kind="debug")
@@ -2913,7 +3019,11 @@ def run_render_pipeline(
                     "tutorial":   "clean",
                     "montage":    "gaming",
                 }
-                _raw_sub_style = (payload.subtitle_style or "").strip()
+                # Variant subtitle takes priority; falls back to creator payload choice.
+                _raw_sub_style = (
+                    str(seg.get("variant_subtitle_style") or "").strip()
+                    or (payload.subtitle_style or "").strip()
+                )
                 _effective_subtitle_style = (
                     _CONTENT_TYPE_SUB_DEFAULTS.get(
                         seg.get("content_type_hint", "vlog"), "tiktok_bounce_v1"
@@ -3159,7 +3269,7 @@ def run_render_pipeline(
                     reup_bgm_enable=payload.reup_bgm_enable,
                     reup_bgm_path=payload.reup_bgm_path,
                     reup_bgm_gain=payload.reup_bgm_gain,
-                    playback_speed=float(payload.playback_speed or 1.07),
+                    playback_speed=float(seg.get("variant_playback_speed") or payload.playback_speed or 1.07),
                     text_layers=_part_text_layers,
                     loudnorm_enabled=getattr(payload, "loudnorm_enabled", False),
                     ffmpeg_threads=_ffmpeg_threads,
@@ -4073,13 +4183,18 @@ def run_render_pipeline(
         for _r_idx, _r_seg in enumerate(scored, start=1):
             if _r_idx in _failed_idx_set:
                 continue
-            _r_output   = str(output_dir / f"{source['slug']}_part_{_r_idx:03d}.mp4")
+            _r_vt = str(_r_seg.get("variant_type") or "")
+            _r_output = str(
+                output_dir / (f"{_output_stem}_{_r_vt}.mp4" if _r_vt else f"{_output_stem}_part_{_r_idx:03d}.mp4")
+            )
             _rank_entry = _compute_output_ranking_entry(
                 _r_idx,
                 _r_seg,
                 _r_output,
                 payload_hook_score=_hook_score,
             )
+            if _r_vt:
+                _rank_entry["variant_type"] = _r_vt
             # Apply quality penalty from per-part validator
             _rank_raw_score = float(_rank_entry["output_score"])
             _rank_q_penalty = int(_r_seg.get("quality_penalty", 0))

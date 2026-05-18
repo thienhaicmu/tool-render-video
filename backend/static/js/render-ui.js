@@ -973,6 +973,7 @@ function _rankMap(job) {
           reason:         String(r.ranking_reason || r.reasons || '').trim(),
           confidenceTier: String(r.confidence_tier || '').trim(),
           dominantSignal: String(r.dominant_signal || '').trim(),
+          variantType:    String(r.variant_type || '').trim(),
         });
       }
     });
@@ -4407,6 +4408,11 @@ function populateRenderOutputPanel(job, parts) {
       </div>
       <div class="clipCardBody">
         <div class="clipCardTitle">${name}</div>
+        ${rk.variantType ? `<div class="clipCardVariantBadge" data-variant="${esc(rk.variantType)}">${
+          rk.variantType === 'aggressive' ? 'Aggressive' :
+          rk.variantType === 'balanced'   ? 'Balanced'   :
+          rk.variantType === 'story_first'? 'Story-first': esc(rk.variantType)
+        }</div>` : ''}
         <div class="clipCardScoreRow">
           ${hasScore
             ? `<span class="clipCardScore" data-tier="${scoreTier}">${scoreVal.toFixed(1)}<span class="clipCardScoreMax"> /10</span></span><span class="clipCardRankTag">#${rk.rank || '?'}</span>`

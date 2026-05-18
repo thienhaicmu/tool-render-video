@@ -235,6 +235,9 @@ class RenderRequest(BaseModel):
     ai_beat_transition_enabled: bool = False
     # AI Timing Mutation (Phase 19) — opt-in; false = advisory-only, no segment timing changes.
     ai_timing_mutation_enabled: bool = False
+    # Multi-variant intelligence (UP13) — 3 purposeful variants from shared source compute.
+    # Produces {stem}_aggressive.mp4, {stem}_balanced.mp4, {stem}_story_first.mp4.
+    multi_variant: bool = False
     # AI Variant Planning (Phase 21) — opt-in; plans advisory variants, never auto-renders.
     ai_variant_planning_enabled: bool = False
     ai_variant_count: int = 3
