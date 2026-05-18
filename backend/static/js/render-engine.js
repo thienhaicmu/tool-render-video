@@ -1,5 +1,4 @@
 async function startRender(){
-  console.log('[EditorOpen] clicked');
   const outputDir = (qs('manual_output_dir')?.value || '').trim();
   const sourceMode = (qs('source_mode').value || 'youtube').trim();
   const youtubeUrl = (qs('youtube_url')?.value || '').trim();

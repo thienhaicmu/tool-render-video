@@ -1129,7 +1129,6 @@ function useTopClips() {
     return;
   }
   window.topClipPaths = paths;
-  console.log('[Market Viral] Selected clip paths:', paths);
   if (typeof showToast === 'function') {
     showToast(`${paths.length} clip${paths.length === 1 ? '' : 's'} selected`, 'success');
   }
@@ -3272,7 +3271,7 @@ function renderPartTimeline(parts) {
     const progressHtml = chipStatus === 'processing'
       ? `<div class="rsClipFill" style="width:${pct}%"></div>`
       : '';
-    return `<div class="rsPartChip rsTimelineBlock" data-chip-status="${chipStatus}" data-part-no="${partNo}" title="${_renderHistoryAttr(chipTitle)}" onclick="console.log('Part chip: Part', ${partNo})">
+    return `<div class="rsPartChip rsTimelineBlock" data-chip-status="${chipStatus}" data-part-no="${partNo}" title="${_renderHistoryAttr(chipTitle)}">
       ${progressHtml}
       <div class="rsClipTop"><span>${esc(label)}</span>${chipStatus === 'processing' ? `<b>${pct}%</b>` : ''}</div>
       <div class="rsClipStatus">${esc(statusText)}</div>

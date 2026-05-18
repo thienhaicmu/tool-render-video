@@ -322,7 +322,7 @@ window.BatchQueue = (() => {
       if (st === 'running')   item.status = STATUS.RUNNING;
       if (st === 'completed') {
         const msg = String(data.message || '');
-        const hasRecovery = msg.includes('[') && msg.includes('failed');
+        const hasRecovery = msg.includes('[');
         item.status = hasRecovery ? STATUS.RECOVERED : STATUS.COMPLETED;
         item.error = hasRecovery ? msg.replace(/^Render completed\s*/, '') : '';
         if (typeof addEvent === 'function') addEvent(`batch_item_completed${hasRecovery ? ' (recovered)' : ''}: ${item.name}`, 'render');
