@@ -1161,6 +1161,26 @@
         </div><!-- /qsAdvBody -->
       </div>
 
+      <!-- UP23: Batch Creator Queue -->
+      <div class="evSection bqSection" id="bqSection" data-insp-panel="performance">
+        <div class="evSectionTitle">Batch Queue</div>
+        <div class="bqDropZone" id="bqDropZone"
+          onclick="if(typeof BatchQueue!=='undefined')BatchQueue.openFilePicker()"
+          ondrop="if(typeof BatchQueue!=='undefined')BatchQueue.onDrop(event)"
+          ondragover="if(typeof BatchQueue!=='undefined')BatchQueue.onDragOver(event)"
+          ondragleave="if(typeof BatchQueue!=='undefined')BatchQueue.onDragLeave(event)">
+          <div class="bqDropIcon">+</div>
+          <div class="bqDropLabel">Drop video files or click to add</div>
+          <input type="file" id="bqFileInput" accept="video/*" multiple style="display:none"
+            onchange="if(typeof BatchQueue!=='undefined')BatchQueue.onFilesSelected(this.files);this.value=''">
+        </div>
+        <div class="bqActions" id="bqActions" style="display:none">
+          <button class="bqSubmitBtn" id="bqSubmitBtn" onclick="if(typeof BatchQueue!=='undefined')BatchQueue.submit()">Queue All</button>
+          <button class="bqClearBtn" onclick="if(typeof BatchQueue!=='undefined')BatchQueue.clear()">Clear</button>
+        </div>
+        <div class="bqList" id="bqList"></div>
+      </div>
+
       <!-- Subtitle Style -->
       <div class="evSection" id="inspSubtitlePane" data-section-type="subtitle" data-insp-panel="subtitle">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -1640,6 +1660,7 @@
 <script src="/static/js/creator-feedback.js"></script>
 <script src="/static/js/creator-dna.js"></script>
 <script src="/static/js/creator-presets.js"></script>
+<script src="/static/js/batch-queue.js"></script>
 <script src="/static/js/editor-converse.js"></script>
 <script src="/static/js/editor-review-intelligence.js"></script>
 <script src="/static/js/editor-agents.js"></script>

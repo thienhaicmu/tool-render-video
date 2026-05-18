@@ -970,6 +970,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   if (typeof CreatorFeedback !== 'undefined') CreatorFeedback.init();
   if (typeof CreatorDNA      !== 'undefined') CreatorDNA.init();
   if (typeof CreatorPresets  !== 'undefined') CreatorPresets.init();
+  if (typeof BatchQueue      !== 'undefined') BatchQueue.init();
   evSyncQsBar();
   if (typeof EditorConverse !== 'undefined') EditorConverse.init();
 
@@ -1058,6 +1059,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   if (typeof CreatorFeedback !== 'undefined') CreatorFeedback.init();
   if (typeof CreatorDNA      !== 'undefined') CreatorDNA.init();
   if (typeof CreatorPresets  !== 'undefined') CreatorPresets.init();
+  if (typeof BatchQueue      !== 'undefined') BatchQueue.init();
   evSyncQsBar();
   if (typeof mvUpdatePreviewHint === 'function') mvUpdatePreviewHint();
 
