@@ -4362,21 +4362,29 @@ function populateRenderOutputPanel(job, parts) {
   window.csKeepClip = function(startSec, endSec, label) {
     if (typeof ClipSteering !== 'undefined') {
       ClipSteering.lockClip(startSec, endSec, label);
-      if (typeof showToast === 'function') showToast('Clip marked as Keep — will be prioritised next render', 'success');
+      if (typeof showToast === 'function') showToast('Kept — will be prioritised next render', 'success');
+      if (typeof v3RefreshSteeringPanel === 'function') v3RefreshSteeringPanel();
     }
   };
   window.csAvoidClip = function(startSec, endSec, label) {
     if (typeof ClipSteering !== 'undefined') {
       ClipSteering.excludeClip(startSec, endSec, label);
-      if (typeof showToast === 'function') showToast('Clip marked as Avoid — will be excluded next render', 'info');
+      if (typeof showToast === 'function') showToast('Avoided — will be excluded next render', 'info');
+      if (typeof v3RefreshSteeringPanel === 'function') v3RefreshSteeringPanel();
     }
+  };
+  window.csKeepAndRerender = function(startSec, endSec, label) {
+    if (typeof ClipSteering !== 'undefined') {
+      ClipSteering.lockClip(startSec, endSec, label);
+      if (typeof v3RefreshSteeringPanel === 'function') v3RefreshSteeringPanel();
+    }
+    if (typeof v3TriggerRerender === 'function') v3TriggerRerender();
+    else if (typeof showToast === 'function') showToast('Kept — use ↻ Rerender in the steering panel', 'info');
   };
 
   // UP14: Platform banner — shows when a non-default platform is selected for the job.
   const _jobTargetPlatform = String(getCurrentJobPayload(job)?.target_platform || '').trim().toLowerCase();
   const _platformBannerLabel = {tiktok:'TikTok',youtube_shorts:'YouTube Shorts',instagram_reels:'Instagram Reels'}[_jobTargetPlatform] || '';
-  const _platformBanner = (_platformBannerLabel && _jobTargetPlatform !== 'youtube_shorts')
-    ? `<div class="clipsPlatformBanner">Optimized for: ${esc(_platformBannerLabel)}</div>` : '';
   // UP20: DNA hint — subtle note when creator identity nudges were applied.
   const _jobDNA = getCurrentJobPayload(job)?.creator_dna || {};
   const _dnaFired = _jobDNA.confident && (
@@ -4384,8 +4392,21 @@ function populateRenderOutputPanel(job, parts) {
     ((_jobDNA.clean_visual         || 0) >= 0.67) ||
     ((_jobDNA.narrative_structure  || 0) >= 1.0)
   );
-  const _dnaHint = _dnaFired ? `<div class="clipsDnaHint">Using recent creator style</div>` : '';
-  list.innerHTML = _platformBanner + _dnaHint + all.map((p) => {
+  // MAP-UI-V3: Trust bar — compact chips showing what influenced this render
+  const _v3JobPayload = getCurrentJobPayload(job) || {};
+  const _v3TrustChips = [];
+  if (_platformBannerLabel && _jobTargetPlatform !== 'youtube_shorts') _v3TrustChips.push(`<span class="v3TrustChip v3TrustPlatform">${esc(_platformBannerLabel)}</span>`);
+  if (_dnaFired) _v3TrustChips.push(`<span class="v3TrustChip v3TrustDna">Creator DNA</span>`);
+  const _v3Sb = _v3JobPayload.structure_bias;
+  if (_v3Sb && _v3Sb !== 'balanced') _v3TrustChips.push(`<span class="v3TrustChip v3TrustSteer">${_v3Sb === 'hook' ? 'More Hook' : 'More Story'}</span>`);
+  if (typeof ClipSteering !== 'undefined') {
+    const _v3Cnt = ClipSteering.getCount();
+    if (_v3Cnt.lock > 0)    _v3TrustChips.push(`<span class="v3TrustChip v3TrustLock">🔒 ${_v3Cnt.lock} kept</span>`);
+    if (_v3Cnt.exclude > 0) _v3TrustChips.push(`<span class="v3TrustChip v3TrustExclude">🚫 ${_v3Cnt.exclude} avoided</span>`);
+  }
+  if (_jobRecovered) _v3TrustChips.push(`<span class="v3TrustChip v3TrustRecovered">Recovered</span>`);
+  const _v3TrustBar = _v3TrustChips.length ? `<div class="v3TrustBar">${_v3TrustChips.join('')}</div>` : '';
+  list.innerHTML = _v3TrustBar + all.map((p) => {
     const partNo = Number(p.part_no || 0);
     const st = String(p?.status || '').toLowerCase();
     const isFailed = st === 'failed' || st === 'error';
@@ -4474,7 +4495,7 @@ function populateRenderOutputPanel(job, parts) {
         ${(motionScore !== null || hookScore !== null) && (rk.isBest || scoreVal >= 6) ? _r7SignalRow(motionScore, hookScore, rk.isBest, _bestMotion, _bestHook) : ''}
         ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
         ${_shouldRenderBestExport(_cardAiUx, rk.isBest) ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">&#x2713;</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}
-        ${isDone && endSec > startSec ? `<div class="clipCardSteerRow"><button class="clipCardBtnKeep" onclick="csKeepClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}')" title="Prioritise this clip in next render">&#10003; Keep</button><button class="clipCardBtnAvoid" onclick="csAvoidClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}')" title="Exclude this clip from next render">&#10007; Avoid</button></div>` : ''}
+        ${isDone && endSec > startSec ? `<div class="clipCardSteerRow"><button class="clipCardBtnKeep" onclick="csKeepClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}')" title="Prioritise this clip in next render">&#10003; Keep</button><button class="clipCardBtnAvoid" onclick="csAvoidClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}')" title="Exclude this clip from next render">&#10007; Avoid</button><button class="clipCardBtnSimilar" onclick="csKeepAndRerender(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}')" title="Keep this clip and rerender now">&#8635; Similar</button></div>` : ''}
         <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}${coverBtn}${compareBtn}</div>
       </div>
     </div>`;

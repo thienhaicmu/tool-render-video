@@ -1040,6 +1040,14 @@
             onclick="if(typeof CreatorPresets!=='undefined')CreatorPresets.deleteActive()">✕</button>
         </div>
         <div class="cpDnaHint" id="cpDnaHint" style="display:none"></div>
+        <!-- MAP-UI-V3: Active Steering Panel — what's influencing the next render -->
+        <div class="v3SteeringPanel" id="v3SteeringPanel" style="display:none">
+          <div class="v3SteeringChips" id="v3SteeringChips"></div>
+          <div class="v3SteeringActions">
+            <button class="v3SteeringResetBtn" onclick="v3ResetSteering()" title="Clear clip keep/avoid decisions and reset structure bias">Reset Steering</button>
+            <button class="v3SteeringRerunBtn" onclick="v3TriggerRerender()" title="Rerender with current steering applied">↻ Rerender</button>
+          </div>
+        </div>
         <!-- MAP-UI-V2 §2: Quick Strategy Bar — one-click Platform / Variant / Subtitle / CTA -->
         <div class="qsBar" id="qsBar">
           <div class="qsGroup">

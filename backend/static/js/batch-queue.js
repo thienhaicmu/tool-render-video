@@ -361,7 +361,13 @@ window.BatchQueue = (() => {
       submitBtn.textContent = hasPending ? `Queue ${_items.filter(it=>it.status===STATUS.PENDING).length} file${_items.filter(it=>it.status===STATUS.PENDING).length!==1?'s':''}` : 'All Queued';
     }
 
-    listEl.innerHTML = _items.map(item => {
+    // MAP-UI-V3: Group cards by status for review-queue clarity
+    const _groups = [
+      { key: 'running',   label: 'Running',          statuses: [STATUS.RUNNING, STATUS.QUEUED] },
+      { key: 'review',    label: 'Ready to Review',  statuses: [STATUS.COMPLETED, STATUS.RECOVERED] },
+      { key: 'problem',   label: 'Failed',            statuses: [STATUS.FAILED, STATUS.CANCELLED] },
+    ];
+    const _cardHtml = function(item) {
       const stClass   = 'st-' + item.status;
       const cardClass = 'bqCard bq-' + item.status;
       const stLabel   = item.status === STATUS.RECOVERED ? 'Recovered' : item.status.charAt(0).toUpperCase() + item.status.slice(1);
@@ -380,7 +386,17 @@ window.BatchQueue = (() => {
   ${item.status === STATUS.FAILED && item.error ? `<div class="bqCardError">${_esc(item.error)}</div>` : ''}
   ${actions ? `<div class="bqCardActions">${actions}</div>` : ''}
 </div>`;
-    }).join('');
+    };
+    const _pendingItems = _items.filter(it => it.status === STATUS.PENDING);
+    let _html = _pendingItems.map(_cardHtml).join('');
+    let _hasGroups = false;
+    _groups.forEach(function(grp) {
+      const grpItems = _items.filter(it => grp.statuses.includes(it.status));
+      if (!grpItems.length) return;
+      _hasGroups = true;
+      _html += `<div class="bqGroupLabel">${grp.label}</div>` + grpItems.map(_cardHtml).join('');
+    });
+    listEl.innerHTML = _html;
   }
 
   function _cardActions(item) {

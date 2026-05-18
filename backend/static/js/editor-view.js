@@ -157,6 +157,60 @@ function evSyncQsBar() {
     dnaHintEl.textContent = hint || '';
     dnaHintEl.style.display = hint ? '' : 'none';
   }
+  v3RefreshSteeringPanel();
+}
+
+/* ── MAP-UI-V3: Steering Memory Panel ───────────────────────────────────── */
+function v3RefreshSteeringPanel() {
+  const panel = document.getElementById('v3SteeringPanel');
+  const chips = document.getElementById('v3SteeringChips');
+  if (!panel || !chips) return;
+
+  const parts = [];
+
+  const presetLabel = (typeof CreatorPresets !== 'undefined') ? (CreatorPresets.getActive()?.name || '') : '';
+  if (presetLabel) parts.push({ label: presetLabel, cls: 'v3Chip v3ChipPreset', title: 'Active preset' });
+
+  const dnaHintEl = document.getElementById('cpDnaHint');
+  if (dnaHintEl && dnaHintEl.textContent && dnaHintEl.style.display !== 'none') {
+    parts.push({ label: 'DNA active', cls: 'v3Chip v3ChipDna', title: dnaHintEl.textContent });
+  }
+
+  const sb = (document.getElementById('qsStructureBias')?.value || 'balanced');
+  if (sb !== 'balanced') parts.push({ label: sb === 'hook' ? 'More Hook' : 'More Story', cls: 'v3Chip v3ChipSteer', title: 'Structure bias' });
+
+  const se = (document.getElementById('evSubtitleEmphasis')?.value || 'balanced');
+  if (se !== 'balanced') parts.push({ label: se === 'subtle' ? 'Subtle subs' : 'Big subs', cls: 'v3Chip v3ChipSteer', title: 'Subtitle emphasis' });
+
+  if (typeof ClipSteering !== 'undefined') {
+    const cnt = ClipSteering.getCount();
+    if (cnt.lock > 0)    parts.push({ label: `🔒 ${cnt.lock} kept`,    cls: 'v3Chip v3ChipLock',    title: 'Moments marked Keep — will be prioritised' });
+    if (cnt.exclude > 0) parts.push({ label: `🚫 ${cnt.exclude} avoided`, cls: 'v3Chip v3ChipExclude', title: 'Moments marked Avoid — will be excluded' });
+  }
+
+  if (parts.length === 0) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  chips.innerHTML = parts.map(function(p) {
+    return `<span class="${p.cls}" title="${p.title}">${p.label}</span>`;
+  }).join('');
+}
+
+function v3ResetSteering() {
+  if (typeof ClipSteering !== 'undefined') ClipSteering.clear();
+  const sbEl = document.getElementById('qsStructureBias');
+  if (sbEl) sbEl.value = 'balanced';
+  const seEl = document.getElementById('evSubtitleEmphasis');
+  if (seEl) seEl.value = 'balanced';
+  evSyncQsBar();
+  if (typeof showToast === 'function') showToast('Steering reset', 'info');
+}
+
+function v3TriggerRerender() {
+  if (typeof startRenderFromEditor === 'function' && typeof _ev !== 'undefined' && _ev.sessionId) {
+    startRenderFromEditor();
+  } else if (typeof showToast === 'function') {
+    showToast('Open a video in the editor first, then use ▶ Start Render', 'info');
+  }
 }
 
 function evQsSet(group, val) {
