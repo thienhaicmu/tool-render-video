@@ -1027,7 +1027,7 @@
       <!-- Output settings — moved to Export tab -->
       <div class="evSection" id="evSectionBasic" data-insp-panel="performance">
         <div class="evSectionTitle">Output</div>
-        <!-- UP21: Creator Style Presets — 1-click workflow bundle -->
+        <!-- MAP-UI-V2 §1: Workflow Header — Preset selector (UP21) + DNA hint -->
         <div class="cpBar" id="cpBar">
           <select class="fieldInput cpSelect" id="cpPresetSelect"
             onchange="if(typeof CreatorPresets!=='undefined')CreatorPresets.applyPreset(this.value)">
@@ -1039,89 +1039,126 @@
             style="display:none"
             onclick="if(typeof CreatorPresets!=='undefined')CreatorPresets.deleteActive()">✕</button>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:7px 10px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid rgba(148,163,184,.12)">
-          <span style="font-size:12px;color:var(--text-mut);white-space:nowrap;flex-shrink:0">Strategy Preset</span>
-          <select id="evOutputPreset" class="fieldInput" style="flex:1;margin-bottom:0;font-size:12px" onchange="evApplyOutputPreset(this.value)">
-            <option value="custom" selected>Manual / Custom</option>
-            <option value="tiktok_us_viral">TikTok US Viral</option>
-            <option value="eu_clean_review">EU Clean Review</option>
-            <option value="jp_storytelling">JP Storytelling</option>
-            <option value="clean_subtitle_focus">Clean Subtitle Focus</option>
-            <option value="fast_batch_ranking">Fast Batch Ranking</option>
-          </select>
-          <span id="evPresetHint" style="font-size:11px;color:var(--primary-hi);white-space:nowrap;min-width:0"></span>
-        </div>
-        <div id="evPresetSummary" style="display:none;margin:-2px 0 10px;padding:0 2px;font-size:11px;color:var(--text-mut);line-height:1.35"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <label class="field">
-            <span class="fieldLabel">Aspect Ratio</span>
-            <select class="fieldInput" id="evAspectRatio" onchange="evUpdateAspectRatio()">
-              <option value="3:4" selected>3:4 Vertical</option>
-              <option value="9:16">9:16 TikTok</option>
-              <option value="1:1">1:1 Square</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="fieldLabel">Output Profile</span>
-            <select class="fieldInput" id="evRenderProfile">
-              <option value="fast">Fast Draft</option>
-              <option value="balanced" selected>Balanced</option>
-              <option value="quality">Quality</option>
-              <option value="best">Best / Master</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="fieldLabel">Min clip (s)</span>
-            <input class="fieldInput" type="number" id="evMinPart" value="70" min="20" max="600">
-          </label>
-          <label class="field">
-            <span class="fieldLabel">Max clip (s)</span>
-            <input class="fieldInput" type="number" id="evMaxPart" value="180" min="30" max="900">
-          </label>
-          <label class="field">
-            <span class="fieldLabel">Max clips</span>
-            <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
-            <span class="inspHint">0 = no limit</span>
-          </label>
-          <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
-            <input type="checkbox" id="evMultiVariant" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0">
-            <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Multi-variant</span>
-            <span style="font-size:11px;color:#888;font-style:italic">Aggressive · Balanced · Story-first</span>
-          </label>
-          <label class="field">
-            <span class="fieldLabel">Platform</span>
-            <select class="fieldInput" id="evTargetPlatform">
-              <option value="youtube_shorts">YouTube Shorts</option>
-              <option value="tiktok">TikTok</option>
-              <option value="instagram_reels">Instagram Reels</option>
-            </select>
-            <span class="inspHint">Subtle editorial bias per platform</span>
-          </label>
-          <!-- UP16: CTA / Series Intelligence — optional subtitle end card. Default OFF. -->
-          <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
-            <input type="checkbox" id="evCtaEnabled" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0"
-              onchange="var cs=document.getElementById('evCtaTypeWrap');if(cs)cs.style.display=this.checked?'':'none';">
-            <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Add ending CTA</span>
-            <span style="font-size:11px;color:#888;font-style:italic">Tasteful end card — comment / part 2 / follow</span>
-          </label>
-          <div id="evCtaTypeWrap" class="field" style="grid-column:1/-1;display:none">
-            <span class="fieldLabel">CTA Type</span>
-            <select class="fieldInput" id="evCtaType">
-              <option value="auto">Auto (by content type)</option>
-              <option value="comment">Comment prompt</option>
-              <option value="part_2">Series / Part 2</option>
-              <option value="follow">Follow</option>
-            </select>
-            <span class="inspHint">Auto picks the right type based on content</span>
+        <div class="cpDnaHint" id="cpDnaHint" style="display:none"></div>
+        <!-- MAP-UI-V2 §2: Quick Strategy Bar — one-click Platform / Variant / Subtitle / CTA -->
+        <div class="qsBar" id="qsBar">
+          <div class="qsGroup">
+            <div class="qsLabel">Platform</div>
+            <div class="qsPills">
+              <button class="qsPill" data-qs-group="platform" data-qs-val="youtube_shorts" onclick="evQsSet('platform','youtube_shorts')">YouTube</button>
+              <button class="qsPill" data-qs-group="platform" data-qs-val="tiktok" onclick="evQsSet('platform','tiktok')">TikTok</button>
+              <button class="qsPill" data-qs-group="platform" data-qs-val="instagram_reels" onclick="evQsSet('platform','instagram_reels')">Reels</button>
+            </div>
           </div>
-          <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
-            <input type="checkbox" id="evAddTitleOverlay" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0" onchange="var ti=document.getElementById('evTitleOverlayText');if(ti)ti.disabled=!this.checked;">
-            <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Title Overlay</span>
-          </label>
-          <label class="field" style="grid-column:1/-1">
-            <input class="fieldInput" type="text" id="evTitleOverlayText" placeholder="Overlay title text…" disabled>
-          </label>
+          <div class="qsGroup">
+            <div class="qsLabel">Variant</div>
+            <div class="qsPills">
+              <button class="qsPill qsPillToggle" id="qsVariantBtn" onclick="evQsToggle('variant')">Multi-variant</button>
+            </div>
+          </div>
+          <div class="qsGroup">
+            <div class="qsLabel">Subtitle</div>
+            <div class="qsPills">
+              <button class="qsPill" data-qs-group="sub" data-qs-val="off" onclick="evQsSet('sub','off')">Off</button>
+              <button class="qsPill" data-qs-group="sub" data-qs-val="clean" onclick="evQsSet('sub','clean')">Clean</button>
+              <button class="qsPill" data-qs-group="sub" data-qs-val="viral" onclick="evQsSet('sub','viral')">Viral</button>
+              <button class="qsPill" data-qs-group="sub" data-qs-val="karaoke" onclick="evQsSet('sub','karaoke')">Karaoke</button>
+            </div>
+          </div>
+          <div class="qsGroup">
+            <div class="qsLabel">CTA</div>
+            <div class="qsPills">
+              <button class="qsPill qsPillToggle" id="qsCtaBtn" onclick="evQsToggle('cta')">End Card</button>
+            </div>
+          </div>
         </div>
+        <!-- MAP-UI-V2 §3: Advanced Settings — collapsed by default -->
+        <div class="qsAdvHeader" id="qsAdvHeader" onclick="evToggleAdvancedOutput()">Advanced <span id="qsAdvArrow" class="qsAdvArrow">▸</span></div>
+        <div class="qsAdvBody" id="qsAdvBody">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:7px 10px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid rgba(148,163,184,.12)">
+            <span style="font-size:12px;color:var(--text-mut);white-space:nowrap;flex-shrink:0">Strategy Preset</span>
+            <select id="evOutputPreset" class="fieldInput" style="flex:1;margin-bottom:0;font-size:12px" onchange="evApplyOutputPreset(this.value)">
+              <option value="custom" selected>Manual / Custom</option>
+              <option value="tiktok_us_viral">TikTok US Viral</option>
+              <option value="eu_clean_review">EU Clean Review</option>
+              <option value="jp_storytelling">JP Storytelling</option>
+              <option value="clean_subtitle_focus">Clean Subtitle Focus</option>
+              <option value="fast_batch_ranking">Fast Batch Ranking</option>
+            </select>
+            <span id="evPresetHint" style="font-size:11px;color:var(--primary-hi);white-space:nowrap;min-width:0"></span>
+          </div>
+          <div id="evPresetSummary" style="display:none;margin:-2px 0 10px;padding:0 2px;font-size:11px;color:var(--text-mut);line-height:1.35"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label class="field">
+              <span class="fieldLabel">Aspect Ratio</span>
+              <select class="fieldInput" id="evAspectRatio" onchange="evUpdateAspectRatio()">
+                <option value="3:4" selected>3:4 Vertical</option>
+                <option value="9:16">9:16 TikTok</option>
+                <option value="1:1">1:1 Square</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Output Profile</span>
+              <select class="fieldInput" id="evRenderProfile">
+                <option value="fast">Fast Draft</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="quality">Quality</option>
+                <option value="best">Best / Master</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Min clip (s)</span>
+              <input class="fieldInput" type="number" id="evMinPart" value="70" min="20" max="600">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Max clip (s)</span>
+              <input class="fieldInput" type="number" id="evMaxPart" value="180" min="30" max="900">
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Max clips</span>
+              <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
+              <span class="inspHint">0 = no limit</span>
+            </label>
+            <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
+              <input type="checkbox" id="evMultiVariant" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0" onchange="evSyncQsBar()">
+              <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Multi-variant</span>
+              <span style="font-size:11px;color:#888;font-style:italic">Aggressive · Balanced · Story-first</span>
+            </label>
+            <label class="field">
+              <span class="fieldLabel">Platform</span>
+              <select class="fieldInput" id="evTargetPlatform" onchange="evSyncQsBar()">
+                <option value="youtube_shorts">YouTube Shorts</option>
+                <option value="tiktok">TikTok</option>
+                <option value="instagram_reels">Instagram Reels</option>
+              </select>
+              <span class="inspHint">Subtle editorial bias per platform</span>
+            </label>
+            <!-- UP16: CTA / Series Intelligence — optional subtitle end card. Default OFF. -->
+            <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
+              <input type="checkbox" id="evCtaEnabled" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0"
+                onchange="var cs=document.getElementById('evCtaTypeWrap');if(cs)cs.style.display=this.checked?'':'none';evSyncQsBar();">
+              <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Add ending CTA</span>
+              <span style="font-size:11px;color:#888;font-style:italic">Tasteful end card — comment / part 2 / follow</span>
+            </label>
+            <div id="evCtaTypeWrap" class="field" style="grid-column:1/-1;display:none">
+              <span class="fieldLabel">CTA Type</span>
+              <select class="fieldInput" id="evCtaType">
+                <option value="auto">Auto (by content type)</option>
+                <option value="comment">Comment prompt</option>
+                <option value="part_2">Series / Part 2</option>
+                <option value="follow">Follow</option>
+              </select>
+              <span class="inspHint">Auto picks the right type based on content</span>
+            </div>
+            <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
+              <input type="checkbox" id="evAddTitleOverlay" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0" onchange="var ti=document.getElementById('evTitleOverlayText');if(ti)ti.disabled=!this.checked;">
+              <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Title Overlay</span>
+            </label>
+            <label class="field" style="grid-column:1/-1">
+              <input class="fieldInput" type="text" id="evTitleOverlayText" placeholder="Overlay title text…" disabled>
+            </label>
+          </div>
+        </div><!-- /qsAdvBody -->
       </div>
 
       <!-- Subtitle Style -->

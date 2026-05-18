@@ -123,6 +123,7 @@ window.CreatorPresets = (() => {
       if (wrap) wrap.style.display = !!settings.cta_enabled ? '' : 'none';
     }
     if (typeof evUpdateSubPreview === 'function') evUpdateSubPreview();
+    if (typeof evSyncQsBar === 'function') evSyncQsBar();
   }
 
   // ── Dropdown render ───────────────────────────────────────────────────────

@@ -107,6 +107,94 @@ function _evSyncQuickControlsFromMain() {
   evSyncQuickSetting('profile', 'main');
 }
 
+/* ── MAP-UI-V2: Quick Strategy Bar ──────────────────────────────────────── */
+function evSyncQsBar() {
+  const plat = document.getElementById('evTargetPlatform');
+  if (plat) {
+    document.querySelectorAll('[data-qs-group="platform"]').forEach(function(btn) {
+      btn.classList.toggle('active', btn.dataset.qsVal === plat.value);
+    });
+  }
+  const variantEl  = document.getElementById('evMultiVariant');
+  const variantBtn = document.getElementById('qsVariantBtn');
+  if (variantEl && variantBtn) variantBtn.classList.toggle('active', !!variantEl.checked);
+
+  const subOn    = document.getElementById('evAddSubtitle');
+  const subStyle = document.getElementById('evSubStyle');
+  let subVal = 'off';
+  if (subOn && subOn.checked && subStyle) {
+    const s = subStyle.value;
+    if (s === 'story_clean_01' || s === 'minimal_clean' || s === 'clean_karaoke') subVal = 'clean';
+    else if (s === 'tiktok_bounce_v1') subVal = 'viral';
+    else if (s === 'pro_karaoke') subVal = 'karaoke';
+    else subVal = 'clean';
+  }
+  document.querySelectorAll('[data-qs-group="sub"]').forEach(function(btn) {
+    btn.classList.toggle('active', btn.dataset.qsVal === subVal);
+  });
+
+  const ctaEl  = document.getElementById('evCtaEnabled');
+  const ctaBtn = document.getElementById('qsCtaBtn');
+  if (ctaEl && ctaBtn) {
+    ctaBtn.classList.toggle('active', !!ctaEl.checked);
+    ctaBtn.textContent = ctaEl.checked ? 'CTA On' : 'End Card';
+  }
+
+  const dnaHintEl = document.getElementById('cpDnaHint');
+  if (dnaHintEl) {
+    let hint = null;
+    if (typeof CreatorDNA !== 'undefined') {
+      const ctx = CreatorDNA.getDNAContext();
+      hint = CreatorDNA.getAppliedHint(ctx);
+    }
+    dnaHintEl.textContent = hint || '';
+    dnaHintEl.style.display = hint ? '' : 'none';
+  }
+}
+
+function evQsSet(group, val) {
+  if (group === 'platform') {
+    const el = document.getElementById('evTargetPlatform');
+    if (el) el.value = val;
+  } else if (group === 'sub') {
+    const subOn    = document.getElementById('evAddSubtitle');
+    const subStyle = document.getElementById('evSubStyle');
+    if (val === 'off') {
+      if (subOn) subOn.checked = false;
+    } else {
+      if (subOn) subOn.checked = true;
+      const styleMap = { clean: 'story_clean_01', viral: 'tiktok_bounce_v1', karaoke: 'pro_karaoke' };
+      if (subStyle && styleMap[val]) subStyle.value = styleMap[val];
+      if (typeof evUpdateSubPreview === 'function') evUpdateSubPreview();
+    }
+  }
+  evSyncQsBar();
+}
+
+function evQsToggle(group) {
+  if (group === 'variant') {
+    const el = document.getElementById('evMultiVariant');
+    if (el) el.checked = !el.checked;
+  } else if (group === 'cta') {
+    const ctaEl = document.getElementById('evCtaEnabled');
+    if (ctaEl) {
+      ctaEl.checked = !ctaEl.checked;
+      const wrap = document.getElementById('evCtaTypeWrap');
+      if (wrap) wrap.style.display = ctaEl.checked ? '' : 'none';
+    }
+  }
+  evSyncQsBar();
+}
+
+function evToggleAdvancedOutput() {
+  const body  = document.getElementById('qsAdvBody');
+  const arrow = document.getElementById('qsAdvArrow');
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : '';
+  if (arrow) arrow.textContent = isOpen ? '▸' : '▾';
+}
+
 function evToggleMoreSettings() {
   _evMoreCollapsed = !_evMoreCollapsed;
   document.querySelectorAll('.evMoreSettingItem').forEach((el) => el.classList.toggle('hiddenView', _evMoreCollapsed));
@@ -882,6 +970,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   if (typeof CreatorFeedback !== 'undefined') CreatorFeedback.init();
   if (typeof CreatorDNA      !== 'undefined') CreatorDNA.init();
   if (typeof CreatorPresets  !== 'undefined') CreatorPresets.init();
+  evSyncQsBar();
   if (typeof EditorConverse !== 'undefined') EditorConverse.init();
 
   try {
@@ -969,6 +1058,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   if (typeof CreatorFeedback !== 'undefined') CreatorFeedback.init();
   if (typeof CreatorDNA      !== 'undefined') CreatorDNA.init();
   if (typeof CreatorPresets  !== 'undefined') CreatorPresets.init();
+  evSyncQsBar();
   if (typeof mvUpdatePreviewHint === 'function') mvUpdatePreviewHint();
 
   if (pendingPayload) pendingPayload.edit_session_id = pd.session_id;
@@ -2620,6 +2710,7 @@ function evApplyOutputPreset(presetId) {
     if (typeof addEvent === 'function') {
       addEvent(`Preset applied: ${label}${changed.length ? ' | fields: ' + changed.join(', ') : ''}`, 'render');
     }
+    evSyncQsBar();
   } finally {
     _evApplyingPreset = false;
   }

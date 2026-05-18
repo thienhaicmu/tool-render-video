@@ -967,18 +967,19 @@ function _rankMap(job) {
     ranking.forEach(r => {
       if (r?.part_no != null) {
         map.set(Number(r.part_no), {
-          rank:           Number(r.output_rank || 0),
-          score:          Number(r.output_score ?? r.output_rank_score ?? 0),
-          isBest:         !!(r.is_best_clip ?? r.is_best_output),
-          reason:         String(r.ranking_reason || r.reasons || '').trim(),
-          confidenceTier: String(r.confidence_tier || '').trim(),
-          dominantSignal: String(r.dominant_signal || '').trim(),
-          variantType:    String(r.variant_type || '').trim(),
-          targetPlatform: String(r.target_platform || '').trim(),
-          coverOffset:    Number(r.cover_frame_offset || 0),
-          coverFile:      String(r.cover_file || '').trim(),
-          ctaApplied:     !!(r.cta_applied),
-          ctaText:        String(r.cta_text || '').trim(),
+          rank:            Number(r.output_rank || 0),
+          score:           Number(r.output_score ?? r.output_rank_score ?? 0),
+          isBest:          !!(r.is_best_clip ?? r.is_best_output),
+          reason:          String(r.ranking_reason || r.reasons || '').trim(),
+          selectionReason: String(r.selection_reason || '').trim(),
+          confidenceTier:  String(r.confidence_tier || '').trim(),
+          dominantSignal:  String(r.dominant_signal || '').trim(),
+          variantType:     String(r.variant_type || '').trim(),
+          targetPlatform:  String(r.target_platform || '').trim(),
+          coverOffset:     Number(r.cover_frame_offset || 0),
+          coverFile:       String(r.cover_file || '').trim(),
+          ctaApplied:      !!(r.cta_applied),
+          ctaText:         String(r.cta_text || '').trim(),
         });
       }
     });
@@ -4450,6 +4451,7 @@ function populateRenderOutputPanel(job, parts) {
           <span class="clipCardStatusDot" data-status="${esc(statusText)}" title="${esc(statusText)}"></span>
         </div>
         ${_clipReason ? `<div class="clipCardReason">${esc(_clipReason)}</div>` : ''}
+        ${rk.selectionReason && rk.selectionReason.includes('limited source variety') ? `<div class="clipVarietyNote">Limited source variety</div>` : ''}
         ${(motionScore !== null || hookScore !== null) && (rk.isBest || scoreVal >= 6) ? _r7SignalRow(motionScore, hookScore, rk.isBest, _bestMotion, _bestHook) : ''}
         ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
         ${_shouldRenderBestExport(_cardAiUx, rk.isBest) ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">&#x2713;</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}

@@ -17437,6 +17437,106 @@ body:not(.is-render-studio-active) .rs-center-stage > #appBottomPanel.renderRunt
   background: rgba(248,113,113,.12);
 }
 
+/* ── MAP-UI-V2: Quick Strategy Bar ───────────────────────────────────────── */
+.qsBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 9px 10px;
+  background: rgba(255,255,255,.025);
+  border-radius: 8px;
+  border: 1px solid rgba(148,163,184,.07);
+}
+
+.qsGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.qsLabel {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.qsPills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.qsPill {
+  background: transparent;
+  border: 1px solid rgba(148,163,184,.18);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color .12s, color .12s, background .12s;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.qsPill:hover {
+  border-color: rgba(96,165,250,.35);
+  color: var(--text-dim);
+}
+
+.qsPill.active {
+  background: rgba(59,130,246,.15);
+  border-color: rgba(59,130,246,.45);
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+.qsAdvHeader {
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 5px 2px;
+  margin: 2px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  user-select: none;
+  transition: color .12s;
+}
+
+.qsAdvHeader:hover { color: var(--text-dim); }
+
+.qsAdvArrow {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.qsAdvBody {
+  display: none;
+  padding-top: 8px;
+  margin-top: 2px;
+  border-top: 1px solid rgba(255,255,255,.04);
+}
+
+/* DNA hint inline in the Output section (distinct from .clipsDnaHint in the clip list) */
+.cpDnaHint {
+  font-size: 10px;
+  color: #64748b;
+  font-style: italic;
+  margin: -2px 0 6px 2px;
+}
+
+/* ── MAP-UI-V2 §4: Limited source variety note on clip cards ─────────────── */
+.clipVarietyNote {
+  font-size: 10px;
+  color: var(--warn);
+  opacity: .75;
+  margin-top: 3px;
+}
+
 /* ── UP20: Creator DNA hint ───────────────────────────────────────────────── */
 .clipsDnaHint {
   font-size: 10px;
