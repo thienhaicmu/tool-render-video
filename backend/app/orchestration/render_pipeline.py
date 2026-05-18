@@ -369,6 +369,27 @@ def _append_cta_block_to_srt(
         return False
 
 
+def _read_srt_meta(srt_path: str) -> dict:
+    """Read timing metadata from an existing per-part SRT — mirrors slice_srt_by_time return shape.
+
+    Used on the resume path (needs_srt=False) so CTA and logging have correct timestamps.
+    """
+    try:
+        blocks = parse_srt_blocks(srt_path)
+        if not blocks:
+            return {"subtitle_count": 0, "first_start": None, "first_end": None,
+                    "last_start": None, "last_end": None}
+        return {
+            "subtitle_count": len(blocks),
+            "first_start": blocks[0]["start"],
+            "first_end":   blocks[0]["end"],
+            "last_start":  blocks[-1]["start"],
+            "last_end":    blocks[-1]["end"],
+        }
+    except Exception:
+        return {}
+
+
 def _build_variant_segments(scored: list[dict], payload) -> list[dict]:
     """Select three purposeful segments from the scored pool (aggressive, balanced, story-first).
 
@@ -3446,8 +3467,12 @@ def run_render_pipeline(
                 upsert_job_part(job_id, idx, part_name, JobPartStage.TRANSCRIBING, 35, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Preparing subtitle")
                 needs_srt = not (payload.resume_from_last and srt_part.exists() and srt_part.stat().st_size > 0)
                 needs_ass = not (payload.resume_from_last and ass_part.exists() and ass_part.stat().st_size > 0)
+                _srt_source_is_fresh = needs_srt  # P1: tracks whether mutations must run
                 if needs_srt:
-                    _eff_speed = max(0.5, min(1.5, float(payload.playback_speed or 1.0)))
+                    # P2: match subtitle slice speed to the platform-adjusted render speed so
+                    # timing aligns on TikTok (+0.08) and Instagram Reels (-0.06).
+                    _platform_speed_delta = _PLATFORM_PROFILES.get(_target_platform, {}).get("speed_delta", 0.0)
+                    _eff_speed = max(0.5, min(1.5, float(payload.playback_speed or 1.0) + _platform_speed_delta))
                     _visual_apply_speed = False
                     _srt_meta = slice_srt_by_time(
                         str(full_srt),
@@ -3492,6 +3517,40 @@ def run_render_pipeline(
                             "last_sub_start": _srt_meta.get("last_start"),
                             "last_sub_end": _srt_meta.get("last_end"),
                             "part_srt_path": str(srt_part),
+                            "resume_cache_hit_srt": False,
+                            "resume_cache_hit_ass": not needs_ass,
+                        },
+                    )
+                else:
+                    # P0-FIX: resume cache hit — read timing metadata from existing SRT so
+                    # CTA (and any callers of _srt_meta["last_end"]) get the correct timestamp
+                    # instead of falling back to 0.0 and appending CTA at the start of the clip.
+                    if srt_part.exists() and srt_part.stat().st_size > 0:
+                        _srt_meta = _read_srt_meta(str(srt_part))
+                    _job_log(
+                        effective_channel, job_id,
+                        f"subtitle_resume_cache_hit part_no={idx} "
+                        f"srt_exists={srt_part.exists()} "
+                        f"ass_exists={ass_part.exists()} "
+                        f"last_sub_end={_srt_meta.get('last_end')!r}",
+                        kind="debug",
+                    )
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="subtitle_part_sync",
+                        level="INFO",
+                        message=f"Subtitle resume cache hit for part {idx}: {_srt_meta.get('subtitle_count', 0)} entries",
+                        step="subtitle.slice",
+                        context={
+                            "part_no": idx,
+                            "part_start": seg["start"],
+                            "part_end": seg["end"],
+                            "part_srt_path": str(srt_part),
+                            "resume_cache_hit_srt": True,
+                            "resume_cache_hit_ass": not needs_ass,
+                            "subtitle_count": _srt_meta.get("subtitle_count", 0),
+                            "last_sub_end": _srt_meta.get("last_end"),
                         },
                     )
                 _ass_srt_source = srt_part
@@ -3557,13 +3616,15 @@ def run_render_pipeline(
                             )
                     if translated_srt_part.exists() and translated_srt_part.stat().st_size > 0:
                         _ass_srt_source = translated_srt_part
+                        if _needs_translated:
+                            _srt_source_is_fresh = True  # P1: freshly translated — mutations must run
                 _sub_edits = getattr(payload, 'subtitle_edits', None)
-                if _sub_edits and _ass_srt_source.exists():
+                if _srt_source_is_fresh and _sub_edits and _ass_srt_source.exists():
                     try:
                         _apply_subtitle_edits_to_srt(str(_ass_srt_source), _sub_edits)
                     except Exception as _se_exc:
                         logger.warning("subtitle_edits: skipped due to error: %s", _se_exc)
-                if _hook_apply_enabled and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
+                if _srt_source_is_fresh and _hook_apply_enabled and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
                     try:
                         _hook_apply_meta = apply_market_hook_text_to_srt(
                             str(_ass_srt_source),
@@ -3617,33 +3678,36 @@ def run_render_pipeline(
                         f"applied_hook_text={_hook_applied_text!r}",
                         kind="warning",
                     )
-                if _mv_cfg and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
+                if _srt_source_is_fresh and _mv_cfg and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
                     try:
                         apply_market_line_break_to_srt(str(_ass_srt_source), _mv_cfg)
                         needs_ass = True
                     except Exception:
                         pass
                 # P4-2: Hook subtitle impact — opening lines of every output clip
-                if _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
-                    _hook_orig_len = _ass_srt_source.stat().st_size
-                    _hook_blocks = apply_hook_subtitle_format(str(_ass_srt_source))
-                    if _hook_blocks > 0:
-                        needs_ass = True
-                        _hook_subtitle_formatted = True
-                        _emit_render_event(
-                            channel_code=effective_channel,
-                            job_id=job_id,
-                            event="subtitle_hook_format_applied",
-                            level="INFO",
-                            message=f"Hook subtitle impact applied: {_hook_blocks} blocks (part {idx})",
-                            step="subtitle.hook_format",
-                            context={
-                                "part_no": idx,
-                                "original_length": _hook_orig_len,
-                                "new_length": _ass_srt_source.stat().st_size,
-                                "lines_count": _hook_blocks,
-                            },
-                        )
+                if _srt_source_is_fresh and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
+                    try:
+                        _hook_orig_len = _ass_srt_source.stat().st_size
+                        _hook_blocks = apply_hook_subtitle_format(str(_ass_srt_source))
+                        if _hook_blocks > 0:
+                            needs_ass = True
+                            _hook_subtitle_formatted = True
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="subtitle_hook_format_applied",
+                                level="INFO",
+                                message=f"Hook subtitle impact applied: {_hook_blocks} blocks (part {idx})",
+                                step="subtitle.hook_format",
+                                context={
+                                    "part_no": idx,
+                                    "original_length": _hook_orig_len,
+                                    "new_length": _ass_srt_source.stat().st_size,
+                                    "lines_count": _hook_blocks,
+                                },
+                            )
+                    except Exception as _hfmt_exc:
+                        logger.warning("apply_hook_subtitle_format: skipped part %d due to error: %s", idx, _hfmt_exc)
                 # Content-type subtitle auto-default — fires only when no explicit style set.
                 # Creator's explicit choice (any non-empty subtitle_style) always wins.
                 _CONTENT_TYPE_SUB_DEFAULTS: dict[str, str] = {
@@ -3693,7 +3757,7 @@ def run_render_pipeline(
                 )
 
                 # S4: Subtitle emphasis — semantic wrap + keyword uppercase + highlight markers
-                if _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
+                if _srt_source_is_fresh and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
                     try:
                         _emph_blocks = parse_srt_blocks(str(_ass_srt_source))
                         if _emph_blocks:
@@ -3814,6 +3878,25 @@ def run_render_pipeline(
                         "subtitle_ass_ms=%d part=%d style=%s content_type=%s",
                         _subtitle_ass_ms, idx, _effective_subtitle_style,
                         seg.get("content_type_hint", ""),
+                    )
+                    # Debug: per-part subtitle file chain — detect identical SRT or wrong timestamps
+                    _dbg_first_line = ""
+                    _dbg_first_ts: float = -1.0
+                    try:
+                        _dbg_blocks = parse_srt_blocks(str(_ass_srt_source))
+                        if _dbg_blocks:
+                            _dbg_first_line = _dbg_blocks[0]["text"][:80]
+                            _dbg_first_ts = round(_dbg_blocks[0]["start"], 3)
+                    except Exception:
+                        pass
+                    _job_log(
+                        effective_channel, job_id,
+                        f"subtitle_file_chain part={idx} "
+                        f"srt={srt_part.name} srt_size={srt_part.stat().st_size if srt_part.exists() else 0} "
+                        f"ass={ass_part.name} ass_size={ass_part.stat().st_size if ass_part.exists() else 0} "
+                        f"source_fresh={_srt_source_is_fresh} needs_srt={needs_srt} needs_ass={needs_ass} "
+                        f"first_ts={_dbg_first_ts}s first_line={_dbg_first_line!r}",
+                        kind="debug",
                     )
                     _job_log(
                         effective_channel, job_id,
