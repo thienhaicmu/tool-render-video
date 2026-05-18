@@ -26,7 +26,7 @@ from app.services.subtitle_engine import (
     subtitle_emphasis_pass, parse_srt_blocks, write_srt_blocks,
 )
 from app.services.subtitle_transcription_adapters import transcribe_with_adapter
-from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event, content_type_crf_delta as _crf_delta_for_content_type
+from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event, content_type_crf_delta as _crf_delta_for_content_type, extract_thumbnail_frame
 from app.services import cancel_registry
 from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
 from app.services.viral_scorer import score_segments
@@ -107,6 +107,72 @@ _PLATFORM_PROFILES: dict[str, dict] = {
         },
     },
 }
+
+
+def _select_cover_frame_time(
+    clip_duration: float,
+    hook_score: float,
+    srt_meta: dict,
+    target_platform: str,
+    variant_type: str,
+) -> tuple[float, str]:
+    """Score thumbnail candidate offsets and return (offset_sec, reason).
+
+    Uses only existing pipeline signals — no new models, no face detection here.
+    Platform and variant nudge where in the clip to look. Hook score biases toward
+    earlier frames when the content opens strong. Subtitle timing adds a penalty
+    to avoid text-heavy frames.
+    """
+    dur = max(2.0, float(clip_duration or 0))
+
+    # Candidate offsets expressed as fractions of clip duration.
+    # Range [0.10, 0.58] avoids opening cuts and mid-roll dropout at the end.
+    _FRACS = [0.10, 0.20, 0.32, 0.44, 0.58]
+    candidates = [round(max(0.5, min(dur - 0.5, dur * f)), 3) for f in _FRACS]
+
+    # Platform position preference: lower value = prefer earlier in clip.
+    _plat_bias = {"tiktok": 0.15, "instagram_reels": 0.48, "youtube_shorts": 0.30}
+    preferred_pos = _plat_bias.get(str(target_platform).lower(), 0.30)
+
+    # Variant nudge on top of platform preference.
+    if variant_type == "aggressive":
+        preferred_pos = max(0.05, preferred_pos - 0.10)
+    elif variant_type == "story_first":
+        preferred_pos = min(0.60, preferred_pos + 0.10)
+
+    # Subtitle window to avoid (first dense text block = worst time for thumbnail).
+    sub_s = float((srt_meta or {}).get("first_sub_start") or -1)
+    sub_e = float((srt_meta or {}).get("first_sub_end") or -1)
+
+    best_t, best_score, best_reason = candidates[0], -9999.0, "default"
+    for t in candidates:
+        norm = t / dur
+        score = 0.0
+
+        # Position score: peak when norm == preferred_pos, falls off with distance.
+        score += max(0.0, 10.0 - abs(norm - preferred_pos) * 35.0)
+
+        # Hook bonus: strong hook content → earlier frame is more attention-worthy.
+        score += (float(hook_score or 0) / 100.0) * (1.0 - norm) * 5.0
+
+        # Stability bonus: middle range has fewer transition artifacts.
+        if 0.22 <= norm <= 0.60:
+            score += 1.5
+
+        # Subtitle penalty: avoid frames during the first subtitle block.
+        if sub_s >= 0 and sub_e > sub_s and sub_s <= t <= sub_e:
+            score -= 6.0
+
+        if score > best_score:
+            best_score = score
+            best_t = t
+            best_reason = (
+                f"pos={norm:.2f} preferred={preferred_pos:.2f} "
+                f"hook={float(hook_score or 0):.0f} platform={target_platform} "
+                f"variant={variant_type or 'none'} score={score:.1f}"
+            )
+
+    return best_t, best_reason
 
 
 def _build_variant_segments(scored: list[dict], payload) -> list[dict]:
@@ -2739,6 +2805,7 @@ def run_render_pipeline(
                 part_name  = f"{_output_stem}_part_{idx:03d}.mp4"
             _sub_target_lang = getattr(payload, "subtitle_target_language", "en")
             translated_srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.{_sub_target_lang}.srt"
+            _srt_meta: dict = {}  # populated by subtitle slice; used for cover frame scoring (UP15)
             _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} start", kind="debug")
 
             # Bail out immediately if job was cancelled before this part started
@@ -4001,6 +4068,49 @@ def run_render_pipeline(
                     },
                 )
 
+            # ── UP15: Smart cover frame extraction ───────────────────────────
+            try:
+                _clip_dur = max(1.0, float(seg.get("duration") or 0))
+                _cover_offset, _cover_reason = _select_cover_frame_time(
+                    clip_duration=_clip_dur,
+                    hook_score=float(seg.get("hook_score") or 0),
+                    srt_meta=_srt_meta,
+                    target_platform=_target_platform,
+                    variant_type=str(seg.get("variant_type") or ""),
+                )
+                _cover_bytes = extract_thumbnail_frame(str(final_part), _cover_offset, width=640)
+                if _cover_bytes:
+                    _cover_stem = (
+                        f"{_output_stem}_{_variant_type}_cover" if _variant_type
+                        else f"{_output_stem}_part_{idx:03d}_cover"
+                    )
+                    _cover_path = output_dir / f"{_cover_stem}.jpg"
+                    _cover_path.write_bytes(_cover_bytes)
+                    seg["cover_file"] = str(_cover_path)
+                    seg["cover_frame_offset"] = _cover_offset
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="cover_frame_selected",
+                        level="INFO",
+                        message=f"Smart cover: part {idx} offset={_cover_offset:.3f}s",
+                        step="render.cover",
+                        context={
+                            "part_no":        idx,
+                            "cover_file":     str(_cover_path),
+                            "frame_offset":   _cover_offset,
+                            "cover_reason":   _cover_reason,
+                            "target_platform": _target_platform,
+                            "variant_type":   str(seg.get("variant_type") or ""),
+                        },
+                    )
+                    _job_log(
+                        effective_channel, job_id,
+                        f"cover_frame_selected part_no={idx} offset={_cover_offset:.3f}s "
+                        f"platform={_target_platform} reason={_cover_reason!r}",
+                    )
+            except Exception as _cov_exc:
+                logger.warning("cover_frame_extraction_failed part=%d: %s", idx, _cov_exc)
             upsert_job_part(job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Completed")
             row = [job_id, effective_channel, source["title"], idx, seg["start"], seg["end"], seg["duration"], seg["viral_score"], seg["priority_rank"], str(final_part)]
             if payload.cleanup_temp_files:
@@ -4265,6 +4375,12 @@ def run_render_pipeline(
             if _r_vt:
                 _rank_entry["variant_type"]  = _r_vt
                 _rank_entry["variant_label"] = str(_r_seg.get("variant_label") or _r_vt.replace("_", " ").title())
+            # UP15: cover frame — propagate from segment dict (set during _process_one_part)
+            _r_cover_file   = str(_r_seg.get("cover_file") or "")
+            _r_cover_offset = float(_r_seg.get("cover_frame_offset") or 0)
+            if _r_cover_file:
+                _rank_entry["cover_file"]         = _r_cover_file
+                _rank_entry["cover_frame_offset"] = round(_r_cover_offset, 3)
             # Apply quality penalty from per-part validator
             _rank_raw_score = float(_rank_entry["output_score"])
             _rank_q_penalty = int(_r_seg.get("quality_penalty", 0))

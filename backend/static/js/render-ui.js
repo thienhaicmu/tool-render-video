@@ -975,6 +975,8 @@ function _rankMap(job) {
           dominantSignal: String(r.dominant_signal || '').trim(),
           variantType:    String(r.variant_type || '').trim(),
           targetPlatform: String(r.target_platform || '').trim(),
+          coverOffset:    Number(r.cover_frame_offset || 0),
+          coverFile:      String(r.cover_file || '').trim(),
         });
       }
     });
@@ -4376,8 +4378,10 @@ function populateRenderOutputPanel(job, parts) {
     const _clipReason = _r7TruthfulReason(rk, motionScore, hookScore);
     // P1.7-F: static JPEG thumbnail (cached 24h) + lazy video for hover preview
     const _thumbBase = `/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}`;
+    // UP15: use smart cover offset when available; fall back to t=1 (1 second in).
+    const _thumbT = rk.coverOffset > 0 ? rk.coverOffset : 1;
     const thumbHtml = isDone && hasFile && jobId
-      ? `<img class="clipCardThumbImg" src="${_thumbBase}/thumbnail?t=1" loading="lazy" alt="" onerror="this.classList.add('is-error')">`
+      ? `<img class="clipCardThumbImg" src="${_thumbBase}/thumbnail?t=${_thumbT}" loading="lazy" alt="" onerror="this.classList.add('is-error')">`
         + `<video class="clipCardThumbVid" data-src="${_thumbBase}/media" preload="none" muted playsinline></video>`
       : `<div class="clipCardThumbPlaceholder">${isFailed ? '✗' : isSkipped ? '—' : '⋯'}</div>`;
     const thumbAttrs = (isDone && hasFile && jobId)
@@ -4405,6 +4409,10 @@ function populateRenderOutputPanel(job, parts) {
     );
     const compareBtn = _r821ShowCmp
       ? `<button class="clipCardBtn clipCardBtnCompare" type="button" onclick="r821EnterCompare(${_r821RefPNo},${_r821ChalPNo})">Compare</button>`
+      : '';
+    // UP15: Cover button — opens the auto-exported thumbnail in the output folder.
+    const coverBtn = (isDone && rk.coverFile)
+      ? `<button class="clipCardBtn clipCardBtnCover" type="button" onclick="openClipFile(${JSON.stringify(rk.coverFile)})">Cover</button>`
       : '';
     if (qs('abp_output_meta') && hasFile) qs('abp_output_meta').textContent = `Latest file: ${String(p.output_file || '').split(/[\\\\/]/).pop()}`;
     const isSelected = isDone && hasFile && _selectedClipPaths.has(p.output_file);
@@ -4434,7 +4442,7 @@ function populateRenderOutputPanel(job, parts) {
         ${(motionScore !== null || hookScore !== null) && (rk.isBest || scoreVal >= 6) ? _r7SignalRow(motionScore, hookScore, rk.isBest, _bestMotion, _bestHook) : ''}
         ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
         ${_shouldRenderBestExport(_cardAiUx, rk.isBest) ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">&#x2713;</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}
-        <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}${compareBtn}</div>
+        <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}${coverBtn}${compareBtn}</div>
       </div>
     </div>`;
   }).join('');
