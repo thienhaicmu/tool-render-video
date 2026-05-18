@@ -26,7 +26,7 @@ from app.services.subtitle_engine import (
     subtitle_emphasis_pass, parse_srt_blocks, write_srt_blocks,
 )
 from app.services.subtitle_transcription_adapters import transcribe_with_adapter
-from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event
+from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event, content_type_crf_delta as _crf_delta_for_content_type
 from app.services import cancel_registry
 from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
 from app.services.viral_scorer import score_segments
@@ -2926,6 +2926,11 @@ def run_render_pipeline(
                 if needs_ass:
                     _play_res_y = _aspect_play_res_y(payload.aspect_ratio)
                     _margin_v = getattr(payload, "sub_margin_v", 180)
+                    # Part F: light subtitle safety for face-forward content without motion reframe.
+                    # When motion_aware_crop=True the crop system already enforces subtitle_safe_bottom_ratio.
+                    # When disabled, interview/commentary faces can reach the subtitle zone — add clearance.
+                    if not payload.motion_aware_crop and seg.get("content_type_hint") in ("interview", "commentary"):
+                        _margin_v += 40
                     _t_sub = time.perf_counter()
                     if _effective_subtitle_style == "pro_karaoke":
                         from app.services.subtitle_engine import _hex_to_ass
@@ -3063,6 +3068,22 @@ def run_render_pipeline(
             overlay_title = (payload.title_overlay_text or "").strip() or source["title"]
             upsert_job_part(job_id, idx, part_name, JobPartStage.RENDERING, 70, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Rendering final video")
 
+            # Visual finish params (QUALITY-UP11)
+            _vf_ct = seg.get("content_type_hint", "vlog")
+            _vf_crf_delta = _crf_delta_for_content_type(_vf_ct)
+            _part_video_crf = max(11, min(28, tuned["video_crf"] + _vf_crf_delta))
+            _vf_bitrate_profile = (
+                "high" if _vf_ct == "montage" else
+                "low" if _vf_ct in ("interview", "tutorial") else "standard"
+            )
+            _vf_subtitle_bump = not payload.motion_aware_crop and _vf_ct in ("interview", "commentary")
+            logger.info(
+                "visual_finish_applied part=%d content_type=%s crf=%d(delta=%+d) "
+                "bitrate_profile=%s subtitle_safety_bump=%s",
+                idx, _vf_ct, _part_video_crf, _vf_crf_delta,
+                _vf_bitrate_profile, _vf_subtitle_bump,
+            )
+
             # Start a background timer that writes linear progress estimates
             # (70–99%) every _PROGRESS_TICK_SEC seconds while FFmpeg runs.
             # Stopped in `finally` before the authoritative 100% write.
@@ -3093,7 +3114,7 @@ def run_render_pipeline(
                     effect_preset=payload.effect_preset,
                     transition_sec=tuned["transition_sec"],
                     video_codec=payload.video_codec,
-                    video_crf=tuned["video_crf"],
+                    video_crf=_part_video_crf,
                     video_preset=tuned["video_preset"],
                     audio_bitrate=payload.audio_bitrate,
                     retry_count=retry_count,
@@ -3117,6 +3138,30 @@ def run_render_pipeline(
             _render_ms = int((time.perf_counter() - _t_render) * 1000)
             logger.info("render_part_ms=%d part=%d codec=%s crop=%s",
                         _render_ms, idx, payload.video_codec, payload.motion_aware_crop)
+            # Part G: visual finish observability — auditable per-part quality metadata
+            _emit_render_event(
+                channel_code=effective_channel,
+                job_id=job_id,
+                event="visual_finish_applied",
+                level="INFO",
+                message=f"Visual finish: part {idx} content_type={_vf_ct} crf={_part_video_crf}({_vf_crf_delta:+d}) bitrate={_vf_bitrate_profile}",
+                step="render.visual_finish",
+                context={
+                    "part_no": idx,
+                    "content_type": _vf_ct,
+                    "visual_finish_score": min(100, max(0, 50 + (_part_video_crf - tuned["video_crf"]) * -5)),
+                    "clarity_level": "enhanced" if _vf_ct in ("tutorial", "interview") else (
+                        "reduced" if _vf_ct == "montage" else "standard"
+                    ),
+                    "compression_risk": "low" if _vf_ct in ("interview", "tutorial") else (
+                        "high" if _vf_ct == "montage" else "medium"
+                    ),
+                    "subtitle_visibility": "adjusted" if _vf_subtitle_bump else "standard",
+                    "crf_applied": _part_video_crf,
+                    "crf_delta": _vf_crf_delta,
+                    "bitrate_profile": _vf_bitrate_profile,
+                },
+            )
             _part_subtitle_voice_path = None
             if (
                 getattr(payload, "voice_enabled", False)

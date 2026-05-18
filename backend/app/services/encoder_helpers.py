@@ -90,7 +90,13 @@ def map_preset_for_encoder(video_preset: str, resolved_codec: str) -> str:
     return p
 
 
-def codec_extra_flags(resolved_codec: str, video_crf: int, video_preset: str = "slow") -> list[str]:
+def codec_extra_flags(
+    resolved_codec: str,
+    video_crf: int,
+    video_preset: str = "slow",
+    maxrate_m: int = 20,
+    bufsize_m: int = 40,
+) -> list[str]:
     """Return the encoder-specific FFmpeg flags for the given resolved codec.
 
     NVENC paths include -maxrate/-bufsize for delivery-safe constrained VBR.
@@ -101,14 +107,14 @@ def codec_extra_flags(resolved_codec: str, video_crf: int, video_preset: str = "
     if c == "hevc_nvenc":
         return [
             "-rc", "vbr_hq", "-cq", str(video_crf), "-b:v", "0",
-            "-maxrate", "20M", "-bufsize", "40M",
+            "-maxrate", f"{maxrate_m}M", "-bufsize", f"{bufsize_m}M",
             "-spatial_aq", "1", "-temporal_aq", "1", "-aq-strength", "8",
             "-rc-lookahead", "32", "-bf", "4",
         ]
     if c == "h264_nvenc":
         return [
             "-rc", "vbr_hq", "-cq", str(video_crf), "-b:v", "0",
-            "-maxrate", "20M", "-bufsize", "40M",
+            "-maxrate", f"{maxrate_m}M", "-bufsize", f"{bufsize_m}M",
             "-spatial_aq", "1", "-temporal_aq", "1", "-aq-strength", "8",
             "-rc-lookahead", "32", "-bf", "3",
         ]
@@ -120,7 +126,7 @@ def codec_extra_flags(resolved_codec: str, video_crf: int, video_preset: str = "
         else:
             x265p = "aq-mode=2:rc-lookahead=20:ref=3:bframes=3"
         return [
-            "-crf", str(video_crf), "-maxrate", "20M", "-bufsize", "40M",
+            "-crf", str(video_crf), "-maxrate", f"{maxrate_m}M", "-bufsize", f"{bufsize_m}M",
             "-tag:v", "hvc1", "-x265-params", x265p,
         ]
     # libx264 — tiered by preset
@@ -132,7 +138,7 @@ def codec_extra_flags(resolved_codec: str, video_crf: int, video_preset: str = "
         x264p = "ref=3:bframes=2:me=hex:subme=6:trellis=0:aq-mode=2"
     return [
         "-crf", str(video_crf),
-        "-maxrate", "20M", "-bufsize", "40M",
+        "-maxrate", f"{maxrate_m}M", "-bufsize", f"{bufsize_m}M",
         "-profile:v", "high", "-level:v", "5.1",
         "-tune", "film",
         "-x264-params", x264p,

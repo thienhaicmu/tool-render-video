@@ -294,20 +294,67 @@ def _effect_filter(effect_preset: str):
     return "eq=contrast=1.05:saturation=1.10:brightness=0.0:gamma=1.01,unsharp=5:5:0.9:3:3:0.35"
 
 
-def _cinematic_color_filter(src_h: int) -> "str | None":
-    """Very subtle contrast/saturation lift to prevent flat-looking output after recompression.
-    Disabled for sources below 480p to avoid compounding on already-processed low-res content."""
+def _cinematic_color_filter(src_h: int, content_type: str = "vlog") -> "str | None":
+    """Content-type-aware contrast/saturation lift after recompression.
+
+    tutorial/interview: near-neutral — preserve screen and face authenticity.
+    montage: slightly richer for energy feel.
+    commentary/vlog: balanced lift (original behaviour).
+    Disabled for sources below 480p.
+    """
     if 0 < src_h < 480:
         return None
+    if content_type in ("tutorial", "interview"):
+        return "eq=contrast=1.01:saturation=1.01"
+    if content_type == "montage":
+        return "eq=contrast=1.03:saturation=1.06"
     return "eq=contrast=1.02:saturation=1.03"
 
 
-def _cinematic_sharpen_filter(src_h: int) -> "str | None":
-    """Subtle luma-only edge sharpening to survive social platform recompression.
-    Disabled for sources below 480p — halo artifacts appear on noisy/low-res content."""
+def _cinematic_sharpen_filter(src_h: int, content_type: str = "vlog") -> "str | None":
+    """Content-type-aware luma-only edge sharpening.
+
+    tutorial/interview: slightly stronger for text and screen clarity.
+    montage: reduced to avoid halos on fast motion.
+    commentary/vlog: standard (original behaviour).
+    Disabled for sources below 480p — halos appear on noisy/low-res content.
+    """
     if 0 < src_h < 480:
         return None
+    if content_type in ("tutorial", "interview"):
+        return "unsharp=5:5:0.5:5:5:0.0"
+    if content_type == "montage":
+        return "unsharp=3:3:0.25:3:3:0.0"
     return "unsharp=5:5:0.4:5:5:0.0"
+
+
+def _smart_denoise_filter(content_type: str, preset: str, src_h: int) -> "str | None":
+    """Return an hqdn3d denoise filter string, or None when denoise should be skipped.
+
+    montage: skipped — motion smearing risk outweighs benefit.
+    slower/veryslow preset: full denoise (quality mode, no change to existing behaviour).
+    slow preset + interview/tutorial: lite denoise for static talking-head / screen content.
+    low-res source (<720p, any non-montage type): lite denoise — compressed noise amplified by upscale.
+    """
+    if content_type == "montage":
+        return None
+    if preset in ("slower", "veryslow"):
+        return "hqdn3d=1.5:1.5:6:6"
+    if preset == "slow" and content_type in ("interview", "tutorial"):
+        return "hqdn3d=1.0:1.0:4:4"
+    if 0 < src_h < 720:
+        return "hqdn3d=0.8:0.8:3:3"
+    return None
+
+
+def content_type_crf_delta(content_type: str) -> int:
+    """Return a CRF adjustment for content-type-aware encode sharpness.
+
+    tutorial/interview: -2 — fine text and screen detail benefit from tighter quantisation.
+    montage: +1 — fast motion benefits more from AQ than marginal CRF improvement.
+    Others: 0 (no change from profile default).
+    """
+    return {"tutorial": -2, "interview": -2, "montage": 1}.get(content_type or "", 0)
 
 
 def _build_audio_filter(loudnorm_enabled: bool, reup_mode: bool, speed: float) -> str | None:
@@ -815,6 +862,7 @@ def render_part(
     text_layers: list[dict] | None = None,
     loudnorm_enabled: bool = False,
     ffmpeg_threads: int | None = None,
+    content_type: str = "vlog",
 ):
     preset_low = (video_preset or "").lower()
     _src_meta = probe_video_metadata(input_path)
@@ -826,6 +874,10 @@ def render_part(
         logger.info("cinematic_pass_reduced_for_low_quality_source src=%dx%d", _src_w, _src_h)
     if loudnorm_enabled and not reup_mode:
         logger.info("audio_polish_enabled audio_loudnorm_applied=True")
+    # Part E: content-type bitrate profile — montage needs more budget; interview/tutorial less
+    _mr_m, _bs_m = {"montage": (25, 50), "interview": (15, 30), "tutorial": (15, 30)}.get(
+        content_type, (20, 40)
+    )
     sws = "lanczos" if preset_low in ("slower", "veryslow") else "bicubic"
     target_w, target_h = resolve_target_dimensions(aspect_ratio)
     scale_crop = (
@@ -846,9 +898,10 @@ def render_part(
         zoom_scale,
         fixed_canvas,
     ]
-    # hqdn3d denoiser only for slower/veryslow (quality mode)
-    if preset_low in ("slower", "veryslow"):
-        vf_parts.append("hqdn3d=1.5:1.5:6:6")
+    # Part C: smart denoise — content-type and source-quality gated (replaces preset-only gate)
+    _denoise = _smart_denoise_filter(content_type, preset_low, _src_h)
+    if _denoise:
+        vf_parts.append(_denoise)
     if reup_mode:
         # Reup mode: use dedicated reup filters (already includes eq+unsharp+hqdn3d)
         vf_parts.extend(_reup_video_filters())
@@ -858,8 +911,10 @@ def render_part(
     else:
         # Normal mode: creative effect filter then cinematic finishing passes
         vf_parts.append(_effect_filter(effect_preset))
-        _color_filter = _cinematic_color_filter(_src_h)
-        _sharpen_filter = _cinematic_sharpen_filter(_src_h)
+        # Part D: content-type-aware color polish
+        _color_filter = _cinematic_color_filter(_src_h, content_type)
+        # Part B: content-type-aware clarity pass
+        _sharpen_filter = _cinematic_sharpen_filter(_src_h, content_type)
         if _color_filter:
             vf_parts.append(_color_filter)
             logger.debug("cinematic_color_pass_enabled src=%dx%d", _src_w, _src_h)
@@ -921,7 +976,8 @@ def render_part(
     vf_chain = ",".join(vf_parts)
     _threads = ffmpeg_threads if ffmpeg_threads is not None else resolve_ffmpeg_threads()
     codec_flags = ["-c:v", resolved_codec, "-preset", resolved_preset,
-                   *_codec_extra_flags(resolved_codec, int(video_crf), video_preset),
+                   *_codec_extra_flags(resolved_codec, int(video_crf), video_preset,
+                                       maxrate_m=_mr_m, bufsize_m=_bs_m),
                    "-threads", str(_threads),
                    "-pix_fmt", "yuv420p",
                    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
@@ -978,7 +1034,8 @@ def render_part(
         cpu_codec = "libx265" if str(video_codec).lower() == "h265" else "libx264"
         cpu_preset = _map_preset_for_encoder(video_preset, cpu_codec)
         cpu_flags = ["-c:v", cpu_codec, "-preset", cpu_preset,
-                     *_codec_extra_flags(cpu_codec, int(video_crf), video_preset),
+                     *_codec_extra_flags(cpu_codec, int(video_crf), video_preset,
+                                         maxrate_m=_mr_m, bufsize_m=_bs_m),
                      "-threads", str(_threads),
                      "-pix_fmt", "yuv420p",
                      "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
@@ -1135,6 +1192,7 @@ def render_part_smart(
                 text_layers=text_layers,
                 loudnorm_enabled=loudnorm_enabled,
                 ffmpeg_threads=ffmpeg_threads,
+                content_type=content_type,
             )
 
     return render_part(
@@ -1165,4 +1223,5 @@ def render_part_smart(
         playback_speed=playback_speed,
         text_layers=text_layers,
         loudnorm_enabled=loudnorm_enabled,
+        content_type=content_type,
     )
