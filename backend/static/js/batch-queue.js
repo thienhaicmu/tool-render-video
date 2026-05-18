@@ -223,6 +223,7 @@ window.BatchQueue = (() => {
       return;
     }
     const payload = _buildPayload(item);
+    item._payload = payload;
     try {
       const res  = await fetch('/api/render/process', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
       const data = await res.json();
@@ -296,11 +297,17 @@ window.BatchQueue = (() => {
         item.status = hasRecovery ? STATUS.RECOVERED : STATUS.COMPLETED;
         item.error = hasRecovery ? msg.replace(/^Render completed\s*/, '') : '';
         if (typeof addEvent === 'function') addEvent(`batch_item_completed${hasRecovery ? ' (recovered)' : ''}: ${item.name}`, 'render');
+        if (typeof ReviewQueue !== 'undefined') {
+          ReviewQueue.addJob(item.jobId, item.name, item.outputDir, { recovered: hasRecovery, payload: item._payload || null });
+        }
       }
       if (st === 'completed_with_errors') {
         item.status = STATUS.RECOVERED;
         item.error = String(data.message || 'Completed with partial failures');
         if (typeof addEvent === 'function') addEvent(`batch_item_completed (recovered): ${item.name}`, 'render');
+        if (typeof ReviewQueue !== 'undefined') {
+          ReviewQueue.addJob(item.jobId, item.name, item.outputDir, { recovered: true, payload: item._payload || null });
+        }
       }
       if (st === 'failed')    { item.status = STATUS.FAILED; item.error = String(data.message || 'Render failed'); if (typeof addEvent === 'function') addEvent(`batch_item_failed: ${item.name}: ${item.error}`, 'render'); }
       if (st === 'cancelled') item.status = STATUS.CANCELLED;

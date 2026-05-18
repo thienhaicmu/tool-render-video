@@ -2210,3 +2210,326 @@
 /* =======================================================
    END OF UX-R8.2.1 - REAL COMPARE EXPERIENCE
    ======================================================= */
+
+
+/* =======================================================
+   UP30 — CREATOR REVIEW QUEUE
+   Morning review workspace: new / kept / favorited /
+   dismissed / failed. Full-width view like history.
+   ======================================================= */
+
+/* ── Workspace shell ─────────────────────────────────── */
+.rqWorkspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────── */
+.rqHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px 12px;
+  background: var(--bg-850, #0f0f14);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  gap: 12px;
+}
+.rqHeaderLeft { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rqHeaderTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fg-100);
+  letter-spacing: .2px;
+}
+.rqHeaderSub {
+  font-size: 11px;
+  color: var(--fg-400);
+  line-height: 1.4;
+}
+.rqHeaderRight { flex-shrink: 0; }
+.rqKbHint {
+  font-size: 11px;
+  color: var(--fg-400);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.rqKbHint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border-default);
+  background: rgba(255,255,255,.06);
+  font-size: 10px;
+  font-family: inherit;
+  color: var(--fg-300);
+  line-height: 1.5;
+}
+
+/* ── Scrollable body ─────────────────────────────────── */
+.rqBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.rqBody::-webkit-scrollbar { width: 5px; }
+.rqBody::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 3px; }
+
+/* ── Section ─────────────────────────────────────────── */
+.rqSection { display: flex; flex-direction: column; gap: 0; }
+.rqSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 8px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 12px;
+}
+.rqSectionHeader:hover .rqSectionTitle { color: var(--fg-200); }
+.rqSectionTitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--fg-400);
+  flex: 1;
+  transition: color .15s;
+}
+.rqSectionCount {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-400);
+  min-width: 18px;
+  text-align: right;
+}
+.rqCollapseIcon {
+  font-size: 9px;
+  color: var(--fg-400);
+  transition: transform .2s ease;
+  display: inline-block;
+}
+.rqSection.rqCollapsed .rqCollapseIcon { transform: rotate(-90deg); }
+.rqSection.rqCollapsed .rqSectionBody  { display: none; }
+
+.rqSectionBody {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+/* ── Card ────────────────────────────────────────────── */
+.rqCard {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: default;
+  transition: border-color .15s, box-shadow .15s, transform .1s;
+  outline: none;
+}
+.rqCard:hover {
+  border-color: var(--border-default);
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+  transform: translateY(-1px);
+}
+.rqCard:focus-visible {
+  border-color: rgba(77,124,255,.55);
+  box-shadow: 0 0 0 2px rgba(77,124,255,.22);
+}
+
+/* State variants */
+.rqCard-favorited {
+  border-color: rgba(234,179,8,.22);
+  background: rgba(234,179,8,.025);
+}
+.rqCard-favorited:hover { border-color: rgba(234,179,8,.38); }
+.rqCard-kept    { opacity: .72; }
+.rqCard-kept:hover { opacity: 1; }
+.rqCard-dismissed { opacity: .38; filter: grayscale(.5); }
+.rqCard-dismissed:hover { opacity: .60; }
+.rqCard-failed {
+  border-color: rgba(239,68,68,.18);
+  background: rgba(239,68,68,.025);
+}
+.rqCard-failed:hover { border-color: rgba(239,68,68,.32); }
+
+/* ── Card thumbnail ──────────────────────────────────── */
+.rqCardThumbWrap {
+  position: relative;
+  background: var(--bg-900);
+  overflow: hidden;
+  aspect-ratio: 9/16;
+}
+.rqCardThumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.rqCardThumbPlaceholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: var(--fg-400);
+  background: var(--bg-900);
+}
+
+/* ── Card body ───────────────────────────────────────── */
+.rqCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px 10px;
+  flex: 1;
+}
+.rqCardTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.rqCardName {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-100);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
+}
+.rqCardTime {
+  font-size: 10px;
+  color: var(--fg-400);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Trust chips ─────────────────────────────────────── */
+.rqChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rqChip {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  line-height: 1.4;
+  white-space: nowrap;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rqChipPreset   { background: rgba(77,124,255,.12);  border-color: rgba(77,124,255,.22);  color: #93c5fd; }
+.rqChipDna      { background: rgba(168,85,247,.10);  border-color: rgba(168,85,247,.20);  color: #c4b5fd; }
+.rqChipSteer    { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.12); color: var(--fg-300); }
+.rqChipAsset    { background: rgba(34,197,94,.10);   border-color: rgba(34,197,94,.18);   color: #4ade80; }
+.rqChipRecovered{ background: rgba(245,158,11,.10);  border-color: rgba(245,158,11,.20);  color: #fbbf24; }
+
+/* ── Action buttons ──────────────────────────────────── */
+.rqCardActions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.rqBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  min-width: 26px;
+  padding: 0 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255,255,255,.04);
+  color: var(--fg-300);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+  white-space: nowrap;
+}
+.rqBtn:hover { background: rgba(255,255,255,.09); color: var(--fg-100); border-color: var(--border-default); }
+
+.rqBtnKeep:hover    { background: rgba(34,197,94,.15);  border-color: rgba(34,197,94,.30);  color: #4ade80; }
+.rqBtnFav:hover     { background: rgba(234,179,8,.13);  border-color: rgba(234,179,8,.28);  color: #facc15; }
+.rqBtnDismiss:hover { background: rgba(239,68,68,.12);  border-color: rgba(239,68,68,.25);  color: #f87171; }
+.rqBtnRetry:hover   { background: rgba(77,124,255,.13); border-color: rgba(77,124,255,.28); color: #93c5fd; }
+.rqBtnOpen          { font-size: 13px; }
+
+/* ── Empty states ────────────────────────────────────── */
+.rqEmpty {
+  font-size: 12px;
+  color: var(--fg-400);
+  padding: 20px 0 8px;
+  grid-column: 1 / -1;
+  text-align: center;
+}
+.rqEmptyFull {
+  text-align: center;
+  padding: 60px 20px;
+  font-size: 13px;
+  color: var(--fg-400);
+  line-height: 1.6;
+}
+
+/* ── Nav badge ───────────────────────────────────────── */
+#rqNavBadge {
+  display: none;
+  margin-left: 5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* ── Section accent — new items ──────────────────────── */
+.rqSection-new .rqSectionTitle { color: var(--fg-200); }
+
+/* ── Favorites section header accent ─────────────────── */
+.rqSection-favorited .rqSectionTitle { color: rgba(234,179,8,.75); }
+
+/* ── Failed section header accent ────────────────────── */
+.rqSection-failed .rqSectionTitle { color: rgba(239,68,68,.70); }
+
+/* ── Responsive ──────────────────────────────────────── */
+@media (max-width: 900px) {
+  .rqHeader { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .rqKbHint { justify-content: flex-start; }
+  .rqSectionBody { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+
+/* =======================================================
+   END OF UP30 — CREATOR REVIEW QUEUE
+   ======================================================= */

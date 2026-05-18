@@ -32,6 +32,7 @@
       <button class="navItem active" data-view="render">Render</button>
       <button class="navItem" data-view="download">Download</button>
       <button class="navItem" data-view="history">History</button>
+      <button class="navItem" data-view="review">Review<span id="rqNavBadge"></span></button>
     </nav>
     <div class="appTopBarChips">
       <div class="pill productModePill">Local AI render engine</div>
@@ -785,6 +786,9 @@
 
     <!-- ── SECTION: history-view ────────────────────────────────── -->
     <div id="partial_history_view"></div>
+
+    <!-- ── SECTION: review-view ──────────────────────────────────── -->
+    <div id="partial_review_view"></div>
 
     <!-- ── Normal page header + grid ─────────────────────────────── -->
     <div class="mainContentScroll">
@@ -1726,6 +1730,7 @@
 <script src="/static/js/creator-memory.js"></script>
 <script src="/static/js/creator-taste.js"></script>
 <script src="/static/js/creator-feedback.js"></script>
+<script src="/static/js/review-queue.js"></script>
 <script src="/static/js/creator-dna.js"></script>
 <script src="/static/js/creator-presets.js"></script>
 <script src="/static/js/batch-queue.js"></script>
