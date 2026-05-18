@@ -4354,6 +4354,10 @@ function populateRenderOutputPanel(job, parts) {
   const _cfVariantPref = (typeof CreatorFeedback !== 'undefined')
     ? ((CreatorFeedback.getVariantPreference() || {}).variant || '') : '';
 
+  // UP24: Recovery notes — surface safe-fallback events on clip cards
+  const _jobRecoveryNotes = Array.isArray(parseRenderResult(job)?.recovery_notes) ? parseRenderResult(job).recovery_notes : [];
+  const _jobRecovered = _jobRecoveryNotes.length > 0;
+
   // UP14: Platform banner — shows when a non-default platform is selected for the job.
   const _jobTargetPlatform = String(getCurrentJobPayload(job)?.target_platform || '').trim().toLowerCase();
   const _platformBannerLabel = {tiktok:'TikTok',youtube_shorts:'YouTube Shorts',instagram_reels:'Instagram Reels'}[_jobTargetPlatform] || '';
@@ -4452,6 +4456,7 @@ function populateRenderOutputPanel(job, parts) {
         </div>
         ${_clipReason ? `<div class="clipCardReason">${esc(_clipReason)}</div>` : ''}
         ${rk.selectionReason && rk.selectionReason.includes('limited source variety') ? `<div class="clipVarietyNote">Limited source variety</div>` : ''}
+        ${_jobRecovered && isDone ? `<div class="clipRecoveredNote" title="${esc(_jobRecoveryNotes.join(' · '))}">Recovered</div>` : ''}
         ${(motionScore !== null || hookScore !== null) && (rk.isBest || scoreVal >= 6) ? _r7SignalRow(motionScore, hookScore, rk.isBest, _bestMotion, _bestHook) : ''}
         ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
         ${_shouldRenderBestExport(_cardAiUx, rk.isBest) ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">&#x2713;</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}

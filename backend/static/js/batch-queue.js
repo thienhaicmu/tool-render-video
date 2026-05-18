@@ -23,6 +23,7 @@ window.BatchQueue = (() => {
     QUEUED:    'queued',
     RUNNING:   'running',
     COMPLETED: 'completed',
+    RECOVERED: 'recovered',   // completed but one or more safe fallbacks were used
     FAILED:    'failed',
     CANCELLED: 'cancelled',
   };
@@ -242,6 +243,7 @@ window.BatchQueue = (() => {
 
   function _stopPollIfDone() {
     const active = _items.some(it => it.status === STATUS.QUEUED || it.status === STATUS.RUNNING);
+    // STATUS.RECOVERED is terminal — counts as done for poll purposes
     if (!active && _pollTimer) {
       clearInterval(_pollTimer);
       _pollTimer = null;
@@ -263,7 +265,7 @@ window.BatchQueue = (() => {
     const completed = _items.filter(it => it.status === STATUS.COMPLETED).length;
     const failed    = _items.filter(it => it.status === STATUS.FAILED).length;
     const total     = _items.length;
-    const done      = _items.filter(it => it.status === STATUS.COMPLETED || it.status === STATUS.FAILED || it.status === STATUS.CANCELLED).length;
+    const done      = _items.filter(it => it.status === STATUS.COMPLETED || it.status === STATUS.RECOVERED || it.status === STATUS.FAILED || it.status === STATUS.CANCELLED).length;
     if (done === total && total > 0 && !_pollTimer) {
       if (typeof addEvent === 'function') addEvent(`batch_completed: ${completed}/${total} succeeded, ${failed} failed`, 'render');
     }
@@ -279,7 +281,18 @@ window.BatchQueue = (() => {
       const st   = String(data.status || '').toLowerCase();
       item.progress = Number(data.progress_percent || 0);
       if (st === 'running')   item.status = STATUS.RUNNING;
-      if (st === 'completed') { item.status = STATUS.COMPLETED; if (typeof addEvent === 'function') addEvent(`batch_item_completed: ${item.name}`, 'render'); }
+      if (st === 'completed') {
+        const msg = String(data.message || '');
+        const hasRecovery = msg.includes('[') && msg.includes('failed');
+        item.status = hasRecovery ? STATUS.RECOVERED : STATUS.COMPLETED;
+        item.error = hasRecovery ? msg.replace(/^Render completed\s*/, '') : '';
+        if (typeof addEvent === 'function') addEvent(`batch_item_completed${hasRecovery ? ' (recovered)' : ''}: ${item.name}`, 'render');
+      }
+      if (st === 'completed_with_errors') {
+        item.status = STATUS.RECOVERED;
+        item.error = String(data.message || 'Completed with partial failures');
+        if (typeof addEvent === 'function') addEvent(`batch_item_completed (recovered): ${item.name}`, 'render');
+      }
       if (st === 'failed')    { item.status = STATUS.FAILED; item.error = String(data.message || 'Render failed'); if (typeof addEvent === 'function') addEvent(`batch_item_failed: ${item.name}: ${item.error}`, 'render'); }
       if (st === 'cancelled') item.status = STATUS.CANCELLED;
       return item.status !== prev || item.progress !== Number(data.progress_percent || 0);
@@ -345,17 +358,20 @@ window.BatchQueue = (() => {
     listEl.innerHTML = _items.map(item => {
       const stClass   = 'st-' + item.status;
       const cardClass = 'bqCard bq-' + item.status;
-      const stLabel   = item.status.charAt(0).toUpperCase() + item.status.slice(1);
+      const stLabel   = item.status === STATUS.RECOVERED ? 'Recovered' : item.status.charAt(0).toUpperCase() + item.status.slice(1);
       const pct       = Math.max(0, Math.min(100, item.progress || 0));
       const showBar   = item.status === STATUS.RUNNING || item.status === STATUS.QUEUED;
+      const isRecovered = item.status === STATUS.RECOVERED;
       const actions   = _cardActions(item);
+      const noteText  = isRecovered && item.error ? item.error : '';
       return `<div class="${cardClass}" data-bq-id="${item.id}">
   <div class="bqCardTop">
     <div class="bqCardName" title="${_esc(item.name)}">${_esc(item.name)}</div>
-    <span class="bqCardStatus ${stClass}">${stLabel}${item.status === STATUS.RUNNING && pct > 0 ? ' ' + pct + '%' : ''}</span>
+    <span class="bqCardStatus ${stClass}" title="${isRecovered ? 'Rendered using safe fallback' : ''}">${stLabel}${item.status === STATUS.RUNNING && pct > 0 ? ' ' + pct + '%' : ''}</span>
   </div>
   ${showBar ? `<div class="bqProgress"><div class="bqProgressBar" style="width:${pct}%"></div></div>` : ''}
-  ${item.error ? `<div class="bqCardError">${_esc(item.error)}</div>` : ''}
+  ${noteText ? `<div class="bqCardRecoveredNote">${_esc(noteText)}</div>` : ''}
+  ${item.status === STATUS.FAILED && item.error ? `<div class="bqCardError">${_esc(item.error)}</div>` : ''}
   ${actions ? `<div class="bqCardActions">${actions}</div>` : ''}
 </div>`;
     }).join('');

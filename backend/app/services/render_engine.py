@@ -1030,6 +1030,7 @@ def render_part(
                 "NVENC encode failed (%s), falling back to CPU encoder for %s",
                 _nvenc_err, Path(output_path).name,
             )
+            logger.info("recovery_attempted strategy=cpu_encoder reason=%s output=%s", _nvenc_err, Path(output_path).name)
         # CPU fallback — NVENC_SEMAPHORE already released by the `with` block above.
         cpu_codec = "libx265" if str(video_codec).lower() == "h265" else "libx264"
         cpu_preset = _map_preset_for_encoder(video_preset, cpu_codec)
@@ -1069,6 +1070,7 @@ def render_part(
                     cpu_cmd += ["-af", af]
         cpu_cmd += [*cpu_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
         _run_ffmpeg_with_retry(cpu_cmd, retry_count=retry_count)
+        logger.info("recovery_success strategy=cpu_encoder output=%s", Path(output_path).name)
     else:
         # CPU-only encode — no GPU semaphore needed.
         _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
@@ -1162,8 +1164,9 @@ def render_part_smart(
             return result
         except Exception as exc:
             logger.warning("Motion-aware crop failed, fallback to standard render: %s", exc)
+            logger.info("recovery_attempted strategy=fallback_standard_crop reason=%s output=%s", exc, Path(output_path).name)
             # Fallback to standard ffmpeg render path if motion-aware branch fails.
-            return render_part(
+            _fb = render_part(
                 input_path=input_path,
                 output_path=output_path,
                 subtitle_ass=subtitle_ass,
@@ -1194,6 +1197,8 @@ def render_part_smart(
                 ffmpeg_threads=ffmpeg_threads,
                 content_type=content_type,
             )
+            logger.info("recovery_success strategy=fallback_standard_crop output=%s", Path(output_path).name)
+            return _fb
 
     return render_part(
         input_path=input_path,

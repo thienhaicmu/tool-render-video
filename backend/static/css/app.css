@@ -17613,3 +17613,8 @@ body:not(.is-render-studio-active) .rs-center-stage > #appBottomPanel.renderRunt
 .bqActionBtn { background:transparent; border:1px solid rgba(148,163,184,.15); color:var(--text-muted); border-radius:4px; padding:1px 6px; font-size:10px; cursor:pointer; transition:border-color .12s, color .12s; }
 .bqActionBtn:hover { border-color:rgba(148,163,184,.35); color:var(--text-dim); }
 .bqCardError { font-size:10px; color:#f87171; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bqCardRecoveredNote { font-size:10px; color:#d97706; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* UP24: Recovered status */
+.bqCard.bq-recovered { border-color:rgba(251,191,36,.25); }
+.bqCardStatus.st-recovered { color:#fbbf24; background:rgba(251,191,36,.1); }
+.clipRecoveredNote { font-size:10px; color:#d97706; opacity:.8; margin-top:2px; cursor:default; }

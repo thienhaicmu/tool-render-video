@@ -1919,6 +1919,7 @@ def run_render_pipeline(
         _sub_translate_clean = []
         _sub_translate_partial = []
         _sub_translate_failed_parts = []
+        _recovery_notes: list[str] = []   # UP24: accumulate fallback events for observability
         if getattr(payload, "voice_enabled", False) and getattr(payload, "voice_source", "manual") == "manual":
             if cancel_registry.is_cancelled(job_id):
                 raise cancel_registry.JobCancelledError()
@@ -1984,6 +1985,17 @@ def run_render_pipeline(
                     exception=voice_exc,
                     traceback_text=traceback.format_exc(),
                     context={"error_code": "VOICE001"},
+                )
+                # UP24: recovery — voice is optional, render continues without it
+                _recovery_notes.append("AI narration failed — rendered without voice")
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="recovery_success",
+                    level="INFO",
+                    message="Recovery: AI narration failed, rendering without voice (original audio preserved)",
+                    step="voice.tts",
+                    context={"recovery_strategy": "skip_voice"},
                 )
 
         _set_stage(JobStage.SCENE_DETECTION, 15, "Detecting scenes")
@@ -2405,6 +2417,17 @@ def run_render_pipeline(
                             step="subtitle.transcribe",
                             context={"source_path": str(source_path), "whisper_model": _whisper_model, "elapsed_ms": _transcribe_ms},
                             exception=transcribe_exc,
+                        )
+                        # UP24: recovery — subtitles optional, render continues without them
+                        _recovery_notes.append("Subtitle transcription failed — rendered without subtitles")
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="recovery_success",
+                            level="INFO",
+                            message="Recovery: subtitle transcription failed, rendering without subtitles",
+                            step="subtitle.transcribe",
+                            context={"recovery_strategy": "skip_subtitles"},
                         )
                     finally:
                         _hb_stop.set()
@@ -4791,6 +4814,8 @@ def run_render_pipeline(
         _is_partial_success = bool(failed_parts)
         _final_status = "completed_with_errors" if _is_partial_success else "completed"
         _final_message = "Render completed with errors" if _is_partial_success else "Render completed"
+        if _recovery_notes:
+            _final_message += " [" + "; ".join(_recovery_notes) + "]"
 
         # ── Phase 30: AI Output Ranking — best-effort, never blocks render ──
         _ai_output_ranking: dict = {"available": False, "mode": "recommendation_only"}
@@ -4901,6 +4926,7 @@ def run_render_pipeline(
             "ai_output_ranking": _ai_output_ranking,
             "ai_render_quality_evaluation": _ai_render_quality,
             "ai_ux": _ai_ux_metadata,
+            "recovery_notes": _recovery_notes,
         }
         upsert_job(
             job_id,
