@@ -274,6 +274,18 @@ class RenderRequest(BaseModel):
     structure_bias: Optional[str] = None
     subtitle_emphasis: Optional[str] = None
 
+    # UP27: Creator Asset Intelligence — local brand assets, all optional, all safe-skip
+    # asset_logo_path: absolute path to PNG/JPEG logo for watermark overlay
+    # asset_intro_path: absolute path to short intro sting clip (prepended)
+    # asset_outro_path: absolute path to outro/bumper clip (appended)
+    # asset_music_profile: 'clean' | 'energetic' | 'soft' — BGM gain hint
+    # asset_brand_subtitle: preferred subtitle style (stronger default when add_subtitle=True)
+    asset_logo_path: Optional[str] = None
+    asset_intro_path: Optional[str] = None
+    asset_outro_path: Optional[str] = None
+    asset_music_profile: Optional[str] = None
+    asset_brand_subtitle: Optional[str] = None
+
     @field_validator("ai_clip_min_duration_sec")
     @classmethod
     def _validate_clip_min_duration(cls, v: int) -> int:

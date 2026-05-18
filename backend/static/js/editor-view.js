@@ -188,6 +188,15 @@ function v3RefreshSteeringPanel() {
     if (cnt.exclude > 0) parts.push({ label: `🚫 ${cnt.exclude} avoided`, cls: 'v3Chip v3ChipExclude', title: 'Moments marked Avoid — will be excluded' });
   }
 
+  if (typeof CreatorAssets !== 'undefined') {
+    const _ca = CreatorAssets.getPayload();
+    if (_ca.asset_logo_path)       parts.push({ label: '🖼 Logo',    cls: 'v3Chip v3ChipAsset', title: 'Brand logo watermark will be applied' });
+    if (_ca.asset_intro_path)      parts.push({ label: '▶ Intro',   cls: 'v3Chip v3ChipAsset', title: 'Creator intro sting will be prepended' });
+    if (_ca.asset_outro_path)      parts.push({ label: '⏹ Outro',   cls: 'v3Chip v3ChipAsset', title: 'Creator outro will be appended' });
+    if (_ca.asset_music_profile)   parts.push({ label: `♫ ${_ca.asset_music_profile}`, cls: 'v3Chip v3ChipAsset', title: 'Music profile preference' });
+    if (_ca.asset_brand_subtitle)  parts.push({ label: 'Brand sub', cls: 'v3Chip v3ChipAsset', title: `Brand subtitle style: ${_ca.asset_brand_subtitle}` });
+  }
+
   if (parts.length === 0) { panel.style.display = 'none'; return; }
   panel.style.display = '';
   chips.innerHTML = parts.map(function(p) {
@@ -1035,6 +1044,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   if (typeof CreatorDNA      !== 'undefined') CreatorDNA.init();
   if (typeof CreatorPresets  !== 'undefined') CreatorPresets.init();
   if (typeof BatchQueue      !== 'undefined') BatchQueue.init();
+  if (typeof CreatorAssets   !== 'undefined') CreatorAssets.init();
   evSyncQsBar();
   if (typeof EditorConverse !== 'undefined') EditorConverse.init();
 
@@ -1124,6 +1134,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   if (typeof CreatorDNA      !== 'undefined') CreatorDNA.init();
   if (typeof CreatorPresets  !== 'undefined') CreatorPresets.init();
   if (typeof BatchQueue      !== 'undefined') BatchQueue.init();
+  if (typeof CreatorAssets   !== 'undefined') CreatorAssets.init();
   evSyncQsBar();
   if (typeof mvUpdatePreviewHint === 'function') mvUpdatePreviewHint();
 
@@ -2285,6 +2296,27 @@ async function startRenderFromEditor() {
       const _cs = ClipSteering.getPayload();
       payload.clip_lock    = _cs.clip_lock.length    ? _cs.clip_lock    : null;
       payload.clip_exclude = _cs.clip_exclude.length ? _cs.clip_exclude : null;
+    }
+  }
+
+  // ── UP27: Creator Asset Intelligence ─────────────────────────────────────────
+  if (typeof CreatorAssets !== 'undefined') {
+    const _ca = CreatorAssets.getPayload();
+    payload.asset_logo_path      = _ca.asset_logo_path;
+    payload.asset_intro_path     = _ca.asset_intro_path;
+    payload.asset_outro_path     = _ca.asset_outro_path;
+    payload.asset_music_profile  = _ca.asset_music_profile;
+    payload.asset_brand_subtitle = _ca.asset_brand_subtitle;
+    // Music profile: adjust BGM gain when BGM is enabled
+    if (_ca.asset_music_profile && payload.reup_bgm_enable) {
+      const _mpGain = { clean: 0.18, soft: 0.12, energetic: 0.26 };
+      if (_mpGain[_ca.asset_music_profile] !== undefined) {
+        payload.reup_bgm_gain = _mpGain[_ca.asset_music_profile];
+      }
+    }
+    // Brand subtitle: use as stronger default when subtitle is enabled and style is unchanged
+    if (_ca.asset_brand_subtitle && payload.add_subtitle && !payload._subtitleManuallySet) {
+      payload.subtitle_style = _ca.asset_brand_subtitle;
     }
   }
 

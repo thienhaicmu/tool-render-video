@@ -1185,6 +1185,47 @@
               <option value="aggressive">Aggressive (larger)</option>
             </select>
           </div>
+          <!-- UP27: Creator Assets -->
+          <div class="v3AssetPanel" id="v3AssetPanel">
+            <div class="v3AssetPanelTitle">Creator Assets</div>
+            <div class="v3AssetRow">
+              <span class="v3AssetLabel">Logo</span>
+              <span class="v3AssetPath" id="assetLogoPath">Not set</span>
+              <button class="v3AssetBtn" onclick="if(typeof CreatorAssets!=='undefined')CreatorAssets.pickLogo()">Choose</button>
+              <button class="v3AssetRemoveBtn" onclick="if(typeof CreatorAssets!=='undefined')CreatorAssets.removeAsset('logo')" title="Remove logo">✕</button>
+            </div>
+            <div class="v3AssetRow">
+              <span class="v3AssetLabel">Intro</span>
+              <span class="v3AssetPath" id="assetIntroPath">Not set</span>
+              <button class="v3AssetBtn" onclick="if(typeof CreatorAssets!=='undefined')CreatorAssets.pickIntro()">Choose</button>
+              <button class="v3AssetRemoveBtn" onclick="if(typeof CreatorAssets!=='undefined')CreatorAssets.removeAsset('intro')" title="Remove intro">✕</button>
+            </div>
+            <div class="v3AssetRow">
+              <span class="v3AssetLabel">Outro</span>
+              <span class="v3AssetPath" id="assetOutroPath">Not set</span>
+              <button class="v3AssetBtn" onclick="if(typeof CreatorAssets!=='undefined')CreatorAssets.pickOutro()">Choose</button>
+              <button class="v3AssetRemoveBtn" onclick="if(typeof CreatorAssets!=='undefined')CreatorAssets.removeAsset('outro')" title="Remove outro">✕</button>
+            </div>
+            <div class="v3AssetRow" style="align-items:center">
+              <span class="v3AssetLabel" style="flex-shrink:0">Music</span>
+              <select id="assetMusicProfile" class="fieldInput" style="flex:1;margin-bottom:0;font-size:11px" onchange="if(typeof CreatorAssets!=='undefined')CreatorAssets.setMusicProfile(this.value)">
+                <option value="">No preference</option>
+                <option value="clean">Clean</option>
+                <option value="soft">Soft</option>
+                <option value="energetic">Energetic</option>
+              </select>
+            </div>
+            <div class="v3AssetRow" style="align-items:center">
+              <span class="v3AssetLabel" style="flex-shrink:0">Brand Sub</span>
+              <select id="assetBrandSubtitle" class="fieldInput" style="flex:1;margin-bottom:0;font-size:11px" onchange="if(typeof CreatorAssets!=='undefined')CreatorAssets.setBrandSubtitle(this.value)">
+                <option value="">No preference</option>
+                <option value="story_clean_01">Clean</option>
+                <option value="tiktok_bounce_v1">Viral</option>
+                <option value="pro_karaoke">Karaoke</option>
+                <option value="bold_cap">Bold Cap</option>
+              </select>
+            </div>
+          </div>
         </div><!-- /qsAdvBody -->
       </div>
 
@@ -1689,6 +1730,7 @@
 <script src="/static/js/creator-presets.js"></script>
 <script src="/static/js/batch-queue.js"></script>
 <script src="/static/js/clip-steering.js"></script>
+<script src="/static/js/creator-assets.js"></script>
 <script src="/static/js/editor-converse.js"></script>
 <script src="/static/js/editor-review-intelligence.js"></script>
 <script src="/static/js/editor-agents.js"></script>

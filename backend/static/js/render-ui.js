@@ -4405,6 +4405,10 @@ function populateRenderOutputPanel(job, parts) {
     if (_v3Cnt.exclude > 0) _v3TrustChips.push(`<span class="v3TrustChip v3TrustExclude">🚫 ${_v3Cnt.exclude} avoided</span>`);
   }
   if (_jobRecovered) _v3TrustChips.push(`<span class="v3TrustChip v3TrustRecovered">Recovered</span>`);
+  if (_v3JobPayload.asset_logo_path)       _v3TrustChips.push(`<span class="v3TrustChip v3TrustAsset">🖼 Logo</span>`);
+  if (_v3JobPayload.asset_intro_path)      _v3TrustChips.push(`<span class="v3TrustChip v3TrustAsset">▶ Intro</span>`);
+  if (_v3JobPayload.asset_outro_path)      _v3TrustChips.push(`<span class="v3TrustChip v3TrustAsset">⏹ Outro</span>`);
+  if (_v3JobPayload.asset_brand_subtitle)  _v3TrustChips.push(`<span class="v3TrustChip v3TrustAsset">Brand sub</span>`);
   const _v3TrustBar = _v3TrustChips.length ? `<div class="v3TrustBar">${_v3TrustChips.join('')}</div>` : '';
   list.innerHTML = _v3TrustBar + all.map((p) => {
     const partNo = Number(p.part_no || 0);

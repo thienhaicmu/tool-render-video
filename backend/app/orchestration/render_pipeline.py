@@ -40,7 +40,10 @@ from app.services.tts_service import generate_narration_mp3
 from app.services.audio_mix_service import mix_narration_audio
 from app.services.audio_cleanup_adapters import cleanup_audio_with_adapter
 from app.services.translation_service import translate_srt_file
-from app.services.remotion_adapter import generate_hook_intro, prepend_intro_clip, resolve_intro_preset
+from app.services.remotion_adapter import (
+    generate_hook_intro, prepend_intro_clip, resolve_intro_preset,
+    append_outro_clip, apply_logo_watermark,  # UP27
+)
 from app.ai.visibility.ai_visibility_summary import attach_ai_visibility_summaries
 
 logger = logging.getLogger("app.render")
@@ -565,6 +568,135 @@ def _maybe_prepend_remotion_hook_intro(
     finally:
         _safe_unlink(intro_path)
         _safe_unlink(concat_path)
+
+
+# ── UP27: Creator Asset Intelligence helpers ──────────────────────────────────
+# All three are safe-skip: missing file → log asset_missing_skip, continue.
+# Never raise. Never fail the render.
+
+def _maybe_prepend_asset_intro(
+    final_part: Path,
+    payload,
+    *,
+    effective_channel: str,
+    job_id: str,
+    part_no: int,
+) -> None:
+    intro_path_raw = str(getattr(payload, "asset_intro_path", None) or "").strip()
+    if not intro_path_raw:
+        return
+    intro_path = Path(intro_path_raw)
+    if not intro_path.exists() or intro_path.stat().st_size <= 0:
+        _job_log(effective_channel, job_id,
+                 f"asset_missing_skip type=intro path={intro_path_raw} part={part_no}", kind="warning")
+        _emit_render_event(channel_code=effective_channel, job_id=job_id,
+                           event="asset_missing", level="WARNING",
+                           message=f"UP27 asset intro missing, skipped part={part_no}",
+                           step="render.asset", context={"type": "intro", "part_no": part_no})
+        return
+    concat_path = final_part.with_name(f"{final_part.stem}.with_asset_intro.mp4")
+    try:
+        merged = prepend_intro_clip(str(final_part), str(intro_path), str(concat_path))
+        if merged:
+            os.replace(merged, final_part)
+            _job_log(effective_channel, job_id,
+                     f"asset_applied type=intro part={part_no} file={intro_path.name}")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id,
+                               event="asset_applied", level="INFO",
+                               message=f"UP27 creator intro sting applied part={part_no}",
+                               step="render.asset", context={"type": "intro", "part_no": part_no})
+        else:
+            _job_log(effective_channel, job_id,
+                     f"asset_skipped type=intro part={part_no} reason=concat_failed", kind="warning")
+    except Exception as exc:
+        _job_log(effective_channel, job_id,
+                 f"asset_error type=intro part={part_no} error={exc}", kind="warning")
+    finally:
+        _safe_unlink(concat_path)
+
+
+def _maybe_append_asset_outro(
+    final_part: Path,
+    payload,
+    *,
+    effective_channel: str,
+    job_id: str,
+    part_no: int,
+) -> None:
+    outro_path_raw = str(getattr(payload, "asset_outro_path", None) or "").strip()
+    if not outro_path_raw:
+        return
+    outro_path = Path(outro_path_raw)
+    if not outro_path.exists() or outro_path.stat().st_size <= 0:
+        _job_log(effective_channel, job_id,
+                 f"asset_missing_skip type=outro path={outro_path_raw} part={part_no}", kind="warning")
+        _emit_render_event(channel_code=effective_channel, job_id=job_id,
+                           event="asset_missing", level="WARNING",
+                           message=f"UP27 asset outro missing, skipped part={part_no}",
+                           step="render.asset", context={"type": "outro", "part_no": part_no})
+        return
+    concat_path = final_part.with_name(f"{final_part.stem}.with_asset_outro.mp4")
+    try:
+        merged = append_outro_clip(str(final_part), str(outro_path), str(concat_path))
+        if merged:
+            os.replace(merged, final_part)
+            _job_log(effective_channel, job_id,
+                     f"asset_applied type=outro part={part_no} file={outro_path.name}")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id,
+                               event="asset_applied", level="INFO",
+                               message=f"UP27 creator outro applied part={part_no}",
+                               step="render.asset", context={"type": "outro", "part_no": part_no})
+        else:
+            _job_log(effective_channel, job_id,
+                     f"asset_skipped type=outro part={part_no} reason=concat_failed", kind="warning")
+    except Exception as exc:
+        _job_log(effective_channel, job_id,
+                 f"asset_error type=outro part={part_no} error={exc}", kind="warning")
+    finally:
+        _safe_unlink(concat_path)
+
+
+def _maybe_apply_asset_logo(
+    final_part: Path,
+    payload,
+    *,
+    effective_channel: str,
+    job_id: str,
+    part_no: int,
+) -> None:
+    logo_path_raw = str(getattr(payload, "asset_logo_path", None) or "").strip()
+    if not logo_path_raw:
+        return
+    logo_path = Path(logo_path_raw)
+    if not logo_path.exists() or logo_path.stat().st_size <= 0:
+        _job_log(effective_channel, job_id,
+                 f"asset_missing_skip type=logo path={logo_path_raw} part={part_no}", kind="warning")
+        _emit_render_event(channel_code=effective_channel, job_id=job_id,
+                           event="asset_missing", level="WARNING",
+                           message=f"UP27 asset logo missing, skipped part={part_no}",
+                           step="render.asset", context={"type": "logo", "part_no": part_no})
+        return
+    watermarked = final_part.with_name(f"{final_part.stem}.with_logo.mp4")
+    try:
+        result = apply_logo_watermark(str(final_part), str(logo_path), str(watermarked),
+                                      position="top-right", opacity=0.85)
+        if result:
+            os.replace(result, final_part)
+            _job_log(effective_channel, job_id,
+                     f"asset_applied type=logo part={part_no} file={logo_path.name}")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id,
+                               event="asset_applied", level="INFO",
+                               message=f"UP27 creator logo watermark applied part={part_no}",
+                               step="render.asset", context={"type": "logo", "part_no": part_no})
+        else:
+            _job_log(effective_channel, job_id,
+                     f"asset_skipped type=logo part={part_no} reason=overlay_failed", kind="warning")
+    except Exception as exc:
+        _job_log(effective_channel, job_id,
+                 f"asset_error type=logo part={part_no} error={exc}", kind="warning")
+    finally:
+        _safe_unlink(watermarked)
+
 
 
 def _maybe_cleanup_narration_audio(
@@ -4074,6 +4206,13 @@ def run_render_pipeline(
                 hook_text=_hook_applied_text or None,
                 source_title=str(source.get("title") or ""),
             )
+            # UP27: Creator asset application — safe-skip on any failure
+            _maybe_prepend_asset_intro(final_part, payload,
+                effective_channel=effective_channel, job_id=job_id, part_no=idx)
+            _maybe_append_asset_outro(final_part, payload,
+                effective_channel=effective_channel, job_id=job_id, part_no=idx)
+            _maybe_apply_asset_logo(final_part, payload,
+                effective_channel=effective_channel, job_id=job_id, part_no=idx)
             _expected_final_duration = max(
                 0.0,
                 (_effective_duration / _render_speed) - _micro_pacing_trim_sec + _remotion_intro_sec,

@@ -322,3 +322,97 @@ def prepend_intro_clip(
         return str(out)
     except Exception:
         return None
+
+
+# ── UP27: Creator Asset Intelligence ─────────────────────────────────────────
+
+def append_outro_clip(
+    clip_path: str,
+    outro_path: str,
+    output_path: str,
+    *,
+    timeout_sec: int = 60,
+) -> str | None:
+    """Append creator outro clip after main rendered clip. Returns None on failure."""
+    clip = Path(clip_path)
+    outro = Path(outro_path)
+    out = Path(output_path)
+    if not clip.exists() or not outro.exists():
+        return None
+    filter_complex = (
+        "[0:v]setsar=1,fps=30,format=yuv420p[v0];"
+        "[1:v]setsar=1,fps=30,format=yuv420p[v1];"
+        "[0:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[a0];"
+        "[1:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[a1];"
+        "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]"
+    )
+    cmd = [
+        get_ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+        "-i", str(clip), "-i", str(outro),
+        "-filter_complex", filter_complex,
+        "-map", "[v]", "-map", "[a]",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k",
+        str(out),
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
+        if proc.returncode != 0 or not out.exists() or out.stat().st_size <= 0:
+            _summarize_ffmpeg_stderr(proc.stderr or "")
+            return None
+        return str(out)
+    except Exception:
+        return None
+
+
+def apply_logo_watermark(
+    clip_path: str,
+    logo_path: str,
+    output_path: str,
+    *,
+    position: str = "top-right",
+    opacity: float = 0.85,
+    margin: int = 20,
+    timeout_sec: int = 60,
+) -> str | None:
+    """Overlay logo PNG/JPEG as a subtle watermark. Returns None on failure.
+
+    Logo is scaled to 8% of video width. opacity controls transparency.
+    position: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
+    """
+    clip = Path(clip_path)
+    logo = Path(logo_path)
+    out = Path(output_path)
+    if not clip.exists() or not logo.exists():
+        return None
+    _pos_map = {
+        "top-right":    f"W-w-{margin}:{margin}",
+        "top-left":     f"{margin}:{margin}",
+        "bottom-right": f"W-w-{margin}:H-h-{margin}",
+        "bottom-left":  f"{margin}:H-h-{margin}",
+    }
+    pos_expr = _pos_map.get(position, _pos_map["top-right"])
+    # Scale logo to 8% of video width, preserve aspect ratio, apply opacity
+    filter_complex = (
+        f"[1:v]scale='iw*min(W*0.08/iw\\,1)':'ih*min(W*0.08/iw\\,1)',"
+        f"format=rgba,colorchannelmixer=aa={opacity:.2f}[logo];"
+        f"[0:v][logo]overlay={pos_expr}:format=auto[vout]"
+    )
+    cmd = [
+        get_ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+        "-i", str(clip), "-i", str(logo),
+        "-filter_complex", filter_complex,
+        "-map", "[vout]", "-map", "0:a?",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+        "-c:a", "copy",
+        "-movflags", "+faststart",
+        str(out),
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
+        if proc.returncode != 0 or not out.exists() or out.stat().st_size <= 0:
+            _summarize_ffmpeg_stderr(proc.stderr or "")
+            return None
+        return str(out)
+    except Exception:
+        return None

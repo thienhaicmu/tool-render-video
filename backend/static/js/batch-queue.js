@@ -140,6 +140,9 @@ window.BatchQueue = (() => {
       subtitle_emphasis: (document.getElementById('evSubtitleEmphasis')?.value) || 'balanced',
       clip_lock:    (typeof ClipSteering !== 'undefined' && ClipSteering.getClipLock().length)    ? ClipSteering.getClipLock()    : null,
       clip_exclude: (typeof ClipSteering !== 'undefined' && ClipSteering.getClipExclude().length) ? ClipSteering.getClipExclude() : null,
+
+      // UP27: Creator Asset Intelligence
+      ...(typeof CreatorAssets !== 'undefined' ? CreatorAssets.getPayload() : {}),
     };
   }
 
