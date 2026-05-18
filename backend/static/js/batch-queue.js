@@ -13,10 +13,12 @@
 window.BatchQueue = (() => {
 
   // ── State ──────────────────────────────────────────────────────────────────
-  let _items = [];       // { id, name, filePath, outputDir, status, jobId, progress, error }
+  let _items = [];       // { id, name, filePath, outputDir, status, jobId, progress, error, _payload, _lastProgressAt, stalled }
   let _pollTimer = null;
   const POLL_INTERVAL_MS = 2000;
   const MAX_BATCH = 50;
+  const STALL_WARN_MS  = 300000; // 5 min with no progress change → stall warning
+  let _queueStallLogged = false;
 
   const STATUS = {
     PENDING:   'pending',
@@ -269,15 +271,38 @@ window.BatchQueue = (() => {
     updates.forEach((result, i) => {
       if (result.status === 'fulfilled' && result.value) anyChange = true;
     });
+
+    // Stall detection: running items with no progress change for > STALL_WARN_MS
+    const now = Date.now();
+    let stalledCount = 0;
+    _items.forEach(it => {
+      if (it.status !== STATUS.RUNNING && it.status !== STATUS.QUEUED) return;
+      if (!it._lastProgressAt) { it._lastProgressAt = now; return; }
+      if (!it.stalled && (now - it._lastProgressAt) > STALL_WARN_MS) {
+        it.stalled = true;
+        stalledCount++;
+        anyChange = true;
+      }
+    });
+    if (stalledCount > 0 && !_queueStallLogged) {
+      _queueStallLogged = true;
+      if (typeof addEvent === 'function') addEvent(`queue_stall: ${stalledCount} item(s) stuck >${Math.round(STALL_WARN_MS/60000)}min with no progress`, 'render');
+    }
+
     if (anyChange) _render();
     _stopPollIfDone();
 
     const completed = _items.filter(it => it.status === STATUS.COMPLETED).length;
+    const recovered = _items.filter(it => it.status === STATUS.RECOVERED).length;
     const failed    = _items.filter(it => it.status === STATUS.FAILED).length;
     const total     = _items.length;
     const done      = _items.filter(it => it.status === STATUS.COMPLETED || it.status === STATUS.RECOVERED || it.status === STATUS.FAILED || it.status === STATUS.CANCELLED).length;
     if (done === total && total > 0 && !_pollTimer) {
       if (typeof addEvent === 'function') addEvent(`batch_completed: ${completed}/${total} succeeded, ${failed} failed`, 'render');
+      if (recovered > 0) {
+        if (typeof addEvent === 'function') addEvent(`recovery_loop: ${recovered} of ${total} item(s) used safe fallback — recommend review`, 'render');
+      }
+      _queueStallLogged = false;
     }
   }
 
@@ -287,9 +312,13 @@ window.BatchQueue = (() => {
       const res  = await fetch(`/api/jobs/${item.jobId}`);
       if (!res.ok) return false;
       const data = await res.json();
-      const prev = item.status;
-      const st   = String(data.status || '').toLowerCase();
-      item.progress = Number(data.progress_percent || 0);
+      const prev     = item.status;
+      const prevPct  = item.progress;
+      const st       = String(data.status || '').toLowerCase();
+      item.progress  = Number(data.progress_percent || 0);
+      if (item.progress !== prevPct || st === 'running') {
+        if (item.progress !== prevPct) { item._lastProgressAt = Date.now(); item.stalled = false; }
+      }
       if (st === 'running')   item.status = STATUS.RUNNING;
       if (st === 'completed') {
         const msg = String(data.message || '');
@@ -342,13 +371,45 @@ window.BatchQueue = (() => {
   async function retryItem(id) {
     const item = _items.find(it => it.id === id);
     if (!item) return;
-    item.status   = STATUS.PENDING;
-    item.jobId    = null;
-    item.progress = 0;
-    item.error    = '';
+    const snap = item._payload || null;
+    item.status          = STATUS.PENDING;
+    item.jobId           = null;
+    item.progress        = 0;
+    item.error           = '';
+    item.stalled         = false;
+    item._lastProgressAt = Date.now();
+    _queueStallLogged    = false;
     _render();
-    await _submitItem(item);
+    if (typeof addEvent === 'function') addEvent(`retry_snapshot: ${item.name} (${snap ? 'payload snapshot used' : 'rebuilt from form'})`, 'render');
+    if (snap) {
+      await _submitWithPayload(item, snap);
+    } else {
+      await _submitItem(item);
+    }
     _startPoll();
+  }
+
+  async function _submitWithPayload(item, payload) {
+    item._payload = payload;
+    try {
+      const res  = await fetch('/api/render/process', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!res.ok) {
+        const err = (typeof _formatApiError === 'function') ? _formatApiError(data.detail) : String(data.detail || 'Failed');
+        item.status = STATUS.FAILED;
+        item.error  = err;
+        if (typeof addEvent === 'function') addEvent(`batch_item_failed (retry): ${item.name}: ${err}`, 'render');
+      } else {
+        item.jobId  = data.job_id || null;
+        item.status = STATUS.QUEUED;
+        item.error  = '';
+      }
+    } catch (e) {
+      item.status = STATUS.FAILED;
+      item.error  = String(e);
+      if (typeof addEvent === 'function') addEvent(`batch_item_failed (retry): ${item.name}: ${e}`, 'render');
+    }
+    _render();
   }
 
   function removeItem(id) {
@@ -384,20 +445,23 @@ window.BatchQueue = (() => {
       { key: 'problem',   label: 'Failed',            statuses: [STATUS.FAILED, STATUS.CANCELLED] },
     ];
     const _cardHtml = function(item) {
-      const stClass   = 'st-' + item.status;
-      const cardClass = 'bqCard bq-' + item.status;
-      const stLabel   = item.status === STATUS.RECOVERED ? 'Recovered' : item.status.charAt(0).toUpperCase() + item.status.slice(1);
-      const pct       = Math.max(0, Math.min(100, item.progress || 0));
-      const showBar   = item.status === STATUS.RUNNING || item.status === STATUS.QUEUED;
+      const stClass     = 'st-' + item.status;
+      const cardClass   = 'bqCard bq-' + item.status + (item.stalled ? ' bq-stalled' : '');
+      const stLabel     = item.status === STATUS.RECOVERED ? 'Recovered' : item.status.charAt(0).toUpperCase() + item.status.slice(1);
+      const pct         = Math.max(0, Math.min(100, item.progress || 0));
+      const showBar     = item.status === STATUS.RUNNING || item.status === STATUS.QUEUED;
       const isRecovered = item.status === STATUS.RECOVERED;
-      const actions   = _cardActions(item);
-      const noteText  = isRecovered && item.error ? item.error : '';
+      const isStalled   = !!(item.stalled && (item.status === STATUS.RUNNING || item.status === STATUS.QUEUED));
+      const actions     = _cardActions(item);
+      const noteText    = isRecovered && item.error ? item.error : '';
       return `<div class="${cardClass}" data-bq-id="${item.id}">
   <div class="bqCardTop">
     <div class="bqCardName" title="${_esc(item.name)}">${_esc(item.name)}</div>
-    <span class="bqCardStatus ${stClass}" title="${isRecovered ? 'Rendered using safe fallback' : ''}">${stLabel}${item.status === STATUS.RUNNING && pct > 0 ? ' ' + pct + '%' : ''}</span>
+    <span class="bqCardStatus ${stClass}" title="${isRecovered ? 'Rendered using safe fallback' : isStalled ? 'No progress for 5+ minutes' : ''}">${stLabel}${item.status === STATUS.RUNNING && pct > 0 ? ' ' + pct + '%' : ''}</span>
   </div>
   ${showBar ? `<div class="bqProgress"><div class="bqProgressBar" style="width:${pct}%"></div></div>` : ''}
+  ${isStalled ? `<div class="bqCardWarn bqCardStall">No progress for 5+ min — may be stalled. Cancel and retry if needed.</div>` : ''}
+  ${isRecovered ? `<div class="bqCardWarn bqCardReviewSuggested">Review suggested <span class="bqReviewLink" onclick="if(typeof setView==='function')setView('review')" style="cursor:pointer;text-decoration:underline">Open Review &rsaquo;</span></div>` : ''}
   ${noteText ? `<div class="bqCardRecoveredNote">${_esc(noteText)}</div>` : ''}
   ${item.status === STATUS.FAILED && item.error ? `<div class="bqCardError">${_esc(item.error)}</div>` : ''}
   ${actions ? `<div class="bqCardActions">${actions}</div>` : ''}
