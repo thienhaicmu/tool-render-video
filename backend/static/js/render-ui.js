@@ -4397,6 +4397,10 @@ function populateRenderOutputPanel(job, parts) {
   const _v3TrustChips = [];
   if (_platformBannerLabel && _jobTargetPlatform !== 'youtube_shorts') _v3TrustChips.push(`<span class="v3TrustChip v3TrustPlatform">${esc(_platformBannerLabel)}</span>`);
   if (_dnaFired) _v3TrustChips.push(`<span class="v3TrustChip v3TrustDna">Creator DNA</span>`);
+  if (typeof CreatorSeries !== 'undefined') {
+    const _v3SeriesChip = CreatorSeries.getAppliedChip();
+    if (_v3SeriesChip) _v3TrustChips.push(`<span class="v3TrustChip v3TrustSeries">${esc(_v3SeriesChip)}</span>`);
+  }
   const _v3Sb = _v3JobPayload.structure_bias;
   if (_v3Sb && _v3Sb !== 'balanced') _v3TrustChips.push(`<span class="v3TrustChip v3TrustSteer">${_v3Sb === 'hook' ? 'More Hook' : 'More Story'}</span>`);
   if (typeof ClipSteering !== 'undefined') {

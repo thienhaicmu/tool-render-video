@@ -157,6 +157,13 @@ function evSyncQsBar() {
     dnaHintEl.textContent = hint || '';
     dnaHintEl.style.display = hint ? '' : 'none';
   }
+  const seriesHintEl = document.getElementById('cpSeriesHint');
+  if (seriesHintEl) {
+    let sh = null;
+    if (typeof CreatorSeries !== 'undefined') sh = CreatorSeries.getAppliedHint();
+    seriesHintEl.textContent = sh || '';
+    seriesHintEl.style.display = sh ? '' : 'none';
+  }
   v3RefreshSteeringPanel();
 }
 
@@ -174,6 +181,10 @@ function v3RefreshSteeringPanel() {
   const dnaHintEl = document.getElementById('cpDnaHint');
   if (dnaHintEl && dnaHintEl.textContent && dnaHintEl.style.display !== 'none') {
     parts.push({ label: 'DNA active', cls: 'v3Chip v3ChipDna', title: dnaHintEl.textContent });
+  }
+  const seriesHintEl2 = document.getElementById('cpSeriesHint');
+  if (seriesHintEl2 && seriesHintEl2.textContent && seriesHintEl2.style.display !== 'none') {
+    parts.push({ label: 'Series', cls: 'v3Chip v3ChipSeries', title: seriesHintEl2.textContent });
   }
 
   const sb = (document.getElementById('qsStructureBias')?.value || 'balanced');
@@ -1045,6 +1056,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   if (typeof CreatorPresets  !== 'undefined') CreatorPresets.init();
   if (typeof BatchQueue      !== 'undefined') BatchQueue.init();
   if (typeof CreatorAssets   !== 'undefined') CreatorAssets.init();
+  if (typeof CreatorSeries   !== 'undefined') CreatorSeries.init();
   evSyncQsBar();
   if (typeof EditorConverse !== 'undefined') EditorConverse.init();
 
@@ -1135,6 +1147,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   if (typeof CreatorPresets  !== 'undefined') CreatorPresets.init();
   if (typeof BatchQueue      !== 'undefined') BatchQueue.init();
   if (typeof CreatorAssets   !== 'undefined') CreatorAssets.init();
+  if (typeof CreatorSeries   !== 'undefined') CreatorSeries.init();
   evSyncQsBar();
   if (typeof mvUpdatePreviewHint === 'function') mvUpdatePreviewHint();
 
@@ -2090,7 +2103,8 @@ async function startRenderFromEditor() {
   payload.subtitle_style = qs('evSubStyle')?.value || 'pro_karaoke';
   if (typeof CreatorTaste    !== 'undefined') CreatorTaste.recordSubtitleStyle(payload.subtitle_style);
   if (typeof CreatorFeedback !== 'undefined') CreatorFeedback.recordPlatformChoice(payload.target_platform || 'youtube_shorts');
-  if (typeof CreatorDNA      !== 'undefined') payload.creator_dna = CreatorDNA.getDNAContext();
+  if (typeof CreatorDNA      !== 'undefined') payload.creator_dna    = CreatorDNA.getDNAContext();
+  if (typeof CreatorSeries   !== 'undefined') payload.creator_series = CreatorSeries.getSeriesContext();
   if (typeof CreatorPresets  !== 'undefined') {
     const _cp = CreatorPresets.getActive();
     if (_cp && typeof addEvent === 'function') addEvent(`preset_applied: ${_cp.name}`, 'render');

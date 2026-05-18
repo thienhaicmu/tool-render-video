@@ -47,6 +47,7 @@ window.ReviewQueue = (() => {
     if (!item) return;
     _log('review_kept', jobId, item.name);
     _steeringFeedback(item, 'keep');
+    if (typeof CreatorSeries !== 'undefined') CreatorSeries.recordReviewAction(jobId, 'keep');
     _showToast('Kept', 'success');
     _refreshView();
   }
@@ -56,6 +57,7 @@ window.ReviewQueue = (() => {
     if (!item) return;
     _log('review_favorited', jobId, item.name);
     _steeringFeedback(item, 'favorite');
+    if (typeof CreatorSeries !== 'undefined') CreatorSeries.recordReviewAction(jobId, 'favorite');
     _showToast('Added to Favorites', 'success');
     _refreshView();
   }
@@ -65,6 +67,7 @@ window.ReviewQueue = (() => {
     if (!item) return;
     _log('review_dismissed', jobId, item.name);
     _steeringFeedback(item, 'dismiss');
+    if (typeof CreatorSeries !== 'undefined') CreatorSeries.recordReviewAction(jobId, 'dismiss');
     _showToast('Dismissed', 'info');
     _refreshView();
   }

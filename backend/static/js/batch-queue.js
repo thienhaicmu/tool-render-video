@@ -300,6 +300,9 @@ window.BatchQueue = (() => {
         if (typeof ReviewQueue !== 'undefined') {
           ReviewQueue.addJob(item.jobId, item.name, item.outputDir, { recovered: hasRecovery, payload: item._payload || null });
         }
+        if (typeof CreatorSeries !== 'undefined') {
+          CreatorSeries.recordRender(item.jobId, item.name, item._payload || null);
+        }
       }
       if (st === 'completed_with_errors') {
         item.status = STATUS.RECOVERED;
@@ -307,6 +310,9 @@ window.BatchQueue = (() => {
         if (typeof addEvent === 'function') addEvent(`batch_item_completed (recovered): ${item.name}`, 'render');
         if (typeof ReviewQueue !== 'undefined') {
           ReviewQueue.addJob(item.jobId, item.name, item.outputDir, { recovered: true, payload: item._payload || null });
+        }
+        if (typeof CreatorSeries !== 'undefined') {
+          CreatorSeries.recordRender(item.jobId, item.name, item._payload || null);
         }
       }
       if (st === 'failed')    { item.status = STATUS.FAILED; item.error = String(data.message || 'Render failed'); if (typeof addEvent === 'function') addEvent(`batch_item_failed: ${item.name}: ${item.error}`, 'render'); }
