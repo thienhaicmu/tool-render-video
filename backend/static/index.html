@@ -1076,6 +1076,15 @@
             <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Multi-variant</span>
             <span style="font-size:11px;color:#888;font-style:italic">Aggressive · Balanced · Story-first</span>
           </label>
+          <label class="field">
+            <span class="fieldLabel">Platform</span>
+            <select class="fieldInput" id="evTargetPlatform">
+              <option value="youtube_shorts">YouTube Shorts</option>
+              <option value="tiktok">TikTok</option>
+              <option value="instagram_reels">Instagram Reels</option>
+            </select>
+            <span class="inspHint">Subtle editorial bias per platform</span>
+          </label>
           <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
             <input type="checkbox" id="evAddTitleOverlay" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0" onchange="var ti=document.getElementById('evTitleOverlayText');if(ti)ti.disabled=!this.checked;">
             <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Title Overlay</span>

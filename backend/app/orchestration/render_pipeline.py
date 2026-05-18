@@ -72,6 +72,115 @@ def _smart_output_stem(hook_text: str, source_title: str, job_id: str) -> str:
 
 _PLAY_RES_Y_MAP = {"9:16": 1920, "1:1": 1080, "3:4": 1440, "4:5": 1440, "16:9": 1080}
 
+# UP13 — Multi-variant intelligence: content-type-aware subtitle style per variant.
+_VARIANT_AGGRESSIVE_SUB: dict[str, str] = {
+    "interview": "viral", "commentary": "viral",
+    "vlog": "viral", "tutorial": "viral", "montage": "gaming",
+}
+_VARIANT_STORY_SUB: dict[str, str] = {
+    "interview": "clean", "commentary": "story",
+    "vlog": "story", "tutorial": "clean", "montage": "story",
+}
+
+# UP14 — Platform-aware editing: small editorial biases per distribution platform.
+# All values are lightweight nudges — no pipeline rewrite, no platform-specific render engine.
+_PLATFORM_PROFILES: dict[str, dict] = {
+    "tiktok": {
+        "speed_delta":     0.04,   # snappier pacing for short-form retention
+        "hook_sort_bonus": 6,      # adds up to 6pts to hook-strong clips in initial sort
+        "sub_bias": {
+            "interview": "viral", "commentary": "viral",
+            "vlog": "viral", "tutorial": "viral", "montage": "gaming",
+        },
+    },
+    "youtube_shorts": {
+        "speed_delta":     0.0,
+        "hook_sort_bonus": 0,
+        "sub_bias": {},            # inherit content-type defaults — already tuned for YT
+    },
+    "instagram_reels": {
+        "speed_delta":    -0.03,   # slightly slower, polished feel
+        "hook_sort_bonus": 0,
+        "sub_bias": {
+            "interview": "clean", "commentary": "clean",
+            "vlog": "clean", "tutorial": "clean", "montage": "gaming",
+        },
+    },
+}
+
+
+def _build_variant_segments(scored: list[dict], payload) -> list[dict]:
+    """Select three purposeful segments from the scored pool (aggressive, balanced, story-first).
+
+    Shared compute: scene detection + scoring run once.  Only branching logic lives here.
+    Each returned dict carries variant_type / variant_label / variant_subtitle_style /
+    variant_playback_speed so the downstream render loop can treat them as normal parts.
+    """
+    if not scored:
+        return scored
+    base_speed = float(getattr(payload, "playback_speed", None) or 1.07)
+    base_sub = (getattr(payload, "subtitle_style", "") or "").strip()
+
+    def _ct(s: dict) -> str:
+        return str(s.get("content_type_hint") or "vlog")
+
+    def _agg_score(s: dict) -> float:
+        return (
+            float(s.get("hook_score", 0) or 0) * 0.50
+            + float(s.get("motion_score", 0) or 0) * 0.25
+            + float(s.get("viral_score", 0) or 0) * 0.25
+        )
+
+    def _bal_score(s: dict) -> float:
+        return (
+            float(s.get("viral_score", 0) or 0) * 0.35
+            + float(s.get("hook_score", 0) or 0) * 0.20
+            + float(s.get("retention_score", 0) or 0) * 0.20
+            + float(s.get("speech_density_score", 0) or 0) * 0.10
+            + float(s.get("market_score", 0) or 0) * 0.10
+            + float(s.get("duration_fit_score", 0) or 0) * 0.05
+        )
+
+    _max_start = max((float(s.get("start", 0) or 0) for s in scored), default=1.0) or 1.0
+
+    def _story_score(s: dict) -> float:
+        return (
+            float(s.get("retention_score", 0) or 0) * 0.45
+            + float(s.get("start", 0) or 0) / _max_start * 100 * 0.30
+            + float(s.get("viral_score", 0) or 0) * 0.25
+        )
+
+    agg   = dict(max(scored, key=_agg_score))
+    bal   = dict(max(scored, key=_bal_score))
+    story = dict(max(scored, key=_story_score))
+
+    agg["variant_type"]            = "aggressive"
+    agg["variant_label"]           = "Aggressive"
+    agg["variant_subtitle_style"]  = _VARIANT_AGGRESSIVE_SUB.get(_ct(agg), "viral")
+    agg["variant_playback_speed"]  = round(min(1.15, base_speed + 0.05), 3)
+    agg["selection_reason"]        = "Aggressive: hook-forward selection"
+
+    bal["variant_type"]            = "balanced"
+    bal["variant_label"]           = "Balanced"
+    bal["variant_subtitle_style"]  = base_sub or None
+    bal["variant_playback_speed"]  = base_speed
+    bal["selection_reason"]        = "Balanced: overall best-quality selection"
+
+    story["variant_type"]          = "story_first"
+    story["variant_label"]         = "Story-first"
+    story["variant_subtitle_style"] = _VARIANT_STORY_SUB.get(_ct(story), "story")
+    story["variant_playback_speed"] = round(max(0.97, base_speed - 0.05), 3)
+    story["selection_reason"]      = "Story-first: payoff-forward selection"
+
+    logger.info(
+        "multi_variant_selected agg_start=%.1f bal_start=%.1f story_start=%.1f",
+        float(agg.get("start", 0) or 0),
+        float(bal.get("start", 0) or 0),
+        float(story.get("start", 0) or 0),
+    )
+    return [agg, bal, story]
+
+
 def _aspect_play_res_y(aspect_ratio: str) -> int:
     ar = (aspect_ratio or "").strip()
     val = _PLAY_RES_Y_MAP.get(ar)
@@ -464,76 +573,6 @@ def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, pay
             f"duration_fit={components['duration_fit_score']}",
         ],
     }
-
-
-# ---------------------------------------------------------------------------
-# Multi-variant intelligence (UP13)
-# ---------------------------------------------------------------------------
-
-_VARIANT_AGGRESSIVE_SUB: dict[str, str] = {
-    "interview":  "viral",
-    "commentary": "viral",
-    "vlog":       "viral",
-    "tutorial":   "viral",
-    "montage":    "gaming",
-}
-_VARIANT_STORY_SUB: dict[str, str] = {
-    "interview":  "clean",
-    "commentary": "story",
-    "vlog":       "story",
-    "tutorial":   "clean",
-    "montage":    "story",
-}
-
-
-def _build_variant_segments(all_scored: list[dict], base_speed: float) -> list[dict]:
-    """Return one best segment per variant (aggressive / balanced / story-first).
-
-    Uses existing score fields only — no re-scoring, no external calls.
-    Each returned dict is annotated with variant_type, variant_subtitle_style,
-    and variant_playback_speed for the render loop to consume.
-    """
-    if not all_scored:
-        return all_scored
-
-    def _f(seg: dict, key: str) -> float:
-        return float(seg.get(key) or 0)
-
-    max_start = max((_f(s, "start") for s in all_scored), default=1.0) or 1.0
-
-    aggressive_seg = dict(max(all_scored, key=lambda s: (
-        _f(s, "hook_score") * 0.50 + _f(s, "viral_score") * 0.30 + _f(s, "motion_score") * 0.20
-    )))
-    balanced_seg = dict(max(all_scored, key=lambda s: (
-        _f(s, "viral_score") * 0.35 + _f(s, "hook_score") * 0.20
-        + _f(s, "retention_score") * 0.20 + _f(s, "speech_density_score") * 0.10
-        + _f(s, "market_score") * 0.10 + _f(s, "duration_fit_score") * 0.05
-    )))
-    story_seg = dict(max(all_scored, key=lambda s: (
-        _f(s, "retention_score") * 0.45
-        + (_f(s, "start") / max_start) * 0.35
-        + _f(s, "viral_score") * 0.20
-    )))
-
-    aggressive_seg.update({
-        "variant_type":           "aggressive",
-        "variant_subtitle_style": _VARIANT_AGGRESSIVE_SUB.get(
-            str(aggressive_seg.get("content_type_hint") or "vlog"), "viral"),
-        "variant_playback_speed": round(min(1.15, base_speed + 0.05), 3),
-    })
-    balanced_seg.update({
-        "variant_type":           "balanced",
-        "variant_subtitle_style": None,  # inherited from payload.subtitle_style (taste-aware)
-        "variant_playback_speed": round(base_speed, 3),
-    })
-    story_seg.update({
-        "variant_type":           "story_first",
-        "variant_subtitle_style": _VARIANT_STORY_SUB.get(
-            str(story_seg.get("content_type_hint") or "vlog"), "story"),
-        "variant_playback_speed": round(max(0.95, base_speed - 0.05), 3),
-    })
-
-    return [aggressive_seg, balanced_seg, story_seg]
 
 
 _PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes to update progress
@@ -1790,6 +1829,8 @@ def run_render_pipeline(
                      f"preference boost applied (no eviction); low-motion clips remain in pool")
         # Sort by viral/motion score first for selection (top N), then re-order for output numbering.
         # viral_score is primary — it now incorporates transition quality, not just cut density.
+        _target_platform = str(getattr(payload, "target_platform", "") or "youtube_shorts").strip().lower()
+        _platform_hook_bonus = _PLATFORM_PROFILES.get(_target_platform, {}).get("hook_sort_bonus", 0)
         _combined_enabled = bool(getattr(payload, "combined_scoring_enabled", False))
         if _combined_enabled:
             def _provisional_combined(s):
@@ -1802,7 +1843,9 @@ def run_render_pipeline(
         else:
             scored.sort(
                 key=lambda x: (
-                    int(x.get("viral_score", 0)) + (8 if _apply_motion_boost and int(x.get("motion_score", 0)) >= HIGH_MOTION_MIN_SCORE else 0),
+                    int(x.get("viral_score", 0))
+                    + (8 if _apply_motion_boost and int(x.get("motion_score", 0)) >= HIGH_MOTION_MIN_SCORE else 0)
+                    + int(float(x.get("hook_score", 0) or 0) * _platform_hook_bonus / 100),
                     int(x.get("motion_score", 0)),
                 ),
                 reverse=True,
@@ -1812,7 +1855,7 @@ def run_render_pipeline(
         # ── Multi-variant: replace pool with 3 purposeful single-clip selections ──
         _multi_variant = bool(getattr(payload, "multi_variant", False))
         if _multi_variant:
-            scored = _build_variant_segments(scored, float(payload.playback_speed or 1.07))
+            scored = _build_variant_segments(scored, payload)
             _job_log(
                 effective_channel, job_id,
                 f"multi_variant: {len(scored)} variants selected "
@@ -1840,6 +1883,21 @@ def run_render_pipeline(
                     ],
                 },
             )
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="platform_bias_applied",
+            level="INFO",
+            message=f"Platform-aware editing: {_target_platform}",
+            step="render.platform",
+            context={
+                "target_platform": _target_platform,
+                "hook_sort_bonus": _platform_hook_bonus,
+                "speed_delta": _PLATFORM_PROFILES.get(_target_platform, {}).get("speed_delta", 0.0),
+            },
+        )
+        _job_log(effective_channel, job_id,
+                 f"platform_bias: target={_target_platform} hook_bonus={_platform_hook_bonus}")
         # Re-order for output numbering: timeline = chronological, viral/combined = by score
         part_order = str(getattr(payload, "part_order", "viral") or "viral").strip().lower()
         if part_order == "timeline":
@@ -3019,17 +3077,24 @@ def run_render_pipeline(
                     "tutorial":   "clean",
                     "montage":    "gaming",
                 }
+                # Subtitle hierarchy (UP14): variant > creator explicit > platform bias > content-type default.
                 # Variant subtitle takes priority; falls back to creator payload choice.
                 _raw_sub_style = (
                     str(seg.get("variant_subtitle_style") or "").strip()
                     or (payload.subtitle_style or "").strip()
                 )
+                # UP14: platform sub_bias — only used when neither variant nor creator set a style.
+                _platform_sub_bias = (
+                    _PLATFORM_PROFILES.get(_target_platform, {})
+                    .get("sub_bias", {})
+                    .get(str(seg.get("content_type_hint") or "vlog"), "")
+                ) if not _raw_sub_style else ""
                 _effective_subtitle_style = (
-                    _CONTENT_TYPE_SUB_DEFAULTS.get(
+                    _raw_sub_style
+                    or _platform_sub_bias
+                    or _CONTENT_TYPE_SUB_DEFAULTS.get(
                         seg.get("content_type_hint", "vlog"), "tiktok_bounce_v1"
                     )
-                    if not _raw_sub_style
-                    else _raw_sub_style
                 )
 
                 # S4: Subtitle emphasis — semantic wrap + keyword uppercase + highlight markers
@@ -3269,7 +3334,11 @@ def run_render_pipeline(
                     reup_bgm_enable=payload.reup_bgm_enable,
                     reup_bgm_path=payload.reup_bgm_path,
                     reup_bgm_gain=payload.reup_bgm_gain,
-                    playback_speed=float(seg.get("variant_playback_speed") or payload.playback_speed or 1.07),
+                    playback_speed=float(
+                        seg.get("variant_playback_speed")
+                        or max(0.5, min(1.5, float(payload.playback_speed or 1.07)
+                               + _PLATFORM_PROFILES.get(_target_platform, {}).get("speed_delta", 0.0)))
+                    ),
                     text_layers=_part_text_layers,
                     loudnorm_enabled=getattr(payload, "loudnorm_enabled", False),
                     ffmpeg_threads=_ffmpeg_threads,
@@ -4194,7 +4263,8 @@ def run_render_pipeline(
                 payload_hook_score=_hook_score,
             )
             if _r_vt:
-                _rank_entry["variant_type"] = _r_vt
+                _rank_entry["variant_type"]  = _r_vt
+                _rank_entry["variant_label"] = str(_r_seg.get("variant_label") or _r_vt.replace("_", " ").title())
             # Apply quality penalty from per-part validator
             _rank_raw_score = float(_rank_entry["output_score"])
             _rank_q_penalty = int(_r_seg.get("quality_penalty", 0))

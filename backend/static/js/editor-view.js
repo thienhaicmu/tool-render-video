@@ -1945,7 +1945,8 @@ async function startRenderFromEditor() {
   payload.max_part_sec   = Number(qs('evMaxPart').value);
   payload.output_fps     = Number(qs('evOutputFps').value || 60);
   payload.max_export_parts = Number(qs('evMaxExportParts').value || 0);
-  payload.multi_variant  = !!document.getElementById('evMultiVariant')?.checked;
+  payload.multi_variant    = !!document.getElementById('evMultiVariant')?.checked;
+  payload.target_platform  = qs('evTargetPlatform')?.value || 'youtube_shorts';
   payload.part_order     = qs('evPartOrder').value;
   payload.frame_scale_y  = Math.max(80, Math.min(130, Number(qs('evFrameScaleY').value || 106)));
   const _addTitleOverlay = !!document.getElementById('evAddTitleOverlay')?.checked;

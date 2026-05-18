@@ -238,6 +238,10 @@ class RenderRequest(BaseModel):
     # Multi-variant intelligence (UP13) — 3 purposeful variants from shared source compute.
     # Produces {stem}_aggressive.mp4, {stem}_balanced.mp4, {stem}_story_first.mp4.
     multi_variant: bool = False
+    # Platform-aware editing (UP14) — small editorial biases per distribution platform.
+    # Options: "tiktok" | "youtube_shorts" | "instagram_reels". Default: youtube_shorts.
+    # Creator explicit settings always win; this is fallback guidance only.
+    target_platform: str = "youtube_shorts"
     # AI Variant Planning (Phase 21) — opt-in; plans advisory variants, never auto-renders.
     ai_variant_planning_enabled: bool = False
     ai_variant_count: int = 3

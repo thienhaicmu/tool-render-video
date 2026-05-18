@@ -17360,6 +17360,30 @@ body:not(.is-render-studio-active) .rs-center-stage > #appBottomPanel.renderRunt
   background: transparent !important;
 }
 
+/* ── UP13: Variant badge ──────────────────────────────────────────────────── */
+.clipCardVariantBadge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: rgba(99,102,241,.15);
+  color: #818cf8;
+  margin-bottom: 2px;
+}
+.clipCardVariantBadge[data-variant="aggressive"] { background: rgba(239,68,68,.14); color: #f87171; }
+.clipCardVariantBadge[data-variant="balanced"]   { background: rgba(16,185,129,.14); color: #34d399; }
+.clipCardVariantBadge[data-variant="story_first"]{ background: rgba(168,85,247,.14); color: #c084fc; }
+
+/* ── UP14: Platform banner ────────────────────────────────────────────────── */
+.clipsPlatformBanner {
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 4px 8px 6px;
+  letter-spacing: 0.01em;
+}
+
 @media (min-width: 901px) {
   #render_active_panel:not(.hiddenView) {
     max-height: min(78vh, 760px) !important;

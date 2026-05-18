@@ -974,6 +974,7 @@ function _rankMap(job) {
           confidenceTier: String(r.confidence_tier || '').trim(),
           dominantSignal: String(r.dominant_signal || '').trim(),
           variantType:    String(r.variant_type || '').trim(),
+          targetPlatform: String(r.target_platform || '').trim(),
         });
       }
     });
@@ -4344,7 +4345,12 @@ function populateRenderOutputPanel(job, parts) {
   // Strong candidate Compare button compares best vs that clip
   const _r821HasRankingData = ranking.size > 0 && _r821BestPartNo !== null;
 
-  list.innerHTML = all.map((p) => {
+  // UP14: Platform banner — shows when a non-default platform is selected for the job.
+  const _jobTargetPlatform = String(getCurrentJobPayload(job)?.target_platform || '').trim().toLowerCase();
+  const _platformBannerLabel = {tiktok:'TikTok',youtube_shorts:'YouTube Shorts',instagram_reels:'Instagram Reels'}[_jobTargetPlatform] || '';
+  const _platformBanner = (_platformBannerLabel && _jobTargetPlatform !== 'youtube_shorts')
+    ? `<div class="clipsPlatformBanner">Optimized for: ${esc(_platformBannerLabel)}</div>` : '';
+  list.innerHTML = _platformBanner + all.map((p) => {
     const partNo = Number(p.part_no || 0);
     const st = String(p?.status || '').toLowerCase();
     const isFailed = st === 'failed' || st === 'error';
