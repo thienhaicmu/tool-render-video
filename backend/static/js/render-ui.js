@@ -4345,6 +4345,10 @@ function populateRenderOutputPanel(job, parts) {
   // Strong candidate Compare button compares best vs that clip
   const _r821HasRankingData = ranking.size > 0 && _r821BestPartNo !== null;
 
+  // UP18: Read creator's learned variant preference (null when no confident signal yet).
+  const _cfVariantPref = (typeof CreatorFeedback !== 'undefined')
+    ? ((CreatorFeedback.getVariantPreference() || {}).variant || '') : '';
+
   // UP14: Platform banner — shows when a non-default platform is selected for the job.
   const _jobTargetPlatform = String(getCurrentJobPayload(job)?.target_platform || '').trim().toLowerCase();
   const _platformBannerLabel = {tiktok:'TikTok',youtube_shorts:'YouTube Shorts',instagram_reels:'Instagram Reels'}[_jobTargetPlatform] || '';
@@ -4382,8 +4386,9 @@ function populateRenderOutputPanel(job, parts) {
     const previewBtn = (!isFailed && !isSkipped && hasFile && jobId)
       ? `<button class="clipCardBtn clipCardBtnPreview" type="button" onclick="centerPreviewClip(${JSON.stringify(jobId)},${partNo},${JSON.stringify(p.output_file || '')},${JSON.stringify(p.part_name || `Clip ${partNo}`)})">Preview</button>`
       : '';
+    const _dlVariant = JSON.stringify(rk.variantType || '');
     const downloadBtn = (!isFailed && hasFile && jobId)
-      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download onclick="if(typeof CreatorTaste!=='undefined'&&${rk.rank||0}>0)CreatorTaste.recordDownload(${rk.rank||0})">Download</a>`
+      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download onclick="if(typeof CreatorTaste!=='undefined'&&${rk.rank||0}>0)CreatorTaste.recordDownload(${rk.rank||0});if(typeof CreatorFeedback!=='undefined'&&${_dlVariant})CreatorFeedback.recordVariantDownload(${_dlVariant})">Download</a>`
       : '';
     const openBtn = hasFile
       ? `<button class="clipCardBtn" type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Folder</button>`
@@ -4418,7 +4423,7 @@ function populateRenderOutputPanel(job, parts) {
           rk.variantType === 'aggressive' ? 'Aggressive' :
           rk.variantType === 'balanced'   ? 'Balanced'   :
           rk.variantType === 'story_first'? 'Story-first': esc(rk.variantType)
-        }</div>` : ''}
+        }${_cfVariantPref && rk.variantType === _cfVariantPref ? '<span class="cfVariantPref"> · recent</span>' : ''}</div>` : ''}
         <div class="clipCardScoreRow">
           ${hasScore
             ? `<span class="clipCardScore" data-tier="${scoreTier}">${scoreVal.toFixed(1)}<span class="clipCardScoreMax"> /10</span></span><span class="clipCardRankTag">#${rk.rank || '?'}</span>`
