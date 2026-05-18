@@ -4047,6 +4047,7 @@ def run_render_pipeline(
             _t_render = time.perf_counter()
             # UP28.1: motion path cache key — stable across rerenders of same source+clip range
             _motion_ck = None
+            _motion_crop_fallback: list = []  # P1-02: signal from render_part_smart when crop falls back
             if payload.motion_aware_crop and _src_stat_for_motion is not None:
                 try:
                     _motion_ck = _render_cache_key(
@@ -4096,6 +4097,7 @@ def run_render_pipeline(
                     ffmpeg_threads=_ffmpeg_threads,
                     content_type=seg.get("content_type_hint", "vlog"),
                     _motion_cache_key=_motion_ck,
+                    _fallback_flag=_motion_crop_fallback,
                 )
             finally:
                 _encode_stop.set()
@@ -4105,6 +4107,23 @@ def run_render_pipeline(
                         _render_ms, idx, payload.video_codec, payload.motion_aware_crop)
             if _motion_ck:
                 _job_log(effective_channel, job_id, f"rerender_fast_path part={idx} motion_cache_key={_motion_ck[:8]} render_ms={_render_ms}")
+            if _motion_crop_fallback:
+                # P1-02: UP24 recovery hook — motion crop fell back to standard crop.
+                # Surface to creator via existing Recovered chip / recovery_notes system.
+                _recovery_notes.append("Motion crop unavailable — used standard crop")
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="recovery_success",
+                    level="WARNING",
+                    message=f"Recovery: motion crop failed for part {idx}, standard crop used",
+                    step="render.motion_crop",
+                    context={
+                        "recovery_strategy": "fallback_standard_crop",
+                        "part_no": idx,
+                        "reason": _motion_crop_fallback[0],
+                    },
+                )
             # Part G: visual finish observability — auditable per-part quality metadata
             _emit_render_event(
                 channel_code=effective_channel,
@@ -4954,6 +4973,22 @@ def run_render_pipeline(
                             f"phase={failure_detail['phase']} code={failure_detail['code']} error={part_err}",
                             kind="error",
                         )
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="part_degraded",
+                            level="WARNING",
+                            message=f"Clip {idx} failed — {len(outputs)}/{total_parts} clips completed so far",
+                            step="render.part",
+                            context={
+                                "part_no": idx,
+                                "total_parts": total_parts,
+                                "completed_so_far": len(outputs),
+                                "failed_so_far": len(failed_parts),
+                                "error_code": failure_detail["code"],
+                                "phase": failure_detail["phase"],
+                            },
+                        )
                     completed_parts += 1
                     progress = 30 + int((completed_parts / total_parts) * 60)
                     _set_stage(JobStage.RENDERING, progress, f"Processed {completed_parts}/{total_parts} parts")
@@ -5000,6 +5035,22 @@ def run_render_pipeline(
                                 f"Part {idx}/{total_parts} failed: "
                                 f"phase={failure_detail['phase']} code={failure_detail['code']} error={part_err}",
                                 kind="error",
+                            )
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="part_degraded",
+                                level="WARNING",
+                                message=f"Clip {idx} failed — {len(outputs)}/{total_parts} clips completed so far",
+                                step="render.part",
+                                context={
+                                    "part_no": idx,
+                                    "total_parts": total_parts,
+                                    "completed_so_far": len(outputs),
+                                    "failed_so_far": len(failed_parts),
+                                    "error_code": failure_detail["code"],
+                                    "phase": failure_detail["phase"],
+                                },
                             )
                         completed_parts += 1
                         progress = 30 + int((completed_parts / total_parts) * 60)
@@ -5262,7 +5313,10 @@ def run_render_pipeline(
 
         _is_partial_success = bool(failed_parts)
         _final_status = "completed_with_errors" if _is_partial_success else "completed"
-        _final_message = "Render completed with errors" if _is_partial_success else "Render completed"
+        _final_message = (
+            f"Render complete: {len(outputs)}/{total_parts} clips · {len(failed_parts)} failed"
+            if _is_partial_success else "Render completed"
+        )
         if _recovery_notes:
             _final_message += " [" + "; ".join(_recovery_notes) + "]"
 

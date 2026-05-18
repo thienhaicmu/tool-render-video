@@ -1111,6 +1111,7 @@ def render_part_smart(
     crop_cfg_override: MotionCropConfig | None = None,
     content_type: str = "vlog",
     _motion_cache_key: str | None = None,
+    _fallback_flag: list | None = None,
 ):
     if motion_aware_crop:
         try:
@@ -1167,6 +1168,8 @@ def render_part_smart(
         except Exception as exc:
             logger.warning("Motion-aware crop failed, fallback to standard render: %s", exc)
             logger.info("recovery_attempted strategy=fallback_standard_crop reason=%s output=%s", exc, Path(output_path).name)
+            if _fallback_flag is not None:
+                _fallback_flag.append(str(exc))
             # Fallback to standard ffmpeg render path if motion-aware branch fails.
             _fb = render_part(
                 input_path=input_path,

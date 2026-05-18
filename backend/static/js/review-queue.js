@@ -72,14 +72,19 @@ window.ReviewQueue = (() => {
     _refreshView();
   }
 
+  // RC1-P1-01: in-flight guard — rapid clicks must not spawn duplicate jobs.
+  const _retryInFlight = new Set();
+
   async function retry(jobId) {
     const item = _items.find(it => it.jobId === jobId);
     if (!item) return;
+    if (_retryInFlight.has(jobId)) return;
     if (!item.payload) {
       _showToast('No settings stored — open Create to start a new render', 'info');
       if (typeof setView === 'function') setView('render');
       return;
     }
+    _retryInFlight.add(jobId);
     _log('review_retry', jobId, item.name);
     try {
       const res  = await fetch('/api/render/process', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(item.payload) });
@@ -96,6 +101,8 @@ window.ReviewQueue = (() => {
       _refreshView();
     } catch (e) {
       _showToast('Retry error — check connection', 'error');
+    } finally {
+      _retryInFlight.delete(jobId);
     }
   }
 
