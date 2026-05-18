@@ -880,6 +880,7 @@ async function openEditorView(sourceMode, urlOrPath, pendingPayload) {
   if (typeof CreatorMemory  !== 'undefined') CreatorMemory.init();
   if (typeof CreatorTaste   !== 'undefined') CreatorTaste.init();
   if (typeof CreatorFeedback !== 'undefined') CreatorFeedback.init();
+  if (typeof CreatorDNA      !== 'undefined') CreatorDNA.init();
   if (typeof EditorConverse !== 'undefined') EditorConverse.init();
 
   try {
@@ -965,6 +966,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
   evInitVoiceFields(pendingPayload);
   if (typeof CreatorTaste    !== 'undefined') CreatorTaste.init();
   if (typeof CreatorFeedback !== 'undefined') CreatorFeedback.init();
+  if (typeof CreatorDNA      !== 'undefined') CreatorDNA.init();
   if (typeof mvUpdatePreviewHint === 'function') mvUpdatePreviewHint();
 
   if (pendingPayload) pendingPayload.edit_session_id = pd.session_id;
@@ -1919,6 +1921,7 @@ async function startRenderFromEditor() {
   payload.subtitle_style = qs('evSubStyle')?.value || 'pro_karaoke';
   if (typeof CreatorTaste    !== 'undefined') CreatorTaste.recordSubtitleStyle(payload.subtitle_style);
   if (typeof CreatorFeedback !== 'undefined') CreatorFeedback.recordPlatformChoice(payload.target_platform || 'youtube_shorts');
+  if (typeof CreatorDNA      !== 'undefined') payload.creator_dna = CreatorDNA.getDNAContext();
   if (payload.subtitle_style === 'pro_karaoke') payload.highlight_per_word = true;
   payload.sub_x_percent  = Math.max(5, Math.min(95, Number(qs('evSubPosX')?.value ?? _ev.subXPercent ?? 50)));
   // Editor mode: user expects subtitle on all exported parts.

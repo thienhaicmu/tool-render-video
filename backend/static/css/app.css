@@ -17400,6 +17400,14 @@ body:not(.is-render-studio-active) .rs-center-stage > #appBottomPanel.renderRunt
   cursor: default;
 }
 
+/* ── UP20: Creator DNA hint ───────────────────────────────────────────────── */
+.clipsDnaHint {
+  font-size: 10px;
+  color: #64748b;
+  padding: 0 8px 5px;
+  font-style: italic;
+}
+
 /* ── UP14: Platform banner ────────────────────────────────────────────────── */
 .clipsPlatformBanner {
   font-size: 11px;

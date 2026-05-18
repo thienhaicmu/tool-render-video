@@ -246,6 +246,9 @@ class RenderRequest(BaseModel):
     # cta_type: "auto" | "comment" | "part_2" | "follow". Auto picks by content type.
     cta_enabled: bool = False
     cta_type: str = "auto"
+    # Creator Style DNA (UP20) — inferred editorial identity context from frontend. Default empty.
+    # Computed by creator-dna.js from UP12+UP18 signals. Never overrides explicit creator choices.
+    creator_dna: dict = Field(default_factory=dict)
     # AI Variant Planning (Phase 21) — opt-in; plans advisory variants, never auto-renders.
     ai_variant_planning_enabled: bool = False
     ai_variant_count: int = 3

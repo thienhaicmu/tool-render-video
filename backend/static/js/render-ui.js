@@ -4358,7 +4358,15 @@ function populateRenderOutputPanel(job, parts) {
   const _platformBannerLabel = {tiktok:'TikTok',youtube_shorts:'YouTube Shorts',instagram_reels:'Instagram Reels'}[_jobTargetPlatform] || '';
   const _platformBanner = (_platformBannerLabel && _jobTargetPlatform !== 'youtube_shorts')
     ? `<div class="clipsPlatformBanner">Optimized for: ${esc(_platformBannerLabel)}</div>` : '';
-  list.innerHTML = _platformBanner + all.map((p) => {
+  // UP20: DNA hint — subtle note when creator identity nudges were applied.
+  const _jobDNA = getCurrentJobPayload(job)?.creator_dna || {};
+  const _dnaFired = _jobDNA.confident && (
+    ((_jobDNA.hook_forward         || 0) >= 0.5) ||
+    ((_jobDNA.clean_visual         || 0) >= 0.67) ||
+    ((_jobDNA.narrative_structure  || 0) >= 1.0)
+  );
+  const _dnaHint = _dnaFired ? `<div class="clipsDnaHint">Adapted to recent creator style</div>` : '';
+  list.innerHTML = _platformBanner + _dnaHint + all.map((p) => {
     const partNo = Number(p.part_no || 0);
     const st = String(p?.status || '').toLowerCase();
     const isFailed = st === 'failed' || st === 'error';

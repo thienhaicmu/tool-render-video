@@ -2029,6 +2029,12 @@ def run_render_pipeline(
         # viral_score is primary — it now incorporates transition quality, not just cut density.
         _target_platform = str(getattr(payload, "target_platform", "") or "youtube_shorts").strip().lower()
         _platform_hook_bonus = _PLATFORM_PROFILES.get(_target_platform, {}).get("hook_sort_bonus", 0)
+        # UP20: Creator Style DNA — inferred identity nudges (after platform, before default)
+        _dna = getattr(payload, "creator_dna", {}) or {}
+        _dna_confident    = bool(_dna.get("confident", False))
+        _dna_hook_bonus   = 3 if (_dna_confident and float(_dna.get("hook_forward",  0) or 0) >= 0.5) else 0
+        _dna_clean_visual = _dna_confident and float(_dna.get("clean_visual", 0) or 0) >= 0.67
+        _dna_action_count = int(_dna.get("action_count", 0) or 0)
         _combined_enabled = bool(getattr(payload, "combined_scoring_enabled", False))
         if _combined_enabled:
             def _provisional_combined(s):
@@ -2043,7 +2049,7 @@ def run_render_pipeline(
                 key=lambda x: (
                     int(x.get("viral_score", 0))
                     + (8 if _apply_motion_boost and int(x.get("motion_score", 0)) >= HIGH_MOTION_MIN_SCORE else 0)
-                    + int(float(x.get("hook_score", 0) or 0) * _platform_hook_bonus / 100),
+                    + int(float(x.get("hook_score", 0) or 0) * (_platform_hook_bonus + _dna_hook_bonus) / 100),
                     int(x.get("motion_score", 0)),
                 ),
                 reverse=True,
@@ -2096,6 +2102,17 @@ def run_render_pipeline(
         )
         _job_log(effective_channel, job_id,
                  f"platform_bias: target={_target_platform} hook_bonus={_platform_hook_bonus}")
+        # UP20: DNA nudge logging
+        if _dna_confident and (_dna_hook_bonus > 0 or _dna_clean_visual):
+            _job_log(
+                effective_channel, job_id,
+                f"dna_applied: action_count={_dna_action_count} "
+                f"hook_forward={float(_dna.get('hook_forward', 0) or 0):.2f} "
+                f"hook_bonus={_dna_hook_bonus} "
+                f"clean_visual={float(_dna.get('clean_visual', 0) or 0):.2f} "
+                f"clean_visual_active={_dna_clean_visual}",
+                kind="info",
+            )
         # Re-order for output numbering: timeline = chronological, viral/combined = by score
         part_order = str(getattr(payload, "part_order", "viral") or "viral").strip().lower()
         if part_order == "timeline":
@@ -3288,9 +3305,16 @@ def run_render_pipeline(
                     .get("sub_bias", {})
                     .get(str(seg.get("content_type_hint") or "vlog"), "")
                 ) if not _raw_sub_style else ""
+                # UP20: DNA sub_bias — clean_visual identity nudge; below platform in hierarchy.
+                _dna_sub_bias_val = (
+                    {"interview": "clean", "commentary": "story", "vlog": "story",
+                     "tutorial": "clean", "montage": "gaming"}.get(
+                        str(seg.get("content_type_hint") or "vlog"), "")
+                ) if (not _raw_sub_style and not _platform_sub_bias and _dna_clean_visual) else ""
                 _effective_subtitle_style = (
                     _raw_sub_style
                     or _platform_sub_bias
+                    or _dna_sub_bias_val
                     or _CONTENT_TYPE_SUB_DEFAULTS.get(
                         seg.get("content_type_hint", "vlog"), "tiktok_bounce_v1"
                     )
