@@ -145,6 +145,28 @@ def _transcription_cache_put(source_path: str, model_name: str, cache_suffix: st
         pass
 
 
+def _score_cache_get(key: str) -> list | None:
+    try:
+        cache_file = Path(tempfile.gettempdir()) / "render_cache" / "segment_scores" / f"{key}.json"
+        if not cache_file.exists():
+            return None
+        if time.time() - cache_file.stat().st_mtime > _RENDER_CACHE_TTL_SEC:
+            cache_file.unlink(missing_ok=True)
+            return None
+        return json.loads(cache_file.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _score_cache_put(key: str, scored: list) -> None:
+    try:
+        cache_dir = Path(tempfile.gettempdir()) / "render_cache" / "segment_scores"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        (cache_dir / f"{key}.json").write_text(json.dumps(scored), encoding="utf-8")
+    except Exception:
+        pass
+
+
 _PLAY_RES_Y_MAP = {"9:16": 1920, "1:1": 1080, "3:4": 1440, "4:5": 1440, "16:9": 1080}
 
 # UP13 — Multi-variant intelligence: content-type-aware subtitle style per variant.
@@ -2243,7 +2265,25 @@ def run_render_pipeline(
         segments = build_segments_from_scenes(scenes, source["duration"], payload.min_part_sec, payload.max_part_sec)
         if cancel_registry.is_cancelled(job_id):
             raise cancel_registry.JobCancelledError()
-        scored = score_segments(segments, scenes)
+        # UP28.1: segment score cache — raw scores are stable for same source + scene split
+        try:
+            _src_st = source_path.stat()
+            _score_ck = _render_cache_key(
+                str(source_path), _src_st.st_mtime, _src_st.st_size,
+                payload.min_part_sec, payload.max_part_sec, len(scenes),
+            )
+            _cached_scored = _score_cache_get(_score_ck)
+        except Exception:
+            _score_ck = None
+            _cached_scored = None
+        if _cached_scored is not None:
+            scored = _cached_scored
+            _job_log(effective_channel, job_id, f"score_cache_hit type=segment_scores segments={len(scored)}")
+        else:
+            scored = score_segments(segments, scenes)
+            _job_log(effective_channel, job_id, f"score_cache_miss type=segment_scores segments={len(scored)}")
+            if _score_ck:
+                _score_cache_put(_score_ck, scored)
         # UP26: Clip exclude — remove creator-blacklisted timestamp ranges before selection
         _clip_exclude = [x for x in (getattr(payload, 'clip_exclude', None) or []) if isinstance(x, dict)]
         if _clip_exclude:
@@ -3255,6 +3295,12 @@ def run_render_pipeline(
                 hook_score=seg.get("hook_score", 0),
             )
 
+        # UP28.1: source stat for motion path cache key — computed once, shared across all parts
+        try:
+            _src_stat_for_motion = source_path.stat()
+        except Exception:
+            _src_stat_for_motion = None
+
         def _process_one_part(idx: int, seg: dict):
             raw_part = work_dir / f"{source['slug']}_part_{idx:03d}_raw.mp4"
             srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.srt"
@@ -3907,6 +3953,24 @@ def run_render_pipeline(
             _encode_timer.start()
             _t_encode = time.perf_counter()
             _t_render = time.perf_counter()
+            # UP28.1: motion path cache key — stable across rerenders of same source+clip range
+            _motion_ck = None
+            if payload.motion_aware_crop and _src_stat_for_motion is not None:
+                try:
+                    _motion_ck = _render_cache_key(
+                        str(source_path),
+                        _src_stat_for_motion.st_mtime,
+                        _src_stat_for_motion.st_size,
+                        round(_effective_start, 3),
+                        round(float(seg["end"]), 3),
+                        str(payload.aspect_ratio),
+                        float(payload.frame_scale_x),
+                        float(payload.frame_scale_y),
+                        str(getattr(payload, "reframe_mode", "subject")),
+                        str(seg.get("content_type_hint", "vlog")),
+                    )
+                except Exception:
+                    _motion_ck = None
             try:
                 render_part_smart(
                     str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if payload.add_title_overlay else "",
@@ -3939,6 +4003,7 @@ def run_render_pipeline(
                     loudnorm_enabled=getattr(payload, "loudnorm_enabled", False),
                     ffmpeg_threads=_ffmpeg_threads,
                     content_type=seg.get("content_type_hint", "vlog"),
+                    _motion_cache_key=_motion_ck,
                 )
             finally:
                 _encode_stop.set()
@@ -3946,6 +4011,8 @@ def run_render_pipeline(
             _render_ms = int((time.perf_counter() - _t_render) * 1000)
             logger.info("render_part_ms=%d part=%d codec=%s crop=%s",
                         _render_ms, idx, payload.video_codec, payload.motion_aware_crop)
+            if _motion_ck:
+                _job_log(effective_channel, job_id, f"rerender_fast_path part={idx} motion_cache_key={_motion_ck[:8]} render_ms={_render_ms}")
             # Part G: visual finish observability — auditable per-part quality metadata
             _emit_render_event(
                 channel_code=effective_channel,

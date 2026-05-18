@@ -1110,6 +1110,7 @@ def render_part_smart(
     ffmpeg_threads: int | None = None,
     crop_cfg_override: MotionCropConfig | None = None,
     content_type: str = "vlog",
+    _motion_cache_key: str | None = None,
 ):
     if motion_aware_crop:
         try:
@@ -1157,6 +1158,7 @@ def render_part_smart(
                     ffmpeg_threads=ffmpeg_threads,
                     cfg=crop_cfg,
                     content_type=content_type,
+                    _cache_key=_motion_cache_key,
                 )
             finally:
                 if _crop_ctx is not None:
