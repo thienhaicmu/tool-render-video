@@ -649,13 +649,15 @@ body:not(.is-history-active) #partial_history_view { display: none !important; }
 /* =======================================================
    H-HOTFIX-2  partial_render_home flex space during render
    -------------------------------------------------------
-   When render_home_panel.hiddenView (active job / non-render
-   view), the wrapper #partial_render_home should not claim
-   flex space — otherwise it competes with renderActivePanel.
-   Uses :has() which is available in Electron/Chromium 105+.
+   When a render job is active, #partial_render_home must not
+   claim flex space — otherwise it competes with renderActivePanel
+   and renderOutputPanel for rs-center-stage height.
+   JS sets .isRenderActive on .appShell whenever showActivePanel
+   is true (active job + render view). This is explicit and does
+   not depend on DOM child state timing.
    ======================================================= */
 
-#partial_render_home:has(> .hiddenView) {
+.appShell.isRenderActive #partial_render_home {
   flex: 0 0 auto;
 }
 

@@ -125,10 +125,10 @@ code, pre, .mono {
 
 /*
   Row layout:
-    1 — topbar        48px
-    2 — rs-main       1fr   (sidebar | center | inspector)
-    3 — bottom panel  var(--abp-h) collapsed / var(--abp-h-expanded) expanded
-    4 — status bar    24px
+    1 — topbar     48px
+    2 — rs-main    1fr   (sidebar | center [bottom panel lives here] | inspector)
+    3 — status bar 24px
+  The bottom panel is a flex child inside rs-main, not a separate grid row.
 */
 
 .appShell {
@@ -137,22 +137,12 @@ code, pre, .mono {
   grid-template-rows:
     var(--topbar-h)
     minmax(0, 1fr)
-    var(--abp-h)
     var(--statusbar-h);
   width: 100vw;
   height: 100vh;
   background: var(--bg-900);
   overflow: hidden;
   position: relative;
-}
-
-/* Bottom panel expanded state */
-.appShell.abp-expanded {
-  grid-template-rows:
-    var(--topbar-h)
-    minmax(0, 1fr)
-    var(--abp-h-expanded)
-    var(--statusbar-h);
 }
 
 
@@ -397,16 +387,9 @@ code, pre, .mono {
    V3 — BOTTOM PANEL SHELL
    ======================================================= */
 
-/*
-  appBottomPanel lives inside .mainArea in HTML but is
-  grid-placed into row 3 of .appShell via absolute grid placement.
-  Its immediate grid parent resolves to .appShell because
-  .mainArea is not a grid container.
-*/
+/* Bottom panel: nested inside .mainArea → .rs-center-stage (not a grid child). */
 
 .appBottomPanel {
-  grid-row: 3;
-  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   background: var(--bg-800);
@@ -494,7 +477,7 @@ code, pre, .mono {
    ======================================================= */
 
 .appStatusBar {
-  grid-row: 4;
+  grid-row: 3;
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
@@ -573,7 +556,7 @@ code, pre, .mono {
 
 /* Old footer strip → covered by .appStatusBar */
 .shell__strip {
-  grid-row: 4;
+  grid-row: 3;
   grid-column: 1 / -1;
   display: flex;
   align-items: center;

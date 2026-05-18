@@ -640,15 +640,6 @@ textarea.fieldInput {
   border-left: none;
 }
 
-/* abpCollapsed: minimal bottom panel (header only) */
-.appShell.abpCollapsed {
-  grid-template-rows:
-    var(--topbar-h)
-    minmax(0, 1fr)
-    var(--abp-h)
-    var(--statusbar-h);
-}
-
 
 /* =======================================================
    V3 — RENDER HOME PANEL

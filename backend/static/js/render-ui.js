@@ -28,19 +28,27 @@ const RENDER_MONITOR_STALL_MS = 45000;
 let _queueStatusTimer = null;
 
 function mountRenderRuntimePanel() {
+  // ATOMIC MOUNT CONTRACT
+  // Both steps below must happen in the same synchronous call with no
+  // interleaved repaints:
+  //   1. Collapse the static .appBottomPanel (renderCompatWrapper → height:0)
+  //   2. Move .abpToolbar + #rc_bottom into .renderRuntimeMount
+  // If either step is delayed the queue subtree briefly has no bounded
+  // height context, which produces a dead-scroll frame.
+  // DO NOT split these operations across async boundaries or microtask gaps.
   const runtimeMount = qs('render_runtime_mount');
   const activePanel = qs('render_active_panel');
   const bottomPanel = qs('appBottomPanel');
   if (!runtimeMount || !activePanel || !bottomPanel) return;
   if (bottomPanel.dataset.runtimeMounted === '1') return;
   bottomPanel.dataset.runtimeMounted = '1';
-  bottomPanel.classList.add('renderCompatWrapper');
+  bottomPanel.classList.add('renderCompatWrapper');   // step 1: collapse static panel
   bottomPanel.setAttribute('aria-hidden', 'true');
 
   const toolbar = bottomPanel.querySelector('.abpToolbar');
   const runtimeBody = qs('rc_bottom');
-  if (toolbar && toolbar.parentElement !== runtimeMount) runtimeMount.appendChild(toolbar);
-  if (runtimeBody && runtimeBody.parentElement !== runtimeMount) runtimeMount.appendChild(runtimeBody);
+  if (toolbar && toolbar.parentElement !== runtimeMount) runtimeMount.appendChild(toolbar);   // step 2a
+  if (runtimeBody && runtimeBody.parentElement !== runtimeMount) runtimeMount.appendChild(runtimeBody); // step 2b
 
   const queuePanel = runtimeMount.querySelector('.rcQueuePanel');
   const partCards = qs('rc_part_cards');
@@ -1849,6 +1857,7 @@ function updateRenderMainState(job, summary, parts = []) {
 
   homePanel.classList.toggle('hiddenView', !((currentView === 'render') && !showActivePanel));
   activePanel.classList.toggle('hiddenView', !showActivePanel);
+  document.querySelector('.appShell')?.classList.toggle('isRenderActive', showActivePanel);
   if (!showActivePanel) return;
 
   const s = summary || computeProgressSummary(parts || []);
