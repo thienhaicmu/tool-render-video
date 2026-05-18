@@ -17618,3 +17618,12 @@ body:not(.is-render-studio-active) .rs-center-stage > #appBottomPanel.renderRunt
 .bqCard.bq-recovered { border-color:rgba(251,191,36,.25); }
 .bqCardStatus.st-recovered { color:#fbbf24; background:rgba(251,191,36,.1); }
 .clipRecoveredNote { font-size:10px; color:#d97706; opacity:.8; margin-top:2px; cursor:default; }
+
+/* UP26: Clip steering — Keep / Avoid buttons on clip cards */
+.clipCardSteerRow { display:flex; gap:6px; margin-top:5px; }
+.clipCardBtnKeep,
+.clipCardBtnAvoid { font-size:10px; padding:2px 8px; border-radius:4px; border:1px solid; cursor:pointer; background:transparent; transition:opacity .15s; }
+.clipCardBtnKeep  { color:#34d399; border-color:rgba(52,211,153,.35); }
+.clipCardBtnKeep:hover  { background:rgba(52,211,153,.1); }
+.clipCardBtnAvoid { color:#f87171; border-color:rgba(248,113,113,.35); }
+.clipCardBtnAvoid:hover { background:rgba(248,113,113,.1); }

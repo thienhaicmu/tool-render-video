@@ -140,6 +140,13 @@ function evSyncQsBar() {
     ctaBtn.textContent = ctaEl.checked ? 'CTA On' : 'End Card';
   }
 
+  const sbEl = document.getElementById('qsStructureBias');
+  if (sbEl) {
+    document.querySelectorAll('[data-qs-group="structure"]').forEach(function(btn) {
+      btn.classList.toggle('active', btn.dataset.qsVal === sbEl.value);
+    });
+  }
+
   const dnaHintEl = document.getElementById('cpDnaHint');
   if (dnaHintEl) {
     let hint = null;
@@ -155,6 +162,9 @@ function evSyncQsBar() {
 function evQsSet(group, val) {
   if (group === 'platform') {
     const el = document.getElementById('evTargetPlatform');
+    if (el) el.value = val;
+  } else if (group === 'structure') {
+    const el = document.getElementById('qsStructureBias');
     if (el) el.value = val;
   } else if (group === 'sub') {
     const subOn    = document.getElementById('evAddSubtitle');
@@ -2209,6 +2219,19 @@ async function startRenderFromEditor() {
   // ── P1.8-J: Editor audio plan ────────────────────────────────────────────────
   if (typeof EditorAudioRuntime !== 'undefined') {
     payload.editor_audio_plan = EditorAudioRuntime.serializeForRender();
+  }
+
+  // ── UP26: Pro Timeline Steering ──────────────────────────────────────────────
+  {
+    const _sbEl = document.getElementById('qsStructureBias');
+    payload.structure_bias    = (_sbEl ? _sbEl.value : null) || 'balanced';
+    const _seEl = document.getElementById('evSubtitleEmphasis');
+    payload.subtitle_emphasis = (_seEl ? _seEl.value : null) || 'balanced';
+    if (typeof ClipSteering !== 'undefined') {
+      const _cs = ClipSteering.getPayload();
+      payload.clip_lock    = _cs.clip_lock.length    ? _cs.clip_lock    : null;
+      payload.clip_exclude = _cs.clip_exclude.length ? _cs.clip_exclude : null;
+    }
   }
 
   // ── Output dir override (editor→render: bypass channel selection) ────────────

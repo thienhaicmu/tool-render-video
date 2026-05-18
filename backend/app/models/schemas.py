@@ -264,6 +264,16 @@ class RenderRequest(BaseModel):
     ai_clip_batch_planning_enabled: bool = False
     ai_clip_batch_limit: int = 5
 
+    # UP26: Pro Timeline Steering — creator guidance signals (above DNA, below explicit lock)
+    # clip_lock: [{start_sec, end_sec}] — candidate ranges creator wants included
+    # clip_exclude: [{start_sec, end_sec}] — timestamp ranges to skip entirely
+    # structure_bias: 'hook' | 'balanced' | 'story' — gentle ranking re-weight
+    # subtitle_emphasis: 'subtle' | 'balanced' | 'aggressive' — font-size multiplier
+    clip_lock: Optional[list[dict]] = None
+    clip_exclude: Optional[list[dict]] = None
+    structure_bias: Optional[str] = None
+    subtitle_emphasis: Optional[str] = None
+
     @field_validator("ai_clip_min_duration_sec")
     @classmethod
     def _validate_clip_min_duration(cls, v: int) -> int:

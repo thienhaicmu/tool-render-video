@@ -4358,6 +4358,20 @@ function populateRenderOutputPanel(job, parts) {
   const _jobRecoveryNotes = Array.isArray(parseRenderResult(job)?.recovery_notes) ? parseRenderResult(job).recovery_notes : [];
   const _jobRecovered = _jobRecoveryNotes.length > 0;
 
+  // UP26: Clip steering helpers — called from card onclick attributes
+  window.csKeepClip = function(startSec, endSec, label) {
+    if (typeof ClipSteering !== 'undefined') {
+      ClipSteering.lockClip(startSec, endSec, label);
+      if (typeof showToast === 'function') showToast('Clip marked as Keep — will be prioritised next render', 'success');
+    }
+  };
+  window.csAvoidClip = function(startSec, endSec, label) {
+    if (typeof ClipSteering !== 'undefined') {
+      ClipSteering.excludeClip(startSec, endSec, label);
+      if (typeof showToast === 'function') showToast('Clip marked as Avoid — will be excluded next render', 'info');
+    }
+  };
+
   // UP14: Platform banner — shows when a non-default platform is selected for the job.
   const _jobTargetPlatform = String(getCurrentJobPayload(job)?.target_platform || '').trim().toLowerCase();
   const _platformBannerLabel = {tiktok:'TikTok',youtube_shorts:'YouTube Shorts',instagram_reels:'Instagram Reels'}[_jobTargetPlatform] || '';
@@ -4460,6 +4474,7 @@ function populateRenderOutputPanel(job, parts) {
         ${(motionScore !== null || hookScore !== null) && (rk.isBest || scoreVal >= 6) ? _r7SignalRow(motionScore, hookScore, rk.isBest, _bestMotion, _bestHook) : ''}
         ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
         ${_shouldRenderBestExport(_cardAiUx, rk.isBest) ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">&#x2713;</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}
+        ${isDone && endSec > startSec ? `<div class="clipCardSteerRow"><button class="clipCardBtnKeep" onclick="csKeepClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}')" title="Prioritise this clip in next render">&#10003; Keep</button><button class="clipCardBtnAvoid" onclick="csAvoidClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}')" title="Exclude this clip from next render">&#10007; Avoid</button></div>` : ''}
         <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}${coverBtn}${compareBtn}</div>
       </div>
     </div>`;

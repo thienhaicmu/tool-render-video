@@ -134,6 +134,12 @@ window.BatchQueue = (() => {
       auto_best_export_count:     3,
 
       creator_dna: (typeof CreatorDNA !== 'undefined') ? CreatorDNA.getDNAContext() : null,
+
+      // UP26: Pro Timeline Steering
+      structure_bias:    (document.getElementById('qsStructureBias')?.value) || 'balanced',
+      subtitle_emphasis: (document.getElementById('evSubtitleEmphasis')?.value) || 'balanced',
+      clip_lock:    (typeof ClipSteering !== 'undefined' && ClipSteering.getClipLock().length)    ? ClipSteering.getClipLock()    : null,
+      clip_exclude: (typeof ClipSteering !== 'undefined' && ClipSteering.getClipExclude().length) ? ClipSteering.getClipExclude() : null,
     };
   }
 

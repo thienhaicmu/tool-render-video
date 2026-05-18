@@ -2029,6 +2029,20 @@ def run_render_pipeline(
         if cancel_registry.is_cancelled(job_id):
             raise cancel_registry.JobCancelledError()
         scored = score_segments(segments, scenes)
+        # UP26: Clip exclude — remove creator-blacklisted timestamp ranges before selection
+        _clip_exclude = [x for x in (getattr(payload, 'clip_exclude', None) or []) if isinstance(x, dict)]
+        if _clip_exclude:
+            _before_ex = len(scored)
+            def _in_exclude_range(seg, _ranges=_clip_exclude):
+                s = float(seg.get('start', 0))
+                e = float(seg.get('end', s + 1))
+                return any(s < float(ex.get('end_sec', 0)) and e > float(ex.get('start_sec', 0)) for ex in _ranges)
+            scored = [seg for seg in scored if not _in_exclude_range(seg)]
+            _job_log(effective_channel, job_id,
+                     f"clip_exclude: {_before_ex - len(scored)} segments filtered by {len(_clip_exclude)} excluded ranges")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id, event="clip_excluded", level="INFO",
+                message=f"UP26 clip_exclude: {_before_ex - len(scored)} segments removed", step="render.steering",
+                context={"excluded_ranges": len(_clip_exclude), "segments_removed": _before_ex - len(scored)})
         # High-motion preference: boost high-energy clips without hard eviction.
         # Talking-head, interview, and commentary content remain competitive in the pool.
         _high_motion_count = sum(1 for s in scored if int(s.get("motion_score", 0)) >= HIGH_MOTION_MIN_SCORE)
@@ -2047,6 +2061,16 @@ def run_render_pipeline(
         _dna_hook_bonus   = 3 if (_dna_confident and float(_dna.get("hook_forward",  0) or 0) >= 0.5) else 0
         _dna_clean_visual = _dna_confident and float(_dna.get("clean_visual", 0) or 0) >= 0.67
         _dna_action_count = int(_dna.get("action_count", 0) or 0)
+        # UP26: Structure bias — gentle ranking re-weight (creator intent, above DNA, below explicit lock)
+        _sb = str(getattr(payload, 'structure_bias', '') or 'balanced').strip().lower()
+        _sb_hook_mult  = 1.25 if _sb == 'hook'  else (0.85 if _sb == 'story' else 1.0)
+        _sb_viral_mult = 0.85 if _sb == 'hook'  else (1.15 if _sb == 'story' else 1.0)
+        # UP26: Subtitle emphasis — adjust font size before part loop reads payload.sub_font_size
+        _sub_emphasis = str(getattr(payload, 'subtitle_emphasis', '') or 'balanced').strip().lower()
+        if _sub_emphasis in ('subtle', 'aggressive'):
+            _base_sz = int(getattr(payload, 'sub_font_size', 0) or 46)
+            payload.sub_font_size = (max(24, int(_base_sz * 0.82)) if _sub_emphasis == 'subtle'
+                                     else min(120, int(_base_sz * 1.20)))
         _combined_enabled = bool(getattr(payload, "combined_scoring_enabled", False))
         if _combined_enabled:
             def _provisional_combined(s):
@@ -2055,20 +2079,36 @@ def run_render_pipeline(
                            s.get("hook_opening_score") or s.get("hook_score") or 0)
                 # mv not yet computed; fallback = vs → vs*0.50 + vs*0.30 + hs*0.20 = vs*0.80 + hs*0.20
                 # UP20.1 Part A: DNA hook bonus — same gentle nudge as standard sort path.
-                return vs * 0.80 + hs * (0.20 + _dna_hook_bonus / 100)
+                # UP26: Structure bias multipliers applied after DNA nudge.
+                return (vs * 0.80 * _sb_viral_mult) + hs * (0.20 + _dna_hook_bonus / 100) * _sb_hook_mult
             scored.sort(key=_provisional_combined, reverse=True)
         else:
             scored.sort(
                 key=lambda x: (
-                    int(x.get("viral_score", 0))
+                    int(x.get("viral_score", 0) * _sb_viral_mult)
                     + (8 if _apply_motion_boost and int(x.get("motion_score", 0)) >= HIGH_MOTION_MIN_SCORE else 0)
-                    + int(float(x.get("hook_score", 0) or 0) * (_platform_hook_bonus + _dna_hook_bonus) / 100),
+                    + int(float(x.get("hook_score", 0) or 0) * (_platform_hook_bonus + _dna_hook_bonus) / 100 * _sb_hook_mult),
                     int(x.get("motion_score", 0)),
                 ),
                 reverse=True,
             )
         if payload.max_export_parts and payload.max_export_parts > 0:
             scored = scored[:payload.max_export_parts]
+        # UP26: Clip lock — promote creator-selected timestamp ranges to front of pool (after slice)
+        _clip_lock = [x for x in (getattr(payload, 'clip_lock', None) or []) if isinstance(x, dict)]
+        if _clip_lock:
+            def _in_lock_range(seg, _ranges=_clip_lock):
+                s = float(seg.get('start', 0))
+                e = float(seg.get('end', s + 1))
+                return any(s < float(lk.get('end_sec', 0)) and e > float(lk.get('start_sec', 0)) for lk in _ranges)
+            _locked = [seg for seg in scored if _in_lock_range(seg)]
+            _unlocked = [seg for seg in scored if not _in_lock_range(seg)]
+            scored = _locked + _unlocked
+            _job_log(effective_channel, job_id,
+                     f"clip_lock: {len(_locked)} segments promoted by {len(_clip_lock)} locked ranges")
+            _emit_render_event(channel_code=effective_channel, job_id=job_id, event="clip_locked", level="INFO",
+                message=f"UP26 clip_lock: {len(_locked)} segments promoted to front", step="render.steering",
+                context={"lock_ranges": len(_clip_lock), "segments_promoted": len(_locked)})
         # ── Multi-variant: replace pool with 3 purposeful single-clip selections ──
         _multi_variant = bool(getattr(payload, "multi_variant", False))
         if _multi_variant:
