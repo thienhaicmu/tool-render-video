@@ -86,7 +86,9 @@ _VARIANT_STORY_SUB: dict[str, str] = {
 # All values are lightweight nudges — no pipeline rewrite, no platform-specific render engine.
 _PLATFORM_PROFILES: dict[str, dict] = {
     "tiktok": {
-        "speed_delta":     0.04,   # snappier pacing for short-form retention
+        # P4 hardening: increased from 0.04 → 0.08 so pacing difference is perceptible.
+        # At 1.07 base: 1.15x output. On 30s clip: ~26s. On 60s clip: ~52s.
+        "speed_delta":     0.08,
         "hook_sort_bonus": 6,      # adds up to 6pts to hook-strong clips in initial sort
         "sub_bias": {
             "interview": "viral", "commentary": "viral",
@@ -99,7 +101,9 @@ _PLATFORM_PROFILES: dict[str, dict] = {
         "sub_bias": {},            # inherit content-type defaults — already tuned for YT
     },
     "instagram_reels": {
-        "speed_delta":    -0.03,   # slightly slower, polished feel
+        # P4 hardening: increased from -0.03 → -0.06 so polished-pace difference is perceptible.
+        # At 1.07 base: 1.01x output. On 30s clip: ~30s. On 60s clip: ~59s.
+        "speed_delta":    -0.06,
         "hook_sort_bonus": 0,
         "sub_bias": {
             "interview": "clean", "commentary": "clean",
@@ -141,8 +145,9 @@ def _select_cover_frame_time(
         preferred_pos = min(0.60, preferred_pos + 0.10)
 
     # Subtitle window to avoid (first dense text block = worst time for thumbnail).
-    sub_s = float((srt_meta or {}).get("first_sub_start") or -1)
-    sub_e = float((srt_meta or {}).get("first_sub_end") or -1)
+    # Keys match slice_srt_by_time() output: "first_start" / "first_end" (not "first_sub_*").
+    sub_s = float((srt_meta or {}).get("first_start") or -1)
+    sub_e = float((srt_meta or {}).get("first_end") or -1)
 
     best_t, best_score, best_reason = candidates[0], -9999.0, "default"
     for t in candidates:
@@ -218,17 +223,32 @@ _CTA_AUTO_TYPE: dict[str, str] = {
 }
 
 
-def _select_cta_text(content_type: str, target_platform: str, cta_type: str) -> str:
-    """Return a deterministic CTA string. Pure function — no I/O, no randomness."""
+def _select_cta_text(
+    content_type: str, target_platform: str, cta_type: str, variant_type: str = ""
+) -> str:
+    """Return a deterministic CTA string. Pure function — no I/O, no randomness.
+
+    When cta_type="auto" and a variant is active, variant intent shapes the CTA type:
+      aggressive → "comment"  (punchy, engagement-first)
+      story_first → "follow"  (soft, natural ending)
+      balanced / none → content-type auto mapping (existing behaviour)
+    Creator's explicit cta_type choice always overrides variant logic.
+    """
     ct = str(content_type or "vlog").lower()
+    vt = str(variant_type or "").lower()
     if cta_type == "auto":
-        cta_type = _CTA_AUTO_TYPE.get(ct, "follow")
+        if vt == "aggressive":
+            cta_type = "comment"    # punchy hook variant → invite engagement
+        elif vt == "story_first":
+            cta_type = "follow"     # payoff variant → soft natural ending
+        else:
+            cta_type = _CTA_AUTO_TYPE.get(ct, "follow")
     if cta_type not in ("comment", "part_2", "follow"):
         cta_type = "follow"
     ct_texts = _CTA_TEXTS.get(ct, _CTA_TEXTS["vlog"])
     options = ct_texts.get(cta_type, ct_texts.get("follow", ["More soon."]))
-    # TikTok prefers shorter text — use second option when available.
-    if str(target_platform).lower() == "tiktok" and len(options) > 1:
+    # Aggressive variant or TikTok: prefer shorter option (index 1) when available.
+    if (str(target_platform).lower() == "tiktok" or vt == "aggressive") and len(options) > 1:
         return options[1]
     return options[0]
 
@@ -275,10 +295,12 @@ def _build_variant_segments(scored: list[dict], payload) -> list[dict]:
         )
 
     def _bal_score(s: dict) -> float:
+        # scene_quality_score replaces retention_score — retention was never computed
+        # by the viral scorer (always 0). scene_quality_score is always populated.
         return (
             float(s.get("viral_score", 0) or 0) * 0.35
             + float(s.get("hook_score", 0) or 0) * 0.20
-            + float(s.get("retention_score", 0) or 0) * 0.20
+            + float(s.get("scene_quality_score", 0) or 0) * 0.20
             + float(s.get("speech_density_score", 0) or 0) * 0.10
             + float(s.get("market_score", 0) or 0) * 0.10
             + float(s.get("duration_fit_score", 0) or 0) * 0.05
@@ -287,8 +309,11 @@ def _build_variant_segments(scored: list[dict], payload) -> list[dict]:
     _max_start = max((float(s.get("start", 0) or 0) for s in scored), default=1.0) or 1.0
 
     def _story_score(s: dict) -> float:
+        # scene_quality_score replaces retention_score — retention was never computed
+        # by the viral scorer (always 0). scene_quality_score reflects visual clarity
+        # and transition quality, a real proxy for payoff-worthy content.
         return (
-            float(s.get("retention_score", 0) or 0) * 0.45
+            float(s.get("scene_quality_score", 0) or 0) * 0.45
             + float(s.get("start", 0) or 0) / _max_start * 100 * 0.30
             + float(s.get("viral_score", 0) or 0) * 0.25
         )
@@ -315,11 +340,41 @@ def _build_variant_segments(scored: list[dict], payload) -> list[dict]:
     story["variant_playback_speed"] = round(max(0.97, base_speed - 0.05), 3)
     story["selection_reason"]      = "Story-first: payoff-forward selection"
 
+    # P3 — Small-pool honesty: warn when variants overlap (limited source variety).
+    # No artificial diversity injection — honest about what the pool contains.
+    _v_starts = [
+        round(float(agg.get("start", 0) or 0), 1),
+        round(float(bal.get("start", 0) or 0), 1),
+        round(float(story.get("start", 0) or 0), 1),
+    ]
+    _unique_starts = len(set(_v_starts))
+    if _unique_starts == 1:
+        _pool_note = " [limited source variety — all variants share same source clip]"
+        for _v in (agg, bal, story):
+            _v["selection_reason"] = _v["selection_reason"] + _pool_note
+        logger.warning(
+            "multi_variant_collapsed pool_size=%d all_start=%.1f — source too short for distinct variants",
+            len(scored), _v_starts[0],
+        )
+    elif _unique_starts == 2:
+        _dup_starts: dict[float, list] = {}
+        for _v, _s in zip((agg, bal, story), _v_starts):
+            _dup_starts.setdefault(_s, []).append(_v)
+        for _dup_group in _dup_starts.values():
+            if len(_dup_group) > 1:
+                for _v in _dup_group:
+                    _v["selection_reason"] = _v["selection_reason"] + " [shares source clip with another variant]"
+        logger.info(
+            "multi_variant_partial_collapse pool_size=%d unique_starts=%d",
+            len(scored), _unique_starts,
+        )
+
     logger.info(
-        "multi_variant_selected agg_start=%.1f bal_start=%.1f story_start=%.1f",
+        "multi_variant_selected agg_start=%.1f bal_start=%.1f story_start=%.1f unique_segs=%d",
         float(agg.get("start", 0) or 0),
         float(bal.get("start", 0) or 0),
         float(story.get("start", 0) or 0),
+        _unique_starts,
     )
     return [agg, bal, story]
 
@@ -3282,9 +3337,10 @@ def run_render_pipeline(
                 _cta_enabled = bool(getattr(payload, "cta_enabled", False))
                 if _cta_enabled and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
                     try:
-                        _cta_type = str(getattr(payload, "cta_type", "auto") or "auto").strip().lower()
-                        _ct_hint  = str(seg.get("content_type_hint") or "vlog")
-                        _cta_text = _select_cta_text(_ct_hint, _target_platform, _cta_type)
+                        _cta_type    = str(getattr(payload, "cta_type", "auto") or "auto").strip().lower()
+                        _ct_hint     = str(seg.get("content_type_hint") or "vlog")
+                        _cta_vt      = str(seg.get("variant_type") or "")
+                        _cta_text    = _select_cta_text(_ct_hint, _target_platform, _cta_type, _cta_vt)
                         _last_sub_end = float(_srt_meta.get("last_end") or 0)
                         _eff_speed    = float(
                             seg.get("variant_playback_speed")

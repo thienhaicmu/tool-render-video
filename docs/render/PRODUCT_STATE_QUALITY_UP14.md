@@ -24,7 +24,7 @@ Three profiles. Each applies small, transparent adjustments to segment selection
 subtitle style, and playback speed.
 
 ### TikTok
-- **Speed delta:** +0.04 (e.g. 1.07 → 1.11)
+- **Speed delta:** +0.08 (e.g. 1.07 → 1.15) — *HARDENING1: increased from +0.04 for perceptible pacing difference*
 - **Hook sort bonus:** +6pts to hook-strong clips in initial selection
 - **Subtitle bias:** `viral` for interview/commentary/vlog/tutorial; `gaming` for montage
 
@@ -34,7 +34,7 @@ subtitle style, and playback speed.
 - **Subtitle bias:** inherit content-type defaults (clean/story/viral/gaming)
 
 ### Instagram Reels
-- **Speed delta:** −0.03 (e.g. 1.07 → 1.04)
+- **Speed delta:** −0.06 (e.g. 1.07 → 1.01) — *HARDENING1: increased from −0.03 for perceptible polish-pacing difference*
 - **Hook sort bonus:** 0
 - **Subtitle bias:** `clean` for interview/commentary/vlog/tutorial; `gaming` for montage
 

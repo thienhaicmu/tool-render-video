@@ -32,15 +32,20 @@ a subtitle bias, and a speed bias.
 ### Variant B — Balanced
 - **Goal:** Best-overall smart edit (current default behavior)
 - **Good for:** General creator workflow, YouTube Shorts
-- **Segment selection:** Existing UP9 formula (`viral×0.35 + hook×0.20 + retention×0.20 + speech×0.10 + market×0.10 + duration×0.05`)
+- **Segment selection:** `viral×0.35 + hook×0.20 + scene_quality×0.20 + speech×0.10 + market×0.10 + duration_fit×0.05`
+  - Note (HARDENING1): `scene_quality_score` replaced `retention_score` — retention was never
+    computed by the viral scorer (always 0). scene_quality_score is always populated.
 - **Subtitle bias:** Creator's payload choice (inherits `subtitle_style`, taste-aware from UP12)
 - **Speed bias:** No change (exact payload `playback_speed`)
 
 ### Variant C — Story-first
 - **Goal:** Flow, coherence, payoff protection
 - **Good for:** Vlog, education, storytelling, YouTube Shorts
-- **Segment selection:** `retention_score × 0.45 + (start / max_start) × 0.35 + viral_score × 0.20`
-  - Biases toward clips that appear later in the source (narrative payoff) with strong retention
+- **Segment selection:** `scene_quality_score × 0.45 + (start / max_start) × 100 × 0.30 + viral_score × 0.25`
+  - Note (HARDENING1): `scene_quality_score` replaced `retention_score` — retention was never
+    computed by the viral scorer. scene_quality reflects visual clarity and transition quality,
+    a real proxy for payoff-worthy content. Positional bias preserved: story-first still tends
+    toward later-in-source clips with high visual quality.
 - **Subtitle bias:** `story` (commentary/vlog/montage) or `clean` (interview/tutorial)
 - **Speed bias:** `−0.05` (e.g. 1.07 → 1.02)
 
@@ -157,7 +162,7 @@ When `multi_variant=True`:
 | File | Change |
 |---|---|
 | `backend/app/models/schemas.py` | `multi_variant: bool = False` field added |
-| `backend/app/orchestration/render_pipeline.py` | `_VARIANT_AGGRESSIVE_SUB`, `_VARIANT_STORY_SUB`, `_build_variant_segments()`; variant injection after score cap; story arc guard; variant-aware filename, subtitle, speed; `variant_type` in ranking entry |
+| `backend/app/orchestration/render_pipeline.py` | `_VARIANT_AGGRESSIVE_SUB`, `_VARIANT_STORY_SUB`, `_build_variant_segments()`; variant injection after score cap; story arc guard; variant-aware filename, subtitle, speed; `variant_type` in ranking entry. **HARDENING1:** `scene_quality_score` replaces `retention_score` in `_bal_score` and `_story_score`; small-pool collapse warning added. |
 | `backend/static/index.html` | Multi-variant checkbox in editor render settings |
 | `backend/static/js/editor-view.js` | `payload.multi_variant` from checkbox |
 | `backend/static/js/render-ui.js` | `variantType` in `_rankMap`; variant badge in clip cards |

@@ -35,7 +35,7 @@ artifact) or near the end (outro).
 | **Position score** | Peak at `preferred_pos`, falls off with distance (weight: 10pts max) |
 | **Hook bonus** | High hook_score → earlier frames preferred (weight: up to 5pts) |
 | **Stability bonus** | Middle range [22%–60%] gets +1.5pts (fewer transition artifacts) |
-| **Subtitle penalty** | Frame inside first subtitle block → −6pts (avoid text-cluttered frame) |
+| **Subtitle penalty** | Frame inside first subtitle block → −6pts (avoid text-cluttered frame). **HARDENING1:** Fixed key mismatch — was reading `"first_sub_start"`/`"first_sub_end"` (never populated); corrected to `"first_start"`/`"first_end"` (actual keys from `slice_srt_by_time()`). Penalty now executes. |
 
 ### Platform position preference (`preferred_pos`)
 

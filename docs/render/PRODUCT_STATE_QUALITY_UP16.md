@@ -42,10 +42,21 @@ of options. Six content types × three CTA types.
 | montage | follow | Montage = highlight reel, follow for more |
 | gaming | follow | Gaming clips — follow for next session |
 
-### Platform text selection
+### Variant-aware auto-type *(HARDENING1)*
 
-TikTok gets the shorter option from the list (index 1) when available.
-All other platforms get index 0.
+When `cta_type=auto` and multi-variant is active, variant intent overrides the
+content-type mapping above. Creator's explicit `cta_type` choice always wins.
+
+| Variant | Auto CTA type override | Rationale |
+|---|---|---|
+| `aggressive` | `comment` (always) | Hook-forward → drive engagement; content-type auto is ignored |
+| `story_first` | `follow` (always) | Payoff ending → soft natural close; content-type auto is ignored |
+| `balanced` | Content-type auto mapping | No override — uses table above |
+
+### Platform and variant text selection
+
+TikTok or aggressive variant: shorter option (index 1) when available.
+All other platform/variant combinations: index 0.
 
 ---
 

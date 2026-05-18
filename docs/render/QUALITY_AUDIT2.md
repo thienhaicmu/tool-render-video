@@ -7,6 +7,24 @@
 
 ---
 
+## HARDENING1 Resolution (2026-05-18)
+
+All five P1–P5 fixes from this audit were applied in commit `fix(render): harden creator intelligence`.
+
+| Fix | Audit Item | Status |
+|---|---|---|
+| P1 — Cover subtitle key names corrected | BUG-1 | **Fixed** — `"first_start"`/`"first_end"` keys now match actual srt_meta dict |
+| P2 — `scene_quality_score` replaces `retention_score` | BUG-2 | **Fixed** — story-first and balanced both use a real, always-populated signal |
+| P3 — Small pool collapse warning | WEAK-3 | **Fixed** — logs warning + notes selection_reason when all/some variants share source clip |
+| P4 — Platform speed delta doubled | WEAK-1 | **Fixed** — TikTok +0.08 (was +0.04), Instagram −0.06 (was −0.03) |
+| P5 — Variant-aware CTA type | WEAK-5 | **Fixed** — aggressive→comment, story_first→follow on auto; balanced unchanged |
+
+BUG-3 (`gaming` content_type_hint never detected) is documented but not fixed — gaming
+content renders correctly as `montage`-class; only the `_CTA_TEXTS["gaming"]` library
+entry is dead code. Accepted as low priority.
+
+---
+
 ## Audit Method
 
 This is not a manual render QA. It is a **code-level reality check** — tracing what the
