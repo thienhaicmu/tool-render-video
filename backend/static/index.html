@@ -657,7 +657,6 @@
                 <div class="rcActiveProgress">
                   <span id="rc_active_bar" style="--progress:0%"></span>
                 </div>
-                <div id="rc_stage_timeline" class="rcStageTimeline"></div>
                 <div id="rc_active_stage" class="rcActiveStage" hidden></div>
                 <div id="rc_active_message" class="rcActiveMessage"></div>
               </div>
@@ -683,14 +682,6 @@
                 </div>
               </div>
 
-              <div id="rc_benchmark_panel" class="rcBenchmarkPanel hiddenView">
-                <div class="rcBenchmarkHeader">
-                  <span class="rcBenchmarkTitle">Render Insights</span>
-                  <span id="rc_benchmark_badge" class="rcBenchmarkBadge" data-state="live">Live</span>
-                </div>
-                <div id="rc_benchmark_grid" class="rcBenchmarkGrid"></div>
-                <div id="rc_benchmark_insight" class="rcBenchmarkInsight hiddenView"></div>
-              </div>
 
               <div id="rc_compare_panel" class="rcComparePanel hiddenView" hidden>
                 <div class="rcCompareHeader">
@@ -718,7 +709,6 @@
                 <div class="rcLogFilterRow">
                   <button class="rcLogFilterBtn isActive" data-filter="all"    type="button" onclick="filterRenderLogs('all')">All</button>
                   <button class="rcLogFilterBtn"          data-filter="error"  type="button" onclick="filterRenderLogs('error')">Error</button>
-                  <button class="rcLogFilterBtn"          data-filter="ffmpeg" type="button" onclick="filterRenderLogs('ffmpeg')">FFmpeg</button>
                   <button class="rcLogFilterBtn"          data-filter="system" type="button" onclick="filterRenderLogs('system')">Progress</button>
                 </div>
               </header>
