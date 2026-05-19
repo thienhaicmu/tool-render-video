@@ -227,11 +227,11 @@ window.ReviewQueue = (() => {
       ${item.state === 'dismissed'
         ? `<button class="rqBtn rqBtnUndo" onclick="ReviewQueue.undismiss('${jid}')" title="Undo dismiss">Undo</button>
       <button class="rqBtn rqBtnOpen" onclick="ReviewQueue.openFolder('${jid}')" title="Open Folder">&#128193;</button>`
-        : `<button class="rqBtn rqBtnKeep"    onclick="ReviewQueue.keep('${jid}')"        title="Keep  K">K</button>
-      <button class="rqBtn rqBtnFav"     onclick="ReviewQueue.favorite('${jid}')"    title="Favorite  F">&#9733;</button>
-      <button class="rqBtn rqBtnDismiss" onclick="ReviewQueue.dismiss('${jid}')"     title="Dismiss  D">D</button>
-      <button class="rqBtn rqBtnRetry"   onclick="ReviewQueue.retry('${jid}')"       title="Retry  R">&#8635;</button>
-      <button class="rqBtn rqBtnOpen"    onclick="ReviewQueue.openFolder('${jid}')"  title="Open Folder">&#128193;</button>`
+        : `<button class="rqBtn rqBtnKeep"    onclick="ReviewQueue.keep('${jid}')"        title="Keep  K">K Keep</button>
+      <button class="rqBtn rqBtnFav"     onclick="ReviewQueue.favorite('${jid}')"    title="Favorite  F">&#9733; Fav</button>
+      <button class="rqBtn rqBtnDismiss" onclick="ReviewQueue.dismiss('${jid}')"     title="Dismiss  D">D Dismiss</button>
+      <button class="rqBtn rqBtnRetry"   onclick="ReviewQueue.retry('${jid}')"       title="Retry  R">&#8635; Retry</button>
+      <button class="rqBtn rqBtnOpen"    onclick="ReviewQueue.openFolder('${jid}')"  title="Open Folder">&#128193; Open</button>`
       }
     </div>
   </div>
