@@ -985,33 +985,35 @@
 
       <!-- Market / Target — where are you publishing? (before technical output config) -->
       <div class="evSection mvPanel" id="evSectionMarket" data-insp-panel="performance">
-        <div class="evSectionTitle">🌍 Market &amp; Target</div>
-        <div class="mvPanelDesc">Market scoring, subtitle tone, and hook optimization for every exported clip.</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-          <label class="field" style="grid-column:1/-1">
-            <span class="fieldLabel">Target Market</span>
-            <select class="fieldInput" id="mvMarket" onchange="mvHandleChange()">
-              <option value="US" selected>🇺🇸 US</option>
-              <option value="EU">🇪🇺 EU</option>
-              <option value="JP">🇯🇵 JP</option>
-            </select>
-          </label>
-          <input type="hidden" id="mvSubtitleTone" value="clean">
-        </div>
-        <div class="mvToggleGroup">
-          <label class="mvToggleRow">
-            <input type="checkbox" id="mvAutoBestClips" onchange="mvHandleAutoBestClips()">
-            <span class="mvToggleLabel">✨ Auto Best Clips</span>
-          </label>
-          <label class="mvToggleRow">
-            <input type="checkbox" id="mvKeywordHighlight" onchange="mvHandleChange()">
-            <span class="mvToggleLabel">🔑 Keyword Highlight</span>
-          </label>
-          <label class="mvToggleRow">
-            <input type="checkbox" id="mvBestExportEnabled" onchange="mvHandleChange()">
-            <span class="mvToggleLabel">📦 Auto Best Export</span>
-          </label>
-        </div>
+        <details>
+          <summary style="font-size:12px;font-weight:600;color:var(--text-mut);cursor:pointer;padding:2px 0;user-select:none">Market &amp; Target (4)</summary>
+          <div class="mvPanelDesc" style="margin-top:6px">Market scoring, subtitle tone, and hook optimization for every exported clip.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;margin-top:8px">
+            <label class="field" style="grid-column:1/-1">
+              <span class="fieldLabel">Target Market</span>
+              <select class="fieldInput" id="mvMarket" onchange="mvHandleChange()">
+                <option value="US" selected>🇺🇸 US</option>
+                <option value="EU">🇪🇺 EU</option>
+                <option value="JP">🇯🇵 JP</option>
+              </select>
+            </label>
+            <input type="hidden" id="mvSubtitleTone" value="clean">
+          </div>
+          <div class="mvToggleGroup">
+            <label class="mvToggleRow">
+              <input type="checkbox" id="mvAutoBestClips" onchange="mvHandleAutoBestClips()">
+              <span class="mvToggleLabel">✨ Auto Best Clips</span>
+            </label>
+            <label class="mvToggleRow">
+              <input type="checkbox" id="mvKeywordHighlight" onchange="mvHandleChange()">
+              <span class="mvToggleLabel">🔑 Keyword Highlight</span>
+            </label>
+            <label class="mvToggleRow">
+              <input type="checkbox" id="mvBestExportEnabled" onchange="mvHandleChange()">
+              <span class="mvToggleLabel">📦 Auto Best Export</span>
+            </label>
+          </div>
+        </details>
       </div>
 
       <!-- Output settings — moved to Export tab -->
