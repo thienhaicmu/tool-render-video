@@ -4374,6 +4374,7 @@ function populateRenderOutputPanel(job, parts) {
   const skipped = items.filter((p) => String(p?.status || '').toLowerCase() === 'skipped');
   // Sort done clips: by AI score desc when _clipsSortOrder==='score', else by part_no
   const ranking = _rankMap(job);
+  window._r69RankMap = ranking;
   const doneSorted = _clipsSortOrder === 'score'
     ? done.slice().sort((a, b) => {
         const sa = Number(ranking.get(Number(a.part_no || 0))?.score || 0);
@@ -4490,7 +4491,16 @@ function populateRenderOutputPanel(job, parts) {
   const _jobRecovered = _jobRecoveryNotes.length > 0;
 
   // UP26: Clip steering helpers — called from card onclick attributes
-  window.csKeepClip = function(startSec, endSec, label) {
+  function _r69RecordDownload(partNo) {
+    if (typeof ScorePreference === 'undefined' || !window._r69RankMap) return;
+    var _r69rk = window._r69RankMap.get(Number(partNo) || 0);
+    if (_r69rk) ScorePreference.recordSignal('download', _r69rk.rankingComponents || {});
+  }
+  window.csKeepClip = function(startSec, endSec, label, partNo) {
+    if (typeof ScorePreference !== 'undefined' && window._r69RankMap) {
+      var _r69rk = window._r69RankMap.get(Number(partNo) || 0);
+      if (_r69rk) ScorePreference.recordSignal('keep', _r69rk.rankingComponents || {});
+    }
     if (typeof ClipSteering !== 'undefined') {
       ClipSteering.lockClip(startSec, endSec, label);
       if (typeof showToast === 'function') showToast('Kept — will be prioritised next render', 'success');
@@ -4518,14 +4528,22 @@ function populateRenderOutputPanel(job, parts) {
     }, 4000);
   }
 
-  window.csAvoidClip = function(startSec, endSec, label) {
+  window.csAvoidClip = function(startSec, endSec, label, partNo) {
+    if (typeof ScorePreference !== 'undefined' && window._r69RankMap) {
+      var _r69rk = window._r69RankMap.get(Number(partNo) || 0);
+      if (_r69rk) ScorePreference.recordSignal('avoid', _r69rk.rankingComponents || {});
+    }
     if (typeof ClipSteering !== 'undefined') {
       ClipSteering.excludeClip(startSec, endSec, label);
       if (typeof showToast === 'function') showToast('Avoided — will be excluded next render', 'info');
       if (typeof v3RefreshSteeringPanel === 'function') v3RefreshSteeringPanel();
     }
   };
-  window.csKeepAndRerender = function(startSec, endSec, label) {
+  window.csKeepAndRerender = function(startSec, endSec, label, partNo) {
+    if (typeof ScorePreference !== 'undefined' && window._r69RankMap) {
+      var _r69rk = window._r69RankMap.get(Number(partNo) || 0);
+      if (_r69rk) ScorePreference.recordSignal('keep', _r69rk.rankingComponents || {});
+    }
     if (typeof ClipSteering !== 'undefined') {
       ClipSteering.lockClip(startSec, endSec, label);
       if (typeof v3RefreshSteeringPanel === 'function') v3RefreshSteeringPanel();
@@ -4608,7 +4626,7 @@ function populateRenderOutputPanel(job, parts) {
       : '';
     const _dlVariant = JSON.stringify(rk.variantType || '');
     const downloadBtn = (!isFailed && hasFile && jobId)
-      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download onclick="if(typeof CreatorTaste!=='undefined'&&${rk.rank||0}>0)CreatorTaste.recordDownload(${rk.rank||0});if(typeof CreatorFeedback!=='undefined'&&${_dlVariant})CreatorFeedback.recordVariantDownload(${_dlVariant})">Download</a>`
+      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download onclick="if(typeof CreatorTaste!=='undefined'&&${rk.rank||0}>0)CreatorTaste.recordDownload(${rk.rank||0});if(typeof CreatorFeedback!=='undefined'&&${_dlVariant})CreatorFeedback.recordVariantDownload(${_dlVariant});if(typeof _r69RecordDownload==='function')_r69RecordDownload(${partNo})">Download</a>`
       : '';
     const openBtn = hasFile
       ? `<button class="clipCardBtn" type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Folder</button>`
@@ -4666,7 +4684,7 @@ function populateRenderOutputPanel(job, parts) {
         ${(motionScore !== null || hookScore !== null) && (rk.isBest || scoreVal >= 6) ? _r7SignalRow(motionScore, hookScore, rk.isBest, _bestMotion, _bestHook) : ''}
         ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
         ${_shouldRenderBestExport(_cardAiUx, rk.isBest) ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">&#x2713;</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}
-        ${isDone && endSec > startSec ? `<div class="clipCardSteerRow"><div class="clipCardSteerLabel">Next render:</div><button class="clipCardBtnKeep" onclick="csKeepClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}')" title="Prioritise this clip in next render">&#10003; Keep</button><button class="clipCardBtnAvoid" onclick="csAvoidClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}')" title="Exclude this clip from next render">&#10007; Avoid</button><button class="clipCardBtnSimilar" onclick="csKeepAndRerender(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}')" title="Keep this clip and rerender immediately">&#8635; Rerender</button></div>` : ''}
+        ${isDone && endSec > startSec ? `<div class="clipCardSteerRow"><div class="clipCardSteerLabel">Next render:</div><button class="clipCardBtnKeep" onclick="csKeepClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}',${partNo})" title="Prioritise this clip in next render">&#10003; Keep</button><button class="clipCardBtnAvoid" onclick="csAvoidClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}',${partNo})" title="Exclude this clip from next render">&#10007; Avoid</button><button class="clipCardBtnSimilar" onclick="csKeepAndRerender(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}',${partNo})" title="Keep this clip and rerender immediately">&#8635; Rerender</button></div>` : ''}
         <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}${coverBtn}${compareBtn}</div>
       </div>
     </div>`;
