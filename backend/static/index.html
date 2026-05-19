@@ -1041,7 +1041,7 @@
             <button class="v3SteeringRerunBtn" onclick="v3TriggerRerender()" title="Rerender with current steering applied">↻ Rerender</button>
           </div>
         </div>
-        <!-- MAP-UI-V2 §2: Quick Strategy Bar — one-click Platform / Variant / Subtitle / CTA -->
+        <!-- MAP-UI-V2 §2: Quick Strategy Bar — Platform / Subtitle / Structure -->
         <div class="qsBar" id="qsBar">
           <div class="qsGroup">
             <div class="qsLabel">Platform</div>
@@ -1052,24 +1052,12 @@
             </div>
           </div>
           <div class="qsGroup">
-            <div class="qsLabel">Variant</div>
-            <div class="qsPills">
-              <button class="qsPill qsPillToggle" id="qsVariantBtn" onclick="evQsToggle('variant')">Multi-variant</button>
-            </div>
-          </div>
-          <div class="qsGroup">
             <div class="qsLabel">Subtitle</div>
             <div class="qsPills">
               <button class="qsPill" data-qs-group="sub" data-qs-val="off" onclick="evQsSet('sub','off')">Off</button>
               <button class="qsPill" data-qs-group="sub" data-qs-val="clean" onclick="evQsSet('sub','clean')">Clean</button>
               <button class="qsPill" data-qs-group="sub" data-qs-val="viral" onclick="evQsSet('sub','viral')">Viral</button>
               <button class="qsPill" data-qs-group="sub" data-qs-val="karaoke" onclick="evQsSet('sub','karaoke')">Karaoke</button>
-            </div>
-          </div>
-          <div class="qsGroup">
-            <div class="qsLabel">CTA</div>
-            <div class="qsPills">
-              <button class="qsPill qsPillToggle" id="qsCtaBtn" onclick="evQsToggle('cta')">End Card</button>
             </div>
           </div>
           <!-- UP26: Structure bias — gentle clip ranking re-weight -->
@@ -1130,8 +1118,12 @@
               <span class="fieldLabel">Max clip (s)</span>
               <input class="fieldInput" type="number" id="evMaxPart" value="180" min="30" max="900">
             </label>
-            <!-- Multi-variant and Platform controlled by qsBar pills above — hidden here to avoid duplication -->
-            <input type="checkbox" id="evMultiVariant" style="display:none" onchange="evSyncQsBar()">
+            <!-- Platform controlled by qsBar pills above — hidden here to avoid duplication -->
+            <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding-top:2px">
+              <input type="checkbox" id="evMultiVariant" style="width:15px;height:15px;accent-color:var(--primary);flex-shrink:0" onchange="evSyncQsBar()">
+              <span class="fieldLabel" style="margin-bottom:0;cursor:pointer">Multi-variant render</span>
+              <span style="font-size:11px;color:#888;font-style:italic">Creates multiple style variants in one render</span>
+            </label>
             <select id="evTargetPlatform" style="display:none" onchange="evSyncQsBar()">
               <option value="youtube_shorts">YouTube Shorts</option>
               <option value="tiktok">TikTok</option>
