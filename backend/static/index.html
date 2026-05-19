@@ -1411,48 +1411,52 @@
               <input type="checkbox" id="evTxtOutlineEnabled" onchange="evUpdateSelectedTextLayer()" style="width:13px;height:13px;accent-color:var(--primary)">
               <span class="fieldLabel" style="margin:0">Outline</span>
             </label>
-            <label class="field" style="grid-column:1/-1;margin-top:2px">
-              <span class="fieldLabel">Outline px</span>
-              <input class="fieldInput" type="number" id="evTxtOutlineThickness" min="0" max="8" value="2" oninput="evUpdateSelectedTextLayer()">
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
-              <input type="checkbox" id="evTxtShadowEnabled" onchange="evUpdateSelectedTextLayer()" style="width:13px;height:13px;accent-color:var(--primary)">
-              <span class="fieldLabel" style="margin:0">Shadow</span>
-            </label>
-            <div style="display:flex;gap:4px">
-              <input class="fieldInput" type="number" id="evTxtShadowX" value="2" min="-20" max="20" step="1" oninput="evUpdateSelectedTextLayer()" placeholder="X" style="margin:0">
-              <input class="fieldInput" type="number" id="evTxtShadowY" value="2" min="-20" max="20" step="1" oninput="evUpdateSelectedTextLayer()" placeholder="Y" style="margin:0">
-            </div>
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
-              <input type="checkbox" id="evTxtBgEnabled" onchange="evUpdateSelectedTextLayer()" style="width:13px;height:13px;accent-color:var(--primary)">
-              <span class="fieldLabel" style="margin:0">BG box</span>
-            </label>
-            <div style="display:flex;align-items:center;gap:4px">
-              <input type="color" class="evColorPicker" id="evTxtBgColor" value="#000000" oninput="evUpdateSelectedTextLayer()">
-              <input class="fieldInput" type="number" id="evTxtBgPadding" min="0" max="64" value="10" oninput="evUpdateSelectedTextLayer()" placeholder="Pad" style="width:50px;margin:0">
-            </div>
           </div>
-          <!-- P1.8-I: Animation preset + enabled/locked runtime controls -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
-            <label class="field" style="grid-column:1/-1">
-              <span class="fieldLabel">Animation</span>
-              <select class="fieldInput" id="edTxtAnimPreset" onchange="EditorTextRuntime?.onAnimPresetChange?.()">
-                <option value="none" selected>None</option>
-                <option value="fade-in">Fade In</option>
-                <option value="slide-up">Slide Up</option>
-                <option value="scale-in">Scale In</option>
-                <option value="typewriter">Typewriter</option>
-              </select>
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
-              <input type="checkbox" id="edTxtLayerEnabled" checked onchange="EditorTextRuntime?.onLayerEnabledChange?.()" style="width:13px;height:13px;accent-color:var(--primary)">
-              <span class="fieldLabel" style="margin:0">Enabled</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
-              <input type="checkbox" id="edTxtLayerLocked" onchange="EditorTextRuntime?.onLayerLockedChange?.()" style="width:13px;height:13px;accent-color:var(--secondary)">
-              <span class="fieldLabel" style="margin:0">Locked</span>
-            </label>
-          </div>
+          <details style="margin-top:6px">
+            <summary style="font-size:11px;color:var(--text-mut);cursor:pointer;padding:3px 0;list-style:none;user-select:none">▸ Advanced</summary>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+              <label class="field" style="grid-column:1/-1;margin-top:2px">
+                <span class="fieldLabel">Outline px</span>
+                <input class="fieldInput" type="number" id="evTxtOutlineThickness" min="0" max="8" value="2" oninput="evUpdateSelectedTextLayer()">
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" id="evTxtShadowEnabled" onchange="evUpdateSelectedTextLayer()" style="width:13px;height:13px;accent-color:var(--primary)">
+                <span class="fieldLabel" style="margin:0">Shadow</span>
+              </label>
+              <div style="display:flex;gap:4px">
+                <input class="fieldInput" type="number" id="evTxtShadowX" value="2" min="-20" max="20" step="1" oninput="evUpdateSelectedTextLayer()" placeholder="X" style="margin:0">
+                <input class="fieldInput" type="number" id="evTxtShadowY" value="2" min="-20" max="20" step="1" oninput="evUpdateSelectedTextLayer()" placeholder="Y" style="margin:0">
+              </div>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" id="evTxtBgEnabled" onchange="evUpdateSelectedTextLayer()" style="width:13px;height:13px;accent-color:var(--primary)">
+                <span class="fieldLabel" style="margin:0">BG box</span>
+              </label>
+              <div style="display:flex;align-items:center;gap:4px">
+                <input type="color" class="evColorPicker" id="evTxtBgColor" value="#000000" oninput="evUpdateSelectedTextLayer()">
+                <input class="fieldInput" type="number" id="evTxtBgPadding" min="0" max="64" value="10" oninput="evUpdateSelectedTextLayer()" placeholder="Pad" style="width:50px;margin:0">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
+              <label class="field" style="grid-column:1/-1">
+                <span class="fieldLabel">Animation</span>
+                <select class="fieldInput" id="edTxtAnimPreset" onchange="EditorTextRuntime?.onAnimPresetChange?.()">
+                  <option value="none" selected>None</option>
+                  <option value="fade-in">Fade In</option>
+                  <option value="slide-up">Slide Up</option>
+                  <option value="scale-in">Scale In</option>
+                  <option value="typewriter">Typewriter</option>
+                </select>
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" id="edTxtLayerEnabled" checked onchange="EditorTextRuntime?.onLayerEnabledChange?.()" style="width:13px;height:13px;accent-color:var(--primary)">
+                <span class="fieldLabel" style="margin:0">Enabled</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" id="edTxtLayerLocked" onchange="EditorTextRuntime?.onLayerLockedChange?.()" style="width:13px;height:13px;accent-color:var(--secondary)">
+                <span class="fieldLabel" style="margin:0">Locked</span>
+              </label>
+            </div>
+          </details>
         </div>
       </div>
         </div>
