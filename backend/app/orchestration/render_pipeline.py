@@ -1912,6 +1912,8 @@ def run_render_pipeline(
         progress_percent=1,
         message="Resuming render job" if resume_mode else "Initializing render job",
     )
+    _final_status = ""  # set to terminal status string on success path; empty means failure/cancelled
+    edit_session_id = ""  # assigned inside try; pre-init so finally block can reference it safely
     try:
         _emit_render_event(
             channel_code=effective_channel,
@@ -5562,8 +5564,10 @@ def run_render_pipeline(
                 _job_log(effective_channel, job_id, "Temporary files cleaned")
             except Exception as cleanup_err:
                 _job_log(effective_channel, job_id, f"Temp cleanup warning: {cleanup_err}")
-        # Cleanup preview session (video already moved/copied to output)
-        if edit_session_id:
+        # Cleanup preview session only on success — failed/cancelled renders should
+        # keep the session alive so the user can retry without re-preparing the source.
+        _session_render_succeeded = _final_status in ("completed", "completed_with_errors")
+        if edit_session_id and _session_render_succeeded:
             try:
                 cleanup_session_fn(edit_session_id)
             except Exception:

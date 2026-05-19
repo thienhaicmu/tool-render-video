@@ -685,6 +685,16 @@ def create_render_batch(payload: RenderRequest):
                 message="Batch running",
             )
             for idx, (url, child_id) in enumerate(zip(urls, child_job_ids), start=1):
+                from app.services import cancel_registry
+                if cancel_registry.is_cancelled(batch_id):
+                    logger.info("Batch %s: cancel requested — stopping after %d/%d", batch_id, idx - 1, len(urls))
+                    upsert_job(
+                        batch_id, "render_batch", effective_channel, "cancelled",
+                        payload.model_dump(), {"count": len(urls), "jobs": child_job_ids},
+                        stage=JobStage.DONE, progress_percent=100,
+                        message=f"Batch cancelled after {idx - 1}/{len(urls)} items",
+                    )
+                    return
                 child_payload = RenderRequest(**{**payload.model_dump(), "youtube_url": url, "youtube_urls": [url], "resume_job_id": None})
                 upsert_job(
                     child_id,
@@ -711,7 +721,12 @@ def create_render_batch(payload: RenderRequest):
                         _ev.set()
                 submitted = submit_job(child_id, _child_fn)
                 if submitted:
-                    _done.wait()
+                    completed_in_time = _done.wait(timeout=7200)  # 2h hard ceiling per child
+                    if not completed_in_time:
+                        logger.error(
+                            "Batch child %s timed out waiting (7200s) — marking failed and continuing", child_id
+                        )
+                        update_job_progress(child_id, "timeout", 100, "Child timed out in batch", status="failed")
                 # If submit_job returned False the child_id was already tracked
                 # (duplicate submission guard) — skip the wait; the DB status
                 # reflects the real outcome when batch progress is written below.

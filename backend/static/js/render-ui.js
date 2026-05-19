@@ -278,6 +278,7 @@ function normalizeRenderStatus(status, stage = ''){
     if (sg === 'queued') return 'pending';
     if (sg === 'starting' || sg === 'downloading' || sg === 'render.prepare_source') return 'preparing';
   }
+  if (st === 'cancelled') return 'failed';
   return st || (sg ? 'working' : '');
 }
 
