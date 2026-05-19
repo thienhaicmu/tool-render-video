@@ -948,9 +948,21 @@ def render_part(
             logger.debug("subtle_sharpen_skipped reason=low_quality_source src=%dx%d", _src_w, _src_h)
     vf_parts.append("format=yuv420p")
     if transition_sec and transition_sec > 0:
-        # Cap at 0.08 s — long fades look cheap on short-form content.
-        # Floor at 0.03 s keeps at least 1 frame of softening to avoid a hard cut.
-        vf_parts.append(f"fade=t=in:st=0:d={max(0.03, min(0.08, transition_sec))}")
+        # Content-type-aware fade cap.
+        # Montage/vlog: keep 0.08 s — hard cuts are intentional in fast-paced content.
+        # Speech-heavy (interview/commentary/tutorial): allow up to 0.20 s so the
+        # edit feels less jarring when the subject is talking continuously.
+        # Floor at 0.03 s (≈ 1 frame at 30fps) prevents pure hard cuts.
+        _FADE_CAP_BY_TYPE: dict[str, float] = {
+            "interview": 0.20, "commentary": 0.20, "tutorial": 0.20,
+        }
+        _fade_cap = _FADE_CAP_BY_TYPE.get(content_type, 0.08)
+        _fade_d = round(max(0.03, min(_fade_cap, transition_sec)), 4)
+        vf_parts.append(f"fade=t=in:st=0:d={_fade_d}")
+        logger.info(
+            "transition_fade_duration part=%s content_type=%s fade_in=%.4f fade_out=0.0000 cap=%.4f",
+            Path(output_path).stem, content_type, _fade_d, _fade_cap,
+        )
     if add_subtitle and subtitle_ass:
         ass_safe = _safe_filter_path(subtitle_ass)
         fonts_dir = _get_custom_fonts_dir() or _detect_windows_fonts_dir()
