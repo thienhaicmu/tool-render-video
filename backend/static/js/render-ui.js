@@ -990,6 +990,7 @@ function _rankMap(job) {
           coverFile:       String(r.cover_file || '').trim(),
           ctaApplied:      !!(r.cta_applied),
           ctaText:         String(r.cta_text || '').trim(),
+          rankingComponents: (r.ranking_components && typeof r.ranking_components === 'object') ? r.ranking_components : {},
         });
       }
     });
@@ -3796,6 +3797,43 @@ function centerPreviewClip(jobId, partNo, outputFile, partName) {
   if (card) card.classList.add('isPreviewActive');
 }
 
+// Phase 66.1: Build signal tag panel from ranking_components.
+// Skips neutral defaults (50.0). Max 3 tags (trust guard: max 2 when all signals <= 55).
+function _r66BuildExplainPanel(rk) {
+  var comps = rk.rankingComponents;
+  if (!comps || typeof comps !== 'object') return '';
+  var _LABELS = {
+    hook_score:           'Opening hook',
+    retention_score:      'Pacing quality',
+    speech_density_score: 'Speech density',
+    duration_fit_score:   'Duration fit',
+    segment_viral_score:  'Overall score',
+    market_score:         'Market fit',
+  };
+  var _WEIGHTS = {
+    segment_viral_score:  0.35,
+    hook_score:           0.20,
+    retention_score:      0.20,
+    speech_density_score: 0.10,
+    market_score:         0.10,
+    duration_fit_score:   0.05,
+  };
+  var entries = [];
+  for (var key in _LABELS) {
+    var raw = Number(comps[key]);
+    if (!isFinite(raw) || raw === 50.0) continue;
+    entries.push({ key: key, raw: raw, contrib: raw * (_WEIGHTS[key] || 0.05) });
+  }
+  entries.sort(function(a, b) { return b.contrib - a.contrib; });
+  var maxTags = entries.some(function(e) { return e.raw > 55; }) ? 3 : 2;
+  entries = entries.slice(0, maxTags);
+  if (!entries.length) return '';
+  var tags = entries.map(function(e) {
+    return '<span class="clipCardSig">' + esc(_LABELS[e.key]) + '</span>';
+  });
+  return '<div class="clipCardExplain">' + tags.join('') + '</div>';
+}
+
 // R7.1: Generate truthful clip reason from AI director output + raw signals + taste model.
 // Prefers rk.reason when present; falls back to signal-derived text.
 function _r7TruthfulReason(rk, motionScore, hookScore) {
@@ -4513,6 +4551,7 @@ function populateRenderOutputPanel(job, parts) {
           <span class="clipCardStatusDot" data-status="${esc(statusText)}" title="${esc(statusText)}"></span>
         </div>
         ${_clipReason ? `<div class="clipCardReason">${esc(_clipReason)}</div>` : ''}
+        ${isDone && scoreVal >= 5 ? _r66BuildExplainPanel(rk) : ''}
         ${rk.selectionReason && rk.selectionReason.includes('limited source variety') ? `<div class="clipVarietyNote">Limited source variety</div>` : ''}
         ${_jobRecovered && isDone ? `<div class="clipRecoveredNote" title="${esc(_jobRecoveryNotes.join(' · '))}">Recovered</div>` : ''}
         ${(motionScore !== null || hookScore !== null) && (rk.isBest || scoreVal >= 6) ? _r7SignalRow(motionScore, hookScore, rk.isBest, _bestMotion, _bestHook) : ''}
