@@ -223,6 +223,13 @@ function v3RefreshSteeringPanel() {
     }
   })();
 
+  if (typeof ScorePreference !== 'undefined') {
+    var _r69Pref = ScorePreference.getPreference();
+    if (_r69Pref && _r69Pref.confident) {
+      parts.push({ label: _r69Pref.label, cls: 'v3Chip v3ChipPref', title: 'Based on your Keep and Download patterns' });
+    }
+  }
+
   if (typeof CreatorAssets !== 'undefined') {
     const _ca = CreatorAssets.getPayload();
     if (_ca.asset_logo_path)       parts.push({ label: '🖼 Logo',    cls: 'v3Chip v3ChipAsset', title: 'Brand logo watermark will be applied' });
