@@ -2622,6 +2622,42 @@ def run_render_pipeline(
         full_srt_available = False
         existing_parts = {int(x["part_no"]): x for x in list_job_parts(job_id)}
         _job_log(effective_channel, job_id, f"Segment building done: {total_parts} parts")
+        # Diagnostic: per-segment selection summary (always at INFO for QA traceability)
+        for _qi, _qs in enumerate(scored, start=1):
+            logger.info(
+                "selected_segment part=%d start=%.3f end=%.3f duration=%.3f "
+                "viral=%.1f motion=%.1f hook=%.1f content_type=%s variant=%s",
+                _qi, float(_qs.get("start", 0)), float(_qs.get("end", 0)),
+                float(_qs.get("duration", 0)),
+                float(_qs.get("viral_score", 0)), float(_qs.get("motion_score", 0)),
+                float(_qs.get("hook_score", 0)), _qs.get("content_type_hint", ""),
+                _qs.get("variant_type", ""),
+            )
+        # Debug artifact: timeline JSON saved to work_dir when RENDER_DEBUG_LOG=1
+        import os as _os
+        if _os.getenv("RENDER_DEBUG_LOG", "0") == "1":
+            try:
+                import json as _json
+                _tl_path = work_dir / f"{source['slug']}_timeline.json"
+                _tl_data = [
+                    {
+                        "part": _qi,
+                        "start": float(_qs.get("start", 0)),
+                        "end": float(_qs.get("end", 0)),
+                        "duration": float(_qs.get("duration", 0)),
+                        "viral_score": float(_qs.get("viral_score", 0)),
+                        "motion_score": float(_qs.get("motion_score", 0)),
+                        "hook_score": float(_qs.get("hook_score", 0)),
+                        "content_type": _qs.get("content_type_hint", ""),
+                        "variant": _qs.get("variant_type", ""),
+                        "transition_score": float(_qs.get("transition_score", 0)),
+                    }
+                    for _qi, _qs in enumerate(scored, start=1)
+                ]
+                _tl_path.write_text(_json.dumps(_tl_data, indent=2), encoding="utf-8")
+                logger.debug("debug_artifact timeline_json=%s", _tl_path)
+            except Exception as _tl_exc:
+                logger.debug("debug_artifact timeline_json_failed: %s", _tl_exc)
 
         subtitle_cutoff = payload.subtitle_viral_min_score
         subtitle_top_count = max(1, int(total_parts * max(0.1, min(1.0, float(payload.subtitle_viral_top_ratio)))))
@@ -3349,6 +3385,33 @@ def run_render_pipeline(
             translated_srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.{_sub_target_lang}.srt"
             _srt_meta: dict = {}  # populated by subtitle slice; used for cover frame scoring (UP15)
             _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} start", kind="debug")
+            # Debug artifact: per-part segment metadata JSON
+            import os as _os2
+            if _os2.getenv("RENDER_DEBUG_LOG", "0") == "1":
+                try:
+                    import json as _json2
+                    _meta_path = work_dir / f"{source['slug']}_part_{idx:03d}_meta.json"
+                    _meta_data = {
+                        "part": idx,
+                        "start": float(seg.get("start", 0)),
+                        "end": float(seg.get("end", 0)),
+                        "duration": float(seg.get("duration", 0)),
+                        "viral_score": float(seg.get("viral_score", 0)),
+                        "motion_score": float(seg.get("motion_score", 0)),
+                        "hook_score": float(seg.get("hook_score", 0)),
+                        "content_type": seg.get("content_type_hint", ""),
+                        "variant": seg.get("variant_type", ""),
+                        "files": {
+                            "raw": str(raw_part),
+                            "srt": str(srt_part),
+                            "ass": str(ass_part),
+                            "output": str(final_part),
+                        },
+                    }
+                    _meta_path.write_text(_json2.dumps(_meta_data, indent=2), encoding="utf-8")
+                    logger.debug("debug_artifact segment_meta=%s", _meta_path)
+                except Exception as _meta_exc:
+                    logger.debug("debug_artifact segment_meta_failed part=%d: %s", idx, _meta_exc)
 
             # Bail out immediately if job was cancelled before this part started
             if cancel_registry.is_cancelled(job_id):
@@ -3900,13 +3963,17 @@ def run_render_pipeline(
                             _dbg_first_ts = round(_dbg_blocks[0]["start"], 3)
                     except Exception:
                         pass
+                    # Compute source-time offset for the first subtitle to detect rebase drift
+                    _dbg_source_offset = round(_effective_start + _dbg_first_ts - seg["start"], 3) if _dbg_first_ts >= 0 else None
                     _job_log(
                         effective_channel, job_id,
                         f"subtitle_file_chain part={idx} "
                         f"srt={srt_part.name} srt_size={srt_part.stat().st_size if srt_part.exists() else 0} "
                         f"ass={ass_part.name} ass_size={ass_part.stat().st_size if ass_part.exists() else 0} "
                         f"source_fresh={_srt_source_is_fresh} needs_srt={needs_srt} needs_ass={needs_ass} "
-                        f"first_ts={_dbg_first_ts}s first_line={_dbg_first_line!r}",
+                        f"first_ts={_dbg_first_ts}s first_line={_dbg_first_line!r} "
+                        f"effective_start={_effective_start:.3f}s rebase_origin={seg['start']:.3f}s "
+                        f"source_offset={_dbg_source_offset}s",
                         kind="debug",
                     )
                     _job_log(

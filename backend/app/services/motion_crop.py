@@ -1970,6 +1970,17 @@ def render_motion_aware_crop(
             _motion_path_cache_put(_cache_key, centers, detected_fps)
             logger.info("motion_cache_miss key=%s centers=%d fps=%.2f", _cache_key[:8], len(centers), detected_fps)
 
+    # Diagnostic: log crop-box sample positions (first, midpoint, last)
+    if centers:
+        _n = len(centers)
+        _sample_mid = centers[_n // 2]
+        logger.debug(
+            "motion_crop_path input=%s centers=%d crop_src=%dx%d out=%dx%d "
+            "first_xy=%s mid_xy=%s last_xy=%s",
+            Path(input_path).name, _n, crop_w_src, crop_h_src, out_w, out_h,
+            centers[0], _sample_mid, centers[-1],
+        )
+
     # Build ffmpeg video filter chain
     vf_parts = []
     preset_low = (video_preset or "").lower()

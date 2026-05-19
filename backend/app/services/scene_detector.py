@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
+import os
 import subprocess
 from typing import List, Dict
+
+logger = logging.getLogger(__name__)
 
 import cv2
 import numpy as np
@@ -125,7 +129,7 @@ def detect_scenes(
 
     cut_scores = _compute_transition_scores(video_path, scene_list)
 
-    return [
+    _results = [
         {
             "start": start.get_seconds(),
             "end": end.get_seconds(),
@@ -133,3 +137,10 @@ def detect_scenes(
         }
         for i, (start, end) in enumerate(scene_list)
     ]
+    if os.getenv("RENDER_DEBUG_LOG", "0") == "1":
+        for i, sc in enumerate(_results):
+            logger.debug(
+                "scene_boundary idx=%d start=%.3f end=%.3f transition_score=%.3f",
+                i, sc["start"], sc["end"], sc["transition_score"],
+            )
+    return _results

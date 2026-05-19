@@ -974,6 +974,10 @@ def render_part(
     input_has_audio = _has_audio_stream(input_path)
 
     vf_chain = ",".join(vf_parts)
+    logger.debug(
+        "render_part vf_chain part=%s chain=%s",
+        Path(output_path).name, vf_chain,
+    )
     _threads = ffmpeg_threads if ffmpeg_threads is not None else resolve_ffmpeg_threads()
     codec_flags = ["-c:v", resolved_codec, "-preset", resolved_preset,
                    *_codec_extra_flags(resolved_codec, int(video_crf), video_preset,
@@ -1012,8 +1016,13 @@ def render_part(
         if input_has_audio:
             af = _build_audio_filter(loudnorm_enabled, reup_mode, speed)
             if af:
+                logger.debug(
+                    "render_part audio_filter=%s speed=%.4f part=%s",
+                    af, speed, Path(output_path).name,
+                )
                 cmd += ["-af", af]
     cmd += [*codec_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
+    logger.debug("render_part ffmpeg_cmd=%s", " ".join(str(a) for a in cmd))
     logger.info("render_part: codec=%s preset=%s crf=%s effect=%s loudnorm=%s input=%s output=%s",
                 resolved_codec, resolved_preset, video_crf, effect_preset, loudnorm_enabled,
                 Path(input_path).name, Path(output_path).name)
