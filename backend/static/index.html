@@ -921,11 +921,6 @@
             <button class="aiActionBtn" onclick="EditorAiActions?.strongerHook?.()">Stronger Hook</button>
             <button class="aiActionBtn" onclick="EditorAiActions?.fasterPacing?.()">Faster Pacing</button>
             <button class="aiActionBtn" onclick="EditorAiActions?.smartClipPrioritization?.()">Best First</button>
-            <button class="aiActionBtn" onclick="EditorAiActions?.viralMode?.()">Viral Mode</button>
-            <button class="aiActionBtn" onclick="EditorAiActions?.cinematicMode?.()">Cinematic</button>
-          </div>
-          <div class="evStorySubtleAction">
-            <button class="evTinyBtn" onclick="EditorAiActions?.subtitleCleanup?.()">quick subtitle fix →</button>
           </div>
           <div class="evStorySubtleAction" style="margin-top:6px">
             <button class="ghostButton" style="font-size:10px;padding:2px 8px;width:100%;text-align:left" onclick="EditorAiActions?.undo?.()" title="Undo the last AI edit action">↩ Undo Last Edit</button>
@@ -993,7 +988,7 @@
         <div class="evSectionTitle">🌍 Market &amp; Target</div>
         <div class="mvPanelDesc">Market scoring, subtitle tone, and hook optimization for every exported clip.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-          <label class="field">
+          <label class="field" style="grid-column:1/-1">
             <span class="fieldLabel">Target Market</span>
             <select class="fieldInput" id="mvMarket" onchange="mvHandleChange()">
               <option value="US" selected>🇺🇸 US</option>
@@ -1001,14 +996,7 @@
               <option value="JP">🇯🇵 JP</option>
             </select>
           </label>
-          <label class="field">
-            <span class="fieldLabel">Market Tone</span>
-            <select class="fieldInput" id="mvSubtitleTone" onchange="mvHandleChange()">
-              <option value="clean" selected>Clean</option>
-              <option value="bold">Bold</option>
-              <option value="karaoke">Karaoke</option>
-            </select>
-          </label>
+          <input type="hidden" id="mvSubtitleTone" value="clean">
         </div>
         <div class="mvToggleGroup">
           <label class="mvToggleRow">
