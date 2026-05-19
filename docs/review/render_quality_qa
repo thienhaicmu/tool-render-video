@@ -1,0 +1,56 @@
+## QA-FIX-05 — Subtitle Drift / Container Timing Notes
+
+### Summary
+
+Small subtitle drift may still occur on some source videos even after accurate-cut fallback.
+
+This is usually caused by:
+- Variable frame rate (VFR) input media
+- Audio encoder delay/padding
+- Container timestamp rounding
+- External subtitle player timing behavior
+- Browser HTML5 video timestamp interpolation
+- Sidecar subtitle playback differences across players
+
+### Current mitigation
+
+The pipeline now:
+- Detects keyframe drift after stream-copy cuts
+- Retries with frame-accurate re-encode when drift exceeds 0.1s
+- Rebases subtitles from effective_start
+- Logs:
+  - effective_start
+  - source_offset
+  - subtitle_file_chain
+  - drift amount
+  - fallback reason
+
+### Remaining known limitations
+
+1. Some VFR videos may still show ±1–2 frame subtitle variance.
+2. External players may render ASS subtitles differently.
+3. Browser playback timing can differ slightly from FFmpeg mux timestamps.
+4. Audio encoder padding can introduce very small offset differences.
+
+### QA Guidance
+
+Treat as bug only if:
+- subtitle drift exceeds ~120 ms consistently
+- subtitle appears before speech starts
+- subtitle lags speech noticeably
+- drift accumulates over time
+
+Do not treat as bug:
+- 1-frame variance
+- player-specific ASS rendering differences
+- subtitle timing differences between VLC and browser preview
+
+### Recommended QA Player
+
+Primary validation:
+- FFmpeg muxed MP4 output
+- VLC
+- mpv
+
+Secondary validation:
+- Browser preview player
