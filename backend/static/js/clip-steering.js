@@ -12,7 +12,7 @@ const ClipSteering = (() => {
   }
 
   function _save(state) {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch {}
+    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (_) { console.warn('[preference:clip-steering] localStorage write failed'); }
   }
 
   function _prune(list) {

@@ -57,7 +57,7 @@ window.CreatorSeries = (() => {
   }
 
   function _save(state) {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (_) {}
+    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (_) { console.warn('[preference:series] localStorage write failed'); }
   }
 
   function _getFingerprint() {

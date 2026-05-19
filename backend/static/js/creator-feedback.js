@@ -49,7 +49,7 @@ window.CreatorFeedback = (() => {
   }
 
   function _save() {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(_data)); } catch (_) {}
+    try { localStorage.setItem(LS_KEY, JSON.stringify(_data)); } catch (_) { console.warn('[preference:feedback] localStorage write failed'); }
   }
 
   // ── EMA helpers (identical pattern to UP12) ───────────

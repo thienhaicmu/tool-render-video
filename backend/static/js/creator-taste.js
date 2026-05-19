@@ -46,7 +46,7 @@ window.CreatorTaste = (() => {
   }
 
   function _save() {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(_data)); } catch (_) {}
+    try { localStorage.setItem(LS_KEY, JSON.stringify(_data)); } catch (_) { console.warn('[preference:taste] localStorage write failed'); }
   }
 
   // ── EMA helpers ───────────────────────────────────────────

@@ -33,7 +33,7 @@ window.ScorePreference = (() => {
   }
 
   function _save(d) {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch (_) {}
+    try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch (_) { console.warn('[preference:score] localStorage write failed'); }
   }
 
   function _prune(d) {
