@@ -3863,6 +3863,40 @@ function _r66ConfidenceBadge(rk) {
   return '';
 }
 
+// Phase 68.3: Feedback learning summary note — cached per page session.
+var _r68FeedbackSummaryCache = null;
+
+function _r68FetchFeedbackSummary(onResult) {
+  if (_r68FeedbackSummaryCache !== null) { onResult(_r68FeedbackSummaryCache); return; }
+  fetch('/api/feedback/summary')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(data) {
+      _r68FeedbackSummaryCache = data || { available: false };
+      onResult(_r68FeedbackSummaryCache);
+    })
+    .catch(function() {
+      _r68FeedbackSummaryCache = { available: false };
+    });
+}
+
+function _r68ShowFeedbackNote(summary) {
+  if (!summary || !summary.available || !summary.biases_active) return;
+  if (summary.total_exports < 3) return;
+  if (document.getElementById('r68FeedbackNote')) return;
+  var list = document.getElementById('render_output_list');
+  if (!list || !list.parentNode) return;
+  var el = document.createElement('div');
+  el.id = 'r68FeedbackNote';
+  el.style.cssText = 'font-size:11px;color:var(--fg2,#888);padding:6px 12px 4px;display:flex;align-items:center;gap:8px';
+  var label = 'Ranking adapted from your export history (' + summary.total_exports + ' renders)';
+  if ((summary.avg_export_rank || 0) > 1.5) label += ' · You often pick alternatives';
+  el.innerHTML = '<span>' + (typeof esc === 'function' ? esc(label) : label) + '</span>'
+    + '<button onclick="document.getElementById(\'r68FeedbackNote\').remove()" '
+    + 'style="background:none;border:none;color:var(--fg2,#888);cursor:pointer;font-size:13px;line-height:1;padding:0 2px" '
+    + 'title="Dismiss">×</button>';
+  list.parentNode.insertBefore(el, list);
+}
+
 // Phase 68.2: Alternative preference nudge on rank-2 clip.
 // Shown when creator consistently downloads non-#1 clips (prefersAlternativeClip, 3+ sessions).
 function _r68AltNote(rk) {
@@ -4662,6 +4696,13 @@ function populateRenderOutputPanel(job, parts) {
   }
 
   renderAiStrategyPanel(job);
+  // 68.3: Show feedback learning summary note after render reaches terminal state
+  (function() {
+    var _r68s = String(job && job.status || '').toLowerCase();
+    if (_r68s === 'done' || _r68s === 'completed' || _r68s === 'complete' || _r68s === 'completed_with_errors') {
+      _r68FetchFeedbackSummary(function(summary) { _r68ShowFeedbackNote(summary); });
+    }
+  })();
   // P2.9.1-A: Restore transient card classes wiped by full innerHTML replacement above
   if (typeof RenderAiRuntime !== 'undefined') RenderAiRuntime.reapplyTransientState();
 
