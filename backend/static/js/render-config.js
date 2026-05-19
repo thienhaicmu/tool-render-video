@@ -287,8 +287,8 @@ async function syncUploadSourceDirByChannel(){
     const out = String(data.input_dir || '').trim();
     if(qs('upload_video_input_dir')) qs('upload_video_input_dir').value = out;
     setUploadAction('channel', 'running', `Channel ${channel} selected. Source folder is ready.`, out || '-');
-  }catch(_){
-    // keep silent for upload panel convenience
+  }catch(err){
+    console.warn('[render-config] upload channel sync', err);
   }
   syncUploadJsonModeUI();
 }

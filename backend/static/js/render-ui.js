@@ -173,7 +173,7 @@ async function _loadQueueStatus() {
       pill.dataset.active = String(d.active_renders > 0 ? 1 : 0);
       pill.hidden = false;
     }
-  } catch(_) {}
+  } catch(err) { console.warn('[render-ui] queue status poll', err); }
 }
 
 function _startQueueStatusPolling() {
