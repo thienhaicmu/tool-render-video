@@ -73,14 +73,44 @@ addEvent('Dashboard ready');
   document.addEventListener('keydown', function (e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return; // never steal modifier combos
     if (_isTyping(e.target)) return;                 // focus is in a text field → ignore
-    if (currentView !== 'editor') return;            // editor must be the active view
 
-    switch (e.code) {
-      case 'Space':  e.preventDefault(); evTogglePlay();          break; // prevents page scroll
-      case 'KeyI':                        evSetTrimIn();           break;
-      case 'KeyO':                        evSetTrimOut();          break;
-      case 'Escape':                      cancelEditorView();      break;
-      case 'Enter':  e.preventDefault(); startRenderFromEditor(); break; // prevents button re-click
+    if (currentView === 'editor') {
+      switch (e.code) {
+        case 'Space':  e.preventDefault(); evTogglePlay();          break; // prevents page scroll
+        case 'KeyI':                        evSetTrimIn();           break;
+        case 'KeyO':                        evSetTrimOut();          break;
+        case 'Escape':                      cancelEditorView();      break;
+        case 'Enter':  e.preventDefault(); startRenderFromEditor(); break; // prevents button re-click
+      }
+      return;
+    }
+
+    if (currentView === 'render') {
+      var card = document.activeElement;
+      if (!card || !card.classList.contains('clipCard') || !card.classList.contains('isDone')) return;
+      var startSec = Number(card.dataset.startSec);
+      var endSec   = Number(card.dataset.endSec);
+      var label    = String((card.querySelector('.clipCardTitle') || {}).textContent || '').trim();
+      var partNo   = Number(card.dataset.partNo) || 0;
+      switch (e.code) {
+        case 'KeyK':
+          if (_r72KbActionLock) return;
+          _r72KbActionLock = true;
+          setTimeout(function() { _r72KbActionLock = false; }, 150);
+          if (typeof csKeepClip === 'function') csKeepClip(startSec, endSec, label, partNo);
+          break;
+        case 'KeyA':
+          if (_r72KbActionLock) return;
+          _r72KbActionLock = true;
+          setTimeout(function() { _r72KbActionLock = false; }, 150);
+          if (typeof csAvoidClip === 'function') csAvoidClip(startSec, endSec, label, partNo);
+          break;
+        case 'KeyD': {
+          var dlBtn = card.querySelector('a.renderClipActionLink[download]');
+          if (dlBtn) dlBtn.click();
+          break;
+        }
+      }
     }
   });
 })();

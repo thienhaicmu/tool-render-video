@@ -10,6 +10,7 @@ let _renderMonitorHeartbeatTimer = null;
 let _renderLogsUserToggled = false;
 let _selectedClipPaths = new Set();
 let _clipsSortOrder        = 'score';
+let _r72KbActionLock    = false;
 let _uxr3AutoSelectedBest  = false;   // UX-R3-F: auto-preview best clip once per session
 let _logAutoScroll = true;
 let _rcLastActivePartNo = -1;
@@ -3657,6 +3658,19 @@ function clearRenderOutputPanel() {
   hideRenderOutputPanel();
 }
 
+function _r72AdvanceFocus(partNo) {
+  const cards = Array.from(document.querySelectorAll('.clipCard.isDone[tabindex="0"]'));
+  if (!cards.length) return;
+  const current = cards.findIndex(function(c) { return Number(c.dataset.partNo) === partNo; });
+  const start = current >= 0 ? current + 1 : 0;
+  for (var i = start; i < cards.length; i++) {
+    if (cards[i].getAttribute('aria-disabled') === 'true') continue;
+    cards[i].focus();
+    cards[i].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+}
+
 function _hideCsPreviewArea() {
   const area = qs('cs_preview_area');
   if (area) area.classList.add('hiddenView');
@@ -4511,6 +4525,7 @@ function populateRenderOutputPanel(job, parts) {
       if (typeof showToast === 'function') showToast('Kept — will be prioritised next render', 'success');
       if (typeof v3RefreshSteeringPanel === 'function') v3RefreshSteeringPanel();
     }
+    _r72AdvanceFocus(Number(partNo) || 0);
   };
   function _r67ShowRerenderBanner() {
     var el = document.getElementById('r67RerenderBanner');
@@ -4544,6 +4559,7 @@ function populateRenderOutputPanel(job, parts) {
       if (typeof showToast === 'function') showToast('Avoided — will be excluded next render', 'info');
       if (typeof v3RefreshSteeringPanel === 'function') v3RefreshSteeringPanel();
     }
+    _r72AdvanceFocus(Number(partNo) || 0);
   };
   window.csKeepAndRerender = function(startSec, endSec, label, partNo) {
     if (typeof DurationPreference !== 'undefined') DurationPreference.recordSignal('keep', endSec - startSec);
@@ -4660,7 +4676,7 @@ function populateRenderOutputPanel(job, parts) {
     const cardClass = `clipCard${isFailed ? ' isFailed' : ''}${isSkipped ? ' isSkipped' : ''}${isDone ? ' isDone' : ''}${isSelected ? ' isSelected' : ''}${rk.isBest ? ' isBestClip' : ''}`;
     const failReasonRaw = isFailed ? String(p?.message || '').trim() : '';
     const failReasonClean = (failReasonRaw && !/(_ms=|\bpart_render\b|\w+=\w+)/.test(failReasonRaw)) ? failReasonRaw.slice(0, 80) : '';
-    return `<div class="${cardClass}" data-clip-status="${esc(st || 'queued')}" data-part-no="${partNo}" data-aspect="${_dataAspect}">
+    return `<div class="${cardClass}" data-clip-status="${esc(st || 'queued')}" data-part-no="${partNo}" data-aspect="${_dataAspect}"${isDone ? ` tabindex="0" data-start-sec="${startSec}" data-end-sec="${endSec}"` : ''}>
       <div class="clipCardThumbWrap"${thumbAttrs}>
         ${thumbHtml}
         ${rk.isBest ? '<div class="clipCardBestFlag">Best</div>' : ''}
