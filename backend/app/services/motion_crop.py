@@ -133,11 +133,13 @@ def _detect_mediapipe_faces(
 # ---------------------------------------------------------------------------
 
 _CONTENT_TYPE_TRACKING: dict[str, dict] = {
-    # interview/tutorial: subject barely moves — detect less often, pan slower, smoother camera
-    "interview":  {"detect_interval_mul": 2.0, "ema_mul": 0.65, "pan_speed_mul": 0.70},
-    "commentary": {"detect_interval_mul": 1.5, "ema_mul": 0.80, "pan_speed_mul": 0.85},
+    # interview/commentary/tutorial: speech-heavy, face is primary subject.
+    # Detect MORE often (0.5×) so tracker loss over 8 frames max, not 32.
+    # Slower pan + stronger EMA keep the camera stable between detections.
+    "interview":  {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
+    "commentary": {"detect_interval_mul": 0.5, "ema_mul": 0.80, "pan_speed_mul": 0.85},
     "vlog":       {"detect_interval_mul": 1.0, "ema_mul": 1.00, "pan_speed_mul": 1.00},
-    "tutorial":   {"detect_interval_mul": 2.0, "ema_mul": 0.65, "pan_speed_mul": 0.70},
+    "tutorial":   {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
     # montage: subject moves fast — detect more often, pan faster, more reactive
     "montage":    {"detect_interval_mul": 0.5, "ema_mul": 1.30, "pan_speed_mul": 1.40},
 }
@@ -960,6 +962,11 @@ def build_subject_path(
     raw_centers: List[Tuple[float, float]] = []
     frame_idx = 0
     detect_interval = max(1, cfg.subject_detect_interval)
+    logger.info(
+        "motion_crop_detect_interval input=%s content_type=%s detect_interval=%d tracker=%s",
+        Path(video_path).name, content_type, detect_interval,
+        "available" if tracker_available else "unavailable",
+    )
     required_lock_confirm = _required_lock_confirm_frames(cfg, tracker_available)
     pending_subject: Optional[Tuple[int, int, int, int]] = None
     pending_count = 0
@@ -1114,6 +1121,11 @@ def build_subject_path(
 
     # If we never found a subject and fallback is enabled, use legacy motion
     if subjects_found_total == 0 and cfg.motion_fallback:
+        logger.warning(
+            "motion_fallback_triggered input=%s content_type=%s reason=no_subject_detected "
+            "frames_scanned=%d detect_interval=%d → switching to legacy pixel-diff",
+            Path(video_path).name, content_type, frame_idx, detect_interval,
+        )
         return _build_motion_path_legacy(video_path, crop_w, crop_h, cfg)
 
     # Pad to frame_count
@@ -1205,6 +1217,11 @@ def build_subject_path_scene(
                 )
         raw_centers: List[Tuple[float, float]] = []
         detect_interval = max(1, cfg.subject_detect_interval)
+        logger.info(
+            "motion_crop_detect_interval input=%s scene=%d content_type=%s detect_interval=%d tracker=%s",
+            Path(video_path).name, scene_index, content_type, detect_interval,
+            "available" if tracker_available else "unavailable",
+        )
         required_lock_confirm = _required_lock_confirm_frames(cfg, tracker_available)
         untracked_hold_frames = _untracked_hold_frames(cfg, detect_interval)
         dead_zone_x = crop_w * cfg.dead_zone_ratio
