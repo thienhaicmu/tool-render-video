@@ -3863,6 +3863,16 @@ function _r66ConfidenceBadge(rk) {
   return '';
 }
 
+// Phase 68.1: DNA hook-sort attribution note on best clip.
+// Only shown when DNA is confident, hook_forward >= 0.5, clip is best, and score >= 7.
+function _r68DnaNote(rk) {
+  if (!rk.isBest || rk.score < 7) return '';
+  if (typeof CreatorDNA === 'undefined') return '';
+  var ctx = CreatorDNA.getDNAContext();
+  if (!ctx || !ctx.confident || (ctx.hook_forward || 0) < 0.5) return '';
+  return '<div class="clipCardSelReason" style="opacity:0.75">↑ Hook-forward ordering was applied (Creator DNA)</div>';
+}
+
 // R7.1: Generate truthful clip reason from AI director output + raw signals + taste model.
 // Prefers rk.reason when present; falls back to signal-derived text.
 function _r7TruthfulReason(rk, motionScore, hookScore) {
@@ -4603,6 +4613,7 @@ function populateRenderOutputPanel(job, parts) {
         </div>
         ${_clipReason ? `<div class="clipCardReason">${esc(_clipReason)}</div>` : ''}
         ${isDone && scoreVal >= 5 ? _r66BuildExplainPanel(rk) : ''}
+        ${isDone && rk.isBest ? _r68DnaNote(rk) : ''}
         ${isDone ? _r66ConfidenceBadge(rk) : ''}
         ${isDone && rk.selectionReasonHuman ? `<div class="clipCardSelReason">${esc(rk.selectionReasonHuman)}</div>` : ''}
         ${rk.selectionReason && rk.selectionReason.includes('limited source variety') ? `<div class="clipVarietyNote">Limited source variety</div>` : ''}
