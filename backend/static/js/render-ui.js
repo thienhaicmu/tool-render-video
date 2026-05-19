@@ -990,7 +990,8 @@ function _rankMap(job) {
           coverFile:       String(r.cover_file || '').trim(),
           ctaApplied:      !!(r.cta_applied),
           ctaText:         String(r.cta_text || '').trim(),
-          rankingComponents: (r.ranking_components && typeof r.ranking_components === 'object') ? r.ranking_components : {},
+          rankingComponents:     (r.ranking_components && typeof r.ranking_components === 'object') ? r.ranking_components : {},
+          selectionReasonHuman: _r66TranslateSelectionReason(String(r.selection_reason || '').trim()),
         });
       }
     });
@@ -3834,6 +3835,34 @@ function _r66BuildExplainPanel(rk) {
   return '<div class="clipCardExplain">' + tags.join('') + '</div>';
 }
 
+// Phase 66.2: Translate machine-tag selection_reason to human language.
+// Machine format: "strong_hook+stable_pacing" → "Strong opening hook · Stable pacing"
+// Human-readable and variant formats pass through unchanged.
+function _r66TranslateSelectionReason(raw) {
+  if (!raw || raw === 'best_available' || raw === 'fallback') return '';
+  if (!raw.includes('+')) return raw;
+  var _MAP = {
+    'strong_hook':   'Strong opening hook',
+    'stable_pacing': 'Stable pacing',
+    'speech_rich':   'Dense speech content',
+    'ideal_length':  'Ideal clip duration',
+    'high_quality':  'High visual quality',
+    'top_viral':     'Top ranked clip',
+  };
+  return raw.split('+').map(function(tag) {
+    return _MAP[tag.trim()] || tag.trim();
+  }).join(' · ');
+}
+
+// Phase 66.2: Confidence tier badge for best clip only.
+// Only shows 'strong' and 'worth_testing'. Experimental tier shows nothing.
+function _r66ConfidenceBadge(rk) {
+  if (!rk.isBest) return '';
+  if (rk.confidenceTier === 'strong')        return '<div class="clipCardConf" data-tier="strong">High confidence</div>';
+  if (rk.confidenceTier === 'worth_testing') return '<div class="clipCardConf" data-tier="worth_testing">Close call — test both</div>';
+  return '';
+}
+
 // R7.1: Generate truthful clip reason from AI director output + raw signals + taste model.
 // Prefers rk.reason when present; falls back to signal-derived text.
 function _r7TruthfulReason(rk, motionScore, hookScore) {
@@ -4552,6 +4581,8 @@ function populateRenderOutputPanel(job, parts) {
         </div>
         ${_clipReason ? `<div class="clipCardReason">${esc(_clipReason)}</div>` : ''}
         ${isDone && scoreVal >= 5 ? _r66BuildExplainPanel(rk) : ''}
+        ${isDone ? _r66ConfidenceBadge(rk) : ''}
+        ${isDone && rk.selectionReasonHuman ? `<div class="clipCardSelReason">${esc(rk.selectionReasonHuman)}</div>` : ''}
         ${rk.selectionReason && rk.selectionReason.includes('limited source variety') ? `<div class="clipVarietyNote">Limited source variety</div>` : ''}
         ${_jobRecovered && isDone ? `<div class="clipRecoveredNote" title="${esc(_jobRecoveryNotes.join(' · '))}">Recovered</div>` : ''}
         ${(motionScore !== null || hookScore !== null) && (rk.isBest || scoreVal >= 6) ? _r7SignalRow(motionScore, hookScore, rk.isBest, _bestMotion, _bestHook) : ''}
