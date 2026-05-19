@@ -210,6 +210,19 @@ function v3RefreshSteeringPanel() {
     if (cnt.exclude > 0) parts.push({ label: `🚫 ${cnt.exclude} avoided`, cls: 'v3Chip v3ChipExclude', title: 'Moments marked Avoid — will be excluded' });
   }
 
+  (function() {
+    const memDims = [];
+    const platPref = (typeof CreatorFeedback !== 'undefined') ? CreatorFeedback.getPlatformPreference() : null;
+    if (platPref) memDims.push('Platform: ' + platPref.label);
+    const subHint = (typeof CreatorTaste !== 'undefined') ? CreatorTaste.getSubtitleStyleHint() : null;
+    if (subHint) memDims.push('Style: ' + subHint.label);
+    const taste = (typeof CreatorMemory !== 'undefined') ? CreatorMemory.getTasteModel() : null;
+    if (taste && taste.confident && taste.editStyle !== 'balanced') memDims.push('Edit: ' + taste.editStyle);
+    if (memDims.length >= 2) {
+      parts.push({ label: '🧠 Learned', cls: 'v3Chip v3ChipMemory', title: memDims.join(' · ') });
+    }
+  })();
+
   if (typeof CreatorAssets !== 'undefined') {
     const _ca = CreatorAssets.getPayload();
     if (_ca.asset_logo_path)       parts.push({ label: '🖼 Logo',    cls: 'v3Chip v3ChipAsset', title: 'Brand logo watermark will be applied' });
