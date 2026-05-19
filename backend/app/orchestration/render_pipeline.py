@@ -2380,6 +2380,12 @@ def run_render_pipeline(
                 ),
                 reverse=True,
             )
+        # UP73.3: First-render quality floor — drop candidates below viral_score 25.
+        # Procedure: sort (already done) → filter → fallback-to-top-1 → slice.
+        # Micro-safety: skip when pool is ≤ 2 to avoid over-pruning sparse content.
+        if len(scored) > 2:
+            _floor_filtered = [s for s in scored if float(s.get("viral_score", 0) or 0) >= 25]
+            scored = _floor_filtered if _floor_filtered else scored[:1]
         if payload.max_export_parts and payload.max_export_parts > 0:
             scored = scored[:payload.max_export_parts]
         # UP26: Clip lock — promote creator-selected timestamp ranges to front of pool (after slice)
