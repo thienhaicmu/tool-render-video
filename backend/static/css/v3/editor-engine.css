@@ -879,6 +879,25 @@
   min-height: 0;
   margin-bottom: 6px;
 }
+.aiSuggestionChips:empty { display: none; }
+
+/* Section hint badge — tooltip-only ? marker */
+.aiSectionHint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.18);
+  color: rgba(255,255,255,.35);
+  font-size: 9px;
+  font-weight: 700;
+  cursor: default;
+  user-select: none;
+  flex-shrink: 0;
+}
+.aiSectionHint:hover { border-color: rgba(255,255,255,.45); color: rgba(255,255,255,.7); }
 
 .aiSuggestionChip {
   padding: 4px 10px;

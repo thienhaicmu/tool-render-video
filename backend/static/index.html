@@ -901,17 +901,25 @@
         </div>
       </div>
 
-      <!-- P2: AI Assist bar — suggestion chips + activity rail -->
-      <div class="evSection insp-panel-active" id="evSectionAiAssist" data-insp-panel="mode">
+      <!-- Quick Styles — saved editing looks (apply + save named snapshot) -->
+      <div class="evSection insp-panel-active" id="evSectionVariants" data-insp-panel="mode">
         <div class="aiAssistHead">
-          <span class="aiAssistTitle">AI Assist</span>
-          <button class="ghostButton" style="font-size:10px;padding:2px 8px" onclick="EditorAiActions?.undo?.()" title="Undo last AI action">Undo</button>
+          <span class="aiAssistTitle">Quick Styles</span>
+          <span class="aiSectionHint" title="Quick Styles apply a named editing look and save a snapshot. AI Edit Actions make targeted one-time changes to the current edit.">?</span>
         </div>
-        <div id="aiSuggestionChips" class="aiSuggestionChips"></div>
-        <div id="aiActivityRail" class="aiActivityRail"><span class="aiActivityEmpty">AI ready</span></div>
+        <div class="aiVariantGrid">
+          <button class="aiVariantBtn" id="aiVariant_viral"       onclick="EditorAiSessions?.applyVariant?.('viral')">Viral</button>
+          <button class="aiVariantBtn" id="aiVariant_cinematic"   onclick="EditorAiSessions?.applyVariant?.('cinematic')">Cinematic</button>
+          <button class="aiVariantBtn" id="aiVariant_aggressive"  onclick="EditorAiSessions?.applyVariant?.('aggressive')">Aggressive</button>
+          <button class="aiVariantBtn" id="aiVariant_balanced"    onclick="EditorAiSessions?.applyVariant?.('balanced')">Balanced</button>
+        </div>
+        <div style="margin-top:6px">
+          <div class="aiSectionLabel" style="margin-bottom:4px;opacity:.55">Snapshots</div>
+          <div id="aiSnapshotList" class="aiSnapshotList"><div class="aiSnapshotEmpty">No snapshots yet</div></div>
+        </div>
       </div>
 
-      <!-- AI Edit actions (collapsible) — Undo lives in AI Assist header above -->
+      <!-- AI Edit Actions (collapsible) -->
       <div class="inspCollapsedGroup insp-panel-active" data-insp-panel="mode" id="inspGroupAiEdit">
         <div class="inspGroupHdr" id="inspGroupAiEditHdr" onclick="evToggleInspGroup('ai-edit')">
           <span>AI Edit Actions</span>
@@ -929,20 +937,21 @@
           <div class="evStorySubtleAction">
             <button class="evTinyBtn" onclick="EditorAiActions?.subtitleCleanup?.()">quick subtitle fix →</button>
           </div>
+          <div class="evStorySubtleAction" style="margin-top:6px">
+            <button class="ghostButton" style="font-size:10px;padding:2px 8px;width:100%;text-align:left" onclick="EditorAiActions?.undo?.()" title="Undo the last AI edit action">↩ Undo Last Edit</button>
+          </div>
         </div>
       </div>
 
-      <!-- Timeline Variants & Snapshots — promoted (was inside collapsed AI group) -->
-      <div class="evCompactRail insp-panel-active" id="evSectionVariants" data-insp-panel="mode">
-        <div class="aiVariantGrid">
-          <button class="aiVariantBtn" id="aiVariant_viral"       onclick="EditorAiSessions?.applyVariant?.('viral')">Viral</button>
-          <button class="aiVariantBtn" id="aiVariant_cinematic"   onclick="EditorAiSessions?.applyVariant?.('cinematic')">Cinematic</button>
-          <button class="aiVariantBtn" id="aiVariant_aggressive"  onclick="EditorAiSessions?.applyVariant?.('aggressive')">Aggressive</button>
-          <button class="aiVariantBtn" id="aiVariant_balanced"    onclick="EditorAiSessions?.applyVariant?.('balanced')">Balanced</button>
+      <!-- Edit History — collapsed by default, reference material -->
+      <div class="inspCollapsedGroup insp-panel-active" data-insp-panel="mode" id="inspGroupEditHistory">
+        <div class="inspGroupHdr" id="inspGroupEditHistoryHdr" onclick="evToggleInspGroup('edit-history')">
+          <span>Edit History</span>
+          <span class="inspGroupArrow">▸</span>
         </div>
-        <div style="margin-top:6px">
-          <div class="aiSectionLabel" style="margin-bottom:4px;opacity:.55">Snapshots</div>
-          <div id="aiSnapshotList" class="aiSnapshotList"><div class="aiSnapshotEmpty">No snapshots yet</div></div>
+        <div class="inspGroupBody" id="inspGroupEditHistoryBody">
+          <div id="aiSuggestionChips" class="aiSuggestionChips"></div>
+          <div id="aiActivityRail" class="aiActivityRail"><span class="aiActivityEmpty">No edits yet</span></div>
         </div>
       </div>
 

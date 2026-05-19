@@ -70,7 +70,7 @@ window.EditorAiActions = (() => {
     if (!rail) return;
     const items = _actLog.slice(0, 5);
     if (!items.length) {
-      rail.innerHTML = '<span class="aiActivityEmpty">AI ready</span>';
+      rail.innerHTML = '<span class="aiActivityEmpty">No edits yet</span>';
       rail.classList.remove('has-activity');
     } else {
       rail.innerHTML = items.map(a => `<span class="aiActivityItem">${_esc(a.msg)}</span>`).join('');

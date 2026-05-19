@@ -1874,8 +1874,9 @@ function evToggleInspGroup(group) {
     audio:         { body: 'inspGroupAudioBody',      hdr: 'inspGroupAudioHdr' },
     performance:   { body: 'inspGroupPerfBody',       hdr: 'inspGroupPerfHdr' },
     advanced:      { body: 'inspGroupAdvBody',        hdr: 'inspGroupAdvHdr' },
-    'ai-edit':     { body: 'inspGroupAiEditBody',     hdr: 'inspGroupAiEditHdr' },
-    'text-layers': { body: 'inspGroupTextLayersBody', hdr: 'inspGroupTextLayersHdr' },
+    'ai-edit':      { body: 'inspGroupAiEditBody',      hdr: 'inspGroupAiEditHdr' },
+    'edit-history': { body: 'inspGroupEditHistoryBody', hdr: 'inspGroupEditHistoryHdr' },
+    'text-layers':  { body: 'inspGroupTextLayersBody',  hdr: 'inspGroupTextLayersHdr' },
   };
   const ids = groupMap[group];
   if (!ids) return;
@@ -1891,8 +1892,9 @@ function evSetInspGroupOpen(group, open) {
     audio:         { body: 'inspGroupAudioBody',      hdr: 'inspGroupAudioHdr' },
     performance:   { body: 'inspGroupPerfBody',       hdr: 'inspGroupPerfHdr' },
     advanced:      { body: 'inspGroupAdvBody',        hdr: 'inspGroupAdvHdr' },
-    'ai-edit':     { body: 'inspGroupAiEditBody',     hdr: 'inspGroupAiEditHdr' },
-    'text-layers': { body: 'inspGroupTextLayersBody', hdr: 'inspGroupTextLayersHdr' },
+    'ai-edit':      { body: 'inspGroupAiEditBody',      hdr: 'inspGroupAiEditHdr' },
+    'edit-history': { body: 'inspGroupEditHistoryBody', hdr: 'inspGroupEditHistoryHdr' },
+    'text-layers':  { body: 'inspGroupTextLayersBody',  hdr: 'inspGroupTextLayersHdr' },
   };
   const ids = groupMap[group];
   if (!ids) return;
