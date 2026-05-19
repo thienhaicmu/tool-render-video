@@ -245,6 +245,7 @@ function v3RefreshSteeringPanel() {
     return `<span class="${p.cls}" title="${p.title}">${p.label}</span>`;
   }).join('');
   _r67SyncDurationHint();
+  _r70SyncDurationHint();
 }
 
 function v3ResetSteering() {
@@ -296,6 +297,45 @@ window._r67ApplyDuration = function(mn, mx) {
 
 window._r67DismissDuration = function() {
   var el = document.getElementById('r67DurationHint');
+  if (el) el.style.display = 'none';
+};
+
+function _r70_ensureDurationHintEl() {
+  var el = document.getElementById('r70DurationHint');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'r70DurationHint';
+  el.style.cssText = 'grid-column:1/-1;display:none;background:var(--bg2,#2a2a2a);border:1px solid var(--border,#333);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--fg2,#aaa);margin-top:2px';
+  var hint67 = document.getElementById('r67DurationHint');
+  if (hint67 && hint67.parentNode) {
+    hint67.parentNode.insertBefore(el, hint67.nextSibling);
+    return el;
+  }
+  var maxEl = document.getElementById('evMaxPart');
+  if (maxEl) {
+    var maxLabel = maxEl.closest('label');
+    if (maxLabel && maxLabel.parentNode) {
+      maxLabel.parentNode.insertBefore(el, maxLabel.nextSibling);
+    }
+  }
+  return el;
+}
+
+function _r70SyncDurationHint() {
+  if (typeof DurationPreference === 'undefined') return;
+  var pref = DurationPreference.getPreference();
+  var el = _r70_ensureDurationHintEl();
+  if (!el) return;
+  if (!pref) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = '<span style="color:var(--fg1,#e0e0e0)">You often keep ' + pref.label + '</span>'
+    + ' — <strong>' + pref.applyMin + '–' + pref.applyMax + 's</strong>'
+    + ' <button onclick="window._r67ApplyDuration(' + pref.applyMin + ',' + pref.applyMax + ');window._r70DismissDuration()" style="margin-left:8px;padding:2px 8px;background:var(--primary,#6c5ce7);color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer">Apply</button>'
+    + ' <button onclick="window._r70DismissDuration()" style="margin-left:4px;padding:2px 6px;background:transparent;color:var(--fg2,#aaa);border:1px solid var(--border,#333);border-radius:4px;font-size:11px;cursor:pointer">×</button>';
+}
+
+window._r70DismissDuration = function() {
+  var el = document.getElementById('r70DurationHint');
   if (el) el.style.display = 'none';
 };
 
