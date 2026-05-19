@@ -1627,37 +1627,6 @@
         </div>
       </div>
 
-      <!-- Export tab: Advanced (collapsed — dev diagnostics) -->
-      <div class="inspCollapsedGroup" data-insp-panel="performance">
-        <div class="inspGroupHdr" id="inspGroupAdvHdr" onclick="evToggleInspGroup('advanced')">
-          <span>Advanced</span>
-          <span class="inspGroupArrow">▸</span>
-        </div>
-        <div class="inspGroupBody" id="inspGroupAdvBody">
-          <div class="evSection" id="edPerfDiagSection" data-section-type="perf-diag" data-insp-panel="performance">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <div class="evSectionTitle" style="margin-bottom:0">Runtime Diagnostics</div>
-              <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.refresh?.()" title="Refresh metrics">↻</button>
-            </div>
-            <div id="edPerfMetrics" class="edPerfMetrics">
-              <div class="edPerfRow"><span class="edPerfKey">FPS</span><span class="edPerfVal" id="edPerfFps">—</span></div>
-              <div class="edPerfRow"><span class="edPerfKey">Dropped</span><span class="edPerfVal" id="edPerfDropped">—</span></div>
-              <div class="edPerfRow"><span class="edPerfKey">TL nodes</span><span class="edPerfVal" id="edPerfNodes">—</span></div>
-              <div class="edPerfRow"><span class="edPerfKey">Clips DOM</span><span class="edPerfVal" id="edPerfClipsDom">—</span></div>
-              <div class="edPerfRow"><span class="edPerfKey">Subs DOM</span><span class="edPerfVal" id="edPerfSubsDom">—</span></div>
-              <div class="edPerfRow"><span class="edPerfKey">Thumb cache</span><span class="edPerfVal" id="edPerfThumbCache">—</span></div>
-              <div class="edPerfRow"><span class="edPerfKey">Wave cache</span><span class="edPerfVal" id="edPerfWaveCache">—</span></div>
-              <div class="edPerfRow"><span class="edPerfKey">Hover vids</span><span class="edPerfVal" id="edPerfHoverVids">—</span></div>
-            </div>
-            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-              <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.clearThumbCache?.()">Clear thumbs</button>
-              <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.clearWaveCache?.()">Clear waves</button>
-              <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.toggleDevOverlay?.()">Dev overlay</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Batch mode panel -->
       <div id="evBatchPanel" style="border-top:1px solid var(--border);padding:7px 12px 6px;flex-shrink:0">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
