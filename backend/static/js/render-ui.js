@@ -4443,6 +4443,27 @@ function populateRenderOutputPanel(job, parts) {
       if (typeof v3RefreshSteeringPanel === 'function') v3RefreshSteeringPanel();
     }
   };
+  function _r67ShowRerenderBanner() {
+    var el = document.getElementById('r67RerenderBanner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'r67RerenderBanner';
+      el.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--primary,#6c5ce7);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.4);pointer-events:none;transition:opacity 0.3s';
+      document.body.appendChild(el);
+    }
+    var cnt = (typeof ClipSteering !== 'undefined') ? ClipSteering.getCount() : { lock: 0 };
+    el.textContent = cnt.lock > 0
+      ? 'Rerendering — ' + cnt.lock + ' moment' + (cnt.lock > 1 ? 's' : '') + ' kept in memory'
+      : 'Rerendering with your preference applied';
+    el.style.opacity = '1';
+    el.style.display = 'block';
+    clearTimeout(el._r67t);
+    el._r67t = setTimeout(function() {
+      el.style.opacity = '0';
+      setTimeout(function() { el.style.display = 'none'; }, 300);
+    }, 4000);
+  }
+
   window.csAvoidClip = function(startSec, endSec, label) {
     if (typeof ClipSteering !== 'undefined') {
       ClipSteering.excludeClip(startSec, endSec, label);
@@ -4455,6 +4476,7 @@ function populateRenderOutputPanel(job, parts) {
       ClipSteering.lockClip(startSec, endSec, label);
       if (typeof v3RefreshSteeringPanel === 'function') v3RefreshSteeringPanel();
     }
+    _r67ShowRerenderBanner();
     if (typeof v3TriggerRerender === 'function') v3TriggerRerender();
     else if (typeof showToast === 'function') showToast('Kept — use ↻ Rerender in the steering panel', 'info');
   };
