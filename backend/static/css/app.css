@@ -17675,3 +17675,4 @@ body:not(.is-render-studio-active) .rs-center-stage > #appBottomPanel.renderRunt
 /* Asset chips (steering panel + trust bar) */
 .v3ChipAsset   { color:#a78bfa; border-color:rgba(167,139,250,.3); background:rgba(167,139,250,.08); }
 .v3TrustAsset  { color:#a78bfa; border-color:rgba(167,139,250,.25); background:rgba(167,139,250,.07); }
+.v3ChipPref    { color:#2dd4bf; border-color:rgba(45,212,191,.3);  background:rgba(45,212,191,.08); }
