@@ -1998,6 +1998,8 @@ function evToggleInspGroup(group) {
   if (!body) return;
   const isOpen = body.classList.toggle('open');
   if (hdr) hdr.classList.toggle('open', isOpen);
+  const arrEl = hdr && hdr.querySelector('.inspGroupArrow');
+  if (arrEl) arrEl.textContent = isOpen ? '▾' : '▸';
 }
 
 function evSetInspGroupOpen(group, open) {
