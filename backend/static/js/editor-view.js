@@ -3390,14 +3390,6 @@ function _mvRememberHookVariants(result) {
   }
 }
 
-function _mvAnalyzeHook(text, market) {
-  const result = mvGenerateHookVariants(text, market);
-  _mvRememberHookVariants(result);
-  const best = result.scores?.[0];
-  if (!best) return { hook_text_score: 0, strength: 'weak', issues: ['No subtitle text available'], suggestion: '' };
-  return { ...best, suggestion: result.best_hook, all_variants: result.variants, scores: result.scores };
-}
-
 function mvGenerateHookSuggestions(text, market, strength) {
   const result = mvGenerateHookVariants(text, market);
   _mvRememberHookVariants(result);

@@ -1597,10 +1597,31 @@
         </div>
       </div>
 
-      <!-- Export tab: Advanced Debug (collapsed by default — not auto-opened) -->
+      <!-- Export tab: Editor Performance (visible — quality toggles + health banner) -->
+      <div class="evSection" data-insp-panel="performance" style="padding:10px 12px 8px">
+        <div id="edPerfHealthBanner" style="display:none;margin-bottom:8px;padding:7px 10px;background:rgba(255,180,0,.1);border:1px solid rgba(255,180,0,.3);border-radius:6px;font-size:11px;color:#ffa;line-height:1.4"></div>
+        <div class="evSectionTitle" style="margin-bottom:4px">Editor Performance</div>
+        <div class="inspHint" style="margin-bottom:8px">Improve editor responsiveness on large timelines</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="edPerfHoverPreview" checked onchange="EditorPerformanceRuntime?.onHoverPreviewToggle?.(this.checked)" style="width:13px;height:13px;accent-color:var(--primary)">
+            <span class="fieldLabel" style="margin:0">Hover video previews</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="edPerfFilmstrip" checked onchange="EditorPerformanceRuntime?.onFilmstripToggle?.(this.checked)" style="width:13px;height:13px;accent-color:var(--primary)">
+            <span class="fieldLabel" style="margin:0">Timeline filmstrip</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="edPerfWaveform" checked onchange="EditorPerformanceRuntime?.onWaveformToggle?.(this.checked)" style="width:13px;height:13px;accent-color:var(--primary)">
+            <span class="fieldLabel" style="margin:0">Waveform lane</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Export tab: Advanced (collapsed — dev diagnostics) -->
       <div class="inspCollapsedGroup" data-insp-panel="performance">
         <div class="inspGroupHdr" id="inspGroupAdvHdr" onclick="evToggleInspGroup('advanced')">
-          <span>Advanced Debug</span>
+          <span>Advanced</span>
           <span class="inspGroupArrow">▸</span>
         </div>
         <div class="inspGroupBody" id="inspGroupAdvBody">
@@ -1623,24 +1644,6 @@
               <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.clearThumbCache?.()">Clear thumbs</button>
               <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.clearWaveCache?.()">Clear waves</button>
               <button class="evTinyBtn" onclick="EditorPerformanceRuntime?.toggleDevOverlay?.()">Dev overlay</button>
-            </div>
-            <!-- Quality toggles -->
-            <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
-              <div class="fieldLabel" style="margin-bottom:6px">Quality Controls</div>
-              <div style="display:flex;flex-direction:column;gap:5px">
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                  <input type="checkbox" id="edPerfHoverPreview" checked onchange="EditorPerformanceRuntime?.onHoverPreviewToggle?.(this.checked)" style="width:13px;height:13px;accent-color:var(--primary)">
-                  <span class="fieldLabel" style="margin:0">Hover video previews</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                  <input type="checkbox" id="edPerfFilmstrip" checked onchange="EditorPerformanceRuntime?.onFilmstripToggle?.(this.checked)" style="width:13px;height:13px;accent-color:var(--primary)">
-                  <span class="fieldLabel" style="margin:0">Timeline filmstrip</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                  <input type="checkbox" id="edPerfWaveform" checked onchange="EditorPerformanceRuntime?.onWaveformToggle?.(this.checked)" style="width:13px;height:13px;accent-color:var(--primary)">
-                  <span class="fieldLabel" style="margin:0">Waveform lane</span>
-                </label>
-              </div>
             </div>
           </div>
         </div>

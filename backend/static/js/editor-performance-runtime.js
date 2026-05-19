@@ -22,7 +22,7 @@ window.EditorPerformanceRuntime = (() => {
   function _startPoll() {
     if (_pollTimer) return;
     _poll();
-    _pollTimer = setInterval(_poll, 1200);
+    _pollTimer = setInterval(_poll, 5000);
   }
 
   function _stopPoll() {
@@ -75,10 +75,14 @@ window.EditorPerformanceRuntime = (() => {
     if (g('edPerfHoverVids')) g('edPerfHoverVids').textContent = fmt(m.hoverVids);
 
     // Health warning if too many TL nodes
+    const heavy = m.tlNodes > 2000 || m.clipsDom > 150 || m.subsDom > 300;
     const section = document.getElementById('edPerfDiagSection');
-    if (section) {
-      const heavy = m.tlNodes > 2000 || m.clipsDom > 150 || m.subsDom > 300;
-      section.classList.toggle('edPerfWarning', heavy);
+    if (section) section.classList.toggle('edPerfWarning', heavy);
+    // Surface actionable banner in visible Editor Performance section
+    const banner = document.getElementById('edPerfHealthBanner');
+    if (banner) {
+      banner.style.display = heavy ? '' : 'none';
+      if (heavy) banner.textContent = 'Timeline is heavy — disable hover previews or filmstrip to improve responsiveness.';
     }
   }
 
