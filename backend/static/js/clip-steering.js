@@ -61,5 +61,16 @@ const ClipSteering = (() => {
     return { lock: _prune(st.lock).length, exclude: _prune(st.exclude).length };
   }
 
-  return { lockClip, excludeClip, getClipLock, getClipExclude, getPayload, clear, getCount };
+  function getDurationHint() {
+    const locks = getClipLock();
+    if (locks.length < 2) return null;
+    const durations = locks.map(e => Math.max(0, (e.end_sec || 0) - (e.start_sec || 0)));
+    const avg = durations.reduce((s, d) => s + d, 0) / durations.length;
+    if (avg >= 70 && avg <= 120) return null;
+    const roundedAvg = Math.round(avg);
+    if (avg < 70) return { avg: roundedAvg, suggestMin: 45, suggestMax: 90 };
+    return { avg: roundedAvg, suggestMin: 90, suggestMax: 180 };
+  }
+
+  return { lockClip, excludeClip, getClipLock, getClipExclude, getPayload, clear, getCount, getDurationHint };
 })();

@@ -224,6 +224,7 @@ function v3RefreshSteeringPanel() {
   chips.innerHTML = parts.map(function(p) {
     return `<span class="${p.cls}" title="${p.title}">${p.label}</span>`;
   }).join('');
+  _r67SyncDurationHint();
 }
 
 function v3ResetSteering() {
@@ -235,6 +236,48 @@ function v3ResetSteering() {
   evSyncQsBar();
   if (typeof showToast === 'function') showToast('Steering reset', 'info');
 }
+
+function _r67_ensureDurationHintEl() {
+  var el = document.getElementById('r67DurationHint');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'r67DurationHint';
+  el.style.cssText = 'grid-column:1/-1;display:none;background:var(--bg2,#2a2a2a);border:1px solid var(--border,#333);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--fg2,#aaa);margin-top:2px';
+  var maxEl = document.getElementById('evMaxPart');
+  if (maxEl) {
+    var maxLabel = maxEl.closest('label');
+    if (maxLabel && maxLabel.parentNode) {
+      maxLabel.parentNode.insertBefore(el, maxLabel.nextSibling);
+    }
+  }
+  return el;
+}
+
+function _r67SyncDurationHint() {
+  if (typeof ClipSteering === 'undefined' || typeof ClipSteering.getDurationHint !== 'function') return;
+  var hint = ClipSteering.getDurationHint();
+  var el = _r67_ensureDurationHintEl();
+  if (!el) return;
+  if (!hint) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = '<span style="color:var(--fg1,#e0e0e0)">Duration preference: ~' + hint.avg + 's avg</span>'
+    + ' — suggest <strong>' + hint.suggestMin + '–' + hint.suggestMax + 's</strong>'
+    + ' <button onclick="window._r67ApplyDuration(' + hint.suggestMin + ',' + hint.suggestMax + ')" style="margin-left:8px;padding:2px 8px;background:var(--primary,#6c5ce7);color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer">Apply</button>'
+    + ' <button onclick="window._r67DismissDuration()" style="margin-left:4px;padding:2px 6px;background:transparent;color:var(--fg2,#aaa);border:1px solid var(--border,#333);border-radius:4px;font-size:11px;cursor:pointer">×</button>';
+}
+
+window._r67ApplyDuration = function(mn, mx) {
+  var minEl = document.getElementById('evMinPart');
+  var maxEl2 = document.getElementById('evMaxPart');
+  if (minEl) minEl.value = mn;
+  if (maxEl2) maxEl2.value = mx;
+  window._r67DismissDuration();
+};
+
+window._r67DismissDuration = function() {
+  var el = document.getElementById('r67DurationHint');
+  if (el) el.style.display = 'none';
+};
 
 function v3TriggerRerender() {
   if (typeof startRenderFromEditor === 'function' && typeof _ev !== 'undefined' && _ev.sessionId) {
