@@ -749,3 +749,12 @@ body:not(.is-history-active) #partial_history_view { display: none !important; }
 /* =======================================================
    END OF UX-R5 · STABILIZATION
    ======================================================= */
+
+/* =======================================================
+   Phase 63.6-A: <details> open/close arrow — Words tab Advanced panel
+   ======================================================= */
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::marker { display: none; }
+details > summary::before { content: '▸ '; font-size: 11px; }
+details[open] > summary::before { content: '▾ '; }
