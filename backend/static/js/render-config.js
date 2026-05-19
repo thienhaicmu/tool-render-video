@@ -14,6 +14,11 @@ async function onLocalVideoPicked(ev){
     if(qs('source_video_name')) qs('source_video_name').textContent = 'No local video selected.';
     return;
   }
+  const _4GB = 4 * 1024 * 1024 * 1024;
+  if (file.size > _4GB) {
+    const _sizeMB = Math.round(file.size / 1024 / 1024);
+    if (typeof showToast === 'function') showToast(`File is ${_sizeMB}MB — large files may take longer to process.`, 'info');
+  }
   // Electron exposes file.path; browser does not
   const realPath = String(file.path || '').trim();
   if(realPath){

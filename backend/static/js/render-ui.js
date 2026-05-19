@@ -510,7 +510,7 @@ function updateRenderMonitorHeartbeat(job, summary, parts = []){
     heartbeat.textContent = !currentJobId
       ? 'Idle'
       : stalled
-      ? `No progress update for ${Math.floor(noProgressMs / 1000)}s — render may be stalled`
+      ? `No progress update for ${Math.floor(noProgressMs / 1000)}s — render may be stalled · Check logs or cancel and retry`
       : completed
       ? 'Render complete'
       : failed
