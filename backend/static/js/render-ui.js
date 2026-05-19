@@ -4452,14 +4452,15 @@ function populateRenderOutputPanel(job, parts) {
     const _thumbBase = `/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}`;
     // UP15: use smart cover offset when available; fall back to t=1 (1 second in).
     const _thumbT = rk.coverOffset > 0 ? rk.coverOffset : 1;
-    const thumbHtml = isDone && hasFile && jobId
+    const canPreview = (isDone || isSkipped) && hasFile && jobId;
+    const thumbHtml = canPreview
       ? `<img class="clipCardThumbImg" src="${_thumbBase}/thumbnail?t=${_thumbT}" loading="lazy" alt="" onerror="this.classList.add('is-error')">`
         + `<video class="clipCardThumbVid" data-src="${_thumbBase}/media" preload="none" muted playsinline></video>`
       : `<div class="clipCardThumbPlaceholder">${isFailed ? '✗' : isSkipped ? '—' : '⋯'}</div>`;
-    const thumbAttrs = (isDone && hasFile && jobId)
+    const thumbAttrs = canPreview
       ? ` data-previewable="true" onclick="centerPreviewClip(${JSON.stringify(jobId)},${partNo},${JSON.stringify(p.output_file || '')},${JSON.stringify(p.part_name || `Clip ${partNo}`)})" style="cursor:pointer"`
       : '';
-    const previewBtn = (!isFailed && !isSkipped && hasFile && jobId)
+    const previewBtn = (!isFailed && hasFile && jobId)
       ? `<button class="clipCardBtn clipCardBtnPreview" type="button" onclick="centerPreviewClip(${JSON.stringify(jobId)},${partNo},${JSON.stringify(p.output_file || '')},${JSON.stringify(p.part_name || `Clip ${partNo}`)})">Preview</button>`
       : '';
     const _dlVariant = JSON.stringify(rk.variantType || '');
@@ -4639,24 +4640,39 @@ function _bindCardHoverPreviews(container) {
     const vid       = card.querySelector('.clipCardThumbVid');
     if (!thumbWrap || !vid) return;
 
-    // UX-R5: Direct assignment prevents listener accumulation on re-render
-    thumbWrap.onmouseenter = () => {
-      if (vid._cardInView === false) return;
-      if (_cardHoverActiveVid === vid) return;
-      _stopCardHoverVideo();
-      // Lazy-set src on first hover so browser doesn't download until needed
-      if (!vid.getAttribute('src') && vid.dataset.src) vid.src = vid.dataset.src;
-      _cardHoverActiveVid = vid;
-      vid.currentTime = 0;
-      vid.loop = true;
-      vid.muted = true;
-      vid.play().catch(() => {});
-      card.classList.add('is-preview-playing');
-    };
+    if (card.classList.contains('isBestClip')) {
+      // Direct pattern matching uxr2HeroThumb: no global lock, no observer gate
+      thumbWrap.onmouseenter = () => {
+        if (!vid.getAttribute('src') && vid.dataset.src) vid.src = vid.dataset.src;
+        vid.loop = true;
+        vid.muted = true;
+        vid.play().catch(() => {});
+        card.classList.add('is-preview-playing');
+      };
+      thumbWrap.onmouseleave = () => {
+        vid.pause();
+        card.classList.remove('is-preview-playing');
+      };
+    } else {
+      // UX-R5: Direct assignment prevents listener accumulation on re-render
+      thumbWrap.onmouseenter = () => {
+        if (vid._cardInView === false) return;
+        if (_cardHoverActiveVid === vid) return;
+        _stopCardHoverVideo();
+        // Lazy-set src on first hover so browser doesn't download until needed
+        if (!vid.getAttribute('src') && vid.dataset.src) vid.src = vid.dataset.src;
+        _cardHoverActiveVid = vid;
+        vid.currentTime = 0;
+        vid.loop = true;
+        vid.muted = true;
+        vid.play().catch(() => {});
+        card.classList.add('is-preview-playing');
+      };
 
-    thumbWrap.onmouseleave = () => {
-      if (_cardHoverActiveVid === vid) _stopCardHoverVideo();
-    };
+      thumbWrap.onmouseleave = () => {
+        if (_cardHoverActiveVid === vid) _stopCardHoverVideo();
+      };
+    }
   });
 }
 
@@ -5420,7 +5436,7 @@ const RenderAiRuntime = (() => {
       // R8.1: Use part_name when available, not generic "Clip N"
       const pName  = p.part_name ? esc(p.part_name) : ('Clip ' + esc(String(pNo)));
       const rawSc  = p.viral_score != null ? Number(p.viral_score) : null;
-      const pct    = rawSc !== null ? Math.round(rawSc * 100) : null;
+      const pct    = rawSc !== null ? Math.round(rawSc) : null;
       const hook   = p.hook_score   != null ? Number(p.hook_score)   : null;
       const motion = p.motion_score != null ? Number(p.motion_score) : null;
       const tier   = pct !== null ? (pct >= 75 ? 'high' : pct >= 50 ? 'mid' : 'low') : 'low';
@@ -5625,7 +5641,7 @@ const RenderAiRuntime = (() => {
     if (thumbEl) {
       if (hasBest) {
         const thumbBase    = '/api/render/jobs/' + encodeURIComponent(jobId) + '/parts/' + bestPartNo;
-        const bestViralPct = Math.round(Number(bestPart.viral_score || 0) * 100) || topPct;
+        const bestViralPct = Math.round(Number(bestPart.viral_score || 0)) || topPct;
         thumbEl.innerHTML =
           '<img class="uxr2ThumbImg" src="' + thumbBase + '/thumbnail?t=1" alt="" onerror="this.classList.add(\'is-error\')">' +
           '<video class="uxr2ThumbVid" data-src="' + thumbBase + '/media" preload="none" muted playsinline></video>' +
@@ -5720,8 +5736,8 @@ const RenderAiRuntime = (() => {
     const scores   = completed.map(p => Number(p.viral_score || 0));
     const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
     const topScore = Math.max(...scores);
-    const avgPct   = Math.round(avgScore * 100);
-    const topPct   = Math.round(topScore * 100);
+    const avgPct   = Math.round(avgScore);
+    const topPct   = Math.round(topScore);
     const tier     = avgPct >= 70 ? 'high' : avgPct >= 50 ? 'mid' : 'low';
     const topTier  = topPct >= 70 ? 'high' : topPct >= 50 ? 'mid' : 'low';
     const totalAll = allParts.length || Number(summary?.total_parts || 0);
