@@ -1080,6 +1080,11 @@
           </div>
           <input type="hidden" id="qsStructureBias" value="balanced">
         </div>
+        <label class="field" style="padding:0 2px 8px">
+          <span class="fieldLabel">Max clips</span>
+          <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
+          <span class="inspHint">0 = no limit</span>
+        </label>
         <!-- MAP-UI-V2 §3: Advanced Settings — collapsed by default -->
         <div class="qsAdvHeader" id="qsAdvHeader" onclick="evToggleAdvancedOutput()">Advanced <span id="qsAdvArrow" class="qsAdvArrow">▸</span></div>
         <div class="qsAdvBody" id="qsAdvBody">
@@ -1122,11 +1127,6 @@
               <span class="fieldLabel">Max clip (s)</span>
               <input class="fieldInput" type="number" id="evMaxPart" value="180" min="30" max="900">
             </label>
-            <label class="field">
-              <span class="fieldLabel">Max clips</span>
-              <input class="fieldInput" type="number" id="evMaxExportParts" value="0" min="0">
-              <span class="inspHint">0 = no limit</span>
-            </label>
             <!-- Multi-variant and Platform controlled by qsBar pills above — hidden here to avoid duplication -->
             <input type="checkbox" id="evMultiVariant" style="display:none" onchange="evSyncQsBar()">
             <select id="evTargetPlatform" style="display:none" onchange="evSyncQsBar()">
@@ -1159,15 +1159,7 @@
               <input class="fieldInput" type="text" id="evTitleOverlayText" placeholder="Overlay title text…" disabled>
             </label>
           </div>
-          <!-- UP26: Subtitle emphasis -->
-          <div style="display:flex;align-items:center;gap:10px;margin-top:6px;padding:7px 10px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid rgba(148,163,184,.12)">
-            <span style="font-size:12px;color:var(--text-mut);white-space:nowrap;flex-shrink:0">Subtitle Size</span>
-            <select id="evSubtitleEmphasis" class="fieldInput" style="flex:1;margin-bottom:0;font-size:12px">
-              <option value="subtle">Subtle (smaller)</option>
-              <option value="balanced" selected>Balanced</option>
-              <option value="aggressive">Aggressive (larger)</option>
-            </select>
-          </div>
+          <input type="hidden" id="evSubtitleEmphasis" value="balanced">
           <!-- UP27: Creator Assets -->
           <div class="v3AssetPanel" id="v3AssetPanel">
             <div class="v3AssetPanelTitle">Creator Assets</div>
@@ -1198,15 +1190,19 @@
                 <option value="energetic">Energetic</option>
               </select>
             </div>
-            <div class="v3AssetRow" style="align-items:center">
-              <span class="v3AssetLabel" style="flex-shrink:0">Brand Sub</span>
-              <select id="assetBrandSubtitle" class="fieldInput" style="flex:1;margin-bottom:0;font-size:11px" onchange="if(typeof CreatorAssets!=='undefined')CreatorAssets.setBrandSubtitle(this.value)">
-                <option value="">No preference</option>
-                <option value="story_clean_01">Clean</option>
-                <option value="tiktok_bounce_v1">Viral</option>
-                <option value="pro_karaoke">Karaoke</option>
-                <option value="bold_cap">Bold Cap</option>
-              </select>
+          </div>
+          <!-- Batch mode — power user URL batch -->
+          <div id="evBatchPanel" style="padding:6px 0 2px;border-top:1px solid var(--border);margin-top:6px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" id="evBatchMode" onchange="evToggleBatchMode()" style="width:14px;height:14px;accent-color:var(--primary);flex-shrink:0">
+              <span style="font-size:12px;color:var(--text-mut);font-weight:500">⚡ Batch Mode</span>
+              <span id="evBatchStatus" style="font-size:11px;color:var(--primary-hi);margin-left:auto;white-space:nowrap"></span>
+            </label>
+            <div id="evBatchBody" style="display:none;flex-direction:column;gap:4px;margin-top:6px">
+              <textarea id="evBatchUrls" rows="4"
+                placeholder="One YouTube URL per line (max 10)"
+                style="width:100%;box-sizing:border-box;background:rgba(255,255,255,.06);border:1px solid var(--border-hi);border-radius:6px;color:var(--text);font-size:11px;padding:6px 8px;resize:vertical;min-height:72px;font-family:inherit;line-height:1.5"></textarea>
+              <div style="font-size:10px;color:var(--text-dim)">One URL per line · Max 10 · Each creates a separate job with current settings.</div>
             </div>
           </div>
         </div><!-- /qsAdvBody -->
@@ -1598,20 +1594,6 @@
         </div>
       </div>
 
-      <!-- Batch mode panel -->
-      <div id="evBatchPanel" style="border-top:1px solid var(--border);padding:7px 12px 6px;flex-shrink:0">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
-          <input type="checkbox" id="evBatchMode" onchange="evToggleBatchMode()" style="width:14px;height:14px;accent-color:var(--primary);flex-shrink:0">
-          <span style="font-size:12px;color:var(--text-mut);font-weight:500">⚡ Batch Mode</span>
-          <span id="evBatchStatus" style="font-size:11px;color:var(--primary-hi);margin-left:auto;white-space:nowrap"></span>
-        </label>
-        <div id="evBatchBody" style="display:none;flex-direction:column;gap:4px;margin-top:6px">
-          <textarea id="evBatchUrls" rows="4"
-            placeholder="One YouTube URL per line (max 10)"
-            style="width:100%;box-sizing:border-box;background:rgba(255,255,255,.06);border:1px solid var(--border-hi);border-radius:6px;color:var(--text);font-size:11px;padding:6px 8px;resize:vertical;min-height:72px;font-family:inherit;line-height:1.5"></textarea>
-          <div style="font-size:10px;color:var(--text-dim)">One URL per line · Max 10 · Each creates a separate job with current settings.</div>
-        </div>
-      </div>
 
     </div><!-- /evRightScroll inspPaneBody -->
 
