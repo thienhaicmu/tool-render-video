@@ -248,6 +248,11 @@ function evQsSet(group, val) {
   if (group === 'platform') {
     const el = document.getElementById('evTargetPlatform');
     if (el) el.value = val;
+    const ar = document.getElementById('evAspectRatio');
+    if (ar) {
+      ar.value = (val === 'tiktok' || val === 'instagram_reels') ? '9:16' : '3:4';
+      if (typeof evUpdateAspectRatio === 'function') evUpdateAspectRatio();
+    }
   } else if (group === 'structure') {
     const el = document.getElementById('qsStructureBias');
     if (el) el.value = val;
