@@ -945,40 +945,42 @@
 
       <!-- Quick Start Presets — moved to Export tab -->
       <div class="evSection evPresetSection ev-panel-card ev-option-panel" id="evPresetSection" data-insp-panel="performance">
-        <div class="evSectionTitle ev-panel-card-head">Quick Start Preset</div>
-        <div style="font-size:11px;color:var(--text-mut);margin-bottom:8px;line-height:1.4">Applies a starting setup. You can still customize everything.</div>
-        <div class="ev-panel-card-body">
-          <div class="evPresetGrid ev-option-grid" id="evQuickStartPreset" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%">
-            <button type="button" class="evPresetCard ev-option-card" data-preset="tiktok" onclick="evApplyPreset('tiktok')">
-              <span class="evPresetIcon">📱</span>
-              <div class="evPresetText">
-                <div class="evPresetName">TikTok / Reels</div>
-                <div class="evPresetDesc">9:16 vertical · big subtitles · loud</div>
-              </div>
-            </button>
-            <button type="button" class="evPresetCard ev-option-card" data-preset="podcast" onclick="evApplyPreset('podcast')">
-              <span class="evPresetIcon">🎙️</span>
-              <div class="evPresetText">
-                <div class="evPresetName">Podcast Clip</div>
-                <div class="evPresetDesc">Clear text · balanced audio</div>
-              </div>
-            </button>
-            <button type="button" class="evPresetCard ev-option-card" data-preset="business" onclick="evApplyPreset('business')">
-              <span class="evPresetIcon">💼</span>
-              <div class="evPresetText">
-                <div class="evPresetName">Clean Business</div>
-                <div class="evPresetDesc">Professional look · calm styling</div>
-              </div>
-            </button>
-            <button type="button" class="evPresetCard ev-option-card" data-preset="hq" onclick="evApplyPreset('hq')">
-              <span class="evPresetIcon">⬆️</span>
-              <div class="evPresetText">
-                <div class="evPresetName">High Quality</div>
-                <div class="evPresetDesc">Slower render · maximum detail</div>
-              </div>
-            </button>
+        <details>
+          <summary style="font-size:12px;font-weight:600;color:var(--text-mut);cursor:pointer;padding:2px 0;user-select:none">Quick Presets (4)</summary>
+          <div style="font-size:11px;color:var(--text-mut);margin-top:6px;margin-bottom:8px;line-height:1.4">Applies a starting setup. You can still customize everything.</div>
+          <div class="ev-panel-card-body">
+            <div class="evPresetGrid ev-option-grid" id="evQuickStartPreset" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%">
+              <button type="button" class="evPresetCard ev-option-card" data-preset="tiktok" onclick="evApplyPreset('tiktok')">
+                <span class="evPresetIcon">📱</span>
+                <div class="evPresetText">
+                  <div class="evPresetName">TikTok / Reels</div>
+                  <div class="evPresetDesc">9:16 vertical · big subtitles · loud</div>
+                </div>
+              </button>
+              <button type="button" class="evPresetCard ev-option-card" data-preset="podcast" onclick="evApplyPreset('podcast')">
+                <span class="evPresetIcon">🎙️</span>
+                <div class="evPresetText">
+                  <div class="evPresetName">Podcast Clip</div>
+                  <div class="evPresetDesc">Clear text · balanced audio</div>
+                </div>
+              </button>
+              <button type="button" class="evPresetCard ev-option-card" data-preset="business" onclick="evApplyPreset('business')">
+                <span class="evPresetIcon">💼</span>
+                <div class="evPresetText">
+                  <div class="evPresetName">Clean Business</div>
+                  <div class="evPresetDesc">Professional look · calm styling</div>
+                </div>
+              </button>
+              <button type="button" class="evPresetCard ev-option-card" data-preset="hq" onclick="evApplyPreset('hq')">
+                <span class="evPresetIcon">⬆️</span>
+                <div class="evPresetText">
+                  <div class="evPresetName">High Quality</div>
+                  <div class="evPresetDesc">Slower render · maximum detail</div>
+                </div>
+              </button>
+            </div>
           </div>
-        </div>
+        </details>
         <input type="hidden" id="evEffectPreset" value="">
         <input type="hidden" id="evLoudnormEnabled" value="1">
       </div>
