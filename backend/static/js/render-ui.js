@@ -3863,6 +3863,16 @@ function _r66ConfidenceBadge(rk) {
   return '';
 }
 
+// Phase 68.2: Alternative preference nudge on rank-2 clip.
+// Shown when creator consistently downloads non-#1 clips (prefersAlternativeClip, 3+ sessions).
+function _r68AltNote(rk) {
+  if ((rk.rank || 0) !== 2 || rk.score < 6) return '';
+  if (typeof CreatorTaste === 'undefined') return '';
+  var prefs = CreatorTaste.getPreferences();
+  if (!prefs || !prefs.prefersAlternativeClip || (prefs.sessions || 0) < 3) return '';
+  return '<div class="clipCardSelReason" style="opacity:0.75">You often end up choosing alternatives</div>';
+}
+
 // Phase 68.1: DNA hook-sort attribution note on best clip.
 // Only shown when DNA is confident, hook_forward >= 0.5, clip is best, and score >= 7.
 function _r68DnaNote(rk) {
@@ -4614,6 +4624,7 @@ function populateRenderOutputPanel(job, parts) {
         ${_clipReason ? `<div class="clipCardReason">${esc(_clipReason)}</div>` : ''}
         ${isDone && scoreVal >= 5 ? _r66BuildExplainPanel(rk) : ''}
         ${isDone && rk.isBest ? _r68DnaNote(rk) : ''}
+        ${isDone && (rk.rank || 0) === 2 && scoreVal >= 6 ? _r68AltNote(rk) : ''}
         ${isDone ? _r66ConfidenceBadge(rk) : ''}
         ${isDone && rk.selectionReasonHuman ? `<div class="clipCardSelReason">${esc(rk.selectionReasonHuman)}</div>` : ''}
         ${rk.selectionReason && rk.selectionReason.includes('limited source variety') ? `<div class="clipVarietyNote">Limited source variety</div>` : ''}
