@@ -1550,14 +1550,6 @@
                   <option value="60" selected>60 fps</option>
                 </select>
               </label>
-              <label class="field">
-                <span class="fieldLabel">Transform</span>
-                <select class="fieldInput" id="evTransformPreset">
-                  <option value="none">None</option>
-                  <option value="slight" selected>Slightly Different</option>
-                  <option value="strong">Strong Transform</option>
-                </select>
-              </label>
               <label class="field" style="grid-column:1/-1">
                 <span class="fieldLabel">Reframe Mode</span>
                 <select class="fieldInput" id="evReframeStrategy">
@@ -1568,6 +1560,7 @@
                 <span class="inspHint">Fast = fastest · Motion = slower · Subject = slowest</span>
               </label>
             </div>
+            <input type="hidden" id="evTransformPreset" value="slight">
           </div>
         </div>
       </div>
