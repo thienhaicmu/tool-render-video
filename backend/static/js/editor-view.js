@@ -2673,7 +2673,7 @@ const EV_OUTPUT_PRESETS = {
     renderProfile: 'quality', sourceQuality: 'high_1440', reframeStrategy: 'fast_center',
     combinedScoring: true, adaptiveScoring: true,
     autoBestClips: true, bestExportEnabled: false, bestExportCount: 3,
-    partOrder: 'viral', maxExportParts: 5,
+    partOrder: 'viral', maxExportParts: null,
     hookMode: 'selected_suggested_only',
   },
   eu_clean_review: {
@@ -2683,7 +2683,7 @@ const EV_OUTPUT_PRESETS = {
     renderProfile: 'balanced', sourceQuality: 'standard_1080', reframeStrategy: 'fast_center',
     combinedScoring: true, adaptiveScoring: true,
     autoBestClips: true, bestExportEnabled: false, bestExportCount: 3,
-    partOrder: 'viral', maxExportParts: 5,
+    partOrder: 'viral', maxExportParts: null,
   },
   jp_storytelling: {
     label: 'JP Storytelling',
@@ -2692,7 +2692,7 @@ const EV_OUTPUT_PRESETS = {
     renderProfile: 'quality', sourceQuality: 'high_1440', reframeStrategy: 'fast_center',
     combinedScoring: true, adaptiveScoring: true,
     autoBestClips: true, bestExportEnabled: false, bestExportCount: 3,
-    partOrder: 'viral', maxExportParts: 5,
+    partOrder: 'viral', maxExportParts: null,
   },
   clean_subtitle_focus: {
     label: 'Clean Subtitle Focus',
@@ -2705,7 +2705,7 @@ const EV_OUTPUT_PRESETS = {
     renderProfile: 'fast', sourceQuality: 'standard_1080', reframeStrategy: 'fast_center',
     combinedScoring: true, adaptiveScoring: true,
     autoBestClips: true, bestExportEnabled: false,
-    partOrder: 'viral', maxExportParts: 5,
+    partOrder: 'viral', maxExportParts: null,
   },
   // Backward-compatible aliases for old saved UI values / external callers.
   youtube_shorts_clean: null,
