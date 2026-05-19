@@ -482,15 +482,33 @@ def cut_video(
             _run_ffmpeg_with_retry(copy_cmd, retry_count=retry_count)
             raw_duration = _probe_cut_duration()
             if _duration_ok(raw_duration):
-                logger.info(
-                    "cut_video: cut_mode=copy intended_duration=%.3f raw_duration=%.3f tolerance=%.3f output=%s",
-                    intended_duration, float(raw_duration or 0.0), duration_tolerance, Path(output_path).name,
+                # Keyframe-drift guard: stream-copy seeks to the nearest keyframe
+                # before start_time.  If the output is >0.1 s longer than intended
+                # it means extra pre-cut content was captured (drift).  Force an
+                # accurate re-encode so subtitles and first-frame are both clean.
+                _drift = float(raw_duration or 0.0) - intended_duration
+                if _drift > 0.1:
+                    copy_error = (
+                        f"keyframe_drift intended={intended_duration:.3f}s "
+                        f"raw={float(raw_duration or 0.0):.3f}s drift={_drift:.3f}s"
+                    )
+                    logger.warning(
+                        "cut_video: keyframe_drift_detected output=%s "
+                        "intended=%.3f raw=%.3f drift=%.3f → retrying with accurate cut",
+                        Path(output_path).name, intended_duration,
+                        float(raw_duration or 0.0), _drift,
+                    )
+                else:
+                    logger.info(
+                        "cut_video: cut_mode=copy intended_duration=%.3f raw_duration=%.3f tolerance=%.3f output=%s",
+                        intended_duration, float(raw_duration or 0.0), duration_tolerance, Path(output_path).name,
+                    )
+                    return
+            else:
+                copy_error = (
+                    f"duration_mismatch intended={intended_duration:.3f}s "
+                    f"raw={float(raw_duration or 0.0):.3f}s tolerance={duration_tolerance:.3f}s"
                 )
-                return
-            copy_error = (
-                f"duration_mismatch intended={intended_duration:.3f}s "
-                f"raw={float(raw_duration or 0.0):.3f}s tolerance={duration_tolerance:.3f}s"
-            )
         except Exception as exc:
             copy_error = str(exc)
     else:
@@ -566,7 +584,7 @@ def detect_bad_first_frame(
     end_sec: float,
     max_scan_sec: float = 1.5,
     max_shift_sec: float = 1.0,
-    black_pix_threshold: float = 0.10,
+    black_pix_threshold: float = 0.06,
 ) -> float:
     """Return seconds to skip past leading dark/black frames at the clip start.
 
@@ -575,6 +593,9 @@ def detect_bad_first_frame(
 
     The returned shift is always in the range (0.0, max_shift_sec].
     A minimum of 3 s of content is always preserved after the shift.
+
+    pix_th=0.06 catches near-black frames (≤6% average brightness) that a
+    10% threshold would miss (e.g. very dark intros or fade-from-black sequences).
     """
     clip_dur = max(0.0, float(end_sec) - float(start_sec))
     # Leave at least 0.5 s of content after any shift
