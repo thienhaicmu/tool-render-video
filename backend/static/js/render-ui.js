@@ -10,7 +10,8 @@ let _renderMonitorHeartbeatTimer = null;
 let _renderLogsUserToggled = false;
 let _selectedClipPaths = new Set();
 let _clipsSortOrder        = 'score';
-let _r72KbActionLock    = false;
+let _r72KbActionLock       = false;
+let _r72ReviewedPartNos    = new Set();
 let _uxr3AutoSelectedBest  = false;   // UX-R3-F: auto-preview best clip once per session
 let _logAutoScroll = true;
 let _rcLastActivePartNo = -1;
@@ -3644,6 +3645,9 @@ function hideRenderOutputPanel() {
 
 function clearRenderOutputPanel() {
   _selectedClipPaths       = new Set();
+  _r72ReviewedPartNos      = new Set();
+  const _r72ctr = document.getElementById('r72ReviewCounter');
+  if (_r72ctr) _r72ctr.hidden = true;
   _uxr3AutoSelectedBest    = false;       // UX-R3-F
   resetAiStrategyPanel();
   const _sumEl = qs('mvRenderSummary');
@@ -3669,6 +3673,29 @@ function _r72AdvanceFocus(partNo) {
     cards[i].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     return;
   }
+}
+
+function _r72EnsureCounterEl() {
+  let el = document.getElementById('r72ReviewCounter');
+  if (el) return el;
+  const anchor = qs('render_output_path');
+  if (!anchor || !anchor.parentNode) return null;
+  el = document.createElement('div');
+  el.id = 'r72ReviewCounter';
+  el.style.cssText = 'font-size:11px;color:var(--text-muted,#888);margin-top:4px;';
+  el.hidden = true;
+  anchor.parentNode.insertBefore(el, anchor.nextSibling);
+  return el;
+}
+
+function _r72UpdateReviewCounter() {
+  const el = _r72EnsureCounterEl();
+  if (!el) return;
+  const total = document.querySelectorAll('.clipCard.isDone').length;
+  const reviewed = _r72ReviewedPartNos.size;
+  if (total === 0) { el.hidden = true; return; }
+  el.textContent = reviewed + ' reviewed of ' + total;
+  el.hidden = false;
 }
 
 function _hideCsPreviewArea() {
@@ -4525,6 +4552,8 @@ function populateRenderOutputPanel(job, parts) {
       if (typeof showToast === 'function') showToast('Kept — will be prioritised next render', 'success');
       if (typeof v3RefreshSteeringPanel === 'function') v3RefreshSteeringPanel();
     }
+    _r72ReviewedPartNos.add(Number(partNo) || 0);
+    _r72UpdateReviewCounter();
     _r72AdvanceFocus(Number(partNo) || 0);
   };
   function _r67ShowRerenderBanner() {
@@ -4559,6 +4588,8 @@ function populateRenderOutputPanel(job, parts) {
       if (typeof showToast === 'function') showToast('Avoided — will be excluded next render', 'info');
       if (typeof v3RefreshSteeringPanel === 'function') v3RefreshSteeringPanel();
     }
+    _r72ReviewedPartNos.add(Number(partNo) || 0);
+    _r72UpdateReviewCounter();
     _r72AdvanceFocus(Number(partNo) || 0);
   };
   window.csKeepAndRerender = function(startSec, endSec, label, partNo) {
@@ -4649,7 +4680,7 @@ function populateRenderOutputPanel(job, parts) {
       : '';
     const _dlVariant = JSON.stringify(rk.variantType || '');
     const downloadBtn = (!isFailed && hasFile && jobId)
-      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download onclick="if(typeof CreatorTaste!=='undefined'&&${rk.rank||0}>0)CreatorTaste.recordDownload(${rk.rank||0});if(typeof CreatorFeedback!=='undefined'&&${_dlVariant})CreatorFeedback.recordVariantDownload(${_dlVariant});if(typeof _r69RecordDownload==='function')_r69RecordDownload(${partNo});if(typeof _r70RecordDurationDownload==='function')_r70RecordDurationDownload(${startSec},${endSec})">Download</a>`
+      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download onclick="if(typeof CreatorTaste!=='undefined'&&${rk.rank||0}>0)CreatorTaste.recordDownload(${rk.rank||0});if(typeof CreatorFeedback!=='undefined'&&${_dlVariant})CreatorFeedback.recordVariantDownload(${_dlVariant});if(typeof _r69RecordDownload==='function')_r69RecordDownload(${partNo});if(typeof _r70RecordDurationDownload==='function')_r70RecordDurationDownload(${startSec},${endSec});_r72ReviewedPartNos.add(${partNo});_r72UpdateReviewCounter()">Download</a>`
       : '';
     const openBtn = hasFile
       ? `<button class="clipCardBtn" type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Folder</button>`
