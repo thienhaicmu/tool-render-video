@@ -43,6 +43,7 @@ window.ReviewQueue = (() => {
 
   // ── State transitions ──────────────────────────────────────────────
   function keep(jobId) {
+    const nextId = _getNextReviewId(jobId);
     const item = _setState(jobId, STATE.KEPT);
     if (!item) return;
     _log('review_kept', jobId, item.name);
@@ -50,9 +51,11 @@ window.ReviewQueue = (() => {
     if (typeof CreatorSeries !== 'undefined') CreatorSeries.recordReviewAction(jobId, 'keep');
     _showToast('Kept', 'success');
     _refreshView();
+    _focusNextCard(nextId);
   }
 
   function favorite(jobId) {
+    const nextId = _getNextReviewId(jobId);
     const item = _setState(jobId, STATE.FAVORITED);
     if (!item) return;
     _log('review_favorited', jobId, item.name);
@@ -60,9 +63,11 @@ window.ReviewQueue = (() => {
     if (typeof CreatorSeries !== 'undefined') CreatorSeries.recordReviewAction(jobId, 'favorite');
     _showToast('Added to Favorites', 'success');
     _refreshView();
+    _focusNextCard(nextId);
   }
 
   function dismiss(jobId) {
+    const nextId = _getNextReviewId(jobId);
     const item = _setState(jobId, STATE.DISMISSED);
     if (!item) return;
     _log('review_dismissed', jobId, item.name);
@@ -70,6 +75,7 @@ window.ReviewQueue = (() => {
     if (typeof CreatorSeries !== 'undefined') CreatorSeries.recordReviewAction(jobId, 'dismiss');
     _showToast('Dismissed — undo in Dismissed section', 'info');
     _refreshView();
+    _focusNextCard(nextId);
   }
 
   // RC1-P1-01: in-flight guard — rapid clicks must not spawn duplicate jobs.
@@ -127,6 +133,21 @@ window.ReviewQueue = (() => {
     _save();
     _refreshBadge();
     return item;
+  }
+
+  function _getNextReviewId(currentJobId) {
+    const newItems = _items.filter(it => it.state === STATE.NEW);
+    const idx = newItems.findIndex(it => it.jobId === currentJobId);
+    if (idx < 0 || idx + 1 >= newItems.length) return null;
+    return newItems[idx + 1].jobId;
+  }
+
+  function _focusNextCard(nextId) {
+    if (!nextId) return;
+    setTimeout(function() {
+      const el = document.querySelector('[data-rq-jobid="' + nextId + '"]');
+      if (el) el.focus();
+    }, 0);
   }
 
   // ── Keyboard handler — call from card onkeydown ────────────────────
