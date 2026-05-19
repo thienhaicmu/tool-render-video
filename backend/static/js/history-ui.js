@@ -2,6 +2,8 @@ let historyItems = [];
 let historyLoading = false;
 let historyError = '';
 let historyFilter = 'all';
+let historyOffset = 0;
+let historyHasMore = false;
 
 function historyKindLabel(kind) {
   return kind === 'download' ? 'Download' : 'Render';
@@ -97,6 +99,10 @@ function renderHistoryView() {
 
   _historySetStatus(`${filtered.length} job${filtered.length === 1 ? '' : 's'}`);
 
+  const loadMoreBtn = historyHasMore
+    ? `<div style="text-align:center;padding:12px 0"><button class="secondaryButton" type="button" onclick="loadMoreHistory()">Load more</button></div>`
+    : '';
+
   list.innerHTML = filtered.map((item) => {
     const kind   = String(item.kind   || 'render').toLowerCase();
     const status = String(item.status || '').toLowerCase();
@@ -143,24 +149,33 @@ function renderHistoryView() {
           <div class="hwCardActions">${openBtn}${retryBtn}${rerunBtn}</div>
         </div>
       </div>`;
-  }).join('');
+  }).join('') + loadMoreBtn;
 }
 
-async function loadHistoryView() {
+async function loadHistoryView(append = false) {
+  if (!append) { historyOffset = 0; historyItems = []; historyHasMore = false; }
   historyLoading = true;
   historyError = '';
   renderHistoryView();
   try {
-    const res = await fetch('/api/jobs/history?limit=20');
+    const res = await fetch(`/api/jobs/history?limit=20&offset=${historyOffset}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'History could not be loaded');
-    historyItems = Array.isArray(data.items) ? data.items : [];
+    const newItems = Array.isArray(data.items) ? data.items : [];
+    historyItems = append ? [...historyItems, ...newItems] : newItems;
+    historyHasMore = !!data.has_more;
+    historyOffset += newItems.length;
   } catch (err) {
     historyError = String(err?.message || 'History could not be loaded');
   } finally {
     historyLoading = false;
     renderHistoryView();
   }
+}
+
+function loadMoreHistory() {
+  if (!historyHasMore || historyLoading) return;
+  loadHistoryView(true);
 }
 
 function openHistoryOutputFolder(encodedJobId) {

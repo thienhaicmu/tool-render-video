@@ -354,6 +354,7 @@ function renderUxStageLabel(job, summary = null, parts = []) {
   if (status === 'completed') return 'Completed';
   if (status === 'completed_with_errors') return 'Completed with issues';
   if (status === 'failed') return 'Failed';
+  if (status === 'cancelling') return 'Cancelling…';
   if (stage === 'scene_detection' || status === 'scene_detecting') return 'Detecting scenes';
   if (stage === 'segment_building') return 'Segment Selection';
   if (stage === 'transcribing_full') return 'Generating subtitles';

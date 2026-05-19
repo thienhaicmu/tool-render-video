@@ -17,6 +17,7 @@ const logStateByScope = {
   channels: { lastText: '', lastAt: 0, lastNode: null, lastCount: 1 },
 };
 let lastProgressBucket = -1;
+let _pollStartedAt = 0;  // ms timestamp when current polling session started; 0 = not polling
 
 // ── Smooth progress animation state ────────────────────────────────────────
 // _partTarget[partNo]   = last known backend progress %  (source of truth)

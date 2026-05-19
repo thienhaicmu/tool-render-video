@@ -314,6 +314,12 @@ function _applyJobUpdate(job, parts, summary){
 // Legacy HTTP polling (fallback when WebSocket unavailable)
 async function loadJobProgress(){
   if(!currentJobId) return;
+  if (_pollStartedAt && (Date.now() - _pollStartedAt) > 3 * 3600 * 1000) {
+    clearInterval(pollTimer); pollTimer = null; _pollStartedAt = 0;
+    addEvent('Polling stopped after 3 hours — job may be stuck. Check diagnostics.', 'render');
+    setRenderActionBusy(false);
+    return;
+  }
   try {
     const [jobRes, partsRes] = await Promise.all([
       fetch(`/api/jobs/${currentJobId}`),
@@ -332,6 +338,7 @@ function _stopJobWs(){
 function startPolling(jobId = null){
   if (jobId) currentJobId = jobId;
   if (!currentJobId) return;
+  _pollStartedAt = Date.now();
   // Try WebSocket first; fall back to HTTP polling on error
   _stopJobWs();
   if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
@@ -646,6 +653,7 @@ async function _submitRenderPayload(payload, isBatch) {
     return { ok: false, error: errMsg };
   }
   currentJobId = isBatch ? data.batch_id : data.job_id;
+  try { sessionStorage.setItem('rc_last_job_id', currentJobId); } catch(_) {}
   activeJobStartedAt = Date.now();
   lastStage = ''; lastMessage = ''; lastStatus = ''; lastProgressBucket = -1;
   _jobTargetPct = 0; _jobDisplayPct = 0;

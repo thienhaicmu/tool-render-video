@@ -51,15 +51,19 @@ def _truncate_text(value: str | None, limit: int = 72) -> str:
     return text if len(text) <= limit else f"{text[:limit - 3]}..."
 
 
-def _render_title_and_hint(payload: dict) -> tuple[str, str]:
+def _render_title_and_hint(payload: dict, result: dict | None = None) -> tuple[str, str]:
+    result = result or {}
+    source_title = str(result.get("source_title") or result.get("title") or "").strip()
     source_mode = str(payload.get("source_mode") or ("youtube" if payload.get("youtube_url") else "local")).strip().lower()
     if source_mode == "local":
         path = str(payload.get("source_video_path") or "").strip()
-        name = _safe_file_name(path) or "Local video render"
+        name = source_title or _safe_file_name(path) or "Local video render"
         return name, name
     url = str(payload.get("youtube_url") or "").strip()
     if not url:
-        return "Render job", "Render source unavailable"
+        return source_title or "Render job", "Render source unavailable"
+    if source_title:
+        return _truncate_text(source_title), _truncate_text(url)
     try:
         parsed = Path(url)
         if parsed.name:
@@ -173,7 +177,7 @@ def _normalize_history_item(row: dict, *, parts_lookup: "dict[str, list] | None"
         completed = counts["completed"]
         failed = counts["failed"]
         total = counts["total"]
-        title, source_hint = _render_title_and_hint(payload)
+        title, source_hint = _render_title_and_hint(payload, result)
         status, summary_text = _render_status_and_summary(base_status, completed, failed)
 
     return {

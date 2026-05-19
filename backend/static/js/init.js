@@ -42,6 +42,21 @@ renderRenderHistory();
 if (typeof renderDownloadQueue === 'function') renderDownloadQueue();
 if (typeof renderHistoryView === 'function') renderHistoryView();
 loadJobs();
+(function _reconnectLastJob() {
+  let savedId;
+  try { savedId = sessionStorage.getItem('rc_last_job_id'); } catch(_) {}
+  if (!savedId || currentJobId) return;
+  fetch(`/api/jobs/${encodeURIComponent(savedId)}`)
+    .then((r) => r.ok ? r.json() : null)
+    .then((job) => {
+      if (job && !isTerminalRenderStatus(job.status)) {
+        currentJobId = savedId;
+        startPolling(currentJobId);
+        addEvent(`Reconnected to job ${savedId.slice(0, 8)}…`, 'render');
+      }
+    })
+    .catch(() => {});
+})();
 initWarmup();
 addEvent('Dashboard ready');
 
