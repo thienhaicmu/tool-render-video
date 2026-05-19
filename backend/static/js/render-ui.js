@@ -3660,6 +3660,7 @@ function clearRenderOutputPanel() {
   if (path) path.textContent = '';
   _hideCsPreviewArea();
   hideRenderOutputPanel();
+  RenderAiRuntime.reset();  // UP74.1: reset arrival signal so every render feels identical
 }
 
 function _r72AdvanceFocus(partNo) {
