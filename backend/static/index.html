@@ -980,7 +980,7 @@
           </div>
         </div>
         <input type="hidden" id="evEffectPreset" value="">
-        <input type="hidden" id="evLoudnormEnabled" value="0">
+        <input type="hidden" id="evLoudnormEnabled" value="1">
       </div>
 
       <!-- Market / Target — where are you publishing? (before technical output config) -->
@@ -1522,7 +1522,7 @@
             <!-- Loudness normalization — surfaced from hidden compat input -->
             <div class="edAudioTrack" style="margin-top:10px">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                <input type="checkbox" id="edAudioLoudnorm" onchange="var h=document.getElementById('evLoudnormEnabled');if(h)h.value=this.checked?'1':'0'" style="width:13px;height:13px;accent-color:var(--primary)">
+                <input type="checkbox" id="edAudioLoudnorm" onchange="var h=document.getElementById('evLoudnormEnabled');if(h)h.value=this.checked?'1':'0'" style="width:13px;height:13px;accent-color:var(--primary)" checked>
                 <span class="edAudioTrackName">Loudness normalization</span>
               </label>
               <div style="font-size:10px;color:var(--text-mut);margin-top:3px;padding-left:21px">Normalize final output to broadcast level</div>
