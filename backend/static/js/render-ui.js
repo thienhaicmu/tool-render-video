@@ -4496,7 +4496,12 @@ function populateRenderOutputPanel(job, parts) {
     var _r69rk = window._r69RankMap.get(Number(partNo) || 0);
     if (_r69rk) ScorePreference.recordSignal('download', _r69rk.rankingComponents || {});
   }
+  function _r70RecordDurationDownload(startSec, endSec) {
+    if (typeof DurationPreference === 'undefined') return;
+    DurationPreference.recordSignal('download', endSec - startSec);
+  }
   window.csKeepClip = function(startSec, endSec, label, partNo) {
+    if (typeof DurationPreference !== 'undefined') DurationPreference.recordSignal('keep', endSec - startSec);
     if (typeof ScorePreference !== 'undefined' && window._r69RankMap) {
       var _r69rk = window._r69RankMap.get(Number(partNo) || 0);
       if (_r69rk) ScorePreference.recordSignal('keep', _r69rk.rankingComponents || {});
@@ -4529,6 +4534,7 @@ function populateRenderOutputPanel(job, parts) {
   }
 
   window.csAvoidClip = function(startSec, endSec, label, partNo) {
+    if (typeof DurationPreference !== 'undefined') DurationPreference.recordSignal('avoid', endSec - startSec);
     if (typeof ScorePreference !== 'undefined' && window._r69RankMap) {
       var _r69rk = window._r69RankMap.get(Number(partNo) || 0);
       if (_r69rk) ScorePreference.recordSignal('avoid', _r69rk.rankingComponents || {});
@@ -4540,6 +4546,7 @@ function populateRenderOutputPanel(job, parts) {
     }
   };
   window.csKeepAndRerender = function(startSec, endSec, label, partNo) {
+    if (typeof DurationPreference !== 'undefined') DurationPreference.recordSignal('keep', endSec - startSec);
     if (typeof ScorePreference !== 'undefined' && window._r69RankMap) {
       var _r69rk = window._r69RankMap.get(Number(partNo) || 0);
       if (_r69rk) ScorePreference.recordSignal('keep', _r69rk.rankingComponents || {});
@@ -4626,7 +4633,7 @@ function populateRenderOutputPanel(job, parts) {
       : '';
     const _dlVariant = JSON.stringify(rk.variantType || '');
     const downloadBtn = (!isFailed && hasFile && jobId)
-      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download onclick="if(typeof CreatorTaste!=='undefined'&&${rk.rank||0}>0)CreatorTaste.recordDownload(${rk.rank||0});if(typeof CreatorFeedback!=='undefined'&&${_dlVariant})CreatorFeedback.recordVariantDownload(${_dlVariant});if(typeof _r69RecordDownload==='function')_r69RecordDownload(${partNo})">Download</a>`
+      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download onclick="if(typeof CreatorTaste!=='undefined'&&${rk.rank||0}>0)CreatorTaste.recordDownload(${rk.rank||0});if(typeof CreatorFeedback!=='undefined'&&${_dlVariant})CreatorFeedback.recordVariantDownload(${_dlVariant});if(typeof _r69RecordDownload==='function')_r69RecordDownload(${partNo});if(typeof _r70RecordDurationDownload==='function')_r70RecordDurationDownload(${startSec},${endSec})">Download</a>`
       : '';
     const openBtn = hasFile
       ? `<button class="clipCardBtn" type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Folder</button>`
