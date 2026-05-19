@@ -24,6 +24,7 @@ const EV_TEXT_POS_TO_XY = {
 };
 let _evUiInitialized = false;
 let _evMoreCollapsed = true;
+let _r71RenderSubmitInFlight = false;
 
 // ── Aspect ratio helpers ──────────────────────────────────────────────────────
 function _evParseAspectRatio(value) {
@@ -340,6 +341,10 @@ window._r70DismissDuration = function() {
 };
 
 function v3TriggerRerender() {
+  if (_r71RenderSubmitInFlight) {
+    if (typeof showToast === 'function') showToast('Render already queued', 'info');
+    return;
+  }
   if (typeof startRenderFromEditor === 'function' && typeof _ev !== 'undefined' && _ev.sessionId) {
     startRenderFromEditor();
   } else if (typeof showToast === 'function') {
@@ -2169,6 +2174,12 @@ function evApplyPreset(preset) {
 /* ── Start render from editor ─────────────────────────────── */
 // ── RENDER SUBMIT ─────────────────────────────────────────────────────────────
 async function startRenderFromEditor() {
+  if (_r71RenderSubmitInFlight) {
+    if (typeof showToast === 'function') showToast('Render already queued', 'info');
+    return;
+  }
+  _r71RenderSubmitInFlight = true;
+  try {
   const payload = _ev.pendingPayload;
   setRenderFlowState('configure', 'Submitting render request', { force: true });
   if (!payload) {
@@ -2260,6 +2271,28 @@ async function startRenderFromEditor() {
   payload.playback_speed = Number(qs('evPlaybackSpeed').value);
   payload.min_part_sec   = Number(qs('evMinPart').value);
   payload.max_part_sec   = Number(qs('evMaxPart').value);
+  const _minPart = payload.min_part_sec;
+  const _maxPart = payload.max_part_sec;
+  if (_minPart > 0 && _maxPart > 0 && _minPart >= _maxPart) {
+    const _mmMsg = `Min clip (${_minPart}s) must be less than max clip (${_maxPart}s).`;
+    qs('evStatusLine').textContent = _mmMsg;
+    qs('evStatusLine').style.color = '#ef4444';
+    qs('evStartBtn').disabled = false;
+    qs('evStartBtn').textContent = '▶ Start Render';
+    if (typeof showToast === 'function') showToast(_mmMsg, 'error');
+    _r71RenderSubmitInFlight = false;
+    return;
+  }
+  if (_minPart === 0 || _maxPart === 0) {
+    const _zeroMsg = 'Min and max clip length must be greater than 0.';
+    qs('evStatusLine').textContent = _zeroMsg;
+    qs('evStatusLine').style.color = '#ef4444';
+    qs('evStartBtn').disabled = false;
+    qs('evStartBtn').textContent = '▶ Start Render';
+    if (typeof showToast === 'function') showToast(_zeroMsg, 'error');
+    _r71RenderSubmitInFlight = false;
+    return;
+  }
   payload.output_fps     = Number(qs('evOutputFps').value || 60);
   payload.max_export_parts = Number(qs('evMaxExportParts').value || 0);
   payload.multi_variant    = !!document.getElementById('evMultiVariant')?.checked;
@@ -2546,6 +2579,9 @@ async function startRenderFromEditor() {
       if (typeof showToast === 'function') showToast(friendlyMsg, 'error');
     }
     setRenderFlowState('configure', 'Render could not start', { force: true });
+  }
+  } finally {
+    _r71RenderSubmitInFlight = false;
   }
 }
 
