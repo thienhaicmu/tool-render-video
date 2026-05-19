@@ -118,11 +118,14 @@ async function startRender(){
 
     addEvent('Downloading YouTube video…', 'render');
     _ytDownloadAbortCtrl = new AbortController();
+    _ytPrepareSid = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     try {
       const pr = await fetch('/api/render/prepare-source', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ source_mode: 'youtube', youtube_url: youtubeUrl }),
+        body: JSON.stringify({ source_mode: 'youtube', youtube_url: youtubeUrl, session_id: _ytPrepareSid }),
         signal: _ytDownloadAbortCtrl.signal,
       });
       const pd = await pr.json();
@@ -150,6 +153,7 @@ async function startRender(){
       if (dlPanel) dlPanel.classList.add('hiddenView');
       clearInterval(_dlTimer);
       _ytDownloadAbortCtrl = null;
+      _ytPrepareSid = null;
     }
     return;
   } else {
@@ -159,9 +163,14 @@ async function startRender(){
 }
 
 function cancelYtDownload() {
+  const sid = _ytPrepareSid;
   if (_ytDownloadAbortCtrl) {
     _ytDownloadAbortCtrl.abort();
     _ytDownloadAbortCtrl = null;
+  }
+  if (sid) {
+    fetch(`/api/render/prepare-source/${encodeURIComponent(sid)}`, { method: 'DELETE' }).catch(() => {});
+    _ytPrepareSid = null;
   }
 }
 

@@ -83,7 +83,7 @@ def _download_title_and_hint(payload: dict, completed: int, total: int) -> tuple
 
 
 def _parts_counts(parts: list[dict]) -> dict:
-    counts = {"completed": 0, "failed": 0, "unsupported": 0, "total": len(parts)}
+    counts = {"completed": 0, "failed": 0, "unsupported": 0, "cancelled": 0, "total": len(parts)}
     for part in parts:
         status = str(part.get("status") or "").lower()
         if status == "done":
@@ -92,6 +92,8 @@ def _parts_counts(parts: list[dict]) -> dict:
             counts["failed"] += 1
         elif status == "unsupported":
             counts["unsupported"] += 1
+        elif status == "cancelled":
+            counts["cancelled"] += 1
     return counts
 
 
@@ -175,7 +177,7 @@ def _normalize_history_item(row: dict, *, parts_lookup: "dict[str, list] | None"
     else:
         counts = _parts_counts(_get_parts(row["job_id"]))
         completed = counts["completed"]
-        failed = counts["failed"]
+        failed = counts["failed"] + counts.get("cancelled", 0)
         total = counts["total"]
         title, source_hint = _render_title_and_hint(payload, result)
         status, summary_text = _render_status_and_summary(base_status, completed, failed)
@@ -469,8 +471,8 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
             await asyncio.sleep(0.5)
     except WebSocketDisconnect:
         pass
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("ws_job_progress error job_id=%s: %s", job_id, exc)
 
 
 @router.post("/cleanup/logs")

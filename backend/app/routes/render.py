@@ -72,13 +72,19 @@ def get_ai_diagnostics():
 # ─────────────────────────────────────────────────────────────────────────────
 
 _PREVIEW_SESSIONS: dict[str, dict] = {}  # session_id -> {video_path, duration, title, work_dir, created_at}
+_ACTIVE_DOWNLOADS: dict[str, threading.Event] = {}  # session_id -> cancel event for in-progress YouTube downloads
 _PREVIEW_DIR = TEMP_DIR / "preview"
 # Sessions idle longer than this are evicted from memory and their dirs pruned from disk.
 _SESSION_TTL_HOURS: int = int(os.getenv("PREVIEW_SESSION_TTL_HOURS", "6"))
+_MAX_PREVIEW_SESSIONS: int = 200
+_UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
 
 
 def _save_session(session_id: str, data: dict):
     """Persist session to memory + JSON file (survives server restart)."""
+    if len(_PREVIEW_SESSIONS) >= _MAX_PREVIEW_SESSIONS:
+        oldest = min(_PREVIEW_SESSIONS, key=lambda k: _PREVIEW_SESSIONS[k].get("created_at", 0))
+        _cleanup_preview_session(oldest)
     if "created_at" not in data:
         data = {**data, "created_at": time.time()}
     _PREVIEW_SESSIONS[session_id] = data
@@ -352,7 +358,8 @@ def prepare_source(payload: PrepareSourceRequest):
     Download YouTube video OR validate local file and return a session_id
     so the frontend can open the editor with a live preview before rendering.
     """
-    session_id = str(uuid.uuid4())
+    _client_sid = str(payload.session_id or "").strip()
+    session_id = _client_sid if _UUID_RE.match(_client_sid) else str(uuid.uuid4())
     work_dir = TEMP_DIR / "preview" / session_id
     work_dir.mkdir(parents=True, exist_ok=True)
     _emit_render_event(
@@ -446,7 +453,12 @@ def prepare_source(payload: PrepareSourceRequest):
                 step="render.prepare_source.select_strategy",
                 context={"strategy": "youtube_download", "url": yt_url},
             )
-            source = download_youtube(yt_url, work_dir)
+            _cancel_ev = threading.Event()
+            _ACTIVE_DOWNLOADS[session_id] = _cancel_ev
+            try:
+                source = download_youtube(yt_url, work_dir, context="preview", cancel_event=_cancel_ev)
+            finally:
+                _ACTIVE_DOWNLOADS.pop(session_id, None)
             src = Path(source["filepath"])
             preview_path = _ensure_h264_preview(src, work_dir, duration_sec=int(source.get("duration") or 0))
             _save_session(session_id, {
@@ -496,6 +508,16 @@ def prepare_source(payload: PrepareSourceRequest):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@router.delete("/prepare-source/{session_id}")
+def cancel_prepare_source(session_id: str):
+    """Signal an active YouTube download to stop and remove the preview work directory."""
+    ev = _ACTIVE_DOWNLOADS.get(session_id)
+    if ev:
+        ev.set()
+    _cleanup_preview_session(session_id)
+    return {"cancelled": True, "session_id": session_id}
+
+
 @router.get("/preview-video/{session_id}")
 def preview_video(session_id: str):
     """Serve H.264 preview video with proper range support for HTML5 player."""
@@ -524,6 +546,9 @@ def preview_transcript(session_id: str):
     session = _load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    if session.get("duration", 0) > 1800:
+        raise HTTPException(status_code=400, detail="Source longer than 30 minutes — preview transcript unavailable")
 
     work_dir = Path(session.get("work_dir", ""))
     cache_path = work_dir / "preview_transcript.json"

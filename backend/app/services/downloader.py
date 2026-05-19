@@ -326,7 +326,7 @@ def check_youtube_download_health(url: str) -> dict:
     return last_payload
 
 
-def download_youtube(url: str, temp_dir: Path, context: str = "render", progress_callback=None, quality_mode: str = "standard_1080") -> dict:
+def download_youtube(url: str, temp_dir: Path, context: str = "render", progress_callback=None, quality_mode: str = "standard_1080", cancel_event=None) -> dict:
     """
     Download a YouTube video at the highest available resolution.
 
@@ -394,6 +394,8 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
     }
 
     def _yt_progress_hook(data: dict):
+        if cancel_event and cancel_event.is_set():
+            raise RuntimeError("Download cancelled")
         if not progress_callback:
             return
         status = str(data.get("status") or "").lower()
@@ -589,6 +591,9 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
             )
             return result
         except Exception as exc:
+            if cancel_event and cancel_event.is_set():
+                _cleanup_partial()
+                raise RuntimeError("Download cancelled") from None
             msg = str(exc)
             if "Requested format is not available" in msg:
                 unavailable_requested = True
@@ -641,6 +646,9 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
                 )
                 return result
             except Exception as exc:
+                if cancel_event and cancel_event.is_set():
+                    _cleanup_partial()
+                    raise RuntimeError("Download cancelled") from None
                 logger.warning(
                     "Dynamic download failed (will retry) | attempt=%d/%d | client=%s | format=%s | reason=%s",
                     idx, min(8, len(dynamic_unique)), client_name, fmt[:60], exc,

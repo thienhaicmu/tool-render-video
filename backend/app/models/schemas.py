@@ -40,6 +40,7 @@ class PrepareSourceRequest(BaseModel):
     source_mode: Optional[str] = "youtube"
     youtube_url: Optional[str] = ""
     source_video_path: Optional[str] = ""
+    session_id: Optional[str] = None  # client-provided UUID; server generates one if absent
 
 
 class DownloadHealthRequest(BaseModel):

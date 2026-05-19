@@ -93,4 +93,5 @@ const uploadPipeline = [
 let uploadActionStage = 'idle';
 let uploadWizardStep = 1;
 let _ytDownloadAbortCtrl = null;
+let _ytPrepareSid = null;  // session_id sent to /prepare-source; used by cancelYtDownload for server-side cancel
 
