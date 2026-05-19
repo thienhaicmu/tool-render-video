@@ -73,7 +73,7 @@ window.ReviewQueue = (() => {
     _log('review_dismissed', jobId, item.name);
     _steeringFeedback(item, 'dismiss');
     if (typeof CreatorSeries !== 'undefined') CreatorSeries.recordReviewAction(jobId, 'dismiss');
-    _showToast('Dismissed — undo in Dismissed section', 'info');
+    _showToast('Dismissed — Undo available', 'info');
     _refreshView();
     _focusNextCard(nextId);
   }
@@ -103,10 +103,10 @@ window.ReviewQueue = (() => {
       item.jobId = data.job_id || jobId;
       item.state = STATE.NEW;
       _save();
-      _showToast('Retrying… check Review when complete', 'success');
+      _showToast('Retrying — check Review when done', 'success');
       _refreshView();
     } catch (e) {
-      _showToast('Retry error — check connection', 'error');
+      _showToast('Retry failed — check connection', 'error');
     } finally {
       _retryInFlight.delete(jobId);
     }
@@ -116,7 +116,7 @@ window.ReviewQueue = (() => {
     const item = _setState(jobId, STATE.NEW);
     if (!item) return;
     _log('review_undismissed', jobId, item.name);
-    _showToast('Restored to Ready to Review', 'success');
+    _showToast('Restored', 'success');
     _refreshView();
   }
 
