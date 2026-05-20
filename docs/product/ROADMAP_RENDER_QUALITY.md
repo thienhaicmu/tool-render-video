@@ -39,6 +39,7 @@ Last updated: 2026-05-20
 |---|---|---|---|---|
 | OQ-4.1 | Edge-TTS + Claude SSML humanizer | Planned | None | Semantic pacing |
 | OQ-4.2 | BGM sidechain ducking + DeepFilterNet auto-activation (OQ-2.1) | ✅ Complete (2026-05-20) | Low | sidechaincompress ducking, deepfilternet auto-detect |
+| OQ-4.3 | XTTS v2 hybrid narration (OQ-2.2) | ✅ Complete (2026-05-20) | Low | tts_engine field, XTTS adapter, edge fallback |
 | OQ-4.4 | MeloTTS adapter (vi-VN) | Planned | Medium | Self-host, new adapter |
 
 ### OQ-5 — Future / S2+

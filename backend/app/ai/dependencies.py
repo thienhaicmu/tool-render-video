@@ -38,6 +38,11 @@ def has_deepfilternet() -> bool:
     return importlib.util.find_spec("deepfilternet") is not None
 
 
+def has_xtts() -> bool:
+    """Check if Coqui TTS (XTTS v2) package is available."""
+    return importlib.util.find_spec("TTS") is not None
+
+
 def get_ai_dependency_status() -> dict:
     """Return availability of all optional AI libraries."""
     return {
@@ -48,4 +53,5 @@ def get_ai_dependency_status() -> dict:
         "faster_whisper": has_faster_whisper(),
         "whisperx": has_whisperx(),
         "deepfilternet": has_deepfilternet(),
+        "xtts": has_xtts(),
     }

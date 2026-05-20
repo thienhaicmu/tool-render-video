@@ -145,3 +145,69 @@ def generate_narration_mp3(
     if not mp3_path.exists() or mp3_path.stat().st_size <= 0:
         raise RuntimeError("AI voice generation failed: output file was not created")
     return str(mp3_path)
+
+
+def generate_narration_audio(
+    *,
+    text: str,
+    language: str,
+    gender: str,
+    rate: str,
+    job_id: str,
+    voice_id: str | None = None,
+    output_path: str | None = None,
+    content_type: str = "vlog",
+    tts_engine: str = "edge",
+) -> str:
+    """Route narration synthesis to Edge-TTS (default) or XTTS v2 (premium).
+
+    tts_engine="edge" → generate_narration_mp3() — zero behavior change.
+    tts_engine="xtts" → XTTS v2 with automatic edge fallback on any failure.
+    """
+    if tts_engine != "xtts":
+        return generate_narration_mp3(
+            text=text, language=language, gender=gender, rate=rate,
+            job_id=job_id, voice_id=voice_id, output_path=output_path,
+            content_type=content_type,
+        )
+
+    # XTTS path: availability check before import
+    from app.ai.dependencies import has_xtts as _has_xtts
+    if not _has_xtts():
+        logger.warning("xtts_unavailable_fallback job_id=%s — TTS package absent, using edge", job_id)
+        return generate_narration_mp3(
+            text=text, language=language, gender=gender, rate=rate,
+            job_id=job_id, voice_id=voice_id, output_path=output_path,
+            content_type=content_type,
+        )
+
+    # Humanize text through the same pipeline as edge (rate is not applied in XTTS — natural prosody)
+    clean_text = str(text or "").strip()
+    if not clean_text:
+        raise RuntimeError("Narration text is empty")
+    _ct_profile = _CONTENT_TYPE_VOICE_PROFILES.get(content_type) or _CONTENT_TYPE_VOICE_PROFILES["vlog"]
+    _humanized = humanize_narration_text(clean_text, pause_style=_ct_profile["pause_style"])
+    logger.info(
+        "xtts_route job_id=%s content_type=%s pause_style=%s language=%s",
+        job_id, content_type, _ct_profile["pause_style"], language,
+    )
+
+    try:
+        from app.services.tts_xtts_adapter import synthesize_xtts
+        return synthesize_xtts(
+            text=_humanized,
+            language=language,
+            gender=gender,
+            job_id=job_id,
+            output_path=output_path,
+        )
+    except Exception as xtts_exc:
+        logger.warning(
+            "xtts_synthesis_failed_fallback job_id=%s: %s — falling back to edge",
+            job_id, xtts_exc,
+        )
+        return generate_narration_mp3(
+            text=text, language=language, gender=gender, rate=rate,
+            job_id=job_id, voice_id=voice_id, output_path=output_path,
+            content_type=content_type,
+        )

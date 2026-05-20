@@ -39,7 +39,7 @@ from app.core.config import TEMP_DIR, CHANNELS_DIR, LOGS_DIR
 from app.core.stage import JobStage, JobPartStage, STAGE_TO_EVENT
 from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin, _summarize_ffmpeg_stderr
 from app.services.text_overlay import normalize_text_layers, MAX_TEXT_LAYERS
-from app.services.tts_service import generate_narration_mp3
+from app.services.tts_service import generate_narration_mp3, generate_narration_audio
 from app.services.audio_mix_service import mix_narration_audio
 from app.services.audio_cleanup_adapters import cleanup_audio_with_adapter
 from app.services.translation_service import translate_srt_file
@@ -2224,7 +2224,7 @@ def run_render_pipeline(
                     "story":   "vlog",
                     "gaming":  "montage",
                 }.get((payload.subtitle_style or "").strip().lower(), "vlog")
-                voice_audio_path = generate_narration_mp3(
+                voice_audio_path = generate_narration_audio(
                     text=str(payload.voice_text or ""),
                     language=payload.voice_language,
                     gender=payload.voice_gender,
@@ -2232,6 +2232,7 @@ def run_render_pipeline(
                     job_id=job_id,
                     voice_id=getattr(payload, "voice_id", None),
                     content_type=_manual_voice_ct,
+                    tts_engine=getattr(payload, "tts_engine", "edge"),
                 )
                 update_job_progress(job_id, current_stage, current_progress, "AI voice generated")
                 _job_log(effective_channel, job_id, f"AI narration audio ready: {voice_audio_path}")
@@ -4289,7 +4290,7 @@ def run_render_pipeline(
                                 step="voice.tts",
                                 context={"part_no": idx, "language": payload.voice_language, "source": "subtitle"},
                             )
-                            _part_subtitle_voice_path = generate_narration_mp3(
+                            _part_subtitle_voice_path = generate_narration_audio(
                                 text=_part_narration_text,
                                 language=payload.voice_language,
                                 gender=payload.voice_gender,
@@ -4298,6 +4299,7 @@ def run_render_pipeline(
                                 voice_id=getattr(payload, "voice_id", None),
                                 output_path=_part_mp3,
                                 content_type=str(seg.get("content_type_hint") or "vlog"),
+                                tts_engine=getattr(payload, "tts_engine", "edge"),
                             )
                             _emit_render_event(
                                 channel_code=effective_channel,
@@ -4380,7 +4382,7 @@ def run_render_pipeline(
                                 step="voice.tts",
                                 context={"part_no": idx, "language": payload.voice_language, "target": _tgt_lang_voice},
                             )
-                            _part_subtitle_voice_path = generate_narration_mp3(
+                            _part_subtitle_voice_path = generate_narration_audio(
                                 text=_part_narration_text,
                                 language=payload.voice_language,
                                 gender=payload.voice_gender,
@@ -4389,6 +4391,7 @@ def run_render_pipeline(
                                 voice_id=getattr(payload, "voice_id", None),
                                 output_path=_part_mp3,
                                 content_type=str(seg.get("content_type_hint") or "vlog"),
+                                tts_engine=getattr(payload, "tts_engine", "edge"),
                             )
                             _emit_render_event(
                                 channel_code=effective_channel,
