@@ -225,14 +225,14 @@ function _partQualityBadgeHtml(part) {
 function stageLabel(stage){
   const map = {
     queued: 'Queued',
-    starting: 'Preparing',
-    downloading: 'Preparing source',
-    scene_detection: 'Scene Detection',
-    segment_building: 'Segment Selection',
-    transcribing_full: 'Subtitles',
-    rendering: 'Rendering Clips',
-    rendering_parallel: 'Rendering Clips',
-    writing_report: 'Finalizing',
+    starting: 'Getting ready',
+    downloading: 'Loading source',
+    scene_detection: 'Analyzing video',
+    segment_building: 'Selecting moments',
+    transcribing_full: 'Generating subtitles',
+    rendering: 'Rendering clips',
+    rendering_parallel: 'Rendering clips',
+    writing_report: 'Finishing up',
     done: 'Completed',
     failed: 'Failed',
   };
@@ -242,17 +242,17 @@ function stageLabelPlain(stage){
   const map = {
     pending: 'Queued',
     queued: 'Queued',
-    preparing: 'Preparing',
-    starting: 'Preparing',
-    downloading: 'Preparing source',
-    scene_detecting: 'Detecting scenes',
-    scene_detection: 'Detecting scenes',
-    segment_building: 'Segment Selection',
+    preparing: 'Getting ready',
+    starting: 'Getting ready',
+    downloading: 'Loading source',
+    scene_detecting: 'Analyzing your video',
+    scene_detection: 'Analyzing your video',
+    segment_building: 'Selecting best moments',
     transcribing_full: 'Generating subtitles',
     rendering: 'Rendering clips',
     rendering_parallel: 'Rendering clips',
-    writing_report: 'Validating output',
-    finalizing: 'Finalizing',
+    writing_report: 'Finishing up',
+    finalizing: 'Finishing up',
     done: 'Completed',
     completed: 'Completed',
     completed_with_errors: 'Completed with issues',
@@ -357,13 +357,13 @@ function renderUxStageLabel(job, summary = null, parts = []) {
   if (status === 'completed_with_errors') return 'Completed with issues';
   if (status === 'failed') return 'Failed';
   if (status === 'cancelling') return 'Cancelling…';
-  if (stage === 'scene_detection' || status === 'scene_detecting') return 'Detecting scenes';
-  if (stage === 'segment_building') return 'Segment Selection';
-  if (stage === 'transcribing_full') return 'Generating subtitles';
-  if (stage === 'rendering' || stage === 'rendering_parallel' || status === 'rendering') return 'Rendering clips';
-  if (stage === 'writing_report') return 'Validating output';
-  if (status === 'pending' || stage === 'queued') return 'Preparing';
-  if (status === 'preparing' || stage === 'starting' || stage === 'downloading') return 'Preparing';
+  if (stage === 'scene_detection' || status === 'scene_detecting') return 'Analyzing your video...';
+  if (stage === 'segment_building') return 'Selecting best moments...';
+  if (stage === 'transcribing_full') return 'Generating subtitles...';
+  if (stage === 'rendering' || stage === 'rendering_parallel' || status === 'rendering') return 'Rendering clips...';
+  if (stage === 'writing_report') return 'Finishing up...';
+  if (status === 'pending' || stage === 'queued') return 'Getting ready...';
+  if (status === 'preparing' || stage === 'starting' || stage === 'downloading') return 'Getting ready...';
   return job ? 'Working...' : 'Idle';
 }
 
@@ -381,14 +381,17 @@ function renderElapsedLabel(job) {
 
 function renderMonitorStageLabel(stage, status, summary = null){
   const st = normalizeRenderStatus(status, stage);
-  if (isPartialRenderStatus(st)) return 'Completed with errors';
-  if (isCompletedRenderStatus(st)) return 'Render complete';
+  if (isPartialRenderStatus(st)) return 'Completed with some issues';
+  if (isCompletedRenderStatus(st)) return 'All done';
   if (st === 'failed') return 'Render failed';
   const s = normalizeRenderStage(stage, status);
   if ((s === 'rendering' || s === 'rendering_parallel') && summary) {
     const active = Number(summary.processing_parts || 0);
-    if (active > 1) return `Rendering ${active} clips in parallel`;
-    if (active === 1) return 'Rendering 1 clip';
+    const total = Number(summary.total_parts || 0);
+    const done = Number(summary.completed_parts || 0);
+    if (total > 0 && done > 0) return `Rendering clip ${done + 1} of ${total}`;
+    if (active > 1) return `Rendering ${active} clips`;
+    if (active === 1) return 'Rendering clip';
   }
   return stageLabel(stage);
 }
@@ -547,15 +550,80 @@ function friendlyRenderError(detail, fallback = 'Render could not start') {
   const raw = String(detail || '').trim();
   const low = raw.toLowerCase();
   if (!raw) return fallback;
+
+  // Session / auth
   if (low.includes('session') && (low.includes('expired') || low.includes('not found') || low.includes('re-open'))) {
-    return 'Render could not start';
+    return 'Session expired — please reopen the editor and try again';
   }
-  if (low.includes('youtube') || low.includes('download') || low.includes('source') || low.includes('video')) {
+
+  // Source file missing / moved (local video)
+  if ((low.includes('source video') || low.includes('source file')) && (low.includes('not found') || low.includes('moved') || low.includes('deleted') || low.includes('accessible'))) {
+    return 'Source video not found — confirm the file is still on your drive';
+  }
+  if (low.includes('render stopped') && (low.includes('not found') || low.includes('moved') || low.includes('deleted'))) {
+    return 'Source video not found — confirm the file is still on your drive';
+  }
+
+  // Disk / storage
+  if (low.includes('no space') || low.includes('disk full') || low.includes('not enough space') || low.includes('enospc')) {
+    return 'Not enough disk space — free up space and try again';
+  }
+
+  // Memory
+  if (low.includes('out of memory') || low.includes('memory error') || low.includes('oom') || low.includes('cannot allocate')) {
+    return 'Not enough memory to render — close other apps and try again';
+  }
+
+  // Permission / access
+  if (low.includes('permission denied') || low.includes('access denied') || low.includes('eacces')) {
+    return 'Permission denied — check your output folder access';
+  }
+
+  // YouTube / download
+  if (low.includes('age restrict') || low.includes('sign in to confirm')) {
+    return 'Video is age-restricted and could not be downloaded';
+  }
+  if (low.includes('private video') || low.includes('video is private')) {
+    return 'This video is private and cannot be accessed';
+  }
+  if (low.includes('youtube') && (low.includes('unavailable') || low.includes('removed') || low.includes('not available'))) {
+    return 'Video is unavailable on YouTube';
+  }
+  if (low.includes('download') && (low.includes('failed') || low.includes('error') || low.includes('timeout'))) {
+    return 'Download failed — check your connection and try again';
+  }
+  if (low.includes('network') || low.includes('connection') || low.includes('timeout')) {
+    return 'Connection issue — check your network and try again';
+  }
+
+  // Transcription / subtitles
+  if (low.includes('whisper') || (low.includes('transcri') && low.includes('fail'))) {
+    return 'Subtitle generation failed — try again or disable subtitles';
+  }
+
+  // Scene / segment detection
+  if (low.includes('scene') && low.includes('detect')) {
+    return 'Could not analyze the video — the file may be corrupted';
+  }
+  if (low.includes('no segment') || low.includes('no clip') || (low.includes('segment') && low.includes('not found'))) {
+    return 'No usable clips were found in the video';
+  }
+
+  // Codec / format
+  if (low.includes('codec') || low.includes('unsupported format') || low.includes('invalid data')) {
+    return 'Video format not supported — try a different source file';
+  }
+
+  // FFmpeg / rendering
+  if (low.includes('ffmpeg') || low.includes('render') || low.includes('encoding')) {
+    return 'Something went wrong during rendering — try again';
+  }
+
+  // Generic video / source catch-all
+  if (low.includes('youtube') || low.includes('source') || low.includes('video')) {
     return 'Video could not be processed';
   }
-  if (low.includes('render') || low.includes('ffmpeg') || low.includes('subtitle') || low.includes('scene')) {
-    return 'Something went wrong during rendering';
-  }
+
   return fallback;
 }
 
@@ -567,12 +635,12 @@ function renderPendingClipsMessage(job) {
   const stage = normalizeRenderStage(job?.stage, job?.status);
   const status = normalizeRenderStatus(job?.status, stage);
   if (!isTerminalRenderStatus(status)) {
-    if (stage === 'scene_detection') return 'Analyzing video and selecting clips...';
-    if (stage === 'segment_building') return 'Preparing clips for rendering...';
-    if (stage === 'transcribing_full') return 'Generating subtitles...';
-    return 'Clips will appear here when rendering starts';
+    if (stage === 'scene_detection') return 'Analyzing your video...';
+    if (stage === 'segment_building') return 'Finding the best moments...';
+    if (stage === 'transcribing_full') return 'Adding subtitles to clips...';
+    return 'Clips will appear here as they\'re created';
   }
-  return 'Clips will appear here when rendering starts';
+  return 'Clips will appear here as they\'re created';
 }
 function updateRenderProgressVisual(job) {
   const stage = normalizeRenderStage(job?.stage, job?.status);
@@ -600,11 +668,11 @@ function partStatusLabel(status){
   const map = {
     queued: 'Waiting',
     waiting: 'Waiting',
-    cutting: 'Cutting clip',
-    transcribing: 'Generating subtitles',
-    rendering: 'Rendering video',
-    completed: 'Completed',
-    done: 'Completed',
+    cutting: 'Trimming clip',
+    transcribing: 'Adding subtitles',
+    rendering: 'Rendering',
+    completed: 'Done',
+    done: 'Done',
     error: 'Failed',
     failed: 'Failed'
   };
@@ -660,9 +728,10 @@ function buildCompletionHandoff(summary, parts, job) {
   const outputLabel = getRenderWorkspaceOutputLabel(job);
   const status = normalizeRenderStatus(job?.status, job?.stage);
   const hasFailure = status === 'failed' || status === 'interrupted';
+  const clipWord = completed === 1 ? 'clip' : 'clips';
   const main = failed > 0
-    ? `${_t('render_complete', 'Render complete')} - ${completed} clips completed, ${failed} ${_t('failed', 'failed')}`
-    : `✓ ${_t('render_complete', 'Render complete')} - ${completed} clips ready`;
+    ? `${completed} ${clipWord} done — ${failed} ${_t('failed', 'failed')}`
+    : `${completed} ${clipWord} ready`;
   let voiceSummary = '';
   try {
     const raw = job?.result_json;
@@ -1435,12 +1504,12 @@ function updateOutputPreview(job, parts) {
 }
 
 const RC_STAGE_STEPS = [
-  { key: 'prepare',  label: 'Preparing', stages: ['starting', 'queued', 'downloading'] },
-  { key: 'scenes',   label: 'Scenes',    stages: ['scene_detection'] },
-  { key: 'segment',  label: 'Segments',  stages: ['segment_building', 'transcribing_full'] },
-  { key: 'render',   label: 'Rendering', stages: ['rendering', 'rendering_parallel'] },
-  { key: 'finalize', label: 'Finalizing', stages: ['writing_report'] },
-  { key: 'done',     label: 'Completed', stages: ['done', 'completed', 'complete'] },
+  { key: 'prepare',  label: 'Preparing',  stages: ['starting', 'queued', 'downloading'] },
+  { key: 'scenes',   label: 'Analyzing',  stages: ['scene_detection'] },
+  { key: 'segment',  label: 'Selecting',  stages: ['segment_building', 'transcribing_full'] },
+  { key: 'render',   label: 'Rendering',  stages: ['rendering', 'rendering_parallel'] },
+  { key: 'finalize', label: 'Finishing',  stages: ['writing_report'] },
+  { key: 'done',     label: 'Done',       stages: ['done', 'completed', 'complete'] },
 ];
 
 function _updateStageTimeline(stage, status) {
