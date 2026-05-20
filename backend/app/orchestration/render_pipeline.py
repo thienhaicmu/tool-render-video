@@ -26,6 +26,7 @@ from app.services.subtitle_engine import (
     slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt,
     apply_market_hook_text_to_srt, apply_hook_subtitle_format, resolve_hook_overlay_text,
     subtitle_emphasis_pass, parse_srt_blocks, write_srt_blocks,
+    resegment_srt_for_readability,
 )
 from app.services.subtitle_transcription_adapters import transcribe_with_adapter
 from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event, content_type_crf_delta as _crf_delta_for_content_type, extract_thumbnail_frame
@@ -3646,6 +3647,17 @@ def run_render_pipeline(
                             "last_sub_end": _srt_meta.get("last_end"),
                         },
                     )
+                # OQ-1.2 — subtitle intelligence: semantic resegmentation for readability.
+                # Targets segment-level SRT only; word-level SRT is skipped internally.
+                # Fires only on fresh slices — resume cache hits are left unchanged.
+                if _srt_source_is_fresh and srt_part.exists() and not getattr(payload, "highlight_per_word", False):
+                    try:
+                        _intel_out = resegment_srt_for_readability(str(srt_part))
+                        if _intel_out > 0:
+                            needs_ass = True
+                    except Exception as _intel_exc:
+                        logger.warning("subtitle_intel_resegment_failed part=%d: %s", idx, _intel_exc)
+
                 _ass_srt_source = srt_part
                 if getattr(payload, "subtitle_translate_enabled", False) and srt_part.exists() and srt_part.stat().st_size > 0:
                     _needs_translated = not (payload.resume_from_last and translated_srt_part.exists() and translated_srt_part.stat().st_size > 0)
