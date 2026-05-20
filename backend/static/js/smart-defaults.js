@@ -15,6 +15,7 @@ var SmartDefaults = (function () {
   var _dismissed   = false; // strip dismissed (chips remain, reset on new video)
   var _chipTone    = 'Suggested'; // 'Recommended' (strong match) or 'Suggested' (weak)
   var _listenersBound = false;
+  var _apRafToken  = null;       // S1.4A: coalescing guard for Autopilot rAF
 
   // ── Profile strip copy (FIX 2) ────────────────────────────────────────────
   var _STRIP_LABEL = {
@@ -220,9 +221,14 @@ var SmartDefaults = (function () {
     if (_profile !== 'generic') _renderStrip(_profile);
     _renderSuggestions(_suggestions);
 
-    // S1.4: Autopilot takes ownership of advanced fields after SD renders
+    // S1.4: Autopilot takes ownership of advanced fields after SD renders.
+    // S1.4A: cancelAnimationFrame guard ensures only the latest call fires.
     if (typeof EditingAutopilot !== 'undefined') {
-      requestAnimationFrame(function () { EditingAutopilot.onVideoLoaded(_profile); });
+      if (_apRafToken) cancelAnimationFrame(_apRafToken);
+      _apRafToken = requestAnimationFrame(function () {
+        _apRafToken = null;
+        EditingAutopilot.onVideoLoaded(_profile);
+      });
     }
   }
 
@@ -250,6 +256,7 @@ var SmartDefaults = (function () {
 
   // Called at the top of _evLoadVideo() — clears all previous video state
   function reset() {
+    if (_apRafToken) { cancelAnimationFrame(_apRafToken); _apRafToken = null; }
     _profile     = null;
     _suggestions = {};
     _dirty       = {};

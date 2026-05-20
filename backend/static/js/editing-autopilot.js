@@ -1,6 +1,6 @@
-// ── Editing Autopilot (S1.4) ─────────────────────────────────────────────────
+// ── Editing Autopilot (S1.4A) ────────────────────────────────────────────────
 // AI ownership layer for advanced editing fields.
-// Shows "AI Managed" on owned fields; switches to "Manual override" when creator
+// Shows "AI: <value>" on owned fields; switches to "Manual: <value>" when creator
 // changes a field. NEVER mutates form values. Suggestion layer only.
 //
 // Activated by SmartDefaults after profile detection. Fails silently.
@@ -55,6 +55,16 @@ var EditingAutopilot = (function () {
     },
   };
 
+  // ── Human-friendly value labels (FIX 1 + FIX 2) ─────────────────────────
+  var _FRIENDLY_LABEL = {
+    'center':           'Center',
+    'auto':             'Auto',
+    'fast_center':      'Center',
+    'pro_karaoke':      'Karaoke',
+    'tiktok_bounce_v1': 'TikTok',
+    'story_clean_01':   'Clean',
+  };
+
   // ── State ─────────────────────────────────────────────────────────────────
   var _profile        = null;
   var _ownership      = {};   // fieldId → 'ai' | 'manual'
@@ -78,10 +88,22 @@ var EditingAutopilot = (function () {
     var fieldLabelSpan = labelWrap ? labelWrap.querySelector('.fieldLabel') : null;
     if (!fieldLabelSpan) return;
 
+    var chipText;
+    if (state === 'manual') {
+      // FIX 2: show what value the creator actually selected
+      var curVal = _FRIENDLY_LABEL[sel.value] || sel.value;
+      chipText = 'Manual: ' + curVal;
+    } else {
+      // FIX 1: show what the AI specifically recommends, not "AI Managed"
+      var rec    = _PROFILE_RECS[_profile] && _PROFILE_RECS[_profile][fieldId];
+      var recVal = _FRIENDLY_LABEL[rec ? rec.value : ''] || '';
+      chipText   = recVal ? 'AI: ' + recVal : 'AI';
+    }
+
     var chip = document.createElement('span');
     chip.id        = 'apChip_' + fieldId;
     chip.className = state === 'manual' ? 'ap-chip ap-manual' : 'ap-chip ap-managed';
-    chip.textContent = state === 'manual' ? 'Manual override' : 'AI Managed';
+    chip.textContent = chipText;
     fieldLabelSpan.classList.add('sd-label-row');
     fieldLabelSpan.appendChild(chip);
   }

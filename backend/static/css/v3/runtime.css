@@ -3004,31 +3004,31 @@
    ======================================================= */
 
 /* =======================================================
-   S1.4 — EDITING AUTOPILOT
+   S1.4 / S1.4A — EDITING AUTOPILOT
    ======================================================= */
 
-/* Base chip — shares layout and animation with .sd-chip */
+/* Base chip — slightly smaller than .sd-chip for quiet confidence */
 .ap-chip {
-  font-size: 10px; font-weight: 500; padding: 1px 6px;
+  font-size: 9px; font-weight: 500; padding: 1px 5px;
   border-radius: var(--r-pill);
   letter-spacing: 0.01em; pointer-events: none; flex-shrink: 0; text-transform: none;
   animation: sd-enter 160ms ease forwards;
 }
 
-/* "AI Managed" — secondary purple, distinct from SD blue */
+/* "AI: <value>" — muted purple, recedes behind content */
 .ap-managed {
-  background: var(--secondary-muted);
-  color: var(--secondary);
-  border: 1px solid rgba(168,85,247,.35);
+  background: rgba(168,85,247,.09);
+  color: rgba(168,85,247,.80);
+  border: 1px solid rgba(168,85,247,.22);
 }
 
-/* "Manual override" — amber signals creator has taken control */
+/* "Manual: <value>" — muted amber, acknowledges override without alarm */
 .ap-manual {
-  background: var(--warning-muted);
-  color: var(--warning);
-  border: 1px solid rgba(245,158,11,.3);
+  background: rgba(245,158,11,.09);
+  color: rgba(245,158,11,.78);
+  border: 1px solid rgba(245,158,11,.20);
 }
 
 /* =======================================================
-   END OF S1.4
+   END OF S1.4A
    ======================================================= */
