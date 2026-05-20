@@ -38,8 +38,7 @@ Last updated: 2026-05-20
 | ID | Title | Status | Risk | Scope |
 |---|---|---|---|---|
 | OQ-4.1 | Edge-TTS + Claude SSML humanizer | Planned | None | Semantic pacing |
-| OQ-4.2 | BGM sidechain ducking | Planned | None | FFmpeg filter only |
-| OQ-4.3 | DeepFilterNet activation | Planned | None | Install package, adapter ready |
+| OQ-4.2 | BGM sidechain ducking + DeepFilterNet auto-activation (OQ-2.1) | ✅ Complete (2026-05-20) | Low | sidechaincompress ducking, deepfilternet auto-detect |
 | OQ-4.4 | MeloTTS adapter (vi-VN) | Planned | Medium | Self-host, new adapter |
 
 ### OQ-5 — Future / S2+

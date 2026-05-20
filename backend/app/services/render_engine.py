@@ -357,6 +357,24 @@ def content_type_crf_delta(content_type: str) -> int:
     return {"tutorial": -2, "interview": -2, "montage": 1}.get(content_type or "", 0)
 
 
+def _build_audio_mix_filter(a0: str, a1: str, out: str) -> str:
+    """Return the filter graph segment that mixes voice (a0) and BGM (a1) into out.
+
+    BGM_DUCKING_ENABLED=1 (default): sidechaincompress ducks BGM during speech,
+    then amix blends. Produces premium creator-grade mix without pumping.
+    BGM_DUCKING_ENABLED=0: plain amix at static volume ratios (pre-OQ-2.1 behavior).
+    """
+    if os.environ.get("BGM_DUCKING_ENABLED", "1") == "1":
+        # threshold=0.015 (~-36.5 dBFS): triggers on clear speech, not room noise.
+        # ratio=3: BGM drops to ~40% during speech. attack=200ms, release=1000ms: no pumping.
+        return (
+            f"[{a1}][{a0}]sidechaincompress="
+            f"threshold=0.015:ratio=3:attack=200:release=1000[bgm_ducked];"
+            f"[{a0}][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2[{out}]"
+        )
+    return f"[{a0}][{a1}]amix=inputs=2:duration=first:dropout_transition=2[{out}]"
+
+
 def _build_audio_filter(loudnorm_enabled: bool, reup_mode: bool, speed: float) -> str | None:
     """Return a comma-joined -af filter string, or None when no audio processing is needed."""
     parts = []
@@ -1033,7 +1051,7 @@ def render_part(
                 a1_chain += f",atempo={speed:.4f}"
             fc = (f"[0:v]{vf_chain}[vout];"
                   f"[0:a]{a0_chain}[a0];[1:a]{a1_chain}[a1];"
-                  f"[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]")
+                  f"{_build_audio_mix_filter('a0', 'a1', 'aout')}")
             cmd += ["-filter_complex", fc, "-map", "[vout]", "-map", "[aout]"]
         else:
             # No source audio — use video filter_complex + map BGM directly
@@ -1094,7 +1112,7 @@ def render_part(
                     a1_chain += f",atempo={speed:.4f}"
                 fc = (f"[0:v]{vf_chain}[vout];"
                       f"[0:a]{a0_chain}[a0];[1:a]{a1_chain}[a1];"
-                      f"[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]")
+                      f"{_build_audio_mix_filter('a0', 'a1', 'aout')}")
                 cpu_cmd += ["-filter_complex", fc, "-map", "[vout]", "-map", "[aout]"]
             else:
                 fc = f"[0:v]{vf_chain}[vout]"
