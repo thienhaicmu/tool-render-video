@@ -388,10 +388,11 @@ On CUDA failure, the CPU model is loaded and aliased under the original CUDA cac
 
 ## 14. OQ-1.1A Commit Hash
 
-*(to be filled after commit)*
+`daa3d67` — fix(subtitle): harden OQ-1.1 foundation and alignment routing
 
 ---
 
 ## 15. Push Confirmation
 
-Pushed to `origin/feature/ai-output-upgrade` — `07a9e48..ee01ddb`
+OQ-1.1: Pushed to `origin/feature/ai-output-upgrade` — `07a9e48..ee01ddb`
+OQ-1.1A: Pushed to `origin/feature/ai-output-upgrade` — `ee01ddb..daa3d67`
