@@ -127,6 +127,8 @@ var SmartDefaults = (function () {
 
   function _applyField(fieldId, sug) {
     if (_dirty[fieldId] || !sug) return;
+    // S1.4: defer to EditingAutopilot for its owned fields
+    if (typeof EditingAutopilot !== 'undefined' && EditingAutopilot.isActive(fieldId)) return;
     var sel = document.getElementById(sug.selectId);
     if (!sel) return;
 
@@ -217,6 +219,11 @@ var SmartDefaults = (function () {
 
     if (_profile !== 'generic') _renderStrip(_profile);
     _renderSuggestions(_suggestions);
+
+    // S1.4: Autopilot takes ownership of advanced fields after SD renders
+    if (typeof EditingAutopilot !== 'undefined') {
+      requestAnimationFrame(function () { EditingAutopilot.onVideoLoaded(_profile); });
+    }
   }
 
   // Called when creator explicitly switches platform — re-evaluate active chips

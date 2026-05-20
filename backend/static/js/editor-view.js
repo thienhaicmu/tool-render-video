@@ -1286,6 +1286,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
 
 function _evLoadVideo(src) {
   if (typeof SmartDefaults !== 'undefined') SmartDefaults.reset();
+  if (typeof EditingAutopilot !== 'undefined') EditingAutopilot.reset();
   const video = qs('evVideo');
   video.removeEventListener('timeupdate', _evOnTimeUpdate);
   video.src = src;
@@ -2992,6 +2993,7 @@ function evApplyOutputPreset(presetId) {
     }
     evSyncQsBar();
     if (typeof SmartDefaults !== 'undefined') SmartDefaults.onPresetApplied(changed);
+    if (typeof EditingAutopilot !== 'undefined') EditingAutopilot.onPresetApplied(changed);
   } finally {
     _evApplyingPreset = false;
   }
