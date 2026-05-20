@@ -257,10 +257,10 @@ After gap-fill, a safety pass ensures:
 
 ## 12. Commit Hash
 
-*(to be filled)*
+`ecc4215` — feat(subtitle): add OQ-1.2 subtitle intelligence layer
 
 ---
 
 ## 13. Push Confirmation
 
-*(to be filled)*
+Pushed to `origin/feature/ai-output-upgrade` — `e06aafe..ecc4215`
