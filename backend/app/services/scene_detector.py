@@ -19,6 +19,19 @@ try:
 except ImportError:
     _HAS_ADAPTIVE = False
 
+try:
+    from transnetv2 import TransNetV2 as _TransNetV2  # type: ignore[import]
+    _HAS_TRANSNETV2 = True
+except ImportError:
+    _HAS_TRANSNETV2 = False
+
+# Deduplication window: two cuts within this many seconds are the same boundary.
+_TV2_MERGE_GAP_SEC: float = 0.5
+# Minimum scene duration after TransNetV2 merge.
+_TV2_MIN_SCENE_SEC: float = 0.5
+# Abort merge if merged count exceeds base × this ratio (scene explosion guard).
+_TV2_EXPLODE_RATIO: int = 4
+
 
 def _get_video_fps(video_path: str) -> float:
     """Read FPS via ffprobe; fall back to 30.0 on any error."""
@@ -179,6 +192,127 @@ def _compute_silence_features(video_path: str, scenes: list) -> list:
         return scenes
 
 
+def _compute_transition_score_at_sec(video_path: str, cut_sec: float) -> float:
+    """Pixel-delta transition score at a seconds-based timestamp.
+
+    Used for TransNetV2-added boundaries that were not in the SceneManager output.
+    Identical algorithm to _compute_transition_scores() but takes seconds, not FrameTimecode.
+    Returns 0.5 (neutral) on any failure.
+    """
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return 0.5
+        actual_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        frame_no = max(0, int(cut_sec * actual_fps) - 1)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
+        ok1, f1 = cap.read()
+        ok2, f2 = cap.read()
+        cap.release()
+        if ok1 and ok2 and f1 is not None and f2 is not None:
+            s1 = cv2.resize(f1, (64, 36), interpolation=cv2.INTER_AREA)
+            s2 = cv2.resize(f2, (64, 36), interpolation=cv2.INTER_AREA)
+            diff = float(np.mean(np.abs(s1.astype(np.float32) - s2.astype(np.float32))))
+            return min(1.0, max(0.1, diff / 55.0))
+    except Exception:
+        pass
+    return 0.5
+
+
+def _transnetv2_detect(video_path: str, fps: float) -> List[float]:
+    """Run TransNetV2 inference; return scene cut timestamps in seconds.
+
+    Returns [] when:
+      - transnetv2 package not installed (_HAS_TRANSNETV2=False)
+      - TRANSNETV2_ENABLED=0
+      - Any runtime error (model load, inference, format mismatch)
+    Caller continues with ContentDetector/AdaptiveDetector results unchanged.
+    """
+    if not _HAS_TRANSNETV2 or os.environ.get("TRANSNETV2_ENABLED", "1") != "1":
+        return []
+    try:
+        threshold = float(os.environ.get("TRANSNETV2_THRESHOLD", "0.5"))
+        model = _TransNetV2()
+        _vid_frames, predictions, _all_scores = model.predict_video(video_path)
+        scenes = model.predictions_to_scenes(predictions, threshold=threshold)
+        # scenes: [(start_frame, end_frame), ...]; cut time = first frame of each scene > 0
+        cut_times = [float(s_frame) / max(fps, 1.0) for s_frame, _e in scenes[1:]]
+        logger.info(
+            "transnetv2_detect_complete cuts=%d threshold=%.2f",
+            len(cut_times), threshold,
+        )
+        return cut_times
+    except Exception as _tv2_exc:
+        logger.warning("transnetv2_detect_failed: %s", _tv2_exc)
+        return []
+
+
+def _merge_transnetv2_cuts(
+    base_results: List[Dict],
+    tv2_cuts: List[float],
+    video_path: str,
+    total_duration: float,
+) -> List[Dict]:
+    """Merge TransNetV2 cut timestamps additively into the existing scene list.
+
+    Additive only — TransNetV2 can add boundaries, never remove existing ones.
+    Deduplicates within _TV2_MERGE_GAP_SEC (0.5s): the earlier cut is kept.
+    Transition scores for heuristic boundaries are preserved; new boundaries
+    get pixel-delta scores via _compute_transition_score_at_sec().
+    Aborts with warning and returns base_results if merged count > base × _TV2_EXPLODE_RATIO.
+    """
+    if not tv2_cuts:
+        return base_results
+
+    # Existing cut times → their transition scores (scene 0 excluded: no preceding cut).
+    existing: Dict[float, float] = {
+        round(float(sc["start"]), 3): float(sc.get("transition_score", 1.0))
+        for sc in base_results
+        if float(sc["start"]) > 0.01
+    }
+
+    # Combine + deduplicate within merge gap.
+    combined = sorted({
+        *existing.keys(),
+        *(round(t, 3) for t in tv2_cuts if 0.0 < t < total_duration),
+    })
+    deduped: List[float] = []
+    for t in combined:
+        if not deduped or t - deduped[-1] >= _TV2_MERGE_GAP_SEC:
+            deduped.append(t)
+
+    # Rebuild scene list from merged boundaries.
+    boundaries = [0.0] + deduped + [round(total_duration, 3)]
+    merged: List[Dict] = []
+    for i in range(len(boundaries) - 1):
+        s = round(boundaries[i], 3)
+        e = round(boundaries[i + 1], 3)
+        if e - s < _TV2_MIN_SCENE_SEC:
+            continue
+        if s < 0.01:
+            ts = 1.0
+        elif round(s, 3) in existing:
+            ts = existing[round(s, 3)]
+        else:
+            ts = _compute_transition_score_at_sec(video_path, s)
+        merged.append({"start": s, "end": e, "transition_score": ts})
+
+    # Scene explosion guard.
+    if len(merged) > max(len(base_results) * _TV2_EXPLODE_RATIO, 50):
+        logger.warning(
+            "transnetv2_merge_explosion base=%d merged=%d — reverting to base",
+            len(base_results), len(merged),
+        )
+        return base_results
+
+    added = max(0, len(merged) - len(base_results))
+    logger.info(
+        "transnetv2_merge_complete base=%d merged=%d new_boundaries=%d",
+        len(base_results), len(merged), added,
+    )
+    return merged if merged else base_results
+
+
 def detect_scenes(
     video_path: str,
     threshold: float = 28.0,
@@ -198,8 +332,9 @@ def detect_scenes(
     -------
     list of {"start": float, "end": float, "transition_score": float}
     """
+    # Always compute fps — needed for TransNetV2 frame→second conversion.
+    fps = _get_video_fps(video_path)
     if frame_skip is None:
-        fps = _get_video_fps(video_path)
         frame_skip = _auto_frame_skip(fps)
 
     video = open_video(video_path)
@@ -238,6 +373,14 @@ def detect_scenes(
         }
         for i, (start, end) in enumerate(scene_list)
     ]
+
+    # TransNetV2: additive semantic boundary layer (runs before silence enrichment
+    # so that newly-added boundaries also receive silence_score).
+    if _HAS_TRANSNETV2 and os.environ.get("TRANSNETV2_ENABLED", "1") == "1":
+        _total_dur = _results[-1]["end"] if _results else 0.0
+        _tv2_cuts = _transnetv2_detect(video_path, fps)
+        if _tv2_cuts:
+            _results = _merge_transnetv2_cuts(_results, _tv2_cuts, video_path, _total_dur)
 
     _results = _compute_silence_features(video_path, _results)
     _silence_active = any("silence_score" in sc for sc in _results)

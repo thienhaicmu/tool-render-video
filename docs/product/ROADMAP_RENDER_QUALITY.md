@@ -23,7 +23,7 @@ Last updated: 2026-05-20
 |---|---|---|---|---|
 | OQ-2.1 | Activate AdaptiveDetector | ✅ Complete (2026-05-20) | None | Catch gradual fades, explicit params, activation gate |
 | OQ-2.2 | Audio silence gap scoring | ✅ Complete (2026-05-20) | None | FFmpeg silencedetect, pre-pause bonus, rhythm bonus, dead-air penalty |
-| OQ-2.3 | TransNetV2 integration | Future | Medium | Requires threshold recalibration |
+| OQ-2.3 | TransNetV2 integration | ✅ Complete (2026-05-20) | Low | Additive semantic boundaries, dedup/explode guard, TRANSNETV2_ENABLED gate |
 
 ### OQ-3 — Reframe / Tracking
 
