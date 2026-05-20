@@ -1927,7 +1927,7 @@ function updateRenderMainState(job, summary, parts = []) {
   const terminal = isTerminalRenderStatus(status);
   const partialStatus = isPartialRenderStatus(status);
   const completedStatus = isCompletedRenderStatus(status) || partialStatus;
-  const showActivePanel = hasJob && currentView === 'render';
+  const showActivePanel = hasJob && !terminal && currentView === 'render';
 
   homePanel.classList.toggle('hiddenView', !((currentView === 'render') && !showActivePanel));
   activePanel.classList.toggle('hiddenView', !showActivePanel);
