@@ -356,11 +356,7 @@ function evQsSet(group, val) {
   if (group === 'platform') {
     const el = document.getElementById('evTargetPlatform');
     if (el) el.value = val;
-    const ar = document.getElementById('evAspectRatio');
-    if (ar) {
-      ar.value = (val === 'tiktok' || val === 'instagram_reels') ? '9:16' : '3:4';
-      if (typeof evUpdateAspectRatio === 'function') evUpdateAspectRatio();
-    }
+    // Frame Ratio (evAspectRatio) is now set independently via Frame Ratio buttons — not from platform
   } else if (group === 'structure') {
     const el = document.getElementById('qsStructureBias');
     if (el) el.value = val;
@@ -1709,18 +1705,20 @@ function evUpdateSubPreview() {
     inner.innerHTML = _evBuildWordSpans(words, _ev.subWordIdx, baseStyle, color, highlight);
   }
 
-  // Static preview box — CSS fallback; also updated when real preview is unavailable
+  // Static preview box — CSS fallback (element may be hidden; null-guard required)
   const sp = qs('evSubStaticText');
-  sp.style.fontFamily = `'${font}',sans-serif`;
-  sp.style.fontSize = `${sampleFontPx}px`;
-  sp.style.color = color;
-  sp.style.webkitTextStroke = `${outline}px #000`;
-  sp.style.textShadow = shadowCSS;
-  const demoWords = _EV_DEMO_WORDS;
-  const half = Math.floor(demoWords.length / 2);
-  sp.innerHTML = demoWords.map((w, i) =>
-    `<span style="color:${i===half?highlight:color}">${w} </span>`
-  ).join('');
+  if (sp) {
+    sp.style.fontFamily = `'${font}',sans-serif`;
+    sp.style.fontSize = `${sampleFontPx}px`;
+    sp.style.color = color;
+    sp.style.webkitTextStroke = `${outline}px #000`;
+    sp.style.textShadow = shadowCSS;
+    const demoWords = _EV_DEMO_WORDS;
+    const half = Math.floor(demoWords.length / 2);
+    sp.innerHTML = demoWords.map((w, i) =>
+      `<span style="color:${i===half?highlight:color}">${w} </span>`
+    ).join('');
+  }
 
   // Schedule a real libass preview render (debounced)
   evFetchSubPreview();
@@ -2634,22 +2632,21 @@ async function startRenderFromEditor() {
 
 // ── Inspector tab system ─────────────────────────────────────────────────────
 function setInspectorTab(tab) {
-  const validTabs = ['mode', 'subtitle', 'text', 'audio', 'performance', 'ai'];
+  const validTabs = ['mode', 'subtitle', 'performance'];
   const tabTitles = {
-    mode:        'Story',
-    subtitle:    'Subtitles',
-    text:        'Words',
-    audio:       'Audio',
+    mode:        'Edit',
+    subtitle:    'Captions',
     performance: 'Export',
-    ai:          'AI',
   };
+  // Redirect removed tabs to Edit
+  if (['text', 'audio', 'ai'].includes(tab)) tab = 'mode';
   const activeTab = validTabs.includes(tab) ? tab : 'mode';
   const insp = document.getElementById('appInspector');
   if (insp) insp.classList.add('insp-tabs-init');
   const pane = document.querySelector('.inspPaneBody');
   if (pane) {
     pane.setAttribute('data-active-insp-tab', activeTab);
-    pane.setAttribute('data-active-insp-title', tabTitles[activeTab] || 'Mode');
+    pane.setAttribute('data-active-insp-title', tabTitles[activeTab] || 'Edit');
   }
   const tabRoot = insp || document;
   tabRoot.querySelectorAll('.insp-tab[data-insp-tab]').forEach((btn) => {
@@ -2661,20 +2658,13 @@ function setInspectorTab(tab) {
     el.classList.toggle('insp-panel-active', panel === activeTab);
   });
 
-  if (activeTab === 'audio') {
-    evSetInspGroupOpen('audio', true);
+  if (activeTab === 'mode') {
     if (typeof EditorAudioRuntime !== 'undefined') EditorAudioRuntime.onTabActivate();
   }
   if (activeTab === 'performance') {
-    evSetInspGroupOpen('performance', true);
     if (typeof EditorPerformanceRuntime !== 'undefined') EditorPerformanceRuntime.onTabActivate();
   } else {
     if (typeof EditorPerformanceRuntime !== 'undefined') EditorPerformanceRuntime.onTabDeactivate();
-  }
-  if (activeTab === 'text') {
-    if (typeof EditorTextRuntime !== 'undefined') EditorTextRuntime.onTabActivate();
-    const hasLayers = typeof _ev !== 'undefined' && Array.isArray(_ev.textLayers) && _ev.textLayers.length > 0;
-    evSetInspGroupOpen('text-layers', hasLayers);
   }
   if (typeof EditorState !== 'undefined') {
     EditorState.setEditorState({ activeInspectorTab: activeTab });
