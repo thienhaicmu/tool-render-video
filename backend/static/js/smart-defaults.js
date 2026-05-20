@@ -1,4 +1,4 @@
-// ── Smart Defaults (S1.3) ────────────────────────────────────────────────────
+// ── Smart Defaults (S1.3A) ───────────────────────────────────────────────────
 // Passive suggestion engine. Adds recommendation indicators to editor controls
 // based on video content profile detected from title, duration, and dimensions.
 //
@@ -78,17 +78,18 @@ var SmartDefaults = (function () {
   }
 
   // ── DNA suggestions ───────────────────────────────────────────────────────
-  // Maps CreatorDNA dimensions to field suggestions (S1.3).
+  // Maps CreatorDNA dimensions to field suggestions (S1.3A).
+  // One signal → one field. No cross-field bleed.
   // Returns {} when DNA is not confident (< 10 action sessions).
   function _buildDNASuggestions(dnaCtx) {
     var dna = {};
     if (!dnaCtx || !dnaCtx.confident) return dna;
+    // hook_forward → caption style only (not video style)
     if (dnaCtx.hook_forward >= 0.5) {
       dna.subtitle_style = { selectId: 'evSubStyle',         value: 'tiktok_bounce_v1', tone: 'Usually used' };
-      dna.video_style    = { selectId: 'evVideoStyleSelect', value: 'viral',             tone: 'Usually used' };
     }
+    // clean_visual → video style only (not subtitle style)
     if (dnaCtx.clean_visual >= 0.67) {
-      dna.subtitle_style = { selectId: 'evSubStyle',         value: 'story_clean_01',    tone: 'Usually used' };
       dna.video_style    = { selectId: 'evVideoStyleSelect', value: 'balanced',          tone: 'Usually used' };
     }
     return dna;
