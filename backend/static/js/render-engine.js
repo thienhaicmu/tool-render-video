@@ -72,7 +72,7 @@ async function startRender(){
     whisper_model: 'auto',
     retry_count: 2,
     resume_job_id: null,
-    keep_source_copy: true,
+    keep_source_copy: false,
     cleanup_temp_files: true,
     reup_mode: false,
     reup_overlay_enable: false,

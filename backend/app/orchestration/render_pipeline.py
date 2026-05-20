@@ -1991,7 +1991,11 @@ def run_render_pipeline(
         elif (payload.source_mode or "youtube").lower() == "local":
             source_path = Path(payload.source_video_path or "").expanduser().resolve()
             if not source_path.exists() or not source_path.is_file():
-                raise RuntimeError(f"Local source video not found: {source_path}")
+                raise RuntimeError(
+                    f"Render stopped: the source video file was not found.\n"
+                    f"Path: {source_path}\n"
+                    f"Please reopen the editor and verify the file is still accessible."
+                )
             source = {
                 "title": source_path.stem.replace("_", " ").replace("-", " "),
                 "slug": slugify(source_path.stem),
@@ -2144,6 +2148,15 @@ def run_render_pipeline(
             source_path = edited_path
             source["filepath"] = str(edited_path)
             _job_log(effective_channel, job_id, f"Edits applied → {edited_path} | new_duration={source['duration']}s")
+
+        # Pre-render source preflight: catch local files moved/deleted after initial validation
+        _detected_source_mode = (payload.source_mode or "youtube").lower()
+        if _detected_source_mode == "local" and not source_path.exists():
+            raise RuntimeError(
+                f"Render stopped: the source video file was moved or deleted.\n"
+                f"Path: {source_path}\n"
+                f"Please reopen the editor and confirm the file is still accessible."
+            )
 
         if payload.keep_source_copy:
             ext = source_path.suffix or ".mp4"
