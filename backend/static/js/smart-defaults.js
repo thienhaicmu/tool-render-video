@@ -1,4 +1,4 @@
-// ── Smart Defaults (S1.2) ────────────────────────────────────────────────────
+// ── Smart Defaults (S1.3) ────────────────────────────────────────────────────
 // Passive suggestion engine. Adds recommendation indicators to editor controls
 // based on video content profile detected from title, duration, and dimensions.
 //
@@ -77,6 +77,23 @@ var SmartDefaults = (function () {
     return {};
   }
 
+  // ── DNA suggestions ───────────────────────────────────────────────────────
+  // Maps CreatorDNA dimensions to field suggestions (S1.3).
+  // Returns {} when DNA is not confident (< 10 action sessions).
+  function _buildDNASuggestions(dnaCtx) {
+    var dna = {};
+    if (!dnaCtx || !dnaCtx.confident) return dna;
+    if (dnaCtx.hook_forward >= 0.5) {
+      dna.subtitle_style = { selectId: 'evSubStyle',         value: 'tiktok_bounce_v1', tone: 'Usually used' };
+      dna.video_style    = { selectId: 'evVideoStyleSelect', value: 'viral',             tone: 'Usually used' };
+    }
+    if (dnaCtx.clean_visual >= 0.67) {
+      dna.subtitle_style = { selectId: 'evSubStyle',         value: 'story_clean_01',    tone: 'Usually used' };
+      dna.video_style    = { selectId: 'evVideoStyleSelect', value: 'balanced',          tone: 'Usually used' };
+    }
+    return dna;
+  }
+
   // ── DOM: profile strip ────────────────────────────────────────────────────
   function _renderStrip(profile) {
     _removeStrip();
@@ -104,6 +121,7 @@ var SmartDefaults = (function () {
     aspect_ratio:   'evFrameRatioSelect',
     reframe_mode:   'evReframeSelect',
     subtitle_style: 'evSubStyle',
+    video_style:    'evVideoStyleSelect',
   };
 
   function _applyField(fieldId, sug) {
@@ -120,7 +138,7 @@ var SmartDefaults = (function () {
     var chip = document.createElement('span');
     chip.id        = 'sdChip_' + fieldId;
     chip.className = 'sd-chip';
-    chip.textContent = _chipTone; // FIX 3: 'Recommended' or 'Suggested'
+    chip.textContent = sug.tone || _chipTone;
 
     fieldLabelSpan.classList.add('sd-label-row');
     fieldLabelSpan.appendChild(chip);
@@ -154,9 +172,10 @@ var SmartDefaults = (function () {
       var el = document.getElementById(selId);
       if (el) el.addEventListener('change', function () { markDirty(field); });
     }
-    _bind('evFrameRatioSelect', 'aspect_ratio');
-    _bind('evReframeSelect',    'reframe_mode');
-    _bind('evSubStyle',         'subtitle_style');
+    _bind('evFrameRatioSelect',  'aspect_ratio');
+    _bind('evReframeSelect',     'reframe_mode');
+    _bind('evSubStyle',          'subtitle_style');
+    _bind('evVideoStyleSelect',  'video_style');
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -180,12 +199,22 @@ var SmartDefaults = (function () {
 
     var result   = _detectProfile(title, duration, sourceAspect, domain);
     _profile     = result.profile;
-    _chipTone    = result.score >= 65 ? 'Recommended' : 'Suggested'; // FIX 3
+    _chipTone    = result.score >= 65 ? 'Recommended' : 'Suggested';
     _suggestions = _buildSuggestions(_profile);
 
-    if (_profile === 'generic') { _removeStrip(); _clearAll(); return; } // FIX 5: nothing rendered
+    // S1.3: DNA overlay — DNA wins over content profile for same fields
+    if (window.CreatorDNA) {
+      try {
+        var dnaSug = _buildDNASuggestions(CreatorDNA.getDNAContext());
+        Object.keys(dnaSug).forEach(function (field) { _suggestions[field] = dnaSug[field]; });
+      } catch (e) {}
+    }
 
-    _renderStrip(_profile);
+    if (_profile === 'generic' && Object.keys(_suggestions).length === 0) {
+      _removeStrip(); _clearAll(); return;
+    }
+
+    if (_profile !== 'generic') _renderStrip(_profile);
     _renderSuggestions(_suggestions);
   }
 
