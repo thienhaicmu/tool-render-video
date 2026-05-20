@@ -25,7 +25,10 @@ def _score_scene(scene: Dict, idx: int, total: int) -> float:
     speech_density = _clamp(float(scene.get("speech_density", 0.0)), 0.0, 1.0)
     speech_bonus = speech_density * 12.0  # up to +12 pts
 
-    return (duration_score * 0.45) + (transition_score * 0.35) + (position_stability * 0.20) + early_bonus + speech_bonus
+    # silence_score: additive silence-gap signal from FFmpeg silencedetect [-8, +20]
+    silence_bonus = _clamp(float(scene.get("silence_score", 0.0)), -8.0, 20.0)
+
+    return (duration_score * 0.45) + (transition_score * 0.35) + (position_stability * 0.20) + early_bonus + speech_bonus + silence_bonus
 
 
 def _normalize_scenes(scenes: List[Dict], total_duration: float) -> List[Dict]:
@@ -40,6 +43,7 @@ def _normalize_scenes(scenes: List[Dict], total_duration: float) -> List[Dict]:
             "end": ed,
             "transition_score": float(s.get("transition_score", 1.0)),
             "speech_density": float(s.get("speech_density", 0.0)),
+            "silence_score": float(s.get("silence_score", 0.0)),
             "_idx": i,
         })
     if not normalized:

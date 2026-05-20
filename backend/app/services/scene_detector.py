@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 from typing import List, Dict
 
@@ -90,6 +91,94 @@ def _compute_transition_scores(video_path: str, scene_list: list) -> List[float]
     return scores
 
 
+def _compute_silence_features(video_path: str, scenes: list) -> list:
+    """Enrich scene dicts with silence-based scoring signal via FFmpeg silencedetect.
+
+    Adds ``silence_score`` [-8, 20] per scene — purely additive to scene_quality:
+      pre_pause_bonus (+8 max):  silence ending ≤0.5s before scene start → hook entry
+      rhythm_bonus    (+10 max): 1–3 natural pauses (0.3–1.2s) within scene
+      trailing_bonus  (+4 max):  scene ends in silence → natural cut point
+      dead_air_penalty (-8 max): total silence >35% of scene → dead air
+
+    Returns unmodified scenes on any failure (silence_score defaults to 0.0 downstream).
+    Skipped when SILENCE_SCORING_ENABLED=0.
+    """
+    if not scenes or os.environ.get("SILENCE_SCORING_ENABLED", "1") != "1":
+        return scenes
+    try:
+        from app.services.bin_paths import get_ffmpeg_bin
+        cmd = [
+            get_ffmpeg_bin(), "-hide_banner",
+            "-i", video_path,
+            "-vn",
+            "-af", "silencedetect=noise=-40dB:d=0.3",
+            "-f", "null", "-",
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        stderr = result.stderr
+
+        raw_starts = re.findall(r"silence_start:\s*([\d.]+)", stderr)
+        raw_ends   = re.findall(r"silence_end:\s*([\d.]+)", stderr)
+        if not raw_starts:
+            return scenes
+
+        silence_ivs: List[tuple] = []
+        for i, s_str in enumerate(raw_starts):
+            s = float(s_str)
+            e = float(raw_ends[i]) if i < len(raw_ends) else s + 0.3
+            silence_ivs.append((s, e, e - s))
+
+        enriched: List[Dict] = []
+        for sc in scenes:
+            sc_s = float(sc["start"])
+            sc_e = float(sc["end"])
+            sc_dur = max(sc_e - sc_s, 0.001)
+
+            # Pre-scene pause: silence ending within 0.5s before scene start.
+            pre_dur = max(
+                (d for s, e, d in silence_ivs if e <= sc_s and e >= sc_s - 0.5 and 0.3 <= d <= 1.5),
+                default=0.0,
+            )
+            pre_pause_bonus = min(8.0, pre_dur * 6.0)
+
+            # Rhythm pauses: natural 0.3–1.2s pauses fully within the scene.
+            rhythm = [d for s, e, d in silence_ivs if s >= sc_s and e <= sc_e and 0.3 <= d <= 1.2]
+            n_r = len(rhythm)
+            if n_r == 0:
+                rhythm_bonus = 0.0
+            elif n_r <= 3:
+                rhythm_bonus = min(10.0, n_r * 4.0)
+            else:
+                rhythm_bonus = max(0.0, 10.0 - (n_r - 3) * 2.0)
+
+            # Trailing silence: scene ends in silence.
+            trailing = any(s <= sc_e - 0.3 and e >= sc_e for s, e, d in silence_ivs)
+            trailing_bonus = 4.0 if trailing else 0.0
+
+            # Dead air: total overlapping silence > 35% of scene.
+            total_sil = sum(
+                min(e, sc_e) - max(s, sc_s)
+                for s, e, d in silence_ivs
+                if e > sc_s and s < sc_e
+            )
+            sil_ratio = total_sil / sc_dur
+            dead_air_penalty = min(8.0, max(0.0, (sil_ratio - 0.35) * 32.0))
+
+            silence_score = max(-8.0, min(20.0,
+                pre_pause_bonus + rhythm_bonus + trailing_bonus - dead_air_penalty
+            ))
+            enriched.append({**sc, "silence_score": round(silence_score, 3)})
+
+        logger.info(
+            "silence_features_computed scenes=%d silence_intervals=%d",
+            len(scenes), len(silence_ivs),
+        )
+        return enriched
+    except Exception as _exc:
+        logger.debug("silence_features_failed: %s", _exc)
+        return scenes
+
+
 def detect_scenes(
     video_path: str,
     threshold: float = 28.0,
@@ -149,6 +238,11 @@ def detect_scenes(
         }
         for i, (start, end) in enumerate(scene_list)
     ]
+
+    _results = _compute_silence_features(video_path, _results)
+    _silence_active = any("silence_score" in sc for sc in _results)
+    logger.info("scene_enrichment_complete silence_data=%s", _silence_active)
+
     if os.getenv("RENDER_DEBUG_LOG", "0") == "1":
         for i, sc in enumerate(_results):
             logger.debug(
