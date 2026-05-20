@@ -116,14 +116,26 @@ def detect_scenes(
     video = open_video(video_path)
     scene_manager = SceneManager()
     scene_manager.add_detector(ContentDetector(threshold=threshold))
-    if _HAS_ADAPTIVE:
+
+    _adaptive_active = False
+    if _HAS_ADAPTIVE and os.environ.get("SCENE_ADAPTIVE_ENABLED", "1") == "1":
         try:
-            scene_manager.add_detector(_AdaptiveDetector())
-        except Exception:
-            pass
+            scene_manager.add_detector(_AdaptiveDetector(
+                adaptive_threshold=3.0,
+                min_content_val=15.0,
+            ))
+            _adaptive_active = True
+            logger.info("scene_adaptive_detector_active threshold=3.0 min_content_val=15.0")
+        except Exception as _adaptive_exc:
+            logger.warning("scene_adaptive_add_failed: %s", _adaptive_exc)
+
     scene_manager.detect_scenes(video, frame_skip=frame_skip)
 
     scene_list = scene_manager.get_scene_list()
+    logger.info(
+        "scene_detection_complete scene_count=%d adaptive=%s frame_skip=%d",
+        len(scene_list), _adaptive_active, frame_skip,
+    )
     if not scene_list:
         return []
 
