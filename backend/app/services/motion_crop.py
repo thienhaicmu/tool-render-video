@@ -129,6 +129,78 @@ def _detect_mediapipe_faces(
 
 
 # ---------------------------------------------------------------------------
+# MediaPipe Pose — eye-level anchor for premium framing composition (OQ-3.3)
+# ---------------------------------------------------------------------------
+
+_mp_pose_detector = None
+_mp_pose_initialized = False
+_POSE_LEFT_EYE = 2    # mp.solutions.pose.PoseLandmark.LEFT_EYE
+_POSE_RIGHT_EYE = 5   # mp.solutions.pose.PoseLandmark.RIGHT_EYE
+_EYE_CROP_THIRDS = 0.33  # eyes at rule-of-thirds from top of crop window
+
+
+def _get_mp_pose():
+    """Lazy-load MediaPipe Pose (BlazePose Lite). Returns None if unavailable."""
+    global _mp_pose_detector, _mp_pose_initialized
+    if _mp_pose_initialized:
+        return _mp_pose_detector
+    _mp_pose_initialized = True
+    if os.environ.get("POSE_EYE_ANCHOR_ENABLED", "1") != "1":
+        return None
+    try:
+        import mediapipe as mp  # noqa: PLC0415
+        _mp_pose_detector = mp.solutions.pose.Pose(
+            static_image_mode=True,
+            model_complexity=0,
+            min_detection_confidence=0.4,
+        )
+        logger.info("mediapipe_pose_loaded model_complexity=0 eye_anchor=enabled")
+    except Exception as exc:
+        logger.info("mediapipe_pose_unavailable reason=%s", exc)
+        _mp_pose_detector = None
+    return _mp_pose_detector
+
+
+def _get_eye_anchor_rel(
+    frame_bgr_small: np.ndarray,
+    face_box_src: Tuple[int, int, int, int],
+    detect_scale: float,
+    det_sy: float = 1.0,
+) -> Optional[float]:
+    """Return eye midpoint y as a fraction of face-box height from its top.
+
+    Runs MediaPipe Pose on the detect-scale frame. Validates the detected nose
+    falls within the selected face box to reject background subjects.
+    Returns None on any failure — caller falls back to y + h * 0.34.
+    """
+    pose = _get_mp_pose()
+    if pose is None:
+        return None
+    try:
+        h_s, w_s = frame_bgr_small.shape[:2]
+        frame_rgb = cv2.cvtColor(frame_bgr_small, cv2.COLOR_BGR2RGB)
+        results = pose.process(frame_rgb)
+        if not results.pose_landmarks:
+            return None
+        lm = results.pose_landmarks.landmark
+        # Convert relative-small coords → src-frame y coords
+        l_eye_y = (lm[_POSE_LEFT_EYE].y * h_s / detect_scale) / det_sy
+        r_eye_y = (lm[_POSE_RIGHT_EYE].y * h_s / detect_scale) / det_sy
+        nose_y  = (lm[0].y * h_s / detect_scale) / det_sy
+        # Validate: nose must be within the selected face box (±20% margin)
+        fx, fy, fw, fh = face_box_src
+        if not (fy - fh * 0.2 <= nose_y <= fy + fh * 1.2):
+            return None
+        eye_mid_y = (l_eye_y + r_eye_y) / 2.0
+        eye_rel = (eye_mid_y - fy) / max(1.0, float(fh))
+        if not (0.0 <= eye_rel <= 0.65):
+            return None
+        return eye_rel
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Content-type-aware tracking parameter overrides
 # ---------------------------------------------------------------------------
 
@@ -844,16 +916,21 @@ def _subject_to_crop_center(
     padding: float,
     subtitle_safe_ratio: float = 0.0,
     subject_kind: str = "face",
+    eye_anchor_rel: Optional[float] = None,
 ) -> Tuple[float, float]:
     """
     Convert a subject bounding box to the desired crop-window center.
-    Uses a slight upward bias so the face sits in the upper portion
-    of the crop, leaving room for text/chin — just like CapCut.
+    When eye_anchor_rel is provided (from MediaPipe Pose), places the eye
+    midpoint at rule-of-thirds (1/3 from top of crop) for premium framing.
+    Falls back to a slight upward bias (y + h * 0.34) when unavailable.
     """
     x, y, w, h = subject
-    # Face: focus on center-top; body: focus on visual mid-body
     cx = x + w / 2.0
-    if subject_kind == "body":
+    if eye_anchor_rel is not None and subject_kind != "body":
+        # Premium framing: eyes at rule-of-thirds (1/3 from crop top)
+        eye_y = y + h * eye_anchor_rel
+        cy = eye_y + crop_h * (0.5 - _EYE_CROP_THIRDS)
+    elif subject_kind == "body":
         cy = y + h * 0.50
     else:
         cy = y + h * 0.34
@@ -861,9 +938,11 @@ def _subject_to_crop_center(
     subject_ratio = (w * h) / max(1.0, float(frame_w * frame_h))
     if subject_ratio > 0.18:
         cx = cx * 0.55 + (frame_w / 2.0) * 0.45
-        cy = cy * 0.70 + (frame_h * 0.42) * 0.30
+        if eye_anchor_rel is None:
+            cy = cy * 0.70 + (frame_h * 0.42) * 0.30
     elif subject_ratio < 0.035:
-        cy = min(cy, y + h * 0.42)
+        if eye_anchor_rel is None:
+            cy = min(cy, y + h * 0.42)
 
     # Apply padding: zoom the crop window out around the subject
     # (padding > 0 means we follow a larger region, feels less claustrophobic)
@@ -1044,6 +1123,7 @@ def build_subject_path(
     last_subject: Optional[Tuple[int, int, int, int]] = None
     subjects_found_total = 0
     _btrack: Optional[_ByteTrackSubject] = None
+    _last_eye_rel: Optional[float] = None
 
     raw_centers: List[Tuple[float, float]] = []
     frame_idx = 0
@@ -1176,6 +1256,9 @@ def build_subject_path(
                             trackerless_confirm_streak,
                         )
                     last_subject = best
+                    _eye_rel = _get_eye_anchor_rel(small, best, detect_scale, _det_sy)
+                    if _eye_rel is not None:
+                        _last_eye_rel = _eye_rel
                     if _btrack is not None:
                         if not _btrack.update(best, gain=0.55):
                             _btrack = _ByteTrackSubject(best)
@@ -1186,7 +1269,7 @@ def build_subject_path(
         if subject is not None:
             cx, cy = _subject_to_crop_center(
                 subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding,
-                cfg.subtitle_safe_bottom_ratio
+                cfg.subtitle_safe_bottom_ratio, eye_anchor_rel=_last_eye_rel,
             )
             if not tracker_available:
                 cx, _, _ = _apply_trackerless_center_guard(
@@ -1200,7 +1283,7 @@ def build_subject_path(
         elif _btrack is not None and _btrack.is_alive(cfg.lost_subject_hold_frames):
             cx, cy = _subject_to_crop_center(
                 _btrack.get_subject(), crop_w, crop_h, src_w, src_h, cfg.subject_padding,
-                cfg.subtitle_safe_bottom_ratio
+                cfg.subtitle_safe_bottom_ratio, eye_anchor_rel=_last_eye_rel,
             )
             if not tracker_available:
                 cx, _, _ = _apply_trackerless_center_guard(
@@ -1215,7 +1298,7 @@ def build_subject_path(
             # Hold last known subject position (subject momentarily occluded)
             cx, cy = _subject_to_crop_center(
                 last_subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding,
-                cfg.subtitle_safe_bottom_ratio
+                cfg.subtitle_safe_bottom_ratio, eye_anchor_rel=_last_eye_rel,
             )
             if not tracker_available:
                 cx, _, _ = _apply_trackerless_center_guard(
@@ -1353,6 +1436,7 @@ def build_subject_path_scene(
         trackerless_confirm_streak = 0
         center_guard_active = False
         _btrack: Optional[_ByteTrackSubject] = None
+        _last_eye_rel: Optional[float] = None
 
         _tracking_start = time.monotonic()
         while frame_idx < end_frame:
@@ -1566,6 +1650,9 @@ def build_subject_path_scene(
                 if detection_confirmed:
                     detect_miss_intervals = 0
                     if locked_subject is not None:
+                        _eye_rel = _get_eye_anchor_rel(small, locked_subject, detect_scale, _det_sy)
+                        if _eye_rel is not None:
+                            _last_eye_rel = _eye_rel
                         if _btrack is not None:
                             if not _btrack.update(locked_subject, gain=0.55):
                                 _btrack = _ByteTrackSubject(locked_subject)
@@ -1601,7 +1688,8 @@ def build_subject_path_scene(
             if subject is not None:
                 target_cx, target_cy = _subject_to_crop_center(
                     subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding,
-                    cfg.subtitle_safe_bottom_ratio, locked_kind
+                    cfg.subtitle_safe_bottom_ratio, locked_kind,
+                    eye_anchor_rel=_last_eye_rel,
                 )
                 if not tracker_available:
                     target_cx, guard_hit, guard_reason = _apply_trackerless_center_guard(
