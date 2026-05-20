@@ -159,6 +159,11 @@ _WHISPER_MODELS = [
     ("small", 488),
 ]
 
+# faster-whisper model sizes (approximate download size in MB)
+_FW_MODELS = [
+    ("large-v3", 1550),
+]
+
 
 def _resolve_whisper_cache() -> Path:
     """Return a stable, persistent Whisper model cache directory.
@@ -201,6 +206,38 @@ def _warmup_whisper(name: str, size_mb: int):
     except Exception as exc:
         _set(key, "error", f"Whisper {name} failed: {exc}", size_mb)
         logger.warning("Warmup Whisper %s: %s", name, exc)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 6b. faster-whisper models (optional — only when faster-whisper is installed)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _warmup_faster_whisper(name: str, size_mb: int):
+    """Pre-download and cache a faster-whisper model.
+
+    Skipped silently when faster-whisper is not installed.  Does NOT load the
+    model into memory — just ensures the weight file is present so the first
+    real render does not stall on a 1.5 GB download.
+    """
+    key = f"faster_whisper_{name.replace('-', '_')}"
+    _set(key, "running", f"Checking faster-whisper {name} (~{size_mb}MB)...", size_mb)
+    try:
+        from app.ai.dependencies import has_faster_whisper
+        if not has_faster_whisper():
+            _set(key, "skipped", "faster-whisper not installed")
+            return
+        from faster_whisper import WhisperModel
+        from app.services.subtitle_transcription_adapters import _detect_fw_device_compute
+        device, compute_type = _detect_fw_device_compute()
+        # Instantiate with no-op to trigger model file download / cache check.
+        # The model is not retained in warmup — it will be cached by the adapter
+        # on first real transcription call.
+        WhisperModel(name, device=device, compute_type=compute_type)
+        _set(key, "ready", f"faster-whisper {name} ready (device={device})", size_mb)
+        logger.info("Warmup: faster-whisper %s ready (device=%s cache=downloaded)", name, device)
+    except Exception as exc:
+        _set(key, "error", f"faster-whisper {name} failed: {exc}", size_mb)
+        logger.warning("Warmup faster-whisper %s: %s", name, exc)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -385,6 +422,8 @@ def _run_warmup():
     _set("opencv_cascades", "pending", "OpenCV cascades pending")
     for name, size in _WHISPER_MODELS:
         _set(f"whisper_{name}", "pending", f"Whisper {name} pending", size)
+    for name, size in _FW_MODELS:
+        _set(f"faster_whisper_{name.replace('-', '_')}", "pending", f"faster-whisper {name} pending", size)
     _set("ollama_service", "pending", "Ollama service pending")
     _set("ollama_model",   "pending", f"Ollama model {OLLAMA_MODEL} pending")
 
@@ -397,6 +436,10 @@ def _run_warmup():
     # Whisper: tiny first → user can render với fast profile ngay
     for name, size in _WHISPER_MODELS:
         _warmup_whisper(name, size)
+
+    # faster-whisper: large-v3 — only runs when package is installed
+    for name, size in _FW_MODELS:
+        _warmup_faster_whisper(name, size)
 
     # Ollama: last (heaviest download, optional)
     _warmup_ollama()

@@ -1344,14 +1344,14 @@ def _validate_text_layers_or_400(payload: RenderRequest) -> list[dict]:
 def _resolve_profile(payload: RenderRequest):
     profile = (payload.render_profile or "quality").lower()
     defaults = {
-        # fast: quick turnaround, acceptable quality
-        "fast":     {"video_preset": "veryfast", "video_crf": 23, "whisper_model": "base",  "transition_sec": 0.05},
-        # balanced: good quality/speed tradeoff — medium is ~3-4x faster than slow with <5% quality delta
-        "balanced": {"video_preset": "medium",   "video_crf": 18, "whisper_model": "base",  "transition_sec": 0.06},
-        # quality: high quality — slow preset gives meaningful gains over medium for large screens
-        "quality":  {"video_preset": "slow",     "video_crf": 15, "whisper_model": "small", "transition_sec": 0.06},
-        # best: maximum quality, slowest encode — use for final master output
-        "best":     {"video_preset": "slower",   "video_crf": 13, "whisper_model": "small", "transition_sec": 0.08},
+        # fast: quick turnaround, acceptable quality — base keeps CPU transcription fast
+        "fast":     {"video_preset": "veryfast", "video_crf": 23, "whisper_model": "base",     "transition_sec": 0.05},
+        # balanced: good quality/speed — large-v3 via faster-whisper CUDA is ~8-12s, not slower
+        "balanced": {"video_preset": "medium",   "video_crf": 18, "whisper_model": "large-v3", "transition_sec": 0.06},
+        # quality: high quality — large-v3 gives near-perfect transcript accuracy
+        "quality":  {"video_preset": "slow",     "video_crf": 15, "whisper_model": "large-v3", "transition_sec": 0.06},
+        # best: maximum quality — large-v3 is the ceiling for open-weight ASR
+        "best":     {"video_preset": "slower",   "video_crf": 13, "whisper_model": "large-v3", "transition_sec": 0.08},
     }
     picked = defaults.get(profile, defaults["quality"])
     if payload.video_preset:

@@ -1,0 +1,81 @@
+# ROADMAP — Render Quality Upgrades
+## AI Output Quality Improvement Plan
+
+Last updated: 2026-05-20
+
+---
+
+## Active Track: OQ (Output Quality)
+
+### OQ-1 — Subtitle Foundation
+
+| ID | Title | Status | Risk | Scope |
+|---|---|---|---|---|
+| OQ-1.1 | faster-whisper large-v3 + WhisperX | ✅ Complete (2026-05-20) | Low | Transcription engine, word timing, CUDA path |
+| OQ-1.2 | PhoWhisper adapter for Vietnamese | Planned | Low | vi-VN transcription accuracy |
+| OQ-1.3 | Subtitle font system (Inter/Montserrat/Geist) | Planned | None | Visual quality |
+| OQ-1.4 | Premium subtitle animation (word-by-word pop) | Planned | Low | ASS animation |
+
+### OQ-2 — Scene Detection
+
+| ID | Title | Status | Risk | Scope |
+|---|---|---|---|---|
+| OQ-2.1 | Activate AdaptiveDetector | Planned | None | Catch gradual fades |
+| OQ-2.2 | Audio silence gap scoring | Planned | None | Additive signal |
+| OQ-2.3 | TransNetV2 integration | Future | Medium | Requires threshold recalibration |
+
+### OQ-3 — Reframe / Tracking
+
+| ID | Title | Status | Risk | Scope |
+|---|---|---|---|---|
+| OQ-3.1 | MediaPipe model_selection=1 (full-range) | Planned | None | Wide-shot face detection |
+| OQ-3.2 | ByteTrack inter-frame tracking | Planned | Low | Eliminate 533ms stale position |
+| OQ-3.3 | MediaPipe Pose (eye-level anchor) | Planned | Low | Better face framing |
+
+### OQ-4 — Narration / Voice
+
+| ID | Title | Status | Risk | Scope |
+|---|---|---|---|---|
+| OQ-4.1 | Edge-TTS + Claude SSML humanizer | Planned | None | Semantic pacing |
+| OQ-4.2 | BGM sidechain ducking | Planned | None | FFmpeg filter only |
+| OQ-4.3 | DeepFilterNet activation | Planned | None | Install package, adapter ready |
+| OQ-4.4 | MeloTTS adapter (vi-VN) | Planned | Medium | Self-host, new adapter |
+
+### OQ-5 — Future / S2+
+
+| ID | Title | Status | Risk | Scope |
+|---|---|---|---|---|
+| OQ-5.1 | CosyVoice2 voice cloning | Future | High | GPU required |
+| OQ-5.2 | SAM2 pixel segmentation | Future | High | Frame-level GPU |
+| OQ-5.3 | CLIP semantic scene scoring | Future | Medium | Additive signal |
+
+---
+
+## OQ-1.1 Completion Notes
+
+**Completed:** 2026-05-20
+
+**What shipped:**
+- `FasterWhisperAdapter` — faster-whisper large-v3, CUDA float16 auto-detect, CPU int8 fallback
+- `WhisperXAdapter` updated — CUDA detection, float16, large-v3 default, batch_size 8 on GPU
+- `_detect_fw_device_compute()` — shared CUDA detection via ctranslate2 (no torch dependency)
+- `transcribe_with_adapter()` default path — automatically uses faster-whisper when installed
+- Render profiles: balanced/quality/best → large-v3 (fast stays base)
+- Schema: added `"faster_whisper"` to `subtitle_transcription_engine` Literal
+- warmup.py: optional faster-whisper large-v3 warmup step
+- `extract_audio_for_transcription()` public helper in subtitle_engine.py
+
+**What did NOT change:**
+- Subtitle styles, fonts, animations, presets
+- ASS format output
+- SRT slice/timing logic
+- viral scoring, scene scoring, AI orchestrator
+- Transcript cache architecture (72h TTL, same key structure)
+- Render queue, multi-render, cancel logic
+- Any UI or API response format
+
+**Regression risks at ship:**
+- None observed. All fallbacks verified in code trace.
+- Vietnamese: correctly falls back to faster-whisper transcription (no alignment, full accuracy gain from large-v3)
+
+**Rollback:** `pip uninstall faster-whisper` → system auto-falls back to DefaultWhisperAdapter

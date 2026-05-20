@@ -1,15 +1,28 @@
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from app.ai.dependencies import has_whisperx
-from app.services.subtitle_engine import format_srt_timestamp, transcribe_to_srt
+from app.ai.dependencies import has_faster_whisper, has_whisperx
+from app.services.subtitle_engine import (
+    extract_audio_for_transcription,
+    format_srt_timestamp,
+    transcribe_to_srt,
+)
 
 _WORD_MIN_DURATION_SEC = 0.10
 _WORD_MIN_GAP_SEC = 0.01
+
+# ---------------------------------------------------------------------------
+# In-process faster-whisper model cache — one WhisperModel per
+# (model_name, device, compute_type) key.  Guarded by a threading.Lock so
+# that concurrent render jobs share one loaded model without re-initializing.
+# ---------------------------------------------------------------------------
+_FW_MODEL_CACHE: dict = {}
+_FW_MODEL_LOCK = threading.Lock()
 
 
 @dataclass
@@ -39,6 +52,94 @@ class SubtitleTranscriptionAdapter(Protocol):
     ) -> SubtitleTranscriptionResult:
         ...
 
+
+# ---------------------------------------------------------------------------
+# Shared CUDA detection helper
+# ---------------------------------------------------------------------------
+
+def _detect_fw_device_compute() -> tuple[str, str]:
+    """Return (device, compute_type) for faster-whisper / WhisperX.
+
+    Checks ctranslate2 CUDA device count — no PyTorch dependency required
+    for the faster-whisper path.  Falls back to CPU int8 if CUDA is absent
+    or ctranslate2 is not installed.
+    """
+    try:
+        import ctranslate2  # noqa: PLC0415
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda", "float16"
+    except Exception:
+        pass
+    return "cpu", "int8"
+
+
+def _get_fw_model(model_name: str, device: str, compute_type: str):
+    """Return a cached WhisperModel, loading it on first call per (model, device, compute)."""
+    cache_key = (model_name, device, compute_type)
+    with _FW_MODEL_LOCK:
+        if cache_key not in _FW_MODEL_CACHE:
+            from faster_whisper import WhisperModel  # noqa: PLC0415
+            _FW_MODEL_CACHE[cache_key] = WhisperModel(
+                model_name,
+                device=device,
+                compute_type=compute_type,
+            )
+        return _FW_MODEL_CACHE[cache_key]
+
+
+# ---------------------------------------------------------------------------
+# faster-whisper SRT writer
+# ---------------------------------------------------------------------------
+
+def _write_fw_srt(segments_iter, srt_path: str, *, word_level: bool) -> None:
+    """Write an SRT file from a faster-whisper segment iterator.
+
+    faster-whisper returns Segment namedtuples, not dicts.  This writer
+    converts them into the same normalised word-block format used by the
+    WhisperX adapter so the two paths are consistent.
+    """
+    segments = list(segments_iter)
+    blocks: list[dict] = []
+
+    if word_level:
+        raw_words: list[dict] = []
+        for seg in segments:
+            for word in (seg.words or []):
+                text = str(word.word).strip()
+                if not text or not any(ch.isalnum() for ch in text):
+                    continue
+                start = float(word.start)
+                end = float(word.end)
+                if start < 0 or end <= start:
+                    continue
+                raw_words.append({"start": start, "end": end, "text": text})
+        blocks = _normalize_whisperx_word_blocks(raw_words)
+
+    if not blocks:
+        # Segment-level fallback (also used when word_level=False)
+        for seg in segments:
+            text = str(seg.text).strip()
+            if not text:
+                continue
+            start = float(seg.start)
+            end = float(seg.end)
+            if end <= start:
+                continue
+            blocks.append({"start": start, "end": end, "text": text})
+
+    with Path(srt_path).open("w", encoding="utf-8") as f:
+        for idx, block in enumerate(blocks, start=1):
+            f.write(
+                f"{idx}\n"
+                f"{format_srt_timestamp(block['start'])} --> "
+                f"{format_srt_timestamp(block['end'])}\n"
+                f"{block['text']}\n\n"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Adapters
+# ---------------------------------------------------------------------------
 
 class DefaultWhisperAdapter:
     engine_name = "default"
@@ -71,7 +172,83 @@ class DefaultWhisperAdapter:
         )
 
 
+class FasterWhisperAdapter:
+    """Transcription adapter using faster-whisper (CTranslate2 backend).
+
+    Automatically selects CUDA float16 when an NVIDIA GPU is available,
+    falls back to CPU int8 otherwise.  Compatible with large-v3 and all
+    other faster-whisper model sizes.
+
+    Graceful fallback: on any runtime error, returns a result with a
+    non-empty warnings list so the caller can fall back to DefaultWhisperAdapter.
+    """
+    engine_name = "faster_whisper"
+
+    def is_available(self) -> bool:
+        return has_faster_whisper()
+
+    def transcribe(
+        self,
+        video_path: str,
+        readable_srt_path: str,
+        *,
+        model_name: str,
+        retry_count: int,
+        highlight_per_word: bool,
+    ) -> SubtitleTranscriptionResult:
+        start = time.perf_counter()
+
+        if not self.is_available():
+            return SubtitleTranscriptionResult(
+                readable_srt_path=readable_srt_path,
+                engine=self.engine_name,
+                aligned=False,
+                warnings=["faster_whisper_unavailable"],
+                elapsed_ms=0,
+            )
+
+        wav_path = str(Path(readable_srt_path).with_suffix(".fw.wav"))
+        try:
+            extract_audio_for_transcription(video_path, wav_path, retry_count=retry_count)
+
+            device, compute_type = _detect_fw_device_compute()
+            _model_name = model_name or "large-v3"
+            model = _get_fw_model(_model_name, device, compute_type)
+
+            segments_iter, _info = model.transcribe(
+                wav_path,
+                word_timestamps=highlight_per_word,
+            )
+            _write_fw_srt(segments_iter, readable_srt_path, word_level=highlight_per_word)
+
+            return SubtitleTranscriptionResult(
+                readable_srt_path=readable_srt_path,
+                engine=self.engine_name,
+                aligned=False,
+                elapsed_ms=int((time.perf_counter() - start) * 1000),
+            )
+        except Exception as exc:
+            return SubtitleTranscriptionResult(
+                readable_srt_path=readable_srt_path,
+                engine=self.engine_name,
+                aligned=False,
+                warnings=[f"faster_whisper_runtime_error:{type(exc).__name__}:{exc}"],
+                elapsed_ms=int((time.perf_counter() - start) * 1000),
+            )
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
+
 class WhisperXAdapter:
+    """Transcription adapter using WhisperX (faster-whisper + forced wav2vec2 alignment).
+
+    When CUDA is available, uses float16 for both transcription and alignment.
+    Defaults to large-v3 for maximum accuracy.
+
+    Language support for forced alignment: en, de, fr, es, it, ja, zh, nl, uk, pt.
+    For languages without an alignment model (e.g. vi), alignment fails gracefully
+    and the result falls back to the faster-whisper path.
+    """
     engine_name = "whisperx"
 
     def is_available(self) -> bool:
@@ -98,14 +275,14 @@ class WhisperXAdapter:
         out_path = Path(readable_srt_path)
         tmp_path = out_path.with_name(out_path.stem + ".whisperx.tmp" + out_path.suffix)
         try:
-            # Lazy import only. WhisperX, torch, and alignment models must never load at startup.
-            import whisperx  # type: ignore
+            import whisperx  # noqa: PLC0415
 
-            device = "cpu"
-            compute_type = "int8"
-            batch_size = 4
+            device, compute_type = _detect_fw_device_compute()
+            batch_size = 8 if device == "cuda" else 4
+            _model_name = model_name or "large-v3"
+
             model = whisperx.load_model(
-                model_name or "base",
+                _model_name,
                 device,
                 compute_type=compute_type,
             )
@@ -143,6 +320,10 @@ class WhisperXAdapter:
             )
 
 
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+
 def transcribe_with_adapter(
     video_path: str,
     readable_srt_path: str,
@@ -153,10 +334,51 @@ def transcribe_with_adapter(
     highlight_per_word: bool,
     logger=None,
 ) -> SubtitleTranscriptionResult:
+    """Route transcription to the appropriate adapter.
+
+    engine="default"
+        Transparent upgrade: uses FasterWhisperAdapter when faster-whisper is
+        installed, otherwise falls back to DefaultWhisperAdapter.  No caller
+        change required — existing payloads automatically benefit.
+
+    engine="faster_whisper"
+        Explicit faster-whisper request.  Falls back to DefaultWhisperAdapter
+        on error, appending warning codes to the result.
+
+    engine="whisperx"
+        WhisperX with wav2vec2 forced alignment.  Falls back first to
+        FasterWhisperAdapter (if available), then to DefaultWhisperAdapter.
+    """
     requested = str(engine or "default").strip().lower()
     default_adapter = DefaultWhisperAdapter()
 
+    # ------------------------------------------------------------------
+    # engine="default" — transparent upgrade when faster-whisper present
+    # ------------------------------------------------------------------
     if requested == "default":
+        if has_faster_whisper():
+            result = FasterWhisperAdapter().transcribe(
+                video_path,
+                readable_srt_path,
+                model_name=model_name,
+                retry_count=retry_count,
+                highlight_per_word=highlight_per_word,
+            )
+            if not result.warnings:
+                if logger is not None:
+                    logger.info(
+                        "subtitle_transcription_adapter_used requested=default used=faster_whisper "
+                        "device=%s elapsed_ms=%d",
+                        "cuda" if "cuda" in result.engine else "cpu",
+                        result.elapsed_ms,
+                    )
+                return result
+            if logger is not None:
+                logger.warning(
+                    "subtitle_transcription_adapter_fallback requested=default "
+                    "faster_whisper_warnings=%s fallback=default_whisper",
+                    ",".join(result.warnings),
+                )
         return default_adapter.transcribe(
             video_path,
             readable_srt_path,
@@ -165,6 +387,47 @@ def transcribe_with_adapter(
             highlight_per_word=highlight_per_word,
         )
 
+    # ------------------------------------------------------------------
+    # engine="faster_whisper" — explicit request
+    # ------------------------------------------------------------------
+    if requested == "faster_whisper":
+        fw_result = FasterWhisperAdapter().transcribe(
+            video_path,
+            readable_srt_path,
+            model_name=model_name,
+            retry_count=retry_count,
+            highlight_per_word=highlight_per_word,
+        )
+        if not fw_result.warnings:
+            if logger is not None:
+                logger.info(
+                    "subtitle_transcription_adapter_used requested=faster_whisper used=faster_whisper "
+                    "aligned=%s elapsed_ms=%d",
+                    fw_result.aligned,
+                    fw_result.elapsed_ms,
+                )
+            return fw_result
+        warning = fw_result.warnings[0] if fw_result.warnings else "faster_whisper_fallback"
+        if logger is not None:
+            logger.warning(
+                "subtitle_transcription_adapter_fallback requested=faster_whisper "
+                "warning=%s fallback=default elapsed_ms=%d",
+                warning,
+                fw_result.elapsed_ms,
+            )
+        result = default_adapter.transcribe(
+            video_path,
+            readable_srt_path,
+            model_name=model_name,
+            retry_count=retry_count,
+            highlight_per_word=highlight_per_word,
+        )
+        result.warnings.extend(fw_result.warnings)
+        return result
+
+    # ------------------------------------------------------------------
+    # engine="whisperx" — WhisperX alignment, two-level fallback
+    # ------------------------------------------------------------------
     if requested == "whisperx":
         whisperx_result = WhisperXAdapter().transcribe(
             video_path,
@@ -176,22 +439,41 @@ def transcribe_with_adapter(
         if whisperx_result.aligned:
             if logger is not None:
                 logger.info(
-                    "subtitle_transcription_adapter_used requested=%s used=%s aligned=%s elapsed_ms=%d",
-                    requested,
-                    whisperx_result.engine,
+                    "subtitle_transcription_adapter_used requested=whisperx used=whisperx "
+                    "aligned=%s elapsed_ms=%d",
                     whisperx_result.aligned,
                     whisperx_result.elapsed_ms,
                 )
             return whisperx_result
 
+        # WhisperX failed — try faster-whisper before falling all the way back
         warning = whisperx_result.warnings[0] if whisperx_result.warnings else "whisperx_fallback"
         if logger is not None:
             logger.warning(
-                "subtitle_transcription_adapter_fallback requested=%s warning=%s fallback=default elapsed_ms=%d",
-                requested,
+                "subtitle_transcription_adapter_fallback requested=whisperx "
+                "warning=%s fallback=faster_whisper elapsed_ms=%d",
                 warning,
                 whisperx_result.elapsed_ms,
             )
+
+        if has_faster_whisper():
+            fw_result = FasterWhisperAdapter().transcribe(
+                video_path,
+                readable_srt_path,
+                model_name=model_name,
+                retry_count=retry_count,
+                highlight_per_word=highlight_per_word,
+            )
+            if not fw_result.warnings:
+                fw_result.warnings.extend(whisperx_result.warnings)
+                return fw_result
+            if logger is not None:
+                logger.warning(
+                    "subtitle_transcription_adapter_fallback requested=whisperx "
+                    "faster_whisper_warning=%s fallback=default",
+                    fw_result.warnings[0] if fw_result.warnings else "fw_fallback",
+                )
+
         result = default_adapter.transcribe(
             video_path,
             readable_srt_path,
@@ -202,6 +484,9 @@ def transcribe_with_adapter(
         result.warnings.extend(whisperx_result.warnings)
         return result
 
+    # ------------------------------------------------------------------
+    # Unknown engine — log and use default path
+    # ------------------------------------------------------------------
     if logger is not None:
         logger.warning(
             "subtitle_transcription_adapter_unknown requested=%s fallback=default",
@@ -217,6 +502,10 @@ def transcribe_with_adapter(
     result.warnings.append("unknown_subtitle_transcription_engine")
     return result
 
+
+# ---------------------------------------------------------------------------
+# WhisperX SRT writer (unchanged from original — preserved for compatibility)
+# ---------------------------------------------------------------------------
 
 def _write_whisperx_srt(result: dict, srt_path: str, *, word_level: bool) -> None:
     segments = list((result or {}).get("segments", []) or [])
@@ -267,7 +556,7 @@ def _is_punctuation_only(text: str) -> bool:
 
 
 def _normalize_whisperx_word_blocks(words: list[dict]) -> list[dict]:
-    """Apply tiny visual-stability normalization to WhisperX word timings only."""
+    """Apply timing normalisation to per-word blocks (shared by WhisperX and faster-whisper paths)."""
     normalized: list[dict] = []
     prev_end: float | None = None
 

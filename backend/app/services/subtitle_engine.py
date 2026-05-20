@@ -263,6 +263,23 @@ def has_audio_stream(video_path: str) -> bool:
     return _has_audio_stream(video_path)
 
 
+def extract_audio_for_transcription(video_path: str, wav_path: str, retry_count: int = 2) -> None:
+    """Extract 16 kHz mono WAV from *video_path* for speech transcription engines.
+
+    Used by both the default Whisper path and the faster-whisper adapter so that
+    audio extraction logic lives in one place.  The caller is responsible for
+    deleting *wav_path* after transcription completes.
+    """
+    _ensure_ffmpeg_in_path_for_whisper()
+    _run_with_retry(
+        [
+            get_ffmpeg_bin(), "-y", "-i", video_path,
+            "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", wav_path,
+        ],
+        retries=retry_count,
+    )
+
+
 def transcribe_to_srt(
     video_path: str,
     srt_path: str,

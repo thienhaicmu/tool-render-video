@@ -153,7 +153,7 @@ class RenderRequest(BaseModel):
     subtitle_viral_min_score: int = 0
     subtitle_viral_top_ratio: float = 1.0
     subtitle_only_viral_high: bool = False
-    subtitle_transcription_engine: Literal["default", "whisperx"] = "default"
+    subtitle_transcription_engine: Literal["default", "faster_whisper", "whisperx"] = "default"
     highlight_per_word: bool = False
     sub_font_size: int = 46
     sub_font: str = "Bungee"
