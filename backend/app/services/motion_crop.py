@@ -358,6 +358,91 @@ def _load_cascade(filename: str) -> Optional[cv2.CascadeClassifier]:
         return None
 
 
+def _iou_xywh(a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> float:
+    """Intersection-over-Union for two (x, y, w, h) boxes. Returns [0, 1]."""
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    ix = max(ax, bx)
+    iy = max(ay, by)
+    iw = max(0, min(ax + aw, bx + bw) - ix)
+    ih = max(0, min(ay + ah, by + bh) - iy)
+    inter = iw * ih
+    union = aw * ah + bw * bh - inter
+    return float(inter) / max(float(union), 1.0)
+
+
+class _ByteTrackSubject:
+    """Kalman-inspired single-subject tracker for reframe stability.
+
+    Maintains (cx, cy, w, h, vx, vy) state between detections.
+    predict() advances position by velocity (with gentle damping).
+    update() lerps toward measurement and computes new velocity.
+    Rejects measurements with IoU < 0.10 after ≥3 coast frames.
+
+    Eliminates two problems from the OpenCV-tracker-only approach:
+      1. Static last_subject hold → replaced by velocity-predicted position.
+      2. Unchecked tracker drift accepted → IoU gate rejects bad tracker output.
+
+    Uses existing cfg.lost_subject_hold_frames to bound coast lifetime.
+    """
+
+    _MIN_VALIDATE_COAST = 3   # frames coasted before IoU rejection kicks in
+    _MIN_IOU = 0.10           # IoU below this after coast → reject update
+
+    def __init__(self, box: Tuple[int, int, int, int]) -> None:
+        x, y, w, h = box
+        self.cx = float(x + w / 2)
+        self.cy = float(y + h / 2)
+        self.w = max(1.0, float(w))
+        self.h = max(1.0, float(h))
+        self.vx = 0.0
+        self.vy = 0.0
+        self.coast = 0
+
+    def predict(self) -> None:
+        """Advance state one frame using current velocity (no measurement)."""
+        self.cx += self.vx
+        self.cy += self.vy
+        self.vx *= 0.90   # gentle damping — prevents runaway drift
+        self.vy *= 0.90
+        self.coast += 1
+
+    def update(self, box: Tuple[int, int, int, int], gain: float = 0.5) -> bool:
+        """Update from a detection or tracker measurement.
+
+        Returns False if the measurement is rejected (coasted + IoU too low).
+        Caller should create a new _ByteTrackSubject when rejected after long coast.
+        """
+        x, y, w, h = box
+        det_cx = float(x + w / 2)
+        det_cy = float(y + h / 2)
+
+        if self.coast >= self._MIN_VALIDATE_COAST:
+            if _iou_xywh(self._to_box(), box) < self._MIN_IOU:
+                return False
+
+        # Update velocity from observed displacement, then lerp position.
+        self.vx = (det_cx - self.cx) * gain
+        self.vy = (det_cy - self.cy) * gain
+        self.cx = self.cx * (1.0 - gain) + det_cx * gain
+        self.cy = self.cy * (1.0 - gain) + det_cy * gain
+        self.w = self.w * 0.90 + max(1.0, float(w)) * 0.10
+        self.h = self.h * 0.90 + max(1.0, float(h)) * 0.10
+        self.coast = 0
+        return True
+
+    def is_alive(self, max_coast: int) -> bool:
+        return self.coast <= max_coast
+
+    def get_subject(self) -> Tuple[int, int, int, int]:
+        return self._to_box()
+
+    def _to_box(self) -> Tuple[int, int, int, int]:
+        x = int(self.cx - self.w / 2)
+        y = int(self.cy - self.h / 2)
+        return (max(0, x), max(0, y), max(1, int(self.w)), max(1, int(self.h)))
+
+
 def _create_tracker():
     """Create fast available OpenCV tracker (KCF > CSRT > MOSSE)."""
     global _TRACKER_CAPABILITY_LOGGED
@@ -958,6 +1043,7 @@ def build_subject_path(
     tracking = False
     last_subject: Optional[Tuple[int, int, int, int]] = None
     subjects_found_total = 0
+    _btrack: Optional[_ByteTrackSubject] = None
 
     raw_centers: List[Tuple[float, float]] = []
     frame_idx = 0
@@ -1000,6 +1086,11 @@ def build_subject_path(
 
         subject: Optional[Tuple[int, int, int, int]] = None
 
+        if _btrack is not None:
+            _btrack.predict()
+            if not _btrack.is_alive(cfg.lost_subject_hold_frames):
+                _btrack = None
+
         # --- Step 1: update tracker ---
         if tracking and tracker is not None:
             ok_track, bbox = tracker.update(frame)
@@ -1009,6 +1100,11 @@ def build_subject_path(
                 if w > 4 and h > 4 and x >= 0 and y >= 0:
                     subject = (x, y, w, h)
                     last_subject = subject
+                    if _btrack is not None:
+                        if _btrack.update(subject, gain=0.20):
+                            subject = _btrack.get_subject()
+                        else:
+                            tracking = False
                 else:
                     tracking = False
             else:
@@ -1080,11 +1176,30 @@ def build_subject_path(
                             trackerless_confirm_streak,
                         )
                     last_subject = best
+                    if _btrack is not None:
+                        if not _btrack.update(best, gain=0.55):
+                            _btrack = _ByteTrackSubject(best)
+                    else:
+                        _btrack = _ByteTrackSubject(best)
 
         # --- Step 3: compute crop center ---
         if subject is not None:
             cx, cy = _subject_to_crop_center(
                 subject, crop_w, crop_h, src_w, src_h, cfg.subject_padding,
+                cfg.subtitle_safe_bottom_ratio
+            )
+            if not tracker_available:
+                cx, _, _ = _apply_trackerless_center_guard(
+                    cx,
+                    default_cx,
+                    src_w,
+                    crop_w,
+                    trackerless_confidence,
+                    trackerless_confirm_streak,
+                )
+        elif _btrack is not None and _btrack.is_alive(cfg.lost_subject_hold_frames):
+            cx, cy = _subject_to_crop_center(
+                _btrack.get_subject(), crop_w, crop_h, src_w, src_h, cfg.subject_padding,
                 cfg.subtitle_safe_bottom_ratio
             )
             if not tracker_available:
@@ -1237,6 +1352,7 @@ def build_subject_path_scene(
         trackerless_confidence = 0.0
         trackerless_confirm_streak = 0
         center_guard_active = False
+        _btrack: Optional[_ByteTrackSubject] = None
 
         _tracking_start = time.monotonic()
         while frame_idx < end_frame:
@@ -1268,6 +1384,11 @@ def build_subject_path_scene(
 
             subject: Optional[Tuple[int, int, int, int]] = None
 
+            if _btrack is not None:
+                _btrack.predict()
+                if not _btrack.is_alive(cfg.lost_subject_hold_frames):
+                    _btrack = None
+
             if tracking and tracker is not None:
                 ok_track, bbox = tracker.update(frame)
                 if ok_track:
@@ -1276,6 +1397,11 @@ def build_subject_path_scene(
                         subject = (x, y, w, h)
                         locked_subject = subject
                         lost_frames = 0
+                        if _btrack is not None:
+                            if _btrack.update(subject, gain=0.20):
+                                subject = _btrack.get_subject()
+                            else:
+                                tracking = False
                     else:
                         tracking = False
                 else:
@@ -1439,6 +1565,12 @@ def build_subject_path_scene(
                             tracking = True
                 if detection_confirmed:
                     detect_miss_intervals = 0
+                    if locked_subject is not None:
+                        if _btrack is not None:
+                            if not _btrack.update(locked_subject, gain=0.55):
+                                _btrack = _ByteTrackSubject(locked_subject)
+                        else:
+                            _btrack = _ByteTrackSubject(locked_subject)
                 elif locked_subject is not None and not tracking:
                     detect_miss_intervals += 1
 
