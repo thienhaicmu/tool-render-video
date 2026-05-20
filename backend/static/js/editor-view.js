@@ -1345,7 +1345,7 @@ function _evLoadVideo(src) {
         _evUpdateInspAiPanel(EditorState.getState());
       });
     }
-    if (typeof SmartDefaults !== 'undefined') SmartDefaults.onVideoLoaded(_ev, video);
+    if (typeof SmartDefaults !== 'undefined') requestAnimationFrame(function () { SmartDefaults.onVideoLoaded(_ev, video); });
   };
   video.onerror = () => {
     qs('evLoadingText').textContent = 'Preview unavailable';

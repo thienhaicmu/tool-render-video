@@ -2970,23 +2970,25 @@
 }
 .sd-dismiss:hover { opacity: 1; }
 
+/* FIX 2: fieldLabel becomes a flex row when a chip is present */
+.sd-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .sd-chip {
-  display: inline-block;
-  margin-top: 4px;
   font-size: 10px;
   font-weight: 500;
-  padding: 2px 7px;
+  padding: 1px 6px;
   border-radius: var(--r-pill);
   background: var(--primary-muted);
   color: var(--primary);
   border: 1px solid var(--primary-border);
   letter-spacing: 0.01em;
   pointer-events: none;
-}
-
-option.sd-recommended {
-  background-color: rgba(77, 124, 255, 0.12);
-  font-weight: 500;
+  flex-shrink: 0;
+  text-transform: none;
 }
 
 /* =======================================================

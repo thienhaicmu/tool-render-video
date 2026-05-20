@@ -1,5 +1,5 @@
-// ── Smart Defaults (S1.1) ────────────────────────────────────────────────────
-// Passive suggestion engine. Adds recommendation indicators to editor controls
+// ── Smart Defaults (S1.1A) ───────────────────────────────────────────────────
+// Passive suggestion engine. Adds recommendation chips to editor field labels
 // based on video content profile detected from title, duration, and dimensions.
 //
 // NEVER mutates form values automatically. Suggestions only. Creator owns all
@@ -12,7 +12,7 @@ var SmartDefaults = (function () {
   var _profile     = null;
   var _suggestions = {};
   var _dirty       = {};    // fields creator manually changed this session
-  var _dismissed   = false; // strip dismissed for current video session
+  var _dismissed   = false; // strip dismissed (chips remain visible)
   var _listenersBound = false;
 
   // ── Profile strip copy ────────────────────────────────────────────────────
@@ -55,6 +55,8 @@ var SmartDefaults = (function () {
   }
 
   // ── Build suggestions for the 3 tracked fields ───────────────────────────
+  // FIX 3: 'tiktok_bounce_v1' label changed from 'Viral' → 'TikTok' to avoid
+  // confusion with the Video Style "Viral" option.
   function _buildSuggestions(profile) {
     if (profile === 'podcast_interview') return {
       aspect_ratio:   { selectId: 'evFrameRatioSelect', value: '9:16',            label: '9:16' },
@@ -64,7 +66,7 @@ var SmartDefaults = (function () {
     if (profile === 'talking_head_vertical') return {
       aspect_ratio:   { selectId: 'evFrameRatioSelect', value: '9:16',            label: '9:16' },
       reframe_mode:   { selectId: 'evReframeSelect',    value: 'fast_center',     label: 'Center' },
-      subtitle_style: { selectId: 'evSubStyle',         value: 'tiktok_bounce_v1',label: 'Viral' },
+      subtitle_style: { selectId: 'evSubStyle',         value: 'tiktok_bounce_v1',label: 'TikTok' },
     };
     if (profile === 'screen_recording') return {
       aspect_ratio:   { selectId: 'evFrameRatioSelect', value: '16:9',            label: '16:9' },
@@ -94,7 +96,10 @@ var SmartDefaults = (function () {
     if (el) el.remove();
   }
 
-  // ── DOM: per-field chip + option marking ──────────────────────────────────
+  // ── DOM: per-field chip in field label row ────────────────────────────────
+  // FIX 2: chip injected INSIDE the .fieldLabel span (not after the <select>).
+  // Result: "Frame Ratio    Suggested" on one row via .sd-label-row flex CSS.
+  // FIX 1: no option.sd-recommended — <option> styling is cross-browser unreliable.
   var _SELECT_IDS = {
     aspect_ratio:   'evFrameRatioSelect',
     reframe_mode:   'evReframeSelect',
@@ -106,36 +111,40 @@ var SmartDefaults = (function () {
     var sel = document.getElementById(sug.selectId);
     if (!sel) return;
 
-    // Mark the suggested option
-    Array.prototype.forEach.call(sel.options, function (opt) {
-      opt.classList.toggle('sd-recommended', opt.value === sug.value);
-    });
-
-    // Chip: one per field, injected after the <select>
+    // One chip per field — skip if already rendered
     if (document.getElementById('sdChip_' + fieldId)) return;
+
+    // Find the .fieldLabel span that labels this select
+    var labelWrap = sel.closest('label');
+    var fieldLabelSpan = labelWrap ? labelWrap.querySelector('.fieldLabel') : null;
+    if (!fieldLabelSpan) return;
+
     var chip = document.createElement('span');
     chip.id        = 'sdChip_' + fieldId;
     chip.className = 'sd-chip';
-    chip.textContent = 'Recommended: ' + sug.label;
-    if (sel.nextSibling) sel.parentNode.insertBefore(chip, sel.nextSibling);
-    else                 sel.parentNode.appendChild(chip);
+    chip.textContent = sug.label;
+
+    // Turn fieldLabel into a flex row so chip floats to the right
+    fieldLabelSpan.classList.add('sd-label-row');
+    fieldLabelSpan.appendChild(chip);
   }
 
   function _clearField(fieldId) {
     var chip = document.getElementById('sdChip_' + fieldId);
-    if (chip) chip.remove();
-    var sel = document.getElementById(_SELECT_IDS[fieldId] || '');
-    if (sel) Array.prototype.forEach.call(sel.options, function (opt) {
-      opt.classList.remove('sd-recommended');
-    });
+    if (chip) {
+      // Remove flex class from parent fieldLabel before removing chip
+      var parent = chip.parentElement;
+      if (parent) parent.classList.remove('sd-label-row');
+      chip.remove();
+    }
   }
 
   function _clearAll() {
     Object.keys(_SELECT_IDS).forEach(_clearField);
   }
 
+  // FIX 5: chips are independent of strip dismiss — no _dismissed guard here.
   function _renderSuggestions(suggestions) {
-    if (_dismissed) return;
     Object.keys(suggestions).forEach(function (field) {
       if (!_dirty[field]) _applyField(field, suggestions[field]);
     });
@@ -214,19 +223,19 @@ var SmartDefaults = (function () {
     _clearAll();
   }
 
-  // Strip dismiss button handler — hides all suggestions for current session
+  // FIX 5: dismiss ONLY hides the strip. Chips remain so creator can still see
+  // field-level suggestions without the explanatory header.
   function _dismiss() {
     _dismissed = true;
     _removeStrip();
-    _clearAll();
   }
 
   return {
-    onVideoLoaded:    onVideoLoaded,
+    onVideoLoaded:     onVideoLoaded,
     onPlatformChanged: onPlatformChanged,
-    onPresetApplied:  onPresetApplied,
-    markDirty:        markDirty,
-    reset:            reset,
-    _dismiss:         _dismiss,
+    onPresetApplied:   onPresetApplied,
+    markDirty:         markDirty,
+    reset:             reset,
+    _dismiss:          _dismiss,
   };
 }());
