@@ -11,7 +11,7 @@ Last updated: 2026-05-20
 
 | ID | Title | Status | Risk | Scope |
 |---|---|---|---|---|
-| OQ-1.1 | faster-whisper large-v3 + WhisperX | ✅ Complete (2026-05-20) | Low | Transcription engine, word timing, CUDA path |
+| OQ-1.1 | faster-whisper large-v3 + WhisperX | ✅ Complete + Hardened (2026-05-20) | Low | Transcription engine, word timing, CUDA path |
 | OQ-1.2 | PhoWhisper adapter for Vietnamese | Planned | Low | vi-VN transcription accuracy |
 | OQ-1.3 | Subtitle font system (Inter/Montserrat/Geist) | Planned | None | Visual quality |
 | OQ-1.4 | Premium subtitle animation (word-by-word pop) | Planned | Low | ASS animation |
@@ -51,11 +51,11 @@ Last updated: 2026-05-20
 
 ---
 
-## OQ-1.1 Completion Notes
+## OQ-1.1 + OQ-1.1A Completion Notes
 
-**Completed:** 2026-05-20
+**Completed:** 2026-05-20 (OQ-1.1) + 2026-05-20 (OQ-1.1A hardening)
 
-**What shipped:**
+**What shipped (OQ-1.1):**
 - `FasterWhisperAdapter` — faster-whisper large-v3, CUDA float16 auto-detect, CPU int8 fallback
 - `WhisperXAdapter` updated — CUDA detection, float16, large-v3 default, batch_size 8 on GPU
 - `_detect_fw_device_compute()` — shared CUDA detection via ctranslate2 (no torch dependency)
@@ -64,6 +64,14 @@ Last updated: 2026-05-20
 - Schema: added `"faster_whisper"` to `subtitle_transcription_engine` Literal
 - warmup.py: optional faster-whisper large-v3 warmup step
 - `extract_audio_for_transcription()` public helper in subtitle_engine.py
+
+**Hardening applied (OQ-1.1A):**
+- `SUPPORTED_ALIGNMENT_LANGUAGES` frozenset — language gate before wav2vec2 alignment
+- WhisperXAdapter language gate: unsupported languages skip alignment, write SRT directly, no second transcription pass
+- Dispatch: `language_not_supported` result treated as success — no fallback chain triggered
+- `_get_fw_model()` GPU safety: CUDA failure → CPU int8 retry, not full fallback to openai-whisper
+- Profile rebalance: balanced → `small` (was `large-v3` — too slow for CPU users)
+- Warmup comment corrected
 
 **What did NOT change:**
 - Subtitle styles, fonts, animations, presets
@@ -76,6 +84,6 @@ Last updated: 2026-05-20
 
 **Regression risks at ship:**
 - None observed. All fallbacks verified in code trace.
-- Vietnamese: correctly falls back to faster-whisper transcription (no alignment, full accuracy gain from large-v3)
+- Vietnamese: single-pass transcription, SRT written from transcription result, no alignment warning loop
 
 **Rollback:** `pip uninstall faster-whisper` → system auto-falls back to DefaultWhisperAdapter

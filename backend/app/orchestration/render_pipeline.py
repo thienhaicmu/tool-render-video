@@ -1346,8 +1346,8 @@ def _resolve_profile(payload: RenderRequest):
     defaults = {
         # fast: quick turnaround, acceptable quality — base keeps CPU transcription fast
         "fast":     {"video_preset": "veryfast", "video_crf": 23, "whisper_model": "base",     "transition_sec": 0.05},
-        # balanced: good quality/speed — large-v3 via faster-whisper CUDA is ~8-12s, not slower
-        "balanced": {"video_preset": "medium",   "video_crf": 18, "whisper_model": "large-v3", "transition_sec": 0.06},
+        # balanced: good quality/speed — small keeps CPU latency acceptable (~30s vs 90-120s for large-v3)
+        "balanced": {"video_preset": "medium",   "video_crf": 18, "whisper_model": "small",    "transition_sec": 0.06},
         # quality: high quality — large-v3 gives near-perfect transcript accuracy
         "quality":  {"video_preset": "slow",     "video_crf": 15, "whisper_model": "large-v3", "transition_sec": 0.06},
         # best: maximum quality — large-v3 is the ceiling for open-weight ASR

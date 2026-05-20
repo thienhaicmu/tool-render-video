@@ -213,11 +213,12 @@ def _warmup_whisper(name: str, size_mb: int):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _warmup_faster_whisper(name: str, size_mb: int):
-    """Pre-download and cache a faster-whisper model.
+    """Pre-download and verify a faster-whisper model.
 
-    Skipped silently when faster-whisper is not installed.  Does NOT load the
-    model into memory — just ensures the weight file is present so the first
-    real render does not stall on a 1.5 GB download.
+    Skipped silently when faster-whisper is not installed.  Loads the model
+    to trigger file download and verify CUDA init; the instance is not retained
+    (GC'd on return) and will be re-loaded and cached by the adapter on first
+    real transcription call.
     """
     key = f"faster_whisper_{name.replace('-', '_')}"
     _set(key, "running", f"Checking faster-whisper {name} (~{size_mb}MB)...", size_mb)
@@ -229,9 +230,6 @@ def _warmup_faster_whisper(name: str, size_mb: int):
         from faster_whisper import WhisperModel
         from app.services.subtitle_transcription_adapters import _detect_fw_device_compute
         device, compute_type = _detect_fw_device_compute()
-        # Instantiate with no-op to trigger model file download / cache check.
-        # The model is not retained in warmup — it will be cached by the adapter
-        # on first real transcription call.
         WhisperModel(name, device=device, compute_type=compute_type)
         _set(key, "ready", f"faster-whisper {name} ready (device={device})", size_mb)
         logger.info("Warmup: faster-whisper %s ready (device=%s cache=downloaded)", name, device)

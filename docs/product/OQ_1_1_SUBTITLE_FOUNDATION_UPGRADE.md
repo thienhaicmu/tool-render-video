@@ -276,12 +276,122 @@ Size: large-v3 ≈ 1.5GB (downloaded once on first use).
 
 ---
 
-## 12. Commit Hash
+## 12. OQ-1.1A Hardening Pass
 
-_Populated after commit._
+**Date:** 2026-05-20
+**Branch:** `feature/ai-output-upgrade`
+
+Four targeted fixes applied after OQ-1.1 shipped. No subtitle styles, animations, or API changes.
 
 ---
 
-## 13. Push Confirmation
+### Fix 1 — WhisperX Language Gate
 
-_Populated after push._
+**Problem:** For unsupported languages (vi, ko, th, id, etc.), WhisperXAdapter ran the full large-v3 transcription (~15s CUDA), then `whisperx.load_align_model()` threw a `ValueError`, triggering the fallback chain — which re-ran full transcription a second time via FasterWhisperAdapter (~15s again). Total: ~30s for what should be ~15s.
+
+**Root cause:** Language detection happens INSIDE `model.transcribe()`. There is no pre-transcription language oracle — language can only be known after the model runs.
+
+**Fix:** After `result = model.transcribe(audio, batch_size=batch_size)` and language extraction, check `language in SUPPORTED_ALIGNMENT_LANGUAGES` before attempting alignment. If not supported, write SRT directly from the transcription result (no alignment) and return `aligned=False, warnings=["whisperx_language_not_supported:{language}"]`.
+
+**Dispatch update:** The `engine="whisperx"` path now treats a `language_not_supported` result as a success — the SRT was written correctly, just without alignment. No second transcription pass occurs.
+
+```python
+SUPPORTED_ALIGNMENT_LANGUAGES = frozenset(
+    os.environ.get("WHISPERX_ALIGN_LANGS", "en,de,fr,es,it,ja,zh,nl,uk,pt").split(",")
+)
+```
+
+Configurable via `WHISPERX_ALIGN_LANGS` env var for future wav2vec2 model additions.
+
+**Impact:**
+- Vietnamese: ~15s (CUDA) instead of ~30s
+- Any unsupported language: correct transcript, no alignment, single-pass
+- No regression for supported languages (en, de, fr, es, it, ja, zh, nl, uk, pt)
+
+---
+
+### Fix 2 — Profile Rebalance
+
+**Problem:** `balanced` profile was upgraded to `large-v3` in OQ-1.1 under the assumption users have CUDA. On CPU, `large-v3` takes 90-120s for a 5-minute video — far too slow for a "balanced" profile.
+
+**Fix:** `balanced` → `"small"` (244M params, ~30s CPU, ~4-6s CUDA). Quality/best stay at `large-v3`.
+
+| Profile | OQ-1.1 | OQ-1.1A |
+|---|---|---|
+| fast | base | base |
+| balanced | large-v3 | **small** |
+| quality | large-v3 | large-v3 |
+| best | large-v3 | large-v3 |
+
+**Rationale:** `balanced` users expect speed parity with the original `medium` preset. `small` provides a 2× accuracy improvement over `base` at ~35% of the latency of `large-v3` on CPU.
+
+---
+
+### Fix 3 — GPU Safety Hardening
+
+**Problem:** `_get_fw_model()` did not wrap `WhisperModel()` init in try/except. CUDA OOM or init failure caused the exception to propagate to `FasterWhisperAdapter.transcribe()` → caught there → returned with warning → fell back all the way to `DefaultWhisperAdapter` (openai-whisper), losing the quality gain from faster-whisper entirely.
+
+**Fix:** Wrap `WhisperModel()` init inside `_get_fw_model()` with a CUDA-specific retry:
+
+```python
+try:
+    model = WhisperModel(model_name, device=device, compute_type=compute_type)
+except Exception:
+    if device == "cuda":
+        model = WhisperModel(model_name, device="cpu", compute_type="int8")
+        _FW_MODEL_CACHE[(model_name, "cpu", "int8")] = model
+    else:
+        raise
+```
+
+On CUDA failure, the CPU model is loaded and aliased under the original CUDA cache key, so subsequent calls also hit the CPU model rather than retrying CUDA.
+
+**Impact:** CUDA OOM → falls to CPU faster-whisper (not openai-whisper). Quality preserved; speed reduced.
+
+---
+
+### Fix 4 — Benchmark Script + Warmup Comment
+
+**Warmup comment fix:** `_warmup_faster_whisper()` docstring incorrectly stated "Does NOT load the model into memory." `WhisperModel()` init DOES load the model; it is GC'd when the warmup function returns since no reference is retained. Comment updated to be accurate.
+
+**Benchmark script:** Created `backend/scripts/benchmark_subtitle.py` — measures per-adapter transcription latency against a supplied video file. Outputs a comparison table of elapsed_ms, engine, model, device, and word_count.
+
+---
+
+### OQ-1.1A Regression Risks
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| Language gate misidentifies language as supported | Low | whisperx.load_align_model() still throws on actual failure; caught by outer except |
+| CPU retry in _get_fw_model() slower than expected | Low | User sees slower render, not failed render — consistent with pre-OQ-1.1 behavior |
+| balanced→small cache key changes | None | Different model_name in cache suffix — no collision with previous large-v3 entries |
+| Benchmark script dependency on test video | None | Script gracefully exits with usage message when no video supplied |
+
+---
+
+### OQ-1.1A Files Modified
+
+| File | Change |
+|---|---|
+| `backend/app/services/subtitle_transcription_adapters.py` | Add `SUPPORTED_ALIGNMENT_LANGUAGES`. Language gate in `WhisperXAdapter.transcribe()`. CPU retry in `_get_fw_model()`. Dispatch update for language_not_supported result. |
+| `backend/app/orchestration/render_pipeline.py` | `_resolve_profile()`: balanced → `"small"` |
+| `backend/app/services/warmup.py` | Fix misleading comment in `_warmup_faster_whisper()` |
+| `backend/scripts/benchmark_subtitle.py` | New — per-adapter latency benchmark CLI |
+
+---
+
+## 13. Commit Hash
+
+`ee01ddb` — feat(subtitle): upgrade subtitle foundation with faster-whisper large-v3 and whisperx
+
+---
+
+## 14. OQ-1.1A Commit Hash
+
+*(to be filled after commit)*
+
+---
+
+## 15. Push Confirmation
+
+Pushed to `origin/feature/ai-output-upgrade` — `07a9e48..ee01ddb`

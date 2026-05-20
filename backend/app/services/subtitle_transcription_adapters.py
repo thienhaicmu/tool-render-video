@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -7,6 +8,12 @@ from pathlib import Path
 from typing import Protocol
 
 from app.ai.dependencies import has_faster_whisper, has_whisperx
+
+# Languages with a supported wav2vec2 alignment model in WhisperX.
+# Configurable via WHISPERX_ALIGN_LANGS env var (comma-separated ISO codes).
+SUPPORTED_ALIGNMENT_LANGUAGES: frozenset[str] = frozenset(
+    os.environ.get("WHISPERX_ALIGN_LANGS", "en,de,fr,es,it,ja,zh,nl,uk,pt").split(",")
+)
 from app.services.subtitle_engine import (
     extract_audio_for_transcription,
     format_srt_timestamp,
@@ -74,16 +81,24 @@ def _detect_fw_device_compute() -> tuple[str, str]:
 
 
 def _get_fw_model(model_name: str, device: str, compute_type: str):
-    """Return a cached WhisperModel, loading it on first call per (model, device, compute)."""
+    """Return a cached WhisperModel, loading it on first call per (model, device, compute).
+
+    On CUDA init failure, retries with CPU int8 and aliases the CUDA cache key
+    to the CPU model so subsequent calls do not re-attempt CUDA.
+    """
     cache_key = (model_name, device, compute_type)
     with _FW_MODEL_LOCK:
         if cache_key not in _FW_MODEL_CACHE:
             from faster_whisper import WhisperModel  # noqa: PLC0415
-            _FW_MODEL_CACHE[cache_key] = WhisperModel(
-                model_name,
-                device=device,
-                compute_type=compute_type,
-            )
+            try:
+                model = WhisperModel(model_name, device=device, compute_type=compute_type)
+            except Exception:
+                if device == "cuda":
+                    model = WhisperModel(model_name, device="cpu", compute_type="int8")
+                    _FW_MODEL_CACHE[(model_name, "cpu", "int8")] = model
+                else:
+                    raise
+            _FW_MODEL_CACHE[cache_key] = model
         return _FW_MODEL_CACHE[cache_key]
 
 
@@ -289,6 +304,22 @@ class WhisperXAdapter:
             audio = whisperx.load_audio(video_path)
             result = model.transcribe(audio, batch_size=batch_size)
             language = str(result.get("language") or "en")
+
+            if language not in SUPPORTED_ALIGNMENT_LANGUAGES:
+                # No wav2vec2 model for this language — write SRT from transcription
+                # result directly and return without alignment (single pass, no retry).
+                _write_whisperx_srt(result, str(tmp_path), word_level=highlight_per_word)
+                if not tmp_path.exists() or tmp_path.stat().st_size <= 0:
+                    raise RuntimeError("whisperx transcription produced empty SRT")
+                tmp_path.replace(out_path)
+                return SubtitleTranscriptionResult(
+                    readable_srt_path=readable_srt_path,
+                    engine=self.engine_name,
+                    aligned=False,
+                    warnings=[f"whisperx_language_not_supported:{language}"],
+                    elapsed_ms=int((time.perf_counter() - start) * 1000),
+                )
+
             model_a, metadata = whisperx.load_align_model(language_code=language, device=device)
             aligned = whisperx.align(
                 result.get("segments", []),
@@ -436,17 +467,25 @@ def transcribe_with_adapter(
             retry_count=retry_count,
             highlight_per_word=highlight_per_word,
         )
-        if whisperx_result.aligned:
+        # Accept aligned=True (full alignment) OR aligned=False with only
+        # language_not_supported warnings (SRT was written; alignment skipped by gate).
+        _lang_gate_only = (
+            not whisperx_result.aligned
+            and bool(whisperx_result.warnings)
+            and all("language_not_supported" in w for w in whisperx_result.warnings)
+        )
+        if whisperx_result.aligned or _lang_gate_only:
             if logger is not None:
                 logger.info(
                     "subtitle_transcription_adapter_used requested=whisperx used=whisperx "
-                    "aligned=%s elapsed_ms=%d",
+                    "aligned=%s elapsed_ms=%d warnings=%s",
                     whisperx_result.aligned,
                     whisperx_result.elapsed_ms,
+                    ",".join(whisperx_result.warnings) if whisperx_result.warnings else "none",
                 )
             return whisperx_result
 
-        # WhisperX failed — try faster-whisper before falling all the way back
+        # WhisperX runtime failure — try faster-whisper before falling all the way back
         warning = whisperx_result.warnings[0] if whisperx_result.warnings else "whisperx_fallback"
         if logger is not None:
             logger.warning(
