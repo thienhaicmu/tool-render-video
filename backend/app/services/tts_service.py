@@ -199,6 +199,7 @@ def generate_narration_audio(
             language=language,
             gender=gender,
             job_id=job_id,
+            content_type=content_type,
             output_path=output_path,
         )
     except Exception as xtts_exc:
