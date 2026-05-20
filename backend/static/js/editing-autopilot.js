@@ -67,7 +67,8 @@ var EditingAutopilot = (function () {
 
   // ── State ─────────────────────────────────────────────────────────────────
   var _profile        = null;
-  var _ownership      = {};   // fieldId → 'ai' | 'manual'
+  var _ownership      = {};   // fieldId → 'ai' | 'manual' | 'dismissed'
+  var _overrideCount  = {};   // FIX 3: counts manual changes per field this session
   var _biases         = {};
   var _listenersBound = false;
 
@@ -144,7 +145,14 @@ var EditingAutopilot = (function () {
 
   // Called when creator explicitly changes an owned field
   function markManual(fieldId) {
-    if (!_profile || !_ownership[fieldId]) return;
+    if (!_profile || !_ownership[fieldId] || _ownership[fieldId] === 'dismissed') return;
+    _overrideCount[fieldId] = (_overrideCount[fieldId] || 0) + 1;
+    // FIX 3: 2+ overrides = AI stops suggesting for this field this session
+    if (_overrideCount[fieldId] >= 2) {
+      _ownership[fieldId] = 'dismissed';
+      _clearChip(fieldId);
+      return;
+    }
     _ownership[fieldId] = 'manual';
     _renderChip(fieldId, 'manual');
   }
@@ -161,7 +169,7 @@ var EditingAutopilot = (function () {
 
   // Used by SmartDefaults._applyField to avoid double-chips on owned fields
   function isActive(fieldId) {
-    return !!(_profile && _PROFILE_RECS[_profile] && _ownership[fieldId]);
+    return !!(_profile && _PROFILE_RECS[_profile] && _ownership[fieldId] && _ownership[fieldId] !== 'dismissed');
   }
 
   // Internal bias hints for ranking/scoring consumers (read-only)
@@ -170,9 +178,10 @@ var EditingAutopilot = (function () {
 
   // Called at top of _evLoadVideo() — clears all previous session state
   function reset() {
-    _profile   = null;
-    _ownership = {};
-    _biases    = {};
+    _profile       = null;
+    _ownership     = {};
+    _overrideCount = {};
+    _biases        = {};
     _clearAll();
   }
 

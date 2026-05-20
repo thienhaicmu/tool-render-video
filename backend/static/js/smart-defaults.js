@@ -1,4 +1,4 @@
-// ── Smart Defaults (S1.3A) ───────────────────────────────────────────────────
+// ── Smart Defaults (S1.5) ────────────────────────────────────────────────────
 // Passive suggestion engine. Adds recommendation indicators to editor controls
 // based on video content profile detected from title, duration, and dimensions.
 //
@@ -25,37 +25,50 @@ var SmartDefaults = (function () {
   };
 
   // ── Profile detection ─────────────────────────────────────────────────────
-  // Returns { profile: string, score: number } so the caller can derive
-  // confidence tone without exposing score details in the UI.
+  // Returns { profile, score, secondScore } — score and secondScore are internal.
+  // FIX 5: score details NEVER reach the UI. Only profile string is used externally.
+  // FIX 2: each profile requires >= 2 distinct signal sources (keyword, duration,
+  //         aspect, domain). Keyword-only fires are blocked.
   function _detectProfile(title, duration, sourceAspect, domain) {
-    var t = String(title || '').toLowerCase();
-    var score = { podcast_interview: 0, talking_head_vertical: 0, screen_recording: 0 };
+    var t       = String(title || '').toLowerCase();
+    var score   = { podcast_interview: 0, talking_head_vertical: 0, screen_recording: 0 };
+    var sources = { podcast_interview: 0, talking_head_vertical: 0, screen_recording: 0 };
 
     // podcast / interview
-    if (duration > 600)                                                              score.podcast_interview += 30;
-    if (sourceAspect > 1.3)                                                          score.podcast_interview += 20;
+    if (duration > 600)                { score.podcast_interview += 30; sources.podcast_interview++; }
+    if (sourceAspect > 1.3)            { score.podcast_interview += 20; sources.podcast_interview++; }
     if (/podcast|interview|ep\.\s*\d|\bepisode\b|\bguest\b|\bhost\b|\bconversation\b|\btalk\b/.test(t))
-                                                                                     score.podcast_interview += 25;
-    if (domain && domain.indexOf('youtube.com') !== -1)                              score.podcast_interview += 10;
+                                       { score.podcast_interview += 25; sources.podcast_interview++; }
+    if (domain && domain.indexOf('youtube.com') !== -1)
+                                       { score.podcast_interview += 10; sources.podcast_interview++; }
 
     // talking head vertical
-    if (sourceAspect < 0.85)                                                         score.talking_head_vertical += 40;
+    if (sourceAspect < 0.85)           { score.talking_head_vertical += 40; sources.talking_head_vertical++; }
     if (domain && (domain.indexOf('tiktok.com') !== -1 || domain.indexOf('instagram.com') !== -1))
-                                                                                     score.talking_head_vertical += 25;
-    if (duration > 0 && duration < 120)                                              score.talking_head_vertical += 15;
+                                       { score.talking_head_vertical += 25; sources.talking_head_vertical++; }
+    if (duration > 0 && duration < 120){ score.talking_head_vertical += 15; sources.talking_head_vertical++; }
 
     // screen recording / tutorial
     if (/how to|tutorial|\bguide\b|walkthrough|setup|install|\bdemo\b|overview/.test(t))
-                                                                                     score.screen_recording += 35;
-    if (sourceAspect > 1.5)                                                          score.screen_recording += 20;
-    if (duration > 300)                                                              score.screen_recording += 10;
+                                       { score.screen_recording += 35; sources.screen_recording++; }
+    if (sourceAspect > 1.5)            { score.screen_recording += 20; sources.screen_recording++; }
+    if (duration > 300)                { score.screen_recording += 10; sources.screen_recording++; }
 
     var THRESHOLD = { podcast_interview: 40, talking_head_vertical: 40, screen_recording: 40 };
-    var best = null, bestScore = 0;
+
+    // Collect qualifying profiles: must meet threshold AND have >= 2 signal sources
+    var qualified = [];
     Object.keys(score).forEach(function (p) {
-      if (score[p] >= THRESHOLD[p] && score[p] > bestScore) { bestScore = score[p]; best = p; }
+      if (sources[p] >= 2 && score[p] >= THRESHOLD[p]) qualified.push({ profile: p, score: score[p] });
     });
-    return { profile: best || 'generic', score: bestScore };
+    qualified.sort(function (a, b) { return b.score - a.score; });
+
+    if (qualified.length === 0) return { profile: 'generic', score: 0, secondScore: 0 };
+    return {
+      profile:     qualified[0].profile,
+      score:       qualified[0].score,
+      secondScore: qualified[1] ? qualified[1].score : 0,
+    };
   }
 
   // ── Build suggestions for the 3 tracked fields ───────────────────────────
@@ -201,9 +214,24 @@ var SmartDefaults = (function () {
       sourceAspect = videoEl.videoWidth / videoEl.videoHeight;
     }
 
-    var result   = _detectProfile(title, duration, sourceAspect, domain);
-    _profile     = result.profile;
-    _chipTone    = result.score >= 65 ? 'Recommended' : 'Suggested';
+    var result = _detectProfile(title, duration, sourceAspect, domain);
+    _profile   = result.profile;
+
+    // FIX 1+4: mixed-signal suppression — when top two profiles are within 15 pts,
+    // confidence is unreliable. Degrade Recommended→Suggested or treat as generic.
+    if (_profile !== 'generic') {
+      var delta = result.score - result.secondScore;
+      if (delta < 15) {
+        if (result.score >= 65) {
+          _chipTone = 'Suggested';   // degrade: strong score but contested
+        } else {
+          _profile = 'generic';      // low confidence + contested = show nothing
+        }
+      } else {
+        _chipTone = result.score >= 65 ? 'Recommended' : 'Suggested';
+      }
+    }
+
     _suggestions = _buildSuggestions(_profile);
 
     // S1.3: DNA overlay — DNA wins over content profile for same fields
@@ -214,6 +242,7 @@ var SmartDefaults = (function () {
       } catch (e) {}
     }
 
+    // FIX 4: generic safe mode — show nothing when confidence is insufficient
     if (_profile === 'generic' && Object.keys(_suggestions).length === 0) {
       _removeStrip(); _clearAll(); return;
     }
