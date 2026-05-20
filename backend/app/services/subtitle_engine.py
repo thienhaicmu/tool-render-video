@@ -402,8 +402,31 @@ def _write_segment_level_srt(result: dict, srt_path: str):
 # ASS Preset architecture
 # ---------------------------------------------------------------------------
 
-# Premium pop-in: scale up to 122% then snap-settle to 100% over 200 ms.
+# Legacy constant — preserved for backward-compatible imports. Internal code uses _get_motion_fx().
 BOUNCE_FX = r"{\fscx122\fscy122\t(0,200,\fscx100\fscy100)}"
+
+# OQ-1.4: Per-preset pop-in motion profiles.
+# Energetic presets: higher scale, faster settle.
+# Editorial presets: softer micro-pop (108-106%), longer settle (160ms).
+# bounce_fx=False presets never reach this — caller guards on preset.bounce_fx.
+_PRESET_MOTION_FX: dict[str, str] = {
+    # Energetic — Anton at large sizes reads best with snap-fast settle
+    "viral":            r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
+    "gaming":           r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
+    # Classic TikTok — punchy but softer than pre-OQ-1.4 (was 122%/200ms)
+    "tiktok_bounce_v1": r"{\fscx112\fscy112\t(0,150,\fscx100\fscy100)}",
+    "viral_bold":       r"{\fscx112\fscy112\t(0,150,\fscx100\fscy100)}",
+    "bold_cap":         r"{\fscx112\fscy112\t(0,150,\fscx100\fscy100)}",
+    # Editorial / story — soft micro-pop: gentle entry, longer settle
+    "story_clean_01":   r"{\fscx108\fscy108\t(0,160,\fscx100\fscy100)}",
+    "clean_pro":        r"{\fscx106\fscy106\t(0,160,\fscx100\fscy100)}",
+}
+_MOTION_FX_DEFAULT = r"{\fscx112\fscy112\t(0,150,\fscx100\fscy100)}"
+
+
+def _get_motion_fx(preset_id: str) -> str:
+    """Return the ASS pop-in animation tag for preset_id."""
+    return _PRESET_MOTION_FX.get(preset_id, _MOTION_FX_DEFAULT)
 
 
 @dataclass(frozen=True)
@@ -628,7 +651,7 @@ def build_ass_style_line(
         f"{preset.border_style},{eff_outline},{eff_shadow},"
         f"{preset.alignment},{preset.margin_l},{preset.margin_r},{margin_v},1"
     )
-    line_fx = BOUNCE_FX if (preset.bounce_fx and highlight_per_word) else ""
+    line_fx = _get_motion_fx(preset.id) if (preset.bounce_fx and highlight_per_word) else ""
     return style_line, line_fx
 
 
@@ -1217,7 +1240,7 @@ def render_subtitle_preview(
         )
 
         # Generate ASS through the same preset pipeline as real renders.
-        # highlight_per_word=False omits BOUNCE_FX tags so the static frame
+        # highlight_per_word=False omits motion tags so the static frame
         # shows the settled appearance (correct font, outline, shadow, box).
         srt_to_ass_bounce(
             srt_path=str(srt_path),
