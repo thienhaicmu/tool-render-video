@@ -428,6 +428,7 @@ class ASSPreset:
     auto_scale: bool        # Font/outline/shadow scale with resolution when font_size=0
     heavy_scale: bool       # Use heavier viral_bold formula vs standard _compute_subtitle_scale
     margin_v_ratio: float   # 0.0 = use margin arg; >0 = override as ratio of play_res_y
+    spacing: float = 0.0   # ASS Spacing field — letter-spacing in pixels
 
 
 # Canonical preset table — one entry per supported style ID.
@@ -436,49 +437,55 @@ _PRESETS: dict[str, ASSPreset] = {
         id="tiktok_bounce_v1", font_default="Bungee", base_font_size=38,
         primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
         outline_color="&H00000000", back_color="&H90000000",
-        bold=0, border_style=1, outline_default=5, shadow_default=3,
+        bold=0, border_style=1, outline_default=4, shadow_default=2,
         alignment=2, margin_l=30, margin_r=30, wrap_max_em=16.0,
         bounce_fx=True, auto_scale=False, heavy_scale=False, margin_v_ratio=0.0,
+        spacing=0.3,
     ),
     "bold_cap": ASSPreset(
         id="bold_cap", font_default="Bungee", base_font_size=48,
         primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
         outline_color="&H00000000", back_color="&H90000000",
-        bold=-1, border_style=1, outline_default=5, shadow_default=3,
+        bold=-1, border_style=1, outline_default=4, shadow_default=2,
         alignment=2, margin_l=30, margin_r=30, wrap_max_em=16.0,
         bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.20,
+        spacing=0.3,
     ),
     "story_clean_01": ASSPreset(
-        id="story_clean_01", font_default="Bungee", base_font_size=32,
+        id="story_clean_01", font_default="Montserrat", base_font_size=32,
         primary_color="&H00F6F6F6", secondary_color="&H0000FFFF",
         outline_color="&H00000000", back_color="&H80000000",
-        bold=0, border_style=1, outline_default=4, shadow_default=1,
+        bold=0, border_style=1, outline_default=3, shadow_default=1,
         alignment=2, margin_l=40, margin_r=40, wrap_max_em=16.0,
         bounce_fx=True, auto_scale=False, heavy_scale=False, margin_v_ratio=0.0,
+        spacing=0.5,
     ),
     "viral_bold": ASSPreset(
         id="viral_bold", font_default="Bungee", base_font_size=46,
         primary_color="&H00FFFFFF", secondary_color="&H0015CCFA",
         outline_color="&H00000000", back_color="&HAA000000",
-        bold=-1, border_style=1, outline_default=5, shadow_default=3,
+        bold=-1, border_style=1, outline_default=4, shadow_default=2,
         alignment=2, margin_l=30, margin_r=30, wrap_max_em=16.0,
         bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.20,
+        spacing=0.4,
     ),
     "clean_pro": ASSPreset(
-        id="clean_pro", font_default="Bungee", base_font_size=38,
+        id="clean_pro", font_default="Inter", base_font_size=38,
         primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
         outline_color="&H00000000", back_color="&H80000000",
-        bold=-1, border_style=1, outline_default=4, shadow_default=2,
+        bold=-1, border_style=1, outline_default=3, shadow_default=1,
         alignment=2, margin_l=40, margin_r=40, wrap_max_em=16.0,
         bounce_fx=True, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
+        spacing=0.6,
     ),
     "boxed_caption": ASSPreset(
         id="boxed_caption", font_default="Bungee", base_font_size=32,
         primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
         outline_color="&H00000000", back_color="&HC0000000",
-        bold=0, border_style=3, outline_default=12, shadow_default=0,
+        bold=0, border_style=3, outline_default=10, shadow_default=0,
         alignment=2, margin_l=20, margin_r=20, wrap_max_em=16.0,
         bounce_fx=False, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
+        spacing=0.4,
     ),
 
     # ── Creator personality presets (QUALITY-UP6) ────────────────────────────
@@ -488,45 +495,49 @@ _PRESETS: dict[str, ASSPreset] = {
     # viral: TikTok/Reels-native. Bold, thick outline, short punchy lines.
     # Good for: commentary, reaction, hook-heavy shorts.
     "viral": ASSPreset(
-        id="viral", font_default="Bungee", base_font_size=50,
+        id="viral", font_default="Anton", base_font_size=50,
         primary_color="&H00FFFFFF", secondary_color="&H0000E5FF",
         outline_color="&H00000000", back_color="&H00000000",
-        bold=-1, border_style=1, outline_default=7, shadow_default=1,
+        bold=-1, border_style=1, outline_default=5, shadow_default=2,
         alignment=2, margin_l=20, margin_r=20, wrap_max_em=13.0,
         bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.22,
+        spacing=0.5,
     ),
 
     # clean: minimal, premium readability. Thin outline, no bounce, wide margins.
     # Good for: education, tutorial, podcast clips.
     "clean": ASSPreset(
-        id="clean", font_default="Bungee", base_font_size=34,
+        id="clean", font_default="Inter", base_font_size=34,
         primary_color="&H00FFFFFF", secondary_color="&H0080CCFF",
         outline_color="&H00000000", back_color="&H40000000",
-        bold=0, border_style=1, outline_default=3, shadow_default=1,
+        bold=0, border_style=1, outline_default=2, shadow_default=1,
         alignment=2, margin_l=60, margin_r=60, wrap_max_em=18.0,
         bounce_fx=False, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
+        spacing=1.0,
     ),
 
     # story: cinematic, soft. Off-white text, minimal outline, serene pacing.
     # Good for: vlog, storytelling, emotional content.
     "story": ASSPreset(
-        id="story", font_default="Bungee", base_font_size=33,
+        id="story", font_default="Montserrat", base_font_size=33,
         primary_color="&H00EBEBEB", secondary_color="&H0066CCFF",
         outline_color="&H00000000", back_color="&H20000000",
         bold=0, border_style=1, outline_default=2, shadow_default=1,
         alignment=2, margin_l=55, margin_r=55, wrap_max_em=19.0,
         bounce_fx=False, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
+        spacing=1.0,
     ),
 
     # gaming: caption-box style for fast-motion readability. Bold, box-backed.
     # Good for: gaming, sports, montage clips.
     "gaming": ASSPreset(
-        id="gaming", font_default="Bungee", base_font_size=44,
+        id="gaming", font_default="Anton", base_font_size=44,
         primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
         outline_color="&H00000000", back_color="&HB0000000",
-        bold=-1, border_style=3, outline_default=14, shadow_default=0,
+        bold=-1, border_style=3, outline_default=12, shadow_default=0,
         alignment=2, margin_l=20, margin_r=20, wrap_max_em=13.0,
         bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.20,
+        spacing=0.3,
     ),
 }
 
@@ -613,7 +624,7 @@ def build_ass_style_line(
         f"{preset.primary_color},{preset.secondary_color},"
         f"{preset.outline_color},{eff_back},"
         f"{preset.bold},0,0,0,"
-        f"100,{scale_y},0,0,"
+        f"100,{scale_y},{preset.spacing:.1f},0,"
         f"{preset.border_style},{eff_outline},{eff_shadow},"
         f"{preset.alignment},{preset.margin_l},{preset.margin_r},{margin_v},1"
     )

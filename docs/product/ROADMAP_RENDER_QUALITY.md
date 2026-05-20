@@ -13,9 +13,9 @@ Last updated: 2026-05-20
 |---|---|---|---|---|
 | OQ-1.1 | faster-whisper large-v3 + WhisperX | ✅ Complete + Hardened (2026-05-20) | Low | Transcription engine, word timing, CUDA path |
 | OQ-1.2 | Subtitle Intelligence Layer (readability resegmentation) | ✅ Complete (2026-05-20) | Low | Semantic splitting, reading-speed, timing |
-| OQ-1.3 | PhoWhisper adapter for Vietnamese | Planned | Low | vi-VN transcription accuracy |
-| OQ-1.3 | Subtitle font system (Inter/Montserrat/Geist) | Planned | None | Visual quality |
-| OQ-1.4 | Premium subtitle animation (word-by-word pop) | Planned | Low | ASS animation |
+| OQ-1.3 | Premium subtitle style system (Anton/Inter/Montserrat, spacing, visual tuning) | ✅ Complete (2026-05-20) | None | Font strategy, letter-spacing, preset differentiation |
+| OQ-1.4 | PhoWhisper adapter for Vietnamese | Planned | Low | vi-VN transcription accuracy |
+| OQ-1.5 | Premium subtitle animation (word-by-word pop) | Planned | Low | ASS animation |
 
 ### OQ-2 — Scene Detection
 

@@ -141,18 +141,18 @@ def _fontfile_for_family(font_family: str, bold: bool = False) -> str | None:
         regular_map = {
             "Bungee":        "Bungee-Regular.ttf",
             "Anton":         "Anton-Regular.ttf",
+            "Inter":         "Inter-Variable.ttf",
+            "Montserrat":    "Montserrat-Variable.ttf",
             "Bebas Neue":    "BebasNeue-Regular.ttf",
             "Oswald":        "Oswald-Regular.ttf",
             "Archivo Black": "ArchivoBlack-Regular.ttf",
             "Teko":          "Teko-Regular.ttf",
             "Luckiest Guy":  "LuckiestGuy-Regular.ttf",
-            "Montserrat":    "Montserrat-Regular.ttf",
             "Roboto":        "Roboto-Regular.ttf",
         }
         bold_map = {
             "Oswald":     "Oswald-Bold.ttf",
             "Teko":       "Teko-Bold.ttf",
-            "Montserrat": "Montserrat-Bold.ttf",
             "Roboto":     "Roboto-Bold.ttf",
         }
         file_name = (bold_map.get(ff, "") or regular_map.get(ff, "")) if bold else regular_map.get(ff, "")
