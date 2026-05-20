@@ -10,6 +10,6 @@ async function loadPartials() {
   for (const id in map) {
     const res = await fetch(map[id]);
     const html = await res.text();
-    document.getElementById(id).innerHTML = html;
+    (document.getElementById(id) || document.querySelector('[data-legacy-id="' + id + '"]')).innerHTML = html;
   }
 }

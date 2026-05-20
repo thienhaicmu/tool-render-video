@@ -1,37 +1,37 @@
-<section id="view_history" class="historyWorkspace historyProductWorkspace hiddenView" aria-live="polite">
+<section id="view_history" class="historyWorkspace historyProductWorkspace history-panel hiddenView" aria-live="polite">
 
-  <div class="hwHeader">
-    <div class="hwHeaderLeft">
+  <div class="hwHeader history-header">
+    <div class="hwHeaderLeft history-header-left">
       <div class="productKicker">History</div>
-      <div class="hwTitle">Render and download activity</div>
-      <div class="hwSub">Review previous jobs, reopen packages, retry failures, or rerun a render with the same source.</div>
+      <div class="hwTitle history-title">Render and download activity</div>
+      <div class="hwSub history-sub">Review previous jobs, reopen packages, retry failures, or rerun a render with the same source.</div>
     </div>
-    <div class="hwHeaderRight">
-      <span class="hwMeta" id="history_status_text"></span>
-      <button class="hwRefreshBtn" type="button" onclick="loadHistoryView()" title="Refresh">&#8635; Refresh</button>
+    <div class="hwHeaderRight history-header-right">
+      <span class="hwMeta history-meta" id="history_status_text"></span>
+      <button class="hwRefreshBtn history-refresh-btn" type="button" onclick="loadHistoryView()" title="Refresh">&#8635; Refresh</button>
     </div>
   </div>
 
-  <div class="historySummaryRail" aria-label="History scopes">
-    <div class="historySummaryCard"><strong>Render jobs</strong><span>Completed, partial, failed, interrupted</span></div>
-    <div class="historySummaryCard"><strong>Download jobs</strong><span>Saved files, failed links, open in Render</span></div>
-    <div class="historySummaryCard"><strong>Packages</strong><span>Outputs, reports, best exports</span></div>
+  <div class="historySummaryRail history-summary-rail" aria-label="History scopes">
+    <div class="historySummaryCard history-summary-card"><strong>Render jobs</strong><span>Completed, partial, failed, interrupted</span></div>
+    <div class="historySummaryCard history-summary-card"><strong>Download jobs</strong><span>Saved files, failed links, open in Render</span></div>
+    <div class="historySummaryCard history-summary-card"><strong>Packages</strong><span>Outputs, reports, best exports</span></div>
   </div>
 
-  <div class="hwFilterBar" id="history_filter_bar">
-    <button class="hwFilterBtn active" data-filter="all"       onclick="setHistoryFilter('all')">All</button>
-    <button class="hwFilterBtn"        data-filter="render"    onclick="setHistoryFilter('render')">Render</button>
-    <button class="hwFilterBtn"        data-filter="download"  onclick="setHistoryFilter('download')">Download</button>
-    <button class="hwFilterBtn"        data-filter="completed" onclick="setHistoryFilter('completed')">Completed</button>
-    <button class="hwFilterBtn"        data-filter="failed"    onclick="setHistoryFilter('failed')">Failed</button>
+  <div class="hwFilterBar history-filter-bar" id="history_filter_bar">
+    <button class="hwFilterBtn history-filter-btn active" data-filter="all"       onclick="setHistoryFilter('all')">All</button>
+    <button class="hwFilterBtn history-filter-btn"        data-filter="render"    onclick="setHistoryFilter('render')">Render</button>
+    <button class="hwFilterBtn history-filter-btn"        data-filter="download"  onclick="setHistoryFilter('download')">Download</button>
+    <button class="hwFilterBtn history-filter-btn"        data-filter="completed" onclick="setHistoryFilter('completed')">Completed</button>
+    <button class="hwFilterBtn history-filter-btn"        data-filter="failed"    onclick="setHistoryFilter('failed')">Failed</button>
   </div>
 
-  <div class="hwBody">
-    <div class="historyList" id="history_list">
-      <div class="hwEmpty">
-        <div class="hwEmptyIcon">&#128203;</div>
-        <div class="hwEmptyTitle">No history yet</div>
-        <div class="hwEmptySub">Render and download jobs will appear here after they start.</div>
+  <div class="hwBody history-body">
+    <div class="historyList history-list" id="history-list" data-legacy-id="history_list">
+      <div class="hwEmpty history-empty">
+        <div class="hwEmptyIcon history-empty-icon">&#128203;</div>
+        <div class="hwEmptyTitle history-empty-title">No history yet</div>
+        <div class="hwEmptySub history-empty-sub">Render and download jobs will appear here after they start.</div>
       </div>
     </div>
   </div>

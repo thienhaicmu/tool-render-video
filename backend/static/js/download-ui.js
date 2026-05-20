@@ -161,28 +161,28 @@ function renderDownloadQueue() {
       const removeDisabled = status === 'downloading';
       const canOpenInRender = status === 'done' && !!String(item.outputFile || '').trim();
       return `
-        <div class="downloadQueueRow ${esc(status)}">
-          <div class="downloadRowMain">
+        <div class="downloadQueueRow download-card ${esc(status)}">
+          <div class="downloadRowMain download-card-main">
             <div style="display:flex;gap:8px;align-items:center;min-width:0">
-              <span class="downloadSourceBadge ${esc(item.source)}">${esc(downloadSourceLabel(item.source))}</span>
-              <div class="downloadRowTitle">${status === 'done' ? '✓ ' : ''}${esc(title)}</div>
+              <span class="downloadSourceBadge download-source-badge ${esc(item.source)}">${esc(downloadSourceLabel(item.source))}</span>
+              <div class="downloadRowTitle download-card-title">${status === 'done' ? '✓ ' : ''}${esc(title)}</div>
             </div>
-            <div class="downloadRowUrl">${esc(item.url)}</div>
-            ${item.outputFile ? `<div class="downloadRowPath">${esc(item.outputFile)}</div>` : ''}
-            ${(status === 'failed' || status === 'unsupported') && item.message ? `<div class="downloadRowError">${esc(item.message)}</div>` : ''}
+            <div class="downloadRowUrl download-card-url">${esc(item.url)}</div>
+            ${item.outputFile ? `<div class="downloadRowPath download-card-path">${esc(item.outputFile)}</div>` : ''}
+            ${(status === 'failed' || status === 'unsupported') && item.message ? `<div class="downloadRowError download-card-error">${esc(item.message)}</div>` : ''}
           </div>
-          <div class="downloadRowStatus">
-            <span class="downloadStatusBadge ${esc(status)}">${esc(downloadStatusLabel(status))}</span>
-            <div class="downloadMiniProgress"><div class="downloadMiniProgressValue" style="width:${Number(item.progressPercent || 0)}%"></div></div>
+          <div class="downloadRowStatus download-card-status">
+            <span class="downloadStatusBadge download-status-badge ${esc(status)}">${esc(downloadStatusLabel(status))}</span>
+            <div class="downloadMiniProgress download-progress"><div class="downloadMiniProgressValue download-progress-bar" style="width:${Number(item.progressPercent || 0)}%"></div></div>
           </div>
-          <div class="downloadRowStatus">
-            <div class="downloadRowUrl">${esc(item.message || '')}</div>
-            <div class="downloadRowUrl">${Math.round(Number(item.progressPercent || 0))}%</div>
+          <div class="downloadRowStatus download-card-status">
+            <div class="downloadRowUrl download-card-url">${esc(item.message || '')}</div>
+            <div class="downloadRowUrl download-card-url">${Math.round(Number(item.progressPercent || 0))}%</div>
           </div>
-          <div class="downloadRowActions">
-            ${canOpenInRender ? `<button class="downloadActionBtn" type="button" onclick="openDownloadedVideoInRender('${encodeURIComponent(item.id)}')">Open in Render</button>` : ''}
-            <button class="downloadActionBtn" type="button" onclick="retryDownloadItem('${encodeURIComponent(item.url)}')" ${retryDisabled ? 'disabled' : ''}>Retry</button>
-            <button class="downloadActionBtn" type="button" onclick="removeDownloadItem('${encodeURIComponent(item.url)}')" ${removeDisabled ? 'disabled' : ''}>Remove</button>
+          <div class="downloadRowActions download-card-actions">
+            ${canOpenInRender ? `<button class="downloadActionBtn download-action-btn" type="button" onclick="openDownloadedVideoInRender('${encodeURIComponent(item.id)}')">Open in Render</button>` : ''}
+            <button class="downloadActionBtn download-action-btn" type="button" onclick="retryDownloadItem('${encodeURIComponent(item.url)}')" ${retryDisabled ? 'disabled' : ''}>Retry</button>
+            <button class="downloadActionBtn download-action-btn" type="button" onclick="removeDownloadItem('${encodeURIComponent(item.url)}')" ${removeDisabled ? 'disabled' : ''}>Remove</button>
           </div>
         </div>
       `;

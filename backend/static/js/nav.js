@@ -209,14 +209,14 @@ function updateWfStrip() {
   var strip = document.getElementById('wfStrip');
   if (!strip) return;
 
-  var mainArea = document.getElementById('mainArea');
+  var mainArea = qs('mainArea');
   var inPipeline = mainArea &&
     (mainArea.classList.contains('editorMode') || mainArea.classList.contains('inPipeline'));
 
   if (!inPipeline) { _setWfStep(strip, null); return; }
 
-  var completionBar  = document.getElementById('render_completion_bar');
-  var outputPanel    = document.getElementById('render_output_panel');
+  var completionBar  = qs('render_completion_bar');
+  var outputPanel    = qs('render_output_panel');
   var completionVis  = completionBar && !completionBar.classList.contains('hiddenView');
   var outputVis      = outputPanel   && !outputPanel.classList.contains('hiddenView');
   var hasActiveJob   = typeof currentJobId !== 'undefined' && !!currentJobId;

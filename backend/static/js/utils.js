@@ -1,4 +1,4 @@
-function qs(id){ return document.getElementById(id); }
+function qs(id){ return document.getElementById(id) || document.querySelector('[data-legacy-id="' + id + '"]'); }
 
 function _setBtnLoading(btnId, loadingText) {
   const btn = qs(btnId);

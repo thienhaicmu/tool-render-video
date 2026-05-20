@@ -47,11 +47,11 @@
   </header>
   <!-- /SECTION: topbar -->
 
-  <div class="rs-main">
+  <div class="rs-main app-main">
   <!-- ═══════════════════════════════════════════════════════════════
        SECTION: sidebar-source-setup
   ════════════════════════════════════════════════════════════════ -->
-  <nav class="sidebar rs-left-panel" id="sidebarPanel">
+  <nav class="sidebar rs-left-panel app-left-panel" id="sidebarPanel">
     <div class="sidebarHeader">
       <div class="sidebarTitle">Render Setup</div>
       <div class="sidebarSubtitle">Source, destination, then editor.</div>
@@ -226,37 +226,37 @@
   <!-- ═══════════════════════════════════════════════════════════════
        SECTION: main-area
   ════════════════════════════════════════════════════════════════ -->
-  <main class="mainArea rs-center-panel" id="mainArea">
+  <main class="mainArea rs-center-panel app-center-panel app-main-area" id="app-main-area" data-legacy-id="mainArea">
 
-    <div class="rs-center-stage">
+    <div class="rs-center-stage app-stage">
 
       <!-- ── SECTION: workflow-step-strip (editor mode only) ──────
            Shown when mainArea.editorMode is set by nav.js.
            Steps map to real screens — no fake panels.        ── -->
-      <nav class="wfStrip" id="wfStrip" aria-label="Workflow steps">
-        <div class="wfCard" data-wf-step="source">
-          <span class="wfCard__num">1</span>
-          <span class="wfCard__label">Source</span>
+      <nav class="wfStrip nav-strip" id="wfStrip" aria-label="Workflow steps">
+        <div class="wfCard nav-step" data-wf-step="source">
+          <span class="wfCard__num nav-step-number">1</span>
+          <span class="wfCard__label nav-step-label">Source</span>
         </div>
-        <div class="wfSep" aria-hidden="true"></div>
-        <div class="wfCard" data-wf-step="prepare">
-          <span class="wfCard__num">2</span>
-          <span class="wfCard__label">Prepare</span>
+        <div class="wfSep nav-separator" aria-hidden="true"></div>
+        <div class="wfCard nav-step" data-wf-step="prepare">
+          <span class="wfCard__num nav-step-number">2</span>
+          <span class="wfCard__label nav-step-label">Prepare</span>
         </div>
-        <div class="wfSep" aria-hidden="true"></div>
-        <div class="wfCard" data-wf-step="render">
-          <span class="wfCard__num">3</span>
-          <span class="wfCard__label">Render</span>
+        <div class="wfSep nav-separator" aria-hidden="true"></div>
+        <div class="wfCard nav-step" data-wf-step="render">
+          <span class="wfCard__num nav-step-number">3</span>
+          <span class="wfCard__label nav-step-label">Render</span>
         </div>
-        <div class="wfSep" aria-hidden="true"></div>
-        <div class="wfCard" data-wf-step="review">
-          <span class="wfCard__num">4</span>
-          <span class="wfCard__label">Review</span>
+        <div class="wfSep nav-separator" aria-hidden="true"></div>
+        <div class="wfCard nav-step" data-wf-step="review">
+          <span class="wfCard__num nav-step-number">4</span>
+          <span class="wfCard__label nav-step-label">Review</span>
         </div>
-        <div class="wfSep" aria-hidden="true"></div>
-        <div class="wfCard" data-wf-step="export">
-          <span class="wfCard__num">5</span>
-          <span class="wfCard__label">Export</span>
+        <div class="wfSep nav-separator" aria-hidden="true"></div>
+        <div class="wfCard nav-step" data-wf-step="export">
+          <span class="wfCard__num nav-step-number">5</span>
+          <span class="wfCard__label nav-step-label">Export</span>
         </div>
       </nav>
       <!-- /SECTION: workflow-step-strip -->
@@ -388,71 +388,71 @@
 
 
       <!-- ── SECTION: render-home-panel ──────────────────────────── -->
-      <div id="partial_render_home">
-        <div id="render_home_panel" class="rhPanel">
+      <div id="render-home" data-legacy-id="partial_render_home">
+        <div id="render-home-panel" data-legacy-id="render_home_panel" class="rhPanel render-home">
 
           <!-- Zone 1: Creator Momentum Hero (UX-R4-A) -->
-          <div class="uxr4MomentumHero card--elevated" id="uxr4_momentum_hero">
-            <div class="uxr4HeroAccent" aria-hidden="true"></div>
-            <div class="uxr4HeroInner">
+          <div class="uxr4MomentumHero history-momentum card--elevated" id="uxr4_momentum_hero">
+            <div class="uxr4HeroAccent history-momentum-accent" aria-hidden="true"></div>
+            <div class="uxr4HeroInner history-momentum-inner">
 
               <!-- Left: continue creating (populated by JS) -->
-              <div class="uxr4ContinueZone" id="uxr4_continue_zone">
-                <div class="uxr4ContinueLabel">Start creating</div>
-                <div class="uxr4ContinueSub">Create your first project. AI will learn your editing style as you work.</div>
+              <div class="uxr4ContinueZone history-momentum-zone" id="uxr4_continue_zone">
+                <div class="uxr4ContinueLabel history-momentum-label">Start creating</div>
+                <div class="uxr4ContinueSub history-momentum-sub">Create your first project. AI will learn your editing style as you work.</div>
               </div>
 
               <!-- Right: AI intelligence (populated by JS) -->
-              <div class="uxr4IntelZone">
-                <div class="uxr4IntelLabel">Your Workspace</div>
-                <div class="uxr4IntelMsg" id="uxr4_intel_msg">Your creative workspace. Start a render to see intelligence here.</div>
+              <div class="uxr4IntelZone history-intel-zone">
+                <div class="uxr4IntelLabel history-intel-label">Your Workspace</div>
+                <div class="uxr4IntelMsg history-intel-msg" id="uxr4_intel_msg">Your creative workspace. Start a render to see intelligence here.</div>
               </div>
 
             </div><!-- /uxr4HeroInner -->
           </div><!-- /uxr4MomentumHero -->
 
           <!-- Zone 2: Quick Start (UX-R4-B) -->
-          <div class="uxr4QuickStart">
+          <div class="uxr4QuickStart history-quick-start">
 
             <!-- Primary: Create New Project -->
-            <button class="uxr4QSPrimary" type="button"
+            <button class="uxr4QSPrimary history-quick-start-primary" type="button"
                     onclick="document.getElementById('source_mode').value='youtube';syncSourceModeUI();">
-              <span class="uxr4QSPrimaryIcon">+</span>
-              <span class="uxr4QSPrimaryText">
-                <span class="uxr4QSPrimaryLabel">Create New Project</span>
-                <span class="uxr4QSPrimarySub">Start with a YouTube URL or local video file</span>
+              <span class="uxr4QSPrimaryIcon history-quick-start-icon">+</span>
+              <span class="uxr4QSPrimaryText history-quick-start-text">
+                <span class="uxr4QSPrimaryLabel history-quick-start-label">Create New Project</span>
+                <span class="uxr4QSPrimarySub history-quick-start-sub">Start with a YouTube URL or local video file</span>
               </span>
             </button>
 
             <!-- Secondary: source tiles -->
-            <div class="uxr4QSSecondary">
+            <div class="uxr4QSSecondary history-quick-start-secondary">
 
-              <div class="rhTile rhTile--youtube card--interactive"
+              <div class="rhTile rhTile--youtube render-home-tile render-home-tile-youtube card--interactive"
                    role="button" tabindex="0"
                    onclick="document.getElementById('source_mode').value='youtube';syncSourceModeUI();"
                    onkeydown="if(event.key==='Enter'||event.key===' '){this.click();}"
                    title="Switch to YouTube / URL source mode">
-                <div class="rhTileAccentBar" aria-hidden="true"></div>
-                <div class="rhTileIcon">🔗</div>
-                <div class="rhTileTitle">From YouTube</div>
-                <div class="rhTileSub">Paste any public URL</div>
+                <div class="rhTileAccentBar render-home-tile-accent" aria-hidden="true"></div>
+                <div class="rhTileIcon render-home-tile-icon">🔗</div>
+                <div class="rhTileTitle render-home-tile-title">From YouTube</div>
+                <div class="rhTileSub render-home-tile-sub">Paste any public URL</div>
               </div>
 
-              <div class="rhTile rhTile--local card--flat"
+              <div class="rhTile rhTile--local render-home-tile render-home-tile-local card--flat"
                    role="button" tabindex="0"
                    onclick="document.getElementById('source_mode').value='local';syncSourceModeUI();"
                    onkeydown="if(event.key==='Enter'||event.key===' '){this.click();}"
                    title="Switch to local video file mode">
-                <div class="rhTileIcon">📁</div>
-                <div class="rhTileTitle">From Local File</div>
-                <div class="rhTileSub">Open a .mp4 / .mov</div>
+                <div class="rhTileIcon render-home-tile-icon">📁</div>
+                <div class="rhTileTitle render-home-tile-title">From Local File</div>
+                <div class="rhTileSub render-home-tile-sub">Open a .mp4 / .mov</div>
               </div>
 
             </div><!-- /uxr4QSSecondary -->
 
             <!-- Tertiary: utility actions -->
-            <div class="uxr4QSTertiary">
-              <button class="uxr4QSTertiaryBtn" type="button"
+            <div class="uxr4QSTertiary history-quick-start-tertiary">
+              <button class="uxr4QSTertiaryBtn history-quick-start-tertiary-btn" type="button"
                       onclick="document.getElementById('resume_job_id').focus();"
                       title="Focus the Resume Job ID field">
                 ↺ Resume from Job ID
@@ -462,12 +462,12 @@
           </div><!-- /uxr4QuickStart -->
 
           <!-- Zone 3: Recent Work (UX-R4-C) -->
-          <div class="uxr4RecentWork">
+          <div class="uxr4RecentWork history-recent-work">
             <div class="section-head">
               <span class="section-head__label">Recent Work</span>
             </div>
-            <div id="render_history_list" class="renderHistoryList uxr4HistoryList">
-              <div class="renderHistoryEmpty">No recent renders yet<div>Your completed renders will appear here.</div></div>
+            <div id="render_history_list" class="renderHistoryList uxr4HistoryList history-list history-recent">
+              <div class="renderHistoryEmpty history-empty">No recent renders yet<div>Your completed renders will appear here.</div></div>
             </div>
           </div>
 
@@ -475,8 +475,8 @@
       </div><!-- /partial_render_home -->
 
       <!-- ── SECTION: render-active-panel ────────────────────────── -->
-      <div id="render_active_panel" class="renderActivePanel hiddenView" aria-live="polite">
-        <div class="renderActiveCompatTargets" hidden>
+      <div id="render-active" data-legacy-id="render_active_panel" class="renderActivePanel render-active hiddenView" aria-live="polite">
+        <div class="renderActiveCompatTargets render-active-compat" hidden>
           <span id="render_active_state"></span>
           <span id="render_active_bar"></span>
           <span id="render_workspace_source"></span>
@@ -490,32 +490,32 @@
         </div>
 
         <!-- UX-R1: AI Orchestration Hero ─────────────────────── -->
-        <div id="uxr1_ai_hero" class="uxr1AiHero">
-          <div class="uxr1HeroStage">
-            <span class="uxr1StageIcon" id="uxr1_stage_icon">◉</span>
-            <div class="uxr1StageBody">
-              <div class="uxr1StageLabel" id="uxr1_stage_label">Reading the Room</div>
-              <div class="uxr1StageMsg" id="uxr1_stage_msg">Calibrating your workspace to the source material</div>
+        <div id="uxr1_ai_hero" class="uxr1AiHero render-ai-live">
+          <div class="uxr1HeroStage render-ai-live-stage">
+            <span class="uxr1StageIcon render-ai-live-icon" id="uxr1_stage_icon">◉</span>
+            <div class="uxr1StageBody render-ai-live-body">
+              <div class="uxr1StageLabel render-ai-live-label" id="uxr1_stage_label">Reading the Room</div>
+              <div class="uxr1StageMsg render-ai-live-msg" id="uxr1_stage_msg">Calibrating your workspace to the source material</div>
             </div>
           </div>
-          <div id="uxr1_concerns" class="uxr1Concerns"></div>
+          <div id="uxr1_concerns" class="uxr1Concerns render-ai-live-concerns"></div>
         </div>
 
-        <div class="rdCard" id="rd_card" data-state="idle">
-          <div class="rdCardHead">
-            <div class="rdHeadLeft">
-              <div class="rdBadge" id="rd_badge" data-state="idle">Idle</div>
-              <div class="rdTitle" id="rd_title">Preparing render…</div>
+        <div class="rdCard render-card" id="rd_card" data-state="idle">
+          <div class="rdCardHead render-card-head">
+            <div class="rdHeadLeft render-card-head-left">
+              <div class="rdBadge render-card-badge" id="rd_badge" data-state="idle">Idle</div>
+              <div class="rdTitle render-card-title" id="rd_title">Preparing render…</div>
             </div>
-            <button class="rdLogBtn" type="button" onclick="focusRenderLogPanel()">View Logs</button>
+            <button class="rdLogBtn render-card-log-btn" type="button" onclick="focusRenderLogPanel()">View Logs</button>
           </div>
-          <div class="rdStep" id="render_active_title">Initializing…</div>
-          <div class="rdSegBar" id="rd_seg_bar" hidden></div>
-          <div class="rdMeta">
-            <span class="rdPct" id="render_active_pct">0%</span>
-            <span class="rdMetaSub" id="render_active_meta">Clips will appear below as they finish.</span>
+          <div class="rdStep render-card-stage" id="render_active_title">Initializing…</div>
+          <div class="rdSegBar render-card-seg-bar" id="rd_seg_bar" hidden></div>
+          <div class="rdMeta render-card-meta">
+            <span class="rdPct render-card-pct" id="render_active_pct">0%</span>
+            <span class="rdMetaSub render-card-meta-sub" id="render_active_meta">Clips will appear below as they finish.</span>
           </div>
-          <div class="rdDoneActions hiddenView" id="render_active_actions">
+          <div class="rdDoneActions render-card-done-actions hiddenView" id="render_active_actions">
             <button class="primaryButton" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
           </div>
         </div>
@@ -528,89 +528,89 @@
           <div id="ai_insights_body" class="aiInBody"></div>
         </div>
 
-        <div id="render_runtime_mount" class="renderRuntimeMount"></div>
+        <div id="render_runtime_mount" class="renderRuntimeMount render-runtime-mount"></div>
       </div>
       <!-- /SECTION: render-active-panel -->
 
       <!-- ── SECTION: render-completion-banner ──────────────────── -->
-      <div id="render_completion_bar" class="renderCompletionBar hiddenView">
-        <div class="rcbLeft">
-          <div class="rcbIcon" id="rcb_icon">✓</div>
-          <div class="rcbCopy">
-            <div class="renderCompletionMsg" id="render_completion_msg">Render complete — 0 clips ready</div>
-            <div class="renderCompletionSummary" id="render_completion_summary"></div>
+      <div id="render-completion" data-legacy-id="render_completion_bar" class="renderCompletionBar render-completion hiddenView">
+        <div class="rcbLeft render-completion-left">
+          <div class="rcbIcon render-completion-icon" id="rcb_icon">✓</div>
+          <div class="rcbCopy render-completion-copy">
+            <div class="renderCompletionMsg render-completion-msg" id="render_completion_msg">Render complete — 0 clips ready</div>
+            <div class="renderCompletionSummary render-completion-summary" id="render_completion_summary"></div>
           </div>
         </div>
-        <div class="renderCompletionActions">
-          <button class="ghostButton rcbBtn" type="button" id="back_to_editor_btn" onclick="backToEditorFromCompletion()">← Back to Editor</button>
-          <button class="ghostButton rcbBtn" type="button" onclick="reviewClipsFromBanner()">Review Clips</button>
-          <button class="primaryButton rcbBtn" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
+        <div class="renderCompletionActions render-completion-actions">
+          <button class="ghostButton rcbBtn render-completion-btn" type="button" id="back_to_editor_btn" onclick="backToEditorFromCompletion()">← Back to Editor</button>
+          <button class="ghostButton rcbBtn render-completion-btn" type="button" onclick="reviewClipsFromBanner()">Review Clips</button>
+          <button class="primaryButton rcbBtn render-completion-btn" type="button" onclick="openRenderOutputFolder()">Open Output Folder</button>
         </div>
       </div>
 
       <!-- UX-R2: Completion Hero ──────────────────────────────── -->
-      <div id="uxr2_completion_hero" class="uxr2CompletionHero hiddenView">
-        <div class="uxr2HeroThumb" id="uxr2_hero_thumb">
-          <div class="uxr2ThumbPlaceholder">◎</div>
+      <div id="render-hero" data-legacy-id="uxr2_completion_hero" class="uxr2CompletionHero render-hero hiddenView">
+        <div class="uxr2HeroThumb render-hero-thumb" id="uxr2_hero_thumb">
+          <div class="uxr2ThumbPlaceholder render-hero-thumb-placeholder">◎</div>
         </div>
-        <div class="uxr2HeroNarrative">
-          <div class="uxr2NarrativeLabel">Creative Outcome</div>
-          <div class="uxr2NarrativeMsg" id="uxr2_narrative_msg"></div>
-          <div class="uxr2NarrativeReason" id="uxr2_narrative_reason" hidden></div>
-          <div class="uxr2NarrativeBits" id="uxr2_narrative_bits"></div>
+        <div class="uxr2HeroNarrative render-hero-narrative">
+          <div class="uxr2NarrativeLabel render-hero-narrative-label">Creative Outcome</div>
+          <div class="uxr2NarrativeMsg render-hero-narrative-msg" id="uxr2_narrative_msg"></div>
+          <div class="uxr2NarrativeReason render-hero-narrative-reason" id="uxr2_narrative_reason" hidden></div>
+          <div class="uxr2NarrativeBits render-hero-narrative-bits" id="uxr2_narrative_bits"></div>
         </div>
-        <div class="uxr2HeroCTA">
-          <button class="uxr2CtaPrimary" type="button" id="uxr2_cta_review">Review Best Clip</button>
-          <a class="uxr2CtaSecondary" id="uxr2_cta_export" hidden>Export Best</a>
-          <button class="uxr2CtaTertiary" type="button" id="uxr2_cta_folder">Open Folder</button>
+        <div class="uxr2HeroCTA render-hero-cta">
+          <button class="uxr2CtaPrimary render-hero-cta-primary" type="button" id="uxr2_cta_review">Review Best Clip</button>
+          <a class="uxr2CtaSecondary render-hero-cta-secondary" id="uxr2_cta_export" hidden>Export Best</a>
+          <button class="uxr2CtaTertiary render-hero-cta-tertiary" type="button" id="uxr2_cta_folder">Open Folder</button>
         </div>
       </div>
 
       <!-- ── SECTION: render-output-panel ────────────────────────── -->
-      <div id="render_output_panel" class="renderOutputPanel hiddenView">
-        <div class="renderOutputHeader">
-          <div class="renderOutputTitle">
+      <div id="output-panel" data-legacy-id="render_output_panel" class="renderOutputPanel output-panel hiddenView">
+        <div class="renderOutputHeader output-panel-header">
+          <div class="renderOutputTitle output-panel-title">
             <span id="render_output_panel_title">Clips</span>
-            <span class="renderOutputBadge" id="render_output_badge">0</span>
+            <span class="renderOutputBadge output-panel-badge" id="render_output_badge">0</span>
           </div>
-          <div class="renderOutputActions">
-            <select id="clips_sort_select" class="clipsSortSelect" onchange="sortClipsView(this.value)" title="Sort clips">
+          <div class="renderOutputActions output-panel-actions">
+            <select id="clips_sort_select" class="clipsSortSelect output-sort" onchange="sortClipsView(this.value)" title="Sort clips">
               <option value="score">Best first</option>
               <option value="part_no">In order</option>
             </select>
-            <button class="ghostButton renderOutputBtn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
+            <button class="ghostButton renderOutputBtn output-panel-btn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
           </div>
         </div>
-        <div id="render_output_path" class="renderOutputPath"></div>
+        <div id="render_output_path" class="renderOutputPath output-panel-path"></div>
         <div id="mvRenderSummary" hidden></div>
-        <div id="cs_preview_area" class="csPreviewArea hiddenView">
-          <div class="csPreviewVideoWrap">
-            <div id="cs_preview_empty" class="csPreviewEmpty">Select a clip to preview.</div>
-            <div id="cs_preview_loading" class="csPreviewLoading hiddenView"><div class="csPreviewSpinner"></div></div>
-            <div id="cs_preview_error" class="csPreviewError hiddenView"></div>
-            <video id="cs_preview_video" class="csPreviewVideo hiddenView" controls preload="metadata" muted playsinline></video>
+        <div id="cs_preview_area" class="csPreviewArea output-preview hiddenView">
+          <div class="csPreviewVideoWrap output-preview-wrap">
+            <div id="cs_preview_empty" class="csPreviewEmpty output-preview-empty">Select a clip to preview.</div>
+            <div id="cs_preview_loading" class="csPreviewLoading output-preview-loading hiddenView"><div class="csPreviewSpinner output-preview-spinner"></div></div>
+            <div id="cs_preview_error" class="csPreviewError output-preview-error hiddenView"></div>
+            <video id="cs_preview_video" class="csPreviewVideo output-preview-video hiddenView" controls preload="metadata" muted playsinline></video>
           </div>
-          <div id="cs_preview_bar" class="csPreviewBar hiddenView">
-            <div class="csPreviewInfo">
-              <span id="cs_preview_name" class="csPreviewName"></span>
-              <span id="cs_preview_meta" class="csPreviewMeta"></span>
+          <div id="cs_preview_bar" class="csPreviewBar output-preview-bar hiddenView">
+            <div class="csPreviewInfo output-preview-info">
+              <span id="cs_preview_name" class="csPreviewName output-preview-name"></span>
+              <span id="cs_preview_meta" class="csPreviewMeta output-preview-meta"></span>
             </div>
-            <div class="csPreviewActions">
+            <div class="csPreviewActions output-preview-actions">
               <a id="cs_preview_download" class="clipCardBtn renderClipActionLink" download>Download</a>
               <button id="cs_preview_folder" class="clipCardBtn" type="button" onclick="openCsPreviewFolder()">Folder</button>
-              <button class="csPreviewClose" type="button" onclick="closeCenterPreview()" title="Close preview">&#x2715;</button>
+              <button class="csPreviewClose output-preview-close" type="button" onclick="closeCenterPreview()" title="Close preview">&#x2715;</button>
             </div>
           </div>
         </div>
-        <div id="render_output_list" class="renderOutputList clipsGrid">
-          <div class="renderOutputEmpty">Clips will appear here when render completes.</div>
+        <div id="render_output_list" class="renderOutputList clipsGrid output-list output-grid">
+          <div class="renderOutputEmpty output-empty">Clips will appear here when render completes.</div>
         </div>
       </div>
 
       <!-- ═══════════════════════════════════════════════════════════════
            SECTION: render-runtime-monitor — Process Timeline + Live Log
       ════════════════════════════════════════════════════════════════ -->
-      <section class="appBottomPanel rs-bottom-panel" id="appBottomPanel">
+      <section class="appBottomPanel rs-bottom-panel app-bottom-panel" id="app-bottom-panel" data-legacy-id="appBottomPanel">
 
         <div class="abpToolbar">
           <div class="abpToolbarJob">
@@ -629,97 +629,97 @@
           </div>
         </div>
 
-        <div class="rcBottom rcActiveQueue" id="rc_bottom">
-          <div class="rcAQMain">
+        <div class="rcBottom render-runtime-bottom rcActiveQueue render-runtime-queue" id="rc_bottom">
+          <div class="rcAQMain render-runtime-queue-main">
 
             <!-- LEFT 60%: active strip + part-cards grid -->
-            <section class="rcQueuePanel">
-              <header class="rcPanelHeader">
+            <section class="rcQueuePanel render-runtime-queue-panel">
+              <header class="rcPanelHeader render-runtime-queue-header">
                 <strong>Render Queue</strong>
-                <span id="rc_queue_summary" class="rcPanelMeta">0 waiting</span>
-                <span id="rc_active_badge" class="rcPanelBadge">Idle</span>
-                <button class="rcLogBtn rcLogToggleBtn" id="rc_log_panel_btn" type="button" onclick="toggleRenderLogs()" title="Toggle log panel">‹ Logs</button>
+                <span id="rc_queue_summary" class="rcPanelMeta render-runtime-queue-meta">0 waiting</span>
+                <span id="rc_active_badge" class="rcPanelBadge render-runtime-queue-badge">Idle</span>
+                <button class="rcLogBtn render-runtime-log-btn rcLogToggleBtn render-runtime-log-toggle" id="rc_log_panel_btn" type="button" onclick="toggleRenderLogs()" title="Toggle log panel">‹ Logs</button>
               </header>
 
-              <div id="rc_active_card" class="rcActiveCard isIdle">
-                <div class="rcCardHeader">
-                  <span id="rc_card_job_title" class="rcCardJobTitle"></span>
-                  <span id="rc_card_status_badge" class="rcCardStatusBadge" data-state="idle">Idle</span>
+              <div id="rc_active_card" class="rcActiveCard render-runtime-active-card isIdle">
+                <div class="rcCardHeader render-runtime-active-card-header">
+                  <span id="rc_card_job_title" class="rcCardJobTitle render-runtime-job-title"></span>
+                  <span id="rc_card_status_badge" class="rcCardStatusBadge render-runtime-status-badge" data-state="idle">Idle</span>
                 </div>
-                <div class="rcActiveTop">
-                  <div class="rcActiveCopy">
-                    <div id="rc_active_title" class="rcActiveTitle">Ready to render</div>
-                    <div id="rc_active_subtitle" class="rcActiveSubtitle">Configure your video, then click Start Render.</div>
-                    <span id="rc_eta" class="rcActiveEta" hidden></span>
+                <div class="rcActiveTop render-runtime-active-top">
+                  <div class="rcActiveCopy render-runtime-active-copy">
+                    <div id="rc_active_title" class="rcActiveTitle render-runtime-active-title">Ready to render</div>
+                    <div id="rc_active_subtitle" class="rcActiveSubtitle render-runtime-active-subtitle">Configure your video, then click Start Render.</div>
+                    <span id="rc_eta" class="rcActiveEta render-runtime-active-eta" hidden></span>
                   </div>
-                  <div id="rc_active_percent" class="rcActivePercent">0%</div>
+                  <div id="rc_active_percent" class="rcActivePercent render-runtime-active-pct">0%</div>
                 </div>
-                <div class="rcActiveProgress">
+                <div class="rcActiveProgress render-runtime-active-progress">
                   <span id="rc_active_bar" style="--progress:0%"></span>
                 </div>
-                <div id="rc_active_stage" class="rcActiveStage" hidden></div>
-                <div id="rc_active_message" class="rcActiveMessage"></div>
+                <div id="rc_active_stage" class="rcActiveStage render-runtime-active-stage" hidden></div>
+                <div id="rc_active_message" class="rcActiveMessage render-runtime-active-message"></div>
               </div>
 
-              <div id="rc_part_cards" class="rcQueueGrid">
+              <div id="rc_part_cards" class="rcQueueGrid render-runtime-clips-grid">
                 <div class="emptyState">No clips queued yet.</div>
               </div>
 
-              <div id="rc_output_preview" class="rcOutputPreview hiddenView" hidden>
-                <div class="rcPreviewHeader">
-                  <span class="rcPreviewTitle">Output Preview</span>
-                  <div class="rcPreviewHeaderRight">
-                    <select id="rc_preview_part_select" class="rcPreviewPartSelect hiddenView" onchange="_rcPreviewHandleSelectChange()"></select>
-                    <button class="rcPreviewOpenBtn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
+              <div id="rc_output_preview" class="rcOutputPreview render-runtime-preview hiddenView" hidden>
+                <div class="rcPreviewHeader render-runtime-preview-header">
+                  <span class="rcPreviewTitle render-runtime-preview-title">Output Preview</span>
+                  <div class="rcPreviewHeaderRight render-runtime-preview-header-right">
+                    <select id="rc_preview_part_select" class="rcPreviewPartSelect render-runtime-preview-part-select hiddenView" onchange="_rcPreviewHandleSelectChange()"></select>
+                    <button class="rcPreviewOpenBtn render-runtime-preview-open-btn" type="button" onclick="openRenderOutputFolder()">Open Folder</button>
                   </div>
                 </div>
-                <video id="rc_preview_video" class="rcPreviewVideo" controls preload="metadata"></video>
-                <div id="rc_preview_unavailable" class="rcPreviewUnavailable hiddenView">Preview unavailable. Use Open Output Folder to access files.</div>
-                <div class="rcPreviewMeta">
-                  <span id="rc_preview_filename" class="rcPreviewFilename"></span>
-                  <span id="rc_preview_partno" class="rcPreviewPartNo"></span>
-                  <span id="rc_preview_path" class="rcPreviewPath"></span>
+                <video id="rc_preview_video" class="rcPreviewVideo render-runtime-preview-video" controls preload="metadata"></video>
+                <div id="rc_preview_unavailable" class="rcPreviewUnavailable render-runtime-preview-unavailable hiddenView">Preview unavailable. Use Open Output Folder to access files.</div>
+                <div class="rcPreviewMeta render-runtime-preview-meta">
+                  <span id="rc_preview_filename" class="rcPreviewFilename render-runtime-preview-filename"></span>
+                  <span id="rc_preview_partno" class="rcPreviewPartNo render-runtime-preview-part-no"></span>
+                  <span id="rc_preview_path" class="rcPreviewPath render-runtime-preview-path"></span>
                 </div>
               </div>
 
 
-              <div id="rc_compare_panel" class="rcComparePanel hiddenView" hidden>
-                <div class="rcCompareHeader">
-                  <span class="rcCompareTitle">Compare Outputs</span>
+              <div id="rc_compare_panel" class="rcComparePanel render-runtime-compare hiddenView" hidden>
+                <div class="rcCompareHeader render-runtime-compare-header">
+                  <span class="rcCompareTitle render-runtime-compare-title">Compare Outputs</span>
                 </div>
-                <div id="rc_compare_empty" class="rcCompareEmpty">Render at least two outputs to compare.</div>
-                <div id="rc_compare_grid" class="rcCompareGrid hiddenView">
-                  <div class="rcCompareColumn" id="rc_compare_col_a"></div>
-                  <div class="rcCompareColumn" id="rc_compare_col_b"></div>
+                <div id="rc_compare_empty" class="rcCompareEmpty render-runtime-compare-empty">Render at least two outputs to compare.</div>
+                <div id="rc_compare_grid" class="rcCompareGrid render-runtime-compare-grid hiddenView">
+                  <div class="rcCompareColumn render-runtime-compare-col" id="rc_compare_col_a"></div>
+                  <div class="rcCompareColumn render-runtime-compare-col" id="rc_compare_col_b"></div>
                 </div>
-                <div id="rc_compare_diff" class="rcCompareDiff hiddenView"></div>
+                <div id="rc_compare_diff" class="rcCompareDiff render-runtime-compare-diff hiddenView"></div>
               </div>
 
             </section>
 
             <!-- RIGHT 40%: log panel -->
-            <section class="rcLogStrip rcLogPanel">
-              <header class="rcLogStripHeader">
+            <section class="rcLogStrip render-runtime-log rcLogPanel render-runtime-log-panel">
+              <header class="rcLogStripHeader render-runtime-log-header">
                 <strong>Recent Activity</strong>
-                <div class="rcLogToolbarActions">
-                  <button class="rcLogBtn isActive" id="rc_log_autoscroll_btn" type="button" onclick="toggleLogAutoScroll()" title="Auto-scroll: On">↑ Auto</button>
-                  <button class="rcLogBtn" id="rc_copy_logs_btn" type="button" onclick="copyRenderLogs()" title="Copy all log text">Copy</button>
-                  <button class="rcLogBtn" id="rc_toggle_logs_btn" type="button" onclick="toggleRenderLogs()">View logs</button>
+                <div class="rcLogToolbarActions render-runtime-log-actions">
+                  <button class="rcLogBtn render-runtime-log-btn isActive" id="rc_log_autoscroll_btn" type="button" onclick="toggleLogAutoScroll()" title="Auto-scroll: On">↑ Auto</button>
+                  <button class="rcLogBtn render-runtime-log-btn" id="rc_copy_logs_btn" type="button" onclick="copyRenderLogs()" title="Copy all log text">Copy</button>
+                  <button class="rcLogBtn render-runtime-log-btn" id="rc_toggle_logs_btn" type="button" onclick="toggleRenderLogs()">View logs</button>
                 </div>
-                <div class="rcLogFilterRow">
-                  <button class="rcLogFilterBtn isActive" data-filter="all"    type="button" onclick="filterRenderLogs('all')">All</button>
-                  <button class="rcLogFilterBtn"          data-filter="error"  type="button" onclick="filterRenderLogs('error')">Error</button>
-                  <button class="rcLogFilterBtn"          data-filter="system" type="button" onclick="filterRenderLogs('system')">Progress</button>
+                <div class="rcLogFilterRow render-runtime-log-filter-row">
+                  <button class="rcLogFilterBtn render-runtime-log-filter-btn isActive" data-filter="all"    type="button" onclick="filterRenderLogs('all')">All</button>
+                  <button class="rcLogFilterBtn render-runtime-log-filter-btn"          data-filter="error"  type="button" onclick="filterRenderLogs('error')">Error</button>
+                  <button class="rcLogFilterBtn render-runtime-log-filter-btn"          data-filter="system" type="button" onclick="filterRenderLogs('system')">Progress</button>
                 </div>
               </header>
-              <div id="event_log_render" class="rcLogList">
-                <div class="rcLogEmpty">No logs yet</div>
+              <div id="event_log_render" class="rcLogList render-runtime-log-list">
+                <div class="rcLogEmpty render-runtime-log-empty">No logs yet</div>
               </div>
             </section>
 
           </div>
 
-          <div class="rcCompatHidden" hidden aria-hidden="true">
+          <div class="rcCompatHidden render-runtime-compat" hidden aria-hidden="true">
             <span id="rc_status"></span>
             <span id="rc_progress"></span>
             <span id="rc_stage"></span>
@@ -756,7 +756,7 @@
       </section><!-- /appBottomPanel -->
 
       <!-- ── SECTION: clip-preview-modal ─────────────────────────── -->
-      <div id="clip_preview_modal" class="clipPreviewModal hiddenView" onclick="closeClipPreview(event)">
+      <div id="output-preview-modal" data-legacy-id="clip_preview_modal" class="clipPreviewModal output-preview-modal hiddenView" onclick="closeClipPreview(event)">
         <div class="clipPreviewDialog">
           <div class="clipPreviewTitleBar">
             <span id="clip_preview_title" class="clipPreviewName"></span>
@@ -778,10 +778,10 @@
     <div id="partial_workspace_view"></div>
 
     <!-- ── SECTION: history-view ────────────────────────────────── -->
-    <div id="partial_history_view"></div>
+    <div id="history-panel" data-legacy-id="partial_history_view"></div>
 
     <!-- ── SECTION: review-view ──────────────────────────────────── -->
-    <div id="partial_review_view"></div>
+    <div id="review-panel" data-legacy-id="partial_review_view"></div>
 
     <!-- ── Normal page header + grid ─────────────────────────────── -->
     <div class="mainContentScroll">
@@ -813,7 +813,7 @@
   <!-- ═══════════════════════════════════════════════════════════════
        SECTION: inspector
   ════════════════════════════════════════════════════════════════ -->
-  <aside class="appInspector rs-right-panel" id="appInspector">
+  <aside class="appInspector rs-right-panel app-right-panel" id="appInspector">
     <div class="evRightHeader">
       <div style="min-width:0;flex:1">
         <div class="evRightTitle">Video Editor</div>

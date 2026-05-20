@@ -127,7 +127,7 @@ function resetRenderSessionUi(){
     qs('render_history_list').innerHTML = '<div class="emptyState">Session mode: old jobs are hidden.</div>';
   }
   hideRenderCompletionBar();
-  const _pipelineMain = document.getElementById('mainArea');
+  const _pipelineMain = qs('mainArea');
   if (_pipelineMain) _pipelineMain.classList.remove('inPipeline');
   resetRenderMonitorHeartbeat();
   _renderLogsUserToggled = false;
@@ -1382,10 +1382,10 @@ function renderBenchmarkPanel(job, parts) {
       grid.innerHTML = '';
       rows.forEach(({ label, value }) => {
         const lbl = document.createElement('span');
-        lbl.className = 'rcBenchmarkLabel';
+        lbl.className = 'rcBenchmarkLabel ai-benchmark-label';
         lbl.textContent = label;
         const val = document.createElement('span');
-        val.className = 'rcBenchmarkValue';
+        val.className = 'rcBenchmarkValue ai-benchmark-value';
         val.textContent = value;
         grid.appendChild(lbl);
         grid.appendChild(val);
@@ -2401,10 +2401,10 @@ function renderRenderHistory() {
   if (!items.length) {
     // R7.4: Honest empty state — don't claim AI learns until user actually starts
     box.innerHTML =
-      '<div class="renderHistoryEmpty">' +
-        '<div class="renderHistoryEmptyIcon">&#127916;</div>' +
-        '<div class="renderHistoryEmptyTitle">No renders yet</div>' +
-        '<div class="renderHistoryEmptySub">Start a render to see your history here. Review clips after each render to help AI learn your preferences.</div>' +
+      '<div class="renderHistoryEmpty history-empty">' +
+        '<div class="renderHistoryEmptyIcon history-empty-icon">&#127916;</div>' +
+        '<div class="renderHistoryEmptyTitle history-empty-title">No renders yet</div>' +
+        '<div class="renderHistoryEmptySub history-empty-sub">Start a render to see your history here. Review clips after each render to help AI learn your preferences.</div>' +
       '</div>';
     _uxr4PopulateMomentumHero();
     return;
@@ -2412,23 +2412,23 @@ function renderRenderHistory() {
   box.innerHTML = items.map((entry, idx) => {
     const icon = entry.status === 'failed' ? '✕' : entry.status === 'partial' ? '⚠' : '✓';
     const openDisabled = entry.outputDir ? '' : ' disabled';
-    const elevatedClass = idx === 0 ? ' uxr4TopItem' : '';
+    const elevatedClass = idx === 0 ? ' uxr4TopItem is-featured' : '';
     // R8.3.1-D: Status-aware continuity narrative — resume-oriented for partial, gentle for failed
     const histMeta = entry.status === 'partial'
       ? 'Resume · ' + _renderHistoryClipSummary(entry)
       : entry.status === 'failed'
       ? 'Ready to retry'
       : _renderHistoryStatusText(entry.status) + ' · ' + _renderHistoryClipSummary(entry);
-    return `<div class="renderHistoryItem ${esc(entry.status || 'completed')}${elevatedClass}">
-      <div class="renderHistoryMain">
-        <div class="renderHistoryTop">
-          <span class="renderHistoryStatusIcon">${icon}</span>
-          <span class="renderHistoryTitle" title="${_renderHistoryAttr(entry.sourceValue)}">${esc(entry.title || 'Untitled render')}</span>
-          <span class="renderHistoryTime">${_renderHistoryRelativeTime(entry.timestamp)}</span>
+    return `<div class="renderHistoryItem history-card ${esc(entry.status || 'completed')}${elevatedClass}">
+      <div class="renderHistoryMain history-card-main">
+        <div class="renderHistoryTop history-card-top">
+          <span class="renderHistoryStatusIcon history-card-status-icon">${icon}</span>
+          <span class="renderHistoryTitle history-card-title" title="${_renderHistoryAttr(entry.sourceValue)}">${esc(entry.title || 'Untitled render')}</span>
+          <span class="renderHistoryTime history-card-time">${_renderHistoryRelativeTime(entry.timestamp)}</span>
         </div>
-        <div class="renderHistoryMeta">${esc(histMeta)}</div>
+        <div class="renderHistoryMeta history-card-meta">${esc(histMeta)}</div>
       </div>
-      <div class="renderHistoryActions">
+      <div class="renderHistoryActions history-card-actions">
         <button class="ghostButton" type="button"${openDisabled} onclick="openRenderHistoryOutput('${encodeURIComponent(entry.jobId)}')">Open Output Folder</button>
         <button class="secondaryButton" type="button" onclick="rerunRenderHistory('${encodeURIComponent(entry.jobId)}')">Rerun</button>
       </div>
@@ -2479,26 +2479,26 @@ async function _uxr4PopulateMomentumHero() {
 
       // R8.3.1-B: Single purposeful CTA
       var ctaHtml = canRerun
-        ? '<button class="uxr4ContinueBtn" type="button"' +
+        ? '<button class="uxr4ContinueBtn history-momentum-cta" type="button"' +
           ' onclick="rerunRenderHistory(\'' + encodeURIComponent(apiLast.job_id) + '\')">' +
           'Try another render pass</button>'
         : canRetry
-        ? '<button class="uxr4ContinueBtn" type="button"' +
+        ? '<button class="uxr4ContinueBtn history-momentum-cta" type="button"' +
           ' onclick="(typeof retryHistoryDownload===\'function\')&&retryHistoryDownload(\'' + encodeURIComponent(apiLast.job_id) + '\')">' +
           'Retry interrupted render</button>'
         : '';
 
       continueZone.innerHTML =
-        '<div class="uxr4ContinueTitle">' + esc(apiLast.title || 'Last project') + '</div>' +
-        (narrative ? '<div class="uxr4ContinueNarrative">' + narrative + '</div>' : '') +
+        '<div class="uxr4ContinueTitle history-momentum-title">' + esc(apiLast.title || 'Last project') + '</div>' +
+        (narrative ? '<div class="uxr4ContinueNarrative history-momentum-narrative">' + narrative + '</div>' : '') +
         ctaHtml;
     } else {
       // Fallback: localStorage shape
       var lsItems = _renderHistoryRead();
       if (!lsItems.length) {
         continueZone.innerHTML =
-          '<div class="uxr4ContinueLabel">Set up your workspace</div>' +
-          '<div class="uxr4ContinueSub">Start a render to see your projects here.</div>';
+          '<div class="uxr4ContinueLabel history-momentum-label">Set up your workspace</div>' +
+          '<div class="uxr4ContinueSub history-momentum-sub">Start a render to see your projects here.</div>';
       } else {
         var last = lsItems[0];
         var clips  = Number(last.completedParts || 0);
@@ -2508,12 +2508,12 @@ async function _uxr4PopulateMomentumHero() {
         if (clips > 0) metaParts.push(clips + ' clip' + (clips !== 1 ? 's' : '') + ' reviewed');
         if (failed > 0) metaParts.push(failed + ' failed');
         continueZone.innerHTML =
-          '<div class="uxr4ContinueTitle">' + esc(last.title || 'Last project') + '</div>' +
+          '<div class="uxr4ContinueTitle history-momentum-title">' + esc(last.title || 'Last project') + '</div>' +
           (metaParts.length
-            ? '<div class="uxr4ContinueNarrative">' + esc(metaParts.join(' · ')) +
-              ' <span class="uxr4ContinueTime">' + esc(lsTimeAgo) + '</span></div>'
+            ? '<div class="uxr4ContinueNarrative history-momentum-narrative">' + esc(metaParts.join(' · ')) +
+              ' <span class="uxr4ContinueTime history-momentum-time">' + esc(lsTimeAgo) + '</span></div>'
             : '') +
-          '<button class="uxr4ContinueBtn" type="button"' +
+          '<button class="uxr4ContinueBtn history-momentum-cta" type="button"' +
           ' onclick="rerunRenderHistory(\'' + encodeURIComponent(last.jobId) + '\')">' +
           'Try another render pass</button>';
       }
@@ -2534,9 +2534,9 @@ async function _uxr4PopulateMomentumHero() {
           if (taste.editStyle === 'viral')      tendencies.push('high-energy edits');
           else if (taste.editStyle === 'cinematic') tendencies.push('cinematic storytelling');
           if (tendencies.length) {
-            html = '<div class="uxr4MomentumStrip">' +
-                   '<div class="uxr4MomentumLabel">Recent tendency</div>' +
-                   '<div class="uxr4MomentumTendency">' + esc(tendencies.slice(0, 2).join(' · ')) + '</div>' +
+            html = '<div class="uxr4MomentumStrip history-momentum-strip">' +
+                   '<div class="uxr4MomentumLabel history-momentum-strip-label">Recent tendency</div>' +
+                   '<div class="uxr4MomentumTendency history-momentum-tendency">' + esc(tendencies.slice(0, 2).join(' · ')) + '</div>' +
                    '</div>';
           } else {
             var STYLE_LABELS = {
@@ -2545,18 +2545,18 @@ async function _uxr4PopulateMomentumHero() {
             };
             var stRows = '';
             if (taste.editStyle && taste.editStyle !== 'balanced') {
-              stRows += '<div class="uxr4IntelTasteRow"><span class="uxr4IntelTasteKey">Edit style</span>' +
-                        '<span class="uxr4IntelTasteVal">' + esc(STYLE_LABELS[taste.editStyle] || taste.editStyle) + '</span></div>';
+              stRows += '<div class="uxr4IntelTasteRow history-intel-taste-row"><span class="uxr4IntelTasteKey history-intel-taste-key">Edit style</span>' +
+                        '<span class="uxr4IntelTasteVal history-intel-taste-val">' + esc(STYLE_LABELS[taste.editStyle] || taste.editStyle) + '</span></div>';
             }
-            if (stRows) html = '<div class="uxr4IntelTaste">' + stRows + '</div>';
+            if (stRows) html = '<div class="uxr4IntelTaste history-intel-taste">' + stRows + '</div>';
           }
         } else if (taste && !taste.confident) {
           var prefs = (typeof CreatorMemory.getDerivedPreferences === 'function')
             ? CreatorMemory.getDerivedPreferences() : null;
           var total = prefs ? (prefs.totalSignals || 0) : 0;
           if (total > 0) {
-            html = '<div class="uxr4MomentumStrip">' +
-                   '<div class="uxr4MomentumLearning">Still learning your preferences — ' + total +
+            html = '<div class="uxr4MomentumStrip history-momentum-strip">' +
+                   '<div class="uxr4MomentumLearning history-momentum-learning">Still learning your preferences — ' + total +
                    ' signal' + (total !== 1 ? 's' : '') + ' so far</div>' +
                    '</div>';
           }
@@ -4067,13 +4067,13 @@ function _r7SignalRow(motionScore, hookScore, isBest, bestMotion, bestHook) {
   if (hookScore !== null) {
     var hp = Math.round(hookScore * 100);
     var hc = hookScore >= 0.7 ? 'sig-high' : hookScore >= 0.5 ? 'sig-mid' : 'sig-low';
-    chips.push('<span class="clipCardSig ' + hc + '" data-sig="hook">Hook ' + hp + '%</span>');
+    chips.push('<span class="clipCardSig ' + hc + '" data-sig="hook">Hook ' + hp/100 + '%</span>');
     if (!isBest && bestHook !== null && hookScore > bestHook + 0.08) tradeoffs.push('Stronger hook');
   }
   if (motionScore !== null) {
     var mp = Math.round(motionScore * 100);
     var mc = motionScore >= 0.7 ? 'sig-high' : motionScore >= 0.5 ? 'sig-mid' : 'sig-low';
-    chips.push('<span class="clipCardSig ' + mc + '" data-sig="motion">Motion ' + mp + '%</span>');
+    chips.push('<span class="clipCardSig ' + mc + '" data-sig="motion">Motion ' + mp/100 + '%</span>');
     if (!isBest && bestMotion !== null && motionScore > bestMotion + 0.08) tradeoffs.push('Better motion');
   }
   if (!chips.length) return '';
@@ -4739,21 +4739,21 @@ function populateRenderOutputPanel(job, parts) {
     const _thumbT = rk.coverOffset > 0 ? rk.coverOffset : 1;
     const canPreview = (isDone || isSkipped) && hasFile && jobId;
     const thumbHtml = canPreview
-      ? `<img class="clipCardThumbImg" src="${_thumbBase}/thumbnail?t=${_thumbT}" loading="lazy" alt="" onerror="this.classList.add('is-error')">`
-        + `<video class="clipCardThumbVid" data-src="${_thumbBase}/media" preload="none" muted playsinline></video>`
-      : `<div class="clipCardThumbPlaceholder">${isFailed ? '✗' : isSkipped ? '—' : '⋯'}</div>`;
+      ? `<img class="clipCardThumbImg output-card-thumb-img" src="${_thumbBase}/thumbnail?t=${_thumbT}" loading="lazy" alt="" onerror="this.classList.add('is-error')">`
+        + `<video class="clipCardThumbVid output-card-thumb-vid" data-src="${_thumbBase}/media" preload="none" muted playsinline></video>`
+      : `<div class="clipCardThumbPlaceholder output-card-thumb-placeholder">${isFailed ? '✗' : isSkipped ? '—' : '⋯'}</div>`;
     const thumbAttrs = canPreview
       ? ` data-previewable="true" onclick="centerPreviewClip(${JSON.stringify(jobId)},${partNo},${JSON.stringify(p.output_file || '')},${JSON.stringify(p.part_name || `Clip ${partNo}`)})" style="cursor:pointer"`
       : '';
     const previewBtn = (!isFailed && hasFile && jobId)
-      ? `<button class="clipCardBtn clipCardBtnPreview" type="button" onclick="centerPreviewClip(${JSON.stringify(jobId)},${partNo},${JSON.stringify(p.output_file || '')},${JSON.stringify(p.part_name || `Clip ${partNo}`)})">Preview</button>`
+      ? `<button class="clipCardBtn clipCardBtnPreview output-card-btn output-card-btn-preview" type="button" onclick="centerPreviewClip(${JSON.stringify(jobId)},${partNo},${JSON.stringify(p.output_file || '')},${JSON.stringify(p.part_name || `Clip ${partNo}`)})">Preview</button>`
       : '';
     const _dlVariant = JSON.stringify(rk.variantType || '');
     const downloadBtn = (!isFailed && hasFile && jobId)
-      ? `<a class="clipCardBtn renderClipActionLink" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download onclick="if(typeof CreatorTaste!=='undefined'&&${rk.rank||0}>0)CreatorTaste.recordDownload(${rk.rank||0});if(typeof CreatorFeedback!=='undefined'&&${_dlVariant})CreatorFeedback.recordVariantDownload(${_dlVariant});if(typeof _r69RecordDownload==='function')_r69RecordDownload(${partNo});if(typeof _r70RecordDurationDownload==='function')_r70RecordDurationDownload(${startSec},${endSec});_r72ReviewedPartNos.add(${partNo});_r72UpdateReviewCounter()">Download</a>`
+      ? `<a class="clipCardBtn renderClipActionLink output-card-btn" href="/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/stream" download onclick="if(typeof CreatorTaste!=='undefined'&&${rk.rank||0}>0)CreatorTaste.recordDownload(${rk.rank||0});if(typeof CreatorFeedback!=='undefined'&&${_dlVariant})CreatorFeedback.recordVariantDownload(${_dlVariant});if(typeof _r69RecordDownload==='function')_r69RecordDownload(${partNo});if(typeof _r70RecordDurationDownload==='function')_r70RecordDurationDownload(${startSec},${endSec});_r72ReviewedPartNos.add(${partNo});_r72UpdateReviewCounter()">Download</a>`
       : '';
     const openBtn = hasFile
-      ? `<button class="clipCardBtn" type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Folder</button>`
+      ? `<button class="clipCardBtn output-card-btn" type="button" onclick="openClipFile(${JSON.stringify(p.output_file)})">Folder</button>`
       : '';
     // R8.2.1: Compare button — best clip (vs second) or strong candidate (vs best)
     // scoreVal and _r821StrongThresh are both 0–10 scale
@@ -4766,50 +4766,50 @@ function populateRenderOutputPanel(job, parts) {
       (_r821IsStrong && _r821BestPartNo !== null && partNo !== _r821BestPartNo)
     );
     const compareBtn = _r821ShowCmp
-      ? `<button class="clipCardBtn clipCardBtnCompare" type="button" onclick="r821EnterCompare(${_r821RefPNo},${_r821ChalPNo})">Compare</button>`
+      ? `<button class="clipCardBtn clipCardBtnCompare output-card-btn output-card-btn-compare" type="button" onclick="r821EnterCompare(${_r821RefPNo},${_r821ChalPNo})">Compare</button>`
       : '';
     // UP15: Cover button — opens the auto-exported thumbnail in the output folder.
     const coverBtn = (isDone && rk.coverFile)
-      ? `<button class="clipCardBtn clipCardBtnCover" type="button" onclick="openClipFile(${JSON.stringify(rk.coverFile)})">Cover</button>`
+      ? `<button class="clipCardBtn clipCardBtnCover output-card-btn output-card-btn-cover" type="button" onclick="openClipFile(${JSON.stringify(rk.coverFile)})">Cover</button>`
       : '';
     if (qs('abp_output_meta') && hasFile) qs('abp_output_meta').textContent = `Latest file: ${String(p.output_file || '').split(/[\\\\/]/).pop()}`;
     const isSelected = isDone && hasFile && _selectedClipPaths.has(p.output_file);
-    const cardClass = `clipCard${isFailed ? ' isFailed' : ''}${isSkipped ? ' isSkipped' : ''}${isDone ? ' isDone' : ''}${isSelected ? ' isSelected' : ''}${rk.isBest ? ' isBestClip' : ''}`;
+    const cardClass = `clipCard output-card${isFailed ? ' isFailed is-error' : ''}${isSkipped ? ' isSkipped' : ''}${isDone ? ' isDone is-complete' : ''}${isSelected ? ' isSelected is-selected' : ''}${rk.isBest ? ' isBestClip is-best' : ''}`;
     const failReasonRaw = isFailed ? String(p?.message || '').trim() : '';
     const failReasonClean = (failReasonRaw && !/(_ms=|\bpart_render\b|\w+=\w+)/.test(failReasonRaw)) ? failReasonRaw.slice(0, 80) : '';
     return `<div class="${cardClass}" data-clip-status="${esc(st || 'queued')}" data-part-no="${partNo}" data-aspect="${_dataAspect}"${isDone ? ` tabindex="0" data-start-sec="${startSec}" data-end-sec="${endSec}"` : ''}>
-      <div class="clipCardThumbWrap"${thumbAttrs}>
+      <div class="clipCardThumbWrap output-card-thumb-wrap"${thumbAttrs}>
         ${thumbHtml}
-        ${rk.isBest ? '<div class="clipCardBestFlag">Best</div>' : ''}
-        <div class="clipCardDurTag">${dur}s</div>
+        ${rk.isBest ? '<div class="clipCardBestFlag output-card-best-flag">Best</div>' : ''}
+        <div class="clipCardDurTag output-card-dur">${dur}s</div>
       </div>
-      <div class="clipCardBody">
-        <div class="clipCardTitle">${name}</div>
-        ${rk.variantType ? `<div class="clipCardVariantBadge" data-variant="${esc(rk.variantType)}">${
+      <div class="clipCardBody output-card-body">
+        <div class="clipCardTitle output-card-title">${name}</div>
+        ${rk.variantType ? `<div class="clipCardVariantBadge output-card-variant" data-variant="${esc(rk.variantType)}">${
           rk.variantType === 'aggressive' ? 'Aggressive' :
           rk.variantType === 'balanced'   ? 'Balanced'   :
           rk.variantType === 'story_first'? 'Story-first': esc(rk.variantType)
         }${_cfVariantPref && rk.variantType === _cfVariantPref ? '<span class="cfVariantPref"> · recent</span>' : ''}</div>` : ''}
-        ${(isDone && rk.ctaApplied && rk.ctaText) ? `<div class="clipCardCtaChip" title="CTA end card: ${esc(rk.ctaText)}">CTA · ${esc(rk.ctaText)}</div>` : ''}
-        <div class="clipCardScoreRow">
+        ${(isDone && rk.ctaApplied && rk.ctaText) ? `<div class="clipCardCtaChip output-card-cta" title="CTA end card: ${esc(rk.ctaText)}">CTA · ${esc(rk.ctaText)}</div>` : ''}
+        <div class="clipCardScoreRow output-card-score-row">
           ${hasScore
-            ? `<span class="clipCardScore" data-tier="${scoreTier}">${scoreVal.toFixed(1)}<span class="clipCardScoreMax"> /10</span></span><span class="clipCardRankTag">#${rk.rank || '?'}</span>`
-            : `<span class="clipCardScore" data-tier="weak">—</span>`}
-          <span class="clipCardStatusDot" data-status="${esc(statusText)}" title="${esc(statusText)}"></span>
+            ? `<span class="clipCardScore output-card-score" data-tier="${scoreTier}">${scoreVal.toFixed(1)}<span class="clipCardScoreMax"> /10</span></span><span class="clipCardRankTag output-card-rank">#${rk.rank || '?'}</span>`
+            : `<span class="clipCardScore output-card-score" data-tier="weak">—</span>`}
+          <span class="clipCardStatusDot output-card-status" data-status="${esc(statusText)}" title="${esc(statusText)}"></span>
         </div>
-        ${_clipReason ? `<div class="clipCardReason">${esc(_clipReason)}</div>` : ''}
+        ${_clipReason ? `<div class="clipCardReason output-card-reason">${esc(_clipReason)}</div>` : ''}
         ${isDone && scoreVal >= 5 ? _r66BuildExplainPanel(rk) : ''}
         ${isDone && rk.isBest ? _r68DnaNote(rk) : ''}
         ${isDone && (rk.rank || 0) === 2 && scoreVal >= 6 ? _r68AltNote(rk) : ''}
         ${isDone ? _r66ConfidenceBadge(rk) : ''}
-        ${isDone && rk.selectionReasonHuman ? `<div class="clipCardSelReason">${esc(rk.selectionReasonHuman)}</div>` : ''}
+        ${isDone && rk.selectionReasonHuman ? `<div class="clipCardSelReason output-card-sel-reason">${esc(rk.selectionReasonHuman)}</div>` : ''}
         ${rk.selectionReason && rk.selectionReason.includes('limited source variety') ? `<div class="clipVarietyNote">Limited source variety</div>` : ''}
         ${_jobRecovered && isDone ? `<div class="clipRecoveredNote" title="${esc(_jobRecoveryNotes.join(' · '))}">Recovered</div>` : ''}
         ${(motionScore !== null || hookScore !== null) && (rk.isBest || scoreVal >= 6) ? _r7SignalRow(motionScore, hookScore, rk.isBest, _bestMotion, _bestHook) : ''}
-        ${failReasonClean ? `<div class="clipCardFailReason">${esc(failReasonClean)}</div>` : ''}
+        ${failReasonClean ? `<div class="clipCardFailReason output-card-fail-reason">${esc(failReasonClean)}</div>` : ''}
         ${_shouldRenderBestExport(_cardAiUx, rk.isBest) ? `<div class="aiux-best-export"><div class="aiux-best-title">Why this output?</div><ul class="aiux-best-reasons">${_bestExportWhy.map(function(w){return`<li class="aiux-best-reason"><span class="aiux-best-check">&#x2713;</span>${esc(w)}</li>`;}).join('')}</ul></div>` : ''}
-        ${isDone && endSec > startSec ? `<div class="clipCardSteerRow"><div class="clipCardSteerLabel">Next render:</div><button class="clipCardBtnKeep" onclick="csKeepClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}',${partNo})" title="Prioritise this clip in next render">&#10003; Keep</button><button class="clipCardBtnAvoid" onclick="csAvoidClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}',${partNo})" title="Exclude this clip from next render">&#10007; Avoid</button><button class="clipCardBtnSimilar" onclick="csKeepAndRerender(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}',${partNo})" title="Keep this clip and rerender immediately">&#8635; Rerender</button></div>` : ''}
-        <div class="clipCardActions">${previewBtn}${downloadBtn}${openBtn}${coverBtn}${compareBtn}</div>
+        ${isDone && endSec > startSec ? `<div class="clipCardSteerRow output-card-steer-row"><div class="clipCardSteerLabel">Next render:</div><button class="clipCardBtnKeep" onclick="csKeepClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}',${partNo})" title="Prioritise this clip in next render">&#10003; Keep</button><button class="clipCardBtnAvoid" onclick="csAvoidClip(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}',${partNo})" title="Exclude this clip from next render">&#10007; Avoid</button><button class="clipCardBtnSimilar" onclick="csKeepAndRerender(${startSec},${endSec},'${esc(p.part_name||'clip'+partNo)}',${partNo})" title="Keep this clip and rerender immediately">&#8635; Rerender</button></div>` : ''}
+        <div class="clipCardActions output-card-actions">${previewBtn}${downloadBtn}${openBtn}${coverBtn}${compareBtn}</div>
       </div>
     </div>`;
   }).join('');
@@ -5150,7 +5150,7 @@ function renderAiInsights(job) {
   let cardH = '<div class="aiInSection"><div class="aiInsightGrid">';
 
   // Pacing card
-  cardH += '<div class="aiInsightCard"><div class="aiInsightCardTitle">Pacing</div><div class="aiInsightCardRow">';
+  cardH += '<div class="aiInsightCard ai-card"><div class="aiInsightCardTitle ai-card-title">Pacing</div><div class="aiInsightCardRow ai-card-row">';
   if (cutStyle && cutStyle !== 'standard') cardH += `<span class="aiInsightCardBadge">${esc(cutStyle.replace(/_/g,' '))}</span>`;
   if (bpm !== null) cardH += `<span class="aiInsightCardBadge">${bpm.toFixed(0)} BPM</span>`;
   if (emotion && emotion !== 'neutral') cardH += `<span class="aiInsightCardBadge">${esc(emotion)}</span>`;
@@ -5159,7 +5159,7 @@ function renderAiInsights(job) {
   cardH += '</div></div>';
 
   // Camera card
-  cardH += '<div class="aiInsightCard"><div class="aiInsightCardTitle">Camera</div><div class="aiInsightCardRow">';
+  cardH += '<div class="aiInsightCard ai-card"><div class="aiInsightCardTitle ai-card-title">Camera</div><div class="aiInsightCardRow ai-card-row">';
   if (camBhv && camBhv !== 'none') {
     cardH += `<span class="aiInsightCardBadge">${esc(camBhv.replace(/_/g,' '))}</span>`;
     if (camZoom !== null && camZoom > 1.0) cardH += `<span class="aiInsightCardBadge">${camZoom.toFixed(2)}x</span>`;
@@ -5179,7 +5179,7 @@ function renderAiInsights(job) {
   const beatAware  = !!subtitle.beat_aware;
   const emAware    = !!subtitle.emotion_aware;
   if (subTone !== 'default' || subEmph !== 'none' || beatAware || emAware) {
-    let h = '<div class="aiInSection"><div class="aiInsightCard aiInsightCardWide"><div class="aiInsightCardTitle">Subtitles</div><div class="aiInsightCardRow">';
+    let h = '<div class="aiInSection"><div class="aiInsightCard aiInsightCardWide ai-card ai-card-wide"><div class="aiInsightCardTitle ai-card-title">Subtitles</div><div class="aiInsightCardRow ai-card-row">';
     if (subTone !== 'default') h += `<span class="aiInsightCardBadge">${esc(subTone)} tone</span>`;
     if (subEmph !== 'none')    h += `<span class="aiInsightCardBadge">${esc(subEmph)} emphasis</span>`;
     if (subDensity !== 'normal') h += `<span class="aiInsightCardBadge">${esc(subDensity)} density</span>`;
@@ -5193,9 +5193,9 @@ function renderAiInsights(job) {
   const memResults = Array.isArray(memCtx.results) ? memCtx.results : [];
   if (memResults.length > 0) {
     const mode = String(aiDir.mode || '');
-    let h = '<div class="aiInSection"><div class="aiMemCard">';
-    h += '<div class="aiMemCardTitle">Memory</div>';
-    h += `<div class="aiMemCardRow">Similar renders found: <strong>${memResults.length}</strong>`;
+    let h = '<div class="aiInSection"><div class="aiMemCard ai-memory-card">';
+    h += '<div class="aiMemCardTitle ai-memory-card-title">Memory</div>';
+    h += `<div class="aiMemCardRow ai-memory-card-row">Similar renders found: <strong>${memResults.length}</strong>`;
     if (mode) h += ` · <span style="color:var(--text-dim)">${esc(mode.replace(/_/g,' '))}</span>`;
     h += '</div></div></div>';
     parts.push(h);
@@ -5431,30 +5431,30 @@ const RenderAiRuntime = (() => {
     if (queuePanel && !document.getElementById('rc_ai_process_cards')) {
       const el = document.createElement('div');
       el.id = 'rc_ai_process_cards';
-      el.className = 'rcAiProcessCards hiddenView';
+      el.className = 'rcAiProcessCards ai-process-cards hiddenView';
       if (partCards) queuePanel.insertBefore(el, partCards);
       else queuePanel.appendChild(el);
     }
     if (queuePanel && !document.getElementById('rc_ai_evolution_feed') && partCards) {
       const el = document.createElement('div');
       el.id = 'rc_ai_evolution_feed';
-      el.className = 'rcAiEvolutionFeed hiddenView';
+      el.className = 'rcAiEvolutionFeed ai-evolution-feed hiddenView';
       el.innerHTML =
-        '<div class="rcAiEvolutionHeader"><span>Clip Intelligence</span></div>' +
-        '<div id="rc_ai_evolution_list" class="rcAiEvolutionList"></div>';
+        '<div class="rcAiEvolutionHeader ai-evolution-header"><span>Clip Intelligence</span></div>' +
+        '<div id="rc_ai_evolution_list" class="rcAiEvolutionList ai-evolution-list"></div>';
       queuePanel.insertBefore(el, partCards);
     }
     const logList = document.getElementById('event_log_render');
     if (logList && !document.getElementById('rc_ai_reason_feed')) {
       const el = document.createElement('div');
       el.id = 'rc_ai_reason_feed';
-      el.className = 'rcAiReasonFeed hiddenView';
+      el.className = 'rcAiReasonFeed ai-reason-feed hiddenView';
       el.innerHTML =
-        '<div class="rcAiReasonHeader">' +
-          '<span class="rcAiReasonLabel">AI Reasoning</span>' +
-          '<span class="rcAiReasonBadge">Live</span>' +
+        '<div class="rcAiReasonHeader ai-reason-header">' +
+          '<span class="rcAiReasonLabel ai-reason-label">AI Reasoning</span>' +
+          '<span class="rcAiReasonBadge ai-reason-badge">Live</span>' +
         '</div>' +
-        '<div id="rc_ai_reason_list" class="rcAiReasonList"></div>';
+        '<div id="rc_ai_reason_list" class="rcAiReasonList ai-reason-list"></div>';
       logList.parentElement.insertBefore(el, logList);
     }
   }
@@ -5513,15 +5513,15 @@ const RenderAiRuntime = (() => {
     }
     requestAnimationFrame(() => {
       el.innerHTML =
-        '<div class="rcAiProcCard" data-state="' + state + '">' +
-          '<div class="rcAiProcIcon">' + stg.icon + '</div>' +
-          '<div class="rcAiProcBody">' +
-            '<div class="rcAiProcLabel">' + esc(stg.label) + '</div>' +
-            '<div class="rcAiProcMsg">' + esc(stg.msg) + '</div>' +
+        '<div class="rcAiProcCard ai-process-card" data-state="' + state + '">' +
+          '<div class="rcAiProcIcon ai-process-icon">' + stg.icon + '</div>' +
+          '<div class="rcAiProcBody ai-process-body">' +
+            '<div class="rcAiProcLabel ai-process-label">' + esc(stg.label) + '</div>' +
+            '<div class="rcAiProcMsg ai-process-msg">' + esc(stg.msg) + '</div>' +
           '</div>' +
-          '<div class="rcAiProcMeta">' +
-            '<span class="rcAiProcPct">' + pct + '%</span>' +
-            '<div class="rcAiProcBar"><div class="rcAiProcFill" style="--w:' + pct + '%"></div></div>' +
+          '<div class="rcAiProcMeta ai-process-meta">' +
+            '<span class="rcAiProcPct ai-process-pct">' + pct + '%</span>' +
+            '<div class="rcAiProcBar ai-process-bar"><div class="rcAiProcFill ai-process-fill" style="--w:' + pct + '%"></div></div>' +
           '</div>' +
         '</div>';
       el.classList.remove('p29Morphing');
@@ -5828,9 +5828,9 @@ const RenderAiRuntime = (() => {
     const el = document.getElementById('rc_ai_reason_list');
     if (!el) return;
     el.innerHTML = _reasonItems.slice().reverse().map(item =>
-      '<div class="rcAiReasonItem" data-stage="' + item.stageKey + '">' +
-        '<span class="rcAiReasonDot"></span>' +
-        '<span class="rcAiReasonText">' + esc(item.msg) + '</span>' +
+      '<div class="rcAiReasonItem ai-reason-item" data-stage="' + item.stageKey + '">' +
+        '<span class="rcAiReasonDot ai-reason-dot"></span>' +
+        '<span class="rcAiReasonText ai-reason-text">' + esc(item.msg) + '</span>' +
       '</div>'
     ).join('');
   }
@@ -5894,7 +5894,7 @@ const RenderAiRuntime = (() => {
     // P2.9.1-C: Idempotent — once per render session, safe across WS reconnects
     if (_arrivalTriggered) return;
     _arrivalTriggered = true;
-    const panel = document.getElementById('render_active_panel');
+    const panel = qs('render_active_panel');
     if (panel) {
       panel.classList.add('p29Arrival');
       setTimeout(() => { if (panel) panel.classList.remove('p29Arrival'); }, 1500);
@@ -5920,7 +5920,7 @@ const RenderAiRuntime = (() => {
 
   // UX-R2-B/C/D/E/F: Populate and reveal #uxr2_completion_hero
   function _showCompletionHero(job, parts, narrative, completed, topPct) {
-    const heroEl = document.getElementById('uxr2_completion_hero');
+    const heroEl = qs('uxr2_completion_hero');
     if (!heroEl) return;
 
     const jobId      = String(job?.id || job?.job_id || '');
@@ -5992,7 +5992,7 @@ const RenderAiRuntime = (() => {
       } else {
         reviewBtn.textContent = 'Review Clips';
         reviewBtn.onclick = function () {
-          const panel = document.getElementById('render_output_panel');
+          const panel = qs('render_output_panel');
           if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
         };
       }
@@ -6010,9 +6010,9 @@ const RenderAiRuntime = (() => {
     }
 
     // ── Demote completion bar; elevate output list ──────────
-    const bar = document.getElementById('render_completion_bar');
+    const bar = qs('render_completion_bar');
     if (bar) bar.classList.add('uxr2BarDemoted');
-    const listEl = document.getElementById('render_output_list');
+    const listEl = qs('render_output_list');
     if (listEl) listEl.classList.add('uxr2Complete');
 
     // ── Reveal ──────────────────────────────────────────────
@@ -6021,8 +6021,8 @@ const RenderAiRuntime = (() => {
   }
 
   function showCompletionIntelligence(job, summary, parts) {
-    const insightEl  = document.getElementById('rc_benchmark_insight');
-    const benchPanel = document.getElementById('rc_benchmark_panel');
+    const insightEl  = qs('rc_benchmark_insight');
+    const benchPanel = qs('rc_benchmark_panel');
     if (!insightEl || !benchPanel) return;
     const allParts  = Array.isArray(parts) ? parts : [];
     const completed = allParts.filter(p => {
@@ -6050,20 +6050,20 @@ const RenderAiRuntime = (() => {
 
     insightEl.classList.remove('hiddenView');
     insightEl.innerHTML =
-      '<div class="rcAiCompCard">' +
-        '<div class="rcAiCompRow">' +
-          '<span class="rcAiCompLabel">Avg Viral Score</span>' +
-          '<span class="rcAiCompScore" data-tier="' + tier + '">' + avgPct + '%</span>' +
+      '<div class="rcAiCompCard ai-comparison-card">' +
+        '<div class="rcAiCompRow ai-comparison-row">' +
+          '<span class="rcAiCompLabel ai-comparison-label">Avg Viral Score</span>' +
+          '<span class="rcAiCompScore ai-comparison-score" data-tier="' + tier + '">' + avgPct + '%</span>' +
         '</div>' +
-        '<div class="rcAiCompRow">' +
-          '<span class="rcAiCompLabel">Top Clip</span>' +
-          '<span class="rcAiCompScore" data-tier="' + topTier + '">' + topPct + '%</span>' +
+        '<div class="rcAiCompRow ai-comparison-row">' +
+          '<span class="rcAiCompLabel ai-comparison-label">Top Clip</span>' +
+          '<span class="rcAiCompScore ai-comparison-score" data-tier="' + topTier + '">' + topPct + '%</span>' +
         '</div>' +
-        '<div class="rcAiCompRow">' +
-          '<span class="rcAiCompLabel">Clips Rendered</span>' +
-          '<span class="rcAiCompCount">' + completed.length + ' / ' + totalAll + '</span>' +
+        '<div class="rcAiCompRow ai-comparison-row">' +
+          '<span class="rcAiCompLabel ai-comparison-label">Clips Rendered</span>' +
+          '<span class="rcAiCompCount ai-comparison-count">' + completed.length + ' / ' + totalAll + '</span>' +
         '</div>' +
-        '<div class="rcAiCompSummary">' + esc(narrative.summaryMsg) + '</div>' +
+        '<div class="rcAiCompSummary ai-comparison-summary">' + esc(narrative.summaryMsg) + '</div>' +
         tasteNoteHtml +
       '</div>';
 
@@ -6114,27 +6114,27 @@ const RenderAiRuntime = (() => {
     _lastHeroConcernHash   = '';      // UX-R1
     {
       // UX-R2: reset completion hero
-      const h2 = document.getElementById('uxr2_completion_hero');
+      const h2 = qs('uxr2_completion_hero');
       if (h2) {
         h2.classList.add('hiddenView');
         h2.classList.remove('uxr2HeroActive');
         h2.dataset.state = '';
-        const thumbEl = document.getElementById('uxr2_hero_thumb');
-        if (thumbEl) thumbEl.innerHTML = '<div class="uxr2ThumbPlaceholder">◎</div>';
-        const msgEl2 = document.getElementById('uxr2_narrative_msg');
+        const thumbEl = qs('uxr2_hero_thumb');
+        if (thumbEl) thumbEl.innerHTML = '<div class="uxr2ThumbPlaceholder render-hero-thumb-placeholder">◎</div>';
+        const msgEl2 = qs('uxr2_narrative_msg');
         if (msgEl2) msgEl2.textContent = '';
-        const reasonEl = document.getElementById('uxr2_narrative_reason');
+        const reasonEl = qs('uxr2_narrative_reason');
         if (reasonEl) { reasonEl.textContent = ''; reasonEl.hidden = true; }
-        const bitsEl = document.getElementById('uxr2_narrative_bits');
+        const bitsEl = qs('uxr2_narrative_bits');
         if (bitsEl) bitsEl.innerHTML = '';
-        const exportLink = document.getElementById('uxr2_cta_export');
+        const exportLink = qs('uxr2_cta_export');
         if (exportLink) { exportLink.removeAttribute('href'); exportLink.setAttribute('hidden', ''); }
       }
-      const uxr1Hero = document.getElementById('uxr1_ai_hero');
+      const uxr1Hero = qs('uxr1_ai_hero');
       if (uxr1Hero) uxr1Hero.classList.remove('uxr2OutcomeMode');
-      const bar2 = document.getElementById('render_completion_bar');
+      const bar2 = qs('render_completion_bar');
       if (bar2) bar2.classList.remove('uxr2BarDemoted');
-      const listEl2 = document.getElementById('render_output_list');
+      const listEl2 = qs('render_output_list');
       if (listEl2) listEl2.classList.remove('uxr2Complete');
     }
     {
@@ -6167,7 +6167,7 @@ const RenderAiRuntime = (() => {
       if (el) el.innerHTML = '';
     });
     // P3.4: concern items live inside evolution list (cleared above)
-    const insightEl = document.getElementById('rc_benchmark_insight');
+    const insightEl = qs('rc_benchmark_insight');
     if (insightEl) { insightEl.classList.add('hiddenView'); insightEl.innerHTML = ''; }
   }
 

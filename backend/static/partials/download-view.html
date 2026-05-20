@@ -1,32 +1,32 @@
-<section id="view_download" class="downloadWorkspace downloadProductWorkspace hiddenView" aria-live="polite">
-  <div class="downloadWorkspaceHeader">
-    <div class="downloadHeaderCopy">
+<section id="view_download" class="downloadWorkspace downloadProductWorkspace download-panel hiddenView" aria-live="polite">
+  <div class="downloadWorkspaceHeader download-header">
+    <div class="downloadHeaderCopy download-header-copy">
       <div class="productKicker">Download workspace</div>
-      <div class="downloadWorkspaceTitle">Collect source videos before rendering.</div>
-      <div class="downloadWorkspaceSub" id="download_summary_text">Paste public social video links to build a reusable download queue.</div>
+      <div class="downloadWorkspaceTitle download-title">Collect source videos before rendering.</div>
+      <div class="downloadWorkspaceSub download-subtitle" id="download_summary_text">Paste public social video links to build a reusable download queue.</div>
     </div>
-    <div class="downloadWorkspaceMeta">
-      <div class="downloadBatchStatus" id="download_batch_status">Idle</div>
-      <div class="downloadBatchMeta" id="download_batch_meta">No active batch</div>
+    <div class="downloadWorkspaceMeta download-header-meta">
+      <div class="downloadBatchStatus download-status" id="download_batch_status">Idle</div>
+      <div class="downloadBatchMeta download-status-meta" id="download_batch_meta">No active batch</div>
     </div>
   </div>
 
-  <div class="downloadFlowRail" aria-label="Download flow">
-    <div class="downloadFlowStep isActive"><strong>Paste</strong><span>YouTube, Facebook, Instagram, TikTok</span></div>
-    <div class="downloadFlowStep"><strong>Queue</strong><span>Parse, dedupe, retry failed links</span></div>
-    <div class="downloadFlowStep"><strong>Save</strong><span>Keep files in a local folder</span></div>
-    <div class="downloadFlowStep"><strong>Render</strong><span>Open completed videos in Render</span></div>
+  <div class="downloadFlowRail download-flow" aria-label="Download flow">
+    <div class="downloadFlowStep download-flow-step isActive"><strong>Paste</strong><span>YouTube, Facebook, Instagram, TikTok</span></div>
+    <div class="downloadFlowStep download-flow-step"><strong>Queue</strong><span>Parse, dedupe, retry failed links</span></div>
+    <div class="downloadFlowStep download-flow-step"><strong>Save</strong><span>Keep files in a local folder</span></div>
+    <div class="downloadFlowStep download-flow-step"><strong>Render</strong><span>Open completed videos in Render</span></div>
   </div>
 
-  <div class="downloadQueuePanel">
-    <div class="downloadQueueHeader">
+  <div class="downloadQueuePanel download-queue">
+    <div class="downloadQueueHeader download-queue-header">
       <div>
-        <div class="downloadQueueTitle">Download Queue</div>
-        <div class="downloadQueueHint">Completed items can move directly into Render as local sources.</div>
+        <div class="downloadQueueTitle download-queue-title">Download Queue</div>
+        <div class="downloadQueueHint download-queue-hint">Completed items can move directly into Render as local sources.</div>
       </div>
-      <div class="downloadQueueMeta" id="download_queue_meta">0 items</div>
+      <div class="downloadQueueMeta download-queue-meta" id="download_queue_meta">0 items</div>
     </div>
-    <div class="downloadQueueList" id="download_queue_list">
+    <div class="downloadQueueList download-list" id="download_queue_list">
       <div class="emptyState">Paste one or more public links, then click Parse Links.</div>
     </div>
   </div>
