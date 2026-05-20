@@ -1,5 +1,7 @@
 import asyncio
+import html as _html
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -100,6 +102,116 @@ def humanize_narration_text(text: str, pause_style: str = "normal") -> str:
     return " ".join(processed)
 
 
+# ---------------------------------------------------------------------------
+# SSML humanizer — Edge-TTS semantic pacing (OQ-4.1)
+# ---------------------------------------------------------------------------
+
+_SSML_HUMANIZER_ENABLED: bool = os.environ.get("SSML_HUMANIZER_ENABLED", "1") == "1"
+
+# Break durations in milliseconds, indexed by pause_style.
+_SSML_BREAK_MS: dict[str, dict[str, int]] = {
+    "light": {
+        "colon": 100, "ellipsis": 200, "sentence": 0,
+        "question": 100, "exclaim": 0, "hook": 0,
+    },
+    "normal": {
+        "colon": 250, "ellipsis": 350, "sentence": 150,
+        "question": 200, "exclaim": 150, "hook": 100,
+    },
+    "deliberate": {
+        "colon": 400, "ellipsis": 500, "sentence": 200,
+        "question": 300, "exclaim": 200, "hook": 150,
+    },
+}
+
+# Lead-in pause: these words at sentence start signal a hook or pivot point.
+_HOOK_STARTERS = frozenset(
+    ("but", "wait", "so", "now", "here", "then", "and", "remember", "think", "imagine")
+)
+
+_ALLCAPS_RE = re.compile(r"\b([A-Z]{2,})\b")
+
+
+def _build_ssml_content(text: str, pause_style: str, language: str) -> str:
+    """Build SSML fragment for insertion inside edge-tts <voice><prosody> wrapper.
+
+    Uses <break> and <emphasis> only — no outer <speak>/<voice> tags.
+    HTML-escapes text content before inserting SSML tags so user text
+    containing & < > doesn't corrupt the SSML document.
+    """
+    brk = _SSML_BREAK_MS.get(pause_style, _SSML_BREAK_MS["normal"])
+    is_english = language.startswith("en-")
+
+    raw_sentences = _SENTENCE_END_RE.split(text.strip())
+    parts: list[str] = []
+
+    for i, raw in enumerate(raw_sentences):
+        sent = raw.strip()
+        if not sent:
+            continue
+
+        # Escape user-supplied text so &, <, > don't break SSML
+        s = _html.escape(sent, quote=False)
+
+        # 1. Ellipsis → dramatic break (before colon rule to avoid over-splitting)
+        if brk["ellipsis"] > 0:
+            s = s.replace("...", f"<break time='{brk['ellipsis']}ms'/>")
+
+        # 2. Colon pause (introduces explanation, list, or reveal)
+        if brk["colon"] > 0:
+            s = re.sub(r":\s*", f":<break time='{brk['colon']}ms'/> ", s)
+
+        # 3. English-only: ALL CAPS words get strong emphasis
+        if is_english:
+            s = _ALLCAPS_RE.sub(
+                lambda m: f"<emphasis level='strong'>{m.group(1)}</emphasis>",
+                s,
+            )
+
+        # 4. Hook lead-in: small beat before pivot/hook starters (not first sentence)
+        if is_english and brk["hook"] > 0 and i > 0:
+            first_word = sent.split()[0].lower().rstrip(",")
+            if first_word in _HOOK_STARTERS:
+                s = f"<break time='{brk['hook']}ms'/> {s}"
+
+        parts.append(s)
+
+        # 5. Inter-sentence break before next sentence
+        if i < len(raw_sentences) - 1:
+            end = sent.rstrip()
+            if end.endswith("?") and brk["question"] > 0:
+                parts.append(f"<break time='{brk['question']}ms'/>")
+            elif end.endswith("!") and brk["exclaim"] > 0:
+                parts.append(f"<break time='{brk['exclaim']}ms'/>")
+            elif brk["sentence"] > 0:
+                parts.append(f"<break time='{brk['sentence']}ms'/>")
+
+    return " ".join(parts)
+
+
+def ssml_humanize_for_edge(
+    text: str,
+    pause_style: str = "normal",
+    language: str = "en-US",
+) -> str:
+    """SSML content for edge-tts: semantic pauses + emphasis.
+
+    Returns SSML fragment (no <speak>/<voice> wrappers — edge-tts adds those).
+    Falls back to humanize_narration_text() on any failure.
+    SSML_HUMANIZER_ENABLED=0 disables SSML and uses plain-text humanization.
+    """
+    if not _SSML_HUMANIZER_ENABLED or not text or not text.strip():
+        return humanize_narration_text(text, pause_style)
+    try:
+        result = _build_ssml_content(text, pause_style, language)
+        if not result or len(result) < 3:
+            return humanize_narration_text(text, pause_style)
+        return result
+    except Exception as exc:
+        logger.debug("ssml_humanize_fallback reason=%s", exc)
+        return humanize_narration_text(text, pause_style)
+
+
 def generate_narration_mp3(
     *,
     text: str,
@@ -116,11 +228,16 @@ def generate_narration_mp3(
         raise RuntimeError("Narration text is empty")
 
     _ct_profile = _CONTENT_TYPE_VOICE_PROFILES.get(content_type) or _CONTENT_TYPE_VOICE_PROFILES["vlog"]
-    _humanized = humanize_narration_text(clean_text, pause_style=_ct_profile["pause_style"])
+    _humanized = ssml_humanize_for_edge(
+        clean_text,
+        pause_style=_ct_profile["pause_style"],
+        language=language,
+    )
+    _ssml_active = _SSML_HUMANIZER_ENABLED and "<break" in _humanized
     _rate = _effective_rate_for(rate, content_type)
     logger.info(
-        "tts_humanized job_id=%s content_type=%s rate=%s pause_style=%s",
-        job_id, content_type, _rate, _ct_profile["pause_style"],
+        "tts_humanized job_id=%s content_type=%s rate=%s pause_style=%s ssml=%s",
+        job_id, content_type, _rate, _ct_profile["pause_style"], _ssml_active,
     )
 
     profile = resolve_voice_profile(language, gender, voice_id=voice_id)
