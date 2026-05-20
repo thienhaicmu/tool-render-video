@@ -2933,9 +2933,15 @@
    ======================================================= */
 
 /* =======================================================
-   S1.1 — SMART DEFAULTS
+   S1.1 / S1.2 — SMART DEFAULTS
    Passive suggestion indicators. No forced overrides.
    ======================================================= */
+
+/* FIX 1: Subtle enter animation — fade + 4px upward lift */
+@keyframes sd-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
 
 .sd-strip {
   display: flex;
@@ -2947,6 +2953,7 @@
   border-left: 2px solid var(--primary);
   border-radius: var(--r-sm);
   margin-bottom: 2px;
+  animation: sd-enter 200ms ease forwards;
 }
 
 .sd-strip-label {
@@ -2970,7 +2977,7 @@
 }
 .sd-dismiss:hover { opacity: 1; }
 
-/* FIX 2: fieldLabel becomes a flex row when a chip is present */
+/* fieldLabel becomes a flex row when a chip is present */
 .sd-label-row {
   display: flex;
   align-items: center;
@@ -2989,8 +2996,9 @@
   pointer-events: none;
   flex-shrink: 0;
   text-transform: none;
+  animation: sd-enter 160ms ease forwards;
 }
 
 /* =======================================================
-   END OF S1.1
+   END OF S1.1 / S1.2
    ======================================================= */

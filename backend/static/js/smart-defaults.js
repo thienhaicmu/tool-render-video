@@ -1,5 +1,5 @@
-// ── Smart Defaults (S1.1A) ───────────────────────────────────────────────────
-// Passive suggestion engine. Adds recommendation chips to editor field labels
+// ── Smart Defaults (S1.2) ────────────────────────────────────────────────────
+// Passive suggestion engine. Adds recommendation indicators to editor controls
 // based on video content profile detected from title, duration, and dimensions.
 //
 // NEVER mutates form values automatically. Suggestions only. Creator owns all
@@ -12,17 +12,20 @@ var SmartDefaults = (function () {
   var _profile     = null;
   var _suggestions = {};
   var _dirty       = {};    // fields creator manually changed this session
-  var _dismissed   = false; // strip dismissed (chips remain visible)
+  var _dismissed   = false; // strip dismissed (chips remain, reset on new video)
+  var _chipTone    = 'Suggested'; // 'Recommended' (strong match) or 'Suggested' (weak)
   var _listenersBound = false;
 
-  // ── Profile strip copy ────────────────────────────────────────────────────
+  // ── Profile strip copy (FIX 2) ────────────────────────────────────────────
   var _STRIP_LABEL = {
-    podcast_interview:     'Suggested for podcast content',
-    talking_head_vertical: 'Suggested for short-form vertical content',
-    screen_recording:      'Suggested for tutorial content',
+    podcast_interview:     'Optimized for podcast clips',
+    talking_head_vertical: 'Optimized for short-form video',
+    screen_recording:      'Optimized for tutorials',
   };
 
   // ── Profile detection ─────────────────────────────────────────────────────
+  // Returns { profile: string, score: number } so the caller can derive
+  // confidence tone without exposing score details in the UI.
   function _detectProfile(title, duration, sourceAspect, domain) {
     var t = String(title || '').toLowerCase();
     var score = { podcast_interview: 0, talking_head_vertical: 0, screen_recording: 0 };
@@ -51,27 +54,25 @@ var SmartDefaults = (function () {
     Object.keys(score).forEach(function (p) {
       if (score[p] >= THRESHOLD[p] && score[p] > bestScore) { bestScore = score[p]; best = p; }
     });
-    return best || 'generic';
+    return { profile: best || 'generic', score: bestScore };
   }
 
   // ── Build suggestions for the 3 tracked fields ───────────────────────────
-  // FIX 3: 'tiktok_bounce_v1' label changed from 'Viral' → 'TikTok' to avoid
-  // confusion with the Video Style "Viral" option.
   function _buildSuggestions(profile) {
     if (profile === 'podcast_interview') return {
-      aspect_ratio:   { selectId: 'evFrameRatioSelect', value: '9:16',            label: '9:16' },
-      reframe_mode:   { selectId: 'evReframeSelect',    value: 'fast_center',     label: 'Center' },
-      subtitle_style: { selectId: 'evSubStyle',         value: 'pro_karaoke',     label: 'Karaoke' },
+      aspect_ratio:   { selectId: 'evFrameRatioSelect', value: '9:16' },
+      reframe_mode:   { selectId: 'evReframeSelect',    value: 'fast_center' },
+      subtitle_style: { selectId: 'evSubStyle',         value: 'pro_karaoke' },
     };
     if (profile === 'talking_head_vertical') return {
-      aspect_ratio:   { selectId: 'evFrameRatioSelect', value: '9:16',            label: '9:16' },
-      reframe_mode:   { selectId: 'evReframeSelect',    value: 'fast_center',     label: 'Center' },
-      subtitle_style: { selectId: 'evSubStyle',         value: 'tiktok_bounce_v1',label: 'TikTok' },
+      aspect_ratio:   { selectId: 'evFrameRatioSelect', value: '9:16' },
+      reframe_mode:   { selectId: 'evReframeSelect',    value: 'fast_center' },
+      subtitle_style: { selectId: 'evSubStyle',         value: 'tiktok_bounce_v1' },
     };
     if (profile === 'screen_recording') return {
-      aspect_ratio:   { selectId: 'evFrameRatioSelect', value: '16:9',            label: '16:9' },
-      reframe_mode:   { selectId: 'evReframeSelect',    value: 'fast_center',     label: 'Center' },
-      subtitle_style: { selectId: 'evSubStyle',         value: 'story_clean_01',  label: 'Clean' },
+      aspect_ratio:   { selectId: 'evFrameRatioSelect', value: '16:9' },
+      reframe_mode:   { selectId: 'evReframeSelect',    value: 'fast_center' },
+      subtitle_style: { selectId: 'evSubStyle',         value: 'story_clean_01' },
     };
     return {};
   }
@@ -97,9 +98,8 @@ var SmartDefaults = (function () {
   }
 
   // ── DOM: per-field chip in field label row ────────────────────────────────
-  // FIX 2: chip injected INSIDE the .fieldLabel span (not after the <select>).
-  // Result: "Frame Ratio    Suggested" on one row via .sd-label-row flex CSS.
-  // FIX 1: no option.sd-recommended — <option> styling is cross-browser unreliable.
+  // Chip text is _chipTone ('Recommended' or 'Suggested') — set per session
+  // based on overall profile confidence score. No score shown to creator.
   var _SELECT_IDS = {
     aspect_ratio:   'evFrameRatioSelect',
     reframe_mode:   'evReframeSelect',
@@ -111,20 +111,17 @@ var SmartDefaults = (function () {
     var sel = document.getElementById(sug.selectId);
     if (!sel) return;
 
-    // One chip per field — skip if already rendered
-    if (document.getElementById('sdChip_' + fieldId)) return;
+    if (document.getElementById('sdChip_' + fieldId)) return; // already rendered
 
-    // Find the .fieldLabel span that labels this select
-    var labelWrap = sel.closest('label');
+    var labelWrap      = sel.closest('label');
     var fieldLabelSpan = labelWrap ? labelWrap.querySelector('.fieldLabel') : null;
     if (!fieldLabelSpan) return;
 
     var chip = document.createElement('span');
     chip.id        = 'sdChip_' + fieldId;
     chip.className = 'sd-chip';
-    chip.textContent = sug.label;
+    chip.textContent = _chipTone; // FIX 3: 'Recommended' or 'Suggested'
 
-    // Turn fieldLabel into a flex row so chip floats to the right
     fieldLabelSpan.classList.add('sd-label-row');
     fieldLabelSpan.appendChild(chip);
   }
@@ -132,7 +129,6 @@ var SmartDefaults = (function () {
   function _clearField(fieldId) {
     var chip = document.getElementById('sdChip_' + fieldId);
     if (chip) {
-      // Remove flex class from parent fieldLabel before removing chip
       var parent = chip.parentElement;
       if (parent) parent.classList.remove('sd-label-row');
       chip.remove();
@@ -143,14 +139,14 @@ var SmartDefaults = (function () {
     Object.keys(_SELECT_IDS).forEach(_clearField);
   }
 
-  // FIX 5: chips are independent of strip dismiss — no _dismissed guard here.
+  // Chips are independent of strip dismiss state — no _dismissed guard here.
   function _renderSuggestions(suggestions) {
     Object.keys(suggestions).forEach(function (field) {
       if (!_dirty[field]) _applyField(field, suggestions[field]);
     });
   }
 
-  // ── Dirty-flag listeners (bound once, on first video load) ────────────────
+  // ── Dirty-flag listeners (bound once on first video load) ─────────────────
   function _bindListeners() {
     if (_listenersBound) return;
     _listenersBound = true;
@@ -177,15 +173,17 @@ var SmartDefaults = (function () {
     var domain    = '';
     try { domain = sourceUrl ? new URL(sourceUrl).hostname : ''; } catch (e) {}
 
-    var sourceAspect = 1.78; // assume landscape if video dimensions unavailable
+    var sourceAspect = 1.78;
     if (videoEl && videoEl.videoWidth && videoEl.videoHeight) {
       sourceAspect = videoEl.videoWidth / videoEl.videoHeight;
     }
 
-    _profile     = _detectProfile(title, duration, sourceAspect, domain);
+    var result   = _detectProfile(title, duration, sourceAspect, domain);
+    _profile     = result.profile;
+    _chipTone    = result.score >= 65 ? 'Recommended' : 'Suggested'; // FIX 3
     _suggestions = _buildSuggestions(_profile);
 
-    if (_profile === 'generic') { _removeStrip(); _clearAll(); return; }
+    if (_profile === 'generic') { _removeStrip(); _clearAll(); return; } // FIX 5: nothing rendered
 
     _renderStrip(_profile);
     _renderSuggestions(_suggestions);
@@ -197,7 +195,7 @@ var SmartDefaults = (function () {
     _renderSuggestions(_suggestions);
   }
 
-  // Called after evApplyOutputPreset() — clear chips for fields the preset touched
+  // Called after evApplyOutputPreset() — clear chips for fields preset touched
   function onPresetApplied(fields) {
     if (!Array.isArray(fields)) return;
     var MAP = { 'reframe mode': 'reframe_mode', 'subtitle style': 'subtitle_style' };
@@ -213,18 +211,19 @@ var SmartDefaults = (function () {
     _clearField(fieldId);
   }
 
-  // Called at the top of _evLoadVideo() — clears previous video's state
+  // Called at the top of _evLoadVideo() — clears all previous video state
   function reset() {
     _profile     = null;
     _suggestions = {};
     _dirty       = {};
-    _dismissed   = false;
+    _dismissed   = false; // FIX 4: new video always starts fresh
+    _chipTone    = 'Suggested';
     _removeStrip();
     _clearAll();
   }
 
-  // FIX 5: dismiss ONLY hides the strip. Chips remain so creator can still see
-  // field-level suggestions without the explanatory header.
+  // FIX 4+5: dismiss ONLY hides the strip for this video session.
+  // Chips remain. Tabs changes cannot restore strip (_dismissed persists until reset).
   function _dismiss() {
     _dismissed = true;
     _removeStrip();
