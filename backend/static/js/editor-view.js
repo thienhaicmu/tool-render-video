@@ -356,6 +356,7 @@ function evQsSet(group, val) {
   if (group === 'platform') {
     const el = document.getElementById('evTargetPlatform');
     if (el) el.value = val;
+    if (typeof SmartDefaults !== 'undefined') SmartDefaults.onPlatformChanged(val);
     // Frame Ratio (evAspectRatio) is now set independently via Frame Ratio buttons — not from platform
   } else if (group === 'structure') {
     const el = document.getElementById('qsStructureBias');
@@ -1284,6 +1285,7 @@ function openEditorView_withSession(pd, urlOrPath, pendingPayload) {
 }
 
 function _evLoadVideo(src) {
+  if (typeof SmartDefaults !== 'undefined') SmartDefaults.reset();
   const video = qs('evVideo');
   video.removeEventListener('timeupdate', _evOnTimeUpdate);
   video.src = src;
@@ -1343,6 +1345,7 @@ function _evLoadVideo(src) {
         _evUpdateInspAiPanel(EditorState.getState());
       });
     }
+    if (typeof SmartDefaults !== 'undefined') SmartDefaults.onVideoLoaded(_ev, video);
   };
   video.onerror = () => {
     qs('evLoadingText').textContent = 'Preview unavailable';
@@ -2988,6 +2991,7 @@ function evApplyOutputPreset(presetId) {
       addEvent(`Preset applied: ${label}${changed.length ? ' | fields: ' + changed.join(', ') : ''}`, 'render');
     }
     evSyncQsBar();
+    if (typeof SmartDefaults !== 'undefined') SmartDefaults.onPresetApplied(changed);
   } finally {
     _evApplyingPreset = false;
   }

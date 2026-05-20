@@ -2931,3 +2931,64 @@
 /* =======================================================
    END OF UX-RUNTIME-A2.1
    ======================================================= */
+
+/* =======================================================
+   S1.1 — SMART DEFAULTS
+   Passive suggestion indicators. No forced overrides.
+   ======================================================= */
+
+.sd-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  background: var(--primary-muted);
+  border-left: 2px solid var(--primary);
+  border-radius: var(--r-sm);
+  margin-bottom: 2px;
+}
+
+.sd-strip-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--fg-200);
+  letter-spacing: 0.01em;
+}
+
+.sd-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--fg-300);
+  font-size: 11px;
+  line-height: 1;
+  padding: 0 0 0 4px;
+  opacity: 0.6;
+  transition: opacity var(--t-fast);
+}
+.sd-dismiss:hover { opacity: 1; }
+
+.sd-chip {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: var(--primary-muted);
+  color: var(--primary);
+  border: 1px solid var(--primary-border);
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
+option.sd-recommended {
+  background-color: rgba(77, 124, 255, 0.12);
+  font-weight: 500;
+}
+
+/* =======================================================
+   END OF S1.1
+   ======================================================= */
