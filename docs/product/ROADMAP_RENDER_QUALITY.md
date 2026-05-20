@@ -49,7 +49,7 @@ Last updated: 2026-05-20
 |---|---|---|---|---|
 | OQ-5.1 | CosyVoice2 voice cloning | Future | High | GPU required |
 | OQ-5.2 | SAM2 pixel segmentation | Future | High | Frame-level GPU |
-| OQ-5.3 | CLIP semantic scene scoring | Future | Medium | Additive signal |
+| OQ-5.3 | CLIP semantic scene scoring | ✅ Complete (2026-05-20) | Medium | Additive signal |
 
 ---
 

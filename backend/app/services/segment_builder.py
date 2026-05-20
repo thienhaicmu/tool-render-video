@@ -28,7 +28,10 @@ def _score_scene(scene: Dict, idx: int, total: int) -> float:
     # silence_score: additive silence-gap signal from FFmpeg silencedetect [-8, +20]
     silence_bonus = _clamp(float(scene.get("silence_score", 0.0)), -8.0, 20.0)
 
-    return (duration_score * 0.45) + (transition_score * 0.35) + (position_stability * 0.20) + early_bonus + speech_bonus + silence_bonus
+    # clip_semantic_score: additive OpenCLIP visual engagement signal [-8, +20]
+    clip_semantic_bonus = _clamp(float(scene.get("clip_semantic_score", 0.0)), -8.0, 20.0)
+
+    return (duration_score * 0.45) + (transition_score * 0.35) + (position_stability * 0.20) + early_bonus + speech_bonus + silence_bonus + clip_semantic_bonus
 
 
 def _normalize_scenes(scenes: List[Dict], total_duration: float) -> List[Dict]:
@@ -44,6 +47,7 @@ def _normalize_scenes(scenes: List[Dict], total_duration: float) -> List[Dict]:
             "transition_score": float(s.get("transition_score", 1.0)),
             "speech_density": float(s.get("speech_density", 0.0)),
             "silence_score": float(s.get("silence_score", 0.0)),
+            "clip_semantic_score": float(s.get("clip_semantic_score", 0.0)),
             "_idx": i,
         })
     if not normalized:

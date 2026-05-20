@@ -21,6 +21,7 @@ from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes
+from app.services.clip_scorer import score_scenes_clip, CLIP_SCORER_VERSION
 from app.services.subtitle_engine import (
     srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time,
     slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt,
@@ -2317,6 +2318,10 @@ def run_render_pipeline(
         _job_log(effective_channel, job_id, f"{'cache_hit' if _scene_cache_hit else 'cache_miss'} type=scene_detect scenes={len(scenes)} elapsed_ms={_scene_ms}")
         _job_log(effective_channel, job_id, f"Scene detection done: {len(scenes)} scenes in {_scene_ms}ms")
 
+        # OQ-5.3: CLIP semantic scoring — enriches scene dicts with clip_semantic_score [-8, +20]
+        if scenes:
+            scenes = score_scenes_clip(str(source_path), scenes)
+
         _set_stage(JobStage.SEGMENT_BUILDING, 25, "Building smart segments")
         segments = build_segments_from_scenes(scenes, source["duration"], payload.min_part_sec, payload.max_part_sec)
         if cancel_registry.is_cancelled(job_id):
@@ -2327,6 +2332,7 @@ def run_render_pipeline(
             _score_ck = _render_cache_key(
                 str(source_path), _src_st.st_mtime, _src_st.st_size,
                 payload.min_part_sec, payload.max_part_sec, len(scenes),
+                CLIP_SCORER_VERSION,
             )
             _cached_scored = _score_cache_get(_score_ck)
         except Exception:
