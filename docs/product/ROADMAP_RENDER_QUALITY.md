@@ -29,7 +29,7 @@ Last updated: 2026-05-20
 
 | ID | Title | Status | Risk | Scope |
 |---|---|---|---|---|
-| OQ-3.1 | MediaPipe model_selection=1 (full-range) | Planned | None | Wide-shot face detection |
+| OQ-3.1 | MediaPipe model_selection=1 (full-range) | ✅ Complete (2026-05-20) | None | Wide-shot face detection, small faces, interview/podcast framing |
 | OQ-3.2 | ByteTrack inter-frame tracking | Planned | Low | Eliminate 533ms stale position |
 | OQ-3.3 | MediaPipe Pose (eye-level anchor) | Planned | Low | Better face framing |
 

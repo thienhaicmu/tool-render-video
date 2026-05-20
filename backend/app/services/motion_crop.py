@@ -84,10 +84,10 @@ def _get_mp_detector():
     try:
         import mediapipe as mp  # noqa: PLC0415
         _mp_face_detector = mp.solutions.face_detection.FaceDetection(
-            model_selection=0,           # short-range model (≤2m), fastest CPU inference
+            model_selection=1,           # full-range model (≤5m) — detects wide shots and small faces
             min_detection_confidence=0.5,
         )
-        logger.info("mediapipe_face_detection_loaded model=short_range confidence_threshold=0.5")
+        logger.info("mediapipe_face_detection_loaded model=full_range confidence_threshold=0.5")
     except Exception as exc:
         logger.info("mediapipe_unavailable fallback=haar reason=%s", exc)
         _mp_face_detector = None
