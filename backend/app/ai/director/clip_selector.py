@@ -17,6 +17,21 @@ from app.ai.analyzers.hook_analyzer import (
 from app.ai.analyzers.moment_analyzer import score_best_moment
 from app.ai.analyzers.silence_analyzer import estimate_silence_penalty, score_speech_density
 
+try:
+    from app.ai.analyzers.structure_analyzer import (
+        score_structure_coherence as _struct_score,
+        find_entry_point as _struct_find_entry,
+        STRUCTURE_INTELLIGENCE_ENABLED as _STRUCTURE_ENABLED,
+    )
+    _STRUCTURE_AVAILABLE = True
+except ImportError:
+    _STRUCTURE_AVAILABLE = False
+    _STRUCTURE_ENABLED = False
+
+    def _struct_score(*a, **kw) -> float: return 0.0           # type: ignore[misc]
+    def _struct_find_entry(all_chunks, current_idx, *a, **kw):  # type: ignore[misc]
+        return current_idx, 0.0
+
 _DEFAULT_WEIGHTS: dict[str, float] = {
     "hook_weight": 0.35,
     "speech_density_weight": 0.35,
@@ -126,6 +141,19 @@ def _build_and_score_candidates(
         if not win or win["duration"] < t_min * 0.4:
             continue
 
+        # S2.3: Micro-trim entry-point alignment BEFORE any scoring (required change 3).
+        # Scans backward up to goal-aware max (3–8s) for a cleaner hook entry.
+        # Only accepts the trim when hook quality improves by >= +10 raw delta.
+        # All signals below are computed on the final (possibly trimmed) window.
+        if _STRUCTURE_AVAILABLE and _STRUCTURE_ENABLED:
+            new_idx, _delta = _struct_find_entry(
+                chunks, i, goal, t_min * 0.4, win["end"]
+            )
+            if new_idx != i:
+                trimmed = _build_window(chunks, new_idx, t_max)
+                if trimmed and trimmed["duration"] >= t_min * 0.4:
+                    win = trimmed
+
         win_chunks = win["chunks"]
 
         # Score hook on the opening window of this candidate (first ~10s from
@@ -154,7 +182,15 @@ def _build_and_score_candidates(
         # existing weights. score_best_moment returns [0,20]; scale to [0,5]
         # to keep effective influence modest relative to the main formula.
         moment_raw = score_best_moment(win_chunks, win["start"], win["end"], goal)
-        final = round(min(100.0, final + moment_raw * 0.25), 2)
+        final = min(100.0, final + moment_raw * 0.25)
+
+        # S2.3: structure coherence bonus — separate additive, max +3 effective.
+        # score_structure_coherence returns [0,20]; scale by 0.15 → max +3.
+        structure_raw = (
+            _struct_score(win_chunks, win["start"], win["end"], goal)
+            if _STRUCTURE_AVAILABLE and _STRUCTURE_ENABLED else 0.0
+        )
+        final = round(min(100.0, final + structure_raw * 0.15), 2)
 
         parts: list[str] = []
         if hook_s >= 60:
@@ -165,6 +201,8 @@ def _build_and_score_candidates(
             parts.append(f"silence_penalty={silence_pen:.0f}")
         if moment_raw >= 5.0:
             parts.append(f"moment={moment_raw:.0f}")
+        if structure_raw >= 5.0:
+            parts.append(f"structure={structure_raw:.0f}")
 
         candidates.append({
             "start": win["start"],

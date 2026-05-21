@@ -29,6 +29,15 @@ except ImportError:
     _BEST_MOMENT_AVAILABLE = False
     _BEST_MOMENT_ENABLED = False
 
+try:
+    from app.ai.analyzers.structure_analyzer import (
+        STRUCTURE_INTELLIGENCE_ENABLED as _STRUCTURE_ENABLED,
+    )
+    _STRUCTURE_AVAILABLE = True
+except ImportError:
+    _STRUCTURE_AVAILABLE = False
+    _STRUCTURE_ENABLED = False
+
 # Visual-path goal multipliers for best-moment scoring (S2.2).
 # Conservative range 1.00–1.15 — lightly goal-aware, never overrides creator intent.
 _VISUAL_GOAL_MULT: dict[str, dict[str, float]] = {
@@ -309,6 +318,7 @@ def _score_candidate(
         "hook_intelligence_type":   hook_intelligence_type,
         "peak_scene_quality":       round(peak_scene_quality, 3),
         "best_moment_bonus":        round(best_moment_bonus, 3),
+        "structure_type":           "none",
     }
 
 
@@ -421,6 +431,7 @@ _FALLBACK_FIELDS = {
     "hook_intelligence_type":  "none",
     "peak_scene_quality":      50.0,
     "best_moment_bonus":       0.0,
+    "structure_type":          "none",
 }
 
 

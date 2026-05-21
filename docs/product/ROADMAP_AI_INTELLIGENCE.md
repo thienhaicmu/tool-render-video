@@ -53,7 +53,7 @@ Smart Defaults, Creator DNA suggestions, Editing Autopilot, AI Managed / Manual 
 
 ### S2.2 — Goal-Aware Best Moment Intelligence ✅ Complete
 
-**Shipped:** `feat(ai): S2.2 Goal-Aware Best Moment Intelligence`
+**Shipped:** `feat(ai): S2.2 Goal-Aware Best Moment Intelligence` (commit `6f1e198`)
 
 **What shipped:**
 - New `moment_analyzer.py` — scores the full candidate window (not just the opening hook):
@@ -82,7 +82,33 @@ Smart Defaults, Creator DNA suggestions, Editing Autopilot, AI Managed / Manual 
 
 ---
 
-### S2.3 — Structure-Aware Clip Builder ⬜ Planned
+### S2.3 — Structure-Aware Clip Builder ✅ Complete
+
+**Shipped:** `feat(ai): S2.3 Structure-Aware Clip Builder`
+
+**What shipped:**
+- New `structure_analyzer.py` — multi-signal confidence detection of three-phase narrative (opening → development → payoff):
+  - `analyze_window_structure(chunks, start, end)` — per-chunk confidence combining phrase markers (0.40), position fit (0.35), transition signals (0.25)
+  - `score_structure_coherence(chunks, start, end, goal)` → [0, +20] additive bonus; goal-aware bonuses per level (open_only / open_payoff / full)
+  - `find_entry_point(all_chunks, current_idx, goal, min_duration, candidate_end)` → (new_idx, delta); only accepts trim when hook quality improves by >= +10 raw delta
+  - Phase vocabulary: EN + VI markers for opening, development, payoff phases
+  - `_DETECT_THRESHOLD = 0.50` — marker alone maxes at 0.40, preventing keyword-only false positives
+  - `STRUCTURE_INTELLIGENCE_ENABLED` env gate for full rollback
+- `clip_selector`: micro-trim BEFORE scoring (required change 3: all signals use final window); structure bonus `structure_raw * 0.15` → max +3 effective contribution; annotated in reason string when firing
+- `segment_builder`: `structure_type: "none"` field added to visual-path segment output and `_FALLBACK_FIELDS`
+
+**Files affected:**
+- `backend/app/ai/analyzers/structure_analyzer.py` (new)
+- `backend/app/ai/director/clip_selector.py`
+- `backend/app/services/segment_builder.py`
+
+**Regression guarantees:**
+- All new imports try/except guarded — zero runtime failures if module missing
+- Text path (clip_selector): max +3 effective influence on final score [0, 100]
+- Micro-trim only fires when hook quality improvement >= +10 raw delta and result meets min_duration
+- `STRUCTURE_INTELLIGENCE_ENABLED=0` disables structure scoring and entry-point trimming entirely
+- Transcript absent → all structure signals return 0.0, segment_builder visual path unaffected
+- No changes to clip count logic, render pipeline, or external APIs
 
 ---
 
