@@ -1,5 +1,6 @@
 import logging
 import math
+import os
 from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -571,6 +572,108 @@ def build_segments_from_scenes(
         max(s["viral_score"] for s in valid),
     )
     return valid
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# S4.1: Transcript-aware boundary refinement (env-gated: S4_CANDIDATE_INTELLIGENCE_ENABLED=1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_S4_MIN_SENTENCE_DUR = 0.5  # SRT blocks shorter than this are ignored as boundary anchors
+
+
+def _build_sentence_timestamps(transcript_blocks: List[Dict]) -> tuple:
+    """Extract deduplicated sentence start and end timestamps from SRT blocks.
+
+    Ignores blocks with empty text or duration < _S4_MIN_SENTENCE_DUR to avoid
+    snapping to ultra-short subtitle fragments (e.g. filler words, artifacts).
+    Returns (sorted starts, sorted ends).
+    """
+    starts: List[float] = []
+    ends: List[float] = []
+    for b in transcript_blocks:
+        s = float(b.get("start", 0.0))
+        e = float(b.get("end", 0.0))
+        if not str(b.get("text", "")).strip():
+            continue
+        if (e - s) < _S4_MIN_SENTENCE_DUR:
+            continue
+        starts.append(s)
+        ends.append(e)
+    return sorted(set(starts)), sorted(set(ends))
+
+
+def _find_nearest_boundary(target: float, timestamps: List[float], max_delta: float):
+    """Return nearest timestamp within max_delta of target, or None."""
+    if not timestamps:
+        return None
+    best = min(timestamps, key=lambda t: abs(t - target))
+    return best if abs(best - target) <= max_delta else None
+
+
+def refine_segment_boundaries(
+    segments: List[Dict],
+    transcript_blocks: List[Dict],
+    min_len: float,
+    max_len: float,
+) -> List[Dict]:
+    """Nudge segment start/end to align with natural speech boundaries.
+
+    Gate: S4_CANDIDATE_INTELLIGENCE_ENABLED=1. Returns segments unchanged when
+    the gate is off, transcript_blocks is empty, or no valid nudge exists.
+
+    Max nudge per boundary: 15% of segment duration.
+    Nudge is skipped (per segment) if the resulting duration falls outside
+    [min_len, max_len]. Each applied nudge is recorded in
+    candidate_adjustment_reason = ["sentence_start_snap", "sentence_end_snap"].
+    """
+    if os.getenv("S4_CANDIDATE_INTELLIGENCE_ENABLED") != "1":
+        return segments
+    if not transcript_blocks:
+        return segments
+
+    sentence_starts, sentence_ends = _build_sentence_timestamps(transcript_blocks)
+    if not sentence_starts and not sentence_ends:
+        return segments
+
+    refined: List[Dict] = []
+    for seg in segments:
+        seg_start = float(seg.get("start", 0.0))
+        seg_end   = float(seg.get("end", 0.0))
+        duration  = seg_end - seg_start
+        if duration <= 0:
+            refined.append(seg)
+            continue
+
+        nudge_max = duration * 0.15
+        new_start = _find_nearest_boundary(seg_start, sentence_starts, nudge_max)
+        new_end   = _find_nearest_boundary(seg_end,   sentence_ends,   nudge_max)
+
+        # Try both nudges together first; fall back to start-only then end-only.
+        for cs, ce in [
+            (new_start if new_start is not None else seg_start,
+             new_end   if new_end   is not None else seg_end),
+            (new_start if new_start is not None else seg_start, seg_end),
+            (seg_start, new_end if new_end is not None else seg_end),
+        ]:
+            new_dur = ce - cs
+            if new_dur <= 0 or not (min_len <= new_dur <= max_len):
+                continue
+            reasons: List[str] = []
+            if new_start is not None and cs != seg_start:
+                reasons.append("sentence_start_snap")
+            if new_end is not None and ce != seg_end:
+                reasons.append("sentence_end_snap")
+            if not reasons:
+                break  # nothing actually changed; keep original
+            seg = dict(seg)
+            seg["start"] = round(cs, 3)
+            seg["end"]   = round(ce, 3)
+            seg["candidate_adjustment_reason"] = reasons
+            break
+
+        refined.append(seg)
+
+    return refined
 
 
 def build_segments_from_scenes_with_subtitles(

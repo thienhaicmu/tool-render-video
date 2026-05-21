@@ -20,7 +20,7 @@ from app.services.db import upsert_job, update_job_progress, upsert_job_part, li
 from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
-from app.services.segment_builder import build_segments_from_scenes
+from app.services.segment_builder import build_segments_from_scenes, refine_segment_boundaries
 from app.services.clip_scorer import score_scenes_clip, CLIP_SCORER_VERSION
 from app.services.subtitle_engine import (
     srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time,
@@ -2863,6 +2863,27 @@ def run_render_pipeline(
                         finally:
                             _hb_stop.set()
                             _hb.join(timeout=2)
+
+        # ── S4.1: Transcript-aware boundary refinement (S4_CANDIDATE_INTELLIGENCE_ENABLED=1) ──
+        # Runs after transcription so it works on the first render (no cold-cache requirement).
+        # Nudges already-selected segment start/end to align with sentence boundaries (±15% max).
+        if os.getenv("S4_CANDIDATE_INTELLIGENCE_ENABLED") == "1" and full_srt_available and scored:
+            try:
+                _s4_blocks = parse_srt_blocks(str(full_srt))
+                if _s4_blocks:
+                    _s4_before = [(s.get("start"), s.get("end")) for s in scored]
+                    scored = refine_segment_boundaries(
+                        scored, _s4_blocks,
+                        float(payload.min_part_sec), float(payload.max_part_sec),
+                    )
+                    _s4_adjusted = sum(
+                        1 for i, s in enumerate(scored)
+                        if s.get("candidate_adjustment_reason") and (s.get("start"), s.get("end")) != _s4_before[i]
+                    )
+                    _job_log(effective_channel, job_id,
+                             f"s4_boundary_refinement segments={len(scored)} adjusted={_s4_adjusted}")
+            except Exception as _s4_exc:
+                logger.debug("s4_boundary_refinement_failed job_id=%s: %s", job_id, _s4_exc)
 
         # ── AI Director Phase 1 — safe edit plan (observation only, no override) ──
         _ai_edit_plan = None
