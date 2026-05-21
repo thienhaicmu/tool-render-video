@@ -242,6 +242,93 @@ def train_model() -> str:
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# S4.4: Content Type Intelligence V2 (env-gated: S4_CONTENT_INTELLIGENCE_ENABLED=1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _classify_content_type_v2(
+    scene_density: float,
+    features: Dict[str, float],
+    seg_scenes: list,
+    seg: Dict,
+    avg_tq: float,
+) -> str:
+    """Multi-signal content type classifier — nine types vs the legacy four.
+
+    Priority order (first match wins):
+      high-energy → montage → education → reaction → storytelling →
+      podcast → commentary → vlog → interview
+    Falls back to scene-density buckets at the bottom so a type is always returned.
+    """
+    n_scenes   = len(seg_scenes)
+    p_acc      = float(features.get("pacing_accel", 0.0))    # normalized [0, 1]
+    starts_cut = float(features.get("starts_at_cut", 0.0))
+    # speech_density_score > 0 only when populated from real SRT;
+    # 0 means unavailable — do not treat proxy value as a speech signal.
+    speech_raw = float(seg.get("speech_density_score", 0.0))
+
+    # ── High-energy: dense fast cuts + sharp transitions + accelerating rhythm ─
+    if scene_density >= 0.20 and avg_tq >= 0.55 and p_acc >= 0.30:
+        logger.debug(
+            "content_type=high-energy seg=[%.1f,%.1f] density=%.3f avg_tq=%.2f p_acc=%.2f",
+            float(seg.get("start", 0)), float(seg.get("end", 0)),
+            scene_density, avg_tq, p_acc,
+        )
+        return "high-energy"
+
+    # ── Montage: high density, any cut quality ─────────────────────────────────
+    if scene_density >= 0.18:
+        return "montage"
+
+    # ── Education: steady instructional rhythm + precise cuts (≥3 scenes) ──────
+    # Optional speech_density boost confirms narration-heavy content.
+    if n_scenes >= 3 and scene_density >= 0.03:
+        _steady = max(0.0, 1.0 - p_acc / 0.40)
+        _sharp  = min(1.0, avg_tq / 0.65)
+        _speech_boost = 0.08 if speech_raw > 55 else 0.0
+        _edu_score = 0.55 * _sharp + 0.37 * _steady + _speech_boost
+        _edu_threshold = 0.68 if scene_density >= 0.08 else 0.73
+        if _edu_score >= _edu_threshold:
+            logger.debug(
+                "content_type=education seg=[%.1f,%.1f] density=%.3f avg_tq=%.2f "
+                "p_acc=%.2f score=%.2f",
+                float(seg.get("start", 0)), float(seg.get("end", 0)),
+                scene_density, avg_tq, p_acc, _edu_score,
+            )
+            return "education"
+
+    # ── Reaction: commentary-range density with reactive cutting pattern ────────
+    if 0.03 <= scene_density < 0.10 and starts_cut >= 0.5 and avg_tq >= 0.50:
+        logger.debug(
+            "content_type=reaction seg=[%.1f,%.1f] density=%.3f starts_cut=%.0f avg_tq=%.2f",
+            float(seg.get("start", 0)), float(seg.get("end", 0)),
+            scene_density, starts_cut, avg_tq,
+        )
+        return "reaction"
+
+    # ── Storytelling: moderate density, flat pacing, soft cuts — narrative arc ──
+    if 0.06 <= scene_density < 0.18 and p_acc < 0.20 and avg_tq < 0.45:
+        logger.debug(
+            "content_type=storytelling seg=[%.1f,%.1f] density=%.3f p_acc=%.2f avg_tq=%.2f",
+            float(seg.get("start", 0)), float(seg.get("end", 0)),
+            scene_density, p_acc, avg_tq,
+        )
+        return "storytelling"
+
+    # ── Podcast: low visual activity + confirmed real-SRT speech coverage ───────
+    if scene_density < 0.05 and speech_raw > 55:
+        return "podcast"
+
+    # ── Fallback: scene-density buckets (same thresholds as legacy v1) ─────────
+    if scene_density < 0.03:
+        return "interview"
+    if scene_density < 0.08:
+        return "commentary"
+    if scene_density < 0.18:
+        return "vlog"
+    return "montage"
+
+
 def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
     """
     Score all segments and return them sorted by viral_score descending.
@@ -273,46 +360,54 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
         hook_timing_score = round(features["starts_at_cut"] * 40 + features["position_score"] * 40
                                   + features["duration_score"] * 20, 1)
 
-        # Content type hint from scene statistics — informs ranking explainability (PART C).
-        # Four primary buckets inferred from scene density alone.
-        if scene_density < 0.03:
-            content_type_hint = "interview"
-        elif scene_density < 0.08:
-            content_type_hint = "commentary"
-        elif scene_density < 0.18:
-            content_type_hint = "vlog"
+        # Content type hint — informs ranking explainability and S4.2 retention signals (PART C).
+        # S4.4 gate: multi-signal V2 classifier when enabled, legacy density buckets otherwise.
+        if os.getenv("S4_CONTENT_INTELLIGENCE_ENABLED") == "1":
+            content_type_hint = _classify_content_type_v2(
+                scene_density, features, seg_scenes, seg, avg_trans_val
+            )
         else:
-            content_type_hint = "montage"
+            # Legacy: four primary buckets inferred from scene density alone.
+            if scene_density < 0.03:
+                content_type_hint = "interview"
+            elif scene_density < 0.08:
+                content_type_hint = "commentary"
+            elif scene_density < 0.18:
+                content_type_hint = "vlog"
+            else:
+                content_type_hint = "montage"
 
-        # Tutorial detection pass (QUALITY-UP10B):
-        # Fires within the "vlog" (0.08–0.18) and "commentary" (0.03–0.08) density buckets.
-        # Signal: steady editing rhythm (low pacing_accel) + sharp/hard cuts (high avg_transition_quality).
-        # Screen recordings and explainer content have abrupt uniform cuts and flat pacing.
-        # Natural vlog/commentary has softer or more variable cuts.
-        # Requires ≥3 scene cuts so the transition quality signal is meaningful.
-        if content_type_hint in ("vlog", "commentary") and len(seg_scenes) >= 3:
-            _steady = max(0.0, 1.0 - features["pacing_accel"] / 0.40)  # 1.0 = flat rhythm
-            _sharp  = min(1.0, avg_trans_val / 0.65)                    # 1.0 = very abrupt cuts
-            _tutorial_likelihood = 0.60 * _sharp + 0.40 * _steady
-            _tut_threshold = 0.70 if content_type_hint == "vlog" else 0.75
-            if _tutorial_likelihood >= _tut_threshold:
-                content_type_hint = "tutorial"
-                logger.debug(
-                    "content_type_hint=tutorial inferred seg=[%.1f,%.1f] "
-                    "scene_density=%.3f avg_tq=%.2f pacing_accel=%.2f likelihood=%.2f",
-                    float(seg.get("start", 0)), float(seg.get("end", 0)),
-                    scene_density, avg_trans_val, features["pacing_accel"], _tutorial_likelihood,
-                )
+            # Tutorial detection pass (QUALITY-UP10B):
+            # Steady rhythm + sharp/hard cuts within vlog/commentary density range.
+            if content_type_hint in ("vlog", "commentary") and len(seg_scenes) >= 3:
+                _steady = max(0.0, 1.0 - features["pacing_accel"] / 0.40)
+                _sharp  = min(1.0, avg_trans_val / 0.65)
+                _tutorial_likelihood = 0.60 * _sharp + 0.40 * _steady
+                _tut_threshold = 0.70 if content_type_hint == "vlog" else 0.75
+                if _tutorial_likelihood >= _tut_threshold:
+                    content_type_hint = "tutorial"
+                    logger.debug(
+                        "content_type_hint=tutorial inferred seg=[%.1f,%.1f] "
+                        "scene_density=%.3f avg_tq=%.2f pacing_accel=%.2f likelihood=%.2f",
+                        float(seg.get("start", 0)), float(seg.get("end", 0)),
+                        scene_density, avg_trans_val, features["pacing_accel"], _tutorial_likelihood,
+                    )
 
         # Selection reason: human-readable signal summary for UI (PART E).
         _sel: list[str] = []
         if features.get("starts_at_cut", 0.0) >= 0.5:
             _sel.append("Strong opening hook")
-        if content_type_hint in ("interview", "commentary"):
+        if content_type_hint in ("interview", "commentary", "podcast"):
             if features.get("scene_quality", 0.0) >= 0.65:
                 _sel.append("High-quality spoken content")
-        elif content_type_hint == "tutorial":
+        elif content_type_hint in ("tutorial", "education"):
             _sel.append("Steady instructional pacing")
+        elif content_type_hint == "storytelling":
+            _sel.append("Narrative arc flow")
+        elif content_type_hint == "reaction":
+            _sel.append("Reactive editing style")
+        elif content_type_hint == "high-energy":
+            _sel.append("High-energy action")
         elif features.get("scene_density", 0.0) >= 0.5:
             _sel.append("Fast-paced editing")
         if features.get("duration_score", 0.0) >= 0.85:
