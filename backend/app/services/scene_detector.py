@@ -187,6 +187,12 @@ def _compute_silence_features(video_path: str, scenes: list) -> list:
             len(scenes), len(silence_ivs),
         )
         return enriched
+    except subprocess.TimeoutExpired:
+        logger.warning(
+            "silence_features_timeout video=%s timeout=90s — silence scoring skipped",
+            video_path,
+        )
+        return scenes
     except Exception as _exc:
         logger.debug("silence_features_failed: %s", _exc)
         return scenes

@@ -208,12 +208,18 @@ _CONTENT_TYPE_TRACKING: dict[str, dict] = {
     # interview/commentary/tutorial: speech-heavy, face is primary subject.
     # Detect MORE often (0.5×) so tracker loss over 8 frames max, not 32.
     # Slower pan + stronger EMA keep the camera stable between detections.
-    "interview":  {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
-    "commentary": {"detect_interval_mul": 0.5, "ema_mul": 0.80, "pan_speed_mul": 0.85},
-    "vlog":       {"detect_interval_mul": 1.0, "ema_mul": 1.00, "pan_speed_mul": 1.00},
-    "tutorial":   {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
+    "interview":    {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
+    "commentary":   {"detect_interval_mul": 0.5, "ema_mul": 0.80, "pan_speed_mul": 0.85},
+    "vlog":         {"detect_interval_mul": 1.0, "ema_mul": 1.00, "pan_speed_mul": 1.00},
+    "tutorial":     {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
     # montage: subject moves fast — detect more often, pan faster, more reactive
-    "montage":    {"detect_interval_mul": 0.5, "ema_mul": 1.30, "pan_speed_mul": 1.40},
+    "montage":      {"detect_interval_mul": 0.5, "ema_mul": 1.30, "pan_speed_mul": 1.40},
+    # S4.4 content types — mapped to nearest existing profile
+    "podcast":      {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
+    "education":    {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
+    "reaction":     {"detect_interval_mul": 0.5, "ema_mul": 0.80, "pan_speed_mul": 0.85},
+    "storytelling": {"detect_interval_mul": 1.0, "ema_mul": 0.90, "pan_speed_mul": 0.90},
+    "high-energy":  {"detect_interval_mul": 0.5, "ema_mul": 1.30, "pan_speed_mul": 1.40},
 }
 
 

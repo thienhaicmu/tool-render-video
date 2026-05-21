@@ -1057,6 +1057,28 @@ def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, pay
 
 _PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes to update progress
 
+
+def _resume_output_valid(path: "Path") -> bool:
+    """Quick integrity check for a previously-rendered part on the resume path.
+
+    Returns True only when ffprobe reports a positive duration.
+    Any probe failure (corrupt container, 0-byte, truncated file) returns False
+    so the part is re-rendered rather than silently skipped.
+    """
+    try:
+        cmd = [
+            get_ffprobe_bin(), "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ]
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        val = (out.stdout or "").strip()
+        return bool(val) and float(val) > 0.0
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Resource throttling
 # ---------------------------------------------------------------------------
@@ -3531,6 +3553,7 @@ def run_render_pipeline(
                 and ((_existing_part_info.get("status") or "").lower() == "done")
                 and final_part.exists()
                 and final_part.stat().st_size > 0
+                and _resume_output_valid(final_part)
             ):
                 upsert_job_part(job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Skipped (already rendered)")
                 _job_log(effective_channel, job_id, f"Part {idx} skipped: final output already exists", kind="debug")
@@ -5115,14 +5138,14 @@ def run_render_pipeline(
         with _render_active_lock:
             _render_active_count[0] += 1
             _render_slot = _render_active_count[0]
-        if _render_slot > 1:
-            max_workers = max(1, max_workers // _render_slot)
-            _job_log(
-                effective_channel, job_id,
-                f"Throttling to {max_workers} worker(s) — {_render_slot} concurrent render(s) active",
-                kind="info",
-            )
         try:
+            if _render_slot > 1:
+                max_workers = max(1, max_workers // _render_slot)
+                _job_log(
+                    effective_channel, job_id,
+                    f"Throttling to {max_workers} worker(s) — {_render_slot} concurrent render(s) active",
+                    kind="info",
+                )
             _ffmpeg_threads = resolve_ffmpeg_threads(max_workers)
             _job_log(effective_channel, job_id, f"ffmpeg_threads={_ffmpeg_threads} cpu_total={os.cpu_count() or 4} max_workers={max_workers}")
             completed_parts = 0

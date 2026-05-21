@@ -5,6 +5,7 @@ Gate: CLIP_SCORING_ENABLED=0 fully disables and returns scenes unchanged.
 """
 import logging
 import os
+import threading
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ _CLIP_BONUS_MIN = -8.0
 _CLIP_BONUS_MAX = 20.0
 
 # Lazy singleton state — populated on first call to _load_clip_model().
+_clip_state_lock = threading.Lock()
 _clip_state: dict = {
     "loaded": False,
     "model": None,
@@ -48,7 +50,10 @@ _clip_state: dict = {
 def _load_clip_model() -> dict:
     if _clip_state["loaded"]:
         return _clip_state
-    _clip_state["loaded"] = True
+    with _clip_state_lock:
+        if _clip_state["loaded"]:
+            return _clip_state
+        _clip_state["loaded"] = True
     if not CLIP_SCORING_ENABLED:
         return _clip_state
     try:
