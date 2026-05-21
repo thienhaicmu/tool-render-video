@@ -58,10 +58,28 @@ S3_RETENTION_MIN_SCORE: float = float(os.environ.get("S3_RETENTION_MIN_SCORE", "
 _BASE_SCORE: float = float(os.environ.get("S3_RETENTION_BASE_SCORE", "65.0"))
 
 # RC4: Dead-zone only fires when flat fraction >= this threshold.
+# Used as the fallback for unknown goals in _get_dead_zone_threshold().
 _DEAD_ZONE_FLAT_THRESHOLD: float = float(os.environ.get("S3_RETENTION_DEAD_ZONE_THRESHOLD", "0.22"))
 
 # Dead-zone penalty multiplier: penalty = min(max_penalty, dead_ratio * multiplier).
 _DEAD_ZONE_PENALTY_MULTIPLIER: float = float(os.environ.get("S3_RETENTION_DEAD_ZONE_MULTIPLIER", "45.0"))
+
+# B3 (Calibration Sprint): goal-aware dead zone threshold.
+# "calm ≠ boring" — podcast/education allow more natural flat spans before flagging.
+# Hard cap ≤ 0.30 per spec (boring podcast still exists).
+# Unknown goals fall back to _DEAD_ZONE_FLAT_THRESHOLD (env-var controlled).
+_GOAL_DEAD_ZONE_THRESHOLDS: dict[str, float] = {
+    "viral":        0.18,
+    "storytelling": 0.22,
+    "education":    0.24,
+    "podcast":      0.28,
+}
+
+
+def _get_dead_zone_threshold(goal: str) -> float:
+    """B3: Goal-aware dead zone threshold. Hard cap ≤ 0.30 per spec."""
+    raw = _GOAL_DEAD_ZONE_THRESHOLDS.get(goal, _DEAD_ZONE_FLAT_THRESHOLD)
+    return min(0.30, raw)
 
 # Emotion score (0-100) below this = "flat chunk" for dead-zone purposes.
 _FLAT_CHUNK_SCORE: float = 8.0
@@ -82,9 +100,28 @@ _MIN_PAYOFF_DURATION: float = 20.0
 _MIN_EMOTION_CHUNKS: int = 4
 
 # Penalty constants — externalized for calibration without code changes.
+# _HOOK_ABSENCE_PENALTY remains for backward-compat / env-var docs; _predict_one
+# now calls _get_hook_absence_penalty(goal) which uses the goal-aware table (B1).
 _HOOK_ABSENCE_PENALTY: float = float(os.environ.get("S3_RETENTION_HOOK_PENALTY", "20.0"))
 _PROMISE_HOOK_PENALTY: float = float(os.environ.get("S3_RETENTION_PROMISE_PENALTY", "18.0"))
 _GENERIC_PAYOFF_PENALTY: float = float(os.environ.get("S3_RETENTION_GENERIC_PENALTY", "12.0"))
+
+# B1 (Calibration Sprint): goal-aware hook absence penalty.
+# "calm ≠ bad content" — podcast/education creators penalized less for indirect openings.
+# Conservative spread per spec: viral=20, storytelling=16, education=14, podcast=12.
+# Unknown goals fall back to _DEFAULT_HOOK_ABSENCE_PENALTY.
+_GOAL_HOOK_ABSENCE_PENALTIES: dict[str, float] = {
+    "viral":        20.0,
+    "storytelling": 16.0,
+    "education":    14.0,
+    "podcast":      12.0,
+}
+_DEFAULT_HOOK_ABSENCE_PENALTY: float = 16.0
+
+
+def _get_hook_absence_penalty(goal: str) -> float:
+    """B1: Goal-aware hook absence penalty. calm≠bad — podcast/edu penalized less."""
+    return _GOAL_HOOK_ABSENCE_PENALTIES.get(goal, _DEFAULT_HOOK_ABSENCE_PENALTY)
 
 # RC2: Goal-aware emotion stacking cap — "calm ≠ boring" for podcast/education.
 # Prevents flat_emotion + dead_zone + density_falloff from over-penalising
@@ -226,7 +263,7 @@ def _predict_one(seg: dict, all_chunks: list[dict], goal: str) -> dict:
             score += 8.0
             strengths.append("hook_present")
     else:
-        score -= _HOOK_ABSENCE_PENALTY
+        score -= _get_hook_absence_penalty(goal)   # B1: goal-aware
         risks.append("hook_weakness")
 
     # ── RC3: Hook → payoff coherence ───────────────────────────────────────
@@ -294,9 +331,9 @@ def _predict_one(seg: dict, all_chunks: list[dict], goal: str) -> dict:
             _emotion_penalty_raw += 10.0
             risks.append("flat_emotion")
 
-        # RC4: Dead-zone detection — conservative threshold (22%).
+        # RC4: Dead-zone detection — goal-aware threshold (B3: calm≠boring).
         dead_ratio = _compute_dead_zone_ratio(win_chunks, emotion_scores, clip_duration)
-        if dead_ratio >= _DEAD_ZONE_FLAT_THRESHOLD:
+        if dead_ratio >= _get_dead_zone_threshold(goal):
             # Scale penalty with dead ratio (max −15 at 100% flat).
             _emotion_penalty_raw += min(15.0, round(dead_ratio * _DEAD_ZONE_PENALTY_MULTIPLIER, 1))
             risks.append("dead_zone_risk")

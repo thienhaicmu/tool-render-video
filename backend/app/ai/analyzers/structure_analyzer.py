@@ -30,7 +30,10 @@ STRUCTURE_INTELLIGENCE_ENABLED: bool = (
 
 # Confidence threshold — a phase must score this to be considered "detected".
 # Requires phrase marker + at least partial position or transition support.
-_DETECT_THRESHOLD = 0.50
+# B2 (Calibration Sprint): externalized so casual/informal speech can use 0.42
+# without a code change. Hard floor at 0.35 (below that, position-only false
+# positives become likely; phrase markers lose their "necessary" status).
+_DETECT_THRESHOLD: float = float(os.environ.get("S3_STRUCTURE_DETECT_THRESHOLD", "0.50"))
 
 # ---------------------------------------------------------------------------
 # Phase marker vocabulary — EN + VI

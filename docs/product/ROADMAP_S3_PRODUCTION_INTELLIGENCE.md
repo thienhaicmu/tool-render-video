@@ -264,6 +264,21 @@ AI must not: switch presets, override style, change clip count.
 
 ---
 
+## Creator Benchmark Sprint 🚧 In Progress
+
+**Goal:** Prove system quality on real creator content. Calibration only — no new features.
+
+**Scope:**
+- Phase A: env-var threshold tuning (no code changes)
+- Phase B: 3 small safe calibrations (goal-aware hook penalty, structure threshold env var, goal-aware dead zone)
+- Benchmark matrix: 20 creator scenarios, 10 QA dimensions each
+- Target: average creator satisfaction ≥ 8.0 / 10
+- Deliverable: `docs/product/CREATOR_BENCHMARK_REPORT.md`
+
+**No new features. No S3.5. No S4. No render changes. Calibration only.**
+
+---
+
 ## Non-Negotiable Constraints (all S3 phases)
 
 - Creator controls: goal, style, format, clip count, duration preference
