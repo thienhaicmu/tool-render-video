@@ -282,14 +282,33 @@ AI must not: switch presets, override style, change clip count.
 
 ---
 
-## Creator QA Mini Sprint 🚧 In Progress
+## Creator QA Mini Sprint ✅ Complete
 
-**Goal:** Validate `S3_STRUCTURE_DETECT_THRESHOLD=0.42` — confirm or deny activation.
+**Shipped:** `feat(ai): Creator QA Mini Sprint — KEEP 0.50 threshold decision` — commit `6d834c4`
+
+**What shipped:**
+- Validated `S3_STRUCTURE_DETECT_THRESHOLD=0.42` against 5 weakest benchmark scenarios
+- False positive mathematically confirmed: marker at ratio=0 + nat_start → c=0.450, detected at 0.42, not at 0.50
+- All tested podcast scenarios (#10, #11) already exceed 0.50 (confidence 0.53–0.72) — lowering threshold gives zero benefit
+- Weak scenarios (#8, #15, #20) fail due to missing opener markers, not strict threshold — threshold tuning cannot fix structural absence
+- **Decision: KEEP 0.50** for all goals
+- Goal-aware threshold infrastructure added to `structure_analyzer.py` (`_GOAL_DETECT_THRESHOLDS={}`, `_get_detect_threshold()`); empty dict → no behavior change
+- Deliverable: `docs/product/CREATOR_QA_MINI_REPORT.md`
+
+**Threshold decision is final. Calibration state locked in Post-QA Freeze Sprint.**
+
+---
+
+## Post-QA Freeze Sprint 🚧 In Progress
+
+**Goal:** Lock S3 calibration state. Prepare soft beta readiness. No further tuning.
 
 **Scope:**
-- Test 5 weakest scenarios: #8 B-roll, #10 Mixed VN/EN, #11 Low-energy, #15 Bad audio, #20 Weak-hook
-- Output one recommendation: ACTIVATE 0.42 / KEEP 0.50 / GOAL-AWARE THRESHOLD
-- Deliverable: `docs/product/CREATOR_QA_MINI_REPORT.md`
+- Freeze production defaults (S3_RETENTION_BASE_SCORE=68, S3_RETENTION_DEAD_ZONE_THRESHOLD=0.26, etc.)
+- Document rejected assumption (0.42 threshold) with false-positive evidence
+- Add CALIBRATION_FROZEN=true marker
+- Soft beta checklist: render stable, no creator override, rollback verified, env defaults frozen, debug off, S3_*_ENABLED rollback verified
+- Deliverables: `docs/product/SOFT_BETA_READINESS.md`, updates to `CREATOR_QA_MINI_REPORT.md`
 
 **No new features. No S3.5. No architecture changes. No render changes.**
 

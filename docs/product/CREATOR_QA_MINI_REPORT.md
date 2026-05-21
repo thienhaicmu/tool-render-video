@@ -181,3 +181,42 @@ in the transcript. Improvement would require upstream changes to clip selection,
 - No render pipeline changes
 - No clip selection changes
 - No scoring changes beyond the no-op threshold infrastructure
+
+---
+
+## 10. Post-QA Freeze Note
+
+**CALIBRATION_FROZEN=true** — applied in Post-QA Freeze Sprint.
+
+This report represents the terminal calibration state for the S3 production intelligence stack.
+No further threshold tuning is permitted without re-opening a calibration sprint with new benchmark data.
+
+### Locked Production Defaults
+
+These env vars are frozen as of the Post-QA Freeze Sprint. Any deviation requires explicit
+sprint approval and a benchmark re-run.
+
+| Env Var | Frozen Value | Module | Rationale |
+|---------|-------------|--------|-----------|
+| `S3_RETENTION_BASE_SCORE` | `68` | S3.2 | Calibration Sprint Phase A — raised from 65 for more realistic baseline |
+| `S3_RETENTION_DEAD_ZONE_THRESHOLD` | `0.26` | S3.2 | Phase A — relaxed from 0.22; "calm pacing ≠ dead zone" |
+| `S3_RETENTION_PROMISE_PENALTY` | `16` | S3.2 | Phase A — reduced from 18; less punishing for partial promise fulfillment |
+| `S3_RETENTION_MIN_SCORE` | `45` | S3.2 | Phase A — raised from 40; only retain higher-confidence clips |
+| `S3_PLATFORM_CONFIDENCE_MIN` | `0.12` | S3.4 | Phase A — raised from 0.10; avoid near-zero confidence hints |
+| `S3_STRUCTURE_DETECT_THRESHOLD` | `0.50` | S2.3 | QA Mini Sprint — 0.42 REJECTED (false positives, zero benefit) |
+
+### Rejected Assumption — Permanent Record
+
+**Assumption tested:** Lowering `S3_STRUCTURE_DETECT_THRESHOLD` to 0.42 for podcast/informal speech
+would detect more true structure phases without false positives.
+
+**Why rejected:**
+1. **False positive confirmed** (Section 3): marker at ratio=0 + nat_start → c=0.450, detected at
+   0.42 but not at 0.50. Mathematically guaranteed for any development/payoff marker at clip start.
+2. **Zero benefit** (Section 4): all 5 tested scenarios showed delta=+0.00. Podcast scenarios
+   (#10, #11) already exceed 0.50 with confidence 0.53–0.72.
+3. **Root cause mismatch**: weak scenarios (#8, #15, #20) fail due to absent opening markers, not
+   strict threshold. Threshold tuning cannot recover structure that was never spoken.
+
+**Status:** PERMANENTLY REJECTED at this confidence level. Re-evaluation requires new benchmark
+data showing scenarios with genuine phase confidence in [0.42, 0.50) that are verified true positives.
