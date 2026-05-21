@@ -23,6 +23,24 @@ from app.ai.config.ai_modes import get_mode_config
 from app.ai.analyzers.transcript_analyzer import normalize_transcript_chunks
 from app.ai.director.clip_selector import select_ai_segments
 
+try:
+    from app.ai.analyzers.retry_analyzer import (
+        evaluate_selection_confidence as _retry_evaluate,
+        should_retry as _retry_should,
+        build_retry_config as _retry_build_config,
+        RETRY_INTELLIGENCE_ENABLED as _RETRY_ENABLED,
+        MIN_IMPROVEMENT_THRESHOLD as _RETRY_MIN_IMPROVEMENT,
+    )
+    _RETRY_AVAILABLE = True
+except ImportError:
+    _RETRY_AVAILABLE = False
+    _RETRY_ENABLED = False
+
+    def _retry_evaluate(selected_raw: list) -> float: return 100.0      # type: ignore[misc]
+    def _retry_should(conf: float, clip_count: int) -> bool: return False  # type: ignore[misc]
+    def _retry_build_config(mode_config: dict, *a, **kw) -> dict: return dict(mode_config)  # type: ignore[misc]
+    _RETRY_MIN_IMPROVEMENT = 8.0
+
 logger = logging.getLogger("app.ai.director")
 
 
@@ -120,6 +138,37 @@ def _build_plan(
         target_duration=target_duration,
         memory_context=memory_ctx or None,
     )
+
+    # S2.5: Single bounded retry when first-pass confidence is weak.
+    # Maximum 1 retry only — never recursive, never loops.
+    # Skipped when no transcript (chunks empty) since scene fallback can't improve.
+    if _RETRY_AVAILABLE and _RETRY_ENABLED and chunks:
+        try:
+            first_conf = _retry_evaluate(selected_raw)
+            clip_count = len(selected_raw) if selected_raw else 1
+            if _retry_should(first_conf, clip_count):
+                retry_config = _retry_build_config(
+                    mode_config, selected_raw,
+                    goal=str(mode_config.get("goal", "")),
+                    clip_count=clip_count,
+                )
+                retry_raw = select_ai_segments(
+                    chunks=chunks,
+                    scenes=scenes,
+                    duration=duration,
+                    mode_config=retry_config,
+                    target_duration=target_duration,
+                    memory_context=memory_ctx or None,
+                )
+                second_conf = _retry_evaluate(retry_raw)
+                if retry_raw and second_conf >= first_conf + _RETRY_MIN_IMPROVEMENT:
+                    selected_raw = retry_raw
+                    warnings.append(f"retry_improved:{second_conf - first_conf:.0f}")
+                else:
+                    warnings.append("retry_no_improvement")
+        except Exception as exc:
+            warnings.append(f"retry_error:{type(exc).__name__}")
+            logger.debug("ai_director_retry_failed job_id=%s: %s", job_id, exc)
 
     selected_segments = [
         AIClipPlan(

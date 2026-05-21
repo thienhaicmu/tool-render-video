@@ -88,12 +88,21 @@ def select_ai_segments(
         return _select_from_scenes(scenes or [], target_min, target_max)
 
     goal = mode_config.get("goal", "")
-    candidates = _build_and_score_candidates(chunks, target_min, target_max, weights, goal=goal)
+    # S2.5: retry scales — optional keys set by retry_analyzer for a second pass.
+    # Absent on normal passes (defaults to 1.0 = no change).
+    retry_scales = {
+        "moment":    float(mode_config.get("retry_moment_scale", 1.0)),
+        "structure": float(mode_config.get("retry_structure_scale", 1.0)),
+        "diversity": float(mode_config.get("retry_diversity_scale", 1.0)),
+    }
+    candidates = _build_and_score_candidates(
+        chunks, target_min, target_max, weights, goal=goal, retry_scales=retry_scales,
+    )
 
     if not candidates:
         return _select_from_scenes(scenes or [], target_min, target_max)
 
-    selected = _select_diverse(candidates, goal, _MAX_SEGMENTS)
+    selected = _select_diverse(candidates, goal, _MAX_SEGMENTS, diversity_scale=retry_scales["diversity"])
     return _apply_memory_bonus(selected, memory_context)
 
 
@@ -149,12 +158,15 @@ def _build_and_score_candidates(
     t_max: float,
     weights: dict[str, float],
     goal: str = "",
+    retry_scales: dict | None = None,
 ) -> list[dict]:
     candidates: list[dict] = []
     # Sample starting points to avoid O(n²) on long transcripts.
     step = max(1, len(chunks) // 12)
     # Total duration estimate for position_ratio used in diversity context.
     total_duration = float(chunks[-1].get("end") or 1.0) if chunks else 1.0
+    moment_scale   = retry_scales.get("moment",    1.0) if retry_scales else 1.0
+    structure_scale = retry_scales.get("structure", 1.0) if retry_scales else 1.0
 
     for i in range(0, len(chunks), step):
         win = _build_window(chunks, i, t_max)
@@ -207,16 +219,18 @@ def _build_and_score_candidates(
         # S2.2: best-moment bonus — separate additive signal, not blended into
         # existing weights. score_best_moment returns [0,20]; scale to [0,5]
         # to keep effective influence modest relative to the main formula.
+        # S2.5: moment_scale (default 1.0) applied during retry pass only.
         moment_raw = score_best_moment(win_chunks, win["start"], win["end"], goal)
-        final = min(100.0, final + moment_raw * 0.25)
+        final = min(100.0, final + moment_raw * 0.25 * moment_scale)
 
         # S2.3: structure coherence bonus — separate additive, max +3 effective.
         # score_structure_coherence returns [0,20]; scale by 0.15 → max +3.
+        # S2.5: structure_scale (default 1.0) applied during retry pass only.
         structure_raw = (
             _struct_score(win_chunks, win["start"], win["end"], goal)
             if _STRUCTURE_AVAILABLE and _STRUCTURE_ENABLED else 0.0
         )
-        final = round(min(100.0, final + structure_raw * 0.15), 2)
+        final = round(min(100.0, final + structure_raw * 0.15 * structure_scale), 2)
 
         parts: list[str] = []
         if hook_s >= 60:
@@ -252,6 +266,7 @@ def _select_diverse(
     candidates: list[dict],
     goal: str,
     clip_count: int,
+    diversity_scale: float = 1.0,
 ) -> list[dict]:
     """Select up to clip_count non-overlapping candidates with diversity awareness.
 
@@ -266,6 +281,9 @@ def _select_diverse(
     Diversity penalty is for ORDERING ONLY.  Output dicts carry the original
     pre-penalty score.  Internal diversity context fields (_hook_type, _phases,
     _position_ratio) are stripped before returning.
+
+    diversity_scale (default 1.0): S2.5 retry multiplier — set > 1.0 during a
+    retry pass to enforce stronger diversity on low-variety first-pass results.
     """
     if not candidates:
         return []
@@ -286,6 +304,8 @@ def _select_diverse(
                 continue
 
             # Diversity-adjusted comparison score (never stored in output).
+            # S2.5: diversity_scale multiplies the penalty during retry passes
+            # where low variety was detected (scale > 1.0 = more enforcement).
             if _DIVERSITY_AVAILABLE and _DIVERSITY_ENABLED and selected_ctxs:
                 ctx = _div_build_ctx(
                     hook_type=c.get("_hook_type", "none"),
@@ -297,7 +317,7 @@ def _select_diverse(
                     top_score=top_score,
                     candidate_score=c["score"],
                     clip_count=clip_count,
-                )
+                ) * diversity_scale
             else:
                 penalty = 0.0
 

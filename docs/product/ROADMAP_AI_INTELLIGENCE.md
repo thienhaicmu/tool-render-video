@@ -114,7 +114,7 @@ Smart Defaults, Creator DNA suggestions, Editing Autopilot, AI Managed / Manual 
 
 ### S2.4 — Diversity Intelligence ✅ Complete
 
-**Shipped:** `feat(ai): S2.4 Diversity Intelligence`
+**Shipped:** `feat(ai): S2.4 Diversity Intelligence` (commit `6ea21ea`)
 
 **What shipped:**
 - New `diversity_analyzer.py` — goal-aware multi-clip diversity engine:
@@ -148,7 +148,35 @@ Smart Defaults, Creator DNA suggestions, Editing Autopilot, AI Managed / Manual 
 
 ---
 
-### S2.5 — Retry Intelligence ⬜ Planned
+### S2.5 — Retry Intelligence ✅ Complete
+
+**Shipped:** `feat(ai): S2.5 Retry Intelligence`
+
+**What shipped:**
+- New `retry_analyzer.py` — single bounded retry engine:
+  - `evaluate_selection_confidence(selected_raw)` → float [0, 100] — mirrors `_clip_confidence()` logic on raw selection dicts before plan assembly
+  - `should_retry(confidence, clip_count)` → bool — fires only when confidence < 60; clip_count accepted for API consistency
+  - `build_retry_config(mode_config, selected_raw, goal, clip_count)` → dict — returns fresh mode_config copy with conservative bounded weight shifts (max multiplier 1.20)
+  - Weakness signals detected from reason annotations: `weak_hook` (no "hook=N"), `weak_moment` (no "moment=N"), `weak_structure` (no "structure=N"), `low_diversity` (2+ clips, score spread < 5pts, no structure variety)
+  - Strategy shifts: weak_hook → `hook_weight *= 1.15`; weak_moment → `retry_moment_scale = 1.15`; weak_structure → `retry_structure_scale = 1.10`; low_diversity → `retry_diversity_scale = 1.10`
+  - clip_count = 1 uses 0.5× aggressiveness on all adjustments
+  - `RETRY_INTELLIGENCE_ENABLED` env gate for full rollback
+- `clip_selector`: reads `retry_moment_scale`, `retry_structure_scale`, `retry_diversity_scale` from mode_config (default 1.0 = no change); applies to moment bonus, structure bonus, and diversity penalty respectively
+- `ai_director._build_plan()`: retry attached post-selection before plan assembly; evaluates first-pass confidence; triggers single retry if below threshold; replaces result only when improvement ≥ +8 confidence; annotates `warnings` with `retry_improved:N` or `retry_no_improvement`; skipped entirely when no transcript (chunks empty)
+
+**Files affected:**
+- `backend/app/ai/analyzers/retry_analyzer.py` (new)
+- `backend/app/ai/director/clip_selector.py`
+- `backend/app/ai/director/ai_director.py`
+
+**Regression guarantees:**
+- All retry imports try/except guarded — zero runtime failures if module missing
+- Maximum 1 retry, bounded by `should_retry()` returning False on second call (no recursion)
+- Retry skipped when transcript absent (chunks empty) — scene fallback path unchanged
+- All weight adjustments capped at ×1.20 — never subtracts weight, never disables a dimension
+- `RETRY_INTELLIGENCE_ENABLED=0` disables entirely; no path change for existing renders
+- Improvement threshold gate: retry result kept only when confidence improves ≥ +8; otherwise original selected_raw preserved
+- No changes to clip count logic, render pipeline, camera/subtitle planners, or external APIs
 
 ---
 
