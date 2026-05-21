@@ -299,18 +299,31 @@ AI must not: switch presets, override style, change clip count.
 
 ---
 
-## Post-QA Freeze Sprint 🚧 In Progress
+## Post-QA Freeze Sprint ✅ Complete
 
-**Goal:** Lock S3 calibration state. Prepare soft beta readiness. No further tuning.
+**Shipped:** `feat(ai): Post-QA Freeze Sprint — calibration locked, soft beta ready` — commit `8153f44`
 
-**Scope:**
-- Freeze production defaults (S3_RETENTION_BASE_SCORE=68, S3_RETENTION_DEAD_ZONE_THRESHOLD=0.26, etc.)
-- Document rejected assumption (0.42 threshold) with false-positive evidence
-- Add CALIBRATION_FROZEN=true marker
-- Soft beta checklist: render stable, no creator override, rollback verified, env defaults frozen, debug off, S3_*_ENABLED rollback verified
-- Deliverables: `docs/product/SOFT_BETA_READINESS.md`, updates to `CREATOR_QA_MINI_REPORT.md`
+**What shipped:**
+- `CALIBRATION_FROZEN=true` — no further threshold tuning without new benchmark data
+- Locked production defaults: `S3_RETENTION_BASE_SCORE=68`, `S3_RETENTION_DEAD_ZONE_THRESHOLD=0.26`, `S3_RETENTION_PROMISE_PENALTY=16`, `S3_RETENTION_MIN_SCORE=45`, `S3_PLATFORM_CONFIDENCE_MIN=0.12`, `S3_STRUCTURE_DETECT_THRESHOLD=0.50`
+- Rejected assumption permanently documented: threshold 0.42 rejected; false-positive proof in `CREATOR_QA_MINI_REPORT.md §10`
+- `docs/product/SOFT_BETA_READINESS.md` (new): frozen defaults, rejected assumptions, launch checklist, known limitations, monitoring signals, exit criteria
+- `docs/product/CREATOR_QA_MINI_REPORT.md`: Section 10 added (freeze note, locked defaults, rejected assumption record)
 
-**No new features. No S3.5. No architecture changes. No render changes.**
+---
+
+## Soft Beta Launch Preparation 🚧 In Progress
+
+**Goal:** Instrument S3 for real creator rollout observability. No new intelligence. No calibration changes.
+
+**Scope (4 required changes):**
+- RC1: `s3_health_summary` per-module clip coverage signal in API response
+- RC2: Warning severity tiers (`CRITICAL:`, `WARN:`, `INFO:`) on all S3 warnings
+- RC3: Measurable stage gates (Stage 1→2: 0 CRITICAL, ≤5% WARN, 5 clean renders; Stage 2→3: satisfaction ≥7.5, error <5%)
+- RC4: S3.5 readiness hard floor — minimum 100 clip-level feedback events before any learning hypothesis
+- Deliverable: `docs/product/SOFT_BETA_OPERATIONS.md`
+
+**No new features. No S3.5. No calibration changes. No render changes.**
 
 ---
 

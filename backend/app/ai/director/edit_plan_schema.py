@@ -292,6 +292,9 @@ class AIEditPlan:
     clip_platform_adaptation: dict = field(default_factory=dict)
     # S3 Stabilization — unified per-clip debug layer (gated by S3_DEBUG_ENABLED=0, off by default)
     clip_production_debug: dict = field(default_factory=dict)
+    # Soft Beta RC1 — per-module clip coverage (observability only, no behavior effect)
+    # Format: {"packaging": {"enabled": bool, "clips_attempted": int, "clips_processed": int}, ...}
+    s3_health_summary: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -435,4 +438,5 @@ class AIEditPlan:
             "clip_cover_hints":                   dict(self.clip_cover_hints),
             "clip_platform_adaptation":           dict(self.clip_platform_adaptation),
             "clip_production_debug":              dict(self.clip_production_debug),
+            "s3_health_summary":                  dict(self.s3_health_summary),
         }

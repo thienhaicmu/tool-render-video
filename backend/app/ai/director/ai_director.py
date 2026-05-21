@@ -321,6 +321,10 @@ def _build_plan(
     # S2.6: Attach DNA explainability report (required change 3).
     plan.creator_dna_applied = dna_report
 
+    # Soft Beta RC1: per-module clip coverage tracker (observability only, zero behavior effect).
+    _s3_health: dict = {}
+    _n_clips = len(selected_raw)
+
     # S3.1: Per-clip packaging micro-adjustments (advisory metadata only).
     # Render pipeline NOT modified — packaging={} is an exact no-op (required change 5).
     if _PACKAGING_AVAILABLE and _PACKAGING_ENABLED:
@@ -343,8 +347,15 @@ def _build_plan(
                     job_id, len(packaging_result),
                 )
         except Exception as exc:
-            plan.warnings.append(f"packaging_error:{type(exc).__name__}")
+            plan.warnings.append(f"CRITICAL:packaging_error:{type(exc).__name__}")  # RC2
             logger.debug("ai_director_packaging_failed job_id=%s: %s", job_id, exc)
+        _s3_health["packaging"] = {  # RC1
+            "enabled": True,
+            "clips_attempted": _n_clips,
+            "clips_processed": sum(1 for v in (plan.clip_packaging or {}).values() if v),
+        }
+    else:
+        _s3_health["packaging"] = {"enabled": False}
 
     # S3.2: Per-clip retention prediction (advisory metadata only).
     # RC1 enforced: retention_score NEVER feeds back into selection, retry,
@@ -366,8 +377,15 @@ def _build_plan(
                     job_id, len(retention_result),
                 )
         except Exception as exc:
-            plan.warnings.append(f"retention_prediction_error:{type(exc).__name__}")
+            plan.warnings.append(f"CRITICAL:retention_prediction_error:{type(exc).__name__}")  # RC2
             logger.debug("ai_director_retention_prediction_failed job_id=%s: %s", job_id, exc)
+        _s3_health["retention"] = {  # RC1
+            "enabled": True,
+            "clips_attempted": _n_clips,
+            "clips_processed": sum(1 for v in (plan.clip_retention_prediction or {}).values() if v),
+        }
+    else:
+        _s3_health["retention"] = {"enabled": False}
 
     # S3.3: Per-clip thumbnail/cover frame hints (advisory metadata only).
     # RC1 enforced: cover_hint NEVER affects selection, retry, ranking,
@@ -390,8 +408,15 @@ def _build_plan(
                     job_id, len(cover_result),
                 )
         except Exception as exc:
-            plan.warnings.append(f"cover_hint_error:{type(exc).__name__}")
+            plan.warnings.append(f"CRITICAL:cover_hint_error:{type(exc).__name__}")  # RC2
             logger.debug("ai_director_cover_hint_failed job_id=%s: %s", job_id, exc)
+        _s3_health["thumbnail"] = {  # RC1
+            "enabled": True,
+            "clips_attempted": _n_clips,
+            "clips_processed": sum(1 for v in (plan.clip_cover_hints or {}).values() if v),
+        }
+    else:
+        _s3_health["thumbnail"] = {"enabled": False}
 
     # S3.4: Per-clip platform micro-adaptation hints (advisory metadata only).
     # RC6 enforced: platform_adaptation MUST NEVER influence selection, retry,
@@ -404,7 +429,7 @@ def _build_plan(
             # RC5: Rate-limited unknown-platform warning — max 1 per render.
             # Avoids log spam when platform is intentionally blank.
             if _target_platform and _target_platform not in _PLATFORM_KNOWN_PLATFORMS:
-                _unknown_warn = f"platform_unknown:{_target_platform}"
+                _unknown_warn = f"INFO:platform_unknown:{_target_platform}"  # RC2
                 if _unknown_warn not in plan.warnings:
                     plan.warnings.append(_unknown_warn)
 
@@ -434,8 +459,15 @@ def _build_plan(
                     job_id, len(platform_result), _target_platform or "unknown",
                 )
         except Exception as exc:
-            plan.warnings.append(f"platform_adaptation_error:{type(exc).__name__}")
+            plan.warnings.append(f"CRITICAL:platform_adaptation_error:{type(exc).__name__}")  # RC2
             logger.debug("ai_director_platform_adaptation_failed job_id=%s: %s", job_id, exc)
+        _s3_health["platform"] = {  # RC1
+            "enabled": True,
+            "clips_attempted": _n_clips,
+            "clips_processed": sum(1 for v in (plan.clip_platform_adaptation or {}).values() if v),
+        }
+    else:
+        _s3_health["platform"] = {"enabled": False}
 
     # S3 Stabilization: unified per-clip debug layer (RC1 gated — S3_DEBUG_ENABLED=0 by default).
     # Advisory metadata only. NEVER affects selection, retry, ranking, DNA, or render.
@@ -449,14 +481,26 @@ def _build_plan(
                 clip_platform_adaptation=plan.clip_platform_adaptation,
             )
             plan.clip_production_debug = debug_result
-            # Propagate dominance warnings into plan.warnings (rate-limited: 1 per clip).
+            # Propagate dominance warnings into plan.warnings (RC2: prefixed as WARN).
             for _clip_debug in debug_result.values():
                 for _w in list((_clip_debug or {}).get("warnings") or []):
-                    if _w not in plan.warnings:
-                        plan.warnings.append(_w)
+                    _w_prefixed = f"WARN:{_w}" if not _w.startswith(("INFO:", "WARN:", "CRITICAL:")) else _w
+                    if _w_prefixed not in plan.warnings:
+                        plan.warnings.append(_w_prefixed)
         except Exception as exc:
-            plan.warnings.append(f"debug_aggregation_error:{type(exc).__name__}")
+            plan.warnings.append(f"CRITICAL:debug_aggregation_error:{type(exc).__name__}")  # RC2
             logger.debug("ai_director_debug_aggregation_failed job_id=%s: %s", job_id, exc)
+
+    # RC1: Finalise health summary. RC2: Emit WARN for any partial clip failures.
+    plan.s3_health_summary = _s3_health
+    for _mod, _h in _s3_health.items():
+        if _h.get("enabled") and _h.get("clips_attempted", 0) > 0:
+            _attempted = _h["clips_attempted"]
+            _processed = _h["clips_processed"]
+            if _processed < _attempted:
+                _pw = f"WARN:partial_{_mod}_failure:processed={_processed},attempted={_attempted}"
+                if _pw not in plan.warnings:
+                    plan.warnings.append(_pw)
 
     # --- Phase 31: AI Apply Policy ---
     # Runs first so downstream phases can reference the effective policy.
