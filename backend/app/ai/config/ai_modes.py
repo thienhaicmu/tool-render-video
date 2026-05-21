@@ -25,6 +25,8 @@ _AI_MODES: dict[str, dict] = {
         "subtitle_emphasis_style": "punch",
         "subtitle_density": "compact",
         "camera_zoom_strength": 1.12,
+        # S2.1 — goal-aware hook intelligence
+        "goal": "viral",
     },
     "podcast_shorts": {
         "preferred_duration_min": 45,
@@ -43,6 +45,8 @@ _AI_MODES: dict[str, dict] = {
         "subtitle_emphasis_style": "keyword",
         "subtitle_density": "normal",
         "camera_zoom_strength": 1.05,
+        # S2.1 — goal-aware hook intelligence
+        "goal": "podcast",
     },
     "storytelling": {
         "preferred_duration_min": 60,
@@ -61,6 +65,8 @@ _AI_MODES: dict[str, dict] = {
         "subtitle_emphasis_style": "soft",
         "subtitle_density": "normal",
         "camera_zoom_strength": 1.05,
+        # S2.1 — goal-aware hook intelligence
+        "goal": "storytelling",
     },
     "clean_subtitle": {
         "preferred_duration_min": 30,
@@ -79,6 +85,8 @@ _AI_MODES: dict[str, dict] = {
         "subtitle_emphasis_style": "none",
         "subtitle_density": "comfortable",
         "camera_zoom_strength": 1.0,
+        # S2.1 — goal-aware hook intelligence
+        "goal": "education",
     },
 }
 

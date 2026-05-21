@@ -9,7 +9,11 @@ Public API:
 """
 from __future__ import annotations
 
-from app.ai.analyzers.hook_analyzer import score_hook_text
+from app.ai.analyzers.hook_analyzer import (
+    score_hook_text,
+    score_hook_intelligence,
+    get_opening_window_text,
+)
 from app.ai.analyzers.silence_analyzer import estimate_silence_penalty, score_speech_density
 
 _DEFAULT_WEIGHTS: dict[str, float] = {
@@ -49,7 +53,8 @@ def select_ai_segments(
     if not chunks:
         return _select_from_scenes(scenes or [], target_min, target_max)
 
-    candidates = _build_and_score_candidates(chunks, target_min, target_max, weights)
+    goal = mode_config.get("goal", "")
+    candidates = _build_and_score_candidates(chunks, target_min, target_max, weights, goal=goal)
 
     if not candidates:
         return _select_from_scenes(scenes or [], target_min, target_max)
@@ -109,6 +114,7 @@ def _build_and_score_candidates(
     t_min: float,
     t_max: float,
     weights: dict[str, float],
+    goal: str = "",
 ) -> list[dict]:
     candidates: list[dict] = []
     # Sample starting points to avoid O(n²) on long transcripts.
@@ -120,9 +126,14 @@ def _build_and_score_candidates(
             continue
 
         win_chunks = win["chunks"]
-        first_text = win_chunks[0].get("text", "") if win_chunks else ""
 
-        hook_s = score_hook_text(first_text)
+        # Score hook on the opening window of this candidate (first ~10s from
+        # candidate start), not the head of the source video — critical for
+        # long-form content where strong hooks appear deep into the file.
+        opening_text = get_opening_window_text(win_chunks, win["start"])
+        base_hook = score_hook_text(opening_text)
+        intel_bonus = score_hook_intelligence(opening_text, goal)
+        hook_s = min(100.0, base_hook + intel_bonus)
         density_s = (
             sum(score_speech_density(c) for c in win_chunks) / len(win_chunks)
             if win_chunks else 0.0

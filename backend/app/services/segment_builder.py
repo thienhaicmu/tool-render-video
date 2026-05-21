@@ -4,6 +4,22 @@ from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+try:
+    from app.ai.analyzers.hook_analyzer import (
+        get_opening_window_text as _hook_get_opening_text,
+        score_hook_intelligence as _score_hook_intelligence,
+        detect_hook_type as _hook_detect_type,
+        HOOK_INTELLIGENCE_ENABLED as _HOOK_INTELLIGENCE_ENABLED,
+    )
+    _HOOK_INTELLIGENCE_AVAILABLE = True
+except ImportError:
+    _HOOK_INTELLIGENCE_AVAILABLE = False
+    _HOOK_INTELLIGENCE_ENABLED = False
+
+    def _hook_get_opening_text(*a, **kw) -> str: return ""       # type: ignore[misc]
+    def _score_hook_intelligence(*a, **kw) -> float: return 0.0  # type: ignore[misc]
+    def _hook_detect_type(*a, **kw) -> str: return "none"        # type: ignore[misc]
+
 
 def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
@@ -122,6 +138,8 @@ def _score_candidate(
     max_len: float,
     target_len: float = 0.0,
     speech_data_active: bool = False,
+    transcript_blocks: Optional[List[Dict]] = None,
+    goal: str = "",
 ) -> Dict:
     """Compute viral_score v3 for a candidate segment defined by scene_window.
 
@@ -148,6 +166,17 @@ def _score_candidate(
     first_q     = float(first["scene_quality"])
     first_trans = _clamp(float(first.get("transition_score", 1.0)) * 60.0, 20.0, 100.0)
     hook_opening_score = _clamp((first_q + first_trans) / 2.0, 0.0, 100.0)
+
+    # ── hook intelligence bonus (S2.1) ───────────────────────────────────────
+    # Additive bonus [0, +20] from semantic hook detection on the candidate's
+    # own opening transcript window. Silent (0) when no transcript is available.
+    hook_intelligence_type = "none"
+    if _HOOK_INTELLIGENCE_ENABLED and _HOOK_INTELLIGENCE_AVAILABLE and transcript_blocks:
+        opening_text = _hook_get_opening_text(transcript_blocks, seg_start)
+        if opening_text:
+            intel_bonus = _score_hook_intelligence(opening_text, goal)
+            hook_opening_score = _clamp(hook_opening_score + intel_bonus, 0.0, 100.0)
+            hook_intelligence_type = _hook_detect_type(opening_text)
 
     # ── avg_scene_quality ────────────────────────────────────────────────────
     avg_scene_quality = sum(scene_qualities) / len(scene_qualities)
@@ -237,8 +266,9 @@ def _score_candidate(
         "duration_fit_score":  round(duration_fit_score, 3),
         "speech_density_score": round(speech_density_score, 3),
         "silence_penalty":     round(silence_penalty, 3),
-        "viral_score":         round(viral_score, 3),
-        "gap_penalty":         round(gap_penalty, 3),
+        "viral_score":              round(viral_score, 3),
+        "gap_penalty":              round(gap_penalty, 3),
+        "hook_intelligence_type":   hook_intelligence_type,
     }
 
 
@@ -345,9 +375,10 @@ _FALLBACK_FIELDS = {
     "duration_fit_score":   50.0,
     "speech_density_score": 0.0,
     "silence_penalty":      0.0,
-    "viral_score":          50.0,
-    "gap_penalty":          0.0,
-    "selection_reason":     "fallback",
+    "viral_score":             50.0,
+    "gap_penalty":             0.0,
+    "selection_reason":        "fallback",
+    "hook_intelligence_type":  "none",
 }
 
 
@@ -356,6 +387,8 @@ def build_segments_from_scenes(
     total_duration: int,
     min_part_sec: int = 70,
     max_part_sec: int = 180,
+    goal: str = "",
+    transcript_blocks: Optional[List[Dict]] = None,
 ) -> List[Dict]:
     total = max(float(total_duration or 0), 0.0)
     if total <= 0:
@@ -388,6 +421,8 @@ def build_segments_from_scenes(
             window, min_len, max_len,
             target_len=target_len,
             speech_data_active=speech_data_active,
+            transcript_blocks=transcript_blocks,
+            goal=goal,
         )
         if result:
             scored_candidates.append(result)
@@ -429,6 +464,7 @@ def build_segments_from_scenes_with_subtitles(
     srt_path: Optional[str] = None,
     min_part_sec: int = 70,
     max_part_sec: int = 180,
+    goal: str = "",
 ) -> List[Dict]:
     """Like build_segments_from_scenes but injects a speech_density signal per scene.
 
@@ -436,13 +472,17 @@ def build_segments_from_scenes_with_subtitles(
     ``speech_density`` = (subtitle-covered seconds) / scene_duration, which
     rewards scenes with dense speech in the viral score.
     Falls back to build_segments_from_scenes when srt_path is absent or unreadable.
+
+    The parsed SRT blocks are also forwarded as transcript_blocks so that
+    S2.1 hook intelligence can score each candidate's opening window.
     """
+    transcript_blocks: Optional[List[Dict]] = None
     if srt_path and scenes:
         try:
-            from pathlib import Path
             from app.services.subtitle_engine import _parse_srt_blocks
             blocks = _parse_srt_blocks(srt_path)
             if blocks:
+                transcript_blocks = blocks
                 enriched: List[Dict] = []
                 for sc in scenes:
                     sc_start = float(sc.get("start", 0.0))
@@ -459,4 +499,8 @@ def build_segments_from_scenes_with_subtitles(
         except Exception:
             pass
 
-    return build_segments_from_scenes(scenes, total_duration, min_part_sec, max_part_sec)
+    return build_segments_from_scenes(
+        scenes, total_duration, min_part_sec, max_part_sec,
+        goal=goal,
+        transcript_blocks=transcript_blocks,
+    )
