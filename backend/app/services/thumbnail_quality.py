@@ -132,6 +132,7 @@ def score_frame_quality(jpeg_bytes: bytes) -> Optional[Dict]:
                 # (sharp = not in a blink / motion moment)
                 if lap_var >= 60.0:
                     reasons.append("expression_ok")
+                    score += 8.0  # sharp face = forward-looking, clear expression
         except Exception:
             pass
 
@@ -199,8 +200,9 @@ def select_best_thumbnail(
                 best_offset = offset
             continue
 
-        if quality["score"] > best_score:
-            best_score = quality["score"]
+        score_adj = quality["score"] + (1.0 if abs(offset - base_offset) < 0.01 else 0.0)
+        if score_adj > best_score:
+            best_score = score_adj
             best_bytes = jpeg
             best_offset = offset
             best_reasons = quality.get("reasons", [])

@@ -2889,6 +2889,7 @@ def run_render_pipeline(
         # ── S4.1: Transcript-aware boundary refinement (S4_CANDIDATE_INTELLIGENCE_ENABLED=1) ──
         # Runs after transcription so it works on the first render (no cold-cache requirement).
         # Nudges already-selected segment start/end to align with sentence boundaries (±15% max).
+        _s4_before = None  # pre-S4.1 boundaries; forwarded to S4.5 for combined-nudge cap
         if os.getenv("S4_CANDIDATE_INTELLIGENCE_ENABLED") == "1" and full_srt_available and scored:
             try:
                 _s4_blocks = parse_srt_blocks(str(full_srt))
@@ -2932,6 +2933,7 @@ def run_render_pipeline(
                     scored = refine_cuts_for_naturalness(
                         scored, _s45_blocks,
                         float(payload.min_part_sec), float(payload.max_part_sec),
+                        original_segments=[{"start": s, "end": e} for s, e in _s4_before] if _s4_before else None,
                     )
                     _s45_adj = sum(1 for s in scored if s.get("cut_adjustment_reason"))
                     _job_log(effective_channel, job_id,

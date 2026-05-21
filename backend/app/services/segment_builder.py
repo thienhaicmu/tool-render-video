@@ -684,6 +684,7 @@ _S45_MIN_PAUSE_SEC   = 0.50   # gaps shorter than this are thinking pauses, not 
 _S45_MAX_NUDGE_END   = 0.10   # end boundary: full ±10% × weight (primary target)
 _S45_MAX_NUDGE_START = 0.05   # start boundary: ±5% × weight — detect_silence_trim_offset
                                # already handles opening cleanup, keep conservative
+_S4_COMBINED_CAP_RATIO = 0.18  # max combined S4.1+S4.5 shift per boundary (18% of original duration)
 
 # Content-type weight scales the nudge window per boundary.
 # 0.0 = skip entirely (fast cuts are intentional), 1.0 = full window.
@@ -730,6 +731,7 @@ def refine_cuts_for_naturalness(
     transcript_blocks: List[Dict],
     min_len: float,
     max_len: float,
+    original_segments: Optional[List[Dict]] = None,
 ) -> List[Dict]:
     """S4.5: Snap cut boundaries to natural pause/utterance points.
 
@@ -752,7 +754,7 @@ def refine_cuts_for_naturalness(
         return segments
 
     refined: List[Dict] = []
-    for seg in segments:
+    for i, seg in enumerate(segments):
         seg_start = float(seg.get("start", 0.0))
         seg_end   = float(seg.get("end", 0.0))
         duration  = seg_end - seg_start
@@ -792,6 +794,15 @@ def refine_cuts_for_naturalness(
                 )
             if not reasons:
                 break   # nothing actually moved — keep original
+            # Combined S4.1+S4.5 cap: if total boundary shift from pre-S4.1 original
+            # exceeds _S4_COMBINED_CAP_RATIO of original duration, skip this candidate.
+            if original_segments is not None and i < len(original_segments):
+                orig_s = float(original_segments[i].get("start", seg_start))
+                orig_e = float(original_segments[i].get("end", seg_end))
+                orig_dur = max(orig_e - orig_s, 0.001)
+                if (abs(cs - orig_s) > orig_dur * _S4_COMBINED_CAP_RATIO or
+                        abs(ce - orig_e) > orig_dur * _S4_COMBINED_CAP_RATIO):
+                    continue  # combined shift too large; try narrower fallback candidate
             seg = dict(seg)
             seg["start"] = round(cs, 3)
             seg["end"]   = round(ce, 3)
