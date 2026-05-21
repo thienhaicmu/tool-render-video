@@ -115,6 +115,59 @@ AI must not: switch presets, override style, change clip count.
 
 ---
 
+## S3.3 — Thumbnail/Cover Intelligence ✅ Complete
+
+**Shipped:** `feat(ai): S3.3 Thumbnail/Cover Intelligence`
+
+**What shipped:**
+- New `thumbnail/cover_hint_planner.py` — S2-signal-driven per-clip frame hint engine:
+  - `plan_cover_hints(selected_raw, retention_predictions, goal, packaging_applied)` → `{clip_idx: cover_hint_dict}`
+  - `_hint_one(seg, retention, pkg_for_clip)` → hint dict or null-ratio dict
+  - `S3_THUMBNAIL_ENABLED` / `S3_THUMBNAIL_MIN_SCORE` env gates (RC1 naming)
+  - RC2 confidence gate: `segment_score >= S3_THUMBNAIL_MIN_SCORE` (default 40); weak clips → null hint
+  - RC3: `packaging_applied[idx]` non-empty (S3.1 crop metadata) → +0.08 confidence bonus; no new CV
+  - RC4 `thumbnail_risks` list: `late_payoff`, `low_face_presence`, `weak_expression`, `low_signal`, `scene_fallback`
+  - RC6 `preferred_offset_ratio`: clamped `[0.05, 0.90]` of clip duration; `None` when no signals
+  - Moment-type → offset range table: payoff / hook_payoff / hook_opener / full_story / explainer / narrative
+  - Hook-type → offset nudge table: surprise/warning/result_first (−0.10) · story/authority (+0.08)
+  - Confidence accumulation: base (0.20) + hook (0.20) + moment (0.25) + retention (0.15) + structure (0.10) + crop meta (0.08)
+- `thumbnail/__init__.py` (new) — package marker
+- `edit_plan_schema.AIClipPlan`: `cover_hint: dict` field + `to_dict()` entry
+- `edit_plan_schema.AIEditPlan`: `clip_cover_hints: dict` field + `to_dict()` entry
+- `ai_director._build_plan()`:
+  - Try-import guard at module level (`_COVER_AVAILABLE`, `_COVER_ENABLED`)
+  - S3.3 block after S3.2 — `plan.clip_cover_hints` populated; `seg_plan.cover_hint` attached per clip
+  - `packaging_applied=plan.clip_packaging` passed to planner (RC3 crop meta)
+  - Try/except guarded — failure appends `cover_hint_error:…` warning, never raises
+- `render_pipeline._select_cover_frame_time()`:
+  - New `cover_hint_ratio: float | None = None` kwarg (backward-compatible, default None = exact no-op)
+  - RC6: hint appended as one extra candidate only; deduplicated against existing 5 candidates
+  - UP15 scoring logic untouched — hint is one more option, not an override
+- `render_pipeline` UP15 call site:
+  - Looks up `_ai_edit_plan.clip_cover_hints.get(idx - 1)` before calling `_select_cover_frame_time`
+  - Whole lookup in try/except — failure leaves `cover_hint_ratio=None` (exact no-op)
+
+**Files affected:**
+- `backend/app/ai/thumbnail/__init__.py` (new)
+- `backend/app/ai/thumbnail/cover_hint_planner.py` (new)
+- `backend/app/ai/director/edit_plan_schema.py`
+- `backend/app/ai/director/ai_director.py`
+- `backend/app/orchestration/render_pipeline.py`
+
+**Regression guarantees:**
+- `S3_THUMBNAIL_ENABLED=0` → `{}` returned → `clip_cover_hints={}`, all `cover_hint={}` → `cover_hint_ratio=None` at UP15 → bit-identical to pre-S3.3
+- `cover_hint_planner` import fails → `_COVER_AVAILABLE=False` → S3.3 block skipped entirely
+- Per-clip hint failure → try/except swallows; other clips unaffected; `cover_hint_error:…` appended
+- `cover_hint_ratio=None` → no extra candidate added; `_select_cover_frame_time` unchanged
+- `preferred_offset_ratio=None` (weak clip / no signals) → `cover_hint_ratio=None` at UP15 → no-op
+- UP15 hint lookup failure (try/except) → `_cover_hint_ratio=None` → UP15 runs exactly as today
+- `packaging_applied={}` (S3.1 disabled) → RC3 bonus never fires; confidence slightly lower, no functional change
+- `segment_score < 40` → null hint; UP15 runs unchanged for that clip
+- No changes to clip count, scoring, selection, diversity, DNA, render engine, or external APIs
+- `cover_hint` advisory only — has zero import path back to clip_selector, retry_analyzer, diversity_analyzer, or dna_engine
+
+---
+
 ## Non-Negotiable Constraints (all S3 phases)
 
 - Creator controls: goal, style, format, clip count, duration preference

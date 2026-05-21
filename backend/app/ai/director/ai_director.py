@@ -78,6 +78,18 @@ except ImportError:
 
     def _retention_predict(*a, **kw) -> dict: return {}  # type: ignore[misc]
 
+try:
+    from app.ai.thumbnail.cover_hint_planner import (
+        plan_cover_hints as _cover_plan,
+        S3_THUMBNAIL_ENABLED as _COVER_ENABLED,
+    )
+    _COVER_AVAILABLE = True
+except ImportError:
+    _COVER_AVAILABLE = False
+    _COVER_ENABLED = False
+
+    def _cover_plan(*a, **kw) -> dict: return {}  # type: ignore[misc]
+
 logger = logging.getLogger("app.ai.director")
 
 
@@ -330,6 +342,30 @@ def _build_plan(
         except Exception as exc:
             plan.warnings.append(f"retention_prediction_error:{type(exc).__name__}")
             logger.debug("ai_director_retention_prediction_failed job_id=%s: %s", job_id, exc)
+
+    # S3.3: Per-clip thumbnail/cover frame hints (advisory metadata only).
+    # RC1 enforced: cover_hint NEVER affects selection, retry, ranking,
+    # diversity, or creator DNA. Hint is one extra UP15 candidate at most (RC6).
+    if _COVER_AVAILABLE and _COVER_ENABLED:
+        try:
+            cover_result = _cover_plan(
+                selected_raw=selected_raw,
+                retention_predictions=plan.clip_retention_prediction,
+                goal=str(mode_config.get("goal", "")),
+                packaging_applied=plan.clip_packaging,
+            )
+            plan.clip_cover_hints = cover_result
+            for idx, seg_plan in enumerate(plan.selected_segments):
+                if idx in cover_result:
+                    seg_plan.cover_hint = dict(cover_result[idx])
+            if cover_result:
+                logger.debug(
+                    "ai_director_cover_hints_planned job_id=%s clips=%d",
+                    job_id, len(cover_result),
+                )
+        except Exception as exc:
+            plan.warnings.append(f"cover_hint_error:{type(exc).__name__}")
+            logger.debug("ai_director_cover_hint_failed job_id=%s: %s", job_id, exc)
 
     # --- Phase 31: AI Apply Policy ---
     # Runs first so downstream phases can reference the effective policy.

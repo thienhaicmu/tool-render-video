@@ -25,6 +25,8 @@ class AIClipPlan:
     packaging_applied: dict = field(default_factory=dict)
     # S3.2 — per-clip retention prediction (advisory metadata only, RC1: never affects selection)
     retention_prediction: dict = field(default_factory=dict)
+    # S3.3 — per-clip thumbnail/cover frame hint (advisory metadata only, UP15 remains authoritative)
+    cover_hint: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -282,6 +284,8 @@ class AIEditPlan:
     clip_packaging: dict = field(default_factory=dict)
     # S3.2 — Production Intelligence: per-clip retention prediction (advisory metadata only)
     clip_retention_prediction: dict = field(default_factory=dict)
+    # S3.3 — Production Intelligence: per-clip thumbnail frame hints (advisory metadata only)
+    clip_cover_hints: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -310,6 +314,7 @@ class AIEditPlan:
                     "content_type_hint": s.content_type_hint,
                     "packaging_applied":   dict(s.packaging_applied),
                     "retention_prediction": dict(s.retention_prediction),
+                    "cover_hint":          dict(s.cover_hint),
                 }
                 for s in self.selected_segments
             ],
@@ -420,4 +425,5 @@ class AIEditPlan:
             "creator_dna_applied":                dict(self.creator_dna_applied),
             "clip_packaging":                     dict(self.clip_packaging),
             "clip_retention_prediction":          dict(self.clip_retention_prediction),
+            "clip_cover_hints":                   dict(self.clip_cover_hints),
         }

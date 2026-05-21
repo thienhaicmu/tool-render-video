@@ -218,6 +218,7 @@ def _select_cover_frame_time(
     srt_meta: dict,
     target_platform: str,
     variant_type: str,
+    cover_hint_ratio: float | None = None,
 ) -> tuple[float, str]:
     """Score thumbnail candidate offsets and return (offset_sec, reason).
 
@@ -225,6 +226,10 @@ def _select_cover_frame_time(
     Platform and variant nudge where in the clip to look. Hook score biases toward
     earlier frames when the content opens strong. Subtitle timing adds a penalty
     to avoid text-heavy frames.
+
+    cover_hint_ratio (S3.3): advisory ratio [0.05, 0.90] from AI plan assembly.
+    RC6: adds at most one extra candidate. UP15 scoring remains authoritative.
+    cover_hint_ratio=None → exact no-op (bit-identical to pre-S3.3).
     """
     dur = max(2.0, float(clip_duration or 0))
 
@@ -232,6 +237,16 @@ def _select_cover_frame_time(
     # Range [0.10, 0.58] avoids opening cuts and mid-roll dropout at the end.
     _FRACS = [0.10, 0.20, 0.32, 0.44, 0.58]
     candidates = [round(max(0.5, min(dur - 0.5, dur * f)), 3) for f in _FRACS]
+
+    # S3.3 RC6: advisory hint adds at most one extra candidate.
+    # Deduplicates against existing candidates before appending.
+    if cover_hint_ratio is not None:
+        try:
+            _hint_t = round(max(0.5, min(dur - 0.5, dur * float(cover_hint_ratio))), 3)
+            if _hint_t not in candidates:
+                candidates.append(_hint_t)
+        except (TypeError, ValueError):
+            pass
 
     # Platform position preference: lower value = prefer earlier in clip.
     _plat_bias = {"tiktok": 0.15, "instagram_reels": 0.48, "youtube_shorts": 0.30}
@@ -4913,12 +4928,24 @@ def run_render_pipeline(
             # ── UP15: Smart cover frame extraction ───────────────────────────
             try:
                 _clip_dur = max(1.0, float(seg.get("duration") or 0))
+                # S3.3: look up advisory hint from AI plan (RC6: +1 candidate max).
+                # idx starts from 1; AI plan clip_cover_hints uses 0-based keys.
+                _cover_hint_ratio: float | None = None
+                try:
+                    if _ai_edit_plan is not None:
+                        _plan_hint = (_ai_edit_plan.clip_cover_hints or {}).get(idx - 1) or {}
+                        _raw_ratio = _plan_hint.get("preferred_offset_ratio")
+                        if _raw_ratio is not None:
+                            _cover_hint_ratio = float(_raw_ratio)
+                except Exception:
+                    pass
                 _cover_offset, _cover_reason = _select_cover_frame_time(
                     clip_duration=_clip_dur,
                     hook_score=float(seg.get("hook_score") or 0),
                     srt_meta=_srt_meta,
                     target_platform=_target_platform,
                     variant_type=str(seg.get("variant_type") or ""),
+                    cover_hint_ratio=_cover_hint_ratio,
                 )
                 _cover_bytes = extract_thumbnail_frame(str(final_part), _cover_offset, width=640)
                 if _cover_bytes:
