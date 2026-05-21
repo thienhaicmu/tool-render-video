@@ -13,6 +13,7 @@ from app.ai.analyzers.hook_analyzer import (
     score_hook_text,
     score_hook_intelligence,
     get_opening_window_text,
+    detect_hook_type,
 )
 from app.ai.analyzers.moment_analyzer import score_best_moment
 from app.ai.analyzers.silence_analyzer import estimate_silence_penalty, score_speech_density
@@ -21,6 +22,7 @@ try:
     from app.ai.analyzers.structure_analyzer import (
         score_structure_coherence as _struct_score,
         find_entry_point as _struct_find_entry,
+        analyze_window_structure as _struct_analyze,
         STRUCTURE_INTELLIGENCE_ENABLED as _STRUCTURE_ENABLED,
     )
     _STRUCTURE_AVAILABLE = True
@@ -31,6 +33,22 @@ except ImportError:
     def _struct_score(*a, **kw) -> float: return 0.0           # type: ignore[misc]
     def _struct_find_entry(all_chunks, current_idx, *a, **kw):  # type: ignore[misc]
         return current_idx, 0.0
+    def _struct_analyze(*a, **kw) -> dict:                      # type: ignore[misc]
+        return {"phases_detected": []}
+
+try:
+    from app.ai.analyzers.diversity_analyzer import (
+        build_candidate_context as _div_build_ctx,
+        compute_diversity_penalty as _div_penalty,
+        DIVERSITY_INTELLIGENCE_ENABLED as _DIVERSITY_ENABLED,
+    )
+    _DIVERSITY_AVAILABLE = True
+except ImportError:
+    _DIVERSITY_AVAILABLE = False
+    _DIVERSITY_ENABLED = False
+
+    def _div_build_ctx(*a, **kw) -> dict: return {}             # type: ignore[misc]
+    def _div_penalty(*a, **kw) -> float: return 0.0             # type: ignore[misc]
 
 _DEFAULT_WEIGHTS: dict[str, float] = {
     "hook_weight": 0.35,
@@ -75,7 +93,7 @@ def select_ai_segments(
     if not candidates:
         return _select_from_scenes(scenes or [], target_min, target_max)
 
-    selected = _deduplicate(candidates)[:_MAX_SEGMENTS]
+    selected = _select_diverse(candidates, goal, _MAX_SEGMENTS)
     return _apply_memory_bonus(selected, memory_context)
 
 
@@ -135,6 +153,8 @@ def _build_and_score_candidates(
     candidates: list[dict] = []
     # Sample starting points to avoid O(n²) on long transcripts.
     step = max(1, len(chunks) // 12)
+    # Total duration estimate for position_ratio used in diversity context.
+    total_duration = float(chunks[-1].get("end") or 1.0) if chunks else 1.0
 
     for i in range(0, len(chunks), step):
         win = _build_window(chunks, i, t_max)
@@ -163,6 +183,12 @@ def _build_and_score_candidates(
         base_hook = score_hook_text(opening_text)
         intel_bonus = score_hook_intelligence(opening_text, goal)
         hook_s = min(100.0, base_hook + intel_bonus)
+        # Detect hook type and structure phases for diversity context (S2.4).
+        hook_type = detect_hook_type(opening_text) if opening_text else "none"
+        phases_detected = (
+            _struct_analyze(win_chunks, win["start"], win["end"]).get("phases_detected", [])
+            if _STRUCTURE_AVAILABLE and _STRUCTURE_ENABLED else []
+        )
         density_s = (
             sum(score_speech_density(c) for c in win_chunks) / len(win_chunks)
             if win_chunks else 0.0
@@ -205,28 +231,96 @@ def _build_and_score_candidates(
             parts.append(f"structure={structure_raw:.0f}")
 
         candidates.append({
-            "start": win["start"],
-            "end": win["end"],
-            "score": final,
-            "reason": ", ".join(parts) or "ai_scored",
-            "source": "local_ai",
-            "duration": win["duration"],
+            "start":          win["start"],
+            "end":            win["end"],
+            "score":          final,
+            "reason":         ", ".join(parts) or "ai_scored",
+            "source":         "local_ai",
+            "duration":       win["duration"],
+            # Diversity context fields (S2.4) — used by _select_diverse, not
+            # part of the external contract; stripped before returning to callers.
+            "_hook_type":     hook_type,
+            "_phases":        phases_detected,
+            "_position_ratio": win["start"] / max(total_duration, 1.0),
         })
 
     candidates.sort(key=lambda c: c["score"], reverse=True)
     return candidates
 
 
-def _deduplicate(candidates: list[dict]) -> list[dict]:
-    """Keep highest-scoring non-overlapping windows."""
-    selected: list[dict] = []
-    for c in candidates:
-        overlaps = any(
-            not (c["end"] <= s["start"] or c["start"] >= s["end"])
-            for s in selected
+def _select_diverse(
+    candidates: list[dict],
+    goal: str,
+    clip_count: int,
+) -> list[dict]:
+    """Select up to clip_count non-overlapping candidates with diversity awareness.
+
+    Candidates must be pre-sorted by score descending.
+
+    Algorithm (O(n²) over ~12 candidates — negligible cost):
+      For each selection round, compute a diversity-adjusted comparison score
+      for every remaining candidate.  Pick the highest adjusted-score candidate
+      that doesn't overlap already-selected windows.  Repeat until clip_count
+      is reached or no non-overlapping candidates remain.
+
+    Diversity penalty is for ORDERING ONLY.  Output dicts carry the original
+    pre-penalty score.  Internal diversity context fields (_hook_type, _phases,
+    _position_ratio) are stripped before returning.
+    """
+    if not candidates:
+        return []
+
+    top_score  = candidates[0]["score"]
+    selected:       list[dict] = []
+    selected_ctxs:  list[dict] = []
+
+    remaining = list(candidates)
+
+    while remaining and len(selected) < clip_count:
+        best: dict | None = None
+        best_adj = -1.0
+
+        for c in remaining:
+            # Temporal overlap check (binary, unchanged from original _deduplicate).
+            if any(not (c["end"] <= s["start"] or c["start"] >= s["end"]) for s in selected):
+                continue
+
+            # Diversity-adjusted comparison score (never stored in output).
+            if _DIVERSITY_AVAILABLE and _DIVERSITY_ENABLED and selected_ctxs:
+                ctx = _div_build_ctx(
+                    hook_type=c.get("_hook_type", "none"),
+                    phases=c.get("_phases", []),
+                    position_ratio=c.get("_position_ratio", 0.5),
+                )
+                penalty = _div_penalty(
+                    ctx, selected_ctxs, goal,
+                    top_score=top_score,
+                    candidate_score=c["score"],
+                    clip_count=clip_count,
+                )
+            else:
+                penalty = 0.0
+
+            adj = c["score"] - penalty
+            if adj > best_adj:
+                best_adj = adj
+                best = c
+
+        if best is None:
+            break
+
+        remaining.remove(best)
+        # Build diversity context from the chosen candidate's internal fields,
+        # then strip those fields before adding to output.
+        ctx_for_tracking = _div_build_ctx(
+            hook_type=best.get("_hook_type", "none"),
+            phases=best.get("_phases", []),
+            position_ratio=best.get("_position_ratio", 0.5),
         )
-        if not overlaps:
-            selected.append(c)
+        selected_ctxs.append(ctx_for_tracking)
+        out = {k: v for k, v in best.items() if not k.startswith("_")}
+        selected.append(out)
+
     return selected
 
 

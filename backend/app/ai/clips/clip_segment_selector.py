@@ -17,6 +17,20 @@ from typing import Any, Optional
 from app.ai.clips.clip_segment_schema import AIClipSegmentPlan, AIClipSegmentSelection
 from app.ai.clips.clip_segment_safety import is_segment_plan_safe, sanitize_segment_plan
 
+try:
+    from app.ai.analyzers.diversity_analyzer import (
+        build_candidate_context as _div_build_ctx,
+        compute_diversity_penalty as _div_penalty,
+        DIVERSITY_INTELLIGENCE_ENABLED as _DIVERSITY_ENABLED,
+    )
+    _DIVERSITY_AVAILABLE = True
+except ImportError:
+    _DIVERSITY_AVAILABLE = False
+    _DIVERSITY_ENABLED = False
+
+    def _div_build_ctx(*a, **kw) -> dict: return {}   # type: ignore[misc]
+    def _div_penalty(*a, **kw) -> float: return 0.0   # type: ignore[misc]
+
 logger = logging.getLogger("app.ai.clips")
 
 # ── Composite score weights (mirror Phase 35 engine) ─────────────────────────
@@ -130,30 +144,77 @@ def _select(
         key=lambda x: (-x["adjusted_score"], str(x["candidate"].get("candidate_id", "")))
     )
 
+    # Total duration estimate for position_ratio (diversity context).
+    all_ends = [
+        _safe_f(item["candidate"].get("end_sec", 0.0), 0.0) for item in scored
+    ]
+    total_dur_est = max(all_ends) if all_ends else 1.0
+    top_score     = scored[0]["adjusted_score"] if scored else 100.0
+
     # ── Select, dedup, and reject ─────────────────────────────────────────────
+    # S2.4: Greedy per-round selection so diversity penalties can influence
+    # ordering correctly.  Each round: apply diversity-adjusted scores to all
+    # remaining candidates, pick the best non-overlapping safe one.
+    # Pool is ≤ 20 candidates (ai_clip_candidate_limit), so O(n²) is trivial.
     selected_windows: list[tuple[float, float]] = []
     selected_plans:   list[AIClipSegmentPlan]  = []
+    selected_ctxs:    list[dict]               = []
     rejected:         list[dict]               = []
+    remaining = list(scored)
 
-    for item in scored:
-        c     = item["candidate"]
-        score = item["adjusted_score"]
+    while remaining and len(selected_plans) < target_count:
+        best_item:  dict | None = None
+        best_adj    = -1.0
 
+        for item in remaining:
+            c     = item["candidate"]
+            score = item["adjusted_score"]
+            start = _safe_f(c.get("start_sec", 0.0), 0.0)
+            end   = _safe_f(c.get("end_sec",   0.0), 0.0)
+
+            if _is_overlapping(start, end, selected_windows):
+                continue
+
+            seg_raw_check = _build_seg_raw(c, score)
+            if not is_segment_plan_safe(seg_raw_check, safety_ctx):
+                continue
+
+            # Diversity-adjusted comparison score (never stored in plan).
+            if _DIVERSITY_AVAILABLE and _DIVERSITY_ENABLED and selected_ctxs:
+                hook_proxy = _hook_type_from_reasons(list(c.get("reasons", [])))
+                div_ctx    = _div_build_ctx(
+                    hook_type=hook_proxy,
+                    phases=[],
+                    position_ratio=start / max(total_dur_est, 1.0),
+                )
+                div_pen = _div_penalty(
+                    div_ctx, selected_ctxs,
+                    goal=context.get("goal", ""),
+                    top_score=top_score,
+                    candidate_score=score,
+                    clip_count=target_count,
+                )
+                adj = score - div_pen
+            else:
+                adj = score
+
+            if adj > best_adj:
+                best_adj  = adj
+                best_item = item
+
+        if best_item is None:
+            break
+
+        remaining.remove(best_item)
+        c     = best_item["candidate"]
+        score = best_item["adjusted_score"]   # original score for plan output
         start = _safe_f(c.get("start_sec", 0.0), 0.0)
         end   = _safe_f(c.get("end_sec",   0.0), 0.0)
-
         seg_raw = _build_seg_raw(c, score)
 
+        # Final safety gate (deterministic re-check; passed above so always True).
         if not is_segment_plan_safe(seg_raw, safety_ctx):
             rejected.append({**seg_raw, "reject_reason": "safety_check_failed"})
-            continue
-
-        if _is_overlapping(start, end, selected_windows):
-            rejected.append({**seg_raw, "reject_reason": "overlap_with_selected"})
-            continue
-
-        if len(selected_plans) >= target_count:
-            rejected.append({**seg_raw, "reject_reason": "target_count_reached"})
             continue
 
         rank = len(selected_plans) + 1
@@ -181,6 +242,28 @@ def _select(
         )
         selected_plans.append(plan)
         selected_windows.append((start, end))
+        if _DIVERSITY_AVAILABLE and _DIVERSITY_ENABLED:
+            hook_proxy = _hook_type_from_reasons(list(c.get("reasons", [])))
+            selected_ctxs.append(_div_build_ctx(
+                hook_type=hook_proxy,
+                phases=[],
+                position_ratio=start / max(total_dur_est, 1.0),
+            ))
+
+    # Capture remaining as rejected (target_count_reached or exhausted).
+    for item in remaining:
+        c     = item["candidate"]
+        score = item["adjusted_score"]
+        seg_raw = _build_seg_raw(c, score)
+        start = _safe_f(c.get("start_sec", 0.0), 0.0)
+        end   = _safe_f(c.get("end_sec",   0.0), 0.0)
+        if _is_overlapping(start, end, selected_windows):
+            reason = "overlap_with_selected"
+        elif len(selected_plans) >= target_count:
+            reason = "target_count_reached"
+        else:
+            reason = "exhausted"
+        rejected.append({**seg_raw, "reject_reason": reason})
 
     logger.info(
         "ai_clip_segment_selection_enabled selected=%d rejected=%d target=%d",
@@ -244,6 +327,22 @@ def _build_fallback_candidates(edit_plan: Any) -> list[dict]:
         return out
     except Exception:
         return []
+
+
+# ── Diversity helpers ─────────────────────────────────────────────────────────
+
+def _hook_type_from_reasons(reasons: list[str]) -> str:
+    """Map Phase 35 story-segment reason labels to a hook_type proxy for diversity."""
+    for r in reasons:
+        if "hook" in r:
+            return "story"       # hook segment → story hook proxy
+        if "climax" in r:
+            return "surprise"    # climax → surprise/reaction proxy
+        if "payoff" in r:
+            return "result_first"  # payoff → result_first proxy
+        if "early_hook_window" in r:
+            return "curiosity"   # positional early hook → curiosity proxy
+    return "none"
 
 
 # ── Overlap detection ─────────────────────────────────────────────────────────

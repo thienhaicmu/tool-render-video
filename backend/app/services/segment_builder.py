@@ -38,6 +38,20 @@ except ImportError:
     _STRUCTURE_AVAILABLE = False
     _STRUCTURE_ENABLED = False
 
+try:
+    from app.ai.analyzers.diversity_analyzer import (
+        build_candidate_context as _div_build_ctx,
+        compute_diversity_penalty as _div_penalty,
+        DIVERSITY_INTELLIGENCE_ENABLED as _DIVERSITY_ENABLED,
+    )
+    _DIVERSITY_AVAILABLE = True
+except ImportError:
+    _DIVERSITY_AVAILABLE = False
+    _DIVERSITY_ENABLED = False
+
+    def _div_build_ctx(*a, **kw) -> dict: return {}             # type: ignore[misc]
+    def _div_penalty(*a, **kw) -> float: return 0.0             # type: ignore[misc]
+
 # Visual-path goal multipliers for best-moment scoring (S2.2).
 # Conservative range 1.00–1.15 — lightly goal-aware, never overrides creator intent.
 _VISUAL_GOAL_MULT: dict[str, dict[str, float]] = {
@@ -319,6 +333,7 @@ def _score_candidate(
         "peak_scene_quality":       round(peak_scene_quality, 3),
         "best_moment_bonus":        round(best_moment_bonus, 3),
         "structure_type":           "none",
+        "diversity_penalty":        0.0,
     }
 
 
@@ -360,19 +375,27 @@ def _select_non_overlapping(
     scored_candidates: List[Dict],
     max_overlap_ratio: float = 0.45,
     speech_data_active: bool = False,
+    goal: str = "",
+    total_duration: float = 0.0,
 ) -> List[Dict]:
-    """Greedy selection of best non-overlapping candidates.
+    """Greedy selection of best non-overlapping candidates with diversity awareness.
 
     Sort descending by (viral_score, hook_opening_score, scene_quality_avg).
     Accept a candidate only when its overlap with every already-selected
     segment is below max_overlap_ratio (= overlap / shorter segment duration).
     A small continuity bonus rewards candidates whose start aligns with the end
     of the last selected segment (avoids jarring time-jumps in the final cut).
-    Each accepted segment is tagged with a selection_reason string.
+
+    S2.4: diversity penalty applied to comparison score only — original
+    viral_score is never mutated.  diversity_penalty field recorded on output.
     Returns segments sorted by start time.
     """
     if not scored_candidates:
         return []
+
+    clip_count = len(scored_candidates)  # upper bound on how many we might select
+    top_score  = max(c["viral_score"] for c in scored_candidates)
+    dur_ref    = max(total_duration, 1.0)
 
     sorted_cands = sorted(
         scored_candidates,
@@ -380,7 +403,8 @@ def _select_non_overlapping(
         reverse=True,
     )
 
-    selected: List[Dict] = []
+    selected:      List[Dict] = []
+    selected_ctxs: List[Dict] = []
     last_end: Optional[float] = None
 
     for cand in sorted_cands:
@@ -396,16 +420,48 @@ def _select_non_overlapping(
                 ok = False
                 break
 
-        if ok:
-            cand = dict(cand)
-            # Continuity bonus: prefer candidates that continue directly from the last segment.
-            if last_end is not None:
-                gap = abs(c_start - last_end)
-                if gap < 2.0:  # within 2s = almost seamless continuation
-                    cand["viral_score"] = min(100.0, cand["viral_score"] + 3.0 * max(0.0, 1.0 - gap / 2.0))
-            cand["selection_reason"] = _make_selection_reason(cand, speech_data_active)
-            selected.append(cand)
-            last_end = c_end
+        if not ok:
+            continue
+
+        cand = dict(cand)
+
+        # S2.4: diversity-adjusted comparison score.
+        # Penalty is for ordering only — never stored in viral_score.
+        diversity_pen = 0.0
+        if _DIVERSITY_AVAILABLE and _DIVERSITY_ENABLED and selected_ctxs:
+            hook_type = str(cand.get("hook_intelligence_type", "none") or "none")
+            position_ratio = c_start / dur_ref
+            ctx = _div_build_ctx(
+                hook_type=hook_type,
+                phases=[],  # structure phases not available in visual path
+                position_ratio=position_ratio,
+            )
+            diversity_pen = _div_penalty(
+                ctx, selected_ctxs, goal,
+                top_score=top_score,
+                candidate_score=cand["viral_score"],
+                clip_count=clip_count,
+            )
+        cand["diversity_penalty"] = round(diversity_pen, 3)
+
+        # Continuity bonus: prefer candidates that continue directly from the last segment.
+        if last_end is not None:
+            gap = abs(c_start - last_end)
+            if gap < 2.0:  # within 2s = almost seamless continuation
+                cand["viral_score"] = min(100.0, cand["viral_score"] + 3.0 * max(0.0, 1.0 - gap / 2.0))
+
+        cand["selection_reason"] = _make_selection_reason(cand, speech_data_active)
+        selected.append(cand)
+        last_end = c_end
+
+        # Track diversity context for next comparison.
+        if _DIVERSITY_AVAILABLE and _DIVERSITY_ENABLED:
+            hook_type = str(cand.get("hook_intelligence_type", "none") or "none")
+            selected_ctxs.append(_div_build_ctx(
+                hook_type=hook_type,
+                phases=[],
+                position_ratio=c_start / dur_ref,
+            ))
 
     return sorted(selected, key=lambda x: x["start"])
 
@@ -432,6 +488,7 @@ _FALLBACK_FIELDS = {
     "peak_scene_quality":      50.0,
     "best_moment_bonus":       0.0,
     "structure_type":          "none",
+    "diversity_penalty":       0.0,
 }
 
 
@@ -482,7 +539,12 @@ def build_segments_from_scenes(
 
     # ── 4. Select best non-overlapping segments ──────────────────────────────
     selected = (
-        _select_non_overlapping(scored_candidates, speech_data_active=speech_data_active)
+        _select_non_overlapping(
+            scored_candidates,
+            speech_data_active=speech_data_active,
+            goal=goal,
+            total_duration=total,
+        )
         if scored_candidates else []
     )
 

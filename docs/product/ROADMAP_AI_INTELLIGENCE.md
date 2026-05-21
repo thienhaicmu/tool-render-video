@@ -112,7 +112,39 @@ Smart Defaults, Creator DNA suggestions, Editing Autopilot, AI Managed / Manual 
 
 ---
 
-### S2.4 — Diversity Intelligence ⬜ Planned
+### S2.4 — Diversity Intelligence ✅ Complete
+
+**Shipped:** `feat(ai): S2.4 Diversity Intelligence`
+
+**What shipped:**
+- New `diversity_analyzer.py` — goal-aware multi-clip diversity engine:
+  - `build_candidate_context(hook_type, phases, position_ratio)` → diversity context dict
+  - `compute_diversity_penalty(candidate_ctx, selected_ctxs, goal, top_score, candidate_score, clip_count)` → [0, 15.0] penalty for selection ordering only
+  - Three diversity dimensions: hook_type exact/group match, moment archetype (derived from hook + structure phases), temporal zone (early/mid/late)
+  - Hook exact-match penalty halved when clips differ in moment_type — avoids over-penalizing clips sharing hook label but differing in content value (required change 1)
+  - Temporal penalty fixed 2.5 pts ≈ 0.95× multiplier effect, within 0.90–0.97 target (required change 2)
+  - Quality delta gate: diversity only fires when `top_score - candidate_score ≤ 12` — 95-score duplicate always beats 70-score unique (required change 3)
+  - Diversity strength scales with clip_count: 2=0.30, 3=0.55, 4=0.70, 5+=1.00 (required change 4)
+  - Goal-aware dimension weights: viral → moment_type priority; education/podcast/storytelling → temporal priority; product → hook_type priority
+  - `DIVERSITY_INTELLIGENCE_ENABLED` env gate for full rollback
+- `clip_selector`: `_deduplicate()` replaced with `_select_diverse()` — greedy per-round O(n²) selection with diversity-adjusted comparison scores; hook_type + phases stored on candidates for context; original scores never mutated in output
+- `segment_builder`: `_select_non_overlapping()` extended with `goal` + `total_duration` params; diversity-adjusted ordering using `hook_intelligence_type` (already computed by S2.1); `diversity_penalty` field added to output
+- `clip_segment_selector` (Phase 36): greedy per-round selection replaces single-pass greedy; story-segment reason labels mapped to hook_type proxies (hook→story, climax→surprise, payoff→result_first); diversity context tracked per accepted plan
+
+**Files affected:**
+- `backend/app/ai/analyzers/diversity_analyzer.py` (new)
+- `backend/app/ai/director/clip_selector.py`
+- `backend/app/services/segment_builder.py`
+- `backend/app/ai/clips/clip_segment_selector.py`
+
+**Regression guarantees:**
+- All imports try/except guarded — zero runtime failures if module missing
+- Diversity penalty affects selection ordering ONLY — output scores are always original pre-penalty values
+- `clip_count = 1` → no-op (count_strength = 0.0)
+- `top_score - score > 12` → no penalty (quality gate); high-quality duplicate always beats mediocre unique
+- `DIVERSITY_INTELLIGENCE_ENABLED=0` disables entirely across all three selection paths
+- Transcript absent → hook_type = "none", moment_type = "unknown", graceful degradation to temporal-only diversity
+- No changes to scoring formulas, render pipeline, external APIs, or clip count logic
 
 ---
 
