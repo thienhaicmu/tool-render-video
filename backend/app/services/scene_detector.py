@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import subprocess
+import threading
 from typing import List, Dict
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,22 @@ _TV2_MERGE_GAP_SEC: float = 0.5
 _TV2_MIN_SCENE_SEC: float = 0.5
 # Abort merge if merged count exceeds base × this ratio (scene explosion guard).
 _TV2_EXPLODE_RATIO: int = 4
+
+# TransNetV2 singleton — model load takes 2–10s; reuse across jobs (R3.3).
+_tv2_model_lock = threading.Lock()
+_tv2_model = None
+
+
+def _get_tv2_model():
+    """Load TransNetV2 once; return the same instance on every subsequent call."""
+    global _tv2_model
+    if _tv2_model is not None:
+        return _tv2_model
+    with _tv2_model_lock:
+        if _tv2_model is not None:
+            return _tv2_model
+        _tv2_model = _TransNetV2()
+    return _tv2_model
 
 
 def _get_video_fps(video_path: str) -> float:
@@ -238,7 +255,7 @@ def _transnetv2_detect(video_path: str, fps: float) -> List[float]:
         return []
     try:
         threshold = float(os.environ.get("TRANSNETV2_THRESHOLD", "0.5"))
-        model = _TransNetV2()
+        model = _get_tv2_model()
         _vid_frames, predictions, _all_scores = model.predict_video(video_path)
         scenes = model.predictions_to_scenes(predictions, threshold=threshold)
         # scenes: [(start_frame, end_frame), ...]; cut time = first frame of each scene > 0

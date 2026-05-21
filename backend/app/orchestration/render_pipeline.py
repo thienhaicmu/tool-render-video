@@ -2355,15 +2355,13 @@ def run_render_pipeline(
         _job_log(effective_channel, job_id, f"{'cache_hit' if _scene_cache_hit else 'cache_miss'} type=scene_detect scenes={len(scenes)} elapsed_ms={_scene_ms}")
         _job_log(effective_channel, job_id, f"Scene detection done: {len(scenes)} scenes in {_scene_ms}ms")
 
-        # OQ-5.3: CLIP semantic scoring — enriches scene dicts with clip_semantic_score [-8, +20]
-        if scenes:
-            scenes = score_scenes_clip(str(source_path), scenes)
-
         _set_stage(JobStage.SEGMENT_BUILDING, 25, "Building smart segments")
-        segments = build_segments_from_scenes(scenes, source["duration"], payload.min_part_sec, payload.max_part_sec)
         if cancel_registry.is_cancelled(job_id):
             raise cancel_registry.JobCancelledError()
-        # UP28.1: segment score cache — raw scores are stable for same source + scene split
+        # UP28.1 + R3.5: segment score cache probed BEFORE CLIP scoring.
+        # Cache key is independent of CLIP output (file mtime/size + scene count + version),
+        # so the probe is safe to hoist.  On hit, cached segments already incorporate CLIP
+        # scores from the original cache-miss run — returning them is bit-identical.
         try:
             _src_st = source_path.stat()
             _score_ck = _render_cache_key(
@@ -2379,6 +2377,14 @@ def run_render_pipeline(
             scored = _cached_scored
             _job_log(effective_channel, job_id, f"score_cache_hit type=segment_scores segments={len(scored)}")
         else:
+            # OQ-5.3: CLIP semantic scoring — enriches scene dicts with clip_semantic_score [-8, +20]
+            # Runs only on cache miss; skipped on re-renders of the same source (R3.5).
+            if scenes:
+                _t_clip = time.perf_counter()
+                scenes = score_scenes_clip(str(source_path), scenes)
+                _clip_ms = int((time.perf_counter() - _t_clip) * 1000)
+                _job_log(effective_channel, job_id, f"clip_scoring_done scenes={len(scenes)} elapsed_ms={_clip_ms}")
+            segments = build_segments_from_scenes(scenes, source["duration"], payload.min_part_sec, payload.max_part_sec)
             scored = score_segments(segments, scenes)
             _job_log(effective_channel, job_id, f"score_cache_miss type=segment_scores segments={len(scored)}")
             if _score_ck:
@@ -5032,9 +5038,12 @@ def run_render_pipeline(
                 if os.getenv("S4_THUMBNAIL_QUALITY_ENABLED") == "1":
                     try:
                         from app.services.thumbnail_quality import select_best_thumbnail
+                        _t_thumb = time.perf_counter()
                         _cover_bytes, _cover_offset, _cover_quality_reasons = select_best_thumbnail(
                             str(final_part), _cover_offset, _clip_dur, width=640
                         )
+                        _thumb_ms = int((time.perf_counter() - _t_thumb) * 1000)
+                        logger.debug("s4_thumbnail_select_ms part=%d ms=%d offset=%.3f", idx, _thumb_ms, _cover_offset)
                     except Exception as _s43_exc:
                         logger.debug("s4_thumbnail_quality_failed part=%d: %s", idx, _s43_exc)
                 if not _cover_bytes:
