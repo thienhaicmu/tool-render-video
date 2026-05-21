@@ -312,16 +312,28 @@ AI must not: switch presets, override style, change clip count.
 
 ---
 
-## Soft Beta Launch Preparation 🚧 In Progress
+## Soft Beta Launch Preparation ✅ Complete
 
-**Goal:** Instrument S3 for real creator rollout observability. No new intelligence. No calibration changes.
+**Shipped:** `feat(ai): Soft Beta Launch Preparation — RC1–RC4 observability` — commit `d8aee34`
 
-**Scope (4 required changes):**
-- RC1: `s3_health_summary` per-module clip coverage signal in API response
-- RC2: Warning severity tiers (`CRITICAL:`, `WARN:`, `INFO:`) on all S3 warnings
-- RC3: Measurable stage gates (Stage 1→2: 0 CRITICAL, ≤5% WARN, 5 clean renders; Stage 2→3: satisfaction ≥7.5, error <5%)
-- RC4: S3.5 readiness hard floor — minimum 100 clip-level feedback events before any learning hypothesis
+**What shipped:**
+- RC1: `s3_health_summary` — per-module `clips_attempted / clips_processed` in every API response
+- RC2: Warning severity tiers — `CRITICAL:` (module crash), `WARN:` (partial failure), `INFO:` (platform unknown)
+- RC3: Measurable stage gates documented in `docs/product/SOFT_BETA_OPERATIONS.md`
+- RC4: S3.5 hard floor — 100 clip-level feedback events before any learning hypothesis
 - Deliverable: `docs/product/SOFT_BETA_OPERATIONS.md`
+
+---
+
+## Soft Beta Stage 1 🚧 In Progress
+
+**Goal:** Internal smoke test. Validate S3 runs safely in production-like conditions.
+
+**Scope:**
+- 5 synthetic renders: podcast, education, viral (strong), viral (weak hook), bad audio
+- `S3_DEBUG_ENABLED=1`, all other settings production defaults
+- Pass gates: 0 CRITICAL, ≤5% WARN, health populated, 0 rollbacks, 0 regressions
+- Deliverable: `docs/product/SOFT_BETA_STAGE1_REPORT.md`
 
 **No new features. No S3.5. No calibration changes. No render changes.**
 

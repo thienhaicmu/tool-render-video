@@ -491,13 +491,16 @@ def _build_plan(
             plan.warnings.append(f"CRITICAL:debug_aggregation_error:{type(exc).__name__}")  # RC2
             logger.debug("ai_director_debug_aggregation_failed job_id=%s: %s", job_id, exc)
 
-    # RC1: Finalise health summary. RC2: Emit WARN for any partial clip failures.
+    # RC1: Finalise health summary. RC2: Emit WARN for genuine partial clip failures.
+    # "Partial" means some clips were processed but not all (0 < processed < attempted).
+    # Zero-processed is either expected gate behaviour (score below threshold, unknown
+    # platform) or already covered by a CRITICAL warning — do NOT emit a noisy WARN.
     plan.s3_health_summary = _s3_health
     for _mod, _h in _s3_health.items():
         if _h.get("enabled") and _h.get("clips_attempted", 0) > 0:
             _attempted = _h["clips_attempted"]
             _processed = _h["clips_processed"]
-            if _processed < _attempted:
+            if 0 < _processed < _attempted:          # true partial — some succeeded, some failed
                 _pw = f"WARN:partial_{_mod}_failure:processed={_processed},attempted={_attempted}"
                 if _pw not in plan.warnings:
                     plan.warnings.append(_pw)
