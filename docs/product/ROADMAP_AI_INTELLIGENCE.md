@@ -182,7 +182,7 @@ Smart Defaults, Creator DNA suggestions, Editing Autopilot, AI Managed / Manual 
 
 ### S2.6 — Creator DNA Editing Memory ✅ Complete
 
-**Shipped:** `feat(ai): S2.6 Creator DNA Editing Memory`
+**Shipped:** `feat(ai): S2.6 Creator DNA Editing Memory` (commit `6e650b4`)
 
 **What shipped:**
 - New `creator_dna/dna_engine.py` — frontend DNA signal consumer:
@@ -212,6 +212,23 @@ Smart Defaults, Creator DNA suggestions, Editing Autopilot, AI Managed / Manual 
 - Confidence below 0.55 → dimension skipped; suppressed signal → dimension hard-blocked
 - No clip count changes caused by DNA bias
 - `creator_dna_applied: {}` on plan when DNA does not fire — always a safe empty dict
+
+---
+
+---
+
+## S2 Stabilization Sprint 🚧 In Progress
+
+**Goal:** Make S2 production-ready. No new features. Stabilize, calibrate, harden, and document existing S2.1–S2.6 behavior.
+
+**Deliverables:**
+- Threshold externalization (critical constants → env config)
+- Unified `clip_debug` explainability layer per selected segment
+- Failure-mode hardening across all edge cases
+- Scoring drift detection
+- `docs/product/S2_STABILIZATION_REPORT.md`
+
+**Status:** Audit complete. Awaiting implementation approval.
 
 ---
 
