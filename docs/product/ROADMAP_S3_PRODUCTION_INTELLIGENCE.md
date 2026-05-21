@@ -264,18 +264,34 @@ AI must not: switch presets, override style, change clip count.
 
 ---
 
-## Creator Benchmark Sprint 🚧 In Progress
+## Creator Benchmark Sprint ✅ Complete
 
-**Goal:** Prove system quality on real creator content. Calibration only — no new features.
+**Shipped:** `feat(ai): Creator Benchmark Calibration Sprint` — commit `69f32ac`
+
+**What shipped:**
+- 20-scenario benchmark matrix, 10 QA dimensions each (see `docs/product/CREATOR_BENCHMARK_REPORT.md`)
+- Phase A: 5 env-var calibrations (no code changes)
+- Phase B code calibrations:
+  - B1: Goal-aware hook absence penalty (viral=20, storytelling=16, education=14, podcast=12)
+  - B2: Externalized `_DETECT_THRESHOLD` to `S3_STRUCTURE_DETECT_THRESHOLD` env var
+  - B3: Goal-aware dead zone threshold (viral=0.18, storytelling=0.22, education=0.24, podcast=0.28, hard cap ≤0.30)
+- Benchmark results: BASELINE 7.09/10 → AFTER 7.13/10 (incremental improvement; QA needed for launch)
+- Launch readiness: "Creator QA Needed (7.0–8.0)"
+
+**Calibration only. No new features. No S3.5. No S4. No render changes.**
+
+---
+
+## Creator QA Mini Sprint 🚧 In Progress
+
+**Goal:** Validate `S3_STRUCTURE_DETECT_THRESHOLD=0.42` — confirm or deny activation.
 
 **Scope:**
-- Phase A: env-var threshold tuning (no code changes)
-- Phase B: 3 small safe calibrations (goal-aware hook penalty, structure threshold env var, goal-aware dead zone)
-- Benchmark matrix: 20 creator scenarios, 10 QA dimensions each
-- Target: average creator satisfaction ≥ 8.0 / 10
-- Deliverable: `docs/product/CREATOR_BENCHMARK_REPORT.md`
+- Test 5 weakest scenarios: #8 B-roll, #10 Mixed VN/EN, #11 Low-energy, #15 Bad audio, #20 Weak-hook
+- Output one recommendation: ACTIVATE 0.42 / KEEP 0.50 / GOAL-AWARE THRESHOLD
+- Deliverable: `docs/product/CREATOR_QA_MINI_REPORT.md`
 
-**No new features. No S3.5. No S4. No render changes. Calibration only.**
+**No new features. No S3.5. No architecture changes. No render changes.**
 
 ---
 

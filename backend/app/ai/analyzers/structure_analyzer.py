@@ -7,8 +7,10 @@ candidate windows. Detection uses multi-signal confidence combining:
   - position in window   (0.35 weight — each phase has an expected position range)
   - transition signals   (0.25 weight — emotion shift, density shift, natural start)
 
-A phase is only "detected" when confidence >= 0.50.  Without a phrase marker, the
-maximum achievable confidence is 0.35, so keyword-only false positives are impossible.
+A phase is only "detected" when confidence >= detect_threshold (default 0.50; see
+_GOAL_DETECT_THRESHOLDS for per-goal overrides — currently empty).  Without a phrase
+marker, the maximum achievable confidence is 0.35, so keyword-only false positives
+are impossible.
 
 Set STRUCTURE_INTELLIGENCE_ENABLED=0 to disable entirely (rollback gate).
 
@@ -34,6 +36,18 @@ STRUCTURE_INTELLIGENCE_ENABLED: bool = (
 # without a code change. Hard floor at 0.35 (below that, position-only false
 # positives become likely; phrase markers lose their "necessary" status).
 _DETECT_THRESHOLD: float = float(os.environ.get("S3_STRUCTURE_DETECT_THRESHOLD", "0.50"))
+
+# QA Mini Sprint finding: goal-aware threshold tested, NOT activated.
+# All 5 weak scenarios already exceed 0.50 or fail for unrelated reasons (no markers,
+# missing opening phase). Lowering to 0.42 gives zero benefit and introduces confirmed
+# false positives (marker at ratio=0 + nat_start → c=0.450, detected at 0.42 only).
+# Infrastructure retained for future calibration; no goals currently override 0.50.
+_GOAL_DETECT_THRESHOLDS: dict[str, float] = {}
+
+
+def _get_detect_threshold(goal: str) -> float:
+    """Return the phase-detection threshold for the given goal."""
+    return _GOAL_DETECT_THRESHOLDS.get(str(goal or "").lower().strip(), _DETECT_THRESHOLD)
 
 # ---------------------------------------------------------------------------
 # Phase marker vocabulary — EN + VI
@@ -178,6 +192,7 @@ def analyze_window_structure(
     chunks: list[dict],
     start: float,
     end: float,
+    detect_threshold: float = _DETECT_THRESHOLD,
 ) -> dict:
     """Analyse three-phase structure within the candidate window.
 
@@ -186,8 +201,8 @@ def analyze_window_structure(
       position    × 0.35  (does this chunk appear where the phase is expected?)
       transition  × 0.25  (emotion shift + density shift + natural start)
 
-    A phase is detected only when confidence >= 0.50, ensuring no single signal
-    can trigger a false positive alone.
+    A phase is detected only when confidence >= detect_threshold, ensuring no single
+    signal can trigger a false positive alone.
 
     Returns:
         opening_confidence     float [0, 1]
@@ -262,9 +277,9 @@ def analyze_window_structure(
         if c3 > best_p3: best_p3 = min(1.0, c3)
 
     phases_detected = []
-    if best_p1 >= _DETECT_THRESHOLD: phases_detected.append("opening")
-    if best_p2 >= _DETECT_THRESHOLD: phases_detected.append("development")
-    if best_p3 >= _DETECT_THRESHOLD: phases_detected.append("payoff")
+    if best_p1 >= detect_threshold: phases_detected.append("opening")
+    if best_p2 >= detect_threshold: phases_detected.append("development")
+    if best_p3 >= detect_threshold: phases_detected.append("payoff")
 
     return {
         "opening_confidence":     round(best_p1, 3),
@@ -295,13 +310,12 @@ def score_structure_coherence(
     if not STRUCTURE_INTELLIGENCE_ENABLED or not chunks:
         return 0.0
 
-    analysis = analyze_window_structure(chunks, start, end)
+    goal_key = str(goal or "").lower().strip()
+    bonuses = _GOAL_STRUCTURE_BONUSES.get(goal_key, _DEFAULT_STRUCTURE_BONUSES)
+    analysis = analyze_window_structure(chunks, start, end, detect_threshold=_get_detect_threshold(goal_key))
     phases = analysis["phases_detected"]
     if not phases:
         return 0.0
-
-    goal_key = str(goal or "").lower().strip()
-    bonuses = _GOAL_STRUCTURE_BONUSES.get(goal_key, _DEFAULT_STRUCTURE_BONUSES)
 
     if "opening" in phases and "development" in phases and "payoff" in phases:
         raw = bonuses["full"]
