@@ -219,7 +219,77 @@ No S3.5 work begins until all five requirements above are ✅.
 
 ---
 
-## 6. Configuration Reference
+## 6. Known Creator Limitations (Soft Beta)
+
+These limitations are expected behaviors of the current calibrated system. They are documented
+here so creator-facing support can set accurate expectations. None require a hotfix. Each has a
+documented path to resolution in a future sprint.
+
+### L1 — YouTube main feed not supported
+
+**What happens:** Creators who set platform to `youtube` (the main channel, not Shorts) receive
+`INFO:platform_unknown:youtube` in the API response and no platform-specific packaging hints.
+S3.1, S3.2, and S3.3 run normally. Only S3.4 platform adaptation is absent.
+
+**Root cause:** `_KNOWN_PLATFORMS` contains `youtube_shorts` but not `youtube`. Main-channel
+content has a different pacing and duration profile that requires separate calibration data.
+
+**Creator guidance:** For YouTube Shorts → use `youtube_shorts`. For YouTube main feed → leave
+platform blank; all other S3 modules run fully. Platform adaptation will not be applied.
+
+**Resolution:** Future platform expansion sprint with YouTube main-channel calibration data.
+Requires `CALIBRATION_FROZEN=false` authorization.
+
+### L2 — Weak source material degrades gracefully, not silently
+
+**What happens:** Clips with `segment_score < 45` are excluded from retention prediction (S3.2
+score gate). Clips with `segment_score < 60` receive no packaging guidance (S3.1 packaging gate).
+These clips still render normally — S3 simply has no output for them.
+
+**Visible signal:** `s3_health_summary.packaging.clips_processed < clips_attempted` when some
+clips are below the packaging gate. No WARN is emitted (zero-processed is expected behavior).
+
+**Creator guidance:** S3 output is most useful for clips with high selection scores. Clips that
+the AI selected with lower confidence naturally receive less S3 enrichment. This is by design.
+
+**Resolution:** Not a bug. If creators want more S3 coverage, `S3_PACKAGING_MIN_SCORE` and
+`S3_RETENTION_MIN_SCORE` can be lowered — but this risks noise on low-quality clips. Requires
+a calibration sprint to evaluate the trade-off.
+
+### L3 — Bad audio lowers retention confidence
+
+**What happens:** Clips with heavily fragmented speech (high filler words, low speech density,
+broken sentence structure) receive lower retention scores. The `hook_weakness` risk is correctly
+flagged when no clear opener signal is detected. Retention `prediction_confidence` is lower for
+these clips.
+
+**Visible signal:** `retention_explanation.risks: ["hook_weakness"]` with `retention_score` in
+the 48–58 range.
+
+**Creator guidance:** This is the system working correctly — poor audio quality genuinely reduces
+retention likelihood. The risk flag is informational; the creator can still use the clip.
+
+**Resolution:** Not a bug. Future improvement (S4 scope): audio quality signal to weight
+confidence rather than penalize score directly.
+
+### L4 — No opener → conservative packaging (expected)
+
+**What happens:** Clips with `hook_intelligence_type = none` and `moment_type = unknown` receive
+`packaging = {}` (no packaging guidance). This is the score-gate and signal-gate working together.
+
+**Visible signal:** `packaging_applied: {}` in `selected_segments` for those clips.
+`s3_health_summary.packaging.clips_processed` will be lower than `clips_attempted`.
+
+**Creator guidance:** The AI cannot improve packaging for clips it cannot read. A clip with no
+detected hook type is likely mid-content — packaging guidance would be speculative. The render
+still proceeds with the creator's chosen style.
+
+**Resolution:** Not a bug. Improving hook detection coverage (S2 scope) would increase packaging
+coverage downstream.
+
+---
+
+## 7. Configuration Reference
 
 ### Production-safe configuration
 

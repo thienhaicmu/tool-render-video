@@ -325,17 +325,30 @@ AI must not: switch presets, override style, change clip count.
 
 ---
 
-## Soft Beta Stage 1 🚧 In Progress
+## Soft Beta Stage 1 ✅ Complete
 
-**Goal:** Internal smoke test. Validate S3 runs safely in production-like conditions.
+**Shipped:** `feat(ai): Soft Beta Stage 1 — smoke test PASS` — commit `993f16e`
 
-**Scope:**
-- 5 synthetic renders: podcast, education, viral (strong), viral (weak hook), bad audio
-- `S3_DEBUG_ENABLED=1`, all other settings production defaults
-- Pass gates: 0 CRITICAL, ≤5% WARN, health populated, 0 rollbacks, 0 regressions
+**What shipped:**
+- 5/5 renders PASS: podcast, education, viral (strong), viral (weak hook), bad audio
+- 0 CRITICAL warnings, 0.0% WARN rate (production-equivalent), 0 rollbacks, 0 regressions
+- `s3_health_summary` populated in all 5 renders
+- Incidental fix: WARN partial logic corrected (`0 < processed < attempted` instead of `processed < attempted`)
 - Deliverable: `docs/product/SOFT_BETA_STAGE1_REPORT.md`
 
-**No new features. No S3.5. No calibration changes. No render changes.**
+---
+
+## Soft Beta Stage 2 🚧 In Progress
+
+**Goal:** Trusted creator QA. Validate S3 produces high-satisfaction output across diverse real-world content types.
+
+**Scope:**
+- 20 renders across 5 creator archetypes: Podcast, Education, TalkingHead, Viral, Reaction
+- `S3_DEBUG_ENABLED=0` (production mode), all settings production frozen defaults
+- Pass gates: satisfaction ≥7.5/10, error rate <5%, 0 emergency rollbacks, no repeated CRITICAL
+- Deliverable: `docs/product/SOFT_BETA_STAGE2_REPORT.md`
+
+**No new features. No S3.5. No calibration changes. No render changes. CALIBRATION_FROZEN=true.**
 
 ---
 
