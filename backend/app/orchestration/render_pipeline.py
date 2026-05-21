@@ -4982,7 +4982,20 @@ def run_render_pipeline(
                     variant_type=str(seg.get("variant_type") or ""),
                     cover_hint_ratio=_cover_hint_ratio,
                 )
-                _cover_bytes = extract_thumbnail_frame(str(final_part), _cover_offset, width=640)
+                # S4.3: Thumbnail Quality Intelligence (S4_THUMBNAIL_QUALITY_ENABLED=1)
+                # Samples ±1.5s around heuristic offset; picks sharpest/best-exposed frame.
+                _cover_quality_reasons: list = []
+                _cover_bytes = None
+                if os.getenv("S4_THUMBNAIL_QUALITY_ENABLED") == "1":
+                    try:
+                        from app.services.thumbnail_quality import select_best_thumbnail
+                        _cover_bytes, _cover_offset, _cover_quality_reasons = select_best_thumbnail(
+                            str(final_part), _cover_offset, _clip_dur, width=640
+                        )
+                    except Exception as _s43_exc:
+                        logger.debug("s4_thumbnail_quality_failed part=%d: %s", idx, _s43_exc)
+                if not _cover_bytes:
+                    _cover_bytes = extract_thumbnail_frame(str(final_part), _cover_offset, width=640)
                 if _cover_bytes:
                     _cover_stem = (
                         f"{_output_stem}_{_variant_type}_cover" if _variant_type
@@ -5006,6 +5019,7 @@ def run_render_pipeline(
                             "cover_reason":   _cover_reason,
                             "target_platform": _target_platform,
                             "variant_type":   str(seg.get("variant_type") or ""),
+                            "thumbnail_quality_reason": _cover_quality_reasons,
                         },
                     )
                     _job_log(
