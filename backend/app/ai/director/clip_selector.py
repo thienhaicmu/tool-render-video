@@ -14,6 +14,7 @@ from app.ai.analyzers.hook_analyzer import (
     score_hook_intelligence,
     get_opening_window_text,
 )
+from app.ai.analyzers.moment_analyzer import score_best_moment
 from app.ai.analyzers.silence_analyzer import estimate_silence_penalty, score_speech_density
 
 _DEFAULT_WEIGHTS: dict[str, float] = {
@@ -147,7 +148,13 @@ def _build_and_score_candidates(
             + dur_s * weights["duration"]
             - silence_pen * weights["silence"]
         )
-        final = round(max(0.0, min(100.0, final)), 2)
+        final = max(0.0, min(100.0, final))
+
+        # S2.2: best-moment bonus — separate additive signal, not blended into
+        # existing weights. score_best_moment returns [0,20]; scale to [0,5]
+        # to keep effective influence modest relative to the main formula.
+        moment_raw = score_best_moment(win_chunks, win["start"], win["end"], goal)
+        final = round(min(100.0, final + moment_raw * 0.25), 2)
 
         parts: list[str] = []
         if hook_s >= 60:
@@ -156,6 +163,8 @@ def _build_and_score_candidates(
             parts.append(f"density={density_s:.0f}")
         if silence_pen > 30:
             parts.append(f"silence_penalty={silence_pen:.0f}")
+        if moment_raw >= 5.0:
+            parts.append(f"moment={moment_raw:.0f}")
 
         candidates.append({
             "start": win["start"],

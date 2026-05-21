@@ -20,6 +20,25 @@ except ImportError:
     def _score_hook_intelligence(*a, **kw) -> float: return 0.0  # type: ignore[misc]
     def _hook_detect_type(*a, **kw) -> str: return "none"        # type: ignore[misc]
 
+try:
+    from app.ai.analyzers.moment_analyzer import (
+        BEST_MOMENT_INTELLIGENCE_ENABLED as _BEST_MOMENT_ENABLED,
+    )
+    _BEST_MOMENT_AVAILABLE = True
+except ImportError:
+    _BEST_MOMENT_AVAILABLE = False
+    _BEST_MOMENT_ENABLED = False
+
+# Visual-path goal multipliers for best-moment scoring (S2.2).
+# Conservative range 1.00–1.15 — lightly goal-aware, never overrides creator intent.
+_VISUAL_GOAL_MULT: dict[str, dict[str, float]] = {
+    "viral":        {"semantic_peak": 1.15, "peak_scene_quality": 1.00},
+    "education":    {"semantic_peak": 1.00, "peak_scene_quality": 1.10},
+    "podcast":      {"semantic_peak": 1.05, "peak_scene_quality": 1.05},
+    "product":      {"semantic_peak": 1.15, "peak_scene_quality": 1.05},
+    "storytelling": {"semantic_peak": 1.10, "peak_scene_quality": 1.10},
+}
+
 
 def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
@@ -178,8 +197,9 @@ def _score_candidate(
             hook_opening_score = _clamp(hook_opening_score + intel_bonus, 0.0, 100.0)
             hook_intelligence_type = _hook_detect_type(opening_text)
 
-    # ── avg_scene_quality ────────────────────────────────────────────────────
-    avg_scene_quality = sum(scene_qualities) / len(scene_qualities)
+    # ── avg_scene_quality / peak_scene_quality ──────────────────────────────
+    avg_scene_quality  = sum(scene_qualities) / len(scene_qualities)
+    peak_scene_quality = max(scene_qualities)
 
     # ── scene_density [0,100] ────────────────────────────────────────────────
     scene_density = _clamp(len(scene_window) / duration * 8.0, 0.0, 1.0) * 100.0
@@ -250,7 +270,25 @@ def _score_candidate(
         + gap_penalty       * 0.3
         + silence_penalty   * 0.5
     )
-    viral_score = _clamp(raw_score, 0.0, 100.0)
+
+    # ── best_moment_bonus (S2.2) — visual path ───────────────────────────────
+    # Additive bonus outside the formula so no weight rebalancing is needed.
+    # Uses peak vs avg scene quality and OpenCLIP semantic peak, lightly
+    # modulated by goal (multipliers 1.00–1.15, never overrides creator intent).
+    best_moment_bonus = 0.0
+    if _BEST_MOMENT_ENABLED and _BEST_MOMENT_AVAILABLE:
+        _vm = _VISUAL_GOAL_MULT.get(str(goal or "").lower().strip(), {})
+        quality_mult  = _vm.get("peak_scene_quality", 1.0)
+        semantic_mult = _vm.get("semantic_peak", 1.0)
+
+        peak_delta = max(0.0, peak_scene_quality * quality_mult - avg_scene_quality)
+        semantic_scores = [float(s.get("clip_semantic_score", 0.0)) for s in scene_window]
+        semantic_peak = max(semantic_scores) if semantic_scores else 0.0
+        semantic_lift = max(0.0, semantic_peak * semantic_mult) * 0.5
+
+        best_moment_bonus = _clamp(peak_delta * 0.25 + semantic_lift, 0.0, 15.0)
+
+    viral_score = _clamp(raw_score + best_moment_bonus, 0.0, 100.0)
 
     return {
         "start":               round(seg_start, 3),
@@ -269,6 +307,8 @@ def _score_candidate(
         "viral_score":              round(viral_score, 3),
         "gap_penalty":              round(gap_penalty, 3),
         "hook_intelligence_type":   hook_intelligence_type,
+        "peak_scene_quality":       round(peak_scene_quality, 3),
+        "best_moment_bonus":        round(best_moment_bonus, 3),
     }
 
 
@@ -379,6 +419,8 @@ _FALLBACK_FIELDS = {
     "gap_penalty":             0.0,
     "selection_reason":        "fallback",
     "hook_intelligence_type":  "none",
+    "peak_scene_quality":      50.0,
+    "best_moment_bonus":       0.0,
 }
 
 
