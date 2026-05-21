@@ -20,27 +20,52 @@ AI must not: switch presets, override style, change clip count.
 
 ---
 
-## S3.1 — Packaging Intelligence 🚧 In Progress
+## S3.1 — Packaging Intelligence ✅ Complete
 
-**Goal:** Per-clip packaging micro-adjustments driven by S2 signals (hook type, moment type, structure type, creator DNA, retry confidence). Same render settings — each clip packaged according to its content archetype.
+**Shipped:** `feat(ai): S3.1 Packaging Intelligence`
 
-**Scope:**
-- Subtitle intensity micro-adjustment (soft / balanced / strong)
-- Motion intensity micro-adjustment (light / medium / aggressive)
-- Subtitle emphasis shape (clean / hook-heavy / payoff-heavy)
-- Crop pacing (stable / dynamic)
-- Timing aggressiveness (calm / balanced / fast)
+**What shipped:**
+- New `packaging/clip_packaging_planner.py` — S2-signal-driven per-clip packaging engine:
+  - `plan_clip_packaging(segments, subtitle_style, subtitle_emphasis_base, goal)` → `{clip_idx: packaging_dict}`
+  - `_derive_clip_packaging(seg, intensity_base)` → packaging dict or `{}` when no signal applies
+  - `_clamp_adjacent(target, base, order)` → RC1 adjacent-only enforcement (soft↔balanced, balanced↔strong)
+  - `S3_PACKAGING_ENABLED` / `S3_PACKAGING_MIN_SCORE` env gates (RC6 naming)
+  - RC4 hard-block: `pro_karaoke`, `minimal` styles → immediate `{}` no-op, no warning
+  - RC2 confidence gate: `segment_score >= S3_PACKAGING_MIN_SCORE` (default 60)
+  - RC3 explainability: each packaging dict includes `"reason": [...]` signal list
+  - Signal table: hook_type → subtitle_intensity target (adjacent-clamped from mode base)
+  - Moment table: `payoff / hook_payoff / hook_opener / full_story / explainer / narrative` → 4-dimension hint pack
+- `clip_selector._select_diverse()`: S2 context exposed before `_` fields are stripped:
+  - `hook_intelligence_type`, `structure_phases`, `moment_type` added to each output dict
+- `edit_plan_schema.AIClipPlan`: S2 carry-through fields + packaging slot:
+  - `hook_intelligence_type`, `structure_phases`, `moment_type`, `content_type_hint`
+  - `packaging_applied: dict` — per-clip packaging guidance on the clip object
+  - All 5 new fields included in `to_dict()` `selected_segments` output
+- `edit_plan_schema.AIEditPlan`: `clip_packaging: dict` field + `to_dict()` entry
+- `ai_director._build_plan()`:
+  - S2 fields carried from `selected_raw` into `AIClipPlan` constructor
+  - Packaging planner called after `plan.creator_dna_applied` (after all S2 signals are resolved)
+  - `plan.clip_packaging` populated; `seg_plan.packaging_applied` attached per clip
+  - Try/except guarded — packaging failure appends `packaging_error:…` warning, never raises
 
-**Constraints:**
-- Additive only — no preset replacement
-- Creator style always wins over packaging suggestion
-- No clip count changes
-- No API changes
-- No render failures
-- S3_PACKAGING_ENABLED=0 full rollback gate
-- Graceful degradation when no transcript
+**Render pipeline:** NOT modified. RC5 trivially satisfied — packaging is advisory metadata only.
 
-**Status:** Audit complete. Awaiting implementation approval.
+**Files affected:**
+- `backend/app/ai/packaging/__init__.py` (new)
+- `backend/app/ai/packaging/clip_packaging_planner.py` (new)
+- `backend/app/ai/director/clip_selector.py`
+- `backend/app/ai/director/edit_plan_schema.py`
+- `backend/app/ai/director/ai_director.py`
+
+**Regression guarantees:**
+- All packaging imports try/except guarded — zero runtime failures if module missing
+- `S3_PACKAGING_ENABLED=0` disables entirely; behavior identical to pre-S3.1
+- `packaging={}` produces bit-identical render output (render pipeline untouched)
+- `subtitle_style` in `{pro_karaoke, minimal}` → packaging skips entirely, no warning
+- `segment_score < 60` → clip skipped (RC2 confidence gate)
+- Adjacent-only clamping: `soft→strong` blocked, only `soft→balanced` or `balanced→strong` allowed
+- `hook_intelligence_type=none` + `moment_type=unknown` → clip produces `{}` (no packaging)
+- No changes to clip count logic, scoring formulas, render pipeline, or external APIs
 
 ---
 

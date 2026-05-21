@@ -339,6 +339,10 @@ def _select_diverse(
         )
         selected_ctxs.append(ctx_for_tracking)
         out = {k: v for k, v in best.items() if not k.startswith("_")}
+        # S3.1: expose S2 signal context before internal fields are stripped.
+        out["hook_intelligence_type"] = best.get("_hook_type", "none")
+        out["structure_phases"]       = list(best.get("_phases", []))
+        out["moment_type"]            = str(ctx_for_tracking.get("moment_type", "unknown"))
         selected.append(out)
 
     return selected

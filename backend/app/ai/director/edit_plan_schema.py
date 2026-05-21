@@ -16,6 +16,13 @@ class AIClipPlan:
     score: float
     reason: str = ""
     source: str = "local_ai"
+    # S3.1 — S2 signal carry-through for per-clip packaging intelligence
+    hook_intelligence_type: str = "none"
+    structure_phases: List[str] = field(default_factory=list)
+    moment_type: str = "unknown"
+    content_type_hint: str = ""
+    # S3.1 — per-clip packaging guidance (advisory metadata only, render pipeline unchanged)
+    packaging_applied: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -269,6 +276,8 @@ class AIEditPlan:
     learning_influence_calibration: dict = field(default_factory=dict)
     # S2.6 — Creator DNA Editing Memory: per-dimension bias report applied before selection
     creator_dna_applied: dict = field(default_factory=dict)
+    # S3.1 — Production Intelligence: per-clip packaging micro-adjustments (advisory metadata only)
+    clip_packaging: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -291,6 +300,11 @@ class AIEditPlan:
                     "score": s.score,
                     "reason": s.reason,
                     "source": s.source,
+                    "hook_intelligence_type": s.hook_intelligence_type,
+                    "structure_phases": list(s.structure_phases),
+                    "moment_type": s.moment_type,
+                    "content_type_hint": s.content_type_hint,
+                    "packaging_applied": dict(s.packaging_applied),
                 }
                 for s in self.selected_segments
             ],
@@ -399,4 +413,5 @@ class AIEditPlan:
             "render_success_patterns":            dict(self.render_success_patterns),
             "learning_influence_calibration":     dict(self.learning_influence_calibration),
             "creator_dna_applied":                dict(self.creator_dna_applied),
+            "clip_packaging":                     dict(self.clip_packaging),
         }

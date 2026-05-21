@@ -54,6 +54,18 @@ except ImportError:
     def _retry_build_config(mode_config: dict, *a, **kw) -> dict: return dict(mode_config)  # type: ignore[misc]
     _RETRY_MIN_IMPROVEMENT = 8.0
 
+try:
+    from app.ai.packaging.clip_packaging_planner import (
+        plan_clip_packaging as _packaging_plan,
+        S3_PACKAGING_ENABLED as _PACKAGING_ENABLED,
+    )
+    _PACKAGING_AVAILABLE = True
+except ImportError:
+    _PACKAGING_AVAILABLE = False
+    _PACKAGING_ENABLED = False
+
+    def _packaging_plan(*a, **kw) -> dict: return {}  # type: ignore[misc]
+
 logger = logging.getLogger("app.ai.director")
 
 
@@ -209,6 +221,11 @@ def _build_plan(
             score=float(s.get("score", 50.0)),
             reason=str(s.get("reason", "")),
             source=str(s.get("source", "local_ai")),
+            # S3.1: carry S2 signal context through for packaging intelligence
+            hook_intelligence_type=str(s.get("hook_intelligence_type", "none") or "none"),
+            structure_phases=list(s.get("structure_phases", []) or []),
+            moment_type=str(s.get("moment_type", "unknown") or "unknown"),
+            content_type_hint=str(s.get("content_type_hint", "") or ""),
         )
         for s in selected_raw
     ]
@@ -253,6 +270,31 @@ def _build_plan(
     )
     # S2.6: Attach DNA explainability report (required change 3).
     plan.creator_dna_applied = dna_report
+
+    # S3.1: Per-clip packaging micro-adjustments (advisory metadata only).
+    # Render pipeline NOT modified — packaging={} is an exact no-op (required change 5).
+    if _PACKAGING_AVAILABLE and _PACKAGING_ENABLED:
+        try:
+            subtitle_style         = str(getattr(request, "subtitle_style", "") or "")
+            subtitle_emphasis_base = str(mode_config.get("subtitle_emphasis_style", "") or "")
+            packaging_result = _packaging_plan(
+                segments=selected_raw,
+                subtitle_style=subtitle_style,
+                subtitle_emphasis_base=subtitle_emphasis_base,
+                goal=str(mode_config.get("goal", "")),
+            )
+            plan.clip_packaging = packaging_result
+            for idx, seg_plan in enumerate(plan.selected_segments):
+                if idx in packaging_result:
+                    seg_plan.packaging_applied = dict(packaging_result[idx])
+            if packaging_result:
+                logger.debug(
+                    "ai_director_packaging_applied job_id=%s clips=%d",
+                    job_id, len(packaging_result),
+                )
+        except Exception as exc:
+            plan.warnings.append(f"packaging_error:{type(exc).__name__}")
+            logger.debug("ai_director_packaging_failed job_id=%s: %s", job_id, exc)
 
     # --- Phase 31: AI Apply Policy ---
     # Runs first so downstream phases can reference the effective policy.
