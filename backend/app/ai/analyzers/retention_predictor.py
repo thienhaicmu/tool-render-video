@@ -33,12 +33,19 @@ Required changes applied:
     RC5: retention_explanation with strengths + risks lists (explainability)
     RC6: S3_RETENTION_ENABLED=0 produces bit-identical behavior
 
+Stabilization changes (S3 Sprint):
+    - All threshold/penalty constants externalized to env vars
+    - RC2 goal-aware emotion stacking cap: flat_emotion + dead_zone + density_falloff
+      capped at viral=30, storytelling=26, education=22, podcast=20, fallback=25
+    - Override all caps via S3_RETENTION_MAX_EMOTION_PENALTY
+
 Set S3_RETENTION_ENABLED=0 for full rollback.
 
 Public API:
     predict_clip_retention(selected_raw, chunks, goal) -> dict
     S3_RETENTION_ENABLED: bool
     S3_RETENTION_MIN_SCORE: float
+    S3_RETENTION_MAX_EMOTION_PENALTY: float | None
 """
 from __future__ import annotations
 
@@ -48,33 +55,64 @@ S3_RETENTION_ENABLED: bool = os.environ.get("S3_RETENTION_ENABLED", "1") == "1"
 S3_RETENTION_MIN_SCORE: float = float(os.environ.get("S3_RETENTION_MIN_SCORE", "50"))
 
 # Base retention score before adjustments.
-_BASE_SCORE: float = 65.0
+_BASE_SCORE: float = float(os.environ.get("S3_RETENTION_BASE_SCORE", "65.0"))
 
 # RC4: Dead-zone only fires when flat fraction >= this threshold.
-# Set between 20–25% per approval (using 22% as conservative middle).
-# Avoids false positives on podcasts / interviews where low drama is normal.
-_DEAD_ZONE_FLAT_THRESHOLD: float = 0.22
+_DEAD_ZONE_FLAT_THRESHOLD: float = float(os.environ.get("S3_RETENTION_DEAD_ZONE_THRESHOLD", "0.22"))
+
+# Dead-zone penalty multiplier: penalty = min(max_penalty, dead_ratio * multiplier).
+_DEAD_ZONE_PENALTY_MULTIPLIER: float = float(os.environ.get("S3_RETENTION_DEAD_ZONE_MULTIPLIER", "45.0"))
 
 # Emotion score (0-100) below this = "flat chunk" for dead-zone purposes.
-# Calibrated against emotion_analyzer._SCORE_SATURATION=6:
-#   score < 8 ≈ zero or near-zero keyword matches.
 _FLAT_CHUNK_SCORE: float = 8.0
 
 # Minimum consecutive flat chunks required to start counting a dead zone.
-# Requires 3+ consecutive to further reduce podcast false positives.
 _MIN_CONSECUTIVE_FLAT: int = 3
 
 # Emotion variance minimum to qualify as an engaging arc.
-_ARC_VARIANCE_MIN: float = 15.0
+_ARC_VARIANCE_MIN: float = float(os.environ.get("S3_RETENTION_ARC_VARIANCE_MIN", "15.0"))
 
 # Density falloff — second half avg / first half avg below this = declining.
-_DENSITY_FALLOFF_RATIO: float = 0.60
+_DENSITY_FALLOFF_RATIO: float = float(os.environ.get("S3_RETENTION_DENSITY_FALLOFF_RATIO", "0.60"))
 
 # Minimum clip duration (seconds) to run payoff-absence checks.
 _MIN_PAYOFF_DURATION: float = 20.0
 
 # Minimum emotion chunks needed to compute variance / dead zones reliably.
 _MIN_EMOTION_CHUNKS: int = 4
+
+# Penalty constants — externalized for calibration without code changes.
+_HOOK_ABSENCE_PENALTY: float = float(os.environ.get("S3_RETENTION_HOOK_PENALTY", "20.0"))
+_PROMISE_HOOK_PENALTY: float = float(os.environ.get("S3_RETENTION_PROMISE_PENALTY", "18.0"))
+_GENERIC_PAYOFF_PENALTY: float = float(os.environ.get("S3_RETENTION_GENERIC_PENALTY", "12.0"))
+
+# RC2: Goal-aware emotion stacking cap — "calm ≠ boring" for podcast/education.
+# Prevents flat_emotion + dead_zone + density_falloff from over-penalising
+# naturally low-intensity content where calm pacing is expected.
+# Override all caps via S3_RETENTION_MAX_EMOTION_PENALTY (int, ≥0).
+_GOAL_EMOTION_CAPS: dict[str, float] = {
+    "viral":        30.0,
+    "storytelling": 26.0,
+    "education":    22.0,
+    "podcast":      20.0,
+}
+_DEFAULT_EMOTION_CAP: float = 25.0
+
+# Env override — applies to ALL goals when set (must be ≥ 0).
+_S3_RETENTION_MAX_EMOTION_PENALTY_ENV: str = os.environ.get("S3_RETENTION_MAX_EMOTION_PENALTY", "")
+S3_RETENTION_MAX_EMOTION_PENALTY: float | None = (
+    float(_S3_RETENTION_MAX_EMOTION_PENALTY_ENV)
+    if _S3_RETENTION_MAX_EMOTION_PENALTY_ENV.strip().lstrip("-").replace(".", "", 1).isdigit()
+    else None
+)
+
+
+def _get_emotion_cap(goal: str) -> float:
+    """Return goal-aware emotion stacking cap. Env override takes precedence."""
+    if S3_RETENTION_MAX_EMOTION_PENALTY is not None:
+        return max(0.0, S3_RETENTION_MAX_EMOTION_PENALTY)
+    return _GOAL_EMOTION_CAPS.get(goal, _DEFAULT_EMOTION_CAP)
+
 
 # RC3: "Promise" hooks make an explicit content promise to the viewer.
 # Unfulfilled promise → strong retention killer (penalty −18).
@@ -188,7 +226,7 @@ def _predict_one(seg: dict, all_chunks: list[dict], goal: str) -> dict:
             score += 8.0
             strengths.append("hook_present")
     else:
-        score -= 20.0
+        score -= _HOOK_ABSENCE_PENALTY
         risks.append("hook_weakness")
 
     # ── RC3: Hook → payoff coherence ───────────────────────────────────────
@@ -208,10 +246,10 @@ def _predict_one(seg: dict, all_chunks: list[dict], goal: str) -> dict:
             strengths.append("payoff_present")
     elif has_opening and clip_duration >= _MIN_PAYOFF_DURATION:
         if hook_type in _PROMISE_HOOK_TYPES:
-            score -= 18.0                     # RC3: strong penalty for broken promise
+            score -= _PROMISE_HOOK_PENALTY    # RC3: strong penalty for broken promise
             risks.append("unfulfilled_hook_promise")
         else:
-            score -= 12.0                     # RC3: moderate penalty for unresolved open
+            score -= _GENERIC_PAYOFF_PENALTY  # RC3: moderate penalty for unresolved open
             risks.append("payoff_absence")
 
     # ── Full structure bonus ───────────────────────────────────────────────
@@ -228,6 +266,11 @@ def _predict_one(seg: dict, all_chunks: list[dict], goal: str) -> dict:
 
     # ── Emotion signals ────────────────────────────────────────────────────
     emotion_scores = _compute_emotion_scores(win_chunks)
+
+    # RC2: accumulate emotion-family penalties, then apply goal-aware cap.
+    # This prevents flat_emotion + dead_zone + density_falloff from stacking
+    # to −33 and over-penalising naturally calm content (podcast/education).
+    _emotion_penalty_raw: float = 0.0
 
     if len(emotion_scores) >= _MIN_EMOTION_CHUNKS:
         conf_parts.append(0.15)
@@ -248,27 +291,29 @@ def _predict_one(seg: dict, all_chunks: list[dict], goal: str) -> dict:
 
         # Flat emotion (monotone content throughout)
         if variance < 5.0 and avg_score < 10.0:
-            score -= 10.0
+            _emotion_penalty_raw += 10.0
             risks.append("flat_emotion")
 
         # RC4: Dead-zone detection — conservative threshold (22%).
-        # Only fires when a substantial contiguous stretch is flat.
         dead_ratio = _compute_dead_zone_ratio(win_chunks, emotion_scores, clip_duration)
         if dead_ratio >= _DEAD_ZONE_FLAT_THRESHOLD:
             # Scale penalty with dead ratio (max −15 at 100% flat).
-            penalty = min(15.0, round(dead_ratio * 45.0, 1))
-            score  -= penalty
+            _emotion_penalty_raw += min(15.0, round(dead_ratio * _DEAD_ZONE_PENALTY_MULTIPLIER, 1))
             risks.append("dead_zone_risk")
 
-    # ── Density falloff ────────────────────────────────────────────────────
+    # ── Density falloff (part of emotion-family stacking pool) ────────────
     falloff = _compute_density_falloff(win_chunks)
     if falloff is not None:
         if falloff < _DENSITY_FALLOFF_RATIO:
-            score -= 8.0
+            _emotion_penalty_raw += 8.0
             risks.append("density_falloff")
         elif falloff >= 1.0:
             score += 3.0
             strengths.append("density_maintained")
+
+    # Apply emotion-family penalty with goal-aware cap (RC2).
+    if _emotion_penalty_raw > 0.0:
+        score -= min(_emotion_penalty_raw, _get_emotion_cap(goal))
 
     # ── Duration confidence factor ─────────────────────────────────────────
     if clip_duration >= 30.0:

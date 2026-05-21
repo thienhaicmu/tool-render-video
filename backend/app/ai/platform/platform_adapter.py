@@ -125,14 +125,16 @@ _AGGRESSIVE_STYLES: frozenset[str] = frozenset({
 })
 
 # Base confidence before per-signal contributions (RC2 bounded to 0.10–0.90).
-_BASE_CONFIDENCE: float = 0.20
+# All externalized to env vars for calibration without code changes.
+_BASE_CONFIDENCE:      float = float(os.environ.get("S3_PLATFORM_CONF_BASE",      "0.20"))
+_CONF_PLATFORM_KNOWN:  float = float(os.environ.get("S3_PLATFORM_CONF_PLATFORM",  "0.20"))
+_CONF_STRATEGY_AVAIL:  float = float(os.environ.get("S3_PLATFORM_CONF_STRATEGY",  "0.15"))
+_CONF_MOMENT_KNOWN:    float = float(os.environ.get("S3_PLATFORM_CONF_MOMENT",    "0.20"))
+_CONF_HOOK_KNOWN:      float = float(os.environ.get("S3_PLATFORM_CONF_HOOK",      "0.10"))
+_CONF_RETENTION_AVAIL: float = float(os.environ.get("S3_PLATFORM_CONF_RETENTION", "0.10"))
 
-# Confidence contributions.
-_CONF_PLATFORM_KNOWN:    float = 0.20
-_CONF_STRATEGY_AVAIL:    float = 0.15
-_CONF_MOMENT_KNOWN:      float = 0.20
-_CONF_HOOK_KNOWN:        float = 0.10
-_CONF_RETENTION_AVAIL:   float = 0.10
+# RC2 confidence floor — never below this even for weak clips.
+S3_PLATFORM_CONFIDENCE_MIN: float = float(os.environ.get("S3_PLATFORM_CONFIDENCE_MIN", "0.10"))
 
 
 # ---------------------------------------------------------------------------
@@ -215,14 +217,14 @@ def _adapt_one(
     # RC1: confidence gate — weak clips get null hints.
     if score < S3_PLATFORM_MIN_SCORE:
         return {
-            "platform":             platform,
-            "pacing_hint":          None,
-            "opener_emphasis":      None,
+            "platform":              platform,
+            "pacing_hint":           None,
+            "opener_emphasis":       None,
             "subtitle_density_hint": None,
-            "visual_polish_hint":   None,
-            "confidence":           0.10,
-            "platform_reason":      ["weak_clip_score"],
-            "platform_risks":       ["low_signal"],
+            "visual_polish_hint":    None,
+            "confidence":            S3_PLATFORM_CONFIDENCE_MIN,
+            "platform_reason":       ["weak_clip_score"],
+            "platform_risks":        ["low_signal"],
         }
 
     hook_type     = str(seg.get("hook_intelligence_type", "none") or "none").lower()
@@ -283,7 +285,7 @@ def _adapt_one(
         conf += _CONF_HOOK_KNOWN
     if retention_available:
         conf += _CONF_RETENTION_AVAIL
-    confidence = round(max(0.10, min(0.90, conf)), 3)  # RC2: never 1.0
+    confidence = round(max(S3_PLATFORM_CONFIDENCE_MIN, min(0.90, conf)), 3)  # RC2
 
     # ── RC4: platform_reason list ─────────────────────────────────────────
     platform_reason: list[str] = [f"platform={platform}"]

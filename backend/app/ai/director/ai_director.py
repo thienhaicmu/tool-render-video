@@ -94,13 +94,27 @@ try:
     from app.ai.platform.platform_adapter import (
         plan_platform_adaptation as _platform_adapt,
         S3_PLATFORM_INTELLIGENCE_ENABLED as _PLATFORM_ADAPT_ENABLED,
+        _KNOWN_PLATFORMS as _PLATFORM_KNOWN_PLATFORMS,
     )
     _PLATFORM_ADAPT_AVAILABLE = True
 except ImportError:
     _PLATFORM_ADAPT_AVAILABLE = False
     _PLATFORM_ADAPT_ENABLED = False
+    _PLATFORM_KNOWN_PLATFORMS: frozenset = frozenset()
 
     def _platform_adapt(*a, **kw) -> dict: return {}  # type: ignore[misc]
+
+try:
+    from app.ai.debug.clip_debug_aggregator import (
+        aggregate_clip_debug as _debug_aggregate,
+        S3_DEBUG_ENABLED as _DEBUG_ENABLED,
+    )
+    _DEBUG_AVAILABLE = True
+except ImportError:
+    _DEBUG_AVAILABLE = False
+    _DEBUG_ENABLED = False
+
+    def _debug_aggregate(*a, **kw) -> dict: return {}  # type: ignore[misc]
 
 logger = logging.getLogger("app.ai.director")
 
@@ -385,6 +399,15 @@ def _build_plan(
     # render_pipeline.py is NOT modified — UP14 _PLATFORM_PROFILES unchanged.
     if _PLATFORM_ADAPT_AVAILABLE and _PLATFORM_ADAPT_ENABLED:
         try:
+            _target_platform = str(getattr(request, "target_platform", "") or "").lower().strip()
+
+            # RC5: Rate-limited unknown-platform warning — max 1 per render.
+            # Avoids log spam when platform is intentionally blank.
+            if _target_platform and _target_platform not in _PLATFORM_KNOWN_PLATFORMS:
+                _unknown_warn = f"platform_unknown:{_target_platform}"
+                if _unknown_warn not in plan.warnings:
+                    plan.warnings.append(_unknown_warn)
+
             # Enrich selected_raw with per-clip retention_prediction so the
             # adapter can read retention signals without a separate parameter.
             _retention_by_idx = plan.clip_retention_prediction or {}
@@ -398,7 +421,7 @@ def _build_plan(
                 selected_raw=_raw_with_retention,
                 platform_render_strategy=dict(plan.platform_render_strategy or {}),
                 goal=str(mode_config.get("goal", "")),
-                target_platform=str(getattr(request, "target_platform", "") or ""),
+                target_platform=_target_platform,
                 subtitle_style=str(getattr(request, "subtitle_style", "") or ""),
             )
             plan.clip_platform_adaptation = platform_result
@@ -408,12 +431,32 @@ def _build_plan(
             if platform_result:
                 logger.debug(
                     "ai_director_platform_adaptation_planned job_id=%s clips=%d platform=%s",
-                    job_id, len(platform_result),
-                    str(getattr(request, "target_platform", "") or "unknown"),
+                    job_id, len(platform_result), _target_platform or "unknown",
                 )
         except Exception as exc:
             plan.warnings.append(f"platform_adaptation_error:{type(exc).__name__}")
             logger.debug("ai_director_platform_adaptation_failed job_id=%s: %s", job_id, exc)
+
+    # S3 Stabilization: unified per-clip debug layer (RC1 gated — S3_DEBUG_ENABLED=0 by default).
+    # Advisory metadata only. NEVER affects selection, retry, ranking, DNA, or render.
+    if _DEBUG_AVAILABLE and _DEBUG_ENABLED:
+        try:
+            debug_result = _debug_aggregate(
+                selected_segments=plan.selected_segments,
+                clip_packaging=plan.clip_packaging,
+                clip_retention_prediction=plan.clip_retention_prediction,
+                clip_cover_hints=plan.clip_cover_hints,
+                clip_platform_adaptation=plan.clip_platform_adaptation,
+            )
+            plan.clip_production_debug = debug_result
+            # Propagate dominance warnings into plan.warnings (rate-limited: 1 per clip).
+            for _clip_debug in debug_result.values():
+                for _w in list((_clip_debug or {}).get("warnings") or []):
+                    if _w not in plan.warnings:
+                        plan.warnings.append(_w)
+        except Exception as exc:
+            plan.warnings.append(f"debug_aggregation_error:{type(exc).__name__}")
+            logger.debug("ai_director_debug_aggregation_failed job_id=%s: %s", job_id, exc)
 
     # --- Phase 31: AI Apply Policy ---
     # Runs first so downstream phases can reference the effective policy.

@@ -17,11 +17,14 @@ Required changes applied:
     RC3: existing packaging crop metadata (S3.1 packaging_applied) → +0.08
          confidence bonus. No new CV system added.
     RC4: thumbnail_risks explainability list per clip
-         (low_face_presence, late_payoff, weak_expression, low_signal,
-          scene_fallback)
+         (late_payoff, weak_expression, low_signal, scene_fallback)
     RC5: S3_THUMBNAIL_ENABLED=0 produces bit-identical behavior
     RC6: UP15 candidate cap — hint adds maximum +1 candidate only;
          UP15 remains authoritative
+
+Stabilization changes (S3 Sprint):
+    - Hook offset nudge values externalized to env vars
+    - Removed dead low_face_presence risk (content_type_hint always "" in selected_raw)
 
 Set S3_THUMBNAIL_ENABLED=0 for full rollback.
 
@@ -60,20 +63,17 @@ _MOMENT_OFFSET_RANGE: dict[str, tuple[float, float]] = {
 
 # Hook type → offset nudge applied on top of moment midpoint.
 # Negative = pull earlier (strong visual impact); positive = push later.
-_HOOK_OFFSET_NUDGE: dict[str, float] = {
-    "surprise":     -0.10,
-    "warning":      -0.10,
-    "result_first": -0.10,
-    "story":        +0.08,
-    "authority":    +0.08,
-}
+# Externalized to env vars for calibration.
+_STRONG_HOOK_NUDGE: float = -float(os.environ.get("S3_THUMBNAIL_STRONG_HOOK_NUDGE", "0.10"))
+_SOFT_HOOK_NUDGE:   float = +float(os.environ.get("S3_THUMBNAIL_SOFT_HOOK_NUDGE",   "0.08"))
 
-# Content types with likely face/subject presence (talking-head formats).
-# Used to gate the low_face_presence risk — only fires when content type
-# is known and explicitly NOT in this set.
-_FACE_HEAVY_CONTENT: frozenset[str] = frozenset({
-    "interview", "talking_head", "vlog", "tutorial", "commentary",
-})
+_HOOK_OFFSET_NUDGE: dict[str, float] = {
+    "surprise":     _STRONG_HOOK_NUDGE,
+    "warning":      _STRONG_HOOK_NUDGE,
+    "result_first": _STRONG_HOOK_NUDGE,
+    "story":        _SOFT_HOOK_NUDGE,
+    "authority":    _SOFT_HOOK_NUDGE,
+}
 
 # Conservative fallback range used when moment_type is unknown but
 # other signals exist (hook_type known, etc.).
@@ -155,7 +155,6 @@ def _hint_one(seg: dict, retention: dict, pkg_for_clip: dict) -> dict:
     hook_type    = str(seg.get("hook_intelligence_type", "none") or "none").lower()
     moment_type  = str(seg.get("moment_type", "unknown") or "unknown").lower()
     struct_phases = list(seg.get("structure_phases", []) or [])
-    content_hint  = str(seg.get("content_type_hint", "") or "").lower()
     source        = str(seg.get("source", "") or "").lower()
 
     retention_available = bool(retention.get("retention_available", False))
@@ -216,10 +215,6 @@ def _hint_one(seg: dict, retention: dict, pkg_for_clip: dict) -> dict:
     # late_payoff: payoff moment but no structure phases to locate its start.
     if moment_type == "payoff" and not struct_phases:
         thumbnail_risks.append("late_payoff")
-
-    # low_face_presence: content type is known and not a face-heavy format.
-    if content_hint and content_hint not in _FACE_HEAVY_CONTENT:
-        thumbnail_risks.append("low_face_presence")
 
     # weak_expression: flat emotion detected by S3.2 retention predictor.
     if "flat_emotion" in retention_risks:

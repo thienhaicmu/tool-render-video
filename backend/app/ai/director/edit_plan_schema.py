@@ -290,6 +290,8 @@ class AIEditPlan:
     clip_cover_hints: dict = field(default_factory=dict)
     # S3.4 — Production Intelligence: per-clip platform micro-adaptation hints (advisory metadata only)
     clip_platform_adaptation: dict = field(default_factory=dict)
+    # S3 Stabilization — unified per-clip debug layer (gated by S3_DEBUG_ENABLED=0, off by default)
+    clip_production_debug: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -432,4 +434,5 @@ class AIEditPlan:
             "clip_retention_prediction":          dict(self.clip_retention_prediction),
             "clip_cover_hints":                   dict(self.clip_cover_hints),
             "clip_platform_adaptation":           dict(self.clip_platform_adaptation),
+            "clip_production_debug":              dict(self.clip_production_debug),
         }

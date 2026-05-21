@@ -228,6 +228,42 @@ AI must not: switch presets, override style, change clip count.
 
 ---
 
+## S3 Stabilization Sprint ✅ Complete
+
+**Shipped:** `feat(ai): S3 Stabilization Sprint`
+
+**What shipped:**
+- `backend/app/ai/analyzers/retention_predictor.py`:
+  - All 8 threshold/penalty constants externalized to env vars (`S3_RETENTION_BASE_SCORE`, `S3_RETENTION_DEAD_ZONE_THRESHOLD`, `S3_RETENTION_DEAD_ZONE_MULTIPLIER`, `S3_RETENTION_ARC_VARIANCE_MIN`, `S3_RETENTION_DENSITY_FALLOFF_RATIO`, `S3_RETENTION_HOOK_PENALTY`, `S3_RETENTION_PROMISE_PENALTY`, `S3_RETENTION_GENERIC_PENALTY`)
+  - RC2: Goal-aware emotion stacking cap — flat_emotion + dead_zone + density_falloff accumulated into `_emotion_penalty_raw`, capped at `_get_emotion_cap(goal)` (viral=30, storytelling=26, education=22, podcast=20, fallback=25)
+  - `S3_RETENTION_MAX_EMOTION_PENALTY` env override applies to all goals
+- `backend/app/ai/thumbnail/cover_hint_planner.py`:
+  - `_HOOK_OFFSET_NUDGE` values externalized to `S3_THUMBNAIL_STRONG_HOOK_NUDGE` / `S3_THUMBNAIL_SOFT_HOOK_NUDGE`
+  - Removed dead `low_face_presence` risk (`content_type_hint` always `""` in selected_raw — structural dead code)
+- `backend/app/ai/platform/platform_adapter.py`:
+  - All 6 confidence constants externalized to env vars (`S3_PLATFORM_CONF_BASE/PLATFORM/STRATEGY/MOMENT/HOOK/RETENTION`)
+  - `S3_PLATFORM_CONFIDENCE_MIN` env var (RC2 floor)
+- `backend/app/ai/debug/__init__.py` (new) — package marker
+- `backend/app/ai/debug/clip_debug_aggregator.py` (new):
+  - `S3_DEBUG_ENABLED=0` default — hard gate, returns `{}` immediately in production
+  - `aggregate_clip_debug()` — S3.1–S3.4 per-clip signal aggregation
+  - `_compute_dominance()` — RC3 signal balance check, fires warning when any signal > `S3_DEBUG_DOMINANCE_THRESHOLD` (55%)
+  - Per-module summarisers: `_summarise_packaging`, `_summarise_retention`, `_summarise_thumbnail`, `_summarise_platform`
+- `backend/app/ai/director/edit_plan_schema.py`: `clip_production_debug: dict` + `to_dict()` entry
+- `backend/app/ai/director/ai_director.py`:
+  - Debug aggregator try-import + execution block after S3.4
+  - RC5: Rate-limited unknown platform warning in S3.4 block (max 1 `platform_unknown:X` per render)
+  - Imports `_KNOWN_PLATFORMS` from `platform_adapter` for RC5 gate
+- `docs/product/S3_STABILIZATION_REPORT.md` (new): RC4 platform differentiation benchmark, RC3 dominance analysis, QA matrix, failure mode table, threshold inventory
+
+**Regression guarantees:**
+- `S3_DEBUG_ENABLED=0` (default) → `{}` → `clip_production_debug={}` → no debug in production API
+- All S3 modules still individually rollback-able via `S3_*_ENABLED=0`
+- No changes to clip count, scoring, selection, diversity, DNA, render pipeline, or external APIs
+- Dead-risk removal (`low_face_presence`) has zero behavior impact (risk was structurally dead)
+
+---
+
 ## Non-Negotiable Constraints (all S3 phases)
 
 - Creator controls: goal, style, format, clip count, duration preference
