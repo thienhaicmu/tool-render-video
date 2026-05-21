@@ -117,7 +117,7 @@ AI must not: switch presets, override style, change clip count.
 
 ## S3.3 — Thumbnail/Cover Intelligence ✅ Complete
 
-**Shipped:** `feat(ai): S3.3 Thumbnail/Cover Intelligence`
+**Shipped:** `feat(ai): S3.3 Thumbnail/Cover Intelligence` — commit `82a2615`
 
 **What shipped:**
 - New `thumbnail/cover_hint_planner.py` — S2-signal-driven per-clip frame hint engine:
@@ -165,6 +165,66 @@ AI must not: switch presets, override style, change clip count.
 - `segment_score < 40` → null hint; UP15 runs unchanged for that clip
 - No changes to clip count, scoring, selection, diversity, DNA, render engine, or external APIs
 - `cover_hint` advisory only — has zero import path back to clip_selector, retry_analyzer, diversity_analyzer, or dna_engine
+
+---
+
+## S3.4 — Platform Intelligence ✅ Complete
+
+**Shipped:** `feat(ai): S3.4 Platform Intelligence`
+
+**What shipped:**
+- New `platform/platform_adapter.py` — S2-signal × platform cross-reference engine:
+  - `plan_platform_adaptation(selected_raw, platform_render_strategy, goal, target_platform, subtitle_style)` → `{clip_idx: adaptation_dict}`
+  - `_adapt_one(seg, platform, subtitle_style, strategy_ctx)` → adaptation dict
+  - `_step(current, delta, order)` — adjacent-only intensity shifts on ordered scales
+  - `_clamp_for_style(target, subtitle_style, order)` — RC3 conflict suppression (conservative → mid-scale cap)
+  - `S3_PLATFORM_INTELLIGENCE_ENABLED` / `S3_PLATFORM_MIN_SCORE` env gates
+  - RC1 confidence gate: `segment_score >= S3_PLATFORM_MIN_SCORE` (default 40); weak clips → null hints
+  - RC2 confidence bounded: `max(0.10, min(0.90, conf))` — heuristic only, never certainty=1.0
+  - RC3 platform conflict suppression: `_CONSERVATIVE_STYLES` (`{minimal, clean, soft}`) capped at mid-scale; `_AGGRESSIVE_STYLES` allow full platform target
+  - RC4 `platform_reason` list: `["platform=tiktok", "moment=hook_opener", "hook=surprise", "retention=low", "style_clamped=clean"]`
+  - RC5 exact no-op: `S3_PLATFORM_INTELLIGENCE_ENABLED=0` → `{}`
+  - RC6 future consumer guard: docstring + comments enforce advisory-only architectural constraint
+  - Four output hints per clip: `pacing_hint`, `opener_emphasis`, `subtitle_density_hint`, `visual_polish_hint`
+  - Per-platform default tables: TikTok (punchy/strong/compact/standard), Shorts (standard/moderate/normal/standard), Reels (standard/moderate/compact/high), Podcast (calm/calm/readable/standard)
+  - Per-clip signal modulation: payoff moment → +1 pacing step; soft hook → −1 pacing & opener step; strong hook → +1 opener step; Reels full_story/narrative → +1 polish step
+  - `platform_risks` list: `hook_too_slow`, `payoff_unclear`, `subtitle_crowded`, `style_conflict`, `low_signal`
+  - Unknown platform → `{}` immediately (no partial hints)
+- `platform/__init__.py` (new) — package marker
+- `edit_plan_schema.AIClipPlan`: `platform_adaptation: dict` + `to_dict()` entry
+- `edit_plan_schema.AIEditPlan`: `clip_platform_adaptation: dict` + `to_dict()` entry
+- `ai_director._build_plan()`:
+  - Try-import guard at module level (`_PLATFORM_ADAPT_AVAILABLE`, `_PLATFORM_ADAPT_ENABLED`)
+  - S3.4 block after S3.3 — enriches `selected_raw` with `retention_prediction` per clip before calling adapter
+  - `plan.clip_platform_adaptation` populated; `seg_plan.platform_adaptation` attached per clip
+  - `platform_render_strategy=plan.platform_render_strategy` passed (Phase 55E output)
+  - `subtitle_style` from request passed for RC3 conflict suppression
+  - Try/except guarded — failure appends `platform_adaptation_error:…` warning, never raises
+
+**Distinct from UP14 (_PLATFORM_PROFILES in render_pipeline.py):**
+- UP14: per-job flat nudges (speed_delta, sub_bias) applied at render time — not signal-aware
+- S3.4: per-clip, signal-aware advisory hints at plan assembly — UP14 unchanged
+
+**Distinct from Phase 55A–57 (platform knowledge retrieval):**
+- Phases 55A–57: job-level platform knowledge contexts (advisory metadata)
+- S3.4: per-clip cross-reference layer using Phase 55E output × S2 signals
+
+**Files affected:**
+- `backend/app/ai/platform/__init__.py` (new)
+- `backend/app/ai/platform/platform_adapter.py` (new)
+- `backend/app/ai/director/edit_plan_schema.py`
+- `backend/app/ai/director/ai_director.py`
+
+**Regression guarantees:**
+- `S3_PLATFORM_INTELLIGENCE_ENABLED=0` → `{}` → `clip_platform_adaptation={}`, all `platform_adaptation={}` → bit-identical to pre-S3.4
+- `platform_adapter` import fails → `_PLATFORM_ADAPT_AVAILABLE=False` → block skipped entirely
+- Per-clip failure → try/except swallows; `platform_adaptation_error:…` appended; other clips unaffected
+- Unknown/empty platform → `{}` immediately; no partial hints emitted
+- `render_pipeline.py` not modified — UP14 `_PLATFORM_PROFILES` unchanged
+- `render_engine.py` not modified — zero render changes
+- Creator `subtitle_style` enforced via RC3 — conservative styles capped at mid-scale
+- `platform_adaptation` advisory only — zero import path back to clip_selector, retry_analyzer, diversity_analyzer, dna_engine
+- No changes to clip count, scoring, selection, render architecture, or external APIs
 
 ---
 

@@ -90,6 +90,18 @@ except ImportError:
 
     def _cover_plan(*a, **kw) -> dict: return {}  # type: ignore[misc]
 
+try:
+    from app.ai.platform.platform_adapter import (
+        plan_platform_adaptation as _platform_adapt,
+        S3_PLATFORM_INTELLIGENCE_ENABLED as _PLATFORM_ADAPT_ENABLED,
+    )
+    _PLATFORM_ADAPT_AVAILABLE = True
+except ImportError:
+    _PLATFORM_ADAPT_AVAILABLE = False
+    _PLATFORM_ADAPT_ENABLED = False
+
+    def _platform_adapt(*a, **kw) -> dict: return {}  # type: ignore[misc]
+
 logger = logging.getLogger("app.ai.director")
 
 
@@ -366,6 +378,42 @@ def _build_plan(
         except Exception as exc:
             plan.warnings.append(f"cover_hint_error:{type(exc).__name__}")
             logger.debug("ai_director_cover_hint_failed job_id=%s: %s", job_id, exc)
+
+    # S3.4: Per-clip platform micro-adaptation hints (advisory metadata only).
+    # RC6 enforced: platform_adaptation MUST NEVER influence selection, retry,
+    # ranking, diversity, or creator DNA. Read-only advisory metadata only.
+    # render_pipeline.py is NOT modified — UP14 _PLATFORM_PROFILES unchanged.
+    if _PLATFORM_ADAPT_AVAILABLE and _PLATFORM_ADAPT_ENABLED:
+        try:
+            # Enrich selected_raw with per-clip retention_prediction so the
+            # adapter can read retention signals without a separate parameter.
+            _retention_by_idx = plan.clip_retention_prediction or {}
+            _raw_with_retention = []
+            for _i, _s in enumerate(selected_raw):
+                _enriched = dict(_s)
+                _enriched["retention_prediction"] = dict(_retention_by_idx.get(_i) or {})
+                _raw_with_retention.append(_enriched)
+
+            platform_result = _platform_adapt(
+                selected_raw=_raw_with_retention,
+                platform_render_strategy=dict(plan.platform_render_strategy or {}),
+                goal=str(mode_config.get("goal", "")),
+                target_platform=str(getattr(request, "target_platform", "") or ""),
+                subtitle_style=str(getattr(request, "subtitle_style", "") or ""),
+            )
+            plan.clip_platform_adaptation = platform_result
+            for idx, seg_plan in enumerate(plan.selected_segments):
+                if idx in platform_result:
+                    seg_plan.platform_adaptation = dict(platform_result[idx])
+            if platform_result:
+                logger.debug(
+                    "ai_director_platform_adaptation_planned job_id=%s clips=%d platform=%s",
+                    job_id, len(platform_result),
+                    str(getattr(request, "target_platform", "") or "unknown"),
+                )
+        except Exception as exc:
+            plan.warnings.append(f"platform_adaptation_error:{type(exc).__name__}")
+            logger.debug("ai_director_platform_adaptation_failed job_id=%s: %s", job_id, exc)
 
     # --- Phase 31: AI Apply Policy ---
     # Runs first so downstream phases can reference the effective policy.
