@@ -33,7 +33,7 @@ from app.services.subtitle_transcription_adapters import transcribe_with_adapter
 from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event, content_type_crf_delta as _crf_delta_for_content_type, extract_thumbnail_frame
 from app.services import cancel_registry
 from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
-from app.services.viral_scorer import score_segments
+from app.services.viral_scorer import score_segments, apply_retention_proxy
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
 from app.services.report_service import append_rows
 from app.core.config import TEMP_DIR, CHANNELS_DIR, LOGS_DIR
@@ -2884,6 +2884,20 @@ def run_render_pipeline(
                              f"s4_boundary_refinement segments={len(scored)} adjusted={_s4_adjusted}")
             except Exception as _s4_exc:
                 logger.debug("s4_boundary_refinement_failed job_id=%s: %s", job_id, _s4_exc)
+
+        # ── S4.2: Real Retention Proxy (S4_RETENTION_PROXY_ENABLED=1) ──
+        # Applies a bounded ±15 adjustment to viral_score using multi-signal
+        # retention estimation. Works on first render (uses freshly-generated
+        # SRT when available; tier-1 signals fire even without transcript).
+        if os.getenv("S4_RETENTION_PROXY_ENABLED") == "1" and scored:
+            try:
+                _s42_blocks = parse_srt_blocks(str(full_srt)) if full_srt_available else None
+                scored = apply_retention_proxy(scored, _s42_blocks)
+                _s42_adj = sum(1 for s in scored if s.get("retention_adjustment_reason"))
+                _job_log(effective_channel, job_id,
+                         f"s4_retention_proxy segments={len(scored)} adjusted={_s42_adj}")
+            except Exception as _s42_exc:
+                logger.debug("s4_retention_proxy_failed job_id=%s: %s", job_id, _s42_exc)
 
         # ── AI Director Phase 1 — safe edit plan (observation only, no override) ──
         _ai_edit_plan = None

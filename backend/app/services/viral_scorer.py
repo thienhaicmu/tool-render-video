@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -347,3 +348,157 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
         item["priority_rank"] = rank
 
     return scored
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# S4.2: Real Retention Proxy (env-gated: S4_RETENTION_PROXY_ENABLED=1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _compute_transcript_signals(
+    transcript_blocks: List[Dict], seg_start: float, seg_end: float
+) -> Dict[str, float] | None:
+    """Extract words/sec, pause ratio, and speech variance for a [seg_start, seg_end] window."""
+    seg_blocks = [
+        b for b in transcript_blocks
+        if float(b.get("end", 0)) > seg_start and float(b.get("start", 0)) < seg_end
+    ]
+    if not seg_blocks:
+        return None
+    duration = max(seg_end - seg_start, 1.0)
+    total_words = sum(len(str(b.get("text", "")).split()) for b in seg_blocks)
+    words_per_sec = total_words / duration
+    # Pause ratio: fraction of segment in gaps > 1.5s between consecutive blocks
+    pause_total = 0.0
+    for k in range(1, len(seg_blocks)):
+        gap = float(seg_blocks[k].get("start", 0)) - float(seg_blocks[k - 1].get("end", 0))
+        if gap > 1.5:
+            pause_total += gap
+    pause_ratio = min(1.0, pause_total / duration)
+    # Words-per-block coefficient of variation (speech dynamics)
+    wpb = [len(str(b.get("text", "")).split()) for b in seg_blocks]
+    mean_wpb = sum(wpb) / max(len(wpb), 1)
+    var_wpb = sum((w - mean_wpb) ** 2 for w in wpb) / max(len(wpb), 1)
+    wps_variance = math.sqrt(var_wpb) / max(mean_wpb, 0.1)
+    return {
+        "words_per_sec":   words_per_sec,
+        "pause_ratio":     pause_ratio,
+        "wps_variance":    wps_variance,
+        "seg_block_count": len(seg_blocks),
+    }
+
+
+def _compute_retention_delta(seg: Dict, tsig: Dict | None) -> tuple:
+    """Compute retention delta ∈ [-15, +15] and reason tags for one segment.
+
+    Tier-1 signals use only pre-computed segment fields (always available).
+    Tier-2 signals use transcript data (silently skipped when tsig is None).
+    """
+    def _c(v: float, lo: float, hi: float) -> float:
+        return max(lo, min(hi, float(v)))
+
+    feat   = seg.get("_features") or {}
+    hook   = float(seg.get("hook_opening_score", 50.0))
+    payoff = float(seg.get("payoff_score", 50.0))
+    avg_q  = float(seg.get("scene_quality_avg", 50.0))
+    sc_den = float(feat.get("scene_density", 0.3))   # normalized [0, 1]
+    p_acc  = float(feat.get("pacing_accel", 0.3))    # normalized [0, 1]
+    ctype  = str(seg.get("content_type_hint", ""))
+    dur    = float(seg.get("duration", 60.0))
+
+    delta: float = 0.0
+    reasons: List[str] = []
+
+    # A — Dead opening: weak hook + minimal visual energy
+    if hook < 35.0 and sc_den < 0.15:
+        delta -= _c((35.0 - hook) / 35.0 * 6.0, 0.0, 6.0)
+        reasons.append("dead_opening")
+
+    # B — Flat zone: completely static talking-head, no pacing variation
+    if ctype in ("interview", "commentary") and p_acc < 0.05:
+        delta -= _c((0.05 - p_acc) / 0.05 * 4.0, 0.0, 4.0)
+        reasons.append("flat_zone")
+
+    # C — Semantic density: content-dense speech (tier-2)
+    if tsig and tsig.get("seg_block_count", 0) >= 3:
+        wps = float(tsig.get("words_per_sec", 0.0))
+        if wps > 2.5:
+            delta += _c((wps - 2.5) / 2.5 * 5.0, 0.0, 5.0)
+            reasons.append("semantic_density")
+
+    # D — Payoff continuation: segment builds to a strong ending
+    if payoff > avg_q + 25.0 and payoff > 70.0:
+        delta += _c((payoff - (avg_q + 25.0)) / 30.0 * 4.0, 0.0, 4.0)
+        reasons.append("payoff_continuation")
+
+    # E — Dead zone: long spoken segment with heavy silence (tier-2 required)
+    if (ctype in ("interview", "commentary") and dur > 75.0
+            and sc_den < 0.10
+            and tsig and float(tsig.get("pause_ratio", 0.0)) > 0.30):
+        delta -= _c((float(tsig["pause_ratio"]) - 0.30) / 0.50 * 4.0, 0.0, 4.0)
+        reasons.append("dead_zone")
+
+    # F — Natural rhythm: healthy pacing acceleration range [0.10, 0.65]
+    if 0.10 <= p_acc <= 0.65:
+        delta += _c(1.0 - abs(p_acc - 0.35) / 0.35, 0.0, 1.0) * 3.0
+        reasons.append("healthy_rhythm")
+
+    # G — Speech dynamics: healthy within-segment variation (tier-2)
+    if tsig and tsig.get("seg_block_count", 0) >= 4:
+        wps_var = float(tsig.get("wps_variance", 0.0))
+        if 0.30 <= wps_var <= 0.80:
+            delta += _c(1.0 - abs(wps_var - 0.55) / 0.55, 0.0, 1.0) * 2.0
+            if "healthy_rhythm" not in reasons:
+                reasons.append("healthy_rhythm")
+
+    return _c(delta, -15.0, 15.0), reasons
+
+
+def apply_retention_proxy(
+    scored: List[Dict],
+    transcript_blocks: List[Dict] | None = None,
+) -> List[Dict]:
+    """Adjust viral_score by a multi-signal retention delta bounded to [-15, +15].
+
+    Gate: S4_RETENTION_PROXY_ENABLED=1. Returns scored unchanged when the gate
+    is off or on any exception (RC3). Transcript signals are skipped when
+    transcript_blocks is None (RC3). Clip count is never changed (RC6).
+    retention_adjustment_reason records which signals fired (RC8).
+    """
+    if os.getenv("S4_RETENTION_PROXY_ENABLED") != "1":
+        return scored
+
+    # Pre-compute transcript signals per segment (tier-2, optional)
+    tsig_map: Dict[int, Dict] = {}
+    if transcript_blocks:
+        for i, seg in enumerate(scored):
+            try:
+                sig = _compute_transcript_signals(
+                    transcript_blocks,
+                    float(seg.get("start", 0.0)),
+                    float(seg.get("end", 0.0)),
+                )
+                if sig:
+                    tsig_map[i] = sig
+            except Exception:
+                pass
+
+    result: List[Dict] = []
+    for i, seg in enumerate(scored):
+        try:
+            delta, reasons = _compute_retention_delta(seg, tsig_map.get(i))
+        except Exception as exc:
+            logger.debug("retention_delta_failed seg=%d: %s", i, exc)
+            result.append(seg)
+            continue
+
+        if delta == 0.0 and not reasons:
+            result.append(seg)
+            continue
+
+        seg = dict(seg)
+        seg["viral_score"] = int(min(100.0, max(0.0, float(seg.get("viral_score", 0)) + delta)))
+        if reasons:
+            seg["retention_adjustment_reason"] = reasons
+        result.append(seg)
+
+    return result
