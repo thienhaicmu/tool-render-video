@@ -508,8 +508,13 @@ def _compute_retention_delta(seg: Dict, tsig: Dict | None) -> tuple:
         delta -= _c((35.0 - hook) / 35.0 * 6.0, 0.0, 6.0)
         reasons.append("dead_opening")
 
-    # B — Flat zone: completely static talking-head, no pacing variation
-    if ctype in ("interview", "commentary") and p_acc < 0.05:
+    # B — Flat zone: completely static talking-head, no pacing variation.
+    # Guard: pacing_accel = 0.0 is a data artifact when scene_count < 4 (extract_features
+    # requires >=4 scenes to compute acceleration). Treat insufficient data as unknown,
+    # not as flat pacing — otherwise ~51% of production segments are falsely penalised.
+    if (ctype in ("interview", "commentary")
+            and p_acc < 0.05
+            and int(seg.get("scene_count", 0)) >= 4):
         delta -= _c((0.05 - p_acc) / 0.05 * 4.0, 0.0, 4.0)
         reasons.append("flat_zone")
 

@@ -716,12 +716,12 @@ def _build_pause_timestamps(
     pts: List[float] = []
     for k, blk in enumerate(blocks):
         blk_end = float(blk.get("end", 0.0))
-        pts.append(blk_end)                    # utterance completion point
         if k + 1 < len(blocks):
             next_start = float(blocks[k + 1].get("start", 0.0))
             gap = next_start - blk_end
             if gap >= min_pause:
-                pts.append((blk_end + next_start) / 2.0)   # pause midpoint
+                pts.append(blk_end)                        # utterance endpoint — pause-adjacent only
+                pts.append((blk_end + next_start) / 2.0)  # pause midpoint
     return sorted(set(round(p, 3) for p in pts))
 
 
