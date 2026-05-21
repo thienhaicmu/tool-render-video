@@ -180,7 +180,7 @@ Smart Defaults, Creator DNA suggestions, Editing Autopilot, AI Managed / Manual 
 
 ---
 
-### S2.6 — Creator DNA Editing Memory ⬜ Planned
+### S2.6 — Creator DNA Editing Memory 🚧 In Progress
 
 ---
 
