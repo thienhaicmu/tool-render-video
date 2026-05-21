@@ -180,7 +180,38 @@ Smart Defaults, Creator DNA suggestions, Editing Autopilot, AI Managed / Manual 
 
 ---
 
-### S2.6 — Creator DNA Editing Memory 🚧 In Progress
+### S2.6 — Creator DNA Editing Memory ✅ Complete
+
+**Shipped:** `feat(ai): S2.6 Creator DNA Editing Memory`
+
+**What shipped:**
+- New `creator_dna/dna_engine.py` — frontend DNA signal consumer:
+  - `apply_creator_dna(mode_config, creator_dna, goal)` → `(evolved_dict, report)` — returns evolved mode_config copy and per-dimension explainability report; never mutates original
+  - `_DNA_MIN_CONFIDENCE = 0.55` — dimension must reach this confidence before any influence fires (avoids premature personalization from insufficient behavior history)
+  - `suppressed_signals` hard-block: if frontend gated a signal, backend absolutely does not apply it — no soft ignore
+  - Influence table: `hook_forward` → `hook_weight ×(1+strength×0.10)` max +10%; `clean_visual` → `speech_density_weight ×(1-strength×0.05)` + `silence_penalty_weight ×(1+strength×0.05)`; `narrative_structure` → `retry_structure_scale ×(1+strength×0.08)` max +8%
+  - All adjustments bounded: `[original × 0.90, original × 1.15]`
+  - Structured explainability report per applied dimension: `{dimension: {"confidence": float, "effect": "+N%"}}`
+  - `CREATOR_DNA_ENABLED` env gate for full rollback
+- `ai_director._build_plan()`: DNA blend applied immediately after `get_mode_config()` — correct order: DNA → mode_config → pass 1 → retry evaluation → retry (S2.5 retry sees DNA-adjusted weights naturally)
+  - No backend learning: frontend snapshot always wins; decay is natural (new snapshot on next request replaces previous preferences without any backend state)
+  - `plan.creator_dna_applied` populated with structured report for downstream explainability
+- `edit_plan_schema.AIEditPlan`: `creator_dna_applied` field added (default `{}`) + included in `to_dict()`
+
+**Files affected:**
+- `backend/app/ai/creator_dna/dna_engine.py` (new)
+- `backend/app/ai/creator_dna/__init__.py` (new)
+- `backend/app/ai/director/ai_director.py`
+- `backend/app/ai/director/edit_plan_schema.py`
+
+**Regression guarantees:**
+- All imports try/except guarded — zero runtime failures if module missing
+- `creator_dna` absent or empty → `dna_report = {}`, `mode_config` unchanged, behavior identical to pre-S2.6
+- `CREATOR_DNA_ENABLED=0` disables entirely; no path change for existing renders
+- No changes to S2.1–S2.5 scorer files, clip_selector scoring formulas, segment_builder, render pipeline, or external APIs
+- Confidence below 0.55 → dimension skipped; suppressed signal → dimension hard-blocked
+- No clip count changes caused by DNA bias
+- `creator_dna_applied: {}` on plan when DNA does not fire — always a safe empty dict
 
 ---
 

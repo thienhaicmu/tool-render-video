@@ -24,6 +24,19 @@ from app.ai.analyzers.transcript_analyzer import normalize_transcript_chunks
 from app.ai.director.clip_selector import select_ai_segments
 
 try:
+    from app.ai.creator_dna.dna_engine import (
+        apply_creator_dna as _dna_apply,
+        CREATOR_DNA_ENABLED as _DNA_ENABLED,
+    )
+    _DNA_AVAILABLE = True
+except ImportError:
+    _DNA_AVAILABLE = False
+    _DNA_ENABLED = False
+
+    def _dna_apply(mode_config: dict, *a, **kw) -> tuple:  # type: ignore[misc]
+        return dict(mode_config), {}
+
+try:
     from app.ai.analyzers.retry_analyzer import (
         evaluate_selection_confidence as _retry_evaluate,
         should_retry as _retry_should,
@@ -100,6 +113,25 @@ def _build_plan(
     fallback_used = False
 
     mode_config = get_mode_config(mode)
+
+    # S2.6: Apply Creator DNA bias to mode_config BEFORE any downstream use.
+    # Required change 5: correct order is DNA → pass 1 → retry evaluation → retry.
+    # No backend learning — frontend snapshot is source-of-truth; decay is natural
+    # (fresh snapshot on next request replaces old preferences automatically).
+    creator_dna = dict(getattr(request, "creator_dna", {}) or {})
+    dna_report: dict = {}
+    if _DNA_AVAILABLE and _DNA_ENABLED and creator_dna:
+        try:
+            mode_config, dna_report = _dna_apply(
+                mode_config, creator_dna, goal=str(mode_config.get("goal", ""))
+            )
+            if dna_report:
+                logger.debug(
+                    "ai_director_dna_applied job_id=%s influences=%s", job_id, list(dna_report)
+                )
+        except Exception as exc:
+            warnings.append(f"dna_error:{type(exc).__name__}")
+            logger.debug("ai_director_dna_failed job_id=%s: %s", job_id, exc)
 
     # --- Transcript resolution ---
     chunks = _resolve_transcript_chunks(context, warnings)
@@ -219,6 +251,8 @@ def _build_plan(
         memory_context=memory_ctx,
         pacing=pacing_plan,
     )
+    # S2.6: Attach DNA explainability report (required change 3).
+    plan.creator_dna_applied = dna_report
 
     # --- Phase 31: AI Apply Policy ---
     # Runs first so downstream phases can reference the effective policy.

@@ -267,6 +267,8 @@ class AIEditPlan:
     render_success_patterns: dict = field(default_factory=dict)
     # Phase 62D — Learning-aware influence calibration (calibration metadata only)
     learning_influence_calibration: dict = field(default_factory=dict)
+    # S2.6 — Creator DNA Editing Memory: per-dimension bias report applied before selection
+    creator_dna_applied: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -396,4 +398,5 @@ class AIEditPlan:
             "creator_preference_reinforcement":   dict(self.creator_preference_reinforcement),
             "render_success_patterns":            dict(self.render_success_patterns),
             "learning_influence_calibration":     dict(self.learning_influence_calibration),
+            "creator_dna_applied":                dict(self.creator_dna_applied),
         }
