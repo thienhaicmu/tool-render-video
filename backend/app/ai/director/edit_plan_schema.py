@@ -23,6 +23,8 @@ class AIClipPlan:
     content_type_hint: str = ""
     # S3.1 — per-clip packaging guidance (advisory metadata only, render pipeline unchanged)
     packaging_applied: dict = field(default_factory=dict)
+    # S3.2 — per-clip retention prediction (advisory metadata only, RC1: never affects selection)
+    retention_prediction: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -278,6 +280,8 @@ class AIEditPlan:
     creator_dna_applied: dict = field(default_factory=dict)
     # S3.1 — Production Intelligence: per-clip packaging micro-adjustments (advisory metadata only)
     clip_packaging: dict = field(default_factory=dict)
+    # S3.2 — Production Intelligence: per-clip retention prediction (advisory metadata only)
+    clip_retention_prediction: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -304,7 +308,8 @@ class AIEditPlan:
                     "structure_phases": list(s.structure_phases),
                     "moment_type": s.moment_type,
                     "content_type_hint": s.content_type_hint,
-                    "packaging_applied": dict(s.packaging_applied),
+                    "packaging_applied":   dict(s.packaging_applied),
+                    "retention_prediction": dict(s.retention_prediction),
                 }
                 for s in self.selected_segments
             ],
@@ -414,4 +419,5 @@ class AIEditPlan:
             "learning_influence_calibration":     dict(self.learning_influence_calibration),
             "creator_dna_applied":                dict(self.creator_dna_applied),
             "clip_packaging":                     dict(self.clip_packaging),
+            "clip_retention_prediction":          dict(self.clip_retention_prediction),
         }

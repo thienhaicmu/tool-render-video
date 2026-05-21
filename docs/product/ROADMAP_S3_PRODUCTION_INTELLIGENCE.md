@@ -69,6 +69,52 @@ AI must not: switch presets, override style, change clip count.
 
 ---
 
+## S3.2 — Retention Prediction ✅ Complete
+
+**Shipped:** `feat(ai): S3.2 Retention Prediction`
+
+**What shipped:**
+- New `analyzers/retention_predictor.py` — per-clip retention likelihood engine:
+  - `predict_clip_retention(selected_raw, chunks, goal)` → `{clip_idx: retention_dict}`
+  - `_predict_one(seg, all_chunks, goal)` — per-clip scoring from S2 carry-through signals
+  - `_get_window_chunks()` — re-slices full transcript by clip start/end (same logic as moment_analyzer)
+  - `_compute_emotion_scores()` — per-chunk emotion intensity via existing emotion_analyzer
+  - `_compute_dead_zone_ratio()` — RC4: contiguous flat zone detection, fires at ≥22% threshold
+  - `_compute_density_falloff()` — second_half_avg / first_half_avg density ratio
+  - `S3_RETENTION_ENABLED` / `S3_RETENTION_MIN_SCORE` env gates (RC6 naming)
+  - Six retention factors: `hook_weakness`, `payoff_absence`, `unfulfilled_hook_promise`, `flat_emotion`, `dead_zone_risk`, `structural_gap`, `density_falloff`
+  - RC1 architectural constraint documented in module docstring and function docstring
+  - RC2: `prediction_confidence` field [0, 1] — reflects signal depth, not prediction certainty
+  - RC3: hook→payoff coherence penalty: −18 for promise hooks (result_first/challenge/surprise/warning/authority), −12 for generic opening-only
+  - RC4: dead-zone only fires at ≥22% clip flat ratio, requires ≥3 consecutive flat chunks
+  - RC5: `retention_explanation: {strengths, risks}` explainability per clip
+- `edit_plan_schema.AIClipPlan`: `retention_prediction: dict` field + `to_dict()` entry
+- `edit_plan_schema.AIEditPlan`: `clip_retention_prediction: dict` field + `to_dict()` entry
+- `ai_director._build_plan()`:
+  - Try-import guard at module level
+  - Called after S3.1 packaging (after all S2 signals resolved)
+  - `plan.clip_retention_prediction` populated; `seg_plan.retention_prediction` attached per clip
+  - Try/except guarded — prediction failure appends `retention_prediction_error:…`, never raises
+
+**Distinct from Phase 16 retention (plan.retention):**
+- Phase 16: whole-video analysis using story + pacing + subtitle context
+- S3.2: per-clip window analysis using S2 signals + transcript chunks
+
+**Files affected:**
+- `backend/app/ai/analyzers/retention_predictor.py` (new)
+- `backend/app/ai/director/edit_plan_schema.py`
+- `backend/app/ai/director/ai_director.py`
+
+**Regression guarantees:**
+- RC1 hard-enforced: `retention_score` has zero path back to clip_selector, segment_builder, retry_analyzer, diversity_analyzer, or dna_engine
+- All imports try/except guarded — zero runtime failures if module missing
+- `S3_RETENTION_ENABLED=0` → returns `{}`, plan unchanged, bit-identical behavior (RC6)
+- Scene fallback clips (no transcript): `retention_available=False`, `prediction_confidence=0.15`, no risk flags
+- `emotion_analyzer` unavailable → empty emotion scores, dead-zone/arc/flat paths skipped gracefully
+- No changes to clip count logic, scoring formulas, selection, render pipeline, or external APIs
+
+---
+
 ## Non-Negotiable Constraints (all S3 phases)
 
 - Creator controls: goal, style, format, clip count, duration preference

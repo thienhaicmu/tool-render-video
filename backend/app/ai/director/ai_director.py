@@ -66,6 +66,18 @@ except ImportError:
 
     def _packaging_plan(*a, **kw) -> dict: return {}  # type: ignore[misc]
 
+try:
+    from app.ai.analyzers.retention_predictor import (
+        predict_clip_retention as _retention_predict,
+        S3_RETENTION_ENABLED as _RETENTION_ENABLED,
+    )
+    _RETENTION_AVAILABLE = True
+except ImportError:
+    _RETENTION_AVAILABLE = False
+    _RETENTION_ENABLED = False
+
+    def _retention_predict(*a, **kw) -> dict: return {}  # type: ignore[misc]
+
 logger = logging.getLogger("app.ai.director")
 
 
@@ -295,6 +307,29 @@ def _build_plan(
         except Exception as exc:
             plan.warnings.append(f"packaging_error:{type(exc).__name__}")
             logger.debug("ai_director_packaging_failed job_id=%s: %s", job_id, exc)
+
+    # S3.2: Per-clip retention prediction (advisory metadata only).
+    # RC1 enforced: retention_score NEVER feeds back into selection, retry,
+    # ranking, diversity, or creator DNA. Read-only metadata only.
+    if _RETENTION_AVAILABLE and _RETENTION_ENABLED:
+        try:
+            retention_result = _retention_predict(
+                selected_raw=selected_raw,
+                chunks=chunks,
+                goal=str(mode_config.get("goal", "")),
+            )
+            plan.clip_retention_prediction = retention_result
+            for idx, seg_plan in enumerate(plan.selected_segments):
+                if idx in retention_result:
+                    seg_plan.retention_prediction = dict(retention_result[idx])
+            if retention_result:
+                logger.debug(
+                    "ai_director_retention_predicted job_id=%s clips=%d",
+                    job_id, len(retention_result),
+                )
+        except Exception as exc:
+            plan.warnings.append(f"retention_prediction_error:{type(exc).__name__}")
+            logger.debug("ai_director_retention_prediction_failed job_id=%s: %s", job_id, exc)
 
     # --- Phase 31: AI Apply Policy ---
     # Runs first so downstream phases can reference the effective policy.
