@@ -20,7 +20,7 @@ from app.services.db import upsert_job, update_job_progress, upsert_job_part, li
 from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify
 from app.services.scene_detector import detect_scenes
-from app.services.segment_builder import build_segments_from_scenes, refine_segment_boundaries
+from app.services.segment_builder import build_segments_from_scenes, refine_segment_boundaries, refine_cuts_for_naturalness
 from app.services.clip_scorer import score_scenes_clip, CLIP_SCORER_VERSION
 from app.services.subtitle_engine import (
     srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time,
@@ -2898,6 +2898,24 @@ def run_render_pipeline(
                          f"s4_retention_proxy segments={len(scored)} adjusted={_s42_adj}")
             except Exception as _s42_exc:
                 logger.debug("s4_retention_proxy_failed job_id=%s: %s", job_id, _s42_exc)
+
+        # ── S4.5: Speaker-aware cuts (S4_SPEAKER_AWARE_CUTS_ENABLED=1) ──
+        # Snaps boundaries to nearby pause midpoints and utterance endpoints.
+        # End boundary gets full nudge window (primary); start gets half
+        # (detect_silence_trim_offset already handles opening cleanup).
+        if os.getenv("S4_SPEAKER_AWARE_CUTS_ENABLED") == "1" and scored:
+            try:
+                _s45_blocks = parse_srt_blocks(str(full_srt)) if full_srt_available else None
+                if _s45_blocks:
+                    scored = refine_cuts_for_naturalness(
+                        scored, _s45_blocks,
+                        float(payload.min_part_sec), float(payload.max_part_sec),
+                    )
+                    _s45_adj = sum(1 for s in scored if s.get("cut_adjustment_reason"))
+                    _job_log(effective_channel, job_id,
+                             f"s4_natural_cuts segments={len(scored)} adjusted={_s45_adj}")
+            except Exception as _s45_exc:
+                logger.debug("s4_natural_cuts_failed job_id=%s: %s", job_id, _s45_exc)
 
         # ── AI Director Phase 1 — safe edit plan (observation only, no override) ──
         _ai_edit_plan = None

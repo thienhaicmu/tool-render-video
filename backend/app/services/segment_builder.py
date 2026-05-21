@@ -676,6 +676,133 @@ def refine_segment_boundaries(
     return refined
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# S4.5: Speaker-aware cuts (env-gated: S4_SPEAKER_AWARE_CUTS_ENABLED=1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_S45_MIN_PAUSE_SEC   = 0.50   # gaps shorter than this are thinking pauses, not clean cuts
+_S45_MAX_NUDGE_END   = 0.10   # end boundary: full ±10% × weight (primary target)
+_S45_MAX_NUDGE_START = 0.05   # start boundary: ±5% × weight — detect_silence_trim_offset
+                               # already handles opening cleanup, keep conservative
+
+# Content-type weight scales the nudge window per boundary.
+# 0.0 = skip entirely (fast cuts are intentional), 1.0 = full window.
+_S45_CONTENT_WEIGHT: Dict[str, float] = {
+    "podcast":      1.0,
+    "interview":    1.0,
+    "reaction":     0.9,
+    "storytelling": 0.7,
+    "education":    0.6,
+    "commentary":   0.5,
+    "tutorial":     0.4,
+    "vlog":         0.3,
+    "montage":      0.10,
+    "high-energy":  0.0,
+}
+_S45_DEFAULT_WEIGHT = 0.40
+
+
+def _build_pause_timestamps(
+    transcript_blocks: List[Dict], min_pause: float
+) -> List[float]:
+    """Collect natural cut candidates from transcript gaps.
+
+    Yields: pause midpoints (center of silence gap >= min_pause) and utterance
+    endpoints (end of each SRT block).  Pause midpoints are preferred cut points
+    because the speaker has fully stopped; utterance endpoints are secondary
+    (cut right as the speaker finishes).
+    """
+    blocks = sorted(transcript_blocks, key=lambda b: float(b.get("start", 0.0)))
+    pts: List[float] = []
+    for k, blk in enumerate(blocks):
+        blk_end = float(blk.get("end", 0.0))
+        pts.append(blk_end)                    # utterance completion point
+        if k + 1 < len(blocks):
+            next_start = float(blocks[k + 1].get("start", 0.0))
+            gap = next_start - blk_end
+            if gap >= min_pause:
+                pts.append((blk_end + next_start) / 2.0)   # pause midpoint
+    return sorted(set(round(p, 3) for p in pts))
+
+
+def refine_cuts_for_naturalness(
+    segments: List[Dict],
+    transcript_blocks: List[Dict],
+    min_len: float,
+    max_len: float,
+) -> List[Dict]:
+    """S4.5: Snap cut boundaries to natural pause/utterance points.
+
+    Complements S4.1 (sentence-timestamp snaps) by targeting pause midpoints
+    and utterance endpoints.  End boundary gets the full nudge window; start
+    boundary gets half (detect_silence_trim_offset already covers opening cleanup).
+
+    Gate: S4_SPEAKER_AWARE_CUTS_ENABLED=1.
+    Max nudge: end ±10% × weight, start ±5% × weight (RC3/RC4).
+    Never changes clip count (RC6).  Never fails render (RC5).
+    Records cut_adjustment_reason (RC8).
+    """
+    if os.getenv("S4_SPEAKER_AWARE_CUTS_ENABLED") != "1":
+        return segments
+    if not transcript_blocks:
+        return segments
+
+    pts = _build_pause_timestamps(transcript_blocks, _S45_MIN_PAUSE_SEC)
+    if not pts:
+        return segments
+
+    refined: List[Dict] = []
+    for seg in segments:
+        seg_start = float(seg.get("start", 0.0))
+        seg_end   = float(seg.get("end", 0.0))
+        duration  = seg_end - seg_start
+        if duration <= 0:
+            refined.append(seg)
+            continue
+
+        ctype  = str(seg.get("content_type_hint", "") or "")
+        weight = _S45_CONTENT_WEIGHT.get(ctype, _S45_DEFAULT_WEIGHT)
+        if weight <= 0.0:
+            refined.append(seg)   # high-energy / montage: intentional fast cuts
+            continue
+
+        # Asymmetric windows: end is primary target, start is conservative.
+        end_nudge   = duration * _S45_MAX_NUDGE_END   * weight
+        start_nudge = duration * _S45_MAX_NUDGE_START * weight
+
+        new_start = _find_nearest_boundary(seg_start, pts, start_nudge)
+        new_end   = _find_nearest_boundary(seg_end,   pts, end_nudge)
+
+        # Fallback ladder: both → start-only → end-only.
+        for cs, ce in [
+            (new_start if new_start is not None else seg_start,
+             new_end   if new_end   is not None else seg_end),
+            (new_start if new_start is not None else seg_start, seg_end),
+            (seg_start, new_end if new_end is not None else seg_end),
+        ]:
+            new_dur = ce - cs
+            if new_dur <= 0 or not (min_len <= new_dur <= max_len):
+                continue
+            reasons: List[str] = []
+            if abs(cs - seg_start) > 0.001:
+                reasons.append("pause_boundary")
+            if abs(ce - seg_end) > 0.001:
+                reasons.append(
+                    "reaction_completion" if ctype == "reaction" else "sentence_completion"
+                )
+            if not reasons:
+                break   # nothing actually moved — keep original
+            seg = dict(seg)
+            seg["start"] = round(cs, 3)
+            seg["end"]   = round(ce, 3)
+            seg["cut_adjustment_reason"] = reasons
+            break
+
+        refined.append(seg)
+
+    return refined
+
+
 def build_segments_from_scenes_with_subtitles(
     scenes: List[Dict],
     total_duration: int,
