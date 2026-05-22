@@ -32,6 +32,7 @@ import pytest
 
 from app.domain.timeline import TimelineMap
 import app.services.render_engine as render_engine_mod
+import app.services.render.overlay_compositor as overlay_compositor_mod
 from app.services.render_engine import composite_overlays_on_base_clip
 
 
@@ -88,11 +89,10 @@ def _call_composite(subtitle_ass: "str | None" = "/fake/overlay.ass", **override
         captured.append(list(cmd))
 
     with (
-        patch.object(render_engine_mod, "_run_ffmpeg_with_retry", side_effect=_fake_run),
-        patch.object(render_engine_mod, "probe_video_metadata", return_value=_FAKE_META),
-        patch.object(render_engine_mod, "nvenc_available", return_value=False),
-        patch.object(render_engine_mod, "_resolve_codec", return_value="libx264"),
-        patch.object(render_engine_mod, "_detect_windows_fontfile", return_value=None),
+        patch.object(overlay_compositor_mod, "_run_ffmpeg_with_retry", side_effect=_fake_run),
+        patch.object(overlay_compositor_mod, "probe_video_metadata", return_value=_FAKE_META),
+        patch.object(overlay_compositor_mod, "_resolve_codec", return_value="libx264"),
+        patch.object(overlay_compositor_mod, "_detect_windows_fontfile", return_value=None),
     ):
         kwargs = dict(
             base_clip_path="/fake/base_clip.mp4",

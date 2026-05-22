@@ -1,7 +1,7 @@
 # OVERLAY_PIPELINE.md
 
 **Source of truth for the overlay composite pipeline.**
-**Last updated**: 2026-05-22 (post Phase 3C)
+**Last updated**: 2026-05-22 (post Phase 4E.4)
 
 ---
 
@@ -22,7 +22,7 @@ It separates render responsibility into two dedicated passes:
 
 ## composite_overlays_on_base_clip() Contract
 
-**File**: `backend/app/services/render_engine.py`
+**File**: `backend/app/services/render/overlay_compositor.py` (re-exported from `render_engine.py`; Phase 4E.4 SHIPPED)
 
 ### Signature
 

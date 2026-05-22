@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4E.3)
+**Last updated**: 2026-05-22 (post Phase 4E.4)
 
 ---
 
@@ -17,10 +17,11 @@ Electron shell
               ├── orchestration/asset_pipeline.py — post-assembly asset hooks (Phase 4B)
               ├── orchestration/qa_pipeline.py — output QA/validation helpers (Phase 4C)
               ├── orchestration/audio_pipeline.py — narration audio cleanup orchestration (Phase 4D)
-              ├── render_engine.py — renderers + backward-compat re-exports (Phase 4E.1/4E.2/4E.3)
+              ├── render_engine.py — legacy renderer + backward-compat re-exports (Phase 4E.1-4E.4)
               ├── services/render/ffmpeg_helpers.py — FFmpeg infrastructure + filter builders (Phase 4E.1)
               ├── services/render/clip_ops.py — cut_video, silence/bad-frame detect, apply_micro_pacing (Phase 4E.2)
               ├── services/render/base_clip_renderer.py — render_base_clip (Phase 4E.3)
+              ├── services/render/overlay_compositor.py — composite_overlays_on_base_clip (Phase 4E.4)
               └── SQLite — job/parts state, upload queue
 ```
 
@@ -176,7 +177,7 @@ _render_part(seg, idx)
 | Layer | Function | Owns |
 |---|---|---|
 | `render_base_clip()` | Speed, crop, reframe, color, audio encoding | `services/render/base_clip_renderer.py` (re-exported from `render_engine.py`) |
-| `composite_overlays_on_base_clip()` | Subtitle, title, text_layers overlay | `render_engine.py` |
+| `composite_overlays_on_base_clip()` | Subtitle, title, text_layers overlay | `services/render/overlay_compositor.py` (re-exported from `render_engine.py`) |
 | `render_part_smart()` | All-in-one legacy render (speed + overlays) | `render_engine.py` |
 | Post-assembly | Hook intro, asset intro/outro, logo watermark | `render_pipeline.py` |
 | Narration mix | TTS atempo compensation, BGM ducking | `audio_mix_service.py` |

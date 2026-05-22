@@ -429,3 +429,37 @@ Phase 4E.2 added 43 new passing tests (`test_clip_ops.py`).
 The 8 persistent failures are pre-existing — unchanged.
 
 Phase 4E.3 added 28 new passing tests (`test_base_clip_renderer.py`).
+
+---
+
+## Phase 4E.4 — Extract Overlay Compositor
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Fourth sub-step of render_engine.py split. Extract `composite_overlays_on_base_clip()` from `render_engine.py` into `services/render/overlay_compositor.py`. Backward-compat re-export keeps all existing callers unchanged.
+
+**Shipped changes**:
+- New file: `backend/app/services/render/overlay_compositor.py` — `composite_overlays_on_base_clip()` moved verbatim from `render_engine.py`. Imports only from `stdlib` + `domain/timeline` + `bin_paths` + `encoder_helpers` + `text_overlay` + `render.ffmpeg_helpers`. No import from `render_engine`. No circular import.
+- `render_engine.py`: `composite_overlays_on_base_clip` body removed; backward-compat re-export added via `from app.services.render.overlay_compositor import composite_overlays_on_base_clip`. Reduced from ~619 → ~477 lines (−142 lines).
+- New test file: `backend/tests/test_overlay_compositor.py` — 42 tests: import smoke tests, backward-compat, same-object identity, subtitle/title/text-layers filter presence, vf_chain order (ass → title → layers → fps), fps= last, forbidden filters (setpts/atempo/crop/scale/eq/hqdn3d/loudnorm/BGM), -c:a copy invariant, -af absent, stream copy vs encode paths, NVENC semaphore acquired/released, CPU fallback on NVENC failure, return value metadata.
+- `backend/tests/test_composite_overlays.py`: module import added (`overlay_compositor_mod`); all `patch.object(render_engine_mod, ...)` in `_call_composite` helper updated to `patch.object(overlay_compositor_mod, ...)` for `_run_ffmpeg_with_retry`, `probe_video_metadata`, `_resolve_codec`, `_detect_windows_fontfile`. Vestigial `nvenc_available` patch removed (not in `overlay_compositor` namespace).
+
+**Contracts maintained**:
+- `overlay_compositor.py` imports from `render.ffmpeg_helpers` only for shared FFmpeg state — no import from `render_engine`. No circular import.
+- Re-exported `composite_overlays_on_base_clip` in `render_engine.py` is the SAME object as in `overlay_compositor.py` (`is` identity).
+- All overlay invariants preserved: no setpts, no atempo, no crop/scale/color/effect, -c:a copy always, fps= last, stream copy when no overlays.
+- No function signature was changed. No call site was changed. No behavior was changed.
+
+---
+
+## Test Suite State (Post Phase 4E.4)
+
+```
+6034 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing — unchanged.
+
+Phase 4E.4 added 42 new passing tests (`test_overlay_compositor.py`).
