@@ -194,7 +194,7 @@ All job history, TikTok upload credentials, channel configuration, upload queue 
 
 This is a working product built by one person (or a very small team) under real shipping pressure. The output it produces is real. The user experience for the happy path is reasonable. The engineering instincts in the places that received attention — the job queue, the cancel mechanism, the caching, the transport layer — are sound.
 
-But the codebase has reached its limits. `render_pipeline.py` at 290KB is not a temporary state. It will not organize itself. Every new feature makes it harder to add the next feature. The TTS desync bug (now resolved in Phase 0) and the subtitle display duration compression (Phase 3 scope) both affect default TikTok renders. The test coverage number (0% for the render pipeline) means any change to the most critical code is a leap of faith.
+But the codebase has reached its limits. `render_pipeline.py` at 290KB is not a temporary state. It will not organize itself. Every new feature makes it harder to add the next feature. The TTS desync bug (resolved Phase 0) and the subtitle display duration compression (resolved on overlay path in Phase 3A/3B; legacy path still affected) were two default-TikTok regressions. The render pipeline test coverage has grown significantly (overlay path, domain models, audio mix), but the legacy `render_part_smart()` path remains uncovered.
 
 The AI branding is a significant gap between expectation and reality. The modules are named as if they implement machine intelligence. They implement if-else scoring. This is not inherently wrong — heuristics can be effective — but the naming creates a maintenance burden when a future developer has to understand what `emotion_analyzer.py` actually does.
 
