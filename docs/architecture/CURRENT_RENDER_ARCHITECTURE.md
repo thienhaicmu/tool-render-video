@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4F.4 shipped)
+**Last updated**: 2026-05-22 (post Phase 4F.5 audit; upload domain removal pending confirmation)
 
 ---
 

@@ -80,7 +80,9 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Phase 4F.3 shipped (2026-05-22)**: `app/db/creator_repo.py` extracted — Group E (get_creator_prefs, upsert_creator_prefs) moved verbatim. `services/db.py` re-exports both symbols. `services/db.py` reduced by ~25 additional lines (~1,236 lines remaining). 17 new tests in `test_creator_repo.py`.
 
-**Phase 4F.4 shipped (2026-05-22)**: `app/db/platform_repo.py` extracted — Group D (_normalize_proxy_pool_row, list_proxy_pool_rows, get_proxy_pool_row, create_proxy_pool_row, update_proxy_pool_row, delete_proxy_pool_row) moved verbatim. `services/db.py` re-exports all 6 symbols. `services/db.py` reduced by ~130 additional lines (~1,106 lines remaining). 44 new tests in `test_platform_repo.py`. Remaining domain (uploads_repo) pending 4F.5.
+**Phase 4F.4 shipped (2026-05-22)**: `app/db/platform_repo.py` extracted — Group D (_normalize_proxy_pool_row, list_proxy_pool_rows, get_proxy_pool_row, create_proxy_pool_row, update_proxy_pool_row, delete_proxy_pool_row) moved verbatim. `services/db.py` re-exports all 6 symbols. `services/db.py` reduced by ~130 additional lines (~1,106 lines remaining). 44 new tests in `test_platform_repo.py`.
+
+**Phase 4F.5 audit (2026-05-22)**: Upload domain removal audit completed. Audit found the upload domain is **100% active** (routes registered, frontend loaded, all 43 upload DB functions called by live endpoints). `uploads_repo.py` extraction **cancelled** — upload domain will be deleted directly, not extracted first. Deletion plan in `docs/restructure/PHASE_4F_5_UPLOAD_DOMAIN_REMOVAL_AUDIT.md`. Awaiting user confirmation of 5 questions before proceeding. **No backend code changed in this audit step.**
 
 ---
 

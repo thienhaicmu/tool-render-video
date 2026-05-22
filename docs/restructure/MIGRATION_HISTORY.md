@@ -669,3 +669,27 @@ Phase 4F.3 added 17 new passing tests (`test_creator_repo.py`).
 The 8 persistent failures are pre-existing — unchanged.
 
 Phase 4F.4 added 44 new passing tests (`test_platform_repo.py`).
+
+---
+
+## Phase 4F.5 — Upload Domain Removal Audit
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: AUDIT COMPLETE — awaiting user confirmation
+**Commit**: (this commit)
+
+**Purpose**: Audit whether the upload domain code (routes, services, DB functions, frontend) is still active before deciding whether to extract `uploads_repo.py` (original plan) or remove the domain entirely.
+
+**Audit finding**: The upload domain is **100% active**. No dead code found.
+- `routes/upload.py` — 1,502 lines, 42 endpoints, registered in `main.py`
+- `services/upload_engine.py` — 1,793 lines, Playwright TikTok automation
+- ~1,000 lines of upload DB functions still in `services/db.py`
+- 6,224 lines of frontend JS (`upload-manager.js`, `upload-config.js`, `upload-engine.js`)
+- 7 DB tables in `init_db()`: upload_accounts, upload_queue, upload_videos, upload_history, upload_runtime_locks, upload_scheduler_state, upload_proxy_pool
+- All 43 upload DB functions actively called by `routes/upload.py`
+
+**Decision**: `uploads_repo.py` extraction is **cancelled**. Upload domain will be removed as a coordinated deletion (not extracted first). Deletion plan requires user confirmation of 5 questions before proceeding.
+
+**Deliverable**: `docs/restructure/PHASE_4F_5_UPLOAD_DOMAIN_REMOVAL_AUDIT.md`
+
+**No backend code changed. No tests changed.**
