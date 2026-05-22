@@ -463,3 +463,38 @@ Phase 4E.3 added 28 new passing tests (`test_base_clip_renderer.py`).
 The 8 persistent failures are pre-existing — unchanged.
 
 Phase 4E.4 added 42 new passing tests (`test_overlay_compositor.py`).
+
+---
+
+## Phase 4E.5 — Extract Legacy Renderer
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Fifth and final sub-step of render_engine.py split. Extract `render_part()` and `render_part_smart()` from `render_engine.py` into `services/render/legacy_renderer.py`. Backward-compat re-exports keep all existing callers unchanged. After this phase `render_engine.py` is a pure imports/re-exports shim with no function bodies.
+
+**Shipped changes**:
+- New file: `backend/app/services/render/legacy_renderer.py` — `render_part()` and `render_part_smart()` moved verbatim from `render_engine.py`. Imports only from `stdlib` + `motion_crop` + `bin_paths` + `text_overlay` + `encoder_helpers` + `render.ffmpeg_helpers`. No import from `render_engine`. No circular import.
+- `render_engine.py`: `render_part` and `render_part_smart` bodies removed; backward-compat re-exports added via `from app.services.render.legacy_renderer import render_part, render_part_smart`. Reduced from ~477 → ~50 lines. `render_engine.py` is now a pure re-export shim.
+- New test file: `backend/tests/test_legacy_renderer.py` — 40 tests: import smoke tests (new module + render_engine re-export), same-object identity checks, aspect ratio handling, vf_chain filter order invariants (ass-before-setpts), subtitle/title/text-layers presence, audio chain, speed handling (atempo, no-op at 1x), NVENC semaphore, CPU fallback on NVENC failure, render_part_smart fallback behavior.
+- `backend/tests/test_render_guards.py`: `_make_render_part_call` helper patch targets updated from `app.services.render_engine.*` to `app.services.render.legacy_renderer.*`. Vestigial `_has_encoder`/`_nvenc_runtime_ready` patches replaced with direct `_resolve_codec` mock.
+- `backend/tests/test_phase0_hotfixes.py`: `TestSubtitleTimingInvariant::test_render_engine_ass_before_setpts` updated to inspect `legacy_renderer` source instead of `render_engine` source (which is now a shim with no function bodies).
+
+**Contracts maintained**:
+- `legacy_renderer.py` imports from `render.ffmpeg_helpers` only for shared FFmpeg state — no import from `render_engine`. No circular import.
+- Re-exported `render_part` and `render_part_smart` in `render_engine.py` are the SAME objects as in `legacy_renderer.py` (`is` identity).
+- `render_part_smart()` is the permanent legacy fallback. Its vf_chain order (ass-before-setpts), NVENC semaphore usage, CPU fallback, audio chain, BGM behavior, loudnorm behavior, subtitle behavior, and function signature are all unchanged.
+- No function signature was changed. No call site was changed. No behavior was changed.
+
+---
+
+## Test Suite State (Post Phase 4E.5)
+
+```
+6074 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing — unchanged.
+
+Phase 4E.5 added 40 new passing tests (`test_legacy_renderer.py`).

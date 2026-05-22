@@ -9,9 +9,9 @@
 
 | Stage | Audio operation | Owner | Applied when |
 |---|---|---|---|
-| `render_base_clip()` | atempo={speed}, loudnorm, BGM mix (reup_bgm_*) | `render_engine.py` | Overlay path, base clip |
-| `render_part_smart()` | atempo={speed}, loudnorm, TTS mix, BGM mix | `render_engine.py` + `audio_mix_service.py` | Legacy path, fallback |
-| `composite_overlays_on_base_clip()` | -c:a copy (stream copy) | `render_engine.py` | Overlay path, final step |
+| `render_base_clip()` | atempo={speed}, loudnorm, BGM mix (reup_bgm_*) | `services/render/base_clip_renderer.py` | Overlay path, base clip |
+| `render_part_smart()` | atempo={speed}, loudnorm, TTS mix, BGM mix | `services/render/legacy_renderer.py` + `audio_mix_service.py` | Legacy path, fallback |
+| `composite_overlays_on_base_clip()` | -c:a copy (stream copy) | `services/render/overlay_compositor.py` | Overlay path, final step |
 | `mix_narration_audio()` | atempo={speed} on narration, source/narration blend | `audio_mix_service.py` | Both paths (post-render step on final_part) |
 
 ---

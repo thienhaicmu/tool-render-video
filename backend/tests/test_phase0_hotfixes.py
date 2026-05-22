@@ -46,14 +46,15 @@ class TestSubtitleTimingInvariant:
 
     def test_render_engine_ass_before_setpts(self):
         """vf_chain must place the ass filter before setpts so that subtitle
-        timestamps (in original time) land on the correct speed-adjusted frame."""
-        from app.services import render_engine
+        timestamps (in original time) land on the correct speed-adjusted frame.
+        Checks legacy_renderer (render_part moved there in Phase 4E.5)."""
+        from app.services.render import legacy_renderer
 
-        src = inspect.getsource(render_engine)
+        src = inspect.getsource(legacy_renderer)
         ass_pos = src.find("ass='")
         setpts_pos = src.find("setpts=PTS/")
-        assert ass_pos != -1, "ass filter not found in render_engine source"
-        assert setpts_pos != -1, "setpts filter not found in render_engine source"
+        assert ass_pos != -1, "ass filter not found in legacy_renderer source"
+        assert setpts_pos != -1, "setpts filter not found in legacy_renderer source"
         assert ass_pos < setpts_pos, (
             "ass filter must appear before setpts in vf_chain build; "
             "reversing the order would cause subtitle drift"

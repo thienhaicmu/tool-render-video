@@ -1,7 +1,7 @@
 # PHASE_4A_BACKEND_MODULARIZATION_PLAN.md
 
-**Status**: PLANNING (Phase 4B SHIPPED, Phase 4C SHIPPED, Phase 4D SHIPPED, Phase 4E.1 SHIPPED, Phase 4E.2 SHIPPED, Phase 4E.3 SHIPPED, Phase 4E.4 SHIPPED)
-**Last updated**: 2026-05-22 (post Phase 4E.4)
+**Status**: PLANNING (Phase 4B SHIPPED, Phase 4C SHIPPED, Phase 4D SHIPPED, Phase 4E.1 SHIPPED, Phase 4E.2 SHIPPED, Phase 4E.3 SHIPPED, Phase 4E.4 SHIPPED, Phase 4E.5 SHIPPED)
+**Last updated**: 2026-05-22 (post Phase 4E.5)
 **Branch**: `restructure/output-timeline-architecture`
 
 This is a planning document only. No code changes are in scope. Phase 4A produces this document and updated supporting docs. Implementation begins in Phase 4B.
@@ -76,7 +76,7 @@ The overlay architecture has given us a working model for what isolated, testabl
 | Clip operations | `cut_video`, `detect_silence_trim_offset`, `detect_bad_first_frame`, `_probe_duration`, `_detect_silence_segments`, `apply_micro_pacing` | Yes — Phase 4E |
 | Base clip renderer | `render_base_clip` | **Yes — Phase 4E.3 SHIPPED** |
 | Overlay compositor | `composite_overlays_on_base_clip` | **Yes — Phase 4E.4 SHIPPED** |
-| Legacy renderer | `render_part_smart`, `render_part` | Yes — Phase 4E.5 (extract last, never modify signature) |
+| Legacy renderer | `render_part_smart`, `render_part` | **Yes — Phase 4E.5 SHIPPED** |
 
 **Current cross-file coupling**: `render_pipeline.py` imports `render_base_clip`, `composite_overlays_on_base_clip`, `render_part_smart`, `cut_video`, `nvenc_available`, and 8 other helpers directly from `render_engine`. After extraction, all these call sites need updating.
 

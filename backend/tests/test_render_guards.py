@@ -108,11 +108,10 @@ class TestRenderPartUsesHelper:
             r.stderr = ""
             return r
 
-        with patch("app.services.render_engine.probe_video_metadata", return_value=mock_meta), \
-             patch("app.services.render_engine._run_ffmpeg_with_retry", side_effect=_fake_run), \
-             patch("app.services.render_engine.NVENC_SEMAPHORE"), \
-             patch("app.services.render_engine._has_encoder", return_value=False), \
-             patch("app.services.render_engine._nvenc_runtime_ready", return_value=False):
+        with patch("app.services.render.legacy_renderer.probe_video_metadata", return_value=mock_meta), \
+             patch("app.services.render.legacy_renderer._run_ffmpeg_with_retry", side_effect=_fake_run), \
+             patch("app.services.render.legacy_renderer.NVENC_SEMAPHORE"), \
+             patch("app.services.render.legacy_renderer._resolve_codec", return_value="libx264"):
             try:
                 render_part(
                     input_path="fake_input.mp4",

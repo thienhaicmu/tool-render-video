@@ -22,7 +22,9 @@
 
 **Phase 4E.3 shipped (2026-05-22)**: `render_base_clip()` extracted from `render_engine.py` to `services/render/base_clip_renderer.py`. `render_engine.py` reduced from 829 → ~619 lines (−210 lines). 1 name re-exported at old location for backward compat.
 
-**Phase 4E.4 shipped (2026-05-22)**: `composite_overlays_on_base_clip()` extracted from `render_engine.py` to `services/render/overlay_compositor.py`. `render_engine.py` reduced from ~619 → ~477 lines (−142 lines). 1 name re-exported at old location for backward compat. Next: Phase 4E.5 (legacy_renderer.py — extract render_part + render_part_smart). Plan: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md`.
+**Phase 4E.4 shipped (2026-05-22)**: `composite_overlays_on_base_clip()` extracted from `render_engine.py` to `services/render/overlay_compositor.py`. `render_engine.py` reduced from ~619 → ~477 lines (−142 lines). 1 name re-exported at old location for backward compat.
+
+**Phase 4E.5 shipped (2026-05-22)**: `render_part()` and `render_part_smart()` extracted from `render_engine.py` to `services/render/legacy_renderer.py`. `render_engine.py` reduced from ~477 → ~50 lines. `render_engine.py` is now a pure re-export shim with no function bodies. All render logic lives in focused modules under `services/render/`.
 
 ---
 
