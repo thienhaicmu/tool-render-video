@@ -1317,6 +1317,8 @@ def composite_overlays_on_base_clip(
     output_path: str,
     timeline: TimelineMap,
     subtitle_ass: str | None = None,
+    text_layers: "list[dict] | None" = None,
+    title_text: "str | None" = None,
     video_codec: str = "h264",
     video_crf: int = 18,
     video_preset: str = "slow",
@@ -1325,20 +1327,32 @@ def composite_overlays_on_base_clip(
     encoder_mode: str = "auto",
     ffmpeg_threads: int | None = None,
 ) -> dict:
-    """Burn output-timeline subtitle overlays onto a pre-processed base clip.
+    """Burn output-timeline subtitle and text overlays onto a pre-processed base clip.
 
     The base clip is already speed-adjusted, cropped, color-processed, and
-    audio-adjusted by render_base_clip(). This compositor only applies subtitle
-    burn-in — no setpts, no atempo, no crop, no scale, no color grading.
+    audio-adjusted by render_base_clip(). This compositor applies only overlays:
+    subtitle burn-in, title drawtext, and text_layer drawtext filters.
 
-    When subtitle_ass is None, both streams are copied without re-encode.
-    Audio is always copied; the audio track in base_clip.mp4 is already at
-    the correct speed and bitrate from render_base_clip().
+    All start_time / end_time values in text_layers must be output-timeline seconds.
+    On base_clip.mp4 the frame PTS is already output-timeline; no speed conversion
+    is applied here — the caller builds output-timeline layers before calling.
+
+    Invariants: no setpts, no atempo, no crop, no scale, no color/effect filters.
+    Audio is always copied; the base_clip audio is already speed-adjusted and
+    loudnorm-applied from render_base_clip().
+
+    When no overlays are present (all three sources None/empty), both streams are
+    copied without re-encode.
 
     Returns a metadata dict: path, duration, fps, width, height, has_audio.
     """
-    if subtitle_ass is None:
-        # No overlay to apply — stream copy preserves all base_clip quality.
+    _has_subtitle = bool(subtitle_ass)
+    _has_title = bool(title_text and str(title_text).strip())
+    _has_text_layers = bool(text_layers)
+    _needs_encode = _has_subtitle or _has_title or _has_text_layers
+
+    if not _needs_encode:
+        # No overlay — stream copy preserves all base_clip quality.
         cmd = [
             get_ffmpeg_bin(), "-y",
             "-i", base_clip_path,
@@ -1349,10 +1363,34 @@ def composite_overlays_on_base_clip(
         ]
         _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
     else:
-        # Output-timeline subtitles are required because base_clip.mp4 has
-        # already been re-clocked from source time. No setpts in this chain.
-        safe_ass = _safe_filter_path(str(Path(subtitle_ass).resolve()))
-        vf_chain = f"ass='{safe_ass}'"
+        # Build vf_chain: overlays in order, fps= always last.
+        # fps is probed from base_clip (which render_base_clip() guaranteed to be CFR);
+        # re-applying ensures CFR output regardless of any container quirks.
+        _base_fps = int(probe_video_metadata(base_clip_path).get("fps") or 60)
+        vf_parts: list = []
+
+        # 1. Subtitle burn-in — output-timeline ASS; base_clip PTS already matches.
+        if _has_subtitle:
+            safe_ass = _safe_filter_path(str(Path(subtitle_ass).resolve()))
+            vf_parts.append(f"ass='{safe_ass}'")
+
+        # 2. Title drawtext — enable='lt(t,3)' means first 3 output seconds on base_clip PTS.
+        if _has_title:
+            fontfile = _detect_windows_fontfile()
+            safe_title = str(title_text).replace("\\", "\\\\").replace(":", r"\:").replace("'", r"\'")[:120]
+            drawtext = f"drawtext=text='{safe_title}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=50:enable='lt(t\\,3)'"
+            if fontfile:
+                drawtext += f":fontfile='{_safe_filter_path(fontfile)}'"
+            vf_parts.append(drawtext)
+
+        # 3. User/hook text_layers — start_time/end_time are output-timeline seconds (caller contract).
+        if _has_text_layers:
+            append_text_layer_filters(vf_parts, text_layers)
+
+        # 4. fps= always last — guarantees CFR output for platform compatibility.
+        vf_parts.append(f"fps={_base_fps}")
+
+        vf_chain = ",".join(vf_parts)
 
         resolved_codec = _resolve_codec(video_codec, encoder_mode=encoder_mode)
         resolved_preset = _map_preset_for_encoder(video_preset, resolved_codec)

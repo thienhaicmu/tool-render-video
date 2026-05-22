@@ -4217,8 +4217,12 @@ def run_render_pipeline(
 
             # ── Hook overlay: build per-part text_layers with optional opening banner ──
             # Operates on a copy so the global normalized_text_layers is never mutated.
+            # Two variants are built simultaneously:
+            #   _part_text_layers         — legacy path (hook end_time = 1.5 × speed, pre-setpts)
+            #   _part_text_layers_overlay — overlay path (hook end_time = 1.5 output seconds)
             _hook_overlay_applied_for_part = False
             _part_text_layers = list(normalized_text_layers)
+            _part_text_layers_overlay = list(normalized_text_layers)
             if _hook_overlay_enabled and len(_part_text_layers) < MAX_TEXT_LAYERS:
                 _hook_srt_path = str(srt_part) if srt_part.exists() and srt_part.stat().st_size > 0 else None
                 _hook_text, _hook_source = resolve_hook_overlay_text(
@@ -4227,8 +4231,8 @@ def run_render_pipeline(
                 )
                 if _hook_text:
                     _hook_overlay_applied_for_part = True
-                    # end_time is pre-setpts, so multiply by speed so the overlay
-                    # shows for ~1.5 s of perceived output time at any playback rate.
+                    # Legacy path: end_time is pre-setpts source-clip seconds; multiply by speed
+                    # so the overlay shows for ~1.5 s of perceived output time at any playback rate.
                     _hook_spd = max(0.5, min(1.5, float(payload.playback_speed or 1.07)))
                     _hook_end_t = round(min(2.5, 1.5 * _hook_spd), 3)
                     _part_text_layers = [
@@ -4251,6 +4255,28 @@ def run_render_pipeline(
                             "order": -1,
                         }
                     ] + _part_text_layers
+                    # Overlay path: base_clip.mp4 PTS is already output-timeline, so end_time
+                    # is 1.5 output seconds directly — no speed multiplication needed.
+                    _part_text_layers_overlay = [
+                        {
+                            "id": f"hook_overlay_{idx}",
+                            "text": _hook_text,
+                            "font_family": "Bungee",
+                            "font_size": 52,
+                            "color": "#FFFFFF",
+                            "position": "top-center",
+                            "x_percent": 50.0,
+                            "y_percent": 26.0,
+                            "alignment": "center",
+                            "bold": False,
+                            "outline": {"enabled": True, "thickness": 4},
+                            "shadow": {"enabled": False, "offset_x": 0, "offset_y": 0},
+                            "background": {"enabled": True, "color": "#000000CC", "padding": 18},
+                            "start_time": 0.0,
+                            "end_time": 1.5,
+                            "order": -1,
+                        }
+                    ] + _part_text_layers_overlay
                     logger.info(
                         "hook_overlay_selected part=%d text=%r source=%s end_t=%.3f",
                         idx, _hook_text, _hook_source, _hook_end_t,
@@ -4452,6 +4478,8 @@ def run_render_pipeline(
                         output_path=str(final_part),
                         timeline=_part_timeline,
                         subtitle_ass=_overlay_ass_path,
+                        text_layers=_part_text_layers_overlay if _part_text_layers_overlay else None,
+                        title_text=overlay_title if payload.add_title_overlay else None,
                         video_codec=payload.video_codec,
                         video_crf=_part_video_crf,
                         video_preset=tuned["video_preset"],
@@ -4462,6 +4490,7 @@ def run_render_pipeline(
                     )
                     _part_manifest.overlay_rendered_path = str(final_part)
                     _part_manifest.rendered_path = str(final_part)
+                    _part_manifest.overlay_text_layers_applied = len(_part_text_layers_overlay or [])
                     write_manifest(work_dir, _part_manifest)
                     logger.info(
                         "overlay_composite_succeeded part=%d path=%s subtitle=%s",

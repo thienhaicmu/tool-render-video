@@ -329,3 +329,27 @@ class TestBaseClipManifestOverlayFields:
         restored = BaseClipManifest.from_dict(m.to_dict())
         assert restored.rendered_path == "/tmp/rendered_by_smart.mp4"
         assert restored.overlay_rendered_path == "/tmp/rendered_by_composite.mp4"
+
+
+class TestBaseClipManifestOverlayTextLayersApplied:
+    def test_overlay_text_layers_applied_none_by_default(self):
+        m = _sample_manifest()
+        assert m.overlay_text_layers_applied is None
+
+    def test_overlay_text_layers_applied_in_to_dict(self):
+        d = _sample_manifest().to_dict()
+        assert "overlay_text_layers_applied" in d
+        assert d["overlay_text_layers_applied"] is None
+
+    def test_overlay_text_layers_applied_round_trip(self):
+        m = _sample_manifest()
+        m.overlay_text_layers_applied = 3
+        restored = BaseClipManifest.from_dict(m.to_dict())
+        assert restored.overlay_text_layers_applied == 3
+
+    def test_from_dict_backward_compat_missing_overlay_text_layers_applied(self):
+        """Old manifest dicts without overlay_text_layers_applied deserialize with None."""
+        old_dict = _sample_manifest().to_dict()
+        old_dict.pop("overlay_text_layers_applied", None)
+        restored = BaseClipManifest.from_dict(old_dict)
+        assert restored.overlay_text_layers_applied is None

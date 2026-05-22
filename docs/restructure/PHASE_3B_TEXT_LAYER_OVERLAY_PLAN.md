@@ -3,8 +3,9 @@
 
 **Date**: 2026-05-22
 **Branch**: restructure/output-timeline-architecture
-**Status**: PLANNING — no code implemented
+**Status**: SHIPPED — implementation complete on branch restructure/output-timeline-architecture
 **Predecessor**: Phase 3A (subtitle overlay, commit 8db0295), Phase 3A.5 (validation, commit bab429c)
+**Files changed**: `render_engine.py`, `render_pipeline.py`, `manifests.py`, `test_composite_overlays.py`, `test_overlay_text_layer_timing.py` (new), `test_base_clip_manifest.py`
 
 ---
 

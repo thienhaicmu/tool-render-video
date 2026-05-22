@@ -77,10 +77,11 @@ class BaseClipManifest:
     base_clip_created_at: Optional[float] = field(default=None)
 
     # Overlay composite artifact — populated when FEATURE_OVERLAY_AFTER_BASE_CLIP=1
-    # Subtitle overlay applied to base_clip in output-timeline time.
+    # Subtitle and text overlays applied to base_clip in output-timeline time.
     overlay_srt_path: Optional[str] = field(default=None)
     overlay_ass_path: Optional[str] = field(default=None)
     overlay_rendered_path: Optional[str] = field(default=None)
+    overlay_text_layers_applied: Optional[int] = field(default=None)  # count applied in composite
 
     # ------------------------------------------------------------------
     # Serialization
@@ -121,6 +122,7 @@ class BaseClipManifest:
             "overlay_srt_path": self.overlay_srt_path,
             "overlay_ass_path": self.overlay_ass_path,
             "overlay_rendered_path": self.overlay_rendered_path,
+            "overlay_text_layers_applied": self.overlay_text_layers_applied,
         }
 
     @classmethod
@@ -159,4 +161,5 @@ class BaseClipManifest:
             overlay_srt_path=d.get("overlay_srt_path"),
             overlay_ass_path=d.get("overlay_ass_path"),
             overlay_rendered_path=d.get("overlay_rendered_path"),
+            overlay_text_layers_applied=int(d["overlay_text_layers_applied"]) if d.get("overlay_text_layers_applied") is not None else None,
         )
