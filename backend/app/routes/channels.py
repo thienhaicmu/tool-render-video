@@ -5,12 +5,6 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from app.models.schemas import ChannelCreate, ChannelInfo
 from app.services.channel_service import ensure_channel, list_channels
-from app.services.upload_engine import (
-    load_upload_settings,
-    save_upload_settings,
-    ensure_upload_account_profile,
-    bootstrap_portable_runtime_for_channel,
-)
 from app.core.config import CHANNELS_DIR
 
 router = APIRouter(prefix="/api/channels", tags=["channels"])
@@ -258,62 +252,30 @@ def create_channel(payload: ChannelCreate):
 
     account_key = str(payload.account_key or "").strip() or tiktok_user or "default"
 
-    if custom_root:
-        # Custom root: write config files directly to the channel folder
-        _write_channel_settings(base, channel_code, {
-            "video_output_subdir": output_subdir,
-            "default_video_input_dir": output_subdir,
-            "schedule_slots": slots,
-            "network_mode": network_mode,
-            "proxy_server": str(payload.proxy_server or "").strip(),
-            "proxy_username": str(payload.proxy_username or "").strip(),
-            "proxy_password": str(payload.proxy_password or "").strip(),
-            "browser_preference": browser_pref,
-        })
-        cfg = _write_channel_profile(base, channel_code, account_key, browser_pref, {
-            "browser_preference": browser_pref,
-            "network_mode": network_mode,
-            "proxy_server": str(payload.proxy_server or "").strip(),
-            "proxy_username": str(payload.proxy_username or "").strip(),
-            "proxy_password": str(payload.proxy_password or "").strip(),
-            "tiktok_username": tiktok_user,
-            "tiktok_password": tiktok_pass,
-            "mail_username": mail_user,
-            "mail_password": mail_pass,
-            "login_username": tiktok_user,
-            "login_password": tiktok_pass,
-            "video_input_dir": str(resolved_output_dir),
-        })
-    else:
-        # Default CHANNELS_DIR: use upload_engine functions
-        save_upload_settings(channel_code, {
-            "video_output_subdir": output_subdir,
-            "default_video_input_dir": output_subdir,
-            "schedule_slots": slots,
-            "network_mode": network_mode,
-            "proxy_server": str(payload.proxy_server or "").strip(),
-            "proxy_username": str(payload.proxy_username or "").strip(),
-            "proxy_password": str(payload.proxy_password or "").strip(),
-            "browser_preference": browser_pref,
-        })
-        cfg = ensure_upload_account_profile(
-            channel_code,
-            account_key=account_key,
-            overrides={
-                "browser_preference": browser_pref,
-                "network_mode": network_mode,
-                "proxy_server": str(payload.proxy_server or "").strip(),
-                "proxy_username": str(payload.proxy_username or "").strip(),
-                "proxy_password": str(payload.proxy_password or "").strip(),
-                "tiktok_username": tiktok_user,
-                "tiktok_password": tiktok_pass,
-                "mail_username": mail_user,
-                "mail_password": mail_pass,
-                "login_username": tiktok_user,
-                "login_password": tiktok_pass,
-                "video_input_dir": str(resolved_output_dir),
-            },
-        )
+    _write_channel_settings(base, channel_code, {
+        "video_output_subdir": output_subdir,
+        "default_video_input_dir": output_subdir,
+        "schedule_slots": slots,
+        "network_mode": network_mode,
+        "proxy_server": str(payload.proxy_server or "").strip(),
+        "proxy_username": str(payload.proxy_username or "").strip(),
+        "proxy_password": str(payload.proxy_password or "").strip(),
+        "browser_preference": browser_pref,
+    })
+    cfg = _write_channel_profile(base, channel_code, account_key, browser_pref, {
+        "browser_preference": browser_pref,
+        "network_mode": network_mode,
+        "proxy_server": str(payload.proxy_server or "").strip(),
+        "proxy_username": str(payload.proxy_username or "").strip(),
+        "proxy_password": str(payload.proxy_password or "").strip(),
+        "tiktok_username": tiktok_user,
+        "tiktok_password": tiktok_pass,
+        "mail_username": mail_user,
+        "mail_password": mail_pass,
+        "login_username": tiktok_user,
+        "login_password": tiktok_pass,
+        "video_input_dir": str(resolved_output_dir),
+    })
 
     hashtags_raw = str(payload.default_hashtags or "").strip()
     if hashtags_raw:
@@ -330,22 +292,6 @@ def create_channel(payload: ChannelCreate):
 
     effective_key = cfg.get("account_key", account_key)
     copied_installers = _seed_portable_installers_to_channel(base)
-    bootstrap_root = str(base.parent.resolve()) if custom_root else None
-    try:
-        bootstrap_info = bootstrap_portable_runtime_for_channel(
-            channel_code=channel_code,
-            account_key=str(effective_key),
-            browser_preference=browser_pref,
-            root_path=bootstrap_root,
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Create channel failed at portable bootstrap. "
-                f"Please verify installer/runtime under '{base / 'browser-profile'}'. Error: {e}"
-            ),
-        ) from e
 
     return {
         "status": "ok",
@@ -356,7 +302,6 @@ def create_channel(payload: ChannelCreate):
         "profile_config": str(base / "account" / "profiles" / str(effective_key) / "account.json"),
         "upload_settings": str(base / "account" / "upload_settings.json"),
         "portable_installers_seeded": copied_installers,
-        "portable_bootstrap": bootstrap_info,
     }
 
 
@@ -376,7 +321,13 @@ def channel_info(channel_code: str, root_path: str = ""):
                 pass
     else:
         base = ensure_channel(channel_code)
-        settings = load_upload_settings(channel_code)
+        settings_path = base / "account" / "upload_settings.json"
+        settings = {}
+        if settings_path.exists():
+            try:
+                settings = json.loads(settings_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
 
     render_subdir = str(settings.get("default_video_input_dir") or settings.get("video_output_subdir") or "video_out").strip()
     render_subdir = render_subdir.replace("\\", "/").strip("/") or "video_out"

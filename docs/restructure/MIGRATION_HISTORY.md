@@ -736,3 +736,54 @@ Phase 4F.4 added 44 new passing tests (`test_platform_repo.py`).
 The 8 persistent failures are pre-existing — unchanged.
 
 Phase 4F.5A added 9 new passing tests (`test_upload_entrypoints_removed.py`).
+
+---
+
+## Phase 4F.5B — Remove Upload Engine + Channels Dependency
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Second deletion sub-phase of upload domain removal. Delete `upload_engine.py`, decouple `channels.py` from it, and remove stale `/api/upload/` fetch calls from frontend JS files used by the render UI.
+
+**Shipped changes**:
+- `backend/app/services/upload_engine.py`: **deleted** (1,793 lines, Playwright TikTok automation).
+- `backend/app/routes/channels.py`:
+  - Removed `from app.services.upload_engine import (load_upload_settings, save_upload_settings, ensure_upload_account_profile, bootstrap_portable_runtime_for_channel)` import block.
+  - Unified `create_channel` to always use the local `_write_channel_settings()` and `_write_channel_profile()` helpers (removed the if/else that used upload_engine functions for the non-custom-root path).
+  - Removed `bootstrap_portable_runtime_for_channel` call and its `HTTPException` wrapper. Removed `bootstrap_root` variable.
+  - Removed `portable_bootstrap` key from response.
+  - In `channel_info`: replaced `load_upload_settings(channel_code)` with direct JSON file read (same pattern as the custom-root branch — reads `base / "account" / "upload_settings.json"` directly).
+- `backend/static/js/render-engine.js`: Removed 9 upload-specific functions: `collectUploadPayload`, `uploadStageLabel`, `uploadPipelineState`, `renderUploadPipeline`, `setUploadAction`, `renderUploadRun`, `ensureUploadAccount`, `checkUploadLoginStatus`, `startLogin`, `_stopUploadWs` (~248 lines removed). These included 3 `/api/upload/` fetch calls (`/accounts/ensure`, `/login/check`, `/login/start`).
+- `backend/static/js/render-ui.js`: Removed 5 upload queue functions: `addRenderClipToUploadQueue`, `loadUploadQueueLegacy`, `loadUploadQueue`, `runUploadQueueItem`, `cancelUploadQueueItem` (~145 lines removed). These included 5 `/api/upload/` fetch calls (`/queue/add`, `/queue`, `/queue/{id}/run`, `/queue/{id}/cancel`).
+- New test file: `backend/tests/test_upload_engine_removed.py` — 11 tests: upload_engine.py file deleted, channels.py source contains no upload_engine references (5 symbol checks), channels module imports cleanly, upload_engine not importable, upload routes still absent from app, render-engine.js and render-ui.js contain no `/api/upload/` fetch calls.
+
+**Remaining upload code intentionally left for later phases**:
+- `backend/app/routes/upload.py` — file still on disk, dead (4F.5C scope)
+- `backend/app/services/db.py` upload DB functions (~1,000 lines) — still present (4F.5C scope)
+- `backend/app/db/platform_repo.py` — still present (4F.5C scope)
+- Upload tables in `init_db()` — still created on startup (4F.5D scope)
+- `globals.js` upload-related global variables — harmless orphans, deferred cleanup
+- `channels.js` `refreshUploadValidationState()` call and `render-config.js` `syncUploadJsonModeUI()` calls — already broken since Phase 4F.5A (functions were defined in deleted upload-manager.js/upload-config.js); deferred cleanup
+
+**Remaining `/api/upload-file` calls**: Two calls in `editor-audio-runtime.js` and `editor-view.js` use `/api/upload-file` (hyphen, not domain path). These are file-upload endpoints for the editor, completely unrelated to the TikTok upload domain — intentionally untouched.
+
+**Note**: `dev_commands.py` and `qa_runner.py` have string references to `upload_engine.py` in file-path routing tables (not Python imports). These are safe — devtools are disabled by default, and `dev_commands.py` already handles `upload_engine.py not found` gracefully.
+
+**Contracts maintained**:
+- `channels.py` channel creation and info endpoints remain functional. Local `_write_channel_settings` and `_write_channel_profile` helpers produce equivalent output to the removed upload_engine functions for the channel creation use case.
+- All non-upload routes, render pipeline, and job management unaffected.
+- No DB schema changed. No upload DB functions removed. `services/db.py` unchanged.
+
+---
+
+## Test Suite State (Post Phase 4F.5B)
+
+```
+6223 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing — unchanged.
+
+Phase 4F.5B added 11 new passing tests (`test_upload_engine_removed.py`).

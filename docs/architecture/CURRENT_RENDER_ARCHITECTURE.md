@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4F.5A; upload router unregistered, frontend entry points removed; upload DB code remains for 4F.5B–D)
+**Last updated**: 2026-05-22 (post Phase 4F.5B; upload router unregistered, frontend entry points removed, upload_engine.py deleted, channels.py upload_engine dependency removed; upload DB code remains for 4F.5C–D)
 
 ---
 

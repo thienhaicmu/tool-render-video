@@ -86,6 +86,8 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Phase 4F.5A shipped (2026-05-22)**: Upload router unregistered from `main.py` (import + `include_router` removed). Upload frontend entry points removed: `upload-manager.js` (5,397 lines), `upload-config.js` (713 lines), `upload-engine.js` (114 lines) deleted; 3 `<script>` tags removed from `index.html`. Upload API now returns 404. Render pipeline and all non-upload routes unaffected. `routes/upload.py`, `upload_engine.py`, upload DB functions, and upload tables intentionally left for Phases 4F.5B–D. 9 new tests in `test_upload_entrypoints_removed.py`.
 
+**Phase 4F.5B shipped (2026-05-22)**: `services/upload_engine.py` (1,793 lines; Playwright TikTok automation) deleted. `routes/channels.py` upload_engine imports removed; `create_channel` unified to always use local `_write_channel_settings`/`_write_channel_profile` helpers; `bootstrap_portable_runtime_for_channel` call removed; `channel_info` replaced `load_upload_settings` with direct JSON file read. `render-engine.js` upload block removed (~248 lines; `collectUploadPayload` through `_stopUploadWs`, 3 `/api/upload/` fetch calls). `render-ui.js` upload queue block removed (~145 lines; `addRenderClipToUploadQueue` through `cancelUploadQueueItem`, 5 `/api/upload/` fetch calls). `routes/upload.py`, upload DB functions, and upload tables intentionally left for Phases 4F.5C–D. 11 new tests in `test_upload_engine_removed.py`.
+
 ---
 
 ### H2. No Test Coverage for Core Pipeline

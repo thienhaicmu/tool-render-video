@@ -1,6 +1,6 @@
 # PHASE_4F_5_UPLOAD_DOMAIN_REMOVAL_AUDIT.md
 
-**Status**: PHASE 4F.5A SHIPPED — upload router unregistered, frontend entry points removed
+**Status**: PHASE 4F.5B SHIPPED — upload_engine.py deleted, channels.py decoupled, frontend /api/upload fetch calls removed
 **Date**: 2026-05-22
 **Branch**: `restructure/output-timeline-architecture`
 

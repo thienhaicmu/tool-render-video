@@ -1,7 +1,7 @@
 # PHASE_4F_DB_SPLIT_PLAN.md
 
-**Status**: IN PROGRESS (Phase 4F.1–4F.4 SHIPPED, Phase 4F.5 AUDIT COMPLETE, Phase 4F.5A SHIPPED — upload router + frontend entry points removed)
-**Last updated**: 2026-05-22 (post Phase 4F.5A)
+**Status**: IN PROGRESS (Phase 4F.1–4F.4 SHIPPED, Phase 4F.5 AUDIT COMPLETE, Phase 4F.5A–B SHIPPED — upload router, frontend, engine, and channels dependency removed)
+**Last updated**: 2026-05-22 (post Phase 4F.5B)
 **Branch**: `restructure/output-timeline-architecture`
 
 Phase 4F.0 was planning only. Phase 4F.1 has been shipped — see [MIGRATION_HISTORY.md](MIGRATION_HISTORY.md) for details.
