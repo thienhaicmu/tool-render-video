@@ -76,6 +76,12 @@ class BaseClipManifest:
     base_clip_has_audio: Optional[bool] = field(default=None)
     base_clip_created_at: Optional[float] = field(default=None)
 
+    # Overlay composite artifact — populated when FEATURE_OVERLAY_AFTER_BASE_CLIP=1
+    # Subtitle overlay applied to base_clip in output-timeline time.
+    overlay_srt_path: Optional[str] = field(default=None)
+    overlay_ass_path: Optional[str] = field(default=None)
+    overlay_rendered_path: Optional[str] = field(default=None)
+
     # ------------------------------------------------------------------
     # Serialization
     # ------------------------------------------------------------------
@@ -112,6 +118,9 @@ class BaseClipManifest:
             "base_clip_height": self.base_clip_height,
             "base_clip_has_audio": self.base_clip_has_audio,
             "base_clip_created_at": self.base_clip_created_at,
+            "overlay_srt_path": self.overlay_srt_path,
+            "overlay_ass_path": self.overlay_ass_path,
+            "overlay_rendered_path": self.overlay_rendered_path,
         }
 
     @classmethod
@@ -147,4 +156,7 @@ class BaseClipManifest:
             base_clip_height=int(d["base_clip_height"]) if d.get("base_clip_height") is not None else None,
             base_clip_has_audio=bool(d["base_clip_has_audio"]) if d.get("base_clip_has_audio") is not None else None,
             base_clip_created_at=float(d["base_clip_created_at"]) if d.get("base_clip_created_at") is not None else None,
+            overlay_srt_path=d.get("overlay_srt_path"),
+            overlay_ass_path=d.get("overlay_ass_path"),
+            overlay_rendered_path=d.get("overlay_rendered_path"),
         )

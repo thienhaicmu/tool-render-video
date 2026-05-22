@@ -1312,6 +1312,111 @@ def render_base_clip(
     }
 
 
+def composite_overlays_on_base_clip(
+    base_clip_path: str,
+    output_path: str,
+    timeline: TimelineMap,
+    subtitle_ass: str | None = None,
+    video_codec: str = "h264",
+    video_crf: int = 18,
+    video_preset: str = "slow",
+    audio_bitrate: str = "192k",
+    retry_count: int = 2,
+    encoder_mode: str = "auto",
+    ffmpeg_threads: int | None = None,
+) -> dict:
+    """Burn output-timeline subtitle overlays onto a pre-processed base clip.
+
+    The base clip is already speed-adjusted, cropped, color-processed, and
+    audio-adjusted by render_base_clip(). This compositor only applies subtitle
+    burn-in — no setpts, no atempo, no crop, no scale, no color grading.
+
+    When subtitle_ass is None, both streams are copied without re-encode.
+    Audio is always copied; the audio track in base_clip.mp4 is already at
+    the correct speed and bitrate from render_base_clip().
+
+    Returns a metadata dict: path, duration, fps, width, height, has_audio.
+    """
+    if subtitle_ass is None:
+        # No overlay to apply — stream copy preserves all base_clip quality.
+        cmd = [
+            get_ffmpeg_bin(), "-y",
+            "-i", base_clip_path,
+            "-c:v", "copy",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            output_path,
+        ]
+        _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
+    else:
+        # Output-timeline subtitles are required because base_clip.mp4 has
+        # already been re-clocked from source time. No setpts in this chain.
+        safe_ass = _safe_filter_path(str(Path(subtitle_ass).resolve()))
+        vf_chain = f"ass='{safe_ass}'"
+
+        resolved_codec = _resolve_codec(video_codec, encoder_mode=encoder_mode)
+        resolved_preset = _map_preset_for_encoder(video_preset, resolved_codec)
+        _threads = ffmpeg_threads if ffmpeg_threads is not None else resolve_ffmpeg_threads()
+
+        codec_flags = [
+            "-c:v", resolved_codec, "-preset", resolved_preset,
+            *_codec_extra_flags(resolved_codec, int(video_crf), video_preset),
+            "-threads", str(_threads),
+            "-pix_fmt", "yuv420p",
+            "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+            "-movflags", "+faststart",
+        ]
+        cmd = [
+            get_ffmpeg_bin(), "-y",
+            "-i", base_clip_path,
+            "-vf", vf_chain,
+            *codec_flags,
+            "-c:a", "copy",
+            output_path,
+        ]
+
+        if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
+            try:
+                with NVENC_SEMAPHORE:
+                    _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
+            except Exception as _nvenc_err:
+                logger.warning(
+                    "NVENC overlay composite failed (%s), falling back to CPU for %s",
+                    _nvenc_err, Path(output_path).name,
+                )
+                cpu_codec = "libx265" if str(video_codec).lower() == "h265" else "libx264"
+                cpu_preset = _map_preset_for_encoder(video_preset, cpu_codec)
+                cpu_flags = [
+                    "-c:v", cpu_codec, "-preset", cpu_preset,
+                    *_codec_extra_flags(cpu_codec, int(video_crf), video_preset),
+                    "-threads", str(_threads),
+                    "-pix_fmt", "yuv420p",
+                    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+                    "-movflags", "+faststart",
+                ]
+                cpu_cmd = [
+                    get_ffmpeg_bin(), "-y",
+                    "-i", base_clip_path,
+                    "-vf", vf_chain,
+                    *cpu_flags,
+                    "-c:a", "copy",
+                    output_path,
+                ]
+                _run_ffmpeg_with_retry(cpu_cmd, retry_count=retry_count)
+        else:
+            _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
+
+    meta = probe_video_metadata(output_path)
+    return {
+        "path": output_path,
+        "duration": meta.get("duration"),
+        "fps": meta.get("fps"),
+        "width": meta.get("width"),
+        "height": meta.get("height"),
+        "has_audio": bool(meta.get("has_audio", False)),
+    }
+
+
 def render_part_smart(
     input_path: str,
     output_path: str,

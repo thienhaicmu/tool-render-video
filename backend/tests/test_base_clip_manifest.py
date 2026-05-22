@@ -257,3 +257,75 @@ class TestBaseClipManifestBaseClipFields:
         m.base_clip_has_audio = False
         restored = BaseClipManifest.from_dict(m.to_dict())
         assert restored.base_clip_has_audio is False
+
+
+class TestBaseClipManifestOverlayFields:
+    def test_overlay_fields_none_by_default(self):
+        m = _sample_manifest()
+        assert m.overlay_srt_path is None
+        assert m.overlay_ass_path is None
+        assert m.overlay_rendered_path is None
+
+    def test_overlay_fields_in_to_dict(self):
+        d = _sample_manifest().to_dict()
+        overlay_keys = {"overlay_srt_path", "overlay_ass_path", "overlay_rendered_path"}
+        assert overlay_keys.issubset(d.keys())
+
+    def test_overlay_fields_none_serialize_as_none(self):
+        d = _sample_manifest().to_dict()
+        for key in ("overlay_srt_path", "overlay_ass_path", "overlay_rendered_path"):
+            assert d[key] is None, f"Expected None for {key}, got {d[key]!r}"
+
+    def test_overlay_fields_round_trip(self):
+        m = _sample_manifest()
+        m.overlay_srt_path = "/tmp/part_1/subtitle_output_timeline.srt"
+        m.overlay_ass_path = "/tmp/part_1/subtitle_output_timeline.ass"
+        m.overlay_rendered_path = "/tmp/output/final_part_001.mp4"
+        restored = BaseClipManifest.from_dict(m.to_dict())
+        assert restored.overlay_srt_path == "/tmp/part_1/subtitle_output_timeline.srt"
+        assert restored.overlay_ass_path == "/tmp/part_1/subtitle_output_timeline.ass"
+        assert restored.overlay_rendered_path == "/tmp/output/final_part_001.mp4"
+
+    def test_overlay_srt_in_to_dict_is_json_serializable(self):
+        m = _sample_manifest()
+        m.overlay_srt_path = "/tmp/subtitle_output_timeline.srt"
+        m.overlay_ass_path = "/tmp/subtitle_output_timeline.ass"
+        m.overlay_rendered_path = "/tmp/final.mp4"
+        import json
+        json.dumps(m.to_dict())  # must not raise
+
+    def test_from_dict_backward_compat_missing_overlay_fields(self):
+        """Old manifest dicts without overlay_* keys deserialize with None defaults."""
+        old_dict = _sample_manifest().to_dict()
+        for key in ("overlay_srt_path", "overlay_ass_path", "overlay_rendered_path"):
+            old_dict.pop(key, None)
+        restored = BaseClipManifest.from_dict(old_dict)
+        assert restored.overlay_srt_path is None
+        assert restored.overlay_ass_path is None
+        assert restored.overlay_rendered_path is None
+
+    def test_from_dict_backward_compat_missing_all_overlay_and_base_clip_fields(self):
+        """Very old manifest dict (no base_clip_* or overlay_*) deserializes cleanly."""
+        old_dict = _sample_manifest().to_dict()
+        for key in (
+            "base_clip_path", "base_clip_duration", "base_clip_fps",
+            "base_clip_width", "base_clip_height", "base_clip_has_audio",
+            "base_clip_created_at",
+            "overlay_srt_path", "overlay_ass_path", "overlay_rendered_path",
+        ):
+            old_dict.pop(key, None)
+        restored = BaseClipManifest.from_dict(old_dict)
+        assert restored.base_clip_path is None
+        assert restored.overlay_srt_path is None
+        assert restored.overlay_ass_path is None
+        assert restored.overlay_rendered_path is None
+
+    def test_overlay_rendered_path_independent_of_rendered_path(self):
+        """overlay_rendered_path and rendered_path can be set independently."""
+        m = _sample_manifest()
+        m.rendered_path = "/tmp/rendered_by_smart.mp4"
+        m.overlay_rendered_path = "/tmp/rendered_by_composite.mp4"
+        assert m.rendered_path != m.overlay_rendered_path
+        restored = BaseClipManifest.from_dict(m.to_dict())
+        assert restored.rendered_path == "/tmp/rendered_by_smart.mp4"
+        assert restored.overlay_rendered_path == "/tmp/rendered_by_composite.mp4"

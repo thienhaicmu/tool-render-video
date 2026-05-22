@@ -24,13 +24,14 @@ from app.services.segment_builder import build_segments_from_scenes, refine_segm
 from app.services.clip_scorer import score_scenes_clip, CLIP_SCORER_VERSION
 from app.services.subtitle_engine import (
     srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time,
-    slice_srt_to_text, has_audio_stream, apply_market_line_break_to_srt,
+    slice_srt_to_text, slice_srt_to_output_timeline,
+    has_audio_stream, apply_market_line_break_to_srt,
     apply_market_hook_text_to_srt, apply_hook_subtitle_format, resolve_hook_overlay_text,
     subtitle_emphasis_pass, parse_srt_blocks, write_srt_blocks,
     resegment_srt_for_readability,
 )
 from app.services.subtitle_transcription_adapters import transcribe_with_adapter
-from app.services.render_engine import cut_video, render_part_smart, render_base_clip, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event, content_type_crf_delta as _crf_delta_for_content_type, extract_thumbnail_frame
+from app.services.render_engine import cut_video, render_part_smart, render_base_clip, composite_overlays_on_base_clip, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event, content_type_crf_delta as _crf_delta_for_content_type, extract_thumbnail_frame
 from app.services import cancel_registry
 from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
 from app.services.viral_scorer import score_segments, apply_retention_proxy
@@ -56,8 +57,13 @@ from app.services.manifest_writer import write_manifest, manifest_path as _manif
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
 # final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
 # The base clip is never fed into the final output — render_part_smart() always
-# produces the final video.
+# produces the final video unless FEATURE_OVERLAY_AFTER_BASE_CLIP is also enabled.
 _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
+
+# Feature flag: composite subtitle overlays onto base_clip.mp4 as the final output.
+# Requires FEATURE_BASE_CLIP_FIRST=1.  OFF by default.
+# When both flags are ON: overlay composite path → fallback render_part_smart() on failure.
+_FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
 
 logger = logging.getLogger("app.render")
 
@@ -4336,9 +4342,20 @@ def run_render_pipeline(
                     )
                 except Exception:
                     _motion_ck = None
+            # When FEATURE_OVERLAY_AFTER_BASE_CLIP is set without FEATURE_BASE_CLIP_FIRST,
+            # the overlay has no base clip to work with — warn once per part and fall back.
+            if _FEATURE_OVERLAY_AFTER_BASE_CLIP and not _FEATURE_BASE_CLIP_FIRST:
+                logger.warning(
+                    "overlay_flag_ignored job_id=%s part=%d: "
+                    "FEATURE_OVERLAY_AFTER_BASE_CLIP=1 requires FEATURE_BASE_CLIP_FIRST=1 "
+                    "— using render_part_smart() for final output",
+                    job_id, idx,
+                )
+
             # When FEATURE_BASE_CLIP_FIRST is enabled, render a no-overlay base clip
-            # as a parallel validation artifact.  render_part_smart() always runs
-            # unconditionally below — the base clip is never the final output.
+            # as a parallel artifact.  The base clip feeds the overlay composite when
+            # FEATURE_OVERLAY_AFTER_BASE_CLIP is also enabled; otherwise it is a
+            # parallel validation artifact only and render_part_smart() produces the output.
             if _FEATURE_BASE_CLIP_FIRST:
                 _base_clip_out = work_dir / f"part_{idx}" / "base_clip.mp4"
                 try:
@@ -4383,8 +4400,84 @@ def run_render_pipeline(
                         "base_clip_render_failed part=%d err=%s — render_part_smart continues",
                         idx, _bc_err,
                     )
+
+            # Overlay composite: burn output-timeline subtitles onto the base clip.
+            # Only activates when both feature flags are ON and base clip was produced.
+            _overlay_composite_succeeded = False
+            if (
+                _FEATURE_BASE_CLIP_FIRST
+                and _FEATURE_OVERLAY_AFTER_BASE_CLIP
+                and _part_manifest.base_clip_path is not None
+            ):
+                _overlay_dir = Path(_part_manifest.base_clip_path).parent
+                _overlay_srt = _overlay_dir / "subtitle_output_timeline.srt"
+                _overlay_ass = _overlay_dir / "subtitle_output_timeline.ass"
+                try:
+                    _overlay_ass_path: "str | None" = None
+                    if part_subtitle_enabled and full_srt_available and full_srt.exists():
+                        _ot_meta = slice_srt_to_output_timeline(
+                            source_srt_path=str(full_srt),
+                            output_srt_path=str(_overlay_srt),
+                            source_start=_part_timeline.source_start,
+                            source_end=_part_timeline.source_end,
+                            timeline=_part_timeline,
+                        )
+                        if _ot_meta.get("subtitle_count", 0) > 0:
+                            _overlay_play_res_y = _aspect_play_res_y(payload.aspect_ratio)
+                            _overlay_margin_v = getattr(payload, "sub_margin_v", 180)
+                            if (
+                                not payload.motion_aware_crop
+                                and seg.get("content_type_hint") in ("interview", "commentary")
+                            ):
+                                _overlay_margin_v += 40
+                            srt_to_ass_bounce(
+                                str(_overlay_srt),
+                                str(_overlay_ass),
+                                subtitle_style=_effective_subtitle_style,
+                                scale_y=payload.frame_scale_y,
+                                font_name=getattr(payload, "sub_font", "Bungee"),
+                                font_size=getattr(payload, "sub_font_size", 0),
+                                margin_v=_overlay_margin_v,
+                                play_res_y=_overlay_play_res_y,
+                                play_res_x=1080,
+                                x_percent=getattr(payload, "sub_x_percent", 50.0),
+                                highlight_per_word=getattr(payload, "highlight_per_word", True),
+                            )
+                            _overlay_ass_path = str(_overlay_ass)
+                            _part_manifest.overlay_srt_path = str(_overlay_srt)
+                            _part_manifest.overlay_ass_path = str(_overlay_ass)
+
+                    _oc_meta = composite_overlays_on_base_clip(
+                        base_clip_path=_part_manifest.base_clip_path,
+                        output_path=str(final_part),
+                        timeline=_part_timeline,
+                        subtitle_ass=_overlay_ass_path,
+                        video_codec=payload.video_codec,
+                        video_crf=_part_video_crf,
+                        video_preset=tuned["video_preset"],
+                        audio_bitrate=payload.audio_bitrate,
+                        retry_count=retry_count,
+                        encoder_mode=payload.encoder_mode,
+                        ffmpeg_threads=_ffmpeg_threads,
+                    )
+                    _part_manifest.overlay_rendered_path = str(final_part)
+                    _part_manifest.rendered_path = str(final_part)
+                    write_manifest(work_dir, _part_manifest)
+                    logger.info(
+                        "overlay_composite_succeeded part=%d path=%s subtitle=%s",
+                        idx, final_part, _overlay_ass_path is not None,
+                    )
+                    _overlay_composite_succeeded = True
+                except Exception as _oc_err:
+                    logger.warning(
+                        "overlay_composite_failed job_id=%s part=%d base_clip=%s err=%s "
+                        "— falling back to render_part_smart",
+                        job_id, idx, _part_manifest.base_clip_path, _oc_err,
+                    )
+
             try:
-                render_part_smart(
+                if not _overlay_composite_succeeded:
+                    render_part_smart(
                     str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if payload.add_title_overlay else "",
                     payload.aspect_ratio, payload.frame_scale_x, payload.frame_scale_y,
                     payload.motion_aware_crop,
