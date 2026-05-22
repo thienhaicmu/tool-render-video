@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4H.0 planning; routes/render.py audited — 9 clusters identified; plan at docs/restructure/PHASE_4H_ROUTE_CLEANUP_PLAN.md; no backend code changed)
+**Last updated**: 2026-05-22 (post Phase 4H.1; services/preview/ffmpeg_probers.py created; 6 FFmpeg probe helpers extracted from routes/render.py; routes/render.py reduced 1,369→1,205 lines)
 
 ---
 
@@ -31,6 +31,8 @@ Electron shell
               │     ├── ass_core.py — _ass_time, _ass_escape_text, srt_to_ass_bounce, srt_to_ass_karaoke, burn_subtitle_onto_video, render_subtitle_preview (Phase 4G.4)
               │     ├── text_transforms.py — resolve_hook_overlay_text, apply_market_hook_text_to_srt, apply_hook_subtitle_format, format_hook_subtitle, apply_market_line_break_to_srt, apply_subtitle_execution_hints (Phase 4G.5)
               │     └── transcription.py — _MODEL_CACHE, get_whisper_model, _get_transcribe_lock, transcribe_to_srt, extract_audio_for_transcription, has_audio_stream (Phase 4G.6)
+              ├── services/preview/ (Phase 4H.1)
+              │     └── ffmpeg_probers.py — _probe_video_codec, _probe_preview_profile, _is_browser_safe_preview, _ensure_h264_preview, _run_ffmpeg_checked, _detect_leading_black_duration (Phase 4H.1)
               ├── db/ (Phase 4F COMPLETE) — app/db/connection.py (get_conn, init_db, thread-local, _drop_upload_tables), app/db/jobs_repo.py (upsert_job, update_job_progress, job parts CRUD), app/db/creator_repo.py (get_creator_prefs, upsert_creator_prefs); platform_repo.py DELETED (4F.5C), uploads_repo CANCELLED (upload domain removed instead)
               └── SQLite — job/parts state, upload queue
 ```

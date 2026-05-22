@@ -1,7 +1,7 @@
 # PHASE_4H_ROUTE_CLEANUP_PLAN.md
 
 **Planning document for routes/render.py cleanup.**
-**Status**: PLANNING — no backend code changed.
+**Status**: IN PROGRESS — Phase 4H.1 shipped (2026-05-22); Phase 4H.2–4H.5 pending.
 **Created**: 2026-05-22
 
 ---

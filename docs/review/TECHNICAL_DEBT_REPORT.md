@@ -122,6 +122,8 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Phase 4H.0 planning (2026-05-22)**: `routes/render.py` audited. 9 clusters and all module-level state inventoried. 3 coupling constraints documented (evict called from main.py; session callbacks passed to render pipeline; batch inner closure). Target modules: `services/preview/ffmpeg_probers.py`, `services/preview/session_service.py`, `services/render/batch_service.py`. Plan: `docs/restructure/PHASE_4H_ROUTE_CLEANUP_PLAN.md`. No backend code changed.
 
+**Phase 4H.1 shipped (2026-05-22)**: `services/preview/ffmpeg_probers.py` created — 6 FFmpeg probe helpers extracted verbatim. `routes/render.py` reduced from ~1,369 → 1,205 lines (−164 lines). 44 new tests in `test_preview_ffmpeg_probers.py` — all pass. Same-object identity preserved. No API changes.
+
 ---
 
 ### H3. RAG Memory Not Connected to Production Render
