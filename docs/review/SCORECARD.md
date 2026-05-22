@@ -207,7 +207,7 @@ Scores are 1–10. Based exclusively on code reviewed during this session. No as
 
 ### 9. Subtitle system — 4/10
 
-**What was scored**: `backend/app/services/subtitle_engine.py` (now a pure ~45-line re-export shim post Phase 4G.6; all logic lives in `app/services/subtitles/` package), `slice_srt_by_time()`, ASS conversion, playback speed interaction.
+**What was scored**: `backend/app/services/subtitle_engine.py` (frozen pure re-export shim post Phase 4G.7; all logic in `app/services/subtitles/` 7-module package with 388 unit tests), `slice_srt_by_time()`, ASS conversion, playback speed interaction.
 
 **Positive**:
 - `parse_srt_blocks()` / `write_srt_blocks()` round-trip SRT editing is correct.

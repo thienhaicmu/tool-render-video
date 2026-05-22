@@ -1352,3 +1352,69 @@ No imports from styles.py, readability.py, ass_core.py, or text_transforms.py.
 ```
 
 49 new tests in `test_subtitle_transcription.py` — all 49 pass (whisper mocked at module load time via `sys.modules` injection). All 8 pre-existing failures unchanged. `subtitle_engine.py` is now a pure re-export shim; no function bodies remain.
+
+---
+
+## Phase 4G.7 — Subtitle Caller Migration Audit + Compatibility Freeze
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: COMPLETE
+**Source plan**: [PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md](PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md) — Phase 4G.7 (audit + freeze)
+
+**Purpose**: Audit all callers of `subtitle_engine.py`, classify them, document the caller migration policy, and freeze the compatibility shim. No behavior changes. No forced caller migration.
+
+**Shipped changes**:
+- New test file: `backend/tests/test_subtitle_engine_compat_exports.py` — 67 tests:
+  - Shim structure (7): no function bodies, no class bodies, no `import whisper`, no `render_engine`, imports only from `subtitles.*`, no stdlib imports
+  - Public symbol presence (31): all expected symbols across all 7 clusters present and callable/accessible
+  - Same-object identity per cluster (11): one representative per cluster + 4 additional constants
+  - No upward coupling (7): no subtitle/* module imports `subtitle_engine`
+  - No `render_engine` coupling (8): no subtitle module imports `render_engine`; coupling fix verification for `transcription.py`
+  - Dependency direction (2): all shim imports from `subtitles.*`; all 7 modules referenced
+
+**Caller audit findings** (no code changes required):
+
+| Caller | File | Import | Classification |
+|---|---|---|---|
+| `render_pipeline.py:25` | `app/orchestration/render_pipeline.py` | Top-level import of 14 subtitle symbols | A — keep as-is |
+| `render_pipeline.py:3407` | `app/orchestration/render_pipeline.py` | Deferred `_hex_to_ass` | A — keep as-is |
+| `routes/subtitle.py:7` | `app/routes/subtitle.py` | `render_subtitle_preview` | A — keep as-is |
+| `routes/render.py:568` | `app/routes/render.py` | Deferred `get_whisper_model` | A — keep as-is |
+| `segment_builder.py:838` | `app/services/segment_builder.py` | Deferred `_parse_srt_blocks` | A — keep as-is |
+| `subtitle_transcription_adapters.py:17` | `app/services/subtitle_transcription_adapters.py` | `extract_audio_for_transcription, format_srt_timestamp, transcribe_to_srt` | A — keep as-is |
+| `test_ai_phase17_dynamic_subtitles.py` | `tests/` | 12× deferred `apply_subtitle_execution_hints` | C — keep as-is |
+| `test_ai_phase59a_subtitle_promotion.py` | `tests/` | `normalize_subtitle_style_id` | C — keep as-is |
+| `test_market_subtitle_linebreak.py` | `tests/` | top-level imports | C — keep as-is |
+| `test_probe_unification.py` | `tests/` | `has_audio_stream` (4 tests) | C — keep as-is |
+| All `test_subtitle_*.py` files | `tests/` | Backward-compat identity checks | C — keep as-is |
+| `test_slice_srt_to_output_timeline.py` | `tests/` | `slice_srt_to_output_timeline, parse_srt_blocks` | C — keep as-is |
+
+Zero Classification B/E/F findings. No active coupling violations. No stale doc references requiring correction.
+
+**Dependency audit — CLEAN**:
+- `subtitle_engine.py` imports ONLY from `app.services.subtitles.*`
+- No subtitle/* module imports `subtitle_engine` (no upward coupling)
+- No subtitle/* module imports `render_engine`
+- `transcription.py has_audio_stream()` imports from `render.ffmpeg_helpers` directly (coupling fix from Phase 4G.6 confirmed working)
+
+**Caller migration policy** (frozen):
+- `app.services.subtitle_engine` remains a stable compatibility shim indefinitely
+- Production callers (`render_pipeline.py`, `routes/`, `services/`) keep existing imports unchanged
+- New code should import from `app.services.subtitles.*` directly
+- Tests for new modules import new modules directly; legacy compat tests verify old import path
+- The shim will not be removed until all confirmed callers are explicitly migrated (Phase 4G.8+, not planned)
+
+**Contracts maintained**:
+- All public `subtitle_engine` exports unchanged
+- No behavior, timing, ASS rendering, or Whisper behavior changed
+- `subtitle_engine.py` is permanently frozen as a pure re-export shim
+
+---
+
+## Test Suite State (Post Phase 4G.7)
+
+```
+8 failed, 6593 passed, 1 skipped  (+67 new tests in test_subtitle_engine_compat_exports.py)
+```
+
+67 new tests in `test_subtitle_engine_compat_exports.py` — all 67 pass. All 388 subtitle package tests pass (full suite: styles 39 + srt_core 44 + output_timeline 21 + ass_core 62 + readability 57 + text_transforms 49 + transcription 49 + compat_exports 67). All 8 pre-existing failures unchanged. No new failures.

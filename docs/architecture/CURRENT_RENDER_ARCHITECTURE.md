@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4G.6; transcription.py created — Whisper/transcription cluster extracted; has_audio_stream coupling fixed to import from render.ffmpeg_helpers directly; subtitle_engine.py is now a pure ~45-line re-export shim)
+**Last updated**: 2026-05-22 (post Phase 4G.7; subtitle_engine.py frozen as compatibility shim; caller audit complete; subtitles/ package finalized with 7 modules)
 
 ---
 
