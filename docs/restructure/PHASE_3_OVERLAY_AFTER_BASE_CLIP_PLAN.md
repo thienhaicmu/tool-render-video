@@ -90,8 +90,8 @@ classified by Phase 3 disposition.
 | Overlay | Current position in vf_chain | Phase 3 disposition |
 |---|---|---|
 | `ass=` subtitle burn-in | Before `setpts` | **A — move to overlay composite in 3A** |
-| `drawtext=` title overlay | Before `setpts` | **B — stay legacy until 3B** |
-| `text_layers` (user, hook, CTA hint) | Before `setpts` | **B — stay legacy until 3B** |
+| `drawtext=` title overlay | Before `setpts` | **B — move to overlay composite in 3B (same expression; output-timeline PTS context)** |
+| `text_layers` (user, hook) | Before `setpts` | **B — move to overlay composite in 3B (hook: remove `× speed`; user layers: as-is)** |
 | `setpts=PTS/speed` | Speed step | **D — never moves; already applied in base_clip** |
 | `atempo=speed` (audio) | Audio filter | **D — never moves; already applied in base_clip** |
 | scale/crop/reframe | Video geometry | **D — never moves; already applied in base_clip** |
@@ -114,7 +114,7 @@ classified by Phase 3 disposition.
 |---|---|---|
 | `slice_srt_by_time(apply_playback_speed=False)` | Produces source-clip-time SRT for legacy burn-in | Legacy path unchanged |
 | `srt_to_ass_bounce()` / `srt_to_ass_karaoke()` | Converts source-clip SRT → ASS | Legacy path unchanged |
-| CTA block appended to SRT | Already in output-timeline seconds | Needs re-examination for Phase 3A |
+| CTA block appended to SRT | Appended to source SRT (`_ass_srt_source`) | Remains in legacy subtitle path; overlay subtitle uses `full_srt` which contains no CTA |
 
 ---
 
@@ -255,63 +255,60 @@ is a new artifact written to a new path. The legacy `srt_part` remains unchanged
 
 ### CTA block timing
 
-The `_append_cta_block_to_srt()` function appends CTA text with timestamps
-expressed as clip-relative seconds (already output-timeline style because CTA
-timing is defined in terms of perceived output duration). For Phase 3A,
-CTA blocks should be re-examined after the base output-timeline SRT is created.
-The safest initial approach: do not append CTA to the output-timeline SRT in
-Phase 3A, and re-evaluate CTA timing in Phase 3B.
+`_append_cta_block_to_srt()` appends CTA text to the per-part source SRT
+(`_ass_srt_source`). The overlay subtitle path uses `full_srt` (the full
+transcription) — CTA blocks are not present in `full_srt` and are therefore
+not included in `subtitle_output_timeline.srt`. CTA remains in the legacy
+subtitle path and is not migrated to the overlay composite in Phase 3B.
 
 ---
 
 ## 8. Text Layer Timing Strategy
 
-### Current timing model
+### Current timing model (legacy path)
 
-Text layer `start_time` / `end_time` fields in `text_overlay.py` are expressed
-in **source-clip seconds** (pre-setpts). The `drawtext` filter's
-`enable='gte(t,start_t)*lt(t,end_t)'` uses frame PTS before setpts transforms it.
+In `render_part_smart()`, text layer `start_time` / `end_time` are used as
+**source-clip seconds** (pre-setpts), because `drawtext` appears in the vf_chain
+before `setpts=PTS/speed`. The hook overlay explicitly compensates:
 
-Evidence: the hook overlay explicitly multiplies by speed:
 ```python
 # end_time is pre-setpts, so multiply by speed so the overlay
 # shows for ~1.5 s of perceived output time at any playback rate.
 _hook_end_t = round(min(2.5, 1.5 * _hook_spd), 3)
 ```
 
-User-supplied text layers have `start_time`/`end_time` set by the creator
-without explicit speed awareness. Their intended semantics are ambiguous —
-they may intend "seconds into the perceived output" or "seconds into the
-source clip."
+User-supplied text layers have `start_time`/`end_time` set by the creator in
+**output/perceived seconds** (creator intent: "show from second 2 to 5"). In the
+legacy path these are inadvertently applied as source-clip seconds, which compresses
+the display window at non-1.0 speeds. This is a pre-existing timing error in the
+legacy path and is not fixed in Phase 3B.
 
-### Migration complexity
+### Finalized Phase 3B timing model
 
-Text layer timing migration is more complex than subtitle migration because:
-1. Hook overlay timing is explicitly speed-compensated (multiply by speed for pre-setpts).
-2. User-supplied layer timing is assumed to be clip-relative but semantics are unclear.
-3. The drawtext filter `enable` expression uses PTS directly.
+Timing per overlay type on `base_clip.mp4` (PTS is already output-timeline):
 
-For overlay on base_clip.mp4 (output timeline), the correct text layer timing is:
-```
-output_t = source_clip_t / speed       (for layers defined in source-clip time)
-output_t = source_clip_t               (for layers defined in output/perceived time)
-```
+| Overlay | Legacy timing | Overlay path timing | Conversion |
+|---|---|---|---|
+| Hook overlay | `end_time = 1.5 × speed` source-clip s | `end_time = 1.5` output s | Remove `× speed` — build `_part_text_layers_overlay` separately |
+| User text_layers | `start/end` as source-clip s (wrong by accident) | `start/end` as output s (correct by intent) | None — use as-is |
+| Title drawtext | `enable='lt(t,3)'` on source-clip PTS | `enable='lt(t,3)'` on output-timeline PTS | None — same expression is correct in both contexts |
+| CTA text | Subtitle SRT block (not drawtext) | Stays in subtitle path | Not applicable |
+| Market hook text | Subtitle SRT text replacement | Stays in subtitle path | Not applicable |
 
-The hook end_time would become:
-```python
-# Legacy: 1.5 * speed (source-clip seconds, to show 1.5s of perceived output)
-# Phase 3B: 1.5       (output seconds directly)
-```
+**No shared conversion function.** There is no single `source_to_output_timeline()`
+helper for text layers because different overlay types require different handling.
+The pipeline builds two explicit variables: `_part_text_layers` (legacy, unchanged)
+and `_part_text_layers_overlay` (overlay, hook at `1.5` output s, user layers as-is).
 
-### Recommendation: staged rollout
+### Implementation plan
 
 - **Phase 3A**: No text layers in overlay composite. Subtitles only.
   `composite_overlays_on_base_clip()` accepts `text_layers=None` in Phase 3A.
-- **Phase 3B**: Add text layer support. Introduce explicit output-timeline
-  timing semantics for layer definitions. Update hook overlay construction
-  to use output-timeline seconds (remove the `* speed` factor).
-- **Phase 3B manifest addition**: Add `base_clip_overlay_text_layers` to
-  `BaseClipManifest` to record which layers were applied with what timing.
+- **Phase 3B**: Add `text_layers` and `title_text` to `composite_overlays_on_base_clip()`.
+  Build `_part_text_layers_overlay` in the pipeline: hook at `1.5` output s,
+  user layers unchanged. Title drawtext passed with unchanged `lt(t,3)` expression.
+- **Phase 3B manifest addition**: Add `overlay_text_layers_applied: Optional[int]`
+  to `BaseClipManifest` to record how many layers were applied in the overlay composite.
 
 ---
 
@@ -683,10 +680,7 @@ Required tests:
 
 After Phase 3A is stable:
 
-**Step 8**: Add output-timeline timing semantics to text layer definitions.
-  - Add a flag or transform function for Phase 3B layer timing.
-  - Update hook overlay construction: remove `* speed` factor when in overlay mode.
-  - Add text_layers support to `composite_overlays_on_base_clip()`.
+**Step 8**: Build `_part_text_layers_overlay` in `render_pipeline.py`: hook at `1.5` output seconds (not `1.5 × speed`), user layers unchanged. Add `text_layers` and `title_text` params to `composite_overlays_on_base_clip()`. No flag in layer dicts, no shared conversion function.
 
 **Step 9**: Add manifest field: `overlay_text_layers_applied`.
 
@@ -734,7 +728,7 @@ identical to the pre-Phase-2 pipeline.
 - Audio passes through unchanged.
 
 **Phase 3B (after 3A is stable in production)**: Text layer overlay.
-- Requires explicit timing model decision for user-supplied layers.
+- Timing model resolved: user layers are output/perceived time (used as-is), hook overlay uses `1.5` output seconds directly, title drawtext requires no conversion.
 - Hook overlay timing change is a behavior change (remove `* speed` factor).
 - Should not block Phase 3A.
 
@@ -757,7 +751,7 @@ Validate subtitle sync in real renders before opening Phase 3B scope.
 | Double setpts risk | Eliminated by design: no setpts in composite function |
 | Double atempo risk | Eliminated in Phase 3A: `-c:a copy` |
 | Subtitle timing | Source-clip SRT → output-timeline SRT via `/ speed` conversion |
-| Text layer timing | Deferred to Phase 3B; timing model requires explicit decision |
+| Text layer timing (Phase 3B) | Hook: `1.5` output s (no `× speed`); user layers: as-is (output/perceived intent); title `lt(t,3)`: correct in both contexts; see PHASE_3B_TEXT_LAYER_OVERLAY_PLAN.md |
 | TTS/BGM | Deferred to Phase 3C |
 | Legacy fallback | `render_part_smart()` always available; triggered on any overlay failure |
 | Frontend/API/DB impact | Zero |
