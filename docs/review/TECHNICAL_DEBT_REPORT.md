@@ -114,9 +114,9 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 ### H2b. routes/render.py Mixes Route Logic with Service Logic
 **File**: `backend/app/routes/render.py`
-**Line count**: ~1,150 lines (post Phase 4H.2)
+**Line count**: ~1,125 lines (post Phase 4H.3)
 
-**Debt**: `routes/render.py` contains at least 7 remaining responsibility clusters: source preparation, preview streaming, render job lifecycle, batch orchestration, media streaming, one-shot quick process, and 2 module-level state variables (`_ACTIVE_DOWNLOADS`, `_UUID_RE`). Non-route logic (batch runner) is still inlined in the route module. Preview session management and FFmpeg probe helpers have been extracted (Phases 4H.1–4H.2).
+**Debt**: `routes/render.py` contains at least 7 remaining responsibility clusters: source preparation, preview streaming, render job lifecycle, batch orchestration, media streaming, one-shot quick process, and 2 module-level state variables (`_ACTIVE_DOWNLOADS`, `_UUID_RE`). Non-route logic (batch runner) is still inlined as an inner closure. Media streaming route handlers remain in `routes/render.py` but their helper logic (range parsing, file iteration) has been extracted (Phase 4H.3).
 
 **Impact**: Batch runner is still an inner closure with no cancel/resume/progress. `_ACTIVE_DOWNLOADS` is route-module-local state that could move to a download service in a future phase.
 
@@ -127,6 +127,8 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 **Phase 4H.1A shipped (2026-05-22)**: `TestGetWhisperModel` ordering failures fixed. Root cause: `test_subtitle_engine_compat_exports.py` (alphabetically earlier) injected a different whisper mock into `sys.modules`, defeating `test_subtitle_transcription.py`'s `setdefault`. Fix: 3 test methods now use `mock.patch("app.services.subtitles.transcription.whisper", ...)` directly. Baseline stabilized to 8 failed / 6654 passed.
 
 **Phase 4H.2 shipped (2026-05-22)**: `services/preview/session_service.py` created — 4 session helper functions and 4 state variables extracted verbatim. `routes/render.py` reduced from 1,205 → 1,150 lines (−55 lines). `evict_stale_preview_sessions` re-exported from `routes/render.py` so `main.py` deferred import is unchanged. 17 new tests in `test_preview_session_service.py` — all pass. Singleton identity verified (`routes.render._PREVIEW_SESSIONS is session_service._PREVIEW_SESSIONS`). No API changes.
+
+**Phase 4H.3 shipped (2026-05-22)**: `services/preview/media_streaming.py` created — `_parse_range_header` (Range header parser + 416 error) and `_iter_file_bytes` (byte-range file generator) extracted from inline body of `stream_render_part_media`. `routes/render.py` reduced from 1,150 → 1,125 lines (−25 lines). Both route handlers (`stream_render_part_media`, `get_render_part_thumbnail`) remain in `routes/render.py`. 28 new tests in `test_preview_media_streaming.py` — all pass. Same-object identity verified. Range/no-range/416 behavior unchanged. No API changes.
 
 ---
 

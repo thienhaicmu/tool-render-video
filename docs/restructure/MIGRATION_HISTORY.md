@@ -1594,3 +1594,46 @@ Baseline stabilized. The 8 remaining failures are pre-existing: 4 remotion adapt
 ```
 
 17 new tests in `test_preview_session_service.py` — all 17 pass. 8 failures unchanged (pre-existing). Zero new failures introduced by Phase 4H.2.
+
+---
+
+## Phase 4H.3 — Extract Media Streaming Helpers
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED (2026-05-22)
+**Commit**: (this commit)
+
+**Purpose**: Third implementation phase of Phase 4H. Extract two media-streaming helpers from the inline body of `stream_render_part_media` in `routes/render.py` into `services/preview/media_streaming.py`. Both helper units were embedded inline (an inner closure and a range-parsing block); they are now module-level functions callable independently and covered by unit tests. Route handlers remain in `routes/render.py`. No API changes.
+
+**Pre-edit audit findings**:
+- `_iter()` inner closure (lines 1065-1075 in pre-4H.3 `routes/render.py`): iterator generator embedded inside `stream_render_part_media`; extracted as `_iter_file_bytes(path, start, end, chunk)` with `path` promoted to explicit parameter.
+- Range parsing inline block (lines 1080-1096): `re.match + HTTPException(416)` logic embedded in `stream_render_part_media`; extracted as `_parse_range_header(range_header, file_size)`.
+- `stream_render_part_media` route handler: **B — stays** (full route handler, calls helpers).
+- `get_render_part_thumbnail` route handler: **B — stays** (self-contained, no helpers to extract).
+- `preview_video` route handler: **B — stays** (different cluster, not touched).
+- `_ACTIVE_DOWNLOADS`: **C — stays** (download lifecycle state).
+- `_UUID_RE`: **C — stays** (route validation).
+
+**Shipped changes**:
+- New file: `backend/app/services/preview/media_streaming.py` (54 lines) — owns `_parse_range_header`, `_iter_file_bytes`
+- `backend/app/routes/render.py`: removed `_iter()` inner closure + range-parsing inline block from `stream_render_part_media`; added `from app.services.preview.media_streaming import _parse_range_header, _iter_file_bytes`; route handler calls helpers by name
+- New tests: `tests/test_preview_media_streaming.py` — 28 tests covering module structure (7), same-object identity (2), route handler presence (2), `_parse_range_header` (11), `_iter_file_bytes` (5), range/no-range integration (2)
+- Updated docs: `CURRENT_RENDER_ARCHITECTURE.md`, `PHASE_4H_ROUTE_CLEANUP_PLAN.md`, `TECHNICAL_DEBT_REPORT.md`
+
+**Contracts introduced**:
+- `routes.render._parse_range_header is media_streaming._parse_range_header` — same object
+- `routes.render._iter_file_bytes is media_streaming._iter_file_bytes` — same object
+- Range parsing behavior: `_parse_range_header` raises `HTTPException(416)` on invalid/out-of-range; returns `(byte1, byte2)` inclusive on success. Behavior identical to pre-extraction inline code.
+- No APIRouter, no DB, no session state in `media_streaming.py`.
+
+**Phase 4H.3 line delta**: `routes/render.py` reduced by 25 net lines (1,150 → 1,125). `media_streaming.py` created (54 lines).
+
+---
+
+## Test Suite State (Post Phase 4H.3)
+
+```
+8 failed, 6699 passed, 1 skipped  (+28 new tests from test_preview_media_streaming.py)
+```
+
+28 new tests in `test_preview_media_streaming.py` — all 28 pass. 8 failures unchanged (pre-existing). Zero new failures introduced by Phase 4H.3.

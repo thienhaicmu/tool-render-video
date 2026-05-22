@@ -47,6 +47,10 @@ from app.services.preview.session_service import (
     _cleanup_preview_session,
     evict_stale_preview_sessions,  # re-exported: main.py imports this from app.routes.render
 )
+from app.services.preview.media_streaming import (
+    _parse_range_header,
+    _iter_file_bytes,
+)
 
 router = APIRouter(prefix="/api/render", tags=["render"])
 logger = logging.getLogger("app.render")
@@ -1062,42 +1066,13 @@ def stream_render_part_media(job_id: str, part_no: int, request: Request):
     if file_size == 0:
         raise HTTPException(status_code=404, detail="Output file is empty")
 
-    def _iter(start: int, end: int, chunk: int = 1 << 16):
-        """Yield file bytes from [start, end] inclusive."""
-        with open(path, "rb") as fh:
-            fh.seek(start)
-            remaining = end - start + 1
-            while remaining > 0:
-                data = fh.read(min(chunk, remaining))
-                if not data:
-                    break
-                remaining -= len(data)
-                yield data
-
     range_header = request.headers.get("range", "").strip()
 
     if range_header:
-        m = re.match(r"bytes=(\d+)-(\d*)", range_header)
-        if not m:
-            raise HTTPException(
-                status_code=416,
-                headers={"Content-Range": f"bytes */{file_size}"},
-                detail="Range Not Satisfiable",
-            )
-        byte1 = int(m.group(1))
-        byte2 = int(m.group(2)) if m.group(2) else file_size - 1
-        byte2 = min(byte2, file_size - 1)
-
-        if byte1 > byte2 or byte1 >= file_size:
-            raise HTTPException(
-                status_code=416,
-                headers={"Content-Range": f"bytes */{file_size}"},
-                detail="Range Not Satisfiable",
-            )
-
+        byte1, byte2 = _parse_range_header(range_header, file_size)
         length = byte2 - byte1 + 1
         return StreamingResponse(
-            _iter(byte1, byte2),
+            _iter_file_bytes(path, byte1, byte2),
             status_code=206,
             media_type="video/mp4",
             headers={
@@ -1110,7 +1085,7 @@ def stream_render_part_media(job_id: str, part_no: int, request: Request):
 
     # No Range header — send the full file (still streaming, never buffered in-process)
     return StreamingResponse(
-        _iter(0, file_size - 1),
+        _iter_file_bytes(path, 0, file_size - 1),
         status_code=200,
         media_type="video/mp4",
         headers={
