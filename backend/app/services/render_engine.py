@@ -1168,8 +1168,15 @@ def render_base_clip(
     Uses timeline.effective_speed for setpts/atempo — no speed re-derivation.
     Returns a metadata dict: path, duration, fps, width, height, has_audio, created_at.
 
-    This is a parallel artifact (FEATURE_BASE_CLIP_FIRST=1).  It is never fed
-    into the final render path; render_part_smart() always produces the final output.
+    When FEATURE_BASE_CLIP_FIRST=1 only: base_clip.mp4 is a parallel validation artifact;
+    render_part_smart() still produces the final output.
+
+    When both FEATURE_BASE_CLIP_FIRST=1 and FEATURE_OVERLAY_AFTER_BASE_CLIP=1:
+    base_clip.mp4 feeds composite_overlays_on_base_clip() which produces the final output.
+
+    BGM: when reup_bgm_enable=True and reup_bgm_path points to a valid file, BGM is
+    baked into base_clip.mp4 via filter_complex. The composite streams audio via -c:a copy
+    so BGM flows through to the final output without re-encoding.
     """
     speed = _sanitize_speed(timeline.effective_speed)
 

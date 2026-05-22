@@ -1,7 +1,7 @@
 # AUDIO_PIPELINE.md
 
 **Source of truth for audio flow through the render pipeline.**
-**Last updated**: 2026-05-22 (post Phase 3B)
+**Last updated**: 2026-05-22 (post Phase 3C)
 
 ---
 
@@ -9,7 +9,7 @@
 
 | Stage | Audio operation | Owner | Applied when |
 |---|---|---|---|
-| `render_base_clip()` | atempo={speed}, loudnorm, BGM mix (Phase 3C planned) | `render_engine.py` | Overlay path, base clip |
+| `render_base_clip()` | atempo={speed}, loudnorm, BGM mix (reup_bgm_*) | `render_engine.py` | Overlay path, base clip |
 | `render_part_smart()` | atempo={speed}, loudnorm, TTS mix, BGM mix | `render_engine.py` + `audio_mix_service.py` | Legacy path, fallback |
 | `composite_overlays_on_base_clip()` | -c:a copy (stream copy) | `render_engine.py` | Overlay path, final step |
 | `mix_narration_audio()` | atempo={speed} on narration, source/narration blend | `audio_mix_service.py` | Both paths (post-render step on final_part) |
@@ -56,7 +56,7 @@ source.mp4 (source audio)
 
 **TTS narration IS mixed into the overlay output** — `mix_narration_audio()` is called on `final_part` after the composite, regardless of which path produced it. No implementation gap for narration.
 
-**BGM is NOT applied on the overlay path** (Phase 3A/3B) — `render_base_clip()` has no BGM parameters. Phase 3C will add BGM to `render_base_clip()`. See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_PLAN.md).
+**BGM is applied on the overlay path** (Phase 3C, shipped) — `render_base_clip()` accepts `reup_bgm_enable`, `reup_bgm_path`, `reup_bgm_gain`. When BGM is enabled and the file exists, it is baked into `base_clip.mp4` via `filter_complex`, then carried through the composite via `-c:a copy`. See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_PLAN.md).
 
 ---
 
@@ -83,7 +83,7 @@ Current safe design:
 - Legacy: atempo applied inside `render_part_smart()` FFmpeg audio chain
 - Overlay: atempo applied inside `render_base_clip()` FFmpeg audio chain; composite does `-c:a copy`
 
-**Risk**: If Phase 3C adds audio operations to the composite step, it MUST NOT apply atempo again. The base clip audio already has speed applied. Only loudnorm, narration mix, or BGM can be added — not atempo.
+**Invariant (enforced, Phase 3C shipped)**: `composite_overlays_on_base_clip()` MUST NOT apply atempo. The base clip audio already has speed applied in `render_base_clip()`. The composite uses only `-c:a copy`. This invariant must be maintained in all future composite extensions.
 
 ---
 
@@ -103,11 +103,10 @@ Regression tests: `TestMixNarrationAudioAtempo` in `test_phase0_hotfixes.py`.
 
 ## BGM
 
-BGM (`reup_bgm_*` params) is mixed via `filter_complex` inside `render_part_smart()`, using `_bgm_duck_filter()` (sidechaincompress when `BGM_DUCKING_ENABLED=1`).
+BGM (`reup_bgm_*` params) is mixed via `filter_complex` using `_build_audio_mix_filter()` (sidechaincompress when `BGM_DUCKING_ENABLED=1`, plain amix otherwise).
 
 **Legacy path**: BGM baked into final encode inside `render_part_smart()`. Active.  
-**Overlay path (Phase 3A/3B)**: `render_base_clip()` has no BGM parameters — BGM silently skipped.  
-**Overlay path (Phase 3C, planned)**: BGM params added to `render_base_clip()`, baked into `base_clip.mp4`, carried through composite via `-c:a copy`.
+**Overlay path (Phase 3C, shipped)**: `render_base_clip()` accepts `reup_bgm_enable/path/gain`. When BGM is enabled and the file exists, it is baked into `base_clip.mp4` via `filter_complex`, then stream-copied through the composite via `-c:a copy`.
 
 ---
 
@@ -115,9 +114,9 @@ BGM (`reup_bgm_*` params) is mixed via `filter_complex` inside `render_part_smar
 
 **Audit finding**: TTS narration mixing **already operates on the overlay path**. `mix_narration_audio()` is called on `final_part` after the render, regardless of which path (overlay or legacy) produced it. Narration requires validation and tests, not new implementation.
 
-**BGM is the sole missing feature** on the overlay path. `render_base_clip()` does not accept `reup_bgm_*` parameters. BGM is silently skipped when the overlay path is active.
+**BGM is now fully supported** on the overlay path. `render_base_clip()` accepts `reup_bgm_*` parameters (Phase 3C shipped). BGM is baked into `base_clip.mp4` and stream-copied through the composite.
 
-**Phase 3C implementation plan**: See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_PLAN.md).
+**Implementation record**: See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_PLAN.md).
 
 **Phase 3C shipped changes**:
 1. `reup_bgm_enable`, `reup_bgm_path`, `reup_bgm_gain` parameters added to `render_base_clip()`. Reuses `_build_audio_mix_filter()` helper.
@@ -138,7 +137,7 @@ BGM (`reup_bgm_*` params) is mixed via `filter_complex` inside `render_part_smar
 | Legacy path, narration enabled | Narration mixed + atempo | Correct (Phase 0 fix) |
 | Overlay path (Phase 3A/3B) | Base clip audio (-c:a copy) | Correct — atempo once |
 | Overlay path + narration enabled | Base clip audio (-c:a copy) → narration mixed post-composite | Correct — narration atempo on [1:a] only, source [0:a] gets volume only |
-| Overlay path + BGM enabled (before Phase 3C) | BGM silently skipped | Gap — Phase 3C fixes this |
+| Overlay path + BGM enabled (before Phase 3C) | BGM silently skipped | Resolved — Phase 3C shipped |
 | Overlay path + BGM enabled (after Phase 3C) | BGM baked into base_clip, stream-copied through composite | Correct — atempo on BGM once in render_base_clip |
 | Overlay path + composite audio filter | DANGER | Double-atempo if composite ever adds atempo — FORBIDDEN |
 | Fallback to render_part_smart() | Reverts to legacy, all audio rules apply | Correct |

@@ -324,9 +324,8 @@ class TestRenderBaseClipBgm:
     def test_no_bgm_input_when_disabled(self):
         """BGM disabled → no extra -i input for BGM."""
         _, captured = _call_render_base_clip(reup_bgm_enable=False)
-        cmd_str = " ".join(str(a) for a in captured[0])
-        # Only one -i flag (the input video)
-        assert cmd_str.count(" -i ") == 1 or cmd_str.startswith("-i ") or cmd_str.count("-i ") == 1
+        cmd = captured[0]
+        assert "-stream_loop" not in cmd
 
     def test_no_bgm_input_when_path_invalid(self, tmp_path):
         """BGM enabled but nonexistent path → no extra -i; no BGM mixed in."""

@@ -198,7 +198,7 @@ But the codebase has reached its limits. `render_pipeline.py` at 290KB is not a 
 
 The AI branding is a significant gap between expectation and reality. The modules are named as if they implement machine intelligence. They implement if-else scoring. This is not inherently wrong — heuristics can be effective — but the naming creates a maintenance burden when a future developer has to understand what `emotion_analyzer.py` actually does.
 
-**Updated priorities (as of 2026-05-22, post Phase 0–1.5):**
+**Updated priorities (as of 2026-05-22, post Phase 3C):**
 
 Items 1–3 from the original list are now addressed:
 
@@ -206,12 +206,13 @@ Items 1–3 from the original list are now addressed:
 2. ~~Fix TTS narration atempo compensation~~ — **Resolved (Phase 0).** `mix_narration_audio()` applies `atempo` at the correct speed. Regression tests added.
 3. ~~Add timeout to `download_youtube()`~~ — **Partially resolved (Phase 0).** `socket_timeout=60` and `cancel_event` wired. Wall-clock timeout remains open.
 
-**Current priorities, in order:**
+**Current priorities, in order (updated 2026-05-22, post Phase 3C):**
 
-1. **Validate and ship Phase 2** — `render_base_clip()` as parallel artifact; establish base clip contract and manifest fields; keep flag OFF until validated.
-2. **Add audio stream presence check to `_validate_render_output()`** — muted output currently passes QA silently.
-3. **Tighten QA duration tolerance** — ±20% allows 48s–72s on a 60s clip; a tighter ±5% would catch real encode failures.
-4. **Wire `memory_store` to `create_ai_edit_plan()`** — one-line change; the RAG system is built and tested but not active.
-5. **Add total wall-clock timeout for `download_youtube()`** — the `socket_timeout=60` is insufficient for slow-but-progressing downloads.
+Phase 2 through Phase 3C are all shipped. Overlay path (base clip + composite) is complete with BGM support, subtitle timing, text layers, and full audio invariant validation. Feature flags default OFF for cautious production rollout.
+
+1. **Add audio stream presence check to `_validate_render_output()`** — muted output currently passes QA silently.
+2. **Tighten QA duration tolerance** — ±20% allows 48s–72s on a 60s clip; a tighter ±5% would catch real encode failures.
+3. **Wire `memory_store` to `create_ai_edit_plan()`** — one-line change; the RAG system is built and tested but not active.
+4. **Add total wall-clock timeout for `download_youtube()`** — the `socket_timeout=60` is insufficient for slow-but-progressing downloads.
 
 Everything else — god files, V3/V4 frontends, FAISS persistence, broader test coverage — is important but not on fire.

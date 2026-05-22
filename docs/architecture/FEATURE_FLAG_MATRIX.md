@@ -1,7 +1,7 @@
 # FEATURE_FLAG_MATRIX.md
 
 **Source of truth for render feature flags.**
-**Last updated**: 2026-05-22 (post Phase 3B)
+**Last updated**: 2026-05-22 (post Phase 3C)
 
 ---
 
@@ -59,7 +59,7 @@ BASE_CLIP_FIRST=1, OVERLAY=1  (full overlay path)
 | Default (OFF) | `"0"` | Legacy path only: `render_part_smart()` is the sole output producer |
 | Dev/test (ON) | `"1"` | `render_base_clip()` runs first → `base_clip.mp4` (artifact); `render_part_smart()` still runs for final output |
 
-**Activation milestone**: Phase 2 shipped this flag. It is safe to enable in dev/test. Production default remains OFF until Phase 3 validates the overlay composite output quality.
+**Activation milestone**: Phase 2 shipped this flag. Phase 3 (3A–3C) is complete. Defaults remain OFF for cautious production rollout — enable with both flags set for full overlay path.
 
 ---
 
@@ -106,12 +106,14 @@ if not _overlay_composite_succeeded:
 
 ## Manifest State by Flag Combination
 
-| Flag state | `base_clip_path` | `overlay_rendered_path` | `rendered_path` | Final output |
-|---|---|---|---|---|
-| Both OFF | None | None | Part N path | `render_part_smart()` |
-| BASE=1, OVERLAY=0 | base_clip.mp4 | None | Part N path | `render_part_smart()` |
-| Both ON (success) | base_clip.mp4 | final_part.mp4 | final_part.mp4 | `composite_overlays_on_base_clip()` |
-| Both ON (composite fails) | base_clip.mp4 | None | Part N path | `render_part_smart()` (fallback) |
+| Flag state | `base_clip_path` | `base_clip_bgm_applied` | `overlay_rendered_path` | `rendered_path` | Final output |
+|---|---|---|---|---|---|
+| Both OFF | None | None | None | Part N path | `render_part_smart()` |
+| BASE=1, OVERLAY=0 | base_clip.mp4 | True/False | None | Part N path | `render_part_smart()` |
+| Both ON (success) | base_clip.mp4 | True/False | final_part.mp4 | final_part.mp4 | `composite_overlays_on_base_clip()` |
+| Both ON (composite fails) | base_clip.mp4 | True/False | None | Part N path | `render_part_smart()` (fallback) |
+
+`base_clip_bgm_applied`: `True` = BGM baked into base_clip, `False` = base clip rendered without BGM (disabled/invalid path), `None` = base clip not rendered (flag OFF or render failed).
 
 ---
 
@@ -127,6 +129,7 @@ if not _overlay_composite_succeeded:
 
 - `base_clip.mp4` exists in `work_dir/part_N/`
 - Manifest: `base_clip_path` populated, `base_clip_duration` populated
+- Manifest: `base_clip_bgm_applied` = True if BGM was enabled/valid, False otherwise
 - Final output still from `render_part_smart()`
 
 ### When BASE=1, OVERLAY=1 (composite success)
@@ -136,6 +139,7 @@ if not _overlay_composite_succeeded:
 - `final_part_NNN.mp4` exists (overlay composite output)
 - Manifest: `overlay_rendered_path` and `rendered_path` both point to `final_part_NNN.mp4`
 - Manifest: `overlay_text_layers_applied` ≥ 0
+- Manifest: `base_clip_bgm_applied` = True if BGM was enabled/valid, False otherwise
 
 ### When BASE=1, OVERLAY=1 (composite fails)
 

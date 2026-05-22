@@ -1,7 +1,7 @@
 # RENDER_BOUNDARIES.md
 
 **Source of truth for render stage ownership and forbidden responsibilities.**
-**Last updated**: 2026-05-22 (post Phase 3B)
+**Last updated**: 2026-05-22 (post Phase 3C)
 
 ---
 
@@ -9,7 +9,7 @@
 
 | Render Stage | Function | File | Owns | Forbidden |
 |---|---|---|---|---|
-| Base clip | `render_base_clip()` | `render_engine.py` | Speed, crop, reframe, effect, color, audio atempo/loudnorm, BGM mix (Phase 3C) | ass=, drawtext=, text_layers, narration |
+| Base clip | `render_base_clip()` | `render_engine.py` | Speed, crop, reframe, effect, color, audio atempo/loudnorm, BGM mix (reup_bgm_*) | ass=, drawtext=, text_layers, narration |
 | Overlay composite | `composite_overlays_on_base_clip()` | `render_engine.py` | subtitle ASS, title drawtext, text_layer drawtext, fps=, -c:a copy | setpts, atempo, crop, scale, color, effect, BGM, loudnorm |
 | Legacy all-in-one | `render_part_smart()` | `render_engine.py` | Everything (legacy path) | N/A — legacy path owns all |
 | Post-assembly | `_maybe_prepend_*`, `_maybe_append_*`, `_maybe_apply_asset_logo()` | `render_pipeline.py` | Hook intro, asset intro/outro, logo watermark | Speed re-encoding of the main clip |
@@ -27,12 +27,14 @@ MUST:
   - Apply fps=target_fps as last vf filter
   - Use TimelineMap.effective_speed (not re-derive from payload)
   - Acquire NVENC semaphore (same as render_part_smart)
+  - When reup_bgm_enable=True and path is valid: use filter_complex to bake BGM
+    into base_clip.mp4 (atempo applied once to BGM stream alongside source audio)
 
 MUST NOT:
   - Apply ass= subtitle filter
   - Apply drawtext= title or text_layers
   - Mix narration audio
-  - BGM: currently forbidden, added by Phase 3C via reup_bgm_* params
+  - Apply atempo to source audio more than once (atempo is already in the audio chain)
   - Read from or write to overlay manifest fields
 ```
 

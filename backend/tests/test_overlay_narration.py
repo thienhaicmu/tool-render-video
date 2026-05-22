@@ -15,7 +15,8 @@ This file verifies:
 from __future__ import annotations
 
 import pytest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
+from pathlib import Path
 
 import app.services.audio_mix_service as audio_mix_mod
 from app.services.audio_mix_service import mix_narration_audio
@@ -27,26 +28,42 @@ from app.services.audio_mix_service import mix_narration_audio
 
 def _call_mix_narration(
     playback_speed: float = 1.15,
-    narration_path: str = "/fake/narration.mp3",
     video_path: str = "/fake/final_part.mp4",
+    narration_audio_path: str = "/fake/narration.mp3",
+    mix_mode: str = "replace_original",
+    output_path: str = "/fake/mixed.mp4",
     **overrides,
 ):
-    """Run mix_narration_audio() with all external I/O mocked."""
+    """Run mix_narration_audio() with all external I/O mocked.
+
+    Patches subprocess.run (the actual FFmpeg call in audio_mix_service) to
+    capture the command without running FFmpeg. Also patches Path.exists and
+    Path.stat so file-presence guards pass.
+    """
     captured: list[list] = []
 
-    def _fake_run(cmd, **_kw):
+    def _fake_subprocess_run(cmd, **_kw):
         captured.append(list(cmd))
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = ""
+        result.stderr = ""
+        return result
+
+    _stat_result = MagicMock()
+    _stat_result.st_size = 1024
 
     with (
-        patch.object(audio_mix_mod, "_run_ffmpeg_with_retry", _fake_run, create=True),
+        patch("app.services.audio_mix_service.subprocess.run", side_effect=_fake_subprocess_run),
+        patch.object(audio_mix_mod, "_has_audio_stream", return_value=True),
         patch("pathlib.Path.exists", return_value=True),
-        patch("pathlib.Path.is_file", return_value=True),
-        patch("os.path.exists", return_value=True),
-        patch("os.path.isfile", return_value=True),
+        patch("pathlib.Path.stat", return_value=_stat_result),
     ):
         kwargs = dict(
             video_path=video_path,
-            narration_path=narration_path,
+            narration_audio_path=narration_audio_path,
+            mix_mode=mix_mode,
+            output_path=output_path,
             playback_speed=playback_speed,
         )
         kwargs.update(overrides)

@@ -1,7 +1,7 @@
 # OVERLAY_PIPELINE.md
 
 **Source of truth for the overlay composite pipeline.**
-**Last updated**: 2026-05-22 (post Phase 3B)
+**Last updated**: 2026-05-22 (post Phase 3C)
 
 ---
 
@@ -224,9 +224,18 @@ final_part_001.mp4  (output-timeline PTS, overlays applied)
 
 ---
 
-## Phase 3C Placeholder
+## Audio on the Overlay Path (Phase 3C shipped)
 
-Phase 3C (not yet implemented) will add TTS narration and BGM to the overlay path. Until Phase 3C ships:
-- TTS/BGM are only on `render_part_smart()` (legacy path)
-- The overlay path uses stream-copied audio from base_clip
-- Do not add audio mixing to `composite_overlays_on_base_clip()`
+Phase 3C added BGM support to the overlay path. TTS narration already operated on the overlay
+path via the post-render `mix_narration_audio()` call.
+
+**BGM**: `render_base_clip()` now accepts `reup_bgm_enable`, `reup_bgm_path`, `reup_bgm_gain`.
+When BGM is enabled and the file exists, BGM is baked into `base_clip.mp4` via `filter_complex`.
+The composite streams audio via `-c:a copy`; BGM flows through unchanged.
+
+**TTS narration**: `mix_narration_audio()` is called on `final_part` after whichever render path
+(overlay composite or legacy fallback) produced it. No separate narration step is needed in the
+composite.
+
+**Invariant**: `composite_overlays_on_base_clip()` MUST NOT add atempo, loudnorm, or BGM.
+The base clip audio is already speed-adjusted. Audio is always `-c:a copy` in the composite.
