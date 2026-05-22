@@ -1,7 +1,7 @@
 # PHASE_4A_BACKEND_MODULARIZATION_PLAN.md
 
-**Status**: PLANNING (Phase 4B SHIPPED, Phase 4C SHIPPED, Phase 4D SHIPPED, Phase 4E.1 SHIPPED)
-**Last updated**: 2026-05-22 (post Phase 4E.1)
+**Status**: PLANNING (Phase 4B SHIPPED, Phase 4C SHIPPED, Phase 4D SHIPPED, Phase 4E.1 SHIPPED, Phase 4E.2 SHIPPED)
+**Last updated**: 2026-05-22 (post Phase 4E.2)
 **Branch**: `restructure/output-timeline-architecture`
 
 This is a planning document only. No code changes are in scope. Phase 4A produces this document and updated supporting docs. Implementation begins in Phase 4B.
@@ -276,7 +276,8 @@ After each extraction, update MIGRATION_HISTORY.md and any architecture docs tha
 | 4C | Extract QA Pipeline | `_validate_render_output`, `_assess_output_quality`, output path helpers → `orchestration/qa_pipeline.py` | **Low** |
 | 4D | Extract Audio Cleanup Pipeline | `_maybe_cleanup_narration_audio` → `orchestration/audio_pipeline.py`; render event emission → `orchestration/render_events.py` | **Low-Medium** |
 | 4E.1 | Extract FFmpeg helpers | `ffmpeg_helpers.py` SHIPPED — infrastructure + filter builders extracted, render_engine re-exports | **Done** |
-| 4E.2+ | Split render_engine.py (remaining) | `clip_ops.py`, `base_clip_renderer.py`, `overlay_compositor.py`, `legacy_renderer.py` | **Medium** |
+| 4E.2 | Extract Clip Ops | `clip_ops.py` SHIPPED — `cut_video`, silence/bad-frame detect, `apply_micro_pacing` extracted | **Done** |
+| 4E.3+ | Split render_engine.py (remaining) | `base_clip_renderer.py`, `overlay_compositor.py`, `legacy_renderer.py` | **Medium** |
 | 4F | Split db.py | `db/connection.py` first, then domain repos | **Medium-High** |
 | 4G | Split subtitle_engine.py | Transcription, SRT core, ASS conversion, text processing | **Medium** |
 | 4H | Route cleanup | `preview_session.py` service, `quick_process` refactor | **Medium** |

@@ -362,3 +362,36 @@ Phase 4D added 24 new passing tests (`test_audio_pipeline.py` + `test_render_eve
 The 8 persistent failures are pre-existing — unchanged.
 
 Phase 4E.1 added 53 new passing tests (`test_ffmpeg_helpers.py`).
+
+---
+
+## Phase 4E.2 — Extract Clip Ops
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: TBD (this commit)
+
+**Purpose**: Second sub-step of render_engine.py split. Extract clip-level operations (`cut_video`, `detect_silence_trim_offset`, `detect_bad_first_frame`, `_detect_silence_segments`, `apply_micro_pacing`) from `render_engine.py` into `services/render/clip_ops.py`. Backward-compat re-exports keep all existing callers unchanged.
+
+**Shipped changes**:
+- New file: `backend/app/services/render/clip_ops.py` (304 lines) — 5 functions moved verbatim from `render_engine.py`. Imports only from `stdlib` + `bin_paths` + `render.ffmpeg_helpers`. No circular import.
+- `render_engine.py`: 5 function bodies removed; backward-compat re-exports added via `from app.services.render.clip_ops import ...`. Reduced from ~1,210 → 829 lines (−381 lines).
+- New test file: `backend/tests/test_clip_ops.py` — 43 tests: import smoke tests (new module + render_engine re-export), same-object identity checks, `cut_video` stream-copy/re-encode/drift paths, `detect_silence_trim_offset` clamping, `detect_bad_first_frame` leading-black detection, `_detect_silence_segments` parsing + cancel-event short-circuit, `apply_micro_pacing` no-op and active paths.
+
+**Contracts maintained**:
+- `clip_ops.py` imports from `render.ffmpeg_helpers` only — no import from `render_engine`. No circular import.
+- Re-exported names in `render_engine.py` are the SAME objects as in `clip_ops.py` (`is` identity).
+- Renderers in `render_engine.py` (`render_base_clip`, `composite_overlays_on_base_clip`, `render_part_smart`, `render_part`) remain in place — NOT moved in this sub-phase.
+- No function signature was changed. No call site was changed. No behavior was changed.
+
+---
+
+## Test Suite State (Post Phase 4E.2)
+
+```
+5964 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing — unchanged.
+
+Phase 4E.2 added 43 new passing tests (`test_clip_ops.py`).

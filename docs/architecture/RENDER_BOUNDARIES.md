@@ -1,7 +1,7 @@
 # RENDER_BOUNDARIES.md
 
 **Source of truth for render stage ownership and forbidden responsibilities.**
-**Last updated**: 2026-05-22 (post Phase 4E.1)
+**Last updated**: 2026-05-22 (post Phase 4E.2)
 
 ---
 
@@ -13,6 +13,7 @@
 | Overlay composite | `composite_overlays_on_base_clip()` | `render_engine.py` (Phase 4E.2: → `render/overlay_compositor.py`) | subtitle ASS, title drawtext, text_layer drawtext, fps=, -c:a copy | setpts, atempo, crop, scale, color, effect, BGM, loudnorm |
 | Legacy all-in-one | `render_part_smart()` | `render_engine.py` (Phase 4E.2: → `render/legacy_renderer.py`) | Everything (legacy path) | N/A — legacy path owns all |
 | FFmpeg infrastructure | probe, NVENC, filter builders, codec selection | `services/render/ffmpeg_helpers.py` (Phase 4E.1 SHIPPED) | Shared FFmpeg primitives | No renderer logic |
+| Clip operations | `cut_video`, `detect_silence_trim_offset`, `detect_bad_first_frame`, `apply_micro_pacing` | `services/render/clip_ops.py` (Phase 4E.2 SHIPPED) | Clip-level FFmpeg ops | No render/encode logic |
 | Post-assembly | `_maybe_prepend_*`, `_maybe_append_*`, `_maybe_apply_asset_logo()` | `render_pipeline.py` | Hook intro, asset intro/outro, logo watermark | Speed re-encoding of the main clip |
 | Narration mix | `mix_narration_audio()` | `audio_mix_service.py` | TTS atempo on narration stream, narration/source blending | atempo on source audio, setpts, crop, video |
 

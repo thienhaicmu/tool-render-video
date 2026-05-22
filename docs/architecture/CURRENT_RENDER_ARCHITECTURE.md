@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4E.1)
+**Last updated**: 2026-05-22 (post Phase 4E.2)
 
 ---
 
@@ -17,8 +17,9 @@ Electron shell
               ├── orchestration/asset_pipeline.py — post-assembly asset hooks (Phase 4B)
               ├── orchestration/qa_pipeline.py — output QA/validation helpers (Phase 4C)
               ├── orchestration/audio_pipeline.py — narration audio cleanup orchestration (Phase 4D)
-              ├── render_engine.py — renderers + backward-compat re-exports (Phase 4E.1)
+              ├── render_engine.py — renderers + backward-compat re-exports (Phase 4E.1/4E.2)
               ├── services/render/ffmpeg_helpers.py — FFmpeg infrastructure + filter builders (Phase 4E.1)
+              ├── services/render/clip_ops.py — cut_video, silence/bad-frame detect, apply_micro_pacing (Phase 4E.2)
               └── SQLite — job/parts state, upload queue
 ```
 

@@ -16,7 +16,9 @@
 
 **Phase 4D shipped (2026-05-22)**: `_maybe_cleanup_narration_audio` extracted to `orchestration/audio_pipeline.py`; `_event_from_stage`, `_resolve_job_log_dir`, `_render_progress_timer`, `_PROGRESS_TICK_SEC` moved to `orchestration/render_events.py`. `render_pipeline.py` reduced from 5,510 → 5,340 lines.
 
-**Phase 4E.1 shipped (2026-05-22)**: Shared FFmpeg infrastructure extracted from `render_engine.py` to `services/render/ffmpeg_helpers.py`. `render_engine.py` reduced from 1,652 → ~1,210 lines (−442 lines). 28 names re-exported at old location for backward compat. Next: Phase 4E.2 (render_engine renderer split). Plan: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md`.
+**Phase 4E.1 shipped (2026-05-22)**: Shared FFmpeg infrastructure extracted from `render_engine.py` to `services/render/ffmpeg_helpers.py`. `render_engine.py` reduced from 1,652 → ~1,210 lines (−442 lines). 28 names re-exported at old location for backward compat.
+
+**Phase 4E.2 shipped (2026-05-22)**: Clip operations extracted from `render_engine.py` to `services/render/clip_ops.py`. `render_engine.py` reduced from ~1,210 → 829 lines (−381 lines). 5 names re-exported at old location for backward compat. Next: Phase 4E.3 (renderer split: `base_clip_renderer.py`, `overlay_compositor.py`, `legacy_renderer.py`). Plan: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md`.
 
 ---
 
