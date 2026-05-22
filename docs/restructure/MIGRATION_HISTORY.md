@@ -1176,3 +1176,64 @@ No new tests added in Phase 4G.0 (planning only). Baseline unchanged.
 ```
 
 21 new tests in `test_subtitle_output_timeline.py`. All 8 known failures are pre-existing. Baseline maintained.
+
+---
+
+## Phase 4G.4 — Extract ASS Core
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Source plan**: [PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md](PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md) — Cluster C (ASS Core) + Cluster D visual-width stub
+
+**Purpose**: Extract ASS generation/conversion cluster from `subtitle_engine.py` into `subtitles/ass_core.py`. Also creates `subtitles/readability.py` as a minimal stub with visual-width helpers required by `srt_to_ass_bounce` — establishes the correct `ass_core → readability` dependency direction per the Phase 4G DAG.
+
+**Shipped changes**:
+- New file: `backend/app/services/subtitles/readability.py` (stub, ~70 lines):
+  - `_WIDE_CHARS`, `_NARROW_CHARS` — character width classification frozensets
+  - `_approx_visual_width` — em-unit width estimator
+  - `_break_by_visual_width` — visual-midpoint line-break for subtitle captions
+  - No subtitle package internal deps (pure Python, no imports from subtitles/)
+- New file: `backend/app/services/subtitles/ass_core.py` (~290 lines) — verbatim copy of:
+  - `_ass_time` — ASS centisecond timestamp formatter (H:MM:SS.cc)
+  - `_ass_escape_text` — safe embedding in ASS Dialogue Text; resolves `_HL_OPEN`/`_HL_CLOSE`
+  - `_ass_highlight_tags` — market-specific inline ASS color tags
+  - `srt_to_ass_bounce` — main SRT→ASS converter (bounce/viral styles)
+  - `_hex_to_ass` — CSS #RRGGBB → ASS &HAABBGGRR
+  - `srt_to_ass_karaoke` — pro karaoke-style ASS (word-level SRT, fallback to bounce)
+  - `_safe_filter_path` — FFmpeg filter path escaping
+  - `burn_subtitle_onto_video` — burn ASS onto video via ffmpeg
+  - `_PREVIEW_ASPECT_RES`, `_PREVIEW_FONTS_DIR` — preview render constants
+  - `render_subtitle_preview` — render PNG preview via ffmpeg lavfi
+- `subtitle_engine.py` edited: removed 11 ASS functions/constants + 4 visual-width helpers; added `from app.services.subtitles.readability import (...)` and `from app.services.subtitles.ass_core import (...)` re-export blocks.
+- New tests: `backend/tests/test_subtitle_ass_core.py` — 62 tests
+
+**Deferred (not moved)**:
+- `subtitle_emphasis_pass`, `resegment_srt_for_readability` — Cluster D, Phase 4G.5
+- Text transforms (`apply_market_hook_text_to_srt`, etc.) — Cluster E, Phase 4G.5
+- Transcription/Whisper cluster — Phase 4G.6
+
+**subtitle_engine.py line reduction**: 1,514 → 1,018 lines (−496)
+
+**Contracts maintained**:
+- All public `subtitle_engine` exports unchanged — same-object identity passes for all moved functions.
+- `srt_to_ass_bounce` signature, ASS output format, style line content — verbatim.
+- `srt_to_ass_karaoke` `\k` timing tags and fallback logic — verbatim.
+- `_ass_escape_text` resolves `_HL_OPEN`/`_HL_CLOSE` via shared constants from `styles.py`.
+- `_PREVIEW_FONTS_DIR` path corrected to `parents[3]` (ass_core.py is one level deeper than subtitle_engine.py).
+- No ASS output content changed. No SRT timing behavior changed. No Whisper behavior changed.
+
+**Dependency graph** (no cycles):
+```
+readability.py  → [no subtitle deps]
+ass_core.py     → styles.py + srt_core.py + readability.py
+```
+
+---
+
+## Test Suite State (Post Phase 4G.4)
+
+```
+8 failed, 6388 passed, 1 skipped  (+62 new tests in test_subtitle_ass_core.py)
+```
+
+62 new tests in `test_subtitle_ass_core.py`. All 8 known failures are pre-existing. Baseline maintained.
