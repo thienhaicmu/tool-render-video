@@ -601,3 +601,37 @@ Phase 4F.1 added 33 new passing tests (`test_db_connection.py`).
 The 8 persistent failures are pre-existing — unchanged.
 
 Phase 4F.2 added 35 new passing tests (`test_jobs_repo.py`).
+
+---
+
+## Phase 4F.3 — Extract Creator Repo
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Third implementation sub-phase of Phase 4F. Move creator preferences CRUD from `backend/app/services/db.py` into `backend/app/db/creator_repo.py`. Backward-compat re-exports keep all existing callers unchanged.
+
+**Shipped changes**:
+- New file: `backend/app/db/creator_repo.py` (~30 lines) — 2 Group E functions moved verbatim from `services/db.py`: `get_creator_prefs()`, `upsert_creator_prefs()`. Imports only from `app.db.connection` (`_json_dumps`, `_json_loads`, `get_conn`). No circular import.
+- `backend/app/services/db.py`: 2 function bodies removed; backward-compat re-exports added via `from app.db.creator_repo import (get_creator_prefs, upsert_creator_prefs)`. Reduced by ~25 lines (~1,261 → ~1,236 lines). Upload, platform, and scheduler functions NOT moved — remain in `services/db.py`.
+- New test file: `backend/tests/test_creator_repo.py` — 17 tests: import identity (2 symbols same-object `is`, module importability), `get_creator_prefs()` returns `{}` when no row exists, `upsert_creator_prefs()` creates/overwrites row, nested JSON roundtrip, empty dict roundtrip, return value equals persisted state, invalid JSON fallback (returns `{}`), NULL prefs_json fallback (returns `{}`), old import path (`app.services.db`) works end-to-end, cross-module read/write.
+
+**Contracts maintained**:
+- `app.db.creator_repo` imports from `app.db.connection` only — no import from `app.services.db`. No circular import.
+- Both re-exported names in `services/db.py` are the SAME objects as in `app.db.creator_repo` (`is` identity guaranteed).
+- No SQL, no DDL, no function signatures changed.
+- Upload domain (uploads_repo), platform repo (platform_repo) NOT moved yet — planned for 4F.4 and 4F.5.
+- 14 production callers all import from `app.services.db` — unchanged.
+
+---
+
+## Test Suite State (Post Phase 4F.3)
+
+```
+6159 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing — unchanged.
+
+Phase 4F.3 added 17 new passing tests (`test_creator_repo.py`).

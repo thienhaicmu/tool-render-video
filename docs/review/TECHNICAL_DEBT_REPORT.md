@@ -76,7 +76,9 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Phase 4F.1 shipped (2026-05-22)**: `app/db/connection.py` extracted — Group A (connection, schema, thread-local, helpers) moved verbatim. `services/db.py` re-exports all moved symbols. `services/db.py` reduced from ~1,886 → ~1,386 lines (−500 lines). 33 new tests in `test_db_connection.py`.
 
-**Phase 4F.2 shipped (2026-05-22)**: `app/db/jobs_repo.py` extracted — Group B (upsert_job, update_job_progress, delete_job, upsert_job_part, get_job, list_jobs, list_jobs_page, list_job_parts_bulk, list_job_parts) moved verbatim. `services/db.py` re-exports all 9 symbols. `services/db.py` reduced by ~145 additional lines. 35 new tests in `test_jobs_repo.py`. Remaining domains (uploads_repo, platform_repo, creator_repo) pending 4F.3–4F.5.
+**Phase 4F.2 shipped (2026-05-22)**: `app/db/jobs_repo.py` extracted — Group B (upsert_job, update_job_progress, delete_job, upsert_job_part, get_job, list_jobs, list_jobs_page, list_job_parts_bulk, list_job_parts) moved verbatim. `services/db.py` re-exports all 9 symbols. `services/db.py` reduced by ~145 additional lines. 35 new tests in `test_jobs_repo.py`.
+
+**Phase 4F.3 shipped (2026-05-22)**: `app/db/creator_repo.py` extracted — Group E (get_creator_prefs, upsert_creator_prefs) moved verbatim. `services/db.py` re-exports both symbols. `services/db.py` reduced by ~25 additional lines (~1,236 lines remaining). 17 new tests in `test_creator_repo.py`. Remaining domains (uploads_repo, platform_repo) pending 4F.4–4F.5.
 
 ---
 
