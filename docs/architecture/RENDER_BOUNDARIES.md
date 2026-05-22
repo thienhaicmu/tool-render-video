@@ -9,11 +9,11 @@
 
 | Render Stage | Function | File | Owns | Forbidden |
 |---|---|---|---|---|
-| Base clip | `render_base_clip()` | `render_engine.py` | Speed, crop, reframe, effect, color, audio atempo/loudnorm | ass=, drawtext=, text_layers, BGM mix, narration |
-| Overlay composite | `composite_overlays_on_base_clip()` | `render_engine.py` | subtitle ASS, title drawtext, text_layer drawtext, fps= | setpts, atempo, crop, scale, color, effect, BGM |
+| Base clip | `render_base_clip()` | `render_engine.py` | Speed, crop, reframe, effect, color, audio atempo/loudnorm, BGM mix (Phase 3C) | ass=, drawtext=, text_layers, narration |
+| Overlay composite | `composite_overlays_on_base_clip()` | `render_engine.py` | subtitle ASS, title drawtext, text_layer drawtext, fps=, -c:a copy | setpts, atempo, crop, scale, color, effect, BGM, loudnorm |
 | Legacy all-in-one | `render_part_smart()` | `render_engine.py` | Everything (legacy path) | N/A — legacy path owns all |
 | Post-assembly | `_maybe_prepend_*`, `_maybe_append_*`, `_maybe_apply_asset_logo()` | `render_pipeline.py` | Hook intro, asset intro/outro, logo watermark | Speed re-encoding of the main clip |
-| Narration mix | `mix_narration_audio()` | `audio_mix_service.py` | TTS atempo, BGM sidechain ducking | setpts, crop, video |
+| Narration mix | `mix_narration_audio()` | `audio_mix_service.py` | TTS atempo on narration stream, narration/source blending | atempo on source audio, setpts, crop, video |
 
 ---
 
@@ -31,7 +31,8 @@ MUST:
 MUST NOT:
   - Apply ass= subtitle filter
   - Apply drawtext= title or text_layers
-  - Mix narration or BGM audio
+  - Mix narration audio
+  - BGM: currently forbidden, added by Phase 3C via reup_bgm_* params
   - Read from or write to overlay manifest fields
 ```
 
@@ -42,7 +43,7 @@ MUST NOT:
 ```
 MUST:
   - Treat base_clip as output-timeline PTS (never apply setpts again)
-  - Use -c:a copy for audio (no audio filter unless Phase 3C adds narration)
+  - Use -c:a copy for audio (BGM and source audio stream-copied from base_clip)
   - Apply fps= as last vf filter (probed from base_clip)
   - Build vf_chain in order: ass → title → text_layers → fps
 

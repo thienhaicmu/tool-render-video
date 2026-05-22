@@ -256,4 +256,8 @@ See [TIMELINE_SEMANTICS.md](TIMELINE_SEMANTICS.md) for full timing contract.
 
 ## Pending Phase
 
-**Phase 3C** (not yet implemented): TTS/BGM audio composite after base clip. Currently TTS narration and BGM mix are only on the legacy `render_part_smart()` path.
+**Phase 3C** (planned, not yet implemented): Add BGM support to `render_base_clip()`.
+
+**Audit finding**: TTS narration already operates on the overlay path — `mix_narration_audio()` is called on `final_part` after the render/composite regardless of which path produced it. Only BGM is missing from the overlay path.
+
+**Planned scope**: Add `reup_bgm_*` parameters to `render_base_clip()`, reusing the existing `_bgm_duck_filter()` helper. BGM baked into `base_clip.mp4` flows through the composite via `-c:a copy`. See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_PLAN.md).

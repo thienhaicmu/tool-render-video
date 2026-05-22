@@ -160,12 +160,28 @@ This document records what changed in each phase, why, and what contracts were i
 
 ---
 
-## Phase 3C — TTS/BGM Audio Composite (Pending)
+## Phase 3C — Audio Ownership for Overlay Path (Planned)
 
-**Status**: NOT IMPLEMENTED  
-**Scope**: Migrate TTS narration and BGM mixing to the overlay path.
+**Branch**: `restructure/output-timeline-architecture`  
+**Status**: PLANNED — no code implemented  
+**Source plan**: [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](PHASE_3C_AUDIO_OWNERSHIP_PLAN.md)
 
-See [AUDIO_PIPELINE.md](../architecture/AUDIO_PIPELINE.md) Phase 3C Scope section for constraints.
+**Audit findings**:
+- TTS narration mixing **already operates on the overlay path** — `mix_narration_audio()` is called on `final_part` after the render/composite. No narration implementation gap.
+- BGM (`reup_bgm_*`) is the sole missing audio feature on the overlay path. It is baked into `render_part_smart()` only; `render_base_clip()` has no BGM parameters.
+
+**Planned scope**:
+- Add `reup_bgm_enable`, `reup_bgm_path`, `reup_bgm_gain` to `render_base_clip()`. Reuse `_bgm_duck_filter()` helper.
+- Pass BGM params from `render_pipeline.py` to `render_base_clip()` call site.
+- Add `base_clip_bgm_applied: Optional[bool]` to `BaseClipManifest`.
+- Add `test_overlay_narration.py` validating narration on overlay path.
+- Add tests asserting no atempo and no BGM in composite command.
+
+**Contracts to introduce**:
+- `render_base_clip()` owns BGM (post Phase 3C).
+- `composite_overlays_on_base_clip()` audio stays `-c:a copy` — BGM flows through stream copy.
+- `mix_narration_audio()` is called on composite output unchanged.
+- atempo applied exactly once per audio stream remains invariant.
 
 ---
 

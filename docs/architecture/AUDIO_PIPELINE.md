@@ -9,10 +9,10 @@
 
 | Stage | Audio operation | Owner | Applied when |
 |---|---|---|---|
-| `render_base_clip()` | atempo={speed}, loudnorm | `render_engine.py` | Overlay path, base clip |
+| `render_base_clip()` | atempo={speed}, loudnorm, BGM mix (Phase 3C planned) | `render_engine.py` | Overlay path, base clip |
 | `render_part_smart()` | atempo={speed}, loudnorm, TTS mix, BGM mix | `render_engine.py` + `audio_mix_service.py` | Legacy path, fallback |
 | `composite_overlays_on_base_clip()` | -c:a copy (stream copy) | `render_engine.py` | Overlay path, final step |
-| `mix_narration_audio()` | atempo={speed}, BGM ducking | `audio_mix_service.py` | Legacy path only (Phase 3C pending) |
+| `mix_narration_audio()` | atempo={speed} on narration, source/narration blend | `audio_mix_service.py` | Both paths (post-render step on final_part) |
 
 ---
 
@@ -54,7 +54,9 @@ source.mp4 (source audio)
     → final_part.mp4 (same audio as base_clip)
 ```
 
-TTS narration and BGM are NOT applied in the overlay path. Phase 3C will add them.
+**TTS narration IS mixed into the overlay output** — `mix_narration_audio()` is called on `final_part` after the composite, regardless of which path produced it. No implementation gap for narration.
+
+**BGM is NOT applied on the overlay path** (Phase 3A/3B) — `render_base_clip()` has no BGM parameters. Phase 3C will add BGM to `render_base_clip()`. See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_PLAN.md).
 
 ---
 
@@ -85,34 +87,46 @@ Current safe design:
 
 ---
 
-## TTS Narration (Legacy Path Only)
+## TTS Narration (Both Paths)
 
 `generate_narration_audio()` → edge-tts or XTTS at natural speaking rate.
 
 The narration runs at source speaking pace. The render is at `effective_speed`. Without compensation, narration would end too early.
 
-**Phase 0 fix** (resolved): `mix_narration_audio()` accepts `playback_speed: float` and applies `atempo={speed}` to the narration before mixing. This compensates for the video speed difference.
+**Phase 0 fix** (resolved): `mix_narration_audio()` accepts `playback_speed: float` and applies `atempo={speed}` to the narration track before mixing. This compensates for the video speed difference.
+
+**Overlay path**: `mix_narration_audio()` is called on `final_part` (the composite output) at the same pipeline step where legacy narration is mixed. The narration atempo applies to `[1:a]` (narration input) only. The composite output audio `[0:a]` (already speed-adjusted from base_clip) gets only `volume` adjustment, not atempo. No double-atempo.
 
 Regression tests: `TestMixNarrationAudioAtempo` in `test_phase0_hotfixes.py`.
 
 ---
 
-## BGM (Legacy Path Only)
+## BGM
 
-BGM sidechain ducking is applied inside `mix_narration_audio()` in `audio_mix_service.py`. Not active in overlay path.
+BGM (`reup_bgm_*` params) is mixed via `filter_complex` inside `render_part_smart()`, using `_bgm_duck_filter()` (sidechaincompress when `BGM_DUCKING_ENABLED=1`).
+
+**Legacy path**: BGM baked into final encode inside `render_part_smart()`. Active.  
+**Overlay path (Phase 3A/3B)**: `render_base_clip()` has no BGM parameters — BGM silently skipped.  
+**Overlay path (Phase 3C, planned)**: BGM params added to `render_base_clip()`, baked into `base_clip.mp4`, carried through composite via `-c:a copy`.
 
 ---
 
-## Phase 3C Scope (Not Yet Implemented)
+## Phase 3C Scope (PLANNED — not yet implemented)
 
-Phase 3C will migrate TTS narration and BGM to the overlay composite path. It must:
-- Generate mixed audio (narration + BGM, with atempo compensation) separately
-- Pass the mixed audio file to `composite_overlays_on_base_clip()`
-- Replace `-c:a copy` with the mixed audio input in the composite FFmpeg command
-- NOT apply atempo again (base_clip audio already speed-adjusted)
-- Handle the case where no narration/BGM is requested (keep `-c:a copy`)
+**Audit finding**: TTS narration mixing **already operates on the overlay path**. `mix_narration_audio()` is called on `final_part` after the render, regardless of which path (overlay or legacy) produced it. Narration requires validation and tests, not new implementation.
 
-Phase 3C is out of scope until explicitly planned.
+**BGM is the sole missing feature** on the overlay path. `render_base_clip()` does not accept `reup_bgm_*` parameters. BGM is silently skipped when the overlay path is active.
+
+**Phase 3C implementation plan**: See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_PLAN.md).
+
+**Phase 3C scope (planned)**:
+1. Add `reup_bgm_enable`, `reup_bgm_path`, `reup_bgm_gain` parameters to `render_base_clip()`. Reuse `_bgm_duck_filter()` helper.
+2. Pass BGM params from `render_pipeline.py` call site to `render_base_clip()`.
+3. Add `base_clip_bgm_applied: Optional[bool]` to `BaseClipManifest`.
+4. Add `test_overlay_narration.py` verifying narration already works on overlay output.
+5. Add tests asserting no atempo and no BGM in `composite_overlays_on_base_clip()` command.
+
+`composite_overlays_on_base_clip()` continues to use `-c:a copy`. BGM is baked into `base_clip.mp4`; stream copy carries it through to the composite output. `mix_narration_audio()` operates on the composite output unchanged.
 
 ---
 
@@ -123,5 +137,8 @@ Phase 3C is out of scope until explicitly planned.
 | Legacy path, narration disabled | Source audio + atempo | Correct |
 | Legacy path, narration enabled | Narration mixed + atempo | Correct (Phase 0 fix) |
 | Overlay path (Phase 3A/3B) | Base clip audio (-c:a copy) | Correct — atempo once |
-| Overlay path + composite audio filter | DANGER | Double-atempo if not guarded |
+| Overlay path + narration enabled | Base clip audio (-c:a copy) → narration mixed post-composite | Correct — narration atempo on [1:a] only, source [0:a] gets volume only |
+| Overlay path + BGM enabled (before Phase 3C) | BGM silently skipped | Gap — Phase 3C fixes this |
+| Overlay path + BGM enabled (after Phase 3C) | BGM baked into base_clip, stream-copied through composite | Correct — atempo on BGM once in render_base_clip |
+| Overlay path + composite audio filter | DANGER | Double-atempo if composite ever adds atempo — FORBIDDEN |
 | Fallback to render_part_smart() | Reverts to legacy, all audio rules apply | Correct |
