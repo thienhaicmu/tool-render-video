@@ -2098,7 +2098,12 @@ def run_render_pipeline(
                 step="render.download",
                 context={"url": yt_url, "source_quality_mode": payload.source_quality_mode},
             )
-            source = download_youtube(yt_url, work_dir, quality_mode=payload.source_quality_mode)
+            source = download_youtube(
+                yt_url,
+                work_dir,
+                quality_mode=payload.source_quality_mode,
+                cancel_event=cancel_registry.get_event(job_id),
+            )
             _emit_render_event(
                 channel_code=effective_channel,
                 job_id=job_id,
@@ -4562,6 +4567,7 @@ def run_render_pipeline(
                         narration_audio_path=str(_final_voice_path),
                         mix_mode=payload.voice_mix_mode,
                         output_path=str(mixed_part),
+                        playback_speed=_get_effective_playback_speed(payload, _target_platform),
                     )
                     os.replace(str(mixed_part), str(final_part))
                     _job_log(effective_channel, job_id, f"voice_mix_completed part_no={idx}/{total_parts}")

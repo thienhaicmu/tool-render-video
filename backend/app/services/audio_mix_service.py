@@ -26,7 +26,15 @@ def mix_narration_audio(
     narration_audio_path: str,
     mix_mode: str,
     output_path: str,
+    playback_speed: float = 1.0,
 ) -> str:
+    """Mix a TTS narration track into the rendered video.
+
+    playback_speed: the effective render speed (base + platform delta).  When
+    != 1.0, an atempo filter is applied to the narration stream so its tempo
+    matches the speed-adjusted video.  Without this, the narration drifts
+    behind (speed > 1.0) or runs ahead (speed < 1.0) of the video content.
+    """
     source_video = Path(video_path)
     narration_audio = Path(narration_audio_path)
     mixed_output = Path(output_path)
@@ -36,25 +44,21 @@ def mix_narration_audio(
     if not narration_audio.exists():
         raise RuntimeError("Narration audio file not found")
 
+    try:
+        speed = max(0.5, min(2.0, float(playback_speed or 1.0)))
+    except Exception:
+        speed = 1.0
+    apply_atempo = abs(speed - 1.0) > 1e-4
+
     ffmpeg_bin = get_ffmpeg_bin()
     cmd = [ffmpeg_bin, "-y", "-i", str(source_video), "-i", str(narration_audio)]
 
     if str(mix_mode or "").strip() == "replace_original":
-        cmd += [
-            "-map", "0:v:0",
-            "-map", "1:a:0",
-            "-c:v", "copy",
-            "-c:a", "aac",
-            "-shortest",
-            str(mixed_output),
-        ]
-    elif str(mix_mode or "").strip() == "keep_original_low":
-        if _has_audio_stream(str(source_video)):
+        if apply_atempo:
             cmd += [
-                "-filter_complex",
-                "[0:a]volume=0.25[a0];[1:a]volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                "-filter_complex", f"[1:a]atempo={speed:.4f}[narr]",
                 "-map", "0:v:0",
-                "-map", "[aout]",
+                "-map", "[narr]",
                 "-c:v", "copy",
                 "-c:a", "aac",
                 "-shortest",
@@ -69,6 +73,50 @@ def mix_narration_audio(
                 "-shortest",
                 str(mixed_output),
             ]
+    elif str(mix_mode or "").strip() == "keep_original_low":
+        if _has_audio_stream(str(source_video)):
+            if apply_atempo:
+                cmd += [
+                    "-filter_complex",
+                    f"[0:a]volume=0.25[a0];[1:a]atempo={speed:.4f},volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    "-map", "0:v:0",
+                    "-map", "[aout]",
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-shortest",
+                    str(mixed_output),
+                ]
+            else:
+                cmd += [
+                    "-filter_complex",
+                    "[0:a]volume=0.25[a0];[1:a]volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    "-map", "0:v:0",
+                    "-map", "[aout]",
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-shortest",
+                    str(mixed_output),
+                ]
+        else:
+            if apply_atempo:
+                cmd += [
+                    "-filter_complex", f"[1:a]atempo={speed:.4f}[narr]",
+                    "-map", "0:v:0",
+                    "-map", "[narr]",
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-shortest",
+                    str(mixed_output),
+                ]
+            else:
+                cmd += [
+                    "-map", "0:v:0",
+                    "-map", "1:a:0",
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-shortest",
+                    str(mixed_output),
+                ]
     else:
         raise RuntimeError("Unsupported narration audio mix mode")
 

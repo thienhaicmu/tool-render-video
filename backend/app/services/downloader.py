@@ -376,6 +376,8 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
         "fragment_retries": 10,
         "extractor_retries": 5,
         "file_access_retries": 5,
+        # prevent stalled connections from hanging indefinitely
+        "socket_timeout": 60,
         "skip_unavailable_fragments": False,
         # Explicit proxy: "" = no proxy. Prevents yt-dlp from auto-detecting a
         # stale/broken OS proxy entry (e.g. 127.0.0.1:9 from a stopped VPN).
