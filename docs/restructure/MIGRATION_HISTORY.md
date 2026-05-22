@@ -436,7 +436,7 @@ Phase 4E.3 added 28 new passing tests (`test_base_clip_renderer.py`).
 
 **Branch**: `restructure/output-timeline-architecture`
 **Status**: SHIPPED
-**Commit**: (this commit)
+**Commit**: `f36171f`
 
 **Purpose**: Fourth sub-step of render_engine.py split. Extract `composite_overlays_on_base_clip()` from `render_engine.py` into `services/render/overlay_compositor.py`. Backward-compat re-export keeps all existing callers unchanged.
 
