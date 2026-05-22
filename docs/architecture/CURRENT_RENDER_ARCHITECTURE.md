@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4G.7; subtitle_engine.py frozen as compatibility shim; caller audit complete; subtitles/ package finalized with 7 modules)
+**Last updated**: 2026-05-22 (post Phase 4H.0 planning; routes/render.py audited — 9 clusters identified; plan at docs/restructure/PHASE_4H_ROUTE_CLEANUP_PLAN.md; no backend code changed)
 
 ---
 

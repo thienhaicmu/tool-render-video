@@ -1418,3 +1418,52 @@ Zero Classification B/E/F findings. No active coupling violations. No stale doc 
 ```
 
 67 new tests in `test_subtitle_engine_compat_exports.py` — all 67 pass. All 388 subtitle package tests pass (full suite: styles 39 + srt_core 44 + output_timeline 21 + ass_core 62 + readability 57 + text_transforms 49 + transcription 49 + compat_exports 67). All 8 pre-existing failures unchanged. No new failures.
+
+---
+
+## Phase 4H.0 — Route Cleanup Planning
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: PLANNING — no backend code changed
+**Source plan**: [PHASE_4H_ROUTE_CLEANUP_PLAN.md](PHASE_4H_ROUTE_CLEANUP_PLAN.md)
+
+**Purpose**: Audit `routes/render.py` (~1,369 lines) and produce a complete cleanup plan before any extraction begins. Next major restructure target after Phase 4G completion.
+
+**Audit findings**:
+- 9 distinct responsibility clusters identified in `routes/render.py`:
+  - **A — Preview Session**: `_save_session`, `_load_session`, `_cleanup_preview_session`, `evict_stale_preview_sessions` + 4 module-level state vars → `services/preview/session_service.py`
+  - **B — Source Prep**: POST `/prepare-source`, DELETE `/prepare-source/{session_id}`; owns `_ACTIVE_DOWNLOADS` state
+  - **C — Preview Endpoints**: GET `/preview/{session_id}/video`, GET `/preview/{session_id}/transcript`
+  - **D — Render Job Control**: POST `/process`, POST `/resume/{job_id}`, POST `/retry/{job_id}`, POST `/{job_id}/cancel`, GET `/jobs/{job_id}`; inner helpers `process_render()` + `_queue_render_job()`
+  - **E — Batch**: POST `/process/batch`; `_run_batch()` inner closure (captures 5 vars) → `services/render/batch_service.py`
+  - **F — Media Streaming**: GET `/jobs/{job_id}/parts/{part_no}/media` (Range-aware), GET `/jobs/{job_id}/parts/{part_no}/thumbnail` (JPEG, 24h cache) → stays in routes
+  - **G — Quick Process**: POST `/quick-process` (no session path)
+  - **H — Route Helpers**: 10 helper functions; FFmpeg probe subset (6 functions) → `services/preview/ffmpeg_probers.py`; payload/validation helpers stay in routes
+  - **I — Module-level state**: `_PREVIEW_SESSIONS`, `_ACTIVE_DOWNLOADS`, `_PREVIEW_DIR`, `_SESSION_TTL_HOURS`, `_MAX_PREVIEW_SESSIONS`, `_UUID_RE`
+
+**Key coupling constraints documented**:
+- `evict_stale_preview_sessions()` called from `main.py` — re-export required at old location
+- `_load_session`/`_cleanup_preview_session` passed as fn-reference callbacks to `run_render_pipeline()` — pipeline signature must NOT change
+- `_run_batch()` inner closure captures 5 variables — requires closure → explicit args refactor to extract
+- `_ACTIVE_DOWNLOADS` stays in `routes/render.py` (download lifecycle, not session lifecycle)
+
+**Proposed sub-phases**:
+- 4H.1: Extract `services/preview/ffmpeg_probers.py` (6 FFmpeg probe helpers — no state deps)
+- 4H.2: Extract `services/preview/session_service.py` (Cluster A + 4 state vars)
+- 4H.3: Extract `services/render/batch_service.py` (Cluster E closure → explicit args)
+- 4H.4: Route thinning pass (update call sites to use new services)
+- 4H.5: Audit + freeze (no code changes)
+
+**Docs created**: `PHASE_4H_ROUTE_CLEANUP_PLAN.md` (20 sections)
+
+**Test baseline at Phase 4H.0 start**: `8 failed, 6593 passed, 1 skipped` (unchanged — planning-only phase)
+
+---
+
+## Test Suite State (Post Phase 4H.0)
+
+```
+8 failed, 6593 passed, 1 skipped  (docs-only phase, no test changes)
+```
+
+No new tests added in Phase 4H.0 (planning only). Baseline unchanged.

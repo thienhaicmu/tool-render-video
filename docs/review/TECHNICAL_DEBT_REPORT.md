@@ -112,6 +112,18 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 ---
 
+### H2b. routes/render.py Mixes Route Logic with Service Logic
+**File**: `backend/app/routes/render.py`
+**Line count**: ~1,369 lines
+
+**Debt**: `routes/render.py` contains at least 9 distinct responsibility clusters: preview session state management (save/load/evict), source preparation, preview streaming, render job lifecycle, batch orchestration, media streaming, one-shot quick process, route-local FFmpeg probe helpers, and 6 module-level state variables. Non-route logic (session management, FFmpeg probers, batch runner) is inlined in the route module.
+
+**Impact**: New preview/session logic is added to the route module instead of a service. FFmpeg probe helpers (`_probe_video_codec`, `_probe_preview_profile`, `_ensure_h264_preview`) have no tests. The `evict_stale_preview_sessions()` function is called from `main.py` — a cross-module dependency that couples startup behavior to a route module.
+
+**Phase 4H.0 planning (2026-05-22)**: `routes/render.py` audited. 9 clusters and all module-level state inventoried. 3 coupling constraints documented (evict called from main.py; session callbacks passed to render pipeline; batch inner closure). Target modules: `services/preview/ffmpeg_probers.py`, `services/preview/session_service.py`, `services/render/batch_service.py`. Plan: `docs/restructure/PHASE_4H_ROUTE_CLEANUP_PLAN.md`. No backend code changed.
+
+---
+
 ### H3. RAG Memory Not Connected to Production Render
 **File**: `backend/app/orchestration/render_pipeline.py` — call to `create_ai_edit_plan()`
 **Line**: ~1550 (approximate — the context dict build)
