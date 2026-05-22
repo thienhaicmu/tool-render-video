@@ -7,8 +7,6 @@ BaseClipManifest is written beside each render artifact so that downstream
 stages (subtitle slicing, TTS, audio mixing, output QA, AI feedback) can
 read confirmed timing decisions rather than recomputing them from scattered
 payload fields.
-
-Phase 1: write-only foundation.  Consumers are added in Phase 2+.
 """
 from __future__ import annotations
 
@@ -42,7 +40,7 @@ class BaseClipManifest:
     payload_speed: float      # creator-selected base speed (payload.playback_speed)
     platform: str             # _target_platform string
     platform_delta: float     # _PLATFORM_PROFILES[platform]["speed_delta"]
-    effective_speed: float    # payload_speed + platform_delta, clamped [0.5, 2.0]
+    effective_speed: float    # payload_speed + platform_delta, clamped to [0.5, 1.5]
 
     # Variant (multi-variant mode; None for normal renders)
     variant_type: Optional[str]    # "aggressive" | "balanced" | "story_first" | None
@@ -59,7 +57,7 @@ class BaseClipManifest:
     ai_enabled: bool           # payload.ai_director_enabled
     ai_mode: Optional[str]     # ai_edit_plan.mode if plan was created
     ai_selected: bool          # True if AI director selected this segment
-    ai_speed_hint: Optional[float]  # AI-recommended speed (Phase 3+, None for now)
+    ai_speed_hint: Optional[float]  # AI-recommended speed override; None until wired
 
     # Artifact paths — filled progressively, None until stage completes
     cut_path: Optional[str] = field(default=None)

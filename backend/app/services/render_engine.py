@@ -7,6 +7,7 @@ import time
 import logging
 from functools import lru_cache
 from pathlib import Path
+from app.domain.timeline import TimelineMap
 from app.services.motion_crop import render_motion_aware_crop, MotionCropConfig
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin, _summarize_ffmpeg_stderr
 from app.services.text_overlay import append_text_layer_filters
@@ -1139,7 +1140,7 @@ def render_part(
 def render_base_clip(
     input_path: str,
     output_path: str,
-    timeline,
+    timeline: TimelineMap,
     aspect_ratio: str = "3:4",
     scale_x: int = 100,
     scale_y: int = 106,
@@ -1205,7 +1206,6 @@ def render_base_clip(
     else:
         _src_meta = probe_video_metadata(input_path)
         _src_h = _src_meta.get("height", 0)
-        _src_w = _src_meta.get("width", 0)
         preset_low = (video_preset or "").lower()
         _mr_m, _bs_m = {"montage": (25, 50), "interview": (15, 30), "tutorial": (15, 30)}.get(
             content_type, (20, 40)
@@ -1241,9 +1241,8 @@ def render_base_clip(
             _fade_cap = _FADE_CAP_BY_TYPE.get(content_type, 0.08)
             _fade_d = round(max(0.03, min(_fade_cap, transition_sec)), 4)
             vf_parts.append(f"fade=t=in:st=0:d={_fade_d}")
-        # No ass= filter — base clip has no subtitle burn-in
-        # No drawtext= filter — base clip has no title overlay
-        # No text_layers — base clip has no text overlay
+        # Overlay filters (ass=, drawtext=, text_layers) are intentionally absent.
+        # Base clip is a clean encode: crop + color + speed only.
         if abs(speed - 1.0) > 1e-4:
             vf_parts.append(f"setpts=PTS/{speed:.4f}")
         target_fps, _ = _resolve_fps(input_path, int(output_fps or 0))

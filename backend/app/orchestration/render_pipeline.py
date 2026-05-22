@@ -56,7 +56,7 @@ from app.services.manifest_writer import write_manifest, manifest_path as _manif
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
 # final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
 # The base clip is never fed into the final output — render_part_smart() always
-# produces the final video.  Phase 2 only.
+# produces the final video.
 _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 
 logger = logging.getLogger("app.render")
@@ -3657,20 +3657,19 @@ def run_render_pipeline(
                         f"first_frame_shift_applied part={idx} visual_trim={_visual_trim:.3f}s "
                         f"total_trim={_trim_offset:.3f}s effective_start={_effective_start:.3f}s accurate_cut=True")
 
-            # ── Phase 1: Output Timeline Architecture ───────────────────────────
             # Build TimelineMap and BaseClipManifest after all trim decisions are
             # final (_effective_start is settled).  Written to disk before cut_video()
             # so a crash leaves a consistent record up to the last completed step.
-            _p1_platform_delta = float(
+            _part_platform_delta = float(
                 _PLATFORM_PROFILES.get(_target_platform, {}).get("speed_delta", 0.0)
             )
-            _p1_timeline = TimelineMap(
+            _part_timeline = TimelineMap(
                 source_start=float(_effective_start),
                 source_end=float(seg["end"]),
                 effective_speed=_get_effective_playback_speed(payload, _target_platform),
                 trim_offset=float(_trim_offset),
             )
-            _p1_manifest = BaseClipManifest(
+            _part_manifest = BaseClipManifest(
                 job_id=job_id,
                 part_no=idx,
                 source_path=str(source_path),
@@ -3678,8 +3677,8 @@ def run_render_pipeline(
                 source_end=float(seg["end"]),
                 payload_speed=float(payload.playback_speed or 1.07),
                 platform=_target_platform,
-                platform_delta=_p1_platform_delta,
-                effective_speed=_p1_timeline.effective_speed,
+                platform_delta=_part_platform_delta,
+                effective_speed=_part_timeline.effective_speed,
                 variant_type=seg.get("variant_type"),
                 variant_speed=(
                     float(seg["variant_playback_speed"])
@@ -3688,14 +3687,13 @@ def run_render_pipeline(
                 silence_trim_offset=float(_trim_offset - _visual_trim)
                     if _visual_trim > 0 else float(_trim_offset),
                 visual_trim_offset=float(_visual_trim),
-                timeline=_p1_timeline,
+                timeline=_part_timeline,
                 ai_enabled=bool(getattr(payload, "ai_director_enabled", False)),
                 ai_mode=getattr(_ai_edit_plan, "mode", None) if _ai_edit_plan is not None else None,
-                ai_selected=False,  # Phase 3 will populate from AIEditPlan
+                ai_selected=False,  # not yet wired to AIEditPlan selection
                 ai_speed_hint=None,
             )
-            write_manifest(work_dir, _p1_manifest)
-            # ── end Phase 1 block ────────────────────────────────────────────────
+            write_manifest(work_dir, _part_manifest)
 
             upsert_job_part(job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
             if not (payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
@@ -3717,8 +3715,8 @@ def run_render_pipeline(
                 _job_log(effective_channel, job_id, f"Part {idx} cut done", kind="debug")
             else:
                 _job_log(effective_channel, job_id, f"Part {idx} cut skipped (raw exists)", kind="debug")
-            _p1_manifest.cut_path = str(raw_part)
-            write_manifest(work_dir, _p1_manifest)
+            _part_manifest.cut_path = str(raw_part)
+            write_manifest(work_dir, _part_manifest)
 
             subtitle_selected_by_rule = subtitle_enabled_by_idx.get(idx, False)
             part_subtitle_enabled = subtitle_selected_by_rule
@@ -3817,8 +3815,8 @@ def run_render_pipeline(
                             "last_sub_end": _srt_meta.get("last_end"),
                         },
                     )
-                _p1_manifest.srt_path = str(srt_part)
-                write_manifest(work_dir, _p1_manifest)
+                _part_manifest.srt_path = str(srt_part)
+                write_manifest(work_dir, _part_manifest)
                 # OQ-1.2 — subtitle intelligence: semantic resegmentation for readability.
                 # Targets segment-level SRT only; word-level SRT is skipped internally.
                 # Fires only on fresh slices — resume cache hits are left unchanged.
@@ -4206,8 +4204,8 @@ def run_render_pipeline(
                             "aspect_ratio": payload.aspect_ratio,
                         },
                     )
-                    _p1_manifest.ass_path = str(ass_part)
-                    write_manifest(work_dir, _p1_manifest)
+                    _part_manifest.ass_path = str(ass_part)
+                    write_manifest(work_dir, _part_manifest)
             else:
                 _job_log(effective_channel, job_id, f"Part {idx} subtitle disabled", kind="debug")
 
@@ -4338,9 +4336,8 @@ def run_render_pipeline(
                     )
                 except Exception:
                     _motion_ck = None
-            # ── Phase 2: base clip (parallel artifact, FEATURE_BASE_CLIP_FIRST=1) ──
-            # Produces base_clip.mp4 with no subtitle/overlay filters for manifest
-            # tracking and future Phase 3+ use.  render_part_smart() always runs
+            # When FEATURE_BASE_CLIP_FIRST is enabled, render a no-overlay base clip
+            # as a parallel validation artifact.  render_part_smart() always runs
             # unconditionally below — the base clip is never the final output.
             if _FEATURE_BASE_CLIP_FIRST:
                 _base_clip_out = work_dir / f"part_{idx}" / "base_clip.mp4"
@@ -4349,7 +4346,7 @@ def run_render_pipeline(
                     _bc_meta = render_base_clip(
                         input_path=str(raw_part),
                         output_path=str(_base_clip_out),
-                        timeline=_p1_timeline,
+                        timeline=_part_timeline,
                         aspect_ratio=payload.aspect_ratio,
                         scale_x=payload.frame_scale_x,
                         scale_y=payload.frame_scale_y,
@@ -4369,24 +4366,23 @@ def run_render_pipeline(
                         content_type=seg.get("content_type_hint", "vlog"),
                         _motion_cache_key=_motion_ck,
                     )
-                    _p1_manifest.base_clip_path = str(_base_clip_out)
-                    _p1_manifest.base_clip_duration = _bc_meta.get("duration")
-                    _p1_manifest.base_clip_fps = _bc_meta.get("fps")
-                    _p1_manifest.base_clip_width = _bc_meta.get("width")
-                    _p1_manifest.base_clip_height = _bc_meta.get("height")
-                    _p1_manifest.base_clip_has_audio = _bc_meta.get("has_audio")
-                    _p1_manifest.base_clip_created_at = _bc_meta.get("created_at")
-                    write_manifest(work_dir, _p1_manifest)
+                    _part_manifest.base_clip_path = str(_base_clip_out)
+                    _part_manifest.base_clip_duration = _bc_meta.get("duration")
+                    _part_manifest.base_clip_fps = _bc_meta.get("fps")
+                    _part_manifest.base_clip_width = _bc_meta.get("width")
+                    _part_manifest.base_clip_height = _bc_meta.get("height")
+                    _part_manifest.base_clip_has_audio = _bc_meta.get("has_audio")
+                    _part_manifest.base_clip_created_at = _bc_meta.get("created_at")
+                    write_manifest(work_dir, _part_manifest)
                     logger.info(
                         "base_clip_rendered part=%d path=%s duration=%.3fs",
                         idx, _base_clip_out, _bc_meta.get("duration", 0.0),
                     )
                 except Exception as _bc_err:
                     logger.warning(
-                        "base_clip_render_failed part=%d err=%s — legacy render continues",
+                        "base_clip_render_failed part=%d err=%s — render_part_smart continues",
                         idx, _bc_err,
                     )
-            # ── end Phase 2 block ─────────────────────────────────────────────────
             try:
                 render_part_smart(
                     str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if payload.add_title_overlay else "",
@@ -4428,8 +4424,8 @@ def run_render_pipeline(
             _render_ms = int((time.perf_counter() - _t_render) * 1000)
             logger.info("render_part_ms=%d part=%d codec=%s crop=%s",
                         _render_ms, idx, payload.video_codec, payload.motion_aware_crop)
-            _p1_manifest.rendered_path = str(final_part)
-            write_manifest(work_dir, _p1_manifest)
+            _part_manifest.rendered_path = str(final_part)
+            write_manifest(work_dir, _part_manifest)
             if _motion_ck:
                 _job_log(effective_channel, job_id, f"rerender_fast_path part={idx} motion_cache_key={_motion_ck[:8]} render_ms={_render_ms}")
             if _motion_crop_fallback:
@@ -4656,8 +4652,8 @@ def run_render_pipeline(
                     )
             _final_voice_path = voice_audio_path or _part_subtitle_voice_path
             if _final_voice_path:
-                _p1_manifest.narration_path = str(_final_voice_path)
-                write_manifest(work_dir, _p1_manifest)
+                _part_manifest.narration_path = str(_final_voice_path)
+                write_manifest(work_dir, _part_manifest)
                 mixed_part = final_part.with_name(final_part.stem + ".voice_tmp.mp4")
                 try:
                     _job_log(effective_channel, job_id, f"Mixing AI narration into part {idx}/{total_parts}", kind="debug")
@@ -4833,8 +4829,8 @@ def run_render_pipeline(
                 f"platform_delta={_PLATFORM_PROFILES.get(_target_platform, {}).get('speed_delta', 0.0):.4f} "
                 f"effective_speed={_render_speed:.4f} "
                 f"target_platform={_target_platform} "
-                f"source_duration={_p1_timeline.source_duration:.3f}s "
-                f"output_duration={_p1_timeline.output_duration:.3f}s "
+                f"source_duration={_part_timeline.source_duration:.3f}s "
+                f"output_duration={_part_timeline.output_duration:.3f}s "
                 f"effective_duration={_effective_duration:.3f}s "
                 f"expected_duration={_expected_final_duration:.3f}s "
                 f"manifest={_manifest_path(work_dir, idx)}",
