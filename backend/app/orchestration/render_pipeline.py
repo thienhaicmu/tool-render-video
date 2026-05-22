@@ -53,6 +53,20 @@ from app.ai.visibility.ai_visibility_summary import attach_ai_visibility_summari
 from app.domain.timeline import TimelineMap
 from app.domain.manifests import BaseClipManifest
 from app.services.manifest_writer import write_manifest, manifest_path as _manifest_path
+from app.orchestration.render_events import (
+    _JOB_LOG_DIRS,
+    _append_json_line,
+    _emit_render_event,
+    _job_log,
+    _render_error_code,
+    _safe_unlink,
+)
+from app.orchestration.asset_pipeline import (
+    _maybe_append_asset_outro,
+    _maybe_apply_asset_logo,
+    _maybe_prepend_asset_intro,
+    _maybe_prepend_remotion_hook_intro,
+)
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
 # final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
@@ -642,217 +656,9 @@ def _score_component(value, default: float = 50.0) -> float:
         return default
 
 
-def _maybe_prepend_remotion_hook_intro(
-    final_part: Path,
-    payload: RenderRequest,
-    *,
-    effective_channel: str,
-    job_id: str,
-    part_no: int,
-    headline_text: str | None = None,
-    content_type: str = "vlog",
-    hook_text: str | None = None,
-    source_title: str | None = None,
-) -> float:
-    if not bool(getattr(payload, "remotion_hook_intro", False)):
-        return 0.0
-
-    _preset = resolve_intro_preset(
-        content_type,
-        override=str(getattr(payload, "intro_preset", "") or "").strip() or None,
-    )
-    # Per-preset duration — drives both the intro clip length and the return value
-    # which feeds _expected_final_duration in the part timing calculation.
-    _preset_durations = {
-        "viral_pop": 1.0,
-        "clean_creator": 1.2,
-        "story_cinematic": 1.5,
-        "gaming_energy": 1.0,
-    }
-    _duration = _preset_durations.get(_preset, 1.0)
-
-    started = time.perf_counter()
-    intro_path = final_part.with_name(f"{final_part.stem}.hook_intro.mp4")
-    concat_path = final_part.with_name(f"{final_part.stem}.with_intro.mp4")
-    _job_log(
-        effective_channel,
-        job_id,
-        f"hook_intro_requested part={part_no} preset={_preset} duration_sec={_duration:.2f}",
-    )
-    try:
-        intro = generate_hook_intro(
-            str(intro_path),
-            aspect_ratio=str(getattr(payload, "aspect_ratio", "3:4") or "3:4"),
-            duration_sec=_duration,
-            headline_text=headline_text,
-            preset_id=_preset,
-            hook_text=hook_text,
-            source_title=source_title,
-        )
-        if not intro:
-            _job_log(
-                effective_channel,
-                job_id,
-                f"hook_intro_failed part={part_no} reason=intro_generation_failed",
-                kind="warning",
-            )
-            return 0.0
-        merged = prepend_intro_clip(str(final_part), intro, str(concat_path))
-        if not merged:
-            _job_log(
-                effective_channel,
-                job_id,
-                f"hook_intro_failed part={part_no} reason=concat_failed",
-                kind="warning",
-            )
-            return 0.0
-        os.replace(merged, final_part)
-        elapsed_ms = int((time.perf_counter() - started) * 1000)
-        _job_log(
-            effective_channel,
-            job_id,
-            f"hook_intro_generated part={part_no} preset={_preset} intro_duration_ms={int(_duration * 1000)} elapsed_ms={elapsed_ms}",
-        )
-        return _duration
-    except Exception as exc:
-        _job_log(
-            effective_channel,
-            job_id,
-            f"hook_intro_failed part={part_no} error={type(exc).__name__}: {exc}",
-            kind="warning",
-        )
-        return 0.0
-    finally:
-        _safe_unlink(intro_path)
-        _safe_unlink(concat_path)
-
-
-# ── UP27: Creator Asset Intelligence helpers ──────────────────────────────────
-# All three are safe-skip: missing file → log asset_missing_skip, continue.
-# Never raise. Never fail the render.
-
-def _maybe_prepend_asset_intro(
-    final_part: Path,
-    payload,
-    *,
-    effective_channel: str,
-    job_id: str,
-    part_no: int,
-) -> None:
-    intro_path_raw = str(getattr(payload, "asset_intro_path", None) or "").strip()
-    if not intro_path_raw:
-        return
-    intro_path = Path(intro_path_raw)
-    if not intro_path.exists() or intro_path.stat().st_size <= 0:
-        _job_log(effective_channel, job_id,
-                 f"asset_missing_skip type=intro path={intro_path_raw} part={part_no}", kind="warning")
-        _emit_render_event(channel_code=effective_channel, job_id=job_id,
-                           event="asset_missing", level="WARNING",
-                           message=f"UP27 asset intro missing, skipped part={part_no}",
-                           step="render.asset", context={"type": "intro", "part_no": part_no})
-        return
-    concat_path = final_part.with_name(f"{final_part.stem}.with_asset_intro.mp4")
-    try:
-        merged = prepend_intro_clip(str(final_part), str(intro_path), str(concat_path))
-        if merged:
-            os.replace(merged, final_part)
-            _job_log(effective_channel, job_id,
-                     f"asset_applied type=intro part={part_no} file={intro_path.name}")
-            _emit_render_event(channel_code=effective_channel, job_id=job_id,
-                               event="asset_applied", level="INFO",
-                               message=f"UP27 creator intro sting applied part={part_no}",
-                               step="render.asset", context={"type": "intro", "part_no": part_no})
-        else:
-            _job_log(effective_channel, job_id,
-                     f"asset_skipped type=intro part={part_no} reason=concat_failed", kind="warning")
-    except Exception as exc:
-        _job_log(effective_channel, job_id,
-                 f"asset_error type=intro part={part_no} error={exc}", kind="warning")
-    finally:
-        _safe_unlink(concat_path)
-
-
-def _maybe_append_asset_outro(
-    final_part: Path,
-    payload,
-    *,
-    effective_channel: str,
-    job_id: str,
-    part_no: int,
-) -> None:
-    outro_path_raw = str(getattr(payload, "asset_outro_path", None) or "").strip()
-    if not outro_path_raw:
-        return
-    outro_path = Path(outro_path_raw)
-    if not outro_path.exists() or outro_path.stat().st_size <= 0:
-        _job_log(effective_channel, job_id,
-                 f"asset_missing_skip type=outro path={outro_path_raw} part={part_no}", kind="warning")
-        _emit_render_event(channel_code=effective_channel, job_id=job_id,
-                           event="asset_missing", level="WARNING",
-                           message=f"UP27 asset outro missing, skipped part={part_no}",
-                           step="render.asset", context={"type": "outro", "part_no": part_no})
-        return
-    concat_path = final_part.with_name(f"{final_part.stem}.with_asset_outro.mp4")
-    try:
-        merged = append_outro_clip(str(final_part), str(outro_path), str(concat_path))
-        if merged:
-            os.replace(merged, final_part)
-            _job_log(effective_channel, job_id,
-                     f"asset_applied type=outro part={part_no} file={outro_path.name}")
-            _emit_render_event(channel_code=effective_channel, job_id=job_id,
-                               event="asset_applied", level="INFO",
-                               message=f"UP27 creator outro applied part={part_no}",
-                               step="render.asset", context={"type": "outro", "part_no": part_no})
-        else:
-            _job_log(effective_channel, job_id,
-                     f"asset_skipped type=outro part={part_no} reason=concat_failed", kind="warning")
-    except Exception as exc:
-        _job_log(effective_channel, job_id,
-                 f"asset_error type=outro part={part_no} error={exc}", kind="warning")
-    finally:
-        _safe_unlink(concat_path)
-
-
-def _maybe_apply_asset_logo(
-    final_part: Path,
-    payload,
-    *,
-    effective_channel: str,
-    job_id: str,
-    part_no: int,
-) -> None:
-    logo_path_raw = str(getattr(payload, "asset_logo_path", None) or "").strip()
-    if not logo_path_raw:
-        return
-    logo_path = Path(logo_path_raw)
-    if not logo_path.exists() or logo_path.stat().st_size <= 0:
-        _job_log(effective_channel, job_id,
-                 f"asset_missing_skip type=logo path={logo_path_raw} part={part_no}", kind="warning")
-        _emit_render_event(channel_code=effective_channel, job_id=job_id,
-                           event="asset_missing", level="WARNING",
-                           message=f"UP27 asset logo missing, skipped part={part_no}",
-                           step="render.asset", context={"type": "logo", "part_no": part_no})
-        return
-    watermarked = final_part.with_name(f"{final_part.stem}.with_logo.mp4")
-    try:
-        result = apply_logo_watermark(str(final_part), str(logo_path), str(watermarked),
-                                      position="top-right", opacity=0.85)
-        if result:
-            os.replace(result, final_part)
-            _job_log(effective_channel, job_id,
-                     f"asset_applied type=logo part={part_no} file={logo_path.name}")
-            _emit_render_event(channel_code=effective_channel, job_id=job_id,
-                               event="asset_applied", level="INFO",
-                               message=f"UP27 creator logo watermark applied part={part_no}",
-                               step="render.asset", context={"type": "logo", "part_no": part_no})
-        else:
-            _job_log(effective_channel, job_id,
-                     f"asset_skipped type=logo part={part_no} reason=overlay_failed", kind="warning")
-    except Exception as exc:
-        _job_log(effective_channel, job_id,
-                 f"asset_error type=logo part={part_no} error={exc}", kind="warning")
-    finally:
-        _safe_unlink(watermarked)
+# _maybe_prepend_remotion_hook_intro, _maybe_prepend_asset_intro,
+# _maybe_append_asset_outro, _maybe_apply_asset_logo
+# → moved to app.orchestration.asset_pipeline (Phase 4B)
 
 
 
@@ -1282,95 +1088,8 @@ def _render_progress_timer(
 
 HIGH_MOTION_MIN_SCORE = 60
 HIGH_MOTION_MIN_KEEP = 3
-_JOB_LOG_DIRS: dict[str, Path] = {}
-
-
-def _job_log(channel_code: str, job_id: str, message: str, kind: str = "info"):
-    if kind == "debug" and os.getenv("RENDER_DEBUG_LOG", "0") != "1":
-        return
-    line = f"[render][{channel_code}][{job_id[:8]}] {message}"
-    try:
-        k = (kind or "info").lower()
-        if k == "debug":
-            logger.debug(line)
-        elif k in ("warn", "warning"):
-            logger.warning(line)
-        elif k == "error":
-            logger.error(line)
-        else:
-            logger.info(line)
-    except Exception:
-        pass
-    log_dir = _JOB_LOG_DIRS.get(job_id) or (CHANNELS_DIR / channel_code / "logs")
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"{job_id}.log"
-    with log_path.open("a", encoding="utf-8") as f:
-        f.write(f"[{datetime.utcnow().isoformat()}Z] [{kind.upper()}] {message}\n")
-
-
-def _append_json_line(path: Path, entry: dict):
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-
-
-def _render_error_code(step: str, message: str, exc: Exception | None = None) -> str:
-    text = f"{step} {message} {exc or ''}".lower()
-    if "not found" in text or "filenotfounderror" in text:
-        return "RN002"
-    if "output" in text and ("invalid" in text or "permission" in text or "path" in text):
-        return "RN003"
-    if "voice" in text or "tts" in text or "narration" in text:
-        return "VOICE001"
-    if "ffmpeg" in text:
-        return "RN004"
-    if "scene" in text and ("detect" in text or "detection" in text):
-        return "RN005"
-    if "trim" in text:
-        return "RN006"
-    return "RN001"
-
-
-def _emit_render_event(
-    *,
-    channel_code: str,
-    job_id: str,
-    event: str,
-    level: str,
-    message: str,
-    step: str,
-    context: dict | None = None,
-    exception: Exception | None = None,
-    traceback_text: str = "",
-    duration_ms: int | None = None,
-    error_code: str = "",
-):
-    lvl = (level or "INFO").upper()
-    err_code = str(error_code or "")
-    if lvl in {"ERROR", "CRITICAL", "FATAL"} or event.endswith(".error"):
-        err_code = err_code or _render_error_code(step, message, exc=exception)
-    entry = {
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "level": lvl,
-        "event": event,
-        "module": "render",
-        "message": message,
-        "job_id": job_id,
-        "step": step,
-        "error_code": err_code,
-        "context": context or {},
-        "exception": (str(exception) if exception else ""),
-        "traceback": traceback_text or "",
-        "duration_ms": duration_ms or 0,
-    }
-    log_dir = _JOB_LOG_DIRS.get(job_id) or (CHANNELS_DIR / channel_code / "logs")
-    _append_json_line(log_dir / f"{job_id}.log", entry)
-    _append_json_line(LOGS_DIR / "app.log", entry)
-    if lvl in {"ERROR", "CRITICAL", "FATAL"}:
-        _append_json_line(LOGS_DIR / "error.log", entry)
+# _JOB_LOG_DIRS, _job_log, _append_json_line, _render_error_code, _emit_render_event
+# → moved to app.orchestration.render_events (Phase 4B)
 
 
 def _event_from_stage(stage: str) -> str:
@@ -1486,11 +1205,7 @@ def _reserve_source_path(channel_code: str, slug: str, ext: str = ".mp4") -> Pat
     return _reserve_source_path_in_dir(CHANNELS_DIR / channel_code / "upload" / "source", slug, ext=ext)
 
 
-def _safe_unlink(path: Path):
-    try:
-        path.unlink(missing_ok=True)
-    except Exception:
-        pass
+# _safe_unlink → moved to app.orchestration.render_events (Phase 4B)
 
 
 def _failed_part_progress(job_id: str, part_no: int, fallback: int = 95) -> int:

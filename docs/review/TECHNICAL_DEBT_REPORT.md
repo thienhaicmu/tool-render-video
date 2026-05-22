@@ -2,15 +2,15 @@
 
 ## CRITICAL
 
-### C1. render_pipeline.py is a 290KB God File
+### C1. render_pipeline.py is a God File
 **File**: `backend/app/orchestration/render_pipeline.py`
-**Functions affected**: `run_render_pipeline()`, `_render_part()`, `_build_variant_segments()`, `_maybe_prepend_remotion_hook_intro()`, `_maybe_prepend_asset_intro()`, `_maybe_append_asset_outro()`, `_maybe_apply_asset_logo()`, `_maybe_cleanup_narration_audio()`, plus 30+ helpers
+**Functions affected**: `run_render_pipeline()`, `_render_part()`, `_build_variant_segments()`, `_maybe_cleanup_narration_audio()`, plus 25+ helpers
 
-**Debt**: Every render concern — download, scene detection caching, scoring, transcription, subtitle processing, TTS, audio mixing, FFmpeg cut, FFmpeg encode, QA validation, report generation, thumbnail extraction, creator asset injection, AI plan integration — is inlined in one file. Navigation is near-impossible. Any change touches unrelated code. Testing is impractical.
+**Debt**: Every render concern — download, scene detection caching, scoring, transcription, subtitle processing, TTS, audio mixing, FFmpeg cut, FFmpeg encode, QA validation, report generation, thumbnail extraction, AI plan integration — is inlined in one file. Navigation is difficult. Any change touches unrelated code.
 
-**Impact**: Every bug fix, every new render feature, every refactor requires opening and reading a 6,000+ line file. High regression risk from any change. Onboarding a new contributor is extremely difficult.
+**Impact**: Every bug fix, every new render feature, every refactor requires navigating a 5,700+ line file. High regression risk from any change.
 
-**Phase 4A plan in progress (2026-05-22)**: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md` defines the split strategy. First implementation phase (4B) extracts `_maybe_prepend_*` / `_maybe_apply_asset_logo` post-assembly helpers to `orchestration/asset_pipeline.py`. Subsequent phases (4C–4H) extract QA pipeline, audio pipeline, render_engine split, db split, and route cleanup. Extract-not-rewrite strategy with backward-compat re-exports at every step.
+**Phase 4B shipped (2026-05-22)**: Post-assembly asset helpers extracted to `orchestration/asset_pipeline.py`; shared logging/event helpers extracted to `orchestration/render_events.py`. `render_pipeline.py` reduced from 6,064 → 5,779 lines. Plan: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md`. Next: Phase 4C (QA pipeline extraction).
 
 ---
 

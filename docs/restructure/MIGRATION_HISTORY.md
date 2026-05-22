@@ -214,8 +214,8 @@ This document records what changed in each phase, why, and what contracts were i
 ## Phase 4A — Backend Modularization Planning
 
 **Branch**: `restructure/output-timeline-architecture`
-**Status**: PLANNING
-**Commit**: (this commit)
+**Status**: SHIPPED
+**Commit**: `b5845bd`
 
 **Purpose**: Define the strategy to split the backend god files (`render_pipeline.py` 6,064 lines, `db.py` 1,886 lines, `render_engine.py` 1,652 lines, `subtitle_engine.py` 1,970 lines, `routes/render.py` 1,368 lines) into focused modules without changing behavior.
 
@@ -227,10 +227,34 @@ This document records what changed in each phase, why, and what contracts were i
 
 ---
 
-## Test Suite State (Post Phase 3C.5)
+---
+
+## Phase 4B — Extract Asset Pipeline
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Extract post-assembly asset hook functions from `render_pipeline.py` into dedicated modules. First code extraction phase of Phase 4.
+
+**Shipped changes**:
+- New file: `backend/app/orchestration/render_events.py` — shared logging/event helpers required by the asset functions: `_JOB_LOG_DIRS`, `_safe_unlink`, `_append_json_line`, `_render_error_code`, `_job_log`, `_emit_render_event`. Extracted as a prerequisite to avoid circular imports.
+- New file: `backend/app/orchestration/asset_pipeline.py` — four post-assembly helpers moved verbatim: `_maybe_prepend_remotion_hook_intro`, `_maybe_prepend_asset_intro`, `_maybe_append_asset_outro`, `_maybe_apply_asset_logo`.
+- `render_pipeline.py`: function bodies for the above 10 items removed; backward-compat re-exports added via `from app.orchestration.render_events import ...` and `from app.orchestration.asset_pipeline import ...`. All existing call sites unchanged.
+- `render_pipeline.py` reduced from 6,064 → 5,779 lines (−285 lines).
+- New test file: `backend/tests/test_asset_pipeline.py` — 23 tests covering import correctness, backward-compat identity, disabled/enabled behavior for all 4 functions, `_safe_unlink` and `_render_error_code` behavior.
+
+**Contracts introduced**:
+- `render_events.py` owns `_JOB_LOG_DIRS`. The dict is a shared mutable singleton: `render_pipeline.py` populates it via `_JOB_LOG_DIRS[job_id] = ...`; `_job_log` and `_emit_render_event` in `render_events.py` read from it. In-place mutation is safe across the import boundary.
+- No function signature was changed. No call site was changed. No behavior was changed.
+- `asset_pipeline.py` imports from `render_events.py` only — no circular import.
+
+---
+
+## Test Suite State (Post Phase 4B)
 
 ```
-5787 passed, 1 skipped, 8 failed
+5810 passed, 1 skipped, 8 failed
 ```
 
 The 8 persistent failures are pre-existing (before Phase 1):
@@ -240,5 +264,7 @@ The 8 persistent failures are pre-existing (before Phase 1):
 - `test_ai_visibility_summary.py` — 1 test
 
 None of these are related to the output-timeline architecture restructure.
+
+Phase 4B added 23 new passing tests (`test_asset_pipeline.py`).
 
 Phase 3C.5 fix: 3 previously-SKIPPED `TestOverlayPathDoubleAtempoSafety` tests in `test_overlay_narration.py` now PASS (5784 → 5787 passing, 4 → 1 skipped).
