@@ -1302,3 +1302,53 @@ text_transforms.py  → srt_core.py + readability.py
 ```
 
 89 functional tests pass. 17 tests fail due to `ModuleNotFoundError: No module named 'whisper'` — this is the same pre-existing environment limitation as the 13 whisper-related failures in `test_subtitle_ass_core.py` (Python 3.11 test runner does not have whisper installed; full project venv does). All 8 pre-existing failures unchanged.
+
+---
+
+## Phase 4G.6 — Extract Subtitle Transcription + Shim Completion
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Source plan**: [PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md](PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md) — Cluster F + shim finalization
+
+**Purpose**: Extract Cluster F (Whisper/transcription) from `subtitle_engine.py` into `subtitles/transcription.py`. Fix the `has_audio_stream` cross-module coupling. After this phase `subtitle_engine.py` is a pure re-export shim with no function bodies and no `import whisper`.
+
+**Shipped changes**:
+- New file: `backend/app/services/subtitles/transcription.py` (~210 lines) — verbatim copy of all transcription symbols from `subtitle_engine.py`, with two changes:
+  - `_WHISPER_CACHE_DIR` uses `parents[4]` (not `parents[3]`) — file is one directory deeper than `subtitle_engine.py` was
+  - `has_audio_stream()` coupling fixed: now imports `from app.services.render.ffmpeg_helpers import _has_audio_stream` directly instead of routing through `render_engine` shim
+  - Moved: `_MODEL_CACHE`, `_MODEL_CACHE_LOCK`, `_MODEL_TRANSCRIBE_LOCKS`, `_WHISPER_CACHE_DIR`, `WORD_MIN_GAP_SEC`, `WORD_MIN_DURATION_SEC`, `WORD_MERGE_SHORTER_THAN_SEC`, `get_whisper_model`, `_get_transcribe_lock`, `_transcribe_with_retry`, `_ensure_ffmpeg_in_path_for_whisper`, `has_audio_stream`, `extract_audio_for_transcription`, `transcribe_to_srt`, `_write_word_level_srt`, `_write_segment_level_srt`
+- `backend/app/services/subtitle_engine.py`: complete rewrite to pure re-export shim (~45 lines). All stdlib imports (`subprocess`, `os`, `re`, `logging`, `Path`, `time`, `threading`), `import whisper`, `from bin_paths import ...`, and all 14 transcription symbol bodies removed. Added `from app.services.subtitles.transcription import (...)` re-export block. File reduced 249 → 45 lines.
+- New test file: `backend/tests/test_subtitle_transcription.py` — 49 tests: module imports (11), same-object identity via shim (10), coupling fix verification (3 — checks `ffmpeg_helpers` is used, not `render_engine`), `get_whisper_model` caching with mock (3), `_get_transcribe_lock` caching (3), `_transcribe_with_retry` retry logic (4), `_ensure_ffmpeg_in_path_for_whisper` PATH injection (2), `extract_audio_for_transcription` args (2), `_write_segment_level_srt` (3), `_write_word_level_srt` (3), `transcribe_to_srt` integration paths (5).
+
+**subtitle_engine.py line reduction**: 249 → 45 lines (−204). Total reduction from original: 1,970 → 45 lines (−1,925).
+
+**Coupling fix details**:
+- Before: `has_audio_stream()` called `from app.services.render_engine import _has_audio_stream` (deferred import through shim)
+- After: `has_audio_stream()` calls `from app.services.render.ffmpeg_helpers import _has_audio_stream` (direct to implementation)
+- Risk: zero — `_has_audio_stream` signature and behavior unchanged; `ffmpeg_helpers` has no import from any subtitle module
+
+**Contracts maintained**:
+- All public `subtitle_engine` exports unchanged — same-object identity passes for all 14 moved symbols.
+- `_MODEL_CACHE`, `_MODEL_CACHE_LOCK`, `_MODEL_TRANSCRIBE_LOCKS` are module-level singletons in exactly one module (`transcription.py`). No second copy created anywhere.
+- `transcribe_to_srt` signature, word-level/segment-level path selection, WAV cleanup (always in `finally`), retry behavior — verbatim.
+- `WORD_MIN_GAP_SEC=0.02`, `WORD_MIN_DURATION_SEC=0.12`, `WORD_MERGE_SHORTER_THAN_SEC=0.11` — unchanged.
+- No ASS output content changed. No SRT timing behavior changed.
+
+**Dependency graph** (no cycles):
+```
+transcription.py → srt_core.py (format_srt_timestamp, _run_with_retry)
+transcription.py → render.ffmpeg_helpers (_has_audio_stream — deferred)
+transcription.py → bin_paths (get_ffmpeg_bin)
+```
+No imports from styles.py, readability.py, ass_core.py, or text_transforms.py.
+
+---
+
+## Test Suite State (Post Phase 4G.6)
+
+```
+8 failed, 6526 passed, 1 skipped  (+49 new tests in test_subtitle_transcription.py)
+```
+
+49 new tests in `test_subtitle_transcription.py` — all 49 pass (whisper mocked at module load time via `sys.modules` injection). All 8 pre-existing failures unchanged. `subtitle_engine.py` is now a pure re-export shim; no function bodies remain.

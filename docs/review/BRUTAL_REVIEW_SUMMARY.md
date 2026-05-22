@@ -58,7 +58,7 @@ The only real local ML in the pipeline: Whisper (transcription), optional senten
 
 ### The Core Pipeline Has Zero Tests
 
-80+ test files exist. They test AI schema validators. They do not test: `render_pipeline.py`, `subtitle_engine.py`, `scene_detector.py`, `job_manager.py`, `db.py`, `downloader.py`, `tts_service.py`.
+80+ test files exist. They test AI schema validators. They do not test: `render_pipeline.py`, `subtitle_engine.py` (now a pure re-export shim — subtitles split into `app/services/subtitles/` package via Phase 4G), `scene_detector.py`, `job_manager.py`, `db.py`, `downloader.py`, `tts_service.py`.
 
 **Partially addressed (post Phase 3B)**: `render_engine.py` now has unit test coverage via `test_composite_overlays.py` (composite_overlays_on_base_clip, render_base_clip) and `test_render_base_clip.py`. `audio_mix_service.py` is covered by `TestMixNarrationAudioAtempo` (Phase 0). Domain models have 100+ tests (`test_timeline_map.py`, `test_base_clip_manifest.py`, `test_manifest_writer.py`). FFmpeg command generation for the overlay path is tested with mocked subprocess.
 
