@@ -30,7 +30,7 @@ from app.services.subtitle_engine import (
     resegment_srt_for_readability,
 )
 from app.services.subtitle_transcription_adapters import transcribe_with_adapter
-from app.services.render_engine import cut_video, render_part_smart, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event, content_type_crf_delta as _crf_delta_for_content_type, extract_thumbnail_frame
+from app.services.render_engine import cut_video, render_part_smart, render_base_clip, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event, content_type_crf_delta as _crf_delta_for_content_type, extract_thumbnail_frame
 from app.services import cancel_registry
 from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
 from app.services.viral_scorer import score_segments, apply_retention_proxy
@@ -52,6 +52,12 @@ from app.ai.visibility.ai_visibility_summary import attach_ai_visibility_summari
 from app.domain.timeline import TimelineMap
 from app.domain.manifests import BaseClipManifest
 from app.services.manifest_writer import write_manifest, manifest_path as _manifest_path
+
+# Feature flag: generate a no-overlay base clip as a parallel artifact before the
+# final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
+# The base clip is never fed into the final output — render_part_smart() always
+# produces the final video.  Phase 2 only.
+_FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 
 logger = logging.getLogger("app.render")
 
@@ -4332,6 +4338,55 @@ def run_render_pipeline(
                     )
                 except Exception:
                     _motion_ck = None
+            # ── Phase 2: base clip (parallel artifact, FEATURE_BASE_CLIP_FIRST=1) ──
+            # Produces base_clip.mp4 with no subtitle/overlay filters for manifest
+            # tracking and future Phase 3+ use.  render_part_smart() always runs
+            # unconditionally below — the base clip is never the final output.
+            if _FEATURE_BASE_CLIP_FIRST:
+                _base_clip_out = work_dir / f"part_{idx}" / "base_clip.mp4"
+                try:
+                    _base_clip_out.parent.mkdir(parents=True, exist_ok=True)
+                    _bc_meta = render_base_clip(
+                        input_path=str(raw_part),
+                        output_path=str(_base_clip_out),
+                        timeline=_p1_timeline,
+                        aspect_ratio=payload.aspect_ratio,
+                        scale_x=payload.frame_scale_x,
+                        scale_y=payload.frame_scale_y,
+                        motion_aware_crop=payload.motion_aware_crop,
+                        reframe_mode=getattr(payload, "reframe_mode", "subject"),
+                        effect_preset=payload.effect_preset,
+                        transition_sec=tuned["transition_sec"],
+                        video_codec=payload.video_codec,
+                        video_crf=_part_video_crf,
+                        video_preset=tuned["video_preset"],
+                        audio_bitrate=payload.audio_bitrate,
+                        retry_count=retry_count,
+                        encoder_mode=payload.encoder_mode,
+                        output_fps=payload.output_fps,
+                        loudnorm_enabled=getattr(payload, "loudnorm_enabled", False),
+                        ffmpeg_threads=_ffmpeg_threads,
+                        content_type=seg.get("content_type_hint", "vlog"),
+                        _motion_cache_key=_motion_ck,
+                    )
+                    _p1_manifest.base_clip_path = str(_base_clip_out)
+                    _p1_manifest.base_clip_duration = _bc_meta.get("duration")
+                    _p1_manifest.base_clip_fps = _bc_meta.get("fps")
+                    _p1_manifest.base_clip_width = _bc_meta.get("width")
+                    _p1_manifest.base_clip_height = _bc_meta.get("height")
+                    _p1_manifest.base_clip_has_audio = _bc_meta.get("has_audio")
+                    _p1_manifest.base_clip_created_at = _bc_meta.get("created_at")
+                    write_manifest(work_dir, _p1_manifest)
+                    logger.info(
+                        "base_clip_rendered part=%d path=%s duration=%.3fs",
+                        idx, _base_clip_out, _bc_meta.get("duration", 0.0),
+                    )
+                except Exception as _bc_err:
+                    logger.warning(
+                        "base_clip_render_failed part=%d err=%s — legacy render continues",
+                        idx, _bc_err,
+                    )
+            # ── end Phase 2 block ─────────────────────────────────────────────────
             try:
                 render_part_smart(
                     str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if payload.add_title_overlay else "",

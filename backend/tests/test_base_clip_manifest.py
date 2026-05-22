@@ -189,3 +189,71 @@ class TestBaseClipManifestProgressiveUpdate:
         assert restored.ass_path == "/tmp/part.ass"
         assert restored.narration_path == "/tmp/narration.mp3"
         assert restored.rendered_path == "/tmp/output.mp4"
+
+
+class TestBaseClipManifestBaseClipFields:
+    def test_base_clip_fields_none_by_default(self):
+        m = _sample_manifest()
+        assert m.base_clip_path is None
+        assert m.base_clip_duration is None
+        assert m.base_clip_fps is None
+        assert m.base_clip_width is None
+        assert m.base_clip_height is None
+        assert m.base_clip_has_audio is None
+        assert m.base_clip_created_at is None
+
+    def test_base_clip_fields_in_to_dict(self):
+        d = _sample_manifest().to_dict()
+        base_keys = {
+            "base_clip_path", "base_clip_duration", "base_clip_fps",
+            "base_clip_width", "base_clip_height", "base_clip_has_audio",
+            "base_clip_created_at",
+        }
+        assert base_keys.issubset(d.keys())
+
+    def test_base_clip_fields_none_serialize_as_none(self):
+        d = _sample_manifest().to_dict()
+        for key in ("base_clip_path", "base_clip_duration", "base_clip_fps",
+                    "base_clip_width", "base_clip_height", "base_clip_has_audio",
+                    "base_clip_created_at"):
+            assert d[key] is None, f"Expected None for {key}, got {d[key]!r}"
+
+    def test_base_clip_fields_round_trip(self):
+        m = _sample_manifest()
+        m.base_clip_path = "/tmp/base_clip.mp4"
+        m.base_clip_duration = 27.826
+        m.base_clip_fps = 60.0
+        m.base_clip_width = 1080
+        m.base_clip_height = 1440
+        m.base_clip_has_audio = True
+        m.base_clip_created_at = 1716374400.0
+        restored = BaseClipManifest.from_dict(m.to_dict())
+        assert restored.base_clip_path == "/tmp/base_clip.mp4"
+        assert restored.base_clip_duration == pytest.approx(27.826)
+        assert restored.base_clip_fps == pytest.approx(60.0)
+        assert restored.base_clip_width == 1080
+        assert restored.base_clip_height == 1440
+        assert restored.base_clip_has_audio is True
+        assert restored.base_clip_created_at == pytest.approx(1716374400.0)
+
+    def test_from_dict_backward_compat_missing_base_clip_fields(self):
+        """Old manifest dicts without base_clip_* keys deserialize with None defaults."""
+        old_dict = _sample_manifest().to_dict()
+        for key in ("base_clip_path", "base_clip_duration", "base_clip_fps",
+                    "base_clip_width", "base_clip_height", "base_clip_has_audio",
+                    "base_clip_created_at"):
+            old_dict.pop(key, None)
+        restored = BaseClipManifest.from_dict(old_dict)
+        assert restored.base_clip_path is None
+        assert restored.base_clip_duration is None
+        assert restored.base_clip_fps is None
+        assert restored.base_clip_width is None
+        assert restored.base_clip_height is None
+        assert restored.base_clip_has_audio is None
+        assert restored.base_clip_created_at is None
+
+    def test_base_clip_has_audio_false_round_trip(self):
+        m = _sample_manifest()
+        m.base_clip_has_audio = False
+        restored = BaseClipManifest.from_dict(m.to_dict())
+        assert restored.base_clip_has_audio is False

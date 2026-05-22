@@ -68,6 +68,16 @@ class BaseClipManifest:
     narration_path: Optional[str] = field(default=None)
     rendered_path: Optional[str] = field(default=None)
 
+    # Base clip artifact — populated when FEATURE_BASE_CLIP_FIRST=1
+    # Parallel artifact only: never fed into the final render path.
+    base_clip_path: Optional[str] = field(default=None)
+    base_clip_duration: Optional[float] = field(default=None)
+    base_clip_fps: Optional[float] = field(default=None)
+    base_clip_width: Optional[int] = field(default=None)
+    base_clip_height: Optional[int] = field(default=None)
+    base_clip_has_audio: Optional[bool] = field(default=None)
+    base_clip_created_at: Optional[float] = field(default=None)
+
     # ------------------------------------------------------------------
     # Serialization
     # ------------------------------------------------------------------
@@ -97,6 +107,13 @@ class BaseClipManifest:
             "ass_path": self.ass_path,
             "narration_path": self.narration_path,
             "rendered_path": self.rendered_path,
+            "base_clip_path": self.base_clip_path,
+            "base_clip_duration": self.base_clip_duration,
+            "base_clip_fps": self.base_clip_fps,
+            "base_clip_width": self.base_clip_width,
+            "base_clip_height": self.base_clip_height,
+            "base_clip_has_audio": self.base_clip_has_audio,
+            "base_clip_created_at": self.base_clip_created_at,
         }
 
     @classmethod
@@ -125,4 +142,11 @@ class BaseClipManifest:
             ass_path=d.get("ass_path"),
             narration_path=d.get("narration_path"),
             rendered_path=d.get("rendered_path"),
+            base_clip_path=d.get("base_clip_path"),
+            base_clip_duration=float(d["base_clip_duration"]) if d.get("base_clip_duration") is not None else None,
+            base_clip_fps=float(d["base_clip_fps"]) if d.get("base_clip_fps") is not None else None,
+            base_clip_width=int(d["base_clip_width"]) if d.get("base_clip_width") is not None else None,
+            base_clip_height=int(d["base_clip_height"]) if d.get("base_clip_height") is not None else None,
+            base_clip_has_audio=bool(d["base_clip_has_audio"]) if d.get("base_clip_has_audio") is not None else None,
+            base_clip_created_at=float(d["base_clip_created_at"]) if d.get("base_clip_created_at") is not None else None,
         )
