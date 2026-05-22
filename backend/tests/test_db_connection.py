@@ -90,21 +90,6 @@ class TestImportIdentity:
 
 
 # ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-class TestConstants:
-    def test_upload_profile_lock_ttl_minutes(self):
-        from app.db.connection import UPLOAD_PROFILE_LOCK_TTL_MINUTES
-        assert UPLOAD_PROFILE_LOCK_TTL_MINUTES == 30
-
-    def test_upload_scheduler_state_id(self):
-        from app.db.connection import UPLOAD_SCHEDULER_STATE_ID
-        assert UPLOAD_SCHEDULER_STATE_ID == "main"
-
-
-
-# ---------------------------------------------------------------------------
 # get_conn()
 # ---------------------------------------------------------------------------
 
@@ -161,13 +146,6 @@ class TestGetConn:
 EXPECTED_TABLES = {
     "jobs",
     "job_parts",
-    "upload_accounts",
-    "upload_queue",
-    "upload_videos",
-    "upload_history",
-    "upload_runtime_locks",
-    "upload_scheduler_state",
-    "upload_proxy_pool",
     "creator_prefs",
 }
 
@@ -207,7 +185,7 @@ class TestInitDb:
         conn = get_conn()
         try:
             conn.execute("SELECT COUNT(*) FROM jobs").fetchone()
-            conn.execute("SELECT COUNT(*) FROM upload_accounts").fetchone()
+            conn.execute("SELECT COUNT(*) FROM creator_prefs").fetchone()
         finally:
             conn.close()
 

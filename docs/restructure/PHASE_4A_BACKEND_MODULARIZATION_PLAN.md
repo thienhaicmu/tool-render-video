@@ -1,7 +1,7 @@
 # PHASE_4A_BACKEND_MODULARIZATION_PLAN.md
 
-**Status**: PLANNING (Phase 4B SHIPPED, Phase 4C SHIPPED, Phase 4D SHIPPED, Phase 4E.1 SHIPPED, Phase 4E.2 SHIPPED, Phase 4E.3 SHIPPED, Phase 4E.4 SHIPPED, Phase 4E.5 SHIPPED, Phase 4F.0 PLANNING, Phase 4F.1 SHIPPED, Phase 4F.2 SHIPPED, Phase 4F.3 SHIPPED, Phase 4F.4 SHIPPED, Phase 4F.5 AUDIT COMPLETE, Phase 4F.5A–C SHIPPED)
-**Last updated**: 2026-05-22 (post Phase 4F.5C — upload domain code fully removed; upload DB tables pending 4F.5D)
+**Status**: COMPLETE (Phase 4B–4F.5D all SHIPPED — upload domain fully removed, DB split complete, services/db.py is a clean re-export shim)
+**Last updated**: 2026-05-22 (post Phase 4F.5D — upload schema dropped from init_db(), upload domain fully removed 4F.5A–D)
 **Branch**: `restructure/output-timeline-architecture`
 
 This is a planning document only. No code changes are in scope. Phase 4A produces this document and updated supporting docs. Implementation begins in Phase 4B.

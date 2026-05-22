@@ -12,8 +12,6 @@ from app.core.config import DATABASE_PATH
 logger = logging.getLogger("app.db")
 _DB_PATH_LOCK = threading.Lock()
 _ACTIVE_DB_PATH: Path | None = None
-UPLOAD_PROFILE_LOCK_TTL_MINUTES = 30
-UPLOAD_SCHEDULER_STATE_ID = "main"
 
 
 def _default_fallback_db_path() -> Path:
@@ -128,8 +126,27 @@ def close_thread_conn() -> None:
         _tls.conn = None
 
 
+# Upload tables removed in Phase 4F.5D. Drop them idempotently from any
+# existing database file that was created before the upload domain was removed.
+_UPLOAD_TABLES = (
+    "upload_accounts",
+    "upload_queue",
+    "upload_videos",
+    "upload_history",
+    "upload_runtime_locks",
+    "upload_scheduler_state",
+    "upload_proxy_pool",
+)
+
+
+def _drop_upload_tables(conn: sqlite3.Connection) -> None:
+    for table in _UPLOAD_TABLES:
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+
 def init_db():
     conn = get_conn()
+    _drop_upload_tables(conn)
     cur = conn.cursor()
     cur.execute(
         """
@@ -171,158 +188,6 @@ def init_db():
         )
         """
     )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS upload_accounts (
-            account_id TEXT PRIMARY KEY,
-            platform TEXT,
-            channel_code TEXT,
-            account_key TEXT,
-            display_name TEXT DEFAULT '',
-            status TEXT DEFAULT 'active',
-            profile_path TEXT DEFAULT '',
-            proxy_id TEXT DEFAULT '',
-            proxy_config_json TEXT DEFAULT '{}',
-            daily_limit INTEGER DEFAULT 0,
-            cooldown_minutes INTEGER DEFAULT 0,
-            today_count INTEGER DEFAULT 0,
-            last_upload_at TEXT,
-            last_login_check_at TEXT,
-            login_state TEXT DEFAULT 'unknown',
-            profile_lock_state TEXT DEFAULT 'idle',
-            health_json TEXT,
-            metadata_json TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS upload_queue (
-            queue_id TEXT PRIMARY KEY,
-            video_id TEXT,
-            video_path TEXT NOT NULL,
-            render_job_id TEXT,
-            part_no INTEGER,
-            account_id TEXT,
-            platform TEXT NOT NULL DEFAULT 'tiktok',
-            channel_code TEXT,
-            caption TEXT DEFAULT '',
-            hashtags_json TEXT DEFAULT '[]',
-            status TEXT NOT NULL DEFAULT 'pending',
-            priority INTEGER DEFAULT 0,
-            scheduled_at TEXT DEFAULT '',
-            attempt_count INTEGER DEFAULT 0,
-            max_attempts INTEGER DEFAULT 3,
-            last_error TEXT DEFAULT '',
-            metadata_json TEXT DEFAULT '{}',
-            result_json TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS upload_videos (
-            video_id TEXT PRIMARY KEY,
-            video_path TEXT NOT NULL,
-            file_name TEXT DEFAULT '',
-            platform TEXT NOT NULL DEFAULT 'tiktok',
-            source_type TEXT NOT NULL DEFAULT 'manual_file',
-            status TEXT NOT NULL DEFAULT 'ready',
-            caption TEXT DEFAULT '',
-            hashtags_json TEXT DEFAULT '[]',
-            cover_path TEXT DEFAULT '',
-            note TEXT DEFAULT '',
-            duration_sec REAL DEFAULT 0,
-            file_size INTEGER DEFAULT 0,
-            metadata_json TEXT DEFAULT '{}',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS upload_history (
-            history_id TEXT PRIMARY KEY,
-            queue_id TEXT NOT NULL,
-            account_id TEXT,
-            video_id TEXT,
-            platform TEXT,
-            video_path TEXT,
-            status TEXT,
-            attempt_no INTEGER,
-            started_at TEXT,
-            finished_at TEXT,
-            duration_seconds REAL,
-            error TEXT,
-            adapter_result_json TEXT DEFAULT '{}',
-            metadata_json TEXT DEFAULT '{}',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS upload_runtime_locks (
-            lock_id TEXT PRIMARY KEY,
-            lock_type TEXT NOT NULL,
-            resource_key TEXT NOT NULL,
-            account_id TEXT DEFAULT '',
-            queue_id TEXT DEFAULT '',
-            profile_path TEXT DEFAULT '',
-            metadata_json TEXT DEFAULT '{}',
-            acquired_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            expires_at TEXT DEFAULT '',
-            released_at TEXT DEFAULT '',
-            active INTEGER DEFAULT 1,
-            UNIQUE(lock_type, resource_key, active)
-        )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS upload_scheduler_state (
-            state_id TEXT PRIMARY KEY,
-            scheduler_enabled INTEGER DEFAULT 0,
-            max_concurrent_uploads INTEGER DEFAULT 1,
-            tick_interval_seconds INTEGER DEFAULT 30,
-            last_tick_at TEXT DEFAULT '',
-            running_count INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'stopped',
-            metadata_json TEXT DEFAULT '{}',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS upload_proxy_pool (
-            proxy_id TEXT PRIMARY KEY,
-            name TEXT DEFAULT '',
-            type TEXT DEFAULT 'http',
-            host TEXT DEFAULT '',
-            port INTEGER DEFAULT 0,
-            username TEXT DEFAULT '',
-            password TEXT DEFAULT '',
-            market TEXT DEFAULT '',
-            status TEXT DEFAULT 'untested',
-            last_tested_at TEXT DEFAULT '',
-            last_ok_at TEXT DEFAULT '',
-            latency_ms INTEGER DEFAULT 0,
-            last_ip TEXT DEFAULT '',
-            last_error TEXT DEFAULT '',
-            notes TEXT DEFAULT '',
-            metadata_json TEXT DEFAULT '{}',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
     # Lightweight schema migration for existing local DBs created by old versions.
     def _ensure_columns(table: str, required: dict[str, str]):
         existing_rows = cur.execute(f"PRAGMA table_info({table})").fetchall()
@@ -357,132 +222,6 @@ def init_db():
             "message": "message TEXT DEFAULT ''",
             "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
         },
-    )
-    _ensure_columns(
-        "upload_accounts",
-        {
-            "platform": "platform TEXT",
-            "channel_code": "channel_code TEXT",
-            "account_key": "account_key TEXT",
-            "display_name": "display_name TEXT DEFAULT ''",
-            "status": "status TEXT DEFAULT 'active'",
-            "profile_path": "profile_path TEXT DEFAULT ''",
-            "proxy_id": "proxy_id TEXT DEFAULT ''",
-            "proxy_config_json": "proxy_config_json TEXT DEFAULT '{}'",
-            "daily_limit": "daily_limit INTEGER DEFAULT 0",
-            "cooldown_minutes": "cooldown_minutes INTEGER DEFAULT 0",
-            "today_count": "today_count INTEGER DEFAULT 0",
-            "last_upload_at": "last_upload_at TEXT",
-            "last_login_check_at": "last_login_check_at TEXT",
-            "login_state": "login_state TEXT DEFAULT 'unknown'",
-            "profile_lock_state": "profile_lock_state TEXT DEFAULT 'idle'",
-            "health_json": "health_json TEXT",
-            "metadata_json": "metadata_json TEXT",
-            "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
-            "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
-        },
-    )
-    _ensure_columns(
-        "upload_queue",
-        {
-            "video_id": "video_id TEXT",
-            "video_path": "video_path TEXT NOT NULL DEFAULT ''",
-            "render_job_id": "render_job_id TEXT",
-            "part_no": "part_no INTEGER",
-            "account_id": "account_id TEXT",
-            "platform": "platform TEXT NOT NULL DEFAULT 'tiktok'",
-            "channel_code": "channel_code TEXT",
-            "caption": "caption TEXT DEFAULT ''",
-            "hashtags_json": "hashtags_json TEXT DEFAULT '[]'",
-            "status": "status TEXT NOT NULL DEFAULT 'pending'",
-            "priority": "priority INTEGER DEFAULT 0",
-            "scheduled_at": "scheduled_at TEXT DEFAULT ''",
-            "attempt_count": "attempt_count INTEGER DEFAULT 0",
-            "max_attempts": "max_attempts INTEGER DEFAULT 3",
-            "last_error": "last_error TEXT DEFAULT ''",
-            "metadata_json": "metadata_json TEXT DEFAULT '{}'",
-            "result_json": "result_json TEXT",
-            "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
-            "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
-        },
-    )
-    _ensure_columns(
-        "upload_videos",
-        {
-            "video_path": "video_path TEXT NOT NULL DEFAULT ''",
-            "file_name": "file_name TEXT DEFAULT ''",
-            "platform": "platform TEXT NOT NULL DEFAULT 'tiktok'",
-            "source_type": "source_type TEXT NOT NULL DEFAULT 'manual_file'",
-            "status": "status TEXT NOT NULL DEFAULT 'ready'",
-            "caption": "caption TEXT DEFAULT ''",
-            "hashtags_json": "hashtags_json TEXT DEFAULT '[]'",
-            "cover_path": "cover_path TEXT DEFAULT ''",
-            "note": "note TEXT DEFAULT ''",
-            "duration_sec": "duration_sec REAL DEFAULT 0",
-            "file_size": "file_size INTEGER DEFAULT 0",
-            "metadata_json": "metadata_json TEXT DEFAULT '{}'",
-            "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
-            "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
-        },
-    )
-    _ensure_columns(
-        "upload_history",
-        {
-            "queue_id": "queue_id TEXT NOT NULL DEFAULT ''",
-            "account_id": "account_id TEXT",
-            "video_id": "video_id TEXT",
-            "platform": "platform TEXT",
-            "video_path": "video_path TEXT",
-            "status": "status TEXT",
-            "attempt_no": "attempt_no INTEGER",
-            "started_at": "started_at TEXT",
-            "finished_at": "finished_at TEXT",
-            "duration_seconds": "duration_seconds REAL",
-            "error": "error TEXT",
-            "adapter_result_json": "adapter_result_json TEXT DEFAULT '{}'",
-            "metadata_json": "metadata_json TEXT DEFAULT '{}'",
-            "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
-        },
-    )
-    _ensure_columns(
-        "upload_runtime_locks",
-        {
-            "lock_type": "lock_type TEXT NOT NULL DEFAULT ''",
-            "resource_key": "resource_key TEXT NOT NULL DEFAULT ''",
-            "account_id": "account_id TEXT DEFAULT ''",
-            "queue_id": "queue_id TEXT DEFAULT ''",
-            "profile_path": "profile_path TEXT DEFAULT ''",
-            "metadata_json": "metadata_json TEXT DEFAULT '{}'",
-            "acquired_at": "acquired_at TEXT DEFAULT CURRENT_TIMESTAMP",
-            "expires_at": "expires_at TEXT DEFAULT ''",
-            "released_at": "released_at TEXT DEFAULT ''",
-            "active": "active INTEGER DEFAULT 1",
-        },
-    )
-    _ensure_columns(
-        "upload_scheduler_state",
-        {
-            "scheduler_enabled": "scheduler_enabled INTEGER DEFAULT 0",
-            "max_concurrent_uploads": "max_concurrent_uploads INTEGER DEFAULT 1",
-            "tick_interval_seconds": "tick_interval_seconds INTEGER DEFAULT 30",
-            "last_tick_at": "last_tick_at TEXT DEFAULT ''",
-            "running_count": "running_count INTEGER DEFAULT 0",
-            "status": "status TEXT DEFAULT 'stopped'",
-            "metadata_json": "metadata_json TEXT DEFAULT '{}'",
-            "created_at": "created_at TEXT DEFAULT CURRENT_TIMESTAMP",
-            "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
-        },
-    )
-    cur.execute(
-        """
-        INSERT INTO upload_scheduler_state (
-            state_id, scheduler_enabled, max_concurrent_uploads, tick_interval_seconds,
-            last_tick_at, running_count, status, metadata_json, created_at, updated_at
-        )
-        VALUES (?, 0, 1, 30, '', 0, 'stopped', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        ON CONFLICT(state_id) DO NOTHING
-        """,
-        (UPLOAD_SCHEDULER_STATE_ID,),
     )
     # ── Creator preferences (singleton row, id always = 1) ──────────────────────
     cur.execute(

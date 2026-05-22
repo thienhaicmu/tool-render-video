@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4F.5C; upload router, frontend, engine, channels dependency, routes/upload.py, platform_repo.py, and all upload DB functions removed from services/db.py; upload tables in init_db() remain for 4F.5D)
+**Last updated**: 2026-05-22 (post Phase 4F.5D; upload domain fully removed — router, frontend, engine, channels dependency, routes/upload.py, platform_repo.py, upload DB functions, upload table DDL all gone; _drop_upload_tables() migration drops stale tables on startup)
 
 ---
 

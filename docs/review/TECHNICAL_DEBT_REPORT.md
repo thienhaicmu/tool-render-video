@@ -90,6 +90,8 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Phase 4F.5C shipped (2026-05-22)**: `routes/upload.py` (1,501 lines, 42 endpoints) deleted. `app/db/platform_repo.py` (142 lines, proxy pool CRUD) deleted. All 43 upload-domain DB functions removed from `services/db.py` (~1,062 lines removed); `UPLOAD_PROFILE_LOCK_TTL_MINUTES`/`UPLOAD_SCHEDULER_STATE_ID` re-exports and `platform_repo` re-export block also removed. `services/db.py` reduced from 1,116 → 31 lines (pure re-export shim). `test_platform_repo.py` (44 tests) deleted; 1 upload-constants re-export test removed from `test_db_connection.py`; 13 new tests in `test_upload_domain_removed.py`. Upload tables in `init_db()` intentionally left for Phase 4F.5D.
 
+**Phase 4F.5D shipped (2026-05-22)**: Upload domain fully removed. `app/db/connection.py` rewritten: removed `UPLOAD_PROFILE_LOCK_TTL_MINUTES`/`UPLOAD_SCHEDULER_STATE_ID` constants, removed all 7 upload table DDL blocks and 6 upload `_ensure_columns` blocks, removed `upload_scheduler_state` seed row. Added `_drop_upload_tables(conn)` helper (called inside `init_db()`) that idempotently `DROP TABLE IF EXISTS` all 7 upload tables on every startup — safely cleans up existing database files. `connection.py` reduced from 522 → ~230 lines. `TestConstants` class removed from `test_db_connection.py`; `EXPECTED_TABLES` updated to 3 tables; 20 new tests in `test_upload_schema_removed.py`. `services/db.py` public namespace: no upload or proxy symbols. **Upload domain removal complete (Phases 4F.5A–D).**
+
 ---
 
 ### H2. No Test Coverage for Core Pipeline

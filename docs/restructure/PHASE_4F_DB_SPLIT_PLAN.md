@@ -1,7 +1,7 @@
 # PHASE_4F_DB_SPLIT_PLAN.md
 
-**Status**: IN PROGRESS (Phase 4F.1–4F.4 SHIPPED, Phase 4F.5 AUDIT COMPLETE, Phase 4F.5A–C SHIPPED — upload router, frontend, engine, channels dependency, DB functions, route file, and platform_repo removed; upload tables remain for 4F.5D)
-**Last updated**: 2026-05-22 (post Phase 4F.5C)
+**Status**: COMPLETE (Phase 4F.1–4F.4 SHIPPED, Phase 4F.5 AUDIT COMPLETE, Phase 4F.5A–D SHIPPED — upload domain fully removed; DB split complete)
+**Last updated**: 2026-05-22 (post Phase 4F.5D — upload schema dropped, _drop_upload_tables() migration added, no uploads_repo created)
 **Branch**: `restructure/output-timeline-architecture`
 
 Phase 4F.0 was planning only. Phase 4F.1 has been shipped — see [MIGRATION_HISTORY.md](MIGRATION_HISTORY.md) for details.

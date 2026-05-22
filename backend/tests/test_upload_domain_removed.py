@@ -180,24 +180,3 @@ class TestStaticNoUploadApiFetches:
             "render-ui.js still contains /api/upload/ fetch calls"
         )
 
-
-# ── Upload DB tables still present in init_db() (intentional — 4F.5D pending) ──
-
-class TestUploadTablesStillInSchema:
-    """These tables must NOT be removed until Phase 4F.5D."""
-
-    def test_upload_tables_in_init_db_source(self):
-        src = (APP_ROOT / "db" / "connection.py").read_text(encoding="utf-8")
-        for table in (
-            "upload_accounts",
-            "upload_queue",
-            "upload_videos",
-            "upload_history",
-            "upload_runtime_locks",
-            "upload_scheduler_state",
-            "upload_proxy_pool",
-        ):
-            assert table in src, (
-                f"upload table '{table}' missing from connection.py — "
-                "do NOT remove tables until Phase 4F.5D"
-            )

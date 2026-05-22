@@ -835,3 +835,60 @@ Phase 4F.5B added 11 new passing tests (`test_upload_engine_removed.py`).
 The 67 failures are all pre-existing environment failures — `edge_tts` not installed in this test environment causes the render_pipeline import chain to fail for many test files. No new failures introduced by Phase 4F.5C. All 84 DB tests (test_db_connection, test_jobs_repo, test_creator_repo) pass cleanly.
 
 Phase 4F.5C: deleted 44 tests (`test_platform_repo.py`), removed 1 test from `test_db_connection.py`, added 13 new tests (`test_upload_domain_removed.py`). Net: −32 tests from suite.
+
+---
+
+## Phase 4F.5D — Drop Upload Schema + Final Upload Cleanup
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Final upload-domain removal phase. Remove upload table DDL from `init_db()`, remove upload-only constants from `connection.py`, add idempotent `_drop_upload_tables()` migration helper, and update tests and docs.
+
+**Shipped changes**:
+- `backend/app/db/connection.py`: Complete rewrite (~522 → 230 lines).
+  - Removed `UPLOAD_PROFILE_LOCK_TTL_MINUTES = 30` and `UPLOAD_SCHEDULER_STATE_ID = "main"` constants.
+  - Removed 7 `CREATE TABLE IF NOT EXISTS upload_*` DDL blocks (`upload_accounts`, `upload_queue`, `upload_videos`, `upload_history`, `upload_runtime_locks`, `upload_scheduler_state`, `upload_proxy_pool`).
+  - Removed 6 `_ensure_columns()` calls for upload tables (kept jobs and job_parts blocks).
+  - Removed `INSERT INTO upload_scheduler_state` seed row.
+  - Added `_UPLOAD_TABLES` tuple and `_drop_upload_tables(conn)` function (idempotent `DROP TABLE IF EXISTS` for all 7 upload tables).
+  - Added `_drop_upload_tables(conn)` call inside `init_db()` — runs on every startup, drops stale upload tables from any existing DB file.
+- `backend/tests/test_db_connection.py`:
+  - Removed `TestConstants` class (2 tests for now-deleted upload constants).
+  - Updated `EXPECTED_TABLES` set from 10 tables to 3 (`jobs`, `job_parts`, `creator_prefs`).
+  - Updated `test_tables_accessible_after_init` to query `creator_prefs` instead of `upload_accounts`.
+- `backend/tests/test_upload_domain_removed.py`: Removed `TestUploadTablesStillInSchema` class (1 test; was a Phase 4F.5D guard, now obsolete).
+- New test file: `backend/tests/test_upload_schema_removed.py` — 20 tests: upload constants absent from connection.py, init_db() does not create any of the 7 upload tables, init_db() creates exactly 3 live tables (jobs, job_parts, creator_prefs), `_drop_upload_tables()` drops existing upload tables from a simulated old DB, `_drop_upload_tables()` is idempotent, `jobs` table preserved after drop, `_drop_upload_tables` helper callable at module level.
+
+**Contracts maintained**:
+- `init_db()` is still called via `services/db.py` shim → `main.py`. Existing databases: upload tables are dropped on first startup after upgrade. New databases: upload tables are never created.
+- `services/db.py` public namespace: `[]` for upload symbols, `[]` for proxy symbols. Only live job/creator/connection re-exports remain.
+- All non-upload routes, render pipeline, and job management unaffected.
+
+**services/db.py public namespace (post 4F.5D)**:
+```
+['_json_dumps', '_json_loads', '_thread_conn', '_utc_now', '_utc_now_iso',
+ 'close_thread_conn', 'delete_job', 'get_conn', 'get_creator_prefs', 'get_job',
+ 'init_db', 'list_job_parts', 'list_job_parts_bulk', 'list_jobs', 'list_jobs_page',
+ 'logger', 'logging', 'update_job_progress', 'upsert_creator_prefs', 'upsert_job', 'upsert_job_part']
+```
+No upload or proxy symbols.
+
+**Upload domain fully removed** — Phases 4F.5A through 4F.5D complete:
+- 4F.5A: Upload router unregistered, frontend JS files deleted.
+- 4F.5B: `upload_engine.py` deleted, `channels.py` decoupled.
+- 4F.5C: `routes/upload.py` deleted, `platform_repo.py` deleted, all upload DB functions removed from `services/db.py`.
+- 4F.5D: Upload table DDL removed from `init_db()`, constants removed, `_drop_upload_tables()` migration added.
+
+---
+
+## Test Suite State (Post Phase 4F.5D)
+
+```
+6148 passed, 1 skipped, 67 failed  (environment without edge_tts)
+```
+
+The 67 failures are identical to Phase 4F.5C — all pre-existing environment failures (`edge_tts` not installed). Zero new failures from Phase 4F.5D changes. All 133 targeted tests pass (DB connection, jobs, creator, upload removal, upload schema).
+
+Phase 4F.5D: removed 3 tests (TestConstants×2 from test_db_connection.py, TestUploadTablesStillInSchema×1 from test_upload_domain_removed.py), added 20 new tests (`test_upload_schema_removed.py`). Net: +17 tests from suite.
