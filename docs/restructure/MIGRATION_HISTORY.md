@@ -160,35 +160,38 @@ This document records what changed in each phase, why, and what contracts were i
 
 ---
 
-## Phase 3C — Audio Ownership for Overlay Path (Planned)
+## Phase 3C — Audio Ownership for Overlay Path
 
 **Branch**: `restructure/output-timeline-architecture`  
-**Status**: PLANNED — no code implemented  
+**Status**: SHIPPED  
 **Source plan**: [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](PHASE_3C_AUDIO_OWNERSHIP_PLAN.md)
 
 **Audit findings**:
-- TTS narration mixing **already operates on the overlay path** — `mix_narration_audio()` is called on `final_part` after the render/composite. No narration implementation gap.
-- BGM (`reup_bgm_*`) is the sole missing audio feature on the overlay path. It is baked into `render_part_smart()` only; `render_base_clip()` has no BGM parameters.
+- TTS narration mixing **already operated on the overlay path** — `mix_narration_audio()` is called on `final_part` after the render/composite. No narration implementation gap.
+- BGM (`reup_bgm_*`) was the sole missing audio feature on the overlay path. It was baked into `render_part_smart()` only; `render_base_clip()` had no BGM parameters.
 
-**Planned scope**:
-- Add `reup_bgm_enable`, `reup_bgm_path`, `reup_bgm_gain` to `render_base_clip()`. Reuse `_bgm_duck_filter()` helper.
-- Pass BGM params from `render_pipeline.py` to `render_base_clip()` call site.
-- Add `base_clip_bgm_applied: Optional[bool]` to `BaseClipManifest`.
-- Add `test_overlay_narration.py` validating narration on overlay path.
-- Add tests asserting no atempo and no BGM in composite command.
+**Shipped changes**:
+- `manifests.py`: `base_clip_bgm_applied: Optional[bool]` field added. `to_dict()` and `from_dict()` updated with backward compatibility.
+- `render_engine.py`: `render_base_clip()` extended with `reup_bgm_enable`, `reup_bgm_path`, `reup_bgm_gain` params. When BGM is enabled and path is valid, uses `filter_complex` (same pattern as `_render_part()`), reusing `_build_audio_mix_filter()` helper. Both NVENC and CPU fallback paths updated via shared `_build_base_clip_cmd()` closure.
+- `render_pipeline.py`: BGM params passed to `render_base_clip()` call site via `getattr(payload, ...)`. `_part_manifest.base_clip_bgm_applied` set after successful base clip render.
+- New file: `backend/tests/test_overlay_narration.py` — narration interface, double-atempo safety, atempo clamp, overlay path narration flow.
+- `test_render_base_clip.py`: `TestRenderBaseClipBgm` class (7 tests).
+- `test_composite_overlays.py`: `TestCompositeAudioInvariantsPhase3C` class (6 tests).
+- `test_base_clip_manifest.py`: `TestBaseClipManifestBgmApplied` class (6 tests).
 
-**Contracts to introduce**:
-- `render_base_clip()` owns BGM (post Phase 3C).
-- `composite_overlays_on_base_clip()` audio stays `-c:a copy` — BGM flows through stream copy.
-- `mix_narration_audio()` is called on composite output unchanged.
-- atempo applied exactly once per audio stream remains invariant.
+**Contracts introduced**:
+- `render_base_clip()` owns BGM. BGM baked into `base_clip.mp4`.
+- `composite_overlays_on_base_clip()` audio stays `-c:a copy` — BGM flows through stream copy unchanged.
+- `mix_narration_audio()` is called on composite output unchanged. No double-atempo.
+- atempo applied exactly once per audio stream invariant maintained.
+- `base_clip_bgm_applied: True` = BGM mixed; `False` = disabled/invalid path; `None` = base clip not rendered.
 
 ---
 
-## Test Suite State (Post Phase 3B)
+## Test Suite State (Post Phase 3C)
 
 ```
-5759 passed, 1 skipped, 8 failed
+5784 passed, 4 skipped, 8 failed
 ```
 
 The 8 persistent failures are pre-existing (before Phase 1):

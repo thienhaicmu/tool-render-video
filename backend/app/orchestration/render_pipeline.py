@@ -4386,6 +4386,12 @@ def run_render_pipeline(
                 _base_clip_out = work_dir / f"part_{idx}" / "base_clip.mp4"
                 try:
                     _base_clip_out.parent.mkdir(parents=True, exist_ok=True)
+                    _bc_bgm_path = str(getattr(payload, "reup_bgm_path", None) or "").strip()
+                    _bc_bgm_ok = (
+                        getattr(payload, "reup_bgm_enable", False)
+                        and _bc_bgm_path
+                        and Path(_bc_bgm_path).is_file()
+                    )
                     _bc_meta = render_base_clip(
                         input_path=str(raw_part),
                         output_path=str(_base_clip_out),
@@ -4408,6 +4414,9 @@ def run_render_pipeline(
                         ffmpeg_threads=_ffmpeg_threads,
                         content_type=seg.get("content_type_hint", "vlog"),
                         _motion_cache_key=_motion_ck,
+                        reup_bgm_enable=getattr(payload, "reup_bgm_enable", False),
+                        reup_bgm_path=getattr(payload, "reup_bgm_path", None),
+                        reup_bgm_gain=getattr(payload, "reup_bgm_gain", 0.18),
                     )
                     _part_manifest.base_clip_path = str(_base_clip_out)
                     _part_manifest.base_clip_duration = _bc_meta.get("duration")
@@ -4416,6 +4425,7 @@ def run_render_pipeline(
                     _part_manifest.base_clip_height = _bc_meta.get("height")
                     _part_manifest.base_clip_has_audio = _bc_meta.get("has_audio")
                     _part_manifest.base_clip_created_at = _bc_meta.get("created_at")
+                    _part_manifest.base_clip_bgm_applied = bool(_bc_bgm_ok)
                     write_manifest(work_dir, _part_manifest)
                     logger.info(
                         "base_clip_rendered part=%d path=%s duration=%.3fs",

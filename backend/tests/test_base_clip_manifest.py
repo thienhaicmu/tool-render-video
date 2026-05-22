@@ -353,3 +353,39 @@ class TestBaseClipManifestOverlayTextLayersApplied:
         old_dict.pop("overlay_text_layers_applied", None)
         restored = BaseClipManifest.from_dict(old_dict)
         assert restored.overlay_text_layers_applied is None
+
+
+class TestBaseClipManifestBgmApplied:
+    def test_base_clip_bgm_applied_none_by_default(self):
+        m = _sample_manifest()
+        assert m.base_clip_bgm_applied is None
+
+    def test_base_clip_bgm_applied_in_to_dict(self):
+        d = _sample_manifest().to_dict()
+        assert "base_clip_bgm_applied" in d
+        assert d["base_clip_bgm_applied"] is None
+
+    def test_base_clip_bgm_applied_true_round_trip(self):
+        m = _sample_manifest()
+        m.base_clip_bgm_applied = True
+        restored = BaseClipManifest.from_dict(m.to_dict())
+        assert restored.base_clip_bgm_applied is True
+
+    def test_base_clip_bgm_applied_false_round_trip(self):
+        m = _sample_manifest()
+        m.base_clip_bgm_applied = False
+        restored = BaseClipManifest.from_dict(m.to_dict())
+        assert restored.base_clip_bgm_applied is False
+
+    def test_from_dict_backward_compat_missing_base_clip_bgm_applied(self):
+        """Old manifest dicts without base_clip_bgm_applied deserialize with None."""
+        old_dict = _sample_manifest().to_dict()
+        old_dict.pop("base_clip_bgm_applied", None)
+        restored = BaseClipManifest.from_dict(old_dict)
+        assert restored.base_clip_bgm_applied is None
+
+    def test_base_clip_bgm_applied_is_json_serializable(self):
+        m = _sample_manifest()
+        m.base_clip_bgm_applied = True
+        import json
+        json.dumps(m.to_dict())  # must not raise

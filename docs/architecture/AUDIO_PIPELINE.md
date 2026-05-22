@@ -111,7 +111,7 @@ BGM (`reup_bgm_*` params) is mixed via `filter_complex` inside `render_part_smar
 
 ---
 
-## Phase 3C Scope (PLANNED — not yet implemented)
+## Phase 3C Scope (SHIPPED)
 
 **Audit finding**: TTS narration mixing **already operates on the overlay path**. `mix_narration_audio()` is called on `final_part` after the render, regardless of which path (overlay or legacy) produced it. Narration requires validation and tests, not new implementation.
 
@@ -119,12 +119,12 @@ BGM (`reup_bgm_*` params) is mixed via `filter_complex` inside `render_part_smar
 
 **Phase 3C implementation plan**: See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_PLAN.md).
 
-**Phase 3C scope (planned)**:
-1. Add `reup_bgm_enable`, `reup_bgm_path`, `reup_bgm_gain` parameters to `render_base_clip()`. Reuse `_bgm_duck_filter()` helper.
-2. Pass BGM params from `render_pipeline.py` call site to `render_base_clip()`.
-3. Add `base_clip_bgm_applied: Optional[bool]` to `BaseClipManifest`.
-4. Add `test_overlay_narration.py` verifying narration already works on overlay output.
-5. Add tests asserting no atempo and no BGM in `composite_overlays_on_base_clip()` command.
+**Phase 3C shipped changes**:
+1. `reup_bgm_enable`, `reup_bgm_path`, `reup_bgm_gain` parameters added to `render_base_clip()`. Reuses `_build_audio_mix_filter()` helper.
+2. BGM params passed from `render_pipeline.py` call site to `render_base_clip()`.
+3. `base_clip_bgm_applied: Optional[bool]` added to `BaseClipManifest`.
+4. `test_overlay_narration.py` verifies narration interface and double-atempo safety.
+5. Tests in `test_render_base_clip.py`, `test_composite_overlays.py`, `test_base_clip_manifest.py` assert BGM and audio invariants.
 
 `composite_overlays_on_base_clip()` continues to use `-c:a copy`. BGM is baked into `base_clip.mp4`; stream copy carries it through to the composite output. `mix_narration_audio()` operates on the composite output unchanged.
 

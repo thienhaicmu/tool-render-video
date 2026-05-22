@@ -1159,6 +1159,9 @@ def render_base_clip(
     ffmpeg_threads: int | None = None,
     content_type: str = "vlog",
     _motion_cache_key: str | None = None,
+    reup_bgm_enable: bool = False,
+    reup_bgm_path: str | None = None,
+    reup_bgm_gain: float = 0.18,
 ) -> dict:
     """Render a base clip with no subtitle, title, or text overlay filters.
 
@@ -1262,13 +1265,45 @@ def render_base_clip(
             "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
             "-movflags", "+faststart",
         ]
-        cmd = [get_ffmpeg_bin(), "-y", "-i", input_path, "-vf", vf_chain]
-        if input_has_audio:
-            af = _build_audio_filter(loudnorm_enabled, False, speed)
-            if af:
-                cmd += ["-af", af]
-        cmd += [*codec_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
-        logger.debug("render_base_clip vf_chain=%s output=%s", vf_chain, Path(output_path).name)
+
+        _bgm_path = str(reup_bgm_path or "").strip()
+        _bgm_ok = reup_bgm_enable and _bgm_path and Path(_bgm_path).is_file()
+
+        def _build_base_clip_cmd(enc_flags: list) -> list:
+            c = [get_ffmpeg_bin(), "-y", "-i", input_path]
+            if _bgm_ok:
+                c += ["-stream_loop", "-1", "-i", _bgm_path]
+                gain = max(0.01, min(1.0, float(reup_bgm_gain or 0.18)))
+                if input_has_audio:
+                    a0_chain = "volume=1.0"
+                    a1_chain = f"volume={gain}"
+                    if abs(speed - 1.0) > 1e-4:
+                        a0_chain += f",atempo={speed:.4f}"
+                        a1_chain += f",atempo={speed:.4f}"
+                    fc = (
+                        f"[0:v]{vf_chain}[vout];"
+                        f"[0:a]{a0_chain}[a0];[1:a]{a1_chain}[a1];"
+                        f"{_build_audio_mix_filter('a0', 'a1', 'aout')}"
+                    )
+                    c += ["-filter_complex", fc, "-map", "[vout]", "-map", "[aout]"]
+                else:
+                    fc = f"[0:v]{vf_chain}[vout]"
+                    af = f"volume={gain}"
+                    if abs(speed - 1.0) > 1e-4:
+                        af += f",atempo={speed:.4f}"
+                    c += ["-filter_complex", fc, "-map", "[vout]", "-map", "1:a:0",
+                          "-filter:a", af, "-shortest"]
+            else:
+                c += ["-vf", vf_chain]
+                if input_has_audio:
+                    af = _build_audio_filter(loudnorm_enabled, False, speed)
+                    if af:
+                        c += ["-af", af]
+            c += [*enc_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
+            return c
+
+        cmd = _build_base_clip_cmd(codec_flags)
+        logger.debug("render_base_clip vf_chain=%s bgm=%s output=%s", vf_chain, _bgm_ok, Path(output_path).name)
 
         if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
             try:
@@ -1290,12 +1325,7 @@ def render_base_clip(
                     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
                     "-movflags", "+faststart",
                 ]
-                cpu_cmd = [get_ffmpeg_bin(), "-y", "-i", input_path, "-vf", vf_chain]
-                if input_has_audio:
-                    af = _build_audio_filter(loudnorm_enabled, False, speed)
-                    if af:
-                        cpu_cmd += ["-af", af]
-                cpu_cmd += [*cpu_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
+                cpu_cmd = _build_base_clip_cmd(cpu_flags)
                 _run_ffmpeg_with_retry(cpu_cmd, retry_count=retry_count)
         else:
             _run_ffmpeg_with_retry(cmd, retry_count=retry_count)

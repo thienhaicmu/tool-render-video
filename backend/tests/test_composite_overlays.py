@@ -520,3 +520,60 @@ class TestCompositeStreamCopyGuard:
         cmd_pairs = list(zip(cmd, cmd[1:]))
         assert ("-c:v", "copy") not in cmd_pairs
         assert "-vf" in cmd
+
+
+# ---------------------------------------------------------------------------
+# Phase 3C Tests: composite audio invariants — no BGM, no atempo, -c:a copy
+# ---------------------------------------------------------------------------
+
+class TestCompositeAudioInvariantsPhase3C:
+    """composite_overlays_on_base_clip() must never add BGM or atempo.
+
+    atempo is applied in render_base_clip() (once).
+    BGM is applied in render_base_clip() (once).
+    The composite layer must stream-copy audio unchanged via -c:a copy.
+    """
+
+    def test_no_stream_loop_bgm_input(self):
+        """-stream_loop must not appear — composite never adds a BGM input."""
+        _, captured = _call_composite()
+        cmd = captured[0]
+        assert "-stream_loop" not in cmd
+
+    def test_no_filter_complex_in_composite(self):
+        """composite_overlays_on_base_clip must not use filter_complex for audio."""
+        _, captured = _call_composite()
+        cmd = captured[0]
+        assert "-filter_complex" not in cmd
+
+    def test_no_amix_in_composite(self):
+        """amix must not appear — no audio mixing in the composite step."""
+        _, captured = _call_composite()
+        cmd_str = " ".join(str(a) for a in captured[0])
+        assert "amix" not in cmd_str
+
+    def test_no_sidechaincompress_in_composite(self):
+        """sidechaincompress (BGM ducking) must not appear in the composite."""
+        _, captured = _call_composite()
+        cmd_str = " ".join(str(a) for a in captured[0])
+        assert "sidechaincompress" not in cmd_str
+
+    def test_audio_copy_invariant_with_all_overlay_types(self):
+        """-c:a copy invariant holds even when all overlay types are present."""
+        _, captured = _call_composite(
+            subtitle_ass="/fake/overlay.ass",
+            title_text="Title",
+            text_layers=[_SAMPLE_TEXT_LAYER],
+        )
+        cmd = captured[0]
+        assert ("-c:a", "copy") in list(zip(cmd, cmd[1:]))
+
+    def test_no_af_flag_with_all_overlay_types(self):
+        """No -af flag even when all overlay types are present."""
+        _, captured = _call_composite(
+            subtitle_ass="/fake/overlay.ass",
+            title_text="Title",
+            text_layers=[_SAMPLE_TEXT_LAYER],
+        )
+        cmd = captured[0]
+        assert "-af" not in cmd

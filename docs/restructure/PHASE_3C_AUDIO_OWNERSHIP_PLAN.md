@@ -3,7 +3,7 @@
 
 **Date**: 2026-05-22
 **Branch**: restructure/output-timeline-architecture
-**Status**: PLANNING ONLY — no code implemented
+**Status**: SHIPPED
 **Predecessor**: Phase 3B (text/title overlay, commit 0a606ca), documentation consolidation (commit 407ec91)
 
 ---

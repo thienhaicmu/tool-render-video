@@ -76,6 +76,10 @@ class BaseClipManifest:
     base_clip_has_audio: Optional[bool] = field(default=None)
     base_clip_created_at: Optional[float] = field(default=None)
 
+    # Base clip audio — populated when FEATURE_BASE_CLIP_FIRST=1
+    # True=BGM mixed into base_clip, False=BGM disabled/invalid, None=base clip not rendered.
+    base_clip_bgm_applied: Optional[bool] = field(default=None)
+
     # Overlay composite artifact — populated when FEATURE_OVERLAY_AFTER_BASE_CLIP=1
     # Subtitle and text overlays applied to base_clip in output-timeline time.
     overlay_srt_path: Optional[str] = field(default=None)
@@ -119,6 +123,7 @@ class BaseClipManifest:
             "base_clip_height": self.base_clip_height,
             "base_clip_has_audio": self.base_clip_has_audio,
             "base_clip_created_at": self.base_clip_created_at,
+            "base_clip_bgm_applied": self.base_clip_bgm_applied,
             "overlay_srt_path": self.overlay_srt_path,
             "overlay_ass_path": self.overlay_ass_path,
             "overlay_rendered_path": self.overlay_rendered_path,
@@ -158,6 +163,7 @@ class BaseClipManifest:
             base_clip_height=int(d["base_clip_height"]) if d.get("base_clip_height") is not None else None,
             base_clip_has_audio=bool(d["base_clip_has_audio"]) if d.get("base_clip_has_audio") is not None else None,
             base_clip_created_at=float(d["base_clip_created_at"]) if d.get("base_clip_created_at") is not None else None,
+            base_clip_bgm_applied=bool(d["base_clip_bgm_applied"]) if d.get("base_clip_bgm_applied") is not None else None,
             overlay_srt_path=d.get("overlay_srt_path"),
             overlay_ass_path=d.get("overlay_ass_path"),
             overlay_rendered_path=d.get("overlay_rendered_path"),

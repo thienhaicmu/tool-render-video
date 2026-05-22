@@ -314,3 +314,85 @@ class TestFeatureBaseClipFlag:
 
         mock_render_base.assert_called_once()
         mock_render_smart.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests: BGM mixing in render_base_clip()
+# ---------------------------------------------------------------------------
+
+class TestRenderBaseClipBgm:
+    def test_no_bgm_input_when_disabled(self):
+        """BGM disabled → no extra -i input for BGM."""
+        _, captured = _call_render_base_clip(reup_bgm_enable=False)
+        cmd_str = " ".join(str(a) for a in captured[0])
+        # Only one -i flag (the input video)
+        assert cmd_str.count(" -i ") == 1 or cmd_str.startswith("-i ") or cmd_str.count("-i ") == 1
+
+    def test_no_bgm_input_when_path_invalid(self, tmp_path):
+        """BGM enabled but nonexistent path → no extra -i; no BGM mixed in."""
+        _, captured = _call_render_base_clip(
+            reup_bgm_enable=True,
+            reup_bgm_path="/nonexistent/bgm.mp3",
+        )
+        cmd = captured[0]
+        # stream_loop is only added when bgm_ok; should not appear
+        assert "-stream_loop" not in cmd
+
+    def test_bgm_input_added_when_enabled(self, tmp_path):
+        """BGM enabled with valid file → -stream_loop -1 -i bgm.mp3 in cmd."""
+        bgm_file = tmp_path / "bgm.mp3"
+        bgm_file.write_bytes(b"fake")
+        _, captured = _call_render_base_clip(
+            reup_bgm_enable=True,
+            reup_bgm_path=str(bgm_file),
+        )
+        cmd = captured[0]
+        assert "-stream_loop" in cmd
+        assert str(bgm_file) in cmd
+
+    def test_filter_complex_used_when_bgm_enabled(self, tmp_path):
+        """BGM path → filter_complex instead of -vf/-af."""
+        bgm_file = tmp_path / "bgm.mp3"
+        bgm_file.write_bytes(b"fake")
+        _, captured = _call_render_base_clip(
+            reup_bgm_enable=True,
+            reup_bgm_path=str(bgm_file),
+        )
+        cmd = captured[0]
+        assert "-filter_complex" in cmd
+        assert "-vf" not in cmd
+
+    def test_bgm_mix_filter_in_filter_complex(self, tmp_path):
+        """filter_complex must contain amix or sidechaincompress for audio blending."""
+        bgm_file = tmp_path / "bgm.mp3"
+        bgm_file.write_bytes(b"fake")
+        _, captured = _call_render_base_clip(
+            reup_bgm_enable=True,
+            reup_bgm_path=str(bgm_file),
+        )
+        cmd = captured[0]
+        fc_idx = cmd.index("-filter_complex")
+        fc_val = cmd[fc_idx + 1]
+        assert "amix" in fc_val or "sidechaincompress" in fc_val
+
+    def test_bgm_atempo_matches_speed(self, tmp_path):
+        """BGM audio chain includes atempo=speed when speed != 1.0."""
+        bgm_file = tmp_path / "bgm.mp3"
+        bgm_file.write_bytes(b"fake")
+        speed = 1.15
+        _, captured = _call_render_base_clip(
+            speed=speed,
+            reup_bgm_enable=True,
+            reup_bgm_path=str(bgm_file),
+        )
+        cmd = captured[0]
+        fc_idx = cmd.index("-filter_complex")
+        fc_val = cmd[fc_idx + 1]
+        assert f"atempo={speed:.4f}" in fc_val
+
+    def test_no_bgm_uses_vf_flag(self):
+        """No BGM → -vf is used (not filter_complex)."""
+        _, captured = _call_render_base_clip(reup_bgm_enable=False)
+        cmd = captured[0]
+        assert "-vf" in cmd
+        assert "-filter_complex" not in cmd
