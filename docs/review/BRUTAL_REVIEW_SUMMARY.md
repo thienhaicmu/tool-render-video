@@ -62,7 +62,7 @@ The only real local ML in the pipeline: Whisper (transcription), optional senten
 
 Every regression in render quality, subtitle correctness, FFmpeg command generation, audio mixing, or output validation is discovered by running a real render job. There is no other safety net.
 
-The subtitle drift bug and TTS desync bug documented below have no test that would catch them. They can be present for months without detection.
+The subtitle display duration compression and historical TTS desync described below had no test coverage. Phase 0 added regression tests for the TTS atempo fix (`TestMixNarrationAudioAtempo`). Subtitle display duration compression remains untested.
 
 ---
 
@@ -94,27 +94,26 @@ Connecting it is a one-line change. The system is complete. It is just not wired
 
 ## What Is Dangerous
 
-### Subtitle Timestamps Not Adjusted for Playback Speed
+### Subtitle Display Duration Compressed at Non-1.0 Speeds
 
-This is the most impactful bug in the project. It is on by default.
+**Partially Resolved (2026-05-22)**: Phase 1.5 validation confirmed that the `ass-before-setpts` vf_chain order means subtitle timestamps ARE synchronized with the sped-up video and audio. The earlier description of "8 seconds of accumulated drift" was based on an incorrect model of the filter chain.
 
-The default TikTok render profile uses `playback_speed = 1.07 (base) + 0.08 (TikTok delta) = 1.15x`.
+The actual remaining issue: subtitle *display duration* is compressed by the speed factor. A subtitle authored for 3.0s of screen time is shown for ≈2.6s at 1.15x speed. For dense text blocks this reduces readability. This is a legibility concern, not synchronization desync.
 
-`slice_srt_by_time()` subtracts the segment start time from all subtitle timestamps. It does not divide by `playback_speed`. The subtitle at `t=10.0s` in the sliced SRT is burned at `t=10.0s` in the rendered video. But at 1.15x playback speed, the video frame at `t=10.0s` corresponds to `t=11.5s` of source content. The subtitle that belongs at frame X is displayed 1.5 seconds later than it should.
-
-This error is linear. Over a 60-second clip at 1.15x, the subtitle drift at the end of the clip is approximately 8 seconds. The closing words of the clip appear 8 seconds after the speaker says them.
-
-**Every TikTok render has this bug. This is the default configuration.**
+**Current State**: Phase 2 preserves the existing behavior. Phase 3+ will address subtitle display duration via overlay-after-render timing derivation from `TimelineMap.output_duration`.
 
 ### TTS Narration Desync at Non-1.0 Speeds
 
-TTS narration is generated from the transcript at natural speaking rate. The video is then played back at 1.15x. No `atempo` compensation is applied to the narration track before mixing. The narration finishes `duration / 1.15` seconds into the video, leaving the remaining audio as silence. On a 60s clip, the narration ends at ~52s, 8s before the video.
+**Resolved (Phase 0 — prior session)**: `mix_narration_audio()` now accepts
+`playback_speed` and applies `atempo=speed` to the narration audio before mixing.
+The narration track is now speed-compensated to match the video playback speed.
+Phase 0 regression tests cover this fix (`TestMixNarrationAudioAtempo`).
 
-This affects any render with `tts_enabled=True` and `playback_speed != 1.0`. The default TikTok profile is `1.15x`. Both bugs compound: the subtitles drift, and the narration ends early.
+### YouTube Download Hang Risk
 
-### YouTube Download Has No Timeout
+**Partially Resolved (Phase 0)**: `socket_timeout: 60` added to yt-dlp options. `cancel_event` is now passed from `render_pipeline.py` so user cancel propagates to the download subprocess. The most common stall scenario (network drop, hung socket) is now mitigated.
 
-`download_youtube()` in `downloader.py` runs a yt-dlp subprocess with no timeout. A stalled download (network drop, yt-dlp authentication failure, private video returning no error) hangs the render job indefinitely. The job stays in `downloading` state. The only recovery is manual server restart. There is no cancel path from the prepare-source step because the subprocess has no kill hook at that layer.
+**Remaining risk**: `socket_timeout` applies to individual socket operations, not total session time. A very slow but progressing download can still run indefinitely. A total wall-clock timeout per download session has not been implemented.
 
 ### Single SQLite with No Backup
 
@@ -126,9 +125,9 @@ All job history, TikTok upload credentials, channel configuration, upload queue 
 
 **Rank-ordered by likelihood × impact:**
 
-1. **Subtitle drift complaint** — The first user who renders a TikTok clip at default speed and watches it will notice the subtitles lagging behind speech by the end of the clip. This is the default behavior. Priority 1 fix.
+1. **Subtitle display duration compressed at high speed** — At the default 1.15x TikTok profile, each subtitle block has ≈13% less reading time than authored. Dense text blocks become hard to read. Subtitles are in sync with speech (not a desync bug). Phase 3 scope.
 
-2. **YouTube download hang** — Any network interruption during download leaves the render job permanently in `downloading` state. On a slow connection or with an old yt-dlp cookie, this is common. There is no recovery path for the user short of restarting the app.
+2. **YouTube download hang** — RESOLVED in Phase 0 (socket_timeout=60). Long-running downloads can still stall if the socket does not timeout cleanly, but the primary hang vector is mitigated.
 
 3. **Scene detection or Whisper hang perceived as a crash** — Whisper on CPU for a long video takes 10–20 minutes. Scene detection takes 1–5 minutes. During both, the progress bar shows the stage name but does not advance. Users will perceive this as a freeze and close the app, aborting the render. A stuck_parts alert exists in the backend but is not surfaced prominently in the UI.
 
@@ -176,9 +175,9 @@ All job history, TikTok upload credentials, channel configuration, upload queue 
 
 ## What Is Not Production-Ready
 
-- **Subtitle timestamps at non-1.0 speed** — default TikTok profile, every render affected
-- **TTS narration sync at non-1.0 speed** — affects any render with TTS enabled
-- **YouTube download timeout** — any stall hangs the job permanently
+- **Subtitle display duration at non-1.0 speed** — compressed readability, not desync; Phase 3 scope
+- **TTS narration sync at non-1.0 speed** — RESOLVED in Phase 0 (atempo compensation)
+- **YouTube download timeout** — RESOLVED in Phase 0 (socket_timeout=60 added)
 - **Output QA tolerance** — real failures pass (missing audio, missing subtitles, wrong codec)
 - **Test coverage** — zero tests for the render pipeline, subtitle system, audio mix, FFmpeg integration
 - **RAG creator memory** — built, tested, not wired, not operational
@@ -193,16 +192,24 @@ All job history, TikTok upload credentials, channel configuration, upload queue 
 
 This is a working product built by one person (or a very small team) under real shipping pressure. The output it produces is real. The user experience for the happy path is reasonable. The engineering instincts in the places that received attention — the job queue, the cancel mechanism, the caching, the transport layer — are sound.
 
-But the codebase has reached its limits. `render_pipeline.py` at 290KB is not a temporary state. It will not organize itself. Every new feature makes it harder to add the next feature. The subtitle drift bug and the TTS desync bug are on by default and affect every TikTok render. The test coverage number (0% for the render pipeline) means any change to the most critical code is a leap of faith.
+But the codebase has reached its limits. `render_pipeline.py` at 290KB is not a temporary state. It will not organize itself. Every new feature makes it harder to add the next feature. The TTS desync bug (now resolved in Phase 0) and the subtitle display duration compression (Phase 3 scope) both affect default TikTok renders. The test coverage number (0% for the render pipeline) means any change to the most critical code is a leap of faith.
 
 The AI branding is a significant gap between expectation and reality. The modules are named as if they implement machine intelligence. They implement if-else scoring. This is not inherently wrong — heuristics can be effective — but the naming creates a maintenance burden when a future developer has to understand what `emotion_analyzer.py` actually does.
 
-**The immediate priorities, in order:**
+**Updated priorities (as of 2026-05-22, post Phase 0–1.5):**
 
-1. Fix subtitle timestamp scaling by `playback_speed` in `slice_srt_by_time()`.
-2. Fix TTS narration atempo compensation when `playback_speed != 1.0`.
-3. Add timeout to `download_youtube()`.
-4. Wire `memory_store` to `create_ai_edit_plan()` in `render_pipeline.py`.
-5. Begin extracting `render_pipeline.py` into bounded modules — not as a refactor sprint, but incrementally, as each bug fix touches that file.
+Items 1–3 from the original list are now addressed:
 
-Everything else — the god files, the orphaned V3/V4 frontends, the FAISS persistence, the test coverage — is important but not on fire. Those three bugs at the top are shipping to every user in every TikTok render today.
+1. ~~Fix subtitle timestamp scaling~~ — Revised: subtitles are correctly synced via `ass-before-setpts`. Remaining concern is display duration compression at high speed. Phase 3 scope.
+2. ~~Fix TTS narration atempo compensation~~ — **Resolved (Phase 0).** `mix_narration_audio()` applies `atempo` at the correct speed. Regression tests added.
+3. ~~Add timeout to `download_youtube()`~~ — **Partially resolved (Phase 0).** `socket_timeout=60` and `cancel_event` wired. Wall-clock timeout remains open.
+
+**Current priorities, in order:**
+
+1. **Validate and ship Phase 2** — `render_base_clip()` as parallel artifact; establish base clip contract and manifest fields; keep flag OFF until validated.
+2. **Add audio stream presence check to `_validate_render_output()`** — muted output currently passes QA silently.
+3. **Tighten QA duration tolerance** — ±20% allows 48s–72s on a 60s clip; a tighter ±5% would catch real encode failures.
+4. **Wire `memory_store` to `create_ai_edit_plan()`** — one-line change; the RAG system is built and tested but not active.
+5. **Add total wall-clock timeout for `download_youtube()`** — the `socket_timeout=60` is insufficient for slow-but-progressing downloads.
+
+Everything else — god files, V3/V4 frontends, FAISS persistence, broader test coverage — is important but not on fire.

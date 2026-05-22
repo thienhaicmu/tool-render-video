@@ -36,7 +36,9 @@ Source video
 
 **What happens**: yt-dlp download (YouTube) or path validation (local).
 
-**Risk**: Large YouTube videos (>1h) can take 5–15min to download synchronously. During this time the render job is in `downloading` state but the UI shows a static spinner with no byte-level progress. If the download hangs (network drop, yt-dlp cookie expiry), there is no timeout at the download stage. The job will hang indefinitely.
+**Risk**: Large YouTube videos (>1h) can take 5–15min to download synchronously. During this time the render job is in `downloading` state but the UI shows a static spinner with no byte-level progress.
+
+**Partially Resolved (Phase 0)**: `socket_timeout: 60` added to yt-dlp options. `cancel_event` is now passed so user cancel propagates to the download. The 60s socket timeout mitigates the most common stall (network drop, hung connection). A total wall-clock timeout per download session is not yet implemented — a very slow but progressing download can still run indefinitely.
 
 **ffprobe validation**: Called to get duration. No explicit codec validation before the render pass — unsupported codec discovered at encode time, not at input validation time.
 
@@ -102,9 +104,13 @@ Source video
 - If Whisper produces word-level segments with very short durations (<0.1s), the ASS conversion may produce zero-duration events that FFmpeg either drops or renders as flashes.
 - `WORD_MIN_DURATION_SEC = 0.12` and `WORD_MERGE_SHORTER_THAN_SEC = 0.11` guard against this in the ASS converter, but the SRT slice step has no equivalent guard.
 
-**Subtitle Drift Risk**: The subtitle timestamps are based on the source video clock, but the render may apply speed adjustment (`atempo`). The SRT is sliced from the source timeline but the ASS is burned into the speed-adjusted video without adjusting timestamps. This means: if `playback_speed=1.15`, a subtitle at 10.0s in the clip will appear at 10.0s in the output even though the audio at that point is now at ~8.7s — **subtitle drift scales with speed deviation from 1.0**.
+**Subtitle Timing at Non-1.0 Speed**: The ASS filter runs **before** `setpts=PTS/speed` in the vf_chain (see vf_chain order above). This means subtitle timestamps are expressed in source-clip seconds, and `setpts` re-clocks the frames so the subtitle appears at `source_t / speed` in the output — correctly synchronized with the sped-up video and audio.
 
-- The current code does NOT adjust subtitle timestamps for playback speed. This is a known issue in video pipeline design but not addressed here.
+The real impact is subtitle *display duration compression*: a subtitle meant to display for 3.0s at natural speed is shown for 3.0/1.15 ≈ 2.6s at 1.15x. At high speeds this may make text harder to read. The accumulated effect over a 60s clip is that the final subtitles appear and disappear more quickly than at 1.0x. This is a legibility concern, not a synchronization desync.
+
+**Current State (2026-05-22)**: The `ass-before-setpts` ordering is confirmed correct and intentional. The vf_chain order MUST NOT be changed. Phase 2+ will address subtitle display duration compression as a separate concern.
+
+- Historical note: earlier reviews described this as "drift" or "desync." That description was imprecise. The subtitles are in sync with the corresponding video frames and audio; the issue is compressed reading time per subtitle block.
 
 #### FPS Handling
 
@@ -135,7 +141,7 @@ Multiple audio manipulations are applied in sequence: speed (atempo), loudnorm, 
 - The narration is generated from the SRT text at source speed, then the video is sped up
 - `mix_narration_audio()` mixes based on original narration duration
 
-If `playback_speed != 1.0` AND `tts_enabled=True`, the TTS narration will be out of sync because the narration was generated for the original-speed clip but is burned into the sped-up video. There is no atempo compensation applied to the narration track.
+**Resolved (Phase 0)**: `mix_narration_audio()` now accepts `playback_speed` and applies `atempo=speed` to the narration track before mixing. The narration is speed-compensated to match the sped-up video. Phase 0 regression tests cover this (`TestMixNarrationAudioAtempo`).
 
 ---
 
@@ -159,7 +165,7 @@ No check for:
 
 | Stage | Time Cost | Notes |
 |-------|-----------|-------|
-| YouTube download | 30s–15min | No timeout, no progress |
+| YouTube download | 30s–15min | socket_timeout=60 (Phase 0); no wall-clock timeout; no byte-progress |
 | Scene detection | 1–5min | CPU-bound, no sub-progress |
 | Whisper transcription | 2–20min | CPU-bound, blocks all concurrent renders |
 | Motion crop (MediaPipe) | Adds 30–60% to encode time | GPU not used for MediaPipe |
@@ -172,8 +178,8 @@ No check for:
 
 ## Output Quality Risks
 
-1. **Subtitle drift at non-1.0 speeds** — timestamps not adjusted for playback speed delta.
-2. **TTS desync at non-1.0 speeds** — narration not speed-adjusted to match video.
+1. **Subtitle display duration compression at non-1.0 speeds** — at 1.15x speed, each subtitle block has ≈13% less on-screen time than authored. Text-heavy blocks are harder to read. Subtitles ARE in sync with the sped-up speech (see §6 Subtitle Timing). This is a legibility concern, not desync. Phase 3 scope.
+2. **TTS narration desync** — RESOLVED in Phase 0 (`mix_narration_audio()` applies atempo compensation; regression tests added).
 3. **No codec compliance validation** — output may use B-frames (not TikTok-safe).
 4. **Black frame risk on scene transitions** — first frame detection is post-render only.
 5. **Variable FPS output** — no `-r` forcing may produce VFR output.

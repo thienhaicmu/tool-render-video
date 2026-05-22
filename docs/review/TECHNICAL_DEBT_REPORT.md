@@ -12,23 +12,35 @@
 
 ---
 
-### C2. Subtitle Timestamps Not Adjusted for Playback Speed
+### C2. Subtitle Display Duration Compressed at Non-1.0 Speeds
 **File**: `backend/app/orchestration/render_pipeline.py` — subtitle slicing and ASS burn-in logic
 **Functions**: `slice_srt_by_time()` in `subtitle_engine.py` + `render_part_smart()` in `render_engine.py`
 
-**Debt**: When `playback_speed != 1.0` (which is the default: `1.07` for base + `0.08` for TikTok = 1.15), the video plays back faster but subtitle timestamps remain anchored to the original segment clock. A subtitle at 10.0s displays at 10.0s in the output, but the audio/video at that point has already advanced to ~8.7s (at 1.15x).
+**Partially Resolved (2026-05-22)**: Phase 1.5 validation confirmed that the `ass-before-setpts` vf_chain order means subtitle timestamps ARE re-clocked by `setpts=PTS/speed`. A subtitle at source t=10.0s appears at output t=10.0/1.15 = 8.7s — correctly synchronized with the sped-up video and audio.
 
-**Impact**: Every non-1.0 speed render has subtitle drift proportional to speed deviation. At the default TikTok profile (1.15x speed), a 60s clip has ~8s of accumulated subtitle drift by the end. This is visible and impacts user-perceived quality.
+**Remaining Debt**: Subtitle *display duration* is compressed proportionally to playback speed. A subtitle block authored for 3.0s of screen time is shown for 3.0/1.15 ≈ 2.6s at 1.15x speed. At the default TikTok profile, end-of-clip subtitles have ≈0.4s less reading time per block than intended. This is a legibility concern, not a synchronization error.
+
+**Impact**: Reduced readability at high playback speeds. Text-heavy subtitle blocks are harder to read. Not a synchronization bug — the subtitle text and speech are aligned.
+
+**Superseded By**: Phase 2 planning identifies this as Phase 3 scope (overlay timing derived from base clip output duration).
 
 ---
 
 ### C3. TTS Narration Desync at Non-1.0 Speeds
-**File**: `backend/app/orchestration/render_pipeline.py` — TTS + audio mixing section
-**Functions**: `generate_narration_audio()` in `tts_service.py`, `mix_narration_audio()` in `audio_mix_service.py`
 
-**Debt**: TTS narration is generated from the transcript at the natural speaking rate. The narration is then mixed with the video at a different playback speed. No atempo compensation is applied to align narration timing with the speed-adjusted video.
+**Resolved (Phase 0)**:  
+`mix_narration_audio()` in `audio_mix_service.py` now accepts `playback_speed: float`
+and applies `atempo={speed:.4f}` to the narration track before mixing. The narration
+is speed-compensated to match the video playback speed. Speed is clamped to FFmpeg
+atempo's range [0.5, 2.0] (a separate concern from the render pipeline's [0.5, 1.5] clamp).
 
-**Impact**: When `tts_enabled=True` and `playback_speed != 1.0`, the narration is out of sync with the video. The narration finishes before the video ends (at speed >1.0) or after (at speed <1.0).
+`render_pipeline.py` passes `playback_speed=_get_effective_playback_speed(payload, _target_platform)`
+to `mix_narration_audio()` at the call site.
+
+Regression tests added: `TestMixNarrationAudioAtempo` (8 tests) in `test_phase0_hotfixes.py`.
+
+**Historical debt**: TTS narration was generated at natural speaking rate and mixed
+without speed compensation. At 1.15x speed the narration ended ~52s into a 60s clip.
 
 ---
 
@@ -81,13 +93,13 @@
 
 ---
 
-### H6. YouTube Download Has No Timeout
+### H6. YouTube Download Hang Risk (Partially Resolved)
 **File**: `backend/app/services/downloader.py` — `download_youtube()`
 **Called from**: `render_pipeline.py` (main render path), `routes/render.py` (prepare-source, quick-process)
 
-**Debt**: `download_youtube()` uses yt-dlp subprocess with no timeout parameter. A stalled download (network drop, yt-dlp API change, private video that returns no error) hangs the render job indefinitely.
+**Partially Resolved (Phase 0)**: `socket_timeout: 60` added to yt-dlp options, and `cancel_event` is now passed from `render_pipeline.py` so user cancel propagates to the download subprocess. The 60s socket timeout mitigates the most common stall scenario (network drop, hung connection).
 
-**Impact**: Render jobs can hang forever at the download stage. The only recovery is manual server restart.
+**Remaining Debt**: yt-dlp's `socket_timeout` applies to individual socket operations, not total download time. A very slow download that keeps making progress can still run indefinitely. A total wall-clock timeout per download session is not yet implemented.
 
 ---
 

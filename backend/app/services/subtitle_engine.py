@@ -7,6 +7,7 @@ import time
 import threading
 from dataclasses import dataclass
 import whisper
+from app.domain.timeline import TimelineMap
 
 logger = logging.getLogger(__name__)
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
@@ -23,8 +24,6 @@ _HL_CLOSE = "\ue101"
 # Whisper model cache — redirect to project dir so models stay on D: not C:
 _WHISPER_CACHE_DIR: Path = Path(__file__).resolve().parents[3] / "data" / "whisper_cache"
 _WHISPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-# Replaced by preset-table auto_scale / heavy_scale fields — see ASSPreset below.
 
 
 def _compute_subtitle_scale(play_res_x: int = 1080, play_res_y: int = 1440) -> dict:
@@ -194,6 +193,33 @@ def slice_srt_by_time(
         "playback_speed": speed,
         "apply_playback_speed": bool(apply_playback_speed),
     }
+
+
+def slice_srt_to_output_timeline(
+    source_srt_path: str,
+    output_srt_path: str,
+    source_start: float,
+    source_end: float,
+    timeline: TimelineMap,
+) -> dict:
+    """Slice a source SRT and re-time entries to output-timeline seconds.
+
+    Output-timeline subtitles are required because base_clip.mp4 has already
+    been re-clocked from source time by setpts=PTS/speed in render_base_clip().
+    Divides each timestamp by timeline.effective_speed after rebasing to zero,
+    so subtitle 10 s at 1.15× speed appears at ≈ 8.70 s in the output clip.
+
+    Returns the same metadata dict as slice_srt_by_time().
+    """
+    return slice_srt_by_time(
+        source_srt_path,
+        output_srt_path,
+        float(source_start),
+        float(source_end),
+        rebase_to_zero=True,
+        playback_speed=timeline.effective_speed,
+        apply_playback_speed=True,
+    )
 
 
 def slice_srt_to_text(source_srt_path: str, start_sec: float, end_sec: float) -> str:
