@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch, call
 import pytest
 
 from app.domain.timeline import TimelineMap
+import app.services.render.base_clip_renderer as base_clip_renderer_mod
 import app.services.render_engine as render_engine_mod
 from app.services.render_engine import render_base_clip
 
@@ -87,11 +88,10 @@ def _call_render_base_clip(
         return _FAKE_SRC_META
 
     with (
-        patch.object(render_engine_mod, "_run_ffmpeg_with_retry", side_effect=_fake_run),
-        patch.object(render_engine_mod, "probe_video_metadata", side_effect=_probe_side_effect),
-        patch.object(render_engine_mod, "_has_audio_stream", return_value=input_has_audio),
-        patch.object(render_engine_mod, "nvenc_available", return_value=False),
-        patch.object(render_engine_mod, "_resolve_codec", return_value="libx264"),
+        patch.object(base_clip_renderer_mod, "_run_ffmpeg_with_retry", side_effect=_fake_run),
+        patch.object(base_clip_renderer_mod, "probe_video_metadata", side_effect=_probe_side_effect),
+        patch.object(base_clip_renderer_mod, "_has_audio_stream", return_value=input_has_audio),
+        patch.object(base_clip_renderer_mod, "_resolve_codec", return_value="libx264"),
     ):
         kwargs = dict(
             input_path="/fake/cut.mp4",

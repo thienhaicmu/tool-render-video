@@ -395,3 +395,37 @@ Phase 4E.1 added 53 new passing tests (`test_ffmpeg_helpers.py`).
 The 8 persistent failures are pre-existing — unchanged.
 
 Phase 4E.2 added 43 new passing tests (`test_clip_ops.py`).
+
+---
+
+## Phase 4E.3 — Extract Base Clip Renderer
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Third sub-step of render_engine.py split. Extract `render_base_clip()` from `render_engine.py` into `services/render/base_clip_renderer.py`. Backward-compat re-export keeps all existing callers unchanged.
+
+**Shipped changes**:
+- New file: `backend/app/services/render/base_clip_renderer.py` — `render_base_clip()` moved verbatim from `render_engine.py`. Imports only from `stdlib` + `domain/timeline` + `motion_crop` + `bin_paths` + `encoder_helpers` + `render.ffmpeg_helpers`. No import from `render_engine`. No circular import.
+- `render_engine.py`: `render_base_clip` body removed; backward-compat re-export added via `from app.services.render.base_clip_renderer import render_base_clip`. Reduced from 829 → ~619 lines (−210 lines).
+- New test file: `backend/tests/test_base_clip_renderer.py` — 28 tests: import smoke tests (new module + render_engine re-export), same-object identity checks, no-overlay-filter invariants (no ass=, no drawtext=, no text_layers), speed from TimelineMap.effective_speed (setpts/atempo, 1x no-op, clamping), fps= last in vf_chain, BGM disabled/invalid/enabled paths, NVENC semaphore acquired/released, CPU fallback on NVENC failure, return value metadata.
+- `backend/tests/test_render_base_clip.py`: mock patch targets updated from `render_engine_mod.*` to `base_clip_renderer_mod.*` for `_run_ffmpeg_with_retry`, `probe_video_metadata`, `_has_audio_stream`, `_resolve_codec`. Vestigial `nvenc_available` patch removed (not in `base_clip_renderer` namespace).
+
+**Contracts maintained**:
+- `base_clip_renderer.py` imports from `render.ffmpeg_helpers` only for shared FFmpeg state — no import from `render_engine`. No circular import.
+- Re-exported `render_base_clip` in `render_engine.py` is the SAME object as in `base_clip_renderer.py` (`is` identity).
+- `render_base_clip` function signature, behavior, NVENC semaphore usage, CPU fallback, BGM handling, and return value are all unchanged.
+- No function signature was changed. No call site was changed. No behavior was changed.
+
+---
+
+## Test Suite State (Post Phase 4E.3)
+
+```
+5992 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing — unchanged.
+
+Phase 4E.3 added 28 new passing tests (`test_base_clip_renderer.py`).

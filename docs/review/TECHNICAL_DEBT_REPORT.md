@@ -18,7 +18,9 @@
 
 **Phase 4E.1 shipped (2026-05-22)**: Shared FFmpeg infrastructure extracted from `render_engine.py` to `services/render/ffmpeg_helpers.py`. `render_engine.py` reduced from 1,652 → ~1,210 lines (−442 lines). 28 names re-exported at old location for backward compat.
 
-**Phase 4E.2 shipped (2026-05-22)**: Clip operations extracted from `render_engine.py` to `services/render/clip_ops.py`. `render_engine.py` reduced from ~1,210 → 829 lines (−381 lines). 5 names re-exported at old location for backward compat. Next: Phase 4E.3 (renderer split: `base_clip_renderer.py`, `overlay_compositor.py`, `legacy_renderer.py`). Plan: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md`.
+**Phase 4E.2 shipped (2026-05-22)**: Clip operations extracted from `render_engine.py` to `services/render/clip_ops.py`. `render_engine.py` reduced from ~1,210 → 829 lines (−381 lines). 5 names re-exported at old location for backward compat.
+
+**Phase 4E.3 shipped (2026-05-22)**: `render_base_clip()` extracted from `render_engine.py` to `services/render/base_clip_renderer.py`. `render_engine.py` reduced from 829 → ~619 lines (−210 lines). 1 name re-exported at old location for backward compat. Next: Phase 4E.4 (overlay_compositor.py), Phase 4E.5 (legacy_renderer.py). Plan: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md`.
 
 ---
 

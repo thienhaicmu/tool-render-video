@@ -1,7 +1,7 @@
 # PHASE_4A_BACKEND_MODULARIZATION_PLAN.md
 
-**Status**: PLANNING (Phase 4B SHIPPED, Phase 4C SHIPPED, Phase 4D SHIPPED, Phase 4E.1 SHIPPED, Phase 4E.2 SHIPPED)
-**Last updated**: 2026-05-22 (post Phase 4E.2)
+**Status**: PLANNING (Phase 4B SHIPPED, Phase 4C SHIPPED, Phase 4D SHIPPED, Phase 4E.1 SHIPPED, Phase 4E.2 SHIPPED, Phase 4E.3 SHIPPED)
+**Last updated**: 2026-05-22 (post Phase 4E.3)
 **Branch**: `restructure/output-timeline-architecture`
 
 This is a planning document only. No code changes are in scope. Phase 4A produces this document and updated supporting docs. Implementation begins in Phase 4B.
@@ -74,9 +74,9 @@ The overlay architecture has given us a working model for what isolated, testabl
 | FFmpeg infrastructure | `set_thread_cancel_event`, `probe_video_metadata`, `_run_ffmpeg_with_retry`, `nvenc_available`, `_resolve_codec`, `resolve_ffmpeg_threads`, `extract_thumbnail_frame`, `_has_audio_stream` | **Yes — Phase 4E (foundation first)** |
 | Filter builders | `_effect_filter`, `_cinematic_color_filter`, `_cinematic_sharpen_filter`, `_smart_denoise_filter`, `content_type_crf_delta`, `_build_audio_mix_filter`, `_build_audio_filter`, `_sanitize_speed`, `resolve_target_dimensions`, `_parse_fps_ratio`, `_probe_fps`, `_resolve_fps` | Yes — Phase 4E with FFmpeg infrastructure |
 | Clip operations | `cut_video`, `detect_silence_trim_offset`, `detect_bad_first_frame`, `_probe_duration`, `_detect_silence_segments`, `apply_micro_pacing` | Yes — Phase 4E |
-| Base clip renderer | `render_base_clip` | **Yes — Phase 4E** |
-| Overlay compositor | `composite_overlays_on_base_clip` | **Yes — Phase 4E** |
-| Legacy renderer | `render_part_smart`, `render_part` | Yes — Phase 4E (extract last, never modify signature) |
+| Base clip renderer | `render_base_clip` | **Yes — Phase 4E.3 SHIPPED** |
+| Overlay compositor | `composite_overlays_on_base_clip` | **Yes — Phase 4E.4** |
+| Legacy renderer | `render_part_smart`, `render_part` | Yes — Phase 4E.5 (extract last, never modify signature) |
 
 **Current cross-file coupling**: `render_pipeline.py` imports `render_base_clip`, `composite_overlays_on_base_clip`, `render_part_smart`, `cut_video`, `nvenc_available`, and 8 other helpers directly from `render_engine`. After extraction, all these call sites need updating.
 
