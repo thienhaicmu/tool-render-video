@@ -10,7 +10,9 @@
 
 **Impact**: Every bug fix, every new render feature, every refactor requires navigating a 5,700+ line file. High regression risk from any change.
 
-**Phase 4B shipped (2026-05-22)**: Post-assembly asset helpers extracted to `orchestration/asset_pipeline.py`; shared logging/event helpers extracted to `orchestration/render_events.py`. `render_pipeline.py` reduced from 6,064 → 5,779 lines. Plan: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md`. Next: Phase 4C (QA pipeline extraction).
+**Phase 4B shipped (2026-05-22)**: Post-assembly asset helpers extracted to `orchestration/asset_pipeline.py`; shared logging/event helpers extracted to `orchestration/render_events.py`. `render_pipeline.py` reduced from 6,064 → 5,779 lines.
+
+**Phase 4C shipped (2026-05-22)**: QA/output validation helpers extracted to `orchestration/qa_pipeline.py`: `_validate_render_output`, `_assess_output_quality`, `_resume_output_valid`, `_render_part_failure_detail`, `_duration_tolerance`, `_stall_deadline`, `_failed_part_progress`. `render_pipeline.py` reduced from 5,779 → 5,510 lines. Plan: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md`. Next: Phase 4D (audio pipeline + events extraction).
 
 ---
 

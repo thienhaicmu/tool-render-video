@@ -619,13 +619,21 @@ Phase 4A is done when:
 - [x] Full test suite still passing (5,787+ pass, 8 pre-existing failures)
 - [x] Committed and pushed on branch `restructure/output-timeline-architecture`
 
-Phase 4B will be done when:
-- [ ] `asset_pipeline.py` created with 4 functions
-- [ ] `render_pipeline.py` has re-exports for all 4 functions (callers unchanged)
-- [ ] `tests/test_asset_pipeline.py` added and passing
-- [ ] Full suite: same pass/fail count as Phase 4A baseline
-- [ ] MIGRATION_HISTORY.md updated with Phase 4B entry + commit hash
-- [ ] `render_pipeline.py` is ~350 lines shorter
+Phase 4B is done (2026-05-22, commit `2be39cc`):
+- [x] `asset_pipeline.py` created with 4 functions
+- [x] `render_pipeline.py` has re-exports for all 4 functions (callers unchanged)
+- [x] `tests/test_asset_pipeline.py` added and passing (23 tests)
+- [x] Full suite: 5,810 passed, 1 skipped, 8 pre-existing failures
+- [x] MIGRATION_HISTORY.md updated with Phase 4B entry + commit hash
+- [x] `render_pipeline.py` reduced 6,064 → 5,779 lines (−285)
+
+Phase 4C is done (2026-05-22):
+- [x] `qa_pipeline.py` created with 7 QA functions
+- [x] `render_pipeline.py` has re-exports for all 7 functions (callers unchanged)
+- [x] `tests/test_qa_pipeline.py` added and passing (34 tests)
+- [x] Full suite: 5,844 passed, 1 skipped, 8 pre-existing failures
+- [x] MIGRATION_HISTORY.md updated with Phase 4C entry
+- [x] `render_pipeline.py` reduced 5,779 → 5,510 lines (−269)
 
 Phase 4 is fully done when:
 - [ ] `render_pipeline.py` contains only orchestration logic (no utility function clusters)

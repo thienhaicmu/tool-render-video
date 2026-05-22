@@ -233,7 +233,7 @@ This document records what changed in each phase, why, and what contracts were i
 
 **Branch**: `restructure/output-timeline-architecture`
 **Status**: SHIPPED
-**Commit**: (this commit)
+**Commit**: `2be39cc`
 
 **Purpose**: Extract post-assembly asset hook functions from `render_pipeline.py` into dedicated modules. First code extraction phase of Phase 4.
 
@@ -251,10 +251,31 @@ This document records what changed in each phase, why, and what contracts were i
 
 ---
 
-## Test Suite State (Post Phase 4B)
+## Phase 4C — Extract QA Pipeline
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Extract QA/output validation helpers from `render_pipeline.py` into `orchestration/qa_pipeline.py`. Second code extraction phase of Phase 4.
+
+**Shipped changes**:
+- New file: `backend/app/orchestration/qa_pipeline.py` — seven QA helpers moved verbatim: `_resume_output_valid`, `_duration_tolerance`, `_stall_deadline`, `_failed_part_progress`, `_validate_render_output`, `_assess_output_quality`, `_render_part_failure_detail`.
+- `render_pipeline.py`: function bodies for the above 7 items removed; backward-compat re-exports added via `from app.orchestration.qa_pipeline import ...`. All existing call sites unchanged.
+- `render_pipeline.py` reduced from 5,779 → 5,510 lines (−269 lines).
+- New test file: `backend/tests/test_qa_pipeline.py` — 34 tests covering import correctness, backward-compat identity, `_duration_tolerance`, `_stall_deadline`, `_failed_part_progress`, `_render_part_failure_detail`, `_resume_output_valid`, and `_validate_render_output` with mocked ffprobe.
+
+**Contracts introduced**:
+- `qa_pipeline.py` imports from `app.services.db` and `app.services.bin_paths` only — no import from `render_pipeline.py`, no circular import.
+- No function signature was changed. No call site was changed. No behavior was changed.
+- `_stall_deadline` is still accessible as `render_pipeline._stall_deadline` via re-export; `_render_progress_timer` (which calls it, still in render_pipeline.py) continues to work unchanged.
+
+---
+
+## Test Suite State (Post Phase 4C)
 
 ```
-5810 passed, 1 skipped, 8 failed
+5844 passed, 1 skipped, 8 failed
 ```
 
 The 8 persistent failures are pre-existing (before Phase 1):
@@ -264,6 +285,8 @@ The 8 persistent failures are pre-existing (before Phase 1):
 - `test_ai_visibility_summary.py` — 1 test
 
 None of these are related to the output-timeline architecture restructure.
+
+Phase 4C added 34 new passing tests (`test_qa_pipeline.py`).
 
 Phase 4B added 23 new passing tests (`test_asset_pipeline.py`).
 

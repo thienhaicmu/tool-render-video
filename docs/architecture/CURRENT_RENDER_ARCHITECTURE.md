@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 3C.5)
+**Last updated**: 2026-05-22 (post Phase 4C)
 
 ---
 
@@ -12,7 +12,10 @@ Electron shell
   └── BrowserWindow → http://127.0.0.1:8000/
         └── FastAPI + Uvicorn (single process)
               ├── job_manager.py — ThreadPoolExecutor, priority heap, cancel events
-              ├── render_pipeline.py — per-job orchestration
+              ├── render_pipeline.py — per-job orchestration (5,510 lines post Phase 4C)
+              ├── orchestration/render_events.py — shared logging/event helpers (Phase 4B)
+              ├── orchestration/asset_pipeline.py — post-assembly asset hooks (Phase 4B)
+              ├── orchestration/qa_pipeline.py — output QA/validation helpers (Phase 4C)
               ├── render_engine.py — FFmpeg command builders
               └── SQLite — job/parts state, upload queue
 ```
