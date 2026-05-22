@@ -2,8 +2,8 @@
 ## Implementation Plan
 
 **Date**: 2026-05-22  
-**Branch**: feature/ai-output-upgrade  
-**Status**: Phase 3A SHIPPED — commit 8db0295 (subtitle overlay after base clip)
+**Branch**: restructure/output-timeline-architecture  
+**Status**: Phase 3A SHIPPED (commit 8db0295) · Phase 3A.5 validated (commit bab429c) · Phase 3B PLANNED (see PHASE_3B_TEXT_LAYER_OVERLAY_PLAN.md)
 
 ---
 
