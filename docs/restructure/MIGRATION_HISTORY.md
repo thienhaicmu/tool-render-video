@@ -335,7 +335,7 @@ Phase 4D added 24 new passing tests (`test_audio_pipeline.py` + `test_render_eve
 
 **Branch**: `restructure/output-timeline-architecture`
 **Status**: SHIPPED
-**Commit**: TBD (this commit)
+**Commit**: `49a40a9`
 
 **Purpose**: First sub-step of render_engine.py split. Extract shared FFmpeg infrastructure (probe helpers, filter builders, NVENC, thread-local, codec selection) into `services/render/ffmpeg_helpers.py`. Backward-compat re-exports keep all existing callers unchanged.
 
