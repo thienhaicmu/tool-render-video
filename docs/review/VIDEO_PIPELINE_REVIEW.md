@@ -36,7 +36,9 @@ Source video
 
 **What happens**: yt-dlp download (YouTube) or path validation (local).
 
-**Risk**: Large YouTube videos (>1h) can take 5–15min to download synchronously. During this time the render job is in `downloading` state but the UI shows a static spinner with no byte-level progress. If the download hangs (network drop, yt-dlp cookie expiry), there is no timeout at the download stage. The job will hang indefinitely.
+**Risk**: Large YouTube videos (>1h) can take 5–15min to download synchronously. During this time the render job is in `downloading` state but the UI shows a static spinner with no byte-level progress.
+
+**Partially Resolved (Phase 0)**: `socket_timeout: 60` added to yt-dlp options. `cancel_event` is now passed so user cancel propagates to the download. The 60s socket timeout mitigates the most common stall (network drop, hung connection). A total wall-clock timeout per download session is not yet implemented — a very slow but progressing download can still run indefinitely.
 
 **ffprobe validation**: Called to get duration. No explicit codec validation before the render pass — unsupported codec discovered at encode time, not at input validation time.
 
@@ -139,7 +141,7 @@ Multiple audio manipulations are applied in sequence: speed (atempo), loudnorm, 
 - The narration is generated from the SRT text at source speed, then the video is sped up
 - `mix_narration_audio()` mixes based on original narration duration
 
-If `playback_speed != 1.0` AND `tts_enabled=True`, the TTS narration will be out of sync because the narration was generated for the original-speed clip but is burned into the sped-up video. There is no atempo compensation applied to the narration track.
+**Resolved (Phase 0)**: `mix_narration_audio()` now accepts `playback_speed` and applies `atempo=speed` to the narration track before mixing. The narration is speed-compensated to match the sped-up video. Phase 0 regression tests cover this (`TestMixNarrationAudioAtempo`).
 
 ---
 
@@ -163,7 +165,7 @@ No check for:
 
 | Stage | Time Cost | Notes |
 |-------|-----------|-------|
-| YouTube download | 30s–15min | No timeout, no progress |
+| YouTube download | 30s–15min | socket_timeout=60 (Phase 0); no wall-clock timeout; no byte-progress |
 | Scene detection | 1–5min | CPU-bound, no sub-progress |
 | Whisper transcription | 2–20min | CPU-bound, blocks all concurrent renders |
 | Motion crop (MediaPipe) | Adds 30–60% to encode time | GPU not used for MediaPipe |
@@ -176,8 +178,8 @@ No check for:
 
 ## Output Quality Risks
 
-1. **Subtitle drift at non-1.0 speeds** — timestamps not adjusted for playback speed delta.
-2. **TTS desync at non-1.0 speeds** — narration not speed-adjusted to match video.
+1. **Subtitle display duration compression at non-1.0 speeds** — at 1.15x speed, each subtitle block has ≈13% less on-screen time than authored. Text-heavy blocks are harder to read. Subtitles ARE in sync with the sped-up speech (see §6 Subtitle Timing). This is a legibility concern, not desync. Phase 3 scope.
+2. **TTS narration desync** — RESOLVED in Phase 0 (`mix_narration_audio()` applies atempo compensation; regression tests added).
 3. **No codec compliance validation** — output may use B-frames (not TikTok-safe).
 4. **Black frame risk on scene transitions** — first frame detection is post-render only.
 5. **Variable FPS output** — no `-r` forcing may produce VFR output.

@@ -117,7 +117,11 @@ The vf_chain order MUST NOT change.
 
 ---
 
-## 3. Target Base-Clip-First Flow
+## 3. Target Base-Clip-First Flow (Phase 2)
+
+> **IMPORTANT**: In Phase 2 the base clip is a **parallel validation artifact**.
+> It is NOT used as input to the final render. The final output still comes
+> exclusively from the unmodified `render_part_smart()` path. See §3a below.
 
 ```
 _render_part(seg, idx, ...)
@@ -128,9 +132,9 @@ _render_part(seg, idx, ...)
 │   ├─ narration generation + mix
 │   └─ cut_video()
 │
-├─ [BASE CLIP RENDER — NEW STAGE]
+├─ [BASE CLIP RENDER — PARALLEL ARTIFACT, only when FEATURE_BASE_CLIP_FIRST=1]
 │   └─ render_base_clip()
-│       ├─ speed from TimelineMap.effective_speed  ← authoritative
+│       ├─ speed from TimelineMap.effective_speed  ← authoritative timing record
 │       ├─ crop/reframe (motion_aware or standard)
 │       ├─ fps normalization
 │       ├─ target resolution/aspect
@@ -140,13 +144,16 @@ _render_part(seg, idx, ...)
 │       ├─ NO drawtext title overlay
 │       ├─ NO text_layers
 │       ├─ NO TTS narration mix at encode time
-│       → base_clip.mp4  ← TimelineMap becomes authoritative here
+│       → base_clip.mp4  ← ARTIFACT ONLY; NOT used as final output input
 │
-├─ [MANIFEST UPDATE]
-│   └─ write manifest: base_clip_path, base_clip_duration, base_clip_fps, etc.
+├─ [MANIFEST UPDATE — base clip fields only]
+│   └─ write base_clip_path, base_clip_duration, base_clip_fps, etc.
 │
-├─ [OVERLAY PHASE — future Phase 3+, currently: reuse existing ASS path]
-│   └─ (In Phase 2: subtitles/overlays still burned as before)
+├─ [FINAL RENDER — ALWAYS runs, UNCHANGED legacy path]
+│   └─ render_part_smart()           ← UNMODIFIED; produces the final output
+│       ├─ ALL overlays (ass=, drawtext=, text_layers)
+│       ├─ speed from payload (same computation as before Phase 2)
+│       └─ → part_N_rendered.mp4    ← the user-facing output clip
 │
 ├─ [POST-RENDER ASSEMBLY — unchanged]
 │   └─ hook intro, asset intro/outro, logo
@@ -155,30 +162,70 @@ _render_part(seg, idx, ...)
 └─ [METADATA — unchanged + manifest update]
 ```
 
+### §3a. Phase 2 Does NOT Change Final Output Path
+
+The final output clip (`part_N_rendered.mp4`) is produced by `render_part_smart()`
+**in both `FEATURE_BASE_CLIP_FIRST=0` and `FEATURE_BASE_CLIP_FIRST=1` modes**.
+
+When the flag is ON, `render_base_clip()` runs first as a **side-channel** and
+produces `base_clip.mp4` — a separate file used for validation, manifest
+population, and future Phase 3+ planning. After `render_base_clip()` completes
+(or fails silently), `render_part_smart()` runs unconditionally as before.
+
+**No user-visible output changes in Phase 2.**
+
+| Flag state | base_clip.mp4 produced? | Final output producer | User sees change? |
+|---|---|---|---|
+| `FEATURE_BASE_CLIP_FIRST=0` (default) | No | `render_part_smart()` | No |
+| `FEATURE_BASE_CLIP_FIRST=1` (dev/test) | Yes | `render_part_smart()` (unchanged) | No |
+
+When the flag is ON, two encode passes run per part (base clip + final). This
+is intentional — the base clip is a validation artifact. The motion path cache
+is shared between both passes to limit the additional CPU cost.
+
 ---
 
-## 4. Overlay-After-Render Future Direction
+## 4. Phase Roadmap: From Parallel Artifact to Overlay Composite
 
-Phase 2 lays the foundation. The full vision is:
+Phase 2 lays the foundation without changing visible output. The full progression:
 
 ```
 Phase 2 (this plan):
-  render_base_clip() → base_clip.mp4
-  Still burns overlays in-band (same as today, safe path)
+  render_base_clip() → base_clip.mp4  [PARALLEL ARTIFACT, not used for final]
+  render_part_smart() → final output  [UNCHANGED LEGACY PATH, always runs]
+  Goal: establish base clip contract, manifest fields, feature flag infrastructure
 
-Phase 3 (future):
-  render_base_clip() → base_clip.mp4  (no overlays)
+Phase 3 (future — NOT in Phase 2):
+  render_base_clip() → base_clip.mp4  [no subtitles, no text overlays]
   render_overlays(base_clip, ass, title, text_layers) → final_clip.mp4
+  base_clip becomes the input to the final composite
   TimelineMap.output_duration is authoritative for overlay timing
+  render_part_smart() is RETIRED from production path
 
-Phase 4 (future):
-  Overlay timing derived from base_clip output duration
+Phase 4 (future — NOT in Phase 2 or 3):
   Subtitle timestamps converted from source-time to output-time using TimelineMap
+  Subtitle display duration expanded to compensate for speed compression
   TTS narration aligned to base_clip output timeline
 ```
 
-Phase 2 must NOT activate Phase 3/4 behavior. It creates the separation
-boundary without changing visible output.
+### §4a. Phase 3 Will Activate Overlay Composite
+
+Phase 3 is the step that actually wires `base_clip.mp4` into the final output.
+Phase 2 intentionally does NOT do this because:
+
+1. **Double-encoding risk**: Using base_clip as input to a second encode pass
+   introduces quality loss. Phase 3 must evaluate whether this is acceptable
+   or whether lossless intermediate formats / single-pass composite are needed.
+
+2. **Audio sync risk**: The base clip encodes audio with atempo. A second encode
+   pass applying audio filters on top risks double atempo application.
+
+3. **Test coverage gap**: Phase 2's parallel-artifact approach means the final
+   output is still validated against the known-good legacy path. Phase 3 cannot
+   activate without its own full smoke-test suite.
+
+Phase 2 must NOT activate Phase 3/4 behavior. It creates the naming and manifest
+infrastructure without coupling `base_clip.mp4` to the production output path.
 
 ---
 
@@ -315,15 +362,22 @@ noting that they share heritage is sufficient to prevent silent divergence.
 
 ### Dual-path compatibility
 
-Phase 2 runs dual-path:
-- `FEATURE_BASE_CLIP_FIRST=0` (default): existing `render_part_smart()` path
-- `FEATURE_BASE_CLIP_FIRST=1`: `render_base_clip()` + then pass the base clip
-  to the same overlay burn-in (so rendered output is identical or near-identical)
+Phase 2 is a **parallel-artifact** model, not a replacement model:
 
-In Phase 2, the overlay burn-in still happens inside the same render call
-(no Phase 3 separation yet). The feature flag governs whether we go through
-the new explicit `render_base_clip()` function vs. the old monolithic
-`render_part_smart()`.
+- `FEATURE_BASE_CLIP_FIRST=0` (default):
+  Only `render_part_smart()` runs. Output unchanged. No base_clip.mp4.
+
+- `FEATURE_BASE_CLIP_FIRST=1` (dev/validation):
+  `render_base_clip()` runs first → produces `base_clip.mp4` (validation artifact).
+  Then `render_part_smart()` runs unconditionally → produces the final output (unchanged).
+  `base_clip.mp4` is NOT passed as input to `render_part_smart()`.
+  The final output clip is identical to the `FEATURE_BASE_CLIP_FIRST=0` output.
+
+**`render_part_smart()` always runs in Phase 2. It is never skipped.**
+
+The feature flag controls whether a *second*, overlay-free encode pass happens
+before the primary render. This is intentional: Phase 2 validates the base clip
+contract without risking the production output path.
 
 ---
 
@@ -412,21 +466,27 @@ _FEATURE_BASE_CLIP_FIRST = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 
 If `FEATURE_BASE_CLIP_FIRST=1` and `render_base_clip()` raises:
 1. Log warning with job_id and part_no
-2. Fall back to legacy `render_part_smart()` path automatically
-3. `_p1_manifest.base_clip_path` remains None (correct)
-4. Render continues — no clip is lost
+2. `_p1_manifest.base_clip_path` remains None (correct)
+3. Continue to `render_part_smart()` unconditionally — no clip is lost
+4. The base clip failure has zero impact on the final output
 
 ```python
-# Pseudocode:
+# Pseudocode — Phase 2 execution model:
 if _FEATURE_BASE_CLIP_FIRST:
     try:
         _base_clip_path = render_base_clip(...)
         _p1_manifest.base_clip_path = str(_base_clip_path)
         # ... probe + update manifest fields ...
     except Exception as _bc_exc:
-        logger.warning("base_clip_render_failed part=%d: %s; falling back", idx, _bc_exc)
-        _base_clip_path = None  # continue with legacy path
+        logger.warning("base_clip_render_failed part=%d: %s; skipping artifact", idx, _bc_exc)
+        _base_clip_path = None
+
+# render_part_smart() ALWAYS runs — it is the source of the final output:
+render_part_smart(...)  # unchanged, unconditional
 ```
+
+There is no "fall back to legacy path" language because `render_part_smart()`
+IS the only path to the final output in Phase 2. It is never replaced.
 
 ### Rollback strategy
 
@@ -507,16 +567,18 @@ test_base_clip_manifest.py (additions):
   ✓ TimelineMap.effective_speed matches render_part_smart playback_speed arg
 ```
 
-### Smoke validation (real render)
+### Smoke validation (real render, FEATURE_BASE_CLIP_FIRST=1)
 
 ```
-  ✓ base_clip.mp4 exists in work_dir/part_N/
+  ✓ base_clip.mp4 exists in work_dir/part_N/  (parallel artifact)
   ✓ base_clip duration ≈ source_duration / effective_speed (within 5%)
   ✓ base_clip has video stream
   ✓ base_clip has audio stream (if source has audio)
   ✓ base_clip fps matches target_fps
-  ✓ final rendered output duration matches legacy path output duration
-  ✓ no subtitle text visible in base_clip.mp4 (visual check)
+  ✓ no subtitle text visible in base_clip.mp4  (visual check)
+  ✓ part_N_rendered.mp4 (final output) produced by render_part_smart()
+  ✓ final output is byte-comparable to flag=OFF reference render
+  ✓ render_part_smart() was called — not skipped — even with flag=1
 ```
 
 ### Exclusions
@@ -532,21 +594,23 @@ test_base_clip_manifest.py (additions):
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| Double encoding quality loss | HIGH | Phase 2 does NOT double-encode — base clip IS the encoded output; overlays stay inline for now |
-| Render time increase | MEDIUM | Phase 2: no extra encode pass; motion path cache still applies |
-| Audio sync drift | MEDIUM | Phase 2: audio pipeline unchanged; atempo applied in same encode pass |
-| Subtitle filter order dependency | HIGH | `ass-before-setpts` order preserved in `render_base_clip()` AND overlay path (Phase 2 still burns inline) |
-| Duplicated crop/reframe | LOW | `render_base_clip()` calls same motion_crop helper; no double-crop |
-| Duplicate encode passes | HIGH | NOT a Phase 2 risk — overlay separation (Phase 3) creates this; document for Phase 3 |
-| Artifact cleanup lifecycle | LOW | `base_clip.mp4` covered by existing `prune_render_temp_dirs()` |
-| Output duration mismatch | MEDIUM | Probe base_clip duration after render; write to manifest; compare to TimelineMap.output_duration |
-| Hidden playback_speed recomputation | HIGH | Phase 2 uses `TimelineMap.effective_speed` as the single source; must not re-derive from payload |
+| Two encode passes when flag=1 (base clip + final) | MEDIUM | Both encodes are independent; base clip is discardable if render time is too high; flag is OFF by default |
+| Double-encoding quality loss in final output | NONE in Phase 2 | Final output is always produced by `render_part_smart()` from the raw cut, not from base_clip.mp4; no quality chain |
+| Double encode in Phase 3 (future risk) | HIGH — Phase 3 concern | Document now: Phase 3 must decide whether base_clip → overlay composite introduces a lossy second pass |
+| Render time increase when flag=1 | MEDIUM | Two encode passes per part; motion path cache shared; flag is OFF by default in production |
+| Audio sync drift in base clip | LOW | Base clip audio uses same atempo path; mismatch only if encode differs from render_part — must not happen |
+| Audio double-atempo risk (Phase 3) | HIGH — Phase 3 concern | If Phase 3 re-encodes base_clip with audio filters, atempo may be applied twice; document for Phase 3 review |
+| Subtitle filter order dependency | HIGH | `ass-before-setpts` order preserved in all paths; `render_base_clip()` has NO ass= filter; `render_part_smart()` unchanged |
+| Duplicated crop/reframe | LOW | `render_base_clip()` calls same motion_crop helper; motion path cache prevents double MediaPipe scan |
+| Artifact cleanup lifecycle | LOW | `base_clip.mp4` covered by existing `prune_render_temp_dirs()`; no new cleanup logic needed |
+| Output duration mismatch | MEDIUM | Probe base_clip duration after render; write to manifest; compare to TimelineMap.output_duration; log discrepancy |
+| Hidden playback_speed recomputation in base clip | HIGH | `render_base_clip()` must use `TimelineMap.effective_speed`; must NOT re-derive speed from payload |
 | AI timing assumptions | LOW | AI plan uses source timeline; Phase 2 does not change AI plan behavior |
-| Feature flag not defaulting OFF | HIGH | Code review gate: default must be "0" before merge |
-| `render_base_clip()` signature drift from `render_part()` | MEDIUM | Explicit comment in both functions; covered by test that both use same vf primitives |
+| Feature flag not defaulting OFF | HIGH | Code review gate: default MUST be "0" before merge |
+| `render_base_clip()` signature drift from `render_part()` | MEDIUM | Explicit comment in both functions; test both use same vf primitives |
 | NVENC semaphore not acquired in base clip path | HIGH | `render_base_clip()` must replicate NVENC semaphore handling from `render_part()` |
 | Windows path escaping in vf_chain | HIGH | Use same `_safe_filter_path()` helper; test on Windows (the target platform) |
-| Motion crop cache miss on base clip (different key) | MEDIUM | Use same `_motion_cache_key` derivation; document in code |
+| Motion crop cache miss on base clip | MEDIUM | Use same `_motion_cache_key` derivation as `render_part_smart()` call site |
 
 ---
 
@@ -584,10 +648,12 @@ Step 4 — render_base_clip() unit tests [~60 min]
 
 Step 5 — Feature flag + pipeline integration [~45 min]
   File: backend/app/orchestration/render_pipeline.py
-  - Add _FEATURE_BASE_CLIP_FIRST constant
-  - Wrap render_base_clip() call in try/except fallback block
-  - Write base_clip_* fields to manifest on success
-  - Probe base_clip output duration + write to manifest
+  - Add _FEATURE_BASE_CLIP_FIRST constant (default "0")
+  - BEFORE render_part_smart() call site: add try/except block for render_base_clip()
+  - On success: write base_clip_* fields to manifest
+  - On failure: log warning, base_clip_path=None, continue
+  - render_part_smart() call is UNCHANGED and ALWAYS runs after the base clip block
+  - Probe base_clip output duration + write to manifest on success only
 
 Step 6 — Integration tests [~30 min]
   File: backend/tests/test_render_base_clip.py (additions)
@@ -599,8 +665,14 @@ Step 7 — Full test suite [~5 min]
   Expect: same 8 pre-existing failures, 0 new failures
 
 Step 8 — Manual smoke test [~20 min]
-  FEATURE_BASE_CLIP_FIRST=1 python -m pytest ... (or run real render)
-  Verify base_clip.mp4, manifest fields, output unchanged
+  Set FEATURE_BASE_CLIP_FIRST=1 and run a real render.
+  Verify:
+  - work_dir/part_N/base_clip.mp4 exists
+  - manifest.json contains base_clip_path, base_clip_duration, base_clip_fps
+  - part_N_rendered.mp4 (final output) is produced by render_part_smart()
+  - final output is identical to a reference render with flag OFF
+  - no subtitle text visible in base_clip.mp4 (visual check)
+  - base_clip duration ≈ source_duration / effective_speed (within 5%)
 
 Step 9 — Commit [feature flag OFF]
   git commit -m "phase 2 base clip first render"
@@ -655,46 +727,50 @@ Step 9 — Commit [feature flag OFF]
 
 ## 16. Review Doc Synchronization
 
-### VIDEO_PIPELINE_REVIEW.md — Update needed
+**Updated as of 2026-05-22 (Phase 2.0 sync)**:
 
-**Section "Subtitle Sync Risks"** contains:
-> "This means: if `playback_speed=1.15`, a subtitle at 10.0s in the clip will
-> appear at 10.0s in the output even though the audio at that point is now at
-> ~8.7s — subtitle drift scales with speed deviation from 1.0."
-
-This description is partially incorrect. The `ass-before-setpts` order means
-subtitle timestamps ARE re-clocked by setpts — the subtitle at 10.0s source
-time appears at 10.0/1.15 = 8.7s output time, which is in sync with the
-sped-up audio. The real issue is that subtitle *display duration* is compressed
-(from 3s source to 2.6s output), which may make text harder to read at high
-speeds. The report should be updated to reflect this corrected understanding.
-
-**Section "TTS Narration Desync"** remains accurate (Phase 0 fix applied
-atempo compensation; the report's historical description was correct at the
-time it was written).
+| Doc | Section | Status |
+|---|---|---|
+| VIDEO_PIPELINE_REVIEW.md | Subtitle Sync Risks | Updated — `ass-before-setpts` confirmed correct; display duration compression documented |
+| VIDEO_PIPELINE_REVIEW.md | Audio-Video Sync | Updated — Phase 0 atempo fix confirmed; marked resolved |
+| VIDEO_PIPELINE_REVIEW.md | Stage 1 (Source Acquisition) | Updated — Phase 0 socket_timeout=60 noted |
+| VIDEO_PIPELINE_REVIEW.md | Output Quality Risks | Updated — items 1 and 2 reflect corrected status |
+| TECHNICAL_DEBT_REPORT.md | C2 (Subtitle timestamps) | Updated — Partially Resolved; display duration compression documented |
+| TECHNICAL_DEBT_REPORT.md | C3 (TTS desync) | Updated — Resolved (Phase 0) |
+| TECHNICAL_DEBT_REPORT.md | H6 (YouTube timeout) | Updated — Partially Resolved (Phase 0) |
+| BRUTAL_REVIEW_SUMMARY.md | What Is Dangerous | Updated — subtitle/TTS/download status corrected |
+| BRUTAL_REVIEW_SUMMARY.md | What Will Break First | Updated |
+| BRUTAL_REVIEW_SUMMARY.md | Final Verdict priorities | Updated — Phase 0 items removed/marked done |
 
 ---
 
 ## Summary
 
 **Recommended option**: B — New `render_base_clip()` function that leaves
-legacy path fully intact.
+the entire legacy render path fully intact and untouched.
+
+**Phase 2 core contract**:
+- `base_clip.mp4` is a **parallel validation artifact**, never a final output input.
+- `render_part_smart()` runs **unconditionally** in Phase 2; it is never replaced.
+- Feature flag `FEATURE_BASE_CLIP_FIRST` defaults to `"0"` (OFF).
+- No user-visible output change in Phase 2.
 
 **Main architectural risks**:
 1. NVENC semaphore must be replicated in `render_base_clip()` (HIGH)
-2. Feature flag must default OFF (HIGH)
-3. Double encoding risk is Phase 3's problem, not Phase 2's (document now)
-4. Windows path escaping in vf_chain needs explicit test (HIGH on target platform)
+2. Feature flag must default OFF — mandatory code review gate (HIGH)
+3. Two encode passes when flag=1 increases render time — document clearly (MEDIUM)
+4. Phase 3 double-encode quality and audio-sync risk — document now, solve in Phase 3 (HIGH — future)
+5. Windows path escaping in vf_chain needs explicit test (HIGH on target platform)
+6. `render_base_clip()` must use `TimelineMap.effective_speed`, not re-derive from payload (HIGH)
 
-**Compatibility strategy**: Dual-path behind `FEATURE_BASE_CLIP_FIRST` env var.
-Default OFF. Legacy path completely unchanged.
+**Compatibility strategy**: Parallel-artifact model behind `FEATURE_BASE_CLIP_FIRST` env var.
+Default OFF. `render_part_smart()` call site completely unchanged.
 
-**Testing strategy**: Unit tests with mocked FFmpeg command inspection.
-Integration tests with mocked render. Real smoke test with flag ON before merge.
+**Testing strategy**: Unit tests with mocked FFmpeg command inspection (assert no `ass=`,
+no `drawtext=`, speed from timeline). Integration-light tests for feature flag behavior.
+Smoke test: flag=1 produces base_clip.mp4 AND final output identical to flag=0 reference.
 No real YouTube, no heavy FFmpeg in CI.
 
-**Review docs updated**: VIDEO_PIPELINE_REVIEW.md subtitle drift section
-needs correction (see §16 above). TECHNICAL_DEBT_REPORT.md C2 remains open —
-subtitle drift is a *display duration* compression issue, not a pure
-desynchronization issue. The original report's severity assessment is still
-valid, but the mechanism description should be corrected.
+**Phase 3 entry condition**: `base_clip.mp4` has been validated as timing-accurate
+(duration within 2% of `TimelineMap.output_duration`) across multiple real renders.
+Only then should Phase 3 attempt to wire `base_clip.mp4` into the final output path.

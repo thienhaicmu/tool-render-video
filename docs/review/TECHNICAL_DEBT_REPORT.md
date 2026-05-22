@@ -27,12 +27,20 @@
 ---
 
 ### C3. TTS Narration Desync at Non-1.0 Speeds
-**File**: `backend/app/orchestration/render_pipeline.py` — TTS + audio mixing section
-**Functions**: `generate_narration_audio()` in `tts_service.py`, `mix_narration_audio()` in `audio_mix_service.py`
 
-**Debt**: TTS narration is generated from the transcript at the natural speaking rate. The narration is then mixed with the video at a different playback speed. No atempo compensation is applied to align narration timing with the speed-adjusted video.
+**Resolved (Phase 0)**:  
+`mix_narration_audio()` in `audio_mix_service.py` now accepts `playback_speed: float`
+and applies `atempo={speed:.4f}` to the narration track before mixing. The narration
+is speed-compensated to match the video playback speed. Speed is clamped to FFmpeg
+atempo's range [0.5, 2.0] (a separate concern from the render pipeline's [0.5, 1.5] clamp).
 
-**Impact**: When `tts_enabled=True` and `playback_speed != 1.0`, the narration is out of sync with the video. The narration finishes before the video ends (at speed >1.0) or after (at speed <1.0).
+`render_pipeline.py` passes `playback_speed=_get_effective_playback_speed(payload, _target_platform)`
+to `mix_narration_audio()` at the call site.
+
+Regression tests added: `TestMixNarrationAudioAtempo` (8 tests) in `test_phase0_hotfixes.py`.
+
+**Historical debt**: TTS narration was generated at natural speaking rate and mixed
+without speed compensation. At 1.15x speed the narration ended ~52s into a 60s clip.
 
 ---
 
@@ -85,7 +93,7 @@
 
 ---
 
-### H6. YouTube Download Has No Timeout
+### H6. YouTube Download Hang Risk (Partially Resolved)
 **File**: `backend/app/services/downloader.py` — `download_youtube()`
 **Called from**: `render_pipeline.py` (main render path), `routes/render.py` (prepare-source, quick-process)
 
