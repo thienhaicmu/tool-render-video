@@ -1557,3 +1557,40 @@ Phase 4H.1 line delta: `routes/render.py` reduced by 164 net lines (1,369 → 1,
 ```
 
 Baseline stabilized. The 8 remaining failures are pre-existing: 4 remotion adapter failures + 4 AI/optional-dependency failures. This is the correct stable baseline for Phase 4H.2+.
+
+---
+
+## Phase 4H.2 — Extract Preview Session Service
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED (2026-05-22)
+**Commit**: (this commit)
+
+**Purpose**: Second implementation phase of Phase 4H. Extract 4 preview session helper functions and 4 module-level state variables from `routes/render.py` into `services/preview/session_service.py`. Singleton state semantics preserved — `_PREVIEW_SESSIONS` is defined exactly once in `session_service.py`; `routes/render.py` imports and re-exports all symbols. `main.py` unchanged.
+
+**Shipped changes**:
+- New file: `backend/app/services/preview/session_service.py` (83 lines) — owns `_PREVIEW_SESSIONS`, `_PREVIEW_DIR`, `_SESSION_TTL_HOURS`, `_MAX_PREVIEW_SESSIONS`, `_save_session`, `_load_session`, `_cleanup_preview_session`, `evict_stale_preview_sessions`
+- `backend/app/routes/render.py`: removed 4 state vars + 4 function bodies; added `from app.services.preview.session_service import ...` block with all 8 symbols; `evict_stale_preview_sessions` comment notes it is re-exported for `main.py` backward compat
+- New tests: `tests/test_preview_session_service.py` — 17 tests covering singleton identity, `_save_session` (5 cases), `_load_session` (4 cases), `_cleanup_preview_session` (3 cases), `evict_stale_preview_sessions` (3 cases)
+- Updated docs: `CURRENT_RENDER_ARCHITECTURE.md`, `PHASE_4H_ROUTE_CLEANUP_PLAN.md`, `TECHNICAL_DEBT_REPORT.md`
+
+**Symbols that stayed in `routes/render.py`**:
+- `_ACTIVE_DOWNLOADS` — download cancel events belong to download lifecycle, not session lifecycle
+- `_UUID_RE` — used only by route handlers for `session_id` validation
+
+**Contracts introduced**:
+- `app.services.preview.session_service._PREVIEW_SESSIONS` is the authoritative singleton registry
+- `routes.render._PREVIEW_SESSIONS is session_service._PREVIEW_SESSIONS` — same object
+- `routes.render.evict_stale_preview_sessions is session_service.evict_stale_preview_sessions` — same function
+
+**Phase 4H.2 line delta**: `routes/render.py` reduced by 55 net lines (1,205 → 1,150). `session_service.py` created (83 lines).
+
+---
+
+## Test Suite State (Post Phase 4H.2)
+
+```
+8 failed, 6671 passed, 1 skipped  (+17 new tests from test_preview_session_service.py)
+```
+
+17 new tests in `test_preview_session_service.py` — all 17 pass. 8 failures unchanged (pre-existing). Zero new failures introduced by Phase 4H.2.

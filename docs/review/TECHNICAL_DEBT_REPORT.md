@@ -114,17 +114,19 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 ### H2b. routes/render.py Mixes Route Logic with Service Logic
 **File**: `backend/app/routes/render.py`
-**Line count**: ~1,369 lines
+**Line count**: ~1,150 lines (post Phase 4H.2)
 
-**Debt**: `routes/render.py` contains at least 9 distinct responsibility clusters: preview session state management (save/load/evict), source preparation, preview streaming, render job lifecycle, batch orchestration, media streaming, one-shot quick process, route-local FFmpeg probe helpers, and 6 module-level state variables. Non-route logic (session management, FFmpeg probers, batch runner) is inlined in the route module.
+**Debt**: `routes/render.py` contains at least 7 remaining responsibility clusters: source preparation, preview streaming, render job lifecycle, batch orchestration, media streaming, one-shot quick process, and 2 module-level state variables (`_ACTIVE_DOWNLOADS`, `_UUID_RE`). Non-route logic (batch runner) is still inlined in the route module. Preview session management and FFmpeg probe helpers have been extracted (Phases 4H.1–4H.2).
 
-**Impact**: New preview/session logic is added to the route module instead of a service. FFmpeg probe helpers (`_probe_video_codec`, `_probe_preview_profile`, `_ensure_h264_preview`) have no tests. The `evict_stale_preview_sessions()` function is called from `main.py` — a cross-module dependency that couples startup behavior to a route module.
+**Impact**: Batch runner is still an inner closure with no cancel/resume/progress. `_ACTIVE_DOWNLOADS` is route-module-local state that could move to a download service in a future phase.
 
 **Phase 4H.0 planning (2026-05-22)**: `routes/render.py` audited. 9 clusters and all module-level state inventoried. 3 coupling constraints documented (evict called from main.py; session callbacks passed to render pipeline; batch inner closure). Target modules: `services/preview/ffmpeg_probers.py`, `services/preview/session_service.py`, `services/render/batch_service.py`. Plan: `docs/restructure/PHASE_4H_ROUTE_CLEANUP_PLAN.md`. No backend code changed.
 
 **Phase 4H.1 shipped (2026-05-22)**: `services/preview/ffmpeg_probers.py` created — 6 FFmpeg probe helpers extracted verbatim. `routes/render.py` reduced from ~1,369 → 1,205 lines (−164 lines). 44 new tests in `test_preview_ffmpeg_probers.py` — all pass. Same-object identity preserved. No API changes.
 
 **Phase 4H.1A shipped (2026-05-22)**: `TestGetWhisperModel` ordering failures fixed. Root cause: `test_subtitle_engine_compat_exports.py` (alphabetically earlier) injected a different whisper mock into `sys.modules`, defeating `test_subtitle_transcription.py`'s `setdefault`. Fix: 3 test methods now use `mock.patch("app.services.subtitles.transcription.whisper", ...)` directly. Baseline stabilized to 8 failed / 6654 passed.
+
+**Phase 4H.2 shipped (2026-05-22)**: `services/preview/session_service.py` created — 4 session helper functions and 4 state variables extracted verbatim. `routes/render.py` reduced from 1,205 → 1,150 lines (−55 lines). `evict_stale_preview_sessions` re-exported from `routes/render.py` so `main.py` deferred import is unchanged. 17 new tests in `test_preview_session_service.py` — all pass. Singleton identity verified (`routes.render._PREVIEW_SESSIONS is session_service._PREVIEW_SESSIONS`). No API changes.
 
 ---
 
