@@ -255,7 +255,7 @@ This document records what changed in each phase, why, and what contracts were i
 
 **Branch**: `restructure/output-timeline-architecture`
 **Status**: SHIPPED
-**Commit**: (this commit)
+**Commit**: `f0666c5`
 
 **Purpose**: Extract QA/output validation helpers from `render_pipeline.py` into `orchestration/qa_pipeline.py`. Second code extraction phase of Phase 4.
 
@@ -291,3 +291,40 @@ Phase 4C added 34 new passing tests (`test_qa_pipeline.py`).
 Phase 4B added 23 new passing tests (`test_asset_pipeline.py`).
 
 Phase 3C.5 fix: 3 previously-SKIPPED `TestOverlayPathDoubleAtempoSafety` tests in `test_overlay_narration.py` now PASS (5784 → 5787 passing, 4 → 1 skipped).
+
+---
+
+## Phase 4D — Extract Audio Pipeline + Remaining Render Events
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Extract audio cleanup orchestration from `render_pipeline.py` into `orchestration/audio_pipeline.py`. Move remaining render event/progress helpers into `orchestration/render_events.py`.
+
+**Shipped changes**:
+- New file: `backend/app/orchestration/audio_pipeline.py` — `_maybe_cleanup_narration_audio` moved verbatim. Imports from `render_events` for `_job_log`/`_safe_unlink`; no circular import.
+- `backend/app/orchestration/render_events.py` extended with: `_PROGRESS_TICK_SEC` constant, `_event_from_stage`, `_resolve_job_log_dir`, `_render_progress_timer`. New imports added: `threading`, `time`, `STAGE_TO_EVENT`/`JobPartStage` from `app.core.stage`, `upsert_job_part` from `app.services.db`. `_render_progress_timer` uses a deferred `from app.orchestration.qa_pipeline import _stall_deadline` to avoid top-level circular import.
+- `render_pipeline.py`: function bodies for the above 5 items removed; backward-compat re-exports added. Reduced from 5,510 → 5,340 lines (−170 lines).
+- New test file: `backend/tests/test_audio_pipeline.py` — 9 tests for `_maybe_cleanup_narration_audio`.
+- New test file: `backend/tests/test_render_events.py` — 15 tests for `_event_from_stage`, `_resolve_job_log_dir`, `_render_progress_timer`.
+- `backend/tests/test_render_pipeline_guards.py`: mock targets updated from `render_pipeline.*` → `render_events.*` (where functions now live). Mock target for `_stall_deadline` updated from `render_pipeline.*` → `qa_pipeline.*`.
+- `backend/tests/test_audio_cleanup_pipeline.py`: mock targets updated from `render_pipeline.cleanup_audio_with_adapter` / `render_pipeline._job_log` → `audio_pipeline.*`.
+
+**Contracts introduced**:
+- `audio_pipeline.py` imports from `render_events.py` only (no import from `render_pipeline.py`). No circular import.
+- `render_events.py` imports from `qa_pipeline.py` are deferred inside `_render_progress_timer` body to avoid import-time circular dependency.
+- `_PROGRESS_TICK_SEC` is defined in `render_events.py`. `render_pipeline.py` no longer defines it.
+- No function signature was changed. No call site behavior was changed.
+
+---
+
+## Test Suite State (Post Phase 4D)
+
+```
+5868 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing (before Phase 1) — unchanged.
+
+Phase 4D added 24 new passing tests (`test_audio_pipeline.py` + `test_render_events.py`).

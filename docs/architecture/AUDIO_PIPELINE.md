@@ -1,7 +1,7 @@
 # AUDIO_PIPELINE.md
 
 **Source of truth for audio flow through the render pipeline.**
-**Last updated**: 2026-05-22 (post Phase 3C)
+**Last updated**: 2026-05-22 (post Phase 4D)
 
 ---
 
@@ -22,7 +22,7 @@
 source.mp4 (source audio, unmodified)
     │
     ├── generate_narration_audio()  → narration.mp3 (natural speaking rate)
-    ├── _maybe_cleanup_narration_audio() → DeepFilterNet (optional)
+    ├── _maybe_cleanup_narration_audio() → DeepFilterNet (optional)  [orchestration/audio_pipeline.py Phase 4D]
     └── mix_narration_audio(playback_speed=effective_speed)
             atempo={speed} applied to narration track
             BGM sidechain ducking (optional)

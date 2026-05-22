@@ -12,7 +12,9 @@
 
 **Phase 4B shipped (2026-05-22)**: Post-assembly asset helpers extracted to `orchestration/asset_pipeline.py`; shared logging/event helpers extracted to `orchestration/render_events.py`. `render_pipeline.py` reduced from 6,064 → 5,779 lines.
 
-**Phase 4C shipped (2026-05-22)**: QA/output validation helpers extracted to `orchestration/qa_pipeline.py`: `_validate_render_output`, `_assess_output_quality`, `_resume_output_valid`, `_render_part_failure_detail`, `_duration_tolerance`, `_stall_deadline`, `_failed_part_progress`. `render_pipeline.py` reduced from 5,779 → 5,510 lines. Plan: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md`. Next: Phase 4D (audio pipeline + events extraction).
+**Phase 4C shipped (2026-05-22)**: QA/output validation helpers extracted to `orchestration/qa_pipeline.py`. `render_pipeline.py` reduced from 5,779 → 5,510 lines.
+
+**Phase 4D shipped (2026-05-22)**: `_maybe_cleanup_narration_audio` extracted to `orchestration/audio_pipeline.py`; `_event_from_stage`, `_resolve_job_log_dir`, `_render_progress_timer`, `_PROGRESS_TICK_SEC` moved to `orchestration/render_events.py`. `render_pipeline.py` reduced from 5,510 → 5,340 lines. Plan: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md`. Next: Phase 4E (render_engine split).
 
 ---
 

@@ -627,13 +627,23 @@ Phase 4B is done (2026-05-22, commit `2be39cc`):
 - [x] MIGRATION_HISTORY.md updated with Phase 4B entry + commit hash
 - [x] `render_pipeline.py` reduced 6,064 → 5,779 lines (−285)
 
-Phase 4C is done (2026-05-22):
+Phase 4C is done (2026-05-22, commit `f0666c5`):
 - [x] `qa_pipeline.py` created with 7 QA functions
 - [x] `render_pipeline.py` has re-exports for all 7 functions (callers unchanged)
 - [x] `tests/test_qa_pipeline.py` added and passing (34 tests)
 - [x] Full suite: 5,844 passed, 1 skipped, 8 pre-existing failures
 - [x] MIGRATION_HISTORY.md updated with Phase 4C entry
 - [x] `render_pipeline.py` reduced 5,779 → 5,510 lines (−269)
+
+Phase 4D is done (2026-05-22):
+- [x] `audio_pipeline.py` created with `_maybe_cleanup_narration_audio`
+- [x] `render_events.py` extended with `_event_from_stage`, `_resolve_job_log_dir`, `_render_progress_timer`, `_PROGRESS_TICK_SEC`
+- [x] `render_pipeline.py` has re-exports for all moved names (callers unchanged)
+- [x] `tests/test_audio_pipeline.py` added and passing (9 tests)
+- [x] `tests/test_render_events.py` added and passing (15 tests)
+- [x] Full suite: 5,868 passed, 1 skipped, 8 pre-existing failures
+- [x] MIGRATION_HISTORY.md updated with Phase 4D entry
+- [x] `render_pipeline.py` reduced 5,510 → 5,340 lines (−170)
 
 Phase 4 is fully done when:
 - [ ] `render_pipeline.py` contains only orchestration logic (no utility function clusters)

@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4C)
+**Last updated**: 2026-05-22 (post Phase 4D)
 
 ---
 
@@ -16,6 +16,7 @@ Electron shell
               ├── orchestration/render_events.py — shared logging/event helpers (Phase 4B)
               ├── orchestration/asset_pipeline.py — post-assembly asset hooks (Phase 4B)
               ├── orchestration/qa_pipeline.py — output QA/validation helpers (Phase 4C)
+              ├── orchestration/audio_pipeline.py — narration audio cleanup orchestration (Phase 4D)
               ├── render_engine.py — FFmpeg command builders
               └── SQLite — job/parts state, upload queue
 ```

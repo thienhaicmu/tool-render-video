@@ -121,12 +121,12 @@ def _run_timer(expected_duration, channel_code="testchan", ticks=1,
     emit = mock_emit or MagicMock()
 
     patches = [
-        patch("app.orchestration.render_pipeline.upsert_job_part", upsert),
-        patch("app.orchestration.render_pipeline._emit_render_event", emit),
+        patch("app.orchestration.render_events.upsert_job_part", upsert),
+        patch("app.orchestration.render_events._emit_render_event", emit),
     ]
     if tick_sec_override is not None:
         patches.append(
-            patch("app.orchestration.render_pipeline._PROGRESS_TICK_SEC", tick_sec_override)
+            patch("app.orchestration.render_events._PROGRESS_TICK_SEC", tick_sec_override)
         )
     if extra_patches:
         patches.extend(extra_patches)
@@ -170,9 +170,9 @@ class TestProgressTimerStallSuspected:
         # Fake encode_start so that elapsed is >300 s on first tick
         fake_start = time.monotonic() - 310.0
 
-        with patch("app.orchestration.render_pipeline.upsert_job_part", upsert), \
-             patch("app.orchestration.render_pipeline._emit_render_event", emit), \
-             patch("app.orchestration.render_pipeline._PROGRESS_TICK_SEC", 0.05):
+        with patch("app.orchestration.render_events.upsert_job_part", upsert), \
+             patch("app.orchestration.render_events._emit_render_event", emit), \
+             patch("app.orchestration.render_events._PROGRESS_TICK_SEC", 0.05):
             t = threading.Thread(
                 target=_render_progress_timer,
                 args=(stop, "job1", 1, "p1", seg, "/out/p1.mp4",
@@ -202,9 +202,9 @@ class TestProgressTimerStallSuspected:
         upsert = MagicMock()
         fake_start = time.monotonic() - 310.0
 
-        with patch("app.orchestration.render_pipeline.upsert_job_part", upsert), \
-             patch("app.orchestration.render_pipeline._emit_render_event", emit), \
-             patch("app.orchestration.render_pipeline._PROGRESS_TICK_SEC", 0.05):
+        with patch("app.orchestration.render_events.upsert_job_part", upsert), \
+             patch("app.orchestration.render_events._emit_render_event", emit), \
+             patch("app.orchestration.render_events._PROGRESS_TICK_SEC", 0.05):
             t = threading.Thread(
                 target=_render_progress_timer,
                 args=(stop, "job2", 1, "p1", seg, "/out/p1.mp4",
@@ -231,9 +231,9 @@ class TestProgressTimerStallSuspected:
         emit = MagicMock()
         upsert = MagicMock()
 
-        with patch("app.orchestration.render_pipeline.upsert_job_part", upsert), \
-             patch("app.orchestration.render_pipeline._emit_render_event", emit), \
-             patch("app.orchestration.render_pipeline._PROGRESS_TICK_SEC", 0.05):
+        with patch("app.orchestration.render_events.upsert_job_part", upsert), \
+             patch("app.orchestration.render_events._emit_render_event", emit), \
+             patch("app.orchestration.render_events._PROGRESS_TICK_SEC", 0.05):
             t = threading.Thread(
                 target=_render_progress_timer,
                 args=(stop, "job3", 1, "p1", seg, "/out/p1.mp4",
@@ -261,9 +261,9 @@ class TestProgressTimerStallSuspected:
         upsert = MagicMock()
         fake_start = time.monotonic() - 310.0
 
-        with patch("app.orchestration.render_pipeline.upsert_job_part", upsert), \
-             patch("app.orchestration.render_pipeline._emit_render_event", emit), \
-             patch("app.orchestration.render_pipeline._PROGRESS_TICK_SEC", 0.05):
+        with patch("app.orchestration.render_events.upsert_job_part", upsert), \
+             patch("app.orchestration.render_events._emit_render_event", emit), \
+             patch("app.orchestration.render_events._PROGRESS_TICK_SEC", 0.05):
             t = threading.Thread(
                 target=_render_progress_timer,
                 args=(stop, "job4", 1, "p1", seg, "/out/p1.mp4",
@@ -302,10 +302,10 @@ class TestProgressTimerStallDetected:
         # Make deadline in the past so stall fires immediately on first tick
         past_deadline = time.monotonic() - 1.0
 
-        with patch("app.orchestration.render_pipeline.upsert_job_part", upsert), \
-             patch("app.orchestration.render_pipeline._emit_render_event", emit), \
-             patch("app.orchestration.render_pipeline._PROGRESS_TICK_SEC", 0.05), \
-             patch("app.orchestration.render_pipeline._stall_deadline",
+        with patch("app.orchestration.render_events.upsert_job_part", upsert), \
+             patch("app.orchestration.render_events._emit_render_event", emit), \
+             patch("app.orchestration.render_events._PROGRESS_TICK_SEC", 0.05), \
+             patch("app.orchestration.qa_pipeline._stall_deadline",
                    return_value=past_deadline):
             t = threading.Thread(
                 target=_render_progress_timer,
@@ -356,10 +356,10 @@ class TestProgressTimerStallDetected:
         emit = MagicMock()
         past_deadline = time.monotonic() - 1.0
 
-        with patch("app.orchestration.render_pipeline.upsert_job_part", upsert), \
-             patch("app.orchestration.render_pipeline._emit_render_event", emit), \
-             patch("app.orchestration.render_pipeline._PROGRESS_TICK_SEC", 0.05), \
-             patch("app.orchestration.render_pipeline._stall_deadline",
+        with patch("app.orchestration.render_events.upsert_job_part", upsert), \
+             patch("app.orchestration.render_events._emit_render_event", emit), \
+             patch("app.orchestration.render_events._PROGRESS_TICK_SEC", 0.05), \
+             patch("app.orchestration.qa_pipeline._stall_deadline",
                    return_value=past_deadline):
             t = threading.Thread(
                 target=_render_progress_timer,
