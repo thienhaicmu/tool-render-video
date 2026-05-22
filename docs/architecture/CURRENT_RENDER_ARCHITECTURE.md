@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4G.4; ass_core.py + readability.py stub extracted — ASS converters, burn, preview, visual-width helpers; subtitle_engine.py reduced 1,970 → 1,018 lines)
+**Last updated**: 2026-05-22 (post Phase 4G.5; readability.py extended + text_transforms.py created — full readability/emphasis cluster + market/hook text transforms extracted; subtitle_engine.py reduced 1,018 → 249 lines)
 
 ---
 
@@ -27,8 +27,9 @@ Electron shell
               │     ├── styles.py — ASSPreset, _PRESETS, _STYLE_ALIASES, _HL_OPEN/_HL_CLOSE, compute helpers, build_ass_style_line (Phase 4G.1)
               │     ├── srt_core.py — format/parse timestamps, SRT parse/write/slice, slice_srt_to_text, _run_with_retry (Phase 4G.2)
               │     ├── output_timeline.py — slice_srt_to_output_timeline (Phase 4G.3)
-              │     ├── readability.py — _WIDE_CHARS/_NARROW_CHARS, _approx_visual_width, _break_by_visual_width (Phase 4G.4 stub; full Cluster D in 4G.5)
-              │     └── ass_core.py — _ass_time, _ass_escape_text, srt_to_ass_bounce, srt_to_ass_karaoke, burn_subtitle_onto_video, render_subtitle_preview (Phase 4G.4)
+              │     ├── readability.py — visual-width helpers, _HOOK_EMPHASIS_WORDS, _is_cjk, subtitle_emphasis_pass, resegment_srt_for_readability, emphasis constants/helpers (Phase 4G.5 full)
+              │     ├── ass_core.py — _ass_time, _ass_escape_text, srt_to_ass_bounce, srt_to_ass_karaoke, burn_subtitle_onto_video, render_subtitle_preview (Phase 4G.4)
+              │     └── text_transforms.py — resolve_hook_overlay_text, apply_market_hook_text_to_srt, apply_hook_subtitle_format, format_hook_subtitle, apply_market_line_break_to_srt, apply_subtitle_execution_hints (Phase 4G.5)
               ├── db/ (Phase 4F COMPLETE) — app/db/connection.py (get_conn, init_db, thread-local, _drop_upload_tables), app/db/jobs_repo.py (upsert_job, update_job_progress, job parts CRUD), app/db/creator_repo.py (get_creator_prefs, upsert_creator_prefs); platform_repo.py DELETED (4F.5C), uploads_repo CANCELLED (upload domain removed instead)
               └── SQLite — job/parts state, upload queue
 ```

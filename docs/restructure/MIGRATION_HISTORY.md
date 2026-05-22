@@ -1237,3 +1237,68 @@ ass_core.py     → styles.py + srt_core.py + readability.py
 ```
 
 62 new tests in `test_subtitle_ass_core.py`. All 8 known failures are pre-existing. Baseline maintained.
+
+---
+
+## Phase 4G.5 — Extract Subtitle Text Transforms + Full Readability Cluster
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Source plan**: [PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md](PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md) — Cluster D (full) + Cluster E
+
+**Purpose**: Extend `subtitles/readability.py` with the full readability/emphasis cluster and create new `subtitles/text_transforms.py` with the market/hook text transform cluster. After this phase, `subtitle_engine.py` contains only the Whisper/transcription cluster plus re-export blocks.
+
+**Shipped changes**:
+- `backend/app/services/subtitles/readability.py` extended from stub (~70 lines) to full module (~370 lines). Added:
+  - `_HOOK_EMPHASIS_WORDS` — hook/emphasis vocabulary frozenset (shared with `text_transforms`)
+  - `_is_cjk` — CJK/Hiragana/Katakana/Hangul detection
+  - `_emphasis_level` — intensity map per preset ID (strong/medium/subtle/minimal/word_only)
+  - `_EMPH_CONTRAST`, `_EMPH_EMOTIONAL`, `_EMPH_URGENCY`, `_NUMBER_RE` — emphasis vocabulary sets + regex
+  - `_should_emphasize`, `_uppercase_emphasis_words`, `_insert_emphasis_markers` — emphasis token helpers
+  - `_semantic_wrap_block` — midpoint wrap with orphan/widow avoidance
+  - `subtitle_emphasis_pass` — unified emphasis pipeline entry point
+  - `_INTEL_MAX_WPS`, `_INTEL_MAX_WORDS`, `_INTEL_MIN_DISPLAY_SEC`, `_INTEL_GAP_FILL_SEC` — readability tuning constants (env-overridable)
+  - `_PUNCT_PAUSE_RE`, `_CLAUSE_STARTERS` — phrase boundary detection
+  - `_find_phrase_split`, `_split_block_semantic`, `resegment_srt_for_readability` — CapCut-style resegmentation
+  - Module-level imports added: `os`, `re`, `logging`, `Path`, `from styles import (normalize_subtitle_style_id, get_subtitle_preset, _HL_OPEN, _HL_CLOSE)`, `from srt_core import (_parse_srt_blocks, format_srt_timestamp)`
+- New file: `backend/app/services/subtitles/text_transforms.py` (~270 lines):
+  - `resolve_hook_overlay_text` — explicit hook text or first SRT block fallback
+  - `apply_market_line_break_to_srt` — market/tone word-count policy re-wrap; deferred import from `market_subtitle_policy`
+  - `apply_market_hook_text_to_srt` — replace opening subtitle hook zone
+  - `format_hook_subtitle` — single-block visual impact formatting (uppercase emphasis anchor)
+  - `apply_hook_subtitle_format` — apply impact formatting to first N blocks
+  - `apply_subtitle_execution_hints` — consume AI subtitle execution metadata (never mutates timing)
+  - Imports: `re`, `logging`, `Path`, `from srt_core import (_parse_srt_blocks, format_srt_timestamp)`, `from readability import _HOOK_EMPHASIS_WORDS`
+- `subtitle_engine.py` edited:
+  - Updated `from subtitles.readability import (...)` block to include all 21 new symbols
+  - Added `from app.services.subtitles.text_transforms import (...)` re-export block (6 symbols)
+  - Removed all moved function/constant bodies (lines 237–1018); file reduced from 1,018 → 249 lines
+  - `subtitle_engine.py` now contains only: re-export blocks (imports) + Whisper/transcription cluster
+- New tests: `backend/tests/test_subtitle_readability.py` — 57 tests
+- New tests: `backend/tests/test_subtitle_text_transforms.py` — 49 tests
+
+**subtitle_engine.py line reduction**: 1,018 → 249 lines (−769)
+
+**Contracts maintained**:
+- All public `subtitle_engine` exports unchanged — same-object identity passes for all moved symbols.
+- `subtitle_emphasis_pass` signature, per-block pipeline order, word-level SRT detection — verbatim.
+- `resegment_srt_for_readability` gap-fill/clamp behavior, env-override constants — verbatim.
+- `_HOOK_EMPHASIS_WORDS` frozenset defined once in `readability.py`; `text_transforms.py` imports from it — no duplication.
+- `apply_subtitle_execution_hints` never mutates subtitle timing or text — verified.
+- No ASS output content changed. No SRT timing behavior changed. No Whisper behavior changed.
+
+**Dependency graph** (no cycles):
+```
+readability.py      → styles.py + srt_core.py
+text_transforms.py  → srt_core.py + readability.py
+```
+
+---
+
+## Test Suite State (Post Phase 4G.5)
+
+```
+8 failed, 6477 passed, 1 skipped  (+89 new passing tests across readability + text_transforms)
+```
+
+89 functional tests pass. 17 tests fail due to `ModuleNotFoundError: No module named 'whisper'` — this is the same pre-existing environment limitation as the 13 whisper-related failures in `test_subtitle_ass_core.py` (Python 3.11 test runner does not have whisper installed; full project venv does). All 8 pre-existing failures unchanged.

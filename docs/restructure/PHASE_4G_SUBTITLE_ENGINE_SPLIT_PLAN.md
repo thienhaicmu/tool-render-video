@@ -1,6 +1,6 @@
 # PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md
 
-**Status**: 4G.4 SHIPPED — styles.py + srt_core.py + output_timeline.py + readability.py(stub) + ass_core.py extracted; 4G.5–4G.7 pending  
+**Status**: 4G.5 SHIPPED — styles.py + srt_core.py + output_timeline.py + readability.py(full) + ass_core.py + text_transforms.py extracted; 4G.6–4G.7 pending  
 **Date**: 2026-05-22  
 **Branch**: `restructure/output-timeline-architecture`
 
