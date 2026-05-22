@@ -369,7 +369,7 @@ Phase 4E.1 added 53 new passing tests (`test_ffmpeg_helpers.py`).
 
 **Branch**: `restructure/output-timeline-architecture`
 **Status**: SHIPPED
-**Commit**: TBD (this commit)
+**Commit**: `a46934c`
 
 **Purpose**: Second sub-step of render_engine.py split. Extract clip-level operations (`cut_video`, `detect_silence_trim_offset`, `detect_bad_first_frame`, `_detect_silence_segments`, `apply_micro_pacing`) from `render_engine.py` into `services/render/clip_ops.py`. Backward-compat re-exports keep all existing callers unchanged.
 
