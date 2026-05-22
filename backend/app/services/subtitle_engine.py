@@ -25,8 +25,6 @@ _HL_CLOSE = "\ue101"
 _WHISPER_CACHE_DIR: Path = Path(__file__).resolve().parents[3] / "data" / "whisper_cache"
 _WHISPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-# Replaced by preset-table auto_scale / heavy_scale fields — see ASSPreset below.
-
 
 def _compute_subtitle_scale(play_res_x: int = 1080, play_res_y: int = 1440) -> dict:
     base = min(max(1, int(play_res_x)), max(1, int(play_res_y)))

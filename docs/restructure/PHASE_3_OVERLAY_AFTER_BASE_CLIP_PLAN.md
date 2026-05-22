@@ -2,8 +2,8 @@
 ## Implementation Plan
 
 **Date**: 2026-05-22  
-**Branch**: restructure/output-timeline-architecture  
-**Status**: PLANNING — no code implemented
+**Branch**: feature/ai-output-upgrade  
+**Status**: Phase 3A SHIPPED — commit 8db0295 (subtitle overlay after base clip)
 
 ---
 
