@@ -102,10 +102,6 @@ class TestConstants:
         from app.db.connection import UPLOAD_SCHEDULER_STATE_ID
         assert UPLOAD_SCHEDULER_STATE_ID == "main"
 
-    def test_constants_re_exported_from_services_db(self):
-        from app.services.db import UPLOAD_PROFILE_LOCK_TTL_MINUTES, UPLOAD_SCHEDULER_STATE_ID
-        assert UPLOAD_PROFILE_LOCK_TTL_MINUTES == 30
-        assert UPLOAD_SCHEDULER_STATE_ID == "main"
 
 
 # ---------------------------------------------------------------------------

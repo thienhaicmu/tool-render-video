@@ -787,3 +787,51 @@ Phase 4F.5A added 9 new passing tests (`test_upload_entrypoints_removed.py`).
 The 8 persistent failures are pre-existing — unchanged.
 
 Phase 4F.5B added 11 new passing tests (`test_upload_engine_removed.py`).
+
+---
+
+## Phase 4F.5C — Remove Upload DB Functions + Dead Upload Files
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Third deletion sub-phase of upload domain removal. Delete the now-dead `routes/upload.py` and `platform_repo.py`, remove all 43 upload-domain DB functions from `services/db.py`, and delete the upload-only test file. No DB schema changes — upload tables remain until Phase 4F.5D.
+
+**Shipped changes**:
+- `backend/app/routes/upload.py`: **deleted** (1,501 lines, 42 API endpoints; had been unregistered since Phase 4F.5A).
+- `backend/app/db/platform_repo.py`: **deleted** (142 lines, proxy pool CRUD; upload-only, callers removed in 4F.5A).
+- `backend/app/services/db.py`: **complete rewrite** — all 43 upload-domain DB functions removed (~1,062 lines deleted); removed `UPLOAD_PROFILE_LOCK_TTL_MINUTES`/`UPLOAD_SCHEDULER_STATE_ID` constants from connection import; removed `from app.db.platform_repo import (...)` re-export block; removed now-unused stdlib imports (`json`, `os`, `sqlite3`, `uuid`, `datetime`, `timedelta`, `timezone`, `Path`, `Any`, `DATABASE_PATH`). File reduced from 1,116 → 31 lines — now a pure re-export shim for `connection`, `jobs_repo`, and `creator_repo`.
+- `backend/tests/test_platform_repo.py`: **deleted** (44 tests; tested deleted platform_repo.py).
+- `backend/tests/test_db_connection.py`: removed `test_constants_re_exported_from_services_db` (tested the now-removed re-export of upload constants from services/db).
+- New test file: `backend/tests/test_upload_domain_removed.py` — 13 tests covering: deleted files (routes/upload.py, upload_engine.py, platform_repo.py), services/db.py exposes no upload symbols, services/db.py exposes no proxy symbols, upload constants absent from services/db.py, live non-upload symbols still present, three dead modules not importable, no /api/upload routes registered, static files contain no /api/upload fetch calls, upload tables still present in connection.py (sanity check for Phase 4F.5D pre-condition).
+
+**Remaining upload code intentionally left for Phase 4F.5D**:
+- `backend/app/db/connection.py` upload table DDL — 7 `CREATE TABLE IF NOT EXISTS upload_*` blocks still present
+- `backend/app/db/connection.py` `_ensure_columns` migration calls for upload tables — still present
+- `backend/app/db/connection.py` `INSERT INTO upload_scheduler_state` seed row — still present
+- `UPLOAD_PROFILE_LOCK_TTL_MINUTES`, `UPLOAD_SCHEDULER_STATE_ID` constants in `connection.py` — still present (tested in `test_db_connection.py::TestConstants`)
+
+**Contracts maintained**:
+- All non-upload routes, render pipeline, and job management unaffected.
+- `services/db.py` re-exports for jobs, creator, and connection helpers unchanged — all callers (`render_pipeline.py`, `routes/render.py`, `routes/jobs.py`, `main.py`, etc.) work without modification.
+- No DB schema changed. Upload tables still exist in running databases.
+
+**Audit findings**:
+- `routes/upload.py` — only importer was `main.py` (removed in 4F.5A); no remaining callers. A.
+- `platform_repo.py` — only callers were `services/db.py` shim (removed) and `routes/upload.py` (deleted). A.
+- All 43 upload DB functions — only caller was `routes/upload.py` (deleted). A.
+- `UPLOAD_PROFILE_LOCK_TTL_MINUTES`, `UPLOAD_SCHEDULER_STATE_ID` — only used by upload functions (removed) and `routes/upload.py` (deleted). A.
+- No unexpected active callers found.
+
+---
+
+## Test Suite State (Post Phase 4F.5C)
+
+```
+6133 passed, 1 skipped, 67 failed  (environment without edge_tts)
+```
+
+The 67 failures are all pre-existing environment failures — `edge_tts` not installed in this test environment causes the render_pipeline import chain to fail for many test files. No new failures introduced by Phase 4F.5C. All 84 DB tests (test_db_connection, test_jobs_repo, test_creator_repo) pass cleanly.
+
+Phase 4F.5C: deleted 44 tests (`test_platform_repo.py`), removed 1 test from `test_db_connection.py`, added 13 new tests (`test_upload_domain_removed.py`). Net: −32 tests from suite.

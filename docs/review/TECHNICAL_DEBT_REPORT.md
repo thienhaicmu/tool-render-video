@@ -88,6 +88,8 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Phase 4F.5B shipped (2026-05-22)**: `services/upload_engine.py` (1,793 lines; Playwright TikTok automation) deleted. `routes/channels.py` upload_engine imports removed; `create_channel` unified to always use local `_write_channel_settings`/`_write_channel_profile` helpers; `bootstrap_portable_runtime_for_channel` call removed; `channel_info` replaced `load_upload_settings` with direct JSON file read. `render-engine.js` upload block removed (~248 lines; `collectUploadPayload` through `_stopUploadWs`, 3 `/api/upload/` fetch calls). `render-ui.js` upload queue block removed (~145 lines; `addRenderClipToUploadQueue` through `cancelUploadQueueItem`, 5 `/api/upload/` fetch calls). `routes/upload.py`, upload DB functions, and upload tables intentionally left for Phases 4F.5C–D. 11 new tests in `test_upload_engine_removed.py`.
 
+**Phase 4F.5C shipped (2026-05-22)**: `routes/upload.py` (1,501 lines, 42 endpoints) deleted. `app/db/platform_repo.py` (142 lines, proxy pool CRUD) deleted. All 43 upload-domain DB functions removed from `services/db.py` (~1,062 lines removed); `UPLOAD_PROFILE_LOCK_TTL_MINUTES`/`UPLOAD_SCHEDULER_STATE_ID` re-exports and `platform_repo` re-export block also removed. `services/db.py` reduced from 1,116 → 31 lines (pure re-export shim). `test_platform_repo.py` (44 tests) deleted; 1 upload-constants re-export test removed from `test_db_connection.py`; 13 new tests in `test_upload_domain_removed.py`. Upload tables in `init_db()` intentionally left for Phase 4F.5D.
+
 ---
 
 ### H2. No Test Coverage for Core Pipeline
