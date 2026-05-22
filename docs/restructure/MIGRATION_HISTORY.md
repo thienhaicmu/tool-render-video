@@ -1137,3 +1137,42 @@ No new tests added in Phase 4G.0 (planning only). Baseline unchanged.
 ```
 
 44 new tests in `test_subtitle_srt_core.py`. All 8 known failures are pre-existing. Baseline maintained.
+
+---
+
+## Phase 4G.3 — Extract Output Timeline Subtitle Helper
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Source plan**: [PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md](PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md) — Cluster B completion
+
+**Purpose**: Extract `slice_srt_to_output_timeline` (deferred from Phase 4G.2) into `subtitles/output_timeline.py`. This function bridges `srt_core.slice_srt_by_time` with the `TimelineMap` domain object and is required for the overlay compositor path (output-timeline subtitle positioning).
+
+**Shipped changes**:
+- New file: `backend/app/services/subtitles/output_timeline.py` (~30 lines) — verbatim copy of:
+  - `slice_srt_to_output_timeline(source_srt_path, output_srt_path, source_start, source_end, timeline)` — delegates to `slice_srt_by_time` with `playback_speed=timeline.effective_speed, rebase_to_zero=True, apply_playback_speed=True`
+- `subtitle_engine.py` edited: removed `from app.domain.timeline import TimelineMap` (no longer needed), removed `slice_srt_to_output_timeline` function body; added `from app.services.subtitles.output_timeline import (slice_srt_to_output_timeline,)` re-export at top.
+- New tests: `backend/tests/test_subtitle_output_timeline.py` — 21 tests
+- Updated `backend/tests/test_subtitle_srt_core.py::TestSliceSrtToOutputTimelineEngineCompat::test_output_timeline_calls_slice_srt_by_time` — patch target updated from `subtitle_engine.slice_srt_by_time` to `output_timeline.slice_srt_by_time` (the function now lives in the new module).
+
+**subtitle_engine.py line reduction**: 1,539 → 1,514 lines (−25)
+
+**Contracts maintained**:
+- `subtitle_engine.slice_srt_to_output_timeline` still works — same-object identity with `subtitles.output_timeline.slice_srt_to_output_timeline`.
+- Output-timeline timing contract unchanged: timestamps divided by `timeline.effective_speed`, rebased to zero.
+- `apply_playback_speed=True` — the overlay path still receives output-timeline SRT.
+- No ASS rendering behavior changed. No Whisper/transcription behavior changed.
+- `test_slice_srt_to_output_timeline.py` (existing 14 tests) — all pass unchanged.
+
+**No circular imports**:
+- `output_timeline.py` imports `TimelineMap` (domain, no subtitle deps) and `srt_core.slice_srt_by_time` (lower layer). No import of `subtitle_engine.py`.
+
+---
+
+## Test Suite State (Post Phase 4G.3)
+
+```
+8 failed, 6326 passed, 1 skipped  (+21 new tests in test_subtitle_output_timeline.py)
+```
+
+21 new tests in `test_subtitle_output_timeline.py`. All 8 known failures are pre-existing. Baseline maintained.

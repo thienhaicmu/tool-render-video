@@ -491,6 +491,7 @@ class TestSliceSrtToOutputTimelineEngineCompat:
 
     def test_output_timeline_calls_slice_srt_by_time(self, monkeypatch):
         import app.services.subtitle_engine as e
+        import app.services.subtitles.output_timeline as ot
         import unittest.mock as mock
 
         dummy_meta = {"subtitle_count": 0, "first_start": None, "first_end": None,
@@ -500,7 +501,9 @@ class TestSliceSrtToOutputTimelineEngineCompat:
         timeline_mock = mock.MagicMock()
         timeline_mock.effective_speed = 1.15
 
-        with mock.patch.object(e, "slice_srt_by_time", return_value=dummy_meta) as m:
+        # slice_srt_to_output_timeline now lives in output_timeline.py and calls
+        # srt_core.slice_srt_by_time directly — patch the name in that module.
+        with mock.patch.object(ot, "slice_srt_by_time", return_value=dummy_meta) as m:
             result = e.slice_srt_to_output_timeline("in.srt", "out.srt", 10.0, 70.0, timeline_mock)
             m.assert_called_once_with(
                 "in.srt", "out.srt", 10.0, 70.0,

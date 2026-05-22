@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4G.2; srt_core.py extracted — format/parse, SRT parse/write/slice, _run_with_retry; subtitle_engine.py reduced 1,970 → 1,539 lines)
+**Last updated**: 2026-05-22 (post Phase 4G.3; output_timeline.py extracted — slice_srt_to_output_timeline; subtitle_engine.py reduced 1,970 → 1,514 lines)
 
 ---
 
@@ -25,7 +25,8 @@ Electron shell
               ├── services/render/legacy_renderer.py — render_part, render_part_smart (Phase 4E.5)
               ├── services/subtitles/ (Phase 4G PARTIAL)
               │     ├── styles.py — ASSPreset, _PRESETS, _STYLE_ALIASES, _HL_OPEN/_HL_CLOSE, compute helpers, build_ass_style_line (Phase 4G.1)
-              │     └── srt_core.py — format/parse timestamps, SRT parse/write/slice, slice_srt_to_text, _run_with_retry (Phase 4G.2)
+              │     ├── srt_core.py — format/parse timestamps, SRT parse/write/slice, slice_srt_to_text, _run_with_retry (Phase 4G.2)
+              │     └── output_timeline.py — slice_srt_to_output_timeline (Phase 4G.3)
               ├── db/ (Phase 4F COMPLETE) — app/db/connection.py (get_conn, init_db, thread-local, _drop_upload_tables), app/db/jobs_repo.py (upsert_job, update_job_progress, job parts CRUD), app/db/creator_repo.py (get_creator_prefs, upsert_creator_prefs); platform_repo.py DELETED (4F.5C), uploads_repo CANCELLED (upload domain removed instead)
               └── SQLite — job/parts state, upload queue
 ```
