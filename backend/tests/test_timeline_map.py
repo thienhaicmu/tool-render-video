@@ -97,7 +97,7 @@ class TestTimelineMapSpeedClamping:
 
     def test_speed_above_max_clamped(self):
         tl = TimelineMap(source_start=0.0, source_end=10.0, effective_speed=5.0)
-        assert tl.effective_speed == pytest.approx(_SPEED_MAX)
+        assert tl.effective_speed == pytest.approx(_SPEED_MAX)  # 1.5
 
     def test_speed_at_min_boundary(self):
         tl = TimelineMap(source_start=0.0, source_end=10.0, effective_speed=_SPEED_MIN)
@@ -105,11 +105,11 @@ class TestTimelineMapSpeedClamping:
 
     def test_speed_at_max_boundary(self):
         tl = TimelineMap(source_start=0.0, source_end=10.0, effective_speed=_SPEED_MAX)
-        assert tl.effective_speed == pytest.approx(_SPEED_MAX)
+        assert tl.effective_speed == pytest.approx(_SPEED_MAX)  # 1.5
 
     def test_output_duration_uses_clamped_speed(self):
         tl = TimelineMap(source_start=0.0, source_end=10.0, effective_speed=999.0)
-        assert tl.output_duration == pytest.approx(10.0 / _SPEED_MAX)
+        assert tl.output_duration == pytest.approx(10.0 / _SPEED_MAX)  # 10.0 / 1.5
 
 
 class TestTimelineMapTrimOffset:

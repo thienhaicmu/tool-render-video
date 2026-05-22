@@ -21,10 +21,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-# FFmpeg atempo filter is clamped to [0.5, 2.0].
-# We apply the same clamp here so TimelineMap always agrees with the renderer.
+# Matches _get_effective_playback_speed() and _sanitize_speed() in the render pipeline,
+# both of which clamp to [0.5, 1.5].  audio_mix_service uses [0.5, 2.0] separately
+# because that is FFmpeg atempo's own filter range — that is a different concern.
 _SPEED_MIN = 0.5
-_SPEED_MAX = 2.0
+_SPEED_MAX = 1.5
 
 
 @dataclass
@@ -44,8 +45,8 @@ class TimelineMap:
 
     effective_speed : float
         The speed multiplier applied to the video (base + platform delta),
-        clamped to [0.5, 2.0].  This is the exact value used for both
-        setpts=PTS/speed (video) and atempo=speed (audio).
+        clamped to [0.5, 1.5].  Matches _get_effective_playback_speed() and
+        _sanitize_speed() in the render pipeline.
 
     trim_offset : float
         Total leading trim applied (silence_trim + visual_trim), in seconds.
