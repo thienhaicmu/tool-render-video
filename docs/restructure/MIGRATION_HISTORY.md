@@ -188,10 +188,49 @@ This document records what changed in each phase, why, and what contracts were i
 
 ---
 
-## Test Suite State (Post Phase 3C)
+## Phase 3C.5 — Audio Contract Validation + Cleanup
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: `fcb077c`
+
+**Purpose**: Validate Phase 3C audio contracts, fix test infrastructure bugs, and sync stale docs. No behavioral changes.
+
+**Issues found and fixed**:
+- `test_overlay_narration.py` helper had wrong kwarg (`narration_path` → `narration_audio_path`), missing `mix_mode`/`output_path`, and wrong mock target (`_run_ffmpeg_with_retry` → `subprocess.run`). The 3 `TestOverlayPathDoubleAtempoSafety` tests were always SKIPPING. Fixed; all 3 now PASS.
+- `test_render_base_clip.py` `test_no_bgm_input_when_disabled` had confusing weak assertion. Simplified to `assert "-stream_loop" not in cmd`.
+- `AUDIO_PIPELINE.md` referenced `_bgm_duck_filter()` — this function does not exist. Corrected to `_build_audio_mix_filter()`.
+- All four architecture docs had stale "Phase 3C planned" language. Updated to reflect shipped status.
+- `BRUTAL_REVIEW_SUMMARY.md` priorities section updated to "post Phase 3C".
+- `render_engine.py` docstring updated to describe both base-clip-only and overlay-composite modes.
+
+**Contracts confirmed** (no new contracts introduced):
+- Double-atempo safety: narration atempo applies to `[1:a]` only; source `[0:a]` gets `volume` only.
+- Composite audio: `-c:a copy` invariant maintained; no BGM, no atempo in composite.
+- `base_clip_bgm_applied` manifest field: `True`/`False`/`None` semantics correct.
+
+---
+
+## Phase 4A — Backend Modularization Planning
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: PLANNING
+**Commit**: (this commit)
+
+**Purpose**: Define the strategy to split the backend god files (`render_pipeline.py` 6,064 lines, `db.py` 1,886 lines, `render_engine.py` 1,652 lines, `subtitle_engine.py` 1,970 lines, `routes/render.py` 1,368 lines) into focused modules without changing behavior.
+
+**No code changes in this phase.** Planning doc only.
+
+**Deliverable**: `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md`
+
+**Recommended first implementation phase**: Phase 4B — Extract Asset Pipeline (`orchestration/asset_pipeline.py`). Moves `_maybe_prepend_remotion_hook_intro`, `_maybe_prepend_asset_intro`, `_maybe_append_asset_outro`, `_maybe_apply_asset_logo` out of render_pipeline.py. These are top-level named functions with no FFmpeg logic and no closure dependencies.
+
+---
+
+## Test Suite State (Post Phase 3C.5)
 
 ```
-5784 passed, 4 skipped, 8 failed
+5787 passed, 1 skipped, 8 failed
 ```
 
 The 8 persistent failures are pre-existing (before Phase 1):
@@ -201,3 +240,5 @@ The 8 persistent failures are pre-existing (before Phase 1):
 - `test_ai_visibility_summary.py` — 1 test
 
 None of these are related to the output-timeline architecture restructure.
+
+Phase 3C.5 fix: 3 previously-SKIPPED `TestOverlayPathDoubleAtempoSafety` tests in `test_overlay_narration.py` now PASS (5784 → 5787 passing, 4 → 1 skipped).
