@@ -892,3 +892,40 @@ No upload or proxy symbols.
 The 67 failures are identical to Phase 4F.5C — all pre-existing environment failures (`edge_tts` not installed). Zero new failures from Phase 4F.5D changes. All 133 targeted tests pass (DB connection, jobs, creator, upload removal, upload schema).
 
 Phase 4F.5D: removed 3 tests (TestConstants×2 from test_db_connection.py, TestUploadTablesStillInSchema×1 from test_upload_domain_removed.py), added 20 new tests (`test_upload_schema_removed.py`). Net: +17 tests from suite.
+
+---
+
+## Phase 4F.6 — Test Baseline Stabilization + DB Import Audit
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Investigate the 8→67 failure spike, confirm all failures are environment-only (not regressions), install the declared production dependency in the test venv, audit DB imports across the app after upload removal, and add a structural import audit test file.
+
+**Root cause of failure spike**:
+- `backend/app/services/tts_service.py:8` has a hard top-level `import edge_tts`.
+- `edge-tts==7.2.8` is declared in `requirements.txt` but was not installed in the test venv.
+- Import chain: any test importing `app.main` → `app.routes.render` → `render_pipeline` → `tts_service` → `edge_tts` → `ModuleNotFoundError`.
+- Fix: `pip install "edge-tts==7.2.8"` in the project venv. Baseline restored to `8 failed, 6207 passed, 1 skipped`.
+
+**DB import audit findings**:
+- `services/db.py` post-4F.5D is a 31-line pure re-export shim. No upload or proxy symbols in namespace.
+- All `app.services.db` callers across app code import only live (non-upload) functions.
+- `dev_commands.py` contains string path literals to deleted files (`"backend/app/services/upload_engine.py"`) — these are routing table strings, not Python imports; acceptable historical references in dev tooling.
+- No active Python imports of deleted modules (`upload_engine`, `platform_repo`, `routes.upload`) found anywhere in the codebase.
+
+**Shipped changes**:
+- Installed `edge-tts==7.2.8` in the project venv (restores declared production dependency).
+- New test file: `backend/tests/test_db_import_audit.py` — 15 tests covering:
+  - All 4 DB modules import cleanly (`connection`, `jobs_repo`, `creator_repo`, `services.db`).
+  - `services/db.py` exposes all expected live symbols (connection, jobs, creator).
+  - `services/db.py` exposes no upload, proxy, or platform-repo symbols.
+  - Upload constants absent from `services/db.py`.
+  - 3 deleted files absent from filesystem and not importable (`platform_repo`, `routes/upload`, `upload_engine`).
+
+**Test suite state (post 4F.6)**:
+```
+8 failed, 6222 passed, 1 skipped  (with edge_tts installed)
+```
+The 8 pre-existing failures are unchanged. +15 tests from `test_db_import_audit.py`.

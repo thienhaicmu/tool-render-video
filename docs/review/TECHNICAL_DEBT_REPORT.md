@@ -92,6 +92,8 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Phase 4F.5D shipped (2026-05-22)**: Upload domain fully removed. `app/db/connection.py` rewritten: removed `UPLOAD_PROFILE_LOCK_TTL_MINUTES`/`UPLOAD_SCHEDULER_STATE_ID` constants, removed all 7 upload table DDL blocks and 6 upload `_ensure_columns` blocks, removed `upload_scheduler_state` seed row. Added `_drop_upload_tables(conn)` helper (called inside `init_db()`) that idempotently `DROP TABLE IF EXISTS` all 7 upload tables on every startup — safely cleans up existing database files. `connection.py` reduced from 522 → ~230 lines. `TestConstants` class removed from `test_db_connection.py`; `EXPECTED_TABLES` updated to 3 tables; 20 new tests in `test_upload_schema_removed.py`. `services/db.py` public namespace: no upload or proxy symbols. **Upload domain removal complete (Phases 4F.5A–D).**
 
+**Phase 4F.6 shipped (2026-05-22)**: Test baseline stabilized. Root cause of 8→67 failure spike: `tts_service.py` hard-imports `edge_tts` at module level; `edge-tts==7.2.8` is a declared `requirements.txt` dependency but was missing from the test venv. Installed — baseline restored to 8 pre-existing failures. DB import audit confirmed: `services/db.py` namespace clean (no upload/proxy/platform symbols), all callers use only live symbols, no active Python imports of deleted modules anywhere in the codebase. 15 new tests in `test_db_import_audit.py`.
+
 ---
 
 ### H2. No Test Coverage for Core Pipeline

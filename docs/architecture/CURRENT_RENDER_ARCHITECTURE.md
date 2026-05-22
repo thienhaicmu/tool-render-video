@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4F.5D; upload domain fully removed — router, frontend, engine, channels dependency, routes/upload.py, platform_repo.py, upload DB functions, upload table DDL all gone; _drop_upload_tables() migration drops stale tables on startup)
+**Last updated**: 2026-05-22 (post Phase 4F.6; test baseline stabilized — edge-tts installed in venv, true baseline 8 pre-existing failures confirmed; DB import audit complete — services/db.py namespace verified clean; 15 new tests in test_db_import_audit.py)
 
 ---
 

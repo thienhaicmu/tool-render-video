@@ -1,6 +1,6 @@
 # PHASE_4F_5_UPLOAD_DOMAIN_REMOVAL_AUDIT.md
 
-**Status**: PHASE 4F.5D SHIPPED — upload schema removed from init_db(), upload constants removed, _drop_upload_tables() migration added. Upload domain fully removed (4F.5A–D complete).
+**Status**: PHASE 4F.6 SHIPPED — test baseline stabilized, DB import audit complete. Upload domain fully removed (4F.5A–D) and verified by 15-test import audit suite.
 **Date**: 2026-05-22
 **Branch**: `restructure/output-timeline-architecture`
 
