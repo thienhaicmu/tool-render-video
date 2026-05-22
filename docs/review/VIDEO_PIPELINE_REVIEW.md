@@ -102,9 +102,13 @@ Source video
 - If Whisper produces word-level segments with very short durations (<0.1s), the ASS conversion may produce zero-duration events that FFmpeg either drops or renders as flashes.
 - `WORD_MIN_DURATION_SEC = 0.12` and `WORD_MERGE_SHORTER_THAN_SEC = 0.11` guard against this in the ASS converter, but the SRT slice step has no equivalent guard.
 
-**Subtitle Drift Risk**: The subtitle timestamps are based on the source video clock, but the render may apply speed adjustment (`atempo`). The SRT is sliced from the source timeline but the ASS is burned into the speed-adjusted video without adjusting timestamps. This means: if `playback_speed=1.15`, a subtitle at 10.0s in the clip will appear at 10.0s in the output even though the audio at that point is now at ~8.7s — **subtitle drift scales with speed deviation from 1.0**.
+**Subtitle Timing at Non-1.0 Speed**: The ASS filter runs **before** `setpts=PTS/speed` in the vf_chain (see vf_chain order above). This means subtitle timestamps are expressed in source-clip seconds, and `setpts` re-clocks the frames so the subtitle appears at `source_t / speed` in the output — correctly synchronized with the sped-up video and audio.
 
-- The current code does NOT adjust subtitle timestamps for playback speed. This is a known issue in video pipeline design but not addressed here.
+The real impact is subtitle *display duration compression*: a subtitle meant to display for 3.0s at natural speed is shown for 3.0/1.15 ≈ 2.6s at 1.15x. At high speeds this may make text harder to read. The accumulated effect over a 60s clip is that the final subtitles appear and disappear more quickly than at 1.0x. This is a legibility concern, not a synchronization desync.
+
+**Current State (2026-05-22)**: The `ass-before-setpts` ordering is confirmed correct and intentional. The vf_chain order MUST NOT be changed. Phase 2+ will address subtitle display duration compression as a separate concern.
+
+- Historical note: earlier reviews described this as "drift" or "desync." That description was imprecise. The subtitles are in sync with the corresponding video frames and audio; the issue is compressed reading time per subtitle block.
 
 #### FPS Handling
 

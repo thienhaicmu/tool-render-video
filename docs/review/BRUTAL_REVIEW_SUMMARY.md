@@ -94,23 +94,20 @@ Connecting it is a one-line change. The system is complete. It is just not wired
 
 ## What Is Dangerous
 
-### Subtitle Timestamps Not Adjusted for Playback Speed
+### Subtitle Display Duration Compressed at Non-1.0 Speeds
 
-This is the most impactful bug in the project. It is on by default.
+**Partially Resolved (2026-05-22)**: Phase 1.5 validation confirmed that the `ass-before-setpts` vf_chain order means subtitle timestamps ARE synchronized with the sped-up video and audio. The earlier description of "8 seconds of accumulated drift" was based on an incorrect model of the filter chain.
 
-The default TikTok render profile uses `playback_speed = 1.07 (base) + 0.08 (TikTok delta) = 1.15x`.
+The actual remaining issue: subtitle *display duration* is compressed by the speed factor. A subtitle authored for 3.0s of screen time is shown for ≈2.6s at 1.15x speed. For dense text blocks this reduces readability. This is a legibility concern, not synchronization desync.
 
-`slice_srt_by_time()` subtracts the segment start time from all subtitle timestamps. It does not divide by `playback_speed`. The subtitle at `t=10.0s` in the sliced SRT is burned at `t=10.0s` in the rendered video. But at 1.15x playback speed, the video frame at `t=10.0s` corresponds to `t=11.5s` of source content. The subtitle that belongs at frame X is displayed 1.5 seconds later than it should.
-
-This error is linear. Over a 60-second clip at 1.15x, the subtitle drift at the end of the clip is approximately 8 seconds. The closing words of the clip appear 8 seconds after the speaker says them.
-
-**Every TikTok render has this bug. This is the default configuration.**
+**Current State**: Phase 2 preserves the existing behavior. Phase 3+ will address subtitle display duration via overlay-after-render timing derivation from `TimelineMap.output_duration`.
 
 ### TTS Narration Desync at Non-1.0 Speeds
 
-TTS narration is generated from the transcript at natural speaking rate. The video is then played back at 1.15x. No `atempo` compensation is applied to the narration track before mixing. The narration finishes `duration / 1.15` seconds into the video, leaving the remaining audio as silence. On a 60s clip, the narration ends at ~52s, 8s before the video.
-
-This affects any render with `tts_enabled=True` and `playback_speed != 1.0`. The default TikTok profile is `1.15x`. Both bugs compound: the subtitles drift, and the narration ends early.
+**Resolved (Phase 0 — prior session)**: `mix_narration_audio()` now accepts
+`playback_speed` and applies `atempo=speed` to the narration audio before mixing.
+The narration track is now speed-compensated to match the video playback speed.
+Phase 0 regression tests cover this fix (`TestMixNarrationAudioAtempo`).
 
 ### YouTube Download Has No Timeout
 
@@ -126,9 +123,9 @@ All job history, TikTok upload credentials, channel configuration, upload queue 
 
 **Rank-ordered by likelihood × impact:**
 
-1. **Subtitle drift complaint** — The first user who renders a TikTok clip at default speed and watches it will notice the subtitles lagging behind speech by the end of the clip. This is the default behavior. Priority 1 fix.
+1. **Subtitle display duration compressed at high speed** — At the default 1.15x TikTok profile, each subtitle block has ≈13% less reading time than authored. Dense text blocks become hard to read. Subtitles are in sync with speech (not a desync bug). Phase 3 scope.
 
-2. **YouTube download hang** — Any network interruption during download leaves the render job permanently in `downloading` state. On a slow connection or with an old yt-dlp cookie, this is common. There is no recovery path for the user short of restarting the app.
+2. **YouTube download hang** — RESOLVED in Phase 0 (socket_timeout=60). Long-running downloads can still stall if the socket does not timeout cleanly, but the primary hang vector is mitigated.
 
 3. **Scene detection or Whisper hang perceived as a crash** — Whisper on CPU for a long video takes 10–20 minutes. Scene detection takes 1–5 minutes. During both, the progress bar shows the stage name but does not advance. Users will perceive this as a freeze and close the app, aborting the render. A stuck_parts alert exists in the backend but is not surfaced prominently in the UI.
 
@@ -176,9 +173,9 @@ All job history, TikTok upload credentials, channel configuration, upload queue 
 
 ## What Is Not Production-Ready
 
-- **Subtitle timestamps at non-1.0 speed** — default TikTok profile, every render affected
-- **TTS narration sync at non-1.0 speed** — affects any render with TTS enabled
-- **YouTube download timeout** — any stall hangs the job permanently
+- **Subtitle display duration at non-1.0 speed** — compressed readability, not desync; Phase 3 scope
+- **TTS narration sync at non-1.0 speed** — RESOLVED in Phase 0 (atempo compensation)
+- **YouTube download timeout** — RESOLVED in Phase 0 (socket_timeout=60 added)
 - **Output QA tolerance** — real failures pass (missing audio, missing subtitles, wrong codec)
 - **Test coverage** — zero tests for the render pipeline, subtitle system, audio mix, FFmpeg integration
 - **RAG creator memory** — built, tested, not wired, not operational
