@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4E.5)
+**Last updated**: 2026-05-22 (post Phase 4F.0 planning)
 
 ---
 
@@ -23,6 +23,7 @@ Electron shell
               ├── services/render/base_clip_renderer.py — render_base_clip (Phase 4E.3)
               ├── services/render/overlay_compositor.py — composite_overlays_on_base_clip (Phase 4E.4)
               ├── services/render/legacy_renderer.py — render_part, render_part_smart (Phase 4E.5)
+              ├── db/ (planned Phase 4F) — app/db/{connection,jobs_repo,uploads_repo,platform_repo,creator_repo}.py
               └── SQLite — job/parts state, upload queue
 ```
 

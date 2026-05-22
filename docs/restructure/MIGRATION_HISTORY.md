@@ -498,3 +498,32 @@ Phase 4E.4 added 42 new passing tests (`test_overlay_compositor.py`).
 The 8 persistent failures are pre-existing — unchanged.
 
 Phase 4E.5 added 40 new passing tests (`test_legacy_renderer.py`).
+
+---
+
+## Phase 4F.0 — DB Split Planning
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: PLANNING
+**Commit**: (this commit)
+
+**Purpose**: Define the strategy to split `backend/app/services/db.py` (1,886 lines, 9 tables, 55 public functions) into focused DB repository modules without changing behavior.
+
+**No code changes in this phase.** Planning doc only.
+
+**Deliverable**: `docs/restructure/PHASE_4F_DB_SPLIT_PLAN.md`
+
+**Target module tree**:
+```
+backend/app/db/
+├── __init__.py          (empty)
+├── connection.py        (get_conn, close_thread_conn, init_db, thread-local, helpers)
+├── jobs_repo.py         (upsert_job, update_job_progress, job parts CRUD)
+├── uploads_repo.py      (accounts, videos, queue, history, locks, scheduler — ~1,200 lines)
+├── platform_repo.py     (proxy pool CRUD)
+└── creator_repo.py      (get_creator_prefs, upsert_creator_prefs)
+```
+
+`services/db.py` remains as backward-compat re-export shim throughout all sub-phases.
+
+**Recommended first implementation phase**: Phase 4F.1 — Extract DB Connection Foundation.

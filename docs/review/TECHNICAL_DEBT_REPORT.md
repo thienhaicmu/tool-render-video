@@ -72,6 +72,8 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Impact**: Changes to upload account logic risk breaking render job logic. Hard to test domain logic in isolation.
 
+**Phase 4F.0 planning (2026-05-22)**: DB split strategy defined. Target: `app/db/` with 5 modules (`connection.py`, `jobs_repo.py`, `uploads_repo.py`, `platform_repo.py`, `creator_repo.py`). `services/db.py` remains as backward-compat re-export shim. Plan: `docs/restructure/PHASE_4F_DB_SPLIT_PLAN.md`.
+
 ---
 
 ### H2. No Test Coverage for Core Pipeline
