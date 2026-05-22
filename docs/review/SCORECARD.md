@@ -41,14 +41,14 @@ Scores are 1–10. Based exclusively on code reviewed during this session. No as
 
 **Positive**:
 - Clear top-level separation: `backend/`, `desktop-shell/`, `docs/`, `channels/`, `knowledge/`.
-- FastAPI router per domain (`render.py`, `jobs.py`, `upload.py`, `channels.py`, etc.) — correct.
+- FastAPI router per domain (`render.py`, `jobs.py`, `channels.py`, etc.) — correct. (`upload.py` removed Phase 4F.5C — 8 active routers remain)
 - `backend/app/ai/` is a well-organized namespace with 60+ modules arranged by function (analyzers, director, rag, camera, subtitles, etc.).
 - `entities/`, `store/`, `api/`, `screens/` split in V2 frontend is appropriate.
 
 **Negative**:
 - `backend/app/orchestration/render_pipeline.py` at 290KB obliterates any meaningful separation. The "orchestration" layer is a dumping ground.
 - `backend/static/`, `backend/static-v3/`, `backend/static-v4/` coexist with `backend/static-v2/` — dead code with no boundary.
-- `backend/app/services/db.py` at 1900 lines violates every separation principle in the services layer.
+- ~~`backend/app/services/db.py` at 1900 lines~~ — **RESOLVED Phase 4F**: `db.py` is now a 31-line re-export shim; all DB logic extracted to `app/db/`.
 - No `core/` domain model — the boundary between route, service, and domain is not enforced anywhere.
 
 ---

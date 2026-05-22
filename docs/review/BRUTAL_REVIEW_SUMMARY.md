@@ -119,7 +119,9 @@ Phase 0 regression tests cover this fix (`TestMixNarrationAudioAtempo`).
 
 ### Single SQLite with No Backup
 
-All job history, TikTok upload credentials, channel configuration, upload queue state, runtime locks, and creator preferences are stored in a single SQLite database file. There is no backup strategy. There is no export path. SQLite corruption = total data loss, including the user's TikTok account credentials.
+All job history, channel configuration, and creator preferences are stored in a single SQLite database file. There is no backup strategy. There is no export path. SQLite corruption = total data loss.
+
+**Phase 4F.5 update**: TikTok upload credentials, upload queue state, and runtime locks are no longer stored here — the upload domain was fully removed (Phase 4F.5A–D). The database now holds only 3 live tables: `jobs`, `job_parts`, `creator_prefs`. The reduced scope limits the blast radius of SQLite corruption.
 
 ---
 

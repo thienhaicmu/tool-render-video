@@ -23,7 +23,7 @@ Electron shell
               ├── services/render/base_clip_renderer.py — render_base_clip (Phase 4E.3)
               ├── services/render/overlay_compositor.py — composite_overlays_on_base_clip (Phase 4E.4)
               ├── services/render/legacy_renderer.py — render_part, render_part_smart (Phase 4E.5)
-              ├── db/ (Phase 4F.4 SHIPPED) — app/db/connection.py (get_conn, init_db, thread-local, helpers), app/db/jobs_repo.py (upsert_job, update_job_progress, job parts CRUD), app/db/creator_repo.py (get_creator_prefs, upsert_creator_prefs), app/db/platform_repo.py (proxy pool CRUD); uploads_repo planned (4F.5)
+              ├── db/ (Phase 4F COMPLETE) — app/db/connection.py (get_conn, init_db, thread-local, _drop_upload_tables), app/db/jobs_repo.py (upsert_job, update_job_progress, job parts CRUD), app/db/creator_repo.py (get_creator_prefs, upsert_creator_prefs); platform_repo.py DELETED (4F.5C), uploads_repo CANCELLED (upload domain removed instead)
               └── SQLite — job/parts state, upload queue
 ```
 

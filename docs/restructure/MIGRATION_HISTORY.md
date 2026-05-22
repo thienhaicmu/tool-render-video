@@ -929,3 +929,51 @@ Phase 4F.5D: removed 3 tests (TestConstants×2 from test_db_connection.py, TestU
 8 failed, 6222 passed, 1 skipped  (with edge_tts installed)
 ```
 The 8 pre-existing failures are unchanged. +15 tests from `test_db_import_audit.py`.
+
+---
+
+## Phase 4F.7 — Architecture Freeze
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Freeze the backend restructure state after Phase 4F completion. Audit all stale documentation references. Create the architecture freeze document as the entry gate for Phase 4G. No code changes.
+
+**Created**:
+- `docs/restructure/PHASE_4F_7_ARCHITECTURE_FREEZE.md` — 20-section freeze document: completed scope, backend module tree, render/orchestration/DB architecture, upload domain removal status, compatibility shim policy, active APIs, removed APIs, test baseline, stale reference audit results, dependency direction rules, what must not change, Phase 4G entry criteria, Phase 4H preview note.
+
+**Stale references corrected**:
+- `docs/architecture/CURRENT_RENDER_ARCHITECTURE.md:26` — removed stale `platform_repo.py (proxy pool CRUD); uploads_repo planned (4F.5)` references; updated to reflect actual state (only connection.py, jobs_repo.py, creator_repo.py in app/db/).
+- `docs/review/TECHNICAL_DEBT_REPORT.md` H1 — marked "RESOLVED (Phase 4F)"; `services/db.py` is now a 31-line shim, not a god file.
+- `docs/review/TECHNICAL_DEBT_REPORT.md` L1 — marked "OBSOLETE (Phase 4F.5)"; `enrich_upload_account_runtime_state()` deleted with upload domain.
+- `docs/review/TECHNICAL_DEBT_REPORT.md` L4 — updated to note upload `_ensure_columns` blocks removed; only `jobs`/`job_parts` remain.
+- `docs/review/SCORECARD.md` — removed `upload.py` from active router list; noted `db.py` debt resolved.
+- `docs/review/BRUTAL_REVIEW_SUMMARY.md` — updated SQLite single-database section to remove references to TikTok upload credentials (upload domain removed).
+- `docs/restructure/PHASE_4A_BACKEND_MODULARIZATION_PLAN.md` — status updated to reference 4F.7.
+
+**Audit findings summary**:
+- 0 classification-E findings (no unexpected active upload code in backend/app).
+- All `from app.services.render_engine import ...` callers — classification D (active shim, acceptable).
+- All `from app.services.db import ...` callers — classification D (active shim, acceptable).
+- `services/dev_commands.py` + `qa_runner.py` string refs to deleted files — classification B (dev tooling string literals, not Python imports).
+- `connection.py _drop_upload_tables()` — classification A (correct migration helper).
+
+**Contracts maintained**:
+- All public API endpoints unchanged.
+- All render behavior unchanged.
+- `services/render_engine.py` shim: 53 lines, all render symbols re-exported.
+- `services/db.py` shim: 31 lines, all DB symbols re-exported.
+- Test baseline: 8 failed, 6222 passed, 1 skipped (unchanged).
+
+**Phase 4G entry criteria**: documented in PHASE_4F_7_ARCHITECTURE_FREEZE.md §18. Requires Phase 4G plan doc + subtitle_engine audit + circular import resolution before starting.
+
+---
+
+## Test Suite State (Post Phase 4F.7)
+
+```
+8 failed, 6222 passed, 1 skipped  (docs-only phase, no test changes)
+```
+
+No new tests added in Phase 4F.7 (docs/audit only). Baseline unchanged.

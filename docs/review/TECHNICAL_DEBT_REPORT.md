@@ -64,13 +64,16 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 ## HIGH
 
-### H1. db.py is a 1900-Line God Service
-**File**: `backend/app/services/db.py`
-**Functions**: All of them (schema init, job CRUD, parts CRUD, upload accounts CRUD, upload queue CRUD, upload history CRUD, runtime locks CRUD, scheduler state CRUD, proxy pool CRUD, creator prefs CRUD)
+### H1. db.py is a 1900-Line God Service — **RESOLVED (Phase 4F)**
 
-**Debt**: One file owns all database interactions for all domains. Adding any new entity requires adding schema + migration + CRUD + normalization to this file. Zero separation of concerns.
+**File**: `backend/app/services/db.py`  
+**Resolution status**: `services/db.py` is now a 31-line pure re-export shim. All live DB logic lives in `app/db/` (connection.py, jobs_repo.py, creator_repo.py). The upload domain (43 functions, 7 tables) was deleted entirely in Phase 4F.5.
 
-**Impact**: Changes to upload account logic risk breaking render job logic. Hard to test domain logic in isolation.
+~~**Functions**: All of them (schema init, job CRUD, parts CRUD, upload accounts CRUD, upload queue CRUD, upload history CRUD, runtime locks CRUD, scheduler state CRUD, proxy pool CRUD, creator prefs CRUD)~~
+
+~~**Debt**: One file owns all database interactions for all domains. Adding any new entity requires adding schema + migration + CRUD + normalization to this file. Zero separation of concerns.~~
+
+~~**Impact**: Changes to upload account logic risk breaking render job logic. Hard to test domain logic in isolation.~~
 
 **Phase 4F.0 planning (2026-05-22)**: DB split strategy defined. Target: `app/db/` with 5 modules (`connection.py`, `jobs_repo.py`, `uploads_repo.py`, `platform_repo.py`, `creator_repo.py`). `services/db.py` remains as backward-compat re-export shim. Plan: `docs/restructure/PHASE_4F_DB_SPLIT_PLAN.md`.
 
@@ -224,11 +227,14 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 ## LOW
 
-### L1. `enrich_upload_account_runtime_state()` is N+1 on Lock List
-**File**: `backend/app/services/db.py` — `enrich_upload_account_runtime_state()`
-**Function calls**: `list_active_runtime_locks()` called once per account
+### L1. `enrich_upload_account_runtime_state()` is N+1 on Lock List — **OBSOLETE (Phase 4F.5)**
 
-**Debt**: `list_upload_account_rows()` calls `enrich_upload_account_runtime_state()` per row, which calls `list_active_runtime_locks()` per row. For 10 accounts, this is 10 separate lock queries.
+~~**File**: `backend/app/services/db.py` — `enrich_upload_account_runtime_state()`~~  
+~~**Function calls**: `list_active_runtime_locks()` called once per account~~
+
+~~**Debt**: `list_upload_account_rows()` calls `enrich_upload_account_runtime_state()` per row, which calls `list_active_runtime_locks()` per row. For 10 accounts, this is 10 separate lock queries.~~
+
+**Resolution**: `enrich_upload_account_runtime_state()`, `list_active_runtime_locks()`, and `list_upload_account_rows()` were all deleted in Phase 4F.5C as part of the upload domain removal. This debt no longer exists.
 
 ---
 
@@ -248,10 +254,13 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 ---
 
-### L4. SQLite Schema Migrations Use ALTER TABLE Per-Column
-**File**: `backend/app/services/db.py` — `_ensure_columns()`
+### L4. SQLite Schema Migrations Use ALTER TABLE Per-Column — **PARTIALLY RESOLVED (Phase 4F)**
 
-**Debt**: Schema migration is done by checking column existence and running `ALTER TABLE ADD COLUMN`. For new tables needing many new columns (e.g. adding 5 columns to `upload_accounts`), this runs 5 separate ALTER TABLE statements on every startup. Harmless but not idiomatic.
+**File**: `backend/app/db/connection.py` — `_ensure_columns()`
+
+**Debt**: Schema migration is done by checking column existence and running `ALTER TABLE ADD COLUMN`. Harmless but not idiomatic.
+
+**Phase 4F resolution**: All upload table `_ensure_columns` calls removed (Phase 4F.5D). Only `jobs` and `job_parts` `_ensure_columns` blocks remain — significantly reduced scope. The pattern persists for the two live tables.
 
 ---
 
