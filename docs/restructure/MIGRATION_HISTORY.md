@@ -693,3 +693,46 @@ Phase 4F.4 added 44 new passing tests (`test_platform_repo.py`).
 **Deliverable**: `docs/restructure/PHASE_4F_5_UPLOAD_DOMAIN_REMOVAL_AUDIT.md`
 
 **No backend code changed. No tests changed.**
+
+---
+
+## Phase 4F.5A — Remove Upload Entrypoints
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: First deletion sub-phase of upload domain removal. Remove upload router registration from backend startup and remove upload frontend entry points from static. Upload API endpoints now return 404. Frontend no longer loads or calls any upload UI.
+
+**Shipped changes**:
+- `backend/app/main.py`: removed `from app.routes.upload import router as upload_router` (import line); removed `app.include_router(upload_router)` (registration line); removed `'WebSocket /api/upload/'` from the noisy-access-log suppression filter. `routes/upload.py` still exists on disk but is no longer registered.
+- `backend/static/index.html`: removed 3 `<script>` tags for `upload-config.js`, `upload-manager.js`, `upload-engine.js`.
+- `backend/static/js/upload-manager.js`: **deleted** (5,397 lines).
+- `backend/static/js/upload-config.js`: **deleted** (713 lines).
+- `backend/static/js/upload-engine.js`: **deleted** (114 lines).
+- New test file: `backend/tests/test_upload_entrypoints_removed.py` — 9 tests: upload_router absent from `main` module, zero `/api/upload` routes in FastAPI app, non-upload core routes still registered, 3 script-tag assertions in `index.html`, 3 file-deleted assertions on disk.
+
+**Intentionally left for later phases**:
+- `backend/app/routes/upload.py` — file still exists, not yet deleted (4F.5B scope)
+- `backend/app/services/upload_engine.py` — still exists, not yet deleted (4F.5B scope)
+- `backend/app/services/db.py` upload DB functions — still present (~1,000 lines, 4F.5C scope)
+- `backend/app/db/platform_repo.py` — still present, not yet deleted (4F.5C scope)
+- Upload tables in `init_db()` — still created on startup (4F.5D scope)
+- `backend/static/js/render-engine.js` and `render-ui.js` — these contain `/api/upload/` fetch calls used by the render login/channel flow; these are NOT upload entry points and remain untouched
+
+**Contracts maintained**:
+- All non-upload routes (render, jobs, channels, download, creator, voice, viral, subtitle) still registered and functional.
+- No DB schema changed. No upload DB functions removed. No render pipeline code touched.
+- `services/db.py` unchanged.
+
+---
+
+## Test Suite State (Post Phase 4F.5A)
+
+```
+6212 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing — unchanged.
+
+Phase 4F.5A added 9 new passing tests (`test_upload_entrypoints_removed.py`).

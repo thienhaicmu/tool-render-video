@@ -1,6 +1,6 @@
 # PHASE_4F_5_UPLOAD_DOMAIN_REMOVAL_AUDIT.md
 
-**Status**: AUDIT COMPLETE — awaiting user confirmation before any deletion
+**Status**: PHASE 4F.5A SHIPPED — upload router unregistered, frontend entry points removed
 **Date**: 2026-05-22
 **Branch**: `restructure/output-timeline-architecture`
 

@@ -82,7 +82,9 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Phase 4F.4 shipped (2026-05-22)**: `app/db/platform_repo.py` extracted — Group D (_normalize_proxy_pool_row, list_proxy_pool_rows, get_proxy_pool_row, create_proxy_pool_row, update_proxy_pool_row, delete_proxy_pool_row) moved verbatim. `services/db.py` re-exports all 6 symbols. `services/db.py` reduced by ~130 additional lines (~1,106 lines remaining). 44 new tests in `test_platform_repo.py`.
 
-**Phase 4F.5 audit (2026-05-22)**: Upload domain removal audit completed. Audit found the upload domain is **100% active** (routes registered, frontend loaded, all 43 upload DB functions called by live endpoints). `uploads_repo.py` extraction **cancelled** — upload domain will be deleted directly, not extracted first. Deletion plan in `docs/restructure/PHASE_4F_5_UPLOAD_DOMAIN_REMOVAL_AUDIT.md`. Awaiting user confirmation of 5 questions before proceeding. **No backend code changed in this audit step.**
+**Phase 4F.5 audit (2026-05-22)**: Upload domain removal audit completed. Audit found the upload domain is **100% active** (routes registered, frontend loaded, all 43 upload DB functions called by live endpoints). `uploads_repo.py` extraction **cancelled** — upload domain will be deleted directly, not extracted first. Deletion plan in `docs/restructure/PHASE_4F_5_UPLOAD_DOMAIN_REMOVAL_AUDIT.md`. **No backend code changed in this audit step.**
+
+**Phase 4F.5A shipped (2026-05-22)**: Upload router unregistered from `main.py` (import + `include_router` removed). Upload frontend entry points removed: `upload-manager.js` (5,397 lines), `upload-config.js` (713 lines), `upload-engine.js` (114 lines) deleted; 3 `<script>` tags removed from `index.html`. Upload API now returns 404. Render pipeline and all non-upload routes unaffected. `routes/upload.py`, `upload_engine.py`, upload DB functions, and upload tables intentionally left for Phases 4F.5B–D. 9 new tests in `test_upload_entrypoints_removed.py`.
 
 ---
 
