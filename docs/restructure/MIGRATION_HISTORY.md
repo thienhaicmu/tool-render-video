@@ -402,7 +402,7 @@ Phase 4E.2 added 43 new passing tests (`test_clip_ops.py`).
 
 **Branch**: `restructure/output-timeline-architecture`
 **Status**: SHIPPED
-**Commit**: (this commit)
+**Commit**: `7576c31`
 
 **Purpose**: Third sub-step of render_engine.py split. Extract `render_base_clip()` from `render_engine.py` into `services/render/base_clip_renderer.py`. Backward-compat re-export keeps all existing callers unchanged.
 
