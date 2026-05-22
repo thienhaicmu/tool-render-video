@@ -1044,3 +1044,50 @@ No cycles. All edges point inward toward styles/srt_core.
 ```
 
 No new tests added in Phase 4G.0 (planning only). Baseline unchanged.
+
+---
+
+## Phase 4G.1 — Extract Subtitle Styles
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Source plan**: [PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md](PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md) — Cluster A
+
+**Purpose**: Create `app/services/subtitles/` package scaffold and extract Cluster A (styles/presets/PUA constants) from `subtitle_engine.py` into `subtitles/styles.py`.
+
+**Shipped changes**:
+- New file: `backend/app/services/subtitles/__init__.py` (empty package scaffold)
+- New file: `backend/app/services/subtitles/styles.py` (~292 lines) — verbatim copy of Cluster A:
+  - `_HL_OPEN` / `_HL_CLOSE` (PUA Unicode sentinels U+E100/U+E101)
+  - `_compute_subtitle_scale()`, `_compute_margin_v()` (resolution helpers)
+  - `BOUNCE_FX`, `_PRESET_MOTION_FX`, `_MOTION_FX_DEFAULT`, `_get_motion_fx()`
+  - `ASSPreset` frozen dataclass (20 fields)
+  - `_PRESETS` dict (10 canonical preset entries)
+  - `_STYLE_ALIASES` dict (5 backward-compat aliases)
+  - `_DEFAULT_PRESET_ID`
+  - `normalize_subtitle_style_id()`, `get_subtitle_preset()`, `build_ass_style_line()`
+- `subtitle_engine.py` edited: removed `from dataclasses import dataclass`; removed `_HL_OPEN`/`_HL_CLOSE` definitions; removed `_compute_subtitle_scale`/`_compute_margin_v` function bodies; removed entire ASS Preset architecture block; added `from app.services.subtitles.styles import (...)` re-export block.
+- New tests: `backend/tests/test_subtitle_styles.py` — 39 tests
+
+**subtitle_engine.py line reduction**: 1,970 → 1,699 lines (−271)
+
+**Contracts maintained**:
+- All public `subtitle_engine` exports unchanged — same-object identity passes for all mutable dicts.
+- `_HL_OPEN = ''` / `_HL_CLOSE = ''` — exact PUA codepoints preserved.
+- `_PRESETS` table: 10 preset entries, all field values verbatim.
+- `_STYLE_ALIASES` table: 5 entries, all unchanged.
+- `_DEFAULT_PRESET_ID = "tiktok_bounce_v1"` unchanged.
+- `ASSPreset` is a frozen dataclass with 20 fields — field order preserved.
+- No ASS rendering behavior changed. No SRT timing behavior changed.
+
+**No circular imports**: `styles.py` imports only `dataclasses.dataclass` (stdlib). `subtitle_engine.py` imports from `styles.py` (correct direction).
+
+---
+
+## Test Suite State (Post Phase 4G.1)
+
+```
+8 failed, 6261 passed, 1 skipped  (+39 new tests in test_subtitle_styles.py)
+```
+
+39 new tests in `test_subtitle_styles.py`. All 8 known failures are pre-existing. Baseline maintained.

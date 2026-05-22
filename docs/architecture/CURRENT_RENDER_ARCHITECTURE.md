@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4G.0 planning; subtitle_engine.py audited — 1,970 lines, 7 clusters identified, split plan in PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md; no code changed)
+**Last updated**: 2026-05-22 (post Phase 4G.1; subtitles/styles.py extracted — ASSPreset, _PRESETS, _HL_OPEN/_HL_CLOSE, compute helpers, build_ass_style_line; subtitle_engine.py reduced 1,970 → 1,699 lines)
 
 ---
 
@@ -23,6 +23,8 @@ Electron shell
               ├── services/render/base_clip_renderer.py — render_base_clip (Phase 4E.3)
               ├── services/render/overlay_compositor.py — composite_overlays_on_base_clip (Phase 4E.4)
               ├── services/render/legacy_renderer.py — render_part, render_part_smart (Phase 4E.5)
+              ├── services/subtitles/ (Phase 4G PARTIAL)
+              │     └── styles.py — ASSPreset, _PRESETS, _STYLE_ALIASES, _HL_OPEN/_HL_CLOSE, compute helpers, build_ass_style_line (Phase 4G.1)
               ├── db/ (Phase 4F COMPLETE) — app/db/connection.py (get_conn, init_db, thread-local, _drop_upload_tables), app/db/jobs_repo.py (upsert_job, update_job_progress, job parts CRUD), app/db/creator_repo.py (get_creator_prefs, upsert_creator_prefs); platform_repo.py DELETED (4F.5C), uploads_repo CANCELLED (upload domain removed instead)
               └── SQLite — job/parts state, upload queue
 ```

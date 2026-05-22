@@ -1,6 +1,6 @@
 # PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md
 
-**Status**: PLANNING — 4G.0 docs only, no code changed  
+**Status**: 4G.1 SHIPPED — styles.py extracted; 4G.2–4G.7 pending  
 **Date**: 2026-05-22  
 **Branch**: `restructure/output-timeline-architecture`
 

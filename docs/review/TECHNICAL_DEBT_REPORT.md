@@ -108,6 +108,8 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Phase 4G.0 planning (2026-05-22)**: `subtitle_engine.py` (1,970 lines) audited and split plan documented. 7 clusters identified (styles, srt_core, ass_core, readability, text_transforms, transcription, shim). Target: `app/services/subtitle/` package (7 focused modules). Cross-module coupling with `render_engine._has_audio_stream` documented; resolution planned for Phase 4G.6. Hard `import whisper` at module level (line 9) isolated to transcription cluster only — after extraction only `transcription.py` is affected. Plan: `docs/restructure/PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md`. No backend code changed in 4G.0.
 
+**Phase 4G.1 shipped (2026-05-22)**: Cluster A extracted to `app/services/subtitles/styles.py` (~292 lines). `subtitles/` package scaffold created. Moved: `ASSPreset`, `_PRESETS` (10 presets), `_STYLE_ALIASES`, `_DEFAULT_PRESET_ID`, `_HL_OPEN`/`_HL_CLOSE`, `_compute_subtitle_scale`, `_compute_margin_v`, `BOUNCE_FX`, `_PRESET_MOTION_FX`, `_MOTION_FX_DEFAULT`, `_get_motion_fx`, `normalize_subtitle_style_id`, `get_subtitle_preset`, `build_ass_style_line`. `subtitle_engine.py` re-exports all moved symbols — same-object identity preserved. `subtitle_engine.py` reduced 1,970 → 1,699 lines (−271). 39 new tests in `test_subtitle_styles.py`. No ASS rendering or SRT timing behavior changed.
+
 ---
 
 ### H3. RAG Memory Not Connected to Production Render
