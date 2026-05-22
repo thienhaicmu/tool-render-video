@@ -1,10 +1,10 @@
 # PHASE_4F_DB_SPLIT_PLAN.md
 
-**Status**: PLANNING (Phase 4F.0 — no code changed)
-**Last updated**: 2026-05-22
+**Status**: IN PROGRESS (Phase 4F.1 SHIPPED — DB connection foundation extracted)
+**Last updated**: 2026-05-22 (post Phase 4F.1 shipped)
 **Branch**: `restructure/output-timeline-architecture`
 
-This is a planning document only. No backend code has changed.
+Phase 4F.0 was planning only. Phase 4F.1 has been shipped — see [MIGRATION_HISTORY.md](MIGRATION_HISTORY.md) for details.
 
 ---
 

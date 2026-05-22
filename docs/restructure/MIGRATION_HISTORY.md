@@ -527,3 +527,40 @@ backend/app/db/
 `services/db.py` remains as backward-compat re-export shim throughout all sub-phases.
 
 **Recommended first implementation phase**: Phase 4F.1 — Extract DB Connection Foundation.
+
+---
+
+## Phase 4F.1 — Extract DB Connection Foundation
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: First implementation sub-phase of Phase 4F. Create `app/db/` package and move the DB connection + schema foundation from `backend/app/services/db.py` into `backend/app/db/connection.py`. Backward-compat re-exports keep all 14 existing callers unchanged.
+
+**Shipped changes**:
+- New file: `backend/app/db/__init__.py` — empty package marker.
+- New file: `backend/app/db/connection.py` (~513 lines) — Group A block moved verbatim from `services/db.py`. Contains: `_DB_PATH_LOCK`, `_ACTIVE_DB_PATH`, `_tls`, `UPLOAD_PROFILE_LOCK_TTL_MINUTES`, `UPLOAD_SCHEDULER_STATE_ID`, `_default_fallback_db_path()`, `_force_writable_file()`, `_can_write_sqlite()`, `_resolve_db_path()`, `get_conn()`, `_thread_conn()`, `close_thread_conn()`, `init_db()` (with internal `_ensure_columns` local function intact), `_json_dumps()`, `_json_loads()`, `_utc_now()`, `_utc_now_iso()`.
+- `backend/app/services/db.py`: Group A definitions removed; backward-compat re-exports added via `from app.db.connection import (UPLOAD_PROFILE_LOCK_TTL_MINUTES, UPLOAD_SCHEDULER_STATE_ID, close_thread_conn, get_conn, init_db, _json_dumps, _json_loads, _thread_conn, _utc_now, _utc_now_iso)`. Reduced by ~500 lines (~1,886 → ~1,386 lines). `threading` import removed (not needed after Group A extraction).
+- New test file: `backend/tests/test_db_connection.py` — 33 tests: import identity (8 symbols same-object `is`), constants (UPLOAD_PROFILE_LOCK_TTL_MINUTES=30, UPLOAD_SCHEDULER_STATE_ID="main"), get_conn() contract (Connection type, row_factory=sqlite3.Row, PRAGMA foreign_keys=1, journal_mode=wal), init_db() creates all 10 expected tables and is idempotent, _json_dumps/_json_loads edge cases (roundtrip, None sentinel behavior, empty string, invalid JSON), _thread_conn() same-connection reuse in same thread and different connections across threads, close_thread_conn() clears thread-local and is safe on empty state, _utc_now() timezone-aware UTC and _utc_now_iso() parseable ISO string.
+
+**Contracts maintained**:
+- `app.db.connection` imports from `app.core.config` and stdlib only — no import from `app.services.db`. No circular import.
+- All 10 re-exported names in `services/db.py` are the SAME objects as in `app.db.connection` (`is` identity guaranteed).
+- `_tls` thread-local state lives in exactly ONE module (`app.db.connection`). `_thread_conn`, `close_thread_conn`, `update_job_progress`, `upsert_job_part` all reference the same `_tls` instance.
+- `init_db()` internal `_ensure_columns()` helper remains a local function inside `init_db()` — not hoisted to module scope.
+- `UPLOAD_PROFILE_LOCK_TTL_MINUTES` re-exported from `services/db.py` — `routes/upload.py` caller unchanged.
+- 14 production callers (main.py, 5 routes, 4 orchestration files, 3 service files) unchanged.
+- No SQL, no DDL, no PRAGMA, no row_factory, no DATABASE_PATH logic changed.
+
+---
+
+## Test Suite State (Post Phase 4F.1)
+
+```
+6107 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing — unchanged.
+
+Phase 4F.1 added 33 new passing tests (`test_db_connection.py`).

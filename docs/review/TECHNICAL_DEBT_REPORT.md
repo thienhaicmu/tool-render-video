@@ -74,6 +74,8 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Phase 4F.0 planning (2026-05-22)**: DB split strategy defined. Target: `app/db/` with 5 modules (`connection.py`, `jobs_repo.py`, `uploads_repo.py`, `platform_repo.py`, `creator_repo.py`). `services/db.py` remains as backward-compat re-export shim. Plan: `docs/restructure/PHASE_4F_DB_SPLIT_PLAN.md`.
 
+**Phase 4F.1 shipped (2026-05-22)**: `app/db/connection.py` extracted — Group A (connection, schema, thread-local, helpers) moved verbatim. `services/db.py` re-exports all moved symbols. `services/db.py` reduced from ~1,886 → ~1,386 lines (−500 lines). 33 new tests in `test_db_connection.py`. Remaining domains (jobs_repo, uploads_repo, platform_repo, creator_repo) remain in `services/db.py` pending 4F.2–4F.5.
+
 ---
 
 ### H2. No Test Coverage for Core Pipeline
