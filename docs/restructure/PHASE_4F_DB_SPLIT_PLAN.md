@@ -1,7 +1,7 @@
 # PHASE_4F_DB_SPLIT_PLAN.md
 
-**Status**: IN PROGRESS (Phase 4F.1 SHIPPED, Phase 4F.2 SHIPPED, Phase 4F.3 SHIPPED — creator repo extracted)
-**Last updated**: 2026-05-22 (post Phase 4F.3 shipped)
+**Status**: IN PROGRESS (Phase 4F.1 SHIPPED, Phase 4F.2 SHIPPED, Phase 4F.3 SHIPPED, Phase 4F.4 SHIPPED — platform repo extracted)
+**Last updated**: 2026-05-22 (post Phase 4F.4 shipped)
 **Branch**: `restructure/output-timeline-architecture`
 
 Phase 4F.0 was planning only. Phase 4F.1 has been shipped — see [MIGRATION_HISTORY.md](MIGRATION_HISTORY.md) for details.
@@ -324,7 +324,7 @@ from app.db.jobs_repo import (
 | **4F.1** ✓ | Extract DB connection foundation to `connection.py` | HIGH | ~130 |
 | **4F.2** ✓ | Extract jobs repo to `jobs_repo.py` | MEDIUM | ~140 |
 | **4F.3** ✓ | Extract creator repo to `creator_repo.py` | VERY LOW | ~25 |
-| **4F.4** | Extract platform repo to `platform_repo.py` | LOW | ~130 |
+| **4F.4** ✓ | Extract platform repo to `platform_repo.py` | LOW | ~130 |
 | **4F.5** | Extract uploads repo to `uploads_repo.py` | HIGH | ~1,200 |
 | **4F.6** | Import migration audit (callers optionally migrated) | LOW | 0 |
 | **4F.7** | Deprecation cleanup planning (no code deleted) | — | 0 |

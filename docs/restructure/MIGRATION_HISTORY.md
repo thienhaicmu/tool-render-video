@@ -635,3 +635,37 @@ Phase 4F.2 added 35 new passing tests (`test_jobs_repo.py`).
 The 8 persistent failures are pre-existing — unchanged.
 
 Phase 4F.3 added 17 new passing tests (`test_creator_repo.py`).
+
+---
+
+## Phase 4F.4 — Extract Platform Repo
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Fourth implementation sub-phase of Phase 4F. Move proxy/platform CRUD from `backend/app/services/db.py` into `backend/app/db/platform_repo.py`. Backward-compat re-exports keep all existing callers unchanged.
+
+**Shipped changes**:
+- New file: `backend/app/db/platform_repo.py` (~130 lines) — 6 Group D functions moved verbatim from `services/db.py`: `_normalize_proxy_pool_row()`, `list_proxy_pool_rows()`, `get_proxy_pool_row()`, `create_proxy_pool_row()`, `update_proxy_pool_row()`, `delete_proxy_pool_row()`. Imports only from `app.db.connection` (`_json_dumps`, `_json_loads`, `_utc_now_iso`, `get_conn`) plus stdlib (`sqlite3`, `uuid`). No circular import.
+- `backend/app/services/db.py`: 6 function bodies removed; backward-compat re-exports added via `from app.db.platform_repo import (_normalize_proxy_pool_row, create_proxy_pool_row, delete_proxy_pool_row, get_proxy_pool_row, list_proxy_pool_rows, update_proxy_pool_row)`. Reduced by ~130 lines (~1,236 → ~1,106 lines). Upload domain functions NOT moved — remain in `services/db.py`.
+- New test file: `backend/tests/test_platform_repo.py` — 44 tests: import identity (6 public symbols + private normalizer same-object `is`), list empty/returns-list, create (defaults, explicit proxy_id, metadata, timestamps), get (found/missing, metadata expanded, port int), list order/shape, update (name, status, metadata, preserves fields, missing returns None, updated_at), delete (true/false, row gone, list empty), normalizer unit tests (None/empty→None, metadata JSON expansion, invalid/None JSON fallback, port/latency_ms coercion, non-numeric fallback), old import path and cross-module read/write.
+
+**Contracts maintained**:
+- `app.db.platform_repo` imports from `app.db.connection` only — no import from `app.services.db`. No circular import.
+- All 6 re-exported names in `services/db.py` are the SAME objects as in `app.db.platform_repo` (`is` identity guaranteed).
+- No SQL, no DDL, no function signatures changed.
+- Upload domain (uploads_repo) NOT moved yet — planned for 4F.5.
+- 14 production callers all import from `app.services.db` — unchanged.
+
+---
+
+## Test Suite State (Post Phase 4F.4)
+
+```
+6203 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing — unchanged.
+
+Phase 4F.4 added 44 new passing tests (`test_platform_repo.py`).
