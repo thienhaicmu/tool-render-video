@@ -200,22 +200,24 @@ But the codebase has reached its limits. `render_pipeline.py` at 290KB is not a 
 
 The AI branding is a significant gap between expectation and reality. The modules are named as if they implement machine intelligence. They implement if-else scoring. This is not inherently wrong — heuristics can be effective — but the naming creates a maintenance burden when a future developer has to understand what `emotion_analyzer.py` actually does.
 
-**Updated priorities (as of 2026-05-22, post Phase 4H.1A baseline stabilization):**
+**Updated priorities (as of 2026-05-22, post Phase 4H.6 freeze):**
 
 Items 1–3 from the original list are now addressed:
 
-1. ~~Fix subtitle timestamp scaling~~ — Revised: subtitles are correctly synced via `ass-before-setpts`. Remaining concern is display duration compression at high speed. Phase 3 scope.
+1. ~~Fix subtitle timestamp scaling~~ — Revised: subtitles are correctly synced via `ass-before-setpts`. Remaining concern is display duration compression at high speed. Resolved on overlay path (Phase 3A/3B).
 2. ~~Fix TTS narration atempo compensation~~ — **Resolved (Phase 0).** `mix_narration_audio()` applies `atempo` at the correct speed. Regression tests added.
 3. ~~Add timeout to `download_youtube()`~~ — **Partially resolved (Phase 0).** `socket_timeout=60` and `cancel_event` wired. Wall-clock timeout remains open.
 
-**Current priorities, in order (updated 2026-05-22, post Phase 4H.0 planning):**
+**Phase 4H is now complete** (2026-05-22): `services/preview/` package finalized (ffmpeg_probers, session_service, media_streaming — 89 tests). `routes/render.py` reduced from ~1,369 → 1,125 lines and frozen as an orchestration-focused route layer. All compatibility shims verified. No circular imports.
 
-Phases 2–3C and 4B–4G are all shipped. `subtitle_engine.py` is a frozen pure shim (388 tests). `render_engine.py` is a frozen pure shim. `services/db.py` is a frozen pure shim. Upload domain removed. `routes/render.py` audited — Phase 4H plan created.
+**Current priorities, in order (updated 2026-05-22, post Phase 4H.6):**
+
+The backend restructure (Phases 2–4H) is functionally complete. All major modularization phases shipped. Route cleanup frozen. Remaining work is product-quality and correctness items.
 
 1. **Add audio stream presence check to `_validate_render_output()`** — muted output currently passes QA silently.
 2. **Tighten QA duration tolerance** — ±20% allows 48s–72s on a 60s clip; a tighter ±5% would catch real encode failures.
 3. **Wire `memory_store` to `create_ai_edit_plan()`** — one-line change; the RAG system is built and tested but not active.
 4. **Add total wall-clock timeout for `download_youtube()`** — the `socket_timeout=60` is insufficient for slow-but-progressing downloads.
-5. **Phase 4H.1 — Extract `services/preview/ffmpeg_probers.py`** — 6 route-local FFmpeg probe helpers have no tests; extraction enables coverage.
+5. **Batch runner threading debt** — `_run_batch()` inner closure; no cancel, no resume, 7200s hang risk. Medium priority; requires batch thread refactor.
 
-Everything else — `render_pipeline.py` god file, V3/V4 frontends, FAISS persistence, batch cancel/resume — is important but not on fire.
+Everything else — `render_pipeline.py` god file, V3/V4 frontends, FAISS persistence — is important but not on fire.

@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4H.3; services/preview/media_streaming.py created; Range parser + file byte iterator extracted from routes/render.py; routes/render.py reduced 1,150→1,125 lines)
+**Last updated**: 2026-05-22 (post Phase 4H.6 freeze; Phase 4H COMPLETE; routes/render.py at 1,125 lines; services/preview/ package finalized with 3 modules, 89 tests)
 
 ---
 
@@ -31,7 +31,7 @@ Electron shell
               │     ├── ass_core.py — _ass_time, _ass_escape_text, srt_to_ass_bounce, srt_to_ass_karaoke, burn_subtitle_onto_video, render_subtitle_preview (Phase 4G.4)
               │     ├── text_transforms.py — resolve_hook_overlay_text, apply_market_hook_text_to_srt, apply_hook_subtitle_format, format_hook_subtitle, apply_market_line_break_to_srt, apply_subtitle_execution_hints (Phase 4G.5)
               │     └── transcription.py — _MODEL_CACHE, get_whisper_model, _get_transcribe_lock, transcribe_to_srt, extract_audio_for_transcription, has_audio_stream (Phase 4G.6)
-              ├── services/preview/ (Phase 4H.1–4H.3)
+              ├── services/preview/ (Phase 4H.1–4H.6 COMPLETE — FROZEN)
               │     ├── ffmpeg_probers.py — _probe_video_codec, _probe_preview_profile, _is_browser_safe_preview, _ensure_h264_preview, _run_ffmpeg_checked, _detect_leading_black_duration (Phase 4H.1)
               │     ├── session_service.py — _PREVIEW_SESSIONS, _PREVIEW_DIR, _SESSION_TTL_HOURS, _MAX_PREVIEW_SESSIONS, _save_session, _load_session, _cleanup_preview_session, evict_stale_preview_sessions (Phase 4H.2)
               │     └── media_streaming.py — _parse_range_header, _iter_file_bytes (Phase 4H.3)

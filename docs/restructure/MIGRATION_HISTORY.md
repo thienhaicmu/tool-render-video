@@ -1637,3 +1637,53 @@ Baseline stabilized. The 8 remaining failures are pre-existing: 4 remotion adapt
 ```
 
 28 new tests in `test_preview_media_streaming.py` — all 28 pass. 8 failures unchanged (pre-existing). Zero new failures introduced by Phase 4H.3.
+
+---
+
+## Phase 4H.6 — Route Cleanup Freeze
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED (2026-05-22)
+**Commit**: (this commit)
+
+**Purpose**: Audit and freeze phase for the Phase 4H route cleanup effort. No backend code changes. Complete cluster classification for all remaining `routes/render.py` content. Document official stopping point and freeze policy. Update SCORECARD.md and BRUTAL_REVIEW_SUMMARY.md with current priorities.
+
+**Audit findings**:
+- `routes/render.py` after Phase 4H.3: 1,125 lines, 17 route handlers + 6 module-level functions + 2 state vars + 1 inner closure
+- All remaining route handlers classified (A/B/C — see PHASE_4H_6_ROUTE_FREEZE.md §2e)
+- `_run_batch()` inner closure: B — future extraction candidate (batch service); deferred
+- `quick_process`: C — intentionally frozen (self-contained 283-line FFmpeg handler)
+- `_ACTIVE_DOWNLOADS`, `_UUID_RE`: A — acceptable to remain (route-lifecycle state)
+- No circular imports confirmed via `python -m compileall app`
+- All 3 compatibility shims verified: `services/db.py`, `services/render_engine.py`, `services/subtitle_engine.py`
+- `main.py` deferred import of `evict_stale_preview_sessions` verified working
+
+**Why 4H.4 / 4H.5 were not completed**:
+- Phase 4H.4 (Source Prepare Service): rejected — `prepare_source` is route-handler code, not service logic; coupling complexity exceeds extraction value
+- Phase 4H.5 (original plan): merged into 4H.6 (this phase)
+
+**Docs created**:
+- `docs/restructure/PHASE_4H_6_ROUTE_FREEZE.md` — full audit, cluster classification, freeze policy, coupling constraint resolution
+
+**Docs updated**:
+- `PHASE_4H_ROUTE_CLEANUP_PLAN.md` — status set to COMPLETE
+- `CURRENT_RENDER_ARCHITECTURE.md` — Phase 4H complete note, service package documented
+- `TECHNICAL_DEBT_REPORT.md` — Phase 4H.6 entry, route debt classified
+- `BRUTAL_REVIEW_SUMMARY.md` — priorities updated post Phase 4H
+- `SCORECARD.md` — backend architecture and maintainability scores updated
+
+**Phase 4H cumulative summary**:
+- Total lines removed from `routes/render.py`: **−244 lines** (1,369 → 1,125)
+- New service modules created: **3** (`ffmpeg_probers.py`, `session_service.py`, `media_streaming.py`)
+- New tests added across Phase 4H: **89** (44 + 17 + 28)
+- Test baseline at freeze: `8 failed, 6699 passed, 1 skipped`
+
+---
+
+## Test Suite State (Post Phase 4H.6)
+
+```
+8 failed, 6699 passed, 1 skipped  (no new tests — audit/docs phase)
+```
+
+Baseline unchanged. Phase 4H.6 introduced no backend code changes and no new tests. Phase 4H is complete.

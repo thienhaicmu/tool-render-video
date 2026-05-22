@@ -6,28 +6,28 @@ Scores are 1–10. Based exclusively on code reviewed during this session. No as
 
 ## Summary Table
 
-| # | Category | Score |
-|---|----------|-------|
-| 1 | Project structure | 5 |
-| 2 | Frontend architecture | 5 |
-| 3 | Backend architecture | 4 |
-| 4 | API contract quality | 7 |
-| 5 | Job / queue design | 8 |
-| 6 | Render pipeline design | 3 |
-| 7 | AI integration | 4 |
-| 8 | FFmpeg integration | 7 |
-| 9 | Subtitle system | 4 |
-| 10 | File / artifact management | 5 |
-| 11 | Realtime / progress system | 7 |
-| 12 | Error handling | 5 |
-| 13 | Test coverage | 2 |
-| 14 | Build / package quality | 7 |
-| 15 | Maintainability | 3 |
-| 16 | Scalability | 4 |
-| 17 | Debuggability | 6 |
-| 18 | Production readiness | 4 |
+| # | Category | Score | Notes |
+|---|----------|-------|-------|
+| 1 | Project structure | 5 | |
+| 2 | Frontend architecture | 5 | |
+| 3 | Backend architecture | 5 | ↑ +1 post Phase 4H: preview service package, route layer cleaned |
+| 4 | API contract quality | 7 | |
+| 5 | Job / queue design | 8 | |
+| 6 | Render pipeline design | 3 | |
+| 7 | AI integration | 4 | |
+| 8 | FFmpeg integration | 7 | |
+| 9 | Subtitle system | 4 | |
+| 10 | File / artifact management | 5 | |
+| 11 | Realtime / progress system | 7 | |
+| 12 | Error handling | 5 | |
+| 13 | Test coverage | 3 | ↑ +1 post Phases 4E–4H: 89 preview tests, domain models, overlay path, audio mix |
+| 14 | Build / package quality | 7 | |
+| 15 | Maintainability | 4 | ↑ +1 post Phases 4E–4H: db/render/subtitle extracted; route layer no longer a dumping ground |
+| 16 | Scalability | 4 | |
+| 17 | Debuggability | 6 | |
+| 18 | Production readiness | 4 | |
 
-**Overall: 5.0 / 10**
+**Overall: 5.2 / 10** *(updated post Phase 4H.6 — three categories improved: backend architecture, test coverage, maintainability)*
 
 ---
 
@@ -74,7 +74,7 @@ Scores are 1–10. Based exclusively on code reviewed during this session. No as
 
 ---
 
-### 3. Backend architecture — 4/10
+### 3. Backend architecture — 5/10 *(updated post Phase 4H.6)*
 
 **What was scored**: `backend/app/` — routes, services, orchestration, core layers.
 
@@ -89,8 +89,8 @@ Scores are 1–10. Based exclusively on code reviewed during this session. No as
 
 **Negative**:
 - `render_pipeline.py` at 290KB / 7000+ lines is not a service, not a module, not an orchestrator — it is a monolith inside a monolith. There is no second-biggest file close to it.
-- `db.py` at 1900 lines owns every data access pattern across all domains with zero separation.
-- `render.py` at 1400 lines mixes preview session state, download orchestration, job creation, batch coordination, media streaming, and thumbnail serving.
+- ~~`db.py` at 1900 lines~~ — **RESOLVED Phase 4F**: `db.py` is a 31-line shim; all DB logic in `app/db/` (connection, jobs_repo, creator_repo).
+- ~~`render.py` at 1400 lines mixes preview session state, download orchestration, job creation, batch coordination, media streaming, and thumbnail serving~~ — **IMPROVED Phase 4H**: `routes/render.py` reduced to 1,125 lines; `services/preview/` package extracts session, probers, and streaming helpers. Route layer is now an orchestration-focused boundary. `_run_batch()` inner closure is accepted remaining debt.
 - No rate limiting on `/api/render/process` or `/api/render/prepare-source`.
 - Batch child hang risk: `_done.wait(timeout=7200)` with no defense against `_ev.set()` never being called.
 - No authentication — any process reaching port 8000 can submit jobs, read credentials, stream output files. Undocumented assumption.
@@ -292,7 +292,7 @@ Scores are 1–10. Based exclusively on code reviewed during this session. No as
 
 ---
 
-### 13. Test coverage — 2/10
+### 13. Test coverage — 3/10 *(updated post Phase 4H.6)*
 
 **What was scored**: `backend/tests/` — all 80+ test files.
 
@@ -303,10 +303,11 @@ Scores are 1–10. Based exclusively on code reviewed during this session. No as
 
 **Negative**:
 - The 80+ tests cover **only AI schema validators** — `dataclass` shape checks, Pydantic model validations, and a few heuristic scoring edge cases.
-- Zero test coverage for: `render_pipeline.py`, `render_engine.py`, `subtitle_engine.py`, `scene_detector.py`, `job_manager.py`, `db.py`, `downloader.py`, `audio_mix_service.py`, `tts_service.py`.
-- No FFmpeg integration tests. No subtitle sync tests. No audio mix tests. No job lifecycle tests. No DB schema migration tests.
-- The subtitle display duration compression (C2) and TTS desync bug (C3) were not caught by tests at time of audit. C3 is now covered by `TestMixNarrationAudioAtempo`; C2 is addressed on the overlay path via `test_composite_overlays.py` assertions.
-- No end-to-end test for the render pipeline — all regressions are discovered by running real render jobs.
+- Zero test coverage for: `render_pipeline.py`, `scene_detector.py`, `job_manager.py`, `downloader.py`, `tts_service.py`. ~~`render_engine.py`, `subtitle_engine.py`, `db.py`, `audio_mix_service.py`~~ — now covered (Phases 4E–4G, Phase 0).
+- No FFmpeg integration tests. No subtitle sync tests. No job lifecycle tests. No DB schema migration tests.
+- The TTS desync bug (C3) is now covered by `TestMixNarrationAudioAtempo`. The subtitle display duration compression (C2) is addressed on the overlay path via `test_composite_overlays.py` assertions.
+- **Phase 4H added 89 new tests** for `services/preview/` (ffmpeg_probers: 44, session_service: 17, media_streaming: 28). **Phases 4E–4G added 200+ tests** for domain models, render services, subtitle modules. Total test suite: 6,699+ passing.
+- No end-to-end test for the render pipeline — all regressions discovered by running real render jobs.
 - No CI configuration visible — tests presumably run manually only.
 
 ---
@@ -332,7 +333,7 @@ Scores are 1–10. Based exclusively on code reviewed during this session. No as
 
 ---
 
-### 15. Maintainability — 3/10
+### 15. Maintainability — 4/10 *(updated post Phase 4H.6)*
 
 **What was scored**: Code navigability, modularity, naming, ability to make a change without understanding the whole file.
 
@@ -345,9 +346,12 @@ Scores are 1–10. Based exclusively on code reviewed during this session. No as
 **Negative**:
 - `render_pipeline.py` at 290KB makes every render change high-risk. Any fix touches unrelated code. Merge conflicts are guaranteed in team development.
 - `db.py` at 1900 lines — adding a new entity requires editing the same file as all other entities.
-- `render.py` at 1400 lines — preview session logic, download orchestration, and media streaming all in one route file.
-- 15+ top-level config dicts inlined in `render_pipeline.py` (`_PLATFORM_PROFILES`, `_CTA_TEXTS`, `_VARIANT_AGGRESSIVE_SUB`, `_PLAY_RES_Y_MAP`, etc.) — platform-specific configuration is buried in a 7000-line file.
-- Module-level state (`_render_active_count`, `_PREVIEW_SESSIONS`) accessed from other modules via direct import of private names — leaky abstraction.
+- ~~`render.py` at 1400 lines~~ — **IMPROVED Phase 4H**: `routes/render.py` reduced to 1,125 lines; preview session state, FFmpeg probers, and streaming helpers extracted to `services/preview/`. Route module is now an orchestration-focused boundary. Batch inner closure and `quick_process` intentionally frozen.
+- ~~`db.py` at 1900 lines~~ — **RESOLVED Phase 4F**: `db.py` is a 31-line shim; all DB logic in `app/db/`.
+- ~~`render_engine.py` monolith~~ — **RESOLVED Phase 4E**: `render_engine.py` is a frozen shim; all render logic in `services/render/` (5 modules).
+- ~~`subtitle_engine.py` monolith~~ — **RESOLVED Phase 4G**: `subtitle_engine.py` is a frozen shim; all subtitle logic in `services/subtitles/` (7 modules, 388 tests).
+- 15+ top-level config dicts inlined in `render_pipeline.py` (`_PLATFORM_PROFILES`, `_CTA_TEXTS`, `_VARIANT_AGGRESSIVE_SUB`, `_PLAY_RES_Y_MAP`, etc.) — platform-specific configuration is buried in a 7000-line file. Still unresolved.
+- ~~`_PREVIEW_SESSIONS` accessed via direct private import~~ — **RESOLVED Phase 4H.2**: `_PREVIEW_SESSIONS` is a singleton owned by `session_service.py`; `routes/render.py` re-exports it.
 - AI modules named as if they implement real AI (ai_director, emotion_analyzer, retention_predictor) while implementing heuristics — the gap between name and behavior is a maintainability hazard.
 - V1/V3/V4 dead frontend code forces every frontend developer to determine whether their change applies to one version, two versions, or all.
 
