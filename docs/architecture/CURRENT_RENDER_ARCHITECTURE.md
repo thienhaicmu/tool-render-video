@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4F.6; test baseline stabilized — edge-tts installed in venv, true baseline 8 pre-existing failures confirmed; DB import audit complete — services/db.py namespace verified clean; 15 new tests in test_db_import_audit.py)
+**Last updated**: 2026-05-22 (post Phase 4G.0 planning; subtitle_engine.py audited — 1,970 lines, 7 clusters identified, split plan in PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md; no code changed)
 
 ---
 

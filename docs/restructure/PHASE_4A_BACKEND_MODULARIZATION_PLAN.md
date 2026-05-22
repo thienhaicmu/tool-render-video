@@ -1,7 +1,7 @@
 # PHASE_4A_BACKEND_MODULARIZATION_PLAN.md
 
-**Status**: COMPLETE (Phase 4B–4F.7 all SHIPPED — upload domain fully removed, DB split complete, services/db.py and render_engine.py are clean re-export shims, architecture frozen)
-**Last updated**: 2026-05-22 (post Phase 4F.7 — architecture freeze doc created, stale references corrected)
+**Status**: COMPLETE (Phase 4B–4F.7 all SHIPPED — upload domain fully removed, DB split complete, services/db.py and render_engine.py are clean re-export shims, architecture frozen); Phase 4G.0 PLANNING (subtitle_engine.py split plan created — implementation pending)
+**Last updated**: 2026-05-22 (post Phase 4G.0 — subtitle_engine.py audited, 7 clusters identified, split plan in PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md)
 **Branch**: `restructure/output-timeline-architecture`
 
 This is a planning document only. No code changes are in scope. Phase 4A produces this document and updated supporting docs. Implementation begins in Phase 4B.

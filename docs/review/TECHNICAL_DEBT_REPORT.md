@@ -106,6 +106,8 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Impact**: Any regression in render quality, subtitle correctness, or FFmpeg command generation is only discovered by running a real render job.
 
+**Phase 4G.0 planning (2026-05-22)**: `subtitle_engine.py` (1,970 lines) audited and split plan documented. 7 clusters identified (styles, srt_core, ass_core, readability, text_transforms, transcription, shim). Target: `app/services/subtitle/` package (7 focused modules). Cross-module coupling with `render_engine._has_audio_stream` documented; resolution planned for Phase 4G.6. Hard `import whisper` at module level (line 9) isolated to transcription cluster only — after extraction only `transcription.py` is affected. Plan: `docs/restructure/PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md`. No backend code changed in 4G.0.
+
 ---
 
 ### H3. RAG Memory Not Connected to Production Render

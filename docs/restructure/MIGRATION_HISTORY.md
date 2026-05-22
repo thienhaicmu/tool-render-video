@@ -977,3 +977,70 @@ The 8 pre-existing failures are unchanged. +15 tests from `test_db_import_audit.
 ```
 
 No new tests added in Phase 4F.7 (docs/audit only). Baseline unchanged.
+
+---
+
+## Phase 4G.0 — Subtitle Engine Split Planning
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: PLANNING — no code changed
+**Source plan**: [PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md](PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md)
+
+**Purpose**: Audit `subtitle_engine.py` (1,970 lines) and produce a complete split plan before any extraction begins.
+
+**Audit findings**:
+- 1,970 lines, 7 distinct clusters identified:
+  - **A — Styles/Constants**: `SUBTITLE_STYLES`, `SUBTITLE_PRESETS`, `_HL_OPEN`/`_HL_CLOSE` PUA constants → `styles.py`
+  - **B — SRT Core**: `parse_srt_blocks`, `write_srt_blocks`, `slice_srt_by_time`, `slice_srt_to_output_timeline`, `_run_with_retry` → `srt_core.py`
+  - **C — ASS Core**: `srt_to_ass_bounce`, `srt_to_ass_karaoke`, `burn_subtitle_onto_video`, `_ass_escape_text`, `_hex_to_ass` → `ass_core.py`
+  - **D — Readability**: `resegment_srt_for_readability`, `slice_srt_to_text`, `insert_emphasis_markers` → `readability.py`
+  - **E — Text Transforms**: `apply_market_line_break_to_srt`, `apply_market_hook_text_to_srt`, `apply_hook_subtitle_format`, `resolve_hook_overlay_text`, `subtitle_emphasis_pass` → `text_transforms.py`
+  - **F — Transcription**: `transcribe_audio`, `_MODEL_CACHE`, `has_audio_stream` (deferred import) → `transcription.py`
+  - **G — Shim**: `subtitle_engine.py` stays as a re-export shim after all clusters extracted
+
+**Key risks identified**:
+- Hard `import whisper` at line 9 — after extraction, only `transcription.py` is affected; breaking the whole module is eliminated
+- `has_audio_stream()` uses a deferred import from `render_engine._has_audio_stream` (line 280–289) — classified as cross-module coupling; resolution in Phase 4G.6 (change to `from app.services.render.ffmpeg_helpers import _has_audio_stream`)
+- `_HL_OPEN`/`_HL_CLOSE` shared between `_ass_escape_text` (ass_core) and `_insert_emphasis_markers` (readability) — defined once in `styles.py`, imported by both
+- `_run_with_retry` used by both transcription (2 callers) and `burn_subtitle_onto_video` (1 caller) — placed in `srt_core.py` (no new dependency edge)
+
+**Dependency DAG for target package**:
+```
+styles.py ← readability.py ← ass_core.py
+srt_core.py ← transcription.py
+srt_core.py ← text_transforms.py
+```
+No cycles. All edges point inward toward styles/srt_core.
+
+**Proposed sub-phases**:
+- 4G.1: Extract `styles.py` (constants only, no logic, no deps)
+- 4G.2: Extract `srt_core.py` (SRT parse/write/slice, `_run_with_retry`)
+- 4G.3: Extract `ass_core.py` (ASS rendering, depends on styles.py + srt_core.py)
+- 4G.4: Extract `readability.py` (depends on styles.py + srt_core.py)
+- 4G.5: Extract `text_transforms.py` (depends on srt_core.py)
+- 4G.6: Extract `transcription.py` (Whisper model, fix `has_audio_stream` import)
+- 4G.7: Convert `subtitle_engine.py` to shim + caller migration
+
+**Docs created**: `PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md` (20 sections)
+
+**Docs updated**:
+- `MIGRATION_HISTORY.md` (this entry)
+- `PHASE_4A_BACKEND_MODULARIZATION_PLAN.md` — status updated to include 4G.0 planning
+- `docs/architecture/CURRENT_RENDER_ARCHITECTURE.md` — last updated note
+- `docs/review/TECHNICAL_DEBT_REPORT.md` — H2 entry updated with 4G.0 planning note
+
+**Contracts maintained**:
+- All public `subtitle_engine` exports unchanged.
+- All render behavior unchanged.
+- No new imports, no function moves, no shim changes.
+- Test baseline: 8 failed, 6222 passed, 1 skipped (unchanged — docs-only phase).
+
+---
+
+## Test Suite State (Post Phase 4G.0)
+
+```
+8 failed, 6222 passed, 1 skipped  (docs-only phase, no test changes)
+```
+
+No new tests added in Phase 4G.0 (planning only). Baseline unchanged.
