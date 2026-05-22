@@ -22,7 +22,9 @@
 
 **Impact**: Reduced readability at high playback speeds. Text-heavy subtitle blocks are harder to read. Not a synchronization bug — the subtitle text and speech are aligned.
 
-**Superseded By**: Phase 2 planning identifies this as Phase 3 scope (overlay timing derived from base clip output duration).
+**Resolved on overlay path (Phase 3A/3B, 2026-05-22)**: The overlay path generates `subtitle_output_timeline.ass` with output-second timestamps using `slice_srt_to_output_timeline()`. In `composite_overlays_on_base_clip()`, there is no `setpts` — the base_clip PTS is already output-timeline. Subtitle display duration on the overlay path is NOT compressed; a 3.0s subtitle block shows for exactly 3.0 output seconds.
+
+**Remaining Debt (legacy path only)**: When `FEATURE_OVERLAY_AFTER_BASE_CLIP=0`, `render_part_smart()` is still used and the display duration compression remains. The legacy path is not fixed and is used as the fallback path.
 
 ---
 

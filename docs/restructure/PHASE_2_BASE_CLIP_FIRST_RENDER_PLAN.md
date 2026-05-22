@@ -1,8 +1,15 @@
+> **HISTORICAL IMPLEMENTATION RECORD**
+> This document is a historical implementation record for Phase 2.
+> Current architecture source of truth lives in [docs/architecture/](../architecture/).
+> For migration chronology see [MIGRATION_HISTORY.md](MIGRATION_HISTORY.md).
+
+---
+
 # Phase 2 — Base Clip First Render: Implementation Plan
 
 **Date**: 2026-05-22  
 **Branch**: restructure/output-timeline-architecture  
-**Status**: PLANNING ONLY — no code changes  
+**Status**: SHIPPED — implementation complete  
 **Author**: Architecture review from Phase 1 + Phase 1.5 foundation
 
 ---

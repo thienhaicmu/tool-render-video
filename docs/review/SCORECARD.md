@@ -305,7 +305,7 @@ Scores are 1–10. Based exclusively on code reviewed during this session. No as
 - The 80+ tests cover **only AI schema validators** — `dataclass` shape checks, Pydantic model validations, and a few heuristic scoring edge cases.
 - Zero test coverage for: `render_pipeline.py`, `render_engine.py`, `subtitle_engine.py`, `scene_detector.py`, `job_manager.py`, `db.py`, `downloader.py`, `audio_mix_service.py`, `tts_service.py`.
 - No FFmpeg integration tests. No subtitle sync tests. No audio mix tests. No job lifecycle tests. No DB schema migration tests.
-- The subtitle drift bug (C2) and TTS desync bug (C3) are not caught by any test because there are no subtitle or audio tests.
+- The subtitle display duration compression (C2) and TTS desync bug (C3) were not caught by tests at time of audit. C3 is now covered by `TestMixNarrationAudioAtempo`; C2 is addressed on the overlay path via `test_composite_overlays.py` assertions.
 - No end-to-end test for the render pipeline — all regressions are discovered by running real render jobs.
 - No CI configuration visible — tests presumably run manually only.
 
@@ -408,8 +408,8 @@ Scores are 1–10. Based exclusively on code reviewed during this session. No as
 - The tool ships with bundled FFmpeg, bundled Python — eliminates most "dependency hell" issues for end users.
 
 **Negative**:
-- **Critical subtitle drift bug** at the default TikTok speed (1.15x): every non-1.0 speed render has progressive subtitle drift. This is the default configuration. Every TikTok render is affected.
-- **Critical TTS desync** at any non-1.0 speed when `tts_enabled=True` — narration and video are out of sync.
+- **Subtitle display duration compression** at non-1.0 speeds: subtitle blocks show for ≈13% less time at 1.15x. This is a legibility concern, not synchronization drift — subtitles ARE in sync with sped-up speech. **Resolved on overlay path (Phase 3A/3B)**: output-timeline ASS eliminates compression when `FEATURE_OVERLAY_AFTER_BASE_CLIP=1`. Legacy path still has compressed display duration.
+- **TTS desync** — **Resolved (Phase 0)**: `mix_narration_audio()` applies `atempo=speed` compensation. Narration is synced to video at any speed. Covered by `TestMixNarrationAudioAtempo` regression tests.
 - YouTube download has no timeout — render jobs can hang indefinitely at the download stage. The only recovery is manual server restart.
 - Single SQLite database with no backup strategy — corruption = total data loss including TikTok credentials.
 - No disk space check before render — full disk discovered only after a full encode pass.

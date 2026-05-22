@@ -1,8 +1,15 @@
+> **HISTORICAL IMPLEMENTATION RECORD**
+> This document is a historical implementation record for Phase 1.
+> Current architecture source of truth lives in [docs/architecture/](../architecture/).
+> For migration chronology see [MIGRATION_HISTORY.md](MIGRATION_HISTORY.md).
+
+---
+
 # PHASE 1 — Output Timeline Architecture Foundation
 ## Implementation Plan
 
 **Branch**: `restructure/output-timeline-architecture`
-**Status**: Plan only — no code changes.
+**Status**: SHIPPED — implementation complete
 **Source of truth**: docs/review/BRUTAL_REVIEW_SUMMARY.md, BACKEND_REVIEW.md, VIDEO_PIPELINE_REVIEW.md, TECHNICAL_DEBT_REPORT.md, PROJECT_FLOW.md
 
 ---

@@ -1,3 +1,10 @@
+> **HISTORICAL IMPLEMENTATION RECORD**
+> This document is a historical implementation record for Phase 1.5.
+> Current architecture source of truth lives in [docs/architecture/](../architecture/).
+> For migration chronology see [MIGRATION_HISTORY.md](MIGRATION_HISTORY.md).
+
+---
+
 # Phase 1.5 — Timeline Contract Validation
 
 **Date**: 2026-05-22  

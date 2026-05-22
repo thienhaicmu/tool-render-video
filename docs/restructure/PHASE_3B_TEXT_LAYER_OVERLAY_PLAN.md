@@ -1,3 +1,10 @@
+> **HISTORICAL IMPLEMENTATION RECORD**
+> This document is a historical implementation record for Phase 3B.
+> Current architecture source of truth lives in [docs/architecture/](../architecture/).
+> For migration chronology see [MIGRATION_HISTORY.md](MIGRATION_HISTORY.md).
+
+---
+
 # Phase 3B — Text Layer Overlay After Base Clip
 ## Implementation Plan
 

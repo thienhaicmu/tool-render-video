@@ -58,11 +58,13 @@ The only real local ML in the pipeline: Whisper (transcription), optional senten
 
 ### The Core Pipeline Has Zero Tests
 
-80+ test files exist. They test AI schema validators. They do not test: `render_pipeline.py`, `render_engine.py`, `subtitle_engine.py`, `scene_detector.py`, `job_manager.py`, `db.py`, `downloader.py`, `audio_mix_service.py`, `tts_service.py`.
+80+ test files exist. They test AI schema validators. They do not test: `render_pipeline.py`, `subtitle_engine.py`, `scene_detector.py`, `job_manager.py`, `db.py`, `downloader.py`, `tts_service.py`.
 
-Every regression in render quality, subtitle correctness, FFmpeg command generation, audio mixing, or output validation is discovered by running a real render job. There is no other safety net.
+**Partially addressed (post Phase 3B)**: `render_engine.py` now has unit test coverage via `test_composite_overlays.py` (composite_overlays_on_base_clip, render_base_clip) and `test_render_base_clip.py`. `audio_mix_service.py` is covered by `TestMixNarrationAudioAtempo` (Phase 0). Domain models have 100+ tests (`test_timeline_map.py`, `test_base_clip_manifest.py`, `test_manifest_writer.py`). FFmpeg command generation for the overlay path is tested with mocked subprocess.
 
-The subtitle display duration compression and historical TTS desync described below had no test coverage. Phase 0 added regression tests for the TTS atempo fix (`TestMixNarrationAudioAtempo`). Subtitle display duration compression remains untested.
+Every regression in render quality, subtitle correctness, audio mixing, or output validation in the **legacy** path is still only discovered by running a real render job. The overlay path has automated FFmpeg command assertions.
+
+The subtitle display duration compression and historical TTS desync described below had no test coverage. Phase 0 added regression tests for the TTS atempo fix (`TestMixNarrationAudioAtempo`). Subtitle display duration compression on the legacy path remains untested.
 
 ---
 
@@ -100,7 +102,7 @@ Connecting it is a one-line change. The system is complete. It is just not wired
 
 The actual remaining issue: subtitle *display duration* is compressed by the speed factor. A subtitle authored for 3.0s of screen time is shown for ≈2.6s at 1.15x speed. For dense text blocks this reduces readability. This is a legibility concern, not synchronization desync.
 
-**Current State**: Phase 2 preserves the existing behavior. Phase 3+ will address subtitle display duration via overlay-after-render timing derivation from `TimelineMap.output_duration`.
+**Current State (post Phase 3B)**: The overlay path (`FEATURE_OVERLAY_AFTER_BASE_CLIP=1`) resolves display duration compression — `subtitle_output_timeline.ass` uses output-second timestamps; no `setpts` in the composite. The legacy fallback path (`render_part_smart()`) still has compressed display duration. Subtitle display duration is not compressed when the overlay flags are enabled.
 
 ### TTS Narration Desync at Non-1.0 Speeds
 

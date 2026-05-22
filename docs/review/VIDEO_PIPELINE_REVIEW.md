@@ -108,7 +108,9 @@ Source video
 
 The real impact is subtitle *display duration compression*: a subtitle meant to display for 3.0s at natural speed is shown for 3.0/1.15 ≈ 2.6s at 1.15x. At high speeds this may make text harder to read. The accumulated effect over a 60s clip is that the final subtitles appear and disappear more quickly than at 1.0x. This is a legibility concern, not a synchronization desync.
 
-**Current State (2026-05-22)**: The `ass-before-setpts` ordering is confirmed correct and intentional. The vf_chain order MUST NOT be changed. Phase 2+ will address subtitle display duration compression as a separate concern.
+**Current State (2026-05-22)**: The `ass-before-setpts` ordering is confirmed correct and intentional. The vf_chain order MUST NOT be changed.
+
+**Phase 3A/3B update**: The overlay path (`FEATURE_OVERLAY_AFTER_BASE_CLIP=1`) resolves display duration compression for subtitles. `slice_srt_to_output_timeline()` generates output-second timestamps; `composite_overlays_on_base_clip()` applies them to `base_clip.mp4` which has output-timeline PTS — no `setpts` in the composite. A 3.0s subtitle block shows for exactly 3.0 output seconds on the overlay path. The legacy path (`render_part_smart()`) still compresses display duration proportionally to speed.
 
 - Historical note: earlier reviews described this as "drift" or "desync." That description was imprecise. The subtitles are in sync with the corresponding video frames and audio; the issue is compressed reading time per subtitle block.
 
@@ -178,7 +180,7 @@ No check for:
 
 ## Output Quality Risks
 
-1. **Subtitle display duration compression at non-1.0 speeds** — at 1.15x speed, each subtitle block has ≈13% less on-screen time than authored. Text-heavy blocks are harder to read. Subtitles ARE in sync with the sped-up speech (see §6 Subtitle Timing). This is a legibility concern, not desync. Phase 3 scope.
+1. **Subtitle display duration compression at non-1.0 speeds** — at 1.15x speed, each subtitle block has ≈13% less on-screen time than authored. Text-heavy blocks are harder to read. Subtitles ARE in sync with the sped-up speech (see §6 Subtitle Timing). This is a legibility concern, not desync. **Resolved on overlay path (Phase 3A/3B)**: the overlay path uses output-second ASS timestamps; no compression. **Remaining on legacy path** (`render_part_smart()` fallback).
 2. **TTS narration desync** — RESOLVED in Phase 0 (`mix_narration_audio()` applies atempo compensation; regression tests added).
 3. **No codec compliance validation** — output may use B-frames (not TikTok-safe).
 4. **Black frame risk on scene transitions** — first frame detection is post-render only.
