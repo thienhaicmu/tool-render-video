@@ -1091,3 +1091,49 @@ No new tests added in Phase 4G.0 (planning only). Baseline unchanged.
 ```
 
 39 new tests in `test_subtitle_styles.py`. All 8 known failures are pre-existing. Baseline maintained.
+
+---
+
+## Phase 4G.2 — Extract SRT Core
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Source plan**: [PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md](PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md) — Cluster B (partial — `slice_srt_to_output_timeline` deferred)
+
+**Purpose**: Extract Cluster B (SRT parsing/writing/slicing, timestamp helpers, `_run_with_retry`) from `subtitle_engine.py` into `subtitles/srt_core.py`.
+
+**Shipped changes**:
+- New file: `backend/app/services/subtitles/srt_core.py` (~165 lines) — verbatim copy of:
+  - `format_srt_timestamp`, `parse_srt_timestamp` — SRT timestamp format/parse
+  - `_parse_srt_blocks` — internal SRT parser (text joined with space)
+  - `parse_srt_blocks` — public round-trip parser (text joined with `\n`)
+  - `write_srt_blocks` — SRT file writer
+  - `slice_srt_by_time` — time-range slicing with optional speed scaling
+  - `slice_srt_to_text` — plain-text extraction, no file write
+  - `_run_with_retry` — generic subprocess retry (shared with future ass_core)
+- `subtitle_engine.py` edited: removed 8 function bodies; added `from app.services.subtitles.srt_core import (...)` re-export block.
+- New tests: `backend/tests/test_subtitle_srt_core.py` — 44 tests
+
+**Deferred (not moved)**:
+- `slice_srt_to_output_timeline` stays in `subtitle_engine.py` — depends on `TimelineMap`; deferred per Phase 4G.2 spec. Still calls `slice_srt_by_time` (now imported from srt_core) — no behavior change.
+
+**subtitle_engine.py line reduction**: 1,699 → 1,539 lines (−160)
+
+**Contracts maintained**:
+- All public `subtitle_engine` exports unchanged — same-object identity passes for all 8 moved functions.
+- `slice_srt_by_time` signature, defaults, return dict schema — verbatim.
+- `slice_srt_to_output_timeline` still in `subtitle_engine.py`, still calls `slice_srt_by_time`.
+- `_run_with_retry` retry count and exception re-raise behavior — verbatim.
+- No ASS rendering behavior changed. No Whisper/transcription behavior changed.
+
+**No circular imports**: `srt_core.py` imports only `subprocess`, `time`, `pathlib.Path` (all stdlib). No subtitle package internal deps.
+
+---
+
+## Test Suite State (Post Phase 4G.2)
+
+```
+8 failed, 6305 passed, 1 skipped  (+44 new tests in test_subtitle_srt_core.py)
+```
+
+44 new tests in `test_subtitle_srt_core.py`. All 8 known failures are pre-existing. Baseline maintained.

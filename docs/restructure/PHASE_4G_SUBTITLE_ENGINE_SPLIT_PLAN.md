@@ -1,6 +1,6 @@
 # PHASE_4G_SUBTITLE_ENGINE_SPLIT_PLAN.md
 
-**Status**: 4G.1 SHIPPED — styles.py extracted; 4G.2–4G.7 pending  
+**Status**: 4G.2 SHIPPED — styles.py + srt_core.py extracted; 4G.3–4G.7 pending  
 **Date**: 2026-05-22  
 **Branch**: `restructure/output-timeline-architecture`
 
