@@ -200,7 +200,7 @@ But the codebase has reached its limits. `render_pipeline.py` at 290KB is not a 
 
 The AI branding is a significant gap between expectation and reality. The modules are named as if they implement machine intelligence. They implement if-else scoring. This is not inherently wrong — heuristics can be effective — but the naming creates a maintenance burden when a future developer has to understand what `emotion_analyzer.py` actually does.
 
-**Updated priorities (as of 2026-05-22, post Phase 4H.0 planning):**
+**Updated priorities (as of 2026-05-22, post Phase 4H.1A baseline stabilization):**
 
 Items 1–3 from the original list are now addressed:
 

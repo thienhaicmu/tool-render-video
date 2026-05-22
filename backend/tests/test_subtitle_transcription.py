@@ -193,28 +193,36 @@ class TestGetWhisperModel:
         tc._MODEL_CACHE.clear()
 
     def test_loads_model_on_first_call(self):
+        # Patch transcription.whisper directly — order-independent (see Phase 4H.1A).
+        # sys.modules.setdefault at module level is defeated by test_subtitle_engine_compat_exports.py
+        # which injects a different mock first (alphabetical collection order: "engine" < "transcription").
         fake_model = mock.MagicMock()
-        _whisper_mock.load_model.return_value = fake_model  # type: ignore[attr-defined]
-        result = tc.get_whisper_model("tiny")
+        mock_whisper = mock.MagicMock()
+        mock_whisper.load_model.return_value = fake_model
+        with mock.patch("app.services.subtitles.transcription.whisper", mock_whisper):
+            result = tc.get_whisper_model("tiny")
         assert result is fake_model
-        _whisper_mock.load_model.assert_called()  # type: ignore[attr-defined]
+        mock_whisper.load_model.assert_called()
 
     def test_returns_cached_model_on_second_call(self):
         fake_model = mock.MagicMock()
-        _whisper_mock.load_model.reset_mock()  # type: ignore[attr-defined]
-        _whisper_mock.load_model.return_value = fake_model  # type: ignore[attr-defined]
-        tc.get_whisper_model("base")
-        _whisper_mock.load_model.reset_mock()  # type: ignore[attr-defined]
-        result2 = tc.get_whisper_model("base")
+        mock_whisper = mock.MagicMock()
+        mock_whisper.load_model.return_value = fake_model
+        with mock.patch("app.services.subtitles.transcription.whisper", mock_whisper):
+            tc.get_whisper_model("base")
+            mock_whisper.load_model.reset_mock()
+            result2 = tc.get_whisper_model("base")
         assert result2 is fake_model
-        _whisper_mock.load_model.assert_not_called()  # type: ignore[attr-defined]
+        mock_whisper.load_model.assert_not_called()
 
     def test_different_names_load_separately(self):
         tc._MODEL_CACHE.clear()
         m1, m2 = mock.MagicMock(), mock.MagicMock()
-        _whisper_mock.load_model.side_effect = [m1, m2]  # type: ignore[attr-defined]
-        r1 = tc.get_whisper_model("tiny")
-        r2 = tc.get_whisper_model("small")
+        mock_whisper = mock.MagicMock()
+        mock_whisper.load_model.side_effect = [m1, m2]
+        with mock.patch("app.services.subtitles.transcription.whisper", mock_whisper):
+            r1 = tc.get_whisper_model("tiny")
+            r2 = tc.get_whisper_model("small")
         assert r1 is m1
         assert r2 is m2
 

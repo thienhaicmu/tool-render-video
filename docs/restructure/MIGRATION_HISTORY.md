@@ -1524,3 +1524,36 @@ No new tests added in Phase 4H.0 (planning only). Baseline unchanged.
 44 new tests in `test_preview_ffmpeg_probers.py` — all 44 pass. All 11 failures are pre-existing (4 AI test failures + 4 remotion adapter failures + 3 whisper mock ordering failures). Zero new failures introduced by Phase 4H.1.
 
 Phase 4H.1 line delta: `routes/render.py` reduced by 164 net lines (1,369 → 1,205). `ffmpeg_probers.py` created (188 lines).
+
+---
+
+## Phase 4H.1A — Stabilize Whisper Test Baseline
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Fix 3 pre-existing `TestGetWhisperModel` ordering failures introduced in Phase 4G.7 when `test_subtitle_engine_compat_exports.py` was added. No behavior changes.
+
+**Root cause**: Both `test_subtitle_engine_compat_exports.py` and `test_subtitle_transcription.py` use `sys.modules.setdefault("whisper", _whisper_mock)` at module level. Because pytest collects files alphabetically, `test_subtitle_engine_compat_exports.py` ("engine") is always collected before `test_subtitle_transcription.py` ("transcription"). The first file injects `_whisper_mock_A` into `sys.modules["whisper"]`, and `transcription.py` binds to it. The second file's `setdefault` is a no-op (key already present). `TestGetWhisperModel` then mutates `_whisper_mock_B` (its own module-level variable), but `transcription.py`'s `get_whisper_model` calls `_whisper_mock_A.load_model` — a different object. Assertions on `_whisper_mock_B.load_model` fail.
+
+**Fix**: Replaced the 3 `TestGetWhisperModel` test methods to use `mock.patch("app.services.subtitles.transcription.whisper", mock_whisper)` inside each test body, making them fully order-independent. The patch targets the `whisper` name binding in the `transcription` module's namespace directly — the exact binding that `get_whisper_model` references. The module-level `_whisper_mock` variable is no longer referenced in these 3 tests.
+
+**Shipped changes**:
+- `backend/tests/test_subtitle_transcription.py`: `TestGetWhisperModel` — 3 methods rewritten to use `mock.patch("app.services.subtitles.transcription.whisper", mock_whisper)` context manager instead of module-level `_whisper_mock`. `setup_method` and `teardown_method` (cache clear) unchanged.
+
+**Behavior unchanged**:
+- `get_whisper_model()` cache behavior, lock semantics, function signature — all unchanged
+- No real Whisper model loads in any test
+- Same-object identity tests (via `subtitle_engine` shim) still pass
+- All 49 subtitle_transcription tests still pass
+
+---
+
+## Test Suite State (Post Phase 4H.1A)
+
+```
+8 failed, 6654 passed, 1 skipped  (3 whisper ordering failures fixed)
+```
+
+Baseline stabilized. The 8 remaining failures are pre-existing: 4 remotion adapter failures + 4 AI/optional-dependency failures. This is the correct stable baseline for Phase 4H.2+.

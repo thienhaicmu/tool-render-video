@@ -124,6 +124,8 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 **Phase 4H.1 shipped (2026-05-22)**: `services/preview/ffmpeg_probers.py` created — 6 FFmpeg probe helpers extracted verbatim. `routes/render.py` reduced from ~1,369 → 1,205 lines (−164 lines). 44 new tests in `test_preview_ffmpeg_probers.py` — all pass. Same-object identity preserved. No API changes.
 
+**Phase 4H.1A shipped (2026-05-22)**: `TestGetWhisperModel` ordering failures fixed. Root cause: `test_subtitle_engine_compat_exports.py` (alphabetically earlier) injected a different whisper mock into `sys.modules`, defeating `test_subtitle_transcription.py`'s `setdefault`. Fix: 3 test methods now use `mock.patch("app.services.subtitles.transcription.whisper", ...)` directly. Baseline stabilized to 8 failed / 6654 passed.
+
 ---
 
 ### H3. RAG Memory Not Connected to Production Render
