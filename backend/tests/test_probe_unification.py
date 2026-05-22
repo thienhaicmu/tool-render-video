@@ -92,27 +92,27 @@ class TestMotionCropHasAudioStream:
 
     def test_returns_true_when_audio_present(self):
         from app.services.motion_crop import has_audio_stream
-        with patch("app.services.render_engine.probe_video_metadata",
+        with patch("app.services.render.ffmpeg_helpers.probe_video_metadata",
                    return_value=_FULL_META):
             assert has_audio_stream("video_with_audio.mp4") is True
 
     def test_returns_false_when_no_audio(self):
         from app.services.motion_crop import has_audio_stream
-        with patch("app.services.render_engine.probe_video_metadata",
+        with patch("app.services.render.ffmpeg_helpers.probe_video_metadata",
                    return_value=_META_NO_AUDIO):
             assert has_audio_stream("silent_video.mp4") is False
 
     def test_delegates_to_probe_video_metadata(self):
         """has_audio_stream must not spawn its own subprocess."""
         from app.services.motion_crop import has_audio_stream
-        with patch("app.services.render_engine.probe_video_metadata",
+        with patch("app.services.render.ffmpeg_helpers.probe_video_metadata",
                    return_value=_FULL_META) as mock_probe:
             has_audio_stream("video.mp4")
         mock_probe.assert_called_once_with("video.mp4")
 
     def test_return_type_is_bool(self):
         from app.services.motion_crop import has_audio_stream
-        with patch("app.services.render_engine.probe_video_metadata",
+        with patch("app.services.render.ffmpeg_helpers.probe_video_metadata",
                    return_value=_FULL_META):
             result = has_audio_stream("video.mp4")
         assert isinstance(result, bool)
@@ -126,20 +126,20 @@ class TestSubtitleEngineHasAudioStream:
 
     def test_returns_true_when_audio_present(self):
         from app.services.subtitle_engine import has_audio_stream
-        with patch("app.services.render_engine.probe_video_metadata",
+        with patch("app.services.render.ffmpeg_helpers.probe_video_metadata",
                    return_value=_FULL_META):
             assert has_audio_stream("video_with_audio.mp4") is True
 
     def test_returns_false_when_no_audio(self):
         from app.services.subtitle_engine import has_audio_stream
-        with patch("app.services.render_engine.probe_video_metadata",
+        with patch("app.services.render.ffmpeg_helpers.probe_video_metadata",
                    return_value=_META_NO_AUDIO):
             assert has_audio_stream("silent_video.mp4") is False
 
     def test_delegates_to_probe_video_metadata(self):
         """subtitle_engine.has_audio_stream must not spawn its own subprocess."""
         from app.services.subtitle_engine import has_audio_stream
-        with patch("app.services.render_engine.probe_video_metadata",
+        with patch("app.services.render.ffmpeg_helpers.probe_video_metadata",
                    return_value=_FULL_META) as mock_probe:
             has_audio_stream("video.mp4")
         mock_probe.assert_called_once_with("video.mp4")
@@ -152,7 +152,7 @@ class TestSubtitleEngineHasAudioStream:
 
     def test_return_type_is_bool(self):
         from app.services.subtitle_engine import has_audio_stream
-        with patch("app.services.render_engine.probe_video_metadata",
+        with patch("app.services.render.ffmpeg_helpers.probe_video_metadata",
                    return_value=_FULL_META):
             result = has_audio_stream("video.mp4")
         assert isinstance(result, bool)

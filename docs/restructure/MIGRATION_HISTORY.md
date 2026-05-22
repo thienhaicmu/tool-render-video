@@ -328,3 +328,37 @@ Phase 3C.5 fix: 3 previously-SKIPPED `TestOverlayPathDoubleAtempoSafety` tests i
 The 8 persistent failures are pre-existing (before Phase 1) — unchanged.
 
 Phase 4D added 24 new passing tests (`test_audio_pipeline.py` + `test_render_events.py`).
+
+---
+
+## Phase 4E.1 — Extract FFmpeg Helpers
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: TBD (this commit)
+
+**Purpose**: First sub-step of render_engine.py split. Extract shared FFmpeg infrastructure (probe helpers, filter builders, NVENC, thread-local, codec selection) into `services/render/ffmpeg_helpers.py`. Backward-compat re-exports keep all existing callers unchanged.
+
+**Shipped changes**:
+- New package: `backend/app/services/render/__init__.py` (empty).
+- New file: `backend/app/services/render/ffmpeg_helpers.py` (474 lines) — moved verbatim from `render_engine.py`: `NVENC_SEMAPHORE`, `_FFMPEG_TIMEOUT_SEC`, `_FPS_CAP`, `_tls`, `_PROBE_CACHE`, `_PROBE_CACHE_LOCK`, `set_thread_cancel_event`, `_file_probe_key`, `probe_video_metadata`, `extract_thumbnail_frame`, `_run_ffmpeg_with_retry`, `nvenc_available`, `_resolve_codec`, `_effect_filter`, `_cinematic_color_filter`, `_cinematic_sharpen_filter`, `_smart_denoise_filter`, `content_type_crf_delta`, `_build_audio_mix_filter`, `_build_audio_filter`, `_parse_fps_ratio`, `_probe_fps`, `_resolve_fps`, `_sanitize_speed`, `_has_audio_stream`, `_probe_duration`, `resolve_ffmpeg_threads`, `resolve_target_dimensions`.
+- `render_engine.py`: all 28 moved names re-exported via `from app.services.render.ffmpeg_helpers import ...`. Function bodies removed. Reduced from 1,652 → ~1,210 lines (−442 lines). Existing encoder_helpers imports (`_has_encoder`, `_nvenc_runtime_ready`) retained for backward-compat with test patches.
+- New test file: `backend/tests/test_ffmpeg_helpers.py` — 53 tests: import smoke tests (new module + render_engine re-export), same-object identity checks, `_sanitize_speed`, `_parse_fps_ratio`, `resolve_target_dimensions`, `_resolve_codec`, `_build_audio_filter`, `_build_audio_mix_filter`, `content_type_crf_delta`.
+- `backend/tests/test_probe_unification.py`: `TestMotionCropHasAudioStream` and `TestSubtitleEngineHasAudioStream` mock targets updated from `app.services.render_engine.probe_video_metadata` to `app.services.render.ffmpeg_helpers.probe_video_metadata` (8 patches across 4 test classes). Root cause: `_has_audio_stream` moved to ffmpeg_helpers; it now looks up `probe_video_metadata` in ffmpeg_helpers's namespace, not render_engine's.
+
+**Contracts introduced**:
+- `ffmpeg_helpers.py` imports only from stdlib + `bin_paths` + `encoder_helpers`. No import from `render_engine`. No circular import.
+- Re-exported names in `render_engine.py` are the SAME objects as in `ffmpeg_helpers.py` (`is` identity). `_tls`, `NVENC_SEMAPHORE`, `_PROBE_CACHE` are shared mutable state — mutations via either namespace are visible to both.
+- Renderers in `render_engine.py` (`render_base_clip`, `composite_overlays_on_base_clip`, `render_part_smart`) remain in place and are NOT moved in this sub-phase.
+
+---
+
+## Test Suite State (Post Phase 4E.1)
+
+```
+5921 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing — unchanged.
+
+Phase 4E.1 added 53 new passing tests (`test_ffmpeg_helpers.py`).
