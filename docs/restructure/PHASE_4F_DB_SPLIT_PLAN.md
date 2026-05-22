@@ -1,7 +1,7 @@
 # PHASE_4F_DB_SPLIT_PLAN.md
 
-**Status**: IN PROGRESS (Phase 4F.1 SHIPPED — DB connection foundation extracted)
-**Last updated**: 2026-05-22 (post Phase 4F.1 shipped)
+**Status**: IN PROGRESS (Phase 4F.1 SHIPPED, Phase 4F.2 SHIPPED — jobs repo extracted)
+**Last updated**: 2026-05-22 (post Phase 4F.2 shipped)
 **Branch**: `restructure/output-timeline-architecture`
 
 Phase 4F.0 was planning only. Phase 4F.1 has been shipped — see [MIGRATION_HISTORY.md](MIGRATION_HISTORY.md) for details.

@@ -30,8 +30,9 @@ import pytest
 def _reset_db_path(monkeypatch, db_path):
     """Force connection.py to use db_path instead of the real DATABASE_PATH."""
     import app.db.connection as conn
+    # Patch the local binding inside connection.py (from-import creates a local name)
+    monkeypatch.setattr(conn, "DATABASE_PATH", db_path)
     monkeypatch.setattr(conn, "_ACTIVE_DB_PATH", None)
-    monkeypatch.setattr("app.core.config.DATABASE_PATH", db_path)
 
 
 # ---------------------------------------------------------------------------

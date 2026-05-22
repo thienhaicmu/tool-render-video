@@ -564,3 +564,40 @@ backend/app/db/
 The 8 persistent failures are pre-existing — unchanged.
 
 Phase 4F.1 added 33 new passing tests (`test_db_connection.py`).
+
+---
+
+## Phase 4F.2 — Extract Jobs Repo
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: (this commit)
+
+**Purpose**: Second implementation sub-phase of Phase 4F. Move jobs + job_parts CRUD functions from `backend/app/services/db.py` into `backend/app/db/jobs_repo.py`. Backward-compat re-exports keep all existing callers unchanged.
+
+**Shipped changes**:
+- New file: `backend/app/db/jobs_repo.py` (~145 lines) — 9 Group B functions moved verbatim from `services/db.py`. Imports only from `app.db.connection` (`_json_dumps`, `_thread_conn`, `get_conn`). No circular import.
+- `backend/app/services/db.py`: 9 function bodies removed; backward-compat re-exports added via `from app.db.jobs_repo import (delete_job, get_job, list_job_parts, list_job_parts_bulk, list_jobs, list_jobs_page, update_job_progress, upsert_job, upsert_job_part)`. Reduced by ~145 lines.
+- `backend/tests/test_db_connection.py`: `_reset_db_path` helper updated to patch `app.db.connection.DATABASE_PATH` (the local binding) directly, ensuring proper test isolation. `app.core.config.DATABASE_PATH` patch was not sufficient since `connection.py` uses a `from`-import binding.
+- New test file: `backend/tests/test_jobs_repo.py` — 35 tests: import identity (9 symbols same-object `is`), job CRUD (upsert creates/updates, get returns dict or None, delete cascades to parts), update_job_progress (stage/progress/message, with/without status, thread-local path), pagination (list_jobs DESC order, list_jobs_page limit/offset/empty), job parts (upsert creates/updates, list ordered by part_no, bulk empty dict/groups-by-job/empty-list-no-parts), JSON payload/result roundtrip (None sentinel → {}), thread-local (progress + part share connection, close allows new connection).
+
+**Contracts maintained**:
+- `app.db.jobs_repo` imports from `app.db.connection` only — no import from `app.services.db`. No circular import.
+- All 9 re-exported names in `services/db.py` are the SAME objects as in `app.db.jobs_repo` (`is` identity guaranteed).
+- `_thread_conn` still lives in `app.db.connection` — `update_job_progress` and `upsert_job_part` both use the shared thread-local from `app.db.connection._tls`. Close behavior via `close_thread_conn()` is unchanged.
+- No SQL, no DDL, no function signatures changed.
+- 14 production callers all import from `app.services.db` — unchanged.
+
+**Discovery**: `from app.core.config import DATABASE_PATH` creates a local binding in `connection.py`. Patching `app.core.config.DATABASE_PATH` in tests does NOT affect `connection.py`'s binding. Tests must patch `app.db.connection.DATABASE_PATH` directly for proper DB isolation. Fixed in both `test_db_connection.py` and `test_jobs_repo.py`.
+
+---
+
+## Test Suite State (Post Phase 4F.2)
+
+```
+6142 passed, 1 skipped, 8 failed
+```
+
+The 8 persistent failures are pre-existing — unchanged.
+
+Phase 4F.2 added 35 new passing tests (`test_jobs_repo.py`).
