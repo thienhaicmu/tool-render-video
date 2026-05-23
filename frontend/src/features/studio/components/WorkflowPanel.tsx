@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { type StudioStep } from '../../../stores/uiStore'
 import { EmptyState } from '../../../components/ui/EmptyState'
-import { SectionHeader } from '../../../components/ui/SectionHeader'
 import { AIPlanCard } from './AIPlanCard'
 import { ReviewWorkspace } from './ReviewWorkspace'
 import { prepareSource, getPreviewTranscript, type TranscriptSegment } from '../../../api/render'
+import { uploadFile } from '../../../api/upload'
 
 export interface WorkflowPanelProps {
   studioStep: StudioStep | null
   sessionId: string | null
-  onSessionReady: (id: string) => void
+  onSessionReady: (id: string, title: string, duration: number) => void
+  sessionTitle?: string
+  sessionDuration?: number
 }
 
 const STEP_TITLES: Record<StudioStep, string> = {
@@ -19,15 +21,6 @@ const STEP_TITLES: Record<StudioStep, string> = {
   edit:    'Edit Settings',
   render:  'Render Options',
   review:  'Review',
-}
-
-const STEP_SECTIONS: Record<StudioStep, string[]> = {
-  source:  ['Source Settings'],
-  analyze: ['Analysis Config'],
-  plan:    ['Plan Settings', 'Clip Selection'],
-  edit:    ['Clip Settings', 'Subtitle', 'Voice', 'AI Assistance', 'Platform'],
-  render:  ['Render Options'],
-  review:  ['Review Summary'],
 }
 
 const SAMPLE_AI_PLAN = [
@@ -64,21 +57,23 @@ function mapSegmentsToPlan(segments: TranscriptSegment[]) {
   const total = limited.length
   return limited.map((seg, i) => ({
     title: seg.text.trim().slice(0, 40) || `Segment at ${formatTimecode(seg.start)}`,
-    confidence: i < total * 0.1 ? 85 : i > total * 0.9 ? 65 : 72,
+    confidence: Math.round(85 - (i / Math.max(total - 1, 1)) * 22),
     reasoning: seg.text,
     impact: `Segment ${i + 1} of ${total}`,
     tags: [`${formatTimecode(seg.start)}–${formatTimecode(seg.end)}`],
   }))
 }
 
-export function WorkflowPanel({ studioStep, sessionId, onSessionReady }: WorkflowPanelProps) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTitle = '', sessionDuration = 0 }: WorkflowPanelProps) {
   const [selectedCards, setSelectedCards] = useState<number[]>([])
   const [urlValue, setUrlValue] = useState('')
   const [sourceLoading, setSourceLoading] = useState(false)
   const [sourceError, setSourceError] = useState<string | null>(null)
   const [planCards, setPlanCards] = useState<ReturnType<typeof mapSegmentsToPlan> | null>(null)
   const [planLoading, setPlanLoading] = useState(false)
+  const [sourceMode, setSourceMode] = useState<'youtube' | 'local'>('youtube')
+  const [localFile, setLocalFile] = useState<File | null>(null)
+  const [uploadLoading, setUploadLoading] = useState(false)
 
   useEffect(() => {
     if (studioStep !== 'plan' || !sessionId) {
@@ -99,24 +94,32 @@ export function WorkflowPanel({ studioStep, sessionId, onSessionReady }: Workflo
       })
   }, [studioStep, sessionId])
 
-  const toggleSection = (title: string) => {
-    setExpanded((prev) => ({ ...prev, [title]: !prev[title] }))
-  }
-
-  const isSectionExpanded = (title: string, index: number) =>
-    expanded[title] !== undefined ? expanded[title] : index === 0
-
   const handleSourceSubmit = async () => {
     if (!urlValue.trim()) return
     setSourceLoading(true)
     setSourceError(null)
     try {
       const res = await prepareSource({ source_mode: 'youtube', youtube_url: urlValue.trim() })
-      onSessionReady(res.session_id)
+      onSessionReady(res.session_id, res.title, res.duration)
     } catch {
       setSourceError('Unable to prepare source — check the URL and try again.')
     } finally {
       setSourceLoading(false)
+    }
+  }
+
+  const handleLocalFileSubmit = async () => {
+    if (!localFile) return
+    setUploadLoading(true)
+    setSourceError(null)
+    try {
+      const uploaded = await uploadFile(localFile)
+      const res = await prepareSource({ source_mode: 'local', source_video_path: uploaded.path })
+      onSessionReady(res.session_id, res.title, res.duration)
+    } catch {
+      setSourceError('Unable to prepare source — try again.')
+    } finally {
+      setUploadLoading(false)
     }
   }
 
@@ -163,54 +166,119 @@ export function WorkflowPanel({ studioStep, sessionId, onSessionReady }: Workflo
           />
         </div>
       ) : studioStep === 'source' ? (
-        /* SOURCE FORM */
         <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              YouTube Source
+            {/* Mode tabs */}
+            <div style={{ display: 'flex', gap: 'var(--space-4)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 'var(--space-2)' }}>
+              {(['youtube', 'local'] as const).map((mode) => (
+                <span
+                  key={mode}
+                  onClick={() => { setSourceMode(mode); setSourceError(null) }}
+                  style={{
+                    fontSize: 'var(--text-sm)',
+                    color: sourceMode === mode ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                    fontWeight: sourceMode === mode ? ('var(--weight-medium)' as unknown as number) : ('var(--weight-regular)' as unknown as number),
+                    cursor: 'pointer',
+                    paddingBottom: 'var(--space-2)',
+                    borderBottom: sourceMode === mode ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                  }}
+                >
+                  {mode === 'youtube' ? 'YouTube URL' : 'Local File'}
+                </span>
+              ))}
             </div>
-            <input
-              type="url"
-              placeholder="Paste YouTube URL…"
-              value={urlValue}
-              disabled={sourceLoading}
-              onChange={(e) => { setUrlValue(e.target.value); setSourceError(null) }}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSourceSubmit() }}
-              style={{
-                width: '100%',
-                height: '34px',
-                padding: '0 var(--space-3)',
-                backgroundColor: 'var(--surface-input)',
-                border: `1px solid ${sourceError ? 'var(--status-error)' : 'var(--border-default)'}`,
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-primary)',
-                fontSize: 'var(--text-sm)',
-                outline: 'none',
-                boxSizing: 'border-box' as const,
-              }}
-            />
-            {sourceError && (
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--status-error)' }}>
-                {sourceError}
-              </span>
+
+            {sourceMode === 'youtube' ? (
+              <>
+                <input
+                  type="url"
+                  placeholder="Paste YouTube URL…"
+                  value={urlValue}
+                  disabled={sourceLoading}
+                  onChange={(e) => { setUrlValue(e.target.value); setSourceError(null) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSourceSubmit() }}
+                  style={{
+                    width: '100%',
+                    height: '34px',
+                    padding: '0 var(--space-3)',
+                    backgroundColor: 'var(--surface-input)',
+                    border: `1px solid ${sourceError ? 'var(--status-error)' : 'var(--border-default)'}`,
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
+                    fontSize: 'var(--text-sm)',
+                    outline: 'none',
+                    boxSizing: 'border-box' as const,
+                  }}
+                />
+                {sourceError && (
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--status-error)' }}>
+                    {sourceError}
+                  </span>
+                )}
+                <button
+                  onClick={handleSourceSubmit}
+                  disabled={sourceLoading || !urlValue.trim()}
+                  style={{
+                    height: '34px',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: sourceLoading || !urlValue.trim() ? 'var(--surface-card)' : 'var(--accent-primary)',
+                    color: sourceLoading || !urlValue.trim() ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 'var(--weight-medium)' as unknown as number,
+                    cursor: sourceLoading || !urlValue.trim() ? 'not-allowed' : 'pointer',
+                    transition: 'background-color var(--duration-instant) var(--ease-out)',
+                  }}
+                >
+                  {sourceLoading ? 'Preparing…' : 'Prepare Source'}
+                </button>
+              </>
+            ) : (
+              <>
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={(e) => { setLocalFile(e.target.files?.[0] ?? null); setSourceError(null) }}
+                  style={{
+                    width: '100%',
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--text-secondary)',
+                    backgroundColor: 'var(--surface-input)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: 'var(--space-2) var(--space-3)',
+                    boxSizing: 'border-box' as const,
+                  }}
+                />
+                {localFile && (
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+                    {localFile.name}
+                  </span>
+                )}
+                {sourceError && (
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--status-error)' }}>
+                    {sourceError}
+                  </span>
+                )}
+                <button
+                  onClick={handleLocalFileSubmit}
+                  disabled={uploadLoading || !localFile}
+                  style={{
+                    height: '34px',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: uploadLoading || !localFile ? 'var(--surface-card)' : 'var(--accent-primary)',
+                    color: uploadLoading || !localFile ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 'var(--weight-medium)' as unknown as number,
+                    cursor: uploadLoading || !localFile ? 'not-allowed' : 'pointer',
+                    transition: 'background-color var(--duration-instant) var(--ease-out)',
+                  }}
+                >
+                  {uploadLoading ? 'Uploading…' : 'Prepare Source'}
+                </button>
+              </>
             )}
-            <button
-              onClick={handleSourceSubmit}
-              disabled={sourceLoading || !urlValue.trim()}
-              style={{
-                height: '34px',
-                border: 'none',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: sourceLoading || !urlValue.trim() ? 'var(--surface-card)' : 'var(--accent-primary)',
-                color: sourceLoading || !urlValue.trim() ? 'var(--text-tertiary)' : 'var(--text-primary)',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 'var(--weight-medium)' as unknown as number,
-                cursor: sourceLoading || !urlValue.trim() ? 'not-allowed' : 'pointer',
-                transition: 'background-color var(--duration-instant) var(--ease-out)',
-              }}
-            >
-              {sourceLoading ? 'Preparing…' : 'Prepare Source'}
-            </button>
           </div>
         </div>
       ) : studioStep === 'plan' ? (
@@ -247,33 +315,118 @@ export function WorkflowPanel({ studioStep, sessionId, onSessionReady }: Workflo
             />
           ))}
         </div>
-      ) : studioStep === 'review' ? (
-        <ReviewWorkspace />
-      ) : (
-        /* GENERIC SECTIONS for analyze, edit, render */
-        <div style={{ flex: 1 }}>
-          {STEP_SECTIONS[studioStep].map((section, i) => (
-            <div key={section}>
-              <SectionHeader
-                title={section}
-                expanded={isSectionExpanded(section, i)}
-                onToggle={() => toggleSection(section)}
-              />
-              {isSectionExpanded(section, i) && (
-                <div
-                  style={{
-                    padding: 'var(--space-3) var(--space-4)',
-                    fontSize: 'var(--text-sm)',
-                    color: 'var(--text-tertiary)',
-                  }}
-                >
-                  Settings for this step are not yet available.
+      ) : studioStep === 'analyze' ? (
+        <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)' }}>
+          {sessionId === null ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <EmptyState primary="Source not prepared" secondary="Go back to Source step" />
+            </div>
+          ) : (
+            <div style={{
+              backgroundColor: 'var(--surface-card)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 'var(--space-4)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-3)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <span style={{ color: 'var(--status-success)', fontSize: 'var(--text-sm)' }}>✓</span>
+                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)', fontWeight: 'var(--weight-medium)' as unknown as number }}>
+                  {sessionTitle || 'Source prepared'}
+                </span>
+              </div>
+              {sessionDuration > 0 && (
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+                  Duration: {Math.floor(sessionDuration / 60)}m {Math.floor(sessionDuration % 60)}s
                 </div>
               )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <span style={{ color: 'var(--ai-active)', fontSize: 'var(--text-sm)' }}>·</span>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Transcript building</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <span style={{ color: 'var(--ai-active)', fontSize: 'var(--text-sm)' }}>·</span>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>AI moments detection</span>
+              </div>
             </div>
-          ))}
+          )}
         </div>
-      )}
+      ) : studioStep === 'edit' ? (
+        <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)' }}>
+          <div style={{
+            backgroundColor: 'var(--surface-card)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-lg)',
+            padding: 'var(--space-4)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--space-3)',
+          }}>
+            {([
+              { label: 'AI clip selection', value: '3 clips selected' },
+              { label: 'Subtitles', value: 'Enabled · Pro Karaoke style' },
+              { label: 'Format', value: '9:16 Vertical · 60fps' },
+              { label: 'Platform', value: 'TikTok optimized' },
+            ] as const).map(({ label, value }) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>{label}</span>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 'var(--weight-medium)' as unknown as number }}>{value}</span>
+              </div>
+            ))}
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--border-subtle)' }}>
+              Adjust settings in Edit options below
+            </div>
+          </div>
+        </div>
+      ) : studioStep === 'render' ? (
+        <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)' }}>
+          <div style={{
+            backgroundColor: 'var(--surface-card)',
+            border: '1px solid var(--status-success-bg)',
+            borderRadius: 'var(--radius-lg)',
+            padding: 'var(--space-4)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--space-3)',
+          }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)' as unknown as number, color: 'var(--status-success)' }}>
+              Ready to Render
+            </div>
+            {([
+              { label: 'Platform', value: 'TikTok Vertical' },
+              { label: 'Clips', value: '3 clips selected' },
+            ] as const).map(({ label, value }) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>{label}</span>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 'var(--weight-medium)' as unknown as number }}>{value}</span>
+              </div>
+            ))}
+            {sessionDuration > 0 && (
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+                Est. output: ~{Math.max(15, Math.floor(sessionDuration * 0.12))}s total
+              </div>
+            )}
+            <div style={{
+              marginTop: 'var(--space-2)',
+              height: '34px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--surface-panel)',
+              border: '1px solid var(--border-subtle)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 'var(--text-sm)',
+              color: 'var(--text-tertiary)',
+            }}>
+              Submit Render →
+            </div>
+          </div>
+        </div>
+      ) : studioStep === 'review' ? (
+        <ReviewWorkspace />
+      ) : null}
     </div>
   )
 }

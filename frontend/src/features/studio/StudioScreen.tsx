@@ -11,10 +11,14 @@ export function StudioScreen() {
   const setStudioStep = useUIStore((s) => s.setStudioStep)
   const hasInitialized = useRef(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionTitle, setSessionTitle] = useState<string>('')
+  const [sessionDuration, setSessionDuration] = useState<number>(0)
   const mediaUrl = sessionId ? getPreviewVideoUrl(sessionId) : undefined
 
-  const handleSessionReady = (id: string) => {
+  const handleSessionReady = (id: string, title: string, duration: number) => {
     setSessionId(id)
+    setSessionTitle(title)
+    setSessionDuration(duration)
     setStudioStep('analyze')
   }
 
@@ -55,6 +59,8 @@ export function StudioScreen() {
           studioStep={studioStep}
           sessionId={sessionId}
           onSessionReady={handleSessionReady}
+          sessionTitle={sessionTitle}
+          sessionDuration={sessionDuration}
         />
       </div>
 
