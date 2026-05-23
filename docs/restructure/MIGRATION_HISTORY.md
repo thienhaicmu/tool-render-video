@@ -1687,3 +1687,43 @@ Baseline stabilized. The 8 remaining failures are pre-existing: 4 remotion adapt
 ```
 
 Baseline unchanged. Phase 4H.6 introduced no backend code changes and no new tests. Phase 4H is complete.
+
+---
+
+## Phase 5.0 — Post-Restructure Review
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: COMPLETE (2026-05-23)
+**Commit**: (this commit)
+
+**Purpose**: Comprehensive post-restructure audit covering all changes from Phases 4E–4H. No runtime code changes. Audit and planning only.
+
+**Scope covered**:
+- Full backend module tree walk (app/, services/, orchestration/ directories)
+- All three compatibility shims verified: `services/render_engine.py` (53 lines), `services/db.py` (31 lines), `services/subtitle_engine.py` (45 lines) — all healthy pure re-export shims
+- Complete API route audit across all 8 registered routers (channels, download, render, jobs, voice, viral, subtitle, creator)
+- Frontend API usage audit across backend/static/ and backend/static-v2/ (23 fetch calls classified, 2 WebSocket connections)
+- Upload domain removal verified clean — no active callers, no active routes, no active frontend references to removed `/api/upload/*` endpoints
+- Schema audit: RenderRequest (70+ fields, active, unchanged since Phase 3C.5); 8 dead Upload* Pydantic classes confirmed in schemas.py (no active callers — NEW-1)
+- WebSocket contract audit: `/api/jobs/{job_id}/ws` unchanged, fingerprinting logic intact
+- Test baseline confirmed: 8 failed / 6699 passed / 1 skipped (matches Phase 4H.6 exactly — no regressions)
+
+**New findings documented in PHASE_5_0_POST_RESTRUCTURE_REVIEW.md**:
+- NEW-1: Dead Upload* Pydantic schemas in `models/schemas.py` (8 classes, no callers) — LOW priority cleanup
+- NEW-2: `/api/upload-file` 404 in editor JS — pre-existing bug (editor-audio-runtime.js:89, editor-view.js:1107) — MEDIUM priority fix
+- NEW-3: `uploadWs` orphan variable in globals.js — LOW priority cleanup
+- NEW-4: `main.py` uses deprecated `@app.on_event` FastAPI pattern — LOW priority, not blocking
+
+**Docs created**:
+- `docs/restructure/PHASE_5_0_POST_RESTRUCTURE_REVIEW.md` — full 22-section audit report
+
+**Docs updated**:
+- `docs/restructure/MIGRATION_HISTORY.md` — Phase 5.0 entry added (this entry)
+- `docs/architecture/CURRENT_RENDER_ARCHITECTURE.md` — stale SQLite "upload queue" comment fixed; last-updated date bumped
+
+**Go/No-Go decision**: GO — Phase 5.1 Output Quality Hardening can begin.
+
+**Test Suite State (Post Phase 5.0)**:
+```
+8 failed, 6699 passed, 1 skipped  (no new tests — audit/docs phase)
+```

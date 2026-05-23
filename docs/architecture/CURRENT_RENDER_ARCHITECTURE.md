@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-22 (post Phase 4H.6 freeze; Phase 4H COMPLETE; routes/render.py at 1,125 lines; services/preview/ package finalized with 3 modules, 89 tests)
+**Last updated**: 2026-05-23 (post Phase 5.0 review; Phase 4H COMPLETE; routes/render.py at 1,125 lines; services/preview/ package finalized with 3 modules, 89 tests; upload domain removal verified clean)
 
 ---
 
@@ -36,7 +36,7 @@ Electron shell
               │     ├── session_service.py — _PREVIEW_SESSIONS, _PREVIEW_DIR, _SESSION_TTL_HOURS, _MAX_PREVIEW_SESSIONS, _save_session, _load_session, _cleanup_preview_session, evict_stale_preview_sessions (Phase 4H.2)
               │     └── media_streaming.py — _parse_range_header, _iter_file_bytes (Phase 4H.3)
               ├── db/ (Phase 4F COMPLETE) — app/db/connection.py (get_conn, init_db, thread-local, _drop_upload_tables), app/db/jobs_repo.py (upsert_job, update_job_progress, job parts CRUD), app/db/creator_repo.py (get_creator_prefs, upsert_creator_prefs); platform_repo.py DELETED (4F.5C), uploads_repo CANCELLED (upload domain removed instead)
-              └── SQLite — job/parts state, upload queue
+              └── SQLite — job/parts state (3 live tables: jobs, job_parts, creator_prefs; upload tables dropped on startup via _drop_upload_tables())
 ```
 
 No cloud dependency. FFmpeg and Python runtime ship bundled.
