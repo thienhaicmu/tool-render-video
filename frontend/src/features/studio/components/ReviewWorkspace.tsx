@@ -1,0 +1,201 @@
+import { useState } from 'react'
+import { AIChip } from '../../../components/ui/AIChip'
+import { ScoreBadge } from '../../../components/ui/ScoreBadge'
+import { ReviewCard } from './ReviewCard'
+import { ComparisonPanel } from './ComparisonPanel'
+import { type ReviewCardData, type ReviewCardStatus } from '../types'
+
+const MOCK_REVIEW_CARDS: ReviewCardData[] = [
+  {
+    id: 'clip-1',
+    title: 'Hook Opening',
+    confidence: 87,
+    reasoning: 'Strong visual cut at 0:04 predicted to retain early audience attention.',
+    impact: '↑ +12% retention',
+    previewTag: '0:04 – 0:42',
+    clipLabel: 'Clip 1 of 3',
+  },
+  {
+    id: 'clip-2',
+    title: 'Climax Moment',
+    confidence: 74,
+    reasoning: 'Peak energy at 1:32. AI markers show high engagement probability.',
+    impact: '↑ +8% completion rate',
+    previewTag: '1:28 – 2:05',
+    clipLabel: 'Clip 2 of 3',
+  },
+  {
+    id: 'clip-3',
+    title: 'Call-to-Action Close',
+    confidence: 61,
+    reasoning: 'Verbal CTA at 3:48. Subtitle density peaks. Strong conversion signal.',
+    impact: '↑ +5% conversion',
+    previewTag: '3:44 – 4:10',
+    clipLabel: 'Clip 3 of 3',
+  },
+]
+
+const avgConfidence = Math.round(
+  MOCK_REVIEW_CARDS.reduce((sum, c) => sum + c.confidence, 0) / MOCK_REVIEW_CARDS.length
+)
+
+export function ReviewWorkspace() {
+  const [statuses, setStatuses] = useState<Record<string, ReviewCardStatus>>({})
+  const [openComparison, setOpenComparison] = useState<string | null>(null)
+
+  const getStatus = (id: string): ReviewCardStatus => statuses[id] ?? 'pending'
+
+  const approvedCount = MOCK_REVIEW_CARDS.filter((c) => getStatus(c.id) === 'approved').length
+  const allApproved = approvedCount === MOCK_REVIEW_CARDS.length
+
+  const handleApprove = (id: string) =>
+    setStatuses((prev) => ({ ...prev, [id]: 'approved' }))
+
+  const handleReject = (id: string) => {
+    setStatuses((prev) => ({ ...prev, [id]: 'rejected' }))
+    if (openComparison === id) setOpenComparison(null)
+  }
+
+  const handleRestore = (id: string) =>
+    setStatuses((prev) => ({ ...prev, [id]: 'pending' }))
+
+  const handleCompare = (id: string) =>
+    setOpenComparison((prev) => (prev === id ? null : id))
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* AI Summary Bar */}
+      <div
+        style={{
+          backgroundColor: 'var(--surface-card)',
+          borderBottom: '1px solid var(--border-subtle)',
+          padding: 'var(--space-3) var(--space-4)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-2)',
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <AIChip variant="applied" label="AI Director" />
+          <ScoreBadge value={avgConfidence} size="sm" />
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              height: '20px',
+              padding: '0 var(--space-2)',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--surface-input)',
+              color: 'var(--text-tertiary)',
+              fontSize: 'var(--text-xs)',
+            }}
+          >
+            {MOCK_REVIEW_CARDS.length} recommendations
+          </span>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              height: '20px',
+              padding: '0 var(--space-2)',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--accent-subtle)',
+              color: 'var(--accent-primary)',
+              fontSize: 'var(--text-xs)',
+            }}
+          >
+            High confidence
+          </span>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              height: '20px',
+              padding: '0 var(--space-2)',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--status-success-bg)',
+              color: 'var(--status-success)',
+              fontSize: 'var(--text-xs)',
+            }}
+          >
+            ↑ Avg +8% retention
+          </span>
+        </div>
+      </div>
+
+      {/* Scrollable card list */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: 'var(--space-3) var(--space-4)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-3)',
+        }}
+      >
+        {MOCK_REVIEW_CARDS.map((card) => (
+          <div key={card.id}>
+            <ReviewCard
+              data={card}
+              status={getStatus(card.id)}
+              isComparisonOpen={openComparison === card.id}
+              onApprove={() => handleApprove(card.id)}
+              onReject={() => handleReject(card.id)}
+              onRestore={() => handleRestore(card.id)}
+              onCompare={() => handleCompare(card.id)}
+            />
+            <ComparisonPanel
+              isOpen={openComparison === card.id}
+              onClose={() => setOpenComparison(null)}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Publish Readiness Bar */}
+      <div
+        style={{
+          borderTop: `1px solid ${allApproved ? 'var(--status-success)' : 'var(--border-subtle)'}`,
+          backgroundColor: allApproved ? 'var(--status-success-bg)' : 'var(--surface-card)',
+          padding: 'var(--space-3) var(--space-4)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexShrink: 0,
+          transition: 'background-color var(--duration-card) var(--ease-out), border-color var(--duration-card) var(--ease-out)',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 'var(--text-sm)',
+            color: allApproved ? 'var(--status-success)' : 'var(--text-secondary)',
+            fontWeight: 'var(--weight-medium)' as unknown as number,
+          }}
+        >
+          {allApproved
+            ? `${MOCK_REVIEW_CARDS.length} clips approved`
+            : `${approvedCount} of ${MOCK_REVIEW_CARDS.length} approved`}
+        </span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            height: '20px',
+            padding: '0 var(--space-2)',
+            borderRadius: 'var(--radius-sm)',
+            backgroundColor: allApproved ? 'var(--status-success-bg)' : 'transparent',
+            color: allApproved ? 'var(--status-success)' : 'var(--text-tertiary)',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 'var(--weight-medium)' as unknown as number,
+          }}
+        >
+          {allApproved ? 'Ready for publish' : 'Approve all clips to publish'}
+        </span>
+      </div>
+    </div>
+  )
+}

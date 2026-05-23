@@ -15,3 +15,16 @@ export interface RenderJobData {
   eta?: string
   platform?: string
 }
+
+export type ReviewCardStatus = 'pending' | 'approved' | 'rejected'
+
+export interface ReviewCardData {
+  id: string
+  title: string
+  confidence: number
+  reasoning: string
+  impact: string
+  previewTag: string
+  clipLabel: string
+  status?: ReviewCardStatus
+}

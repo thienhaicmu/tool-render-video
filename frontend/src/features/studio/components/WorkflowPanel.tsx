@@ -3,6 +3,7 @@ import { type StudioStep } from '../../../stores/uiStore'
 import { EmptyState } from '../../../components/ui/EmptyState'
 import { SectionHeader } from '../../../components/ui/SectionHeader'
 import { AIPlanCard } from './AIPlanCard'
+import { ReviewWorkspace } from './ReviewWorkspace'
 
 export interface WorkflowPanelProps {
   studioStep: StudioStep | null
@@ -139,6 +140,8 @@ export function WorkflowPanel({ studioStep }: WorkflowPanelProps) {
             />
           ))}
         </div>
+      ) : studioStep === 'review' ? (
+        <ReviewWorkspace />
       ) : (
         <div style={{ flex: 1 }}>
           {STEP_SECTIONS[studioStep].map((section, i) => (
@@ -156,7 +159,7 @@ export function WorkflowPanel({ studioStep }: WorkflowPanelProps) {
                     color: 'var(--text-tertiary)',
                   }}
                 >
-                  Content coming in B8+
+                  Content coming in B9+
                 </div>
               )}
             </div>

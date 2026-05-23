@@ -11,6 +11,7 @@ export interface AIPlanCardProps {
   selected?: boolean
   onApprove?: () => void
   onIgnore?: () => void
+  status?: 'pending' | 'approved' | 'rejected'
 }
 
 export function AIPlanCard({
@@ -22,21 +23,26 @@ export function AIPlanCard({
   selected = false,
   onApprove,
   onIgnore,
+  status,
 }: AIPlanCardProps) {
   const [approveHovered, setApproveHovered] = useState(false)
   const [ignoreHovered, setIgnoreHovered] = useState(false)
 
+  const resolvedSelected = status === 'approved' ? true : status === 'rejected' ? false : selected
+  const isRejected = status === 'rejected'
+
   return (
     <div
       style={{
-        backgroundColor: selected ? 'var(--accent-subtle)' : 'var(--surface-card)',
-        border: `1px solid ${selected ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
+        backgroundColor: resolvedSelected ? 'var(--accent-subtle)' : 'var(--surface-card)',
+        border: `1px solid ${resolvedSelected ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
         borderRadius: 'var(--radius-lg)',
         padding: 'var(--space-4)',
         display: 'flex',
         flexDirection: 'column',
         gap: 'var(--space-3)',
-        transition: 'background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out)',
+        opacity: isRejected ? 0.5 : 1,
+        transition: 'background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), opacity var(--duration-fast) var(--ease-out)',
       }}
     >
       {/* Header: AIChip + ScoreBadge */}
@@ -104,19 +110,19 @@ export function AIPlanCard({
             height: '30px',
             border: 'none',
             borderRadius: 'var(--radius-md)',
-            backgroundColor: selected
+            backgroundColor: resolvedSelected
               ? 'var(--status-success)'
               : approveHovered
               ? 'var(--accent-hover)'
               : 'var(--accent-primary)',
-            color: '#FFFFFF',
+            color: 'var(--text-primary)',
             fontSize: 'var(--text-sm)',
             fontWeight: 'var(--weight-medium)' as unknown as number,
             cursor: 'pointer',
             transition: 'background-color var(--duration-instant) var(--ease-out)',
           }}
         >
-          {selected ? '✓ Approved' : 'Approve'}
+          {resolvedSelected ? '✓ Approved' : 'Approve'}
         </button>
         <button
           onClick={onIgnore}
@@ -134,7 +140,7 @@ export function AIPlanCard({
             transition: 'border-color var(--duration-instant) var(--ease-out)',
           }}
         >
-          Ignore
+          {isRejected ? 'Restore' : 'Ignore'}
         </button>
       </div>
     </div>
