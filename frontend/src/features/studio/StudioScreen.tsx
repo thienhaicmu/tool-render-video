@@ -13,12 +13,22 @@ export function StudioScreen() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState<string>('')
   const [sessionDuration, setSessionDuration] = useState<number>(0)
+  const [sessionSourceMode, setSessionSourceMode] = useState<'youtube' | 'local'>('youtube')
+  const [sessionOutputDir, setSessionOutputDir] = useState<string>('')
   const mediaUrl = sessionId ? getPreviewVideoUrl(sessionId) : undefined
 
-  const handleSessionReady = (id: string, title: string, duration: number) => {
+  const handleSessionReady = (
+    id: string,
+    title: string,
+    duration: number,
+    sourceMode: 'youtube' | 'local',
+    outputDir: string,
+  ) => {
     setSessionId(id)
     setSessionTitle(title)
     setSessionDuration(duration)
+    setSessionSourceMode(sourceMode)
+    setSessionOutputDir(outputDir)
     setStudioStep('analyze')
   }
 
@@ -61,6 +71,8 @@ export function StudioScreen() {
           onSessionReady={handleSessionReady}
           sessionTitle={sessionTitle}
           sessionDuration={sessionDuration}
+          sessionSourceMode={sessionSourceMode}
+          sessionOutputDir={sessionOutputDir}
         />
       </div>
 

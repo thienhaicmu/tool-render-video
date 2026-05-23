@@ -1,17 +1,25 @@
 import { useEffect, useState } from 'react'
-import { type StudioStep } from '../../../stores/uiStore'
+import { type StudioStep, useUIStore } from '../../../stores/uiStore'
 import { EmptyState } from '../../../components/ui/EmptyState'
 import { AIPlanCard } from './AIPlanCard'
 import { ReviewWorkspace } from './ReviewWorkspace'
-import { prepareSource, getPreviewTranscript, type TranscriptSegment } from '../../../api/render'
+import { prepareSource, getPreviewTranscript, submitRender, type TranscriptSegment } from '../../../api/render'
 import { uploadFile } from '../../../api/upload'
 
 export interface WorkflowPanelProps {
   studioStep: StudioStep | null
   sessionId: string | null
-  onSessionReady: (id: string, title: string, duration: number) => void
+  onSessionReady: (
+    id: string,
+    title: string,
+    duration: number,
+    sourceMode: 'youtube' | 'local',
+    outputDir: string,
+  ) => void
   sessionTitle?: string
   sessionDuration?: number
+  sessionSourceMode?: 'youtube' | 'local'
+  sessionOutputDir?: string
 }
 
 const STEP_TITLES: Record<StudioStep, string> = {
@@ -64,7 +72,24 @@ function mapSegmentsToPlan(segments: TranscriptSegment[]) {
   }))
 }
 
-export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTitle = '', sessionDuration = 0 }: WorkflowPanelProps) {
+const ALLOWED_VIDEO_EXTENSIONS = new Set([
+  'mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'm4v', 'ts', 'wmv',
+])
+const MAX_VIDEO_BYTES = 200 * 1024 * 1024
+
+function validateVideoFile(file: File): string | null {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  if (!ALLOWED_VIDEO_EXTENSIONS.has(ext)) {
+    return `Unsupported file type ".${ext}". Use MP4, MOV, MKV, AVI, or WebM.`
+  }
+  if (file.size > MAX_VIDEO_BYTES) {
+    return `File too large (${Math.round(file.size / (1024 * 1024))} MB). Maximum is 200 MB.`
+  }
+  return null
+}
+
+export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTitle = '', sessionDuration = 0, sessionSourceMode = 'youtube', sessionOutputDir = '' }: WorkflowPanelProps) {
+  const setStudioStep = useUIStore((s) => s.setStudioStep)
   const [selectedCards, setSelectedCards] = useState<number[]>([])
   const [urlValue, setUrlValue] = useState('')
   const [sourceLoading, setSourceLoading] = useState(false)
@@ -74,10 +99,14 @@ export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTi
   const [sourceMode, setSourceMode] = useState<'youtube' | 'local'>('youtube')
   const [localFile, setLocalFile] = useState<File | null>(null)
   const [uploadLoading, setUploadLoading] = useState(false)
+  const [renderLoading, setRenderLoading] = useState(false)
+  const [renderError, setRenderError] = useState<string | null>(null)
+  const [planError, setPlanError] = useState<string | null>(null)
 
   useEffect(() => {
     if (studioStep !== 'plan' || !sessionId) {
       setPlanCards(null)
+      setPlanError(null)
       return
     }
     setPlanLoading(true)
@@ -88,6 +117,7 @@ export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTi
       })
       .catch(() => {
         setPlanCards(null)
+        setPlanError('Transcript unavailable — showing AI recommendations instead.')
       })
       .finally(() => {
         setPlanLoading(false)
@@ -100,7 +130,7 @@ export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTi
     setSourceError(null)
     try {
       const res = await prepareSource({ source_mode: 'youtube', youtube_url: urlValue.trim() })
-      onSessionReady(res.session_id, res.title, res.duration)
+      onSessionReady(res.session_id, res.title, res.duration, 'youtube', res.export_dir)
     } catch {
       setSourceError('Unable to prepare source — check the URL and try again.')
     } finally {
@@ -110,16 +140,39 @@ export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTi
 
   const handleLocalFileSubmit = async () => {
     if (!localFile) return
+    const validationError = validateVideoFile(localFile)
+    if (validationError) {
+      setSourceError(validationError)
+      return
+    }
     setUploadLoading(true)
     setSourceError(null)
     try {
       const uploaded = await uploadFile(localFile)
       const res = await prepareSource({ source_mode: 'local', source_video_path: uploaded.path })
-      onSessionReady(res.session_id, res.title, res.duration)
+      onSessionReady(res.session_id, res.title, res.duration, 'local', res.export_dir)
     } catch {
       setSourceError('Unable to prepare source — try again.')
     } finally {
       setUploadLoading(false)
+    }
+  }
+
+  const handleRenderSubmit = async () => {
+    if (!sessionId || !sessionOutputDir) return
+    setRenderLoading(true)
+    setRenderError(null)
+    try {
+      await submitRender({
+        source_mode: sessionSourceMode,
+        output_dir: sessionOutputDir,
+        edit_session_id: sessionId,
+      })
+      setStudioStep('review')
+    } catch {
+      setRenderError('Render could not be submitted — check the queue and try again.')
+    } finally {
+      setRenderLoading(false)
     }
   }
 
@@ -286,6 +339,11 @@ export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTi
         <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-3) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-1)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             AI Recommendations
+            {planError && (
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+                {planError}
+              </span>
+            )}
           </div>
           {planLoading ? (
             /* Skeleton loading */
@@ -408,19 +466,33 @@ export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTi
                 Est. output: ~{Math.max(15, Math.floor(sessionDuration * 0.12))}s total
               </div>
             )}
-            <div style={{
-              marginTop: 'var(--space-2)',
-              height: '34px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--surface-panel)',
-              border: '1px solid var(--border-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 'var(--text-sm)',
-              color: 'var(--text-tertiary)',
-            }}>
-              Submit Render →
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+              {renderError && (
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--status-error)' }}>
+                  {renderError}
+                </span>
+              )}
+              <button
+                onClick={handleRenderSubmit}
+                disabled={renderLoading || !sessionId}
+                style={{
+                  height: '34px',
+                  border: 'none',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: renderLoading || !sessionId
+                    ? 'var(--surface-card)'
+                    : 'var(--accent-primary)',
+                  color: renderLoading || !sessionId
+                    ? 'var(--text-tertiary)'
+                    : 'var(--text-primary)',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 'var(--weight-medium)' as unknown as number,
+                  cursor: renderLoading || !sessionId ? 'not-allowed' : 'pointer',
+                  transition: 'background-color var(--duration-instant) var(--ease-out)',
+                }}
+              >
+                {renderLoading ? 'Submitting…' : 'Submit Render →'}
+              </button>
             </div>
           </div>
         </div>
