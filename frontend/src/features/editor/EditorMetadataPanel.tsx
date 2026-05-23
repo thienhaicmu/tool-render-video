@@ -1,10 +1,13 @@
 /**
- * EditorMetadataPanel — right-rail metadata for the active editor selection.
- * Shows job ID, part, status, duration, trim summary, copy URL.
- * Future actions (Apply Trim, Re-render, Export) are shown as disabled placeholders.
+ * EditorMetadataPanel — right-rail metadata and action panel for the editor.
+ * Provides Apply Trim, Re-render Selection, and Export Clip actions.
  */
+import { useState } from 'react'
 import { Button } from '../../components/ui/Button'
 import { formatTime } from './editor.utils'
+import { useUIStore } from '../../stores/uiStore'
+import { trimJobPart, rerenderSelection, exportClip } from '../../api/editing'
+import { _formatApiError } from '../../lib/errors'
 
 export interface EditorMetadataPanelProps {
   jobId: string
@@ -29,7 +32,91 @@ export function EditorMetadataPanel({
   trimEndSec,
   mediaUrl,
 }: EditorMetadataPanelProps) {
+  const addNotification = useUIStore((s) => s.addNotification)
+  const setActivePanel = useUIStore((s) => s.setActivePanel)
+
+  const [trimLoading, setTrimLoading] = useState(false)
+  const [rerenderLoading, setRerenderLoading] = useState(false)
+  const [exportLoading, setExportLoading] = useState(false)
+  const [exportDir, setExportDir] = useState('')
+
   const trimDuration = Math.max(0, trimEndSec - trimStartSec)
+  const hasTrim = trimDuration >= 1.0 && trimDuration < durationSec
+
+  async function handleApplyTrim() {
+    if (!hasTrim) return
+    setTrimLoading(true)
+    try {
+      const result = await trimJobPart(jobId, partNo, {
+        start_sec: trimStartSec,
+        end_sec: trimEndSec,
+        output_mode: 'new_job',
+      })
+      addNotification({
+        type: 'success',
+        title: 'Trim applied',
+        message: `Saved ${result.duration_sec.toFixed(1)}s clip`,
+      })
+    } catch (err) {
+      addNotification({
+        type: 'error',
+        title: 'Trim failed',
+        message: _formatApiError(err),
+      })
+    } finally {
+      setTrimLoading(false)
+    }
+  }
+
+  async function handleRerender() {
+    if (!hasTrim) return
+    setRerenderLoading(true)
+    try {
+      const result = await rerenderSelection(jobId, partNo, {
+        start_sec: trimStartSec,
+        end_sec: trimEndSec,
+      })
+      addNotification({
+        type: 'success',
+        title: 'Re-render queued',
+        message: `New job: ${result.new_job_id.slice(0, 20)}…`,
+      })
+      setActivePanel('history')
+    } catch (err) {
+      addNotification({
+        type: 'error',
+        title: 'Re-render failed',
+        message: _formatApiError(err),
+      })
+    } finally {
+      setRerenderLoading(false)
+    }
+  }
+
+  async function handleExport() {
+    const dest = exportDir.trim()
+    if (!dest) {
+      addNotification({ type: 'error', title: 'Export failed', message: 'Enter a destination directory path' })
+      return
+    }
+    setExportLoading(true)
+    try {
+      const result = await exportClip(jobId, partNo, { destination_dir: dest })
+      addNotification({
+        type: 'success',
+        title: 'Export complete',
+        message: `Saved to ${result.destination_dir}`,
+      })
+    } catch (err) {
+      addNotification({
+        type: 'error',
+        title: 'Export failed',
+        message: _formatApiError(err),
+      })
+    } finally {
+      setExportLoading(false)
+    }
+  }
 
   return (
     <div
@@ -139,7 +226,7 @@ export function EditorMetadataPanel({
         </Button>
       </div>
 
-      {/* Future actions */}
+      {/* Actions */}
       <div>
         <div
           style={{
@@ -150,18 +237,62 @@ export function EditorMetadataPanel({
             borderTop: '1px solid var(--color-border)',
           }}
         >
-          Coming in Phase 6.6+
+          Actions
+          {!hasTrim && durationSec > 0 && (
+            <span style={{ marginLeft: 'var(--space-2)', color: 'var(--color-text-muted)' }}>
+              (set trim range first)
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-          <Button variant="secondary" size="sm" disabled data-testid="apply-trim-btn">
-            Apply Trim
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!hasTrim || trimLoading}
+            onClick={handleApplyTrim}
+            data-testid="apply-trim-btn"
+          >
+            {trimLoading ? 'Trimming…' : 'Apply Trim'}
           </Button>
-          <Button variant="secondary" size="sm" disabled data-testid="rerender-btn">
-            Re-render Selection
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!hasTrim || rerenderLoading}
+            onClick={handleRerender}
+            data-testid="rerender-btn"
+          >
+            {rerenderLoading ? 'Queuing…' : 'Re-render Selection'}
           </Button>
-          <Button variant="secondary" size="sm" disabled data-testid="export-clip-btn">
-            Export Clip
-          </Button>
+
+          {/* Export: destination dir input + button */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+            <input
+              type="text"
+              placeholder="Destination folder path"
+              value={exportDir}
+              onChange={(e) => setExportDir(e.target.value)}
+              data-testid="export-dir-input"
+              style={{
+                padding: '4px 8px',
+                backgroundColor: 'var(--color-bg-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--color-text-primary)',
+                fontSize: 'var(--font-size-xs)',
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={exportLoading || !exportDir.trim()}
+              onClick={handleExport}
+              data-testid="export-clip-btn"
+            >
+              {exportLoading ? 'Exporting…' : 'Export Clip'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

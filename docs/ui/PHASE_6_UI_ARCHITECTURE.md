@@ -454,3 +454,53 @@ Full report: `docs/ui/PHASE_6_7_ELECTRON_CUTOVER_REPORT.md`
 - [ ] Export Clip — export trimmed clip to output directory
 - [ ] Resolve `tsc -b` errors in test files (`api.test.ts`, `vite.config.ts`)
 - [ ] CSP header on FastAPI index response (hardening phase)
+
+---
+
+## 17. Phase 6.8 — Final Product Hardening (COMPLETE)
+
+**Status**: COMPLETE — Phase 6 is COMPLETE.
+
+### Apply Trim
+- `POST /api/jobs/{job_id}/parts/{part_no}/trim` — FFmpeg stream-copy trim; output to `trimmed/` subdir; original never mutated
+- Frontend: Apply Trim button wired with loading state + notification
+- Security: source path from DB only; min 1s; clamped bounds
+
+### Re-render Selection
+- `POST /api/jobs/{job_id}/parts/{part_no}/rerender` — New render job with trim range + optional style overrides; parent lineage stored
+- Frontend: Re-render button redirects to History on success
+
+### Export Clip
+- `POST /api/jobs/{job_id}/parts/{part_no}/export` — Safe copy to validated absolute destination; path traversal blocked
+- Frontend: destination dir text input + Export button
+
+### CSP Hardening
+- `_CSP_V2` middleware applied to `GET /` and `/index.html` when `STATIC_UI_VERSION=v2`
+- `script-src 'self'`, `connect-src` includes WebSocket origins, `media-src blob:` for video player
+
+### TypeScript Cleanup
+- `tsc -b`: **0 errors** (was 16)
+- Fixed: `vitest/config` import, `@types/node`, `ignoreDeprecations`, unused import
+
+### Test Results
+- Frontend: **426/426** (25 test files)
+- Backend new: **37/37** (4 new test files)
+- `vite build`: success — 231.84 kB JS
+
+Full report: `docs/ui/PHASE_6_8_FINALIZATION_REPORT.md`
+
+---
+
+## Phase 6 Complete Checklist
+
+- [x] Phase 6.0 Foundation
+- [x] Phase 6.1 Render Setup Screen
+- [x] Phase 6.2 History Screen
+- [x] Phase 6.3 Quality Panel
+- [x] Phase 6.4 Live Progress Panel
+- [x] Phase 6.5 Editor Screen
+- [x] Phase 6.6 Frontend Integration Polish
+- [x] Phase 6.7 Electron Cut-over
+- [x] Phase 6.8 Final Product Hardening
+
+**Phase 6: COMPLETE**

@@ -2599,3 +2599,60 @@ Docs updated:
 **Backend impact**: None — `ui_gate.py` and `main.py` were already fully implemented (Phase 6.0 infra).
 
 **Test results**: 399/399 frontend tests pass (22 test files). 21/21 new backend gate tests pass. 49/49 backend contract tests pass.
+
+---
+
+## Phase 6.8 — Final Product Hardening + Optional Editing Operations
+
+**Branch**: `restructure/output-timeline-architecture`
+**Commit**: TBD
+**Date**: 2026-05-23
+
+**Purpose**: Complete Phase 6 with functional trim/re-render/export editing operations, CSP hardening for the v2 UI, TypeScript build cleanup, and final stabilization. This phase marks Phase 6 as COMPLETE.
+
+**New backend files**:
+- `backend/app/services/editing_service.py` — Trim, re-render selection, export clip service layer. Security: source paths resolved from DB only; export destination validated against safe roots; no path traversal.
+- `backend/app/routes/editing.py` — Three editing endpoints registered under `/api/jobs/{job_id}/parts/{part_no}/`
+- `backend/tests/test_trim_api.py` — 13 tests covering valid trim, invalid range, clamping, missing media/job/part
+- `backend/tests/test_rerender_selection_api.py` — 8 tests covering new job creation, parent linkage, trim range, effect preset, error paths
+- `backend/tests/test_export_clip_api.py` — 7 tests covering safe destination, path traversal block, missing media/job, empty destination
+- `backend/tests/test_csp_headers.py` — 8 tests covering CSP constant integrity, WebSocket/media allowances, frame-ancestors, API routes unaffected
+
+**New frontend files**:
+- `frontend/src/api/editing.ts` — Typed API client for trim, rerender, export endpoints
+- `frontend/src/lib/errors.ts` — `_formatApiError()` helper; prevents [object Object] in notifications
+- `frontend/tests/editor-operations.test.tsx` — 12 tests for button state (enabled/disabled logic)
+- `frontend/tests/trim-flow.test.tsx` — 9 tests for trim + rerender API calls and notification flow
+- `frontend/tests/export-flow.test.tsx` — 7 tests for export API calls and notification flow
+
+**Modified files**:
+- `backend/app/main.py` — Added editing router; added `_CSP_V2` middleware (v2 only); added `Request`/`Response` imports
+- `frontend/src/features/editor/EditorMetadataPanel.tsx` — Apply Trim, Re-render Selection, Export Clip buttons now fully wired with loading states, success/error notifications, and re-render→History redirect
+- `frontend/src/api/index.ts` — Added `export * from './editing'`
+- `frontend/tsconfig.app.json` — Added `"types": ["node", "vitest/globals"]`, `"ignoreDeprecations": "5.0"`
+- `frontend/tsconfig.node.json` — Added `"types": ["node", "vitest/globals"]`
+- `frontend/vite.config.ts` — Changed `defineConfig` import to `vitest/config` so `test` key resolves
+- `frontend/tests/navigation-polish.test.tsx` — Removed unused `within` import
+- `backend/static-v2/` — Updated to Phase 6.8 build (231.84 kB JS, 12.08 kB CSS)
+- `frontend/package.json` — Added `@types/node` devDependency
+
+**Contracts introduced**:
+- `POST /api/jobs/{job_id}/parts/{part_no}/trim` — Trims a rendered clip; validates range; min 1s; output_mode=new_job default; never mutates original
+- `POST /api/jobs/{job_id}/parts/{part_no}/rerender` — Creates a new render job from a selection; stores parent_job_id linkage; returns immediately with new_job_id
+- `POST /api/jobs/{job_id}/parts/{part_no}/export` — Copies clip to validated absolute destination; safe roots enforced; returns exported_to path
+- CSP header `Content-Security-Policy` applied to `/` and `/index.html` when `STATIC_UI_VERSION=v2`; not applied to API routes
+
+**Key decisions**:
+- Export destination validated at service layer, not route layer — PermissionError → 403, ValueError → 400
+- Re-render queues immediately via existing `job_manager.submit_job`; if enqueue fails, job remains in DB as "queued" and will be recovered on restart
+- CSP does not block Electron (same-origin), does not break WebSocket, permits inline styles (React runtime), permits blob: media URLs
+- TypeScript `tsc -b` clean: `@types/node` + `vitest/config` pattern resolves all Node.js global errors in test files
+
+**Test results**:
+- Frontend: 426/426 tests pass (25 test files)
+- Backend new tests: 37/37 pass
+- Backend full suite: 7385 pass, 8 pre-existing failures (remotion ×4 + known ×4), unchanged
+- `tsc -b`: 0 errors
+- `vite build`: success (231.84 kB JS)
+
+**Phase 6 status**: COMPLETE
