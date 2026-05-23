@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AIChip } from '../../../components/ui/AIChip'
 import { ScoreBadge } from '../../../components/ui/ScoreBadge'
 import { ReviewCard } from './ReviewCard'
 import { ComparisonPanel } from './ComparisonPanel'
 import { type ReviewCardData, type ReviewCardStatus } from '../types'
+import { getJobHistory, getJobParts } from '../../../api/jobs'
+import type { JobPart } from '../../../types/api'
 
 const MOCK_REVIEW_CARDS: ReviewCardData[] = [
   {
@@ -35,18 +37,53 @@ const MOCK_REVIEW_CARDS: ReviewCardData[] = [
   },
 ]
 
-const avgConfidence = Math.round(
-  MOCK_REVIEW_CARDS.reduce((sum, c) => sum + c.confidence, 0) / MOCK_REVIEW_CARDS.length
-)
+function mapPartsToReviewCards(parts: JobPart[]): ReviewCardData[] {
+  const done = parts.filter((p) => p.status === 'done')
+  return done.map((p) => ({
+    id: String(p.part_no),
+    title: `Clip ${p.part_no}`,
+    confidence: 72,
+    reasoning: 'Successfully rendered clip',
+    impact: '↑ Rendered output',
+    previewTag: `Part ${p.part_no}`,
+    clipLabel: `Clip ${p.part_no} of ${done.length}`,
+  }))
+}
 
 export function ReviewWorkspace() {
   const [statuses, setStatuses] = useState<Record<string, ReviewCardStatus>>({})
   const [openComparison, setOpenComparison] = useState<string | null>(null)
+  const [cards, setCards] = useState<ReviewCardData[]>(MOCK_REVIEW_CARDS)
+  const [reviewLoading, setReviewLoading] = useState(true)
+
+  useEffect(() => {
+    getJobHistory(5, 0)
+      .then((res) => {
+        const completedJob = res.items.find(
+          (item) => item.status === 'completed' || item.status === 'completed_with_errors',
+        )
+        if (!completedJob) return
+        return getJobParts(completedJob.job_id)
+      })
+      .then((parts) => {
+        if (!parts) return
+        const mapped = mapPartsToReviewCards(parts)
+        if (mapped.length > 0) setCards(mapped)
+      })
+      .catch(() => {
+        // silent — MOCK_REVIEW_CARDS remain
+      })
+      .finally(() => setReviewLoading(false))
+  }, [])
+
+  const avgConfidence = Math.round(
+    cards.reduce((sum, c) => sum + c.confidence, 0) / cards.length
+  )
 
   const getStatus = (id: string): ReviewCardStatus => statuses[id] ?? 'pending'
 
-  const approvedCount = MOCK_REVIEW_CARDS.filter((c) => getStatus(c.id) === 'approved').length
-  const allApproved = approvedCount === MOCK_REVIEW_CARDS.length
+  const approvedCount = cards.filter((c) => getStatus(c.id) === 'approved').length
+  const allApproved = approvedCount === cards.length
 
   const handleApprove = (id: string) =>
     setStatuses((prev) => ({ ...prev, [id]: 'approved' }))
@@ -80,6 +117,11 @@ export function ReviewWorkspace() {
           <AIChip variant="applied" label="AI Director" />
           <ScoreBadge value={avgConfidence} size="sm" />
         </div>
+        {reviewLoading && (
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+            Loading…
+          </span>
+        )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
           <span
             style={{
@@ -93,7 +135,7 @@ export function ReviewWorkspace() {
               fontSize: 'var(--text-xs)',
             }}
           >
-            {MOCK_REVIEW_CARDS.length} recommendations
+            {cards.length} recommendations
           </span>
           <span
             style={{
@@ -137,7 +179,7 @@ export function ReviewWorkspace() {
           gap: 'var(--space-3)',
         }}
       >
-        {MOCK_REVIEW_CARDS.map((card) => (
+        {cards.map((card) => (
           <div key={card.id}>
             <ReviewCard
               data={card}
@@ -177,8 +219,8 @@ export function ReviewWorkspace() {
           }}
         >
           {allApproved
-            ? `${MOCK_REVIEW_CARDS.length} clips approved`
-            : `${approvedCount} of ${MOCK_REVIEW_CARDS.length} approved`}
+            ? `${cards.length} clips approved`
+            : `${approvedCount} of ${cards.length} approved`}
         </span>
         <span
           style={{

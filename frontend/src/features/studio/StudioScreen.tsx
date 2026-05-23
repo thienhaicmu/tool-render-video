@@ -13,6 +13,11 @@ export function StudioScreen() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const mediaUrl = sessionId ? getPreviewVideoUrl(sessionId) : undefined
 
+  const handleSessionReady = (id: string) => {
+    setSessionId(id)
+    setStudioStep('analyze')
+  }
+
   useEffect(() => {
     if (!hasInitialized.current && studioStep === null) {
       hasInitialized.current = true
@@ -46,7 +51,11 @@ export function StudioScreen() {
         }}
       >
         <PreviewWorkspace studioStep={studioStep} mediaUrl={mediaUrl} />
-        <WorkflowPanel studioStep={studioStep} />
+        <WorkflowPanel
+          studioStep={studioStep}
+          sessionId={sessionId}
+          onSessionReady={handleSessionReady}
+        />
       </div>
 
       {/* Bottom render state */}
