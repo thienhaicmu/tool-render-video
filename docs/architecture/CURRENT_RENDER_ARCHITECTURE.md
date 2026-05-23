@@ -1,7 +1,13 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-23 (Phase 5.3: AI contract models + validation layer + knowledge→hints mapper; limited render influence: hook overlay gated by AI hint; pacing/subtitle advisory only; trace logger extended with execution_hints/validation_fixup/decision_rejected events)
+**Last updated**: 2026-05-23 (Phase 6.0: New React/TypeScript frontend foundation created at `frontend/`. Backend architecture unchanged.)
+
+> **Phase 6.0 note**: A new React 18 + TypeScript frontend has been scaffolded at `frontend/`.
+> It is independent of the legacy `backend/static/` frontend. See
+> `docs/ui/PHASE_6_UI_ARCHITECTURE.md` and `docs/ui/UI_BACKEND_CONTRACT.md` for the
+> UI architecture and API contract. The render pipeline, FFmpeg infrastructure, and all
+> API endpoints are unchanged by Phase 6.0.
 
 ---
 

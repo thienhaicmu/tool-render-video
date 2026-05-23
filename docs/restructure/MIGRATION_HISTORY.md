@@ -2219,3 +2219,64 @@ option enums, and create tests that enforce the contract.
 8 failed (pre-existing), 7479 passed, 2 skipped
 ```
 Phase 5.10 added 131 new passing tests.
+
+---
+
+## Phase 6.0 — UI Foundation Architecture (2026-05-23)
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+
+**Purpose**: Scaffold the new React/TypeScript frontend foundation at `frontend/`.
+Implements all architecture, typed API layer, state stores, WebSocket abstraction,
+design tokens, layout skeleton, enum constants, and tests. The legacy `backend/static/`
+frontend is untouched and remains fully operational.
+
+**New directory**: `frontend/` (React 18 + TypeScript + Vite + Zustand)
+
+**New files (frontend)**:
+- `frontend/package.json` — name: render-studio-ui; React 18, TypeScript, Vite, Zustand, Vitest
+- `frontend/vite.config.ts` — proxy /api + /media to 127.0.0.1:8000; build → backend/static-new/
+- `frontend/tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json`
+- `frontend/index.html` — Vite entry point
+- `frontend/src/main.tsx` — React root
+- `frontend/src/App.tsx` — AppShell wrapper with panel routing
+- `frontend/src/types/api.ts` — TypeScript interfaces from API contract + schemas.py
+- `frontend/src/types/enums.ts` — Typed enum constants matching backend values
+- `frontend/src/api/client.ts` — ApiError class + apiFetch base wrapper
+- `frontend/src/api/render.ts` — submitRender, getRenderStatus, cancelRender, resumeRender, retryRender
+- `frontend/src/api/jobs.ts` — getJob, getJobHistory, getQueueStatus, getJobPartQuality, getJobQualitySummary, deleteJob
+- `frontend/src/api/upload.ts` — uploadFile() using POST /api/upload-file only
+- `frontend/src/websocket/RenderSocketClient.ts` — WS client, 3-attempt reconnect, terminal guard
+- `frontend/src/websocket/events.ts` — typed WS event interfaces + RenderStage enum
+- `frontend/src/hooks/useRenderSocket.ts` — React hook: { stage, progress, isConnected, error }
+- `frontend/src/stores/renderStore.ts` — jobs, activeJobId, submitRender, updateJobStatus, setActiveJob
+- `frontend/src/stores/qualityStore.ts` — reports, summaries, fetchPartQuality, fetchJobSummary
+- `frontend/src/stores/uiStore.ts` — sidebarOpen, activePanel, notifications
+- `frontend/src/styles/tokens.css` — ~79 CSS custom properties (cinematic dark theme)
+- `frontend/src/styles/global.css` — reset + base styles using tokens
+- `frontend/src/lib/constants.ts` — PLATFORMS(3), ASPECT_RATIOS(5), SUBTITLE_STYLES(10), EFFECT_PRESETS(6), QUALITY_MODES(3), RENDER_PROFILES(4), getQualityLabel, getQualityVariant
+- `frontend/src/layouts/AppShell.tsx` — root layout: sidebar + topbar + content
+- `frontend/src/layouts/Sidebar.tsx` — navigation with collapse support
+- `frontend/src/layouts/Topbar.tsx` — title, connection status, warmup badge
+- `frontend/src/components/ui/Button.tsx` — variant(4) + size(3) + loading
+- `frontend/src/components/ui/Badge.tsx` — 5 semantic variants
+- `frontend/src/components/ui/ProgressBar.tsx` — 0–100 fill, 3 variants
+- `frontend/src/components/quality/QualityBadge.tsx` — score → §8.3 threshold badge
+- `frontend/src/components/quality/QualityIssueList.tsx` — grouped by severity
+- `frontend/tests/api.test.ts` — ApiError + upload path audit (11 tests)
+- `frontend/tests/constants.test.ts` — enum count + value + quality logic (31 tests)
+- `frontend/tests/stores.test.ts` — uiStore toggle/panel/notifications (15 tests)
+
+**New docs**:
+- `docs/ui/PHASE_6_UI_ARCHITECTURE.md` — tech stack, directory, state flow, WS flow, token system, API layer, component strategy, migration plan, Phase 6.1 checklist
+
+**Test results**: 57/57 passed (3 test files)
+
+**Contracts preserved**:
+- `backend/static/` untouched — legacy UI remains fully operational
+- All API calls comply with `docs/ui/UI_BACKEND_CONTRACT.md` Phase 5.10 freeze
+- `/api/upload-file` (hyphen) used for uploads; `/api/upload/*` (slash) never referenced
+- Quality endpoints called on-demand only (not polled)
+- WebSocket closes on terminal status; no reconnect for terminal states
+- Paginated history uses `/api/jobs/history`; unbounded `/api/jobs` not used
