@@ -145,3 +145,16 @@
 .score-value--xl {
   animation: score-xl-appear var(--duration-score) var(--ease-spring) both;
 }
+
+/* Render progress fill glow — animated=true state */
+/* rgba literal required: CSS custom properties cannot be used in rgba() inside @keyframes */
+@keyframes render-fill-glow {
+  0%, 100% { box-shadow: 0 0 0px 0px rgba(77, 124, 255, 0); }
+  50%       { box-shadow: 0 0 6px 2px rgba(77, 124, 255, 0.35); }
+}
+.render-progress--animated {
+  animation: render-fill-glow 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .render-progress--animated { animation: none; }
+}
