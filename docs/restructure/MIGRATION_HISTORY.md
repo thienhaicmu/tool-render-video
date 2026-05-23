@@ -1727,3 +1727,88 @@ Baseline unchanged. Phase 4H.6 introduced no backend code changes and no new tes
 ```
 8 failed, 6699 passed, 1 skipped  (no new tests — audit/docs phase)
 ```
+
+---
+
+## Phase 5.1 — AI Knowledge and Render Safety Foundation
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: COMPLETE (2026-05-23)
+**Commit**: phase 5.1 ai knowledge and render safety foundation
+
+**Purpose**: Fix the /api/upload-file 404, add render safety checks (audio stream QA + download timeout), lay the local knowledge foundation for AI-augmented rendering, and document the AI render contract.
+
+**Shipped changes**:
+
+### Task 1 — Fix /api/upload-file 404
+- **New file**: `backend/app/routes/files.py` — POST `/api/upload-file` endpoint
+  - Accepts FormData field `file` (matches frontend in editor-audio-runtime.js:89, editor-view.js:1107)
+  - Saves to `APP_DATA_DIR/editor-uploads/` (safe; no traversal possible)
+  - `_safe_filename()` strips `/`, `\\`, null bytes, leading dots; normalises unicode
+  - Returns `{"path": "<saved_absolute_path>"}` (matches frontend `d.path` usage)
+  - Max upload 200 MB; counter-suffixed if name collides
+  - Does NOT recreate /api/upload/* domain
+- **Updated**: `backend/app/main.py` — registered `files_router`
+
+### Task 2 — Wall-clock timeout for YouTube download
+- **Updated**: `backend/app/services/downloader.py`
+  - Added `_DOWNLOAD_WALLCLOCK_TIMEOUT = 300` (override via `YTDLP_WALLCLOCK_TIMEOUT` env)
+  - Added `_try_download_with_timeout()` inner closure (wraps `_try_download` via `concurrent.futures.ThreadPoolExecutor`)
+  - Timeout fires `RuntimeError("Download timed out after Xs wall-clock")` — distinguishable from format errors
+  - On timeout: propagates immediately (no retrying a timed-out download)
+  - Applied to both main attempts loop and dynamic fallback loop
+  - `socket_timeout: 60` (per-socket stall protection) preserved unchanged
+
+### Task 3 — Audio stream check in output QA
+- **Updated**: `backend/app/orchestration/qa_pipeline.py`
+  - `_validate_render_output()` section 6: now warns when audio stream is absent regardless of `expect_audio`
+  - Severity: WARNING (non-fatal, ok=True preserved) — consistent with existing QA pattern
+  - `expect_audio=True` path: produces "expected but missing" warning (legacy behaviour preserved)
+  - `expect_audio=None/False` path: NEW — "output has no audio stream" warning
+  - Uses `has_audio` from existing ffprobe JSON parse (no duplicate probe calls)
+  - `_has_audio_stream()` in `services/render/ffmpeg_helpers.py` already existed; qa_pipeline uses probe JSON directly
+
+### Task 4 — Local knowledge foundation
+- **New directory**: `backend/knowledge/` — full structure created
+  - `raw/video_samples/`, `raw/transcripts/`, `raw/research_notes/` — empty with .gitkeep
+  - `processed/` — 7 `.jsonl` files with 1 example item each (platform_rules, hook_patterns, subtitle_rules, pacing_rules, visual_rules, cta_patterns, failure_patterns)
+  - `index/` — empty with .gitkeep (FAISS index location)
+- **New file**: `backend/knowledge/README.md` — schema reference, usage docs, governance notes
+
+### Task 5 — RAG/FAISS readiness
+- **Updated**: `backend/app/ai/rag/vector_store.py`
+  - Added `save_index(path)` method — serializes FAISS index to disk; returns bool, never raises
+  - Added `load_index(path)` method — deserializes from disk; validates entry count matches; returns bool, never raises
+  - Added clarifying module docstring: `memory_store` = RAG infrastructure; `knowledge/` = filter-based platform/video knowledge
+  - FAISS persistence target path: `backend/knowledge/index/faiss.index`
+  - Graceful degradation: missing index → rebuild path; no knowledge files → warn, don't crash
+  - Existing memory_store behaviour unchanged
+
+### Task 6 — AI Render Contract
+- **New file**: `docs/ai/AI_RENDER_CONTRACT.md`
+  - 10 sections covering: local-first, no external LLM at runtime, RAG as filter retrieval, AI boundaries, structured output validation, fallback to safe defaults, knowledge sources, user filter mapping, cloud AI policy, offline requirement
+  - Future flow diagram: filters → knowledge retrieval → CreativeBrief → ScenePlan → VisualDirection → validation → render pipeline → QA → output
+
+### Task 7 — AI Decision Traceability Plan
+- **New file**: `docs/ai/AI_DECISION_TRACEABILITY_PLAN.md`
+  - Planning doc (no code) — 8 event types defined with JSON schemas
+  - Implementation guidance: `app/ai/tracing.py` + `AITraceLogger` class + per-job `.jsonl` file
+  - Answers: "Why did AI choose this scene/style/subtitle/pacing?"
+
+**New tests**:
+- `tests/test_upload_file_endpoint.py` — 18 tests: import, _safe_filename sanitisation, route 200, path key, field name, path traversal safety, upload domain not restored
+- `tests/test_downloader_timeout.py` — 7 tests: constant exists, default 300s, min 60s, timeout raises RuntimeError, wall-clock indicator in message, normal download unaffected, socket_timeout preserved
+- `tests/test_qa_audio_stream.py` — 14 tests: audio present passes, metadata correct, audio missing warns, warn non-fatal, expect_audio=True warning, probe failure safety, keys always present
+
+**Docs updated**:
+- `docs/review/FULL_PROJECT_BACKEND_AI_GOVERNANCE_REVIEW.md` — Phase 5.1 summary section added
+- `docs/review/TECHNICAL_DEBT_REPORT.md` — P0: /api/upload-file marked RESOLVED; FAISS persistence status updated; H6 downloader timeout updated
+- `docs/architecture/CURRENT_RENDER_ARCHITECTURE.md` — audio stream QA note added
+- `docs/restructure/MIGRATION_HISTORY.md` — this entry
+
+**Upload domain removal**: STILL INTACT — `routes/upload.py` absent, `services/upload_engine.py` absent, no `/api/upload/*` routes registered. `/api/upload-file` is a single new endpoint, not a domain.
+
+**Test Suite State (Post Phase 5.1)**:
+```
+Expected: 8 failed (same known failures) / 6738+ passed (39+ new tests) / 1 skipped
+```

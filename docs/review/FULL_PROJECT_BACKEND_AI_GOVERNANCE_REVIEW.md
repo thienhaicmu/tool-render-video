@@ -1010,3 +1010,42 @@ All 202 critical Phase 4E–4H tests pass. Full suite at 6699 passing / 8 known 
 
 **Blockers for go**: None (0 blocking issues).
 **Known caveats**: `/api/upload-file` pre-existing 404 (editor audio broken), dead `Upload*` schema classes in `schemas.py`, `static-v3/`/`static-v4/` dead frontend directories.
+
+---
+
+## Phase 5.1 — AI Knowledge and Render Safety Foundation (2026-05-23)
+
+**Summary of Phase 5.1 changes:**
+
+### Resolved: /api/upload-file 404
+`POST /api/upload-file` now exists at `backend/app/routes/files.py`. Accepts `file` field (FormData), saves to `APP_DATA_DIR/editor-uploads/`, returns `{"path": "<saved_path>"}`. Safe filename validation prevents path traversal. Does not recreate the upload domain. Editor audio file selection is now functional.
+
+### Resolved: Output QA now checks audio stream
+`_validate_render_output()` in `orchestration/qa_pipeline.py` now warns when the rendered output has no audio stream, regardless of the `expect_audio` flag. Severity is WARNING (non-fatal, `ok=True` preserved) — consistent with existing QA pattern. Uses the existing ffprobe JSON parse — no additional subprocess calls.
+
+### Resolved: Downloader has wall-clock timeout
+`download_youtube()` in `services/downloader.py` now enforces a `_DOWNLOAD_WALLCLOCK_TIMEOUT = 300s` ceiling per download attempt via `concurrent.futures` with `result(timeout=...)`. Timeout raises `RuntimeError` with "wall-clock" text for easy distinction from format/network errors. Applies to both main and dynamic fallback loops. `socket_timeout: 60` preserved.
+
+### Shipped: Local knowledge foundation
+`backend/knowledge/` directory structure created with 7 processed `.jsonl` files (one example each), empty raw directories, and index directory. `knowledge/README.md` documents the schema, usage, and AI governance rules.
+
+### Shipped: RAG/FAISS persistence primitives
+`LocalVectorStore.save_index(path)` and `load_index(path)` added to `backend/app/ai/rag/vector_store.py`. Graceful degradation: missing index returns False (no crash). Entry-count validation on load prevents position mismatches. Full startup wiring (load → rebuild from knowledge/*.jsonl → save) deferred to Phase 5.2.
+
+### AI knowledge direction clarified
+`memory_store` (RAG infrastructure for per-job render experience) and `knowledge/` (filter-based platform/video-quality retrieval) are now documented as separate concerns in both `vector_store.py` docstring and `knowledge/README.md`. RAG is filter-based platform/video knowledge retrieval — not personal user memory.
+
+### No external LLM required at render runtime
+Confirmed and documented in `docs/ai/AI_RENDER_CONTRACT.md`. Cloud AI may populate `knowledge/processed/*.jsonl` offline. Render jobs work fully offline once the knowledge index exists.
+
+### No UI overhaul started
+Phase 5.1 does not include any frontend changes beyond the backend endpoint that enables the existing editor audio file picker.
+
+### New documentation
+- `docs/ai/AI_RENDER_CONTRACT.md` — 10-section governance contract for AI in the render pipeline
+- `docs/ai/AI_DECISION_TRACEABILITY_PLAN.md` — planning doc for future AI decision logging
+
+**Test suite state (expected post-Phase 5.1)**:
+```
+8 failed (same known failures), 6738+ passed (39+ new tests), 1 skipped
+```

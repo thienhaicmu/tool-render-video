@@ -160,9 +160,20 @@ def _validate_render_output(
             result["code"] = "RN001"
             return result
 
-    # 6. Audio sanity — warn-only unless caller is confident audio is required
-    if expect_audio is True and not has_audio:
-        result["warnings"].append("audio stream expected but missing from output")
+    # 6. Audio stream presence check
+    #    - When caller explicitly signals audio is required (expect_audio=True):
+    #      warn (non-fatal) — preserves existing behaviour for legacy callers.
+    #    - When audio is unknown/unspecified (expect_audio=None/False):
+    #      warn — rendered video with no audio stream is almost always a bug;
+    #      keep non-fatal so partial/silent clips (e.g. voice-only) are not
+    #      hard-blocked, but surface the issue for developer visibility.
+    if not has_audio:
+        if expect_audio is True:
+            result["warnings"].append("audio stream expected but missing from output")
+        else:
+            result["warnings"].append(
+                "output has no audio stream — video may be silent (check source audio or mix settings)"
+            )
 
     result["ok"] = True
     return result

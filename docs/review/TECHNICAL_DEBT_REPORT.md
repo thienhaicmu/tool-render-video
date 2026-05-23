@@ -148,12 +148,14 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 ---
 
-### H4. FAISS Vector Index Not Persisted
+### H4. FAISS Vector Index Not Persisted — PARTIALLY RESOLVED (Phase 5.1)
 **File**: `backend/app/ai/rag/vector_store.py` — `LocalVectorStore`
 
-**Debt**: The in-memory vector store is rebuilt from scratch on every server restart. The `SQLiteStore` (`sqlite_store.py`) persists the raw text and metadata, but the vector embeddings are not saved to disk. Rebuilding from SQLite requires re-embedding all entries on startup — no code does this.
+**Phase 5.1 shipped (2026-05-23)**: `LocalVectorStore.save_index(path)` and `load_index(path)` methods added. The canonical index path is `backend/knowledge/index/faiss.index`. `save_index()` serializes the FAISS index to disk; `load_index()` deserializes it on startup if present, with entry-count validation to prevent position mismatches. Both methods handle all exceptions gracefully (return bool, never raise).
 
-**Impact**: RAG retrieval on the first render after a server restart has no vector index. The system falls back to cosine search over empty entries (no results).
+**Remaining Debt**: The rebuild-from-knowledge-files path (loading `knowledge/processed/*.jsonl` → embedding → populating vector store → `save_index()`) is not yet wired to the server startup sequence. The save/load primitives are in place; the startup orchestration is Phase 5.2 work.
+
+**Impact**: FAISS index still not rebuilt automatically on startup from knowledge files. Manual call to `save_index()` / `load_index()` is possible but not automated. RAG retrieval on server restart still returns empty results until the knowledge loading pipeline is wired.
 
 ---
 
@@ -166,13 +168,15 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 ---
 
-### H6. YouTube Download Hang Risk (Partially Resolved)
+### H6. YouTube Download Hang Risk — RESOLVED (Phase 5.1)
 **File**: `backend/app/services/downloader.py` — `download_youtube()`
 **Called from**: `render_pipeline.py` (main render path), `routes/render.py` (prepare-source, quick-process)
 
-**Partially Resolved (Phase 0)**: `socket_timeout: 60` added to yt-dlp options, and `cancel_event` is now passed from `render_pipeline.py` so user cancel propagates to the download subprocess. The 60s socket timeout mitigates the most common stall scenario (network drop, hung connection).
+**Phase 0 (partially resolved)**: `socket_timeout: 60` added to yt-dlp options. `cancel_event` propagated.
 
-**Remaining Debt**: yt-dlp's `socket_timeout` applies to individual socket operations, not total download time. A very slow download that keeps making progress can still run indefinitely. A total wall-clock timeout per download session is not yet implemented.
+**Phase 5.1 shipped (2026-05-23)**: `_DOWNLOAD_WALLCLOCK_TIMEOUT = 300` constant added (overridable via `YTDLP_WALLCLOCK_TIMEOUT` env var, minimum 60s). `_try_download_with_timeout()` inner closure wraps each download attempt via `concurrent.futures.ThreadPoolExecutor.result(timeout=...)`. On timeout, raises `RuntimeError("Download timed out after Xs wall-clock")` — distinguishable from format/network errors by "wall-clock" text. Timeout propagates immediately (no further retry attempts). Applied to both main attempt loop and dynamic fallback loop. `socket_timeout: 60` preserved.
+
+**Impact**: Resolved. A hung or stalled YouTube download can no longer block a render job indefinitely.
 
 ---
 

@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-23 (post Phase 5.0 review; Phase 4H COMPLETE; routes/render.py at 1,125 lines; services/preview/ package finalized with 3 modules, 89 tests; upload domain removal verified clean)
+**Last updated**: 2026-05-23 (Phase 5.1: /api/upload-file added; output QA now checks audio stream; downloader has wall-clock timeout; local knowledge foundation created; FAISS persistence primitives added)
 
 ---
 
@@ -15,7 +15,7 @@ Electron shell
               ├── render_pipeline.py — per-job orchestration (5,510 lines post Phase 4C)
               ├── orchestration/render_events.py — shared logging/event helpers (Phase 4B)
               ├── orchestration/asset_pipeline.py — post-assembly asset hooks (Phase 4B)
-              ├── orchestration/qa_pipeline.py — output QA/validation helpers (Phase 4C)
+              ├── orchestration/qa_pipeline.py — output QA/validation helpers (Phase 4C); audio stream presence check added (Phase 5.1 — warns when output has no audio stream)
               ├── orchestration/audio_pipeline.py — narration audio cleanup orchestration (Phase 4D)
               ├── render_engine.py — pure re-export shim (Phase 4E.5; all functions moved out)
               ├── services/render/ffmpeg_helpers.py — FFmpeg infrastructure + filter builders (Phase 4E.1)

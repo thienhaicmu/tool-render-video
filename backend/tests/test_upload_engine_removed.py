@@ -86,13 +86,20 @@ class TestNoAppImportsUploadEngine:
 
 class TestUploadRoutesStillAbsent:
     def test_no_upload_routes_registered(self):
+        """Verify old /api/upload/* domain routes are absent.
+
+        NOTE: /api/upload-file (POST, Phase 5.1) is intentionally excluded from
+        this check — it is a single editor utility endpoint, NOT a restoration of
+        the old /api/upload/* upload domain. Only routes under /api/upload/ (with
+        trailing slash) constitute the old domain.
+        """
         import app.main as main_mod
         upload_routes = [
             r for r in main_mod.app.routes
-            if hasattr(r, "path") and r.path.startswith("/api/upload")
+            if hasattr(r, "path") and r.path.startswith("/api/upload/")
         ]
         assert upload_routes == [], (
-            f"Found {len(upload_routes)} /api/upload route(s) still registered"
+            f"Found {len(upload_routes)} /api/upload/ route(s) still registered"
         )
 
 

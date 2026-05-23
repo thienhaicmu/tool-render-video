@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 import os
 import re
@@ -9,6 +10,15 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
 from app.services.bin_paths import ensure_ffmpeg_available
+
+# Maximum total wall-clock seconds allowed for a single YouTube download session.
+# socket_timeout=60 (in yt-dlp options) covers individual socket stalls; this
+# constant adds a hard ceiling so a very slow-but-progressing download cannot
+# block a render job indefinitely.
+# Override with YTDLP_WALLCLOCK_TIMEOUT env var (e.g. "600" for 10 minutes).
+_DOWNLOAD_WALLCLOCK_TIMEOUT: int = max(
+    60, int(os.getenv("YTDLP_WALLCLOCK_TIMEOUT", "300"))
+)
 
 logger = logging.getLogger(__name__)
 
@@ -494,6 +504,26 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
             "selected_format": fmt_id,
         }
 
+    def _try_download_with_timeout(opts: dict) -> dict:
+        """Run _try_download with a wall-clock timeout (_DOWNLOAD_WALLCLOCK_TIMEOUT seconds).
+
+        Raises RuntimeError("Download timed out") when the timeout expires so the
+        caller can distinguish a timeout stall from a network/format error.
+        This is distinct from socket_timeout (which covers individual socket ops) —
+        _DOWNLOAD_WALLCLOCK_TIMEOUT is a total session ceiling.
+        """
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+            fut = _pool.submit(_try_download, opts)
+            try:
+                return fut.result(timeout=_DOWNLOAD_WALLCLOCK_TIMEOUT)
+            except concurrent.futures.TimeoutError:
+                # Signal cancellation via progress hook on next iteration
+                if cancel_event:
+                    cancel_event.set()
+                raise RuntimeError(
+                    f"Download timed out after {_DOWNLOAD_WALLCLOCK_TIMEOUT}s wall-clock"
+                )
+
     def _probe_info(client_kwargs: dict) -> dict:
         probe_opts = {
             "skip_download": True,
@@ -584,7 +614,7 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
                 "download.ytdlp.attempt context=%s attempt=%d/%d client=%s format=%s proxy_used=%s",
                 context, idx, len(attempts), client_name, fmt[:60], bool(proxy_val),
             )
-            result = _try_download(opts)
+            result = _try_download_with_timeout(opts)
             h = result.get("selected_height", 0)
             fps_val = result.get("selected_fps", 0)
             logger.info(
@@ -597,6 +627,17 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
                 _cleanup_partial()
                 raise RuntimeError("Download cancelled") from None
             msg = str(exc)
+            if "timed out after" in msg and "wall-clock" in msg:
+                # Wall-clock timeout: propagate immediately — no point retrying
+                logger.error(
+                    "download.ytdlp.wallclock_timeout context=%s attempt=%d/%d client=%s format=%s timeout=%ds",
+                    context, idx, len(attempts), client_name, fmt[:60], _DOWNLOAD_WALLCLOCK_TIMEOUT,
+                )
+                raise RuntimeError(
+                    f"YouTube download timed out after {_DOWNLOAD_WALLCLOCK_TIMEOUT}s. "
+                    "The video may be too large or your connection too slow. "
+                    "Increase YTDLP_WALLCLOCK_TIMEOUT env var to allow more time."
+                ) from exc
             if "Requested format is not available" in msg:
                 unavailable_requested = True
             logger.warning(
@@ -638,7 +679,7 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
             )
             attempted_formats.append(fmt)
             try:
-                result = _try_download(opts)
+                result = _try_download_with_timeout(opts)
                 h = result.get("selected_height", 0)
                 fps_val = result.get("selected_fps", 0)
                 logger.info(
@@ -651,6 +692,15 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
                 if cancel_event and cancel_event.is_set():
                     _cleanup_partial()
                     raise RuntimeError("Download cancelled") from None
+                msg = str(exc)
+                if "timed out after" in msg and "wall-clock" in msg:
+                    logger.error(
+                        "Dynamic download wallclock timeout | attempt=%d/%d | client=%s | format=%s",
+                        idx, min(8, len(dynamic_unique)), client_name, fmt[:60],
+                    )
+                    raise RuntimeError(
+                        f"YouTube download timed out after {_DOWNLOAD_WALLCLOCK_TIMEOUT}s wall-clock."
+                    ) from exc
                 logger.warning(
                     "Dynamic download failed (will retry) | attempt=%d/%d | client=%s | format=%s | reason=%s",
                     idx, min(8, len(dynamic_unique)), client_name, fmt[:60], exc,
