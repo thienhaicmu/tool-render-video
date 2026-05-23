@@ -3,10 +3,12 @@ import { useState, type CSSProperties } from 'react'
 export interface TransportBarProps {
   currentTime?: string
   totalDuration?: string
-  onPlay?: () => void    // B8 ready
-  onPause?: () => void   // B8 ready
-  onSeek?: (delta: number) => void  // B8 ready
-  onMute?: () => void    // B8 ready
+  isPlaying?: boolean       // controlled — add this
+  onPlayPause?: () => void  // controlled — add this
+  onPlay?: () => void       // B8 ready — keep
+  onPause?: () => void      // B8 ready — keep
+  onSeek?: (delta: number) => void  // B8 ready — keep
+  onMute?: () => void    // B8 ready — keep
 }
 
 type BtnId = 'prev' | 'play' | 'next' | 'mute'
@@ -14,8 +16,11 @@ type BtnId = 'prev' | 'play' | 'next' | 'mute'
 export function TransportBar({
   currentTime = '00:00:00',
   totalDuration = '--:--:--',
+  isPlaying: isPlayingProp,
+  onPlayPause,
 }: TransportBarProps) {
-  const [isPlaying, setIsPlaying] = useState(false)
+  const [localIsPlaying, setLocalIsPlaying] = useState(false)
+  const playing = isPlayingProp !== undefined ? isPlayingProp : localIsPlaying
   const [isMuted, setIsMuted] = useState(false)
   const [hoveredBtn, setHoveredBtn] = useState<BtnId | null>(null)
 
@@ -65,10 +70,16 @@ export function TransportBar({
         style={btnStyle('play')}
         onMouseEnter={() => setHoveredBtn('play')}
         onMouseLeave={() => setHoveredBtn(null)}
-        onClick={() => setIsPlaying((p) => !p)}
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        onClick={() => {
+          if (onPlayPause) {
+            onPlayPause()
+          } else {
+            setLocalIsPlaying((p) => !p)
+          }
+        }}
+        aria-label={playing ? 'Pause' : 'Play'}
       >
-        {isPlaying ? '⏸' : '▶'}
+        {playing ? '⏸' : '▶'}
       </button>
 
       {/* Seek forward */}

@@ -1,5 +1,7 @@
+import { useState, useEffect, useRef } from 'react'
 import { TransportBar } from './TransportBar'
 import { TimelineTrack } from './TimelineTrack'
+import { TimelineZoomControl } from './TimelineZoomControl'
 import { AIChip } from '../../../components/ui/AIChip'
 import { type StudioStep } from '../../../stores/uiStore'
 
@@ -25,7 +27,52 @@ const TIMELINE_BLOCKS = {
   ],
 }
 
+const MARKER_META = [
+  { label: 'Hook detected', timecode: '0:04', confidence: 87 },
+  { label: 'Energy peak',   timecode: '0:38', confidence: 74 },
+  { label: 'CTA moment',    timecode: '1:18', confidence: 61 },
+]
+
+const TOTAL_DURATION_SECS = 120
+
 export function PreviewWorkspace({ hasMedia = false, studioStep }: PreviewWorkspaceProps) {
+  const [playheadPosition, setPlayheadPosition] = useState(0.15)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [zoomLevel, setZoomLevel] = useState(1)
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null)
+  const intervalRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (isPlaying) {
+      intervalRef.current = window.setInterval(() => {
+        setPlayheadPosition((prev) => {
+          const next = prev + (0.1 / TOTAL_DURATION_SECS)
+          if (next >= 1) {
+            setIsPlaying(false)
+            return 0
+          }
+          return next
+        })
+      }, 100)
+    } else {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
+    return () => {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
+  }, [isPlaying])
+
+  const totalSeconds = Math.floor(playheadPosition * TOTAL_DURATION_SECS)
+  const mins = Math.floor(totalSeconds / 60)
+  const secs = totalSeconds % 60
+  const timecodeDisplay = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+
   return (
     <div
       style={{
@@ -36,7 +83,7 @@ export function PreviewWorkspace({ hasMedia = false, studioStep }: PreviewWorksp
         minWidth: 0,
       }}
     >
-      {/* Player container — flex-based, no maxHeight hack */}
+      {/* Player container */}
       <div
         style={{
           flexBasis: '40%',
@@ -114,7 +161,6 @@ export function PreviewWorkspace({ hasMedia = false, studioStep }: PreviewWorksp
             </div>
           )}
         </div>
-        {/* AI overlay — visible only when media is loaded */}
         {hasMedia && (
           <div style={{ position: 'absolute', top: 'var(--space-2)', right: 'var(--space-2)' }}>
             <AIChip variant="applied" label="AI Director" />
@@ -123,7 +169,12 @@ export function PreviewWorkspace({ hasMedia = false, studioStep }: PreviewWorksp
       </div>
 
       {/* Transport controls */}
-      <TransportBar />
+      <TransportBar
+        isPlaying={isPlaying}
+        onPlayPause={() => setIsPlaying((p) => !p)}
+        currentTime={timecodeDisplay}
+        totalDuration="02:00"
+      />
 
       {/* Timeline */}
       <div
@@ -151,20 +202,24 @@ export function PreviewWorkspace({ hasMedia = false, studioStep }: PreviewWorksp
               display: 'flex',
               justifyContent: 'space-between',
               padding: '0 var(--space-2)',
+              alignItems: 'center',
             }}
           >
-            {['0:00', '0:30', '1:00', '1:30'].map((t) => (
-              <span
-                key={t}
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 'var(--text-xs)',
-                  color: 'var(--text-tertiary)',
-                }}
-              >
-                {t}
-              </span>
-            ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', flex: 1 }}>
+              {['0:00', '0:30', '1:00', '1:30'].map((t) => (
+                <span
+                  key={t}
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--text-tertiary)',
+                  }}
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+            <TimelineZoomControl zoom={zoomLevel} onZoomChange={setZoomLevel} />
           </div>
         </div>
 
@@ -174,17 +229,34 @@ export function PreviewWorkspace({ hasMedia = false, studioStep }: PreviewWorksp
           color="var(--accent-subtle)"
           blocks={TIMELINE_BLOCKS.VIDEO}
           hasPlayhead
-          playheadPosition={0.15}
+          playheadPosition={playheadPosition}
+          onSeek={setPlayheadPosition}
+          selectedClipId={selectedClipId}
+          onClipSelect={setSelectedClipId}
+          zoom={zoomLevel}
         />
         <TimelineTrack
           label="SUBS"
           color="var(--accent-subtle)"
           blocks={TIMELINE_BLOCKS.SUBS}
+          hasPlayhead
+          playheadPosition={playheadPosition}
+          onSeek={setPlayheadPosition}
+          selectedClipId={selectedClipId}
+          onClipSelect={setSelectedClipId}
+          zoom={zoomLevel}
         />
         <TimelineTrack
           label="AI MKR"
           color="var(--ai-subtle)"
           blocks={TIMELINE_BLOCKS.AI_MKR}
+          hasPlayhead
+          playheadPosition={playheadPosition}
+          onSeek={setPlayheadPosition}
+          selectedClipId={selectedClipId}
+          onClipSelect={setSelectedClipId}
+          zoom={zoomLevel}
+          markerMeta={MARKER_META}
         />
       </div>
 

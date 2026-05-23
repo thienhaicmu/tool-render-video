@@ -158,3 +158,14 @@
 @media (prefers-reduced-motion: reduce) {
   .render-progress--animated { animation: none; }
 }
+
+/* ── Timeline Playhead ────────────────────────────────────────────────────── */
+.playhead-line {
+  transition: left var(--duration-instant) linear;
+}
+
+/* ── Timeline Ghost Cursor ───────────────────────────────────────────────── */
+.timeline-ghost-cursor {
+  transition: left var(--duration-instant) var(--ease-out), opacity var(--duration-instant) var(--ease-out);
+  pointer-events: none;
+}
