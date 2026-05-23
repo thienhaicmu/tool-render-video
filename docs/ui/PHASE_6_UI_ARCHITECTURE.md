@@ -212,22 +212,40 @@ cut-over happen via `STATIC_UI_VERSION`.
 
 ---
 
-## 9. Phase 6.1 Checklist (next steps)
+## 9. Phase 6.1 — Render Setup Screen (SHIPPED 2026-05-23)
 
-- [ ] Render form screen (`src/features/render/RenderForm.tsx`)
-  - Source group: source_mode toggle, youtube_url input, source_video_path
-  - Output group: output_dir (required), render_profile selector
-  - Subtitle group: add_subtitle toggle, subtitle_style dropdown (10 canonical presets only)
-  - Effect group: effect_preset dropdown (6 presets)
-  - Platform selector: 3 platforms
-  - Aspect ratio: 5 ratios
-  - Playback speed: validated [0.5, 1.5]
-  - Submit → submitRender() → activeJobId set in store
+All items completed:
+
+- [x] Render form screen (`src/features/render/RenderSetupScreen.tsx` + `RenderForm.tsx`)
+  - Source group: source_mode toggle (YouTube/Local), youtube_url input, source_video_path
+  - Output group: output_dir (required), max_export_parts
+  - Creative group: target_platform (3), aspect_ratio (5), effect_preset (6)
+  - Subtitle group: add_subtitle toggle, subtitle_style SelectCardGroup (10 canonical presets only)
+  - Advanced group: ai_director_enabled, hook_overlay_enabled, remotion_hook_intro, render_profile, min/max_part_sec, title_overlay_text
+  - Default subtitle: `tiktok_bounce_v1` (never `pro_karaoke`)
+  - Submit → submitRender() → success notification → redirect to history panel
+- [x] Notification system (`src/components/ui/Notifications.tsx`)
+  - Fixed-position toasts at bottom-right
+  - Auto-dismiss after 5 seconds
+  - Type-appropriate colors: success/error/info/warning
+  - Integrated into AppShell
+- [x] Validation schema (`src/features/render/RenderForm.schema.ts`)
+  - Pure functions: validateRenderForm, isFormValid, buildRenderPayload
+  - All business rules enforced: output_dir required, URL format, part duration ranges, playback speed [0.5, 1.5]
+- [x] Feature component decomposition
+  - FormField, SelectCardGroup, SourceSection, OutputSection, CreativeSection, SubtitleSection, AdvancedSection, SummaryCard
+- [x] Tests: 109/109 passing (6 test files)
+
+---
+
+## 10. Phase 6.2 Checklist (next steps)
+
+- [ ] History screen (`src/features/jobs/HistoryScreen.tsx`)
+  - Paginated list using `/api/jobs/history`
+  - Status badges, retry/rerun/cancel actions
 - [ ] Job progress panel (`src/features/render/JobProgress.tsx`)
   - Live WebSocket via useRenderSocket hook
   - ProgressBar component for overall %
-  - Stage display
-  - Cancel button
-- [ ] History page with paginated getJobHistory()
+  - Stage display + Cancel button
 - [ ] Quality panel on job detail (on-demand, not polled)
-- [ ] Notification system using uiStore.addNotification()
+- [ ] Editor screen with preview video and trim controls

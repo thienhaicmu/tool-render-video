@@ -5,6 +5,7 @@ import React from 'react'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { useUIStore } from '../stores/uiStore'
+import { Notifications } from '../components/ui/Notifications'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -29,6 +30,7 @@ export function AppShell({ children }: AppShellProps) {
           {children}
         </main>
       </div>
+      <Notifications />
     </div>
   )
 }

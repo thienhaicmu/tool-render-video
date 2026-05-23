@@ -2280,3 +2280,48 @@ frontend is untouched and remains fully operational.
 - Quality endpoints called on-demand only (not polled)
 - WebSocket closes on terminal status; no reconnect for terminal states
 - Paginated history uses `/api/jobs/history`; unbounded `/api/jobs` not used
+
+---
+
+## Phase 6.1 — Render Setup Screen (2026-05-23)
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+
+**Purpose**: Build the Render Setup Screen — the primary user-facing form for configuring and submitting render jobs.
+
+**Files created**:
+- `frontend/src/features/render/RenderSetupScreen.tsx` — top-level screen, plugged into App.tsx
+- `frontend/src/features/render/RenderForm.tsx` — main form, two-column layout
+- `frontend/src/features/render/RenderForm.types.ts` — RenderFormState + RenderFormErrors
+- `frontend/src/features/render/RenderForm.schema.ts` — validateRenderForm, isFormValid, buildRenderPayload
+- `frontend/src/features/render/RenderForm.css` — form layout and component styles
+- `frontend/src/features/render/components/FormField.tsx` — label + children + hint + error wrapper
+- `frontend/src/features/render/components/SelectCardGroup.tsx` — clickable card grid for enum selection
+- `frontend/src/features/render/components/SourceSection.tsx` — source_mode toggle + URL/path inputs
+- `frontend/src/features/render/components/OutputSection.tsx` — output_dir + max_export_parts
+- `frontend/src/features/render/components/CreativeSection.tsx` — platform, aspect ratio, effect preset
+- `frontend/src/features/render/components/SubtitleSection.tsx` — add_subtitle toggle + subtitle_style
+- `frontend/src/features/render/components/AdvancedSection.tsx` — AI director, render profile, part durations
+- `frontend/src/features/render/components/SummaryCard.tsx` — sticky summary card with submit button
+- `frontend/src/components/ui/Notifications.tsx` — fixed-position toast notifications
+- `frontend/tests/render-form.test.tsx` — 14 rendering tests
+- `frontend/tests/render-validation.test.tsx` — 29 pure logic tests
+- `frontend/tests/render-submit.test.tsx` — 9 submit flow tests
+
+**Files modified**:
+- `frontend/src/App.tsx` — replaced RenderPanel placeholder with RenderSetupScreen
+- `frontend/src/layouts/AppShell.tsx` — added Notifications toast area
+
+**Canonical subtitle default confirmed**: `tiktok_bounce_v1` — `pro_karaoke` never appears in form
+
+**Test results**: 109/109 passed (6 test files)
+
+**Contracts preserved**:
+- `backend/static/` untouched — legacy UI remains fully operational
+- All field names match `docs/ui/UI_BACKEND_CONTRACT.md` §5 exactly
+- Only 10 canonical subtitle presets used (no legacy aliases)
+- Only 6 effect presets, 3 platforms, 5 aspect ratios used
+- Submit calls `POST /api/render/process` via `renderStore.submitRender()`
+- On success: success notification + redirect to history panel
+- On failure: error notification, stays on render panel

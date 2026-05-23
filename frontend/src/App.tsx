@@ -1,14 +1,10 @@
 /**
  * App — root component, wraps AppShell with active panel routing.
  */
-import React from 'react'
 import { AppShell } from './layouts/AppShell'
 import { useUIStore } from './stores/uiStore'
+import { RenderSetupScreen } from './features/render/RenderSetupScreen'
 
-// Lazy panel placeholders — will be replaced by real feature screens in Phase 6.1+
-function RenderPanel() {
-  return <div style={{ padding: 'var(--space-6)', color: 'var(--color-text-secondary)' }}>Render panel — Phase 6.1</div>
-}
 function HistoryPanel() {
   return <div style={{ padding: 'var(--space-6)', color: 'var(--color-text-secondary)' }}>History panel — Phase 6.1</div>
 }
@@ -20,7 +16,7 @@ function SettingsPanel() {
 }
 
 const PANEL_MAP = {
-  render: RenderPanel,
+  render: RenderSetupScreen,
   history: HistoryPanel,
   editor: EditorPanel,
   settings: SettingsPanel,

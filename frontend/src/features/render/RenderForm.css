@@ -1,0 +1,144 @@
+/**
+ * RenderForm styles — uses CSS custom properties from tokens.css.
+ */
+
+.render-form-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.render-form-main {
+  min-width: 0;
+}
+
+.render-form-sidebar {
+  min-width: 0;
+}
+
+/* Section headings */
+.render-form-section {
+  margin-bottom: var(--space-6);
+}
+
+.render-form-section-heading {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-4) 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Field container */
+.render-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--space-4);
+}
+
+.render-form-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.render-form-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.render-form-error {
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+  margin: 0;
+}
+
+/* Input fields */
+.render-form-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: var(--font-size-base);
+  font-family: var(--font-family-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color var(--duration-fast);
+}
+
+.render-form-input:focus {
+  border-color: var(--color-accent);
+}
+
+.render-form-input--error {
+  border-color: var(--color-error);
+}
+
+/* Select cards grid */
+.select-card-grid {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.select-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--duration-fast), background-color var(--duration-fast);
+  background-color: var(--color-bg-elevated);
+  text-align: left;
+  width: 100%;
+}
+
+.select-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.select-card--selected {
+  border-color: var(--color-accent);
+  background-color: rgba(108, 99, 255, 0.12);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.select-card-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.select-card-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* Summary card */
+.summary-card {
+  position: sticky;
+  top: var(--space-6);
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+/* Responsive: stack on narrow viewports */
+@media (max-width: 768px) {
+  .render-form-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .render-form-sidebar {
+    order: -1;
+  }
+}
