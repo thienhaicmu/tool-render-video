@@ -352,3 +352,24 @@ Assessment categories:
 7. Hook risk (first subtitle > 5s → WARNING; first block > 15 words → WARNING)
 8. Pacing risk (< 3s or > 300s → WARNING)
 9. AI trace correlation (reads events from JSONL, stores in ai_trace_refs)
+
+
+---
+
+## Phase 5.9 Addition (2026-05-23)
+
+**Quality Report API — Read-Only Exposure**
+
+Two new GET endpoints expose the Phase 5.8 quality sidecar JSON via the API:
+
+- `GET /api/jobs/{job_id}/parts/{part_no}/quality` — single-part report
+- `GET /api/jobs/{job_id}/quality` — aggregated job-level summary
+
+**Contract constraints for Phase 5.9**:
+- API is **READ-ONLY** — no render behavior change of any kind
+- **No FFmpeg calls** in any quality report route
+- **No auto-regeneration** of videos or quality reports
+- **No raw filesystem paths** accepted from or exposed to the client
+- **No AI hints** modified or triggered
+- **No DB schema changes**
+- Invalid `job_id` (non-alphanumeric) → 400; missing job/part → 404; missing report → 404

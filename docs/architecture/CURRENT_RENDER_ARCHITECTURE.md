@@ -459,3 +459,27 @@ Called from: `render_pipeline.py` after `_assess_output_quality()` succeeds
 - Never auto-regenerates video
 - Never makes warnings fatal for existing QA
 - Requires no internet, no API keys
+
+
+---
+
+## Phase 5.9 Addition (2026-05-23) — Quality Report API Routes
+
+New read-only API endpoints added to `backend/app/routes/jobs.py`:
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/jobs/{job_id}/parts/{part_no}/quality` | GET | Single-part quality report sidecar |
+| `/api/jobs/{job_id}/quality` | GET | Aggregated quality summary for all parts |
+
+**New modules**:
+- `backend/app/quality/report_locator.py` — safe sidecar path resolution + JSON loading
+- `backend/app/quality/report_summary.py` — aggregated summary builder
+
+**Security**:
+- `job_id` validated: alphanumeric + hyphens/underscores, max 128 chars
+- `part_no` validated: positive integer only
+- Resolved path verified to stay under `<video_path.parent>/quality/`
+- No raw filesystem paths accepted from or returned to client
+
+**No render, FFmpeg, or DB schema changes.**

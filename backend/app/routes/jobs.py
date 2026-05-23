@@ -2,15 +2,18 @@
 import asyncio
 import json
 import logging
+import re
 import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_parts_bulk, get_job, delete_job
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR, TEMP_DIR
+from app.quality.report_locator import load_quality_report_for_part
+from app.quality.report_summary import build_job_quality_summary
 
 logger = logging.getLogger("app.jobs")
 
@@ -405,6 +408,81 @@ def _compute_progress_summary(parts: list) -> dict:
         "overall_progress_percent":  overall,
         "parts_percent":             overall,         # backward compat alias
     }
+
+
+_JOB_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,128}$')
+
+
+def _validate_quality_job_id(job_id: str) -> bool:
+    """Return True only if job_id contains safe characters (alphanumeric + hyphens/underscores)."""
+    return bool(_JOB_ID_RE.match(job_id))
+
+
+@router.get("/{job_id}/parts/{part_no}/quality")
+def api_get_part_quality(job_id: str, part_no: int):
+    """Return the quality report sidecar for a single rendered part.
+
+    Security: never exposes filesystem paths; accepts only job_id + part_no.
+    Read-only. No render behavior change.
+    """
+    if not _validate_quality_job_id(job_id):
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+    if part_no <= 0:
+        raise HTTPException(status_code=400, detail="part_no must be a positive integer")
+
+    # Verify job and part exist in DB
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    parts = list_job_parts(job_id)
+    part = next((p for p in parts if int(p.get("part_no", -1)) == part_no), None)
+    if not part:
+        raise HTTPException(status_code=404, detail="Part not found")
+
+    video_path_raw = str(part.get("output_file") or "").strip()
+    if not video_path_raw:
+        raise HTTPException(status_code=404, detail="quality report not available")
+
+    try:
+        video_path = Path(video_path_raw)
+    except Exception:
+        raise HTTPException(status_code=404, detail="quality report not available")
+
+    report = load_quality_report_for_part(job_id, part_no, video_path)
+    if report is None:
+        raise HTTPException(status_code=404, detail="quality report not available")
+
+    return report
+
+
+@router.get("/{job_id}/quality")
+def api_get_job_quality(job_id: str, include_reports: bool = Query(default=False)):
+    """Return an aggregated quality summary for all parts of a job.
+
+    include_reports=true embeds full report dicts per part.
+    Security: never exposes filesystem paths; accepts only job_id.
+    Read-only. No render behavior change.
+    """
+    if not _validate_quality_job_id(job_id):
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    parts = list_job_parts(job_id)
+
+    # Build parts_info: only expose part_no + video_path (not raw paths in response)
+    parts_info = [
+        {
+            "part_no": p.get("part_no"),
+            "video_path": str(p.get("output_file") or "").strip() or None,
+        }
+        for p in parts
+    ]
+
+    return build_job_quality_summary(job_id, parts_info, include_reports=include_reports)
 
 
 @router.get("/{job_id}/parts/{part_no}/stream")

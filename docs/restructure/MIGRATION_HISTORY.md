@@ -2144,3 +2144,37 @@ Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.p
 - NEVER requires internet or API keys
 - Warnings NEVER affect existing QA ok/error result
 - Quality intelligence failure NEVER propagates to render result
+
+
+---
+
+## Phase 5.9 — Expose Quality Report API (2026-05-23)
+
+**Goal**: Expose Phase 5.8 quality report sidecar JSON through safe read-only API endpoints.
+
+**New files**:
+- `backend/app/quality/report_locator.py` — `find_quality_report_path()`, `load_quality_report()`, `load_quality_report_for_part()` with security validation
+- `backend/app/quality/report_summary.py` — `build_job_quality_summary()` aggregator
+
+**Modified**:
+- `backend/app/routes/jobs.py` — two new read-only GET endpoints added; no existing routes changed
+
+**New tests** (3 files, 62 tests):
+- `tests/test_quality_report_locator.py` (29 passed, 1 skipped)
+- `tests/test_quality_report_summary.py` (12 passed)
+- `tests/test_quality_report_api.py` (21 passed)
+
+**Docs updated** (4 files):
+- `docs/ai/AI_RENDER_CONTRACT.md`
+- `docs/architecture/CURRENT_RENDER_ARCHITECTURE.md`
+- `docs/review/TECHNICAL_DEBT_REPORT.md`
+- `docs/restructure/MIGRATION_HISTORY.md`
+
+### Constraints honored
+- READ-ONLY — zero render behavior change
+- No FFmpeg calls from quality routes
+- No raw filesystem paths accepted or exposed
+- Path traversal blocked at locator level (regex + resolve + relative_to)
+- Invalid job_id → 400; missing job/part → 404; missing report → 404
+- No DB schema changes
+- Baseline test count unchanged (8 failures from Phase 5.8 pre-existing)

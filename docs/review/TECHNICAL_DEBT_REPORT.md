@@ -366,3 +366,16 @@ The following items were addressed or resolved by Phase 5.6:
 | Subtitle density checks | ADDED — wps, flash, line length, density overload thresholds |
 | Hook risk assessment | ADDED — first subtitle delay and word count checks |
 | Pacing risk assessment | ADDED — very short (<3s) and very long (>300s) part warnings |
+
+
+---
+
+## Phase 5.9 Additions (2026-05-23)
+
+| Item | Status |
+|---|---|
+| Quality report API (read-only) | ADDED — `GET /api/jobs/{job_id}/parts/{part_no}/quality` and `GET /api/jobs/{job_id}/quality` |
+| Report locator security | ADDED — `app/quality/report_locator.py`; job_id regex, part_no positive-int, path traversal guard |
+| Report summary builder | ADDED — `app/quality/report_summary.py`; aggregates score/severity counts across parts |
+| Filesystem path exposure | CONFIRMED SAFE — no raw paths returned in API responses |
+| No render behavior change | CONFIRMED — zero render/FFmpeg/DB schema changes in Phase 5.9 |
