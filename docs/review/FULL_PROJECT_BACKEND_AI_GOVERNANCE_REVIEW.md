@@ -1049,3 +1049,48 @@ Phase 5.1 does not include any frontend changes beyond the backend endpoint that
 ```
 8 failed (same known failures), 6738+ passed (39+ new tests), 1 skipped
 ```
+
+---
+
+## Phase 5.2 — Local Knowledge Retrieval Activation (2026-05-23)
+
+### Summary
+
+Phase 5.2 activates the local filter-based knowledge retrieval system for render AI planning. All code is local — no cloud AI at render runtime.
+
+### New Files
+
+| File | Role |
+|---|---|
+| `app/ai/rag/knowledge_schema.py` | `KnowledgeItem` dataclass + `validate_knowledge_item()` |
+| `app/ai/rag/knowledge_loader.py` | `load_knowledge_items()` — reads `knowledge/processed/*.jsonl` |
+| `app/ai/rag/knowledge_index.py` | `KnowledgeIndex` — build/save/load/rebuild/query with FAISS or fallback |
+| `app/ai/rag/knowledge_warmup.py` | `get_knowledge_index()` singleton + `warmup_knowledge_index()` startup hook |
+| `app/ai/tracing.py` | `AITraceLogger` — JSONL trace log at `data/logs/{job_id}_ai_trace.jsonl` |
+
+### Runtime Changes (surgical)
+
+| File | Change |
+|---|---|
+| `app/main.py` | Added `warmup_knowledge_index()` as daemon background thread at startup |
+| `app/orchestration/render_pipeline.py` | Added knowledge filter build, retrieval, trace logging in AI director block |
+| `app/ai/director/ai_director.py` | Added hint extraction from `retrieved_knowledge` in `_build_plan()` |
+
+### H3 / H4 Status
+
+- **H3** (memory_store not wired to create_ai_edit_plan): RESOLVED in Phase 5.2 — `retrieved_knowledge` from knowledge index is now injected into `_ai_context` and consumed by `create_ai_edit_plan()`.
+- **H4** (FAISS not persisted): RESOLVED — `KnowledgeIndex.save()/load()` persists both FAISS index and item metadata. Graceful fallback when FAISS unavailable.
+
+### Test Suite (Post Phase 5.2)
+
+```
+8 failed (same known pre-existing failures), 6842 passed (+104 new tests), 1 skipped
+```
+
+New test files:
+- `tests/test_ai_knowledge_schema.py` — 28 tests
+- `tests/test_ai_knowledge_loader.py` — 10 tests
+- `tests/test_ai_knowledge_index.py` — 20 tests
+- `tests/test_ai_knowledge_retrieval.py` — 17 tests
+- `tests/test_ai_trace_logger.py` — 12 tests
+- `tests/test_ai_render_knowledge_integration.py` — 13 tests

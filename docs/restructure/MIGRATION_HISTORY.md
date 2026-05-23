@@ -1812,3 +1812,70 @@ Baseline unchanged. Phase 4H.6 introduced no backend code changes and no new tes
 ```
 Expected: 8 failed (same known failures) / 6738+ passed (39+ new tests) / 1 skipped
 ```
+
+---
+
+## Phase 5.2 — Local Knowledge Retrieval Activation (2026-05-23)
+
+**Goal**: Activate the local filter-based knowledge retrieval system so AI render planning uses `knowledge/processed/*.jsonl` items at render time.
+
+**Entry criteria**: Phase 5.1 complete (knowledge foundation, FAISS persistence primitives).
+
+### New Files
+
+| File | Purpose |
+|---|---|
+| `backend/app/ai/rag/knowledge_schema.py` | `KnowledgeItem` dataclass + `validate_knowledge_item()` (never raises, returns None on bad data) |
+| `backend/app/ai/rag/knowledge_loader.py` | `load_knowledge_items()` — reads all `*.jsonl` from `knowledge/processed/`, validates each item |
+| `backend/app/ai/rag/knowledge_index.py` | `KnowledgeIndex` — `build()`, `save()`, `load()`, `rebuild()`, `query()`, `is_ready()` |
+| `backend/app/ai/rag/knowledge_warmup.py` | `get_knowledge_index()` singleton + `warmup_knowledge_index()` |
+| `backend/app/ai/tracing.py` | `AITraceLogger` — JSONL trace per render job at `data/logs/{job_id}_ai_trace.jsonl` |
+
+### Runtime Changes (surgical — minimal)
+
+| File | Change |
+|---|---|
+| `backend/app/main.py` | Added `warmup_knowledge_index()` daemon thread in `@app.on_event("startup")` |
+| `backend/app/orchestration/render_pipeline.py` | Added knowledge filter build, retrieval call, tracer init, context injection in AI director block |
+| `backend/app/ai/director/ai_director.py` | Added hint extraction from `retrieved_knowledge` in `_build_plan()` |
+
+### Knowledge Index Lifecycle
+
+1. At startup: `warmup_knowledge_index()` → `get_knowledge_index()` → try `load()` from `knowledge/index/faiss.index.meta.json` → if fail, try `rebuild()` from `knowledge/processed/*.jsonl` → if fail, log warning, continue
+2. At render time (ai_director_enabled=True): `KnowledgeIndex.query(filters, top_k=10)` → hard-filter by platform/niche/style/duration/aspect_ratio/subtitle_style/target_goal → rank by weight + match count → return top-k
+3. Missing knowledge: empty list returned → AI edit plan receives `retrieved_knowledge=[]` → hints not set → render proceeds unchanged
+
+### Fallback Guarantees
+
+- Missing `knowledge/processed/` directory: `load_knowledge_items()` returns `[]`, warning logged
+- Missing FAISS/sentence-transformers: `KnowledgeIndex` uses in-memory filter+rank, no crash
+- Missing `knowledge/index/faiss.index.meta.json`: `load()` returns False, `rebuild()` called
+- Retrieval exception at render time: caught, `retrieved_knowledge=[]`, warning logged
+- `warmup_knowledge_index()` never raises
+
+### H3 / H4 Resolution
+
+- **H3** (knowledge not wired to `create_ai_edit_plan`): RESOLVED — `retrieved_knowledge` and `knowledge_filters` now in `_ai_context`.
+- **H4** (FAISS not persisted): RESOLVED — `KnowledgeIndex.save()/load()` persist metadata and FAISS geometry; startup wires load → rebuild lifecycle.
+
+### Test Files Added
+
+| File | Tests |
+|---|---|
+| `tests/test_ai_knowledge_schema.py` | 28 |
+| `tests/test_ai_knowledge_loader.py` | 10 |
+| `tests/test_ai_knowledge_index.py` | 20 |
+| `tests/test_ai_knowledge_retrieval.py` | 17 |
+| `tests/test_ai_trace_logger.py` | 12 |
+| `tests/test_ai_render_knowledge_integration.py` | 13 |
+| **Total** | **100** |
+
+### Test Suite State (Post Phase 5.2)
+
+```
+8 failed (same known pre-existing failures) / 6842 passed (+104 new tests) / 1 skipped
+```
+
+Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
+
+**No new failures introduced.**

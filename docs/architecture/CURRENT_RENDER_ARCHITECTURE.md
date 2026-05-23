@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-23 (Phase 5.1: /api/upload-file added; output QA now checks audio stream; downloader has wall-clock timeout; local knowledge foundation created; FAISS persistence primitives added)
+**Last updated**: 2026-05-23 (Phase 5.2: local knowledge retrieval activated; KnowledgeIndex with load/save/rebuild wired; warmup at startup; retrieved_knowledge injected into AI edit context; AITraceLogger writes per-job JSONL trace)
 
 ---
 

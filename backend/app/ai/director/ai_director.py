@@ -307,6 +307,38 @@ def _build_plan(
     camera_plan = _safe_camera_plan(mode_config_with_name, pacing_ctx, memory_ctx, transcript_ctx, warnings)
     subtitle_plan = _safe_subtitle_plan(mode_config_with_name, pacing_ctx, memory_ctx, transcript_ctx, warnings)
 
+    # --- Phase 5.2: Extract knowledge hints from retrieved_knowledge ---
+    # retrieved_knowledge is passed via context from render_pipeline.py (optional).
+    # If not present or empty, hints are simply not applied — no behaviour change.
+    _retrieved_knowledge: list = context.get("retrieved_knowledge") or []
+    _knowledge_hints: dict = {}
+    if _retrieved_knowledge:
+        try:
+            _pacing_hint = None
+            _subtitle_emphasis_hint = None
+            _hook_hint = False
+            for _kitem in _retrieved_knowledge:
+                _ru = _kitem.get("render_usage", {})
+                if _pacing_hint is None and _ru.get("pacing"):
+                    _pacing_hint = _ru["pacing"]
+                if _subtitle_emphasis_hint is None and _ru.get("subtitle_emphasis"):
+                    _subtitle_emphasis_hint = _ru["subtitle_emphasis"]
+                if not _hook_hint and _ru.get("hook") is True:
+                    _hook_hint = True
+            _knowledge_hints = {
+                "pacing_hint": _pacing_hint,
+                "subtitle_emphasis_hint": _subtitle_emphasis_hint,
+                "hook_hint": _hook_hint,
+                "source_count": len(_retrieved_knowledge),
+            }
+            if _pacing_hint or _subtitle_emphasis_hint or _hook_hint:
+                logger.info(
+                    "ai_director_knowledge_hints_extracted job_id=%s pacing=%r subtitle=%r hook=%s",
+                    job_id, _pacing_hint, _subtitle_emphasis_hint, _hook_hint,
+                )
+        except Exception as _kh_err:
+            logger.debug("ai_director_knowledge_hints_failed job_id=%s: %s", job_id, _kh_err)
+
     plan = AIEditPlan(
         enabled=True,
         mode=mode,
@@ -320,6 +352,17 @@ def _build_plan(
     )
     # S2.6: Attach DNA explainability report (required change 3).
     plan.creator_dna_applied = dna_report
+
+    # Phase 5.2: Attach knowledge hints to plan (advisory metadata, no render change)
+    if _knowledge_hints:
+        try:
+            plan.knowledge_injection = {
+                "retrieved_count": len(_retrieved_knowledge),
+                "hints": _knowledge_hints,
+                "filters_used": context.get("knowledge_filters", {}),
+            }
+        except Exception:
+            pass
 
     # Soft Beta RC1: per-module clip coverage tracker (observability only, zero behavior effect).
     _s3_health: dict = {}

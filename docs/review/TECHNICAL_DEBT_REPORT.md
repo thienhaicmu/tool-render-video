@@ -138,24 +138,21 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 
 ---
 
-### H3. RAG Memory Not Connected to Production Render
-**File**: `backend/app/orchestration/render_pipeline.py` — call to `create_ai_edit_plan()`
-**Line**: ~1550 (approximate — the context dict build)
+### H3. RAG Memory Not Connected to Production Render — RESOLVED (Phase 5.2)
+**File**: `backend/app/orchestration/render_pipeline.py`
 
-**Debt**: `create_ai_edit_plan()` accepts a `memory_store` context key for RAG retrieval of prior render decisions. `render_pipeline.py` does not pass this key. The entire RAG infrastructure (vector store, SQLite memory, embeddings, retriever) is built and tested but effectively unused in production renders.
+**Phase 5.2 shipped (2026-05-23)**: `retrieved_knowledge` is now injected into `_ai_context` in `render_pipeline.py`. `KnowledgeIndex.query()` runs filter-based retrieval against `knowledge/processed/*.jsonl` items. Results are passed to `create_ai_edit_plan()` which extracts `pacing_hint`, `subtitle_emphasis_hint`, and `hook_hint`. The knowledge index singleton is warmed up at startup via a daemon thread. The system degrades gracefully — missing files, FAISS unavailable, or retrieval failure all produce an empty list and renders continue unchanged.
 
-**Impact**: The AI system has no memory of prior renders. Creator preference learning is siloed in the adaptive profile JSON files, not in the RAG system. Work done on Phases 3–5 (memory phases) is not active.
+**Note**: `memory_store` (per-job render experience memory) is a separate concern from knowledge retrieval and remains unwired. H3 is resolved for knowledge-based retrieval; creator render experience memory (per-job history) is separate future work.
 
 ---
 
-### H4. FAISS Vector Index Not Persisted — PARTIALLY RESOLVED (Phase 5.1)
-**File**: `backend/app/ai/rag/vector_store.py` — `LocalVectorStore`
+### H4. FAISS Vector Index Not Persisted — RESOLVED (Phase 5.2)
+**File**: `backend/app/ai/rag/knowledge_index.py`, `backend/app/ai/rag/vector_store.py`
 
-**Phase 5.1 shipped (2026-05-23)**: `LocalVectorStore.save_index(path)` and `load_index(path)` methods added. The canonical index path is `backend/knowledge/index/faiss.index`. `save_index()` serializes the FAISS index to disk; `load_index()` deserializes it on startup if present, with entry-count validation to prevent position mismatches. Both methods handle all exceptions gracefully (return bool, never raise).
+**Phase 5.1 shipped (2026-05-23)**: `LocalVectorStore.save_index(path)` and `load_index(path)` methods added. Primitives in place, startup orchestration deferred to Phase 5.2.
 
-**Remaining Debt**: The rebuild-from-knowledge-files path (loading `knowledge/processed/*.jsonl` → embedding → populating vector store → `save_index()`) is not yet wired to the server startup sequence. The save/load primitives are in place; the startup orchestration is Phase 5.2 work.
-
-**Impact**: FAISS index still not rebuilt automatically on startup from knowledge files. Manual call to `save_index()` / `load_index()` is possible but not automated. RAG retrieval on server restart still returns empty results until the knowledge loading pipeline is wired.
+**Phase 5.2 shipped (2026-05-23)**: `KnowledgeIndex` class provides `save()`, `load()`, and `rebuild()`. Item metadata is persisted to `knowledge/index/faiss.index.meta.json`. FAISS geometry is saved to `knowledge/index/faiss.index`. On startup, `get_knowledge_index()` tries `load()` first; if that fails, tries `rebuild()` from `knowledge/processed/*.jsonl`. When FAISS/sentence-transformers unavailable, falls back to in-memory filter+rank with no crash. This resolves H4 for knowledge retrieval. Per-job render experience FAISS (memory_store) is a separate system and remains in-memory.
 
 ---
 

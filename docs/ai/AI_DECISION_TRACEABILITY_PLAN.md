@@ -1,6 +1,6 @@
 # AI_DECISION_TRACEABILITY_PLAN.md
 
-**Status**: Planning document — no code implementation required.
+**Status**: IMPLEMENTED — Phase 5.2. `AITraceLogger` is live in `app/ai/tracing.py`.
 **Scope**: Future structured logging for AI render decisions.
 **Date**: 2026-05-23 (Phase 5.1)
 **Branch**: `restructure/output-timeline-architecture`
@@ -224,8 +224,25 @@ With this log:
 
 ---
 
+## Implementation Status (Phase 5.2)
+
+| Item | Status |
+|---|---|
+| `AITraceLogger` class | IMPLEMENTED — `app/ai/tracing.py` |
+| `log_input_filters()` | IMPLEMENTED |
+| `log_knowledge_retrieved()` | IMPLEMENTED — logs IDs and scores only (not full rule text) |
+| `log_rules_selected()` | IMPLEMENTED |
+| `log_fallback()` | IMPLEMENTED |
+| `log_render_plan_summary()` | IMPLEMENTED |
+| Log path | `data/logs/{job_id}_ai_trace.jsonl` |
+| Wired into render_pipeline.py | YES — creates `AITraceLogger(job_id)` in AI director block |
+| Never raises | CONFIRMED — all methods catch all exceptions |
+
+---
+
 ## Changelog
 
 | Date | Change |
 |---|---|
 | 2026-05-23 | Initial planning document — Phase 5.1 |
+| 2026-05-23 | Phase 5.2 — `AITraceLogger` implemented and wired into `render_pipeline.py` |

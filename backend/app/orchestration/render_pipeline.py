@@ -2248,6 +2248,67 @@ def run_render_pipeline(
         if getattr(payload, "ai_director_enabled", False):
             try:
                 from app.ai.director.ai_director import create_ai_edit_plan as _create_ai_plan
+
+                # ── Phase 5.2: Build knowledge filters from payload ────────────────
+                _knowledge_filters: dict = {}
+                try:
+                    _knowledge_filters = {
+                        "platform": getattr(payload, "render_profile", None) or None,
+                        "niche": None,
+                        "style": None,
+                        "duration": source.get("duration", None),
+                        "aspect_ratio": getattr(payload, "aspect_ratio", None) or None,
+                        "subtitle_style": getattr(payload, "subtitle_style", None) or None,
+                        "target_goal": None,
+                    }
+                    # Remove None-valued keys for clarity (query handles None)
+                    _knowledge_filters = {k: v for k, v in _knowledge_filters.items() if v is not None}
+                except Exception as _kf_err:
+                    logger.debug("knowledge_filter_build_failed job_id=%s: %s", job_id, _kf_err)
+                    _knowledge_filters = {}
+
+                # ── Phase 5.2: AI Trace Logger ────────────────────────────────────
+                _ai_tracer = None
+                try:
+                    from app.ai.tracing import AITraceLogger
+                    _ai_tracer = AITraceLogger(job_id)
+                    _ai_tracer.log_input_filters(_knowledge_filters)
+                except Exception as _tracer_err:
+                    logger.debug("ai_tracer_init_failed job_id=%s: %s", job_id, _tracer_err)
+
+                # ── Phase 5.2: Retrieve knowledge items ───────────────────────────
+                _retrieved_knowledge: list = []
+                try:
+                    from app.ai.rag.knowledge_warmup import get_knowledge_index
+                    _kidx = get_knowledge_index()
+                    if _kidx.is_ready():
+                        _retrieved_knowledge = _kidx.query(_knowledge_filters, top_k=10)
+                        logger.info(
+                            "knowledge_retrieved job_id=%s filters=%s count=%d",
+                            job_id, list(_knowledge_filters.keys()), len(_retrieved_knowledge),
+                        )
+                        if _ai_tracer is not None:
+                            _ai_tracer.log_knowledge_retrieved(_retrieved_knowledge)
+                    else:
+                        logger.debug("knowledge_index_not_ready job_id=%s", job_id)
+                        if _ai_tracer is not None:
+                            _ai_tracer.log_fallback("no_index", "knowledge index not ready at render time")
+                except Exception as _kr_err:
+                    logger.warning("knowledge_retrieval_failed job_id=%s: %s", job_id, _kr_err)
+                    _retrieved_knowledge = []
+                    if _ai_tracer is not None:
+                        try:
+                            _ai_tracer.log_fallback("ai_exception", str(_kr_err))
+                        except Exception:
+                            pass
+
+                if not _retrieved_knowledge:
+                    if _ai_tracer is not None:
+                        try:
+                            _ai_tracer.log_fallback("no_matching_rules", "no knowledge items matched filters")
+                        except Exception:
+                            pass
+
                 _ai_context = {
                     "job_id": job_id,
                     "srt_path": str(full_srt) if full_srt_available else None,
@@ -2256,6 +2317,9 @@ def run_render_pipeline(
                     "market": getattr(payload, "viral_market", None),
                     # Phase 4: source path for optional beat analysis
                     "source_path": str(source_path) if source_path else None,
+                    # Phase 5.2: retrieved knowledge items and filters
+                    "retrieved_knowledge": _retrieved_knowledge,
+                    "knowledge_filters": _knowledge_filters,
                 }
                 _ai_edit_plan = _create_ai_plan(payload, _ai_context)
                 if _ai_edit_plan is not None:
@@ -2272,6 +2336,18 @@ def run_render_pipeline(
                         step="ai_director",
                         context=_ai_edit_plan.to_dict(),
                     )
+                    # Phase 5.2: trace render plan summary
+                    if _ai_tracer is not None:
+                        try:
+                            _ai_tracer.log_render_plan_summary({
+                                "mode": _ai_edit_plan.mode,
+                                "segments": len(_ai_edit_plan.selected_segments),
+                                "fallback_used": _ai_edit_plan.fallback_used,
+                                "knowledge_items_used": len(_retrieved_knowledge),
+                                "warnings": list(_ai_edit_plan.warnings),
+                            })
+                        except Exception:
+                            pass
             except Exception as _ai_err:
                 _job_log(
                     effective_channel, job_id,

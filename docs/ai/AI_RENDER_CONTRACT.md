@@ -219,8 +219,26 @@ Output
 
 ---
 
+## Phase 5.2 Status
+
+| Component | Status |
+|---|---|
+| Local knowledge loader | ACTIVE — `app/ai/rag/knowledge_loader.py` reads all `knowledge/processed/*.jsonl` |
+| Knowledge schema | DEFINED — `app/ai/rag/knowledge_schema.py` — `KnowledgeItem` dataclass with validation |
+| Filter-based retrieval | ACTIVE — `KnowledgeIndex.query()` applies platform/niche/style/duration/aspect_ratio/subtitle_style/target_goal filters |
+| FAISS load/save/rebuild | ACTIVE — `KnowledgeIndex.save()/load()/rebuild()` with metadata persistence; FALLBACK MODE if FAISS/sentence-transformers unavailable |
+| Startup warmup | ACTIVE — `warmup_knowledge_index()` called in daemon background thread at startup |
+| Retrieved knowledge injected into AI edit context | ACTIVE — `retrieved_knowledge` and `knowledge_filters` added to `_ai_context` in `render_pipeline.py` |
+| AI edit plan knowledge hints | ACTIVE — `pacing_hint`, `subtitle_emphasis_hint`, `hook_hint` extracted in `ai_director.py`; attached as advisory `knowledge_injection` metadata |
+| Minimal trace logger | ACTIVE — `app/ai/tracing.py` — `AITraceLogger` writes JSONL to `data/logs/{job_id}_ai_trace.jsonl` |
+| No cloud AI at runtime | CONFIRMED — zero external API calls during render |
+| Render works without knowledge/index | CONFIRMED — missing knowledge files, missing FAISS index, or retrieval failure all degrade gracefully; renders proceed with safe defaults |
+
+---
+
 ## Changelog
 
 | Date | Change |
 |---|---|
 | 2026-05-23 | Initial document — Phase 5.1 AI knowledge foundation |
+| 2026-05-23 | Phase 5.2 — local knowledge retrieval activated; knowledge schema/loader/index/warmup/tracing implemented |
