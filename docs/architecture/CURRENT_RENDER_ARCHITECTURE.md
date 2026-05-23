@@ -483,3 +483,38 @@ New read-only API endpoints added to `backend/app/routes/jobs.py`:
 - No raw filesystem paths accepted from or returned to client
 
 **No render, FFmpeg, or DB schema changes.**
+
+---
+
+## Phase 5.10 — UI/Backend Contract Freeze (2026-05-23)
+
+**Status**: SHIPPED
+
+**Goal**: Freeze the UI/backend API contract so Phase 6 UI overhaul can begin
+against a stable, documented surface.
+
+**New files**:
+- `docs/ui/UI_BACKEND_CONTRACT.md` — single authoritative contract document
+- `backend/tests/test_ui_backend_contract.py` — 44 contract tests
+- `backend/tests/test_ui_option_contract.py` — 47 option enum tests
+- `backend/tests/test_quality_api_contract.py` — 40 quality API tests
+
+**Key findings**:
+- 37 active endpoints across core, render, jobs, and file routers
+- Zero occurrences of old `/api/upload/` domain in static JS files (confirmed clean)
+- 10 canonical subtitle style presets documented
+- 6 effect presets documented
+- `pro_karaoke` (schema default for `subtitle_style`) is not a canonical preset — resolves to `tiktok_bounce_v1`; Phase 6 UI must use canonical IDs
+- Quality report endpoints (Phase 5.9) are active but not yet called by the current UI — Phase 6 must add quality panel
+
+**Contracts frozen**:
+- All RenderRequest fields categorized: UI_READY / ADVANCED_ONLY / INTERNAL_ONLY / DEPRECATED / DO_NOT_USE
+- All valid enum values for subtitle_style, effect_preset, target_platform, aspect_ratio, source_quality_mode, render_profile documented
+- AI UI contract: what controls to show, what to display, what AI can influence
+- Quality report API response shapes documented with score thresholds
+- WebSocket fingerprint change detection documented
+- Phase 6 UI overhaul checklist defined
+
+**No FFmpeg changes. No render behavior changes. No API behavior changes.**
+
+**Test suite after Phase 5.10**: 8 failed (pre-existing) / 7479 passed / 2 skipped.

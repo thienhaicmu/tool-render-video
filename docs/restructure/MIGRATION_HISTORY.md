@@ -1,4 +1,4 @@
-# MIGRATION_HISTORY.md
+﻿# MIGRATION_HISTORY.md
 
 **Historical implementation record for the output-timeline architecture restructure.**
 **Architecture source of truth lives in** [docs/architecture/](../architecture/).
@@ -2178,3 +2178,44 @@ Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.p
 - Invalid job_id → 400; missing job/part → 404; missing report → 404
 - No DB schema changes
 - Baseline test count unchanged (8 failures from Phase 5.8 pre-existing)
+
+---
+
+## Phase 5.10 — UI/Backend Contract Freeze (2026-05-23)
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+
+**Purpose**: Freeze the UI/backend contract before Phase 6 UI overhaul. Audit
+all active endpoints, document all RenderRequest field statuses, document valid
+option enums, and create tests that enforce the contract.
+
+**New files**:
+- `docs/ui/UI_BACKEND_CONTRACT.md` — 14-section contract document; single source of truth for Phase 6 UI
+- `backend/tests/test_ui_backend_contract.py` — 44 tests: endpoint existence, removed routes absent, file upload, RenderRequest instantiation, static file audit
+- `backend/tests/test_ui_option_contract.py` — 47 tests: subtitle style enum, effect preset enum, platform options, duration bounds, source quality modes, render profiles, AI hint bounds
+- `backend/tests/test_quality_api_contract.py` — 40 tests: quality endpoint 404/400 behavior, response shapes, locator security, contract doc existence
+
+**Key audit findings**:
+- 37 active API endpoints (render: 17, jobs: 12, files: 1, core: 2, other routers: 5+)
+- Zero `/api/upload/` (old domain) calls in static JS — upload domain fully removed
+- Two `/api/upload-file` (hyphen) calls in editor JS — correct, intentional
+- 10 canonical subtitle style presets; `pro_karaoke` (schema default) is not canonical — resolves to `tiktok_bounce_v1`; Phase 6 UI must use canonical IDs
+- 6 effect presets; quality endpoints (Phase 5.9) active but not yet called by UI
+- WebSocket fingerprint logic documented
+- Phase 6 UI overhaul checklist: 14 items
+
+**Contracts introduced**:
+- `docs/ui/UI_BACKEND_CONTRACT.md` is frozen — Phase 6 UI must comply with it
+- All removed `/api/upload/*` routes confirmed absent and test-asserted
+- All option enums test-validated against live backend code
+- Quality report response shapes test-asserted against `QualityReport.to_dict()` and `build_job_quality_summary()`
+- Score thresholds: >=85 Good, 70-84 Needs review, 50-69 Warning, <50 Poor
+
+**No code changes to render pipeline, FFmpeg, or API behavior.**
+
+**Test suite state (Post Phase 5.10)**:
+```
+8 failed (pre-existing), 7479 passed, 2 skipped
+```
+Phase 5.10 added 131 new passing tests.

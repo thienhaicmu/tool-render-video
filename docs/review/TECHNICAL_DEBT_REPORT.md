@@ -379,3 +379,27 @@ The following items were addressed or resolved by Phase 5.6:
 | Report summary builder | ADDED — `app/quality/report_summary.py`; aggregates score/severity counts across parts |
 | Filesystem path exposure | CONFIRMED SAFE — no raw paths returned in API responses |
 | No render behavior change | CONFIRMED — zero render/FFmpeg/DB schema changes in Phase 5.9 |
+
+
+---
+
+## Phase 5.10 Contract Freeze (2026-05-23)
+
+| Item | Status |
+|---|---|
+| UI/backend contract freeze | COMPLETE — `docs/ui/UI_BACKEND_CONTRACT.md` created |
+| All active endpoints documented | 37 endpoints audited and classified |
+| Removed /api/upload/* routes confirmed absent | CONFIRMED — test-asserted in test_ui_backend_contract.py |
+| RenderRequest field contract | COMPLETE — 70+ fields categorized UI_READY/ADVANCED_ONLY/INTERNAL_ONLY/DEPRECATED/DO_NOT_USE |
+| Subtitle style enum frozen | 10 canonical presets documented; legacy aliases documented |
+| Effect preset enum frozen | 6 presets documented; AI intensity mapping documented |
+| AI UI contract documented | Controls, display items, influence summary all documented |
+| Quality API response shapes frozen | Single-part and job-level shapes documented with score thresholds |
+| WebSocket contract documented | Fingerprint logic, terminal behavior, push interval documented |
+| Phase 6 UI overhaul checklist | 14-item checklist in UI_BACKEND_CONTRACT.md §14 |
+| Contract enforcement tests | 131 new passing tests across 3 test files |
+| Known pre-existing failures | 8 (unchanged) |
+
+**`pro_karaoke` is not a canonical subtitle preset** — resolves to `tiktok_bounce_v1`. Phase 6 UI must use canonical IDs from the frozen enum list.
+
+**Phase 6 can now begin** against the frozen contract in `docs/ui/UI_BACKEND_CONTRACT.md`.
