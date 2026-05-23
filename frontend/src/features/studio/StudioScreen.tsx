@@ -1,14 +1,17 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useUIStore } from '../../stores/uiStore'
 import { StepStrip } from './components/StepStrip'
 import { WorkflowPanel } from './components/WorkflowPanel'
 import { PreviewWorkspace } from './components/PreviewWorkspace'
 import { BottomRenderState } from './components/BottomRenderState'
+import { getPreviewVideoUrl } from '../../api/render'
 
 export function StudioScreen() {
   const studioStep    = useUIStore((s) => s.studioStep)
   const setStudioStep = useUIStore((s) => s.setStudioStep)
   const hasInitialized = useRef(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const mediaUrl = sessionId ? getPreviewVideoUrl(sessionId) : undefined
 
   useEffect(() => {
     if (!hasInitialized.current && studioStep === null) {
@@ -42,7 +45,7 @@ export function StudioScreen() {
           minHeight: 0,
         }}
       >
-        <PreviewWorkspace studioStep={studioStep} />
+        <PreviewWorkspace studioStep={studioStep} mediaUrl={mediaUrl} />
         <WorkflowPanel studioStep={studioStep} />
       </div>
 

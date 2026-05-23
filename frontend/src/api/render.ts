@@ -1,7 +1,7 @@
 /**
  * Render API — POST /api/render/process, cancel, status
  */
-import { apiFetch } from './client'
+import { apiFetch, BASE_URL } from './client'
 import type { RenderRequest, RenderResponse, JobStatus } from '../types/api'
 
 /**
@@ -51,4 +51,40 @@ export async function retryRender(jobId: string): Promise<RenderResponse> {
   return apiFetch<RenderResponse>(`/api/render/retry/${encodeURIComponent(jobId)}`, {
     method: 'POST',
   })
+}
+
+export interface PrepareSourceResponse {
+  session_id: string
+  duration: number
+  title: string
+  export_dir: string
+}
+
+export async function prepareSource(body: {
+  source_mode: 'youtube' | 'local'
+  youtube_url?: string
+  source_video_path?: string
+}): Promise<PrepareSourceResponse> {
+  return apiFetch<PrepareSourceResponse>('/api/render/prepare-source', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function getPreviewVideoUrl(sessionId: string): string {
+  return `${BASE_URL}/api/render/preview-video/${encodeURIComponent(sessionId)}`
+}
+
+export interface TranscriptSegment {
+  start: number
+  end: number
+  text: string
+}
+
+export async function getPreviewTranscript(
+  sessionId: string,
+): Promise<{ segments: TranscriptSegment[] }> {
+  return apiFetch<{ segments: TranscriptSegment[] }>(
+    `/api/render/preview-transcript/${encodeURIComponent(sessionId)}`,
+  )
 }

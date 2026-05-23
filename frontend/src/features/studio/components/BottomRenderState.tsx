@@ -1,38 +1,54 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { RenderJobCard } from './RenderJobCard'
 import { type RenderJobData } from '../types'
-
-const MOCK_JOBS: RenderJobData[] = [
-  {
-    jobId: 'mock-1',
-    title: 'TikTok Highlight Reel',
-    state: 'rendering',
-    progress: 67,
-    stage: 'Encoding vertical 9:16',
-    eta: '~40s',
-    platform: 'TikTok',
-  },
-  {
-    jobId: 'mock-2',
-    title: 'Instagram Story Cut',
-    state: 'reviewing',
-    platform: 'Instagram',
-  },
-  {
-    jobId: 'mock-3',
-    title: 'YouTube Long Version',
-    state: 'queued',
-    platform: 'YouTube',
-  },
-]
+import { getJobHistory } from '../../../api/jobs'
+import type { HistoryItem } from '../../../types/api'
 
 const ACTIVE_STATES: RenderJobData['state'][] = ['rendering', 'preparing', 'reviewing']
 
 export function BottomRenderState() {
   const [collapsed, setCollapsed] = useState(true)
   const [toggleHovered, setToggleHovered] = useState(false)
+  const [jobs, setJobs] = useState<RenderJobData[]>([])
 
-  const activeCount = MOCK_JOBS.filter((j) => ACTIVE_STATES.includes(j.state)).length
+  useEffect(() => {
+    function mapItem(item: HistoryItem): RenderJobData {
+      let state: RenderJobData['state']
+      const s = item.status
+      if (s === 'running') {
+        state = 'rendering'
+      } else if (s === 'interrupted' || s === 'cancelled' || s === 'cancelling') {
+        state = 'failed'
+      } else if (s === 'queued' || s === 'completed' || s === 'failed') {
+        state = s as RenderJobData['state']
+      } else {
+        state = 'failed'
+      }
+      const raw = item.title || item.source_hint || item.job_id
+      const title = raw.length > 40 ? raw.slice(0, 40) + '…' : raw
+      return {
+        jobId: item.job_id,
+        title,
+        state,
+        stage: item.stage || undefined,
+      }
+    }
+
+    async function fetchJobs() {
+      try {
+        const res = await getJobHistory(20, 0)
+        setJobs(res.items.map(mapItem))
+      } catch {
+        // silent — retry on next interval
+      }
+    }
+
+    fetchJobs()
+    const id = window.setInterval(fetchJobs, 5000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const activeCount = jobs.filter((j) => ACTIVE_STATES.includes(j.state)).length
   const hasActive = activeCount > 0
 
   return (
@@ -118,7 +134,7 @@ export function BottomRenderState() {
             gap: 'var(--space-2)',
           }}
         >
-          {MOCK_JOBS.map((job) => (
+          {jobs.map((job) => (
             <RenderJobCard key={job.jobId} {...job} />
           ))}
         </div>
