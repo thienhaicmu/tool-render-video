@@ -319,6 +319,8 @@ All 42 `/api/upload/*` endpoints — REMOVED Phase 4F.5A–C. No residual route 
 
 ## 12. Frontend API Usage Audit
 
+**Active frontend**: `backend/static/` — this is the default UI served by FastAPI. `backend/static-v2/` is an opt-in alternate (set `STATIC_UI_VERSION=v2`). `backend/static-v3/` and `backend/static-v4/` are legacy/archive fragments that serve no active route and are not enabled by default.
+
 Audited directory: `backend/static/` (V1 frontend — active default).
 
 **Classification key**:
@@ -518,7 +520,7 @@ From `TECHNICAL_DEBT_REPORT.md` (post Phase 4H.6), key items:
 | H2 | No test coverage for core pipeline | PARTIALLY RESOLVED — overlay path, domain models, audio mix, subtitle modules now covered; legacy `render_part_smart()` path has no end-to-end test |
 | H3 | RAG memory not wired to production render | UNRESOLVED — one-line fix, never done |
 | H4 | FAISS vector index not persisted | UNRESOLVED |
-| H5 | V2/V3/V4 frontends ship but are not default | UNRESOLVED |
+| H5 | `backend/static/` is the active default frontend. `static-v2/` is opt-in via `STATIC_UI_VERSION=v2`. `static-v3/` and `static-v4/` are legacy/archive fragments that serve no active route. All three ship in every Electron build as dead weight. | UNRESOLVED |
 | H6 | YouTube download hang risk (partial) | PARTIALLY RESOLVED — socket_timeout=60; no wall-clock timeout |
 | H7 | Preview session memory loss on restart | UNRESOLVED |
 
