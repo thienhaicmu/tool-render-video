@@ -352,7 +352,46 @@ All items completed:
 
 ---
 
-## 13. Phase 6.5 Checklist (next steps)
+## 13. Phase 6.5 — Editor Screen with Preview Video + Trim Controls (SHIPPED 2026-05-23)
 
-- [ ] Editor screen with preview video and trim controls
+All items completed:
+
+- [x] Editor feature module (`src/features/editor/`)
+  - `EditorScreen.tsx` — top-level screen; fetches parts, routes to empty/loading/error/preview
+  - `VideoPreview.tsx` — native HTML5 `<video controls>` with onDuration/onTimeUpdate/onError callbacks; error overlay on load failure
+  - `TrimControls.tsx` — two number inputs (start/end in seconds) with mm:ss labels, trim duration display, inline validation, reset button
+  - `EditorMetadataPanel.tsx` — right-rail panel: job ID (monospace + copy), part, status, duration, trim summary, copy media URL, disabled future actions (Phase 6.6+)
+  - `EditorEmptyState.tsx` — shown when no job selected; "Go to History" CTA
+  - `EditorLoadingState.tsx` — skeleton for parts fetch
+  - `EditorErrorState.tsx` — error + optional retry button
+  - `EditorScreen.css` — editor layout tokens (flex, rail, video frame)
+  - `editor.types.ts` — `EditorMediaInfo` interface
+  - `editor.utils.ts` — `buildMediaUrl`, `buildThumbnailUrl`, `formatTime`, `clamp`, `validateTrim` (all pure)
+- [x] editorStore (`src/stores/editorStore.ts`)
+  - Fields: `selectedJobId`, `selectedPartNo`, `mediaUrl`, `durationSec`, `trimStartSec`, `trimEndSec`, `isDirty`
+  - Actions: `openEditor`, `setDuration`, `setTrim`, `resetTrim`, `closeEditor`
+  - Trim is UI-only — no backend mutations
+- [x] stores/index.ts updated to export `useEditorStore` and `EditorStore`
+- [x] api/jobs.ts: added `getJobParts(jobId)` → `GET /api/jobs/{jobId}/parts`
+- [x] App.tsx: `editor: EditorScreen` replaces placeholder `EditorPanel`
+- [x] JobDetailDrawer updated
+  - "Open in Editor" button added between progress and payload sections
+  - Enabled for: `completed`, `partial`, `completed_with_errors` statuses
+  - Disabled for: `queued`, `running`, `failed`, `interrupted`, `cancelled`, etc.
+  - On click: `openEditor(job.job_id, 1)` + `setActivePanel('editor')` — no backend call
+- [x] Part selector shown only when job has multiple parts
+- [x] Video preview triggers `editorStore.setDuration()` on metadata load
+- [x] Tests: 55 new tests across 4 test files (335 total, all passing)
+  - `tests/editor-utils.test.ts` — 18 pure logic tests
+  - `tests/editor-screen.test.tsx` — 11 rendering + behaviour tests
+  - `tests/trim-controls.test.tsx` — 13 trim controls tests
+  - `tests/job-detail-open-editor.test.tsx` — 9 open-in-editor integration tests
+
+---
+
+## 14. Phase 6.6 Checklist (next steps)
+
+- [ ] Apply Trim — submit trim range to backend for re-render
+- [ ] Re-render Selection — re-render a specific clip segment
+- [ ] Export Clip — export trimmed clip to output directory
 - [ ] Integration testing with Electron shell

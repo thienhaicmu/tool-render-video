@@ -5,9 +5,7 @@ import { AppShell } from './layouts/AppShell'
 import { useUIStore } from './stores/uiStore'
 import { RenderSetupScreen } from './features/render/RenderSetupScreen'
 import { HistoryScreen } from './features/jobs/HistoryScreen'
-function EditorPanel() {
-  return <div style={{ padding: 'var(--space-6)', color: 'var(--color-text-secondary)' }}>Editor panel — Phase 6.1</div>
-}
+import { EditorScreen } from './features/editor/EditorScreen'
 function SettingsPanel() {
   return <div style={{ padding: 'var(--space-6)', color: 'var(--color-text-secondary)' }}>Settings panel — Phase 6.1</div>
 }
@@ -15,7 +13,7 @@ function SettingsPanel() {
 const PANEL_MAP = {
   render: RenderSetupScreen,
   history: HistoryScreen,
-  editor: EditorPanel,
+  editor: EditorScreen,
   settings: SettingsPanel,
 } as const
 

@@ -2472,3 +2472,56 @@ Docs updated:
 **Backend impact**: None — reads existing WebSocket endpoint `/api/jobs/{jobId}/ws`.
 
 **Test results**: 280/280 passed (14 test files, 63 new tests)
+
+---
+
+## Phase 6.5 — Editor Screen with Preview Video + Trim Controls
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED 2026-05-23
+**Source plan**: `docs/ui/PHASE_6_UI_ARCHITECTURE.md` §13
+
+**Purpose**: Add editor panel with HTML5 video preview and UI-only trim controls.
+No backend mutations — trim state is local until Phase 6.6 wires it to re-render.
+
+**New files**:
+- `frontend/src/features/editor/editor.types.ts` — `EditorMediaInfo` interface
+- `frontend/src/features/editor/editor.utils.ts` — `buildMediaUrl`, `buildThumbnailUrl`, `formatTime`, `clamp`, `validateTrim` (pure)
+- `frontend/src/features/editor/VideoPreview.tsx` — native HTML5 video player with error overlay
+- `frontend/src/features/editor/TrimControls.tsx` — start/end number inputs with mm:ss display, validation, reset
+- `frontend/src/features/editor/EditorMetadataPanel.tsx` — right-rail: job ID, part, status, duration, trim summary, copy URL, disabled future actions
+- `frontend/src/features/editor/EditorEmptyState.tsx` — empty state with "Go to History" CTA
+- `frontend/src/features/editor/EditorLoadingState.tsx` — loading skeleton
+- `frontend/src/features/editor/EditorErrorState.tsx` — error + retry button
+- `frontend/src/features/editor/EditorScreen.tsx` — top-level screen
+- `frontend/src/features/editor/EditorScreen.css` — layout tokens
+- `frontend/src/stores/editorStore.ts` — `useEditorStore` (selectedJobId, selectedPartNo, mediaUrl, durationSec, trimStartSec, trimEndSec, isDirty)
+
+**Modified files**:
+- `frontend/src/api/jobs.ts` — added `getJobParts(jobId)` → `GET /api/jobs/{jobId}/parts`
+- `frontend/src/stores/index.ts` — exports `useEditorStore` and `EditorStore`
+- `frontend/src/App.tsx` — `editor: EditorScreen` replaces `EditorPanel` placeholder
+- `frontend/src/features/jobs/JobDetailDrawer.tsx` — "Open in Editor" button (enabled for completed/partial/completed_with_errors)
+
+Tests — new files:
+- `frontend/tests/editor-utils.test.ts` — 18 pure logic tests
+- `frontend/tests/editor-screen.test.tsx` — 11 rendering + behaviour tests
+- `frontend/tests/trim-controls.test.tsx` — 13 trim controls tests
+- `frontend/tests/job-detail-open-editor.test.tsx` — 9 open-in-editor integration tests
+
+Docs updated:
+- `docs/ui/PHASE_6_UI_ARCHITECTURE.md` — Phase 6.5 section added, checklist updated to Phase 6.6
+- `docs/restructure/MIGRATION_HISTORY.md` — this entry
+
+**Contracts introduced**:
+- Trim state is UI-only — no backend calls in Phase 6.5
+- `editorStore.openEditor(jobId, partNo)` builds the media URL client-side
+- Media URL pattern: `/api/render/jobs/{jobId}/parts/{partNo}/media` (Vite proxy → backend)
+- "Open in Editor" button enabled only for terminal statuses with rendered output: `completed`, `partial`, `completed_with_errors`
+- `getJobParts` is the only new API call — `GET /api/jobs/{jobId}/parts` → `JobPart[]`
+
+**Backend impact**: None — reads existing endpoints (`/api/jobs/{id}/parts`, `/api/render/jobs/{id}/parts/{n}/media`).
+
+**Test results**: 335/335 passed (18 test files, 55 new tests)
+
+**Test results**: 280/280 passed (14 test files, 63 new tests)

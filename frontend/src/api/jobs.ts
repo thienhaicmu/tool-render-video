@@ -4,6 +4,7 @@
 import { apiFetch } from './client'
 import type {
   JobStatus,
+  JobPart,
   JobsHistoryResponse,
   QualityReport,
   QualitySummary,
@@ -81,6 +82,14 @@ export async function deleteJob(
   return apiFetch(`/api/jobs/${encodeURIComponent(jobId)}?${params}`, {
     method: 'DELETE',
   })
+}
+
+/**
+ * Get all parts for a job.
+ * GET /api/jobs/{jobId}/parts
+ */
+export async function getJobParts(jobId: string): Promise<JobPart[]> {
+  return apiFetch<JobPart[]>(`/api/jobs/${encodeURIComponent(jobId)}/parts`)
 }
 
 // ── NOTE: Do NOT use GET /api/jobs (unbounded). Use getJobHistory() instead. ──

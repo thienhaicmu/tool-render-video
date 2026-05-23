@@ -3,6 +3,7 @@
  */
 import { type ReactNode, useEffect, useState } from 'react'
 import { Badge } from '../../components/ui/Badge'
+import { Button } from '../../components/ui/Button'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { JobStatusBadge } from './JobStatusBadge'
 import { formatDateTime } from './jobs.utils'
@@ -10,6 +11,8 @@ import { getJob } from '../../api/jobs'
 import type { JobStatus } from '../../types/api'
 import { QualityPanel } from '../quality/QualityPanel'
 import { JobProgressPanel } from '../progress/JobProgressPanel'
+import { useEditorStore } from '../../stores/editorStore'
+import { useUIStore } from '../../stores/uiStore'
 
 export interface JobDetailDrawerProps {
   jobId: string
@@ -145,6 +148,9 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
   const [job, setJob] = useState<JobStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const openEditor = useEditorStore((s) => s.openEditor)
+  const setActivePanel = useUIStore((s) => s.setActivePanel)
 
   useEffect(() => {
     let cancelled = false
@@ -298,6 +304,28 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
               </div>
               <ProgressBar value={job.progress_percent} />
             </div>
+
+            {/* Open in Editor */}
+            {(() => {
+              const isEditorAvailable = ['completed', 'partial', 'completed_with_errors'].includes(job.status)
+              return (
+                <div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={!isEditorAvailable}
+                    onClick={() => {
+                      openEditor(job.job_id, 1)
+                      setActivePanel('editor')
+                    }}
+                    title={!isEditorAvailable ? 'No rendered parts available yet' : undefined}
+                    data-testid="open-in-editor-btn"
+                  >
+                    Open in Editor
+                  </Button>
+                </div>
+              )
+            })()}
 
             {/* Payload */}
             <PayloadSection payloadJson={job.payload_json} />
