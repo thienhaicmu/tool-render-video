@@ -4,10 +4,7 @@
 import { AppShell } from './layouts/AppShell'
 import { useUIStore } from './stores/uiStore'
 import { RenderSetupScreen } from './features/render/RenderSetupScreen'
-
-function HistoryPanel() {
-  return <div style={{ padding: 'var(--space-6)', color: 'var(--color-text-secondary)' }}>History panel — Phase 6.1</div>
-}
+import { HistoryScreen } from './features/jobs/HistoryScreen'
 function EditorPanel() {
   return <div style={{ padding: 'var(--space-6)', color: 'var(--color-text-secondary)' }}>Editor panel — Phase 6.1</div>
 }
@@ -17,7 +14,7 @@ function SettingsPanel() {
 
 const PANEL_MAP = {
   render: RenderSetupScreen,
-  history: HistoryPanel,
+  history: HistoryScreen,
   editor: EditorPanel,
   settings: SettingsPanel,
 } as const

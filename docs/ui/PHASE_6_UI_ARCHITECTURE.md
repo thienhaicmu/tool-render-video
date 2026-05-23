@@ -238,14 +238,59 @@ All items completed:
 
 ---
 
-## 10. Phase 6.2 Checklist (next steps)
+## 10. Phase 6.2 — History Screen + Job Actions (SHIPPED 2026-05-23)
 
-- [ ] History screen (`src/features/jobs/HistoryScreen.tsx`)
-  - Paginated list using `/api/jobs/history`
-  - Status badges, retry/rerun/cancel actions
+All items completed:
+
+- [x] History screen (`src/features/jobs/HistoryScreen.tsx`)
+  - Paginated list using `getJobHistory(20, offset)` → `/api/jobs/history`
+  - Local search filtering: by title, source_hint, job_id
+  - Local status filtering: All | Rendering | Complete | Failed | Canceled
+  - Pagination: Previous / Next with `has_more` guard
+  - Detail drawer panel (380px right rail) for selected job
+  - Refresh button
+- [x] Job actions (`src/features/jobs/JobActionsMenu.tsx`)
+  - Cancel (running/queued) → `cancelRender(jobId)`
+  - Retry (can_retry=true) → `retryRender(jobId)`
+  - Re-run (can_rerun=true) → `resumeRender(jobId)`
+  - Delete (terminal) → `window.confirm()` → `deleteJob(jobId, true)`
+  - Details → opens `JobDetailDrawer`
+  - Per-job action loading state via `Set<string>`
+  - Success/error notifications via `uiStore.addNotification`
+- [x] Status badges (`src/features/jobs/JobStatusBadge.tsx`)
+  - All 9 status values mapped: completed/partial/running/queued/failed/interrupted/cancelled/canceled/cancelling
+- [x] Job detail drawer (`src/features/jobs/JobDetailDrawer.tsx`)
+  - Full `JobStatus` loaded via `getJob(jobId)` on open
+  - job_id (monospace + copy button), kind badge, status badge, stage, dates, progress bar
+  - Payload section (collapsible): source, URL/path, platform, aspect ratio, subtitle style, effect preset
+  - Placeholders for live progress, quality report, AI trace (Phase 6.3)
+  - Close button
+- [x] Supporting components
+  - `JobList.tsx` — rendered list with pagination controls
+  - `JobListItem.tsx` — card with title, source, badge, progress bar (active jobs), counts, timestamp
+  - `JobFilters.tsx` — search input + status dropdown
+  - `JobEmptyState.tsx` — "No render jobs yet" + CTA to render panel
+  - `JobLoadingState.tsx` — 3-row skeleton placeholder
+  - `JobErrorState.tsx` — error message + retry button
+- [x] Utility functions (`src/features/jobs/jobs.utils.ts`)
+  - `formatRelativeTime`, `formatDateTime`, `isTerminalStatus`, `isActiveStatus`
+  - `canCancel`, `canRetry`, `canRerun`, `canDelete`
+- [x] Local types (`src/features/jobs/jobs.types.ts`)
+  - `StatusFilter`, `JobActionState`
+- [x] App.tsx wired: `history: HistoryScreen` replaces placeholder
+- [x] Tests: 64 new tests across 4 test files (173 total, all passing)
+
+---
+
+## 11. Phase 6.3 Checklist (next steps)
+
+- [ ] Quality panel on job detail (on-demand, not polled)
+  - Per-part quality badges from `getJobPartQuality(jobId, partNo)`
+  - Aggregated quality summary from `getJobQualitySummary(jobId)`
+  - Issue list with severity grouping
 - [ ] Job progress panel (`src/features/render/JobProgress.tsx`)
   - Live WebSocket via useRenderSocket hook
   - ProgressBar component for overall %
   - Stage display + Cancel button
-- [ ] Quality panel on job detail (on-demand, not polled)
+- [ ] AI trace panel (placeholder → real in 6.3)
 - [ ] Editor screen with preview video and trim controls

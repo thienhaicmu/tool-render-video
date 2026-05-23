@@ -2325,3 +2325,57 @@ frontend is untouched and remains fully operational.
 - Submit calls `POST /api/render/process` via `renderStore.submitRender()`
 - On success: success notification + redirect to history panel
 - On failure: error notification, stays on render panel
+
+---
+
+## Phase 6.2 — History Screen + Job Actions (2026-05-23)
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+
+**Purpose**: Build the History Screen — paginated job list with search/filter, job action buttons (cancel/retry/re-run/delete), and a detail drawer for selected jobs.
+
+**Files created**:
+- `frontend/src/features/jobs/HistoryScreen.tsx` — top-level screen; manages fetch, pagination, filters, action state
+- `frontend/src/features/jobs/HistoryScreen.css` — layout CSS (.history-screen, .history-content, .history-list-pane, .history-detail-pane)
+- `frontend/src/features/jobs/JobList.tsx` — renders filtered list + pagination controls
+- `frontend/src/features/jobs/JobListItem.tsx` — card: title, badge, source, progress bar (active), counts, timestamp, actions
+- `frontend/src/features/jobs/JobStatusBadge.tsx` — maps 9 status strings to Badge variants
+- `frontend/src/features/jobs/JobActionsMenu.tsx` — Cancel/Retry/Re-run/Details/Delete buttons with conditions
+- `frontend/src/features/jobs/JobDetailDrawer.tsx` — right-rail panel; loads full JobStatus via getJob(), collapsible payload section
+- `frontend/src/features/jobs/JobFilters.tsx` — search input + status filter dropdown
+- `frontend/src/features/jobs/JobEmptyState.tsx` — empty list with "Create first render" CTA
+- `frontend/src/features/jobs/JobLoadingState.tsx` — 3-row skeleton placeholder
+- `frontend/src/features/jobs/JobErrorState.tsx` — error message + retry button
+- `frontend/src/features/jobs/jobs.utils.ts` — formatRelativeTime, formatDateTime, isTerminalStatus, isActiveStatus, canCancel, canRetry, canRerun, canDelete
+- `frontend/src/features/jobs/jobs.types.ts` — StatusFilter, JobActionState
+- `frontend/tests/history-screen.test.tsx` — 14 screen integration tests
+- `frontend/tests/job-actions.test.tsx` — 9 action handler tests
+- `frontend/tests/job-status.test.tsx` — 10 status badge tests
+- `frontend/tests/job-utils.test.ts` — 31 utility function tests
+
+**Files modified**:
+- `frontend/src/App.tsx` — replaced HistoryPanel placeholder with HistoryScreen import
+
+**Status badge map (9 statuses)**:
+- completed → Complete (success), partial → Partial (warning), running → Rendering (info)
+- queued → Queued (neutral), failed → Failed (error), interrupted → Interrupted (warning)
+- cancelled/canceled → Canceled (neutral), cancelling → Canceling (warning), unknown → Unknown (neutral)
+
+**Action conditions**:
+- Cancel: isActiveStatus(status) → cancelRender(jobId)
+- Retry: item.can_retry → retryRender(jobId)
+- Re-run: item.can_rerun → resumeRender(jobId)
+- Delete: isTerminalStatus(status) → window.confirm() → deleteJob(jobId, true)
+- Details: always visible → opens JobDetailDrawer
+
+**Test results**: 173/173 passed (10 test files, 64 new tests)
+
+**Contracts preserved**:
+- `backend/static/` untouched — legacy UI remains fully operational
+- History uses `GET /api/jobs/history?limit=20&offset=N` (paginated) — never unbounded `/api/jobs`
+- Delete uses `DELETE /api/jobs/{id}?delete_files=true`
+- Cancel uses `POST /api/render/{id}/cancel`
+- Retry uses `POST /api/render/retry/{id}`
+- Re-run uses `POST /api/render/resume/{id}`
+- Quality endpoints NOT called in Phase 6.2 — placeholder shown in drawer
