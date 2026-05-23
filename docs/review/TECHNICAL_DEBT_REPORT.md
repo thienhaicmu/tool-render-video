@@ -312,3 +312,16 @@ The following previously-noted debt items were addressed or partially resolved b
 | "No structured contract between AI and render pipeline" | RESOLVED — `contracts.py` defines `CreativeBrief`, `RenderExecutionHints`, `AIValidationResult` as explicit dataclasses with `to_dict()` methods |
 | "AI knowledge retrieval has no mapping layer" | RESOLVED — `render_mapper.py` maps raw `render_usage` fields from knowledge items to validated execution hints; weight-sorted, deterministic |
 | "AI render decisions not traceable" | PARTIALLY RESOLVED — `ai.execution_hints`, `ai.validation_fixup`, `ai.decision_rejected` events added to `AITraceLogger` |
+
+---
+
+## Phase 5.4 Resolutions (2026-05-23)
+
+The following items were addressed or resolved by Phase 5.4:
+
+| Item | Resolution |
+|---|---|
+| "Pacing hint application: advisory only" | RESOLVED — `app/ai/pacing.py` `build_ai_pacing_config()` now applies `cut_interval_min/max` to `_seg_min_sec/_seg_max_sec` before segment building when `ai_director_enabled=True` and user has not overridden defaults |
+| "AI pacing has no injection point in segment building" | RESOLVED — early retrieval block added before `SEGMENT_BUILDING` stage; `_seg_min_sec/_seg_max_sec` propagated to all three segment building calls |
+| "Double FAISS query risk if early retrieval needed" | RESOLVED — `_early_retrieved_knowledge` stored and reused by Phase 5.2/5.3 AI director block; zero double-queries |
+| "AI render decisions not traceable" | FURTHER RESOLVED — `ai.pacing_applied` event added; `log_pacing_applied()` in `AITraceLogger` now writes pacing applied/rejected for every render job with AI enabled |

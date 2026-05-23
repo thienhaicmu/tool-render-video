@@ -1930,3 +1930,38 @@ Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.p
 Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
 
 **No new failures introduced.**
+
+### Phase 5.4 — AI Pacing Hint Propagation (2026-05-23)
+
+**New files**:
+- `backend/app/ai/pacing.py` — `AIPacingConfig` dataclass, `build_ai_pacing_config()`: validates/applies pacing hints; user explicit limits always win
+- `backend/tests/test_ai_pacing_config.py` — 25 tests
+- `backend/tests/test_ai_trace_logger_pacing.py` — 12 tests
+- `backend/tests/test_render_pipeline_ai_pacing.py` — 17 tests
+
+**Modified files**:
+- `backend/app/ai/tracing.py` — `log_pacing_applied()` added
+- `backend/app/orchestration/render_pipeline.py` — Phase 5.4 early pacing block; `_seg_min_sec/_seg_max_sec` local vars; Phase 5.2 block reuses `_early_retrieved_knowledge`
+- Docs: `AI_RENDER_CONTRACT.md`, `AI_DECISION_TRACEABILITY_PLAN.md`, `CURRENT_RENDER_ARCHITECTURE.md`, `TECHNICAL_DEBT_REPORT.md`, `MIGRATION_HISTORY.md` updated
+
+**Pacing injection point**:
+- Early retrieval before `build_segments_from_scenes()` (~line 1683 pre-edit)
+- `_seg_min_sec`/`_seg_max_sec` replace `payload.min_part_sec`/`payload.max_part_sec` in 3 calls
+
+**User override**: `payload.min_part_sec != 15` or `payload.max_part_sec != 60` → AI rejected with `user_duration_override`
+
+**Render behavior impact**:
+- Pacing hints: NOW APPLIED (was advisory only)
+- FFmpeg: ZERO changes
+- Subtitle hints: still advisory
+- Hook overlay gate: still active
+
+### Test Suite State (Post Phase 5.4)
+
+```
+8 failed (same known pre-existing failures) / 7005 passed (+54 new tests) / 1 skipped
+```
+
+Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
+
+**No new failures introduced.**

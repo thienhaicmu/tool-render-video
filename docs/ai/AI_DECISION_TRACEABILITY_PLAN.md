@@ -252,6 +252,18 @@ With this log:
 
 ---
 
+## Implementation Status (Phase 5.4)
+
+| Event | Status |
+|---|---|
+| `ai.pacing_applied` | IMPLEMENTED — `log_pacing_applied(config)` added to `AITraceLogger` |
+| Wired in render_pipeline.py | YES — after `build_ai_pacing_config()` call in early pacing block; logs applied or rejected with reason |
+| `ai.decision_rejected` reason: `user_duration_override` | IMPLEMENTED — logged when user explicit limits override AI |
+| `ai.decision_rejected` reason: `no_pacing_hint` | IMPLEMENTED — logged when execution hints have no cut_interval values |
+| Never raises | CONFIRMED |
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -259,3 +271,4 @@ With this log:
 | 2026-05-23 | Initial planning document — Phase 5.1 |
 | 2026-05-23 | Phase 5.2 — `AITraceLogger` implemented and wired into `render_pipeline.py` |
 | 2026-05-23 | Phase 5.3 — `log_execution_hints`, `log_validation_fixup`, `log_decision_rejected` added; wired for execution hints and advisory rejections |
+| 2026-05-23 | Phase 5.4 — `log_pacing_applied()` added; `ai.pacing_applied` event IMPLEMENTED; wired in render_pipeline.py early pacing block |

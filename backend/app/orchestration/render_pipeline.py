@@ -1651,6 +1651,114 @@ def run_render_pipeline(
         _job_log(effective_channel, job_id, f"{'cache_hit' if _scene_cache_hit else 'cache_miss'} type=scene_detect scenes={len(scenes)} elapsed_ms={_scene_ms}")
         _job_log(effective_channel, job_id, f"Scene detection done: {len(scenes)} scenes in {_scene_ms}ms")
 
+        # ── Phase 5.4: Early AI pacing retrieval (before segment building) ─────
+        # Runs only when ai_director_enabled=True. Retrieves knowledge to get
+        # pacing hints BEFORE build_segments_from_scenes() so they can influence
+        # segment duration config. Results are stored in _early_retrieved_knowledge
+        # to avoid a second FAISS query in the Phase 5.2/5.3 AI director block.
+        # NEVER raises. NEVER modifies payload. NEVER crashes render.
+        # Priority: user explicit limits > AI hints > payload defaults.
+        _early_retrieved_knowledge: list = []
+        _early_pacing_tracer = None
+        _pacing_config = None
+        if getattr(payload, "ai_director_enabled", False):
+            try:
+                from app.ai.rag.knowledge_warmup import get_knowledge_index as _get_kidx
+                from app.ai.render_mapper import map_knowledge_to_execution_hints as _map_hints
+                from app.ai.pacing import build_ai_pacing_config as _build_pacing
+                from app.ai.tracing import AITraceLogger as _AITraceLogger
+
+                # Build knowledge filters (same logic as Phase 5.2 block below)
+                _early_filters: dict = {}
+                try:
+                    _early_filters = {
+                        k: v for k, v in {
+                            "platform": getattr(payload, "render_profile", None) or None,
+                            "niche": None,
+                            "style": None,
+                            "duration": source.get("duration", None),
+                            "aspect_ratio": getattr(payload, "aspect_ratio", None) or None,
+                            "subtitle_style": getattr(payload, "subtitle_style", None) or None,
+                            "target_goal": None,
+                        }.items() if v is not None
+                    }
+                except Exception:
+                    _early_filters = {}
+
+                # Early knowledge retrieval
+                try:
+                    _early_kidx = _get_kidx()
+                    if _early_kidx.is_ready():
+                        _early_retrieved_knowledge = _early_kidx.query(_early_filters, top_k=10)
+                        logger.debug(
+                            "phase54_early_knowledge_retrieved job_id=%s count=%d",
+                            job_id, len(_early_retrieved_knowledge),
+                        )
+                except Exception as _early_kr_err:
+                    logger.debug("phase54_early_retrieval_failed job_id=%s: %s", job_id, _early_kr_err)
+                    _early_retrieved_knowledge = []
+
+                # Map knowledge → execution hints → pacing config
+                if _early_retrieved_knowledge:
+                    try:
+                        _early_hint_result = _map_hints(_early_retrieved_knowledge)
+                        _early_exec_hints = _early_hint_result.hints if _early_hint_result else None
+                        _pacing_config = _build_pacing(_early_exec_hints, payload)
+                    except Exception as _pacing_build_err:
+                        logger.debug("phase54_pacing_build_failed job_id=%s: %s", job_id, _pacing_build_err)
+                        _pacing_config = None
+
+                # Trace logger for pacing
+                try:
+                    _early_pacing_tracer = _AITraceLogger(job_id)
+                except Exception:
+                    _early_pacing_tracer = None
+
+                if _pacing_config is not None and _early_pacing_tracer is not None:
+                    try:
+                        if _pacing_config.applied:
+                            _early_pacing_tracer.log_pacing_applied({
+                                "applied": True,
+                                "cut_interval_min": _pacing_config.cut_interval_min,
+                                "cut_interval_max": _pacing_config.cut_interval_max,
+                                "source_knowledge_ids": _pacing_config.source_knowledge_ids,
+                                "reason": "valid_ai_pacing_hint",
+                            })
+                        else:
+                            _rejected_reason = _pacing_config.rejected_reason or "no_pacing_hint"
+                            _early_pacing_tracer.log_decision_rejected(
+                                _rejected_reason,
+                                detail={
+                                    "hint": "pacing",
+                                    "cut_interval_min": _pacing_config.cut_interval_min,
+                                    "cut_interval_max": _pacing_config.cut_interval_max,
+                                    "reason": _rejected_reason,
+                                },
+                            )
+                    except Exception:
+                        pass
+            except Exception as _p54_err:
+                logger.debug("phase54_early_pacing_block_failed job_id=%s: %s", job_id, _p54_err)
+
+        # Resolve effective segment duration limits:
+        # AI pacing hint (if applied) overrides payload defaults; user explicit limits always win.
+        # _seg_min_sec and _seg_max_sec are used for ALL segment building calls below.
+        _seg_min_sec: int = int(payload.min_part_sec)
+        _seg_max_sec: int = int(payload.max_part_sec)
+        if (
+            _pacing_config is not None
+            and _pacing_config.applied
+            and _pacing_config.cut_interval_min is not None
+            and _pacing_config.cut_interval_max is not None
+        ):
+            _seg_min_sec = int(_pacing_config.cut_interval_min)
+            _seg_max_sec = int(_pacing_config.cut_interval_max)
+            logger.info(
+                "phase54_pacing_applied job_id=%s seg_min=%s seg_max=%s "
+                "(ai hint overrides payload defaults)",
+                job_id, _seg_min_sec, _seg_max_sec,
+            )
+
         _set_stage(JobStage.SEGMENT_BUILDING, 25, "Building smart segments")
         if cancel_registry.is_cancelled(job_id):
             raise cancel_registry.JobCancelledError()
@@ -1662,7 +1770,7 @@ def run_render_pipeline(
             _src_st = source_path.stat()
             _score_ck = _render_cache_key(
                 str(source_path), _src_st.st_mtime, _src_st.st_size,
-                payload.min_part_sec, payload.max_part_sec, len(scenes),
+                _seg_min_sec, _seg_max_sec, len(scenes),
                 CLIP_SCORER_VERSION,
             )
             _cached_scored = _score_cache_get(_score_ck)
@@ -1680,7 +1788,7 @@ def run_render_pipeline(
                 scenes = score_scenes_clip(str(source_path), scenes)
                 _clip_ms = int((time.perf_counter() - _t_clip) * 1000)
                 _job_log(effective_channel, job_id, f"clip_scoring_done scenes={len(scenes)} elapsed_ms={_clip_ms}")
-            segments = build_segments_from_scenes(scenes, source["duration"], payload.min_part_sec, payload.max_part_sec)
+            segments = build_segments_from_scenes(scenes, source["duration"], _seg_min_sec, _seg_max_sec)
             scored = score_segments(segments, scenes)
             _job_log(effective_channel, job_id, f"score_cache_miss type=segment_scores segments={len(scored)}")
             if _score_ck:
@@ -2199,7 +2307,7 @@ def run_render_pipeline(
                     _s4_before = [(s.get("start"), s.get("end")) for s in scored]
                     scored = refine_segment_boundaries(
                         scored, _s4_blocks,
-                        float(payload.min_part_sec), float(payload.max_part_sec),
+                        float(_seg_min_sec), float(_seg_max_sec),
                     )
                     _s4_adjusted = sum(
                         1 for i, s in enumerate(scored)
@@ -2234,7 +2342,7 @@ def run_render_pipeline(
                 if _s45_blocks:
                     scored = refine_cuts_for_naturalness(
                         scored, _s45_blocks,
-                        float(payload.min_part_sec), float(payload.max_part_sec),
+                        float(_seg_min_sec), float(_seg_max_sec),
                         original_segments=[{"start": s, "end": e} for s, e in _s4_before] if _s4_before else None,
                     )
                     _s45_adj = sum(1 for s in scored if s.get("cut_adjustment_reason"))
@@ -2277,30 +2385,46 @@ def run_render_pipeline(
                     logger.debug("ai_tracer_init_failed job_id=%s: %s", job_id, _tracer_err)
 
                 # ── Phase 5.2: Retrieve knowledge items ───────────────────────────
+                # Phase 5.4: Reuse early retrieval results if available (avoids
+                # double FAISS query). _early_retrieved_knowledge is set by the
+                # Phase 5.4 early pacing block above before segment building.
                 _retrieved_knowledge: list = []
-                try:
-                    from app.ai.rag.knowledge_warmup import get_knowledge_index
-                    _kidx = get_knowledge_index()
-                    if _kidx.is_ready():
-                        _retrieved_knowledge = _kidx.query(_knowledge_filters, top_k=10)
-                        logger.info(
-                            "knowledge_retrieved job_id=%s filters=%s count=%d",
-                            job_id, list(_knowledge_filters.keys()), len(_retrieved_knowledge),
-                        )
-                        if _ai_tracer is not None:
-                            _ai_tracer.log_knowledge_retrieved(_retrieved_knowledge)
-                    else:
-                        logger.debug("knowledge_index_not_ready job_id=%s", job_id)
-                        if _ai_tracer is not None:
-                            _ai_tracer.log_fallback("no_index", "knowledge index not ready at render time")
-                except Exception as _kr_err:
-                    logger.warning("knowledge_retrieval_failed job_id=%s: %s", job_id, _kr_err)
-                    _retrieved_knowledge = []
+                if _early_retrieved_knowledge:
+                    # Reuse results from Phase 5.4 early retrieval — no second query needed
+                    _retrieved_knowledge = _early_retrieved_knowledge
+                    logger.debug(
+                        "phase54_knowledge_reused job_id=%s count=%d (skipping second query)",
+                        job_id, len(_retrieved_knowledge),
+                    )
                     if _ai_tracer is not None:
                         try:
-                            _ai_tracer.log_fallback("ai_exception", str(_kr_err))
+                            _ai_tracer.log_knowledge_retrieved(_retrieved_knowledge)
                         except Exception:
                             pass
+                else:
+                    try:
+                        from app.ai.rag.knowledge_warmup import get_knowledge_index
+                        _kidx = get_knowledge_index()
+                        if _kidx.is_ready():
+                            _retrieved_knowledge = _kidx.query(_knowledge_filters, top_k=10)
+                            logger.info(
+                                "knowledge_retrieved job_id=%s filters=%s count=%d",
+                                job_id, list(_knowledge_filters.keys()), len(_retrieved_knowledge),
+                            )
+                            if _ai_tracer is not None:
+                                _ai_tracer.log_knowledge_retrieved(_retrieved_knowledge)
+                        else:
+                            logger.debug("knowledge_index_not_ready job_id=%s", job_id)
+                            if _ai_tracer is not None:
+                                _ai_tracer.log_fallback("no_index", "knowledge index not ready at render time")
+                    except Exception as _kr_err:
+                        logger.warning("knowledge_retrieval_failed job_id=%s: %s", job_id, _kr_err)
+                        _retrieved_knowledge = []
+                        if _ai_tracer is not None:
+                            try:
+                                _ai_tracer.log_fallback("ai_exception", str(_kr_err))
+                            except Exception:
+                                pass
 
                 if not _retrieved_knowledge:
                     if _ai_tracer is not None:
@@ -2390,33 +2514,17 @@ def run_render_pipeline(
                 except Exception:
                     pass
 
-            # A. Pacing hint — advisory only. No compatible cut-interval parameter
-            #    exists that can be safely overridden at this point in the pipeline.
-            #    The cut_interval_min/max are noted for observability and logged.
+            # A. Pacing hint — Phase 5.4: pacing hints are now APPLIED before
+            #    segment building via _seg_min_sec/_seg_max_sec (see early pacing
+            #    block above). Here we only log for observability — no further action.
             _pacing_cut_min = _exec_hints.get("cut_interval_min")
             _pacing_cut_max = _exec_hints.get("cut_interval_max")
             if _pacing_cut_min is not None or _pacing_cut_max is not None:
-                logger.info(
-                    "phase53_pacing_hint_advisory job_id=%s cut_min=%s cut_max=%s "
-                    "(advisory only — no compatible runtime hook; pacing unchanged)",
+                logger.debug(
+                    "phase53_pacing_hint_observed job_id=%s cut_min=%s cut_max=%s "
+                    "(Phase 5.4: pacing applied before segment building via _seg_min_sec/_seg_max_sec)",
                     job_id, _pacing_cut_min, _pacing_cut_max,
                 )
-                if _phase53_tracer is not None:
-                    try:
-                        _phase53_tracer.log_decision_rejected(
-                            "pacing_hint_advisory_only",
-                            detail={
-                                "hint": "cut_interval",
-                                "cut_interval_min": _pacing_cut_min,
-                                "cut_interval_max": _pacing_cut_max,
-                                "reason": (
-                                    "no compatible runtime cut-interval parameter found; "
-                                    "pacing hint logged as advisory"
-                                ),
-                            },
-                        )
-                    except Exception:
-                        pass
 
             # B. Subtitle emphasis hint — if a style is suggested, note it.
             #    The actual emphasis style is resolved per-part from payload.subtitle_style

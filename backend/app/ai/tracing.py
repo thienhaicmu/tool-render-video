@@ -181,3 +181,41 @@ class AITraceLogger:
         except Exception:
             payload = {"reason": "unknown"}
         self._write("ai.decision_rejected", payload)
+
+    # -----------------------------------------------------------------------
+    # Phase 5.4 — Pacing hint tracing
+    # -----------------------------------------------------------------------
+
+    def log_pacing_applied(self, config: dict) -> None:
+        """Log when AI pacing hint is applied or rejected.
+
+        Event: ai.pacing_applied
+        Payload fields:
+            applied:              bool — True if pacing was applied
+            cut_interval_min:     float|None
+            cut_interval_max:     float|None
+            source_knowledge_ids: list[str]
+            target:               str — "segment_selection"
+            reason:               str — e.g. "valid_ai_pacing_hint"
+        Never raises.
+        """
+        try:
+            cfg = dict(config) if config else {}
+            payload = {
+                "applied": bool(cfg.get("applied", False)),
+                "cut_interval_min": cfg.get("cut_interval_min"),
+                "cut_interval_max": cfg.get("cut_interval_max"),
+                "source_knowledge_ids": list(cfg.get("source_knowledge_ids") or []),
+                "target": "segment_selection",
+                "reason": str(cfg.get("reason") or "valid_ai_pacing_hint"),
+            }
+        except Exception:
+            payload = {
+                "applied": False,
+                "cut_interval_min": None,
+                "cut_interval_max": None,
+                "source_knowledge_ids": [],
+                "target": "segment_selection",
+                "reason": "log_error",
+            }
+        self._write("ai.pacing_applied", payload)

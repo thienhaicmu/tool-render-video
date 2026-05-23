@@ -303,3 +303,26 @@ See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_P
 - Pacing hints: advisory only — logged but no runtime parameter overridden
 - Subtitle hints: advisory only — per-part style resolved from payload unchanged
 - FFmpeg: ZERO changes to FFmpeg commands or filter graphs
+
+---
+
+## Phase 5.4 — AI Pacing Hint Propagation (2026-05-23)
+
+**New files**:
+- `app/ai/pacing.py` — `AIPacingConfig` dataclass, `build_ai_pacing_config(execution_hints, payload)`: validates and applies pacing hints with user override protection
+
+**Modified files**:
+- `app/ai/tracing.py` — `log_pacing_applied(config)` added; writes `ai.pacing_applied` JSONL event
+- `app/orchestration/render_pipeline.py` — Phase 5.4 early pacing block added before `SEGMENT_BUILDING` stage; local `_seg_min_sec`/`_seg_max_sec` variables replace `payload.min_part_sec`/`payload.max_part_sec` in all three segment building calls; Phase 5.2 block reuses `_early_retrieved_knowledge` to avoid double FAISS query
+
+**Pacing injection point**:
+- Before `build_segments_from_scenes()` (~line 1683): `_seg_min_sec`/`_seg_max_sec` set from AI hint or payload
+- Also propagated to `refine_segment_boundaries()` and `refine_cuts_for_naturalness()`
+
+**Render behavior impact**:
+- Pacing hints: NOW APPLIED — `cut_interval_min/max` from knowledge hints sets segment duration bounds when `ai_director_enabled=True` and user has not overridden defaults
+- User explicit limits: always win — if `payload.min_part_sec != 15` or `payload.max_part_sec != 60`, AI pacing rejected with `user_duration_override`
+- AI disabled: if `ai_director_enabled=False`, early pacing block skipped; segment duration unchanged
+- Subtitle hints: still advisory only — unchanged
+- Hook overlay gate: still active — unchanged
+- FFmpeg: ZERO changes to FFmpeg commands or filter graphs

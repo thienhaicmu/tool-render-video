@@ -254,6 +254,24 @@ Output
 
 ---
 
+## Phase 5.4 Status
+
+| Component | Status |
+|---|---|
+| Pacing config model | IMPLEMENTED — `app/ai/pacing.py`: `AIPacingConfig` dataclass, `build_ai_pacing_config()` |
+| Pacing hint application | APPLIED — `cut_interval_min/max` from knowledge hints now sets `_seg_min_sec/_seg_max_sec` before `build_segments_from_scenes()` |
+| User explicit override | ENFORCED — if `payload.min_part_sec` or `max_part_sec` differ from schema defaults (15/60), user values win; AI rejected with `user_duration_override` |
+| Segment function coverage | ALL THREE — `build_segments_from_scenes()`, `refine_segment_boundaries()`, `refine_cuts_for_naturalness()` now use `_seg_min_sec/_seg_max_sec` |
+| Early retrieval | IMPLEMENTED — knowledge retrieved before segment building; results reused by Phase 5.2/5.3 block (no double-query) |
+| Trace logger | EXTENDED — `log_pacing_applied()` added to `AITraceLogger`; writes `ai.pacing_applied` JSONL event |
+| Subtitle hints | ADVISORY ONLY — unchanged from Phase 5.3 |
+| Hook overlay gate | ACTIVE — unchanged from Phase 5.3 |
+| FFmpeg changes | NONE — zero changes to FFmpeg commands or filter graphs |
+| Render safe on AI failure | CONFIRMED — all pacing failures degrade to payload defaults; never raises |
+| AI disabled behavior | CONFIRMED — if `ai_director_enabled=False`, early pacing block skipped; `_seg_min_sec/_seg_max_sec` = payload values |
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -261,3 +279,4 @@ Output
 | 2026-05-23 | Initial document — Phase 5.1 AI knowledge foundation |
 | 2026-05-23 | Phase 5.2 — local knowledge retrieval activated; knowledge schema/loader/index/warmup/tracing implemented |
 | 2026-05-23 | Phase 5.3 — AI contract models, validation layer, knowledge→hints mapper, limited render influence (hook overlay gate), trace logger extensions |
+| 2026-05-23 | Phase 5.4 — AI pacing hints now applied to segment selection; `AIPacingConfig` model; early retrieval before segment building; user explicit limits override AI; no FFmpeg changes |
