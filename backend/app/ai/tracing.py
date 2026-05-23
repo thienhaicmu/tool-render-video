@@ -133,3 +133,51 @@ class AITraceLogger:
     def log_render_plan_summary(self, summary: dict) -> None:
         """Log a summary of the finalised render plan."""
         self._write("ai.render_plan_summary", {"plan": dict(summary)})
+
+    # -----------------------------------------------------------------------
+    # Phase 5.3 — Execution hints tracing
+    # -----------------------------------------------------------------------
+
+    def log_execution_hints(self, hints: dict, source_knowledge_ids: list) -> None:
+        """Log validated execution hints derived from retrieved knowledge.
+
+        Event: ai.execution_hints
+        Never raises.
+        """
+        try:
+            payload = {
+                "hints": dict(hints) if hints else {},
+                "source_knowledge_ids": list(source_knowledge_ids) if source_knowledge_ids else [],
+            }
+        except Exception:
+            payload = {"hints": {}, "source_knowledge_ids": []}
+        self._write("ai.execution_hints", payload)
+
+    def log_validation_fixup(self, fixups: list) -> None:
+        """Log validation fixups applied to AI execution hints.
+
+        Event: ai.validation_fixup
+        Never raises.
+        """
+        try:
+            payload = {"fixups": list(fixups) if fixups else []}
+        except Exception:
+            payload = {"fixups": []}
+        self._write("ai.validation_fixup", payload)
+
+    def log_decision_rejected(self, reason: str, detail: dict = None) -> None:
+        """Log when a hint or decision was considered but not applied.
+
+        Event: ai.decision_rejected
+        Never raises.
+        """
+        try:
+            payload: dict = {"reason": str(reason) if reason is not None else ""}
+            if detail is not None:
+                try:
+                    payload["detail"] = dict(detail)
+                except Exception:
+                    payload["detail"] = {"raw": str(detail)}
+        except Exception:
+            payload = {"reason": "unknown"}
+        self._write("ai.decision_rejected", payload)

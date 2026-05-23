@@ -236,9 +236,28 @@ Output
 
 ---
 
+## Phase 5.3 Status
+
+| Component | Status |
+|---|---|
+| Contract models | IMPLEMENTED — `app/ai/contracts.py`: `CreativeBrief`, `RenderExecutionHints`, `AIValidationResult` dataclasses with `to_dict()` |
+| Validation layer | IMPLEMENTED — `app/ai/validators.py`: `validate_execution_hints()` clamps speed [0.5,1.5], cut intervals [1.0,12.0], enforces allowed subtitle/visual enums, strict bool check; records fixups |
+| Knowledge→hints mapper | IMPLEMENTED — `app/ai/render_mapper.py`: `map_knowledge_to_execution_hints()` sorts by weight, maps pacing/subtitle/hook from `render_usage`, always calls validator |
+| AI director integration | IMPLEMENTED — `ai_director.py` calls mapper after all Phase 53–57 blocks; stores `execution_hints`, `validation_fixups`, `validation_warnings` in `plan.knowledge_injection` |
+| Pacing hint application | ADVISORY ONLY — `cut_interval_min/cut_interval_max` logged; no compatible runtime parameter for override; render behavior unchanged |
+| Subtitle emphasis hint | ADVISORY ONLY — `subtitle_emphasis_style` logged; per-part style resolved from `payload.subtitle_style` and DNA/platform bias; render behavior unchanged |
+| Hook overlay hint | APPLIED — `hook_overlay_enabled=False` gates `_hook_overlay_enabled`; True/None keeps existing behavior; only AI-controlled change to render behavior |
+| Trace logger additions | IMPLEMENTED — `log_execution_hints()`, `log_validation_fixup()`, `log_decision_rejected()` added to `AITraceLogger` |
+| AI still cannot control FFmpeg | CONFIRMED — zero FFmpeg command changes; zero filter graph changes |
+| Deterministic + offline-safe | CONFIRMED — mapper output is deterministic; zero external API calls |
+| Render safe on AI failure | CONFIRMED — mapper exception caught in ai_director; render continues |
+
+---
+
 ## Changelog
 
 | Date | Change |
 |---|---|
 | 2026-05-23 | Initial document — Phase 5.1 AI knowledge foundation |
 | 2026-05-23 | Phase 5.2 — local knowledge retrieval activated; knowledge schema/loader/index/warmup/tracing implemented |
+| 2026-05-23 | Phase 5.3 — AI contract models, validation layer, knowledge→hints mapper, limited render influence (hook overlay gate), trace logger extensions |

@@ -1879,3 +1879,54 @@ Expected: 8 failed (same known failures) / 6738+ passed (39+ new tests) / 1 skip
 Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
 
 **No new failures introduced.**
+
+---
+
+## Phase 5.3 — AI Render Contract (2026-05-23)
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Commit**: `phase 5.3 freeze ai render contract`
+
+**Purpose**: Convert retrieved local knowledge into validated render execution hints that can safely influence render decisions. Establish explicit AI contract models with validation layer.
+
+**New files**:
+- `backend/app/ai/contracts.py` — `CreativeBrief`, `RenderExecutionHints`, `AIValidationResult` dataclasses
+- `backend/app/ai/validators.py` — `validate_execution_hints()`: clamp/fallback/fixup for all hint fields
+- `backend/app/ai/render_mapper.py` — `map_knowledge_to_execution_hints()`: knowledge → validated hints
+- `backend/tests/test_ai_contracts.py` — 11 tests
+- `backend/tests/test_ai_validators.py` — 35 tests
+- `backend/tests/test_ai_render_mapper.py` — 28 tests
+- `backend/tests/test_ai_trace_logger_execution_hints.py` — 13 tests
+- `backend/tests/test_ai_director_execution_hints.py` — 9 tests
+- `backend/tests/test_render_pipeline_ai_execution_hints.py` — 13 tests
+
+**Modified files**:
+- `backend/app/ai/director/ai_director.py` — Phase 5.3 mapper block added at end of `create_ai_edit_plan()`; merges into `plan.knowledge_injection`
+- `backend/app/ai/tracing.py` — `log_execution_hints()`, `log_validation_fixup()`, `log_decision_rejected()` added
+- `backend/app/orchestration/render_pipeline.py` — Phase 5.3 block: reads execution_hints; applies hook overlay gate; logs pacing/subtitle as advisory
+- Docs: `AI_RENDER_CONTRACT.md`, `AI_DECISION_TRACEABILITY_PLAN.md`, `CURRENT_RENDER_ARCHITECTURE.md`, `TECHNICAL_DEBT_REPORT.md` updated
+
+**Contracts introduced**:
+- `RenderExecutionHints.playback_speed_hint` clamped to [0.5, 1.5]
+- `RenderExecutionHints.cut_interval_min/max` clamped to [1.0, 12.0]; inverted range auto-swapped
+- `subtitle_emphasis_style` must be one of "subtle"/"medium"/"strong"/"word_only"; else → None
+- `hook_overlay_enabled` must be strict bool; int/str → None
+- `visual_intensity` must be one of "low"/"medium"/"high"; else → None
+- Invalid AI output NEVER crashes render — all failures degrade to None/safe defaults
+
+**Render behavior impact**:
+- Hook overlay: AI `hook_overlay_enabled=False` → `_hook_overlay_enabled = False` (single gate applied)
+- Pacing hints: advisory only — logged, not applied (no compatible runtime hook found)
+- Subtitle hints: advisory only — per-part resolution from payload unchanged
+- FFmpeg: ZERO changes to FFmpeg commands or filter graphs
+
+### Test Suite State (Post Phase 5.3)
+
+```
+8 failed (same known pre-existing failures) / 6951 passed (+109 new tests) / 1 skipped
+```
+
+Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
+
+**No new failures introduced.**

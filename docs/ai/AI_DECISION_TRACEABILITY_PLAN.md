@@ -240,9 +240,22 @@ With this log:
 
 ---
 
+## Implementation Status (Phase 5.3)
+
+| Event | Status |
+|---|---|
+| `ai.execution_hints` | IMPLEMENTED — `log_execution_hints(hints, source_knowledge_ids)` |
+| `ai.validation_fixup` | IMPLEMENTED — `log_validation_fixup(fixups)` |
+| `ai.decision_rejected` | IMPLEMENTED — `log_decision_rejected(reason, detail=None)` |
+| Wired in render_pipeline.py | YES — execution hints, fixups, and advisory-only rejections logged after Phase 5.3 block |
+| Never raises | CONFIRMED — all three new methods catch all exceptions |
+
+---
+
 ## Changelog
 
 | Date | Change |
 |---|---|
 | 2026-05-23 | Initial planning document — Phase 5.1 |
 | 2026-05-23 | Phase 5.2 — `AITraceLogger` implemented and wired into `render_pipeline.py` |
+| 2026-05-23 | Phase 5.3 — `log_execution_hints`, `log_validation_fixup`, `log_decision_rejected` added; wired for execution hints and advisory rejections |

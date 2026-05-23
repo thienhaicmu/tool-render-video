@@ -2355,6 +2355,118 @@ def run_render_pipeline(
                     kind="warning",
                 )
 
+        # ── Phase 5.3: Apply execution hints from AI plan (advisory, safe, bounded) ──
+        # Reads execution_hints from plan.knowledge_injection (set by ai_director).
+        # If ai_director_enabled=False, _ai_edit_plan is None → this block is skipped.
+        # If hints are invalid or absent → behavior unchanged, advisory log only.
+        # NEVER crashes render. NEVER modifies FFmpeg commands or filter graphs.
+        _exec_hints: dict = {}
+        _phase53_tracer = _ai_tracer if getattr(payload, "ai_director_enabled", False) else None
+        if _ai_edit_plan is not None:
+            try:
+                _exec_hints = (
+                    _ai_edit_plan.knowledge_injection.get("execution_hints") or {}
+                ) if isinstance(_ai_edit_plan.knowledge_injection, dict) else {}
+            except Exception:
+                _exec_hints = {}
+
+            if _exec_hints and _phase53_tracer is not None:
+                try:
+                    _phase53_tracer.log_execution_hints(
+                        _exec_hints,
+                        _exec_hints.get("source_knowledge_ids") or [],
+                    )
+                except Exception:
+                    pass
+
+            # Log validation fixups if any
+            if _ai_edit_plan is not None and _phase53_tracer is not None:
+                try:
+                    _fixups_53 = (
+                        _ai_edit_plan.knowledge_injection.get("validation_fixups") or []
+                    ) if isinstance(_ai_edit_plan.knowledge_injection, dict) else []
+                    if _fixups_53:
+                        _phase53_tracer.log_validation_fixup(_fixups_53)
+                except Exception:
+                    pass
+
+            # A. Pacing hint — advisory only. No compatible cut-interval parameter
+            #    exists that can be safely overridden at this point in the pipeline.
+            #    The cut_interval_min/max are noted for observability and logged.
+            _pacing_cut_min = _exec_hints.get("cut_interval_min")
+            _pacing_cut_max = _exec_hints.get("cut_interval_max")
+            if _pacing_cut_min is not None or _pacing_cut_max is not None:
+                logger.info(
+                    "phase53_pacing_hint_advisory job_id=%s cut_min=%s cut_max=%s "
+                    "(advisory only — no compatible runtime hook; pacing unchanged)",
+                    job_id, _pacing_cut_min, _pacing_cut_max,
+                )
+                if _phase53_tracer is not None:
+                    try:
+                        _phase53_tracer.log_decision_rejected(
+                            "pacing_hint_advisory_only",
+                            detail={
+                                "hint": "cut_interval",
+                                "cut_interval_min": _pacing_cut_min,
+                                "cut_interval_max": _pacing_cut_max,
+                                "reason": (
+                                    "no compatible runtime cut-interval parameter found; "
+                                    "pacing hint logged as advisory"
+                                ),
+                            },
+                        )
+                    except Exception:
+                        pass
+
+            # B. Subtitle emphasis hint — if a style is suggested, note it.
+            #    The actual emphasis style is resolved per-part from payload.subtitle_style
+            #    and DNA/platform bias. The hint is advisory and cannot override the
+            #    per-part resolution without rewriting that logic (out of scope).
+            _sub_emph_hint = _exec_hints.get("subtitle_emphasis_style")
+            if _sub_emph_hint is not None:
+                logger.info(
+                    "phase53_subtitle_emphasis_hint_advisory job_id=%s style=%r "
+                    "(advisory only — per-part subtitle style resolved from payload)",
+                    job_id, _sub_emph_hint,
+                )
+                if _phase53_tracer is not None:
+                    try:
+                        _phase53_tracer.log_decision_rejected(
+                            "subtitle_emphasis_hint_advisory_only",
+                            detail={
+                                "hint": "subtitle_emphasis_style",
+                                "value": _sub_emph_hint,
+                                "reason": (
+                                    "subtitle style is resolved per-part from payload.subtitle_style "
+                                    "and DNA/platform bias; hint is advisory"
+                                ),
+                            },
+                        )
+                    except Exception:
+                        pass
+
+            # C. Hook overlay hint — if explicitly disabled, gate the hook overlay.
+            #    This is the one hint that IS applied: hook_overlay_enabled=False → skip overlay.
+            #    hook_overlay_enabled=True or None → keep existing behavior (unchanged).
+            _hook_enabled_hint = _exec_hints.get("hook_overlay_enabled")
+            if _hook_enabled_hint is False:
+                # AI says: skip hook overlay for this render job
+                if _hook_overlay_enabled:
+                    _hook_overlay_enabled = False
+                    logger.info(
+                        "phase53_hook_overlay_disabled_by_ai job_id=%s "
+                        "(knowledge hint hook_overlay_enabled=False overrides payload=True)",
+                        job_id,
+                    )
+                    if _phase53_tracer is not None:
+                        try:
+                            _phase53_tracer.log_execution_hints(
+                                {"hook_overlay_enabled": False, "applied": True},
+                                _exec_hints.get("source_knowledge_ids") or [],
+                            )
+                        except Exception:
+                            pass
+
         # ── AI Execution Mode Resolution (Phase 60D) — control only ─────────────
         # Resolve BEFORE Phase 59 blocks so they can be gated correctly.
         # mode=off blocks all Phase 59 promotion; other modes run Phase 59 normally.

@@ -1,7 +1,7 @@
 # CURRENT_RENDER_ARCHITECTURE.md
 
 **Source of truth for current render architecture.**
-**Last updated**: 2026-05-23 (Phase 5.2: local knowledge retrieval activated; KnowledgeIndex with load/save/rebuild wired; warmup at startup; retrieved_knowledge injected into AI edit context; AITraceLogger writes per-job JSONL trace)
+**Last updated**: 2026-05-23 (Phase 5.3: AI contract models + validation layer + knowledge→hints mapper; limited render influence: hook overlay gated by AI hint; pacing/subtitle advisory only; trace logger extended with execution_hints/validation_fixup/decision_rejected events)
 
 ---
 
@@ -283,3 +283,23 @@ See [TIMELINE_SEMANTICS.md](TIMELINE_SEMANTICS.md) for full timing contract.
 `render_base_clip()` now accepts `reup_bgm_enable`, `reup_bgm_path`, `reup_bgm_gain`. When BGM is enabled and valid, `filter_complex` is used to mix BGM into `base_clip.mp4`, which then flows through the composite via `-c:a copy`. `base_clip_bgm_applied: Optional[bool]` added to `BaseClipManifest`.
 
 See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_PLAN.md) and [MIGRATION_HISTORY.md](../restructure/MIGRATION_HISTORY.md).
+
+---
+
+## Phase 5.3 — AI Render Contract (2026-05-23)
+
+**New files**:
+- `app/ai/contracts.py` — `CreativeBrief`, `RenderExecutionHints`, `AIValidationResult` dataclasses
+- `app/ai/validators.py` — `validate_execution_hints()`: clamp/fallback for all hint fields
+- `app/ai/render_mapper.py` — `map_knowledge_to_execution_hints()`: knowledge → validated hints
+
+**Modified files**:
+- `app/ai/director/ai_director.py` — Phase 5.3 mapper called last in `create_ai_edit_plan()`, after all Phase 53–57 blocks; result merged into `plan.knowledge_injection`
+- `app/ai/tracing.py` — `log_execution_hints()`, `log_validation_fixup()`, `log_decision_rejected()` added
+- `app/orchestration/render_pipeline.py` — Phase 5.3 block reads `execution_hints` from plan; applies hook overlay gate; pacing/subtitle hints logged as advisory only
+
+**Render behavior impact**:
+- Hook overlay: `hook_overlay_enabled=False` in execution_hints → `_hook_overlay_enabled = False`; all other values keep existing behavior
+- Pacing hints: advisory only — logged but no runtime parameter overridden
+- Subtitle hints: advisory only — per-part style resolved from payload unchanged
+- FFmpeg: ZERO changes to FFmpeg commands or filter graphs

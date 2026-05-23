@@ -299,3 +299,16 @@ without speed compensation. At 1.15x speed the narration ended ~52s into a 60s c
 **File**: `backend/app/orchestration/render_pipeline.py` — `_validate_render_output()`
 
 **Debt**: Output validation checks duration and size. No MD5/SHA checksum of output files stored to DB. No way to verify file integrity after delivery (e.g. network copy corruption, partial disk write).
+
+---
+
+## Phase 5.3 Resolutions (2026-05-23)
+
+The following previously-noted debt items were addressed or partially resolved by Phase 5.3:
+
+| Item | Resolution |
+|---|---|
+| "AI output is unvalidated before render influence" | RESOLVED — `validate_execution_hints()` in `validators.py` clamps all numeric fields, enforces allowed enum values, records fixups; invalid AI output always falls back to None/safe defaults |
+| "No structured contract between AI and render pipeline" | RESOLVED — `contracts.py` defines `CreativeBrief`, `RenderExecutionHints`, `AIValidationResult` as explicit dataclasses with `to_dict()` methods |
+| "AI knowledge retrieval has no mapping layer" | RESOLVED — `render_mapper.py` maps raw `render_usage` fields from knowledge items to validated execution hints; weight-sorted, deterministic |
+| "AI render decisions not traceable" | PARTIALLY RESOLVED — `ai.execution_hints`, `ai.validation_fixup`, `ai.decision_rejected` events added to `AITraceLogger` |

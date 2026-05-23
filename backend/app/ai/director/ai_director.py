@@ -1074,6 +1074,42 @@ def _build_plan(
         plan.warnings.append(f"platform_quality_feedback_error:{type(exc).__name__}")
         logger.debug("ai_director_platform_quality_feedback_failed job_id=%s: %s", job_id, exc)
 
+    # --- Phase 5.3: Map retrieved knowledge to validated execution hints ---
+    # Runs LAST — after _attach_knowledge_injection (Phase 53A) so we merge into the
+    # final knowledge_injection dict rather than having it overwritten.
+    # Advisory only — stores validated, bounded hints in plan.knowledge_injection["execution_hints"].
+    # Never raises — mapper exception must not prevent plan from returning.
+    try:
+        from app.ai.render_mapper import map_knowledge_to_execution_hints as _map_hints53
+        _exec_hint_result53 = _map_hints53(_retrieved_knowledge)
+        _exec_hints_dict53 = _exec_hint_result53.hints.to_dict()
+        _exec_fixups53 = _exec_hint_result53.fixups
+        _exec_warnings53 = _exec_hint_result53.warnings
+        # Merge into knowledge_injection (which may have been replaced by Phase 53A)
+        if not isinstance(plan.knowledge_injection, dict):
+            plan.knowledge_injection = {}
+        plan.knowledge_injection["execution_hints"] = _exec_hints_dict53
+        plan.knowledge_injection["validation_fixups"] = _exec_fixups53
+        plan.knowledge_injection["validation_warnings"] = _exec_warnings53
+        if _exec_hints_dict53.get("cut_interval_min") is not None or _exec_hints_dict53.get("subtitle_emphasis_style"):
+            logger.info(
+                "ai_director_execution_hints_mapped job_id=%s cut=[%s,%s] sub=%r hook=%s",
+                job_id,
+                _exec_hints_dict53.get("cut_interval_min"),
+                _exec_hints_dict53.get("cut_interval_max"),
+                _exec_hints_dict53.get("subtitle_emphasis_style"),
+                _exec_hints_dict53.get("hook_overlay_enabled"),
+            )
+    except Exception as _mapper53_err:
+        logger.warning(
+            "ai_director_execution_hints_mapper_failed job_id=%s: %s",
+            job_id, _mapper53_err,
+        )
+        if isinstance(plan.knowledge_injection, dict):
+            plan.knowledge_injection.setdefault("execution_hints", {})
+            plan.knowledge_injection.setdefault("validation_fixups", [])
+            plan.knowledge_injection.setdefault("validation_warnings", [])
+
     return plan
 
 
