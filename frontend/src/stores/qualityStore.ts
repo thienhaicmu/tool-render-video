@@ -16,6 +16,11 @@ export interface QualityStore {
   fetchPartQuality: (jobId: string, partNo: number) => Promise<void>
   fetchJobSummary: (jobId: string, includeReports?: boolean) => Promise<void>
   clearJob: (jobId: string) => void
+
+  /** Re-fetch summary even if already cached — clears cached data first. */
+  refreshJobSummary: (jobId: string) => Promise<void>
+  /** Re-fetch a single part report even if already cached. */
+  refreshPartQuality: (jobId: string, partNo: number) => Promise<void>
 }
 
 export const useQualityStore = create<QualityStore>((set, get) => ({
@@ -77,5 +82,28 @@ export const useQualityStore = create<QualityStore>((set, get) => ({
       delete errors[jobId]
       return { reports, summaries, errors }
     })
+  },
+
+  refreshJobSummary: async (jobId: string) => {
+    // Clear loading state so fetchJobSummary guard does not block
+    set((s) => {
+      const loading = { ...s.loading }
+      delete loading[jobId]
+      return { loading }
+    })
+    get().clearJob(jobId)
+    await get().fetchJobSummary(jobId)
+  },
+
+  refreshPartQuality: async (jobId: string, partNo: number) => {
+    const key = `${jobId}_${partNo}`
+    set((s) => {
+      const loading = { ...s.loading }
+      const reports = { ...s.reports }
+      delete loading[key]
+      delete reports[key]
+      return { loading, reports }
+    })
+    await get().fetchPartQuality(jobId, partNo)
   },
 }))

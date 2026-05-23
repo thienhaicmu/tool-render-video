@@ -2379,3 +2379,49 @@ frontend is untouched and remains fully operational.
 - Retry uses `POST /api/render/retry/{id}`
 - Re-run uses `POST /api/render/resume/{id}`
 - Quality endpoints NOT called in Phase 6.2 — placeholder shown in drawer
+
+---
+
+## Phase 6.3 — Quality Panel + Job Detail Intelligence
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Date**: 2026-05-23
+
+**Purpose**: Replace the "coming in Phase 6.3" placeholder in JobDetailDrawer with a fully functional, on-demand quality report panel. AI trace references are displayed with friendly labels, never raw internal event strings.
+
+**Shipped changes**:
+
+Frontend — new files (`frontend/src/features/quality/`):
+- `quality.types.ts` — `QualityLoadState` type, `AI_TRACE_FRIENDLY` display map (6 known refs)
+- `quality.utils.ts` — `getFriendlyTraceLabel`, `getSeverityIcon`, `formatScore` pure helpers
+- `QualityPanel.tsx` — main entry, fetch-on-open, no polling, pending/loading/error/empty/loaded states
+- `QualityPanel.css` — CSS token-based styles (compact for 380px drawer)
+- `QualitySummaryCard.tsx` — aggregate score badge + issue count badges
+- `QualityPartList.tsx` — list wrapper for QualityPartCard
+- `QualityPartCard.tsx` — expandable card; fetches part report on-demand when expanded
+- `QualityTraceRefs.tsx` — AI trace ref pills (friendly labels); "No AI trace references" if empty
+- `QualityLoadingState.tsx` — 3-row animated skeleton
+- `QualityEmptyState.tsx` — 404 / no data state
+- `QualityErrorState.tsx` — error message + Retry button
+
+Frontend — modified files:
+- `frontend/src/stores/qualityStore.ts` — added `refreshJobSummary`, `refreshPartQuality` actions
+- `frontend/src/features/jobs/JobDetailDrawer.tsx` — placeholder replaced with `<QualityPanel />`
+
+Tests — new files:
+- `frontend/tests/quality-utils.test.ts` — 17 pure logic tests
+- `frontend/tests/quality-panel.test.tsx` — 21 rendering + behaviour tests
+
+Docs updated:
+- `docs/ui/PHASE_6_UI_ARCHITECTURE.md` — Phase 6.3 section added, checklist updated
+- `docs/restructure/MIGRATION_HISTORY.md` — this entry
+
+**Contracts introduced**:
+- `QualityPanel` NEVER polls — single fetch on open, manual refresh only
+- `QualityPanel` skips fetch entirely for `queued`/`running` job statuses
+- Part reports are fetched on-demand (expand click) — not bulk-fetched with summary
+- `refreshJobSummary` clears loading guard before re-fetch (prevents skip on repeat open)
+- AI trace refs always rendered as friendly labels; raw `ai.*` event strings never shown directly
+
+**Test results**: 211/211 passed (12 test files, 38 new tests)

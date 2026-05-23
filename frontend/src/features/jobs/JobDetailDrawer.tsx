@@ -8,6 +8,7 @@ import { JobStatusBadge } from './JobStatusBadge'
 import { formatDateTime } from './jobs.utils'
 import { getJob } from '../../api/jobs'
 import type { JobStatus } from '../../types/api'
+import { QualityPanel } from '../quality/QualityPanel'
 
 export interface JobDetailDrawerProps {
   jobId: string
@@ -300,23 +301,19 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
             {/* Payload */}
             <PayloadSection payloadJson={job.payload_json} />
 
-            {/* Placeholders */}
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-bg-elevated)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-xs)',
-                color: 'var(--color-text-secondary)',
-                opacity: 0.6,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--space-2)',
-              }}
-            >
-              <div>Live progress — available when running</div>
-              <div>Quality report — coming in Phase 6.3</div>
-              <div>AI trace — coming in Phase 6.3</div>
+            {/* Live progress notice + Quality panel */}
+            <div>
+              <div
+                style={{
+                  fontSize: 'var(--font-size-xs)',
+                  color: 'var(--color-text-secondary)',
+                  marginBottom: 'var(--space-2)',
+                  opacity: 0.6,
+                }}
+              >
+                Live progress — available when running
+              </div>
+              <QualityPanel jobId={job.job_id} jobStatus={job.status} />
             </div>
           </div>
         )}

@@ -282,15 +282,45 @@ All items completed:
 
 ---
 
-## 11. Phase 6.3 Checklist (next steps)
+## 11. Phase 6.3 — Quality Panel + Job Detail Intelligence (SHIPPED 2026-05-23)
 
-- [ ] Quality panel on job detail (on-demand, not polled)
-  - Per-part quality badges from `getJobPartQuality(jobId, partNo)`
-  - Aggregated quality summary from `getJobQualitySummary(jobId)`
-  - Issue list with severity grouping
+All items completed:
+
+- [x] Quality feature module (`src/features/quality/`)
+  - `QualityPanel.tsx` — main entry point; fetch-on-open, never polled
+  - `QualitySummaryCard.tsx` — aggregate score + issue counts row
+  - `QualityPartList.tsx` — list of expandable QualityPartCard components
+  - `QualityPartCard.tsx` — per-part score badge + on-demand report fetch on expand
+  - `QualityTraceRefs.tsx` — AI trace ref pills with friendly labels, no raw event strings
+  - `QualityLoadingState.tsx` — 3-row skeleton (compact, drawer-width)
+  - `QualityEmptyState.tsx` — shown for 404 / no report
+  - `QualityErrorState.tsx` — shown for API errors, has Retry button
+  - `QualityPanel.css` — CSS token-based styles for all quality components
+  - `quality.types.ts` — QualityLoadState, AI_TRACE_FRIENDLY map
+  - `quality.utils.ts` — getFriendlyTraceLabel, getSeverityIcon, formatScore
+- [x] qualityStore extended
+  - `refreshJobSummary(jobId)` — clears cache + loading guard, re-fetches
+  - `refreshPartQuality(jobId, partNo)` — clears cached report + loading guard, re-fetches
+- [x] JobDetailDrawer updated
+  - Placeholder "coming in Phase 6.3" div replaced with QualityPanel
+  - Live progress notice kept as a static text line
+  - QualityPanel receives `job.job_id` and `job.status`
+- [x] QualityPanel behaviour
+  - Does NOT fetch for queued/running status (shows "will be available after render")
+  - Fetches once on open (guarded by loading key in store)
+  - Refresh button triggers refreshJobSummary
+  - Per-part reports fetched on-demand when card is expanded (only if not already cached)
+  - 404 errors → QualityEmptyState; other errors → QualityErrorState with retry
+- [x] Tests: 38 new tests across 2 test files (211 total, all passing)
+  - `tests/quality-utils.test.ts` — 17 pure logic tests
+  - `tests/quality-panel.test.tsx` — 21 rendering + behaviour tests
+
+---
+
+## 12. Phase 6.4 Checklist (next steps)
+
 - [ ] Job progress panel (`src/features/render/JobProgress.tsx`)
   - Live WebSocket via useRenderSocket hook
   - ProgressBar component for overall %
   - Stage display + Cancel button
-- [ ] AI trace panel (placeholder → real in 6.3)
 - [ ] Editor screen with preview video and trim controls
