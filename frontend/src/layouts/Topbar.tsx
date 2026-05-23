@@ -1,18 +1,8 @@
 /**
- * Topbar — App title (panel-aware), connection status, warmup/AI status badge.
+ * Topbar — Product wordmark, connection status, warmup/AI status badge.
  */
 import React, { useEffect, useState } from 'react'
 import { apiFetch } from '../api/client'
-import { useRenderStore } from '../stores/renderStore'
-import { useUIStore } from '../stores/uiStore'
-import type { ActivePanel } from '../stores/uiStore'
-
-const PANEL_TITLES: Record<ActivePanel, string> = {
-  render: 'New Render',
-  history: 'History',
-  editor: 'Editor',
-  settings: 'Settings',
-}
 
 interface WarmupStatus {
   model?: string
@@ -22,8 +12,6 @@ interface WarmupStatus {
 }
 
 export function Topbar() {
-  const activeJobId = useRenderStore((s) => s.activeJobId)
-  const activePanel = useUIStore((s) => s.activePanel)
   const [warmupStatus, setWarmupStatus] = useState<WarmupStatus | null>(null)
   const [isConnected, setIsConnected] = useState(false)
 
@@ -62,12 +50,7 @@ export function Topbar() {
   return (
     <header style={styles.topbar}>
       <div style={styles.left}>
-        <h1 style={styles.title}>{PANEL_TITLES[activePanel]}</h1>
-        {activeJobId && (
-          <span style={styles.jobBadge}>
-            Job: {activeJobId.slice(0, 8)}…
-          </span>
-        )}
+        <span style={styles.wordmark}>AI Clip Studio</span>
       </div>
 
       <div style={styles.right}>
@@ -89,8 +72,8 @@ export function Topbar() {
           style={{
             ...styles.connectionDot,
             backgroundColor: isConnected
-              ? 'var(--color-success)'
-              : 'var(--color-error)',
+              ? 'var(--status-success)'
+              : 'var(--status-error)',
           }}
           title={isConnected ? 'Backend connected' : 'Backend disconnected'}
         />
@@ -102,8 +85,8 @@ export function Topbar() {
 const styles: Record<string, React.CSSProperties> = {
   topbar: {
     height: 'var(--topbar-height)',
-    backgroundColor: 'var(--color-bg-surface)',
-    borderBottom: '1px solid var(--color-border)',
+    backgroundColor: 'var(--surface-panel)',
+    borderBottom: '1px solid var(--border-subtle)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -118,18 +101,11 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 'var(--space-4)',
   },
-  title: {
-    fontSize: 'var(--font-size-lg)',
-    fontWeight: 'var(--font-weight-semibold)' as unknown as number,
-    color: 'var(--color-text-primary)',
-  },
-  jobBadge: {
-    fontSize: 'var(--font-size-xs)',
-    color: 'var(--color-accent)',
-    backgroundColor: 'var(--color-accent-muted)',
-    padding: '2px var(--space-2)',
-    borderRadius: 'var(--radius-full)',
-    fontFamily: 'var(--font-family-mono)',
+  wordmark: {
+    fontSize: 'var(--text-md)',
+    fontWeight: 'var(--weight-semibold)' as unknown as number,
+    color: 'var(--text-primary)',
+    fontFamily: 'var(--font-ui)',
   },
   right: {
     display: 'flex',
@@ -137,22 +113,22 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 'var(--space-3)',
   },
   statusBadge: {
-    fontSize: 'var(--font-size-xs)',
+    fontSize: 'var(--text-xs)',
     padding: '2px var(--space-2)',
     borderRadius: 'var(--radius-full)',
   },
   statusBadgeReady: {
-    color: 'var(--color-success)',
-    backgroundColor: 'var(--color-success-muted)',
+    color: 'var(--status-success)',
+    backgroundColor: 'var(--status-success-bg)',
   },
   statusBadgeLoading: {
-    color: 'var(--color-warning)',
-    backgroundColor: 'var(--color-warning-muted)',
+    color: 'var(--status-warning)',
+    backgroundColor: 'var(--status-warning-bg)',
   },
   connectionDot: {
     width: '8px',
     height: '8px',
     borderRadius: '50%',
-    transition: `background-color var(--duration-normal)`,
+    transition: `background-color var(--duration-panel)`,
   },
 }

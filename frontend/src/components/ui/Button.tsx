@@ -50,11 +50,11 @@ const BASE_STYLE: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   gap: '6px',
-  fontFamily: 'var(--font-family-base)',
-  fontWeight: 'var(--font-weight-medium)' as unknown as number,
+  fontFamily: 'var(--font-ui)',
+  fontWeight: 'var(--weight-medium)' as unknown as number,
   borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
-  transition: `background-color var(--duration-fast), color var(--duration-fast), opacity var(--duration-fast), box-shadow var(--duration-fast)`,
+  transition: `background-color var(--duration-fast) var(--ease-in-out), color var(--duration-fast) var(--ease-in-out), opacity var(--duration-fast) var(--ease-in-out), box-shadow var(--duration-fast) var(--ease-in-out)`,
   border: '1px solid transparent',
   outline: 'none',
   userSelect: 'none',
@@ -63,42 +63,42 @@ const BASE_STYLE: React.CSSProperties = {
 
 const VARIANT_STYLES: Record<ButtonVariant, React.CSSProperties> = {
   primary: {
-    backgroundColor: 'var(--color-accent)',
+    backgroundColor: 'var(--accent-primary)',
     color: '#FFFFFF',
-    borderColor: 'var(--color-accent)',
+    borderColor: 'var(--accent-primary)',
   },
   secondary: {
-    backgroundColor: 'var(--color-bg-elevated)',
-    color: 'var(--color-text-primary)',
-    borderColor: 'var(--color-border)',
+    backgroundColor: 'var(--surface-card)',
+    color: 'var(--text-primary)',
+    borderColor: 'var(--border-default)',
   },
   ghost: {
     backgroundColor: 'transparent',
-    color: 'var(--color-text-secondary)',
-    borderColor: 'transparent',
+    color: 'var(--accent-primary)',
+    borderColor: 'var(--accent-subtle)',
   },
   danger: {
-    backgroundColor: 'var(--color-error)',
-    color: '#FFFFFF',
-    borderColor: 'var(--color-error)',
+    backgroundColor: 'color-mix(in srgb, var(--status-error) 15%, transparent)',
+    color: 'var(--status-error)',
+    borderColor: 'color-mix(in srgb, var(--status-error) 40%, transparent)',
   },
 }
 
 const SIZE_STYLES: Record<ButtonSize, React.CSSProperties> = {
   sm: {
-    fontSize: 'var(--font-size-sm)',
-    padding: '4px 10px',
+    fontSize: 'var(--text-sm)',
+    padding: '0 10px',
     height: '28px',
   },
   md: {
-    fontSize: 'var(--font-size-base)',
-    padding: '6px 16px',
-    height: '36px',
+    fontSize: 'var(--text-base)',
+    padding: '0 14px',
+    height: '32px',
   },
   lg: {
-    fontSize: 'var(--font-size-md)',
-    padding: '10px 20px',
-    height: '44px',
+    fontSize: 'var(--text-md)',
+    padding: '0 20px',
+    height: '40px',
   },
 }
 

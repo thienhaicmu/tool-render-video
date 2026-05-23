@@ -1,0 +1,147 @@
+/* Motion System — AI Clip Studio Design System B3.6
+   Source: docs/design/motion.md
+   All durations and easings use tokens from tokens.css.
+   Motion is purposeful, not decorative. */
+
+/* ── Reduced motion reset ───────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Clip Card Appearance ────────────────────────────────────────────────── */
+
+@keyframes clip-card-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.clip-card {
+  animation: clip-card-appear var(--duration-card) var(--ease-out) both;
+}
+
+/* Stagger: 40ms per card, capped at 6 cards */
+.clip-card:nth-child(1) { animation-delay:   0ms; }
+.clip-card:nth-child(2) { animation-delay:  40ms; }
+.clip-card:nth-child(3) { animation-delay:  80ms; }
+.clip-card:nth-child(4) { animation-delay: 120ms; }
+.clip-card:nth-child(5) { animation-delay: 160ms; }
+.clip-card:nth-child(6) { animation-delay: 200ms; }
+.clip-card:nth-child(n+7) { animation-delay: 200ms; }
+
+/* ── Running Status Dot Pulse ────────────────────────────────────────────── */
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+.status-dot--running {
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+/* ── Progress Bar Indeterminate Shimmer ──────────────────────────────────── */
+
+@keyframes progress-shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+.progress-bar--indeterminate {
+  background: linear-gradient(
+    90deg,
+    var(--surface-card)       0%,
+    var(--accent-primary) 40%,
+    var(--accent-subtle)      60%,
+    var(--surface-card)      100%
+  );
+  background-size: 200% 100%;
+  animation: progress-shimmer 1.4s linear infinite;
+}
+
+/* ── Inspector Section Collapse/Expand ───────────────────────────────────── */
+
+.inspector-section__chevron {
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.inspector-section--expanded .inspector-section__chevron {
+  transform: rotate(90deg);
+}
+
+.inspector-section__body {
+  overflow: hidden;
+  transition: height var(--duration-panel) var(--ease-out);
+  /* Height set via JS: el.style.height = collapsed ? '0' : el.scrollHeight + 'px' */
+}
+
+/* ── Step Strip Transition ───────────────────────────────────────────────── */
+
+.step-number {
+  transition:
+    background-color var(--duration-step) var(--ease-out),
+    color           var(--duration-step) var(--ease-out);
+}
+
+.step-connector {
+  transition: background-color var(--duration-step) var(--ease-out);
+}
+
+/* ── Panel Slide-In (Bottom Log Panel) ───────────────────────────────────── */
+
+@keyframes panel-slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+
+@keyframes panel-slide-down {
+  from { transform: translateY(0);   opacity: 1; }
+  to   { transform: translateY(100%); opacity: 0; }
+}
+
+.bottom-panel--entering {
+  animation: panel-slide-up var(--duration-panel) var(--ease-out) both;
+}
+
+.bottom-panel--exiting {
+  animation: panel-slide-down var(--duration-panel) var(--ease-in-out) both;
+}
+
+/* ── Button Interaction ──────────────────────────────────────────────────── */
+
+.btn-motion {
+  transition:
+    background-color var(--duration-instant) var(--ease-out),
+    opacity          var(--duration-instant) var(--ease-out),
+    transform        var(--duration-instant) var(--ease-out);
+}
+
+.btn-motion:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ── Score Reveal — Full Screen (xl) ─────────────────────────────────────── */
+
+@keyframes score-xl-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.score-value--xl {
+  animation: score-xl-appear var(--duration-score) var(--ease-spring) both;
+}
