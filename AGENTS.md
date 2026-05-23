@@ -271,3 +271,29 @@ ffprobe -version
 - Queue concurrency and resume/retry semantics are unchanged unless intentionally tested.
 - AI changes are bounded by phase safety rules and do not add import-time optional dependency failures.
 - Audit docs updated for any behavior/spec change.
+
+## Frontend System Note
+
+The Project Overview section above describes the **legacy** frontend at `backend/static/`.
+That description and those protected files remain accurate — the legacy app is still the
+default served UI when `STATIC_UI_VERSION` is not set.
+
+Three frontend states now coexist in this repository:
+
+**Legacy** (`backend/static/`) — served by default (no env var).
+Protected files in this document cover this state.
+
+**v2** (`backend/static-v2/`) — served when `STATIC_UI_VERSION=v2`.
+Contains Vite-bundled React app chunks. Active in `run-backend-v2.ps1` and `run-desktop-v2.ps1`.
+Apply the same minimal-patch discipline when modifying files in this directory.
+
+**React source** (`frontend/src/`) — never directly served.
+TypeScript + React + Zustand source. `vite.config.ts` builds to `backend/static-new/`
+(gitignored). `ui_gate.py` has no knowledge of `static-new/`.
+Running `npm run build` does NOT update the served UI. This is a known gap — see `CURRENT.md`.
+
+When working on any frontend state:
+- Apply the same minimal-patch discipline as for backend changes
+- Do not assume changes in one state affect another
+- Check `CURRENT.md` for active known issues before starting any UI work
+- Identify which state is actually served before modifying any UI file
