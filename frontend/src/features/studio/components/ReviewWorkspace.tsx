@@ -187,8 +187,8 @@ export function ReviewWorkspace() {
             height: '20px',
             padding: '0 var(--space-2)',
             borderRadius: 'var(--radius-sm)',
-            backgroundColor: allApproved ? 'var(--status-success-bg)' : 'transparent',
-            color: allApproved ? 'var(--status-success)' : 'var(--text-tertiary)',
+            backgroundColor: allApproved ? 'var(--status-success)' : 'transparent',
+            color: allApproved ? 'var(--text-inverse)' : 'var(--text-tertiary)',
             fontSize: 'var(--text-xs)',
             fontWeight: 'var(--weight-medium)' as unknown as number,
           }}

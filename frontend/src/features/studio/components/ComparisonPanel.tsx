@@ -15,7 +15,7 @@ export function ComparisonPanel({ isOpen, onClose }: ComparisonPanelProps) {
         overflow: 'hidden',
         maxHeight: isOpen ? '400px' : '0px',
         opacity: isOpen ? 1 : 0,
-        transition: 'max-height var(--duration-panel) var(--ease-out), opacity var(--duration-panel) var(--ease-out)',
+        transition: 'max-height var(--duration-panel) var(--ease-in-out), opacity var(--duration-panel) var(--ease-in-out)',
       }}
     >
       <div
@@ -84,8 +84,8 @@ export function ComparisonPanel({ isOpen, onClose }: ComparisonPanelProps) {
                   justifyContent: 'center',
                 }}
               >
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-disabled)' }}>
-                  {label}
+                <span style={{ fontSize: '18px', color: 'var(--text-disabled)', opacity: 0.4 }}>
+                  ▢
                 </span>
               </div>
             </div>

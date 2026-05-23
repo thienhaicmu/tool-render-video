@@ -99,7 +99,7 @@ export function PreviewWorkspace({ hasMedia = false, studioStep }: PreviewWorksp
                     fontWeight: 'var(--weight-medium)' as unknown as number,
                   }}
                 >
-                  No media loaded
+                  Ready to preview
                 </div>
                 <div
                   style={{
@@ -108,7 +108,7 @@ export function PreviewWorkspace({ hasMedia = false, studioStep }: PreviewWorksp
                     marginTop: 'var(--space-1)',
                   }}
                 >
-                  Select a source in the workflow panel →
+                  Add a source file to begin
                 </div>
               </div>
             </div>
@@ -219,12 +219,12 @@ export function PreviewWorkspace({ hasMedia = false, studioStep }: PreviewWorksp
             background: 'var(--accent-primary)',
             border: 'none',
             borderRadius: 'var(--radius-sm)',
-            color: '#FFFFFF',
+            color: 'var(--text-primary)',
             fontSize: 'var(--text-sm)',
             fontWeight: 'var(--weight-medium)' as unknown as number,
             padding: 'var(--space-2) var(--space-4)',
             opacity: 0.4,
-            cursor: 'default',
+            cursor: 'not-allowed',
           }}
         >
           Submit Render →

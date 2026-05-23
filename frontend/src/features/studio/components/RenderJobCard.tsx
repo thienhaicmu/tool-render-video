@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { StatusPill } from '../../../components/ui/StatusPill'
 import { AIChip } from '../../../components/ui/AIChip'
 import { RenderProgress } from './RenderProgress'
@@ -10,7 +11,7 @@ function PlatformBadge({ platform }: { platform: string }) {
         fontSize: 'var(--text-xs)',
         color: 'var(--accent-primary)',
         backgroundColor: 'var(--accent-subtle)',
-        padding: '2px 6px',
+        padding: 'var(--space-1) var(--space-2)',
         borderRadius: 'var(--radius-sm)',
         flexShrink: 0,
       }}
@@ -28,16 +29,21 @@ export function RenderJobCard({
   eta,
   platform,
 }: RenderJobData) {
+  const [isHovered, setIsHovered] = useState(false)
+
   return (
     <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
-        backgroundColor: 'var(--surface-card)',
+        backgroundColor: isHovered ? 'var(--surface-card-hover)' : 'var(--surface-card)',
         border: '1px solid var(--border-subtle)',
         borderRadius: 'var(--radius-lg)',
         padding: 'var(--space-3) var(--space-4)',
         display: 'flex',
         flexDirection: 'column',
         gap: 'var(--space-2)',
+        transition: 'background-color var(--duration-instant) var(--ease-out)',
       }}
     >
       {/* Top row */}

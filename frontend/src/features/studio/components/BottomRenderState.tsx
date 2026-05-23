@@ -66,7 +66,7 @@ export function BottomRenderState() {
             width: '8px',
             height: '8px',
             borderRadius: '50%',
-            backgroundColor: hasActive ? 'var(--accent-primary)' : 'var(--text-disabled)',
+            backgroundColor: hasActive ? 'var(--accent-primary)' : 'var(--text-tertiary)',
             flexShrink: 0,
           }}
         />

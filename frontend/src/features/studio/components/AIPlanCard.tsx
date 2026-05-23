@@ -27,14 +27,21 @@ export function AIPlanCard({
 }: AIPlanCardProps) {
   const [approveHovered, setApproveHovered] = useState(false)
   const [ignoreHovered, setIgnoreHovered] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
 
   const resolvedSelected = status === 'approved' ? true : status === 'rejected' ? false : selected
   const isRejected = status === 'rejected'
 
   return (
     <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
-        backgroundColor: resolvedSelected ? 'var(--accent-subtle)' : 'var(--surface-card)',
+        backgroundColor: resolvedSelected
+          ? 'var(--accent-subtle)'
+          : isHovered && !isRejected
+          ? 'var(--surface-card-hover)'
+          : 'var(--surface-card)',
         border: `1px solid ${resolvedSelected ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
         borderRadius: 'var(--radius-lg)',
         padding: 'var(--space-4)',

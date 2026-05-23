@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { type StudioStep } from '../../../stores/uiStore'
 
 export interface StepStripProps {
@@ -18,6 +19,7 @@ const STEP_LABELS: Record<StudioStep, string> = {
 
 export function StepStrip({ currentStep, completedSteps = [], onStepClick }: StepStripProps) {
   const currentIndex = currentStep !== null ? STEP_ORDER.indexOf(currentStep) : -1
+  const [hoveredStep, setHoveredStep] = useState<StudioStep | null>(null)
 
   return (
     <div
@@ -41,7 +43,7 @@ export function StepStrip({ currentStep, completedSteps = [], onStepClick }: Ste
         const numberBg   = isActive ? 'var(--accent-primary)'
                          : isDone   ? 'color-mix(in srgb, var(--status-success) 20%, transparent)'
                          :            'var(--surface-card)'
-        const numberColor = isActive ? '#FFFFFF'
+        const numberColor = isActive ? 'var(--text-primary)'
                           : isDone   ? 'var(--status-success)'
                           :            'var(--text-tertiary)'
         const labelColor  = isActive ? 'var(--text-primary)'
@@ -60,9 +62,14 @@ export function StepStrip({ currentStep, completedSteps = [], onStepClick }: Ste
                 gap: 'var(--space-1)',
                 cursor: isClickable ? 'pointer' : 'default',
                 opacity: isActive || isDone ? 1 : 0.65,
-                transition: 'opacity var(--duration-fast) var(--ease-in-out)',
+                transition: 'background-color var(--duration-instant) var(--ease-out), opacity var(--duration-fast) var(--ease-in-out)',
+                backgroundColor: isClickable && hoveredStep === step ? 'var(--surface-card)' : 'transparent',
+                borderRadius: 'var(--radius-md)',
+                padding: '0 var(--space-2)',
               }}
               onClick={isClickable ? () => onStepClick(step) : undefined}
+              onMouseEnter={() => { if (isClickable) setHoveredStep(step) }}
+              onMouseLeave={() => setHoveredStep(null)}
             >
               {/* Number circle */}
               <div

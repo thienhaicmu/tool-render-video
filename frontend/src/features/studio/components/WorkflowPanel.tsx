@@ -87,7 +87,7 @@ export function WorkflowPanel({ studioStep }: WorkflowPanelProps) {
       >
         <span
           style={{
-            fontSize: 'var(--text-sm)',
+            fontSize: 'var(--text-base)',
             fontWeight: 'var(--weight-semibold)' as unknown as number,
             color: 'var(--text-primary)',
           }}
