@@ -94,3 +94,6 @@ checkpoints/
 *.onnx
 *.bin
 .cache/
+
+backend/static-new/
+frontend/*.tsbuildinfo
