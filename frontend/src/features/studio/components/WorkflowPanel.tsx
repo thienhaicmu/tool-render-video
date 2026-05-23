@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react'
 import { type StudioStep, useUIStore } from '../../../stores/uiStore'
 import { EmptyState } from '../../../components/ui/EmptyState'
-import { AIPlanCard } from './AIPlanCard'
 import { ReviewWorkspace } from './ReviewWorkspace'
-import { prepareSource, getPreviewTranscript, submitRender, type TranscriptSegment } from '../../../api/render'
+import { AnalyzeStep } from './AnalyzeStep'
+import { EditStep } from './EditStep'
+import { PlanStep } from './PlanStep'
+import { RenderStep } from './RenderStep'
+import { prepareSource, getPreviewTranscript } from '../../../api/render'
 import { uploadFile } from '../../../api/upload'
+import { mapSegmentsToPlan } from '../../../adapters/studioAdapters'
+import type { AIPlanCardData } from '../../../adapters/studioAdapters'
 
 export interface WorkflowPanelProps {
   studioStep: StudioStep | null
@@ -31,46 +36,6 @@ const STEP_TITLES: Record<StudioStep, string> = {
   review:  'Review',
 }
 
-const SAMPLE_AI_PLAN = [
-  {
-    title: 'Hook Opening',
-    confidence: 87,
-    reasoning: 'Hook identified at 0:04. Strong visual cut predicted to retain audience.',
-    impact: '+12% watch duration',
-    tags: ['hook', '0:04', 'high retention'],
-  },
-  {
-    title: 'Climax Moment',
-    confidence: 74,
-    reasoning: 'Peak energy moment at 1:32. AI markers indicate high engagement.',
-    impact: '+8% completion rate',
-    tags: ['climax', '1:32', 'energy peak'],
-  },
-  {
-    title: 'Call-to-Action Close',
-    confidence: 61,
-    reasoning: 'Strong verbal CTA detected at 3:48. Subtitle density peaks here.',
-    impact: '+5% conversion signal',
-    tags: ['cta', '3:48', 'verbal'],
-  },
-]
-
-function formatTimecode(sec: number): string {
-  const s = Math.floor(sec)
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-}
-
-function mapSegmentsToPlan(segments: TranscriptSegment[]) {
-  const limited = segments.slice(0, 5)
-  const total = limited.length
-  return limited.map((seg, i) => ({
-    title: seg.text.trim().slice(0, 40) || `Segment at ${formatTimecode(seg.start)}`,
-    confidence: Math.round(85 - (i / Math.max(total - 1, 1)) * 22),
-    reasoning: seg.text,
-    impact: `Segment ${i + 1} of ${total}`,
-    tags: [`${formatTimecode(seg.start)}–${formatTimecode(seg.end)}`],
-  }))
-}
 
 const ALLOWED_VIDEO_EXTENSIONS = new Set([
   'mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'm4v', 'ts', 'wmv',
@@ -90,17 +55,14 @@ function validateVideoFile(file: File): string | null {
 
 export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTitle = '', sessionDuration = 0, sessionSourceMode = 'youtube', sessionOutputDir = '' }: WorkflowPanelProps) {
   const setStudioStep = useUIStore((s) => s.setStudioStep)
-  const [selectedCards, setSelectedCards] = useState<number[]>([])
   const [urlValue, setUrlValue] = useState('')
   const [sourceLoading, setSourceLoading] = useState(false)
   const [sourceError, setSourceError] = useState<string | null>(null)
-  const [planCards, setPlanCards] = useState<ReturnType<typeof mapSegmentsToPlan> | null>(null)
+  const [planCards, setPlanCards] = useState<AIPlanCardData[] | null>(null)
   const [planLoading, setPlanLoading] = useState(false)
   const [sourceMode, setSourceMode] = useState<'youtube' | 'local'>('youtube')
   const [localFile, setLocalFile] = useState<File | null>(null)
   const [uploadLoading, setUploadLoading] = useState(false)
-  const [renderLoading, setRenderLoading] = useState(false)
-  const [renderError, setRenderError] = useState<string | null>(null)
   const [planError, setPlanError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -155,24 +117,6 @@ export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTi
       setSourceError('Unable to prepare source — try again.')
     } finally {
       setUploadLoading(false)
-    }
-  }
-
-  const handleRenderSubmit = async () => {
-    if (!sessionId || !sessionOutputDir) return
-    setRenderLoading(true)
-    setRenderError(null)
-    try {
-      await submitRender({
-        source_mode: sessionSourceMode,
-        output_dir: sessionOutputDir,
-        edit_session_id: sessionId,
-      })
-      setStudioStep('review')
-    } catch {
-      setRenderError('Render could not be submitted — check the queue and try again.')
-    } finally {
-      setRenderLoading(false)
     }
   }
 
@@ -335,167 +279,19 @@ export function WorkflowPanel({ studioStep, sessionId, onSessionReady, sessionTi
           </div>
         </div>
       ) : studioStep === 'plan' ? (
-        /* PLAN STEP */
-        <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-3) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-1)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            AI Recommendations
-            {planError && (
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
-                {planError}
-              </span>
-            )}
-          </div>
-          {planLoading ? (
-            /* Skeleton loading */
-            [0, 1, 2].map((i) => (
-              <div
-                key={i}
-                style={{
-                  height: '96px',
-                  backgroundColor: 'var(--surface-card)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-lg)',
-                  opacity: 0.6,
-                }}
-              />
-            ))
-          ) : (planCards ?? SAMPLE_AI_PLAN).map((card, i) => (
-            <AIPlanCard
-              key={card.title}
-              {...card}
-              selected={selectedCards.includes(i)}
-              onApprove={() =>
-                setSelectedCards((prev) =>
-                  prev.includes(i) ? prev.filter((j) => j !== i) : [...prev, i]
-                )
-              }
-              onIgnore={() => setSelectedCards((prev) => prev.filter((j) => j !== i))}
-            />
-          ))}
-        </div>
+        <PlanStep planCards={planCards} planLoading={planLoading} planError={planError} />
       ) : studioStep === 'analyze' ? (
-        <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)' }}>
-          {sessionId === null ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <EmptyState primary="Source not prepared" secondary="Go back to Source step" />
-            </div>
-          ) : (
-            <div style={{
-              backgroundColor: 'var(--surface-card)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-lg)',
-              padding: 'var(--space-4)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-3)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                <span style={{ color: 'var(--status-success)', fontSize: 'var(--text-sm)' }}>✓</span>
-                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)', fontWeight: 'var(--weight-medium)' as unknown as number }}>
-                  {sessionTitle || 'Source prepared'}
-                </span>
-              </div>
-              {sessionDuration > 0 && (
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
-                  Duration: {Math.floor(sessionDuration / 60)}m {Math.floor(sessionDuration % 60)}s
-                </div>
-              )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                <span style={{ color: 'var(--ai-active)', fontSize: 'var(--text-sm)' }}>·</span>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Transcript building</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                <span style={{ color: 'var(--ai-active)', fontSize: 'var(--text-sm)' }}>·</span>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>AI moments detection</span>
-              </div>
-            </div>
-          )}
-        </div>
+        <AnalyzeStep sessionId={sessionId} sessionTitle={sessionTitle} sessionDuration={sessionDuration} />
       ) : studioStep === 'edit' ? (
-        <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)' }}>
-          <div style={{
-            backgroundColor: 'var(--surface-card)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-lg)',
-            padding: 'var(--space-4)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-3)',
-          }}>
-            {([
-              { label: 'AI clip selection', value: '3 clips selected' },
-              { label: 'Subtitles', value: 'Enabled · Pro Karaoke style' },
-              { label: 'Format', value: '9:16 Vertical · 60fps' },
-              { label: 'Platform', value: 'TikTok optimized' },
-            ] as const).map(({ label, value }) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>{label}</span>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 'var(--weight-medium)' as unknown as number }}>{value}</span>
-              </div>
-            ))}
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--border-subtle)' }}>
-              Adjust settings in Edit options below
-            </div>
-          </div>
-        </div>
+        <EditStep />
       ) : studioStep === 'render' ? (
-        <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)' }}>
-          <div style={{
-            backgroundColor: 'var(--surface-card)',
-            border: '1px solid var(--status-success-bg)',
-            borderRadius: 'var(--radius-lg)',
-            padding: 'var(--space-4)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-3)',
-          }}>
-            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)' as unknown as number, color: 'var(--status-success)' }}>
-              Ready to Render
-            </div>
-            {([
-              { label: 'Platform', value: 'TikTok Vertical' },
-              { label: 'Clips', value: '3 clips selected' },
-            ] as const).map(({ label, value }) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>{label}</span>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 'var(--weight-medium)' as unknown as number }}>{value}</span>
-              </div>
-            ))}
-            {sessionDuration > 0 && (
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
-                Est. output: ~{Math.max(15, Math.floor(sessionDuration * 0.12))}s total
-              </div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
-              {renderError && (
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--status-error)' }}>
-                  {renderError}
-                </span>
-              )}
-              <button
-                onClick={handleRenderSubmit}
-                disabled={renderLoading || !sessionId}
-                style={{
-                  height: '34px',
-                  border: 'none',
-                  borderRadius: 'var(--radius-md)',
-                  backgroundColor: renderLoading || !sessionId
-                    ? 'var(--surface-card)'
-                    : 'var(--accent-primary)',
-                  color: renderLoading || !sessionId
-                    ? 'var(--text-tertiary)'
-                    : 'var(--text-primary)',
-                  fontSize: 'var(--text-sm)',
-                  fontWeight: 'var(--weight-medium)' as unknown as number,
-                  cursor: renderLoading || !sessionId ? 'not-allowed' : 'pointer',
-                  transition: 'background-color var(--duration-instant) var(--ease-out)',
-                }}
-              >
-                {renderLoading ? 'Submitting…' : 'Submit Render →'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <RenderStep
+          sessionId={sessionId}
+          sessionDuration={sessionDuration}
+          sessionSourceMode={sessionSourceMode}
+          sessionOutputDir={sessionOutputDir}
+          onRenderComplete={() => setStudioStep('review')}
+        />
       ) : studioStep === 'review' ? (
         <ReviewWorkspace />
       ) : null}

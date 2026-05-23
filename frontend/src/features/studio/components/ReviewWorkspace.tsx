@@ -5,50 +5,8 @@ import { ReviewCard } from './ReviewCard'
 import { ComparisonPanel } from './ComparisonPanel'
 import { type ReviewCardData, type ReviewCardStatus } from '../types'
 import { getJobHistory, getJobParts } from '../../../api/jobs'
-import type { JobPart } from '../../../types/api'
-
-const MOCK_REVIEW_CARDS: ReviewCardData[] = [
-  {
-    id: 'clip-1',
-    title: 'Hook Opening',
-    confidence: 87,
-    reasoning: 'Strong visual cut at 0:04 predicted to retain early audience attention.',
-    impact: '↑ +12% retention',
-    previewTag: '0:04 – 0:42',
-    clipLabel: 'Clip 1 of 3',
-  },
-  {
-    id: 'clip-2',
-    title: 'Climax Moment',
-    confidence: 74,
-    reasoning: 'Peak energy at 1:32. AI markers show high engagement probability.',
-    impact: '↑ +8% completion rate',
-    previewTag: '1:28 – 2:05',
-    clipLabel: 'Clip 2 of 3',
-  },
-  {
-    id: 'clip-3',
-    title: 'Call-to-Action Close',
-    confidence: 61,
-    reasoning: 'Verbal CTA at 3:48. Subtitle density peaks. Strong conversion signal.',
-    impact: '↑ +5% conversion',
-    previewTag: '3:44 – 4:10',
-    clipLabel: 'Clip 3 of 3',
-  },
-]
-
-function mapPartsToReviewCards(parts: JobPart[]): ReviewCardData[] {
-  const done = parts.filter((p) => p.status === 'done')
-  return done.map((p) => ({
-    id: String(p.part_no),
-    title: `Clip ${p.part_no}`,
-    confidence: 72,
-    reasoning: 'Successfully rendered clip',
-    impact: '↑ Rendered output',
-    previewTag: `Part ${p.part_no}`,
-    clipLabel: `Clip ${p.part_no} of ${done.length}`,
-  }))
-}
+import { mapPartsToReviewCards } from '../../../adapters/studioAdapters'
+import { MOCK_REVIEW_CARDS } from '../../../lib/fallbacks'
 
 export function ReviewWorkspace() {
   const [statuses, setStatuses] = useState<Record<string, ReviewCardStatus>>({})
