@@ -10,7 +10,8 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../backend/static-new',
+    outDir: '../backend/static-v2',
+    emptyOutDir: true,
   },
   test: {
     environment: 'jsdom',
