@@ -272,6 +272,28 @@ Output
 
 ---
 
+## Phase 5.5 Status
+
+| Component | Status |
+|---|---|
+| Subtitle emphasis config model | IMPLEMENTED — `app/ai/subtitle_hints.py`: `AISubtitleEmphasisConfig` dataclass, `build_ai_subtitle_emphasis_config()` |
+| Subtitle emphasis hint application | APPLIED — `subtitle_emphasis_style` from knowledge hints now passed as `emphasis_level_override` to `subtitle_emphasis_pass()` in per-part subtitle loop |
+| Emphasis style validation | ENFORCED — only "subtle"/"medium"/"strong"/"word_only" allowed; unknown styles rejected with `invalid_emphasis_style` |
+| No new style IDs | CONFIRMED — `emphasis_level_override` only changes text transform behavior; `_effective_subtitle_style` (preset ID for ASS generation) is never changed |
+| Subtitle timing safety | CONFIRMED — `subtitle_emphasis_pass()` modifies only `b['text']`, never `b['start']` or `b['end']`; SRT timestamps preserved |
+| User subtitle_style preservation | CONFIRMED — `_effective_subtitle_style` resolution hierarchy (variant > creator > platform > DNA > content-type default) unchanged; AI only affects emphasis level inside the pass |
+| Trace logger | EXTENDED — `log_subtitle_emphasis_applied()` added to `AITraceLogger`; writes `ai.subtitle_emphasis_applied` JSONL event |
+| AI disabled behavior | CONFIRMED — if `ai_director_enabled=False`, Phase 5.5 block skipped; emphasis derived from preset_id as before |
+| Missing knowledge fallback | CONFIRMED — no knowledge/hints → `applied=False` → `emphasis_level_override=None` → existing behavior |
+| Invalid hint fallback | CONFIRMED — invalid style → `rejected_reason="invalid_emphasis_style"` → `emphasis_level_override=None` → existing behavior |
+| Pacing hints | ACTIVE — unchanged from Phase 5.4 |
+| Hook overlay gate | ACTIVE — unchanged from Phase 5.3 |
+| FFmpeg changes | NONE — zero changes to FFmpeg commands or filter graphs |
+| API changes | NONE — no new API endpoints, no schema changes, no websocket payload changes |
+| Render safe on AI failure | CONFIRMED — all subtitle emphasis failures degrade to original behavior; never raises |
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -280,3 +302,4 @@ Output
 | 2026-05-23 | Phase 5.2 — local knowledge retrieval activated; knowledge schema/loader/index/warmup/tracing implemented |
 | 2026-05-23 | Phase 5.3 — AI contract models, validation layer, knowledge→hints mapper, limited render influence (hook overlay gate), trace logger extensions |
 | 2026-05-23 | Phase 5.4 — AI pacing hints now applied to segment selection; `AIPacingConfig` model; early retrieval before segment building; user explicit limits override AI; no FFmpeg changes |
+| 2026-05-23 | Phase 5.5 — AI subtitle emphasis hints now applied to subtitle text transforms; `AISubtitleEmphasisConfig` model; `emphasis_level_override` parameter added to `subtitle_emphasis_pass()`; no new style IDs; no timing changes; no FFmpeg changes |

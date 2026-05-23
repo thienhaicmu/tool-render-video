@@ -326,3 +326,29 @@ See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_P
 - Subtitle hints: still advisory only — unchanged
 - Hook overlay gate: still active — unchanged
 - FFmpeg: ZERO changes to FFmpeg commands or filter graphs
+
+---
+
+## Phase 5.5 — AI Subtitle Emphasis Hint Propagation (2026-05-23)
+
+**New files**:
+- `app/ai/subtitle_hints.py` — `AISubtitleEmphasisConfig` dataclass, `build_ai_subtitle_emphasis_config(execution_hints, payload)`: validates and applies subtitle emphasis hints
+
+**Modified files**:
+- `app/services/subtitles/readability.py` — `subtitle_emphasis_pass()` gains optional `emphasis_level_override: str | None = None` parameter; when provided and valid, overrides the emphasis level derived from `preset_id`; timing is never touched
+- `app/ai/tracing.py` — `log_subtitle_emphasis_applied(config)` added; writes `ai.subtitle_emphasis_applied` JSONL event
+- `app/orchestration/render_pipeline.py` — Phase 5.5 block added after Phase 5.3 block (before per-part loop); builds `_ai_subtitle_emphasis_config`; per-part `subtitle_emphasis_pass()` call passes `emphasis_level_override=_ai_emph_override`
+
+**Subtitle injection point**:
+- Phase 5.5 config built once at ~line 2578 (after Phase 5.3, before per-part loop)
+- Per-part: `subtitle_emphasis_pass()` call at ~line 3664 receives `emphasis_level_override` from config
+
+**Render behavior impact**:
+- Subtitle emphasis: NOW APPLIED — `subtitle_emphasis_style` from knowledge hints now influences text emphasis level inside `subtitle_emphasis_pass()` when `ai_director_enabled=True`
+- No new style IDs: `_effective_subtitle_style` (preset ID for ASS generation) is never changed by AI
+- Subtitle timing: GUARANTEED UNCHANGED — `subtitle_emphasis_pass()` modifies only `b['text']`, never `b['start']` or `b['end']`
+- User subtitle_style: preserved — style resolution hierarchy (variant > creator > platform > DNA > content-type) unchanged
+- AI disabled: if `ai_director_enabled=False`, Phase 5.5 block skipped; emphasis derived from preset_id as before
+- Pacing hints: active — unchanged from Phase 5.4
+- Hook overlay gate: active — unchanged from Phase 5.3
+- FFmpeg: ZERO changes to FFmpeg commands or filter graphs

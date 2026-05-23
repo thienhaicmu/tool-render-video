@@ -264,6 +264,19 @@ With this log:
 
 ---
 
+## Implementation Status (Phase 5.5)
+
+| Event | Status |
+|---|---|
+| `ai.subtitle_emphasis_applied` | IMPLEMENTED — `log_subtitle_emphasis_applied(config)` added to `AITraceLogger` |
+| Wired in render_pipeline.py | YES — after `build_ai_subtitle_emphasis_config()` call in Phase 5.5 block; logs applied or rejected with reason |
+| `ai.decision_rejected` reason: `no_subtitle_emphasis_hint` | IMPLEMENTED — logged when execution hints have no subtitle_emphasis_style |
+| `ai.decision_rejected` reason: `invalid_emphasis_style` | IMPLEMENTED — logged when emphasis style is not in allowed set |
+| `ai.decision_rejected` reason: `ai_disabled` | HANDLED — Phase 5.5 block skipped when ai_director_enabled=False |
+| Never raises | CONFIRMED — log_subtitle_emphasis_applied catches all exceptions |
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -272,3 +285,4 @@ With this log:
 | 2026-05-23 | Phase 5.2 — `AITraceLogger` implemented and wired into `render_pipeline.py` |
 | 2026-05-23 | Phase 5.3 — `log_execution_hints`, `log_validation_fixup`, `log_decision_rejected` added; wired for execution hints and advisory rejections |
 | 2026-05-23 | Phase 5.4 — `log_pacing_applied()` added; `ai.pacing_applied` event IMPLEMENTED; wired in render_pipeline.py early pacing block |
+| 2026-05-23 | Phase 5.5 — `log_subtitle_emphasis_applied()` added; `ai.subtitle_emphasis_applied` event IMPLEMENTED; wired in render_pipeline.py Phase 5.5 block |

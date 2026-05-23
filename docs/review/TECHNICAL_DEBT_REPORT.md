@@ -325,3 +325,17 @@ The following items were addressed or resolved by Phase 5.4:
 | "AI pacing has no injection point in segment building" | RESOLVED — early retrieval block added before `SEGMENT_BUILDING` stage; `_seg_min_sec/_seg_max_sec` propagated to all three segment building calls |
 | "Double FAISS query risk if early retrieval needed" | RESOLVED — `_early_retrieved_knowledge` stored and reused by Phase 5.2/5.3 AI director block; zero double-queries |
 | "AI render decisions not traceable" | FURTHER RESOLVED — `ai.pacing_applied` event added; `log_pacing_applied()` in `AITraceLogger` now writes pacing applied/rejected for every render job with AI enabled |
+
+
+---
+
+## Phase 5.5 Resolutions (2026-05-23)
+
+The following items were addressed or resolved by Phase 5.5:
+
+| Item | Resolution |
+|---|---|
+| "Subtitle emphasis hint: advisory only" | RESOLVED — `app/ai/subtitle_hints.py` `build_ai_subtitle_emphasis_config()` now applies `subtitle_emphasis_style` as `emphasis_level_override` to `subtitle_emphasis_pass()` when `ai_director_enabled=True` and hint is valid |
+| "subtitle_emphasis_pass() has no override path for AI hints" | RESOLVED — `emphasis_level_override: str | None = None` added as optional parameter; None preserves existing behavior; valid value overrides level only (not preset_id) |
+| "AI render decisions not traceable" | FURTHER RESOLVED — `ai.subtitle_emphasis_applied` event added; `log_subtitle_emphasis_applied()` in `AITraceLogger` now writes subtitle emphasis applied/rejected for every render job with AI enabled |
+| "Subtitle timing not protected from AI mutation" | CONFIRMED SAFE — `subtitle_emphasis_pass()` modifies only `b["text"]`; `b["start"]` and `b["end"]` are never touched; SRT timestamps preserved |

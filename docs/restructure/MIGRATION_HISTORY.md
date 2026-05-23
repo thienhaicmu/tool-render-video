@@ -1965,3 +1965,50 @@ Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.p
 Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
 
 **No new failures introduced.**
+
+
+---
+
+## Phase 5.5 — AI Subtitle Emphasis Hint Integration (2026-05-23)
+
+**Branch**: `restructure/output-timeline-architecture`
+**Goal**: Integrate validated AI subtitle emphasis hints into the subtitle processing path without altering SRT timestamps, ASS preset IDs, or FFmpeg commands.
+
+**New files**:
+- `backend/app/ai/subtitle_hints.py` — `AISubtitleEmphasisConfig` dataclass; `build_ai_subtitle_emphasis_config()` validates emphasis style; same pattern as `pacing.py`
+- `backend/tests/test_ai_subtitle_emphasis_config.py` — 28 tests
+- `backend/tests/test_ai_trace_logger_subtitle_emphasis.py` — 11 tests
+- `backend/tests/test_render_pipeline_ai_subtitle_emphasis.py` — 16 tests
+- `backend/tests/test_subtitle_execution_hints_ai_integration.py` — 12 tests
+
+**Modified files**:
+- `backend/app/services/subtitles/readability.py` — `subtitle_emphasis_pass()` gains `emphasis_level_override: str | None = None` parameter (Case B); default=None preserves existing behavior
+- `backend/app/ai/tracing.py` — `log_subtitle_emphasis_applied()` added; writes `ai.subtitle_emphasis_applied` JSONL event
+- `backend/app/orchestration/render_pipeline.py` — Phase 5.5 block between Phase 5.3 and Phase 60D; `_ai_subtitle_emphasis_config` built once; per-part `subtitle_emphasis_pass()` call passes `emphasis_level_override`
+- Docs: `AI_RENDER_CONTRACT.md`, `AI_DECISION_TRACEABILITY_PLAN.md`, `CURRENT_RENDER_ARCHITECTURE.md`, `TECHNICAL_DEBT_REPORT.md`, `MIGRATION_HISTORY.md` updated
+
+**Subtitle injection point**:
+- Phase 5.5 config built once at ~line 2578 in `render_pipeline.py` (after Phase 5.3, before per-part loop)
+- Per-part: `subtitle_emphasis_pass()` call at ~line 3664 receives `emphasis_level_override` from config
+
+**Emphasis integration: Case B** — `subtitle_emphasis_pass()` existed but had no emphasis override parameter; minimal optional param added with None default preserving all existing behavior.
+
+**User override**: `payload.subtitle_style` and per-part style hierarchy always preserved; AI only overrides emphasis level inside the pass.
+
+**Timing safety**: `subtitle_emphasis_pass()` only modifies `b["text"]`; `b["start"]` and `b["end"]` guaranteed unchanged.
+
+**Render behavior impact**:
+- Subtitle emphasis: NOW APPLIED (was advisory only)
+- No new style IDs created
+- Subtitle timing: GUARANTEED UNCHANGED
+- FFmpeg: ZERO changes
+- Pacing hints: still active (Phase 5.4)
+- Hook overlay gate: still active (Phase 5.3)
+
+### Test Suite State (Post Phase 5.5)
+
+8 failed (same known pre-existing failures) / 7072 passed (+67 new tests) / 1 skipped
+
+Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
+
+**No new failures introduced.**

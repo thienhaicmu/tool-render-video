@@ -2575,6 +2575,53 @@ def run_render_pipeline(
                         except Exception:
                             pass
 
+        # ── Phase 5.5: Build AI subtitle emphasis config ─────────────────────────
+        # Runs only when ai_director_enabled=True and _ai_edit_plan is not None.
+        # Config is built once per job; applied per-part in the subtitle loop below.
+        # NEVER mutates payload. NEVER changes _effective_subtitle_style (preset ID).
+        # NEVER alters SRT timestamps. NEVER touches FFmpeg commands.
+        # If AI disabled or no hints → _ai_subtitle_emphasis_config.applied=False → no change.
+        _ai_subtitle_emphasis_config = None
+        if getattr(payload, "ai_director_enabled", False) and _ai_edit_plan is not None:
+            try:
+                from app.ai.subtitle_hints import build_ai_subtitle_emphasis_config as _build_sub_emph
+                _ai_subtitle_emphasis_config = _build_sub_emph(_exec_hints, payload)
+                if _phase53_tracer is not None:
+                    try:
+                        _emph_reason = (
+                            "valid_ai_subtitle_hint" if _ai_subtitle_emphasis_config.applied
+                            else str(_ai_subtitle_emphasis_config.rejected_reason or "no_subtitle_emphasis_hint")
+                        )
+                        _phase53_tracer.log_subtitle_emphasis_applied(
+                            {**_ai_subtitle_emphasis_config.to_dict(), "reason": _emph_reason}
+                        )
+                    except Exception:
+                        pass
+                if not _ai_subtitle_emphasis_config.applied and _phase53_tracer is not None:
+                    try:
+                        _phase53_tracer.log_decision_rejected(
+                            str(_ai_subtitle_emphasis_config.rejected_reason or "no_subtitle_emphasis_hint"),
+                            detail={
+                                "hint": "subtitle_emphasis_style",
+                                "value": _ai_subtitle_emphasis_config.emphasis_style,
+                                "phase": "5.5",
+                            },
+                        )
+                    except Exception:
+                        pass
+                logger.debug(
+                    "phase55_subtitle_emphasis_config job_id=%s applied=%s style=%s reason=%s",
+                    job_id,
+                    _ai_subtitle_emphasis_config.applied,
+                    _ai_subtitle_emphasis_config.emphasis_style,
+                    _ai_subtitle_emphasis_config.rejected_reason,
+                )
+            except Exception as _sub55_err:
+                logger.warning(
+                    "phase55_subtitle_emphasis_config_failed job_id=%s: %s", job_id, _sub55_err
+                )
+                _ai_subtitle_emphasis_config = None
+
         # ── AI Execution Mode Resolution (Phase 60D) — control only ─────────────
         # Resolve BEFORE Phase 59 blocks so they can be gated correctly.
         # mode=off blocks all Phase 59 promotion; other modes run Phase 59 normally.
@@ -3610,15 +3657,28 @@ def run_render_pipeline(
                 )
 
                 # S4: Subtitle emphasis — semantic wrap + keyword uppercase + highlight markers
+                # Phase 5.5: AI emphasis level override applied here if config.applied=True.
+                # _effective_subtitle_style (preset ID for ASS) is NEVER changed by AI.
+                # Only emphasis_level_override influences text transforms inside the pass.
                 if _srt_source_is_fresh and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
                     try:
                         _emph_blocks = parse_srt_blocks(str(_ass_srt_source))
                         if _emph_blocks:
+                            # Phase 5.5: resolve AI emphasis level override (None = disabled/not applied)
+                            _ai_emph_override = (
+                                _ai_subtitle_emphasis_config.emphasis_style
+                                if (
+                                    _ai_subtitle_emphasis_config is not None
+                                    and _ai_subtitle_emphasis_config.applied
+                                )
+                                else None
+                            )
                             subtitle_emphasis_pass(
                                 _emph_blocks,
                                 preset_id=_effective_subtitle_style,
                                 market=_mv_market,
                                 language=_sub_target_lang,
+                                emphasis_level_override=_ai_emph_override,
                             )
                             write_srt_blocks(_emph_blocks, str(_ass_srt_source))
                             needs_ass = True
@@ -3626,7 +3686,8 @@ def run_render_pipeline(
                                 effective_channel, job_id,
                                 f"subtitle_emphasis_applied part={idx} "
                                 f"style={_effective_subtitle_style} market={_mv_market} "
-                                f"lang={_sub_target_lang} blocks={len(_emph_blocks)}",
+                                f"lang={_sub_target_lang} blocks={len(_emph_blocks)}"
+                                + (f" ai_emph_override={_ai_emph_override}" if _ai_emph_override else ""),
                                 kind="info",
                             )
                         else:

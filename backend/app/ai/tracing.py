@@ -186,6 +186,41 @@ class AITraceLogger:
     # Phase 5.4 — Pacing hint tracing
     # -----------------------------------------------------------------------
 
+    # -----------------------------------------------------------------------
+    # Phase 5.5 — Subtitle emphasis hint tracing
+    # -----------------------------------------------------------------------
+
+    def log_subtitle_emphasis_applied(self, config: dict) -> None:
+        """Log when AI subtitle emphasis hint is applied or rejected.
+
+        Event: ai.subtitle_emphasis_applied
+        Payload fields:
+            applied:              bool — True if emphasis was applied
+            emphasis_style:       str|None — e.g. "strong", "medium", "subtle", "word_only"
+            source_knowledge_ids: list[str]
+            target:               str — "subtitle_emphasis_pass"
+            reason:               str — e.g. "valid_ai_subtitle_hint" or rejection reason
+        Never raises.
+        """
+        try:
+            cfg = dict(config) if config else {}
+            payload = {
+                "applied": bool(cfg.get("applied", False)),
+                "emphasis_style": cfg.get("emphasis_style"),
+                "source_knowledge_ids": list(cfg.get("source_knowledge_ids") or []),
+                "target": "subtitle_emphasis_pass",
+                "reason": str(cfg.get("reason") or "valid_ai_subtitle_hint"),
+            }
+        except Exception:
+            payload = {
+                "applied": False,
+                "emphasis_style": None,
+                "source_knowledge_ids": [],
+                "target": "subtitle_emphasis_pass",
+                "reason": "log_error",
+            }
+        self._write("ai.subtitle_emphasis_applied", payload)
+
     def log_pacing_applied(self, config: dict) -> None:
         """Log when AI pacing hint is applied or rejected.
 

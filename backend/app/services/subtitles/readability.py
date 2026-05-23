@@ -270,6 +270,7 @@ def subtitle_emphasis_pass(
     preset_id: str = "tiktok_bounce_v1",
     market: str = "US",
     language: str = "en",
+    emphasis_level_override: str | None = None,
 ) -> list[dict]:
     """Unified emphasis pass: semantic wrap + keyword uppercase + highlight markers.
 
@@ -288,12 +289,24 @@ def subtitle_emphasis_pass(
       clean_pro                                → subtle  (numbers only)
       boxed_caption                            → minimal (no emphasis transforms)
       pro_karaoke                              → word_only (no transforms — karaoke handles timing)
+
+    Phase 5.5 — emphasis_level_override:
+      When provided by the AI subtitle hint system, overrides the level derived
+      from preset_id. Must be one of "subtle"/"medium"/"strong"/"word_only".
+      When None (default): existing behavior exactly preserved — level from preset_id.
+      preset_id is NEVER changed — ASS generation style is unaffected.
+      Subtitle timing (start/end) is never touched by this function.
     """
     if not blocks:
         return blocks
 
     preset = get_subtitle_preset(preset_id)
-    level = _emphasis_level(preset_id)
+    # Phase 5.5: use AI override level when provided and valid; fall back to preset-derived level
+    _allowed_overrides = frozenset({"subtle", "medium", "strong", "word_only"})
+    if emphasis_level_override is not None and emphasis_level_override in _allowed_overrides:
+        level = emphasis_level_override
+    else:
+        level = _emphasis_level(preset_id)
     mkt = str(market or "US").upper()
 
     # Word-level SRT detection — skip all text transforms for per-word transcription
@@ -327,8 +340,9 @@ def subtitle_emphasis_pass(
 
     logger.info(
         "subtitle_emphasis_applied preset=%s market=%s level=%s blocks=%d "
-        "word_level=%s affected=%d",
+        "word_level=%s affected=%d override=%s",
         preset_id, mkt, level, len(blocks), is_word_level, affected,
+        emphasis_level_override,
     )
     return blocks
 
