@@ -339,3 +339,17 @@ The following items were addressed or resolved by Phase 5.5:
 | "subtitle_emphasis_pass() has no override path for AI hints" | RESOLVED — `emphasis_level_override: str | None = None` added as optional parameter; None preserves existing behavior; valid value overrides level only (not preset_id) |
 | "AI render decisions not traceable" | FURTHER RESOLVED — `ai.subtitle_emphasis_applied` event added; `log_subtitle_emphasis_applied()` in `AITraceLogger` now writes subtitle emphasis applied/rejected for every render job with AI enabled |
 | "Subtitle timing not protected from AI mutation" | CONFIRMED SAFE — `subtitle_emphasis_pass()` modifies only `b["text"]`; `b["start"]` and `b["end"]` are never touched; SRT timestamps preserved |
+
+---
+
+## Phase 5.6 Resolutions (2026-05-23)
+
+The following items were addressed or resolved by Phase 5.6:
+
+| Item | Resolution |
+|---|---|
+| "Visual intensity hint: advisory only (no injection point)" | INVESTIGATED — `app/ai/visual_hints.py` `build_ai_visual_intensity_config()` built; no safe injection point found; `effect_preset` is a user field, `_effect_filter()` maps directly to FFmpeg filter strings with no intermediate intensity parameter; hint logged as advisory (`applied=False`, `render_overrides={}`) |
+| "AI visual intensity has no safe render parameter to override" | CONFIRMED — `render_part()`, `render_part_smart()`, `render_base_clip()` accept `effect_preset` which maps to raw FFmpeg strings; no `_effect_intensity`/`_visual_energy` local variable exists; safe injection point NOT found |
+| "AI render decisions not traceable" | FURTHER RESOLVED — `ai.visual_intensity_applied` event added; `log_visual_intensity_applied()` in `AITraceLogger` writes visual intensity applied/rejected for every render job with AI enabled; all rejection reasons covered |
+| "User visual effect choice must not be overridden by AI" | CONFIRMED SAFE — `effect_preset` field detection added; if user has non-default preset, rejected with `user_visual_override`; `payload.effect_preset` never mutated by AI |
+

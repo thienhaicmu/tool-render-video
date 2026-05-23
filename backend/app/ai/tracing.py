@@ -221,6 +221,41 @@ class AITraceLogger:
             }
         self._write("ai.subtitle_emphasis_applied", payload)
 
+    # -----------------------------------------------------------------------
+    # Phase 5.6 — Visual intensity hint tracing
+    # -----------------------------------------------------------------------
+
+    def log_visual_intensity_applied(self, config: dict) -> None:
+        """Log when AI visual intensity hint is applied or rejected.
+
+        Event: ai.visual_intensity_applied
+        Payload fields:
+            applied:              bool — True if visual intensity was applied
+            visual_intensity:     str|None — e.g. "low", "medium", "high"
+            source_knowledge_ids: list[str]
+            render_overrides:     dict — overrides applied (empty if no injection point)
+            reason:               str — e.g. "no_safe_visual_injection_point" or rejection reason
+        Never raises.
+        """
+        try:
+            cfg = dict(config) if config else {}
+            payload = {
+                "applied": bool(cfg.get("applied", False)),
+                "visual_intensity": cfg.get("visual_intensity"),
+                "source_knowledge_ids": list(cfg.get("source_knowledge_ids") or []),
+                "render_overrides": dict(cfg.get("render_overrides") or {}),
+                "reason": str(cfg.get("reason") or "no_safe_visual_injection_point"),
+            }
+        except Exception:
+            payload = {
+                "applied": False,
+                "visual_intensity": None,
+                "source_knowledge_ids": [],
+                "render_overrides": {},
+                "reason": "log_error",
+            }
+        self._write("ai.visual_intensity_applied", payload)
+
     def log_pacing_applied(self, config: dict) -> None:
         """Log when AI pacing hint is applied or rejected.
 

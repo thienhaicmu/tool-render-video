@@ -2622,6 +2622,73 @@ def run_render_pipeline(
                 )
                 _ai_subtitle_emphasis_config = None
 
+        # ── Phase 5.6: Build AI visual intensity config ───────────────────────────
+        # Runs only when ai_director_enabled=True and _ai_edit_plan is not None.
+        # Config is built once per job; logged immediately.
+        # Phase 5.6 finding: NO safe visual intensity injection point was found.
+        #   - effect_preset is payload.effect_preset (user field — must not be overridden)
+        #   - No _effect_intensity / _visual_energy / effect_strength / visual_profile
+        #     local variables exist in render_pipeline.py
+        #   - _effect_filter() maps preset names directly to FFmpeg filter strings
+        #   - No intermediate intensity parameter sits between the caller and FFmpeg
+        # Result: config.applied=False, render_overrides={}, logged as advisory.
+        # NEVER mutates payload. NEVER changes effect_preset. NEVER touches FFmpeg.
+        # If AI disabled or no hints → _ai_visual_intensity_config.applied=False → no change.
+        _ai_visual_intensity_config = None
+        if getattr(payload, "ai_director_enabled", False) and _ai_edit_plan is not None:
+            try:
+                from app.ai.visual_hints import build_ai_visual_intensity_config as _build_vis_int
+                _ai_visual_intensity_config = _build_vis_int(_exec_hints, payload)
+                _vis_reason = (
+                    str(_ai_visual_intensity_config.rejected_reason or "no_safe_visual_injection_point")
+                )
+                if _phase53_tracer is not None:
+                    try:
+                        _phase53_tracer.log_visual_intensity_applied(
+                            {**_ai_visual_intensity_config.to_dict(), "reason": _vis_reason}
+                        )
+                    except Exception:
+                        pass
+                # Phase 5.6: always rejected — log decision_rejected for observability
+                if _phase53_tracer is not None:
+                    try:
+                        _phase53_tracer.log_decision_rejected(
+                            _vis_reason,
+                            detail={
+                                "hint": "visual_intensity",
+                                "value": _ai_visual_intensity_config.visual_intensity,
+                                "phase": "5.6",
+                            },
+                        )
+                    except Exception:
+                        pass
+                logger.debug(
+                    "phase56_visual_intensity_config job_id=%s applied=%s intensity=%s reason=%s",
+                    job_id,
+                    _ai_visual_intensity_config.applied,
+                    _ai_visual_intensity_config.visual_intensity,
+                    _ai_visual_intensity_config.rejected_reason,
+                )
+                # Phase 5.6: No safe injection point → no render parameter overrides applied.
+                # If config.applied were True (future phase), render_overrides would be
+                # applied to local variables here BEFORE the per-part renderer call.
+                # For now: no change to any render parameters.
+            except Exception as _vis56_err:
+                logger.warning(
+                    "phase56_visual_intensity_config_failed job_id=%s: %s", job_id, _vis56_err
+                )
+                _ai_visual_intensity_config = None
+        elif not getattr(payload, "ai_director_enabled", False):
+            # AI disabled: skip entirely, log as advisory
+            if _phase53_tracer is not None:
+                try:
+                    _phase53_tracer.log_decision_rejected(
+                        "ai_disabled",
+                        detail={"hint": "visual_intensity", "phase": "5.6"},
+                    )
+                except Exception:
+                    pass
+
         # ── AI Execution Mode Resolution (Phase 60D) — control only ─────────────
         # Resolve BEFORE Phase 59 blocks so they can be gated correctly.
         # mode=off blocks all Phase 59 promotion; other modes run Phase 59 normally.

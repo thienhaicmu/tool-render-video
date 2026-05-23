@@ -2012,3 +2012,50 @@ Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.p
 Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
 
 **No new failures introduced.**
+
+---
+
+## Phase 5.6 — AI Visual Intensity Hint Integration (2026-05-23)
+
+**Goal**: Integrate validated AI `visual_intensity` hints into existing visual render behavior, or safely log rejection if no safe injection point exists.
+
+**Outcome**: No safe injection point found. Infrastructure built, all hints logged as advisory.
+
+**Files added**:
+- `backend/app/ai/visual_hints.py` — `AIVisualIntensityConfig` dataclass, `build_ai_visual_intensity_config(execution_hints, payload)`: validates intensity, detects user override, documents injection investigation
+- `backend/tests/test_ai_visual_intensity_config.py` — 29 tests for config model
+- `backend/tests/test_ai_trace_logger_visual_intensity.py` — 14 tests for trace logger
+- `backend/tests/test_render_pipeline_ai_visual_intensity.py` — 26 tests for pipeline integration
+
+**Files modified**:
+- `backend/app/ai/tracing.py` — `log_visual_intensity_applied()` added; writes `ai.visual_intensity_applied` JSONL event
+- `backend/app/orchestration/render_pipeline.py` — Phase 5.6 block added after Phase 5.5 block; `_ai_visual_intensity_config` built once; no render parameter changes
+- Docs: `AI_RENDER_CONTRACT.md`, `AI_DECISION_TRACEABILITY_PLAN.md`, `CURRENT_RENDER_ARCHITECTURE.md`, `TECHNICAL_DEBT_REPORT.md`, `MIGRATION_HISTORY.md` updated
+
+**Visual injection point investigation**:
+- Reviewed: `legacy_renderer.py`, `base_clip_renderer.py`, `ffmpeg_helpers.py`, `clip_ops.py`, `render_pipeline.py`
+- `effect_preset` param in `render_part()`/`render_part_smart()`/`render_base_clip()` maps directly to FFmpeg filter strings via `_effect_filter()` — no intermediate level parameter
+- `payload.effect_preset` is a user-set field — AI must not override it
+- No `_effect_intensity`, `_visual_energy`, `effect_strength`, `visual_profile` local variables found in render_pipeline.py
+- `_cinematic_color_filter()` and `_cinematic_sharpen_filter()` accept content_type/src_h only
+- **Result: NOT FOUND — no safe visual intensity injection point**
+- `render_overrides={}`, `applied=False` for all valid hints
+
+**User override detection**: `payload.effect_preset != "slay_soft_01"` (schema default) → rejected with `user_visual_override`
+
+**Render behavior impact**:
+- Visual intensity hints: ADVISORY ONLY — `applied=False`, `render_overrides={}`
+- `effect_preset`: GUARANTEED UNCHANGED
+- FFmpeg: ZERO changes
+- Subtitle emphasis hints: still active (Phase 5.5)
+- Pacing hints: still active (Phase 5.4)
+- Hook overlay gate: still active (Phase 5.3)
+- API: ZERO changes
+
+### Test Suite State (Post Phase 5.6)
+
+8 failed (same known pre-existing failures) / 7141 passed (+69 new tests) / 1 skipped
+
+Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
+
+**No new failures introduced.**

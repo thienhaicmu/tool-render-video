@@ -277,6 +277,21 @@ With this log:
 
 ---
 
+## Implementation Status (Phase 5.6)
+
+| Event | Status |
+|---|---|
+| `ai.visual_intensity_applied` | IMPLEMENTED — `log_visual_intensity_applied(config)` added to `AITraceLogger` |
+| Wired in render_pipeline.py | YES — after `build_ai_visual_intensity_config()` call in Phase 5.6 block; always logs (applied always False in Phase 5.6) |
+| `ai.decision_rejected` reason: `no_safe_visual_injection_point` | IMPLEMENTED — logged when valid hint cannot be applied due to no safe injection point |
+| `ai.decision_rejected` reason: `no_visual_intensity_hint` | IMPLEMENTED — logged when execution hints have no visual_intensity |
+| `ai.decision_rejected` reason: `invalid_visual_intensity` | IMPLEMENTED — logged when intensity is not in allowed set (low/medium/high) |
+| `ai.decision_rejected` reason: `user_visual_override` | IMPLEMENTED — logged when user has non-default effect_preset |
+| `ai.decision_rejected` reason: `ai_disabled` | IMPLEMENTED — logged when ai_director_enabled=False |
+| Never raises | CONFIRMED — log_visual_intensity_applied catches all exceptions |
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -286,3 +301,4 @@ With this log:
 | 2026-05-23 | Phase 5.3 — `log_execution_hints`, `log_validation_fixup`, `log_decision_rejected` added; wired for execution hints and advisory rejections |
 | 2026-05-23 | Phase 5.4 — `log_pacing_applied()` added; `ai.pacing_applied` event IMPLEMENTED; wired in render_pipeline.py early pacing block |
 | 2026-05-23 | Phase 5.5 — `log_subtitle_emphasis_applied()` added; `ai.subtitle_emphasis_applied` event IMPLEMENTED; wired in render_pipeline.py Phase 5.5 block |
+| 2026-05-23 | Phase 5.6 — `log_visual_intensity_applied()` added; `ai.visual_intensity_applied` event IMPLEMENTED; wired in render_pipeline.py Phase 5.6 block; `ai.decision_rejected` reasons `no_safe_visual_injection_point`, `user_visual_override`, `invalid_visual_intensity`, `no_visual_intensity_hint`, `ai_disabled` all covered |

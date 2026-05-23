@@ -294,6 +294,27 @@ Output
 
 ---
 
+## Phase 5.6 Status
+
+| Component | Status |
+|---|---|
+| Visual intensity config model | IMPLEMENTED — `app/ai/visual_hints.py`: `AIVisualIntensityConfig` dataclass, `build_ai_visual_intensity_config(execution_hints, payload)` |
+| Visual injection point | NOT FOUND — no safe parameter exists between render_pipeline.py callers and FFmpeg command construction that can accept a visual intensity level without modifying filter strings or bypassing renderer validation |
+| Visual intensity hint application | ADVISORY ONLY — `visual_intensity` hint validated and logged; `applied=False`, `render_overrides={}` in all cases; no render parameter changed |
+| User visual override detection | ENFORCED — if `payload.effect_preset != "slay_soft_01"` (schema default), hint rejected with `user_visual_override`; `effect_preset` never mutated |
+| Trace logger | EXTENDED — `log_visual_intensity_applied()` added to `AITraceLogger`; writes `ai.visual_intensity_applied` JSONL event; `log_decision_rejected()` called for every rejection including `no_safe_visual_injection_point` |
+| AI disabled behavior | CONFIRMED — if `ai_director_enabled=False`, Phase 5.6 block skipped; `ai_disabled` rejection logged |
+| Missing knowledge fallback | CONFIRMED — no knowledge/hints → `applied=False` → `render_overrides={}` → existing behavior |
+| Invalid hint fallback | CONFIRMED — invalid intensity → `rejected_reason="invalid_visual_intensity"` → `render_overrides={}` → existing behavior |
+| Subtitle hints | ACTIVE — unchanged from Phase 5.5 |
+| Pacing hints | ACTIVE — unchanged from Phase 5.4 |
+| Hook overlay gate | ACTIVE — unchanged from Phase 5.3 |
+| FFmpeg changes | NONE — zero changes to FFmpeg commands or filter graphs |
+| API changes | NONE — no new API endpoints, no schema changes, no websocket payload changes |
+| Render safe on AI failure | CONFIRMED — all visual intensity failures degrade to existing behavior; never raises |
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -303,3 +324,4 @@ Output
 | 2026-05-23 | Phase 5.3 — AI contract models, validation layer, knowledge→hints mapper, limited render influence (hook overlay gate), trace logger extensions |
 | 2026-05-23 | Phase 5.4 — AI pacing hints now applied to segment selection; `AIPacingConfig` model; early retrieval before segment building; user explicit limits override AI; no FFmpeg changes |
 | 2026-05-23 | Phase 5.5 — AI subtitle emphasis hints now applied to subtitle text transforms; `AISubtitleEmphasisConfig` model; `emphasis_level_override` parameter added to `subtitle_emphasis_pass()`; no new style IDs; no timing changes; no FFmpeg changes |
+| 2026-05-23 | Phase 5.6 — AI visual intensity hint infrastructure built; `AIVisualIntensityConfig` model; `log_visual_intensity_applied()` trace logger added; no safe injection point found — hints logged as advisory only; no FFmpeg changes; no render behavior changes |

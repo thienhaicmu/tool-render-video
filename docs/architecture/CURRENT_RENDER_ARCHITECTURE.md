@@ -352,3 +352,34 @@ See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_P
 - Pacing hints: active — unchanged from Phase 5.4
 - Hook overlay gate: active — unchanged from Phase 5.3
 - FFmpeg: ZERO changes to FFmpeg commands or filter graphs
+
+---
+
+## Phase 5.6 — AI Visual Intensity Hint (2026-05-23)
+
+**New files**:
+- `app/ai/visual_hints.py` — `AIVisualIntensityConfig` dataclass, `build_ai_visual_intensity_config(execution_hints, payload)`: validates visual intensity hints, detects user override, documents injection point investigation
+
+**Modified files**:
+- `app/ai/tracing.py` — `log_visual_intensity_applied(config)` added; writes `ai.visual_intensity_applied` JSONL event
+- `app/orchestration/render_pipeline.py` — Phase 5.6 block added after Phase 5.5 block; builds `_ai_visual_intensity_config`; logs applied/rejected; no render parameter changes
+
+**Visual injection point investigation**:
+- `render_part()`, `render_part_smart()`, `render_base_clip()` all accept `effect_preset: str`
+- `effect_preset` maps directly to FFmpeg filter strings via `_effect_filter()` — no intermediate intensity parameter
+- No `_effect_intensity`, `_visual_energy`, `effect_strength`, `visual_profile` local variables exist in render_pipeline.py
+- `_cinematic_color_filter()` and `_cinematic_sharpen_filter()` accept `content_type`/`src_h`, not intensity levels
+- `content_type` and `effect_preset` are both user-controlled payload fields — AI must not override them
+- **Result: NOT FOUND — no safe visual intensity injection point**
+
+**Render behavior impact**:
+- Visual intensity hints: ADVISORY ONLY — logged as `ai.visual_intensity_applied` (always `applied=False` in Phase 5.6)
+- `effect_preset`: GUARANTEED UNCHANGED — AI never reads or writes `payload.effect_preset`
+- `render_overrides={}`: no render parameters changed in Phase 5.6
+- AI disabled: if `ai_director_enabled=False`, Phase 5.6 block skipped; `ai_disabled` rejection logged
+- User effect_preset override: if `payload.effect_preset != "slay_soft_01"`, rejected as `user_visual_override`
+- Subtitle hints: active — unchanged from Phase 5.5
+- Pacing hints: active — unchanged from Phase 5.4
+- Hook overlay gate: active — unchanged from Phase 5.3
+- FFmpeg: ZERO changes to FFmpeg commands or filter graphs
+- API changes: NONE
