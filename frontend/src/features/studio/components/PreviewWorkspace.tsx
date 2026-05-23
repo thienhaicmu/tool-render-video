@@ -1,16 +1,31 @@
-import { EmptyState } from '../../../components/ui/EmptyState'
+import { TransportBar } from './TransportBar'
+import { TimelineTrack } from './TimelineTrack'
+import { AIChip } from '../../../components/ui/AIChip'
+import { type StudioStep } from '../../../stores/uiStore'
 
 export interface PreviewWorkspaceProps {
   hasMedia?: boolean
+  studioStep?: StudioStep | null
+  mediaUrl?: string      // B8 ready
+  duration?: number      // B8 ready
+  currentTime?: number   // B8 ready
 }
 
-const TRACKS: Array<{ label: string; color: string }> = [
-  { label: 'VIDEO',   color: 'var(--accent-subtle)' },
-  { label: 'SUBS',    color: 'var(--accent-subtle)' },
-  { label: 'AI MKR',  color: 'var(--ai-subtle)' },
-]
+const TIMELINE_BLOCKS = {
+  VIDEO:  [{ start: 0.0,  end: 0.85 }],
+  SUBS:   [
+    { start: 0.05, end: 0.25 },
+    { start: 0.35, end: 0.55 },
+    { start: 0.65, end: 0.80 },
+  ],
+  AI_MKR: [
+    { start: 0.04, end: 0.06 },
+    { start: 0.32, end: 0.34 },
+    { start: 0.65, end: 0.67 },
+  ],
+}
 
-export function PreviewWorkspace({ hasMedia = false }: PreviewWorkspaceProps) {
+export function PreviewWorkspace({ hasMedia = false, studioStep }: PreviewWorkspaceProps) {
   return (
     <div
       style={{
@@ -21,55 +36,96 @@ export function PreviewWorkspace({ hasMedia = false }: PreviewWorkspaceProps) {
         minWidth: 0,
       }}
     >
-      {/* Video player container */}
+      {/* Player container — flex-based, no maxHeight hack */}
       <div
         style={{
-          aspectRatio: '16 / 9',
+          flexBasis: '40%',
+          flexShrink: 0,
+          flexGrow: 0,
           backgroundColor: 'var(--surface-base)',
           border: '1px solid var(--border-subtle)',
-          flexShrink: 0,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          maxHeight: '45%',
+          overflow: 'hidden',
+          position: 'relative',
         }}
       >
-        {!hasMedia && (
-          <EmptyState
-            variant="no-jobs"
-            primary="No media loaded"
-            secondary="Select a source to begin"
-          />
+        {/* 16:9 letterbox */}
+        <div
+          style={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+            aspectRatio: '16 / 9',
+            margin: 'auto',
+            backgroundColor: '#000000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+          }}
+        >
+          {!hasMedia && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 'var(--space-4)',
+              }}
+            >
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--surface-card)',
+                  border: '1px solid var(--border-default)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '20px',
+                  color: 'var(--text-tertiary)',
+                }}
+              >
+                ▶
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div
+                  style={{
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 'var(--weight-medium)' as unknown as number,
+                  }}
+                >
+                  No media loaded
+                </div>
+                <div
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--text-tertiary)',
+                    marginTop: 'var(--space-1)',
+                  }}
+                >
+                  Select a source in the workflow panel →
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        {/* AI overlay — visible only when media is loaded */}
+        {hasMedia && (
+          <div style={{ position: 'absolute', top: 'var(--space-2)', right: 'var(--space-2)' }}>
+            <AIChip variant="applied" label="AI Director" />
+          </div>
         )}
       </div>
 
       {/* Transport controls */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-3)',
-          padding: 'var(--space-2) var(--space-4)',
-          flexShrink: 0,
-          borderBottom: '1px solid var(--border-subtle)',
-        }}
-      >
-        <span style={{ fontSize: '16px', color: 'var(--text-tertiary)', cursor: 'default' }}>▶</span>
-        <span style={{ fontSize: '16px', color: 'var(--text-tertiary)', cursor: 'default' }}>🔊</span>
-        <span style={{ fontSize: '16px', color: 'var(--text-tertiary)', cursor: 'default' }}>⟲</span>
-        <span style={{ flex: 1 }} />
-        <span
-          style={{
-            fontSize: 'var(--text-xs)',
-            color: 'var(--text-tertiary)',
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          00:00:00
-        </span>
-      </div>
+      <TransportBar />
 
-      {/* 3-track timeline shell */}
+      {/* Timeline */}
       <div
         style={{
           flex: 1,
@@ -78,62 +134,58 @@ export function PreviewWorkspace({ hasMedia = false }: PreviewWorkspaceProps) {
           overflow: 'hidden',
         }}
       >
-        {/* Track header */}
+        {/* Ruler */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            height: '28px',
+            height: '20px',
             borderBottom: '1px solid var(--border-subtle)',
             flexShrink: 0,
           }}
         >
           <div style={{ width: 'var(--timeline-label-w)', flexShrink: 0 }} />
-          <span
+          <div
             style={{
               flex: 1,
-              fontSize: 'var(--text-xs)',
-              color: 'var(--text-tertiary)',
+              display: 'flex',
+              justifyContent: 'space-between',
               padding: '0 var(--space-2)',
             }}
           >
-            Timeline
-          </span>
+            {['0:00', '0:30', '1:00', '1:30'].map((t) => (
+              <span
+                key={t}
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--text-tertiary)',
+                }}
+              >
+                {t}
+              </span>
+            ))}
+          </div>
         </div>
 
-        {/* Track rows */}
-        {TRACKS.map((track) => (
-          <div
-            key={track.label}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              height: 'var(--timeline-track-h)',
-              borderBottom: '1px solid var(--border-subtle)',
-              flexShrink: 0,
-            }}
-          >
-            <div
-              style={{
-                width: 'var(--timeline-label-w)',
-                flexShrink: 0,
-                fontSize: 'var(--text-xs)',
-                color: 'var(--text-tertiary)',
-                padding: '0 var(--space-2)',
-                userSelect: 'none',
-              }}
-            >
-              {track.label}
-            </div>
-            <div
-              style={{
-                flex: 1,
-                height: '100%',
-                backgroundColor: track.color,
-              }}
-            />
-          </div>
-        ))}
+        {/* Tracks */}
+        <TimelineTrack
+          label="VIDEO"
+          color="var(--accent-subtle)"
+          blocks={TIMELINE_BLOCKS.VIDEO}
+          hasPlayhead
+          playheadPosition={0.15}
+        />
+        <TimelineTrack
+          label="SUBS"
+          color="var(--accent-subtle)"
+          blocks={TIMELINE_BLOCKS.SUBS}
+        />
+        <TimelineTrack
+          label="AI MKR"
+          color="var(--ai-subtle)"
+          blocks={TIMELINE_BLOCKS.AI_MKR}
+        />
       </div>
 
       {/* Action row */}
@@ -151,7 +203,8 @@ export function PreviewWorkspace({ hasMedia = false }: PreviewWorkspaceProps) {
           disabled
           style={{
             background: 'none',
-            border: 'none',
+            border: '1px solid transparent',
+            borderRadius: 'var(--radius-md)',
             cursor: 'default',
             color: 'var(--text-tertiary)',
             fontSize: 'var(--text-sm)',
@@ -177,6 +230,18 @@ export function PreviewWorkspace({ hasMedia = false }: PreviewWorkspaceProps) {
           Submit Render →
         </button>
       </div>
+      {studioStep === 'plan' && (
+        <div
+          style={{
+            textAlign: 'center',
+            fontSize: 'var(--text-xs)',
+            color: 'var(--text-tertiary)',
+            padding: 'var(--space-1) var(--space-6) var(--space-2)',
+          }}
+        >
+          3 clips selected by AI Director
+        </div>
+      )}
     </div>
   )
 }

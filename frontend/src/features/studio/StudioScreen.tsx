@@ -42,7 +42,7 @@ export function StudioScreen() {
           minHeight: 0,
         }}
       >
-        <PreviewWorkspace />
+        <PreviewWorkspace studioStep={studioStep} />
         <WorkflowPanel studioStep={studioStep} />
       </div>
 

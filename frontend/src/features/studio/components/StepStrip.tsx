@@ -66,6 +66,7 @@ export function StepStrip({ currentStep, completedSteps = [], onStepClick }: Ste
             >
               {/* Number circle */}
               <div
+                className="step-number"
                 style={{
                   width: '22px',
                   height: '22px',

@@ -3,6 +3,7 @@ import { EmptyState } from '../../../components/ui/EmptyState'
 
 export function BottomRenderState() {
   const [collapsed, setCollapsed] = useState(true)
+  const [toggleHovered, setToggleHovered] = useState(false)
 
   return (
     <div
@@ -48,14 +49,17 @@ export function BottomRenderState() {
         <div style={{ flex: 1 }} />
         <button
           onClick={() => setCollapsed((c) => !c)}
+          onMouseEnter={() => setToggleHovered(true)}
+          onMouseLeave={() => setToggleHovered(false)}
           style={{
-            background: 'none',
             border: 'none',
             cursor: 'pointer',
             color: 'var(--text-tertiary)',
             fontSize: '12px',
             padding: 'var(--space-1) var(--space-2)',
             borderRadius: 'var(--radius-sm)',
+            backgroundColor: toggleHovered ? 'var(--surface-card)' : 'transparent',
+            transition: 'background-color var(--duration-instant) var(--ease-out)',
           }}
           aria-label={collapsed ? 'Expand render queue' : 'Collapse render queue'}
         >
