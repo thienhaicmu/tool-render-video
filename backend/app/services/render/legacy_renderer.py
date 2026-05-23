@@ -29,6 +29,7 @@ from app.services.render.ffmpeg_helpers import (
     _has_audio_stream,
     resolve_ffmpeg_threads,
     resolve_target_dimensions,
+    resolve_effect_preset_with_intensity,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ def render_part(
     loudnorm_enabled: bool = False,
     ffmpeg_threads: int | None = None,
     content_type: str = "vlog",
+    visual_intensity_hint: str | None = None,
 ):
     preset_low = (video_preset or "").lower()
     _src_meta = probe_video_metadata(input_path)
@@ -99,6 +101,15 @@ def render_part(
         zoom_scale,
         fixed_canvas,
     ]
+    # Phase 5.7: Resolve effective effect preset from AI visual intensity hint.
+    # Renderer OWNS the mapping; AI only passes None/"low"/"medium"/"high".
+    # User explicit effect_preset (non-default) always wins over AI hint.
+    _user_effect_explicit = (
+        (effect_preset or "slay_soft_01").strip() != "slay_soft_01"
+    )
+    _effective_effect_preset = resolve_effect_preset_with_intensity(
+        effect_preset, visual_intensity_hint, _user_effect_explicit
+    )
     # Part C: smart denoise — content-type and source-quality gated (replaces preset-only gate)
     _denoise = _smart_denoise_filter(content_type, preset_low, _src_h)
     if _denoise:
@@ -111,7 +122,10 @@ def render_part(
             vf_parts.append(f"drawbox=x=0:y=0:w=iw:h=ih:color=black@{opacity}:t=fill")
     else:
         # Normal mode: creative effect filter then cinematic finishing passes
-        vf_parts.append(_effect_filter(effect_preset))
+        # _effective_effect_preset is either the user's preset (when explicit) or
+        # the AI-intensity-mapped preset (when AI hint is valid and not overridden).
+        # Original effect_preset is preserved for logging below.
+        vf_parts.append(_effect_filter(_effective_effect_preset))
         # Part D: content-type-aware color polish
         _color_filter = _cinematic_color_filter(_src_h, content_type)
         # Part B: content-type-aware clarity pass
@@ -236,9 +250,14 @@ def render_part(
                 cmd += ["-af", af]
     cmd += [*codec_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
     logger.debug("render_part ffmpeg_cmd=%s", " ".join(str(a) for a in cmd))
-    logger.info("render_part: codec=%s preset=%s crf=%s effect=%s loudnorm=%s input=%s output=%s",
-                resolved_codec, resolved_preset, video_crf, effect_preset, loudnorm_enabled,
-                Path(input_path).name, Path(output_path).name)
+    logger.info(
+        "render_part: codec=%s preset=%s crf=%s effect=%s effective_effect=%s "
+        "visual_intensity_hint=%s loudnorm=%s input=%s output=%s",
+        resolved_codec, resolved_preset, video_crf,
+        effect_preset, _effective_effect_preset,
+        visual_intensity_hint, loudnorm_enabled,
+        Path(input_path).name, Path(output_path).name,
+    )
     if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
         # GPU encode: hold one NVENC session slot for the duration of the subprocess.
         # NVENC_SEMAPHORE is released on any exit (success OR exception) before the
@@ -333,7 +352,18 @@ def render_part_smart(
     content_type: str = "vlog",
     _motion_cache_key: str | None = None,
     _fallback_flag: list | None = None,
+    visual_intensity_hint: str | None = None,
 ):
+    # Phase 5.7: Resolve effective effect preset from AI visual intensity hint.
+    # Renderer OWNS the mapping; AI only passes None/"low"/"medium"/"high".
+    # User explicit effect_preset (non-default) always wins over AI hint.
+    _smart_user_explicit = (
+        (effect_preset or "slay_soft_01").strip() != "slay_soft_01"
+    )
+    _smart_effective_preset = resolve_effect_preset_with_intensity(
+        effect_preset, visual_intensity_hint, _smart_user_explicit
+    )
+
     if motion_aware_crop:
         try:
             if crop_cfg_override is not None:
@@ -359,7 +389,7 @@ def render_part_smart(
                     scale_y_percent=float(scale_y),
                     subtitle_file=subtitle_ass if add_subtitle and subtitle_ass and Path(subtitle_ass).exists() else None,
                     title_text=title_text if add_title_overlay else None,
-                    effect_preset=effect_preset,
+                    effect_preset=_smart_effective_preset,
                     transition_sec=transition_sec,
                     video_codec=video_codec,
                     video_crf=video_crf,
@@ -392,6 +422,7 @@ def render_part_smart(
             if _fallback_flag is not None:
                 _fallback_flag.append(str(exc))
             # Fallback to standard ffmpeg render path if motion-aware branch fails.
+            # Pass visual_intensity_hint so render_part() can re-resolve correctly.
             _fb = render_part(
                 input_path=input_path,
                 output_path=output_path,
@@ -422,6 +453,7 @@ def render_part_smart(
                 loudnorm_enabled=loudnorm_enabled,
                 ffmpeg_threads=ffmpeg_threads,
                 content_type=content_type,
+                visual_intensity_hint=visual_intensity_hint,
             )
             logger.info("recovery_success strategy=fallback_standard_crop output=%s", Path(output_path).name)
             return _fb
@@ -455,4 +487,5 @@ def render_part_smart(
         text_layers=text_layers,
         loudnorm_enabled=loudnorm_enabled,
         content_type=content_type,
+        visual_intensity_hint=visual_intensity_hint,
     )

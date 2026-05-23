@@ -284,6 +284,92 @@ def _effect_filter(effect_preset: str):
     return "eq=contrast=1.05:saturation=1.10:brightness=0.0:gamma=1.01,unsharp=5:5:0.9:3:3:0.35"
 
 
+# ---------------------------------------------------------------------------
+# Phase 5.7 — Safe visual intensity → effect preset resolver
+# ---------------------------------------------------------------------------
+# Supported preset names (all keys in _effect_filter above):
+#   slay_soft_01    default — natural cinematic, light sharpening
+#   slay_pop_01     high energy — boosted contrast/saturation/unsharp
+#   story_clean_01  subtle — low contrast/saturation, soft sharpening
+#   social_bright   bright social — high saturation, strong brightness
+#   cinematic_soft  cinematic desaturated — soft, denoised
+#   high_contrast   maximum contrast — heaviest unsharp
+#
+# AI visual_intensity mapping (renderer-owned, AI never picks the preset name):
+#   "low"    → "story_clean_01"  (subtle look, gentle processing)
+#   "medium" → "slay_soft_01"    (natural default, matches schema default)
+#   "high"   → "slay_pop_01"     (energetic pop look, boosted processing)
+#
+# Priority (documented in render contract):
+#   1. FFmpeg safety (enforced by _effect_filter — only accepts known presets)
+#   2. user_effect_is_explicit=True → return effect_preset unchanged
+#   3. Valid visual_intensity_hint → map to known preset (renderer decides)
+#   4. Default: return effect_preset unchanged
+
+_VISUAL_INTENSITY_ALLOWED = frozenset({"low", "medium", "high"})
+
+_VISUAL_INTENSITY_PRESET_MAP: dict[str, str] = {
+    # low  → subtle look: lower contrast/saturation, softer sharpening
+    "low": "story_clean_01",
+    # medium → natural default: matches the schema default effect_preset
+    "medium": "slay_soft_01",
+    # high → energetic pop: boosted contrast/saturation/sharpening
+    "high": "slay_pop_01",
+}
+
+
+def resolve_effect_preset_with_intensity(
+    effect_preset: "str | None",
+    visual_intensity_hint: "str | None",
+    user_effect_is_explicit: bool = False,
+) -> "str | None":
+    """Map AI visual_intensity_hint to a renderer-owned effect preset.
+
+    Phase 5.7 safe injection point — renderer OWNS the mapping table.
+    AI may only pass None, "low", "medium", or "high".
+    This function NEVER raises. Invalid inputs are silently ignored.
+
+    Priority:
+      1. user_effect_is_explicit=True → return effect_preset unchanged
+      2. visual_intensity_hint is None or invalid → return effect_preset unchanged
+      3. Valid hint → return mapped preset (only known supported presets)
+
+    NEVER returns:
+      - A raw FFmpeg filter string (no "vf=", "eq=", "unsharp=" content)
+      - An unsupported preset name
+      - A preset not listed in _effect_filter()
+
+    Args:
+        effect_preset:          The current effect_preset (may be None or default).
+        visual_intensity_hint:  AI hint — one of None/"low"/"medium"/"high".
+        user_effect_is_explicit: True when the user explicitly chose effect_preset.
+
+    Returns:
+        A known supported effect preset name, or effect_preset unchanged.
+    """
+    try:
+        # Priority 1: user explicit wins unconditionally
+        if user_effect_is_explicit:
+            return effect_preset
+
+        # Priority 2: missing or invalid hint → no change
+        if not visual_intensity_hint:
+            return effect_preset
+        hint = str(visual_intensity_hint).strip().lower()
+        if hint not in _VISUAL_INTENSITY_ALLOWED:
+            return effect_preset
+
+        # Priority 3: map to renderer-owned preset
+        mapped = _VISUAL_INTENSITY_PRESET_MAP.get(hint)
+        if mapped is None:
+            # Defensive: hint in ALLOWED but not in map (shouldn't happen)
+            return effect_preset
+        return mapped
+    except Exception:
+        # Safety: never raise — return unchanged on any error
+        return effect_preset
+
+
 def _cinematic_color_filter(src_h: int, content_type: str = "vlog") -> "str | None":
     """Content-type-aware contrast/saturation lift after recompression.
 

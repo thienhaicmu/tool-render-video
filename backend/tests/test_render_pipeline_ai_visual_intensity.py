@@ -1,22 +1,26 @@
 """
-test_render_pipeline_ai_visual_intensity.py — Phase 5.6 render pipeline integration tests.
+test_render_pipeline_ai_visual_intensity.py — Phase 5.7 render pipeline integration tests.
 
 Tests:
 - AI disabled → visual config skipped, behavior unchanged
 - no knowledge/hints → behavior unchanged
-- valid "high" hint → config applied=False (no safe injection point in Phase 5.6)
-- valid "low" hint → config applied=False (no safe injection point in Phase 5.6)
+- valid "high" hint → config applied=True (Phase 5.7: safe injection point found)
+- valid "low" hint → config applied=True (Phase 5.7: safe injection point found)
 - invalid hint → rejected, behavior unchanged
 - no FFmpeg command string generation by AI
 - trace logs ai.visual_intensity_applied when processed
-- trace logs rejection when not applied (including "no_safe_visual_injection_point")
-- render_overrides contains only safe known keys (empty in Phase 5.6)
+- trace logs rejection when not applied (user override, invalid hint)
+- render_overrides contains only safe known keys (visual_intensity_hint in Phase 5.7)
+- render_overrides must not contain effect_preset names or FFmpeg filter strings
 - exception in visual mapping → fallback, render behavior unchanged
+- render_pipeline does NOT mutate payload.effect_preset
+- overlay compositor unchanged (does not receive visual_intensity_hint)
 
-Phase 5.6 note:
-  No safe visual intensity injection point was found. All valid hints are logged
-  as advisory only (applied=False, rejected_reason="no_safe_visual_injection_point").
-  This is the expected and correct behavior for Phase 5.6.
+Phase 5.7 note:
+  Safe injection point found. Valid hints now result in applied=True.
+  render_overrides={"visual_intensity_hint": <value>} when applied=True.
+  render_pipeline extracts this value and passes to renderer as visual_intensity_hint.
+  Renderer OWNS the mapping from hint to preset — AI never picks a preset name.
 """
 from __future__ import annotations
 
@@ -79,31 +83,34 @@ class TestAIVisualIntensityConfigInPipeline:
         assert cfg.applied is False
         assert cfg.rejected_reason == "no_visual_intensity_hint"
 
-    def test_valid_high_hint_not_applied_no_injection_point(self):
-        """Valid 'high' hint → applied=False (no safe injection point in Phase 5.6)."""
+    def test_valid_high_hint_applied_phase57(self):
+        """Valid 'high' hint → applied=True (Phase 5.7: safe injection point found)."""
         from app.ai.visual_hints import build_ai_visual_intensity_config
         cfg = build_ai_visual_intensity_config(_make_exec_hints("high"))
         assert cfg.enabled is True
         assert cfg.visual_intensity == "high"
-        # Phase 5.6: no safe injection point
-        assert cfg.applied is False
-        assert cfg.rejected_reason == "no_safe_visual_injection_point"
+        # Phase 5.7: safe injection point found — applied=True
+        assert cfg.applied is True
+        assert cfg.rejected_reason is None
+        assert cfg.render_overrides.get("visual_intensity_hint") == "high"
 
-    def test_valid_low_hint_not_applied_no_injection_point(self):
-        """Valid 'low' hint → applied=False (no safe injection point in Phase 5.6)."""
+    def test_valid_low_hint_applied_phase57(self):
+        """Valid 'low' hint → applied=True (Phase 5.7: safe injection point found)."""
         from app.ai.visual_hints import build_ai_visual_intensity_config
         cfg = build_ai_visual_intensity_config(_make_exec_hints("low"))
         assert cfg.enabled is True
         assert cfg.visual_intensity == "low"
-        assert cfg.applied is False
-        assert cfg.rejected_reason == "no_safe_visual_injection_point"
+        assert cfg.applied is True
+        assert cfg.rejected_reason is None
+        assert cfg.render_overrides.get("visual_intensity_hint") == "low"
 
-    def test_valid_medium_hint_not_applied_no_injection_point(self):
-        """Valid 'medium' hint → applied=False (no safe injection point in Phase 5.6)."""
+    def test_valid_medium_hint_applied_phase57(self):
+        """Valid 'medium' hint → applied=True (Phase 5.7: safe injection point found)."""
         from app.ai.visual_hints import build_ai_visual_intensity_config
         cfg = build_ai_visual_intensity_config(_make_exec_hints("medium"))
-        assert cfg.applied is False
-        assert cfg.rejected_reason == "no_safe_visual_injection_point"
+        assert cfg.applied is True
+        assert cfg.rejected_reason is None
+        assert cfg.render_overrides.get("visual_intensity_hint") == "medium"
 
     def test_invalid_hint_rejected_behavior_unchanged(self):
         """Invalid hint → rejected=invalid_visual_intensity, applied=False."""
@@ -156,14 +163,29 @@ class TestNoFFmpegChanges:
                 assert "hqdn3d=" not in val_str, f"FFmpeg hqdn3d filter found in render_overrides[{key}]"
                 assert "scale=" not in val_str, f"FFmpeg scale filter found in render_overrides[{key}]"
 
-    def test_render_overrides_empty_in_phase56(self):
-        """Phase 5.6: render_overrides={} — no injection point, no overrides."""
+    def test_render_overrides_contains_hint_in_phase57(self):
+        """Phase 5.7: render_overrides={"visual_intensity_hint": <value>} when applied=True."""
         from app.ai.visual_hints import build_ai_visual_intensity_config
         for intensity in ("low", "medium", "high"):
             cfg = build_ai_visual_intensity_config(_make_exec_hints(intensity))
-            assert cfg.render_overrides == {}, (
-                f"Phase 5.6: render_overrides must be empty, got {cfg.render_overrides}"
+            assert cfg.applied is True, f"Expected applied=True for intensity={intensity!r}"
+            assert "visual_intensity_hint" in cfg.render_overrides, (
+                f"render_overrides must contain 'visual_intensity_hint' for intensity={intensity!r}"
             )
+            assert cfg.render_overrides["visual_intensity_hint"] == intensity
+
+    def test_render_overrides_does_not_contain_effect_preset_name(self):
+        """render_overrides must not contain effect_preset names (AI does not pick presets)."""
+        from app.ai.visual_hints import build_ai_visual_intensity_config
+        _preset_names = {"slay_soft_01", "slay_pop_01", "story_clean_01",
+                         "social_bright", "cinematic_soft", "high_contrast"}
+        for intensity in ("low", "medium", "high"):
+            cfg = build_ai_visual_intensity_config(_make_exec_hints(intensity))
+            for key, val in cfg.render_overrides.items():
+                assert key != "effect_preset", "render_overrides must not contain 'effect_preset'"
+                assert val not in _preset_names, (
+                    f"render_overrides value must not be a preset name: {val!r}"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -172,16 +194,16 @@ class TestNoFFmpegChanges:
 
 class TestTraceLoggerVisualIntensity:
     def test_trace_logs_visual_intensity_applied_event(self, tmp_path):
-        """Tracer writes ai.visual_intensity_applied event."""
+        """Tracer writes ai.visual_intensity_applied event with applied=True in Phase 5.7."""
         from app.ai.tracing import AITraceLogger
         from app.ai.visual_hints import build_ai_visual_intensity_config
 
         tracer = AITraceLogger("job_test_vis_123", log_dir=tmp_path)
         cfg = build_ai_visual_intensity_config(_make_exec_hints("high"))
-        assert cfg.applied is False  # Phase 5.6: always False
+        assert cfg.applied is True  # Phase 5.7: applied=True when valid hint
 
         tracer.log_visual_intensity_applied(
-            {**cfg.to_dict(), "reason": cfg.rejected_reason or "no_safe_visual_injection_point"}
+            {**cfg.to_dict(), "reason": "applied" if cfg.applied else str(cfg.rejected_reason)}
         )
 
         log_file = tmp_path / "job_test_vis_123_ai_trace.jsonl"
@@ -192,19 +214,22 @@ class TestTraceLoggerVisualIntensity:
             if line.strip()
         ]
         assert any(r["event"] == "ai.visual_intensity_applied" for r in records)
+        applied_rec = next(r for r in records if r["event"] == "ai.visual_intensity_applied")
+        assert applied_rec["applied"] is True  # Phase 5.7: applied=True now possible
 
-    def test_trace_logs_no_safe_injection_point_rejection(self, tmp_path):
-        """Tracer writes ai.decision_rejected with no_safe_visual_injection_point."""
+    def test_trace_logs_rejection_for_user_override(self, tmp_path):
+        """Tracer writes ai.decision_rejected for user_visual_override."""
         from app.ai.tracing import AITraceLogger
         from app.ai.visual_hints import build_ai_visual_intensity_config
 
         tracer = AITraceLogger("job_test_vis_456", log_dir=tmp_path)
-        cfg = build_ai_visual_intensity_config(_make_exec_hints("high"))
-        assert cfg.rejected_reason == "no_safe_visual_injection_point"
+        payload = _make_payload(effect_preset="slay_pop_01")
+        cfg = build_ai_visual_intensity_config(_make_exec_hints("high"), payload=payload)
+        assert cfg.rejected_reason == "user_visual_override"
 
         tracer.log_decision_rejected(
             cfg.rejected_reason,
-            detail={"hint": "visual_intensity", "value": cfg.visual_intensity, "phase": "5.6"},
+            detail={"hint": "visual_intensity", "value": cfg.visual_intensity, "phase": "5.7"},
         )
 
         log_file = tmp_path / "job_test_vis_456_ai_trace.jsonl"
@@ -215,7 +240,7 @@ class TestTraceLoggerVisualIntensity:
         ]
         assert any(r["event"] == "ai.decision_rejected" for r in records)
         rejection_record = next(r for r in records if r["event"] == "ai.decision_rejected")
-        assert rejection_record["reason"] == "no_safe_visual_injection_point"
+        assert rejection_record["reason"] == "user_visual_override"
 
     def test_trace_logs_rejection_when_no_hint(self, tmp_path):
         """Tracer writes decision_rejected when config.applied=False (no hint)."""
@@ -289,6 +314,7 @@ class TestRenderOverridesSafeKeys:
         "ffmpeg_filter", "vf_chain", "vf_parts", "filter_complex",
         "filter_graph", "ass_filter", "drawtext", "eq_filter",
         "unsharp_filter", "hqdn3d_filter",
+        "effect_preset",  # AI must not pick effect_preset directly
     })
 
     def test_render_overrides_contains_no_unsafe_keys(self):
@@ -307,6 +333,17 @@ class TestRenderOverridesSafeKeys:
         for hints_input in [None, {}, _make_exec_hints("low"), _make_exec_hints("bad_value")]:
             cfg = build_ai_visual_intensity_config(hints_input)
             assert isinstance(cfg.render_overrides, dict)
+
+    def test_render_overrides_safe_key_is_visual_intensity_hint(self):
+        """Phase 5.7: render_overrides only safe key is 'visual_intensity_hint'."""
+        from app.ai.visual_hints import build_ai_visual_intensity_config
+        for intensity in ("low", "medium", "high"):
+            cfg = build_ai_visual_intensity_config(_make_exec_hints(intensity))
+            assert cfg.applied is True
+            for key in cfg.render_overrides:
+                assert key == "visual_intensity_hint", (
+                    f"Unexpected key '{key}' in render_overrides for intensity={intensity}"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -385,22 +422,37 @@ class TestAIEnabledDisabledBehavior:
         assert cfg.applied is False
         assert cfg.rejected_reason == "no_visual_intensity_hint"
 
-    def test_ai_enabled_valid_hint_processed_but_rejected(self):
-        """AI enabled + valid hint → processed but rejected (no injection point)."""
+    def test_ai_enabled_valid_hint_applied_phase57(self):
+        """AI enabled + valid hint → applied=True in Phase 5.7."""
         from app.ai.visual_hints import build_ai_visual_intensity_config
         cfg = build_ai_visual_intensity_config({"visual_intensity": "high", "source_knowledge_ids": []})
         assert cfg.enabled is True
         assert cfg.visual_intensity == "high"
-        assert cfg.applied is False
-        assert cfg.rejected_reason == "no_safe_visual_injection_point"
+        assert cfg.applied is True
+        assert cfg.rejected_reason is None
+        assert cfg.render_overrides.get("visual_intensity_hint") == "high"
 
-    def test_no_render_behavior_change_phase56(self):
-        """Phase 5.6: render_overrides={} → no render parameter is actually changed."""
+    def test_render_behavior_change_phase57(self):
+        """Phase 5.7: render_overrides={"visual_intensity_hint": <val>} — hint is passed to renderer."""
         from app.ai.visual_hints import build_ai_visual_intensity_config
         for intensity in ("low", "medium", "high"):
             cfg = build_ai_visual_intensity_config({"visual_intensity": intensity, "source_knowledge_ids": []})
-            # Confirm no render parameters are being set
-            assert len(cfg.render_overrides) == 0, (
-                f"Expected empty render_overrides for Phase 5.6, "
-                f"got {cfg.render_overrides} for intensity={intensity}"
+            # Phase 5.7: applied=True, render_overrides contains the hint
+            assert cfg.applied is True, f"Expected applied=True for intensity={intensity!r}"
+            assert cfg.render_overrides.get("visual_intensity_hint") == intensity, (
+                f"Expected visual_intensity_hint={intensity!r}, "
+                f"got render_overrides={cfg.render_overrides}"
             )
+
+    def test_payload_effect_preset_not_mutated(self):
+        """payload.effect_preset must never be mutated by AI hint processing."""
+        from app.ai.visual_hints import build_ai_visual_intensity_config
+        payload = _make_payload(effect_preset="slay_soft_01")
+        cfg = build_ai_visual_intensity_config(
+            {"visual_intensity": "high", "source_knowledge_ids": []},
+            payload=payload,
+        )
+        assert payload.effect_preset == "slay_soft_01", (
+            "payload.effect_preset must not be mutated"
+        )
+        assert cfg.applied is True

@@ -2058,4 +2058,49 @@ Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.p
 
 Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
 
+---
+
+## Phase 5.7 — Safe Visual Intensity Injection (2026-05-23)
+
+**Goal**: Add a safe renderer-level injection point so AI `visual_intensity` hints can affect visual output without giving AI control over FFmpeg.
+
+**Key finding from Phase 5.6**: `_effect_filter()` in `ffmpeg_helpers.py` supports 6 named presets: `slay_soft_01` (default), `slay_pop_01`, `story_clean_01`, `social_bright`, `cinematic_soft`, `high_contrast`. The new `resolve_effect_preset_with_intensity()` function maps AI hints to 3 of these presets.
+
+**Files changed**:
+
+| File | Change |
+|---|---|
+| `backend/app/services/render/ffmpeg_helpers.py` | Added `resolve_effect_preset_with_intensity()`, `_VISUAL_INTENSITY_ALLOWED`, `_VISUAL_INTENSITY_PRESET_MAP` |
+| `backend/app/services/render/legacy_renderer.py` | Added `visual_intensity_hint: str | None = None` to `render_part()` and `render_part_smart()`; calls resolver before `_effect_filter()` |
+| `backend/app/services/render/base_clip_renderer.py` | Added `visual_intensity_hint: str | None = None` to `render_base_clip()`; calls resolver before `_effect_filter()` |
+| `backend/app/ai/visual_hints.py` | `_NO_SAFE_INJECTION_POINT = False`; `applied=True` now possible; `render_overrides={"visual_intensity_hint": <value>}`; `_build_render_overrides()` helper added |
+| `backend/app/orchestration/render_pipeline.py` | Phase 5.7 block extracts `_vis_intensity_hint`; passes to renderer calls via `visual_intensity_hint=_vis_intensity_hint` |
+
+**New test files** (5):
+- `tests/test_render_effect_intensity_mapping.py` — 34 tests for `resolve_effect_preset_with_intensity()`
+- `tests/test_legacy_renderer_visual_intensity.py` — 17 tests for `render_part()` / `render_part_smart()`
+- `tests/test_base_clip_renderer_visual_intensity.py` — 16 tests for `render_base_clip()`
+- `tests/test_ai_visual_intensity_config.py` — 37 tests for `build_ai_visual_intensity_config()` (applied=True cases)
+- `tests/test_render_pipeline_ai_visual_intensity.py` — 25 tests for pipeline integration
+
+**AI mapping table** (renderer-owned):
+- `"low"` → `story_clean_01` (subtle, gentle processing)
+- `"medium"` → `slay_soft_01` (natural default)
+- `"high"` → `slay_pop_01` (energetic pop)
+
+**Render behavior impact**:
+- Visual intensity hints: ACTIVE — `applied=True` for valid hints when user has not set explicit `effect_preset`
+- `effect_preset`: GUARANTEED UNCHANGED — never mutated; preserved for logging
+- AI disabled: `visual_intensity_hint=None` → renderer uses original `effect_preset`
+- User explicit preset: `user_effect_is_explicit=True` → renderer uses original `effect_preset`
+- `overlay_compositor.py`: NOT modified — no `visual_intensity_hint` added (strict rule)
+- FFmpeg: ONLY the preset name input to `_effect_filter()` may change — filter construction logic unchanged
+- API: ZERO changes
+
+### Test Suite State (Post Phase 5.7)
+
+8 failed (same known pre-existing failures) / 7215 passed (+74 new tests from Phase 5.7) / 1 skipped
+
+Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
+
 **No new failures introduced.**

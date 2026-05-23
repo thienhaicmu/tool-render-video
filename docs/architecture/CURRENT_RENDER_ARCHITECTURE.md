@@ -370,7 +370,7 @@ See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_P
 - No `_effect_intensity`, `_visual_energy`, `effect_strength`, `visual_profile` local variables exist in render_pipeline.py
 - `_cinematic_color_filter()` and `_cinematic_sharpen_filter()` accept `content_type`/`src_h`, not intensity levels
 - `content_type` and `effect_preset` are both user-controlled payload fields — AI must not override them
-- **Result: NOT FOUND — no safe visual intensity injection point**
+- **Result: NOT FOUND — no safe visual intensity injection point** (Phase 5.6)
 
 **Render behavior impact**:
 - Visual intensity hints: ADVISORY ONLY — logged as `ai.visual_intensity_applied` (always `applied=False` in Phase 5.6)
@@ -382,4 +382,48 @@ See [PHASE_3C_AUDIO_OWNERSHIP_PLAN.md](../restructure/PHASE_3C_AUDIO_OWNERSHIP_P
 - Pacing hints: active — unchanged from Phase 5.4
 - Hook overlay gate: active — unchanged from Phase 5.3
 - FFmpeg: ZERO changes to FFmpeg commands or filter graphs
+
+### Phase 5.7 — Safe Visual Intensity Injection (2026-05-23)
+
+**Safe injection point found and implemented.**
+
+New files/changes:
+- `app/services/render/ffmpeg_helpers.py` — `resolve_effect_preset_with_intensity()` added; `_VISUAL_INTENSITY_PRESET_MAP` mapping table; renderer OWNS all mapping
+- `app/services/render/legacy_renderer.py` — `visual_intensity_hint: str | None = None` added to `render_part()` and `render_part_smart()`; calls `resolve_effect_preset_with_intensity()` before `_effect_filter()`
+- `app/services/render/base_clip_renderer.py` — `visual_intensity_hint: str | None = None` added to `render_base_clip()`; same pattern
+- `app/ai/visual_hints.py` — `_NO_SAFE_INJECTION_POINT = False`; `applied=True` now possible; `render_overrides={"visual_intensity_hint": <value>}`
+- `app/orchestration/render_pipeline.py` — Phase 5.7 block extracts `_vis_intensity_hint` from config; passes to `render_part_smart()` and `render_base_clip()` calls
+
+**_effect_filter() supported presets** (all 6):
+| Preset | Description |
+|---|---|
+| `slay_soft_01` | Default — natural cinematic, light sharpening |
+| `slay_pop_01` | High energy — boosted contrast/saturation/unsharp |
+| `story_clean_01` | Subtle — low contrast/saturation, soft sharpening |
+| `social_bright` | Bright social — high saturation, strong brightness |
+| `cinematic_soft` | Cinematic desaturated — soft, denoised |
+| `high_contrast` | Maximum contrast — heaviest unsharp |
+
+**AI visual intensity mapping table** (renderer-owned):
+| AI hint | Preset | Rationale |
+|---|---|---|
+| `"low"` | `story_clean_01` | Subtle look, gentle processing |
+| `"medium"` | `slay_soft_01` | Natural default (schema default) |
+| `"high"` | `slay_pop_01` | Energetic pop, boosted processing |
+
+**Priority order** (enforced by renderer):
+1. FFmpeg safety — `_effect_filter()` only accepts known preset names
+2. `user_effect_is_explicit=True` → `effect_preset` unchanged
+3. Valid `visual_intensity_hint` → renderer maps to known preset
+4. Default: `effect_preset` unchanged
+
+**Render behavior impact (Phase 5.7)**:
+- Visual intensity hints: ACTIVE — `applied=True` for valid hints when user has default preset
+- `effect_preset`: GUARANTEED UNCHANGED — never mutated; original preserved for logging
+- `render_overrides={"visual_intensity_hint": <value>}`: render_pipeline passes value to renderer
+- AI disabled: `visual_intensity_hint=None` → renderer uses `effect_preset` unchanged
+- User effect_preset override: `user_effect_is_explicit=True` → renderer uses `effect_preset` unchanged
+- overlay_compositor: NOT modified — no `visual_intensity_hint` parameter added
+- FFmpeg: ZERO changes to filter construction — only the input preset name may change (to a known supported preset)
+- API: ZERO changes — no new endpoints, no schema changes, no websocket payload changes
 - API changes: NONE

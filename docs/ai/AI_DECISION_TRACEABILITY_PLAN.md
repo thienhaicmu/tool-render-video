@@ -283,7 +283,7 @@ With this log:
 |---|---|
 | `ai.visual_intensity_applied` | IMPLEMENTED — `log_visual_intensity_applied(config)` added to `AITraceLogger` |
 | Wired in render_pipeline.py | YES — after `build_ai_visual_intensity_config()` call in Phase 5.6 block; always logs (applied always False in Phase 5.6) |
-| `ai.decision_rejected` reason: `no_safe_visual_injection_point` | IMPLEMENTED — logged when valid hint cannot be applied due to no safe injection point |
+| `ai.decision_rejected` reason: `no_safe_visual_injection_point` | IMPLEMENTED (Phase 5.6) — logged when valid hint could not be applied; RETIRED in Phase 5.7 (`_NO_SAFE_INJECTION_POINT=False`); valid hints now reach `applied=True` path |
 | `ai.decision_rejected` reason: `no_visual_intensity_hint` | IMPLEMENTED — logged when execution hints have no visual_intensity |
 | `ai.decision_rejected` reason: `invalid_visual_intensity` | IMPLEMENTED — logged when intensity is not in allowed set (low/medium/high) |
 | `ai.decision_rejected` reason: `user_visual_override` | IMPLEMENTED — logged when user has non-default effect_preset |
@@ -301,4 +301,5 @@ With this log:
 | 2026-05-23 | Phase 5.3 — `log_execution_hints`, `log_validation_fixup`, `log_decision_rejected` added; wired for execution hints and advisory rejections |
 | 2026-05-23 | Phase 5.4 — `log_pacing_applied()` added; `ai.pacing_applied` event IMPLEMENTED; wired in render_pipeline.py early pacing block |
 | 2026-05-23 | Phase 5.5 — `log_subtitle_emphasis_applied()` added; `ai.subtitle_emphasis_applied` event IMPLEMENTED; wired in render_pipeline.py Phase 5.5 block |
+| 2026-05-23 | Phase 5.7 — `ai.visual_intensity_applied` event can now log `applied=True`; `log_visual_intensity_applied()` unchanged (already wrote the event); render_pipeline.py Phase 5.7 block passes `applied=True` config to tracer when hint is valid and not user-overridden |
 | 2026-05-23 | Phase 5.6 — `log_visual_intensity_applied()` added; `ai.visual_intensity_applied` event IMPLEMENTED; wired in render_pipeline.py Phase 5.6 block; `ai.decision_rejected` reasons `no_safe_visual_injection_point`, `user_visual_override`, `invalid_visual_intensity`, `no_visual_intensity_hint`, `ai_disabled` all covered |

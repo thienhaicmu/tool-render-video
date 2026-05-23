@@ -1,35 +1,36 @@
 """
 visual_hints.py — AIVisualIntensityConfig: validated AI visual intensity hint.
 
-Phase 5.6 visual injection point:
-  [NOT FOUND: no safe visual intensity injection point exists — will log rejected]
-  Investigation findings:
+Phase 5.7 visual injection point:
+  [FOUND: safe visual_intensity_hint parameter added to render_part(), render_part_smart(),
+   and render_base_clip() in Phase 5.7. The renderer OWNS the mapping table.]
+
+  Injection mechanism (Phase 5.7):
+    AI passes visual_intensity_hint=<"low"|"medium"|"high"> to the renderer.
+    The renderer calls resolve_effect_preset_with_intensity() which maps:
+      "low"    → "story_clean_01"  (subtle, gentle processing)
+      "medium" → "slay_soft_01"   (natural default, no change from schema default)
+      "high"   → "slay_pop_01"    (energetic pop look)
+    AI NEVER picks a preset name or FFmpeg filter string.
+    The renderer OWNS the mapping table — mapping is in ffmpeg_helpers.py.
+    User explicit effect_preset always wins (renderer enforces this via
+    user_effect_is_explicit=True → returns original effect_preset unchanged).
+
+  Phase 5.6 investigation findings (retained for history):
     render_part() and render_part_smart() in legacy_renderer.py accept effect_preset
     (a string like "slay_soft_01") which maps directly to an FFmpeg filter string
     via _effect_filter() in ffmpeg_helpers.py. There are no intermediate intensity
     level parameters (e.g. effect_level, effect_strength, visual_energy) that sit
-    between the caller and the FFmpeg command. To change visual intensity, AI would
-    need to either: (a) change effect_preset — which is payload.effect_preset
-    (an explicit user-set field that must not be overridden), or (b) directly modify
-    an FFmpeg filter string — which is forbidden by the AI render contract.
-    render_base_clip() in base_clip_renderer.py has the same structure.
-    Local variables in render_pipeline.py:
-      - No _effect_intensity, _visual_energy, effect_level, visual_profile,
-        effect_strength, or equivalent found.
-      - _visual_trim is a bad-first-frame detection offset (seconds), not an
-        artistic intensity control.
-      - _dna_clean_visual is a bool signal for subtitle bias, not a render
-        visual intensity parameter.
-    _cinematic_color_filter() and _cinematic_sharpen_filter() accept content_type
-    and src_h — these are content classification/source quality, not intensity levers.
-    Content_type is resolved from payload.content_type (user field), not from AI hints.
-  Safe because: no action taken — applied=False, render_overrides={}, decision logged.
-  Not touching: effect_preset, effect_preset in payload, FFmpeg filter strings,
-    _effect_filter(), _cinematic_color_filter(), _cinematic_sharpen_filter(),
-    content_type, visual_trim, FFmpeg commands, audio, subtitles, timestamps,
-    DB schema, API schema, websocket payloads.
-  render_overrides = {} because no real existing parameters were found that could
-  safely accept a visual intensity override without touching FFmpeg command strings.
+    between the caller and the FFmpeg command.
+    Phase 5.7 solution: added visual_intensity_hint as a NEW optional parameter
+    (default None) that sits alongside effect_preset. The renderer resolves the
+    effective preset from the hint before calling _effect_filter(). The original
+    effect_preset argument is preserved for logging/metadata.
+
+  Phase 5.7 render_overrides:
+    render_overrides = {"visual_intensity_hint": <hint_value>} when applied=True.
+    This contains ONLY the intensity level — not a preset name or FFmpeg string.
+    The render_pipeline.py extracts this value and passes it to the renderer.
 
 Public API:
     AIVisualIntensityConfig               — dataclass result of build_ai_visual_intensity_config()
@@ -46,12 +47,13 @@ logger = logging.getLogger(__name__)
 # Allowed visual intensity values — must match RenderExecutionHints contract.
 _ALLOWED_VISUAL_INTENSITIES = frozenset({"low", "medium", "high"})
 
-# Phase 5.6 decision: no safe injection point found.
-# render_overrides must only contain keys that correspond to REAL existing
-# parameters in render_pipeline.py / legacy_renderer.py / base_clip_renderer.py.
-# Since no safe intensity parameters were found, render_overrides is always empty
-# and applied is always False regardless of hint validity.
-_NO_SAFE_INJECTION_POINT = True
+# Phase 5.7: safe injection point found.
+# visual_intensity_hint parameter added to render_part(), render_part_smart(), and
+# render_base_clip() with default None (backward compatible). Renderer OWNS the
+# mapping from hint to effect preset — AI never picks a preset name directly.
+# render_overrides now carries {"visual_intensity_hint": <value>} when applied=True.
+# render_pipeline.py extracts this value and passes it to the renderer.
+_NO_SAFE_INJECTION_POINT = False
 
 
 # ── AIVisualIntensityConfig dataclass ─────────────────────────────────────────
@@ -65,16 +67,18 @@ class AIVisualIntensityConfig:
         visual_intensity:     One of "low"/"medium"/"high" or None.
         source_knowledge_ids: IDs of knowledge items that contributed.
         applied:              True if the hint will actually influence rendering.
-                              Always False in Phase 5.6 — no safe injection point.
+                              Now possible in Phase 5.7 — safe injection point found.
         rejected_reason:      Reason hint was NOT applied (or None if applied).
         validation_fixups:    List of dicts describing any fixups applied.
         render_overrides:     Dict of render parameter overrides to apply.
-                              Always {} in Phase 5.6 — no safe injection point.
+                              {"visual_intensity_hint": <value>} when applied=True.
+                              {} when not applied.
 
-    IMPORTANT (Phase 5.6): No safe visual intensity injection point was found.
-    render_overrides is always {}. applied is always False.
-    The hint is validated and logged as advisory only.
-    See module docstring for full investigation details.
+    Phase 5.7: Safe injection point found.
+    When applied=True: render_overrides={"visual_intensity_hint": <hint>}.
+    The render_pipeline extracts this value and passes it to the renderer.
+    The renderer OWNS the mapping from hint to effect preset.
+    AI never picks a preset name or FFmpeg filter string.
     """
     enabled: bool = False
     visual_intensity: Optional[str] = None
@@ -175,15 +179,11 @@ def _build(execution_hints: Any, payload: Any) -> AIVisualIntensityConfig:
             rejected_reason="user_visual_override",
         )
 
-    # ── Step 6: Phase 5.6 — no safe injection point found ────────────────────
-    # Even though the hint is valid, we cannot safely apply it because no
-    # existing render parameter accepts a visual intensity level without
-    # bypassing renderer validation or editing FFmpeg command strings.
-    # Document: render_overrides is intentionally empty.
-    #
-    # Future phases may find a safe injection point and set applied=True here.
-    # When that happens, render_overrides should be populated with ONLY keys
-    # that correspond to real existing parameters verified in code reading.
+    # ── Step 6: Phase 5.6 guard (now disabled in Phase 5.7) ──────────────────
+    # _NO_SAFE_INJECTION_POINT=False in Phase 5.7: safe injection point confirmed.
+    # visual_intensity_hint parameter added to render_part(), render_part_smart(),
+    # and render_base_clip() — all with default None (fully backward compatible).
+    # The renderer owns the mapping from hint to known effect presets.
     if _NO_SAFE_INJECTION_POINT:
         return AIVisualIntensityConfig(
             enabled=True,
@@ -194,10 +194,11 @@ def _build(execution_hints: Any, payload: Any) -> AIVisualIntensityConfig:
             render_overrides={},
         )
 
-    # ── Step 7: (Future) Build render_overrides ───────────────────────────────
-    # This code path is currently unreachable because _NO_SAFE_INJECTION_POINT=True.
-    # When a safe injection point is confirmed, set _NO_SAFE_INJECTION_POINT=False
-    # and populate render_overrides with ONLY verified real parameter keys.
+    # ── Step 7: Build render_overrides (Phase 5.7) ───────────────────────────
+    # render_overrides contains ONLY the intensity level — not a preset name
+    # and not an FFmpeg filter string. The render_pipeline extracts this value
+    # and passes it as visual_intensity_hint to the renderer. The renderer
+    # calls resolve_effect_preset_with_intensity() which maps hint to preset.
     render_overrides = _build_render_overrides(visual_intensity)
     return AIVisualIntensityConfig(
         enabled=True,
@@ -233,20 +234,17 @@ def _user_has_visual_override(payload: Any) -> bool:
 def _build_render_overrides(visual_intensity: str) -> dict:
     """Build render_overrides dict for a given visual intensity.
 
-    NOTE (Phase 5.6): This function is currently unreachable because
-    _NO_SAFE_INJECTION_POINT=True. The keys below are RESERVED for a future
-    phase when a safe injection point is confirmed. They MUST NOT be used
-    until they have been verified as real, existing render parameters.
+    Phase 5.7: Returns {"visual_intensity_hint": <value>}.
+    This key is a REAL existing parameter added to render_part(),
+    render_part_smart(), and render_base_clip() in Phase 5.7.
+    The render_pipeline extracts this value and passes it to the renderer.
 
-    The mapping is documented here for reference only:
-      "low"    → {"visual_energy": "low",    "effect_strength": "subtle"}
-      "medium" → {"visual_energy": "medium", "effect_strength": "normal"}
-      "high"   → {"visual_energy": "high",   "effect_strength": "strong"}
-
-    Until a safe injection point is found, returns {} always.
+    IMPORTANT: render_overrides MUST NOT contain:
+      - Effect preset names (AI does not pick presets)
+      - FFmpeg filter strings (AI never touches FFmpeg)
+      - Any key that is not a verified real renderer parameter
     """
-    # No real parameters found — return empty overrides.
-    return {}
+    return {"visual_intensity_hint": visual_intensity}
 
 
 def _hints_to_dict(execution_hints: Any) -> dict:

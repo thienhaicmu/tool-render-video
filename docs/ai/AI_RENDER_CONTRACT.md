@@ -299,8 +299,8 @@ Output
 | Component | Status |
 |---|---|
 | Visual intensity config model | IMPLEMENTED — `app/ai/visual_hints.py`: `AIVisualIntensityConfig` dataclass, `build_ai_visual_intensity_config(execution_hints, payload)` |
-| Visual injection point | NOT FOUND — no safe parameter exists between render_pipeline.py callers and FFmpeg command construction that can accept a visual intensity level without modifying filter strings or bypassing renderer validation |
-| Visual intensity hint application | ADVISORY ONLY — `visual_intensity` hint validated and logged; `applied=False`, `render_overrides={}` in all cases; no render parameter changed |
+| Visual injection point | FOUND (Phase 5.7) — `visual_intensity_hint: str | None = None` added to `render_part()`, `render_part_smart()`, `render_base_clip()`; renderer calls `resolve_effect_preset_with_intensity()` which maps hint to known presets only |
+| Visual intensity hint application | ACTIVE (Phase 5.7) — `visual_intensity` hint validated; `applied=True` when valid; `render_overrides={"visual_intensity_hint": <value>}`; render_pipeline extracts value and passes to renderer; renderer OWNS mapping (low→story_clean_01, medium→slay_soft_01, high→slay_pop_01); AI never picks preset name or FFmpeg string |
 | User visual override detection | ENFORCED — if `payload.effect_preset != "slay_soft_01"` (schema default), hint rejected with `user_visual_override`; `effect_preset` never mutated |
 | Trace logger | EXTENDED — `log_visual_intensity_applied()` added to `AITraceLogger`; writes `ai.visual_intensity_applied` JSONL event; `log_decision_rejected()` called for every rejection including `no_safe_visual_injection_point` |
 | AI disabled behavior | CONFIRMED — if `ai_director_enabled=False`, Phase 5.6 block skipped; `ai_disabled` rejection logged |
@@ -324,4 +324,5 @@ Output
 | 2026-05-23 | Phase 5.3 — AI contract models, validation layer, knowledge→hints mapper, limited render influence (hook overlay gate), trace logger extensions |
 | 2026-05-23 | Phase 5.4 — AI pacing hints now applied to segment selection; `AIPacingConfig` model; early retrieval before segment building; user explicit limits override AI; no FFmpeg changes |
 | 2026-05-23 | Phase 5.5 — AI subtitle emphasis hints now applied to subtitle text transforms; `AISubtitleEmphasisConfig` model; `emphasis_level_override` parameter added to `subtitle_emphasis_pass()`; no new style IDs; no timing changes; no FFmpeg changes |
+| 2026-05-23 | Phase 5.7 — Safe visual intensity injection point found and implemented; `visual_intensity_hint: str | None = None` added to `render_part()`, `render_part_smart()`, `render_base_clip()`; `resolve_effect_preset_with_intensity()` added to `ffmpeg_helpers.py`; renderer OWNS mapping table (low→story_clean_01, medium→slay_soft_01, high→slay_pop_01); `applied=True` now possible; `render_overrides={"visual_intensity_hint": <value>}`; AI passes only low/medium/high — never a preset name or FFmpeg string; user explicit `effect_preset` always wins; `payload.effect_preset` never mutated |
 | 2026-05-23 | Phase 5.6 — AI visual intensity hint infrastructure built; `AIVisualIntensityConfig` model; `log_visual_intensity_applied()` trace logger added; no safe injection point found — hints logged as advisory only; no FFmpeg changes; no render behavior changes |

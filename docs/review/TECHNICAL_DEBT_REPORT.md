@@ -348,8 +348,8 @@ The following items were addressed or resolved by Phase 5.6:
 
 | Item | Resolution |
 |---|---|
-| "Visual intensity hint: advisory only (no injection point)" | INVESTIGATED — `app/ai/visual_hints.py` `build_ai_visual_intensity_config()` built; no safe injection point found; `effect_preset` is a user field, `_effect_filter()` maps directly to FFmpeg filter strings with no intermediate intensity parameter; hint logged as advisory (`applied=False`, `render_overrides={}`) |
-| "AI visual intensity has no safe render parameter to override" | CONFIRMED — `render_part()`, `render_part_smart()`, `render_base_clip()` accept `effect_preset` which maps to raw FFmpeg strings; no `_effect_intensity`/`_visual_energy` local variable exists; safe injection point NOT found |
-| "AI render decisions not traceable" | FURTHER RESOLVED — `ai.visual_intensity_applied` event added; `log_visual_intensity_applied()` in `AITraceLogger` writes visual intensity applied/rejected for every render job with AI enabled; all rejection reasons covered |
-| "User visual effect choice must not be overridden by AI" | CONFIRMED SAFE — `effect_preset` field detection added; if user has non-default preset, rejected with `user_visual_override`; `payload.effect_preset` never mutated by AI |
+| "Visual intensity hint: advisory only (no injection point)" | INVESTIGATED (Phase 5.6) → RESOLVED (Phase 5.7) — `visual_intensity_hint: str | None = None` added to `render_part()`, `render_part_smart()`, `render_base_clip()`; `resolve_effect_preset_with_intensity()` maps hint to known renderer-owned presets; AI passes only low/medium/high |
+| "AI visual intensity has no safe render parameter to override" | RESOLVED (Phase 5.7) — safe `visual_intensity_hint` parameter added; renderer OWNS mapping table; AI never picks preset name or FFmpeg string; user explicit `effect_preset` always wins |
+| "AI render decisions not traceable" | FURTHER RESOLVED — `ai.visual_intensity_applied` event can now log `applied=True`; trace logger unchanged (already implemented); Phase 5.7 means valid hints produce `applied=True` in trace records |
+| "User visual effect choice must not be overridden by AI" | CONFIRMED SAFE — `effect_preset` field detection active; if user has non-default preset, rejected with `user_visual_override`; `payload.effect_preset` never mutated by AI |
 

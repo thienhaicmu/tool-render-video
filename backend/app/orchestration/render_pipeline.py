@@ -2622,25 +2622,27 @@ def run_render_pipeline(
                 )
                 _ai_subtitle_emphasis_config = None
 
-        # ── Phase 5.6: Build AI visual intensity config ───────────────────────────
+        # ── Phase 5.7: Build AI visual intensity config ───────────────────────────
         # Runs only when ai_director_enabled=True and _ai_edit_plan is not None.
         # Config is built once per job; logged immediately.
-        # Phase 5.6 finding: NO safe visual intensity injection point was found.
-        #   - effect_preset is payload.effect_preset (user field — must not be overridden)
-        #   - No _effect_intensity / _visual_energy / effect_strength / visual_profile
-        #     local variables exist in render_pipeline.py
-        #   - _effect_filter() maps preset names directly to FFmpeg filter strings
-        #   - No intermediate intensity parameter sits between the caller and FFmpeg
-        # Result: config.applied=False, render_overrides={}, logged as advisory.
-        # NEVER mutates payload. NEVER changes effect_preset. NEVER touches FFmpeg.
-        # If AI disabled or no hints → _ai_visual_intensity_config.applied=False → no change.
+        # Phase 5.7: Safe injection point found — visual_intensity_hint parameter
+        #   added to render_part(), render_part_smart(), render_base_clip().
+        #   All three accept visual_intensity_hint with default None (backward compat).
+        #   Renderer OWNS the mapping from hint to known effect presets.
+        #   AI passes only "low"/"medium"/"high" — never a preset name or filter string.
+        # Result when applied=True: render_overrides={"visual_intensity_hint": <value>}
+        # render_pipeline extracts this value and passes it to renderer calls below.
+        # NEVER mutates payload. NEVER changes payload.effect_preset. NEVER touches FFmpeg.
+        # If AI disabled or no hints → _ai_visual_intensity_config.applied=False → hint=None.
         _ai_visual_intensity_config = None
         if getattr(payload, "ai_director_enabled", False) and _ai_edit_plan is not None:
             try:
                 from app.ai.visual_hints import build_ai_visual_intensity_config as _build_vis_int
                 _ai_visual_intensity_config = _build_vis_int(_exec_hints, payload)
                 _vis_reason = (
-                    str(_ai_visual_intensity_config.rejected_reason or "no_safe_visual_injection_point")
+                    str(_ai_visual_intensity_config.rejected_reason)
+                    if _ai_visual_intensity_config.rejected_reason
+                    else "applied"
                 )
                 if _phase53_tracer is not None:
                     try:
@@ -2649,33 +2651,32 @@ def run_render_pipeline(
                         )
                     except Exception:
                         pass
-                # Phase 5.6: always rejected — log decision_rejected for observability
-                if _phase53_tracer is not None:
+                # Log decision_rejected only when NOT applied
+                if not _ai_visual_intensity_config.applied and _phase53_tracer is not None:
                     try:
                         _phase53_tracer.log_decision_rejected(
                             _vis_reason,
                             detail={
                                 "hint": "visual_intensity",
                                 "value": _ai_visual_intensity_config.visual_intensity,
-                                "phase": "5.6",
+                                "phase": "5.7",
                             },
                         )
                     except Exception:
                         pass
                 logger.debug(
-                    "phase56_visual_intensity_config job_id=%s applied=%s intensity=%s reason=%s",
+                    "phase57_visual_intensity_config job_id=%s applied=%s intensity=%s reason=%s",
                     job_id,
                     _ai_visual_intensity_config.applied,
                     _ai_visual_intensity_config.visual_intensity,
                     _ai_visual_intensity_config.rejected_reason,
                 )
-                # Phase 5.6: No safe injection point → no render parameter overrides applied.
-                # If config.applied were True (future phase), render_overrides would be
-                # applied to local variables here BEFORE the per-part renderer call.
-                # For now: no change to any render parameters.
-            except Exception as _vis56_err:
+                # Phase 5.7: Extract hint from render_overrides when applied=True.
+                # _vis_intensity_hint is used below in per-part renderer calls.
+                # When applied=False: hint is None → renderer uses effect_preset unchanged.
+            except Exception as _vis57_err:
                 logger.warning(
-                    "phase56_visual_intensity_config_failed job_id=%s: %s", job_id, _vis56_err
+                    "phase57_visual_intensity_config_failed job_id=%s: %s", job_id, _vis57_err
                 )
                 _ai_visual_intensity_config = None
         elif not getattr(payload, "ai_director_enabled", False):
@@ -2684,10 +2685,27 @@ def run_render_pipeline(
                 try:
                     _phase53_tracer.log_decision_rejected(
                         "ai_disabled",
-                        detail={"hint": "visual_intensity", "phase": "5.6"},
+                        detail={"hint": "visual_intensity", "phase": "5.7"},
                     )
                 except Exception:
                     pass
+
+        # ── Phase 5.7: Extract visual_intensity_hint for per-part renderer calls ──
+        # When _ai_visual_intensity_config.applied=True, render_overrides contains
+        # {"visual_intensity_hint": <value>}. Extract it for use in renderer calls.
+        # When applied=False (disabled, invalid, user override): hint=None.
+        # This local variable is read-only — payload.effect_preset is NEVER mutated.
+        _vis_intensity_hint: "str | None" = None
+        if (
+            _ai_visual_intensity_config is not None
+            and _ai_visual_intensity_config.applied
+        ):
+            try:
+                _vis_intensity_hint = (
+                    _ai_visual_intensity_config.render_overrides.get("visual_intensity_hint")
+                )
+            except Exception:
+                _vis_intensity_hint = None
 
         # ── AI Execution Mode Resolution (Phase 60D) — control only ─────────────
         # Resolve BEFORE Phase 59 blocks so they can be gated correctly.
@@ -4117,6 +4135,9 @@ def run_render_pipeline(
                         reup_bgm_enable=getattr(payload, "reup_bgm_enable", False),
                         reup_bgm_path=getattr(payload, "reup_bgm_path", None),
                         reup_bgm_gain=getattr(payload, "reup_bgm_gain", 0.18),
+                        # Phase 5.7: pass AI visual intensity hint to renderer.
+                        # Renderer owns mapping; None when AI disabled/invalid/user override.
+                        visual_intensity_hint=_vis_intensity_hint,
                     )
                     _part_manifest.base_clip_path = str(_base_clip_out)
                     _part_manifest.base_clip_duration = _bc_meta.get("duration")
@@ -4249,6 +4270,9 @@ def run_render_pipeline(
                     content_type=seg.get("content_type_hint", "vlog"),
                     _motion_cache_key=_motion_ck,
                     _fallback_flag=_motion_crop_fallback,
+                    # Phase 5.7: pass AI visual intensity hint to renderer.
+                    # Renderer owns mapping; None when AI disabled/invalid/user override.
+                    visual_intensity_hint=_vis_intensity_hint,
                 )
             finally:
                 _encode_stop.set()

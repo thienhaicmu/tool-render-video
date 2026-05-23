@@ -25,6 +25,7 @@ from app.services.render.ffmpeg_helpers import (
     resolve_ffmpeg_threads,
     _build_audio_mix_filter,
     _build_audio_filter,
+    resolve_effect_preset_with_intensity,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ def render_base_clip(
     reup_bgm_enable: bool = False,
     reup_bgm_path: str | None = None,
     reup_bgm_gain: float = 0.18,
+    visual_intensity_hint: str | None = None,
 ) -> dict:
     """Render a base clip with no subtitle, title, or text overlay filters.
 
@@ -73,6 +75,16 @@ def render_base_clip(
     """
     speed = _sanitize_speed(timeline.effective_speed)
 
+    # Phase 5.7: Resolve effective effect preset from AI visual intensity hint.
+    # Renderer OWNS the mapping; AI only passes None/"low"/"medium"/"high".
+    # User explicit effect_preset (non-default) always wins over AI hint.
+    _bc_user_explicit = (
+        (effect_preset or "slay_soft_01").strip() != "slay_soft_01"
+    )
+    _bc_effective_preset = resolve_effect_preset_with_intensity(
+        effect_preset, visual_intensity_hint, _bc_user_explicit
+    )
+
     if motion_aware_crop:
         _crop_codec = _resolve_codec(video_codec, encoder_mode=encoder_mode)
         _use_nvenc = _crop_codec in ("h264_nvenc", "hevc_nvenc")
@@ -87,7 +99,7 @@ def render_base_clip(
                 scale_y_percent=float(scale_y),
                 subtitle_file=None,
                 title_text=None,
-                effect_preset=effect_preset,
+                effect_preset=_bc_effective_preset,
                 transition_sec=transition_sec,
                 video_codec=video_codec,
                 video_crf=video_crf,
@@ -129,7 +141,9 @@ def render_base_clip(
         _denoise = _smart_denoise_filter(content_type, preset_low, _src_h)
         if _denoise:
             vf_parts.append(_denoise)
-        vf_parts.append(_effect_filter(effect_preset))
+        # _bc_effective_preset is either user's preset (when explicit) or
+        # the AI-intensity-mapped preset (when AI hint valid and not overridden).
+        vf_parts.append(_effect_filter(_bc_effective_preset))
         _color_filter = _cinematic_color_filter(_src_h, content_type)
         _sharpen_filter = _cinematic_sharpen_filter(_src_h, content_type)
         if _color_filter:
