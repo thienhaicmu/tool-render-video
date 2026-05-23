@@ -3,7 +3,25 @@
  */
 import { create } from 'zustand'
 
-export type ActivePanel = 'render' | 'history' | 'editor' | 'settings'
+export type ActivePanel =
+  // Canonical navigation (Figma-locked — 5 top-level routes)
+  | 'home'
+  | 'studio'
+  | 'library'
+  | 'publish'
+  | 'settings'
+  // Deprecated aliases — preserved for backward compat, do not add new usage
+  | 'render'   // JobEmptyState uses this
+  | 'history'  // RenderForm, EditorEmptyState, EditorMetadataPanel use this
+  | 'editor'   // JobDetailDrawer uses this
+
+export type StudioStep =
+  | 'source'
+  | 'analyze'
+  | 'plan'
+  | 'edit'
+  | 'render'
+  | 'review'
 
 export interface Notification {
   id: string
@@ -16,11 +34,13 @@ export interface Notification {
 export interface UIStore {
   sidebarOpen: boolean
   activePanel: ActivePanel
+  studioStep: StudioStep | null
   notifications: Notification[]
 
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
   setActivePanel: (panel: ActivePanel) => void
+  setStudioStep: (step: StudioStep | null) => void
   addNotification: (notification: Omit<Notification, 'id'>) => string
   removeNotification: (id: string) => void
   clearNotifications: () => void
@@ -30,7 +50,8 @@ let _notifCounter = 0
 
 export const useUIStore = create<UIStore>((set) => ({
   sidebarOpen: true,
-  activePanel: 'render',
+  activePanel: 'home',
+  studioStep: null as StudioStep | null,
   notifications: [],
 
   toggleSidebar: () => {
@@ -44,6 +65,8 @@ export const useUIStore = create<UIStore>((set) => ({
   setActivePanel: (panel: ActivePanel) => {
     set({ activePanel: panel })
   },
+
+  setStudioStep: (step: StudioStep | null) => set({ studioStep: step }),
 
   addNotification: (notification: Omit<Notification, 'id'>): string => {
     const id = `notif_${Date.now()}_${++_notifCounter}`

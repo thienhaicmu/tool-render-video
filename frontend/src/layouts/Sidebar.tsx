@@ -1,7 +1,7 @@
 /**
- * Sidebar — Navigation with collapse support.
+ * Sidebar — Primary navigation. Fixed width, no collapse in B5.
  */
-import React from 'react'
+import React, { useState } from 'react'
 import { useUIStore } from '../stores/uiStore'
 import type { ActivePanel } from '../stores/uiStore'
 
@@ -11,46 +11,117 @@ interface NavItem {
   icon: string
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { panel: 'render',   label: 'Render',   icon: '▶' },
-  { panel: 'history',  label: 'History',  icon: '☰' },
-  { panel: 'editor',   label: 'Editor',   icon: '✂' },
-  { panel: 'settings', label: 'Settings', icon: '⚙' },
+const MAIN_NAV: NavItem[] = [
+  { panel: 'home'    as ActivePanel, label: 'Home',    icon: '⌂' },
+  { panel: 'studio'  as ActivePanel, label: 'Studio',  icon: '✦' },
+  { panel: 'library' as ActivePanel, label: 'Library', icon: '⊟' },
+  { panel: 'publish' as ActivePanel, label: 'Publish', icon: '⬆' },
 ]
 
-export function Sidebar() {
-  const { sidebarOpen, activePanel, toggleSidebar, setActivePanel } = useUIStore()
+const BOTTOM_NAV: NavItem[] = [
+  { panel: 'settings' as ActivePanel, label: 'Settings', icon: '⚙' },
+]
 
+function NavGroup({ items, activePanel, hoveredItem, setHoveredItem, setActivePanel }: {
+  items: NavItem[]
+  activePanel: ActivePanel
+  hoveredItem: string | null
+  setHoveredItem: (panel: string | null) => void
+  setActivePanel: (panel: ActivePanel) => void
+}) {
   return (
-    <aside style={{ ...styles.sidebar, width: sidebarOpen ? 'var(--sidebar-width)' : 'var(--sidebar-collapsed-width)' }}>
-      <div style={styles.header}>
-        {sidebarOpen && <span style={styles.logo}>Render Studio</span>}
-        <button
-          style={styles.collapseBtn}
-          onClick={toggleSidebar}
-          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-          aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-        >
-          {sidebarOpen ? '◀' : '▶'}
-        </button>
-      </div>
+    <>
+      {items.map((item) => {
+        const isActive = activePanel === item.panel
+        const isHovered = hoveredItem === item.panel
 
-      <nav style={styles.nav}>
-        {NAV_ITEMS.map((item) => (
+        let bgColor = 'transparent'
+        let textColor = 'var(--text-secondary)'
+
+        if (isActive) {
+          bgColor = 'var(--accent-subtle)'
+          textColor = 'var(--accent-primary)'
+        } else if (isHovered) {
+          bgColor = 'var(--surface-card)'
+          textColor = 'var(--text-primary)'
+        }
+
+        return (
           <button
             key={item.panel}
             style={{
-              ...styles.navItem,
-              ...(activePanel === item.panel ? styles.navItemActive : {}),
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-3)',
+              height: '36px',
+              padding: '0 var(--space-4)',
+              width: '100%',
+              backgroundColor: bgColor,
+              color: textColor,
+              fontSize: 'var(--text-base)',
+              fontWeight: 'var(--weight-medium)' as unknown as number,
+              cursor: 'pointer',
+              border: 'none',
+              textAlign: 'left',
+              borderRadius: 'var(--radius-md)',
+              transition: `background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out)`,
             }}
             onClick={() => setActivePanel(item.panel)}
+            onMouseEnter={() => setHoveredItem(item.panel)}
+            onMouseLeave={() => setHoveredItem(null)}
+            aria-current={isActive ? 'page' : undefined}
             title={item.label}
-            aria-current={activePanel === item.panel ? 'page' : undefined}
           >
-            <span style={styles.navIcon}>{item.icon}</span>
-            {sidebarOpen && <span style={styles.navLabel}>{item.label}</span>}
+            {/* Left accent bar — visible only when active */}
+            {isActive && (
+              <span
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '2px',
+                  height: '20px',
+                  backgroundColor: 'var(--accent-primary)',
+                  borderRadius: '1px',
+                }}
+              />
+            )}
+            <span style={{ fontSize: '18px', width: '18px', textAlign: 'center', flexShrink: 0 }}>
+              {item.icon}
+            </span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {item.label}
+            </span>
           </button>
-        ))}
+        )
+      })}
+    </>
+  )
+}
+
+export function Sidebar() {
+  const { activePanel, setActivePanel } = useUIStore()
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null)
+
+  const sharedProps = { activePanel, hoveredItem, setHoveredItem, setActivePanel }
+
+  return (
+    <aside style={styles.sidebar}>
+      {/* Header / wordmark */}
+      <div style={styles.header}>
+        <span style={styles.wordmark}>AI Clip Studio</span>
+      </div>
+
+      <nav style={styles.nav}>
+        <NavGroup items={MAIN_NAV} {...sharedProps} />
+
+        <div style={{ flex: 1 }} />
+
+        <hr style={{ borderTop: '1px solid var(--border-subtle)', border: 'none', margin: 'var(--space-2) 0' }} />
+
+        <NavGroup items={BOTTOM_NAV} {...sharedProps} />
       </nav>
     </aside>
   )
@@ -62,73 +133,39 @@ const styles: Record<string, React.CSSProperties> = {
     top: 0,
     left: 0,
     height: '100vh',
-    backgroundColor: 'var(--color-bg-surface)',
-    borderRight: '1px solid var(--color-border)',
+    width: 'var(--sidebar-width)',
+    backgroundColor: 'var(--surface-panel)',
+    borderRight: '1px solid var(--border-subtle)',
     display: 'flex',
     flexDirection: 'column',
-    transition: `width var(--duration-normal) var(--ease-default)`,
     overflow: 'hidden',
     zIndex: 'var(--z-raised)' as unknown as number,
   },
   header: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
     padding: 'var(--space-4)',
-    borderBottom: '1px solid var(--color-border)',
+    borderBottom: '1px solid var(--border-subtle)',
     height: 'var(--topbar-height)',
     flexShrink: 0,
   },
-  logo: {
-    fontSize: 'var(--font-size-md)',
-    fontWeight: 'var(--font-weight-semibold)' as unknown as number,
-    color: 'var(--color-text-primary)',
+  wordmark: {
+    fontSize: 'var(--text-md)',
+    fontWeight: 'var(--weight-semibold)' as unknown as number,
+    color: 'var(--text-primary)',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
-  },
-  collapseBtn: {
-    padding: 'var(--space-1) var(--space-2)',
-    color: 'var(--color-text-secondary)',
-    fontSize: 'var(--font-size-xs)',
-    borderRadius: 'var(--radius-sm)',
-    cursor: 'pointer',
-    transition: `color var(--duration-fast)`,
-    flexShrink: 0,
   },
   nav: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 'var(--space-1)',
     padding: 'var(--space-3)',
     flex: 1,
+    gap: '2px',
   },
-  navItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--space-3)',
-    padding: 'var(--space-2) var(--space-3)',
-    borderRadius: 'var(--radius-md)',
-    color: 'var(--color-text-secondary)',
-    fontSize: 'var(--font-size-base)',
-    cursor: 'pointer',
-    transition: `background-color var(--duration-fast), color var(--duration-fast)`,
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textAlign: 'left',
-    width: '100%',
-  },
-  navItemActive: {
-    backgroundColor: 'var(--color-accent-muted)',
-    color: 'var(--color-accent)',
-  },
-  navIcon: {
-    fontSize: 'var(--font-size-md)',
-    flexShrink: 0,
-    width: '20px',
-    textAlign: 'center',
-  },
-  navLabel: {
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
+  separator: {
+    margin: 'var(--space-2) 0',
+    border: 'none',
+    borderTop: '1px solid var(--border-subtle)',
   },
 }
