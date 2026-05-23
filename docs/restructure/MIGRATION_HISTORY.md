@@ -2561,3 +2561,41 @@ Docs updated:
 **Backend impact**: None.
 
 **Test results**: 335 pre-existing tests pass. 3 new test files added.
+
+---
+
+## Phase 6.7 — Electron Cut-over + Static v2 Activation
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Date**: 2026-05-23
+
+**Purpose**: Activate the v2 React UI for production Electron serving. Promote the Vite build output to `backend/static-v2/`, create v2 launch scripts, confirm the ui_gate env passthrough, and add test coverage for the cut-over mechanism.
+
+**New files**:
+- `backend/static-v2/` — promoted v2 React build (index.html + assets/); tracked by git
+- `run-desktop-v2.ps1` — launches Electron desktop with `STATIC_UI_VERSION=v2`
+- `run-backend-v2.ps1` — launches FastAPI backend with `STATIC_UI_VERSION=v2` (browser testing)
+- `backend/tests/test_ui_static_v2_gate.py` — 21 tests covering ui_gate logic + static-v2 artifact integrity
+- `frontend/tests/electron-cutover-readiness.test.ts` — 20 tests for same-origin safety, asset paths, env var wiring
+- `docs/ui/PHASE_6_7_ELECTRON_CUTOVER_REPORT.md` — full cut-over report + smoke test checklist
+
+**Modified files**:
+- `docs/ui/PHASE_6_UI_ARCHITECTURE.md` — Phase 6.7 section added, checklist updated to Phase 6.8
+
+**Contracts introduced**:
+- `STATIC_UI_VERSION=v2` is the canonical way to activate the React UI in production
+- `backend/static-v2/` is the tracked, git-committed copy of the React build
+- `backend/static-new/` remains gitignored (transient build artifact)
+- `GET /health` → `{"status": "ok", "ui_version": "v2"}` when v2 is active
+- Rollback: set `STATIC_UI_VERSION=legacy` or unset; ui_gate falls back gracefully without raise
+- Electron env passthrough: `...process.env` in `startBackendWithCommand()` auto-passes `STATIC_UI_VERSION` — no `main.js` changes needed
+
+**Key findings**:
+- `index.html` uses `/assets/...` absolute paths (Vite default `base: '/'`) — correct for FastAPI `/assets` mount
+- SPA routing is panel-based only (no URL changes) — `GET /` is sufficient, no catch-all needed
+- CSP deferred: same-origin local Electron serving, threat model does not require CSP in Phase 6.7
+
+**Backend impact**: None — `ui_gate.py` and `main.py` were already fully implemented (Phase 6.0 infra).
+
+**Test results**: 399/399 frontend tests pass (22 test files). 21/21 new backend gate tests pass. 49/49 backend contract tests pass.

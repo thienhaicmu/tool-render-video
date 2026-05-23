@@ -425,12 +425,32 @@ All items completed:
 
 ---
 
-## 15. Phase 6.7 Checklist (next steps)
+## 15. Phase 6.7 — Electron Cut-over + Static v2 Activation (SHIPPED 2026-05-23)
 
-- [ ] Rename `backend/static-new/` → `backend/static-v2/` for first production deploy
-- [ ] Set `STATIC_UI_VERSION=v2` in deployment environment / Electron launch
-- [ ] Add CSP header to FastAPI index response
+All items completed:
+
+- [x] `backend/static-v2/` created from `vite build` output (tracked by git, not gitignored)
+- [x] `STATIC_UI_VERSION=v2` activates `backend/static-v2/` via `ui_gate.py` + `main.py`
+- [x] `run-desktop-v2.ps1` — launches Electron with `STATIC_UI_VERSION=v2`
+- [x] `run-backend-v2.ps1` — launches FastAPI backend with `STATIC_UI_VERSION=v2`
+- [x] Electron env passthrough confirmed: `...process.env` in `startBackendWithCommand()` auto-passes `STATIC_UI_VERSION`
+- [x] `index.html` verified: uses `/assets/...` absolute paths (correct for FastAPI `/assets` mount)
+- [x] SPA routing confirmed: panel-based only, no URL changes, `GET /` is sufficient (no catch-all needed)
+- [x] `GET /health` reports `{"status": "ok", "ui_version": "v2"}` when v2 active
+- [x] CSP deferred — same-origin local serving, not needed for Phase 6.7
+- [x] Backend tests: `test_ui_static_v2_gate.py` — 21 tests, all pass
+- [x] Frontend tests: `electron-cutover-readiness.test.ts` — 20 tests, all pass
+- [x] Full test suite: 399 frontend tests pass, 49 backend contract tests pass
+- [x] Rollback: set `STATIC_UI_VERSION=legacy` or unset; delete `backend/static-v2/` to force legacy
+
+Full report: `docs/ui/PHASE_6_7_ELECTRON_CUTOVER_REPORT.md`
+
+---
+
+## 16. Phase 6.8 Checklist (next steps)
+
 - [ ] Apply Trim — submit trim range to backend for re-render
 - [ ] Re-render Selection — re-render a specific clip segment
 - [ ] Export Clip — export trimmed clip to output directory
 - [ ] Resolve `tsc -b` errors in test files (`api.test.ts`, `vite.config.ts`)
+- [ ] CSP header on FastAPI index response (hardening phase)
