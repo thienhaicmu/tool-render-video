@@ -9,6 +9,7 @@ import { formatDateTime } from './jobs.utils'
 import { getJob } from '../../api/jobs'
 import type { JobStatus } from '../../types/api'
 import { QualityPanel } from '../quality/QualityPanel'
+import { JobProgressPanel } from '../progress/JobProgressPanel'
 
 export interface JobDetailDrawerProps {
   jobId: string
@@ -301,20 +302,21 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
             {/* Payload */}
             <PayloadSection payloadJson={job.payload_json} />
 
-            {/* Live progress notice + Quality panel */}
-            <div>
-              <div
-                style={{
-                  fontSize: 'var(--font-size-xs)',
-                  color: 'var(--color-text-secondary)',
-                  marginBottom: 'var(--space-2)',
-                  opacity: 0.6,
-                }}
-              >
-                Live progress — available when running
+            {/* Live Progress */}
+            <section>
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
+                Live Progress
               </div>
-              <QualityPanel jobId={job.job_id} jobStatus={job.status} />
-            </div>
+              <JobProgressPanel
+                jobId={job.job_id}
+                initialStatus={job.status}
+                initialProgress={job.progress_percent}
+                compact
+              />
+            </section>
+
+            {/* Quality panel */}
+            <QualityPanel jobId={job.job_id} jobStatus={job.status} />
           </div>
         )}
       </div>

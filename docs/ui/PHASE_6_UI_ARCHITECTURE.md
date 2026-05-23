@@ -317,10 +317,42 @@ All items completed:
 
 ---
 
-## 12. Phase 6.4 Checklist (next steps)
+## 12. Phase 6.4 — Live Job Progress Panel (SHIPPED 2026-05-23)
 
-- [ ] Job progress panel (`src/features/render/JobProgress.tsx`)
-  - Live WebSocket via useRenderSocket hook
-  - ProgressBar component for overall %
-  - Stage display + Cancel button
+All items completed:
+
+- [x] `useRenderSocket` hook extended (backward compatible)
+  - Added `jobStatus: string | null` — set from `event.job.status` on terminal events
+  - Added `jobMessage: string | null` — captured from `onStageChange(stage, message)` second arg
+  - Added `isTerminal: boolean` — derived from `isTerminalStatus(jobStatus ?? '')`
+  - Existing callers using `{ stage, progress, isConnected, error }` still work unchanged
+- [x] Progress feature module (`src/features/progress/`)
+  - `progress.types.ts` — `ConnectionStatus` type + `MAX_LOG_MESSAGES = 5`
+  - `progress.utils.ts` — `normalizeProgressPercent`, `getStageLabel`, `getStatusLabel`, `deriveConnectionStatus`, `extractLatestMessage`, `getPartLabel` (all pure functions)
+  - `ConnectionStatusBadge.tsx` — connecting/live/reconnecting/disconnected/terminal variants
+  - `ProgressStageTimeline.tsx` — 5-stage linear indicator (Queued→Analyzing→Rendering→Finalizing→Complete)
+  - `ProgressPartList.tsx` — active parts with per-part progress bars (capped at 5 shown)
+  - `ProgressPartItem.tsx` — compact card: part label, status, small progress bar
+  - `ProgressMessageLog.tsx` — collapsible log (max 5 entries, toggle at >2)
+  - `JobProgressPanel.tsx` — main panel; active vs terminal routing; cancel action with double-click guard
+  - `JobProgressPanel.css` — CSS token-based compact styles for 380px drawer
+- [x] JobDetailDrawer updated
+  - Static "Live progress — available when running" notice replaced with live `JobProgressPanel`
+  - `JobProgressPanel` receives `job.job_id`, `job.status`, `job.progress_percent` with `compact` flag
+  - `QualityPanel` preserved below the progress panel
+- [x] Cancel behavior
+  - `window.confirm()` guard before issuing cancel
+  - `isCanceling` state guard prevents double-fire
+  - Error notification via `uiStore.addNotification` on failure
+  - Cancel button visible for `running`/`queued`/`cancelling` statuses only
+- [x] No polling — purely event-driven via WebSocket (onProgress, onStageChange, onComplete)
+- [x] Tests: 63 new tests across 2 test files (280 total, all passing)
+  - `tests/progress-utils.test.ts` — 36 pure logic tests
+  - `tests/job-progress-panel.test.tsx` — 27 rendering + behaviour tests
+
+---
+
+## 13. Phase 6.5 Checklist (next steps)
+
 - [ ] Editor screen with preview video and trim controls
+- [ ] Integration testing with Electron shell

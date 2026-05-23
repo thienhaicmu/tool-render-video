@@ -2425,3 +2425,50 @@ Docs updated:
 - AI trace refs always rendered as friendly labels; raw `ai.*` event strings never shown directly
 
 **Test results**: 211/211 passed (12 test files, 38 new tests)
+
+---
+
+## Phase 6.4 — Live Job Progress Panel
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Date**: 2026-05-23
+
+**Purpose**: Replace the static "Live progress — available when running" notice in `JobDetailDrawer`
+with a fully functional live progress panel driven by WebSocket events. No polling — all state
+arrives via the existing `RenderSocketClient` infrastructure.
+
+**Shipped changes**:
+
+Frontend — new files (`frontend/src/features/progress/`):
+- `progress.types.ts` — `ConnectionStatus` union type, `MAX_LOG_MESSAGES = 5`
+- `progress.utils.ts` — `normalizeProgressPercent`, `getStageLabel`, `getStatusLabel`, `deriveConnectionStatus`, `extractLatestMessage`, `getPartLabel` (all pure)
+- `ConnectionStatusBadge.tsx` — WS connection badge (connecting/live/reconnecting/disconnected/terminal)
+- `ProgressStageTimeline.tsx` — 5-stage linear indicator with completed/current/future visual states
+- `ProgressPartList.tsx` — active parts list capped at 5, with summary when idle
+- `ProgressPartItem.tsx` — compact per-part card (label, status, mini progress bar)
+- `ProgressMessageLog.tsx` — collapsible recent message log (max 5, toggle at >2)
+- `JobProgressPanel.tsx` — main panel; routes active↔terminal; cancel with confirm + double-fire guard
+- `JobProgressPanel.css` — compact CSS token styles for 380px drawer context
+
+Frontend — modified files:
+- `frontend/src/hooks/useRenderSocket.ts` — added `jobStatus`, `jobMessage`, `isTerminal` fields (backward compatible)
+- `frontend/src/features/jobs/JobDetailDrawer.tsx` — static notice replaced with `<JobProgressPanel>`; `QualityPanel` preserved below
+
+Tests — new files:
+- `frontend/tests/progress-utils.test.ts` — 36 pure logic tests
+- `frontend/tests/job-progress-panel.test.tsx` — 27 rendering + behaviour tests
+
+Docs updated:
+- `docs/ui/PHASE_6_UI_ARCHITECTURE.md` — Phase 6.4 section added, checklist updated
+- `docs/restructure/MIGRATION_HISTORY.md` — this entry
+
+**Contracts introduced**:
+- `JobProgressPanel` NEVER polls — WebSocket events only
+- Active jobs connect via `useRenderSocket(jobId)`; terminal jobs call `useRenderSocket(null)` (no connection)
+- Cancel action guarded by `window.confirm()` + `isCanceling` state (no double-fire)
+- `useRenderSocket` is backward compatible — callers using `{ stage, progress, isConnected, error }` unchanged
+
+**Backend impact**: None — reads existing WebSocket endpoint `/api/jobs/{jobId}/ws`.
+
+**Test results**: 280/280 passed (14 test files, 63 new tests)
