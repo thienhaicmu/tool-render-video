@@ -2104,3 +2104,43 @@ Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.p
 Known failures: `test_remotion_adapter.py` (4), `test_ai_optional_dependencies.py` (1), `test_ai_phase36_clip_segment_selection.py` (2), `test_ai_visibility_summary.py` (1) — all pre-Phase-1.
 
 **No new failures introduced.**
+
+---
+
+## Phase 5.8 — Output Quality Intelligence (2026-05-23)
+
+**Branch**: `restructure/output-timeline-architecture`
+**Commit message**: `phase 5.8 add output quality intelligence`
+
+### Changes
+
+**New module**: `backend/app/quality/`
+- `__init__.py` — package exports
+- `models.py` — `QualityIssue`, `QualityReport` dataclasses with scoring
+- `assessor.py` — `assess_rendered_part_quality()` with 9 assessment categories
+
+**Modified**:
+- `backend/app/orchestration/qa_pipeline.py` — added `_assess_render_quality_intelligence()`
+- `backend/app/orchestration/render_pipeline.py` — wired quality intelligence after `_assess_output_quality()`
+
+**New tests** (5 files, ~80 tests):
+- `tests/test_quality_models.py`
+- `tests/test_quality_assessor.py`
+- `tests/test_quality_subtitle_density.py`
+- `tests/test_quality_trace_correlation.py`
+- `tests/test_qa_pipeline_quality_integration.py`
+
+**Docs updated** (5 files):
+- `docs/ai/AI_RENDER_CONTRACT.md`
+- `docs/ai/AI_DECISION_TRACEABILITY_PLAN.md`
+- `docs/architecture/CURRENT_RENDER_ARCHITECTURE.md`
+- `docs/review/TECHNICAL_DEBT_REPORT.md`
+- `docs/restructure/MIGRATION_HISTORY.md`
+
+### Constraints honored
+- NEVER raises (all exceptions caught internally)
+- NEVER auto-regenerates video
+- NEVER changes FFmpeg commands
+- NEVER requires internet or API keys
+- Warnings NEVER affect existing QA ok/error result
+- Quality intelligence failure NEVER propagates to render result

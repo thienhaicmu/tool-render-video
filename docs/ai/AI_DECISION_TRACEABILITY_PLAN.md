@@ -303,3 +303,29 @@ With this log:
 | 2026-05-23 | Phase 5.5 — `log_subtitle_emphasis_applied()` added; `ai.subtitle_emphasis_applied` event IMPLEMENTED; wired in render_pipeline.py Phase 5.5 block |
 | 2026-05-23 | Phase 5.7 — `ai.visual_intensity_applied` event can now log `applied=True`; `log_visual_intensity_applied()` unchanged (already wrote the event); render_pipeline.py Phase 5.7 block passes `applied=True` config to tracer when hint is valid and not user-overridden |
 | 2026-05-23 | Phase 5.6 — `log_visual_intensity_applied()` added; `ai.visual_intensity_applied` event IMPLEMENTED; wired in render_pipeline.py Phase 5.6 block; `ai.decision_rejected` reasons `no_safe_visual_injection_point`, `user_visual_override`, `invalid_visual_intensity`, `no_visual_intensity_hint`, `ai_disabled` all covered |
+
+---
+
+## Phase 5.8 — Quality Report AI Trace Correlation (2026-05-23)
+
+The quality intelligence module (`app/quality/assessor.py`) reads the AI trace JSONL at assessment time to correlate AI decisions with render output quality.
+
+**File read**: `data/logs/{job_id}_ai_trace.jsonl`
+
+**Events collected** (filtered to relevant subset only):
+- `ai.pacing_applied`
+- `ai.subtitle_emphasis_applied`
+- `ai.visual_intensity_applied`
+- `ai.execution_hints`
+- `ai.decision_rejected`
+- `ai.validation_fixup`
+
+**Storage**: `QualityReport.ai_trace_refs` — list of event name strings (no full content)
+
+**Behavior**:
+- File missing → `ai_trace_refs = []`, silent skip
+- Malformed JSONL lines → skipped individually, parsing continues
+- Unrelated events → ignored
+- Duplicate events → deduplicated (each event name stored at most once)
+
+**Changelog entry**: 2026-05-23 — Phase 5.8 — quality report now reads AI trace JSONL for correlation; events collected into `QualityReport.ai_trace_refs`; read-only, no write to trace file

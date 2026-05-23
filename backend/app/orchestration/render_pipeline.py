@@ -75,6 +75,7 @@ from app.orchestration.audio_pipeline import (
 )
 from app.orchestration.qa_pipeline import (
     _assess_output_quality,
+    _assess_render_quality_intelligence,
     _duration_tolerance,
     _failed_part_progress,
     _render_part_failure_detail,
@@ -4977,6 +4978,33 @@ def run_render_pipeline(
                         "score_penalty": _quality_penalty,
                     },
                 )
+
+            # ── Phase 5.8: quality intelligence (non-blocking, warn-only) ─────
+            try:
+                _qi_srt = ass_part if part_subtitle_enabled and ass_part and ass_part.suffix == ".srt" else None
+                # Prefer clip SRT for density analysis
+                _qi_srt_path: Path | None = None
+                if srt_path is not None and Path(str(srt_path)).exists():
+                    _qi_srt_path = Path(str(srt_path))
+                elif _qi_srt is not None and Path(str(_qi_srt)).exists():
+                    _qi_srt_path = Path(str(_qi_srt))
+                _qi_manifest: Path | None = None
+                try:
+                    from app.ai.tracing import _DEFAULT_LOG_DIR as _ai_log_dir
+                    _qi_ai_trace = _ai_log_dir / f"{job_id}_ai_trace.jsonl"
+                    _qi_ai_trace = _qi_ai_trace if _qi_ai_trace.exists() else None
+                except Exception:
+                    _qi_ai_trace = None
+                _assess_render_quality_intelligence(
+                    video_path=final_part,
+                    part_no=idx,
+                    job_id=job_id,
+                    srt_path=_qi_srt_path,
+                    manifest_path=_qi_manifest,
+                    ai_trace_path=_qi_ai_trace,
+                )
+            except Exception:
+                pass  # quality intelligence must never crash the render
 
             # ── UP15: Smart cover frame extraction ───────────────────────────
             try:

@@ -353,3 +353,16 @@ The following items were addressed or resolved by Phase 5.6:
 | "AI render decisions not traceable" | FURTHER RESOLVED — `ai.visual_intensity_applied` event can now log `applied=True`; trace logger unchanged (already implemented); Phase 5.7 means valid hints produce `applied=True` in trace records |
 | "User visual effect choice must not be overridden by AI" | CONFIRMED SAFE — `effect_preset` field detection active; if user has non-default preset, rejected with `user_visual_override`; `payload.effect_preset` never mutated by AI |
 
+
+---
+
+## Phase 5.8 Additions (2026-05-23)
+
+| Item | Status |
+|---|---|
+| Post-render quality intelligence | ADDED — `app/quality/` module; offline, deterministic, non-blocking |
+| Quality sidecar reports | ADDED — JSON written to `<output_dir>/quality/<job_id>_part_<N>.json` |
+| AI trace correlation | ADDED — quality report reads `ai_trace.jsonl` for correlation context |
+| Subtitle density checks | ADDED — wps, flash, line length, density overload thresholds |
+| Hook risk assessment | ADDED — first subtitle delay and word count checks |
+| Pacing risk assessment | ADDED — very short (<3s) and very long (>300s) part warnings |

@@ -326,3 +326,29 @@ Output
 | 2026-05-23 | Phase 5.5 — AI subtitle emphasis hints now applied to subtitle text transforms; `AISubtitleEmphasisConfig` model; `emphasis_level_override` parameter added to `subtitle_emphasis_pass()`; no new style IDs; no timing changes; no FFmpeg changes |
 | 2026-05-23 | Phase 5.7 — Safe visual intensity injection point found and implemented; `visual_intensity_hint: str | None = None` added to `render_part()`, `render_part_smart()`, `render_base_clip()`; `resolve_effect_preset_with_intensity()` added to `ffmpeg_helpers.py`; renderer OWNS mapping table (low→story_clean_01, medium→slay_soft_01, high→slay_pop_01); `applied=True` now possible; `render_overrides={"visual_intensity_hint": <value>}`; AI passes only low/medium/high — never a preset name or FFmpeg string; user explicit `effect_preset` always wins; `payload.effect_preset` never mutated |
 | 2026-05-23 | Phase 5.6 — AI visual intensity hint infrastructure built; `AIVisualIntensityConfig` model; `log_visual_intensity_applied()` trace logger added; no safe injection point found — hints logged as advisory only; no FFmpeg changes; no render behavior changes |
+| 2026-05-23 | Phase 5.8 — Quality intelligence added: `app/quality/` module with `QualityIssue`, `QualityReport`, `assess_rendered_part_quality()`; `_assess_render_quality_intelligence()` wired in `qa_pipeline.py` and `render_pipeline.py`; all checks are non-fatal; warnings never affect ok/error result; no FFmpeg changes; no API changes; AI trace JSONL read for correlation |
+
+---
+
+## Phase 5.8 Summary (2026-05-23)
+
+**Quality Intelligence Added — Offline, Deterministic, Non-Blocking**
+
+Post-render quality assessment now runs automatically after `_assess_output_quality()` succeeds in `render_pipeline.py`. The assessment:
+
+- Is **NEVER fatal** — all exceptions caught internally; warnings never convert to errors
+- Uses **only local probes** (ffprobe cached metadata, SRT parsing, file checks)
+- Writes a **sidecar JSON report**: `<output_dir>/quality/<job_id>_part_<N>.json`
+- Correlates **AI trace events** from `data/logs/{job_id}_ai_trace.jsonl`
+- Does **NOT** auto-regenerate video or change render behavior
+
+Assessment categories:
+1. File integrity (missing/zero-byte → CRITICAL, early exit)
+2. Video probe (ffprobe failure → ERROR)
+3. Audio stream presence (missing → WARNING)
+4. Duration vs manifest (mismatch > tolerance → ERROR)
+5. First frame quality (dark/blur → WARNING, confidence ≤ 0.7)
+6. Subtitle density (too fast / flash / line too long → WARNING; >30% flash → ERROR)
+7. Hook risk (first subtitle > 5s → WARNING; first block > 15 words → WARNING)
+8. Pacing risk (< 3s or > 300s → WARNING)
+9. AI trace correlation (reads events from JSONL, stores in ai_trace_refs)

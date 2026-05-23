@@ -427,3 +427,35 @@ New files/changes:
 - FFmpeg: ZERO changes to filter construction — only the input preset name may change (to a known supported preset)
 - API: ZERO changes — no new endpoints, no schema changes, no websocket payload changes
 - API changes: NONE
+
+---
+
+## Phase 5.8 — Quality Intelligence Module (2026-05-23)
+
+New module: `backend/app/quality/`
+
+| File | Purpose |
+|---|---|
+| `app/quality/__init__.py` | Package exports: `QualityIssue`, `QualityReport`, `assess_rendered_part_quality` |
+| `app/quality/models.py` | `QualityIssue` and `QualityReport` dataclasses; scoring penalty table |
+| `app/quality/assessor.py` | `assess_rendered_part_quality()` — 9-category offline assessment |
+
+**Integration point**: `app/orchestration/qa_pipeline.py` → `_assess_render_quality_intelligence()`
+Called from: `render_pipeline.py` after `_assess_output_quality()` succeeds
+
+**Sidecar report path**: `<output_dir>/quality/<job_id>_part_<N>.json`
+
+**Scoring penalties**:
+| Severity | Penalty |
+|---|---|
+| critical | -100 (score → 0) |
+| error | -25 |
+| warning | -10 |
+| info | -2 |
+
+**Constraints**:
+- Never raises
+- Never changes FFmpeg commands
+- Never auto-regenerates video
+- Never makes warnings fatal for existing QA
+- Requires no internet, no API keys

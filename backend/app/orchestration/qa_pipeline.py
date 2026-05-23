@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 from pathlib import Path
 
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
 from app.services.db import list_job_parts
+
+logger = logging.getLogger(__name__)
 
 
 def _resume_output_valid(path: "Path") -> bool:
@@ -302,6 +305,73 @@ def _assess_output_quality(
         "checks": checks,
         "score_penalty": penalty,
     }
+
+
+def _assess_render_quality_intelligence(
+    video_path: "Path",
+    part_no: "int | None" = None,
+    job_id: "str | None" = None,
+    srt_path: "Path | None" = None,
+    manifest_path: "Path | None" = None,
+    ai_trace_path: "Path | None" = None,
+) -> "dict | None":
+    """Non-blocking post-render quality intelligence assessment.
+
+    Runs assess_rendered_part_quality() and writes a sidecar JSON report.
+    Never raises; never makes warnings fatal; never affects QA ok/error result.
+
+    Sidecar JSON path:
+        <video_path.parent>/quality/<job_id>_part_<part_no>.json
+        Falls back to <video_path.parent>/quality_report.json if ids not available.
+
+    Returns the report dict or None on any failure.
+    """
+    try:
+        from app.quality.assessor import assess_rendered_part_quality
+
+        report = assess_rendered_part_quality(
+            video_path=video_path,
+            part_no=part_no,
+            job_id=job_id,
+            srt_path=srt_path,
+            manifest_path=manifest_path,
+            ai_trace_path=ai_trace_path,
+        )
+
+        # Determine sidecar output path
+        quality_dir = video_path.parent / "quality"
+        try:
+            quality_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            quality_dir = video_path.parent  # fallback
+
+        if job_id and part_no is not None:
+            sidecar_name = f"{job_id}_part_{part_no}.json"
+        elif job_id:
+            sidecar_name = f"{job_id}_quality.json"
+        else:
+            sidecar_name = "quality_report.json"
+
+        sidecar_path = quality_dir / sidecar_name
+
+        try:
+            sidecar_path.write_text(
+                json.dumps(report.to_dict(), indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            logger.info(
+                "quality_intelligence: report written job_id=%s part_no=%s score=%.1f "
+                "issues=%d path=%s",
+                job_id, part_no, report.score, len(report.issues), sidecar_path,
+            )
+        except Exception as write_exc:
+            logger.warning("quality_intelligence: failed to write sidecar: %s", write_exc)
+
+        return report.to_dict()
+
+    except Exception as exc:
+        logger.warning("quality_intelligence: assessment failed (non-fatal): %s", exc)
+        return None
 
 
 def _render_part_failure_detail(part_no: int, error: Exception | str) -> dict:
