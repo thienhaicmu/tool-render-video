@@ -1,0 +1,53 @@
+import { useEffect, useRef } from 'react'
+import { useUIStore } from '../../stores/uiStore'
+import { StepStrip } from './components/StepStrip'
+import { WorkflowPanel } from './components/WorkflowPanel'
+import { PreviewWorkspace } from './components/PreviewWorkspace'
+import { BottomRenderState } from './components/BottomRenderState'
+
+export function StudioScreen() {
+  const studioStep    = useUIStore((s) => s.studioStep)
+  const setStudioStep = useUIStore((s) => s.setStudioStep)
+  const hasInitialized = useRef(false)
+
+  useEffect(() => {
+    if (!hasInitialized.current && studioStep === null) {
+      hasInitialized.current = true
+      setStudioStep('source')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: 'calc(100vh - var(--topbar-height))',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Step strip */}
+      <StepStrip
+        currentStep={studioStep}
+        onStepClick={setStudioStep}
+      />
+
+      {/* Middle body: PreviewWorkspace (left, flex) + WorkflowPanel (right, fixed) */}
+      <div
+        style={{
+          display: 'flex',
+          flex: 1,
+          overflow: 'hidden',
+          minHeight: 0,
+        }}
+      >
+        <PreviewWorkspace />
+        <WorkflowPanel studioStep={studioStep} />
+      </div>
+
+      {/* Bottom render state */}
+      <BottomRenderState />
+    </div>
+  )
+}

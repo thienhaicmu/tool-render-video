@@ -104,6 +104,8 @@
   --topbar-height:        48px;
   --bottom-panel-height:  240px;
   --step-strip-height:    40px;
+  --timeline-track-h:     24px;
+  --timeline-label-w:     52px;
 
   /* ── Motion ─────────────────────────────────────────────── */
   --duration-instant:     100ms;

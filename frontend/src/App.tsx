@@ -8,6 +8,7 @@ import type { ActivePanel } from './stores/uiStore'
 import { RenderSetupScreen } from './features/render/RenderSetupScreen'
 import { HistoryScreen } from './features/jobs/HistoryScreen'
 import { EditorScreen } from './features/editor/EditorScreen'
+import { StudioScreen } from './features/studio/StudioScreen'
 
 function SettingsPanel() {
   return <div style={{ padding: 'var(--space-6)', color: 'var(--color-text-secondary)' }}>Settings panel — Phase 6.1</div>
@@ -24,7 +25,7 @@ function PublishPlaceholder() {
 const PANEL_MAP: Record<ActivePanel, React.ComponentType> = {
   // Canonical 5 routes (Figma-locked)
   home:     HistoryScreen,       // placeholder → HomeScreen in B6
-  studio:   RenderSetupScreen,   // placeholder → StudioScreen in B6
+  studio:   StudioScreen,
   library:  HistoryScreen,       // placeholder → LibraryScreen in B6+
   publish:  PublishPlaceholder,
   settings: SettingsPanel,
