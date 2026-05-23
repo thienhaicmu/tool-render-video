@@ -9,6 +9,8 @@ export interface TransportBarProps {
   onPause?: () => void      // B8 ready — keep
   onSeek?: (delta: number) => void  // B8 ready — keep
   onMute?: () => void    // B8 ready — keep
+  isMuted?: boolean          // NEW — lifted mute state
+  onMuteToggle?: () => void  // NEW — lifted mute toggle
 }
 
 type BtnId = 'prev' | 'play' | 'next' | 'mute'
@@ -18,10 +20,14 @@ export function TransportBar({
   totalDuration = '--:--:--',
   isPlaying: isPlayingProp,
   onPlayPause,
+  isMuted: isMutedProp,
+  onMuteToggle,
+  onSeek,
 }: TransportBarProps) {
   const [localIsPlaying, setLocalIsPlaying] = useState(false)
   const playing = isPlayingProp !== undefined ? isPlayingProp : localIsPlaying
   const [isMuted, setIsMuted] = useState(false)
+  const muted = isMutedProp !== undefined ? isMutedProp : isMuted
   const [hoveredBtn, setHoveredBtn] = useState<BtnId | null>(null)
 
   const btnStyle = (id: BtnId): CSSProperties => ({
@@ -59,6 +65,7 @@ export function TransportBar({
         style={btnStyle('prev')}
         onMouseEnter={() => setHoveredBtn('prev')}
         onMouseLeave={() => setHoveredBtn(null)}
+        onClick={() => onSeek?.(-10)}
         aria-label="Seek backward"
       >
         ⏮
@@ -88,6 +95,7 @@ export function TransportBar({
         style={btnStyle('next')}
         onMouseEnter={() => setHoveredBtn('next')}
         onMouseLeave={() => setHoveredBtn(null)}
+        onClick={() => onSeek?.(10)}
         aria-label="Seek forward"
       >
         ⏭
@@ -102,10 +110,16 @@ export function TransportBar({
         style={btnStyle('mute')}
         onMouseEnter={() => setHoveredBtn('mute')}
         onMouseLeave={() => setHoveredBtn(null)}
-        onClick={() => setIsMuted((m) => !m)}
-        aria-label={isMuted ? 'Unmute' : 'Mute'}
+        onClick={() => {
+          if (onMuteToggle) {
+            onMuteToggle()
+          } else {
+            setIsMuted((m) => !m)
+          }
+        }}
+        aria-label={muted ? 'Unmute' : 'Mute'}
       >
-        {isMuted ? '🔇' : '🔊'}
+        {muted ? '🔇' : '🔊'}
       </button>
 
       {/* Spacer */}
