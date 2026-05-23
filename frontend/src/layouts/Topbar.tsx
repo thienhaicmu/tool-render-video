@@ -1,9 +1,18 @@
 /**
- * Topbar — App title, connection status, warmup/AI status badge.
+ * Topbar — App title (panel-aware), connection status, warmup/AI status badge.
  */
 import React, { useEffect, useState } from 'react'
 import { apiFetch } from '../api/client'
 import { useRenderStore } from '../stores/renderStore'
+import { useUIStore } from '../stores/uiStore'
+import type { ActivePanel } from '../stores/uiStore'
+
+const PANEL_TITLES: Record<ActivePanel, string> = {
+  render: 'New Render',
+  history: 'History',
+  editor: 'Editor',
+  settings: 'Settings',
+}
 
 interface WarmupStatus {
   model?: string
@@ -14,6 +23,7 @@ interface WarmupStatus {
 
 export function Topbar() {
   const activeJobId = useRenderStore((s) => s.activeJobId)
+  const activePanel = useUIStore((s) => s.activePanel)
   const [warmupStatus, setWarmupStatus] = useState<WarmupStatus | null>(null)
   const [isConnected, setIsConnected] = useState(false)
 
@@ -52,7 +62,7 @@ export function Topbar() {
   return (
     <header style={styles.topbar}>
       <div style={styles.left}>
-        <h1 style={styles.title}>Render Studio</h1>
+        <h1 style={styles.title}>{PANEL_TITLES[activePanel]}</h1>
         {activeJobId && (
           <span style={styles.jobBadge}>
             Job: {activeJobId.slice(0, 8)}…

@@ -389,9 +389,48 @@ All items completed:
 
 ---
 
-## 14. Phase 6.6 Checklist (next steps)
+## 14. Phase 6.6 — Frontend Integration Polish + Shell Readiness (SHIPPED 2026-05-23)
 
+All items completed:
+
+- [x] `vite-env.d.ts` added (`/// <reference types="vite/client" />`) — was missing, caused `import.meta.env` TypeScript error
+- [x] `BASE_URL` made environment-aware: `import.meta.env.VITE_API_BASE_URL ?? ''`
+  - Empty string = same-origin = works in Electron (FastAPI serves at `http://127.0.0.1:8000`)
+  - Works with Vite dev proxy (intercepts `/api/*` → `127.0.0.1:8000`)
+  - Override via `VITE_API_BASE_URL` env var for custom setups
+- [x] WebSocket URL fixed: `computeWsBase()` function handles empty `BASE_URL`
+  - When `BASE_URL = ''`: derives from `window.location.origin` → `ws://127.0.0.1:8000`
+  - Test/SSR fallback: hardcoded `ws://127.0.0.1:8000`
+- [x] `backend/static-new/` confirmed in root `.gitignore` (build artifact not committed)
+- [x] `*.tsbuildinfo` added to `frontend/.gitignore`
+- [x] Topbar panel title: now shows `PANEL_TITLES[activePanel]` — dynamic per panel
+  - `render→"New Render"`, `history→"History"`, `editor→"Editor"`, `settings→"Settings"`
+- [x] Sidebar verified: all 4 panels present, correct labels, `aria-current="page"` on active, no stale text
+- [x] Notifications: verified fixed-position bottom-right, `z-toast=300` (above all layers)
+- [x] `EditorEmptyState`: verified "Go to History" calls `setActivePanel('history')` (correct)
+- [x] `HistoryScreen.handleDelete`: verified drawer clears when selected job is deleted (correct)
+- [x] Responsive CSS:
+  - `RenderForm.css`: `@media (max-width: 1100px)` stacks to 1-column grid
+  - `EditorScreen.css`: `@media (max-width: 1100px)` stacks editor layout + full-width rail
+  - `HistoryScreen.css`: `@media (max-width: 1100px)` shrinks detail pane to 320px
+- [x] Build: `vite build` succeeds; `backend/static-new/index.html` uses `/assets/…` paths
+- [x] Electron readiness audit documented in `docs/ui/PHASE_6_6_FRONTEND_READINESS_REPORT.md`
+  - Cut-over plan: rename `static-new` → `static-v2`, set `STATIC_UI_VERSION=v2`
+  - CSP: not set (Phase 6.7 task)
+  - WS compatibility: confirmed (same-origin derivation)
+- [x] Tests: 3 new test files added
+  - `tests/integration-flow.test.tsx` — E2E flow tests
+  - `tests/static-readiness.test.ts` — build artifact + config checks
+  - `tests/navigation-polish.test.tsx` — navigation + topbar + notifications tests
+
+---
+
+## 15. Phase 6.7 Checklist (next steps)
+
+- [ ] Rename `backend/static-new/` → `backend/static-v2/` for first production deploy
+- [ ] Set `STATIC_UI_VERSION=v2` in deployment environment / Electron launch
+- [ ] Add CSP header to FastAPI index response
 - [ ] Apply Trim — submit trim range to backend for re-render
 - [ ] Re-render Selection — re-render a specific clip segment
 - [ ] Export Clip — export trimmed clip to output directory
-- [ ] Integration testing with Electron shell
+- [ ] Resolve `tsc -b` errors in test files (`api.test.ts`, `vite.config.ts`)

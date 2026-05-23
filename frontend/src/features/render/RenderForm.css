@@ -133,6 +133,16 @@
 }
 
 /* Responsive: stack on narrow viewports */
+@media (max-width: 1100px) {
+  .render-form-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .render-form-sidebar {
+    order: -1;
+  }
+}
+
 @media (max-width: 768px) {
   .render-form-layout {
     grid-template-columns: 1fr;

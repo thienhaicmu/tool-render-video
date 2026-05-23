@@ -2524,4 +2524,40 @@ Docs updated:
 
 **Test results**: 335/335 passed (18 test files, 55 new tests)
 
-**Test results**: 280/280 passed (14 test files, 63 new tests)
+---
+
+## Phase 6.6 — Frontend Integration Polish + Shell Readiness
+
+**Branch**: `restructure/output-timeline-architecture`
+**Status**: SHIPPED
+**Date**: 2026-05-23
+
+**Purpose**: Make the React frontend environment-aware (no hardcoded localhost URLs), polish navigation UX, add responsive CSS, audit Electron shell readiness, and verify the full E2E flow.
+
+**New files**:
+- `frontend/src/vite-env.d.ts` — `/// <reference types="vite/client" />` (was missing; required for `import.meta.env`)
+- `frontend/tests/integration-flow.test.tsx` — E2E flow tests (render→history, history pagination, open-in-editor, delete clears drawer)
+- `frontend/tests/static-readiness.test.ts` — build config + API path audit tests
+- `frontend/tests/navigation-polish.test.tsx` — sidebar, topbar, notifications, EmptyState tests
+- `docs/ui/PHASE_6_6_FRONTEND_READINESS_REPORT.md` — Electron readiness audit + cut-over plan
+
+**Modified files**:
+- `frontend/src/api/client.ts` — `BASE_URL` changed from hardcoded `'http://127.0.0.1:8000'` to `import.meta.env.VITE_API_BASE_URL ?? ''`
+- `frontend/src/websocket/RenderSocketClient.ts` — `computeWsBase()` added to handle empty `BASE_URL` (derives from `window.location.origin`)
+- `frontend/src/layouts/Topbar.tsx` — added `PANEL_TITLES` map; title now shows current panel name dynamically
+- `frontend/src/features/render/RenderForm.css` — `@media (max-width: 1100px)` responsive stacking
+- `frontend/src/features/editor/EditorScreen.css` — `@media (max-width: 1100px)` editor layout + rail stacking
+- `frontend/src/features/jobs/HistoryScreen.css` — `@media (max-width: 1100px)` detail pane width 320px
+- `frontend/.gitignore` — added `*.tsbuildinfo`
+- `docs/ui/PHASE_6_UI_ARCHITECTURE.md` — Phase 6.6 section added, checklist updated to Phase 6.7
+
+**Contracts introduced**:
+- `BASE_URL = ''` is the correct production value for same-origin FastAPI serving
+- `VITE_API_BASE_URL` env var overrides for non-default backend locations
+- `computeWsBase()` is the canonical WS URL resolver — handles empty `BASE_URL`, SSR, and test environments
+- `STATIC_UI_VERSION=v2` activates `backend/static-v2/` in FastAPI (cut-over mechanism, Phase 6.7)
+- `backend/static-new/` is confirmed in `.gitignore` — never committed
+
+**Backend impact**: None.
+
+**Test results**: 335 pre-existing tests pass. 3 new test files added.

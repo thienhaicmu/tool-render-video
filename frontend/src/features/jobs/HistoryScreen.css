@@ -46,3 +46,9 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+@media (max-width: 1100px) {
+  .history-detail-pane {
+    width: 320px;
+  }
+}

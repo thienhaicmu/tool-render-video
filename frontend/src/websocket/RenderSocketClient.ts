@@ -16,7 +16,18 @@ type ProgressHandler = (summary: WsProgressSummary) => void
 type CompleteHandler = (event: WebSocketEvent) => void
 type ErrorHandler = (error: string) => void
 
-const WS_BASE = BASE_URL.replace(/^http/, 'ws')
+function computeWsBase(): string {
+  if (BASE_URL) {
+    return BASE_URL.replace(/^http/, 'ws')
+  }
+  // Same-origin: derive from current page location
+  if (typeof window !== 'undefined') {
+    return window.location.origin.replace(/^http/, 'ws')
+  }
+  // Fallback for tests/SSR
+  return 'ws://127.0.0.1:8000'
+}
+const WS_BASE = computeWsBase()
 const MAX_RECONNECT_ATTEMPTS = 3
 const RECONNECT_BASE_DELAY_MS = 2000
 

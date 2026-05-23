@@ -70,3 +70,13 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+@media (max-width: 1100px) {
+  .editor-layout {
+    flex-direction: column;
+  }
+
+  .editor-rail {
+    width: 100%;
+  }
+}

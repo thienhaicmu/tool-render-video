@@ -1,9 +1,13 @@
 /**
  * Base fetch wrapper with typed request/response and centralized error handling.
- * Base URL: http://127.0.0.1:8000
+ *
+ * BASE_URL resolution:
+ *   - In production (Electron or same-origin served by FastAPI): empty string → same-origin requests.
+ *   - In development: Vite proxy intercepts /api/* → 127.0.0.1:8000, so empty string also works.
+ *   - Override with VITE_API_BASE_URL env var for custom setups (e.g., remote backend).
  */
 
-export const BASE_URL = 'http://127.0.0.1:8000'
+export const BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? ''
 
 // ── ApiError ──────────────────────────────────────────────────────────────────
 
