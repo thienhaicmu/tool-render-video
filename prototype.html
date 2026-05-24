@@ -1,0 +1,2234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Video Studio — Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+/* ── CSS Variables ── */
+:root {
+  --surface-base: #0A0A0A;
+  --surface-1: #111111;
+  --surface-2: #1A1A1A;
+  --surface-3: #252525;
+  --surface-4: #2C2C2C;
+  --border-subtle: #2A2A2A;
+  --border-default: #383838;
+  --border-strong: #505050;
+  --text-primary: #F0F0F0;
+  --text-secondary: #A0A0A0;
+  --text-tertiary: #606060;
+  --accent: #6366F1;
+  --accent-hover: #818CF8;
+  --accent-muted: rgba(99,102,241,0.08);
+  --accent-border: rgba(99,102,241,0.25);
+  --ai-glow: #A78BFA;
+  --ai-muted: rgba(167,139,250,0.08);
+  --success: #22C55E;
+  --success-muted: rgba(34,197,94,0.1);
+  --warning: #F59E0B;
+  --warning-muted: rgba(245,158,11,0.1);
+  --error: #EF4444;
+  --error-muted: rgba(239,68,68,0.1);
+  --info: #3B82F6;
+  --info-muted: rgba(59,130,246,0.1);
+  --sidebar-w: 220px;
+  --topbar-h: 52px;
+  --step-indicator-w: 180px;
+  --nav-bar-h: 64px;
+  --surface-1-rgb: 17,17,17;
+}
+body.light {
+  --surface-base: #F9FAFB;
+  --surface-1: #FFFFFF;
+  --surface-1-rgb: 255,255,255;
+  --surface-2: #F3F4F6;
+  --surface-3: #E9EAEC;
+  --surface-4: #D1D5DB;
+  --border-subtle: #E5E7EB;
+  --border-default: #D1D5DB;
+  --border-strong: #9CA3AF;
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
+  --text-tertiary: #9CA3AF;
+  --accent: #4F46E5;
+  --accent-hover: #6366F1;
+  --accent-muted: rgba(79,70,229,0.08);
+  --accent-border: rgba(79,70,229,0.25);
+  --ai-glow: #7C3AED;
+  --ai-muted: rgba(124,58,237,0.08);
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  line-height: 1.5;
+  transition: background 0.2s, color 0.2s;
+}
+button { font-family: inherit; cursor: pointer; border: none; }
+input, select, textarea { font-family: inherit; }
+a { color: var(--accent); text-decoration: none; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* ── App Shell ── */
+#app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+/* ── Topbar ── */
+.topbar {
+  height: var(--topbar-h);
+  min-height: var(--topbar-h);
+  background: rgba(var(--surface-1-rgb), 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  justify-content: space-between;
+  z-index: 100;
+  position: relative;
+}
+.topbar-logo {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 700; font-size: 15px;
+}
+.topbar-logo .logo-text {
+  background: linear-gradient(135deg, #6366F1, #A78BFA);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.01em;
+}
+.topbar-logo .logo-version {
+  font-size: 11px; font-weight: 500;
+  color: var(--text-tertiary);
+  -webkit-text-fill-color: var(--text-tertiary);
+  margin-top: 1px;
+}
+.topbar-logo .logo-icon {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--accent), var(--ai-glow));
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 2px 8px rgba(99,102,241,0.4);
+  flex-shrink: 0;
+}
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.queue-status {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.queue-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 6px rgba(34,197,94,0.6);
+  animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+.theme-toggle {
+  width: 32px; height: 32px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+  transition: all 0.15s ease;
+}
+.theme-toggle:hover { background: var(--surface-3); border-color: var(--border-strong); }
+
+/* ── Main body ── */
+.main-body { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  background: var(--surface-1);
+  box-shadow: inset -1px 0 0 var(--border-subtle);
+  display: flex; flex-direction: column;
+  padding: 0 0 12px;
+  transition: width 0.2s ease, min-width 0.2s ease;
+}
+.sidebar.collapsed { width: 56px; min-width: 56px; }
+.sidebar-brand {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.sidebar-brand-name {
+  font-size: 13px; font-weight: 700;
+  background: linear-gradient(135deg, #6366F1, #A78BFA);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+}
+.sidebar-brand-tag {
+  font-size: 11px; color: var(--text-tertiary); margin-top: 1px;
+  white-space: nowrap;
+}
+.sidebar.collapsed .sidebar-brand-name,
+.sidebar.collapsed .sidebar-brand-tag { display: none; }
+.sidebar-section-label {
+  font-size: 11px; font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0 16px 6px;
+  margin-top: 8px;
+}
+.sidebar.collapsed .sidebar-section-label { display: none; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 1px 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 13px; font-weight: 500;
+  white-space: nowrap; overflow: hidden;
+  background: none; border: none; width: calc(100% - 16px); text-align: left;
+  position: relative;
+}
+.nav-item:hover { background: var(--surface-2); color: var(--text-primary); }
+.nav-item.active {
+  background: linear-gradient(90deg, var(--accent-muted), transparent);
+  color: var(--accent);
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute; left: 0; top: 50%;
+  transform: translateY(-50%);
+  width: 3px; height: 20px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+}
+.nav-item .nav-icon {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 18px; width: 18px; height: 18px;
+  flex-shrink: 0;
+}
+.nav-item .nav-icon svg { width: 16px; height: 16px; }
+.nav-item .nav-label { transition: opacity 0.2s; }
+.sidebar.collapsed .nav-label { opacity: 0; width: 0; overflow: hidden; }
+.sidebar-toggle {
+  margin-top: auto;
+  padding: 8px 20px;
+  background: none; border: none;
+  color: var(--text-tertiary); font-size: 13px;
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
+  transition: color 0.15s;
+}
+.sidebar-toggle:hover { color: var(--text-secondary); }
+.sidebar-toggle svg { width: 14px; height: 14px; transition: transform 0.2s; }
+.sidebar.collapsed .sidebar-toggle svg { transform: rotate(180deg); }
+
+/* ── Content area ── */
+.content-area {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  background: var(--surface-base);
+}
+
+/* ── Screen ── */
+.screen { display: none; height: 100%; }
+.screen.active { display: flex; flex-direction: column; }
+
+/* ── Studio Layout ── */
+.studio-layout {
+  display: flex; flex: 1; overflow: hidden; height: 100%;
+  flex-direction: column;
+}
+.studio-top { display: flex; flex: 1; overflow: hidden; }
+.step-indicator {
+  width: var(--step-indicator-w);
+  min-width: var(--step-indicator-w);
+  background: var(--surface-1);
+  border-right: 1px solid var(--border-subtle);
+  padding: 20px 0;
+  overflow-y: auto;
+}
+.step-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  margin: 1px 8px;
+  border-radius: 8px;
+  cursor: default;
+  transition: all 0.15s;
+  position: relative;
+  min-height: 40px;
+}
+.step-item.done { cursor: pointer; }
+.step-item.done:hover { background: var(--surface-2); }
+.step-item.active {
+  background: var(--accent-muted);
+  border: 1px solid var(--accent-border);
+}
+.step-circle {
+  width: 22px; height: 22px; border-radius: 6px;
+  border: 1.5px solid var(--border-default);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+  min-width: 22px;
+  color: var(--text-tertiary);
+  transition: all 0.15s ease;
+  background: var(--surface-2);
+  flex-shrink: 0;
+}
+.step-item.active .step-circle {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.step-item.done .step-circle {
+  background: var(--success-muted); border-color: rgba(34,197,94,0.4); color: var(--success);
+  font-size: 11px;
+}
+.step-label {
+  font-size: 12px; font-weight: 500; color: var(--text-secondary);
+  line-height: 1.3;
+}
+.step-item.active .step-label { color: var(--accent); font-weight: 600; }
+.step-item.done .step-label { color: var(--text-primary); }
+.step-connector {
+  position: absolute; left: 21px; bottom: -10px;
+  width: 1px; height: 10px;
+  border-left: 1px dashed var(--border-subtle);
+}
+.step-item.done .step-connector { border-color: rgba(34,197,94,0.3); }
+
+/* ── Step content ── */
+.step-content-panel {
+  flex: 1; overflow-y: auto; padding: 32px;
+}
+.step-title {
+  font-size: 22px; font-weight: 700; margin-bottom: 4px;
+  letter-spacing: -0.02em;
+}
+.step-subtitle { font-size: 14px; color: var(--text-secondary); margin-bottom: 28px; margin-top: 4px; }
+
+/* ── Nav bar ── */
+.step-nav-bar {
+  height: var(--nav-bar-h);
+  background: rgba(var(--surface-1-rgb), 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border-subtle);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 32px;
+}
+.step-nav-bar .step-progress {
+  font-size: 13px; color: var(--text-secondary);
+  display: flex; align-items: center; gap: 8px;
+}
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px; font-weight: 600;
+  transition: all 0.15s ease;
+  cursor: pointer; border: none;
+}
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+.btn-ghost:hover { background: var(--surface-2); border-color: var(--border-strong); color: var(--text-primary); }
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), #7C3AED);
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.4);
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(99,102,241,0.5);
+  background: linear-gradient(135deg, var(--accent-hover), #8B5CF6);
+}
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { filter: brightness(1.1); }
+
+/* ── Cards ── */
+.card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 20px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.card:hover {
+  border-color: var(--border-default);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.card-selectable {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.card-selectable:hover {
+  border-color: var(--border-default);
+  background: var(--surface-2);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.card-selectable.selected {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+  box-shadow: 0 0 0 1px var(--accent), 0 4px 20px rgba(99,102,241,0.15);
+}
+
+/* ── Tabs — pill style ── */
+.tabs {
+  display: inline-flex;
+  background: var(--surface-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+  margin-bottom: 24px;
+}
+.tab-btn {
+  padding: 6px 18px;
+  background: none; border: none; border-radius: 8px;
+  color: var(--text-secondary); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.tab-btn:hover { color: var(--text-primary); }
+.tab-btn.active {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── Inputs ── */
+.input-field {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 0 16px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  height: 56px;
+}
+.input-field:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-muted); }
+.input-field::placeholder { color: var(--text-tertiary); }
+.input-sm {
+  height: 36px; padding: 0 12px; font-size: 13px; border-radius: 6px;
+  background: var(--surface-2); border: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+.input-sm:focus { outline: none; border-color: var(--accent); }
+.select-field {
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: 8px; padding: 8px 12px;
+  color: var(--text-primary); font-size: 13px;
+  cursor: pointer;
+}
+.select-field:focus { outline: none; border-color: var(--accent); }
+
+/* ── Dropzone ── */
+.dropzone {
+  border: 2px dashed var(--border-default);
+  border-radius: 16px; height: 200px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px;
+  cursor: pointer; transition: all 0.15s ease;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+}
+.dropzone:hover {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, var(--accent-muted), rgba(167,139,250,0.04));
+  color: var(--text-primary);
+}
+.dropzone .dz-icon { font-size: 32px; }
+.dropzone .dz-label { font-size: 13px; font-weight: 500; }
+.dropzone .dz-hint { font-size: 11px; color: var(--text-tertiary); }
+
+/* ── Status chip ── */
+.status-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 9999px;
+  font-size: 12px; font-weight: 500;
+}
+.status-checking { background: var(--info-muted); color: var(--info); border: 1px solid rgba(59,130,246,0.2); }
+.status-valid { background: var(--success-muted); color: var(--success); border: 1px solid rgba(34,197,94,0.2); }
+.status-invalid { background: var(--error-muted); color: var(--error); border: 1px solid rgba(239,68,68,0.2); }
+
+/* ── Video meta card ── */
+.video-meta-card {
+  display: flex; gap: 16px; align-items: flex-start;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px; padding: 16px;
+  margin-top: 16px;
+  animation: fadeIn 0.3s ease;
+  box-shadow: 0 2px 12px rgba(99,102,241,0.08);
+}
+.video-thumb-placeholder {
+  width: 160px; min-width: 160px; height: 90px;
+  background: linear-gradient(135deg, var(--surface-3), var(--surface-4));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; color: var(--text-tertiary);
+  position: relative; overflow: hidden;
+}
+.video-thumb-placeholder::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, transparent 30%, rgba(99,102,241,0.05) 100%);
+}
+.video-meta-info { display: flex; flex-direction: column; gap: 6px; }
+.video-meta-title { font-size: 14px; font-weight: 600; }
+.video-meta-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.video-meta-item { font-size: 12px; color: var(--text-secondary); }
+.video-meta-item span { color: var(--text-primary); font-weight: 500; }
+
+/* ── Segmented control ── */
+.segmented {
+  display: inline-flex; gap: 2px; flex-wrap: wrap;
+  background: var(--surface-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 3px;
+}
+.seg-btn {
+  padding: 6px 16px;
+  background: none; border: none;
+  border-radius: 8px; font-size: 13px; font-weight: 500;
+  color: var(--text-secondary); cursor: pointer; transition: all 0.15s ease;
+}
+.seg-btn:hover { color: var(--text-primary); }
+.seg-btn.active {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+/* ── Toggle ── */
+.toggle-wrap { display: flex; align-items: center; gap: 10px; }
+.toggle {
+  position: relative; width: 44px; height: 24px;
+  background: var(--surface-4); border-radius: 12px;
+  cursor: pointer; transition: all 0.2s ease;
+  border: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+.toggle.on {
+  background: linear-gradient(135deg, var(--accent), #7C3AED);
+  border-color: transparent;
+  box-shadow: 0 0 8px rgba(99,102,241,0.4);
+}
+.toggle::after {
+  content: ''; position: absolute;
+  width: 18px; height: 18px;
+  background: #fff; border-radius: 50%;
+  top: 2px; left: 2px;
+  transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+.toggle.on::after { transform: translateX(20px); }
+.toggle-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.toggle-desc { font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+
+/* ── Section header ── */
+.section-header { margin-bottom: 12px; }
+.section-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+.section-desc { font-size: 12px; color: var(--text-secondary); }
+
+/* ── Platform cards ── */
+.platform-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.platform-card {
+  background: var(--surface-2);
+  border: 2px solid var(--border-subtle);
+  border-radius: 12px; padding: 20px 16px;
+  cursor: pointer; transition: all 0.15s ease;
+  display: flex; flex-direction: column; gap: 6px;
+  position: relative; overflow: hidden;
+}
+.platform-card:hover { border-color: var(--border-default); background: var(--surface-3); box-shadow: 0 4px 20px rgba(0,0,0,0.25); }
+.platform-card.selected { box-shadow: 0 0 0 1px var(--accent), 0 4px 20px rgba(99,102,241,0.15); }
+.platform-card[data-platform="tiktok"]:hover,
+.platform-card[data-platform="tiktok"].selected { border-color: #FE2C55; background: rgba(254,44,85,0.05); box-shadow: 0 0 0 1px #FE2C55, 0 4px 20px rgba(254,44,85,0.12); }
+.platform-card[data-platform="yt-shorts"]:hover,
+.platform-card[data-platform="yt-shorts"].selected { border-color: #FF0000; background: rgba(255,0,0,0.05); box-shadow: 0 0 0 1px #FF0000, 0 4px 20px rgba(255,0,0,0.12); }
+.platform-card[data-platform="reels"]:hover,
+.platform-card[data-platform="reels"].selected { border-color: #e6683c; background: rgba(230,104,60,0.05); box-shadow: 0 0 0 1px #e6683c, 0 4px 20px rgba(230,104,60,0.12); }
+.platform-card[data-platform="multi"].selected { border-color: var(--accent); background: var(--accent-muted); }
+.platform-name { font-size: 15px; font-weight: 700; }
+.platform-meta { font-size: 12px; color: var(--text-secondary); }
+.platform-desc { font-size: 12px; color: var(--text-tertiary); }
+.platform-icon { font-size: 28px; margin-bottom: 4px; line-height: 1; }
+.platform-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.platform-tag {
+  display: inline-flex; padding: 2px 7px;
+  background: var(--surface-3); border: 1px solid var(--border-subtle);
+  border-radius: 4px; font-size: 10px; font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+/* ── Info chip ── */
+.info-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 9999px;
+  background: var(--info-muted); color: var(--info);
+  border: 1px solid rgba(59,130,246,0.2);
+  font-size: 12px; font-weight: 500;
+}
+
+/* ── AI badge ── */
+.ai-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 9999px;
+  background: linear-gradient(135deg, rgba(167,139,250,0.15), rgba(99,102,241,0.1));
+  border: 1px solid rgba(167,139,250,0.3);
+  font-size: 12px; font-weight: 600;
+  color: var(--ai-glow);
+  box-shadow: 0 0 12px rgba(167,139,250,0.1);
+}
+.ai-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 9999px;
+  background: linear-gradient(135deg, rgba(167,139,250,0.15), rgba(99,102,241,0.1));
+  border: 1px solid rgba(167,139,250,0.3);
+  font-size: 12px; font-weight: 600;
+  color: var(--ai-glow);
+  box-shadow: 0 0 12px rgba(167,139,250,0.1);
+}
+.coming-soon {
+  display: inline-flex; padding: 2px 7px;
+  background: var(--warning-muted); color: var(--warning);
+  border-radius: 4px; font-size: 10px; font-weight: 600;
+}
+
+/* ── Viral mode cards ── */
+.viral-grid { display: flex; gap: 10px; margin-bottom: 24px; }
+.viral-card {
+  flex: 1; background: var(--surface-2);
+  border: 2px solid var(--border-subtle);
+  border-radius: 10px; padding: 14px 12px;
+  cursor: pointer; transition: all 0.15s ease; text-align: center;
+}
+.viral-card[data-mode="aggressive"]:hover { border-color: rgba(239,68,68,0.5); background: linear-gradient(135deg, rgba(239,68,68,0.05), transparent); }
+.viral-card[data-mode="balanced"]:hover { border-color: rgba(99,102,241,0.5); background: linear-gradient(135deg, rgba(99,102,241,0.05), transparent); }
+.viral-card[data-mode="safe"]:hover { border-color: rgba(34,197,94,0.5); background: linear-gradient(135deg, rgba(34,197,94,0.05), transparent); }
+.viral-card.selected { border-color: var(--accent); background: var(--accent-muted); box-shadow: 0 0 0 1px var(--accent); }
+.viral-card .vc-icon { font-size: 22px; margin-bottom: 6px; }
+.viral-card .vc-name { font-size: 13px; font-weight: 600; }
+.viral-card .vc-desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+/* ── Content chips ── */
+.chip-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  padding: 6px 14px; border-radius: 9999px;
+  border: 1px solid var(--border-default);
+  background: var(--surface-2); color: var(--text-secondary);
+  font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.chip:hover { border-color: var(--accent-border); color: var(--text-primary); }
+.chip.selected { border-color: var(--accent); background: var(--accent-muted); color: var(--accent); }
+.chip.ai { border-color: rgba(167,139,250,0.3); color: var(--ai-glow); background: var(--ai-muted); }
+.chip.ai.selected { border-color: var(--ai-glow); }
+
+/* ── Subtitle style cards ── */
+.style-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+.style-card {
+  background: var(--surface-2); border: 2px solid var(--border-subtle);
+  border-radius: 10px; padding: 12px; cursor: pointer;
+  transition: all 0.15s ease; text-align: center;
+}
+.style-card:hover { border-color: var(--border-default); }
+.style-card.selected { border-color: var(--accent); background: var(--accent-muted); }
+.style-card .sc-preview {
+  height: 52px; background: var(--surface-3); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; margin-bottom: 8px; overflow: hidden;
+}
+.style-card .sc-name { font-size: 12px; font-weight: 600; }
+.style-card .sc-desc { font-size: 11px; color: var(--text-secondary); }
+
+/* ── Slider ── */
+.slider-wrap { display: flex; align-items: center; gap: 12px; }
+input[type=range] {
+  -webkit-appearance: none; flex: 1; height: 4px;
+  background: var(--surface-4); border-radius: 9999px; outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px;
+  background: var(--accent); border-radius: 50%; cursor: pointer;
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+.slider-label { font-size: 12px; color: var(--text-secondary); min-width: 28px; text-align: right; }
+
+/* ── Range labels ── */
+.range-labels { display: flex; justify-content: space-between; margin-top: 4px; }
+.range-label { font-size: 11px; color: var(--text-tertiary); }
+
+/* ── Crop cards ── */
+.crop-grid { display: flex; gap: 10px; margin-bottom: 24px; }
+.crop-card {
+  flex: 1; background: var(--surface-2);
+  border: 2px solid var(--border-subtle);
+  border-radius: 10px; padding: 16px 12px;
+  cursor: pointer; transition: all 0.15s ease; text-align: center;
+}
+.crop-card:hover { border-color: var(--border-default); }
+.crop-card.selected { border-color: var(--accent); background: var(--accent-muted); }
+.crop-card .cc-icon { font-size: 22px; margin-bottom: 8px; }
+.crop-card .cc-name { font-size: 13px; font-weight: 600; }
+.crop-card .cc-desc { font-size: 11px; color: var(--text-secondary); margin-top: 3px; }
+
+/* ── Toggle rows ── */
+.toggle-row {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 14px 0; border-bottom: 1px solid var(--border-subtle);
+}
+.toggle-row:last-child { border-bottom: none; }
+.toggle-row-left { flex: 1; margin-right: 16px; }
+.toggle-row-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.toggle-row-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.toggle-sub {
+  margin-top: 12px; padding: 12px;
+  background: var(--surface-2); border-radius: 8px;
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+}
+
+/* ── Thumb cards ── */
+.thumb-grid { display: flex; gap: 12px; margin-bottom: 24px; }
+.thumb-card {
+  flex: 1; background: var(--surface-2);
+  border: 2px solid var(--border-subtle);
+  border-radius: 10px; padding: 16px 12px;
+  cursor: pointer; transition: all 0.15s ease; text-align: center;
+}
+.thumb-card:hover { border-color: var(--border-default); }
+.thumb-card.selected { border-color: var(--accent); background: var(--accent-muted); }
+.thumb-card .tc-icon { font-size: 22px; margin-bottom: 8px; }
+.thumb-card .tc-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.thumb-card .tc-desc { font-size: 11px; color: var(--text-secondary); }
+
+/* ── Clip cards ── */
+.clips-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+.clip-card {
+  background: var(--surface-2); border: 1px solid var(--border-subtle);
+  border-radius: 12px; overflow: hidden; transition: all 0.2s ease;
+}
+.clip-card:hover {
+  border-color: var(--border-default);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.clip-thumb {
+  width: 100%; aspect-ratio: 9/5;
+  background: linear-gradient(135deg, var(--surface-3), var(--surface-4));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 32px; position: relative; cursor: pointer;
+  overflow: hidden;
+}
+.clip-thumb::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, transparent 30%, rgba(99,102,241,0.05) 100%);
+}
+.clip-play-btn {
+  position: absolute;
+  width: 36px; height: 36px; background: rgba(0,0,0,0.7);
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: #fff;
+}
+.clip-info { padding: 12px; }
+.clip-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.clip-score { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.clip-score-val { color: var(--warning); font-weight: 700; }
+.clip-regions { font-size: 11px; color: var(--text-tertiary); margin-bottom: 10px; }
+.clip-actions { display: flex; gap: 8px; }
+
+/* ── Export / quality cards ── */
+.quality-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
+.quality-card {
+  background: var(--surface-2); border: 2px solid var(--border-subtle);
+  border-radius: 8px; padding: 10px 8px;
+  cursor: pointer; transition: all 0.15s ease; text-align: center;
+}
+.quality-card:hover { border-color: var(--border-default); }
+.quality-card.selected { border-color: var(--accent); background: var(--accent-muted); }
+.quality-card .qc-name { font-size: 12px; font-weight: 700; }
+.quality-card .qc-desc { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+
+/* ── Output summary ── */
+.output-summary {
+  background: var(--surface-2); border: 1px solid var(--border-subtle);
+  border-radius: 12px; padding: 20px;
+}
+.output-summary-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; font-size: 13px; color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.output-summary-row:last-of-type { border-bottom: none; margin-bottom: 16px; }
+.output-summary-row strong { color: var(--text-primary); }
+
+/* ── Progress bars ── */
+.progress-bar-wrap { margin-bottom: 8px; }
+.progress-bar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.progress-bar-label { font-size: 12px; font-weight: 500; }
+.progress-bar-status { font-size: 11px; color: var(--text-secondary); }
+.progress-track {
+  width: 100%; height: 6px; background: var(--surface-4);
+  border-radius: 9999px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: 9999px;
+  background: linear-gradient(90deg, var(--accent), var(--ai-glow));
+  transition: width 0.3s ease;
+  position: relative; overflow: hidden;
+}
+.progress-fill::after {
+  content: '';
+  position: absolute; top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer { to { left: 100%; } }
+.progress-fill.done { background: linear-gradient(90deg, var(--success), #4ADE80); }
+
+/* ── Library screen ── */
+.library-header { padding: 24px 32px 16px; }
+.library-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.library-grid { padding: 0 32px 32px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 80px 20px; gap: 12px; color: var(--text-tertiary);
+}
+.empty-state .es-icon { font-size: 40px; }
+.empty-state .es-title { font-size: 15px; font-weight: 600; color: var(--text-secondary); }
+.empty-state .es-desc { font-size: 13px; }
+
+/* ── Download screen ── */
+.download-container { padding: 32px; max-width: 640px; }
+.download-container h2 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.download-container .screen-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 28px; }
+.textarea-field {
+  width: 100%; min-height: 120px;
+  background: var(--surface-2); border: 1px solid var(--border-default);
+  border-radius: 8px; padding: 12px 16px;
+  color: var(--text-primary); font-size: 13px; resize: vertical;
+}
+.textarea-field:focus { outline: none; border-color: var(--accent); }
+.mock-dl-list { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+.dl-item {
+  background: var(--surface-2); border: 1px solid var(--border-subtle);
+  border-radius: 8px; padding: 12px 16px;
+  display: flex; align-items: center; gap: 12px;
+}
+.dl-icon { font-size: 18px; }
+.dl-info { flex: 1; }
+.dl-name { font-size: 13px; font-weight: 500; }
+.dl-url { font-size: 11px; color: var(--text-tertiary); }
+.dl-bar { margin-top: 6px; }
+
+/* ── Settings screen ── */
+.settings-layout { display: flex; height: 100%; }
+.settings-subnav {
+  width: 160px; min-width: 160px;
+  background: var(--surface-1); border-right: 1px solid var(--border-subtle);
+  padding: 20px 0;
+}
+.settings-nav-item {
+  padding: 8px 16px; font-size: 13px; font-weight: 500;
+  color: var(--text-secondary); cursor: pointer;
+  transition: all 0.15s ease; border: none; background: none;
+  width: 100%; text-align: left;
+}
+.settings-nav-item:hover { background: var(--surface-2); color: var(--text-primary); }
+.settings-nav-item.active { background: var(--accent-muted); color: var(--accent); }
+.settings-content { flex: 1; padding: 32px; overflow-y: auto; }
+.settings-content h3 { font-size: 18px; font-weight: 700; margin-bottom: 24px; }
+.settings-group { margin-bottom: 28px; }
+.settings-group-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-tertiary); margin-bottom: 12px; }
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0; border-bottom: 1px solid var(--border-subtle);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row-label { font-size: 13px; font-weight: 500; }
+.settings-row-desc { font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+
+/* ── Animations ── */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes step-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.step-content-panel { animation: step-enter 0.2s ease; }
+
+/* ── Render progress ── */
+.render-progress { animation: fadeIn 0.4s ease; }
+.render-overall { margin-bottom: 20px; }
+.render-clips { display: flex; flex-direction: column; gap: 12px; }
+.render-clip-row {
+  background: var(--surface-2); border: 1px solid var(--border-subtle);
+  border-radius: 8px; padding: 12px 16px;
+}
+.render-clip-header { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.render-clip-name { font-size: 13px; font-weight: 500; }
+.render-clip-pct { font-size: 12px; font-weight: 600; color: var(--accent); }
+.render-clip-pct.done-txt { color: var(--success); }
+.render-success { text-align: center; padding: 32px; animation: fadeIn 0.4s ease; }
+.render-success .rs-icon { font-size: 48px; margin-bottom: 12px; }
+.render-success .rs-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+.render-success .rs-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
+
+/* ── Misc ── */
+.divider { height: 1px; background: var(--border-subtle); margin: 20px 0; }
+.label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.form-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.gap-section { margin-bottom: 24px; }
+.flex-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.frame-preview {
+  width: 100%; aspect-ratio: 16/9;
+  background: var(--surface-3); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-tertiary); font-size: 13px; margin-top: 12px;
+}
+.export-layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
+.summary-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 13px; }
+.summary-row .sr-icon { font-size: 16px; }
+.summary-divider { height: 1px; background: var(--border-subtle); margin: 4px 0 16px; }
+
+/* ── Score ring ── */
+.clip-score-ring {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+}
+.score-ring-svg { flex-shrink: 0; }
+.score-ring-bg { fill: none; stroke: var(--surface-4); stroke-width: 3; }
+.score-ring-fill { fill: none; stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
+.score-ring-fill.green { stroke: var(--success); }
+.score-ring-fill.amber { stroke: var(--warning); }
+.score-ring-fill.red { stroke: var(--error); }
+.score-ring-val { font-size: 11px; font-weight: 700; }
+.score-ring-val.green { color: var(--success); }
+.score-ring-val.amber { color: var(--warning); }
+.score-ring-val.red { color: var(--error); }
+
+/* ── Viral region chips ── */
+.clip-regions { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+.region-chip {
+  display: inline-flex; align-items: center;
+  padding: 2px 7px; border-radius: 4px;
+  background: var(--accent-muted); border: 1px solid var(--accent-border);
+  font-size: 10px; font-weight: 700; color: var(--accent);
+}
+
+/* ── Step nav progress dots ── */
+.step-dots { display: flex; gap: 4px; align-items: center; }
+.step-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--border-default);
+  transition: all 0.15s;
+}
+.step-dot.active { background: var(--accent); width: 18px; border-radius: 3px; }
+.step-dot.done { background: var(--success); }
+
+/* ── input[type=text/url/textarea] global upgrade ── */
+input[type="text"]:not(.input-sm):not(.input-field),
+input[type="url"]:not(.input-sm):not(.input-field),
+textarea:not(.textarea-field) {
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  width: 100%;
+}
+input[type="text"]:focus,
+input[type="url"]:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+
+/* ── Style card preview upgrade ── */
+.style-card .sc-preview {
+  height: 52px; background: #000; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; margin-bottom: 8px; overflow: hidden; gap: 4px;
+}
+
+/* ── Lucide icon sizing in nav ── */
+.nav-item i[data-lucide] { width: 16px; height: 16px; stroke-width: 2; }
+.sidebar-toggle i[data-lucide] { width: 14px; height: 14px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-logo">
+      <div class="logo-icon"><i data-lucide="film"></i></div>
+      <span class="logo-text">AI Video Studio</span>
+      <span class="logo-version">v2.0</span>
+    </div>
+    <div class="topbar-right">
+      <div class="queue-status">
+        <div class="queue-dot"></div>
+        <span>Queue: 0 jobs</span>
+      </div>
+      <button class="theme-toggle" id="themeToggle" title="Toggle theme">&#9790;</button>
+    </div>
+  </header>
+
+  <!-- MAIN BODY -->
+  <div class="main-body">
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-name">AI Video Studio</div>
+        <div class="sidebar-brand-tag">Offline-first AI renderer</div>
+      </div>
+      <div class="sidebar-section-label">Workspace</div>
+      <button class="nav-item active" data-screen="studio">
+        <span class="nav-icon"><i data-lucide="film"></i></span>
+        <span class="nav-label">Studio</span>
+      </button>
+      <button class="nav-item" data-screen="library">
+        <span class="nav-icon"><i data-lucide="layout-grid"></i></span>
+        <span class="nav-label">Library</span>
+      </button>
+      <button class="nav-item" data-screen="download">
+        <span class="nav-icon"><i data-lucide="download"></i></span>
+        <span class="nav-label">Download</span>
+      </button>
+      <div class="sidebar-section-label">Configure</div>
+      <button class="nav-item" data-screen="channels">
+        <span class="nav-icon"><i data-lucide="tv-2"></i></span>
+        <span class="nav-label">Channels</span>
+      </button>
+      <button class="nav-item" data-screen="settings">
+        <span class="nav-icon"><i data-lucide="settings"></i></span>
+        <span class="nav-label">Settings</span>
+      </button>
+      <button class="sidebar-toggle" id="sidebarToggle">
+        <i data-lucide="chevron-left"></i>
+        <span class="nav-label">Collapse</span>
+      </button>
+    </nav>
+
+    <!-- CONTENT AREA -->
+    <main class="content-area">
+
+      <!-- STUDIO SCREEN -->
+      <div class="screen active" id="screen-studio">
+        <div class="studio-layout">
+          <div class="studio-top">
+
+            <!-- Step indicator -->
+            <div class="step-indicator" id="stepIndicator"></div>
+
+            <!-- Step content -->
+            <div class="step-content-panel" id="stepContent"></div>
+          </div>
+
+          <!-- Nav bar -->
+          <div class="step-nav-bar">
+            <button class="btn btn-ghost" id="btnBack"><i data-lucide="arrow-left"></i> Back</button>
+            <span class="step-progress" id="stepProgress">
+              <span id="stepProgressText">Step 1 of 10</span>
+              <span class="step-dots" id="stepDots"></span>
+            </span>
+            <button class="btn btn-primary" id="btnContinue">Continue <i data-lucide="arrow-right"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- LIBRARY SCREEN -->
+      <div class="screen" id="screen-library">
+        <div class="library-header">
+          <h2 style="font-size:22px;font-weight:700;margin-bottom:4px;">Library</h2>
+          <p style="font-size:13px;color:var(--text-secondary);">Your rendered clips and projects</p>
+          <div style="display:flex;gap:12px;margin-top:16px;align-items:center;">
+            <input class="input-sm" style="width:240px;" placeholder="&#128269; Search clips..." />
+            <div class="library-filters">
+              <span class="chip selected">All</span>
+              <span class="chip">Completed</span>
+              <span class="chip">Failed</span>
+              <span class="chip">This week</span>
+            </div>
+          </div>
+        </div>
+        <div class="library-grid" id="libraryGrid"></div>
+      </div>
+
+      <!-- DOWNLOAD SCREEN -->
+      <div class="screen" id="screen-download">
+        <div class="download-container">
+          <h2>Download Videos</h2>
+          <p class="screen-sub">Paste YouTube or other video URLs to download locally.</p>
+          <div class="gap-section">
+            <div class="label-row"><label class="form-label">URLs (one per line)</label></div>
+            <textarea class="textarea-field" placeholder="https://www.youtube.com/watch?v=...&#10;https://www.youtube.com/watch?v=..." id="dlUrls"></textarea>
+          </div>
+          <div class="gap-section">
+            <div class="label-row"><label class="form-label">Output folder</label></div>
+            <input class="input-field" value="D:/videos/downloads/" style="height:40px;font-size:13px;" />
+          </div>
+          <button class="btn btn-primary" onclick="startDownload()">&#8595; Start Download</button>
+          <div class="mock-dl-list" id="dlList"></div>
+        </div>
+      </div>
+
+      <!-- CHANNELS SCREEN -->
+      <div class="screen" id="screen-channels">
+        <div style="padding:32px;">
+          <h2 style="font-size:22px;font-weight:700;margin-bottom:4px;">Channels</h2>
+          <p style="font-size:13px;color:var(--text-secondary);margin-bottom:28px;">Manage your platform channels and presets.</p>
+          <div class="empty-state">
+            <div class="es-icon">&#128225;</div>
+            <div class="es-title">No channels configured</div>
+            <div class="es-desc">Add a TikTok, YouTube, or Instagram channel to get started.</div>
+            <button class="btn btn-primary" style="margin-top:12px;">+ Add Channel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS SCREEN -->
+      <div class="screen" id="screen-settings">
+        <div class="settings-layout">
+          <div class="settings-subnav" id="settingsSubnav">
+            <button class="settings-nav-item active" data-settings="general">General</button>
+            <button class="settings-nav-item" data-settings="quality">Quality</button>
+            <button class="settings-nav-item" data-settings="voice">Voice</button>
+            <button class="settings-nav-item" data-settings="ai">AI</button>
+            <button class="settings-nav-item" data-settings="appearance">Appearance</button>
+          </div>
+          <div class="settings-content" id="settingsContent"></div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────
+const state = {
+  theme: 'dark',
+  currentScreen: 'studio',
+  currentStep: 1,
+  completedSteps: new Set(),
+  sidebarCollapsed: false,
+  // step data
+  ytStatus: null,    // null | 'checking' | 'valid' | 'invalid'
+  videoReady: false,
+  selectedPlatform: 'tiktok',
+  clipCount: '5',
+  clipDuration: '30-60s',
+  viralMode: 'balanced',
+  contentStyles: new Set(['auto']),
+  subtitlesOn: true,
+  translateOn: false,
+  translateLang: 'Vietnamese',
+  subtitleStyle: 'capcut',
+  originalVoice: true,
+  aiDub: false,
+  bgMusic: false,
+  voiceCleanup: true,
+  cropMode: 'auto',
+  zoomIntensity: 1,
+  hookAccel: false,
+  skipSilence: true,
+  dynamicPacing: false,
+  autoOptimize: false,
+  thumbMode: 'auto',
+  exportQuality: 'balanced',
+  exportFps: '30',
+  watermark: false,
+  selectedQuality: 'balanced',
+  renderState: 'idle', // idle | running | done
+  settingsTab: 'general',
+};
+
+const STEPS = [
+  { n:1,  label:'Input Video' },
+  { n:2,  label:'Platform' },
+  { n:3,  label:'Clip Settings' },
+  { n:4,  label:'Subtitles' },
+  { n:5,  label:'Audio' },
+  { n:6,  label:'Visual / Crop' },
+  { n:7,  label:'Timeline / Speed' },
+  { n:8,  label:'Thumbnail' },
+  { n:9,  label:'Review & Preview' },
+  { n:10, label:'Export' },
+];
+
+// ─────────────────────────────────────────────
+//  THEME
+// ─────────────────────────────────────────────
+function toggleTheme() {
+  state.theme = state.theme === 'dark' ? 'light' : 'dark';
+  document.body.classList.toggle('light', state.theme === 'light');
+  document.getElementById('themeToggle').textContent = state.theme === 'dark' ? '☾' : '☀';
+}
+
+// ─────────────────────────────────────────────
+//  SIDEBAR
+// ─────────────────────────────────────────────
+function toggleSidebar() {
+  state.sidebarCollapsed = !state.sidebarCollapsed;
+  document.getElementById('sidebar').classList.toggle('collapsed', state.sidebarCollapsed);
+}
+
+function switchScreen(name) {
+  state.currentScreen = name;
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  const scr = document.getElementById('screen-' + name);
+  if (scr) scr.classList.add('active');
+  document.querySelector(`[data-screen="${name}"]`)?.classList.add('active');
+  if (name === 'settings') renderSettingsContent();
+  if (name === 'library') renderLibrary();
+}
+
+// ─────────────────────────────────────────────
+//  STEP INDICATOR
+// ─────────────────────────────────────────────
+const STEP_ICONS = ['video','monitor-smartphone','scissors','subtitles','volume-2','crop','timer','image','eye','upload-cloud'];
+
+function renderStepIndicator() {
+  const el = document.getElementById('stepIndicator');
+  el.innerHTML = STEPS.map((s, i) => {
+    const isDone = state.completedSteps.has(s.n);
+    const isActive = state.currentStep === s.n;
+    const cls = isActive ? 'active' : isDone ? 'done' : '';
+    const circleContent = isDone
+      ? '<i data-lucide="check" style="width:12px;height:12px;"></i>'
+      : `<i data-lucide="${STEP_ICONS[i]}" style="width:11px;height:11px;"></i>`;
+    const connector = i < STEPS.length - 1 ? '<div class="step-connector"></div>' : '';
+    return `<div class="step-item ${cls}" onclick="jumpStep(${s.n})">
+      <div class="step-circle">${circleContent}</div>
+      <div class="step-label">${s.label}</div>
+      ${connector}
+    </div>`;
+  }).join('');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function jumpStep(n) {
+  if (!state.completedSteps.has(n) && n !== state.currentStep) return;
+  state.currentStep = n;
+  renderStep();
+}
+
+// ─────────────────────────────────────────────
+//  STEP NAVIGATION
+// ─────────────────────────────────────────────
+function goNext() {
+  if (state.currentStep === 10) {
+    if (state.renderState === 'idle') startRender();
+    return;
+  }
+  state.completedSteps.add(state.currentStep);
+  state.currentStep = Math.min(10, state.currentStep + 1);
+  renderStep();
+}
+
+function goBack() {
+  if (state.currentStep <= 1) return;
+  state.currentStep = Math.max(1, state.currentStep - 1);
+  renderStep();
+}
+
+function renderStep() {
+  renderStepIndicator();
+  renderStepContent();
+  updateNavBar();
+}
+
+function updateNavBar() {
+  const progText = document.getElementById('stepProgressText');
+  const dots = document.getElementById('stepDots');
+  const back = document.getElementById('btnBack');
+  const cont = document.getElementById('btnContinue');
+  if (progText) progText.textContent = `Step ${state.currentStep} of 10`;
+  if (dots) {
+    dots.innerHTML = STEPS.map(s => {
+      const isDone = state.completedSteps.has(s.n);
+      const isActive = state.currentStep === s.n;
+      return `<span class="step-dot ${isActive?'active':isDone?'done':''}"></span>`;
+    }).join('');
+  }
+  back.style.visibility = state.currentStep === 1 ? 'hidden' : 'visible';
+  if (state.currentStep === 10) {
+    cont.innerHTML = '<i data-lucide="zap"></i> Export Now';
+  } else {
+    cont.innerHTML = 'Continue <i data-lucide="arrow-right"></i>';
+  }
+  // Disable continue on step 1 until video ready
+  cont.disabled = (state.currentStep === 1 && !state.videoReady);
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// ─────────────────────────────────────────────
+//  STEP CONTENT
+// ─────────────────────────────────────────────
+function renderStepContent() {
+  const el = document.getElementById('stepContent');
+  el.innerHTML = '';
+  const fns = [null, step1, step2, step3, step4, step5, step6, step7, step8, step9, step10];
+  const html = fns[state.currentStep]?.() || '';
+  el.innerHTML = html;
+  attachStepListeners();
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// ─────────────────────────────────────────────
+//  STEP 1 — INPUT VIDEO
+// ─────────────────────────────────────────────
+function step1() {
+  const statusHtml = state.ytStatus === 'checking'
+    ? '<div class="status-chip status-checking" style="margin-top:10px;">&#9679; Checking URL...</div>'
+    : state.ytStatus === 'valid'
+    ? '<div class="status-chip status-valid" style="margin-top:10px;">✓ Valid YouTube URL</div>'
+    : state.ytStatus === 'invalid'
+    ? '<div class="status-chip status-invalid" style="margin-top:10px;">✗ Invalid URL</div>'
+    : '';
+
+  const metaCard = state.videoReady ? `
+    <div class="video-meta-card">
+      <div class="video-thumb-placeholder">▶</div>
+      <div class="video-meta-info">
+        <div class="video-meta-title">How to Build a Viral Short-Form Video (Full Guide)</div>
+        <div class="video-meta-row">
+          <div class="video-meta-item">Duration: <span>45:32</span></div>
+          <div class="video-meta-item">Resolution: <span>1080p</span></div>
+          <div class="video-meta-item">FPS: <span>30fps</span></div>
+          <div class="video-meta-item">Source: <span>YouTube</span></div>
+        </div>
+        <div style="margin-top:8px;"><span class="status-chip status-valid">✓ Ready to process</span></div>
+      </div>
+    </div>` : '';
+
+  return `
+    <div class="step-title">Input Video</div>
+    <div class="step-subtitle">Add a video via YouTube URL or upload a local file.</div>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="yt">YouTube URL</button>
+      <button class="tab-btn" data-tab="local">Local File</button>
+    </div>
+    <div class="tab-panel active" id="tab-yt">
+      <input class="input-field" id="ytInput" placeholder="Paste YouTube URL..." value="${state.ytUrl||''}" />
+      ${statusHtml}
+      ${!state.videoReady ? `<button class="btn btn-primary" style="margin-top:16px;width:100%;" onclick="prepareVideo()">Prepare Video</button>` : ''}
+      ${metaCard}
+    </div>
+    <div class="tab-panel" id="tab-local">
+      <div class="dropzone" onclick="fakeLocalDrop()" id="localDz">
+        <div class="dz-icon">&#128190;</div>
+        <div class="dz-label">Drop video file here or click to browse</div>
+        <div class="dz-hint">Accepts: .mp4, .mov, .avi, .mkv</div>
+      </div>
+      ${state.localReady ? `
+      <div class="video-meta-card" style="margin-top:16px;">
+        <div class="video-thumb-placeholder">▶</div>
+        <div class="video-meta-info">
+          <div class="video-meta-title">my_podcast_episode_12.mp4</div>
+          <div class="video-meta-row">
+            <div class="video-meta-item">Duration: <span>1:12:04</span></div>
+            <div class="video-meta-item">Resolution: <span>1920x1080</span></div>
+            <div class="video-meta-item">FPS: <span>30fps</span></div>
+            <div class="video-meta-item">Source: <span>Local file</span></div>
+          </div>
+          <div style="margin-top:8px;"><span class="status-chip status-valid">✓ Ready to process</span></div>
+        </div>
+      </div>` : ''}
+    </div>`;
+}
+
+function prepareVideo() {
+  const val = document.getElementById('ytInput')?.value || '';
+  if (!val.trim()) return;
+  state.ytUrl = val;
+  state.ytStatus = 'checking';
+  renderStepContent();
+  setTimeout(() => {
+    state.ytStatus = val.includes('youtube') || val.includes('youtu.be') ? 'valid' : 'invalid';
+    if (state.ytStatus === 'valid') { state.videoReady = true; }
+    renderStepContent();
+    updateNavBar();
+  }, 1200);
+}
+
+function fakeLocalDrop() {
+  state.localReady = true;
+  state.videoReady = true;
+  renderStepContent();
+  updateNavBar();
+}
+
+function attachStepListeners() {
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + tab)?.classList.add('active');
+    });
+  });
+}
+
+// ─────────────────────────────────────────────
+//  STEP 2 — PLATFORM
+// ─────────────────────────────────────────────
+function step2() {
+  const platforms = [
+    { id:'tiktok', icon:'♪', name:'TikTok', meta:'9:16 · 30fps', desc:'Viral-first', tags:['9:16','30fps','Viral-first'] },
+    { id:'yt-shorts', icon:'▶', name:'YouTube Shorts', meta:'9:16 · 60fps', desc:'Retention-first', tags:['9:16','60fps','Retention'] },
+    { id:'reels', icon:'◉', name:'Instagram Reels', meta:'9:16 · 30fps', desc:'Aesthetic', tags:['9:16','30fps','Aesthetic'] },
+    { id:'multi', icon:'✦', name:'Multi-platform', meta:'All platforms', desc:'Batch export', tags:['All','Batch'] },
+  ];
+  const cards = platforms.map(p => `
+    <div class="platform-card card-selectable ${state.selectedPlatform===p.id?'selected':''}" data-platform="${p.id}" onclick="selectPlatform('${p.id}')">
+      <div class="platform-icon">${p.icon}</div>
+      <div class="platform-name">${p.name}</div>
+      <div class="platform-meta">${p.meta}</div>
+      <div class="platform-desc">${p.desc}</div>
+      <div class="platform-tags">${p.tags.map(t=>`<span class="platform-tag">${t}</span>`).join('')}</div>
+    </div>`).join('');
+
+  const platformInfo = {
+    tiktok: 'Aspect ratio 9:16 · 30fps · Viral mode',
+    'yt-shorts': 'Aspect ratio 9:16 · 60fps · Retention mode',
+    reels: 'Aspect ratio 9:16 · 30fps · Aesthetic mode',
+    multi: 'All platforms · Batch export enabled',
+  };
+
+  return `
+    <div class="step-title">Select Platform</div>
+    <div class="step-subtitle">Choose the target platform for your clips.</div>
+    <div class="platform-grid">${cards}</div>
+    <div class="info-chip">&#9432; Auto-configured: ${platformInfo[state.selectedPlatform]||''}</div>`;
+}
+
+function selectPlatform(id) {
+  state.selectedPlatform = id;
+  renderStepContent();
+}
+
+// ─────────────────────────────────────────────
+//  STEP 3 — CLIP SETTINGS
+// ─────────────────────────────────────────────
+function step3() {
+  const cCounts = ['3','5','8','Custom'];
+  const cDurations = ['15–30s','30–60s','60–90s','Custom'];
+  const viralModes = [
+    { id:'aggressive', icon:'🔥', name:'Aggressive', desc:'Max viral potential' },
+    { id:'balanced',   icon:'⚡', name:'Balanced',   desc:'Default recommended' },
+    { id:'safe',       icon:'🛡', name:'Safe',        desc:'Conservative brand-safe' },
+  ];
+  const styles = [
+    { id:'podcast', label:'Podcast' },
+    { id:'reaction', label:'Reaction' },
+    { id:'story', label:'Storytelling' },
+    { id:'edu', label:'Education' },
+    { id:'auto', label:'✨ Auto Detect', ai:true },
+  ];
+  const aiActive = state.contentStyles.has('auto');
+
+  return `
+    <div class="step-title">Clip Generation Settings</div>
+    <div class="step-subtitle">Configure how the AI Director will generate your clips.</div>
+
+    <div class="gap-section">
+      <div class="section-header">
+        <div class="section-title">Number of clips</div>
+      </div>
+      <div class="segmented">
+        ${cCounts.map(c => `<button class="seg-btn ${state.clipCount===c?'active':''}" onclick="setState('clipCount','${c}')">${c}</button>`).join('')}
+      </div>
+      ${state.clipCount==='Custom'?`<div style="margin-top:10px;"><input class="input-sm" type="number" min="1" max="12" value="5" style="width:80px;" /> <span style="font-size:12px;color:var(--text-secondary);margin-left:8px;">clips (1–12)</span></div>`:''}
+    </div>
+
+    <div class="gap-section">
+      <div class="section-header">
+        <div class="section-title">Clip duration</div>
+      </div>
+      <div class="segmented">
+        ${cDurations.map(c => `<button class="seg-btn ${state.clipDuration===c?'active':''}" onclick="setState('clipDuration','${c}')">${c}</button>`).join('')}
+      </div>
+      ${state.clipDuration==='Custom'?`<div style="margin-top:10px;display:flex;gap:12px;align-items:center;"><input class="input-sm" type="number" value="15" style="width:72px;" /><span style="font-size:12px;color:var(--text-secondary);">to</span><input class="input-sm" type="number" value="60" style="width:72px;" /><span style="font-size:12px;color:var(--text-secondary);">seconds</span></div>`:''}
+    </div>
+
+    <div class="gap-section">
+      <div class="section-header"><div class="section-title">Viral mode</div></div>
+      <div class="viral-grid">
+        ${viralModes.map(v => `
+          <div class="viral-card ${state.viralMode===v.id?'selected':''}" data-mode="${v.id}" onclick="setState('viralMode','${v.id}')">
+            <div class="vc-icon">${v.icon}</div>
+            <div class="vc-name">${v.name}</div>
+            <div class="vc-desc">${v.desc}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="gap-section">
+      <div class="section-header"><div class="section-title">Content style <span style="font-size:11px;color:var(--text-tertiary);">multi-select</span></div></div>
+      <div class="chip-group">
+        ${styles.map(s => `
+          <span class="chip ${s.ai?'ai':''} ${state.contentStyles.has(s.id)?'selected':''}" onclick="toggleStyle('${s.id}')">${s.label}</span>
+        `).join('')}
+      </div>
+    </div>
+
+    ${aiActive ? `<div style="margin-top:8px;"><span class="ai-pill">&#10024; AI Director Active ✨</span></div>` : ''}`;
+}
+
+function toggleStyle(id) {
+  if (state.contentStyles.has(id)) state.contentStyles.delete(id);
+  else state.contentStyles.add(id);
+  renderStepContent();
+}
+
+// ─────────────────────────────────────────────
+//  STEP 4 — SUBTITLES
+// ─────────────────────────────────────────────
+function step4() {
+  const styles = [
+    { id:'capcut', name:'CapCut', desc:'karaoke', preview:'<span style="color:#fff;font-size:10px;">WORD </span><span style="background:var(--accent);color:#fff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">WORD</span><span style="color:#fff;font-size:10px;"> WORD</span>' },
+    { id:'hormozi', name:'Hormozi', desc:'highlight', preview:'<span style="color:#F59E0B;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;">THESE WORDS</span>' },
+    { id:'podcast', name:'Podcast', desc:'standard', preview:'<span style="color:#ddd;font-size:10px;text-align:center;">Clean centered subtitle text</span>' },
+    { id:'custom', name:'Custom', desc:'manual', preview:'<i data-lucide="edit-3" style="width:16px;height:16px;color:var(--text-tertiary);"></i>' },
+  ];
+
+  return `
+    <div class="step-title">Subtitle Settings</div>
+    <div class="step-subtitle">Configure subtitles and translation options.</div>
+
+    <div class="gap-section" style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:var(--surface-2);border-radius:12px;border:1px solid var(--border-subtle);">
+      <div>
+        <div style="font-size:15px;font-weight:700;">Subtitles</div>
+        <div style="font-size:12px;color:var(--text-secondary);">Generate and embed subtitles in your clips</div>
+      </div>
+      <div class="toggle ${state.subtitlesOn?'on':''}" onclick="toggleState('subtitlesOn')"></div>
+    </div>
+
+    ${state.subtitlesOn ? `
+    <div class="gap-section">
+      <div class="toggle-row">
+        <div class="toggle-row-left">
+          <div class="toggle-row-title">Translate subtitles</div>
+          <div class="toggle-row-desc">Translate subtitles into another language</div>
+        </div>
+        <div class="toggle ${state.translateOn?'on':''}" onclick="toggleState('translateOn')"></div>
+      </div>
+      ${state.translateOn ? `
+      <div style="margin-top:12px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:12px;color:var(--text-secondary);">Language:</span>
+        <select class="select-field">
+          <option>Vietnamese</option>
+          <option>English</option>
+          <option>Japanese</option>
+          <option>Korean</option>
+        </select>
+      </div>` : ''}
+    </div>
+
+    <div class="gap-section">
+      <div class="section-header"><div class="section-title">Subtitle style</div></div>
+      <div class="style-grid">
+        ${styles.map(s => `
+          <div class="style-card ${state.subtitleStyle===s.id?'selected':''}" onclick="setState('subtitleStyle','${s.id}')">
+            <div class="sc-preview">${s.preview}</div>
+            <div class="sc-name">${s.name}</div>
+            <div class="sc-desc">${s.desc}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    ${state.subtitleStyle==='custom' ? `
+    <div class="gap-section card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div class="label-row"><label class="form-label">Font</label></div>
+        <select class="select-field" style="width:100%;">
+          <option>Inter</option><option>Arial Black</option><option>Impact</option><option>Montserrat</option>
+        </select>
+      </div>
+      <div>
+        <div class="label-row"><label class="form-label">Font size: <span id="fontSizeVal">36</span>px</label></div>
+        <input type="range" min="16" max="72" value="36" oninput="document.getElementById('fontSizeVal').textContent=this.value" />
+      </div>
+      <div>
+        <div class="label-row"><label class="form-label">Text color</label></div>
+        <input type="color" value="#ffffff" style="width:100%;height:36px;border-radius:6px;border:1px solid var(--border-default);cursor:pointer;" />
+      </div>
+      <div>
+        <div class="label-row"><label class="form-label">Highlight color</label></div>
+        <input type="color" value="#6366F1" style="width:100%;height:36px;border-radius:6px;border:1px solid var(--border-default);cursor:pointer;" />
+      </div>
+    </div>` : ''}
+    ` : '<div style="padding:32px;text-align:center;color:var(--text-tertiary);font-size:13px;">Subtitles are disabled. Toggle on to configure.</div>'}`;
+}
+
+// ─────────────────────────────────────────────
+//  STEP 5 — AUDIO
+// ─────────────────────────────────────────────
+function step5() {
+  return `
+    <div class="step-title">Audio Settings</div>
+    <div class="step-subtitle">Configure voice, music, and audio processing.</div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="toggle-row">
+        <div class="toggle-row-left">
+          <div class="toggle-row-title">Original voice</div>
+          <div class="toggle-row-desc">Keep the original audio track from the source video</div>
+        </div>
+        <div class="toggle ${state.originalVoice?'on':''}" onclick="toggleState('originalVoice')"></div>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-row-left">
+          <div class="toggle-row-title">AI Voice Dub <span class="ai-badge">AI</span></div>
+          <div class="toggle-row-desc">Replace or overlay with AI-generated voice narration</div>
+        </div>
+        <div class="toggle ${state.aiDub?'on':''}" onclick="toggleState('aiDub')"></div>
+      </div>
+      ${state.aiDub ? `
+      <div class="toggle-sub">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:var(--text-secondary);">Language:</span>
+          <select class="select-field"><option>Vietnamese</option><option>English</option><option>Japanese</option></select>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:var(--text-secondary);">Gender:</span>
+          <div class="segmented">
+            <button class="seg-btn active">Male ♂</button>
+            <button class="seg-btn">Female ♀</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:var(--text-secondary);">Engine:</span>
+          <div class="segmented">
+            <button class="seg-btn active">Edge TTS (online)</button>
+            <button class="seg-btn">XTTS (offline)</button>
+          </div>
+        </div>
+      </div>` : ''}
+
+      <div class="toggle-row">
+        <div class="toggle-row-left">
+          <div class="toggle-row-title">Background music</div>
+          <div class="toggle-row-desc">Add background music track to your clips</div>
+        </div>
+        <div class="toggle ${state.bgMusic?'on':''}" onclick="toggleState('bgMusic')"></div>
+      </div>
+      ${state.bgMusic ? `
+      <div class="toggle-sub" style="flex-direction:column;gap:10px;">
+        <div style="width:100%;">
+          <div class="dropzone" style="height:80px;" onclick="">
+            <div class="dz-label" style="font-size:12px;">Upload BGM file or click to browse</div>
+            <div class="dz-hint">.mp3, .wav, .m4a</div>
+          </div>
+        </div>
+        <div style="width:100%;">
+          <div class="label-row"><label class="form-label">Volume: <span id="bgmVol">50</span>%</label></div>
+          <input type="range" min="0" max="100" value="50" oninput="document.getElementById('bgmVol').textContent=this.value" />
+        </div>
+      </div>` : ''}
+
+      <div class="toggle-row" style="border-bottom:none;">
+        <div class="toggle-row-left">
+          <div class="toggle-row-title">Voice cleanup</div>
+          <div class="toggle-row-desc">Loudness normalization and noise reduction</div>
+        </div>
+        <div class="toggle ${state.voiceCleanup?'on':''}" onclick="toggleState('voiceCleanup')"></div>
+      </div>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────
+//  STEP 6 — VISUAL / CROP
+// ─────────────────────────────────────────────
+function step6() {
+  const crops = [
+    { id:'auto', icon:'🤖', name:'Auto Crop', desc:'Smart framing' },
+    { id:'speaker', icon:'👤', name:'Speaker Tracking', desc:'Follow the speaker' },
+    { id:'face', icon:'👁', name:'Face Focus', desc:'Close-up mode' },
+  ];
+  const zoomLabels = ['None','Subtle','Medium','Strong'];
+
+  return `
+    <div class="step-title">Visual / Crop</div>
+    <div class="step-subtitle">Configure framing, crop mode, and visual effects.</div>
+
+    <div class="gap-section">
+      <div class="section-header"><div class="section-title">Crop mode</div></div>
+      <div class="crop-grid">
+        ${crops.map(c => `
+          <div class="crop-card ${state.cropMode===c.id?'selected':''}" onclick="setState('cropMode','${c.id}')">
+            <div class="cc-icon">${c.icon}</div>
+            <div class="cc-name">${c.name}</div>
+            <div class="cc-desc">${c.desc}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="gap-section">
+      <div class="section-header"><div class="section-title">Zoom intensity</div></div>
+      <div class="slider-wrap">
+        <input type="range" min="0" max="3" step="1" value="${state.zoomIntensity}"
+          oninput="state.zoomIntensity=this.value;document.getElementById('zoomLabel').textContent='${zoomLabels}'[this.value]" />
+        <span class="slider-label" id="zoomLabel">${zoomLabels[state.zoomIntensity]}</span>
+      </div>
+      <div class="range-labels">
+        ${zoomLabels.map(l => `<span class="range-label">${l}</span>`).join('')}
+      </div>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────
+//  STEP 7 — TIMELINE / SPEED
+// ─────────────────────────────────────────────
+function step7() {
+  const rows = [
+    { key:'hookAccel', title:'Hook Acceleration', desc:'Speed up first 3s for instant hook', badge:'coming-soon', badgeText:'coming soon' },
+    { key:'skipSilence', title:'Skip Silence', desc:'Auto-remove silent pauses' },
+    { key:'dynamicPacing', title:'Dynamic Pacing', desc:'Vary speed based on content energy' },
+    { key:'autoOptimize', title:'Auto Optimize', desc:'AI adjusts cuts for maximum retention', badge:'ai-badge', badgeText:'AI ✨' },
+  ];
+
+  return `
+    <div class="step-title">Timeline / Speed</div>
+    <div class="step-subtitle">Configure pacing, silence removal, and timing optimizations.</div>
+
+    <div class="card">
+      ${rows.map(r => `
+        <div class="toggle-row ${r.key==='autoOptimize'?'':''}">
+          <div class="toggle-row-left">
+            <div class="toggle-row-title">
+              ${r.title}
+              ${r.badge==='coming-soon' ? `<span class="coming-soon">${r.badgeText}</span>` : ''}
+              ${r.badge==='ai-badge' ? `<span class="ai-badge">${r.badgeText}</span>` : ''}
+            </div>
+            <div class="toggle-row-desc">${r.desc}</div>
+          </div>
+          <div class="toggle ${state[r.key]?'on':''}" onclick="toggleState('${r.key}')"></div>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ─────────────────────────────────────────────
+//  STEP 8 — THUMBNAIL
+// ─────────────────────────────────────────────
+function step8() {
+  const opts = [
+    { id:'auto', icon:'🤖', name:'Auto Best', desc:'AI picks best quality frame' },
+    { id:'manual', icon:'🎯', name:'Manual Frame', desc:'Seek to choose your frame' },
+    { id:'expression', icon:'😊', name:'Expression Priority', desc:'Prioritize expressive faces', soon:true },
+  ];
+
+  return `
+    <div class="step-title">Thumbnail</div>
+    <div class="step-subtitle">Choose how to select the thumbnail frame for each clip.</div>
+
+    <div class="thumb-grid">
+      ${opts.map(o => `
+        <div class="thumb-card ${state.thumbMode===o.id?'selected':''}" onclick="setState('thumbMode','${o.id}')">
+          <div class="tc-icon">${o.icon}</div>
+          <div class="tc-name">${o.name} ${o.soon?'<span class="coming-soon">coming soon</span>':''}</div>
+          <div class="tc-desc">${o.desc}</div>
+        </div>`).join('')}
+    </div>
+
+    ${state.thumbMode==='manual' ? `
+    <div class="gap-section card">
+      <div class="section-title" style="margin-bottom:12px;">Frame selector</div>
+      <div class="slider-wrap">
+        <span style="font-size:12px;color:var(--text-secondary);">0:00</span>
+        <input type="range" min="0" max="100" value="35" style="flex:1;" />
+        <span style="font-size:12px;color:var(--text-secondary);">45:32</span>
+      </div>
+      <div class="frame-preview">Frame preview at 15:55</div>
+    </div>` : ''}`;
+}
+
+// ─────────────────────────────────────────────
+//  STEP 9 — REVIEW & PREVIEW
+// ─────────────────────────────────────────────
+function step9() {
+  const clips = [
+    { n:1, dur:'45s', score:87, us:82, eu:71 },
+    { n:2, dur:'38s', score:79, us:74, eu:68 },
+    { n:3, dur:'52s', score:91, us:88, eu:85 },
+  ];
+  const cards = clips.map(c => {
+    const colorClass = c.score >= 80 ? 'green' : c.score >= 60 ? 'amber' : 'red';
+    const circumference = 2 * Math.PI * 14;
+    const dash = (c.score / 100) * circumference;
+    const gap = circumference - dash;
+    return `
+    <div class="clip-card">
+      <div class="clip-thumb">
+        <i data-lucide="play" style="width:28px;height:28px;color:var(--text-tertiary);"></i>
+        <div class="clip-play-btn"><i data-lucide="play" style="width:14px;height:14px;color:#fff;"></i></div>
+      </div>
+      <div class="clip-info">
+        <div class="clip-title">Clip ${c.n} · ${c.dur}</div>
+        <div class="clip-score-ring">
+          <svg class="score-ring-svg" width="32" height="32" viewBox="0 0 32 32">
+            <circle class="score-ring-bg" cx="16" cy="16" r="14"/>
+            <circle class="score-ring-fill ${colorClass}" cx="16" cy="16" r="14"
+              stroke-dasharray="${dash.toFixed(1)} ${gap.toFixed(1)}"
+              stroke-dashoffset="${(circumference * 0.25).toFixed(1)}"
+              transform="rotate(-90 16 16)"/>
+            <text x="16" y="20" text-anchor="middle" font-size="9" font-weight="700" fill="currentColor" class="score-ring-val ${colorClass}" style="fill:${colorClass==='green'?'#22C55E':colorClass==='amber'?'#F59E0B':'#EF4444'}">${c.score}</text>
+          </svg>
+          <span style="font-size:12px;color:var(--text-secondary);">Viral score</span>
+        </div>
+        <div class="clip-regions">
+          <span class="region-chip">US ${c.us}</span>
+          <span class="region-chip">EU ${c.eu}</span>
+        </div>
+        <div class="clip-actions">
+          <button class="btn btn-sm btn-success">✓ Keep</button>
+          <button class="btn btn-sm btn-ghost" style="padding:5px 10px;">✗</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="step-title">Review & Preview</div>
+    <div class="step-subtitle">Review AI-selected clips before exporting.</div>
+
+    <div class="clips-grid">${cards}</div>
+
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap;">
+      <button class="btn btn-ghost">↺ Regenerate All</button>
+      <a href="#" onclick="jumpStep(3);return false;" style="font-size:13px;">Adjust Settings</a>
+      <span style="font-size:13px;color:var(--text-secondary);margin-left:auto;">3 clips selected · Avg score: 85.7 · Total: 2m 15s</span>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────
+//  STEP 10 — EXPORT
+// ─────────────────────────────────────────────
+function step10() {
+  if (state.renderState === 'running') return renderRunning();
+  if (state.renderState === 'done') return renderDone();
+
+  const qualities = [
+    { id:'fast', name:'Fast', desc:'Quick export' },
+    { id:'balanced', name:'Balanced', desc:'Recommended' },
+    { id:'quality', name:'Quality', desc:'Best quality' },
+    { id:'best', name:'Best', desc:'Maximum' },
+  ];
+
+  return `
+    <div class="step-title">Export</div>
+    <div class="step-subtitle">Configure final export settings and start rendering.</div>
+
+    <div class="export-layout">
+      <div>
+        <div class="gap-section">
+          <div class="section-header"><div class="section-title">Quality preset</div></div>
+          <div class="quality-grid">
+            ${qualities.map(q => `
+              <div class="quality-card ${state.selectedQuality===q.id?'selected':''}" onclick="setState('selectedQuality','${q.id}')">
+                <div class="qc-name">${q.name}</div>
+                <div class="qc-desc">${q.desc}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+
+        <div class="gap-section">
+          <div class="section-header"><div class="section-title">Frame rate</div></div>
+          <div class="segmented">
+            ${['24','30','60'].map(f => `<button class="seg-btn ${state.exportFps===f?'active':''}" onclick="setState('exportFps','${f}')">${f} fps</button>`).join('')}
+          </div>
+        </div>
+
+        <div class="toggle-wrap">
+          <div class="toggle ${state.watermark?'on':''}" onclick="toggleState('watermark')"></div>
+          <div>
+            <div class="toggle-label">Watermark</div>
+            <div class="toggle-desc" style="font-size:12px;color:var(--text-secondary);">Add watermark to exported clips</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="output-summary">
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Output Summary</div>
+        <div class="summary-row"><span class="sr-icon">📁</span><span style="color:var(--text-secondary);">D:/videos/output/</span></div>
+        <div class="summary-divider"></div>
+        <div class="summary-row"><span class="sr-icon">📄</span><strong>3 clips</strong> to export</div>
+        <div class="summary-row"><span class="sr-icon">🎞</span>Format: <strong>MP4 H.264</strong></div>
+        <div class="summary-row"><span class="sr-icon">📐</span>Resolution: <strong>1080×1920</strong></div>
+        <div class="summary-row"><span class="sr-icon">⏱</span>Est. render: <strong>~4 min</strong></div>
+        <div style="height:16px;"></div>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;" onclick="startRender()">
+          <i data-lucide="zap"></i> Start Render — 3 clips
+        </button>
+      </div>
+    </div>`;
+}
+
+function renderRunning() {
+  return `
+    <div class="step-title">Rendering...</div>
+    <div class="step-subtitle">Your clips are being processed. Please wait.</div>
+    <div class="render-progress">
+      <div class="render-overall card" style="margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:13px;font-weight:600;">Overall progress</span>
+          <span style="font-size:13px;color:var(--accent);" id="overallPct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="overallBar" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="render-clips">
+        <div class="render-clip-row">
+          <div class="render-clip-header">
+            <span class="render-clip-name">Clip 1</span>
+            <span class="render-clip-pct" id="p1">0%</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="b1" style="width:0%"></div></div>
+        </div>
+        <div class="render-clip-row">
+          <div class="render-clip-header">
+            <span class="render-clip-name">Clip 2</span>
+            <span class="render-clip-pct" id="p2">0%</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="b2" style="width:0%"></div></div>
+        </div>
+        <div class="render-clip-row">
+          <div class="render-clip-header">
+            <span class="render-clip-name">Clip 3</span>
+            <span class="render-clip-pct" id="p3">0%</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="b3" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderDone() {
+  return `
+    <div class="render-success">
+      <div class="rs-icon">✅</div>
+      <div class="rs-title">Render Complete!</div>
+      <div class="rs-desc">3 clips rendered successfully · Total time: 4m 12s</div>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button class="btn btn-primary" onclick="switchScreen('library')">View Results</button>
+        <button class="btn btn-ghost" onclick="resetRender()">New Project</button>
+      </div>
+    </div>`;
+}
+
+function startRender() {
+  state.renderState = 'running';
+  renderStepContent();
+
+  const clips = [
+    { bar:'b1', pct:'p1', delay:0, duration:3500 },
+    { bar:'b2', pct:'p2', delay:600, duration:4200 },
+    { bar:'b3', pct:'p3', delay:1200, duration:5000 },
+  ];
+
+  clips.forEach(c => {
+    setTimeout(() => animateProgress(c.bar, c.pct, c.duration), c.delay);
+  });
+
+  // Overall
+  animateProgress('overallBar', 'overallPct', 5000);
+
+  setTimeout(() => {
+    state.renderState = 'done';
+    renderStepContent();
+  }, 5500);
+}
+
+function animateProgress(barId, pctId, duration) {
+  const start = Date.now();
+  const tick = () => {
+    const elapsed = Date.now() - start;
+    const pct = Math.min(100, Math.round((elapsed / duration) * 100));
+    const bar = document.getElementById(barId);
+    const pctEl = document.getElementById(pctId);
+    if (bar) bar.style.width = pct + '%';
+    if (pctEl) {
+      pctEl.textContent = pct === 100 ? 'DONE ✓' : pct + '%';
+      if (pct === 100) { pctEl.className = 'render-clip-pct done-txt'; bar && (bar.className='progress-fill done'); }
+    }
+    if (pct < 100) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function resetRender() {
+  state.renderState = 'idle';
+  state.currentStep = 1;
+  state.completedSteps.clear();
+  state.videoReady = false;
+  state.ytStatus = null;
+  renderStep();
+}
+
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
+function setState(key, val) {
+  state[key] = val;
+  renderStepContent();
+  updateNavBar();
+}
+
+function toggleState(key) {
+  state[key] = !state[key];
+  renderStepContent();
+  updateNavBar();
+}
+
+// ─────────────────────────────────────────────
+//  LIBRARY
+// ─────────────────────────────────────────────
+function renderLibrary() {
+  const grid = document.getElementById('libraryGrid');
+  const mockClips = [
+    { n:1, score:87, dur:'45s', status:'Completed' },
+    { n:2, score:79, dur:'38s', status:'Completed' },
+    { n:3, score:91, dur:'52s', status:'Completed' },
+  ];
+  if (mockClips.length === 0) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
+      <div class="es-icon">📭</div>
+      <div class="es-title">No renders yet</div>
+      <div class="es-desc">Start your first project to see clips here.</div>
+      <button class="btn btn-primary" style="margin-top:12px;" onclick="switchScreen('studio')">Start your first project</button>
+    </div>`;
+    return;
+  }
+  grid.innerHTML = mockClips.map(c => `
+    <div class="clip-card">
+      <div class="clip-thumb">▶<div class="clip-play-btn">▶</div></div>
+      <div class="clip-info">
+        <div class="clip-title">Clip ${c.n} · ${c.dur}</div>
+        <div class="clip-score">Score: <span class="clip-score-val">★ ${c.score}</span></div>
+        <div class="clip-regions" style="margin-bottom:10px;">
+          <span class="status-chip status-valid" style="font-size:11px;padding:2px 8px;">${c.status}</span>
+        </div>
+        <div class="clip-actions">
+          <button class="btn btn-sm btn-ghost">&#8659; Download</button>
+          <button class="btn btn-sm btn-ghost">&#128065; Preview</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+// ─────────────────────────────────────────────
+//  DOWNLOAD
+// ─────────────────────────────────────────────
+function startDownload() {
+  const urls = document.getElementById('dlUrls')?.value.trim().split('\n').filter(Boolean);
+  if (!urls || !urls.length) return;
+  const list = document.getElementById('dlList');
+  list.innerHTML = urls.map((url, i) => `
+    <div class="dl-item">
+      <div class="dl-icon">▼</div>
+      <div class="dl-info">
+        <div class="dl-name">Video ${i+1}</div>
+        <div class="dl-url">${url.substring(0,60)}${url.length>60?'...':''}</div>
+        <div class="dl-bar">
+          <div class="progress-track" style="margin-top:6px;">
+            <div class="progress-fill" id="dlbar${i}" style="width:0%;background:var(--info);"></div>
+          </div>
+        </div>
+      </div>
+      <span style="font-size:12px;color:var(--text-secondary);" id="dlpct${i}">0%</span>
+    </div>`).join('');
+
+  urls.forEach((_, i) => {
+    setTimeout(() => animateDlProgress(i), i * 800);
+  });
+}
+
+function animateDlProgress(i) {
+  animateProgress('dlbar' + i, 'dlpct' + i, 3000 + i * 500);
+}
+
+// ─────────────────────────────────────────────
+//  SETTINGS
+// ─────────────────────────────────────────────
+const SETTINGS_TABS = {
+  general: {
+    title: 'General',
+    groups: [
+      {
+        title: 'Application',
+        rows: [
+          { label:'Output folder', desc:'Default export location', control:'<input class="input-sm" value="D:/videos/output/" style="width:200px;" />' },
+          { label:'Auto-open on export', desc:'Open output folder after render completes', control:'<div class="toggle on" onclick="this.classList.toggle(\'on\')"></div>' },
+          { label:'Language', desc:'UI language', control:'<select class="select-field"><option>English</option><option>Vietnamese</option></select>' },
+        ]
+      }
+    ]
+  },
+  quality: {
+    title: 'Quality',
+    groups: [
+      {
+        title: 'Encoding',
+        rows: [
+          { label:'Default encoder', desc:'Video encoding codec', control:'<select class="select-field"><option>H.264</option><option>H.265</option><option>VP9</option></select>' },
+          { label:'Default bitrate', desc:'Target video bitrate', control:'<select class="select-field"><option>Auto</option><option>4 Mbps</option><option>8 Mbps</option></select>' },
+          { label:'Hardware acceleration', desc:'Use GPU encoding when available', control:'<div class="toggle on" onclick="this.classList.toggle(\'on\')"></div>' },
+        ]
+      }
+    ]
+  },
+  voice: {
+    title: 'Voice',
+    groups: [
+      {
+        title: 'TTS Engine',
+        rows: [
+          { label:'Default engine', desc:'Text-to-speech engine', control:'<select class="select-field"><option>Edge TTS</option><option>XTTS (offline)</option></select>' },
+          { label:'Default language', desc:'Voice language', control:'<select class="select-field"><option>Vietnamese</option><option>English</option></select>' },
+          { label:'Default gender', desc:'Voice gender preference', control:'<div class="segmented"><button class="seg-btn active">Male</button><button class="seg-btn">Female</button></div>' },
+        ]
+      }
+    ]
+  },
+  ai: {
+    title: 'AI',
+    groups: [
+      {
+        title: 'AI Director',
+        rows: [
+          { label:'Model', desc:'AI model for clip selection', control:'<select class="select-field"><option>Local (fast)</option><option>Cloud (accurate)</option></select>' },
+          { label:'Confidence threshold', desc:'Minimum AI confidence to include clip', control:'<input class="input-sm" type="number" value="70" style="width:80px;" />' },
+          { label:'GPU inference', desc:'Use GPU for AI processing', control:'<div class="toggle on" onclick="this.classList.toggle(\'on\')"></div>' },
+        ]
+      }
+    ]
+  },
+  appearance: {
+    title: 'Appearance',
+    groups: [
+      {
+        title: 'Theme',
+        rows: [
+          { label:'Color theme', desc:'Application color scheme', control:'<div class="segmented"><button class="seg-btn active">Dark</button><button class="seg-btn" onclick="if(state.theme!==\'light\')toggleTheme()">Light</button></div>' },
+          { label:'Accent color', desc:'Primary accent color', control:'<input type="color" value="#6366F1" style="width:48px;height:32px;border-radius:6px;border:1px solid var(--border-default);cursor:pointer;" />' },
+          { label:'Compact mode', desc:'Reduce padding and spacing', control:'<div class="toggle" onclick="this.classList.toggle(\'on\')"></div>' },
+        ]
+      }
+    ]
+  }
+};
+
+function renderSettingsContent() {
+  const tab = state.settingsTab;
+  const data = SETTINGS_TABS[tab];
+  if (!data) return;
+  const sc = document.getElementById('settingsContent');
+  sc.innerHTML = `<h3>${data.title}</h3>` + data.groups.map(g => `
+    <div class="settings-group">
+      <div class="settings-group-title">${g.title}</div>
+      ${g.rows.map(r => `
+        <div class="settings-row">
+          <div>
+            <div class="settings-row-label">${r.label}</div>
+            <div class="settings-row-desc">${r.desc}</div>
+          </div>
+          ${r.control}
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+// ─────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Theme toggle
+  document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+
+  // Sidebar toggle
+  document.getElementById('sidebarToggle').addEventListener('click', toggleSidebar);
+
+  // Screen nav
+  document.querySelectorAll('.nav-item[data-screen]').forEach(btn => {
+    btn.addEventListener('click', () => switchScreen(btn.dataset.screen));
+  });
+
+  // Step nav bar buttons
+  document.getElementById('btnBack').addEventListener('click', goBack);
+  document.getElementById('btnContinue').addEventListener('click', goNext);
+
+  // Settings subnav
+  document.getElementById('settingsSubnav').addEventListener('click', e => {
+    const btn = e.target.closest('[data-settings]');
+    if (!btn) return;
+    state.settingsTab = btn.dataset.settings;
+    document.querySelectorAll('.settings-nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderSettingsContent();
+  });
+
+  // Library filter chips (demo)
+  document.getElementById('screen-library').addEventListener('click', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    document.querySelectorAll('#screen-library .chip').forEach(c => c.classList.remove('selected'));
+    chip.classList.add('selected');
+  });
+
+  // Init step
+  renderStep();
+  renderSettingsContent();
+
+  // Init Lucide icons (static HTML icons — dynamic ones handled in render fns)
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,3218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Clip Studio — Render Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+/* ============================================================
+   FOUNDATION TOKENS
+   ============================================================ */
+:root {
+  --bg-900: #0a0a0c;
+  --bg-850: #101014;
+  --bg-800: #111116;
+  --bg-750: #1c1c24;
+  --bg-700: #18181f;
+  --bg-600: #1e1e28;
+  --bg-500: #252533;
+  --bg-400: #2d2d3d;
+  --bg-300: #383850;
+
+  --fg-100: #f0f0f6;
+  --fg-200: #c8c8d8;
+  --fg-300: #8888a0;
+  --fg-400: #55556a;
+
+  --primary: #4d7cff;
+  --primary-hover: #5f8aff;
+  --primary-active: #3d6ce8;
+  --primary-muted: rgba(77,124,255,.15);
+  --primary-border: rgba(77,124,255,.35);
+
+  --secondary: #a855f7;
+  --secondary-hover: #b668ff;
+  --secondary-muted: rgba(168,85,247,.15);
+
+  --success: #22c55e;
+  --success-muted: rgba(34,197,94,.15);
+  --warning: #f59e0b;
+  --warning-muted: rgba(245,158,11,.15);
+  --danger: #ef4444;
+  --danger-muted: rgba(239,68,68,.15);
+  --info: #38bdf8;
+  --info-muted: rgba(56,189,248,.15);
+
+  --border-subtle: rgba(255,255,255,.06);
+  --border-default: rgba(255,255,255,.10);
+  --border-strong: rgba(255,255,255,.18);
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.4);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.5);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.6);
+
+  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --topbar-h: 84px;
+  --topbar-r1: 48px;
+  --topbar-r2: 36px;
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-pill: 999px;
+}
+
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font-ui);
+  background: var(--bg-800);
+  color: var(--fg-100);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-400); border-radius: var(--r-pill); }
+::-webkit-scrollbar-thumb:hover { background: var(--bg-300); }
+
+/* ============================================================
+   TOPBAR — 2-level navigation
+   ============================================================ */
+.topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--topbar-h);
+  z-index: 100;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+}
+.topbar-row1 {
+  height: var(--topbar-r1);
+  background: var(--bg-850);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 0;
+  flex-shrink: 0;
+}
+.topbar-row2 {
+  height: var(--topbar-r2);
+  background: var(--bg-800);
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 20px;
+  flex-shrink: 0;
+}
+.topbar-brand .ai-badge {
+  height: 20px;
+  padding: 0 7px;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  border-radius: var(--r-xs);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  color: #fff;
+  display: flex;
+  align-items: center;
+}
+.topbar-brand .brand-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg-100);
+}
+
+/* Level-1 section tabs */
+.l1-tab {
+  display: flex;
+  align-items: center;
+  height: var(--topbar-r1);
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-300);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  position: relative;
+  transition: color 150ms ease;
+  gap: 6px;
+  white-space: nowrap;
+}
+.l1-tab:hover { color: var(--fg-200); }
+.l1-tab.active { color: var(--fg-100); }
+.l1-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--primary);
+  border-radius: var(--r-pill) var(--r-pill) 0 0;
+}
+
+/* Level-2 step tabs */
+.l2-tab {
+  display: flex;
+  align-items: center;
+  height: var(--topbar-r2);
+  padding: 0 11px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-400);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  position: relative;
+  transition: color 120ms ease;
+  gap: 5px;
+  white-space: nowrap;
+  border-radius: var(--r-sm);
+}
+.l2-tab:hover:not(.disabled) { color: var(--fg-200); background: rgba(255,255,255,.04); }
+.l2-tab.active { color: var(--fg-100); }
+.l2-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--primary);
+  border-radius: var(--r-pill) var(--r-pill) 0 0;
+}
+.l2-tab.disabled { opacity: 0.3; pointer-events: none; }
+.l2-tab.done { color: var(--success); }
+.l2-step-num {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--bg-500);
+  font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--fg-400);
+  flex-shrink: 0;
+}
+.l2-tab.active .l2-step-num { background: var(--primary-muted); color: var(--primary); }
+.l2-tab.done .l2-step-num { background: var(--success-muted); color: var(--success); }
+
+.l1-divider { width: 1px; height: 18px; background: var(--border-subtle); margin: 0 6px; flex-shrink: 0; }
+
+.topbar-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.topbar-pill {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-700);
+  color: var(--fg-300);
+  transition: all 150ms ease;
+}
+.topbar-pill:hover { border-color: var(--border-default); color: var(--fg-200); }
+.topbar-pill.active { background: var(--primary-muted); border-color: var(--primary-border); color: var(--primary); }
+
+/* ============================================================
+   SCREEN CONTAINER
+   ============================================================ */
+.screen-wrapper {
+  position: fixed;
+  top: var(--topbar-h);
+  left: 0; right: 0; bottom: 0;
+  overflow: hidden;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+  display: none;
+}
+.screen.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: all;
+  display: block;
+}
+
+/* ============================================================
+   SECTION HEAD
+   ============================================================ */
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  margin-bottom: 10px;
+}
+.section-head::before {
+  content: '';
+  display: block;
+  width: 2px;
+  height: 12px;
+  background: var(--primary);
+  border-radius: var(--r-pill);
+  flex-shrink: 0;
+}
+.section-head > span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--primary);
+  line-height: 1;
+}
+.section-head--success::before { background: var(--success); }
+.section-head--success > span { color: var(--success); }
+.section-head--warning::before { background: var(--warning); }
+.section-head--warning > span { color: var(--warning); }
+.section-head--muted::before { background: var(--fg-400); }
+.section-head--muted > span { color: var(--fg-400); }
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 14px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: all 80ms ease;
+  white-space: nowrap;
+  text-decoration: none;
+  line-height: 1;
+}
+.btn:disabled { opacity: 0.4; pointer-events: none; }
+.btn-primary { background: var(--primary); color: #fff; border-color: transparent; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:active { background: var(--primary-active); }
+.btn-secondary { background: var(--bg-600); color: var(--fg-100); border-color: var(--border-strong); }
+.btn-secondary:hover { background: var(--bg-500); }
+.btn-ghost { background: transparent; color: var(--fg-300); border-color: transparent; }
+.btn-ghost:hover { background: var(--bg-600); color: var(--fg-200); }
+.btn-danger { background: var(--danger-muted); color: #f87171; border-color: rgba(239,68,68,.25); }
+.btn-danger:hover { background: rgba(239,68,68,.22); }
+.btn-lg { height: 40px; padding: 0 18px; font-size: 13px; }
+.btn-sm { height: 28px; padding: 0 10px; font-size: 11px; }
+.btn-full { width: 100%; justify-content: center; }
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+.card {
+  background: var(--bg-750);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  transition: border-color 150ms ease;
+}
+.card:hover { border-color: var(--border-default); }
+.card.selected {
+  border-color: var(--primary);
+  background: rgba(77,124,255,.08);
+  box-shadow: 0 0 0 1px var(--primary-border);
+}
+
+/* ============================================================
+   INPUTS
+   ============================================================ */
+input[type="text"],
+input[type="number"],
+input[type="url"],
+select,
+.input-field {
+  background: var(--bg-850);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  padding: 0 12px;
+  height: 38px;
+  color: var(--fg-100);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  width: 100%;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+  outline: none;
+}
+input:focus, select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-muted);
+}
+input::placeholder { color: var(--fg-400); }
+select option { background: var(--bg-700); }
+
+/* ============================================================
+   BADGES
+   ============================================================ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.badge-running { background: rgba(77,124,255,.18); color: var(--primary); }
+.badge-done { background: rgba(34,197,94,.15); color: #4ade80; }
+.badge-failed { background: rgba(239,68,68,.15); color: #f87171; }
+.badge-queued { background: rgba(148,163,184,.12); color: var(--fg-300); }
+.badge-warning { background: rgba(245,158,11,.15); color: #fbbf24; }
+@keyframes pulse-running {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.badge-running { animation: pulse-running 1.5s ease infinite; }
+
+/* ============================================================
+   PROGRESS BAR
+   ============================================================ */
+.progress-track {
+  height: 4px;
+  background: var(--bg-400);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: var(--r-pill);
+  transition: width 0.5s ease;
+  position: relative;
+  overflow: hidden;
+}
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.25), transparent);
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+.progress-track-lg .progress-fill,
+.progress-lg {
+  height: 8px;
+}
+.progress-track-lg { height: 8px; }
+
+/* ============================================================
+   TOGGLE SWITCH
+   ============================================================ */
+.toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.toggle-track {
+  width: 44px;
+  height: 24px;
+  background: var(--bg-400);
+  border-radius: var(--r-pill);
+  position: relative;
+  transition: background 200ms ease;
+  flex-shrink: 0;
+}
+.toggle-track.on {
+  background: linear-gradient(135deg, var(--primary), #6b4eff);
+}
+.toggle-thumb {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 200ms cubic-bezier(.34,1.56,.64,1);
+  box-shadow: 0 1px 4px rgba(0,0,0,.4);
+}
+.toggle-track.on .toggle-thumb { transform: translateX(20px); }
+.toggle-label { font-size: 13px; font-weight: 500; color: var(--fg-200); }
+
+/* ============================================================
+   SEGMENTED CONTROL
+   ============================================================ */
+.seg-ctrl {
+  display: inline-flex;
+  background: var(--bg-700);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 3px;
+  gap: 2px;
+}
+.seg-btn {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-300);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.seg-btn.active {
+  background: var(--bg-600);
+  color: var(--fg-100);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+.seg-btn:hover:not(.active) { color: var(--fg-200); background: var(--bg-600); }
+
+/* ============================================================
+   SCREEN 1 — INPUT
+   ============================================================ */
+.s1-wrap {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 24px 120px;
+}
+.s1-header { margin-bottom: 32px; }
+.s1-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--fg-100);
+  margin-bottom: 6px;
+}
+.s1-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-400);
+}
+.s1-breadcrumb .bc-step { color: var(--fg-400); }
+.s1-breadcrumb .bc-step.current { color: var(--primary); font-weight: 600; }
+.s1-breadcrumb .bc-sep { color: var(--fg-400); opacity: 0.5; }
+.s1-step-hint {
+  font-size: 14px;
+  color: var(--fg-300);
+  margin-top: 4px;
+}
+
+.source-toggle-wrap { display: flex; justify-content: center; margin-bottom: 28px; }
+.source-toggle {
+  display: inline-flex;
+  background: var(--bg-700);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-pill);
+  padding: 4px;
+  gap: 4px;
+}
+.src-btn {
+  height: 34px;
+  padding: 0 18px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  color: var(--fg-300);
+  background: transparent;
+  transition: all 150ms ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.src-btn.active {
+  background: var(--bg-600);
+  color: var(--fg-100);
+  border-color: var(--primary-border);
+}
+.src-btn:hover:not(.active) { color: var(--fg-200); }
+
+.input-panel { display: none; }
+.input-panel.active { display: block; }
+
+.url-input-wrap {
+  position: relative;
+  margin-bottom: 8px;
+}
+.url-input {
+  height: 48px !important;
+  padding-left: 42px !important;
+  font-size: 14px !important;
+}
+.url-input-icon {
+  position: absolute;
+  left: 14px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--fg-400);
+  pointer-events: none;
+  display: flex;
+}
+.url-hint {
+  font-size: 11px;
+  color: var(--fg-400);
+  margin-top: 6px;
+}
+
+.video-meta-card {
+  margin-top: 20px;
+  border-left: 3px solid var(--success);
+  display: none;
+}
+.video-meta-card.visible { display: block; }
+.meta-thumb {
+  width: 100%;
+  height: 100px;
+  background: linear-gradient(135deg, var(--bg-600), var(--bg-500));
+  border-radius: var(--r-sm);
+  margin-bottom: 12px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.meta-thumb::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #1a2a4a 0%, #2a1a3a 50%, #1a3a2a 100%);
+}
+.meta-thumb-icon {
+  position: relative;
+  z-index: 1;
+  color: var(--fg-400);
+  opacity: 0.5;
+}
+.meta-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg-100);
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+.meta-details {
+  font-size: 12px;
+  color: var(--fg-300);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 10px;
+}
+.meta-detail-item { display: flex; align-items: center; gap: 4px; }
+
+/* Dropzone */
+.dropzone {
+  border: 2px dashed rgba(255,255,255,.12);
+  border-radius: var(--r-xl);
+  height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+.dropzone:hover, .dropzone.drag-over {
+  border-color: var(--primary);
+  background: var(--primary-muted);
+  transform: scale(1.01);
+}
+.dz-icon { color: var(--fg-400); }
+.dz-main { font-size: 16px; font-weight: 500; color: var(--fg-200); }
+.dz-sub { font-size: 13px; color: var(--primary); text-decoration: underline; cursor: pointer; }
+.dz-formats { font-size: 11px; color: var(--fg-400); margin-top: 4px; }
+
+/* Bottom CTA bar */
+.cta-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 72px;
+  background: linear-gradient(to top, var(--bg-800) 60%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+  z-index: 50;
+}
+.cta-inner {
+  max-width: 640px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ============================================================
+   SCREEN 2 — CONFIGURE (simplified)
+   ============================================================ */
+.s2-layout { display: flex; height: 100%; overflow: hidden; }
+
+/* LEFT — large preview */
+.s2-left {
+  flex: 0 0 44%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-900);
+  border-right: 1px solid var(--border-subtle);
+  padding: 28px 24px 20px;
+  gap: 18px;
+}
+
+/* RIGHT — settings */
+.s2-right {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px 96px;
+  position: relative;
+}
+
+.s2-section { margin-bottom: 24px; }
+
+/* Ratio chips (below preview in left panel) */
+.ratio-strip { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.ratio-chip {
+  height: 30px; padding: 0 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-750);
+  color: var(--fg-400);
+  font-size: 11px; font-weight: 700;
+  cursor: pointer;
+  transition: all 150ms ease;
+  display: flex; align-items: center; gap: 6px;
+  user-select: none;
+}
+.ratio-chip:hover { border-color: var(--border-default); color: var(--fg-200); background: var(--bg-700); }
+.ratio-chip.selected { border-color: var(--primary); background: var(--primary-muted); color: var(--primary); }
+.ratio-chip .rc-icon {
+  display: block; background: currentColor; border-radius: 1px; flex-shrink: 0;
+}
+
+/* Legacy ratio-card (kept for any remaining references) */
+.ratio-cards { display: flex; gap: 8px; }
+.ratio-card { display: none; } /* hidden — replaced by ratio-chip */
+
+/* Sliders */
+.slider-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.slider-group label {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px; font-size: 12px; font-weight: 500; color: var(--fg-200);
+}
+.slider-group label .val { color: var(--primary); font-weight: 700; font-family: var(--font-mono); font-size: 12px; }
+input[type="range"] {
+  -webkit-appearance: none; width: 100%;
+  background: var(--bg-400); border-radius: var(--r-pill);
+  outline: none; cursor: pointer; border: none; padding: 0; height: auto;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--primary); cursor: pointer;
+  box-shadow: 0 0 0 3px var(--primary-muted);
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); box-shadow: 0 0 0 4px var(--primary-muted); }
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: var(--r-pill);
+  background: linear-gradient(to right, var(--primary) var(--pct,0%), var(--bg-400) var(--pct,0%));
+}
+
+/* Subtitle style */
+.sub-expand { display: none; margin-top: 10px; }
+.sub-expand.open { display: block; }
+.style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.style-card {
+  background: var(--bg-750); border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg); padding: 8px; cursor: pointer; transition: all 150ms ease;
+}
+.style-card:hover { border-color: var(--border-default); }
+.style-card.selected { border-color: var(--primary); background: rgba(77,124,255,.08); }
+.style-preview {
+  height: 36px; background: var(--bg-900); border-radius: var(--r-sm);
+  margin-bottom: 6px; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; overflow: hidden; position: relative;
+}
+.style-name { font-size: 11px; font-weight: 600; color: var(--fg-200); }
+.style-desc { font-size: 10px; color: var(--fg-400); margin-top: 1px; }
+
+/* Subtitle subtitle toggle row */
+.toggle-row-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--border-subtle);
+}
+.toggle-row-item:last-child { border-bottom: none; }
+.tri-label { font-size: 13px; font-weight: 500; color: var(--fg-200); }
+.tri-sub { font-size: 11px; color: var(--fg-400); margin-top: 2px; }
+
+/* Translate row */
+.translate-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.translate-row select { flex: 1; height: 32px; font-size: 12px; }
+
+/* Video style pills */
+.vstyle-cards { display: flex; gap: 8px; }
+.vstyle-card {
+  flex: 1; background: var(--bg-750); border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg); padding: 8px 6px;
+  cursor: pointer; transition: all 150ms ease; text-align: center;
+}
+.vstyle-card:hover { border-color: var(--border-default); }
+.vstyle-card.selected { border-color: var(--primary); background: rgba(77,124,255,.08); }
+.vstyle-card.selected-secondary { border-color: var(--secondary); background: var(--secondary-muted); }
+.vstyle-icon { font-size: 16px; margin-bottom: 3px; }
+.vstyle-label { font-size: 11px; font-weight: 700; color: var(--fg-200); }
+.vstyle-sub { font-size: 10px; color: var(--fg-400); margin-top: 1px; }
+
+/* Save location */
+.save-loc-row { display: flex; gap: 8px; align-items: center; }
+.save-loc-row input { flex: 1; }
+.disk-info { font-size: 11px; color: var(--fg-400); margin-top: 6px; display: flex; align-items: center; gap: 4px; }
+
+/* Device frame wrapping the preview */
+.preview-device {
+  display: flex; flex-direction: column; align-items: center;
+  position: relative; flex-shrink: 0;
+}
+.preview-device-notch {
+  width: 60px; height: 8px; background: var(--bg-850);
+  border-radius: 0 0 6px 6px; margin-bottom: -1px; z-index: 1;
+  border: 1px solid rgba(255,255,255,.07); border-top: none;
+  transition: opacity 200ms;
+}
+.preview-device-bar {
+  width: 44px; height: 5px; background: rgba(255,255,255,.2);
+  border-radius: var(--r-pill); margin-top: 8px;
+  transition: opacity 200ms;
+}
+/* Preview box — fixed size, swaps per ratio */
+.preview-box {
+  width: 220px; height: 391px;
+  border-radius: 18px;
+  background: var(--bg-700);
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  transition: width 300ms cubic-bezier(.34,1.56,.64,1), height 300ms cubic-bezier(.34,1.56,.64,1),
+              border-radius 200ms ease;
+  box-shadow:
+    0 32px 80px rgba(0,0,0,.75),
+    0 0 0 1px rgba(255,255,255,.1),
+    0 0 0 5px rgba(255,255,255,.03),
+    0 0 0 6px rgba(255,255,255,.025);
+}
+.preview-bg {
+  position: absolute; inset: 0;
+  background: linear-gradient(160deg,#0d1a2e 0%,#1a0d2e 55%,#0d2e1a 100%);
+  transition: background 400ms ease;
+}
+.preview-subject {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  padding-bottom: 28px;
+}
+.preview-ratio-badge {
+  position: absolute; top: 8px; right: 8px;
+  background: rgba(0,0,0,.65); color: #fff;
+  font-size: 10px; font-weight: 700;
+  padding: 3px 7px; border-radius: var(--r-pill);
+  z-index: 3; backdrop-filter: blur(4px);
+}
+/* Subtitle overlay on preview */
+.preview-subtitle {
+  position: absolute; bottom: 14px; left: 8px; right: 8px;
+  text-align: center; z-index: 4; pointer-events: none;
+  transition: all 200ms ease;
+}
+.preview-subtitle--standard span {
+  display: inline; font-size: 11px; font-weight: 600;
+  color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.9); line-height: 1.5;
+}
+.preview-subtitle--karaoke span {
+  display: inline; font-size: 11px; font-weight: 700;
+  color: rgba(255,255,255,.65); text-shadow: 0 1px 4px rgba(0,0,0,.9);
+}
+.preview-subtitle--karaoke .kw { color: #FFD600; }
+.preview-subtitle--highlight span {
+  display: inline; font-size: 11px; font-weight: 700; color: #fff;
+  background: rgba(77,124,255,.75); border-radius: 2px; padding: 0 3px; margin: 0 1px;
+}
+.preview-center-icon {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-60%);
+  color: rgba(255,255,255,.15); z-index: 2;
+}
+/* Scan lines for video feel */
+.preview-scanlines {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);
+}
+/* Video-style overlay gradient */
+.preview-vignette {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 30%, transparent 40%, rgba(0,0,0,.5) 100%);
+}
+
+.preview-meta {
+  font-size: 10px; color: var(--fg-400); font-family: var(--font-mono);
+  text-align: center; line-height: 1.7;
+}
+
+.s2-cta-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 20px; border-top: 1px solid var(--border-subtle); margin-top: auto;
+}
+
+/* preview-info legacy (kept for JS compat) */
+.preview-info { display: none; }
+
+/* ============================================================
+   SCREEN 3 — RENDERING
+   ============================================================ */
+.s3-wrap { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+.s3-header {
+  background: var(--bg-850);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 16px 24px;
+  flex-shrink: 0;
+}
+.s3h-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 16px;
+}
+.s3h-info { flex: 1; }
+.s3h-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.s3h-title { font-size: 15px; font-weight: 700; color: var(--fg-100); }
+.s3h-meta { font-size: 12px; color: var(--fg-300); }
+.s3h-progress { margin-top: 10px; }
+.s3h-prog-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  gap: 12px;
+}
+.s3h-pct { font-size: 13px; font-weight: 700; color: var(--fg-100); font-family: var(--font-mono); }
+.s3h-eta { font-size: 12px; color: var(--fg-300); }
+
+.stats-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-800);
+  flex-shrink: 0;
+}
+.stat-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-300);
+}
+.stat-chip .num { font-weight: 800; font-size: 13px; }
+.stat-chip.running .num { color: var(--primary); }
+.stat-chip.done .num { color: var(--success); }
+.stat-chip.failed .num { color: var(--danger); }
+.stat-chip.queued .num { color: var(--fg-400); }
+
+.s3-grid-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+.parts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.part-card {
+  background: var(--bg-750);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  transition: border-color 150ms ease;
+}
+.part-card.state-failed { border-color: rgba(239,68,68,.3); }
+.part-card.state-done { border-color: rgba(34,197,94,.2); }
+.part-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 8px;
+}
+.part-num { font-size: 12px; font-weight: 700; color: var(--fg-200); }
+.part-thumb {
+  width: 100%;
+  height: 110px;
+  background: linear-gradient(135deg, var(--bg-600) 0%, var(--bg-500) 100%);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.part-thumb-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.3);
+  transition: opacity 300ms ease;
+}
+.part-card.state-done .part-thumb-overlay { opacity: 0; }
+.part-thumb-icon { position: relative; z-index: 1; color: rgba(255,255,255,.3); }
+.part-thumb-play {
+  position: absolute;
+  z-index: 2;
+  width: 36px; height: 36px;
+  background: rgba(255,255,255,.15);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  border: 1px solid rgba(255,255,255,.25);
+}
+.part-card.state-done:hover .part-thumb-play { opacity: 1; }
+.part-card-body { padding: 10px 12px 12px; }
+.part-stage {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--fg-300);
+  margin-bottom: 8px;
+  height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.part-prog-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  gap: 8px;
+}
+.part-pct { font-size: 11px; font-weight: 700; color: var(--fg-300); font-family: var(--font-mono); }
+.part-time { font-size: 11px; color: var(--fg-400); margin-top: 6px; display: flex; justify-content: space-between; }
+
+/* Log panel */
+.log-panel {
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-900);
+  flex-shrink: 0;
+}
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.log-body {
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 10px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-300);
+  line-height: 1.7;
+}
+.log-line .ts { color: var(--fg-400); margin-right: 8px; }
+.log-line .lpart { color: var(--primary); margin-right: 6px; }
+.log-body.collapsed { display: none; }
+
+/* ============================================================
+   SCREEN 4 — RESULTS
+   ============================================================ */
+.s4-wrap { height: 100%; overflow-y: auto; }
+.s4-header {
+  background: var(--bg-850);
+  border-bottom: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--success);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.s4h-left {}
+.s4h-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--fg-100);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.s4h-title .check-icon { color: var(--success); }
+.s4h-meta { font-size: 12px; color: var(--fg-300); }
+.s4h-actions { display: flex; gap: 8px; align-items: center; }
+
+.s4-grid-area { padding: 24px; }
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.result-card {
+  background: var(--bg-750);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.result-card:hover { border-color: var(--border-default); box-shadow: var(--shadow-md); }
+.result-card.state-failed { border-color: rgba(239,68,68,.3); }
+
+.result-thumb {
+  width: 100%;
+  height: 160px;
+  background: linear-gradient(135deg, #0f1f30 0%, #1f0f30 50%, #0f301f 100%);
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.result-thumb video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.result-thumb-play {
+  position: relative;
+  z-index: 2;
+  width: 44px; height: 44px;
+  background: rgba(255,255,255,.15);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+  border: 1px solid rgba(255,255,255,.25);
+}
+.result-thumb:hover .result-thumb-play { background: rgba(255,255,255,.25); transform: scale(1.08); }
+.result-thumb-meta {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 6px 10px;
+  background: linear-gradient(to top, rgba(0,0,0,.8), transparent);
+  font-size: 11px;
+  color: rgba(255,255,255,.8);
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+}
+.result-body { padding: 12px; }
+.result-title { font-size: 13px; font-weight: 700; color: var(--fg-100); margin-bottom: 10px; }
+
+/* Quality dots */
+.quality-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.quality-dots { display: flex; gap: 3px; }
+.q-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--bg-400);
+}
+.q-dot.filled-green { background: var(--success); }
+.q-dot.filled-amber { background: var(--warning); }
+.q-dot.filled-red { background: var(--danger); }
+.quality-score { font-size: 13px; font-weight: 800; color: var(--fg-100); font-family: var(--font-mono); }
+.quality-score.green { color: #4ade80; }
+.quality-score.amber { color: #fbbf24; }
+.quality-score.red { color: #f87171; }
+
+/* Region pills */
+.region-pills { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.rpill {
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(77,124,255,.12);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid rgba(77,124,255,.2);
+}
+.rpill .rval { margin-left: 1px; }
+.rpill.green .rval { color: #4ade80; }
+.rpill.amber .rval { color: #fbbf24; }
+.rpill.red .rval { color: #f87171; }
+
+/* Result actions */
+.result-actions { display: flex; gap: 6px; align-items: center; }
+.result-actions .btn { flex: 1; }
+.result-actions .btn-overflow { flex: 0; width: 28px; padding: 0; }
+
+/* Overflow dropdown */
+.overflow-wrap { position: relative; }
+.overflow-menu {
+  position: absolute;
+  bottom: 100%; right: 0;
+  margin-bottom: 6px;
+  background: var(--bg-600);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  padding: 4px;
+  min-width: 140px;
+  display: none;
+  z-index: 200;
+  box-shadow: var(--shadow-lg);
+}
+.overflow-menu.open { display: block; }
+.om-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--fg-200);
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.om-item:hover { background: var(--bg-500); }
+.om-item.danger { color: #f87171; }
+
+/* ============================================================
+   MISC UTILITIES
+   ============================================================ */
+.divider { height: 1px; background: var(--border-subtle); margin: 16px 0; }
+.row { display: flex; gap: 12px; align-items: center; }
+.ml-auto { margin-left: auto; }
+.text-muted { color: var(--fg-300); }
+.text-micro { font-size: 11px; }
+.font-mono { font-family: var(--font-mono); }
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   RENDER ACTIVE PANEL (Screen 3 — old UI rdCard pattern)
+   ============================================================ */
+.renderActivePanel { display:flex; flex-direction:column; height:100%; overflow:hidden; background:var(--bg-900); }
+.rdCard { background:var(--bg-850); border-bottom:1px solid rgba(255,255,255,.07); padding:12px 20px 10px; display:flex; flex-direction:column; gap:7px; flex-shrink:0; }
+.rdCardHead { display:flex; align-items:center; gap:10px; }
+.rdHeadLeft { display:flex; align-items:center; gap:8px; flex:1; min-width:0; }
+.rdBadge2 { display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:var(--r-pill); font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; flex-shrink:0; background:rgba(148,163,184,.1); color:var(--fg-400); transition:background .15s,color .15s; }
+.rdBadge2[data-state="running"]   { background:rgba(77,124,255,.18);  color:var(--primary); }
+.rdBadge2[data-state="completed"] { background:rgba(34,197,94,.15);   color:#4ade80; }
+.rdBadge2[data-state="failed"]    { background:rgba(239,68,68,.15);   color:#f87171; }
+.rdBadge2[data-state="cancelled"] { background:rgba(239,68,68,.12);   color:#f87171; }
+.rdTitle2 { font-size:13px; font-weight:600; color:var(--fg-100); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
+.rdLogBtn2 { flex-shrink:0; background:none; border:1px solid rgba(255,255,255,.1); border-radius:var(--r-sm); padding:3px 9px; font-size:11px; font-weight:500; color:var(--fg-300); cursor:pointer; font-family:var(--font-ui); transition:color .12s,border-color .12s; }
+.rdLogBtn2:hover { color:var(--fg-100); border-color:rgba(255,255,255,.2); }
+.rdStep2 { font-size:12px; color:var(--primary); line-height:1.35; }
+.rdStep2.muted { color:var(--fg-300); }
+.rdStep2.fail  { color:#f87171; }
+.rdSegBar { display:flex; height:4px; gap:2px; border-radius:2px; overflow:hidden; }
+.rdSegItem { flex:1; border-radius:2px; background:rgba(148,163,184,.15); transition:background .2s; }
+.rdSegItem--completed { background:#4ade80; }
+.rdSegItem--rendering { background:rgba(77,124,255,.7); animation:segPulse 1.4s ease-in-out infinite; }
+.rdSegItem--failed    { background:#f87171; }
+@keyframes segPulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.rdMeta { display:flex; align-items:baseline; gap:10px; }
+.rdPct2 { font-size:15px; font-weight:700; color:var(--fg-100); font-variant-numeric:tabular-nums; flex-shrink:0; }
+.rdPct2.done { color:#4ade80; }
+.rdMetaSub { font-size:11px; color:var(--fg-400); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* AI Insights strip */
+.aiInsightsPanel { background:var(--bg-800); border-bottom:1px solid rgba(255,255,255,.07); padding:8px 20px; flex-shrink:0; display:flex; flex-direction:column; gap:4px; }
+.aiInHeader { display:flex; align-items:center; gap:8px; }
+.aiInLabel { font-size:10px; font-weight:700; color:var(--secondary); letter-spacing:.08em; text-transform:uppercase; }
+.aiInConfBadge { font-size:10px; color:var(--fg-400); background:rgba(255,255,255,.06); padding:1px 6px; border-radius:var(--r-pill); }
+.aiInBody { font-size:11px; color:var(--fg-300); line-height:1.65; }
+/* Runtime mount + queue */
+.renderRuntimeMount { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; }
+.rdQueueScroll { flex:1; overflow-y:auto; }
+.rdQueueScroll::-webkit-scrollbar { width:4px; }
+.rdQueueScroll::-webkit-scrollbar-thumb { background:rgba(255,255,255,.1); border-radius:2px; }
+.rdQueueRow { padding:10px 20px 10px 18px; border-bottom:1px solid rgba(255,255,255,.05); border-left:2px solid transparent; display:flex; flex-direction:column; gap:4px; transition:background .12s; }
+.rdQueueRow:hover { background:rgba(255,255,255,.015); }
+.rdQueueRow:last-child { border-bottom:none; }
+.rdQueueRow--waiting  { border-left-color:rgba(148,163,184,.15); opacity:.75; }
+.rdQueueRow--rendering{ border-left-color:var(--primary); background:rgba(77,124,255,.04); opacity:1; }
+.rdQueueRow--completed{ border-left-color:rgba(34,197,94,.35); }
+.rdQueueRow--failed   { border-left-color:rgba(239,68,68,.35); }
+.rdQueueRowHead { display:flex; align-items:center; gap:8px; }
+.rdQueueRowName { font-size:11px; font-weight:500; color:var(--fg-200); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rdQueueRowBadge { font-size:10px; font-weight:600; padding:2px 6px; border-radius:var(--r-pill); background:rgba(148,163,184,.08); color:var(--fg-400); flex-shrink:0; }
+.rdQueueRowBadge[data-state="completed"] { background:rgba(34,197,94,.12); color:#4ade80; }
+.rdQueueRowBadge[data-state="rendering"] { background:rgba(77,124,255,.12); color:var(--primary); animation:pulse-running 1.5s ease infinite; }
+.rdQueueRowBadge[data-state="failed"]    { background:rgba(239,68,68,.12); color:#f87171; }
+.rdQueueRowPath { font-size:10px; color:var(--fg-400); font-family:var(--font-mono); }
+.rdQueueRowActions { display:flex; gap:5px; margin-top:2px; }
+.rdQueueBtn { background:none; border:1px solid rgba(255,255,255,.1); border-radius:var(--r-sm); padding:2px 8px; font-size:10px; color:var(--fg-300); cursor:pointer; font-family:var(--font-ui); transition:color .12s,background .12s; }
+.rdQueueBtn:hover { background:rgba(255,255,255,.05); color:var(--fg-100); }
+/* abpToolbar */
+.abpToolbar { flex-shrink:0; height:48px; display:flex; align-items:center; gap:10px; padding:0 14px; background:var(--bg-850); border-top:1.5px solid var(--primary); }
+.abpToolbarJob { flex:0 0 auto; max-width:190px; display:flex; flex-direction:column; justify-content:center; gap:1px; }
+.abpJobTitle { font-size:11px; font-weight:600; color:var(--fg-100); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.abpJobMeta { font-size:9px; color:var(--fg-400); font-family:var(--font-mono); line-height:1.4; white-space:nowrap; }
+.abpToolbarProgress { flex:1; display:flex; flex-direction:column; gap:3px; min-width:0; }
+.abpProgressBar { width:100%; height:4px; background:rgba(255,255,255,.1); border-radius:2px; overflow:hidden; }
+.abpProgressValue { height:100%; background:var(--primary); border-radius:2px; box-shadow:0 0 8px rgba(77,124,255,.4); transition:width .35s ease; }
+.abpJobMsg { font-size:10px; color:var(--fg-400); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.abpPct { font-family:var(--font-mono); font-size:12px; font-weight:700; color:var(--fg-100); flex-shrink:0; min-width:36px; text-align:right; }
+
+/* ============================================================
+   CLIP CARD (Screen 4 — Results)
+   ============================================================ */
+.productKicker { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--primary); margin-bottom:4px; }
+.s4-wrap2 { display:flex; flex-direction:column; height:100%; overflow:hidden; background:var(--bg-900); }
+
+/* Hero banner */
+.s4-hero { position:relative; padding:28px 28px 24px; flex-shrink:0; overflow:hidden; }
+.s4-hero-bg {
+  position:absolute; inset:0; z-index:0;
+  background: linear-gradient(135deg, rgba(34,197,94,.08) 0%, rgba(77,124,255,.06) 50%, rgba(168,85,247,.06) 100%);
+  border-bottom: 1px solid rgba(34,197,94,.15);
+}
+.s4-hero-content { position:relative; z-index:1; display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+.s4-hero-left { flex:1; min-width:0; }
+.s4-complete-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.s4-complete-icon { width:36px; height:36px; border-radius:50%; background:rgba(34,197,94,.15); border:1.5px solid rgba(34,197,94,.4); display:flex; align-items:center; justify-content:center; color:var(--success); flex-shrink:0; }
+.s4-hero-title { font-size:22px; font-weight:800; color:var(--fg-100); line-height:1.2; }
+.s4-hero-sub { font-size:13px; color:var(--fg-300); margin-top:4px; }
+.s4-hero-right { display:flex; flex-direction:column; align-items:flex-end; gap:12px; flex-shrink:0; }
+.s4-kpi-row { display:flex; gap:8px; }
+.s4-kpi {
+  background:var(--bg-750); border:1px solid var(--border-subtle);
+  border-radius:var(--r-lg); padding:10px 14px; text-align:center; min-width:72px;
+}
+.s4-kpi strong { display:block; font-size:18px; font-weight:800; color:var(--fg-100); line-height:1; }
+.s4-kpi span { font-size:10px; color:var(--fg-400); text-transform:uppercase; letter-spacing:.5px; margin-top:3px; display:block; }
+.s4-kpi.green strong { color:var(--success); }
+.s4-kpi.blue strong { color:var(--primary); }
+
+/* Body + clips */
+.s4-body { flex:1; overflow-y:auto; padding:20px 24px 32px; }
+.s4-clips-row { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
+.clip-card { background:var(--bg-750); border:1px solid var(--border-default); border-radius:var(--r-lg); overflow:hidden; width:200px; flex-shrink:0; cursor:pointer; transition:border-color .15s,box-shadow .15s; }
+.clip-card:hover { border-color:var(--border-strong); box-shadow:var(--shadow-md); }
+.clip-card.is-top { border-color:rgba(34,197,94,.55); }
+.clip-card__thumb { position:relative; background:var(--bg-600); overflow:hidden; height:180px; }
+.clip-card[data-aspect="9:16"] .clip-card__thumb { height:240px; }
+.clip-card[data-aspect="1:1"]  .clip-card__thumb { height:180px; }
+.clip-card[data-aspect="16:9"] .clip-card__thumb { height:120px; }
+.clip-card__thumb-bg { position:absolute; inset:0; }
+.clip-card__rank { position:absolute; top:8px; left:8px; background:rgba(8,8,11,.85); border-radius:var(--r-sm); padding:3px 8px; font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--primary-hover); z-index:2; }
+.clip-card__score { position:absolute; top:8px; right:8px; border-radius:var(--r-sm); padding:3px 7px; font-size:11px; font-weight:700; z-index:2; }
+.clip-card__score--high   { background:var(--success-muted); color:var(--success); border:1px solid rgba(34,197,94,.5); }
+.clip-card__score--medium { background:var(--warning-muted); color:var(--warning); border:1px solid rgba(245,158,11,.5); }
+.clip-card__score--low    { background:var(--danger-muted);  color:var(--danger);  border:1px solid rgba(239,68,68,.5); }
+.clip-card__duration { position:absolute; bottom:8px; right:8px; background:rgba(8,8,11,.85); border-radius:var(--r-sm); padding:2px 7px; font-family:var(--font-mono); font-size:11px; font-weight:700; color:#fff; z-index:2; }
+.clip-card__aspect { position:absolute; bottom:8px; left:8px; background:rgba(8,8,11,.7); border-radius:var(--r-xs); padding:2px 6px; font-size:9px; font-weight:700; color:var(--fg-200); z-index:2; }
+.clip-card__play { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,.15); border:1.5px solid rgba(255,255,255,.4); display:flex; align-items:center; justify-content:center; color:#fff; opacity:0; transition:opacity .15s; z-index:2; }
+.clip-card:hover .clip-card__play { opacity:1; }
+.clip-card__info { padding:10px 12px 12px; }
+.clip-card__title { font-size:12px; font-weight:700; color:var(--fg-100); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:4px; }
+.clip-card__meta { display:flex; align-items:center; justify-content:space-between; font-size:11px; color:var(--fg-300); margin-bottom:8px; }
+.clip-card__actions { display:flex; gap:4px; }
+.clip-card__actions .btn { flex:1; font-size:11px; }
+
+/* ============================================================
+   DOWNLOAD WORKSPACE (Screen 5)
+   ============================================================ */
+.downloadWorkspace { display:flex; flex-direction:column; height:100%; overflow:hidden; background:var(--bg-900); }
+.downloadWorkspaceHeader { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 24px 16px; background:var(--bg-850); border-bottom:1px solid rgba(255,255,255,.06); flex-shrink:0; }
+.downloadHeaderCopy { flex:1; min-width:0; }
+.downloadWorkspaceTitle { font-size:20px; font-weight:700; color:var(--fg-100); line-height:1.2; margin-bottom:4px; }
+.downloadWorkspaceSub { font-size:12px; color:var(--fg-400); }
+.downloadWorkspaceMeta { display:flex; flex-direction:column; align-items:flex-end; gap:3px; flex-shrink:0; }
+.downloadBatchStatus { font-size:13px; font-weight:700; color:var(--fg-300); }
+.downloadBatchStatus[data-state="running"]   { color:var(--primary); }
+.downloadBatchStatus[data-state="completed"] { color:var(--success); }
+.downloadBatchMeta { font-size:11px; color:var(--fg-400); }
+.downloadFlowRail { display:flex; align-items:stretch; border-bottom:1px solid rgba(255,255,255,.06); background:var(--bg-850); flex-shrink:0; }
+.downloadFlowStep { display:flex; flex-direction:column; gap:2px; padding:10px 16px; flex:1; border-right:1px solid rgba(255,255,255,.05); opacity:.45; transition:opacity .15s; }
+.downloadFlowStep:last-child { border-right:none; }
+.downloadFlowStep.isActive { opacity:1; }
+.downloadFlowStep.isActive strong { color:var(--primary); }
+.downloadFlowStep strong { font-size:11px; font-weight:700; color:var(--fg-200); display:block; }
+.downloadFlowStep span   { font-size:10px; color:var(--fg-400); line-height:1.4; }
+.downloadQueuePanel { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; }
+.downloadQueueHeader { display:flex; align-items:center; justify-content:space-between; padding:10px 20px 9px; background:var(--bg-850); border-bottom:1px solid rgba(255,255,255,.05); flex-shrink:0; }
+.downloadQueueTitle { font-size:12px; font-weight:700; color:var(--fg-200); }
+.downloadQueueMeta { font-size:11px; color:var(--fg-400); }
+.downloadQueueList { flex:1; overflow-y:auto; }
+.downloadQueueList::-webkit-scrollbar { width:6px; }
+.downloadQueueList::-webkit-scrollbar-thumb { background:rgba(255,255,255,.1); border-radius:3px; }
+.downloadQueueRow { display:flex; align-items:center; gap:12px; padding:10px 20px 10px 24px; min-height:62px; border-bottom:1px solid rgba(255,255,255,.04); border-left:3px solid rgba(255,255,255,.08); transition:background .12s; }
+.downloadQueueRow:hover { background:rgba(255,255,255,.02); }
+.downloadQueueRow:last-child { border-bottom:none; }
+.downloadRowMain { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+.downloadRowTitle { font-size:12px; font-weight:600; color:var(--fg-100); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.downloadRowUrl  { font-size:10px; color:var(--fg-400); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.downloadRowPath { font-size:10px; color:rgba(34,197,94,.6); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.downloadRowError{ font-size:10px; color:#f87171; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.downloadRowStatus { display:flex; flex-direction:column; align-items:flex-start; gap:5px; flex-shrink:0; width:130px; }
+.downloadSourceBadge { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:3px; font-size:10px; font-weight:700; flex-shrink:0; white-space:nowrap; }
+.downloadSourceBadge.youtube   { background:rgba(255,0,0,.12);     border:1px solid rgba(255,0,0,.2);     color:#ff6b6b; }
+.downloadSourceBadge.instagram { background:rgba(193,53,132,.12);  border:1px solid rgba(193,53,132,.2);  color:#f48fb1; }
+.downloadSourceBadge.tiktok    { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); color:var(--fg-200); }
+.downloadStatusBadge { display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:10px; font-size:10px; font-weight:700; flex-shrink:0; white-space:nowrap; }
+.downloadStatusBadge.waiting     { background:rgba(77,124,255,.12);  border:1px solid rgba(77,124,255,.2);  color:#93c5fd; }
+.downloadStatusBadge.downloading { background:rgba(77,124,255,.18);  border:1px solid rgba(77,124,255,.35); color:var(--primary); }
+.downloadStatusBadge.done        { background:rgba(34,197,94,.12);   border:1px solid rgba(34,197,94,.2);   color:#4ade80; }
+.downloadStatusBadge.failed      { background:rgba(239,68,68,.12);   border:1px solid rgba(239,68,68,.2);   color:#f87171; }
+.downloadMiniProgress { width:100%; height:4px; background:rgba(255,255,255,.07); border-radius:2px; overflow:hidden; }
+.downloadMiniProgressValue { height:100%; background:var(--primary); border-radius:2px; transition:width .3s; }
+.downloadQueueRow.done   .downloadMiniProgressValue { background:var(--success); }
+.downloadQueueRow.failed .downloadMiniProgressValue { background:var(--danger); }
+.downloadRowActions { display:flex; align-items:center; gap:5px; flex-shrink:0; }
+.downloadActionBtn { display:inline-flex; align-items:center; height:26px; padding:0 9px; border-radius:5px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.05); color:var(--fg-200); font-size:11px; cursor:pointer; font-family:var(--font-ui); transition:background .12s; white-space:nowrap; }
+.downloadActionBtn:hover { background:rgba(255,255,255,.1); color:var(--fg-100); }
+.downloadQueueRow.waiting     { border-left-color:rgba(77,124,255,.3); }
+.downloadQueueRow.downloading { border-left-color:var(--primary); animation:_dlPulse 1.8s ease-in-out infinite; }
+.downloadQueueRow.done        { border-left-color:var(--success); }
+.downloadQueueRow.failed      { border-left-color:var(--danger); background:rgba(239,68,68,.02); }
+@keyframes _dlPulse { 0%,100%{border-left-color:rgba(77,124,255,.5)} 50%{border-left-color:var(--primary)} }
+/* URL input bar */
+.dlInputBar { display:flex; gap:8px; padding:12px 20px; background:var(--bg-850); border-bottom:1px solid rgba(255,255,255,.05); flex-shrink:0; }
+.dlInputBar input { flex:1; height:34px; background:var(--bg-700); border:1px solid var(--border-strong); border-radius:var(--r-md); color:var(--fg-100); font-size:12px; padding:0 12px; font-family:var(--font-ui); outline:none; }
+.dlInputBar input:focus { border-color:var(--primary); box-shadow:0 0 0 2px var(--primary-muted); }
+.dlInputBar input::placeholder { color:var(--fg-400); }
+
+/* ============================================================
+   HISTORY WORKSPACE (Screen 6)
+   ============================================================ */
+.historyWorkspace { display:flex; flex-direction:column; height:100%; overflow:hidden; background:var(--bg-900); }
+.hwHeader { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 24px 16px; background:var(--bg-850); border-bottom:1px solid rgba(255,255,255,.06); flex-shrink:0; }
+.hwHeaderLeft { flex:1; min-width:0; }
+.hwTitle { font-size:20px; font-weight:700; color:var(--fg-100); margin-bottom:4px; }
+.hwSub { font-size:12px; color:var(--fg-400); }
+.hwHeaderRight { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.hwMeta { font-size:12px; color:var(--fg-400); }
+.hwRefreshBtn { height:28px; padding:0 10px; border-radius:6px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.05); color:var(--fg-300); font-size:11px; cursor:pointer; font-family:var(--font-ui); transition:background .12s; }
+.hwRefreshBtn:hover { background:rgba(255,255,255,.1); color:var(--fg-100); }
+.historySummaryRail { display:flex; align-items:stretch; border-bottom:1px solid rgba(255,255,255,.06); background:var(--bg-850); flex-shrink:0; }
+.historySummaryCard { display:flex; flex-direction:column; gap:2px; padding:10px 20px; flex:1; border-right:1px solid rgba(255,255,255,.05); }
+.historySummaryCard:last-child { border-right:none; }
+.historySummaryCard strong { font-size:11px; font-weight:700; color:var(--fg-200); display:block; }
+.historySummaryCard span { font-size:10px; color:var(--fg-400); line-height:1.4; }
+.hwFilterBar { display:flex; align-items:center; gap:4px; padding:10px 20px; background:var(--bg-900); border-bottom:1px solid rgba(255,255,255,.05); flex-shrink:0; flex-wrap:wrap; }
+.hwFilterBtn { height:28px; padding:0 12px; border-radius:14px; border:1px solid rgba(255,255,255,.08); background:transparent; color:var(--fg-300); font-size:11px; font-weight:500; cursor:pointer; font-family:var(--font-ui); white-space:nowrap; transition:background .12s,color .12s,border-color .12s; }
+.hwFilterBtn:hover  { background:rgba(255,255,255,.06); color:var(--fg-100); border-color:rgba(255,255,255,.15); }
+.hwFilterBtn.active { background:rgba(77,124,255,.15); border-color:rgba(77,124,255,.35); color:var(--primary); font-weight:600; }
+.hwBody { flex:1; overflow-y:auto; min-height:0; }
+.hwBody::-webkit-scrollbar { width:6px; }
+.hwBody::-webkit-scrollbar-thumb { background:rgba(255,255,255,.1); border-radius:3px; }
+.historyList { display:flex; flex-direction:column; }
+.hwCard { display:flex; align-items:center; gap:14px; padding:12px 20px; border-bottom:1px solid rgba(255,255,255,.04); border-left:3px solid rgba(255,255,255,.08); background:transparent; transition:background .12s; min-height:52px; }
+.hwCard:hover { background:rgba(255,255,255,.02); }
+.hwCard:last-child { border-bottom:none; }
+.hwCard.completed  { border-left-color:rgba(34,197,94,.35); }
+.hwCard.partial    { border-left-color:rgba(245,158,11,.35); }
+.hwCard.failed     { border-left-color:rgba(239,68,68,.35); background:rgba(239,68,68,.015); }
+.hwCard.running    { border-left-color:var(--primary); }
+.hwCard.queued     { border-left-color:rgba(168,85,247,.35); }
+.hwCardLeft { display:flex; flex-direction:column; align-items:center; gap:5px; flex-shrink:0; width:50px; }
+.hwKindBadge { display:inline-flex; align-items:center; justify-content:center; height:16px; padding:0 6px; border-radius:3px; font-size:9px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; white-space:nowrap; }
+.hwKindBadge.render   { background:rgba(77,124,255,.13);  border:1px solid rgba(77,124,255,.22);  color:#93c5fd; }
+.hwKindBadge.download { background:rgba(168,85,247,.12);  border:1px solid rgba(168,85,247,.22);  color:#c4b5fd; }
+.hwCardMain { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+.hwCardTitle { font-size:12px; font-weight:600; color:var(--fg-100); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hwCardMeta { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.hwCardTime    { font-size:10px; color:var(--fg-400); flex-shrink:0; }
+.hwCardSummary { font-size:10px; color:var(--fg-300); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hwCardRight { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0; }
+.hwStatusBadge { display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:.3px; white-space:nowrap; }
+.hwStatusBadge.completed  { background:rgba(34,197,94,.12);   border:1px solid rgba(34,197,94,.2);   color:#4ade80; }
+.hwStatusBadge.partial    { background:rgba(245,158,11,.12);  border:1px solid rgba(245,158,11,.2);  color:#fbbf24; }
+.hwStatusBadge.failed     { background:rgba(239,68,68,.12);   border:1px solid rgba(239,68,68,.2);   color:#f87171; }
+.hwStatusBadge.running    { background:rgba(77,124,255,.15);  border:1px solid rgba(77,124,255,.3);  color:var(--primary); }
+.hwStatusBadge.queued     { background:rgba(168,85,247,.12);  border:1px solid rgba(168,85,247,.22); color:#c4b5fd; }
+.hwCardActions { display:flex; align-items:center; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
+.hwActionBtn { display:inline-flex; align-items:center; justify-content:center; height:24px; padding:0 9px; border-radius:4px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.05); color:var(--fg-200); font-size:10px; font-weight:600; cursor:pointer; font-family:var(--font-ui); transition:background .12s; white-space:nowrap; }
+.hwActionBtn:hover { background:rgba(255,255,255,.1); color:var(--fg-100); }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     TOPBAR
+     ============================================================ -->
+<header class="topbar">
+  <!-- Row 1: Brand + L1 section tabs + pills -->
+  <div class="topbar-row1">
+    <div class="topbar-brand">
+      <div class="ai-badge">AI</div>
+      <span class="brand-name">Clip Studio</span>
+    </div>
+
+    <button class="l1-tab active" id="l1-render" onclick="goSection('render')">
+      <i data-lucide="film" style="width:13px;height:13px;"></i> Render
+    </button>
+    <button class="l1-tab" id="l1-download" onclick="goSection('download')">
+      <i data-lucide="download" style="width:13px;height:13px;"></i> Download
+    </button>
+    <button class="l1-tab" id="l1-history" onclick="goSection('history')">
+      <i data-lucide="history" style="width:13px;height:13px;"></i> History
+    </button>
+
+    <div class="topbar-pills">
+      <div class="topbar-pill active" id="pill-hq">
+        <i data-lucide="zap" style="width:11px;height:11px;"></i> HQ
+      </div>
+      <div class="topbar-pill" id="pill-fast" onclick="togglePill('pill-fast','pill-hq')">
+        <i data-lucide="rocket" style="width:11px;height:11px;"></i> Fast
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: L2 step tabs (shown only for Render section) -->
+  <div class="topbar-row2" id="l2-render-tabs">
+    <button class="l2-tab active" id="tab1" data-tab="1" onclick="goTab(1)">
+      <span class="l2-step-num">1</span> Input
+    </button>
+    <button class="l2-tab disabled" id="tab2" data-tab="2" onclick="goTab(2)">
+      <span class="l2-step-num">2</span> Configure
+    </button>
+    <button class="l2-tab disabled" id="tab3" data-tab="3" onclick="goTab(3)">
+      <span class="l2-step-num">3</span> Rendering
+    </button>
+    <button class="l2-tab disabled" id="tab4" data-tab="4" onclick="goTab(4)">
+      <span class="l2-step-num">4</span> Results
+    </button>
+  </div>
+</header>
+
+<!-- ============================================================
+     SCREEN WRAPPER
+     ============================================================ -->
+<div class="screen-wrapper">
+
+  <!-- ==========================================
+       SCREEN 1 — INPUT VIDEO
+       ========================================== -->
+  <div class="screen active" id="screen-1">
+    <div class="s1-wrap">
+
+      <div class="s1-header">
+        <div class="s1-title">Add Video Source</div>
+        <div class="s1-breadcrumb">
+          <span class="bc-step current">Input</span>
+          <span class="bc-sep">→</span>
+          <span class="bc-step">Configure</span>
+          <span class="bc-sep">→</span>
+          <span class="bc-step">Render</span>
+          <span class="bc-sep">→</span>
+          <span class="bc-step">Results</span>
+        </div>
+        <div class="s1-step-hint" style="margin-top:8px;">Step 1 of 4 — Paste a link or drop a local file to get started</div>
+      </div>
+
+      <!-- Source type toggle -->
+      <div class="source-toggle-wrap">
+        <div class="source-toggle">
+          <button class="src-btn active" id="src-yt" onclick="setSource('yt')">
+            <i data-lucide="youtube" style="width:14px;height:14px;"></i> YouTube URL
+          </button>
+          <button class="src-btn" id="src-local" onclick="setSource('local')">
+            <i data-lucide="hard-drive" style="width:14px;height:14px;"></i> Local File
+          </button>
+        </div>
+      </div>
+
+      <!-- YouTube URL panel -->
+      <div class="input-panel active" id="panel-yt">
+        <div class="section-head"><span>Video URL</span></div>
+        <div class="url-input-wrap">
+          <span class="url-input-icon"><i data-lucide="link" style="width:16px;height:16px;"></i></span>
+          <input type="url" class="url-input" id="url-input" placeholder="Paste YouTube, TikTok, Instagram or Facebook link..." oninput="onUrlChange()">
+        </div>
+        <div class="url-hint">Supports YouTube, TikTok, Instagram, Facebook, Twitter</div>
+
+        <div style="margin-top:16px;">
+          <button class="btn btn-primary btn-lg btn-full" id="btn-prepare" onclick="prepareVideo()" disabled>
+            <i data-lucide="download" style="width:14px;height:14px;"></i>
+            <span id="prepare-label">Prepare Video</span>
+          </button>
+        </div>
+
+        <!-- Video meta card -->
+        <div class="card video-meta-card" id="meta-card">
+          <div class="meta-thumb">
+            <div style="position:absolute;inset:0;background:linear-gradient(135deg,#1a2a4a,#2a1a3a,#1a3a2a);"></div>
+            <div class="meta-thumb-icon">
+              <i data-lucide="film" style="width:36px;height:36px;"></i>
+            </div>
+          </div>
+          <div class="meta-title">How to Build Viral Content in 2024</div>
+          <div class="meta-details">
+            <span class="meta-detail-item"><i data-lucide="clock" style="width:12px;height:12px;color:var(--fg-400);"></i> 45:32</span>
+            <span class="meta-detail-item"><i data-lucide="monitor" style="width:12px;height:12px;color:var(--fg-400);"></i> 1920×1080</span>
+            <span class="meta-detail-item"><i data-lucide="activity" style="width:12px;height:12px;color:var(--fg-400);"></i> 30fps</span>
+            <span class="meta-detail-item"><i data-lucide="youtube" style="width:12px;height:12px;color:var(--fg-400);"></i> YouTube</span>
+            <span class="meta-detail-item"><i data-lucide="database" style="width:12px;height:12px;color:var(--fg-400);"></i> ~380MB</span>
+          </div>
+          <div class="badge badge-done"><i data-lucide="check" style="width:10px;height:10px;"></i> Video ready</div>
+        </div>
+      </div>
+
+      <!-- Local file panel -->
+      <div class="input-panel" id="panel-local">
+        <div class="section-head"><span>Local File</span></div>
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event)">
+          <div class="dz-icon"><i data-lucide="cloud-upload" style="width:32px;height:32px;"></i></div>
+          <div class="dz-main">Drop video file here</div>
+          <div class="dz-sub">or click to browse</div>
+          <div class="dz-formats">.mp4  .mov  .avi  .mkv</div>
+          <input type="file" id="file-input" accept=".mp4,.mov,.avi,.mkv" style="display:none;" onchange="localFilePicked(this)">
+        </div>
+
+        <div class="card video-meta-card" id="meta-card-local" style="margin-top:16px;">
+          <div class="meta-thumb">
+            <div style="position:absolute;inset:0;background:linear-gradient(135deg,#2a1a1a,#1a2a1a,#1a1a2a);"></div>
+            <div class="meta-thumb-icon"><i data-lucide="film" style="width:36px;height:36px;"></i></div>
+          </div>
+          <div class="meta-title" id="local-title">video_file.mp4</div>
+          <div class="meta-details">
+            <span class="meta-detail-item"><i data-lucide="clock" style="width:12px;height:12px;color:var(--fg-400);"></i> <span id="local-dur">--:--</span></span>
+            <span class="meta-detail-item"><i data-lucide="hard-drive" style="width:12px;height:12px;color:var(--fg-400);"></i> Local File</span>
+          </div>
+          <div class="badge badge-done"><i data-lucide="check" style="width:10px;height:10px;"></i> Video ready</div>
+        </div>
+      </div>
+
+    </div><!-- /s1-wrap -->
+
+    <div class="cta-bar">
+      <div class="cta-inner">
+        <button class="btn btn-primary btn-lg" id="btn-continue-1" onclick="goTab(2)" disabled>
+          Continue to Configure <i data-lucide="arrow-right" style="width:14px;height:14px;"></i>
+        </button>
+      </div>
+    </div>
+  </div><!-- /screen-1 -->
+
+
+  <!-- ==========================================
+       SCREEN 2 — CONFIGURE
+       ========================================== -->
+  <div class="screen" id="screen-2">
+    <div class="s2-layout">
+
+      <!-- ── LEFT: Live Preview ── -->
+      <div class="s2-left">
+
+        <!-- Device frame + preview box -->
+        <div class="preview-device" id="preview-device">
+          <div class="preview-device-notch" id="preview-notch"></div>
+          <div class="preview-box" id="preview-box">
+            <div class="preview-bg" id="preview-bg"></div>
+            <div class="preview-scanlines"></div>
+            <div class="preview-vignette"></div>
+
+            <!-- Center play icon -->
+            <div class="preview-center-icon">
+              <i data-lucide="play" style="width:40px;height:40px;"></i>
+            </div>
+
+            <!-- Ratio badge top-right -->
+            <div class="preview-ratio-badge" id="preview-ratio-badge">9:16</div>
+
+            <!-- Subtitle overlay at bottom -->
+            <div class="preview-subtitle preview-subtitle--karaoke" id="preview-subtitle">
+              <span>building </span><span class="kw">viral</span><span> content fast</span>
+            </div>
+          </div>
+          <div class="preview-device-bar" id="preview-bar"></div>
+        </div>
+
+        <!-- Dimensions label -->
+        <div style="text-align:center;line-height:1.6;">
+          <div style="font-size:12px;font-weight:700;color:var(--fg-200);font-family:var(--font-mono);" id="preview-dims">1080 × 1920</div>
+          <div style="font-size:10px;color:var(--fg-400);" id="preview-platform">TikTok · Instagram Reels · Shorts</div>
+        </div>
+
+        <!-- Ratio chips -->
+        <div class="ratio-strip" id="ratio-strip">
+          <div class="ratio-chip selected" data-ratio="9:16" onclick="selectRatio(this)">
+            <span class="rc-icon" style="width:7px;height:13px;"></span> 9:16
+          </div>
+          <div class="ratio-chip" data-ratio="3:4" onclick="selectRatio(this)">
+            <span class="rc-icon" style="width:9px;height:12px;"></span> 3:4
+          </div>
+          <div class="ratio-chip" data-ratio="4:5" onclick="selectRatio(this)">
+            <span class="rc-icon" style="width:10px;height:12px;"></span> 4:5
+          </div>
+          <div class="ratio-chip" data-ratio="1:1" onclick="selectRatio(this)">
+            <span class="rc-icon" style="width:11px;height:11px;"></span> 1:1
+          </div>
+          <div class="ratio-chip" data-ratio="16:9" onclick="selectRatio(this)">
+            <span class="rc-icon" style="width:14px;height:8px;"></span> 16:9
+          </div>
+        </div>
+
+        <!-- hidden legacy compat -->
+        <div class="preview-info" id="preview-info" style="display:none;">
+          <span id="pi-ratio">9:16</span><span id="pi-fps"></span><span id="pi-sub"></span>
+          <span id="pi-translate"></span><span id="pi-clips"></span><span id="pi-dur"></span>
+        </div>
+
+      </div><!-- /s2-left -->
+
+      <!-- ── RIGHT: Settings ── -->
+      <div class="s2-right">
+
+        <!-- Duration -->
+        <div class="s2-section">
+          <div class="section-head"><span>Clip Duration</span></div>
+          <div class="slider-row">
+            <div class="slider-group">
+              <label>Min <span class="val" id="min-dur-val">30s</span></label>
+              <input type="range" id="slider-min" min="10" max="120" value="30" oninput="onSlider(this,'min-dur-val','s')">
+            </div>
+            <div class="slider-group">
+              <label>Max <span class="val" id="max-dur-val">90s</span></label>
+              <input type="range" id="slider-max" min="30" max="300" value="90" oninput="onSlider(this,'max-dur-val','s')">
+            </div>
+          </div>
+        </div>
+
+        <!-- Video Style -->
+        <div class="s2-section">
+          <div class="section-head"><span>Video Style</span></div>
+          <div class="vstyle-cards" id="vstyle-cards">
+            <div class="vstyle-card selected" data-vstyle="dynamic" onclick="selectVStyle(this)">
+              <div class="vstyle-icon">⚡</div>
+              <div class="vstyle-label">Dynamic</div>
+              <div class="vstyle-sub">Energetic</div>
+            </div>
+            <div class="vstyle-card" data-vstyle="clean" onclick="selectVStyle(this)">
+              <div class="vstyle-icon">🎯</div>
+              <div class="vstyle-label">Clean</div>
+              <div class="vstyle-sub">Minimal</div>
+            </div>
+            <div class="vstyle-card" data-vstyle="cinematic" onclick="selectVStyle(this)">
+              <div class="vstyle-icon">🎬</div>
+              <div class="vstyle-label">Cinematic</div>
+              <div class="vstyle-sub">Film look</div>
+            </div>
+            <div class="vstyle-card" data-vstyle="auto" onclick="selectVStyle(this)">
+              <div class="vstyle-icon">✨</div>
+              <div class="vstyle-label">Auto</div>
+              <div class="vstyle-sub">AI picks</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtitle -->
+        <div class="s2-section">
+          <div class="section-head"><span>Subtitle</span></div>
+          <div class="toggle-row-item">
+            <div>
+              <div class="tri-label">Enable subtitles</div>
+              <div class="tri-sub">Auto-transcribe and burn in captions</div>
+            </div>
+            <div class="toggle-wrap" onclick="toggleSub()" id="sub-toggle-wrap">
+              <div class="toggle-track on" id="sub-track"><div class="toggle-thumb"></div></div>
+            </div>
+          </div>
+
+          <div class="sub-expand open" id="sub-expand">
+            <div style="margin-top:12px;margin-bottom:10px;">
+              <div class="style-grid" id="style-cards">
+                <div class="style-card selected" data-style="capcut" onclick="selectStyle(this)">
+                  <div class="style-preview">
+                    <span style="color:#FFD600;font-weight:800;letter-spacing:.04em;text-shadow:0 1px 4px rgba(0,0,0,.8);">WORD</span>
+                  </div>
+                  <div class="style-name">Karaoke</div>
+                  <div class="style-desc">Word highlight</div>
+                </div>
+                <div class="style-card" data-style="hormozi" onclick="selectStyle(this)">
+                  <div class="style-preview">
+                    <span style="color:#fff;font-size:13px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;">BIG TEXT</span>
+                  </div>
+                  <div class="style-name">Bold</div>
+                  <div class="style-desc">Hormozi style</div>
+                </div>
+                <div class="style-card" data-style="podcast" onclick="selectStyle(this)">
+                  <div class="style-preview">
+                    <span style="color:rgba(255,255,255,.85);font-size:11px;text-align:center;line-height:1.4;">Clean subtitle<br>text</span>
+                  </div>
+                  <div class="style-name">Standard</div>
+                  <div class="style-desc">Clean readable</div>
+                </div>
+                <div class="style-card" data-style="highlight" onclick="selectStyle(this)">
+                  <div class="style-preview">
+                    <span style="background:rgba(77,124,255,.75);color:#fff;border-radius:2px;padding:1px 5px;font-size:11px;font-weight:700;">word</span>
+                    <span style="color:rgba(255,255,255,.55);font-size:11px;"> by </span>
+                    <span style="background:rgba(77,124,255,.5);color:#fff;border-radius:2px;padding:1px 5px;font-size:11px;font-weight:700;">word</span>
+                  </div>
+                  <div class="style-name">Highlight</div>
+                  <div class="style-desc">Word boxes</div>
+                </div>
+              </div>
+            </div>
+            <div class="translate-row">
+              <div class="toggle-wrap" onclick="toggleTranslate()" id="trans-toggle-wrap">
+                <div class="toggle-track" id="trans-track"><div class="toggle-thumb"></div></div>
+              </div>
+              <span class="toggle-label" style="font-size:12px;">Translate to</span>
+              <select id="lang-select" style="max-width:150px;font-size:12px;height:32px;" disabled>
+                <option>Vietnamese</option><option>English</option>
+                <option>Japanese</option><option>Korean</option><option>Spanish</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Save Location -->
+        <div class="s2-section">
+          <div class="section-head"><span>Save Location</span></div>
+          <div class="save-loc-row">
+            <input type="text" value="D:\videos\output" id="output-path">
+            <button class="btn btn-secondary btn-sm" style="white-space:nowrap;" onclick="fakebrw()">Browse</button>
+          </div>
+          <div class="disk-info">
+            <i data-lucide="hard-drive" style="width:12px;height:12px;"></i> D: · 234 GB free
+          </div>
+        </div>
+
+        <!-- Sticky CTA -->
+        <div style="position:sticky;bottom:0;background:linear-gradient(to top,var(--bg-800) 70%,transparent);padding:20px 0 4px;display:flex;align-items:center;gap:10px;">
+          <button class="btn btn-ghost" onclick="goTab(1)">
+            <i data-lucide="arrow-left" style="width:14px;height:14px;"></i> Back
+          </button>
+          <div style="flex:1;"></div>
+          <div style="font-size:11px;color:var(--fg-400);" id="preview-meta">Karaoke · Dynamic · 30–90s</div>
+          <button class="btn btn-primary btn-lg" onclick="startRender()">
+            <i data-lucide="zap" style="width:14px;height:14px;"></i> Start Render
+          </button>
+        </div>
+
+      </div><!-- /s2-right -->
+
+    </div><!-- /s2-layout -->
+  </div><!-- /screen-2 -->
+
+
+  <!-- ==========================================
+       SCREEN 3 — RENDERING (rdCard pattern)
+       ========================================== -->
+  <div class="screen" id="screen-3">
+    <div class="renderActivePanel">
+
+      <!-- rdCard: overall job summary -->
+      <div class="rdCard" id="rdCard" data-state="running">
+        <div class="rdCardHead">
+          <div class="rdHeadLeft">
+            <span class="rdBadge2" id="s3-status-badge" data-state="running">RENDERING</span>
+            <span class="rdTitle2">How to Build Viral Content in 2024</span>
+          </div>
+          <button class="rdLogBtn2" onclick="toggleLog()">Logs</button>
+          <button class="rdLogBtn2" onclick="cancelRender()" id="btn-cancel" style="color:#f87171;">Cancel</button>
+        </div>
+        <div class="rdStep2" id="rd-step">Clip 1/3 — Cutting 00:12 → 01:24 · 72s</div>
+        <div class="rdSegBar">
+          <div class="rdSegItem rdSegItem--rendering" id="seg-1"></div>
+          <div class="rdSegItem rdSegItem--waiting"   id="seg-2"></div>
+          <div class="rdSegItem rdSegItem--waiting"   id="seg-3"></div>
+        </div>
+        <div class="rdMeta">
+          <span class="rdPct2" id="overall-pct">0%</span>
+          <span class="rdMetaSub" id="overall-eta">Calculating ETA…</span>
+        </div>
+      </div>
+
+      <!-- AI Insights strip -->
+      <div class="aiInsightsPanel">
+        <div class="aiInHeader">
+          <span class="aiInLabel">AI Director</span>
+          <span class="aiInConfBadge">Confidence 94%</span>
+        </div>
+        <div class="aiInBody">Selected 3 viral-candidate segments · Avg engagement score 8.7 · CapCut karaoke subtitles applied · Smart crop: face tracking active</div>
+      </div>
+
+      <!-- Runtime mount: clip queue rows -->
+      <div class="renderRuntimeMount">
+        <div class="rdQueueScroll" id="rdQueueScroll">
+
+          <!-- Clip 1 -->
+          <div class="rdQueueRow rdQueueRow--waiting" id="part-1">
+            <div class="rdQueueRowHead">
+              <span class="rdQueueRowName" id="clip-dur-1">Clip 01 · 0:12 – 1:24</span>
+              <span class="rdQueueRowBadge" id="badge-1">Queued</span>
+            </div>
+            <div class="progress-track" style="height:3px;margin:2px 0;">
+              <div class="progress-fill" id="prog-1" style="width:0%;"></div>
+            </div>
+            <div class="rdQueueRowPath" id="stage-1">Waiting to start…</div>
+            <div class="rdQueueRowActions" id="actions-1" style="display:none;">
+              <button class="rdQueueBtn">Preview</button>
+              <button class="rdQueueBtn">Open Folder</button>
+            </div>
+          </div>
+
+          <!-- Clip 2 -->
+          <div class="rdQueueRow rdQueueRow--waiting" id="part-2">
+            <div class="rdQueueRowHead">
+              <span class="rdQueueRowName" id="clip-dur-2">Clip 02 · 3:15 – 4:48</span>
+              <span class="rdQueueRowBadge" id="badge-2">Queued</span>
+            </div>
+            <div class="progress-track" style="height:3px;margin:2px 0;">
+              <div class="progress-fill" id="prog-2" style="width:0%;"></div>
+            </div>
+            <div class="rdQueueRowPath" id="stage-2">Waiting to start…</div>
+            <div class="rdQueueRowActions" id="actions-2" style="display:none;">
+              <button class="rdQueueBtn">Preview</button>
+              <button class="rdQueueBtn">Open Folder</button>
+            </div>
+          </div>
+
+          <!-- Clip 3 -->
+          <div class="rdQueueRow rdQueueRow--waiting" id="part-3">
+            <div class="rdQueueRowHead">
+              <span class="rdQueueRowName" id="clip-dur-3">Clip 03 · 7:22 – 8:55</span>
+              <span class="rdQueueRowBadge" id="badge-3">Queued</span>
+            </div>
+            <div class="progress-track" style="height:3px;margin:2px 0;">
+              <div class="progress-fill" id="prog-3" style="width:0%;"></div>
+            </div>
+            <div class="rdQueueRowPath" id="stage-3">Waiting to start…</div>
+            <div class="rdQueueRowActions" id="actions-3" style="display:none;">
+              <button class="rdQueueBtn">Preview</button>
+              <button class="rdQueueBtn">Open Folder</button>
+            </div>
+          </div>
+        </div><!-- /rdQueueScroll -->
+
+        <!-- Log panel (collapsible) -->
+        <div class="log-panel" id="log-panel">
+          <div class="log-header" onclick="toggleLog()" style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;cursor:pointer;border-bottom:1px solid var(--border-subtle);background:var(--bg-850);">
+            <div class="section-head section-head--muted" style="margin-bottom:0;"><span>Render Log</span></div>
+            <button class="rdLogBtn2" id="log-toggle-btn">Collapse</button>
+          </div>
+          <div class="log-body" id="log-body" style="max-height:140px;overflow-y:auto;padding:8px 16px;font-family:var(--font-mono);font-size:11px;color:var(--fg-300);line-height:1.7;background:var(--bg-900);"></div>
+        </div>
+
+        <!-- abpToolbar: bottom status bar -->
+        <div class="abpToolbar">
+          <div class="abpToolbarJob">
+            <div class="abpJobTitle" id="abpTitle">job_2024_001</div>
+            <div class="abpJobMeta">3 clips · 9:16 · CapCut karaoke</div>
+          </div>
+          <div class="abpToolbarProgress">
+            <div class="abpProgressBar">
+              <div class="abpProgressValue" id="overall-bar" style="width:0%;"></div>
+            </div>
+            <div class="abpJobMsg" id="abp-msg">Clip 1/3 · Waiting…</div>
+          </div>
+          <span class="abpPct" id="abp-pct">0%</span>
+          <span class="rdBadge2" id="abp-badge" data-state="running" style="flex-shrink:0;">RUNNING</span>
+        </div>
+
+      </div><!-- /renderRuntimeMount -->
+    </div><!-- /renderActivePanel -->
+  </div><!-- /screen-3 -->
+
+
+  <!-- ==========================================
+       SCREEN 4 — RESULTS
+       ========================================== -->
+  <div class="screen" id="screen-4">
+    <div class="s4-wrap2">
+
+      <!-- Hero banner -->
+      <div class="s4-hero">
+        <div class="s4-hero-bg"></div>
+        <div class="s4-hero-content">
+          <div class="s4-hero-left">
+            <div class="s4-complete-row">
+              <div class="s4-complete-icon">
+                <i data-lucide="check" style="width:18px;height:18px;"></i>
+              </div>
+              <div>
+                <div class="productKicker">Render Complete</div>
+                <div class="s4-hero-title">3 clips ready to publish</div>
+              </div>
+            </div>
+            <div class="s4-hero-sub">How to Build Viral Content in 2024 · 9:16 · CapCut Karaoke</div>
+            <!-- Viral tags -->
+            <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;">
+              <span style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.2);color:#4ade80;font-size:10px;font-weight:700;padding:3px 9px;border-radius:var(--r-pill);">🔥 Hook detected</span>
+              <span style="background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.2);color:#c4b5fd;font-size:10px;font-weight:700;padding:3px 9px;border-radius:var(--r-pill);">💡 3 key insights</span>
+              <span style="background:rgba(77,124,255,.12);border:1px solid rgba(77,124,255,.2);color:#93c5fd;font-size:10px;font-weight:700;padding:3px 9px;border-radius:var(--r-pill);">⚡ High engagement window</span>
+            </div>
+          </div>
+          <div class="s4-hero-right">
+            <div class="s4-kpi-row">
+              <div class="s4-kpi green">
+                <strong>91</strong><span>Top Score</span>
+              </div>
+              <div class="s4-kpi blue">
+                <strong>3</strong><span>Clips</span>
+              </div>
+              <div class="s4-kpi">
+                <strong>2:08</strong><span>Total</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-ghost btn-sm" onclick="newRender()">
+                <i data-lucide="plus" style="width:13px;height:13px;"></i> New
+              </button>
+              <button class="btn btn-primary" onclick="exportAll()">
+                <i data-lucide="download" style="width:13px;height:13px;"></i> Export All
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Clip cards -->
+      <div class="s4-body">
+        <div class="section-head" style="margin-bottom:16px;"><span>Exported Clips</span></div>
+        <div class="s4-clips-row">
+
+          <!-- Clip 1 — top score -->
+          <div class="clip-card is-top" data-aspect="9:16">
+            <div class="clip-card__thumb">
+              <div class="clip-card__thumb-bg" style="background:linear-gradient(160deg,#0a1628 0%,#1a0a28 60%,#0a2818 100%);"></div>
+              <div class="clip-card__rank">#1</div>
+              <div class="clip-card__score clip-card__score--high">87</div>
+              <div class="clip-card__duration">0:45</div>
+              <div class="clip-card__aspect">9:16</div>
+              <div class="clip-card__play"><i data-lucide="play" style="width:18px;height:18px;margin-left:2px;"></i></div>
+            </div>
+            <div class="clip-card__info">
+              <div class="clip-card__title">Clip 01 — Opening Hook</div>
+              <div class="clip-card__meta">
+                <span style="color:var(--fg-400);">0:12 – 0:57</span>
+                <span style="color:var(--success);font-weight:700;font-family:var(--font-mono);">87</span>
+              </div>
+              <!-- Score bar -->
+              <div style="height:3px;background:var(--bg-400);border-radius:var(--r-pill);margin-bottom:8px;overflow:hidden;">
+                <div style="width:87%;height:100%;background:var(--success);border-radius:var(--r-pill);"></div>
+              </div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
+                <span style="font-size:9px;background:rgba(34,197,94,.1);color:#4ade80;padding:2px 6px;border-radius:var(--r-pill);border:1px solid rgba(34,197,94,.2);">🔥 Hook</span>
+                <span style="font-size:9px;background:rgba(77,124,255,.1);color:#93c5fd;padding:2px 6px;border-radius:var(--r-pill);border:1px solid rgba(77,124,255,.2);">⚡ Viral</span>
+              </div>
+              <div class="clip-card__actions">
+                <button class="btn btn-primary btn-sm" onclick="fakeDownload(1)">
+                  <i data-lucide="download" style="width:11px;height:11px;"></i> Save
+                </button>
+                <div class="overflow-wrap">
+                  <button class="btn btn-secondary btn-sm" onclick="toggleOverflow(1,event)" style="width:28px;padding:0;">
+                    <i data-lucide="more-horizontal" style="width:12px;height:12px;"></i>
+                  </button>
+                  <div class="overflow-menu" id="overflow-1">
+                    <div class="om-item" onclick="omAction('open-folder',1)"><i data-lucide="folder-open" style="width:13px;height:13px;"></i> Open folder</div>
+                    <div class="om-item" onclick="omAction('rerender',1)"><i data-lucide="refresh-cw" style="width:13px;height:13px;"></i> Re-render</div>
+                    <div class="om-item danger" onclick="omAction('delete',1)"><i data-lucide="trash-2" style="width:13px;height:13px;"></i> Delete</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Clip 2 — highest score -->
+          <div class="clip-card is-top" data-aspect="9:16">
+            <div class="clip-card__thumb">
+              <div class="clip-card__thumb-bg" style="background:linear-gradient(160deg,#0a2018 0%,#181028 60%,#200a18 100%);"></div>
+              <div class="clip-card__rank">#2</div>
+              <div class="clip-card__score clip-card__score--high">91</div>
+              <div class="clip-card__duration">0:52</div>
+              <div class="clip-card__aspect">9:16</div>
+              <div class="clip-card__play"><i data-lucide="play" style="width:18px;height:18px;margin-left:2px;"></i></div>
+            </div>
+            <div class="clip-card__info">
+              <div class="clip-card__title">Clip 02 — Key Insight</div>
+              <div class="clip-card__meta">
+                <span style="color:var(--fg-400);">3:15 – 4:07</span>
+                <span style="color:var(--success);font-weight:700;font-family:var(--font-mono);">91</span>
+              </div>
+              <div style="height:3px;background:var(--bg-400);border-radius:var(--r-pill);margin-bottom:8px;overflow:hidden;">
+                <div style="width:91%;height:100%;background:var(--success);border-radius:var(--r-pill);"></div>
+              </div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
+                <span style="font-size:9px;background:rgba(168,85,247,.1);color:#c4b5fd;padding:2px 6px;border-radius:var(--r-pill);border:1px solid rgba(168,85,247,.2);">💡 Insight</span>
+                <span style="font-size:9px;background:rgba(245,158,11,.1);color:#fbbf24;padding:2px 6px;border-radius:var(--r-pill);border:1px solid rgba(245,158,11,.2);">🎯 CTA ready</span>
+              </div>
+              <div class="clip-card__actions">
+                <button class="btn btn-primary btn-sm" onclick="fakeDownload(2)">
+                  <i data-lucide="download" style="width:11px;height:11px;"></i> Save
+                </button>
+                <div class="overflow-wrap">
+                  <button class="btn btn-secondary btn-sm" onclick="toggleOverflow(2,event)" style="width:28px;padding:0;">
+                    <i data-lucide="more-horizontal" style="width:12px;height:12px;"></i>
+                  </button>
+                  <div class="overflow-menu" id="overflow-2">
+                    <div class="om-item" onclick="omAction('open-folder',2)"><i data-lucide="folder-open" style="width:13px;height:13px;"></i> Open folder</div>
+                    <div class="om-item" onclick="omAction('rerender',2)"><i data-lucide="refresh-cw" style="width:13px;height:13px;"></i> Re-render</div>
+                    <div class="om-item danger" onclick="omAction('delete',2)"><i data-lucide="trash-2" style="width:13px;height:13px;"></i> Delete</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Clip 3 -->
+          <div class="clip-card" data-aspect="9:16">
+            <div class="clip-card__thumb">
+              <div class="clip-card__thumb-bg" style="background:linear-gradient(160deg,#200a0a 0%,#0a1020 60%,#1a1a0a 100%);"></div>
+              <div class="clip-card__rank">#3</div>
+              <div class="clip-card__score clip-card__score--medium">74</div>
+              <div class="clip-card__duration">0:31</div>
+              <div class="clip-card__aspect">9:16</div>
+              <div class="clip-card__play"><i data-lucide="play" style="width:18px;height:18px;margin-left:2px;"></i></div>
+            </div>
+            <div class="clip-card__info">
+              <div class="clip-card__title">Clip 03 — CTA Closer</div>
+              <div class="clip-card__meta">
+                <span style="color:var(--fg-400);">7:22 – 7:53</span>
+                <span style="color:var(--warning);font-weight:700;font-family:var(--font-mono);">74</span>
+              </div>
+              <div style="height:3px;background:var(--bg-400);border-radius:var(--r-pill);margin-bottom:8px;overflow:hidden;">
+                <div style="width:74%;height:100%;background:var(--warning);border-radius:var(--r-pill);"></div>
+              </div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
+                <span style="font-size:9px;background:rgba(245,158,11,.1);color:#fbbf24;padding:2px 6px;border-radius:var(--r-pill);border:1px solid rgba(245,158,11,.2);">📢 CTA</span>
+              </div>
+              <div class="clip-card__actions">
+                <button class="btn btn-secondary btn-sm" onclick="fakeDownload(3)">
+                  <i data-lucide="download" style="width:11px;height:11px;"></i> Save
+                </button>
+                <div class="overflow-wrap">
+                  <button class="btn btn-secondary btn-sm" onclick="toggleOverflow(3,event)" style="width:28px;padding:0;">
+                    <i data-lucide="more-horizontal" style="width:12px;height:12px;"></i>
+                  </button>
+                  <div class="overflow-menu" id="overflow-3">
+                    <div class="om-item" onclick="omAction('open-folder',3)"><i data-lucide="folder-open" style="width:13px;height:13px;"></i> Open folder</div>
+                    <div class="om-item" onclick="omAction('rerender',3)"><i data-lucide="refresh-cw" style="width:13px;height:13px;"></i> Re-render</div>
+                    <div class="om-item danger" onclick="omAction('delete',3)"><i data-lucide="trash-2" style="width:13px;height:13px;"></i> Delete</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /s4-clips-row -->
+      </div><!-- /s4-body -->
+
+    </div><!-- /s4-wrap2 -->
+  </div><!-- /screen-4 -->
+
+
+  <!-- ==========================================
+       SCREEN 5 — DOWNLOAD
+       ========================================== -->
+  <div class="screen" id="screen-5">
+    <div class="downloadWorkspace">
+
+      <!-- Header -->
+      <div class="downloadWorkspaceHeader">
+        <div class="downloadHeaderCopy">
+          <div class="productKicker">Downloader</div>
+          <div class="downloadWorkspaceTitle">Download Videos</div>
+          <div class="downloadWorkspaceSub">Queue YouTube, Instagram and TikTok URLs for batch download</div>
+        </div>
+        <div class="downloadWorkspaceMeta">
+          <div class="downloadBatchStatus" data-state="running">1 Downloading</div>
+          <div class="downloadBatchMeta">4 total · 1 done · 1 failed</div>
+        </div>
+      </div>
+
+      <!-- Flow rail: 4 steps -->
+      <div class="downloadFlowRail">
+        <div class="downloadFlowStep isActive">
+          <strong>1. Paste URLs</strong>
+          <span>Add links to queue</span>
+        </div>
+        <div class="downloadFlowStep isActive">
+          <strong>2. Configure</strong>
+          <span>Quality & format</span>
+        </div>
+        <div class="downloadFlowStep isActive">
+          <strong>3. Download</strong>
+          <span>Processing now</span>
+        </div>
+        <div class="downloadFlowStep">
+          <strong>4. Done</strong>
+          <span>Open or render</span>
+        </div>
+      </div>
+
+      <!-- URL input bar -->
+      <div class="dlInputBar">
+        <input type="url" placeholder="Paste YouTube, Instagram or TikTok URL and press Enter…" id="dl-url-input" onkeydown="if(event.key==='Enter')addDlUrl()">
+        <button class="btn btn-primary btn-sm" onclick="addDlUrl()">
+          <i data-lucide="plus" style="width:12px;height:12px;"></i> Add
+        </button>
+        <button class="btn btn-ghost btn-sm">
+          <i data-lucide="play" style="width:12px;height:12px;"></i> Start All
+        </button>
+      </div>
+
+      <!-- Queue panel -->
+      <div class="downloadQueuePanel">
+        <div class="downloadQueueHeader">
+          <div>
+            <div class="downloadQueueTitle">Download Queue</div>
+          </div>
+          <div class="downloadQueueMeta">4 items</div>
+        </div>
+        <div class="downloadQueueList">
+
+          <!-- Row 1: done -->
+          <div class="downloadQueueRow done">
+            <div class="downloadRowMain">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+                <span class="downloadSourceBadge youtube">YouTube</span>
+                <span class="downloadRowTitle">How to Build Viral Content in 2024 — Full Tutorial</span>
+              </div>
+              <div class="downloadRowUrl">youtube.com/watch?v=dQw4w9WgXcQ</div>
+              <div class="downloadRowPath">D:\videos\downloads\how_to_build_viral_content.mp4</div>
+            </div>
+            <div class="downloadRowStatus">
+              <span class="downloadStatusBadge done">Done</span>
+              <div class="downloadMiniProgress"><div class="downloadMiniProgressValue" style="width:100%;"></div></div>
+            </div>
+            <div class="downloadRowActions">
+              <button class="downloadActionBtn"><i data-lucide="folder-open" style="width:11px;height:11px;"></i> Open</button>
+              <button class="downloadActionBtn" onclick="addToast('Opening in Render…')">
+                <i data-lucide="film" style="width:11px;height:11px;"></i> Render
+              </button>
+            </div>
+          </div>
+
+          <!-- Row 2: downloading -->
+          <div class="downloadQueueRow downloading">
+            <div class="downloadRowMain">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+                <span class="downloadSourceBadge youtube">YouTube</span>
+                <span class="downloadRowTitle">10 Marketing Secrets Nobody Talks About</span>
+              </div>
+              <div class="downloadRowUrl">youtube.com/watch?v=xvFZjo5PgG0</div>
+            </div>
+            <div class="downloadRowStatus">
+              <span class="downloadStatusBadge downloading">Downloading</span>
+              <div class="downloadMiniProgress">
+                <div class="downloadMiniProgressValue" id="dl-prog-2" style="width:67%;background:linear-gradient(90deg,var(--primary),rgba(168,85,247,.8));background-size:200% 100%;animation:progress-shimmer 1.8s linear infinite;"></div>
+              </div>
+              <span style="font-size:10px;color:var(--fg-300);font-family:var(--font-mono);">67% · 2.1 MB/s</span>
+            </div>
+            <div class="downloadRowActions">
+              <button class="downloadActionBtn" onclick="addToast('Download paused')">Pause</button>
+              <button class="downloadActionBtn" style="color:#f87171;" onclick="addToast('Download cancelled')">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Row 3: waiting -->
+          <div class="downloadQueueRow waiting">
+            <div class="downloadRowMain">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+                <span class="downloadSourceBadge instagram">Instagram</span>
+                <span class="downloadRowTitle">Brand Strategy Reel — @marketingpro</span>
+              </div>
+              <div class="downloadRowUrl">instagram.com/reel/C9xA1mBs4Lw/</div>
+            </div>
+            <div class="downloadRowStatus">
+              <span class="downloadStatusBadge waiting">Waiting</span>
+              <div class="downloadMiniProgress"><div class="downloadMiniProgressValue" style="width:0%;"></div></div>
+            </div>
+            <div class="downloadRowActions">
+              <button class="downloadActionBtn" onclick="addToast('Removed from queue')">Remove</button>
+            </div>
+          </div>
+
+          <!-- Row 4: failed -->
+          <div class="downloadQueueRow failed">
+            <div class="downloadRowMain">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+                <span class="downloadSourceBadge tiktok">TikTok</span>
+                <span class="downloadRowTitle">Productivity Hack #47</span>
+              </div>
+              <div class="downloadRowUrl">tiktok.com/@creator/video/7412345678</div>
+              <div class="downloadRowError">Error: Video is private or region-restricted</div>
+            </div>
+            <div class="downloadRowStatus">
+              <span class="downloadStatusBadge failed">Failed</span>
+              <div class="downloadMiniProgress"><div class="downloadMiniProgressValue" style="width:0%;"></div></div>
+            </div>
+            <div class="downloadRowActions">
+              <button class="downloadActionBtn" onclick="addToast('Retrying download…')">Retry</button>
+              <button class="downloadActionBtn" onclick="addToast('Removed')">Remove</button>
+            </div>
+          </div>
+
+        </div><!-- /downloadQueueList -->
+      </div><!-- /downloadQueuePanel -->
+
+    </div><!-- /downloadWorkspace -->
+  </div><!-- /screen-5 -->
+
+
+  <!-- ==========================================
+       SCREEN 6 — HISTORY
+       ========================================== -->
+  <div class="screen" id="screen-6">
+    <div class="historyWorkspace">
+
+      <!-- Header -->
+      <div class="hwHeader">
+        <div class="hwHeaderLeft">
+          <div class="productKicker">History</div>
+          <div class="hwTitle">Activity</div>
+          <div class="hwSub">Recent renders, downloads and AI jobs</div>
+        </div>
+        <div class="hwHeaderRight">
+          <span class="hwMeta">14 total jobs</span>
+          <button class="hwRefreshBtn" onclick="addToast('Refreshing history…')">
+            <i data-lucide="refresh-cw" style="width:11px;height:11px;vertical-align:middle;"></i> Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- Summary rail -->
+      <div class="historySummaryRail">
+        <div class="historySummaryCard">
+          <strong>12</strong><span>Total Renders</span>
+        </div>
+        <div class="historySummaryCard">
+          <strong>38</strong><span>Clips Created</span>
+        </div>
+        <div class="historySummaryCard">
+          <strong>4</strong><span>Downloads</span>
+        </div>
+        <div class="historySummaryCard">
+          <strong style="color:var(--success);">8.4</strong><span>Avg Viral Score</span>
+        </div>
+        <div class="historySummaryCard">
+          <strong>2h 14m</strong><span>Total Runtime</span>
+        </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="hwFilterBar" id="hwFilterBar">
+        <button class="hwFilterBtn active" onclick="hwFilter(this)">All</button>
+        <button class="hwFilterBtn" onclick="hwFilter(this)">Render</button>
+        <button class="hwFilterBtn" onclick="hwFilter(this)">Download</button>
+        <button class="hwFilterBtn" onclick="hwFilter(this)">Completed</button>
+        <button class="hwFilterBtn" onclick="hwFilter(this)">Partial</button>
+        <button class="hwFilterBtn" onclick="hwFilter(this)">Failed</button>
+        <button class="hwFilterBtn" onclick="hwFilter(this)">This week</button>
+      </div>
+
+      <!-- History list -->
+      <div class="hwBody">
+        <div class="historyList">
+
+          <!-- Job 1: completed render -->
+          <div class="hwCard completed">
+            <div class="hwCardLeft">
+              <i data-lucide="film" style="width:16px;height:16px;color:var(--fg-300);"></i>
+              <span class="hwKindBadge render">Render</span>
+            </div>
+            <div class="hwCardMain">
+              <div class="hwCardTitle">How to Build Viral Content in 2024</div>
+              <div class="hwCardMeta">
+                <span class="hwCardTime">Today 14:32</span>
+                <span class="hwCardSummary">3 clips · 9:16 · CapCut · 2m 08s total</span>
+              </div>
+            </div>
+            <div class="hwCardRight">
+              <span class="hwStatusBadge completed">Completed</span>
+              <div class="hwCardActions">
+                <button class="hwActionBtn" onclick="goTab(4)">View</button>
+                <button class="hwActionBtn" onclick="addToast('Opening folder…')">Folder</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Job 2: running render -->
+          <div class="hwCard running">
+            <div class="hwCardLeft">
+              <i data-lucide="loader-2" style="width:16px;height:16px;color:var(--primary);animation:spin 1s linear infinite;"></i>
+              <span class="hwKindBadge render">Render</span>
+            </div>
+            <div class="hwCardMain">
+              <div class="hwCardTitle">10 Marketing Secrets — Full Video</div>
+              <div class="hwCardMeta">
+                <span class="hwCardTime">Today 15:10</span>
+                <span class="hwCardSummary">5 clips · 9:16 · Karaoke · Processing…</span>
+              </div>
+            </div>
+            <div class="hwCardRight">
+              <span class="hwStatusBadge running">Running 67%</span>
+              <div class="hwCardActions">
+                <button class="hwActionBtn" onclick="goTab(3)">Monitor</button>
+                <button class="hwActionBtn" style="color:#f87171;" onclick="addToast('Cancelling…')">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Job 3: partial render -->
+          <div class="hwCard partial">
+            <div class="hwCardLeft">
+              <i data-lucide="alert-triangle" style="width:16px;height:16px;color:var(--warning);"></i>
+              <span class="hwKindBadge render">Render</span>
+            </div>
+            <div class="hwCardMain">
+              <div class="hwCardTitle">Brand Strategy Deep Dive — Episode 12</div>
+              <div class="hwCardMeta">
+                <span class="hwCardTime">Yesterday 09:45</span>
+                <span class="hwCardSummary">2/3 clips done · Clip 3 failed (timeout)</span>
+              </div>
+            </div>
+            <div class="hwCardRight">
+              <span class="hwStatusBadge partial">Partial</span>
+              <div class="hwCardActions">
+                <button class="hwActionBtn" onclick="addToast('Re-rendering failed clip…')">Resume</button>
+                <button class="hwActionBtn">View</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Job 4: completed download -->
+          <div class="hwCard completed">
+            <div class="hwCardLeft">
+              <i data-lucide="download" style="width:16px;height:16px;color:var(--fg-300);"></i>
+              <span class="hwKindBadge download">Download</span>
+            </div>
+            <div class="hwCardMain">
+              <div class="hwCardTitle">Productivity Hack — @techguru (Instagram)</div>
+              <div class="hwCardMeta">
+                <span class="hwCardTime">Yesterday 11:22</span>
+                <span class="hwCardSummary">instagram.com/reel/C9x… · 720p · 45MB</span>
+              </div>
+            </div>
+            <div class="hwCardRight">
+              <span class="hwStatusBadge completed">Completed</span>
+              <div class="hwCardActions">
+                <button class="hwActionBtn">Open</button>
+                <button class="hwActionBtn" onclick="addToast('Opening in Render…')">Render</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Job 5: failed render -->
+          <div class="hwCard failed">
+            <div class="hwCardLeft">
+              <i data-lucide="x-circle" style="width:16px;height:16px;color:var(--danger);"></i>
+              <span class="hwKindBadge render">Render</span>
+            </div>
+            <div class="hwCardMain">
+              <div class="hwCardTitle">AI Tools Comparison 2024</div>
+              <div class="hwCardMeta">
+                <span class="hwCardTime">2 days ago</span>
+                <span class="hwCardSummary">FFmpeg error: codec not supported · 0/3 clips</span>
+              </div>
+            </div>
+            <div class="hwCardRight">
+              <span class="hwStatusBadge failed">Failed</span>
+              <div class="hwCardActions">
+                <button class="hwActionBtn" onclick="addToast('Re-queuing job…')">Retry</button>
+                <button class="hwActionBtn" onclick="addToast('Deleted')">Delete</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Job 6: completed render -->
+          <div class="hwCard completed">
+            <div class="hwCardLeft">
+              <i data-lucide="film" style="width:16px;height:16px;color:var(--fg-300);"></i>
+              <span class="hwKindBadge render">Render</span>
+            </div>
+            <div class="hwCardMain">
+              <div class="hwCardTitle">Growth Hacking Masterclass — Session 3</div>
+              <div class="hwCardMeta">
+                <span class="hwCardTime">3 days ago</span>
+                <span class="hwCardSummary">4 clips · 1:1 · Hormozi style · 3m 20s total</span>
+              </div>
+            </div>
+            <div class="hwCardRight">
+              <span class="hwStatusBadge completed">Completed</span>
+              <div class="hwCardActions">
+                <button class="hwActionBtn">View</button>
+                <button class="hwActionBtn">Folder</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Job 7: completed download -->
+          <div class="hwCard completed">
+            <div class="hwCardLeft">
+              <i data-lucide="download" style="width:16px;height:16px;color:var(--fg-300);"></i>
+              <span class="hwKindBadge download">Download</span>
+            </div>
+            <div class="hwCardMain">
+              <div class="hwCardTitle">The Science of Virality — YouTube</div>
+              <div class="hwCardMeta">
+                <span class="hwCardTime">4 days ago</span>
+                <span class="hwCardSummary">youtube.com/watch?v=… · 1080p · 380MB</span>
+              </div>
+            </div>
+            <div class="hwCardRight">
+              <span class="hwStatusBadge completed">Completed</span>
+              <div class="hwCardActions">
+                <button class="hwActionBtn">Open</button>
+                <button class="hwActionBtn">Render</button>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /historyList -->
+      </div><!-- /hwBody -->
+
+    </div><!-- /historyWorkspace -->
+  </div><!-- /screen-6 -->
+
+</div><!-- /screen-wrapper -->
+
+
+<!-- ============================================================
+     JAVASCRIPT
+     ============================================================ -->
+<script>
+// ── Init Lucide icons ────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  lucide.createIcons();
+  initSliders();
+  updatePreviewMeta();
+  // Ensure L2 row visible on load (render section default)
+  const l2row = document.getElementById('l2-render-tabs');
+  if (l2row) l2row.style.display = 'flex';
+});
+
+// ── Navigation ───────────────────────────────────────────────
+let unlockedTabs = new Set([1]);
+let currentTab = 1;
+let currentSection = 'render';
+
+function goSection(section) {
+  currentSection = section;
+  // Update L1 active
+  document.querySelectorAll('.l1-tab').forEach(t => t.classList.remove('active'));
+  const l1 = document.getElementById('l1-' + section);
+  if (l1) l1.classList.add('active');
+  // Show/hide L2 row
+  const l2row = document.getElementById('l2-render-tabs');
+  l2row.style.display = section === 'render' ? 'flex' : 'none';
+  // Navigate to section screen
+  if (section === 'download') goTab(5);
+  else if (section === 'history') goTab(6);
+  else goTab(currentTab <= 4 ? currentTab : 1);
+}
+
+function goTab(n) {
+  if (n <= 4 && !unlockedTabs.has(n)) return;
+  currentTab = n;
+
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const screen = document.getElementById('screen-' + n);
+  if (screen) screen.classList.add('active');
+
+  // L2 tab active state (render flow only)
+  document.querySelectorAll('.l2-tab').forEach(t => t.classList.remove('active'));
+  const tab = document.getElementById('tab' + n);
+  if (tab) tab.classList.add('active');
+
+  // Mark completed L2 tabs
+  document.querySelectorAll('.l2-tab').forEach(t => {
+    const tn = parseInt(t.dataset.tab);
+    if (tn && tn < n && tn <= 4 && unlockedTabs.has(tn)) {
+      t.classList.add('done');
+      const numEl = t.querySelector('.l2-step-num');
+      if (numEl) numEl.innerHTML = '<i data-lucide="check" style="width:9px;height:9px;"></i>';
+    }
+  });
+  lucide.createIcons();
+
+  if (n === 3) startRenderSimulation();
+}
+
+function unlockTab(n) {
+  unlockedTabs.add(n);
+  const tab = document.getElementById('tab' + n);
+  if (tab) tab.classList.remove('disabled');
+}
+
+function togglePill(id, otherId) {
+  document.getElementById(id).classList.toggle('active');
+  document.getElementById(otherId).classList.remove('active');
+}
+
+// ── SCREEN 1 logic ───────────────────────────────────────────
+let videoReady = false;
+let prepareTimer = null;
+
+function setSource(src) {
+  document.querySelectorAll('.src-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.input-panel').forEach(p => p.classList.remove('active'));
+
+  document.getElementById('src-' + src).classList.add('active');
+  document.getElementById('panel-' + src).classList.add('active');
+}
+
+function onUrlChange() {
+  const val = document.getElementById('url-input').value.trim();
+  document.getElementById('btn-prepare').disabled = !val;
+}
+
+function prepareVideo() {
+  const btn = document.getElementById('btn-prepare');
+  const label = document.getElementById('prepare-label');
+
+  btn.disabled = true;
+  label.innerHTML = '';
+  btn.insertAdjacentHTML('afterbegin', '<div class="spinner"></div>');
+  label.textContent = 'Preparing...';
+
+  clearTimeout(prepareTimer);
+  prepareTimer = setTimeout(() => {
+    // Remove spinner
+    const spinner = btn.querySelector('.spinner');
+    if (spinner) spinner.remove();
+    label.textContent = 'Prepare Video';
+    btn.disabled = false;
+
+    // Show meta card
+    document.getElementById('meta-card').classList.add('visible');
+    videoReady = true;
+    document.getElementById('btn-continue-1').disabled = false;
+    unlockTab(2);
+
+    lucide.createIcons();
+    addToast('Video prepared successfully');
+  }, 1500);
+}
+
+function dzOver(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.add('drag-over');
+}
+function dzLeave(e) {
+  document.getElementById('dropzone').classList.remove('drag-over');
+}
+function dzDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) localFileReady(file.name);
+}
+function localFilePicked(input) {
+  if (input.files[0]) localFileReady(input.files[0].name);
+}
+function localFileReady(name) {
+  document.getElementById('local-title').textContent = name;
+  const meta = document.getElementById('meta-card-local');
+  meta.classList.add('visible');
+  videoReady = true;
+  document.getElementById('btn-continue-1').disabled = false;
+  unlockTab(2);
+  lucide.createIcons();
+  addToast('File loaded: ' + name);
+}
+
+// ── SCREEN 2 logic ───────────────────────────────────────────
+const RATIOS = {
+  '9:16': { w: 1080, h: 1920, bw: 220, bh: 391, platform: 'TikTok · Reels · Shorts', br: '18px' },
+  '3:4':  { w: 1080, h: 1440, bw: 220, bh: 293, platform: 'Pinterest · Stories', br: '14px' },
+  '4:5':  { w: 1080, h: 1350, bw: 220, bh: 275, platform: 'Instagram Feed', br: '12px' },
+  '1:1':  { w: 1080, h: 1080, bw: 256, bh: 256, platform: 'Square · Facebook Post', br: '12px' },
+  '16:9': { w: 1920, h: 1080, bw: 356, bh: 200, platform: 'YouTube · Widescreen', br: '10px' },
+};
+
+function selectRatio(el) {
+  document.querySelectorAll('.ratio-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  const r = el.dataset.ratio;
+  const info = RATIOS[r];
+  const box = document.getElementById('preview-box');
+  if (box) {
+    box.style.width = info.bw + 'px';
+    box.style.height = info.bh + 'px';
+    box.style.borderRadius = info.br;
+  }
+  // Show/hide device notch+bar only for portrait ratios
+  const isPortrait = info.bh > info.bw;
+  const notch = document.getElementById('preview-notch');
+  const bar = document.getElementById('preview-bar');
+  if (notch) notch.style.opacity = isPortrait ? '1' : '0';
+  if (bar) bar.style.opacity = isPortrait ? '1' : '0';
+
+  document.getElementById('preview-ratio-badge').textContent = r;
+  document.getElementById('pi-ratio').textContent = r;
+  const dims = document.getElementById('preview-dims');
+  const platform = document.getElementById('preview-platform');
+  if (dims) dims.textContent = info.w + ' × ' + info.h;
+  if (platform) platform.textContent = info.platform;
+  updatePreviewMeta();
+}
+
+let subOn = true;
+let transOn = false;
+let selectedStyle = 'capcut';
+let selectedVStyle = 'dynamic';
+let clipCount = 3;
+let minDur = 30;
+let maxDur = 90;
+
+function toggleSub() {
+  subOn = !subOn;
+  const track = document.getElementById('sub-track');
+  const expand = document.getElementById('sub-expand');
+  track.classList.toggle('on', subOn);
+  expand.classList.toggle('open', subOn);
+  updatePreviewMeta();
+}
+function toggleTranslate() {
+  transOn = !transOn;
+  const track = document.getElementById('trans-track');
+  track.classList.toggle('on', transOn);
+  document.getElementById('lang-select').disabled = !transOn;
+  updatePreviewInfo();
+}
+function toggleItem(wrap, trackId) {
+  const track = document.getElementById(trackId);
+  track.classList.toggle('on');
+}
+
+function selectClipCount(btn) {
+  document.querySelectorAll('#clips-seg .seg-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const ci = document.getElementById('clip-custom-input');
+  if (btn.dataset.val === 'custom') {
+    ci.style.display = 'block';
+    clipCount = parseInt(ci.value) || 3;
+  } else {
+    ci.style.display = 'none';
+    clipCount = parseInt(btn.dataset.val);
+  }
+  updatePreviewInfo();
+}
+
+function selectStyle(el) {
+  document.querySelectorAll('.style-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedStyle = el.dataset.style;
+  updatePreviewMeta();
+}
+
+function selectVStyle(el) {
+  document.querySelectorAll('.vstyle-card').forEach(c => {
+    c.classList.remove('selected');
+    c.classList.remove('selected-secondary');
+  });
+  if (el.dataset.vstyle === 'auto') {
+    el.classList.add('selected-secondary');
+  } else {
+    el.classList.add('selected');
+  }
+  selectedVStyle = el.dataset.vstyle;
+  updatePreviewMeta();
+}
+
+function onSlider(el, valId, unit) {
+  const v = el.value;
+  document.getElementById(valId).textContent = v + unit;
+  updateSliderFill(el);
+  if (valId === 'min-dur-val') minDur = parseInt(v);
+  if (valId === 'max-dur-val') maxDur = parseInt(v);
+  updatePreviewMeta();
+}
+
+const ZOOM_LABELS = ['None', 'Subtle', 'Medium', 'Strong'];
+function onZoomSlider(el) {
+  document.getElementById('zoom-val').textContent = ZOOM_LABELS[el.value] || 'Medium';
+  updateSliderFill(el);
+}
+
+function updateSliderFill(el) {
+  const min = parseFloat(el.min), max = parseFloat(el.max), val = parseFloat(el.value);
+  const pct = ((val - min) / (max - min) * 100).toFixed(1) + '%';
+  el.style.setProperty('--pct', pct);
+}
+
+function initSliders() {
+  document.querySelectorAll('input[type="range"]').forEach(s => updateSliderFill(s));
+}
+
+const STYLE_LABELS = { capcut: 'Karaoke', hormozi: 'Bold', podcast: 'Standard', highlight: 'Highlight', custom: 'Custom' };
+const VSTYLE_GRADIENTS = {
+  dynamic:   'linear-gradient(160deg,#0a1628 0%,#1a0a28 60%,#0a2818 100%)',
+  clean:     'linear-gradient(160deg,#0f1420 0%,#141f2a 60%,#0f2014 100%)',
+  cinematic: 'linear-gradient(160deg,#1a0e08 0%,#0e1020 60%,#1a1408 100%)',
+  auto:      'linear-gradient(160deg,#100a1e 0%,#1a0a14 60%,#0a181a 100%)',
+};
+
+function updatePreviewMeta() {
+  const ratio = document.querySelector('.ratio-chip.selected')?.dataset.ratio || '9:16';
+  const info = RATIOS[ratio] || RATIOS['9:16'];
+  const subLabel = subOn ? STYLE_LABELS[selectedStyle] : 'Off';
+
+  // CTA bar meta text (compact, inline)
+  const metaEl = document.getElementById('preview-meta');
+  if (metaEl) {
+    metaEl.textContent = ratio + ' · ' + subLabel + ' · ' + selectedVStyle + ' · ' + minDur + '–' + maxDur + 's';
+  }
+
+  // Subtitle overlay on preview
+  const subEl = document.getElementById('preview-subtitle');
+  if (subEl) {
+    if (subOn) {
+      const cls = selectedStyle === 'capcut' ? 'karaoke'
+                : selectedStyle === 'podcast' ? 'standard'
+                : selectedStyle === 'highlight' ? 'highlight' : 'standard';
+      subEl.className = 'preview-subtitle preview-subtitle--' + cls;
+      subEl.style.display = '';
+    } else {
+      subEl.style.display = 'none';
+    }
+  }
+
+  // Preview background per video style
+  const bg = document.getElementById('preview-bg');
+  if (bg) bg.style.background = VSTYLE_GRADIENTS[selectedVStyle] || VSTYLE_GRADIENTS.dynamic;
+}
+
+function updatePreviewInfo() { updatePreviewMeta(); }
+
+function fakebrw() { addToast('Browse dialog (demo mode)'); }
+
+function startRender() {
+  unlockTab(3);
+  goTab(3);
+}
+
+// ── SCREEN 3 — Render simulation ────────────────────────────
+const STAGES = [
+  'Cutting segment...',
+  'Transcribing audio...',
+  'Generating subtitles...',
+  'Burning subtitles...',
+  'Encoding video...',
+  'Finalizing output...',
+];
+
+const CLIP_DATA = [
+  { start: 0, len: 45, delay: 0 },
+  { start: 800, len: 52, delay: 1200 },
+  { start: 2500, len: 31, delay: 2500 },
+];
+
+let renderRunning = false;
+let renderTimers = [];
+let partProgress = [0, 0, 0];
+let partState = ['queued', 'queued', 'queued'];
+let startTimes = [0, 0, 0];
+let elapsed = [0, 0, 0];
+let logLines = [];
+let logInterval = null;
+let elapsedInterval = null;
+
+function clearRenderTimers() {
+  renderTimers.forEach(clearTimeout);
+  renderTimers = [];
+  clearInterval(logInterval);
+  clearInterval(elapsedInterval);
+}
+
+function startRenderSimulation() {
+  if (renderRunning) return;
+  renderRunning = true;
+
+  // Reset
+  for (let i = 1; i <= 3; i++) {
+    setPartState(i, 'queued');
+    setPartPct(i, 0);
+    document.getElementById('clip-dur-' + i).textContent = 'Clip 0' + i + ' · --:-- – --:--';
+    document.getElementById('stage-' + i).textContent = 'Waiting to start…';
+    const actions = document.getElementById('actions-' + i);
+    if (actions) actions.style.display = 'none';
+    const seg = document.getElementById('seg-' + i);
+    if (seg) seg.className = 'rdSegItem rdSegItem--waiting';
+  }
+  logLines = [];
+  document.getElementById('log-body').innerHTML = '';
+  document.getElementById('overall-pct').textContent = '0%';
+  document.getElementById('abp-pct').textContent = '0%';
+  document.getElementById('overall-bar').style.width = '0%';
+  document.getElementById('overall-eta').textContent = 'Calculating…';
+  document.getElementById('abp-msg').textContent = 'Clip 1/3 · Waiting…';
+  const statusBadge = document.getElementById('s3-status-badge');
+  statusBadge.setAttribute('data-state', 'running');
+  statusBadge.textContent = 'RENDERING';
+  const abpBadge = document.getElementById('abp-badge');
+  abpBadge.setAttribute('data-state', 'running');
+  abpBadge.textContent = 'RUNNING';
+
+  const now = Date.now();
+
+  CLIP_DATA.forEach((c, idx) => {
+    const partNum = idx + 1;
+    const t = renderTimers;
+
+    // Start part after delay
+    t.push(setTimeout(() => {
+      startTimes[idx] = Date.now();
+      setPartState(partNum, 'running');
+      const seg = document.getElementById('seg-' + partNum);
+      if (seg) seg.className = 'rdSegItem rdSegItem--rendering';
+      document.getElementById('clip-dur-' + partNum).textContent = 'Clip 0' + partNum + ' · ' + msToTS(c.start * 1000) + ' – ' + msToTS((c.start + c.len) * 1000);
+      document.getElementById('rd-step').textContent = 'Clip ' + partNum + '/3 — Cutting · ' + c.len + 's';
+      document.getElementById('abp-msg').textContent = 'Clip ' + partNum + '/3 · Rendering…';
+      pushLog(partNum, 'Cutting ' + msToTS(c.start * 1000) + ' → ' + msToTS((c.start + c.len) * 1000) + ' (' + c.len + 's)');
+      animatePart(partNum, idx);
+    }, c.delay));
+  });
+
+  // Elapsed timer (no elapsed display in new UI, kept for startTimes tracking)
+  elapsedInterval = setInterval(() => {}, 500);
+
+  // Overall progress updater
+  logInterval = setInterval(() => {
+    const total = partProgress.reduce((a, b) => a + b, 0);
+    const pct = Math.round(total / 3);
+    document.getElementById('overall-pct').textContent = pct + '%';
+    document.getElementById('overall-bar').style.width = pct + '%';
+    document.getElementById('abp-pct').textContent = pct + '%';
+
+    const remaining = Math.round((100 - pct) / 10);
+    if (pct < 100) {
+      document.getElementById('overall-eta').textContent = 'ETA ~' + (remaining > 0 ? remaining + 's' : '1s');
+    } else {
+      document.getElementById('overall-eta').textContent = 'Complete';
+    }
+  }, 300);
+}
+
+function animatePart(partNum, idx) {
+  let pct = 0;
+  let stageIdx = 0;
+
+  const speed = 0.8 + Math.random() * 0.6; // %/tick variation
+  const interval = setInterval(() => {
+    pct += speed;
+    if (pct > 100) pct = 100;
+
+    partProgress[idx] = pct;
+    setPartPct(partNum, Math.round(pct));
+
+    // Cycle stage
+    const newStageIdx = Math.floor((pct / 100) * STAGES.length);
+    if (newStageIdx !== stageIdx && newStageIdx < STAGES.length) {
+      stageIdx = newStageIdx;
+      document.getElementById('stage-' + partNum).textContent = STAGES[stageIdx];
+      document.getElementById('rd-step').textContent = 'Clip ' + partNum + '/3 — ' + STAGES[stageIdx];
+      document.getElementById('abp-msg').textContent = 'Clip ' + partNum + '/3 · ' + STAGES[stageIdx];
+      if (stageIdx > 0) pushLog(partNum, STAGES[stageIdx]);
+    }
+
+    if (pct >= 100) {
+      clearInterval(interval);
+      finishPart(partNum, idx);
+    }
+  }, 80);
+
+  renderTimers.push(interval);
+}
+
+function finishPart(partNum, idx) {
+  setPartState(partNum, 'done');
+  document.getElementById('stage-' + partNum).textContent = 'Done ✓';
+  const actions = document.getElementById('actions-' + partNum);
+  if (actions) actions.style.display = 'flex';
+  const seg = document.getElementById('seg-' + partNum);
+  if (seg) seg.className = 'rdSegItem rdSegItem--completed';
+  pushLog(partNum, 'Output: clip_' + partNum + '_1080x1920.mp4 ✓');
+
+  const allDone = partState.every(s => s === 'done');
+  if (allDone) {
+    clearInterval(logInterval);
+    clearInterval(elapsedInterval);
+    renderRunning = false;
+
+    const statusBadge = document.getElementById('s3-status-badge');
+    statusBadge.setAttribute('data-state', 'completed');
+    statusBadge.textContent = 'COMPLETE';
+    const abpBadge = document.getElementById('abp-badge');
+    abpBadge.setAttribute('data-state', 'completed');
+    abpBadge.textContent = 'DONE';
+
+    document.getElementById('overall-pct').textContent = '100%';
+    document.getElementById('abp-pct').textContent = '100%';
+    document.getElementById('overall-bar').style.width = '100%';
+    document.getElementById('overall-eta').textContent = 'Complete';
+    document.getElementById('abp-msg').textContent = 'All 3 clips done ✓';
+    document.getElementById('rd-step').textContent = 'All 3 clips complete';
+
+    unlockTab(4);
+    setTimeout(() => goTab(4), 1500);
+  }
+}
+
+function setPartState(partNum, state) {
+  partState[partNum - 1] = state;
+  const row = document.getElementById('part-' + partNum);
+  const badge = document.getElementById('badge-' + partNum);
+
+  const ROW_CLASS = {
+    queued:  'rdQueueRow rdQueueRow--waiting',
+    running: 'rdQueueRow rdQueueRow--rendering',
+    done:    'rdQueueRow rdQueueRow--completed',
+    failed:  'rdQueueRow rdQueueRow--failed',
+  };
+  const BADGE_STATE = { queued: null, running: 'rendering', done: 'completed', failed: 'failed' };
+  const BADGE_TEXT  = { queued: 'Queued', running: 'Rendering', done: 'Done', failed: 'Failed' };
+
+  row.className = ROW_CLASS[state] || 'rdQueueRow rdQueueRow--waiting';
+  if (BADGE_STATE[state]) badge.setAttribute('data-state', BADGE_STATE[state]);
+  else badge.removeAttribute('data-state');
+  badge.textContent = BADGE_TEXT[state] || state;
+}
+
+function setPartPct(partNum, pct) {
+  document.getElementById('prog-' + partNum).style.width = pct + '%';
+}
+
+function updateStatChips() {
+  // stat chips removed in new UI — no-op
+}
+
+function pushLog(partNum, msg) {
+  const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const body = document.getElementById('log-body');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = '<span class="ts">[' + ts + ']</span><span class="lpart">Part ' + partNum + ':</span>' + escHtml(msg);
+  body.appendChild(line);
+  // Keep last 40 lines
+  while (body.children.length > 40) body.removeChild(body.firstChild);
+  body.scrollTop = body.scrollHeight;
+}
+
+let logExpanded = true;
+function toggleLog() {
+  logExpanded = !logExpanded;
+  const body = document.getElementById('log-body');
+  const btn = document.getElementById('log-toggle-btn');
+  body.classList.toggle('collapsed', !logExpanded);
+  btn.textContent = logExpanded ? 'Collapse' : 'Expand';
+}
+
+function cancelRender() {
+  clearRenderTimers();
+  renderRunning = false;
+  const statusBadge = document.getElementById('s3-status-badge');
+  statusBadge.setAttribute('data-state', 'cancelled');
+  statusBadge.textContent = 'CANCELLED';
+  const abpBadge = document.getElementById('abp-badge');
+  abpBadge.setAttribute('data-state', 'cancelled');
+  abpBadge.textContent = 'CANCELLED';
+  document.getElementById('rd-step').textContent = 'Render cancelled by user';
+  document.getElementById('abp-msg').textContent = 'Cancelled';
+  document.getElementById('btn-cancel').disabled = true;
+  pushLog(0, 'Render cancelled by user.');
+  addToast('Render cancelled');
+}
+
+// ── SCREEN 4 logic ───────────────────────────────────────────
+const SCORES = [87, 91, 74];
+function initQualityDots() {
+  SCORES.forEach((score, idx) => {
+    const container = document.getElementById('qdots-' + (idx + 1));
+    if (!container) return;
+    const filled = Math.round(score / 10);
+    const colorClass = score >= 80 ? 'filled-green' : score >= 60 ? 'filled-amber' : 'filled-red';
+    container.innerHTML = '';
+    for (let i = 0; i < 10; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'q-dot' + (i < filled ? ' ' + colorClass : '');
+      container.appendChild(dot);
+    }
+  });
+}
+
+const playStates = {};
+function togglePlay(n) {
+  const wrap = document.getElementById('rvideo-wrap-' + n);
+  const icon = document.getElementById('rplay-icon-' + n);
+  const video = document.getElementById('rvideo-' + n);
+
+  if (!playStates[n]) {
+    playStates[n] = true;
+    wrap.style.display = 'block';
+    icon.style.display = 'none';
+    // Set a blank video — just show native controls as placeholder
+    video.src = 'about:blank';
+    video.poster = '';
+  } else {
+    playStates[n] = false;
+    wrap.style.display = 'none';
+    icon.style.display = 'flex';
+    video.src = '';
+  }
+}
+
+const openOverflows = {};
+function toggleOverflow(n, e) {
+  e.stopPropagation();
+  const menu = document.getElementById('overflow-' + n);
+  const wasOpen = menu.classList.contains('open');
+  // Close all
+  document.querySelectorAll('.overflow-menu').forEach(m => m.classList.remove('open'));
+  if (!wasOpen) menu.classList.add('open');
+}
+
+document.addEventListener('click', () => {
+  document.querySelectorAll('.overflow-menu').forEach(m => m.classList.remove('open'));
+});
+
+function omAction(action, partNum) {
+  document.querySelectorAll('.overflow-menu').forEach(m => m.classList.remove('open'));
+  const MSGS = {
+    'open-folder': 'Opening folder for clip ' + partNum,
+    'rerender': 'Re-queuing clip ' + partNum + ' for render',
+    'delete': 'Deleted clip ' + partNum,
+  };
+  addToast(MSGS[action] || action);
+}
+
+function fakeDownload(n) { addToast('Saving clip_' + n + '_1080x1920.mp4 to D:\\videos\\output'); }
+function exportAll() { addToast('Exporting all 3 clips to D:\\videos\\output'); }
+function newRender() { goTab(1); }
+
+// ── SCREEN 5 — Download logic ────────────────────────────────
+function addDlUrl() {
+  const input = document.getElementById('dl-url-input');
+  const url = input.value.trim();
+  if (!url) return;
+  const short = url.length > 55 ? url.substring(0, 55) + '…' : url;
+  addToast('Added to queue: ' + short);
+  input.value = '';
+}
+
+// ── SCREEN 6 — History filter ────────────────────────────────
+function hwFilter(btn) {
+  document.querySelectorAll('.hwFilterBtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ── Toast notification ───────────────────────────────────────
+function addToast(msg) {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.style.cssText = [
+      'position:fixed', 'bottom:20px', 'left:50%', 'transform:translateX(-50%)',
+      'display:flex', 'flex-direction:column', 'gap:8px', 'z-index:9999',
+      'pointer-events:none', 'align-items:center',
+    ].join(';');
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.textContent = msg;
+  toast.style.cssText = [
+    'background:#1c1c24', 'border:1px solid rgba(255,255,255,.15)',
+    'color:#f0f0f6', 'padding:8px 16px', 'border-radius:8px',
+    'font-size:12px', 'font-family:var(--font-ui)', 'font-weight:500',
+    'box-shadow:0 4px 16px rgba(0,0,0,.6)',
+    'opacity:0', 'transition:opacity 200ms ease',
+    'white-space:nowrap',
+  ].join(';');
+  container.appendChild(toast);
+  requestAnimationFrame(() => { toast.style.opacity = '1'; });
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 220);
+  }, 2500);
+}
+
+// ── Utilities ────────────────────────────────────────────────
+function msToTS(ms) {
+  const total = Math.floor(ms / 1000);
+  const h = String(Math.floor(total / 3600)).padStart(2, '0');
+  const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
+  const s = String(total % 60).padStart(2, '0');
+  return h + ':' + m + ':' + s;
+}
+function fmtSecs(s) {
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+</script>
+</body>
+</html>
