@@ -179,21 +179,32 @@ const STEPS: StepDef[] = [
 export function AnalyzeStep({ sessionId, sessionTitle, sessionDuration, onContinue }: AnalyzeStepProps) {
   const { t } = useI18n()
   const [transcriptReady, setTranscriptReady] = useState(false)
+  const [transcriptUnavailable, setTranscriptUnavailable] = useState(false)
   const [pct, setPct] = useState(15)
 
   useEffect(() => {
     if (!sessionId) return
     setTranscriptReady(false)
+    setTranscriptUnavailable(false)
     setPct(15)
+    let intervalId: number
     const check = async () => {
       try {
         const res = await getPreviewTranscript(sessionId)
-        if (res.segments.length > 0) setTranscriptReady(true)
-      } catch { /* not ready */ }
+        if (res.status === 'too_long' || res.status === 'error') {
+          setTranscriptUnavailable(true)
+          window.clearInterval(intervalId)
+          return
+        }
+        if (res.segments.length > 0) {
+          setTranscriptReady(true)
+          window.clearInterval(intervalId)
+        }
+      } catch { /* not ready yet */ }
     }
     check()
-    const id = window.setInterval(check, 3000)
-    return () => window.clearInterval(id)
+    intervalId = window.setInterval(check, 3000)
+    return () => window.clearInterval(intervalId)
   }, [sessionId])
 
   useEffect(() => {
@@ -246,7 +257,7 @@ export function AnalyzeStep({ sessionId, sessionTitle, sessionDuration, onContin
         <div style={s.headerBar}>
           <div style={s.headerLeft}>
             <span style={s.headerTitle}>
-              {transcriptReady ? t('analyze_complete') : t('analyze_scanning')}
+              {transcriptReady ? t('analyze_complete') : transcriptUnavailable ? 'Preview Unavailable' : t('analyze_scanning')}
             </span>
             {durationText && (
               <span style={s.durationBadge}>{durationText}</span>
@@ -256,6 +267,10 @@ export function AnalyzeStep({ sessionId, sessionTitle, sessionDuration, onContin
             <div style={s.completeBadge}>
               <span style={{ color: '#34C878', fontSize: '12px' }}>✓</span>
               <span>Analysis complete</span>
+            </div>
+          ) : transcriptUnavailable ? (
+            <div style={{ ...s.aiChip, backgroundColor: 'var(--surface-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-tertiary)' }}>
+              <span>Long video</span>
             </div>
           ) : (
             <div style={s.aiChip}>
@@ -282,11 +297,13 @@ export function AnalyzeStep({ sessionId, sessionTitle, sessionDuration, onContin
             {/* Status label */}
             <div style={s.statusWrap}>
               <p style={s.statusTitle}>
-                {transcriptReady ? 'Video Analyzed' : (sessionTitle ? `Analyzing: ${sessionTitle.slice(0, 36)}` : 'Analyzing video…')}
+                {transcriptReady ? 'Video Analyzed' : transcriptUnavailable ? 'Video too long for preview' : (sessionTitle ? `Analyzing: ${sessionTitle.slice(0, 36)}` : 'Analyzing video…')}
               </p>
               <p style={s.statusSub}>
                 {transcriptReady
                   ? 'AI Director has finished analyzing. Review the plan below.'
+                  : transcriptUnavailable
+                  ? 'Preview transcripts are available for videos under 60 minutes. You can still render — the AI Director will analyze the full video during rendering.'
                   : 'AI Director is processing your content to find the best clips.'}
               </p>
             </div>
@@ -338,9 +355,9 @@ export function AnalyzeStep({ sessionId, sessionTitle, sessionDuration, onContin
 
         {/* Footer */}
         <div style={s.footer}>
-          {transcriptReady ? (
+          {(transcriptReady || transcriptUnavailable) ? (
             <button onClick={onContinue} style={s.primaryBtn}>
-              {t('analyze_view_plan')} →
+              {transcriptUnavailable ? 'Continue to Plan →' : `${t('analyze_view_plan')} →`}
             </button>
           ) : (
             <button onClick={onContinue} style={s.skipBtn}>

@@ -377,8 +377,8 @@ def preview_transcript(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    if session.get("duration", 0) > 1800:
-        raise HTTPException(status_code=400, detail="Source longer than 30 minutes — preview transcript unavailable")
+    if session.get("duration", 0) > 3600:
+        return {"segments": [], "status": "too_long"}
 
     work_dir = Path(session.get("work_dir", ""))
     cache_path = work_dir / "preview_transcript.json"

@@ -83,8 +83,8 @@ export interface TranscriptSegment {
 
 export async function getPreviewTranscript(
   sessionId: string,
-): Promise<{ segments: TranscriptSegment[] }> {
-  return apiFetch<{ segments: TranscriptSegment[] }>(
+): Promise<{ segments: TranscriptSegment[]; status?: string }> {
+  return apiFetch<{ segments: TranscriptSegment[]; status?: string }>(
     `/api/render/preview-transcript/${encodeURIComponent(sessionId)}`,
   )
 }
