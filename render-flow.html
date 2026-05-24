@@ -2544,7 +2544,10 @@ input[type="range"]::-webkit-slider-runnable-track {
 document.addEventListener('DOMContentLoaded', () => {
   lucide.createIcons();
   initSliders();
-  updatePreviewMeta();
+  // Init preview with selected ratio so dims/platform show on first load
+  const defaultChip = document.querySelector('.ratio-chip.selected');
+  if (defaultChip) selectRatio(defaultChip);
+  else updatePreviewMeta();
   // Ensure L2 row visible on load (render section default)
   const l2row = document.getElementById('l2-render-tabs');
   if (l2row) l2row.style.display = 'flex';
