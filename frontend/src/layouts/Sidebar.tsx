@@ -143,7 +143,7 @@ function NavGroup({ items, activePanel, hoveredItem, setHoveredItem, setActivePa
                 transform: 'translateY(-50%)',
                 width: '3px',
                 height: '20px',
-                background: 'linear-gradient(180deg, #7B61FF, #4D7CFF)',
+                background: 'linear-gradient(180deg, #a855f7, #4d7cff)',
                 borderRadius: '0 2px 2px 0',
               }} />
             )}
@@ -270,7 +270,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   logoMark: {
     fontSize: '16px',
-    background: 'linear-gradient(135deg, #7B61FF, #4D7CFF)',
+    background: 'linear-gradient(135deg, #a855f7, #4d7cff)',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
     flexShrink: 0,

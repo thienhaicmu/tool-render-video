@@ -8,17 +8,15 @@ export interface StepStripProps {
   onStepClick: (step: StudioStep) => void
 }
 
-const STEP_ORDER: StudioStep[] = ['source', 'analyze', 'plan', 'edit', 'review', 'render', 'monitor', 'results']
+const STEP_ORDER: StudioStep[] = ['source', 'configure', 'analyze', 'plan', 'monitor', 'results']
 
 const STEP_LABEL_KEYS: Record<StudioStep, string> = {
-  source:  'step_source',
-  analyze: 'step_analyze',
-  plan:    'step_plan',
-  edit:    'step_edit',
-  review:  'step_review',
-  render:  'step_render',
-  monitor: 'step_monitor',
-  results: 'step_results',
+  source:    'step_source',
+  configure: 'step_configure',
+  analyze:   'step_analyze',
+  plan:      'step_plan',
+  monitor:   'step_monitor',
+  results:   'step_results',
 }
 
 export function StepStrip({ currentStep, completedSteps = [], onStepClick }: StepStripProps) {

@@ -11,18 +11,168 @@ interface RenderStepProps {
   onRenderStarted: (jobId: string) => void
 }
 
-// ── Platform card ──────────────────────────────────────────────────────────────
+// ── Format preset definitions ──────────────────────────────────────────────────
 
-interface PlatformCardProps {
+interface FormatDef {
+  ratio: string
+  label: string
+  platforms: string[]
+  isAIPick?: boolean
+  shapeW: number
+  shapeH: number
+}
+
+const FORMAT_DEFS: FormatDef[] = [
+  { ratio: '9:16', label: 'Vertical',  platforms: ['TikTok', 'Reels', 'Shorts'],    isAIPick: true,  shapeW: 36, shapeH: 64 },
+  { ratio: '3:4',  label: 'Portrait',  platforms: ['Instagram', 'Pinterest'],                        shapeW: 48, shapeH: 64 },
+  { ratio: '1:1',  label: 'Square',    platforms: ['Instagram', 'Twitter'],                          shapeW: 60, shapeH: 60 },
+  { ratio: '16:9', label: 'Landscape', platforms: ['YouTube', 'LinkedIn'],                           shapeW: 64, shapeH: 36 },
+]
+
+// ── Format card ────────────────────────────────────────────────────────────────
+
+interface FormatCardProps extends FormatDef {
+  selected: boolean
+  onToggle: () => void
+}
+
+function FormatCard({ ratio, label, platforms, isAIPick, shapeW, shapeH, selected, onToggle }: FormatCardProps) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <div
+      onClick={onToggle}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: `${isAIPick ? '18px' : '14px'} 8px 12px`,
+        borderRadius: '14px',
+        cursor: 'pointer',
+        position: 'relative' as const,
+        backgroundColor: selected
+          ? 'rgba(168,85,247,0.08)'
+          : hovered
+          ? 'rgba(255,255,255,0.02)'
+          : 'var(--surface-card)',
+        border: `1.5px solid ${selected ? '#a855f7' : hovered ? 'rgba(255,255,255,0.08)' : 'var(--border-subtle)'}`,
+        boxShadow: selected
+          ? '0 0 0 3px rgba(168,85,247,0.15), 0 4px 16px rgba(0,0,0,0.25)'
+          : hovered
+          ? '0 2px 8px rgba(0,0,0,0.15)'
+          : 'none',
+        transition: 'all 0.15s ease',
+        userSelect: 'none' as const,
+      }}
+    >
+      {/* AI Pick badge — floats above top edge */}
+      {isAIPick && (
+        <div style={{
+          position: 'absolute',
+          top: '-11px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'linear-gradient(135deg, #a855f7, #4d7cff)',
+          borderRadius: '100px',
+          padding: '3px 9px',
+          fontSize: '8.5px',
+          fontWeight: 700,
+          color: '#fff',
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase' as const,
+          whiteSpace: 'nowrap' as const,
+          boxShadow: '0 2px 8px rgba(168,85,247,0.5)',
+          pointerEvents: 'none' as const,
+        }}>
+          AI Pick
+        </div>
+      )}
+
+      {/* Ratio shape — 72×72 canvas */}
+      <div style={{
+        width: '72px',
+        height: '72px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: '10px',
+        flexShrink: 0,
+      }}>
+        <div style={{
+          width: `${shapeW}px`,
+          height: `${shapeH}px`,
+          borderRadius: '3px',
+          background: selected
+            ? 'linear-gradient(145deg, rgba(168,85,247,0.55), rgba(77,124,255,0.55))'
+            : 'rgba(255,255,255,0.06)',
+          border: `1.5px solid ${selected ? 'rgba(168,85,247,0.55)' : 'rgba(255,255,255,0.10)'}`,
+          boxShadow: selected ? '0 0 12px rgba(168,85,247,0.3)' : 'none',
+          transition: 'all 0.15s ease',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          {selected && (
+            <span style={{
+              fontSize: `${Math.round(Math.min(shapeW, shapeH) * 0.36)}px`,
+              color: 'rgba(255,255,255,0.9)',
+              lineHeight: 1,
+            }}>✓</span>
+          )}
+        </div>
+      </div>
+
+      {/* Ratio label */}
+      <span style={{
+        fontSize: '13px',
+        fontWeight: 700,
+        color: selected ? '#d8b4fe' : 'var(--text-primary)',
+        fontFamily: 'var(--font-mono)',
+        letterSpacing: '-0.01em',
+        lineHeight: 1,
+        marginBottom: '3px',
+      }}>{ratio}</span>
+
+      {/* Format name */}
+      <span style={{
+        fontSize: '10px',
+        fontWeight: 500,
+        color: selected ? 'rgba(216,180,254,0.7)' : 'var(--text-tertiary)',
+        marginBottom: '9px',
+      }}>{label}</span>
+
+      {/* Platform chips */}
+      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '3px', justifyContent: 'center' }}>
+        {platforms.map((p) => (
+          <span key={p} style={{
+            fontSize: '9px',
+            padding: '2px 5px',
+            borderRadius: '4px',
+            backgroundColor: selected ? 'rgba(168,85,247,0.15)' : 'rgba(255,255,255,0.05)',
+            color: selected ? 'rgba(216,180,254,0.8)' : 'rgba(255,255,255,0.28)',
+            fontWeight: 500,
+            whiteSpace: 'nowrap' as const,
+          }}>{p}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Platform targeting chip ────────────────────────────────────────────────────
+
+interface PlatformChipProps {
   id: TargetPlatform
   name: string
-  ratio: string
   icon: string
   selected: boolean
   onSelect: () => void
 }
 
-function PlatformCard({ id: _id, name, ratio, icon, selected, onSelect }: PlatformCardProps) {
+function PlatformChip({ id: _id, name, icon, selected, onSelect }: PlatformChipProps) {
   const [hovered, setHovered] = useState(false)
   return (
     <div
@@ -31,28 +181,24 @@ function PlatformCard({ id: _id, name, ratio, icon, selected, onSelect }: Platfo
       onMouseLeave={() => setHovered(false)}
       style={{
         flex: 1,
+        height: '34px',
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
-        gap: '6px',
-        padding: '14px 8px',
-        borderRadius: '12px',
+        justifyContent: 'center',
+        gap: '5px',
+        borderRadius: '8px',
         cursor: 'pointer',
-        backgroundColor: selected ? 'rgba(123,97,255,0.1)' : hovered ? 'rgba(255,255,255,0.03)' : 'var(--surface-input)',
-        border: `1.5px solid ${selected ? '#7B61FF' : hovered ? 'var(--border-default)' : 'var(--border-subtle)'}`,
-        boxShadow: selected ? '0 0 0 1px rgba(123,97,255,0.3)' : 'none',
+        backgroundColor: selected ? 'rgba(168,85,247,0.1)' : hovered ? 'rgba(255,255,255,0.03)' : 'var(--surface-input)',
+        border: `1px solid ${selected ? '#a855f7' : hovered ? 'var(--border-default)' : 'var(--border-subtle)'}`,
         transition: 'all 0.12s ease',
-        minWidth: 0,
+        fontSize: 'var(--text-xs)',
+        fontWeight: selected ? 600 : 400,
+        color: selected ? '#d8b4fe' : 'var(--text-secondary)',
+        userSelect: 'none' as const,
       }}
     >
-      <span style={{ fontSize: '22px', lineHeight: 1 }}>{icon}</span>
-      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: selected ? '#7B61FF' : 'var(--text-primary)', textAlign: 'center' as const }}>{name}</span>
-      <span style={{
-        fontSize: '10px',
-        color: selected ? 'rgba(123,97,255,0.7)' : 'var(--text-tertiary)',
-        fontFamily: 'var(--font-mono)',
-        fontWeight: 600,
-      }}>{ratio}</span>
+      <span style={{ fontSize: '13px', lineHeight: 1 }}>{icon}</span>
+      <span>{name}</span>
     </div>
   )
 }
@@ -67,8 +213,8 @@ function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onC
         width: '32px',
         height: '18px',
         borderRadius: '9px',
-        backgroundColor: checked ? '#7B61FF' : 'var(--surface-input)',
-        border: '1.5px solid ' + (checked ? '#7B61FF' : 'var(--border-subtle)'),
+        backgroundColor: checked ? '#a855f7' : 'var(--surface-input)',
+        border: '1.5px solid ' + (checked ? '#a855f7' : 'var(--border-subtle)'),
         position: 'relative',
         cursor: disabled ? 'not-allowed' : 'pointer',
         transition: 'background-color 0.2s ease',
@@ -92,17 +238,21 @@ function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onC
 
 // ── Section label ──────────────────────────────────────────────────────────────
 
-function SectionLabel({ text }: { text: string }) {
+function SectionLabel({ text, hint }: { text: string; hint?: string }) {
   return (
-    <div style={{
-      fontSize: '10px',
-      fontWeight: 700,
-      letterSpacing: '0.08em',
-      textTransform: 'uppercase' as const,
-      color: 'var(--text-tertiary)',
-      marginBottom: 'var(--space-2)',
-    }}>
-      {text}
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: 'var(--space-2)' }}>
+      <div style={{
+        fontSize: '10px',
+        fontWeight: 700,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase' as const,
+        color: 'var(--text-tertiary)',
+      }}>
+        {text}
+      </div>
+      {hint && (
+        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)', fontStyle: 'italic' }}>{hint}</span>
+      )}
     </div>
   )
 }
@@ -158,13 +308,13 @@ const tr: Record<string, React.CSSProperties> = {
   },
 }
 
-// ── Quality profile map ────────────────────────────────────────────────────────
+// ── Quality / fps options ──────────────────────────────────────────────────────
 
 const QUALITY_OPTIONS: Array<{ label: string; profile: RenderProfile }> = [
-  { label: '480p',           profile: 'fast' },
-  { label: '720p',           profile: 'balanced' },
+  { label: '480p',               profile: 'fast' },
+  { label: '720p',               profile: 'balanced' },
   { label: '1080p (Recommended)', profile: 'quality' },
-  { label: '4K',             profile: 'best' },
+  { label: '4K',                 profile: 'best' },
 ]
 
 const FPS_OPTIONS: Array<{ label: string; value: 30 | 60 }> = [
@@ -183,12 +333,11 @@ export function RenderStep({
   onRenderStarted,
 }: RenderStepProps) {
   const { t } = useI18n()
-  const { settings, setPlatform, update } = useEditStore()
+  const { settings, setPlatform, toggleFormat, update } = useEditStore()
   const [renderLoading, setRenderLoading] = useState(false)
   const [renderError, setRenderError] = useState<string | null>(null)
   const [customOutputDir, setCustomOutputDir] = useState(sessionOutputDir)
 
-  // Static toggle states (visual only)
   const [broll, setBroll] = useState(true)
   const [zoom, setZoom] = useState(true)
   const [enhanceAudio, setEnhanceAudio] = useState(false)
@@ -252,22 +401,49 @@ export function RenderStep({
   }
 
   const estSecs = sessionDuration > 0 ? Math.max(15, Math.floor(sessionDuration * 0.12)) : null
+  const selectedCount = settings.selectedFormats.length
 
   return (
     <div style={s.page}>
       <div style={s.scroll}>
         <div style={s.inner}>
-          {/* Section 1: Output Format */}
+
+          {/* ── Section 1: Format ──────────────────────────────────────────── */}
           <div style={s.section}>
-            <SectionLabel text={t('render_format_label')} />
+            <SectionLabel text="Output Format" hint="select one or more" />
+
+            <div style={s.formatGrid}>
+              {FORMAT_DEFS.map((def) => (
+                <FormatCard
+                  key={def.ratio}
+                  {...def}
+                  selected={settings.selectedFormats.includes(def.ratio)}
+                  onToggle={() => toggleFormat(def.ratio)}
+                />
+              ))}
+            </div>
+
+            {/* Multi-select hint */}
+            {selectedCount > 1 && (
+              <div style={s.multiHint}>
+                <span style={{ color: '#d8b4fe', fontWeight: 700 }}>{selectedCount} formats</span>
+                {' '}selected · primary render: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{settings.aspectRatio}</span>
+                <span style={{ color: 'rgba(255,255,255,0.2)', marginLeft: '6px' }}>· multi-format batch coming soon</span>
+              </div>
+            )}
+          </div>
+
+          {/* ── Section 2: Platform targeting ─────────────────────────────── */}
+          <div style={s.section}>
+            <SectionLabel text="Platform Targeting" hint="optimizes AI & metadata" />
             <div style={s.platformRow}>
-              <PlatformCard id="tiktok"           name="TikTok"       icon="🎵" ratio="9:16" selected={settings.targetPlatform === 'tiktok'}          onSelect={() => setPlatform('tiktok')} />
-              <PlatformCard id="youtube_shorts"   name="YT Shorts"    icon="▶" ratio="9:16" selected={settings.targetPlatform === 'youtube_shorts'}   onSelect={() => setPlatform('youtube_shorts')} />
-              <PlatformCard id="instagram_reels"  name="Reels"        icon="◈" ratio="9:16" selected={settings.targetPlatform === 'instagram_reels'}  onSelect={() => setPlatform('instagram_reels')} />
+              <PlatformChip id="tiktok"          name="TikTok"    icon="🎵" selected={settings.targetPlatform === 'tiktok'}         onSelect={() => setPlatform('tiktok')} />
+              <PlatformChip id="youtube_shorts"  name="YT Shorts" icon="▶" selected={settings.targetPlatform === 'youtube_shorts'}  onSelect={() => setPlatform('youtube_shorts')} />
+              <PlatformChip id="instagram_reels" name="Reels"     icon="◈" selected={settings.targetPlatform === 'instagram_reels'} onSelect={() => setPlatform('instagram_reels')} />
             </div>
           </div>
 
-          {/* Section 2: Quality */}
+          {/* ── Section 3: Quality ────────────────────────────────────────── */}
           <div style={s.section}>
             <SectionLabel text="Quality Settings" />
             <div style={s.qualityGrid}>
@@ -296,7 +472,7 @@ export function RenderStep({
                 </select>
               </div>
               <div style={s.fieldGroup}>
-                <label style={s.fieldLabel}>Video Codec</label>
+                <label style={s.fieldLabel}>Codec</label>
                 <select style={s.select} disabled>
                   <option>H.264 (MP4)</option>
                 </select>
@@ -304,7 +480,7 @@ export function RenderStep({
             </div>
           </div>
 
-          {/* Section 3: Advanced toggles */}
+          {/* ── Section 4: Enhancements ───────────────────────────────────── */}
           <div style={s.section}>
             <SectionLabel text={t('render_advanced_label')} />
             <div style={s.toggleGrid}>
@@ -313,6 +489,12 @@ export function RenderStep({
                 sublabel="Burn subtitles into video"
                 checked={settings.addSubtitle}
                 onChange={(v) => update({ addSubtitle: v })}
+              />
+              <ToggleRow
+                label="AI Director"
+                sublabel="AI optimizes clip selection"
+                checked={settings.aiDirectorEnabled}
+                onChange={(v) => update({ aiDirectorEnabled: v })}
               />
               <ToggleRow
                 label={t('render_broll')}
@@ -336,12 +518,6 @@ export function RenderStep({
                 disabled
               />
               <ToggleRow
-                label="AI Director"
-                sublabel="Let AI optimize clip selection"
-                checked={settings.aiDirectorEnabled}
-                onChange={(v) => update({ aiDirectorEnabled: v })}
-              />
-              <ToggleRow
                 label={t('render_watermark')}
                 sublabel="Add branding watermark"
                 checked={watermark}
@@ -351,7 +527,7 @@ export function RenderStep({
             </div>
           </div>
 
-          {/* Section 4: Output folder */}
+          {/* ── Section 5: Output folder ──────────────────────────────────── */}
           <div style={s.section}>
             <SectionLabel text={t('render_output_label')} />
             <div style={s.dirRow}>
@@ -371,11 +547,10 @@ export function RenderStep({
             <span style={s.dirHint}>{t('render_output_hint')}</span>
           </div>
 
-          {/* Estimate */}
+          {/* Estimate + errors */}
           {estSecs !== null && (
-            <p style={s.estText}>~{estSecs}s total</p>
+            <p style={s.estText}>~{estSecs}s estimated render time</p>
           )}
-
           {renderError && (
             <span style={s.errorText}>{renderError}</span>
           )}
@@ -388,13 +563,17 @@ export function RenderStep({
               ...s.submitBtn,
               background: renderLoading || !sessionId
                 ? 'var(--surface-panel)'
-                : 'linear-gradient(135deg, #7B61FF 0%, #4D7CFF 100%)',
+                : 'linear-gradient(135deg, #a855f7 0%, #4d7cff 100%)',
               color: renderLoading || !sessionId ? 'var(--text-tertiary)' : '#fff',
               cursor: renderLoading || !sessionId ? 'not-allowed' : 'pointer',
+              boxShadow: renderLoading || !sessionId
+                ? 'none'
+                : '0 4px 16px rgba(168,85,247,0.35)',
             }}
           >
             {renderLoading ? t('render_starting') : `${t('render_start_btn')} →`}
           </button>
+
         </div>
       </div>
     </div>
@@ -415,20 +594,35 @@ const s: Record<string, React.CSSProperties> = {
     minHeight: 0,
   },
   inner: {
-    maxWidth: 'min(680px, 100%)',
+    maxWidth: 'min(720px, 100%)',
     margin: '0 auto',
-    padding: 'var(--space-6)',
+    padding: 'var(--space-6) var(--space-6) var(--space-8)',
     display: 'flex',
     flexDirection: 'column',
-    gap: 'var(--space-5)',
+    gap: 'var(--space-6)',
   },
   section: {
     display: 'flex',
     flexDirection: 'column',
   },
+  formatGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: 'var(--space-3)',
+    paddingTop: '14px',
+  },
+  multiHint: {
+    marginTop: '10px',
+    fontSize: '11px',
+    color: 'var(--text-tertiary)',
+    padding: '6px 10px',
+    backgroundColor: 'rgba(168,85,247,0.06)',
+    borderRadius: '8px',
+    border: '1px solid rgba(168,85,247,0.15)',
+  },
   platformRow: {
     display: 'flex',
-    gap: 'var(--space-3)',
+    gap: 'var(--space-2)',
   },
   qualityGrid: {
     display: 'grid',
@@ -506,12 +700,12 @@ const s: Record<string, React.CSSProperties> = {
     color: 'var(--status-error)',
   },
   submitBtn: {
-    height: '44px',
+    height: '46px',
     border: 'none',
     borderRadius: 'var(--radius-md)',
     fontSize: 'var(--text-sm)',
     fontWeight: 600,
-    transition: 'opacity 0.15s ease',
+    transition: 'opacity 0.15s ease, box-shadow 0.15s ease',
     letterSpacing: '0.02em',
     width: '100%',
   },

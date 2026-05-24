@@ -9,7 +9,7 @@ interface StepNavProps {
 }
 
 const STEP_ORDER: StudioStep[] = [
-  'source', 'analyze', 'plan', 'edit', 'review', 'render', 'monitor', 'results',
+  'source', 'configure', 'analyze', 'plan', 'monitor', 'results',
 ]
 
 export function StepNav({ currentStep, onStepClick }: StepNavProps) {
@@ -36,7 +36,7 @@ export function StepNav({ currentStep, onStepClick }: StepNavProps) {
           const isHovered = hoveredIdx === i && isDone
 
           const bgColor = isActive
-            ? 'rgba(123,97,255,0.1)'
+            ? 'rgba(77,124,255,0.08)'
             : isHovered
             ? 'rgba(255,255,255,0.04)'
             : 'transparent'
@@ -60,13 +60,16 @@ export function StepNav({ currentStep, onStepClick }: StepNavProps) {
               {/* Circle */}
               <div style={{
                 ...s.circle,
+                background: isActive
+                  ? 'linear-gradient(135deg, #4d7cff, #2563eb)'
+                  : undefined,
                 backgroundColor: isActive
-                  ? '#7B61FF'
+                  ? undefined
                   : isDone
                   ? 'rgba(52,200,120,0.15)'
                   : 'var(--surface-input)',
                 border: isActive
-                  ? '1.5px solid #7B61FF'
+                  ? '1.5px solid #4d7cff'
                   : isDone
                   ? '1.5px solid rgba(52,200,120,0.5)'
                   : '1.5px solid var(--border-subtle)',
@@ -83,14 +86,14 @@ export function StepNav({ currentStep, onStepClick }: StepNavProps) {
               <div style={s.labelWrap}>
                 <span style={{
                   ...s.stepNum,
-                  color: isActive ? 'rgba(123,97,255,0.7)' : 'var(--text-tertiary)',
+                  color: isActive ? 'rgba(77,124,255,0.7)' : 'var(--text-tertiary)',
                 }}>
                   {String(i + 1).padStart(2, '0')}
                 </span>
                 <span style={{
                   ...s.label,
                   color: isActive
-                    ? 'var(--text-primary)'
+                    ? 'var(--accent-primary)'
                     : isDone
                     ? 'var(--text-secondary)'
                     : 'var(--text-tertiary)',
@@ -121,7 +124,7 @@ export function StepNav({ currentStep, onStepClick }: StepNavProps) {
 
 const s: Record<string, React.CSSProperties> = {
   nav: {
-    width: '160px',
+    width: '172px',
     flexShrink: 0,
     display: 'flex',
     flexDirection: 'column',
@@ -139,7 +142,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   logoMark: {
     fontSize: '15px',
-    background: 'linear-gradient(135deg, #7B61FF, #4D7CFF)',
+    background: 'linear-gradient(135deg, #a855f7, #4d7cff)',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
     flexShrink: 0,
@@ -155,7 +158,7 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    height: '44px',
+    height: '46px',
     padding: '0 14px 0 16px',
     transition: 'background-color 0.12s ease',
     userSelect: 'none' as const,
@@ -165,10 +168,10 @@ const s: Record<string, React.CSSProperties> = {
     left: 0,
     top: '50%',
     transform: 'translateY(-50%)',
-    width: '3px',
-    height: '22px',
-    background: 'linear-gradient(180deg, #7B61FF, #4D7CFF)',
-    borderRadius: '0 3px 3px 0',
+    width: '2px',
+    height: '12px',
+    background: 'var(--accent-primary)',
+    borderRadius: '999px',
   },
   circle: {
     width: '22px',

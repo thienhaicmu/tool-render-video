@@ -19,8 +19,11 @@ interface ClipCardProps {
 
 function ClipCard({ card, index, selected, onToggle }: ClipCardProps) {
   const [hovered, setHovered] = useState(false)
-  const scoreColor = card.confidence >= 70 ? '#34C878' : card.confidence >= 40 ? '#F5A623' : '#E05252'
+  const score = card.confidence
+  const scoreColor = score >= 70 ? '#34C878' : score >= 40 ? '#F5A623' : '#E05252'
+  const scoreTier = score >= 80 ? 'High' : score >= 60 ? 'Good' : score >= 40 ? 'Fair' : 'Low'
   const durationSec = Math.round(card.endSec - card.startSec)
+  const isHook = card.startSec < 30
 
   return (
     <div
@@ -88,22 +91,42 @@ function ClipCard({ card, index, selected, onToggle }: ClipCardProps) {
           {index + 1}
         </div>
 
-        {/* Score badge */}
+        {/* Hook badge — top right, only for opening clips */}
+        {isHook && (
+          <div style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            background: 'linear-gradient(135deg, #F5A623, #E8732A)',
+            borderRadius: '5px',
+            padding: '2px 5px',
+            fontSize: '8.5px',
+            fontWeight: 700,
+            color: '#fff',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase' as const,
+          }}>
+            Hook
+          </div>
+        )}
+
+        {/* Viral score badge */}
         <div style={{
           position: 'absolute',
           bottom: '8px',
           right: '8px',
-          backgroundColor: 'rgba(0,0,0,0.75)',
+          backgroundColor: 'rgba(0,0,0,0.82)',
           border: `1px solid ${scoreColor}`,
-          borderRadius: '6px',
-          padding: '2px 6px',
-          fontSize: '11px',
-          fontWeight: 700,
-          color: scoreColor,
-          fontFamily: 'var(--font-mono)',
+          borderRadius: '7px',
+          padding: '3px 7px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
           backdropFilter: 'blur(4px)',
+          gap: '0',
         }}>
-          {card.confidence}
+          <span style={{ fontSize: '12px', fontWeight: 800, color: scoreColor, fontFamily: 'var(--font-mono)', lineHeight: 1.1 }}>{score}</span>
+          <span style={{ fontSize: '7.5px', fontWeight: 600, color: scoreColor, letterSpacing: '0.05em', opacity: 0.8 }}>VIRAL</span>
         </div>
 
         {/* Duration badge */}
@@ -132,7 +155,7 @@ function ClipCard({ card, index, selected, onToggle }: ClipCardProps) {
             <div style={{
               position: 'absolute',
               top: '8px',
-              right: '8px',
+              right: isHook ? '44px' : '8px',
               width: '22px',
               height: '22px',
               borderRadius: '50%',
@@ -149,7 +172,7 @@ function ClipCard({ card, index, selected, onToggle }: ClipCardProps) {
       </div>
 
       {/* Info */}
-      <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+      <div style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
         <span style={{
           fontSize: '11px',
           fontWeight: 600,
@@ -161,6 +184,26 @@ function ClipCard({ card, index, selected, onToggle }: ClipCardProps) {
         }}>
           {card.title.slice(0, 30)}
         </span>
+
+        {/* Score bar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div style={{
+            flex: 1,
+            height: '3px',
+            borderRadius: '2px',
+            backgroundColor: 'rgba(255,255,255,0.06)',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              width: `${score}%`,
+              height: '100%',
+              borderRadius: '2px',
+              background: `linear-gradient(90deg, ${scoreColor}80, ${scoreColor})`,
+            }} />
+          </div>
+          <span style={{ fontSize: '9px', color: scoreColor, fontWeight: 700, flexShrink: 0 }}>{scoreTier}</span>
+        </div>
+
         <span style={{
           fontSize: '10px',
           color: 'var(--text-tertiary)',
@@ -368,14 +411,14 @@ const s: Record<string, React.CSSProperties> = {
     padding: '0 var(--space-6)',
     border: 'none',
     borderRadius: '10px',
-    background: 'linear-gradient(135deg, #7B61FF 0%, #4D7CFF 100%)',
+    background: 'linear-gradient(135deg, #a855f7 0%, #4d7cff 100%)',
     color: '#fff',
     fontSize: 'var(--text-sm)',
     fontWeight: 700,
     cursor: 'pointer',
     flexShrink: 0,
     letterSpacing: '0.01em',
-    boxShadow: '0 3px 10px rgba(123,97,255,0.3)',
+    boxShadow: '0 3px 10px rgba(168,85,247,0.3)',
   },
   empty: {
     flex: 1,

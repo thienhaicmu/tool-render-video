@@ -27,7 +27,7 @@ function ProgressRing({ pct }: { pct: number }) {
         borderRadius: '50%',
         background: isComplete
           ? 'radial-gradient(circle, rgba(52,200,120,0.18) 0%, transparent 70%)'
-          : 'radial-gradient(circle, rgba(123,97,255,0.2) 0%, transparent 70%)',
+          : 'radial-gradient(circle, rgba(168,85,247,0.2) 0%, transparent 70%)',
         transition: 'background 0.6s ease',
         pointerEvents: 'none',
       }} />
@@ -48,7 +48,7 @@ function ProgressRing({ pct }: { pct: number }) {
         />
         <defs>
           <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#7B61FF" />
+            <stop offset="0%" stopColor="#a855f7" />
             <stop offset="100%" stopColor="#4D7CFF" />
           </linearGradient>
         </defs>
@@ -98,11 +98,11 @@ function CheckRow({ item }: { item: CheckItemState }) {
       backgroundColor: item.done
         ? 'rgba(52,200,120,0.05)'
         : item.active
-        ? 'rgba(123,97,255,0.06)'
+        ? 'rgba(168,85,247,0.06)'
         : 'var(--surface-input)',
       border: '1px solid ' + (
         item.done ? 'rgba(52,200,120,0.2)'
-        : item.active ? 'rgba(123,97,255,0.2)'
+        : item.active ? 'rgba(168,85,247,0.2)'
         : 'var(--border-subtle)'
       ),
       transition: 'all 0.3s ease',
@@ -118,11 +118,11 @@ function CheckRow({ item }: { item: CheckItemState }) {
         backgroundColor: item.done
           ? 'rgba(52,200,120,0.15)'
           : item.active
-          ? 'rgba(123,97,255,0.15)'
+          ? 'rgba(168,85,247,0.15)'
           : 'var(--surface-panel)',
         border: '1.5px solid ' + (
           item.done ? 'rgba(52,200,120,0.5)'
-          : item.active ? 'rgba(123,97,255,0.4)'
+          : item.active ? 'rgba(168,85,247,0.4)'
           : 'var(--border-subtle)'
         ),
       }}>
@@ -133,8 +133,8 @@ function CheckRow({ item }: { item: CheckItemState }) {
             display: 'inline-block',
             width: '10px',
             height: '10px',
-            border: '2px solid rgba(123,97,255,0.3)',
-            borderTopColor: '#7B61FF',
+            border: '2px solid rgba(168,85,247,0.3)',
+            borderTopColor: '#a855f7',
             borderRadius: '50%',
             animation: 'az-spin 0.8s linear infinite',
           }} />
@@ -198,11 +198,16 @@ export function AnalyzeStep({ sessionId, sessionTitle, sessionDuration, onContin
 
   useEffect(() => {
     if (transcriptReady) { setPct(100); return }
+    // Whisper-tiny processes ~8x real-time; min 15s to avoid instant fill
+    const estimatedSec = Math.max(15, sessionDuration / 8)
+    const startTime = Date.now()
     const id = window.setInterval(() => {
-      setPct((p) => (p < 95 ? p + Math.ceil((95 - p) / 12) : p))
-    }, 600)
+      const elapsedSec = (Date.now() - startTime) / 1000
+      const computed = Math.min(93, (elapsedSec / estimatedSec) * 95)
+      setPct(Math.round(computed))
+    }, 800)
     return () => window.clearInterval(id)
-  }, [transcriptReady])
+  }, [transcriptReady, sessionDuration])
 
   if (!sessionId) {
     return (
@@ -217,7 +222,10 @@ export function AnalyzeStep({ sessionId, sessionTitle, sessionDuration, onContin
     : null
 
   const items: CheckItemState[] = STEPS.map((step, i) => {
-    const stepDoneCount = transcriptReady ? STEPS.length : Math.floor(pct / 25)
+    const stepThresholds = [20, 45, 65, 85]
+    const stepDoneCount = transcriptReady
+      ? STEPS.length
+      : stepThresholds.filter((t) => pct >= t).length
     const isDone = i < stepDoneCount && !step.alwaysInProgress
     return {
       label: t(step.labelKey as any),
@@ -229,7 +237,10 @@ export function AnalyzeStep({ sessionId, sessionTitle, sessionDuration, onContin
 
   return (
     <>
-      <style>{`@keyframes az-spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes az-spin { to { transform: rotate(360deg); } }
+        @keyframes az-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+      `}</style>
       <div style={s.page}>
         {/* Top header bar */}
         <div style={s.headerBar}>
@@ -253,8 +264,8 @@ export function AnalyzeStep({ sessionId, sessionTitle, sessionDuration, onContin
                 width: '8px',
                 height: '8px',
                 borderRadius: '50%',
-                backgroundColor: '#7B61FF',
-                boxShadow: '0 0 8px rgba(123,97,255,0.8)',
+                backgroundColor: '#a855f7',
+                boxShadow: '0 0 8px rgba(168,85,247,0.8)',
                 animation: 'az-pulse 2s ease-in-out infinite',
               }} />
               <span>AI Director</span>
@@ -291,13 +302,20 @@ export function AnalyzeStep({ sessionId, sessionTitle, sessionDuration, onContin
             {transcriptReady && (
               <div style={s.insightsBox}>
                 <div style={s.insightsHeader}>
-                  <span style={s.insightsIcon}>✦</span>
+                  <div style={{ width: '2px', height: '12px', background: 'var(--ai-active)', borderRadius: '999px', flexShrink: 0 }} />
                   <span style={s.insightsTitle}>AI Insights</span>
                 </div>
                 <div style={s.tagsRow}>
-                  {['#productivity', '#ai-tools', '#tips', '#mindset'].map((tag) => (
-                    <span key={tag} style={s.tag}>{tag}</span>
-                  ))}
+                  {sessionTitle
+                    .toLowerCase()
+                    .replace(/[^a-z0-9\s]/g, '')
+                    .split(/\s+/)
+                    .filter((w) => w.length > 4)
+                    .slice(0, 5)
+                    .map((w) => `#${w}`)
+                    .map((tag) => (
+                      <span key={tag} style={s.tag}>{tag}</span>
+                    ))}
                 </div>
                 <div style={s.insightsList}>
                   <div style={s.insightItem}>
@@ -331,9 +349,6 @@ export function AnalyzeStep({ sessionId, sessionTitle, sessionDuration, onContin
           )}
         </div>
       </div>
-      <style>{`
-        @keyframes az-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-      `}</style>
     </>
   )
 }
@@ -347,14 +362,14 @@ const s: Record<string, React.CSSProperties> = {
     backgroundColor: 'var(--surface-base)',
   },
   headerBar: {
-    height: '52px',
+    height: '48px',
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '0 var(--space-6)',
     borderBottom: '1px solid var(--border-subtle)',
-    backgroundColor: 'var(--surface-card)',
+    backgroundColor: 'var(--surface-panel)',
   },
   headerLeft: {
     display: 'flex',
@@ -381,11 +396,11 @@ const s: Record<string, React.CSSProperties> = {
     gap: '7px',
     padding: '5px 12px',
     borderRadius: '20px',
-    backgroundColor: 'rgba(123,97,255,0.1)',
-    border: '1px solid rgba(123,97,255,0.25)',
+    backgroundColor: 'rgba(168,85,247,0.1)',
+    border: '1px solid rgba(168,85,247,0.25)',
     fontSize: 'var(--text-xs)',
     fontWeight: 600,
-    color: '#7B61FF',
+    color: '#a855f7',
   },
   completeBadge: {
     display: 'inline-flex',
@@ -454,20 +469,15 @@ const s: Record<string, React.CSSProperties> = {
   insightsHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: '7px',
-  },
-  insightsIcon: {
-    fontSize: '12px',
-    background: 'linear-gradient(135deg, #7B61FF, #4D7CFF)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
+    gap: '8px',
+    height: '22px',
   },
   insightsTitle: {
-    fontSize: '11px',
+    fontSize: '10px',
     fontWeight: 700,
-    letterSpacing: '0.06em',
+    letterSpacing: '.08em',
     textTransform: 'uppercase' as const,
-    color: 'var(--text-tertiary)',
+    color: 'var(--ai-active)',
   },
   tagsRow: {
     display: 'flex',
@@ -499,39 +509,42 @@ const s: Record<string, React.CSSProperties> = {
     width: '5px',
     height: '5px',
     borderRadius: '50%',
-    backgroundColor: '#7B61FF',
+    backgroundColor: '#a855f7',
     marginTop: '5px',
     flexShrink: 0,
   },
   footer: {
     flexShrink: 0,
-    padding: 'var(--space-4) var(--space-6)',
+    padding: '0 var(--space-6)',
+    height: '56px',
     borderTop: '1px solid var(--border-subtle)',
-    backgroundColor: 'var(--surface-card)',
+    backgroundColor: 'var(--surface-panel)',
     display: 'flex',
+    alignItems: 'center',
     justifyContent: 'flex-end',
   },
   primaryBtn: {
-    height: '40px',
-    padding: '0 var(--space-6)',
+    height: '38px',
+    padding: '0 20px',
     border: 'none',
-    borderRadius: '10px',
-    background: 'linear-gradient(135deg, #7B61FF 0%, #4D7CFF 100%)',
+    borderRadius: '8px',
+    background: 'linear-gradient(135deg, #a855f7, #4d7cff)',
     color: '#fff',
-    fontSize: 'var(--text-sm)',
+    fontSize: '12px',
     fontWeight: 700,
     cursor: 'pointer',
-    letterSpacing: '0.01em',
-    boxShadow: '0 4px 12px rgba(123,97,255,0.3)',
+    boxShadow: '0 0 0 1px rgba(168,85,247,.35), 0 0 16px rgba(168,85,247,.2)',
+    transition: 'opacity 0.15s ease',
   },
   skipBtn: {
-    height: '40px',
-    padding: '0 var(--space-6)',
-    border: '1px solid var(--border-subtle)',
-    borderRadius: '10px',
+    height: '34px',
+    padding: '0 14px',
+    fontSize: '12px',
+    fontWeight: 700,
+    border: '1px solid var(--border-default)',
+    borderRadius: '8px',
     backgroundColor: 'transparent',
-    color: 'var(--text-tertiary)',
-    fontSize: 'var(--text-sm)',
+    color: 'var(--text-secondary)',
     cursor: 'pointer',
   },
 }

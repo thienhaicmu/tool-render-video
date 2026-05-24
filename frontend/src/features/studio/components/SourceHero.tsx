@@ -115,9 +115,6 @@ export function SourceHero({ onSessionReady }: SourceHeroProps) {
 
   return (
     <div style={s.page}>
-      {/* ambient glow */}
-      <div style={s.glow} />
-
       <div style={s.card}>
         {/* Brand */}
         <div style={s.brand}>
@@ -143,7 +140,7 @@ export function SourceHero({ onSessionReady }: SourceHeroProps) {
             style={{ ...s.seg, ...(mode === 'local' ? s.segActive : {}) }}
             onClick={() => { setMode('local'); setError(null) }}
           >
-            <span style={{ display: 'flex', alignItems: 'center', color: mode === 'local' ? '#7B61FF' : 'var(--text-tertiary)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', color: mode === 'local' ? '#a855f7' : 'var(--text-tertiary)' }}>
               <IconFile />
             </span>
             <span>{t('source_tab_local')}</span>
@@ -206,14 +203,14 @@ export function SourceHero({ onSessionReady }: SourceHeroProps) {
               style={{
                 ...s.dropZone,
                 borderColor: dragOver
-                  ? '#7B61FF'
+                  ? '#a855f7'
                   : file
                   ? 'rgba(52,200,120,0.5)'
                   : error
                   ? 'var(--status-error)'
                   : 'var(--border-default)',
                 backgroundColor: dragOver
-                  ? 'rgba(123,97,255,0.06)'
+                  ? 'rgba(168,85,247,0.06)'
                   : file
                   ? 'rgba(52,200,120,0.04)'
                   : 'var(--surface-input)',
@@ -294,16 +291,6 @@ const s: Record<string, React.CSSProperties> = {
     overflowY: 'auto',
     position: 'relative',
   },
-  glow: {
-    position: 'absolute',
-    top: 0,
-    left: '50%',
-    transform: 'translateX(-50%)',
-    width: '800px',
-    height: '400px',
-    background: 'radial-gradient(ellipse 70% 60% at 50% 0%, rgba(123,97,255,0.09) 0%, transparent 70%)',
-    pointerEvents: 'none',
-  },
   card: {
     position: 'relative',
     width: '100%',
@@ -313,9 +300,9 @@ const s: Record<string, React.CSSProperties> = {
     gap: 'var(--space-5)',
     padding: 'var(--space-8)',
     backgroundColor: 'var(--surface-card)',
-    border: '1px solid var(--border-subtle)',
+    border: '1px solid var(--border-default)',
     borderRadius: '20px',
-    boxShadow: '0 0 0 1px rgba(123,97,255,0.06), 0 24px 48px rgba(0,0,0,0.5)',
+    boxShadow: '0 24px 48px rgba(0,0,0,0.5)',
   },
   brand: {
     display: 'flex',
@@ -324,7 +311,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   brandIcon: {
     fontSize: '20px',
-    background: 'linear-gradient(135deg, #7B61FF, #4D7CFF)',
+    background: 'linear-gradient(135deg, #a855f7, #4d7cff)',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
     lineHeight: 1,
@@ -431,7 +418,7 @@ const s: Record<string, React.CSSProperties> = {
     height: '52px',
     border: 'none',
     borderRadius: '12px',
-    background: 'linear-gradient(135deg, #7B61FF 0%, #4D7CFF 100%)',
+    background: 'linear-gradient(135deg, #a855f7 0%, #4d7cff 100%)',
     color: '#fff',
     fontSize: 'var(--text-sm)',
     fontWeight: 700,
@@ -442,7 +429,7 @@ const s: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: '8px',
     transition: 'opacity 0.15s ease, transform 0.1s ease',
-    boxShadow: '0 4px 16px rgba(123,97,255,0.35)',
+    boxShadow: '0 4px 16px rgba(168,85,247,0.35)',
   },
   spinner: {
     display: 'inline-block',

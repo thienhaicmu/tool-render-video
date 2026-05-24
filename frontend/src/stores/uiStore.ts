@@ -19,11 +19,9 @@ export type ActivePanel =
 
 export type StudioStep =
   | 'source'
+  | 'configure'
   | 'analyze'
   | 'plan'
-  | 'edit'
-  | 'review'
-  | 'render'
   | 'monitor'
   | 'results'
 

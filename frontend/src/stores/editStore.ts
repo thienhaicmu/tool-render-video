@@ -12,6 +12,7 @@ export interface ClipRange {
 export interface EditSettings {
   targetPlatform: TargetPlatform
   aspectRatio: string
+  selectedFormats: string[]
   outputFps: 30 | 60
   renderProfile: RenderProfile
 
@@ -42,6 +43,7 @@ const PLATFORM_PRESETS: Record<TargetPlatform, Pick<EditSettings, 'aspectRatio' 
 export const DEFAULT_EDIT_SETTINGS: EditSettings = {
   targetPlatform:    'tiktok',
   aspectRatio:       '9:16',
+  selectedFormats:   ['9:16'],
   outputFps:         30,
   renderProfile:     'balanced',
 
@@ -67,6 +69,7 @@ interface EditStore {
   settings: EditSettings
   update: (patch: Partial<EditSettings>) => void
   setPlatform: (platform: TargetPlatform) => void
+  toggleFormat: (ratio: string) => void
   addClipLock: (range: ClipRange) => void
   removeClipLock: (index: number) => void
   clearClipLock: () => void
@@ -86,6 +89,22 @@ export const useEditStore = create<EditStore>((set) => ({
         ...PLATFORM_PRESETS[platform],
       },
     })),
+
+  toggleFormat: (ratio) =>
+    set((s) => {
+      const current = s.settings.selectedFormats
+      const hasIt = current.includes(ratio)
+      const next = hasIt
+        ? current.length > 1 ? current.filter((r) => r !== ratio) : current
+        : [...current, ratio]
+      return {
+        settings: {
+          ...s.settings,
+          selectedFormats: next,
+          aspectRatio: next[0] ?? '9:16',
+        },
+      }
+    }),
 
   addClipLock: (range) =>
     set((s) => ({

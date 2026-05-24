@@ -393,7 +393,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: '44px',
     border: 'none',
     borderRadius: '10px',
-    background: 'linear-gradient(135deg, #7B61FF 0%, #4D7CFF 100%)',
+    background: 'linear-gradient(135deg, #a855f7 0%, #4d7cff 100%)',
     color: '#fff',
     fontSize: 'var(--text-base)',
     fontWeight: 'var(--weight-semibold)' as unknown as number,

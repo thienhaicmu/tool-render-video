@@ -111,7 +111,7 @@ function ResultCard({ card, jobId, index }: ResultCardProps) {
           <div style={{
             position: 'absolute',
             inset: 0,
-            backgroundColor: 'rgba(123,97,255,0.08)',
+            backgroundColor: 'rgba(168,85,247,0.08)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -120,7 +120,7 @@ function ResultCard({ card, jobId, index }: ResultCardProps) {
               width: '44px',
               height: '44px',
               borderRadius: '50%',
-              backgroundColor: 'rgba(123,97,255,0.9)',
+              backgroundColor: 'rgba(168,85,247,0.9)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -219,8 +219,8 @@ export function ResultsStep({ jobId, sessionOutputDir, onNewProject }: ResultsSt
             display: 'inline-block',
             width: '20px',
             height: '20px',
-            border: '2.5px solid rgba(123,97,255,0.3)',
-            borderTopColor: '#7B61FF',
+            border: '2.5px solid rgba(168,85,247,0.3)',
+            borderTopColor: '#a855f7',
             borderRadius: '50%',
             animation: 'res-spin 0.8s linear infinite',
           }} />
@@ -228,7 +228,10 @@ export function ResultsStep({ jobId, sessionOutputDir, onNewProject }: ResultsSt
         </div>
       ) : cards.length === 0 ? (
         <div style={s.loadingWrap}>
-          <span style={{ fontSize: '40px', opacity: 0.1 }}>🎬</span>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.1, color: 'var(--text-tertiary)' }}>
+            <rect x="2" y="2" width="20" height="20" rx="3"/>
+            <polygon points="10 8 16 12 10 16 10 8"/>
+          </svg>
           <span style={s.loadingText}>{t('results_no_clips')}</span>
         </div>
       ) : (
@@ -266,10 +269,11 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 'var(--space-4) var(--space-6)',
+    padding: '0 var(--space-6)',
+    height: '48px',
     borderBottom: '1px solid var(--border-subtle)',
     flexShrink: 0,
-    backgroundColor: 'var(--surface-card)',
+    backgroundColor: 'var(--surface-panel)',
     flexWrap: 'wrap' as const,
     gap: 'var(--space-3)',
   },
@@ -308,14 +312,14 @@ const s: Record<string, React.CSSProperties> = {
     gap: '6px',
   },
   folderBtn: {
-    height: '32px',
-    padding: '0 var(--space-3)',
-    border: '1px solid var(--border-subtle)',
+    height: '34px',
+    padding: '0 14px',
+    border: '1px solid var(--border-default)',
     borderRadius: '8px',
-    backgroundColor: 'var(--surface-input)',
+    backgroundColor: 'transparent',
     color: 'var(--text-secondary)',
-    fontSize: '11px',
-    fontWeight: 500,
+    fontSize: '12px',
+    fontWeight: 700,
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
@@ -346,10 +350,11 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 'var(--space-4) var(--space-6)',
+    padding: '0 var(--space-6)',
+    height: '56px',
     borderTop: '1px solid var(--border-subtle)',
     flexShrink: 0,
-    backgroundColor: 'var(--surface-card)',
+    backgroundColor: 'var(--surface-panel)',
   },
   footerSummary: {
     fontSize: 'var(--text-sm)',
@@ -357,14 +362,15 @@ const s: Record<string, React.CSSProperties> = {
   },
   newProjectBtn: {
     height: '38px',
-    padding: '0 var(--space-6)',
+    padding: '0 20px',
     border: 'none',
-    borderRadius: '10px',
-    background: 'linear-gradient(135deg, #7B61FF 0%, #4D7CFF 100%)',
+    borderRadius: '8px',
+    background: 'linear-gradient(135deg, #a855f7, #4d7cff)',
     color: '#fff',
-    fontSize: 'var(--text-sm)',
+    fontSize: '12px',
     fontWeight: 700,
     cursor: 'pointer',
-    boxShadow: '0 3px 10px rgba(123,97,255,0.3)',
+    boxShadow: '0 0 0 1px rgba(168,85,247,.35), 0 0 16px rgba(168,85,247,.2)',
+    transition: 'opacity 0.15s ease',
   },
 }

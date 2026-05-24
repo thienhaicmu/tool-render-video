@@ -131,25 +131,25 @@
 :root {
 
   /* ── Surfaces ─────────────────────────────────────────── */
-  --surface-base:         #0D0F14;   /* app background */
-  --surface-panel:        #13161C;   /* sidebar, inspector, topbar */
-  --surface-card:         #191D25;   /* clip cards, list rows */
-  --surface-card-hover:   #1F2430;   /* hover state for cards/rows */
-  --surface-input:        #0F1219;   /* text inputs, dropdowns */
-  --surface-overlay:      rgba(7, 9, 14, 0.85); /* modals, popovers */
+  --surface-base:         #0a0a0c;   /* app background */
+  --surface-panel:        #111116;   /* sidebar, inspector, topbar */
+  --surface-card:         #1c1c24;   /* clip cards, list rows */
+  --surface-card-hover:   #24242e;   /* hover state for cards/rows */
+  --surface-input:        #101014;   /* text inputs, dropdowns */
+  --surface-overlay:      rgba(8, 8, 11, 0.88); /* modals, popovers */
 
   /* ── Borders ───────────────────────────────────────────── */
-  --border-subtle:        #1A1F2C;
-  --border-default:       #252D3D;
-  --border-strong:        #364050;
-  --border-focus:         rgba(77, 124, 255, 0.5);
+  --border-subtle:        rgba(255,255,255,.06);
+  --border-default:       rgba(255,255,255,.10);
+  --border-strong:        rgba(255,255,255,.18);
+  --border-focus:         rgba(77, 124, 255, 0.6);
 
   /* ── Text ──────────────────────────────────────────────── */
-  --text-primary:         #F0F3F8;
-  --text-secondary:       #9BA5B8;
-  --text-tertiary:        #5E6A7E;
+  --text-primary:         #f0f0f6;
+  --text-secondary:       #c8c8d8;
+  --text-tertiary:        #8888a0;
   --text-disabled:        #3A4252;
-  --text-inverse:         #0D0F14;
+  --text-inverse:         #0a0a0c;
 
   /* ── Accent — primary interactive ─────────────────────── */
   --accent-primary:       #4D7CFF;
@@ -159,9 +159,11 @@
   --accent-subtle-hover:  rgba(77, 124, 255, 0.20);
 
   /* ── AI identity ───────────────────────────────────────── */
-  --ai-active:            #7B61FF;
-  --ai-hover:             #9179FF;
-  --ai-subtle:            rgba(123, 97, 255, 0.12);
+  --ai-active:            #a855f7;
+  --ai-hover:             #c084fc;
+  --ai-subtle:            rgba(168, 85, 247, 0.12);
+  --ai-glow:              rgba(168, 85, 247, 0.20);
+  --ai-border:            rgba(168, 85, 247, 0.35);
 
   /* ── Status semantic ───────────────────────────────────── */
   --status-running:       #4D7CFF;

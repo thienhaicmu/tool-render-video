@@ -13,6 +13,7 @@ export const translations = {
 
     // Studio step labels
     step_source: 'Source',
+    step_configure: 'Configure',
     step_analyze: 'Analyze',
     step_plan: 'Plan',
     step_edit: 'Edit',
@@ -110,6 +111,25 @@ export const translations = {
     // New steps
     step_monitor: 'Monitor',
     step_results: 'Results',
+    // Configure step
+    configure_header: 'Configure Output',
+    configure_format_section: 'Output Format',
+    configure_duration_section: 'Clip Duration',
+    configure_count_section: 'Output Count',
+    configure_subtitle_section: 'Subtitle Style',
+    configure_platform_section: 'Platform',
+    configure_quality_section: 'Quality',
+    configure_continue: 'Start Analysis →',
+    configure_ai_pick: 'AI Pick',
+    configure_min_label: 'Min',
+    configure_max_label: 'Max',
+    configure_clips_label: 'clips',
+    // Plan merged (approve + render)
+    plan_approve_render: 'Approve & Start Rendering →',
+    plan_submitting: 'Submitting…',
+    plan_view_table: 'Table',
+    plan_view_cards: 'Cards',
+    plan_error_submit: 'Render could not be submitted — try again.',
     // AnalyzeStep new
     analyze_scanning: 'Analyzing your video…',
     analyze_complete: 'Analysis complete',
@@ -177,6 +197,7 @@ export const translations = {
 
     // Studio step labels
     step_source: 'Nguồn',
+    step_configure: 'Cấu hình',
     step_analyze: 'Phân tích',
     step_plan: 'Kế hoạch',
     step_edit: 'Chỉnh sửa',
@@ -274,6 +295,25 @@ export const translations = {
     // New steps
     step_monitor: 'Theo dõi',
     step_results: 'Kết quả',
+    // Configure step
+    configure_header: 'Cấu hình đầu ra',
+    configure_format_section: 'Định dạng',
+    configure_duration_section: 'Thời lượng clip',
+    configure_count_section: 'Số lượng',
+    configure_subtitle_section: 'Kiểu phụ đề',
+    configure_platform_section: 'Nền tảng',
+    configure_quality_section: 'Chất lượng',
+    configure_continue: 'Bắt đầu phân tích →',
+    configure_ai_pick: 'AI Chọn',
+    configure_min_label: 'Tối thiểu',
+    configure_max_label: 'Tối đa',
+    configure_clips_label: 'clips',
+    // Plan merged
+    plan_approve_render: 'Phê duyệt & Bắt đầu xuất →',
+    plan_submitting: 'Đang gửi…',
+    plan_view_table: 'Bảng',
+    plan_view_cards: 'Thẻ',
+    plan_error_submit: 'Không thể xuất — thử lại.',
     analyze_scanning: 'Đang phân tích video…',
     analyze_complete: 'Phân tích hoàn tất',
     analyze_topics_found: 'Đã xác định chủ đề',

@@ -397,7 +397,7 @@ const ws: Record<string, React.CSSProperties> = {
     padding: '0 var(--space-4)',
     border: 'none',
     borderRadius: '8px',
-    background: 'linear-gradient(135deg, #7B61FF 0%, #4D7CFF 100%)',
+    background: 'linear-gradient(135deg, #a855f7 0%, #4d7cff 100%)',
     color: '#fff',
     fontSize: 'var(--text-sm)',
     fontWeight: 500,
@@ -556,7 +556,7 @@ const cs: Record<string, React.CSSProperties> = {
     padding: '0 var(--space-3)',
     flexShrink: 0,
     fontWeight: 700,
-    background: 'linear-gradient(135deg, #7B61FF 0%, #4D7CFF 100%)',
+    background: 'linear-gradient(135deg, #a855f7 0%, #4d7cff 100%)',
     color: '#fff',
   },
   openBtn: {

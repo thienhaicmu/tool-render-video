@@ -10,6 +10,11 @@ import uuid
 import logging
 import subprocess
 from urllib.parse import urlparse
+
+# Guards concurrent preview-transcript requests for the same session.
+# Key = session_id, Value = threading.Lock held while Whisper is running.
+_transcript_locks: dict[str, threading.Lock] = {}
+_transcript_locks_mu = threading.Lock()
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
@@ -389,10 +394,43 @@ def preview_transcript(session_id: str):
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video file not found")
 
+    # Get or create a per-session lock so only one Whisper run happens at a time.
+    with _transcript_locks_mu:
+        lock = _transcript_locks.setdefault(session_id, threading.Lock())
+
+    acquired = lock.acquire(blocking=False)
+    if not acquired:
+        # Another request is already transcribing — tell the client to retry later.
+        return {"segments": [], "status": "in_progress"}
+
     try:
+        # Double-check cache inside the lock (another thread may have just written it).
+        if cache_path.exists():
+            try:
+                with cache_path.open("r", encoding="utf-8") as fh:
+                    return {"segments": json.load(fh)}
+            except Exception:
+                pass
+
+        # Extract audio to WAV first — avoids tensor-shape errors that occur
+        # when Whisper reads 60fps or high-bitrate video containers directly.
+        ffmpeg_bin = get_ffmpeg_bin()
+        audio_path = work_dir / "preview_audio.wav"
+        if not audio_path.exists():
+            subprocess.run(
+                [
+                    ffmpeg_bin, "-y", "-i", str(video_path),
+                    "-vn", "-ac", "1", "-ar", "16000",
+                    "-acodec", "pcm_s16le", str(audio_path),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+
         from app.services.subtitle_engine import get_whisper_model
         model = get_whisper_model("tiny")
-        result = model.transcribe(str(video_path), fp16=False, verbose=False)
+        result = model.transcribe(str(audio_path), fp16=False, verbose=False)
         segments = [
             {
                 "start": round(float(s["start"]), 3),
@@ -404,9 +442,17 @@ def preview_transcript(session_id: str):
         ]
         with cache_path.open("w", encoding="utf-8") as fh:
             json.dump(segments, fh)
+        # Remove temp audio — cache_path now holds the result
+        audio_path.unlink(missing_ok=True)
         return {"segments": segments}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {exc}")
+        logging.getLogger(__name__).error("preview-transcript failed for %s: %s", session_id, exc)
+        return {"segments": [], "status": "error", "detail": str(exc)}
+    finally:
+        lock.release()
+        # Clean up the lock entry once done so it doesn't grow unbounded.
+        with _transcript_locks_mu:
+            _transcript_locks.pop(session_id, None)
 
 
 def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = False):
