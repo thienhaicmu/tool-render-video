@@ -8,6 +8,8 @@ export const SAMPLE_AI_PLAN: AIPlanCardData[] = [
     reasoning: 'Hook identified at 0:04. Strong visual cut predicted to retain audience.',
     impact: '+12% watch duration',
     tags: ['hook', '0:04', 'high retention'],
+    startSec: 4,
+    endSec: 64,
   },
   {
     title: 'Climax Moment',
@@ -15,6 +17,8 @@ export const SAMPLE_AI_PLAN: AIPlanCardData[] = [
     reasoning: 'Peak energy moment at 1:32. AI markers indicate high engagement.',
     impact: '+8% completion rate',
     tags: ['climax', '1:32', 'energy peak'],
+    startSec: 92,
+    endSec: 152,
   },
   {
     title: 'Call-to-Action Close',
@@ -22,6 +26,8 @@ export const SAMPLE_AI_PLAN: AIPlanCardData[] = [
     reasoning: 'Strong verbal CTA detected at 3:48. Subtitle density peaks here.',
     impact: '+5% conversion signal',
     tags: ['cta', '3:48', 'verbal'],
+    startSec: 228,
+    endSec: 288,
   },
 ]
 

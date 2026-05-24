@@ -28,8 +28,9 @@ logger = logging.getLogger("app.files")
 # Upload directory — inside APP_DATA_DIR; created lazily on first use.
 _EDITOR_UPLOADS_DIR = APP_DATA_DIR / "editor-uploads"
 
-# Maximum upload size: 200 MB (audio files only; no video expected here)
-_MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+# No hard upload size cap — video files can exceed several GB on desktop.
+# The OS/disk will reject writes if the volume is full (OSError caught below).
+_MAX_UPLOAD_BYTES: int | None = None
 
 
 def _safe_filename(name: str) -> str:
@@ -98,12 +99,6 @@ async def upload_file(file: UploadFile = File(...)):
                 if not chunk:
                     break
                 written += len(chunk)
-                if written > _MAX_UPLOAD_BYTES:
-                    dest.unlink(missing_ok=True)
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"File too large (max {_MAX_UPLOAD_BYTES // (1024*1024)} MB)",
-                    )
                 f.write(chunk)
     except HTTPException:
         raise

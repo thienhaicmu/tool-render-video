@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { type StudioStep } from '../../../stores/uiStore'
+import { useI18n } from '../../../i18n/useI18n'
 
 export interface StepStripProps {
   currentStep: StudioStep | null
@@ -7,53 +8,56 @@ export interface StepStripProps {
   onStepClick: (step: StudioStep) => void
 }
 
-const STEP_ORDER: StudioStep[] = ['source', 'analyze', 'plan', 'edit', 'render', 'review']
-const STEP_LABELS: Record<StudioStep, string> = {
-  source:  'Source',
-  analyze: 'Analyze',
-  plan:    'Plan',
-  edit:    'Edit',
-  render:  'Render',
-  review:  'Review',
+const STEP_ORDER: StudioStep[] = ['source', 'analyze', 'plan', 'edit', 'review', 'render', 'monitor', 'results']
+
+const STEP_LABEL_KEYS: Record<StudioStep, string> = {
+  source:  'step_source',
+  analyze: 'step_analyze',
+  plan:    'step_plan',
+  edit:    'step_edit',
+  review:  'step_review',
+  render:  'step_render',
+  monitor: 'step_monitor',
+  results: 'step_results',
 }
 
 export function StepStrip({ currentStep, completedSteps = [], onStepClick }: StepStripProps) {
+  const { t } = useI18n()
   const currentIndex = currentStep !== null ? STEP_ORDER.indexOf(currentStep) : -1
   const [hoveredStep, setHoveredStep] = useState<StudioStep | null>(null)
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: 'var(--step-strip-height)',
-        backgroundColor: 'var(--surface-panel)',
-        borderBottom: '1px solid var(--border-subtle)',
-        flexShrink: 0,
-        padding: '0 var(--space-6)',
-        gap: 0,
-      }}
-    >
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: 'var(--step-strip-height)',
+      backgroundColor: 'var(--surface-panel)',
+      borderBottom: '1px solid var(--border-subtle)',
+      flexShrink: 0,
+      padding: '0 var(--space-6)',
+      gap: 0,
+    }}>
       {STEP_ORDER.map((step, i) => {
-        const isActive   = step === currentStep
-        const isDone     = currentIndex > -1 ? i < currentIndex : completedSteps.includes(step)
+        const isActive    = step === currentStep
+        const isDone      = currentIndex > -1 ? i < currentIndex : completedSteps.includes(step)
         const isClickable = isDone && !isActive
 
-        const numberBg   = isActive ? 'var(--accent-primary)'
-                         : isDone   ? 'color-mix(in srgb, var(--status-success) 20%, transparent)'
-                         :            'var(--surface-card)'
+        const numberBg    = isActive ? 'var(--accent-primary)'
+                          : isDone   ? 'color-mix(in srgb, var(--status-success) 20%, transparent)'
+                          :            'var(--surface-card)'
         const numberColor = isActive ? 'var(--text-primary)'
                           : isDone   ? 'var(--status-success)'
                           :            'var(--text-tertiary)'
         const labelColor  = isActive ? 'var(--text-primary)'
                           : isDone   ? 'var(--text-secondary)'
                           :            'var(--text-tertiary)'
-        const labelWeight = isActive ? ('var(--weight-semibold)' as unknown as number) : ('var(--weight-regular)' as unknown as number)
+        const labelWeight = isActive
+          ? ('var(--weight-semibold)' as unknown as number)
+          : ('var(--weight-regular)' as unknown as number)
 
         return (
           <div key={step} style={{ display: 'flex', alignItems: 'center' }}>
-            {/* Step item */}
             <div
               style={{
                 display: 'flex',
@@ -71,7 +75,6 @@ export function StepStrip({ currentStep, completedSteps = [], onStepClick }: Ste
               onMouseEnter={() => { if (isClickable) setHoveredStep(step) }}
               onMouseLeave={() => setHoveredStep(null)}
             >
-              {/* Number circle */}
               <div
                 className="step-number"
                 style={{
@@ -90,31 +93,20 @@ export function StepStrip({ currentStep, completedSteps = [], onStepClick }: Ste
               >
                 {i + 1}
               </div>
-              {/* Label */}
-              <span
-                style={{
-                  fontSize: 'var(--text-xs)',
-                  color: labelColor,
-                  fontWeight: labelWeight,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {STEP_LABELS[step]}
+              <span style={{ fontSize: 'var(--text-xs)', color: labelColor, fontWeight: labelWeight, whiteSpace: 'nowrap' }}>
+                {t(STEP_LABEL_KEYS[step] as any)}
               </span>
             </div>
 
-            {/* Connector (not after last step) */}
             {i < STEP_ORDER.length - 1 && (
-              <div
-                style={{
-                  width: '32px',
-                  height: '1px',
-                  backgroundColor: isDone ? 'var(--status-success)' : 'var(--border-subtle)',
-                  margin: '0 var(--space-2)',
-                  alignSelf: 'flex-start',
-                  marginTop: '11px',
-                }}
-              />
+              <div style={{
+                width: '32px',
+                height: '1px',
+                backgroundColor: isDone ? 'var(--status-success)' : 'var(--border-subtle)',
+                margin: '0 var(--space-2)',
+                alignSelf: 'flex-start',
+                marginTop: '11px',
+              }} />
             )}
           </div>
         )

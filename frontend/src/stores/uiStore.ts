@@ -2,14 +2,16 @@
  * UI store — sidebar state, active panel, notifications.
  */
 import { create } from 'zustand'
+import type { Lang } from '../i18n/translations'
 
 export type ActivePanel =
-  // Canonical navigation (Figma-locked — 5 top-level routes)
+  // Canonical navigation
   | 'home'
   | 'studio'
   | 'library'
   | 'publish'
   | 'settings'
+  | 'download'
   // Deprecated aliases — preserved for backward compat, do not add new usage
   | 'render'   // JobEmptyState uses this
   | 'history'  // RenderForm, EditorEmptyState, EditorMetadataPanel use this
@@ -20,8 +22,10 @@ export type StudioStep =
   | 'analyze'
   | 'plan'
   | 'edit'
-  | 'render'
   | 'review'
+  | 'render'
+  | 'monitor'
+  | 'results'
 
 export interface Notification {
   id: string
@@ -36,6 +40,7 @@ export interface UIStore {
   activePanel: ActivePanel
   studioStep: StudioStep | null
   notifications: Notification[]
+  lang: Lang
 
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
@@ -44,6 +49,7 @@ export interface UIStore {
   addNotification: (notification: Omit<Notification, 'id'>) => string
   removeNotification: (id: string) => void
   clearNotifications: () => void
+  setLang: (lang: Lang) => void
 }
 
 let _notifCounter = 0
@@ -53,6 +59,7 @@ export const useUIStore = create<UIStore>((set) => ({
   activePanel: 'home',
   studioStep: null as StudioStep | null,
   notifications: [],
+  lang: 'en' as Lang,
 
   toggleSidebar: () => {
     set((s) => ({ sidebarOpen: !s.sidebarOpen }))
@@ -88,4 +95,6 @@ export const useUIStore = create<UIStore>((set) => ({
   clearNotifications: () => {
     set({ notifications: [] })
   },
+
+  setLang: (lang: Lang) => set({ lang }),
 }))

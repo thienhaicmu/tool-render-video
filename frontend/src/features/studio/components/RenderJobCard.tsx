@@ -3,22 +3,14 @@ import { StatusPill } from '../../../components/ui/StatusPill'
 import { AIChip } from '../../../components/ui/AIChip'
 import { RenderProgress } from './RenderProgress'
 import { type RenderJobData } from '../types'
+import { useI18n } from '../../../i18n/useI18n'
+import { relativeTime } from './BottomRenderState'
 
-function PlatformBadge({ platform }: { platform: string }) {
-  return (
-    <span
-      style={{
-        fontSize: 'var(--text-xs)',
-        color: 'var(--accent-primary)',
-        backgroundColor: 'var(--accent-subtle)',
-        padding: 'var(--space-1) var(--space-2)',
-        borderRadius: 'var(--radius-sm)',
-        flexShrink: 0,
-      }}
-    >
-      {platform}
-    </span>
-  )
+function stateColor(state: RenderJobData['state']): string {
+  if (state === 'completed') return 'var(--status-success)'
+  if (state === 'failed') return 'var(--status-error)'
+  if (state === 'rendering' || state === 'preparing' || state === 'reviewing') return 'var(--accent-primary)'
+  return 'var(--text-tertiary)'
 }
 
 export function RenderJobCard({
@@ -28,8 +20,26 @@ export function RenderJobCard({
   stage = '',
   eta,
   platform,
+  createdAt,
+  outputDir,
+  canOpenFolder,
+  completedCount,
+  failedCount,
+  totalCount,
+  kind,
 }: RenderJobData) {
+  const { t } = useI18n()
   const [isHovered, setIsHovered] = useState(false)
+
+  const openFolder = async () => {
+    const api = (window as any).electronAPI
+    if (!api?.openPath || !outputDir) return
+    await api.openPath(outputDir)
+  }
+
+  const timeText = createdAt ? relativeTime(createdAt) : null
+  const hasStats = typeof totalCount === 'number' && totalCount > 0
+  const kindBadge = kind === 'download' ? '⬇' : '🎬'
 
   return (
     <div
@@ -37,70 +47,121 @@ export function RenderJobCard({
       onMouseLeave={() => setIsHovered(false)}
       style={{
         backgroundColor: isHovered ? 'var(--surface-card-hover)' : 'var(--surface-card)',
-        border: '1px solid var(--border-subtle)',
+        border: `1px solid ${isHovered ? 'var(--border-default)' : 'var(--border-subtle)'}`,
+        borderLeft: `3px solid ${stateColor(state)}`,
         borderRadius: 'var(--radius-lg)',
-        padding: 'var(--space-3) var(--space-4)',
+        padding: 'var(--space-3) var(--space-3)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 'var(--space-2)',
+        gap: '6px',
         transition: 'background-color var(--duration-instant) var(--ease-out)',
       }}
     >
-      {/* Top row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
-        {/* Left: title + platform */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', minWidth: 0 }}>
-          <span
-            style={{
-              fontSize: 'var(--text-sm)',
-              fontWeight: 'var(--weight-medium)' as unknown as number,
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {title}
-          </span>
-          {platform && <PlatformBadge platform={platform} />}
+      {/* Top row: kind badge + title + state */}
+      <div style={styles.topRow}>
+        <span style={styles.kindBadge}>{kindBadge}</span>
+        <span style={styles.titleText}>{title}</span>
+        {platform && (
+          <span style={styles.platformBadge}>{platform}</span>
+        )}
+        <div style={{ flexShrink: 0, marginLeft: 'auto' }}>
+          {state === 'queued' && (
+            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>In queue</span>
+          )}
+          {state === 'preparing' && <StatusPill status="running" />}
+          {state === 'rendering' && eta && (
+            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{eta}</span>
+          )}
+          {state === 'reviewing' && <AIChip variant="applied" label="AI Reviewing…" />}
+          {state === 'completed' && <StatusPill status="completed" />}
+          {state === 'failed' && <StatusPill status="failed" />}
         </div>
+      </div>
 
-        {/* Right: state indicator */}
-        {state === 'queued' && (
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', flexShrink: 0 }}>
-            In queue
+      {/* Secondary row: time + stats + open folder */}
+      <div style={styles.metaRow}>
+        {timeText && <span style={styles.timeText}>{timeText}</span>}
+        {hasStats && (
+          <span style={styles.statsText}>
+            {completedCount}/{totalCount} {t('history_parts_done')}
+            {(failedCount ?? 0) > 0 && (
+              <span style={{ color: 'var(--status-error)', marginLeft: '4px' }}>
+                · {failedCount} {t('history_parts_failed')}
+              </span>
+            )}
           </span>
         )}
-        {state === 'preparing' && (
-          <StatusPill status="running" />
-        )}
-        {state === 'rendering' && eta && (
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', flexShrink: 0 }}>
-            {eta}
-          </span>
-        )}
-        {state === 'reviewing' && (
-          <AIChip variant="applied" label="AI Reviewing…" />
-        )}
-        {state === 'completed' && (
-          <StatusPill status="completed" />
-        )}
-        {state === 'failed' && (
-          <StatusPill status="failed" />
+        {canOpenFolder && outputDir && state === 'completed' && (
+          <button onClick={openFolder} style={styles.openBtn}>
+            📂 {t('history_open')}
+          </button>
         )}
       </div>
 
-      {/* Secondary text for preparing state */}
-      {state === 'preparing' && (
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-          Preparing…
-        </span>
-      )}
-
-      {/* Progress bar for rendering state */}
+      {/* Progress (rendering) */}
       {state === 'rendering' && (
         <RenderProgress progress={progress} stage={stage} animated />
       )}
+      {state === 'preparing' && (
+        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Preparing…</span>
+      )}
     </div>
   )
+}
+
+const styles: Record<string, React.CSSProperties> = {
+  topRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    minWidth: 0,
+  },
+  kindBadge: {
+    fontSize: '12px',
+    flexShrink: 0,
+  },
+  titleText: {
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-medium)' as unknown as number,
+    color: 'var(--text-primary)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    flex: 1,
+    minWidth: 0,
+  },
+  platformBadge: {
+    fontSize: '11px',
+    color: 'var(--accent-primary)',
+    backgroundColor: 'var(--accent-subtle)',
+    padding: '1px 6px',
+    borderRadius: 'var(--radius-sm)',
+    flexShrink: 0,
+  },
+  metaRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap' as const,
+  },
+  timeText: {
+    fontSize: '11px',
+    color: 'var(--text-tertiary)',
+    fontFamily: 'var(--font-mono)',
+  },
+  statsText: {
+    fontSize: '11px',
+    color: 'var(--text-tertiary)',
+  },
+  openBtn: {
+    height: '20px',
+    padding: '0 6px',
+    border: '1px solid var(--border-subtle)',
+    borderRadius: '4px',
+    backgroundColor: 'transparent',
+    color: 'var(--text-secondary)',
+    fontSize: '11px',
+    cursor: 'pointer',
+    marginLeft: 'auto',
+  },
 }

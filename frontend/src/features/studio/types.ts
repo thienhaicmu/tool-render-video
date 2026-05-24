@@ -14,6 +14,15 @@ export interface RenderJobData {
   stage?: string
   eta?: string
   platform?: string
+  // Extended from HistoryItem for richer log display
+  createdAt?: string
+  outputDir?: string | null
+  canOpenFolder?: boolean
+  completedCount?: number
+  failedCount?: number
+  totalCount?: number
+  summaryText?: string
+  kind?: 'render' | 'download'
 }
 
 export type ReviewCardStatus = 'pending' | 'approved' | 'rejected'
