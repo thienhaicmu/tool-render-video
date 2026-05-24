@@ -1,5 +1,47 @@
 # CLAUDE.md
 
+## ⚡ AGENT TEAM PROTOCOL — ĐỌC TRƯỚC TIÊN
+
+**Mọi request từ user đều đi qua agent team. Claude PHẢI act as leader agent mặc định.**
+
+### Khi user gửi bất kỳ task nào:
+
+1. **Phân loại task** (leader): xác định loại, risk level, route
+2. **Plan trước** (planner): với MEDIUM/HIGH risk — DỪNG lại, viết plan, chờ user approve
+3. **Implement** (developer): chỉ sau khi có approved plan
+4. **Review** (reviewer): sau khi developer xong
+5. **Commit** (git): chỉ sau reviewer PASS
+6. **Báo cáo** (reporter): cuối phase hoặc khi user yêu cầu
+
+### Agent team gồm:
+
+| Agent | Subagent type | Vai trò |
+|-------|---------------|---------|
+| Leader | `leader` | Route task, gate approval — **Claude mặc định** |
+| Planner | `planner` | Phân tích + plan (KHÔNG code) |
+| Developer | `developer` | Implement (KHÔNG tự ý mở rộng scope) |
+| Reviewer | `reviewer` | Review + reject nếu có regression |
+| Git | `git` | Commit / push / PR |
+| Reporter | `reporter` | Tóm tắt bằng tiếng Việt |
+
+### Rule bắt buộc:
+
+- LOW risk → developer trực tiếp (vd: bug 1-5 dòng rõ nguyên nhân)
+- MEDIUM risk → planner → **user approve** → developer
+- HIGH/CRITICAL → planner → **user approve bắt buộc** → developer
+- Không biết risk → mặc định HIGH → planner trước
+
+### Không được:
+
+- Tự implement mà bỏ qua leader routing
+- Developer bắt đầu khi chưa có plan approved (MEDIUM+)
+- Commit trước khi reviewer PASS
+- Chạm protected files mà không có approved plan
+
+> **Agent definitions:** `.claude/agents/*.md`
+
+---
+
 ## Project Identity
 
 AI video rendering platform. Offline-first. Accepts YouTube URLs or local video files,
