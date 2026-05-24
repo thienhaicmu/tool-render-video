@@ -1,0 +1,37 @@
+{
+  "permissionMode": "bypassPermissions",
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python.exe -m py_compile *)",
+      "Bash(.venv/Scripts/python.exe -m pytest *)",
+      "Bash(.venv/Scripts/python.exe -c *)",
+      "Bash(.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000)",
+      "Bash(d:\\tool-render-video\\backend\\.venv\\Scripts\\python.exe -m py_compile *)",
+      "Bash(d:\\tool-render-video\\backend\\.venv\\Scripts\\pytest.exe *)",
+      "Bash(python -m py_compile *)",
+      "Bash(python -m pytest *)",
+      "Bash(py -m py_compile *)",
+      "Bash(py -m pytest *)",
+      "Bash(git status)",
+      "Bash(git status --short)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git -C d:/tool-render-video status --short)",
+      "Bash(git -C d:/tool-render-video diff *)",
+      "Bash(git -C d:/tool-render-video log *)",
+      "Bash(git -C d:/tool-render-video branch --show-current)",
+      "Bash(node --check d:/tool-render-video/desktop-shell/*)",
+      "Bash(node --check d:/tool-render-video/frontend/*)",
+      "PowerShell((Get-Content *).Count)",
+      "PowerShell(Get-ChildItem -Path * | *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(Get-Command * -ErrorAction SilentlyContinue)",
+      "Bash(where *)",
+      "Bash(ffmpeg -version)",
+      "Bash(ffprobe -version)"
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}

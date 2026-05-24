@@ -12,7 +12,8 @@ desktop.ini
 # ================================================
 # Claude Code internal settings
 # ================================================
-.claude/
+
+.mcp.json
 
 # ================================================
 # Python — virtual env & compiled files
