@@ -380,7 +380,7 @@
       "Bash(powershell -Command \"\\(Get-Content 'd:\\\\tool-render-video\\\\docs\\\\restructure\\\\MIGRATION_HISTORY.md' | Measure-Object -Line\\).Lines\")",
       "Bash(powershell -Command \"Get-Content 'd:\\\\tool-render-video\\\\docs\\\\restructure\\\\MIGRATION_HISTORY.md' | Select-Object -Last 5\")"
     ],
-    "defaultMode": "bypassPermissions",
+    "defaultMode": "default",
     "additionalDirectories": [
       "\\tmp"
     ]
