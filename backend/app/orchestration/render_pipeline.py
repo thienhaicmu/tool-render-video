@@ -87,6 +87,7 @@ from app.orchestration.part_plan import PartExecutionPlan
 from app.orchestration.part_assets import PartAssets
 from app.orchestration.visual_analysis import VisualAnalysisResult
 from app.orchestration.camera_strategy import CameraStrategy
+from app.orchestration.render_output import RenderOutputResult
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
 # final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
@@ -4924,6 +4925,23 @@ def run_render_pipeline(
                 )
             except Exception:
                 pass
+
+            # ── Layer 8 → Layer 9 boundary: RenderOutputResult ────────────
+            _render_output = RenderOutputResult(
+                output_path=str(final_part),
+                render_ms=_render_ms,
+                codec=str(payload.video_codec),
+                crop_fallback=bool(_motion_crop_fallback),
+                overlay_composite_used=bool(
+                    int(os.environ.get("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0"))
+                    and int(os.environ.get("FEATURE_BASE_CLIP_FIRST", "0"))
+                ),
+            )
+            logger.info(
+                "render_output part=%d codec=%s render_ms=%d crop_fallback=%s overlay=%s",
+                idx, _render_output.codec, _render_output.render_ms,
+                _render_output.crop_fallback, _render_output.overlay_composite_used,
+            )
 
             # ── Post-render output validation ─────────────────────────────
             _expect_audio: bool | None = None
