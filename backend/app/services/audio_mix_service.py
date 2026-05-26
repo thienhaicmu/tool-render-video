@@ -20,6 +20,23 @@ def _has_audio_stream(input_path: str) -> bool:
         return False
 
 
+def _probe_duration_s(path: str) -> float:
+    """Return duration in seconds via ffprobe. Returns 0.0 on failure."""
+    try:
+        result = subprocess.run(
+            [
+                get_ffprobe_bin(), "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            capture_output=True, text=True, timeout=15,
+        )
+        return float(result.stdout.strip())
+    except Exception:
+        return 0.0
+
+
 def mix_narration_audio(
     *,
     video_path: str,
@@ -50,27 +67,34 @@ def mix_narration_audio(
         speed = 1.0
     apply_atempo = abs(speed - 1.0) > 1e-4
 
+    # Probe once — used to cap output at video duration instead of TTS duration.
+    # Without this, -shortest would truncate to the shorter TTS stream (~15s)
+    # instead of the full video duration (~52s).
+    _vdur = _probe_duration_s(str(source_video))
+    _dur_args = ["-t", str(_vdur)] if _vdur > 0 else []
+
     ffmpeg_bin = get_ffmpeg_bin()
     cmd = [ffmpeg_bin, "-y", "-i", str(source_video), "-i", str(narration_audio)]
 
     if str(mix_mode or "").strip() == "replace_original":
         if apply_atempo:
             cmd += [
-                "-filter_complex", f"[1:a]atempo={speed:.4f}[narr]",
+                "-filter_complex", f"[1:a]atempo={speed:.4f},apad[narr]",
                 "-map", "0:v:0",
                 "-map", "[narr]",
                 "-c:v", "copy",
                 "-c:a", "aac",
-                "-shortest",
+                *_dur_args,
                 str(mixed_output),
             ]
         else:
             cmd += [
+                "-filter_complex", "[1:a]apad[narr]",
                 "-map", "0:v:0",
-                "-map", "1:a:0",
+                "-map", "[narr]",
                 "-c:v", "copy",
                 "-c:a", "aac",
-                "-shortest",
+                *_dur_args,
                 str(mixed_output),
             ]
     elif str(mix_mode or "").strip() == "keep_original_low":
@@ -78,43 +102,44 @@ def mix_narration_audio(
             if apply_atempo:
                 cmd += [
                     "-filter_complex",
-                    f"[0:a]volume=0.25[a0];[1:a]atempo={speed:.4f},volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    f"[0:a]volume=0.25[a0];[1:a]atempo={speed:.4f},apad,volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
                     "-map", "0:v:0",
                     "-map", "[aout]",
                     "-c:v", "copy",
                     "-c:a", "aac",
-                    "-shortest",
+                    *_dur_args,
                     str(mixed_output),
                 ]
             else:
                 cmd += [
                     "-filter_complex",
-                    "[0:a]volume=0.25[a0];[1:a]volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    "[0:a]volume=0.25[a0];[1:a]apad,volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
                     "-map", "0:v:0",
                     "-map", "[aout]",
                     "-c:v", "copy",
                     "-c:a", "aac",
-                    "-shortest",
+                    *_dur_args,
                     str(mixed_output),
                 ]
         else:
             if apply_atempo:
                 cmd += [
-                    "-filter_complex", f"[1:a]atempo={speed:.4f}[narr]",
+                    "-filter_complex", f"[1:a]atempo={speed:.4f},apad[narr]",
                     "-map", "0:v:0",
                     "-map", "[narr]",
                     "-c:v", "copy",
                     "-c:a", "aac",
-                    "-shortest",
+                    *_dur_args,
                     str(mixed_output),
                 ]
             else:
                 cmd += [
+                    "-filter_complex", "[1:a]apad[narr]",
                     "-map", "0:v:0",
-                    "-map", "1:a:0",
+                    "-map", "[narr]",
                     "-c:v", "copy",
                     "-c:a", "aac",
-                    "-shortest",
+                    *_dur_args,
                     str(mixed_output),
                 ]
     else:

@@ -7,6 +7,7 @@ import type { Lang } from '../i18n/translations'
 export type ActivePanel =
   // Canonical navigation
   | 'home'
+  | 'clip-studio'
   | 'studio'
   | 'library'
   | 'publish'
@@ -54,7 +55,7 @@ let _notifCounter = 0
 
 export const useUIStore = create<UIStore>((set) => ({
   sidebarOpen: true,
-  activePanel: 'home',
+  activePanel: 'clip-studio',
   studioStep: null as StudioStep | null,
   notifications: [],
   lang: 'en' as Lang,

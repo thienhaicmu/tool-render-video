@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useEditStore } from '../../../stores/editStore'
 import type { TargetPlatform, RenderProfile } from '../../../stores/editStore'
+import { REFRAME_MODES } from '../../../lib/constants'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -1055,6 +1056,94 @@ export function ConfigureStep({ defaultOutputDir = '', onContinue }: ConfigureSt
                     )
                   })}
                 </div>
+              </div>
+
+              <div style={{ height: '1px', backgroundColor: 'var(--border-subtle)' }} />
+
+              {/* ── Section 7: Camera & Framing ── */}
+              <div className="cfg-section" style={{ animationDelay: '140ms' }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '10px',
+                }}>
+                  <SectionLabel>Camera & Framing</SectionLabel>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '10px',
+                  }}>
+                    <span style={{
+                      fontSize: '11px',
+                      color: settings.motionAwareCrop ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                      fontWeight: 500,
+                      transition: 'color 0.2s ease',
+                    }}>
+                      {settings.motionAwareCrop ? 'ON' : 'OFF'}
+                    </span>
+                    <Toggle
+                      value={settings.motionAwareCrop}
+                      onChange={(v) => update({ motionAwareCrop: v })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
+                  AI tracks subject in frame — reframes vertical crop automatically.
+                </div>
+
+                {settings.motionAwareCrop && (
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    animation: 'cfg-fadein 0.2s ease both',
+                  }}>
+                    {REFRAME_MODES.map((mode) => {
+                      const isSelected = settings.reframeMode === mode.value
+                      return (
+                        <button
+                          key={mode.value}
+                          onClick={() => update({ reframeMode: mode.value })}
+                          style={{
+                            flex: 1,
+                            padding: '12px 8px',
+                            border: `1.5px solid ${isSelected ? 'rgba(168,85,247,0.6)' : 'var(--border-default)'}`,
+                            borderRadius: '10px',
+                            backgroundColor: isSelected ? 'rgba(168,85,247,0.1)' : 'var(--surface-input)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'border-color 0.15s ease, background-color 0.15s ease',
+                            boxShadow: isSelected ? '0 0 10px rgba(168,85,247,0.2)' : 'none',
+                            outline: 'none',
+                          }}
+                        >
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: isSelected ? '#a855f7' : 'var(--text-primary)',
+                            transition: 'color 0.15s ease',
+                            letterSpacing: '0.01em',
+                          }}>
+                            {mode.label}
+                          </span>
+                          <span style={{
+                            fontSize: '10px',
+                            color: 'var(--text-tertiary)',
+                            lineHeight: 1.3,
+                            textAlign: 'center' as const,
+                          }}>
+                            {mode.description}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Bottom spacer */}

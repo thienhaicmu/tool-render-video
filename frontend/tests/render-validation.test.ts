@@ -29,6 +29,10 @@ const VALID_STATE: RenderFormState = {
   remotion_hook_intro: true,
   title_overlay_text: '',
   playback_speed: 1.0,
+  motion_aware_crop: false,
+  reframe_mode: 'auto',
+  frame_scale_x: 1.0,
+  frame_scale_y: 1.0,
 }
 
 describe('validateRenderForm — output_dir', () => {

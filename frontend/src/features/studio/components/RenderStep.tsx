@@ -388,6 +388,8 @@ export function RenderStep({
           voice_gender: settings.voiceGender,
           voice_source: 'subtitle' as const,
         } : {}),
+        motion_aware_crop: settings.motionAwareCrop,
+        ...(settings.motionAwareCrop ? { reframe_mode: settings.reframeMode } : {}),
         ...(settings.clipLock && settings.clipLock.length > 0
           ? { clip_lock: settings.clipLock }
           : {}),

@@ -103,6 +103,11 @@ export function buildRenderPayload(state: RenderFormState): RenderRequest {
     payload.add_title_overlay = true
   }
 
+  payload.motion_aware_crop = state.motion_aware_crop
+  payload.reframe_mode = state.reframe_mode
+  payload.frame_scale_x = state.frame_scale_x
+  payload.frame_scale_y = state.frame_scale_y
+
   return payload
 }
 

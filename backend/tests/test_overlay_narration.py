@@ -56,6 +56,7 @@ def _call_mix_narration(
     with (
         patch("app.services.audio_mix_service.subprocess.run", side_effect=_fake_subprocess_run),
         patch.object(audio_mix_mod, "_has_audio_stream", return_value=True),
+        patch.object(audio_mix_mod, "_probe_duration_s", return_value=60.0),
         patch("pathlib.Path.exists", return_value=True),
         patch("pathlib.Path.stat", return_value=_stat_result),
     ):

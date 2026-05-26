@@ -88,6 +88,10 @@ export interface RenderRequest {
 
   // Frame / crop
   aspect_ratio?: string
+  motion_aware_crop?: boolean
+  reframe_mode?: string
+  frame_scale_x?: number
+  frame_scale_y?: number
 
   // Overlay / effect
   add_title_overlay?: boolean
@@ -187,6 +191,10 @@ export interface JobPart {
   progress_percent: number
   output_file: string
   updated_at: string
+  hook_score: number
+  viral_score: number
+  motion_score: number
+  duration: number
 }
 
 // ── Quality types (from docs/ui/UI_BACKEND_CONTRACT.md §8) ───────────────────
