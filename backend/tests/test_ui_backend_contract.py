@@ -230,7 +230,7 @@ class TestRenderRequestInstantiation:
     def test_default_subtitle_style(self):
         from backend.app.models.schemas import RenderRequest
         req = RenderRequest()
-        assert req.subtitle_style == "pro_karaoke"
+        assert req.subtitle_style == "tiktok_bounce_v1"
 
     def test_default_effect_preset(self):
         from backend.app.models.schemas import RenderRequest

@@ -177,7 +177,7 @@ class RenderRequest(BaseModel):
     loudnorm_enabled: bool = True
     audio_cleanup_engine: Literal["none", "deepfilternet"] = "none"
     tts_engine: Literal["edge", "xtts"] = "edge"
-    remotion_hook_intro: bool = True
+    remotion_hook_intro: bool = False
 
     # Reup mode
     reup_mode: bool = False

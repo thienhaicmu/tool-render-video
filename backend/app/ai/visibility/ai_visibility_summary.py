@@ -58,6 +58,22 @@ _SIGNAL_BADGE_LABELS: dict[str, str] = {
     "speech_density_score": "Speech density",
 }
 
+# (field, badge_label, threshold) — ordered for deterministic output
+_COMPONENT_BADGE_RULES: list[tuple[str, str, float]] = [
+    ("hook_score",           "Strong hook",    80.0),
+    ("retention_score",      "Good retention", 70.0),
+    ("market_score",         "Market fit",     65.0),
+    ("duration_fit_score",   "Good duration",  70.0),
+    ("segment_viral_score",  "High energy",    70.0),
+    ("speech_density_score", "Speech density", 70.0),
+]
+
+_COMPONENT_REASON_RULES: list[tuple[str, str, float]] = [
+    ("hook_score", "High hook score", 80.0),
+]
+
+_OUTPUT_SCORE_BADGE_THRESHOLD = 85.0
+
 
 def build_ai_visibility_summary(part: dict, *, is_best: bool = False) -> dict:
     """Build UI-ready explainability from existing output metadata only."""
@@ -87,7 +103,23 @@ def build_ai_visibility_summary(part: dict, *, is_best: bool = False) -> dict:
         if value is not None:
             signals[key] = round(value, 3)
 
-    # Max 2 badges — dominant signal first, then one suppressed signal that scored highly
+    # Component badges: generate from ranking_components scores using thresholds.
+    for field, badge_label, threshold in _COMPONENT_BADGE_RULES:
+        score_val = _first_score(part, [field])
+        if score_val is not None and score_val >= threshold:
+            _append_unique(badges, badge_label)
+
+    # Component reasons: generate from specific score thresholds.
+    for field, reason_text, threshold in _COMPONENT_REASON_RULES:
+        score_val = _first_score(part, [field])
+        if score_val is not None and score_val >= threshold:
+            _append_unique(reasons, reason_text)
+
+    # Output rank badge: add when overall score is strong.
+    if output_score is not None and output_score >= _OUTPUT_SCORE_BADGE_THRESHOLD:
+        _append_unique(badges, "Strong output rank")
+
+    # Legacy dominant/suppressed signal badges (additive, for backward compat).
     dominant = str(part.get("dominant_signal") or "")
     if dominant and dominant in _SIGNAL_BADGE_LABELS:
         dom_val = _first_score(part, [dominant])
@@ -95,14 +127,12 @@ def build_ai_visibility_summary(part: dict, *, is_best: bool = False) -> dict:
             _append_unique(badges, _SIGNAL_BADGE_LABELS[dominant])
 
     suppressed = part.get("suppressed_signals")
-    if isinstance(suppressed, list) and len(badges) < 2:
+    if isinstance(suppressed, list):
         for sup in suppressed[:2]:
             if sup in _SIGNAL_BADGE_LABELS and sup != dominant:
                 sup_val = _first_score(part, [sup])
                 if sup_val is not None and sup_val >= 65:
                     _append_unique(badges, _SIGNAL_BADGE_LABELS[sup])
-                    if len(badges) >= 2:
-                        break
 
     # Ranking reason is the primary reason — already contribution-weighted from _output_ranking_reason
     ranking_reason = str(part.get("ranking_reason") or "").strip()
@@ -138,7 +168,7 @@ def build_ai_visibility_summary(part: dict, *, is_best: bool = False) -> dict:
         summary["confidence_label"] = _CONFIDENCE_LABELS[confidence_tier]
 
     if badges:
-        summary["badges"] = badges[:2]
+        summary["badges"] = badges
     if reasons:
         summary["reasons"] = reasons
     if warnings:

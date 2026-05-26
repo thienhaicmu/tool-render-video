@@ -36,6 +36,7 @@ def test_get_ai_dependency_status_keys():
         "faster_whisper",
         "whisperx",
         "deepfilternet",
+        "xtts",
     }
     assert expected_keys == set(status.keys()), f"Missing keys: {expected_keys - set(status.keys())}"
     for key, val in status.items():

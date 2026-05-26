@@ -160,7 +160,18 @@ def _select(
     selected_plans:   list[AIClipSegmentPlan]  = []
     selected_ctxs:    list[dict]               = []
     rejected:         list[dict]               = []
-    remaining = list(scored)
+
+    # Pre-filter: reject candidates that fail the safety check immediately so
+    # they are recorded with reason="safety_check_failed" rather than surfacing
+    # as "exhausted" or "target_count_reached" at the end of the greedy loop.
+    safe_scored: list[dict] = []
+    for item in scored:
+        seg_raw_check = _build_seg_raw(item["candidate"], item["adjusted_score"])
+        if not is_segment_plan_safe(seg_raw_check, safety_ctx):
+            rejected.append({**seg_raw_check, "reject_reason": "safety_check_failed"})
+        else:
+            safe_scored.append(item)
+    remaining = list(safe_scored)
 
     while remaining and len(selected_plans) < target_count:
         best_item:  dict | None = None
