@@ -31,6 +31,9 @@ export interface EditSettings {
   voiceLanguage: 'vi-VN' | 'ja-JP' | 'en-US' | 'en-GB'
   voiceGender: 'female' | 'male'
 
+  motionAwareCrop: boolean
+  reframeMode: string
+
   clipLock: ClipRange[] | null
 }
 
@@ -61,6 +64,9 @@ export const DEFAULT_EDIT_SETTINGS: EditSettings = {
   voiceEnabled:      false,
   voiceLanguage:     'en-US',
   voiceGender:       'female',
+
+  motionAwareCrop:   false,
+  reframeMode:       'subject',
 
   clipLock:          null,
 }

@@ -24,25 +24,67 @@ The pipeline must remain conservative:
 
 ```text
 Input payload
-  -> request/source validation
-  -> source load or download
-  -> preview/editor session resolution
-  -> optional editor trim/volume
-  -> optional source archive
-  -> scene detection
-  -> segment generation
-  -> viral/hook/motion scoring
+  -> [Layer 1]   source validation and request guards
+  -> [Layer 2]   user setup: output dir, channel, options
+  -> [Layer 3]   source load or download, preview session resolution,
+                 optional editor trim/volume, optional source archive
+  -> [Layer 4]   scene detection  ──► VisualAnalysisResult
+  -> [Layer 5]   segment generation, viral/hook/motion scoring
   -> optional full subtitle transcription
   -> optional AI Director planning
   -> optional bounded AI render influence
-  -> per-part cut
-  -> per-part subtitle slice/translate/style
-  -> per-part motion crop/reframe/FFmpeg render
-  -> per-part voice/TTS/audio mix
-  -> output validation and quality checks
-  -> output ranking and best clip selection
-  -> report and result_json
+  -- per-part loop --
+  -> [Layer 6]   per-part execution plan (cut, speed, SRT inputs)
+  -> [Layer 6.5] camera strategy  ──► CameraStrategy
+  -> [Layer 7]   per-part subtitle slice/translate/style/overlays  ──► PartAssets
+  -> [Layer 8]   per-part FFmpeg render + voice/TTS/audio mix  ──► RenderOutputResult
+  -> [Layer 9]   output validation and quality checks
+  -> [Layer 10]  output ranking and best clip selection
+  -> [Layer 11]  report and result_json
 ```
+
+## Layer Boundary Dataclasses
+
+**Stability marker: Stable contract**
+
+These dataclasses mark explicit architectural boundaries within the per-part render loop. Each is instantiated at the boundary between two layers and captures the outputs of the upstream layer before the downstream layer consumes them.
+
+They are pure-additive — they do not modify render behavior. They exist to make the layer handoff explicit, observable via `logger.info`, and structured for future extension.
+
+| Dataclass | Layer boundary | Source file | Instantiation point |
+|-----------|---------------|-------------|---------------------|
+| `VisualAnalysisResult` | Layer 4 → 5 | `orchestration/visual_analysis.py` | After `detect_scenes()`, before segment building |
+| `CameraStrategy` | Layer 6.5 | `orchestration/camera_strategy.py` | After `PartExecutionPlan`, before FFmpeg render flags |
+| `PartAssets` | Layer 7 → 8 | `orchestration/part_assets.py` | After subtitle/hook/text-layer prep, before FFmpeg encode |
+| `RenderOutputResult` | Layer 8 → 9 | `orchestration/render_output.py` | After FFmpeg encode + voice mix, before `_validate_render_output` |
+
+### VisualAnalysisResult — Layer 4 → 5
+
+**Purpose:** Encapsulate visual analysis output. Boundary between analysis and planning.
+
+Fields: `scene_count`, `detection_ms`, `cache_hit`, `clip_score_applied`, `clip_score_ms`
+
+### CameraStrategy — Layer 6.5
+
+**Purpose:** Isolate camera decision logic. Explicit camera planning contract.
+
+Fields: `aspect_ratio`, `frame_scale_x`, `frame_scale_y`, `motion_aware_crop`, `reframe_mode`, `content_type`, `camera_mode`
+
+`camera_mode` is derived in `__post_init__`: `motion_track` | `static_subject` | `static_default`
+
+### PartAssets — Layer 7 → 8
+
+**Purpose:** Encapsulate generated/render-ready assets. Boundary before render execution.
+
+Fields: `subtitle_enabled`, `srt_path`, `ass_path`, `subtitle_count`, `subtitle_style`, `hook_subtitle_formatted`, `hook_overlay_applied`, `text_layers`, `text_layers_overlay`
+
+### RenderOutputResult — Layer 8 → 9
+
+**Purpose:** Capture FFmpeg render output metadata. Boundary before validation.
+
+Fields: `output_path`, `render_ms`, `codec`, `crop_fallback`, `overlay_composite_used`
+
+---
 
 ## Stage Model
 

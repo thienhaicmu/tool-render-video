@@ -168,7 +168,7 @@ class RenderRequest(BaseModel):
     frame_scale_x: int = 100
     frame_scale_y: int = 106
     motion_aware_crop: bool = False
-    reframe_mode: str = "center"
+    reframe_mode: str = "subject"
 
     # Overlay / effect
     add_title_overlay: bool = False

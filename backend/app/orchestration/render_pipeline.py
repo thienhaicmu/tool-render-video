@@ -4094,6 +4094,7 @@ def run_render_pipeline(
             _part_text_layers = list(_part_assets.text_layers)
             _part_text_layers_overlay = list(_part_assets.text_layers_overlay)
             _effective_subtitle_style = _part_assets.subtitle_style
+            _hook_overlay_applied_for_part = _part_assets.hook_overlay_applied
             overlay_title = (payload.title_overlay_text or "").strip() or source["title"]
             upsert_job_part(job_id, idx, part_name, JobPartStage.RENDERING, 70, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Rendering final video")
 
