@@ -89,7 +89,8 @@ export async function deleteJob(
  * GET /api/jobs/{jobId}/parts
  */
 export async function getJobParts(jobId: string): Promise<JobPart[]> {
-  return apiFetch<JobPart[]>(`/api/jobs/${encodeURIComponent(jobId)}/parts`)
+  const result = await apiFetch<{ items: JobPart[] }>(`/api/jobs/${encodeURIComponent(jobId)}/parts`)
+  return result.items ?? []
 }
 
 // ── NOTE: Do NOT use GET /api/jobs (unbounded). Use getJobHistory() instead. ──

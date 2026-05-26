@@ -1,0 +1,223 @@
+/* ── Clip Studio App Shell — matches ui-prototype.html exactly ──────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+.cs-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  font-family: var(--fb);
+  background: var(--bg-void);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg-base)}
+::-webkit-scrollbar-thumb{background:var(--border-hi)}
+
+/* ── Topbar ──────────────────────────────────────────────────────────────── */
+.cs-topbar {
+  display: flex;
+  align-items: center;
+  height: 52px;
+  min-height: 52px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  position: relative;
+  z-index: 100;
+  gap: 0;
+  flex-shrink: 0;
+}
+.cs-topbar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--grad);
+  opacity: 0.4;
+}
+
+.cs-brand {
+  font-family: var(--fo);
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--grad);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 2px;
+  margin-right: 36px;
+  white-space: nowrap;
+  user-select: none;
+  display: flex;
+  align-items: center;
+}
+
+.cs-brand-pulse {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  background: var(--cyan);
+  border-radius: 50%;
+  margin: 0 4px 2px;
+  vertical-align: middle;
+  animation: cs-blink 2s infinite;
+  flex-shrink: 0;
+  -webkit-text-fill-color: initial;
+}
+@keyframes cs-blink {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.2; }
+}
+
+.cs-nav {
+  display: flex;
+  gap: 0;
+}
+
+.cs-nav-tab {
+  font-family: var(--fh);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 0 24px;
+  height: 52px;
+  color: var(--text-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cs-nav-tab:hover { color: var(--text-2); }
+.cs-nav-tab.active { color: var(--text-1); }
+.cs-nav-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--grad);
+}
+
+.cs-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+
+.cs-topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cs-lang-sw {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.cs-lang-btn {
+  font-family: var(--fh);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 4px 12px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  transition: all 0.15s;
+}
+.cs-lang-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.cs-top-icon {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  color: var(--text-2);
+  transition: all 0.15s;
+  font-size: 14px;
+}
+.cs-top-icon:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Content ─────────────────────────────────────────────────────────────── */
+.cs-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.cs-tab-pane { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+.cs-tab-pane.active { display: flex; }
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+.cs-sbar {
+  height: 24px;
+  min-height: 24px;
+  background: var(--bg-void);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.cs-sb {
+  font-size: 10px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.cs-sb-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cs-sb-dot.ok   { background: var(--ok);   animation: cs-blink 3s infinite; }
+.cs-sb-dot.warn { background: var(--warn); }
+.cs-sb-dot.off  { background: var(--text-3); }
+.cs-sb-endpoint {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-3);
+  font-family: monospace;
+}

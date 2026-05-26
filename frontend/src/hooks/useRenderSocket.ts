@@ -5,13 +5,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { RenderSocketClient } from '../websocket/RenderSocketClient'
 import { isTerminalStatus } from '../types/enums'
-import type { WsProgressSummary } from '../types/api'
+import type { WsProgressSummary, JobPart } from '../types/api'
 
 export interface RenderSocketState {
   stage: string | null
   jobStatus: string | null      // from job.status on terminal events
   jobMessage: string | null     // from job.message (second arg of onStageChange)
   progress: WsProgressSummary | null
+  liveParts: JobPart[]          // per-event parts array (all parts, current state)
   isConnected: boolean
   isTerminal: boolean           // derived from jobStatus
   error: string | null
@@ -23,6 +24,7 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
   const [jobStatus, setJobStatus] = useState<string | null>(null)
   const [jobMessage, setJobMessage] = useState<string | null>(null)
   const [progress, setProgress] = useState<WsProgressSummary | null>(null)
+  const [liveParts, setLiveParts] = useState<JobPart[]>([])
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,8 +40,9 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
       setJobMessage(msg)
     })
 
-    client.onProgress((summary) => {
+    client.onProgress((summary, parts) => {
       setProgress(summary)
+      if (parts.length > 0) setLiveParts(parts)
     })
 
     client.onComplete((event) => {
@@ -65,6 +68,7 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
     jobStatus,
     jobMessage,
     progress,
+    liveParts,
     isConnected,
     isTerminal: isTerminalStatus(jobStatus ?? ''),
     error,

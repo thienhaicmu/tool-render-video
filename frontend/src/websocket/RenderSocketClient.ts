@@ -12,7 +12,7 @@ import { isTerminalStatus } from '../types/enums'
 import type { WebSocketEvent, WsProgressSummary } from '../types/api'
 
 type StageHandler = (stage: string, message: string) => void
-type ProgressHandler = (summary: WsProgressSummary) => void
+type ProgressHandler = (summary: WsProgressSummary, parts: import('../types/api').JobPart[]) => void
 type CompleteHandler = (event: WebSocketEvent) => void
 type ErrorHandler = (error: string) => void
 
@@ -113,7 +113,7 @@ export class RenderSocketClient {
         this.stageHandlers.forEach((h) => h(job.stage, job.message))
 
         // Emit progress
-        this.progressHandlers.forEach((h) => h(summary))
+        this.progressHandlers.forEach((h) => h(summary, event.parts ?? []))
 
         // Emit complete on terminal status
         if (isTerminalStatus(job.status)) {

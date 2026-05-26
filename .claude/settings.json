@@ -1,4 +1,5 @@
 {
+  "enableAllProjectMcpServers": true,
   "permissions": {
     "allow": [
       "Bash(git -C d:/tool-render-video show ea0326f --date=iso -- backend/app/routes/render.py)",
