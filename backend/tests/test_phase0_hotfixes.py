@@ -60,22 +60,21 @@ class TestSubtitleTimingInvariant:
             "reversing the order would cause subtitle drift"
         )
 
-    def test_slice_srt_apply_playback_speed_false_in_pipeline(self):
-        """render_pipeline.py must ensure apply_playback_speed resolves to False
-        at the slice_srt_by_time call site.  The pipeline assigns
-        _visual_apply_speed = False and passes apply_playback_speed=_visual_apply_speed;
-        either the literal or the variable pattern is acceptable — what matters is
-        that the value is False so subtitle timestamps are NOT divided by speed."""
+    def test_per_part_subtitle_transcribes_raw_clip(self):
+        """render_pipeline.py must call transcribe_with_adapter on the already-cut
+        raw_part clip for per-part subtitle generation, not slice the full-source SRT.
+        Timestamps are naturally zero-based when Whisper reads a clip that starts at t=0,
+        so no rebase arithmetic is needed and timing is correct by construction."""
         from app.orchestration import render_pipeline
 
         src = inspect.getsource(render_pipeline)
-        # Accept either the literal or the variable-based pattern.
-        literal_ok = "apply_playback_speed=False" in src
-        variable_ok = "_visual_apply_speed = False" in src and "apply_playback_speed=_visual_apply_speed" in src
-        assert literal_ok or variable_ok, (
-            "render_pipeline.py must pass apply_playback_speed=False (directly or "
-            "via _visual_apply_speed) to slice_srt_by_time(); the flag prevents "
-            "double-correcting subtitle timestamps that the setpts filter already adjusts"
+        assert "SUBTITLE_PER_PART_MODEL" in src, (
+            "render_pipeline.py must reference SUBTITLE_PER_PART_MODEL to configure "
+            "the per-part transcription model (used in _prepare_part_assets)"
+        )
+        assert "str(raw_part)" in src, (
+            "render_pipeline.py must pass str(raw_part) as the audio source to "
+            "transcribe_with_adapter() so subtitle timestamps start at 0 by construction"
         )
 
 

@@ -3254,6 +3254,7 @@ def run_render_pipeline(
             _part_manifest,
             part_name,
             final_part,
+            raw_part,
         ):
             # Layer 7: Overlay Asset Prep — subtitle slicing, ASS conversion, hook formatting,
             # text-layer assembly. Returns PartAssets + raw timing/meta for Layer 8 callers.
@@ -3266,9 +3267,9 @@ def run_render_pipeline(
 
             subtitle_selected_by_rule = subtitle_enabled_by_idx.get(idx, False)
             part_subtitle_enabled = subtitle_selected_by_rule
-            if part_subtitle_enabled and not full_srt_available:
+            if part_subtitle_enabled and not raw_part.exists():
                 part_subtitle_enabled = False
-                _job_log(effective_channel, job_id, f"Part {idx} subtitle skipped: full transcript unavailable", kind="warning")
+                _job_log(effective_channel, job_id, f"Part {idx} subtitle skipped: raw clip not available for transcription", kind="warning")
             if payload.add_subtitle and not part_subtitle_enabled and not subtitle_selected_by_rule:
                 _job_log(effective_channel, job_id, f"Part {idx} subtitle skipped (viral={int(seg.get('viral_score', 0))} < cutoff={int(subtitle_cutoff)})")
 
@@ -3278,25 +3279,33 @@ def run_render_pipeline(
                 needs_ass = not (payload.resume_from_last and ass_part.exists() and ass_part.stat().st_size > 0)
                 _srt_source_is_fresh = needs_srt  # P1: tracks whether mutations must run
                 if needs_srt:
-                    # P2: match subtitle slice speed to the platform-adjusted render speed so
-                    # timing aligns on TikTok (+0.08) and Instagram Reels (-0.06).
-                    _eff_speed = _get_effective_playback_speed(payload, _target_platform)
-                    _visual_apply_speed = False
-                    _srt_meta = slice_srt_by_time(
-                        str(full_srt),
-                        str(srt_part),
-                        _effective_start,
-                        seg["end"],
-                        rebase_to_zero=True,
-                        playback_speed=_eff_speed,
-                        apply_playback_speed=_visual_apply_speed,
-                    )
+                    # Transcribe the already-cut clip directly. Whisper reads raw_part.mp4
+                    # which starts at t=0, so timestamps are naturally zero-based — no
+                    # rebase or slice needed. Timing is correct by construction.
+                    _t_part_transcribe = time.perf_counter()
+                    _part_trans_engine = getattr(payload, "subtitle_transcription_engine", "default")
+                    _part_trans_model = os.getenv("SUBTITLE_PER_PART_MODEL", "small")
+                    try:
+                        transcribe_with_adapter(
+                            str(raw_part),
+                            str(srt_part),
+                            engine=_part_trans_engine,
+                            model_name=_part_trans_model,
+                            retry_count=0,
+                            highlight_per_word=bool(getattr(payload, "highlight_per_word", False)),
+                            logger=logger,
+                        )
+                    except Exception as _part_trans_exc:
+                        logger.warning("per_part_transcription_failed part=%d: %s", idx, _part_trans_exc)
+                        _job_log(effective_channel, job_id,
+                                 f"per_part_transcription_failed part_no={idx}: {_part_trans_exc}", kind="warning")
+                    _part_trans_ms = int((time.perf_counter() - _t_part_transcribe) * 1000)
+                    _srt_meta = _read_srt_meta(str(srt_part)) if srt_part.exists() and srt_part.stat().st_size > 0 else {}
                     _srt_count = _srt_meta.get("subtitle_count", 0)
                     _job_log(
                         effective_channel, job_id,
-                        f"subtitle_part_sync part_no={idx} subtitle_slice_mode=visual_burn_in "
-                        f"start={seg['start']:.1f}s effective_start={_effective_start:.1f}s end={seg['end']:.1f}s "
-                        f"playback_speed={_eff_speed} apply_playback_speed={_visual_apply_speed} count={_srt_count}"
+                        f"subtitle_part_transcribed part_no={idx} model={_part_trans_model} "
+                        f"engine={_part_trans_engine} elapsed_ms={_part_trans_ms} count={_srt_count}"
                         + (
                             f" first={_srt_meta['first_start']:.3f}->{_srt_meta['first_end']:.3f}s"
                             f" last={_srt_meta['last_start']:.3f}->{_srt_meta['last_end']:.3f}s"
@@ -3309,22 +3318,21 @@ def run_render_pipeline(
                         job_id=job_id,
                         event="subtitle_part_sync",
                         level="INFO" if _srt_count > 0 else "WARNING",
-                        message=f"Subtitle sliced for part {idx}: {_srt_count} entries",
-                        step="subtitle.slice",
+                        message=f"Subtitle transcribed for part {idx}: {_srt_count} entries",
+                        step="subtitle.transcribe_part",
                         context={
                             "part_no": idx,
                             "part_start": seg["start"],
                             "part_end": seg["end"],
-                            "effective_start": _effective_start,
-                            "subtitle_slice_mode": "visual_burn_in",
-                            "playback_speed": _eff_speed,
-                            "apply_playback_speed": _visual_apply_speed,
                             "subtitle_count": _srt_count,
                             "first_sub_start": _srt_meta.get("first_start"),
                             "first_sub_end": _srt_meta.get("first_end"),
                             "last_sub_start": _srt_meta.get("last_start"),
                             "last_sub_end": _srt_meta.get("last_end"),
                             "part_srt_path": str(srt_part),
+                            "model": _part_trans_model,
+                            "engine": _part_trans_engine,
+                            "elapsed_ms": _part_trans_ms,
                             "resume_cache_hit_srt": False,
                             "resume_cache_hit_ass": not needs_ass,
                         },
@@ -4089,6 +4097,7 @@ def run_render_pipeline(
              _hook_subtitle_formatted, _subtitle_ass_ms) = _prepare_part_assets(
                 idx, seg, srt_part, ass_part, translated_srt_part,
                 _effective_start, _part_manifest, part_name, final_part,
+                raw_part,
             )
             part_subtitle_enabled = _part_assets.subtitle_enabled
             _part_text_layers = list(_part_assets.text_layers)
