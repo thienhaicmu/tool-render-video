@@ -405,3 +405,102 @@ class TestEnsureH264Preview:
              mock.patch.object(subprocess, "run", side_effect=subprocess.TimeoutExpired("ffmpeg", 120)):
             result = probers._ensure_h264_preview(src, tmp_path)
         assert result == src
+
+    # ── New fast-path tests ────────────────────────────────────────────────
+
+    def test_copy_remux_used_for_h264_in_non_mp4(self, tmp_path):
+        """H.264-in-MKV must take the copy-remux path, not re-encode."""
+        src = tmp_path / "source.mkv"
+        src.write_bytes(b"h264 video")
+        fake_profile = {"format_name": "matroska", "video_codec": "h264", "audio_codec": "aac"}
+        out = tmp_path / "preview_h264.mp4"
+
+        def fake_run(cmd, **kwargs):
+            out.write_bytes(b"remuxed video")
+            r = mock.MagicMock()
+            r.returncode = 0
+            return r
+
+        with mock.patch.object(probers, "_is_browser_safe_preview", return_value=False), \
+             mock.patch.object(probers, "_probe_preview_profile", return_value=fake_profile), \
+             mock.patch.object(subprocess, "run", side_effect=fake_run) as m:
+            result = probers._ensure_h264_preview(src, tmp_path)
+
+        assert result == out
+        assert m.call_count == 1, "copy-remux should call subprocess.run exactly once"
+        cmd = m.call_args[0][0]
+        assert "-c:v" in cmd
+        cv_idx = cmd.index("-c:v")
+        assert cmd[cv_idx + 1] == "copy", "copy-remux path must use -c:v copy"
+
+    def test_copy_remux_not_used_for_hevc(self, tmp_path):
+        """HEVC source must NOT take the copy-remux path (h264-only shortcut)."""
+        src = tmp_path / "source.mkv"
+        src.write_bytes(b"hevc video")
+        fake_profile = {"format_name": "matroska", "video_codec": "hevc", "audio_codec": "aac"}
+        out = tmp_path / "preview_h264.mp4"
+
+        def fake_run(cmd, **kwargs):
+            out.write_bytes(b"encoded video")
+            r = mock.MagicMock()
+            r.returncode = 0
+            return r
+
+        with mock.patch.object(probers, "_is_browser_safe_preview", return_value=False), \
+             mock.patch.object(probers, "_probe_preview_profile", return_value=fake_profile), \
+             mock.patch.object(subprocess, "run", side_effect=fake_run) as m:
+            probers._ensure_h264_preview(src, tmp_path)
+
+        cmd = m.call_args[0][0]
+        assert "-c:v" in cmd
+        cv_idx = cmd.index("-c:v")
+        assert cmd[cv_idx + 1] != "copy", "HEVC should go through libx264 encode, not copy"
+
+    def test_encode_path_uses_duration_cap(self, tmp_path):
+        """-t cap must appear in the encode command and must not exceed _PREVIEW_MAX_ENCODE_SECONDS."""
+        src = tmp_path / "source.mkv"
+        src.write_bytes(b"hevc video")
+        fake_profile = {"format_name": "matroska", "video_codec": "hevc", "audio_codec": "aac"}
+        out = tmp_path / "preview_h264.mp4"
+
+        def fake_run(cmd, **kwargs):
+            out.write_bytes(b"encoded video")
+            r = mock.MagicMock()
+            r.returncode = 0
+            return r
+
+        with mock.patch.object(probers, "_is_browser_safe_preview", return_value=False), \
+             mock.patch.object(probers, "_probe_preview_profile", return_value=fake_profile), \
+             mock.patch.object(subprocess, "run", side_effect=fake_run) as m:
+            probers._ensure_h264_preview(src, tmp_path, duration_sec=3600)
+
+        cmd = m.call_args[0][0]
+        assert "-t" in cmd, "encode command must include a duration cap (-t)"
+        t_idx = cmd.index("-t")
+        cap_used = int(cmd[t_idx + 1])
+        assert cap_used <= probers._PREVIEW_MAX_ENCODE_SECONDS
+
+    def test_copy_remux_fallback_to_encode_on_failure(self, tmp_path):
+        """If copy-remux fails for an H.264 source, the encode path must still run."""
+        src = tmp_path / "source.mkv"
+        src.write_bytes(b"h264 video")
+        fake_profile = {"format_name": "matroska", "video_codec": "h264", "audio_codec": "aac"}
+        out = tmp_path / "preview_h264.mp4"
+        call_count = {"n": 0}
+
+        def fake_run(cmd, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise Exception("copy-remux failed")
+            out.write_bytes(b"encoded video")
+            r = mock.MagicMock()
+            r.returncode = 0
+            return r
+
+        with mock.patch.object(probers, "_is_browser_safe_preview", return_value=False), \
+             mock.patch.object(probers, "_probe_preview_profile", return_value=fake_profile), \
+             mock.patch.object(subprocess, "run", side_effect=fake_run):
+            result = probers._ensure_h264_preview(src, tmp_path)
+
+        assert result == out
+        assert call_count["n"] == 2, "should have tried copy-remux then encode"

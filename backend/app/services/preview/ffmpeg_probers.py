@@ -82,13 +82,27 @@ def _is_browser_safe_preview(video_path: Path) -> bool:
     return container_ok and video_ok and audio_ok
 
 
+# Maximum seconds of source video to encode for the preview.
+# The preview is only used for clip-selection scrubbing; the original file is
+# always used for the actual render. Capping here bounds the worst-case wait
+# for long HEVC/VP9 sources that cannot be copy-remuxed.
+_PREVIEW_MAX_ENCODE_SECONDS = 600  # 10 minutes
+
+
 def _ensure_h264_preview(src: Path, work_dir: Path, duration_sec: int = 0) -> Path:
     """
-    Reuse the source only when it is already browser-safe for Chromium playback.
-    Otherwise generate a cached H.264 preview for the editor.
+    Return a browser-safe H.264 MP4 path for editor preview.
 
-    Timeout is duration-aware: base 120s + 2s per second of video, capped at 3600s.
-    Returns src unchanged when transcoding fails so the caller can still serve it.
+    Fast-path order:
+      1. Return cached output if it already exists.
+      2. Return src unchanged when it is already browser-safe.
+      3. Copy-remux (no re-encode) when the source is H.264 in a non-MP4 container.
+         This takes 3-5 seconds regardless of video duration.
+      4. Re-encode with libx264 ultrafast, capped at _PREVIEW_MAX_ENCODE_SECONDS.
+         Bounding the encode length prevents a 30-minute HEVC source from stalling
+         the UI for 30 minutes. The original file is always used for actual rendering.
+
+    Returns src unchanged if all attempts fail so the caller can still serve it.
     """
     out = work_dir / "preview_h264.mp4"
     if out.exists() and out.stat().st_size > 0:
@@ -96,31 +110,58 @@ def _ensure_h264_preview(src: Path, work_dir: Path, duration_sec: int = 0) -> Pa
     if _is_browser_safe_preview(src):
         return src
 
-    timeout_sec = min(3600, 120 + 2 * max(0, int(duration_sec)))
     profile = _probe_preview_profile(src)
     has_audio = bool(profile.get("audio_codec"))
+    video_codec = (profile.get("video_codec") or "").lower()
+
+    # ── Fast path: H.264 source in a non-browser-safe container ─────────────
+    # Just change the container — no pixel re-encoding needed.
+    # Handles the common H.264-in-MKV case in seconds at any duration.
+    if video_codec in ("h264", "avc", "avc1"):
+        logger.info("Copy-remuxing H.264 preview to MP4 container (src=%s)", src)
+        cmd = [get_ffmpeg_bin(), "-y", "-i", str(src), "-c:v", "copy"]
+        cmd += (["-c:a", "copy"] if has_audio else ["-an"])
+        cmd += ["-movflags", "+faststart", str(out)]
+        try:
+            subprocess.run(cmd, capture_output=True, timeout=60, check=False)
+            if out.exists() and out.stat().st_size > 0:
+                logger.info("Copy-remux OK (output=%s)", out)
+                return out
+        except Exception as exc:
+            logger.warning("Copy-remux failed for %s: %s — falling through to encode", src, exc)
+        try:
+            out.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    # ── Encode path: libx264 with a hard duration cap ────────────────────────
+    # ultrafast preset at reduced resolution is ~4x faster than the previous
+    # veryfast + 1280px combination. The cap means a 30-min HEVC source produces
+    # a 10-minute preview in ~3-5 min instead of blocking for 30 min.
+    cap_sec = _PREVIEW_MAX_ENCODE_SECONDS
+    timeout_sec = 600  # generous bound: ultrafast encodes 10 min well within this
     logger.info(
-        "Transcoding preview to browser-safe H.264 (format=%s video=%s audio=%s duration=%ss timeout=%ss)",
+        "Encoding preview (format=%s video=%s audio=%s cap=%ss timeout=%ss)",
         profile.get("format_name") or "",
-        profile.get("video_codec") or "",
+        video_codec,
         profile.get("audio_codec") or "",
-        duration_sec,
+        cap_sec,
         timeout_sec,
     )
-
     cmd = [
         get_ffmpeg_bin(),
         "-y",
         "-i", str(src),
+        "-t", str(cap_sec),
         "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "28",
+        "-preset", "ultrafast",
+        "-crf", "32",
         "-pix_fmt", "yuv420p",
-        "-vf", "scale='min(1280,iw)':-2",
+        "-vf", "scale='min(960,iw)':-2",
         "-movflags", "+faststart",
     ]
     if has_audio:
-        cmd += ["-c:a", "aac", "-b:a", "128k"]
+        cmd += ["-c:a", "aac", "-b:a", "96k"]
     else:
         cmd += ["-an"]
     cmd.append(str(out))
@@ -128,17 +169,16 @@ def _ensure_h264_preview(src: Path, work_dir: Path, duration_sec: int = 0) -> Pa
     try:
         subprocess.run(cmd, capture_output=True, timeout=timeout_sec, check=False)
         if out.exists() and out.stat().st_size > 0:
-            logger.info("Preview transcode OK (output=%s)", out)
+            logger.info("Preview encode OK (output=%s)", out)
             return out
     except subprocess.TimeoutExpired:
         logger.error(
-            "Preview transcode timed out after %ss (src=%s duration=%ss). Falling back to original file.",
+            "Preview encode timed out after %ss (src=%s). Falling back to original file.",
             timeout_sec,
             src,
-            duration_sec,
         )
     except Exception as exc:
-        logger.warning("Preview transcode failed for %s: %s", src, exc)
+        logger.warning("Preview encode failed for %s: %s", src, exc)
 
     try:
         out.unlink(missing_ok=True)

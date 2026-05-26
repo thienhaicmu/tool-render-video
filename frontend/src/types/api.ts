@@ -191,6 +191,10 @@ export interface JobPart {
   progress_percent: number
   output_file: string
   updated_at: string
+  hook_score: number
+  viral_score: number
+  motion_score: number
+  duration: number
 }
 
 // ── Quality types (from docs/ui/UI_BACKEND_CONTRACT.md §8) ───────────────────

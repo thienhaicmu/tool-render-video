@@ -6,7 +6,7 @@ import { useRenderSocket } from '../../../hooks/useRenderSocket'
 import { prepareSource, getPreviewVideoUrl, cancelRender } from '../../../api/render'
 import { getJobParts, getJobQualitySummary } from '../../../api/jobs'
 import { BASE_URL } from '../../../api/client'
-import type { RenderRequest, JobPart, WsProgressSummary } from '../../../types/api'
+import type { RenderRequest, JobPart, WsProgressSummary, QualityReport } from '../../../types/api'
 import type { PrepareSourceResponse } from '../../../api/render'
 
 // ── i18n ──────────────────────────────────────────────────────────────────────
@@ -266,9 +266,10 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const [submitError, setSubmitError]   = useState<string | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
 
-  const [parts, setParts]           = useState<JobPart[]>([])
-  const [partScores, setPartScores] = useState<Record<number, number>>({})
-  const [partsLoading, setPartsLoading] = useState(false)
+  const [parts, setParts]                   = useState<JobPart[]>([])
+  const [partScores, setPartScores]         = useState<Record<number, number>>({})
+  const [qualityReports, setQualityReports] = useState<Record<number, QualityReport | null>>({})
+  const [partsLoading, setPartsLoading]     = useState(false)
 
   const { submitRender } = useRenderStore()
   const { stage, jobStatus, progress, jobMessage, isTerminal, liveParts } = useRenderSocket(jobId)
@@ -280,14 +281,28 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     getJobParts(jobId)
       .then(setParts)
       .finally(() => setPartsLoading(false))
-    getJobQualitySummary(jobId)
+    getJobQualitySummary(jobId, true)
       .then((summary) => {
         const scores: Record<number, number> = {}
-        summary.parts?.forEach((p) => { scores[p.part_no] = p.score })
+        const reports: Record<number, QualityReport | null> = {}
+        summary.parts?.forEach((p) => {
+          scores[p.part_no] = p.score
+          reports[p.part_no] = p.report ?? null
+        })
         setPartScores(scores)
+        setQualityReports(reports)
       })
       .catch(() => {})
   }, [jobId, isTerminal])
+
+  // Auto-advance to results after successful completion
+  useEffect(() => {
+    if (!isTerminal || step !== 3) return
+    const jobFailed = jobStatus?.toLowerCase().includes('fail') || jobStatus === 'cancelled'
+    if (jobFailed) return
+    const timer = setTimeout(() => setStep(4), 1500)
+    return () => clearTimeout(timer)
+  }, [isTerminal, jobStatus, step])
 
   // ── Source actions ──────────────────────────────────────────────────────────
   function addUrl() {
@@ -550,7 +565,9 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
           <div className={`step-screen${step === 4 ? ' active' : ''}`}>
             <StepResults
               jobId={jobId} parts={parts} partScores={partScores}
+              qualityReports={qualityReports}
               loading={partsLoading} t={t}
+              aspectRatio={RATIO_INFO[cfg.ratio].api}
             />
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(3)}>{t.btnBackRendering}</button>
@@ -1056,7 +1073,7 @@ function StepConfigure({
 }
 
 // ── Step 3 — Rendering ────────────────────────────────────────────────────────
-// ── Rendering v2 helpers ──────────────────────────────────────────────────────
+
 type ClipSlot = { part_no: number; status: string; progress_percent: number }
 
 function buildClipSlots(liveParts: JobPart[], progress: WsProgressSummary | null): ClipSlot[] {
@@ -1084,36 +1101,100 @@ function getActivePhaseIdx(stage: string, jobStatus: string): number {
   return -1
 }
 
-function clipStatusClass(status: string): string {
+function clipStateKey(status: string): 'done' | 'failed' | 'active' | 'waiting' {
   const s = status.toLowerCase()
-  if (s === 'done') return 'clip-done'
-  if (s === 'failed' || s === 'cancelled') return 'clip-failed'
-  if (s === 'waiting') return 'clip-wait'
-  return 'clip-active'
+  if (s === 'done') return 'done'
+  if (s === 'failed' || s === 'cancelled') return 'failed'
+  if (s === 'waiting' || s === 'queued') return 'waiting'
+  return 'active'
 }
 
-function clipStatusIcon(status: string): string {
-  const s = status.toLowerCase()
-  if (s === 'done') return '✓'
-  if (s === 'failed' || s === 'cancelled') return '✕'
-  if (s === 'waiting') return '○'
-  return '⟳'
+// Per-step activity descriptions shown under active clip rows
+const ACTIVITY_LABELS: Record<string, string> = {
+  cutting:      'Extracting video segment · FFmpeg',
+  transcribing: 'Generating subtitles · Whisper AI',
+  rendering:    'Encoding clip · FFmpeg NVENC',
 }
 
-function ClipCard({ slot, statusLabel }: { slot: ClipSlot; statusLabel: string }) {
-  const cls = clipStatusClass(slot.status)
-  const icon = clipStatusIcon(slot.status)
-  const isActive = cls === 'clip-active'
+// Step icons for the step-progress indicator inside each clip
+const STEP_NODES = [
+  { key: 'cutting',      label: 'Cut' },
+  { key: 'transcribing', label: 'Sub' },
+  { key: 'rendering',    label: 'Render' },
+]
+
+function ClipRow({ slot, statusLabel }: { slot: ClipSlot; statusLabel: string }) {
+  const state   = clipStateKey(slot.status)
+  const pct     = slot.progress_percent
+  const isDone  = state === 'done'
+  const isFail  = state === 'failed'
+  const isWait  = state === 'waiting'
+  const isActive = state === 'active'
+  const activity = ACTIVITY_LABELS[slot.status.toLowerCase()] ?? ''
+
+  // Which step node is active/done inside this clip row
+  const activeStepIdx = STEP_NODES.findIndex((n) => n.key === slot.status.toLowerCase())
+
   return (
-    <div className={`rnd-clip-card ${cls}`}>
-      <div className="rnd-clip-icon">{icon}</div>
-      <div className="rnd-clip-num">#{slot.part_no}</div>
-      <div className="rnd-clip-status">{statusLabel}</div>
-      {isActive && (
-        <div className="rnd-clip-bar">
-          <div className="rnd-clip-bar-fill" style={{ width: `${slot.progress_percent}%` }} />
+    <div className={`rndv-row rndv-row-${state}`}>
+      {/* Left accent bar */}
+      <div className="rndv-row-accent" />
+
+      <div className="rndv-row-body">
+        {/* Top line: number badge · status badge · bar · pct */}
+        <div className="rndv-row-top">
+          <div className="rndv-clip-num">#{slot.part_no}</div>
+
+          <div className={`rndv-badge rndv-badge-${state}`}>
+            {isActive && <span className="rndv-live-dot" />}
+            {isDone && <span className="rndv-check">✓</span>}
+            {isFail && <span className="rndv-fail-x">✕</span>}
+            <span className="rndv-badge-label">{statusLabel}</span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="rndv-bar-wrap">
+            <div className="rndv-bar-track">
+              <div
+                className={`rndv-bar-fill rndv-bar-${state}`}
+                style={{ width: `${isDone ? 100 : isFail || isWait ? 0 : pct}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Percentage / status indicator */}
+          <div className={`rndv-pct rndv-pct-${state}`}>
+            {isDone ? '100%' : isFail ? 'ERR' : isWait ? '—' : `${pct}%`}
+          </div>
         </div>
-      )}
+
+        {/* Active clip: step nodes + activity label */}
+        {isActive && (
+          <div className="rndv-row-detail">
+            {/* Mini step nodes */}
+            <div className="rndv-steps">
+              {STEP_NODES.map((n, i) => {
+                const stepState = i < activeStepIdx ? 'done' : i === activeStepIdx ? 'active' : 'pending'
+                return (
+                  <React.Fragment key={n.key}>
+                    <div className={`rndv-step rndv-step-${stepState}`}>
+                      <div className="rndv-step-dot">
+                        {stepState === 'done' ? '✓' : stepState === 'active' ? <span className="rndv-step-pulse" /> : null}
+                      </div>
+                      <span className="rndv-step-label">{n.label}</span>
+                    </div>
+                    {i < STEP_NODES.length - 1 && (
+                      <div className={`rndv-step-line${i < activeStepIdx ? ' done' : ''}`} />
+                    )}
+                  </React.Fragment>
+                )
+              })}
+            </div>
+            {/* Activity text */}
+            {activity && <div className="rndv-activity">{activity}</div>}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -1148,8 +1229,7 @@ function StepRendering({
     { key: 'done',       label: t.rndPhaseDone },
   ]
   const activePhaseIdx = getActivePhaseIdx(stage, jobStatus)
-
-  const clipSlots = buildClipSlots(liveParts, progress)
+  const clipSlots      = buildClipSlots(liveParts, progress)
 
   function getStatusLabel(s: string): string {
     const sl = s.toLowerCase()
@@ -1161,62 +1241,68 @@ function StepRendering({
     return t.rndStatusWaiting
   }
 
-  const isFailed = jobStatus?.toLowerCase().includes('fail') || jobStatus?.toLowerCase() === 'cancelled'
+  const isFailed   = jobStatus?.toLowerCase().includes('fail') || jobStatus?.toLowerCase() === 'cancelled'
   const displayMsg = jobMessage
     || (isTerminal ? (isFailed ? '✕ ' + t.rndStatusFailed : '✓ ' + t.rndComplete) : t.rndPreparing)
 
   return (
     <div className="rnd-screen">
-      {/* 5-phase pipeline strip */}
-      <div className="rnd-pipeline">
-        {phases.map((ph, idx) => {
-          const state = idx < activePhaseIdx ? 'done' : idx === activePhaseIdx ? 'active' : 'pending'
-          return (
-            <React.Fragment key={ph.key}>
-              <div className={`rnd-phase rnd-phase-${state}`}>
-                <div className="rnd-phase-dot">
-                  {state === 'done' ? '✓' : state === 'active' ? <span className="rnd-dot-pulse" /> : null}
-                </div>
-                <span className="rnd-phase-label">{ph.label}</span>
-              </div>
-              {idx < phases.length - 1 && (
-                <div className={`rnd-phase-arrow${idx < activePhaseIdx ? ' done' : ''}`}>›</div>
-              )}
-            </React.Fragment>
-          )
-        })}
-      </div>
 
-      {/* Progress section */}
-      <div className="rnd-progress-section">
-        <div className="rnd-pct-big">{Math.round(pct)}<span className="rnd-pct-sym">%</span></div>
-        <div className="rnd-bar-wrap">
-          <div className="rnd-bar-track">
-            <div className="rnd-bar-fill" style={{ width: `${pct}%` }} />
+      {/* ── Compact header: pipeline + overall bar ── */}
+      <div className="rndv-header">
+        {/* Pipeline nodes */}
+        <div className="rndv-pipeline">
+          {phases.map((ph, idx) => {
+            const state = idx < activePhaseIdx ? 'done' : idx === activePhaseIdx ? 'active' : 'pending'
+            return (
+              <React.Fragment key={ph.key}>
+                <div className={`rndv-phase rndv-phase-${state}`}>
+                  <div className="rndv-phase-dot">
+                    {state === 'done' ? '✓' : state === 'active' ? <span className="rndv-phase-pulse" /> : idx + 1}
+                  </div>
+                  <span className="rndv-phase-label">{ph.label}</span>
+                </div>
+                {idx < phases.length - 1 && (
+                  <div className={`rndv-phase-line${idx < activePhaseIdx ? ' done' : ''}`} />
+                )}
+              </React.Fragment>
+            )
+          })}
+        </div>
+
+        {/* Overall progress row */}
+        <div className="rndv-overall">
+          <div className="rndv-overall-left">
+            <span className="rndv-overall-pct">{Math.round(pct)}<span className="rndv-overall-sym">%</span></span>
+            <div className="rndv-overall-meta">
+              {totalCount > 0 && (
+                <span className="rndv-overall-clips">
+                  {t.rndClipsDone(doneCount, totalCount)}
+                  {failedCount > 0 && <span className="rndv-clips-failed"> · {t.rndClipsFailed(failedCount)}</span>}
+                </span>
+              )}
+              <span className="rndv-overall-msg">{displayMsg}</span>
+            </div>
+          </div>
+          <div className="rndv-overall-right">
+            <div className="rndv-overall-bar-track">
+              <div className="rndv-overall-bar-fill" style={{ width: `${pct}%` }} />
+            </div>
+            {!isTerminal && jobId && <span className="rndv-elapsed">{mm}:{ss}</span>}
           </div>
         </div>
-        <div className="rnd-msg">{displayMsg}</div>
-        <div className="rnd-meta-row">
-          {totalCount > 0 && (
-            <span className="rnd-clips-done">
-              {t.rndClipsDone(doneCount, totalCount)}
-              {failedCount > 0 && <span className="rnd-clips-failed">&nbsp;· {t.rndClipsFailed(failedCount)}</span>}
-            </span>
-          )}
-          {!isTerminal && jobId && <span className="rnd-elapsed">{mm}:{ss}</span>}
-        </div>
       </div>
 
-      {/* Clip cards grid */}
+      {/* ── Per-clip rows ── */}
       {clipSlots.length === 0 ? (
         <div className="rnd-waiting-msg">
           <span className="rnd-waiting-dot" />
           {t.rndPreparing}
         </div>
       ) : (
-        <div className="rnd-clips-grid">
+        <div className="rndv-clip-list">
           {clipSlots.map((slot) => (
-            <ClipCard key={slot.part_no} slot={slot} statusLabel={getStatusLabel(slot.status)} />
+            <ClipRow key={slot.part_no} slot={slot} statusLabel={getStatusLabel(slot.status)} />
           ))}
         </div>
       )}
@@ -1225,27 +1311,97 @@ function StepRendering({
 }
 
 // ── Step 4 — Results ──────────────────────────────────────────────────────────
+
+function aiTier(score: number): { label: string; cls: string } {
+  if (score >= 85) return { label: 'VIRAL READY', cls: 'tier-viral' }
+  if (score >= 70) return { label: 'HIGH IMPACT', cls: 'tier-high' }
+  if (score >= 55) return { label: 'GOOD', cls: 'tier-good' }
+  return { label: 'REVIEW', cls: 'tier-review' }
+}
+
+function ScoreRingSm({ score }: { score: number }) {
+  const r = 13, circ = 2 * Math.PI * r
+  const fill = (score / 100) * circ
+  const col = score >= 70 ? 'var(--ok)' : score >= 40 ? 'var(--warn)' : 'var(--fail)'
+  return (
+    <div className="sr-wrap">
+      <svg width="34" height="34" viewBox="0 0 34 34" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="17" cy="17" r={r} fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="3.5" />
+        <circle cx="17" cy="17" r={r} fill="none" stroke={col} strokeWidth="3.5"
+          strokeDasharray={`${fill} ${circ}`} strokeLinecap="round" />
+      </svg>
+      <span className="sr-num" style={{ color: col }}>{Math.round(score)}</span>
+    </div>
+  )
+}
+
+function ScoreRingLg({ score }: { score: number }) {
+  const r = 28, circ = 2 * Math.PI * r
+  const fill = (score / 100) * circ
+  const col = score >= 70 ? 'var(--ok)' : score >= 40 ? 'var(--warn)' : 'var(--fail)'
+  const tier = aiTier(score)
+  return (
+    <div className="srl-wrap">
+      <div style={{ position: 'relative', width: 68, height: 68, flexShrink: 0 }}>
+        <svg width="68" height="68" viewBox="0 0 68 68" style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx="34" cy="34" r={r} fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="6" />
+          <circle cx="34" cy="34" r={r} fill="none" stroke={col} strokeWidth="6"
+            strokeDasharray={`${fill} ${circ}`} strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray 0.5s ease' }} />
+        </svg>
+        <div className="srl-num" style={{ color: col }}>{Math.round(score)}</div>
+      </div>
+      <div className="srl-info">
+        <div className={`res-ai-tier ${tier.cls}`}>{tier.label}</div>
+        <div className="srl-sub">AI Quality Score</div>
+      </div>
+    </div>
+  )
+}
+
 function StepResults({
-  jobId, parts, partScores, loading, t,
+  jobId, parts, partScores, qualityReports, loading, t, aspectRatio,
 }: {
   jobId: string | null
   parts: JobPart[]
   partScores: Record<number, number>
+  qualityReports: Record<number, QualityReport | null>
   loading: boolean
   t: Strings
+  aspectRatio: string
 }) {
   const [selectedPart, setSelectedPart] = useState<JobPart | null>(null)
-  const doneParts   = parts.filter((p) => p.status === 'done')
+  const doneParts  = parts.filter((p) => p.status === 'done')
   const failedParts = parts.filter((p) => p.status === 'failed')
+  const sortedDone = [...doneParts].sort((a, b) => (partScores[b.part_no] ?? 0) - (partScores[a.part_no] ?? 0))
 
-  function scoreColor(score: number): string {
-    if (score >= 70) return 'var(--ok)'
-    if (score >= 40) return 'var(--warn)'
-    return 'var(--fail)'
+  const outputDir = (() => {
+    const f = doneParts[0]?.output_file
+    if (!f) return null
+    const sep = f.includes('\\') ? '\\' : '/'
+    return f.substring(0, f.lastIndexOf(sep)) || null
+  })()
+
+  const openOutputFolder = async () => {
+    const api = (window as any).electronAPI
+    if (api?.openPath && outputDir) await api.openPath(outputDir)
   }
 
-  const sortedDone = [...doneParts].sort((a, b) => (partScores[b.part_no] ?? 0) - (partScores[a.part_no] ?? 0))
-  const selectedScore = selectedPart ? partScores[selectedPart.part_no] : undefined
+  const selScore  = selectedPart ? partScores[selectedPart.part_no] : undefined
+  const selReport = selectedPart ? qualityReports[selectedPart.part_no] : undefined
+
+  const fmtMetric = (v: unknown): string => {
+    if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(2)
+    if (typeof v === 'boolean') return v ? 'Yes' : 'No'
+    return String(v ?? '—')
+  }
+
+  const SEV_COL: Record<string, string> = {
+    critical: 'var(--fail)', error: '#f97316', warning: 'var(--warn)', info: 'var(--cyan)',
+  }
+
+  // '9:16' → '9/16', '3:4' → '3/4', '1:1' → '1/1'
+  const thumbRatio = aspectRatio.replace(':', '/')
 
   if (!jobId) {
     return (
@@ -1259,58 +1415,72 @@ function StepResults({
 
   return (
     <div className="res-screen">
+      {/* ── Clip grid ── */}
       <div className="res-left">
         <div className="res-toolbar">
           <div className="res-count">
             {t.resClipsRendered(doneParts.length)}
             {failedParts.length > 0 && (
-              <span style={{ color: 'var(--fail)', fontSize: '12px', marginLeft: '8px' }}>
-                · {failedParts.length} failed
-              </span>
+              <span style={{ color: 'var(--fail)', marginLeft: 8, fontSize: 11 }}>· {failedParts.length} failed</span>
             )}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-3)', marginLeft: '12px' }}>
-            {jobId.slice(0, 16)}…
           </div>
           <div className="res-sort">
             <button className="sort-btn on">{t.resSortViral}</button>
             <button className="sort-btn">{t.resSortDuration}</button>
-            <button className="sort-btn">{t.resSortNewest}</button>
           </div>
         </div>
 
+        {outputDir && (
+          <div className="res-output-banner">
+            <span className="res-output-icon">📁</span>
+            <span className="res-output-path" title={outputDir}>{outputDir}</span>
+            <button className="res-open-btn" onClick={openOutputFolder}>Open Folder</button>
+          </div>
+        )}
+
         {loading ? (
           <div className="rw-empty">
-            <div style={{ width: '32px', height: '32px', border: '2px solid var(--border-hi)', borderTop: '2px solid var(--accent)', borderRadius: '50%', animation: 'rw-spin 0.8s linear infinite' }} />
+            <div style={{ width: 32, height: 32, border: '2px solid var(--border-hi)', borderTop: '2px solid var(--accent)', borderRadius: '50%', animation: 'rw-spin 0.8s linear infinite' }} />
             {t.resLoading}
           </div>
         ) : doneParts.length === 0 ? (
           <div className="rw-empty">
-            <span className="rw-empty-icon">📭</span>
-            {t.resNoClips}
+            <span className="rw-empty-icon">📭</span>{t.resNoClips}
           </div>
         ) : (
           <div className="clip-grid-area">
             {sortedDone.map((part, i) => {
               const score     = partScores[part.part_no]
+              const report    = qualityReports[part.part_no]
               const thumbUrl  = getPartThumbnailUrl(jobId, part.part_no)
+              const isBest    = i === 0
               const isSelected = selectedPart?.part_no === part.part_no
+              const tier      = score !== undefined ? aiTier(score) : null
+              const issueCount = report?.issues?.length ?? 0
+
               return (
                 <div
                   key={part.part_no}
                   className={`clip-card${isSelected ? ' selected' : ''}`}
                   onClick={() => setSelectedPart(isSelected ? null : part)}
                 >
-                  <div className="clip-thumb">
+                  {/* Thumbnail — aspect ratio matches the rendered output */}
+                  <div className="clip-thumb" style={{ aspectRatio: thumbRatio }}>
                     <img src={thumbUrl} alt={`Clip ${part.part_no}`}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+
+                    {/* Top-left: BEST badge */}
+                    {isBest && <span className="clip-best">BEST</span>}
+
+                    {/* Top-right: AI score ring */}
                     {score !== undefined && (
-                      <span className="clip-score-badge" style={{ color: scoreColor(score) }}>
-                        {Math.round(score)}
-                      </span>
+                      <div className="clip-score-ring">
+                        <ScoreRingSm score={score} />
+                      </div>
                     )}
-                    {i === 0 && <span className="clip-best">BEST</span>}
+
+                    {/* Hover overlay */}
                     <div className="clip-overlay">
                       <a href={getPartMediaUrl(jobId, part.part_no)} target="_blank" rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}>
@@ -1322,12 +1492,38 @@ function StepResults({
                       </a>
                     </div>
                   </div>
+
+                  {/* Info bar */}
                   <div className="clip-info">
-                    <div className="clip-name">Clip_{String(part.part_no).padStart(2, '0')}.mp4</div>
-                    <div className="clip-meta">
-                      <span>9:16</span>
-                      {score !== undefined && <span style={{ color: scoreColor(score) }}>{Math.round(score)}pt</span>}
+                    <div className="clip-row-top">
+                      <span className="clip-num-lbl">#{String(part.part_no).padStart(2, '0')}</span>
+                      {tier && <span className={`clip-ai-badge ${tier.cls}`}>{tier.label}</span>}
                     </div>
+
+                    {/* Hook / Viral score pills */}
+                    {(part.hook_score > 0 || part.viral_score > 0) && (
+                      <div className="clip-scores-row">
+                        {part.hook_score > 0 && (
+                          <span className="clip-score-pill hook">
+                            Hook {Math.round(part.hook_score)}%
+                          </span>
+                        )}
+                        {part.viral_score > 0 && (
+                          <span className="clip-score-pill viral">
+                            Viral {Math.round(part.viral_score)}%
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {issueCount > 0 ? (
+                      <div className="clip-issue-row">
+                        <span className="clip-issue-dot" />
+                        {issueCount} issue{issueCount > 1 ? 's' : ''}
+                      </div>
+                    ) : report ? (
+                      <div className="clip-ok-row">✓ Passed</div>
+                    ) : null}
                   </div>
                 </div>
               )
@@ -1336,47 +1532,114 @@ function StepResults({
         )}
       </div>
 
-      {/* Player panel */}
+      {/* ── Detail panel ── */}
       <div className={`player-panel${selectedPart ? '' : ' collapsed'}`}>
         <div className="player-hd">
-          <span className="player-hd-title">{t.resClipViewer}</span>
+          <span className="player-hd-title">
+            {selectedPart ? `Clip #${String(selectedPart.part_no).padStart(2, '0')}` : t.resClipViewer}
+          </span>
           <button className="player-close" onClick={() => setSelectedPart(null)}>✕</button>
         </div>
+
         <div className="player-video-area">
           {selectedPart ? (
             <>
-              <div className="player-frame">
+              {/* Video — same aspect ratio as the rendered clip */}
+              <div className="player-frame" style={{ aspectRatio: thumbRatio }}>
                 <video
                   key={selectedPart.part_no}
                   src={getPartMediaUrl(jobId, selectedPart.part_no)}
                   controls
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
                 />
               </div>
-              <div className="player-controls">
-                <div className="player-title">Clip_{String(selectedPart.part_no).padStart(2, '0')}.mp4</div>
-                {selectedScore !== undefined && (
-                  <div className="player-score-row">
-                    <div className="player-score" style={{ color: scoreColor(selectedScore) }}>
-                      {Math.round(selectedScore)}
-                    </div>
-                    <div>
-                      <div className="player-score-lbl">{t.resViralScore}</div>
-                      <div style={{ fontSize: '9px', color: 'var(--text-3)' }}>
-                        is_best_output: {selectedPart.part_no === sortedDone[0]?.part_no ? 'true' : 'false'}
+
+              {/* Score ring + tier */}
+              {selScore !== undefined && <ScoreRingLg score={selScore} />}
+
+              {/* Hook / Viral / Motion score bars */}
+              {selectedPart && (selectedPart.hook_score > 0 || selectedPart.viral_score > 0 || selectedPart.motion_score > 0) && (
+                <div className="player-score-bars">
+                  {selectedPart.hook_score > 0 && (
+                    <div className="psb-row">
+                      <span className="psb-label">Hook</span>
+                      <div className="psb-track">
+                        <div className="psb-fill psb-hook" style={{ width: `${selectedPart.hook_score}%` }} />
                       </div>
+                      <span className="psb-val">{Math.round(selectedPart.hook_score)}%</span>
                     </div>
+                  )}
+                  {selectedPart.viral_score > 0 && (
+                    <div className="psb-row">
+                      <span className="psb-label">Viral</span>
+                      <div className="psb-track">
+                        <div className="psb-fill psb-viral" style={{ width: `${selectedPart.viral_score}%` }} />
+                      </div>
+                      <span className="psb-val">{Math.round(selectedPart.viral_score)}%</span>
+                    </div>
+                  )}
+                  {selectedPart.motion_score > 0 && (
+                    <div className="psb-row">
+                      <span className="psb-label">Motion</span>
+                      <div className="psb-track">
+                        <div className="psb-fill psb-motion" style={{ width: `${selectedPart.motion_score}%` }} />
+                      </div>
+                      <span className="psb-val">{Math.round(selectedPart.motion_score)}%</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* AI analysis section */}
+              <div className="player-section">
+                <div className="player-section-title">AI Analysis</div>
+
+                {/* Issues */}
+                {selReport && selReport.issues.length > 0 ? (
+                  <div className="player-issues">
+                    {selReport.issues.map((iss, i) => (
+                      <div key={i} className="player-issue-row">
+                        <span className="player-issue-dot" style={{ background: SEV_COL[iss.severity] ?? '#888' }} />
+                        <div>
+                          <div className="player-issue-msg">{iss.message}</div>
+                          {iss.recommended_action && (
+                            <div className="player-issue-action">{iss.recommended_action}</div>
+                          )}
+                        </div>
+                        <span className="player-issue-sev" style={{ color: SEV_COL[iss.severity] ?? '#888' }}>
+                          {iss.severity}
+                        </span>
+                      </div>
+                    ))}
                   </div>
+                ) : selReport ? (
+                  <div className="player-all-ok">✓ No issues — all quality checks passed</div>
+                ) : (
+                  <div className="player-no-data">Quality data loading…</div>
                 )}
-                <div className="player-btns">
-                  <a className="player-btn" href={getPartMediaUrl(jobId, selectedPart.part_no)} target="_blank" rel="noreferrer">{t.btnPlay}</a>
-                  <button className="player-btn">{t.btnOpen}</button>
+              </div>
+
+              {/* Metrics grid */}
+              {selReport && Object.keys(selReport.metrics).length > 0 && (
+                <div className="player-section">
+                  <div className="player-section-title">Metrics</div>
+                  <div className="player-metrics-grid">
+                    {Object.entries(selReport.metrics)
+                      .filter(([, v]) => v !== null && v !== undefined && typeof v !== 'object')
+                      .map(([k, v]) => (
+                        <div key={k} className="player-metric-cell">
+                          <div className="player-metric-key">{k.replace(/_/g, ' ')}</div>
+                          <div className="player-metric-val">{fmtMetric(v)}</div>
+                        </div>
+                      ))}
+                  </div>
                 </div>
-                <div className="player-btns" style={{ marginTop: '4px' }}>
-                  <a className="player-btn primary" href={getPartMediaUrl(jobId, selectedPart.part_no)} download={`clip_${selectedPart.part_no}.mp4`}>
-                    {t.btnExport}
-                  </a>
-                </div>
+              )}
+
+              {/* Actions */}
+              <div className="player-btns">
+                <a className="player-btn" href={getPartMediaUrl(jobId, selectedPart.part_no)} target="_blank" rel="noreferrer">{t.btnPlay}</a>
+                <a className="player-btn primary" href={getPartMediaUrl(jobId, selectedPart.part_no)} download={`clip_${selectedPart.part_no}.mp4`}>{t.btnExport}</a>
               </div>
             </>
           ) : (
