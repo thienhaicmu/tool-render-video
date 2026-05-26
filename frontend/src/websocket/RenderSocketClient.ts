@@ -115,8 +115,9 @@ export class RenderSocketClient {
         // Emit progress
         this.progressHandlers.forEach((h) => h(summary, event.parts ?? []))
 
-        // Emit complete on terminal status
+        // Emit complete on terminal status and stop reconnects
         if (isTerminalStatus(job.status)) {
+          this._destroyed = true
           this.completeHandlers.forEach((h) => h(event))
         }
       }

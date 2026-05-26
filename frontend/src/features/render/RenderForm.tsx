@@ -40,6 +40,7 @@ export const DEFAULT_FORM_STATE: RenderFormState = {
   reframe_mode: 'subject',
   frame_scale_x: 100,
   frame_scale_y: 106,
+  ai_target_market: 'us',
 }
 
 interface RenderFormProps {

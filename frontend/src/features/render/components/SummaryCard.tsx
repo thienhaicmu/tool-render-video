@@ -3,7 +3,12 @@
  */
 import React from 'react'
 import { Button } from '../../../components/ui/Button'
+import { MARKETS } from '../../../lib/constants'
 import type { RenderFormState } from '../RenderForm.types'
+
+const MARKET_LABEL: Record<string, string> = Object.fromEntries(
+  MARKETS.map((m) => [m.value, m.label]),
+)
 
 interface SummaryCardProps {
   state: RenderFormState
@@ -25,6 +30,9 @@ export function SummaryCard({ state, isValid, isSubmitting, onSubmit }: SummaryC
         <SummaryRow label="Parts" value={String(state.max_export_parts)} />
         <SummaryRow label="Subtitles" value={state.add_subtitle ? 'On' : 'Off'} />
         <SummaryRow label="AI Director" value={state.ai_director_enabled ? 'On' : 'Off'} />
+        {state.ai_target_market && (
+          <SummaryRow label="Market" value={MARKET_LABEL[state.ai_target_market] ?? state.ai_target_market} />
+        )}
         <SummaryRow label="Effect" value={state.effect_preset} />
         <SummaryRow label="Profile" value={state.render_profile} />
       </dl>

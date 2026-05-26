@@ -13,6 +13,20 @@ export const PLATFORMS = [
 
 export type PlatformValue = typeof PLATFORMS[number]['value']
 
+// ── Target Markets — geographic AI knowledge targeting ────────────────────────
+
+export const MARKETS = [
+  { value: 'us',    label: '🇺🇸 US',          description: 'Hook 3s · fast cut · viral bold' },
+  { value: 'eu',    label: '🇪🇺 Europe',       description: 'Authenticity · slower pacing · story' },
+  { value: 'jp',    label: '🇯🇵 Japan',        description: 'Visual hook · silent viewing · clean sub' },
+  { value: 'sea',   label: '🌏 SE Asia',       description: 'Entertainment-first · audio-on · local' },
+  { value: 'kr',    label: '🇰🇷 Korea',        description: 'Music-driven · K-content · captions' },
+  { value: 'latam', label: '🌎 Latin America', description: 'High energy · fast cut · ES/PT sub' },
+  { value: 'in',    label: '🇮🇳 India',        description: 'Edutainment · multi-language · Reels/Shorts' },
+] as const
+
+export type MarketValue = typeof MARKETS[number]['value']
+
 // ── Aspect ratios (§6.2) — 5 items ───────────────────────────────────────────
 
 export const ASPECT_RATIOS = [

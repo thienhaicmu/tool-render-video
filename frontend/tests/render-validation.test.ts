@@ -33,6 +33,7 @@ const VALID_STATE: RenderFormState = {
   reframe_mode: 'auto',
   frame_scale_x: 1.0,
   frame_scale_y: 1.0,
+  ai_target_market: 'us',
 }
 
 describe('validateRenderForm — output_dir', () => {

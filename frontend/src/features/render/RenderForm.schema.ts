@@ -9,6 +9,7 @@ import {
   SUBTITLE_STYLES,
   EFFECT_PRESETS,
   RENDER_PROFILES,
+  MARKETS,
 } from '../../lib/constants'
 
 const PLATFORM_VALUES = PLATFORMS.map((p) => p.value)
@@ -16,6 +17,7 @@ const ASPECT_RATIO_VALUES = ASPECT_RATIOS.map((a) => a.value)
 const SUBTITLE_STYLE_VALUES = SUBTITLE_STYLES.map((s) => s.value)
 const EFFECT_PRESET_VALUES = EFFECT_PRESETS.map((e) => e.value)
 const RENDER_PROFILE_VALUES = RENDER_PROFILES.map((r) => r.value)
+const MARKET_VALUES = MARKETS.map((m) => m.value)
 
 export function validateRenderForm(state: RenderFormState): RenderFormErrors {
   const errors: RenderFormErrors = {}
@@ -108,8 +110,12 @@ export function buildRenderPayload(state: RenderFormState): RenderRequest {
   payload.frame_scale_x = state.frame_scale_x
   payload.frame_scale_y = state.frame_scale_y
 
+  if (state.ai_target_market && MARKET_VALUES.includes(state.ai_target_market as typeof MARKET_VALUES[number])) {
+    payload.ai_target_market = state.ai_target_market
+  }
+
   return payload
 }
 
 // Re-export for use in tests
-export { PLATFORM_VALUES, ASPECT_RATIO_VALUES, SUBTITLE_STYLE_VALUES, EFFECT_PRESET_VALUES, RENDER_PROFILE_VALUES }
+export { PLATFORM_VALUES, ASPECT_RATIO_VALUES, SUBTITLE_STYLE_VALUES, EFFECT_PRESET_VALUES, RENDER_PROFILE_VALUES, MARKET_VALUES }

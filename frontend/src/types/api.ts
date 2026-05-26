@@ -70,6 +70,7 @@ export interface RenderRequest {
   // Profile / quality
   render_profile?: 'fast' | 'balanced' | 'quality' | 'best'
   output_fps?: number
+  whisper_model?: string
 
   // Segmentation
   auto_detect_scene?: boolean
@@ -117,12 +118,15 @@ export interface RenderRequest {
   voice_gender?: 'female' | 'male'
   voice_source?: 'manual' | 'subtitle' | 'translated_subtitle'
   voice_text?: string | null
+  tts_engine?: 'edge' | 'xtts'
+  voice_mix_mode?: 'replace_original' | 'keep_original_low'
   hook_apply_enabled?: boolean
   hook_overlay_enabled?: boolean
 
   // AI Director
   ai_director_enabled?: boolean
   target_platform?: 'tiktok' | 'youtube_shorts' | 'instagram_reels'
+  ai_target_market?: string
   multi_variant?: boolean
   cta_enabled?: boolean
   cta_type?: 'auto' | 'comment' | 'part_2' | 'follow'
@@ -195,6 +199,7 @@ export interface JobPart {
   viral_score: number
   motion_score: number
   duration: number
+  message?: string
 }
 
 // ── Quality types (from docs/ui/UI_BACKEND_CONTRACT.md §8) ───────────────────

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Default: knowledge/processed/ relative to this file's location
 # This file lives at: backend/app/ai/rag/knowledge_loader.py
 # Resolves to:        backend/knowledge/processed/
-_DEFAULT_PROCESSED_DIR = Path(__file__).resolve().parents[4] / "knowledge" / "processed"
+_DEFAULT_PROCESSED_DIR = Path(__file__).resolve().parents[3] / "knowledge" / "processed"
 
 
 def load_knowledge_items(

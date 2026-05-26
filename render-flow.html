@@ -809,6 +809,24 @@ input[type="range"]::-webkit-slider-runnable-track {
 .vstyle-label { font-size: 11px; font-weight: 700; color: var(--fg-200); }
 .vstyle-sub { font-size: 10px; color: var(--fg-400); margin-top: 1px; }
 
+/* Target Market selector */
+.mkt-cards { display: flex; gap: 6px; flex-wrap: wrap; }
+.mkt-card {
+  flex: 1; min-width: 56px; background: var(--bg-750); border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg); padding: 8px 4px;
+  cursor: pointer; transition: all 150ms ease; text-align: center;
+}
+.mkt-card:hover { border-color: var(--border-default); }
+.mkt-card.selected { border-color: var(--primary); background: rgba(77,124,255,.08); }
+.mkt-flag { font-size: 18px; margin-bottom: 3px; }
+.mkt-label { font-size: 11px; font-weight: 700; color: var(--fg-200); }
+.mkt-code { font-size: 9px; color: var(--fg-400); margin-top: 1px; font-family: var(--font-mono); text-transform: uppercase; }
+.mkt-badge {
+  display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px;
+  border-radius: 4px; margin-left: 6px; vertical-align: middle;
+  background: rgba(77,124,255,.15); color: var(--primary);
+}
+
 /* Save location */
 .save-loc-row { display: flex; gap: 8px; align-items: center; }
 .save-loc-row input { flex: 1; }
@@ -1771,6 +1789,54 @@ input[type="range"]::-webkit-slider-runnable-track {
           </div>
         </div>
 
+        <!-- Target Market -->
+        <div class="s2-section">
+          <div class="section-head">
+            <span>Target Market</span>
+            <span class="mkt-badge" id="mkt-badge">US</span>
+          </div>
+          <div class="mkt-cards" id="mkt-cards">
+            <div class="mkt-card selected" data-market="us" onclick="selectMarket(this)">
+              <div class="mkt-flag">🇺🇸</div>
+              <div class="mkt-label">United States</div>
+              <div class="mkt-code">us</div>
+            </div>
+            <div class="mkt-card" data-market="eu" onclick="selectMarket(this)">
+              <div class="mkt-flag">🇪🇺</div>
+              <div class="mkt-label">Europe</div>
+              <div class="mkt-code">uk · de · fr</div>
+            </div>
+            <div class="mkt-card" data-market="jp" onclick="selectMarket(this)">
+              <div class="mkt-flag">🇯🇵</div>
+              <div class="mkt-label">Japan</div>
+              <div class="mkt-code">jp</div>
+            </div>
+            <div class="mkt-card" data-market="sea" onclick="selectMarket(this)">
+              <div class="mkt-flag">🌏</div>
+              <div class="mkt-label">SE Asia</div>
+              <div class="mkt-code">vn · th · id</div>
+            </div>
+            <div class="mkt-card" data-market="kr" onclick="selectMarket(this)">
+              <div class="mkt-flag">🇰🇷</div>
+              <div class="mkt-label">Korea</div>
+              <div class="mkt-code">kr</div>
+            </div>
+            <div class="mkt-card" data-market="latam" onclick="selectMarket(this)">
+              <div class="mkt-flag">🌎</div>
+              <div class="mkt-label">Latin America</div>
+              <div class="mkt-code">mx · br</div>
+            </div>
+            <div class="mkt-card" data-market="in" onclick="selectMarket(this)">
+              <div class="mkt-flag">🇮🇳</div>
+              <div class="mkt-label">India</div>
+              <div class="mkt-code">in</div>
+            </div>
+          </div>
+          <div style="margin-top:8px;font-size:10px;color:var(--fg-400);line-height:1.5;" id="mkt-hint">
+            AI sẽ tối ưu hook, pacing, subtitle style theo thị trường mục tiêu.
+          </div>
+        </div>
+
         <!-- Subtitle -->
         <div class="s2-section">
           <div class="section-head"><span>Subtitle</span></div>
@@ -2723,6 +2789,20 @@ let subOn = true;
 let transOn = false;
 let selectedStyle = 'capcut';
 let selectedVStyle = 'dynamic';
+let selectedMarket = 'us';
+
+const MARKET_LABELS = {
+  us: 'US', eu: 'EU', jp: 'JP', sea: 'SEA', kr: 'KR', latam: 'LATAM', in: 'IN'
+};
+const MARKET_HINTS = {
+  us:    'Hook trong 3s · fast cut · viral bold subtitle',
+  eu:    'Authenticity first · slower pacing · story subtitle',
+  jp:    'Visual hook · silent-viewing · clean subtitle carry full meaning',
+  sea:   'Entertainment-first · audio-on · fast cut · local content',
+  kr:    'Music-driven hook · K-content sync · captions for discovery',
+  latam: 'High energy · fast cut · Spanish/Portuguese subtitle',
+  in:    'Edutainment · multi-language subtitle · Reels/Shorts (no TikTok)',
+};
 let clipCount = 3;
 let minDur = 30;
 let maxDur = 90;
@@ -2765,6 +2845,17 @@ function selectStyle(el) {
   document.querySelectorAll('.style-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
   selectedStyle = el.dataset.style;
+  updatePreviewMeta();
+}
+
+function selectMarket(el) {
+  document.querySelectorAll('.mkt-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedMarket = el.dataset.market;
+  const badge = document.getElementById('mkt-badge');
+  if (badge) badge.textContent = MARKET_LABELS[selectedMarket] || selectedMarket.toUpperCase();
+  const hint = document.getElementById('mkt-hint');
+  if (hint) hint.textContent = MARKET_HINTS[selectedMarket] || '';
   updatePreviewMeta();
 }
 
@@ -2823,7 +2914,7 @@ function updatePreviewMeta() {
   // CTA bar meta text (compact, inline)
   const metaEl = document.getElementById('preview-meta');
   if (metaEl) {
-    metaEl.textContent = ratio + ' · ' + subLabel + ' · ' + selectedVStyle + ' · ' + minDur + '–' + maxDur + 's';
+    metaEl.textContent = ratio + ' · ' + subLabel + ' · ' + selectedVStyle + ' · ' + (MARKET_LABELS[selectedMarket] || selectedMarket.toUpperCase()) + ' · ' + minDur + '–' + maxDur + 's';
   }
 
   // Subtitle overlay on preview
@@ -2850,6 +2941,11 @@ function updatePreviewInfo() { updatePreviewMeta(); }
 function fakebrw() { addToast('Browse dialog (demo mode)'); }
 
 function startRender() {
+  // Collect configure values — ai_target_market wired to backend RenderRequest
+  window._renderPayloadExtras = {
+    ai_target_market: selectedMarket,
+    viral_market: selectedMarket,
+  };
   unlockTab(3);
   goTab(3);
 }

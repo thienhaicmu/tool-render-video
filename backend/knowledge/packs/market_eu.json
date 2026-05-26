@@ -1,0 +1,122 @@
+{
+  "id": "market_eu_v1",
+  "domain": "market",
+  "title": "Europe Market — UK / Germany / France (TikTok / YouTube Shorts / Reels)",
+  "version": 1,
+  "tags": ["eu", "europe", "uk", "de", "fr", "market", "tiktok", "youtube_shorts", "english", "german", "french"],
+  "rules": [
+    {
+      "id": "eu_authenticity_first",
+      "title": "EU: Authenticity tuyệt đối — polished studio bị reject",
+      "description": "EU 2025: polished studio shoot bị reject, TikTok quay ở nhà được tin tưởng hơn. 69% EU consumers trust micro-influencers 'people like me'. Raw, real content > professional production. Đây là tín hiệu quan trọng nhất với EU audience.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "eu", "uk", "de", "fr"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "subtitle_emphasis": "story",
+        "pacing": { "cut_interval_min": 4, "cut_interval_max": 12 }
+      },
+      "confidence": 0.89
+    },
+    {
+      "id": "eu_community_hook",
+      "title": "EU: Community hook — shared experience, belong",
+      "description": "Germany và UK: community-building content rất mạnh. Hook tạo cảm giác belong và shared experience hiệu quả. 'Third places' disappearing → creators build face-to-face community encounters. Hook kiểu 'bạn không phải người duy nhất cảm thấy X'.",
+      "applies_to": ["tiktok", "youtube_shorts", "eu", "uk", "de", "hook", "lifestyle"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "subtitle_emphasis": "story",
+        "pacing": { "cut_interval_min": 5, "cut_interval_max": 15 }
+      },
+      "confidence": 0.84
+    },
+    {
+      "id": "eu_uk_explanation_depth",
+      "title": "UK: Depth và explanation được reward",
+      "description": "UK audience reward time put into dissecting complex matters. Gary's Economics model — explainer videos rarely under 30 minutes thành công vang dội. Trong Shorts, hook kiểu curiosity gap với depth payoff hiệu quả hơn pure entertainment.",
+      "applies_to": ["tiktok", "youtube_shorts", "eu", "uk", "education", "finance"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "pacing": { "cut_interval_min": 10, "cut_interval_max": 30 },
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.83
+    },
+    {
+      "id": "eu_slower_pacing_preferred",
+      "title": "EU: Pacing chậm hơn US — không quá aggressive",
+      "description": "EU market prefer pacing chậm hơn US. Visual change interval ~2.5s (vs 1.5s của US). Không quá fast/chaotic. Balance giữa engagement và comprehension. Germany đặc biệt prefer measured, calm content.",
+      "applies_to": ["tiktok", "youtube_shorts", "eu"],
+      "recommendation": {
+        "pacing": { "cut_interval_min": 4, "cut_interval_max": 12 },
+        "subtitle_emphasis": "story"
+      },
+      "confidence": 0.82
+    },
+    {
+      "id": "eu_travel_lifestyle_dominant",
+      "title": "EU: Travel và lifestyle dominant — French Riviera, Barcelona, Italy",
+      "description": "Travel và fashion content dominate European TikTok. Popular destinations: French Riviera, Barcelona, Italian locations. Couple travel content và destination guides rất viral. Street style fashion cũng rất mạnh.",
+      "applies_to": ["tiktok", "instagram_reels", "eu", "lifestyle", "travel"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "pacing": { "cut_interval_min": 4, "cut_interval_max": 10 },
+        "subtitle_emphasis": "story"
+      },
+      "confidence": 0.85
+    },
+    {
+      "id": "eu_no_fake_urgency",
+      "title": "EU: Tránh fake urgency và hard sell",
+      "description": "EU audience, đặc biệt Germany, phản ứng rất tiêu cực với fake urgency ('BUY NOW', 'LIMITED TIME'), hard sell, và overly commercial hooks. Authenticity và trust quan trọng hơn sales pressure.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "eu"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "community_hook",
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.87
+    },
+    {
+      "id": "eu_de_authenticity_extreme",
+      "title": "Germany: Authenticity signal mạnh nhất EU",
+      "description": "Germany có standard authenticity cao nhất EU. Content phải cực kỳ genuine và honest. Prefer calm, measured energy. Subtitle clean, không flashy. Raw footage được trust hơn polished production.",
+      "applies_to": ["tiktok", "youtube_shorts", "eu", "de"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "pacing": { "cut_interval_min": 8, "cut_interval_max": 20 },
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.84
+    },
+    {
+      "id": "eu_fr_lifestyle_story",
+      "title": "France: Lifestyle và storytelling — visual aesthetic cao",
+      "description": "France TikTok/Reels: lifestyle content với visual aesthetic cao. Story-driven content, không pure entertainment. Subtitle style story phù hợp hơn viral bold style. Fashion, food, travel là top niches.",
+      "applies_to": ["tiktok", "instagram_reels", "eu", "fr", "lifestyle"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "pacing": { "cut_interval_min": 5, "cut_interval_max": 15 },
+        "subtitle_emphasis": "story"
+      },
+      "confidence": 0.81
+    },
+    {
+      "id": "eu_duration_slightly_longer",
+      "title": "EU: Duration hơi dài hơn US (20-45s)",
+      "description": "EU market chấp nhận clip 20-45 giây, dài hơn US một chút. Audience kiên nhẫn hơn nếu content có depth và authenticity. Không cần cắt ngắn quá mức như TikTok US.",
+      "applies_to": ["tiktok", "youtube_shorts", "eu"],
+      "recommendation": {
+        "target_duration_min": 20,
+        "target_duration_max": 45,
+        "pacing": { "cut_interval_min": 4, "cut_interval_max": 12 }
+      },
+      "confidence": 0.80
+    }
+  ]
+}

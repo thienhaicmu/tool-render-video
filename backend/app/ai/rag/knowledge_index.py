@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 
 # Default index path: backend/knowledge/index/faiss.index
 # This file lives at: backend/app/ai/rag/knowledge_index.py
-_DEFAULT_INDEX_PATH = Path(__file__).resolve().parents[4] / "knowledge" / "index" / "faiss.index"
-_DEFAULT_PROCESSED_DIR = Path(__file__).resolve().parents[4] / "knowledge" / "processed"
+_DEFAULT_INDEX_PATH = Path(__file__).resolve().parents[3] / "knowledge" / "index" / "faiss.index"
+_DEFAULT_PROCESSED_DIR = Path(__file__).resolve().parents[3] / "knowledge" / "processed"
 
 
 class KnowledgeIndex:

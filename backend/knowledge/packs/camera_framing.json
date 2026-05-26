@@ -1,0 +1,107 @@
+{
+  "id": "camera_framing_v1",
+  "domain": "camera",
+  "title": "Camera Framing, Safe Zones & Shot Composition for Vertical Short-Form Video (2025-2026)",
+  "version": 1,
+  "tags": ["camera", "framing", "safe_zone", "composition", "vertical", "9_16", "tiktok", "youtube_shorts", "instagram_reels", "lighting"],
+  "rules": [
+    {
+      "id": "camera_native_vertical_9_16",
+      "title": "Native 9:16 vertical bắt buộc — 93% viral TikTok shoot native không crop",
+      "description": "93% viral TikTok videos là native vertical 9:16 (1080×1920 pixels), không phải horizontal crop. Crop từ 16:9 sang 9:16 mất chất lượng, mất framing, và thiếu safe zone awareness. Native vertical maximizes resolution và composition control. Nếu source video là horizontal, phải crop thông minh: subject vào trung tâm, không có blank bars. Aspect ratio 9:16 là non-negotiable cho mọi platform.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "jp", "eu"],
+      "recommendation": {
+        "subtitle_position": "center"
+      },
+      "confidence": 0.93
+    },
+    {
+      "id": "camera_safe_zone_tiktok",
+      "title": "TikTok Safe Zone: Tránh 108px top, 320px bottom, 60px left, 120px right",
+      "description": "TikTok UI elements che khuất các vùng sau (trên frame 1080×1920): Top 108px (notifications, back button); Bottom 320px (username, caption, hashtag, sound icon, follow button, share button); Left 60px; Right 120px (like/comment/share/save icons). Safe content zone: 900×1400px centered. Subtitle và text overlay phải nằm trong safe zone. Upper center là vị trí an toàn nhất cho critical text.",
+      "applies_to": ["tiktok", "us", "eu", "jp", "subtitle"],
+      "recommendation": {
+        "subtitle_position": "upper_center",
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.91
+    },
+    {
+      "id": "camera_safe_zone_reels",
+      "title": "Instagram Reels Safe Zone: Tránh 220px top, 420px bottom, 170px right",
+      "description": "Instagram Reels UI elements: Top 220px (back, profile button); Bottom 420px (username, caption, audio name, like/comment/share/save, follow); Right 170px (reaction buttons). Reels có bottom UI lớn nhất trong 3 platform — cần margin dưới nhiều nhất. Safe text zone: upper third đến mid-frame. Subtitle phải center hoặc upper center — không bao giờ bottom.",
+      "applies_to": ["instagram_reels", "us", "eu", "subtitle"],
+      "recommendation": {
+        "subtitle_position": "center",
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.90
+    },
+    {
+      "id": "camera_safe_zone_shorts",
+      "title": "YouTube Shorts Safe Zone: Tránh 140px top, 270px bottom, 190px right",
+      "description": "YouTube Shorts UI elements: Top 140px (back, settings); Bottom 270px (title, channel name, like/dislike, comment, share, subscribe); Right 190px (interaction buttons). Shorts safe zone rộng hơn Reels một chút. Subtitle center là an toàn nhất. Text cần clear contrast — Shorts audience có thể xem trên TV screen lớn (YouTube TV auto-promoted Shorts).",
+      "applies_to": ["youtube_shorts", "us", "eu", "jp", "subtitle"],
+      "recommendation": {
+        "subtitle_position": "center",
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.89
+    },
+    {
+      "id": "camera_subject_positioning",
+      "title": "Subject Positioning: Vertical center hoặc upper third — không bottom heavy",
+      "description": "Subject chính (người nói, sản phẩm, action) phải nằm ở vertical center hoặc upper third của frame để tránh bị che bởi UI bottom. Rule of thirds áp dụng cho portrait orientation: key elements ở 1/3 trên hoặc 1/3 dưới (không bottom edge). Để room phía trên đầu (headroom) — framing quá tight làm cảm giác claustrophobic. Subject center + text upper = layout chuẩn nhất cho mọi platform.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "jp", "eu"],
+      "recommendation": {
+        "subtitle_position": "upper_center"
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "camera_authenticity_over_polish",
+      "title": "Authenticity signal: Raw, handheld, natural > cinematic, polished, studio",
+      "description": "2024-2025 dominant trend: UGC aesthetic và smartphone-shot content outperform highly produced cinematic content. Audiences perceive polished studio production as 'ad-like' và trust giảm. Handheld movement tự nhiên (không phải controlled steadicam) signal relatability. Raw, unedited-feel footage được tin tưởng hơn. Áp dụng đặc biệt mạnh cho EU (Germany), Japan, và personal brand creators. Exception: fashion/luxury brand có thể dùng aesthetic cinematic.",
+      "applies_to": ["tiktok", "youtube_shorts", "eu", "jp", "us", "lifestyle", "education", "personal_brand"],
+      "recommendation": {
+        "hook_type": "visual_hook",
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.87
+    },
+    {
+      "id": "camera_lighting_ring_vs_natural",
+      "title": "Lighting: Ring light cho consistency — natural light cho depth và authenticity",
+      "description": "Ring light ($8.8B market, 10% CAGR 2034): consistent, even, shadowless, makes face/product clear và flattering. Tốt cho regular posting schedule cần consistency. Natural light (golden hour, window light): adds depth, warmth, authentic feel — nhưng inconsistent. EU/JP audience trust signal: natural light > ring light (feels less produced). US TikTok: ring light acceptable và common. Optimal: soft diffused LED hoặc large window = balance giữa consistency và authenticity.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "eu", "jp", "lifestyle"],
+      "recommendation": {
+        "hook_type": "visual_hook",
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.82
+    },
+    {
+      "id": "camera_close_up_emphasis",
+      "title": "Close-up: Emotional engagement — extreme close-up = emphasis và connection",
+      "description": "Close-up shots drive emotional engagement trong short-form. Extreme close-up (khuôn mặt điền full frame, product detail) = emphasis signal và emotional connection mạnh nhất. Wide shots: establish context, setting. Cut pattern hiệu quả: wide (context, 3-5s) → medium (subject, 5-10s) → close-up (emotion/detail, 2-5s). AI tools hiện cho phép create close-up variety từ single source clip via intelligent crop. 85% video xem không có âm → close-up giúp subtitle và expression communication.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "eu", "jp", "lifestyle", "education"],
+      "recommendation": {
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 10 },
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.84
+    },
+    {
+      "id": "camera_captions_40pct_retention",
+      "title": "Captions tăng retention 40% — Meta data confirm (85% xem không âm)",
+      "description": "Meta (Instagram) data: captions tăng retention 40% trên Reels. 85% social media video (tất cả platforms) được xem không có âm. Captions không chỉ là accessibility — chúng là primary content delivery cho silent viewers. Kết hợp với proper safe zone placement, captions là yếu tố kỹ thuật đơn lẻ có tác động retention lớn nhất có thể implement qua post-processing. Không có context nào mà không có captions là đúng.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "eu", "jp", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "clean",
+        "subtitle_must_carry_full_meaning": true,
+        "subtitle_words_per_block": 5
+      },
+      "confidence": 0.94
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "id": "viral_formats",
+  "domain": "hook",
+  "version": "1.0",
+  "description": "Content format patterns that drive virality: POV, story time, reaction, trend participation",
+  "rules": [
+    {
+      "id": "pov_hook_format",
+      "title": "POV Format: Highest Relatability Hook",
+      "description": "POV (Point of View) format creates immediate first-person immersion. POV videos on TikTok get 2.8x more comments than third-person content. Hook line: 'POV: You [relatable situation]' grabs in 1.5s.",
+      "applies_to": ["tiktok", "us", "latam", "sea", "hook"],
+      "confidence": 0.88,
+      "recommendation": {
+        "format": "pov",
+        "hook_template": "POV: You [situation]",
+        "hook_position_sec": 1.5,
+        "comment_multiplier": 2.8
+      }
+    },
+    {
+      "id": "storytime_open_loop",
+      "title": "Story Time: Open Loop Creates Must-Watch",
+      "description": "Story time format with an open loop hook ('I can't believe this happened to me…') achieves 71% average completion on TikTok. The unresolved tension forces watch-through. Best 30-60s duration.",
+      "applies_to": ["tiktok", "instagram_reels", "us", "eu", "hook", "retention"],
+      "confidence": 0.90,
+      "recommendation": {
+        "format": "storytime",
+        "hook_pattern": "open_loop_unresolved",
+        "optimal_duration_sec": [30, 60],
+        "avg_completion_pct": 71
+      }
+    },
+    {
+      "id": "reaction_format_trust",
+      "title": "Reaction Format: Social Proof Through Response",
+      "description": "Reaction videos leverage existing viral content + creator commentary. Average watch time is 1.9x higher than original commentary content. The familiar anchor + new perspective formula triggers curiosity.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "kr", "hook"],
+      "confidence": 0.83,
+      "recommendation": {
+        "format": "reaction",
+        "structure": "anchor_clip_plus_commentary",
+        "watch_time_multiplier": 1.9
+      }
+    },
+    {
+      "id": "before_after_transformation",
+      "title": "Before/After: Highest Save Rate Format",
+      "description": "Before/after transformation content drives the highest save rate of any format (avg 8.4% save rate vs 2.1% baseline). Viewers save to reference later. Works for beauty, fitness, home, food, skills.",
+      "applies_to": ["tiktok", "instagram_reels", "us", "eu", "hook", "retention"],
+      "confidence": 0.91,
+      "recommendation": {
+        "format": "before_after",
+        "avg_save_rate_pct": 8.4,
+        "baseline_save_rate_pct": 2.1,
+        "best_niches": ["beauty", "fitness", "home", "food", "skill"]
+      }
+    },
+    {
+      "id": "trend_participation_velocity",
+      "title": "Trend Participation: Speed Is Everything",
+      "description": "Participating in a trend within 24h of its peak gives 4.1x more reach than after 72h. After 5 days, trend content gets 89% less distribution. Template: use trend format + niche-specific twist for differentiation.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "sea", "kr", "hook"],
+      "confidence": 0.87,
+      "recommendation": {
+        "trend_window_hours": 24,
+        "reach_multiplier_at_peak": 4.1,
+        "distribution_drop_after_days": 5,
+        "strategy": "trend_format_plus_niche_twist"
+      }
+    },
+    {
+      "id": "educational_hook_pattern",
+      "title": "Did You Know: Educational Hook Drives Shares",
+      "description": "'Did you know [surprising fact]?' is the #1 shared hook format for educational content. Share rate 3.4x higher than standard teaching format. Fact must be counter-intuitive or challenge common belief.",
+      "applies_to": ["youtube_shorts", "tiktok", "us", "eu", "in", "hook"],
+      "confidence": 0.86,
+      "recommendation": {
+        "hook_template": "Did you know [counter-intuitive fact]?",
+        "share_rate_multiplier": 3.4,
+        "fact_type": "counter_intuitive_or_myth_busting"
+      }
+    },
+    {
+      "id": "list_format_completion",
+      "title": "Number Lists Drive Completion: '5 things you didn't know'",
+      "description": "Numbered list format ('5 things', 'Top 3 reasons') achieves 64% completion rate by creating an expectation loop. Each number is a micro-hook. Odd numbers (3, 5, 7) outperform even numbers in engagement.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "in", "retention"],
+      "confidence": 0.85,
+      "recommendation": {
+        "format": "numbered_list",
+        "optimal_numbers": [3, 5, 7],
+        "avg_completion_pct": 64,
+        "structure": "each_number_as_micro_hook"
+      }
+    },
+    {
+      "id": "contrast_conflict_hook",
+      "title": "Contrast/Conflict Hook Stops the Scroll",
+      "description": "Opening with contrast ('Everyone thinks X, but actually Y') stops scroll 2.2x better than agreement-based hooks. Conflict creates cognitive dissonance that the brain must resolve by continuing to watch.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "eu", "hook"],
+      "confidence": 0.88,
+      "recommendation": {
+        "hook_template": "Everyone thinks X, but actually Y",
+        "scroll_stop_multiplier": 2.2,
+        "mechanism": "cognitive_dissonance"
+      }
+    }
+  ]
+}

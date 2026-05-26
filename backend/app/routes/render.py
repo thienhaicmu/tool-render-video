@@ -380,7 +380,10 @@ def preview_transcript(session_id: str):
     if session.get("duration", 0) > 3600:
         return {"segments": [], "status": "too_long"}
 
-    work_dir = Path(session.get("work_dir", ""))
+    _work_dir_str = session.get("work_dir", "")
+    if not _work_dir_str:
+        raise HTTPException(status_code=400, detail="Session has no work_dir — recreate the session")
+    work_dir = Path(_work_dir_str)
     cache_path = work_dir / "preview_transcript.json"
 
     if cache_path.exists():

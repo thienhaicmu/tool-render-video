@@ -1,0 +1,114 @@
+{
+  "id": "subtitle_by_platform_v1",
+  "domain": "subtitle",
+  "title": "Subtitle Style, Position, and Format Rules by Platform",
+  "version": 1,
+  "tags": ["subtitle", "tiktok", "youtube_shorts", "instagram_reels", "us", "jp", "eu", "caption", "text_overlay"],
+  "rules": [
+    {
+      "id": "subtitle_tiktok_viral_style",
+      "title": "TikTok: Viral bold style — upper center, 3-4 words, white+shadow",
+      "description": "TikTok US viral clips dùng bold sans-serif (Montserrat/Helvetica), ALL CAPS hoặc mixed case lớn, màu trắng với black shadow/outline mạnh. Position: upper center hoặc center để tránh bottom UI (follow button, caption, sound icon). 3-4 words per block tối ưu cho reading speed khi swipe. Font size lớn — phải đọc được khi hold phone cách mặt 40cm. Emoji accent words được (nếu brand fit). Đây là style viral nhất TikTok US 2025.",
+      "applies_to": ["tiktok", "us", "eu", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "viral",
+        "subtitle_position": "upper_center",
+        "subtitle_words_per_block": 4,
+        "subtitle_font_style": "bold_sans_serif",
+        "subtitle_must_carry_full_meaning": false
+      },
+      "confidence": 0.91
+    },
+    {
+      "id": "subtitle_youtube_shorts_clean",
+      "title": "YouTube Shorts: Clean readable style — center, 5-6 words, clear contrast",
+      "description": "YouTube Shorts audience có culture xem dài hơn TikTok. Subtitle style 'clean' phù hợp hơn 'viral': font rõ ràng, không quá flashy, 5-6 words per block (audience đọc nhanh hơn). Center positioning. White với black outline hoặc semi-transparent background strip. Không ALL CAPS. Avoid overlap với Shorts UI elements (bottom bar, subscribe, like buttons). Loop structure ảnh hưởng subtitle: subtitle cuối phải match với beginning để trigger rewatch.",
+      "applies_to": ["youtube_shorts", "us", "eu", "jp", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "clean",
+        "subtitle_position": "center",
+        "subtitle_words_per_block": 5,
+        "subtitle_font_style": "bold_sans_serif",
+        "subtitle_must_carry_full_meaning": false
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "subtitle_instagram_reels_center",
+      "title": "Instagram Reels: Center position, 3-4 words, tránh bottom 15% và right 10%",
+      "description": "Instagram Reels: center positioning bắt buộc để tránh UI elements. Bottom 15% màn hình bị che bởi username, caption, music icon. Right 10% bị che bởi like/comment/share buttons. 3-4 words per block để match reading cadence của Reels scroll behavior. 1 line per subtitle instance tối ưu engagement. Bold sans-serif, white+outline. Reels audience gần với TikTok audience hơn Shorts về pacing expectations.",
+      "applies_to": ["instagram_reels", "us", "eu", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "viral",
+        "subtitle_position": "center",
+        "subtitle_words_per_block": 3,
+        "subtitle_font_style": "bold_sans_serif",
+        "subtitle_must_carry_full_meaning": false
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "subtitle_japan_silent_critical",
+      "title": "Japan: Subtitle critical — phải carry full meaning không cần audio",
+      "description": "Japan: 70%+ người dùng xem không có âm (tàu điện, nơi công cộng). Subtitle KHÔNG thể chỉ là complement cho audio — phải carry 100% meaning độc lập. 5-6 words per block (Japanese reading speed khác với English). Center position. Font rõ ràng, bold sans-serif. Không dùng style quá flashy — clean và readable ưu tiên hơn viral aesthetic. Không phụ thuộc vào context audio để hiểu nội dung.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "jp", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "clean",
+        "subtitle_position": "center",
+        "subtitle_words_per_block": 6,
+        "subtitle_font_style": "bold_sans_serif",
+        "subtitle_must_carry_full_meaning": true
+      },
+      "confidence": 0.93
+    },
+    {
+      "id": "subtitle_eu_story_style",
+      "title": "EU: Story style — không flashy, narrative pacing, clean font",
+      "description": "EU market (đặc biệt Germany, France) phản ứng tốt với subtitle style 'story': font clean, không ALL CAPS, mixed case natural, 5-6 words per block, pacing theo natural speech rhythm. Không dùng viral bold style quá aggressive — EU audience perceive nó là low quality hoặc overly commercial. Germany: subtitle phải feel genuine và honest, không entertainment gimmick. France: subtitle phải complement visual aesthetic.",
+      "applies_to": ["tiktok", "youtube_shorts", "eu", "de", "fr", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "story",
+        "subtitle_position": "center",
+        "subtitle_words_per_block": 5,
+        "subtitle_font_style": "bold_sans_serif",
+        "subtitle_must_carry_full_meaning": false
+      },
+      "confidence": 0.84
+    },
+    {
+      "id": "subtitle_silent_viewing_universal",
+      "title": "Universal: Silent viewing dominant — subtitle luôn required",
+      "description": "Tất cả platforms và markets: subtitle không phải optional feature — đây là requirement cơ bản. US: 80% xem không âm. Japan: 70%+. EU: 60%+. Content không có subtitle thất bại với majority audience trước khi hook có cơ hội work. Subtitle không chỉ là accessibility feature — đây là primary content delivery mechanism cho silent viewers. Không có ngữ cảnh nào mà subtitle là bad idea.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "jp", "eu", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "clean",
+        "subtitle_must_carry_full_meaning": true
+      },
+      "confidence": 0.95
+    },
+    {
+      "id": "subtitle_highlight_per_word",
+      "title": "Highlight per-word: Karaoke style tăng engagement trên US TikTok",
+      "description": "Highlight từng word khi nói (karaoke style) trên TikTok US tạo +15-30% watch time so với static subtitle. Người xem eye-tracking theo highlighted word, keeping them engaged. Hiệu quả nhất cho educational/talking-head content. Ít hiệu quả hơn cho entertainment fast-cut (subtitle change quá nhanh để track). Japan: karaoke style familiar từ cultural context → receptive. EU: mixed — UK receptive, Germany prefer static clean.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "jp", "education", "talking_head", "finance", "tutorial"],
+      "recommendation": {
+        "subtitle_emphasis": "viral",
+        "highlight_per_word": true,
+        "subtitle_words_per_block": 4,
+        "subtitle_font_style": "bold_sans_serif"
+      },
+      "confidence": 0.80
+    },
+    {
+      "id": "subtitle_avoid_bottom_all_platforms",
+      "title": "Anti-pattern: Bottom placement bị chặn bởi UI trên mọi platform",
+      "description": "Bottom 15-20% của màn hình bị overlay bởi platform UI trên mọi platform: TikTok (caption, follow, hashtag), YouTube Shorts (title bar, buttons), Instagram Reels (username, caption, music). Subtitle ở đây bị che một phần hoặc hoàn toàn. Đây là anti-pattern universal — không bao giờ default subtitle vào bottom. Upper center hoặc center là safe zones. Đặc biệt quan trọng khi video có nhiều text information.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "jp", "eu", "subtitle"],
+      "recommendation": {
+        "subtitle_position": "center",
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.96
+    }
+  ]
+}

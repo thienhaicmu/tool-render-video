@@ -1,0 +1,126 @@
+{
+  "id": "creator_types_v1",
+  "domain": "creator",
+  "title": "Creator Archetypes, Audience Psychology & Platform Strategy (2025-2026)",
+  "version": 1,
+  "tags": ["creator", "personal_brand", "education", "ugc", "brand", "psychology", "tiktok", "youtube_shorts", "instagram_reels", "us", "eu", "jp"],
+  "rules": [
+    {
+      "id": "creator_personal_brand_hook_speed",
+      "title": "Personal Brand: Hook 1-3s, point trong 15-30s — immediate gratification mandatory",
+      "description": "Personal brand và influencer creators: hook bắt buộc trong 1-3 giây (3-5x engagement increase khi mastered). Get to the point trong 15-30 giây — TikTok audience không chờ đợi. Show unpolished, relatable content — buyers feel closer to authentic outcomes. Trend velocity critical: hyper-aware của sounds, filters, challenges mới. Personal brand content KHÔNG được feel scripted hoặc polished như brand ad — authenticity là competitive advantage duy nhất.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "eu", "jp", "personal_brand", "lifestyle"],
+      "recommendation": {
+        "hook": true,
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 8 },
+        "subtitle_emphasis": "story"
+      },
+      "confidence": 0.89
+    },
+    {
+      "id": "creator_educational_problem_solver",
+      "title": "Educational Creator: Immediate applicable value, problem-solver positioning",
+      "description": "Educational creator phải đặt mình là reliable problem-solver với tangible value. Tutorial content builds credibility và loyalty — nhưng value phải immediately applicable, không phải theoretical. Deliver useful insights under 60s. Viewers cần tangible value, không chỉ entertainment. Best performs khi creator đang giải quyết problem mà họ đã personally experienced. Pacing chậm hơn entertainment — audience trade watch time để lấy knowledge. Hook kiểu 'Bạn đang làm X sai' hoặc 'Học X trong 60 giây' hiệu quả nhất.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "eu", "uk", "jp", "education", "tutorial", "finance"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 8, "cut_interval_max": 20 },
+        "subtitle_emphasis": "clean",
+        "subtitle_must_carry_full_meaning": true
+      },
+      "confidence": 0.87
+    },
+    {
+      "id": "creator_brand_ugc_strategy",
+      "title": "Brand Account: 71% UGC-style content — không để feel như ad",
+      "description": "Brand và commercial accounts: 71% content nên là UGC-style (customers, fans, real usage scenarios) thay vì brand-produced polished content. 86% người dùng trust brands khi share UGC. UGC drives 10x higher conversions và 6x more engagement so với brand-produced content. Pair influencer recommendations với UGC synergy cho niche market credibility. Feature genuine customer opinions và real usage scenarios. Avoid 'ad feel' là mục tiêu số 1.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "eu", "jp", "brand", "commercial"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.85
+    },
+    {
+      "id": "creator_ugc_authenticity_signal",
+      "title": "UGC Creator: Unscripted, real problem-solving, 'someone like me' = primary signal",
+      "description": "UGC (User Generated Content) creator: raw, authentic appeal là core value proposition. Everyday users vs. polished professionals. Authenticity signals: unscripted moments, real problem-solving on camera, genuine reactions. Skepticism về overly scripted content rất cao — audience gravitate toward 'someone like me'. Cost advantage: UGC content 71% cheaper than brand-produced nhưng convert at higher rates. Không polish quá mức — imperfection IS the feature.",
+      "applies_to": ["tiktok", "instagram_reels", "us", "eu", "jp", "ugc", "lifestyle", "review"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "subtitle_emphasis": "story",
+        "pacing": { "cut_interval_min": 4, "cut_interval_max": 15 }
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "creator_share_triggers",
+      "title": "Psychology: Awe, surprise, humor, inspiration → Shares (high-arousal emotions)",
+      "description": "High-arousal emotions drive viral sharing behavior. Awe, surprise, humor, inspiration → shares tăng. Awe và controlled controversy là proven shareability accelerants. Low-arousal emotions (sadness, calm) → saves nhiều hơn shares. Existing social proof (visible comments/shares) triggers more shares. Implication: content cần trigger 'I need to send this to someone' feeling. Entertainment content → share. Educational utility → save. Relatability → comment.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "eu", "jp", "entertainment", "lifestyle"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 6 },
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.86
+    },
+    {
+      "id": "creator_save_triggers",
+      "title": "Psychology: Utility và reference value → Saves (Instagram Reels algorithm priority)",
+      "description": "Save behavior triggered bởi: emotional support cảm thấy khi xem, utility/reference value (content muốn xem lại), và practical information. Instagram Reels algorithm (2025): saves và shares weighted cao hơn views. 5,000 views + 200 shares > 20,000 views + 20 shares trong algorithm. Educational content, recipes, tutorials, financial tips có natural save advantage. Implication: educational và utility content perform tốt hơn trên Reels so với TikTok.",
+      "applies_to": ["instagram_reels", "youtube_shorts", "us", "eu", "education", "tutorial", "food", "finance"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "pacing": { "cut_interval_min": 8, "cut_interval_max": 20 },
+        "subtitle_emphasis": "clean",
+        "subtitle_must_carry_full_meaning": true
+      },
+      "confidence": 0.84
+    },
+    {
+      "id": "creator_us_individualism_psychology",
+      "title": "US Audience: Personalization, self-expression, product differentiation resonates",
+      "description": "US và Western individualistic cultures: personalization và self-expression là primary appeal. 'This is made for YOU specifically' hook hiệu quả. Product differentiation messaging ('This is different from what you've tried') works. Identity-affirming content ('If you're the type of person who...') drives engagement. US audience comfortable với direct CTA và clear value proposition trong content. Self-improvement narrative (fitness, finance, productivity) rất mạnh.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "lifestyle", "finance", "fitness"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "subtitle_emphasis": "viral",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 8 }
+      },
+      "confidence": 0.83
+    },
+    {
+      "id": "creator_eu_jp_collectivism_psychology",
+      "title": "EU/Japan Audience: Community, group identity, social connection > individual appeal",
+      "description": "EU và Japan thuộc collectivist cultural framework: community recommendations và group identity weighted cao hơn individual testimonials. 'People like you' và 'shared experience' hooks hiệu quả hơn 'personalized for you'. Japan: FOMO dạng group identity ('Mọi người đang làm X, bạn chưa biết sao?') triggers rapid engagement. EU: community-building content và 'belong to something' narrative. Trust dựa vào group validation, không phải individual authority.",
+      "applies_to": ["tiktok", "youtube_shorts", "eu", "jp", "de", "uk", "lifestyle", "community"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "community_hook",
+        "subtitle_emphasis": "story",
+        "pacing": { "cut_interval_min": 4, "cut_interval_max": 15 }
+      },
+      "confidence": 0.84
+    },
+    {
+      "id": "creator_tiktok_engagement_benchmark",
+      "title": "Platform Benchmark: TikTok 2.8-3.15% engagement, Reels saves/shares > views",
+      "description": "TikTok engagement rate 2024: 2.80% (top platform). Projected 2025: 3.15%. Creator Rewards Program: $0.02-0.04 per 1K views. YouTube Shorts: 45% ad revenue share, use as funnel top cho long-form monetization. Instagram Reels: limited direct monetization, strongest cho brand partnerships và product sales. Algorithm priority: TikTok = watch time + loop; Shorts = engagement (beyond-threshold watch + interaction); Reels = skip rate reduction + saves/shares. Multi-platform repurposing với platform-specific hooks tối ưu ROI.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us"],
+      "recommendation": {
+        "hook": true,
+        "hook_position": "opening_3s"
+      },
+      "confidence": 0.82
+    }
+  ]
+}

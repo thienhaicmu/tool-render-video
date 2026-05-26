@@ -1,0 +1,104 @@
+{
+  "id": "market_latam_india_v1",
+  "domain": "market",
+  "title": "Latin America & India Market — TikTok / YouTube Shorts / Instagram Reels",
+  "version": 1,
+  "tags": ["latam", "latin_america", "mexico", "brazil", "india", "market", "tiktok", "youtube_shorts", "instagram_reels", "spanish", "portuguese", "hindi"],
+  "rules": [
+    {
+      "id": "latam_tiktok_dominant",
+      "title": "LATAM: TikTok dominant — 80%+ Mexico, 70%+ Brazil internet users trên TikTok",
+      "description": "Latin America là fastest-growing region của TikTok globally. 80%+ Mexico internet users, 70%+ Brazil internet users dùng TikTok. Platform distribution: TikTok first, Instagram Reels second, YouTube Shorts third. Brazil publish 7 triệu Reels daily (Q1 2025) — cũng rất active trên Reels. LATAM creators multi-platform: repurpose content TikTok → Reels → Shorts. TikTok Shop monetization (5-15% affiliate commission) lucrative hơn ad revenue cho creators.",
+      "applies_to": ["tiktok", "instagram_reels", "youtube_shorts", "latam"],
+      "recommendation": {
+        "hook": true,
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 6 },
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.87
+    },
+    {
+      "id": "latam_entertainment_high_energy",
+      "title": "LATAM: High-energy entertainment — fast-cut, vibrant, expressive content",
+      "description": "LATAM content culture: high energy và expressive là expectation. 70% entertainment/education split, 20% engagement content, 10% direct selling. Fast-cut editing performs well. Vibrant, colorful visual style. Expressive performance — facial expressions và body language amplified. Music-driven content (Latin music trends) rất mạnh. Humor và comedy có cultural nuance riêng — local slang và references resonate tốt hơn global humor. Platform stacking (5-6 apps daily) → high tolerance for varied content.",
+      "applies_to": ["tiktok", "instagram_reels", "latam", "entertainment", "lifestyle"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 5 },
+        "subtitle_emphasis": "viral",
+        "target_duration_min": 15,
+        "target_duration_max": 45
+      },
+      "confidence": 0.85
+    },
+    {
+      "id": "latam_language_spanish_portuguese",
+      "title": "LATAM: Spanish/Portuguese content outperform English — local language is advantage",
+      "description": "Content bằng Spanish (Mexico, Colombia, Argentina, etc.) và Portuguese (Brazil) significantly outperform English-only content ở LATAM market. Local slang, cultural references, và region-specific trends resonate mạnh. Subtitle bằng tiếng địa phương tăng engagement. Không translate trực tiếp từ English — cần cultural adaptation, không chỉ language translation. Mexico và Brazil có cultural differences — content optimal cho một market không nhất thiết optimal cho market kia.",
+      "applies_to": ["tiktok", "instagram_reels", "youtube_shorts", "latam", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "viral",
+        "subtitle_words_per_block": 4,
+        "subtitle_must_carry_full_meaning": true
+      },
+      "confidence": 0.86
+    },
+    {
+      "id": "india_tiktok_banned_reels_shorts_primary",
+      "title": "India: TikTok banned — Instagram Reels và YouTube Shorts là primary platforms",
+      "description": "India: TikTok bị ban từ June 2020 và vẫn chưa trở lại. Primary platforms: Instagram Reels (strongest), YouTube Shorts (second). ShareChat và Moj là local alternatives cho regional language creators. Implication: không target TikTok cho India market. Reels strategy (saves + shares weighted) phù hợp với India user behavior. Audience lớn, active — India là top market cho YouTube globally. YouTube Shorts discovery mechanism rất mạnh ở India.",
+      "applies_to": ["instagram_reels", "youtube_shorts", "india", "subtitle"],
+      "recommendation": {
+        "hook": true,
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 3, "cut_interval_max": 10 },
+        "subtitle_emphasis": "clean",
+        "subtitle_must_carry_full_meaning": true
+      },
+      "confidence": 0.93
+    },
+    {
+      "id": "india_multilanguage_critical",
+      "title": "India: Multi-language subtitle critical — regional languages underserved và high-engagement",
+      "description": "India có 22 official languages và hàng trăm dialects. Regional language content (Hindi, Tamil, Telugu, Kannada, Bengali, Marathi, etc.) có engagement cao hơn English-only content đáng kể. Regional language niches underserved — less competition, higher relative engagement. Instagram Reels translation features đang expand. YouTube Shorts: subtitle/caption indexing tăng discoverability cross-language. Multi-language subtitle support là competitive advantage cho creators targeting India.",
+      "applies_to": ["instagram_reels", "youtube_shorts", "india", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "clean",
+        "subtitle_words_per_block": 5,
+        "subtitle_must_carry_full_meaning": true
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "india_captions_discovery_indexing",
+      "title": "India: Captions = algorithmic discovery tool — keyword-rich subtitle tăng reach",
+      "description": "India market: captions và subtitles function như SEO/algorithmic indexing tools trên Instagram Reels và YouTube Shorts. Accurate, keyword-rich captions tăng discoverability significantly. Pattern tương tự Japan và Korea — platforms dùng caption text để index và distribute content. India creators có ý thức optimize caption cho searchability. Translation dubbing features (mouth-movement sync) gaining traction. Subtitle phải accurate và informative, không chỉ stylistic.",
+      "applies_to": ["instagram_reels", "youtube_shorts", "india", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "clean",
+        "subtitle_must_carry_full_meaning": true,
+        "subtitle_words_per_block": 5
+      },
+      "confidence": 0.84
+    },
+    {
+      "id": "india_entertainment_education_mix",
+      "title": "India: Edutainment dominant — education wrapped in entertainment performs best",
+      "description": "India YouTube và Reels: edutainment (education + entertainment hybrid) là dominant và growing format. Pure educational content có large audience. Entertainment content cũng strong. Hybrid 'edutainment' outperform pure entertainment hoặc pure education. Finance, technology, health, và career development content rất phổ biến. Hook kiểu curiosity gap kết hợp với practical utility ('5 điều bạn không biết về X') very effective. Tutorial và how-to content có very strong search intent.",
+      "applies_to": ["instagram_reels", "youtube_shorts", "india", "education", "lifestyle"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 5, "cut_interval_max": 15 },
+        "subtitle_emphasis": "clean",
+        "target_duration_min": 25,
+        "target_duration_max": 60
+      },
+      "confidence": 0.83
+    }
+  ]
+}

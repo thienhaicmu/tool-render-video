@@ -3,8 +3,10 @@ import './RenderWorkflow.css'
 import type { Lang } from '../ClipStudio'
 import { useRenderStore } from '../../../stores/renderStore'
 import { useRenderSocket } from '../../../hooks/useRenderSocket'
-import { prepareSource, getPreviewVideoUrl, cancelRender } from '../../../api/render'
+import { prepareSource, getPreviewVideoUrl, cancelRender, cancelPrepareSource, retryRender, resumeRender, getPreviewTranscript } from '../../../api/render'
+import type { TranscriptSegment } from '../../../api/render'
 import { getJobParts, getJobQualitySummary } from '../../../api/jobs'
+import { uploadFile } from '../../../api/upload'
 import { BASE_URL } from '../../../api/client'
 import type { RenderRequest, JobPart, WsProgressSummary, QualityReport } from '../../../types/api'
 import type { PrepareSourceResponse } from '../../../api/render'
@@ -42,8 +44,31 @@ const T = {
     cfgPlatform: 'PLATFORM', cfgAIFeatures: 'AI FEATURES',
     cfgAIDirector: 'AI Director', cfgAIDirectorDesc: 'Auto-select best moments',
     cfgMultiVariant: 'Multi-Variant ×3', cfgMultiVariantDesc: 'Generate 3 style variations',
+    cfgCTAEnable: 'Call to Action', cfgCTAEnableDesc: 'Append a CTA at the end of each clip',
+    cfgCTAType: 'CTA TYPE',
+    cfgCTAAuto: 'Auto', cfgCTAComment: 'Comment', cfgCTAPart2: 'Part 2', cfgCTAFollow: 'Follow',
+    cfgClipLock: 'CLIP LOCK', cfgClipLockDesc: 'Force-include these time ranges',
+    cfgClipExclude: 'CLIP EXCLUDE', cfgClipExcludeDesc: 'Never include these time ranges',
+    cfgRangeStart: 'Start (s)', cfgRangeEnd: 'End (s)', cfgAddRange: '+ ADD',
+    cfgHookApply: 'Hook Intro', cfgHookApplyDesc: 'Apply AI-selected hook at clip start',
+    cfgHookOverlay: 'Hook Overlay', cfgHookOverlayDesc: 'Add branded overlay to hook segment',
+    cfgStructureBias: 'STRUCTURE BIAS', cfgBiasOff: 'Off',
+    cfgBiasHook: 'Hook', cfgBiasBalanced: 'Balanced', cfgBiasStory: 'Story',
+    cfgSubEmphasis: 'SUBTITLE EMPHASIS', cfgEmphasisOff: 'Off',
+    cfgEmphasisSubtle: 'Subtle', cfgEmphasisBalanced: 'Balanced', cfgEmphasisAggressive: 'Aggressive',
+    cfgSrcQuality: 'DOWNLOAD QUALITY', cfgSrcQualityStd: '1080p', cfgSrcQualityHigh: '1440p', cfgSrcQualityBest: 'Best',
+    cfgAssets: 'CREATOR ASSETS',
+    cfgAssetLogo: 'Logo / Watermark', cfgAssetLogoDesc: 'PNG/JPEG corner overlay',
+    cfgAssetIntro: 'Intro Sting', cfgAssetIntroDesc: 'Short clip prepended to each output',
+    cfgAssetOutro: 'Outro / Bumper', cfgAssetOutroDesc: 'Bumper clip appended to each output',
+    cfgAssetMusicProfile: 'MUSIC PROFILE',
+    cfgAssetMusicOff: 'Off', cfgAssetMusicClean: 'Clean', cfgAssetMusicEnergetic: 'Energetic', cfgAssetMusicSoft: 'Soft',
+    cfgAssetUpload: 'Upload', cfgAssetReplace: 'Replace',
+    cfgWhisperModel: 'TRANSCRIPTION MODEL',
+    cfgWhisperAuto: 'Auto', cfgWhisperTiny: 'Tiny', cfgWhisperBase: 'Base', cfgWhisperSmall: 'Small', cfgWhisperMedium: 'Medium',
     cfgRenderProfile: 'RENDER PROFILE',
     cfgEnableSub: 'Enable Subtitles', cfgSubStyle: 'STYLE',
+    cfgHighlightWord: 'Highlight Per Word', cfgFontSize: 'Font Size',
     cfgAutoTranslate: 'Auto-Translate', cfgTargetLang: 'TARGET LANGUAGE',
     cfgEnableVoice: 'Enable Voiceover', cfgVoiceSource: 'VOICE SOURCE',
     cfgVoiceSrcAuto: 'Auto (from transcript)', cfgVoiceSrcAutoDesc: 'Read from video transcript',
@@ -52,9 +77,14 @@ const T = {
     cfgVoiceLang: 'LANGUAGE', cfgVoiceGender: 'VOICE', cfgEngine: 'ENGINE', cfgMixMode: 'MIX MODE',
     cfgSaveFolder: 'SAVE FOLDER', cfgRanking: 'RANKING', cfgAutoExport: 'Auto-export best 3',
     cfgChangeSource: '← CHANGE SOURCE',
+    cfgPartOrder: 'PART ORDER', cfgOrderViral: 'Viral First', cfgOrderSeq: 'Sequential',
+    cfgTranscript: 'TRANSCRIPT PREVIEW', cfgTranscriptLoad: 'Load preview…', cfgTranscriptEmpty: 'No transcript available',
     btnBack: '← BACK', btnStartRender: 'START RENDER ▶',
     // Rendering
     rndWaiting: 'Waiting for job…', rndInProgress: 'Rendering in progress…', rndComplete: '✓ Render complete',
+    rndFailed: '✗ Render failed', rndCancelled: '✗ Render cancelled',
+    rndPartial: '⚠ Partial success', rndInterrupted: '✗ Interrupted',
+    rndWsError: 'Connection lost — check job history for status',
     btnCancelRender: 'CANCEL RENDER', btnCancelling: 'CANCELLING…',
     btnViewResults: 'VIEW RESULTS →', btnConfig: '← CONFIG',
     rndAllJobs: 'ALL JOBS', rndLog: 'RENDER LOG',
@@ -75,6 +105,9 @@ const T = {
     btnNewRender: 'NEW RENDER +', btnBackRendering: '← RENDERING',
     resNoResults: 'No render results yet', resNoClips: 'No clips rendered successfully',
     resLoading: 'Loading clips…',
+    resFailedParts: 'Failed Clips', resNoReason: 'No detail available',
+    btnRetry: 'RETRY FAILED', btnResume: 'RESUME',
+    qualityLoadFailed: 'Quality data could not be loaded',
   },
   VI: {
     stepSrc: 'NGUỒN',         stepSrcSub: 'Thêm video',
@@ -104,8 +137,31 @@ const T = {
     cfgPlatform: 'NỀN TẢNG', cfgAIFeatures: 'TÍNH NĂNG AI',
     cfgAIDirector: 'AI Director', cfgAIDirectorDesc: 'Tự chọn khoảnh khắc hay nhất',
     cfgMultiVariant: 'Đa biến thể ×3', cfgMultiVariantDesc: 'Tạo 3 biến thể phong cách',
+    cfgCTAEnable: 'Kêu gọi hành động', cfgCTAEnableDesc: 'Thêm CTA vào cuối mỗi clip',
+    cfgCTAType: 'LOẠI CTA',
+    cfgCTAAuto: 'Tự động', cfgCTAComment: 'Bình luận', cfgCTAPart2: 'Phần 2', cfgCTAFollow: 'Theo dõi',
+    cfgClipLock: 'KHÓA ĐOẠN', cfgClipLockDesc: 'Bắt buộc giữ các khoảng thời gian này',
+    cfgClipExclude: 'LOẠI TRỪ ĐOẠN', cfgClipExcludeDesc: 'Không bao giờ dùng các khoảng này',
+    cfgRangeStart: 'Bắt đầu (s)', cfgRangeEnd: 'Kết thúc (s)', cfgAddRange: '+ THÊM',
+    cfgHookApply: 'Hook Intro', cfgHookApplyDesc: 'Áp dụng hook AI vào đầu clip',
+    cfgHookOverlay: 'Hook Overlay', cfgHookOverlayDesc: 'Thêm overlay thương hiệu vào đoạn hook',
+    cfgStructureBias: 'ĐỊNH HƯỚNG CẤU TRÚC', cfgBiasOff: 'Tắt',
+    cfgBiasHook: 'Hook', cfgBiasBalanced: 'Cân bằng', cfgBiasStory: 'Câu chuyện',
+    cfgSubEmphasis: 'NHẤN MẠNH PHỤ ĐỀ', cfgEmphasisOff: 'Tắt',
+    cfgEmphasisSubtle: 'Nhẹ', cfgEmphasisBalanced: 'Cân bằng', cfgEmphasisAggressive: 'Mạnh',
+    cfgSrcQuality: 'CHẤT LƯỢNG TẢI', cfgSrcQualityStd: '1080p', cfgSrcQualityHigh: '1440p', cfgSrcQualityBest: 'Tốt nhất',
+    cfgAssets: 'TÀI NGUYÊN CREATOR',
+    cfgAssetLogo: 'Logo / Watermark', cfgAssetLogoDesc: 'Overlay góc PNG/JPEG',
+    cfgAssetIntro: 'Intro', cfgAssetIntroDesc: 'Clip ngắn thêm vào đầu mỗi output',
+    cfgAssetOutro: 'Outro / Bumper', cfgAssetOutroDesc: 'Clip kết thêm vào cuối mỗi output',
+    cfgAssetMusicProfile: 'PROFILE NHẠC',
+    cfgAssetMusicOff: 'Tắt', cfgAssetMusicClean: 'Nhẹ nhàng', cfgAssetMusicEnergetic: 'Năng động', cfgAssetMusicSoft: 'Mềm',
+    cfgAssetUpload: 'Tải lên', cfgAssetReplace: 'Thay',
+    cfgWhisperModel: 'MODEL PHIÊN ÂM',
+    cfgWhisperAuto: 'Tự động', cfgWhisperTiny: 'Tiny', cfgWhisperBase: 'Base', cfgWhisperSmall: 'Small', cfgWhisperMedium: 'Medium',
     cfgRenderProfile: 'CHẾ ĐỘ RENDER',
     cfgEnableSub: 'Bật phụ đề', cfgSubStyle: 'KIỂU',
+    cfgHighlightWord: 'Tô sáng từng từ', cfgFontSize: 'Cỡ chữ',
     cfgAutoTranslate: 'Tự dịch', cfgTargetLang: 'NGÔN NGỮ ĐÍCH',
     cfgEnableVoice: 'Bật thuyết minh', cfgVoiceSource: 'NGUỒN GIỌNG',
     cfgVoiceSrcAuto: 'Tự động (từ transcript)', cfgVoiceSrcAutoDesc: 'Đọc từ transcript video',
@@ -114,8 +170,13 @@ const T = {
     cfgVoiceLang: 'NGÔN NGỮ', cfgVoiceGender: 'GIỌNG', cfgEngine: 'BỘ ĐỌC', cfgMixMode: 'TRỘN ÂM',
     cfgSaveFolder: 'THƯ MỤC LƯU', cfgRanking: 'SẮP XẾP', cfgAutoExport: 'Tự xuất 3 clip tốt nhất',
     cfgChangeSource: '← ĐỔI NGUỒN',
+    cfgPartOrder: 'THỨ TỰ CLIP', cfgOrderViral: 'Viral trước', cfgOrderSeq: 'Tuần tự',
+    cfgTranscript: 'XEM TRANSCRIPT', cfgTranscriptLoad: 'Tải preview…', cfgTranscriptEmpty: 'Không có transcript',
     btnBack: '← QUAY LẠI', btnStartRender: 'BẮT ĐẦU RENDER ▶',
     rndWaiting: 'Đang chờ job…', rndInProgress: 'Đang render…', rndComplete: '✓ Hoàn thành',
+    rndFailed: '✗ Render thất bại', rndCancelled: '✗ Đã hủy',
+    rndPartial: '⚠ Hoàn thành một phần', rndInterrupted: '✗ Bị gián đoạn',
+    rndWsError: 'Mất kết nối — kiểm tra lịch sử job',
     btnCancelRender: 'HỦY RENDER', btnCancelling: 'ĐANG HỦY…',
     btnViewResults: 'XEM KẾT QUẢ →', btnConfig: '← CẤU HÌNH',
     rndAllJobs: 'TẤT CẢ', rndLog: 'NHẬT KÝ',
@@ -135,6 +196,9 @@ const T = {
     btnNewRender: 'RENDER MỚI +', btnBackRendering: '← RENDER',
     resNoResults: 'Chưa có kết quả render', resNoClips: 'Không có clip nào thành công',
     resLoading: 'Đang tải clip…',
+    resFailedParts: 'Clip thất bại', resNoReason: 'Không có chi tiết',
+    btnRetry: 'THỬ LẠI', btnResume: 'TIẾP TỤC',
+    qualityLoadFailed: 'Không tải được dữ liệu chất lượng',
   },
 } as const
 
@@ -157,24 +221,39 @@ interface ConfigState {
   clipCount:     number
   style:         string
   platform:      'tiktok' | 'youtube_shorts' | 'instagram_reels'
-  aiEnabled:     boolean
-  multiVariant:  boolean
-  motionCrop:    boolean
-  fps60:         boolean
-  subEnabled:    boolean
-  subStyle:      string
-  autoTranslate: boolean
-  subtitleLang:  string
+  aiMarket:      string
+  aiEnabled:          boolean
+  multiVariant:       boolean
+  ctaEnabled:         boolean
+  ctaType:            'auto' | 'comment' | 'part_2' | 'follow'
+  hookApplyEnabled:   boolean
+  hookOverlayEnabled: boolean
+  structureBias:      'hook' | 'balanced' | 'story' | null
+  clipLock:           Array<{ start_sec: number; end_sec: number }>
+  clipExclude:        Array<{ start_sec: number; end_sec: number }>
+  motionCrop:         boolean
+  subEnabled:       boolean
+  subStyle:         string
+  subHighlight:     boolean
+  subFontSize:      number
+  subTranslate:     boolean
+  subTranslateLang: 'vi' | 'en' | 'ja'
+  subEmphasis:      'subtle' | 'balanced' | 'aggressive' | null
+  sourceQualityMode: 'standard_1080' | 'high_1440' | 'best_available'
+  assetLogoPath:     string | null
+  assetIntroPath:    string | null
+  assetOutroPath:    string | null
+  assetMusicProfile: 'clean' | 'energetic' | 'soft' | null
+  whisperModel:      string
+  partOrder:       'viral' | 'sequential'
   narrEnabled:   boolean
   voiceLang:     string
   voiceGender:   'female' | 'male'
   ttsEngine:     'edge' | 'xtts'
   voiceSource:   'subtitle' | 'translated_subtitle' | 'manual'
   voiceText:     string
-  voiceMixMode:  string
+  voiceMixMode:  'replace_original' | 'keep_original_low'
   outputDir:     string
-  ranking:       'viral' | 'sequential'
-  autoExport:    boolean
   renderProfile: 'fast' | 'balanced' | 'quality'
 }
 
@@ -190,13 +269,12 @@ const STYLES = [
   { id: 'slay_soft_01',   ico: '✨', label: 'SOFT'    },
   { id: 'slay_pop_01',    ico: '⚡', label: 'POP'     },
   { id: 'story_clean_01', ico: '🎬', label: 'CLEAN'   },
-  { id: 'viral_bold',     ico: '💥', label: 'BOLD'    },
-  { id: 'dark_cinema',    ico: '🎥', label: 'CINEMA'  },
-  { id: 'minimal_white',  ico: '⬜', label: 'MINIMAL' },
+  { id: 'social_bright',  ico: '💥', label: 'BRIGHT'  },
+  { id: 'cinematic_soft', ico: '🎥', label: 'CINEMA'  },
+  { id: 'high_contrast',  ico: '⬜', label: 'BOLD'    },
 ]
 
 const SUB_STYLES = [
-  { id: 'pro_karaoke',     label: 'KARAOKE'   },
   { id: 'tiktok_bounce_v1',label: 'BOUNCE'    },
   { id: 'viral_bold',      label: 'VIRAL'     },
   { id: 'bold_cap',        label: 'BOLD CAP'  },
@@ -245,20 +323,29 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const [urlInput, setUrlInput] = useState('')
   const [srcMode, setSrcMode] = useState<SourceMode>('youtube')
 
-  const [prepareResult, setPrepareResult]       = useState<PrepareSourceResponse | null>(null)
-  const [isPreparing, setIsPreparing]           = useState(false)
-  const [prepareError, setPrepareError]         = useState<string | null>(null)
-  const [prepareCancelled, setPrepareCancelled] = useState(false)
+  const [prepareResult, setPrepareResult] = useState<PrepareSourceResponse | null>(null)
+  const [isPreparing, setIsPreparing]     = useState(false)
+  const [prepareError, setPrepareError]   = useState<string | null>(null)
+  const prepareCancelledRef               = useRef(false)
+  const prepareAbortRef                   = useRef<AbortController | null>(null)
 
   const [cfgTab, setCfgTab] = useState<CfgTab>('ai')
   const [cfg, setCfg] = useState<ConfigState>({
     preset: 'viral', ratio: 'r916', minSec: 15, maxSec: 60, clipCount: 5,
-    style: 'slay_soft_01', platform: 'tiktok',
-    aiEnabled: true, multiVariant: false, motionCrop: true, fps60: true,
-    subEnabled: true, subStyle: 'pro_karaoke', autoTranslate: false, subtitleLang: 'vi',
-    narrEnabled: false, voiceLang: 'vi', voiceGender: 'female', ttsEngine: 'edge',
+    style: 'slay_soft_01', platform: 'tiktok', aiMarket: 'us',
+    aiEnabled: true, multiVariant: false, ctaEnabled: false, ctaType: 'auto',
+    hookApplyEnabled: false, hookOverlayEnabled: false, structureBias: null,
+    clipLock: [], clipExclude: [],
+    motionCrop: true,
+    subEnabled: true, subStyle: 'tiktok_bounce_v1',
+    subHighlight: true, subFontSize: 28, subTranslate: false, subTranslateLang: 'en',
+    subEmphasis: null, partOrder: 'viral',
+    sourceQualityMode: 'standard_1080',
+    assetLogoPath: null, assetIntroPath: null, assetOutroPath: null, assetMusicProfile: null,
+    whisperModel: 'auto',
+    narrEnabled: false, voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
     voiceSource: 'subtitle', voiceText: '', voiceMixMode: 'replace_original',
-    outputDir: '', ranking: 'viral', autoExport: true,
+    outputDir: '',
     renderProfile: 'balanced',
   })
 
@@ -269,14 +356,17 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const [parts, setParts]                   = useState<JobPart[]>([])
   const [partScores, setPartScores]         = useState<Record<number, number>>({})
   const [qualityReports, setQualityReports] = useState<Record<number, QualityReport | null>>({})
+  const [qualityLoadFailed, setQualityLoadFailed] = useState(false)
   const [partsLoading, setPartsLoading]     = useState(false)
+  const [isRetrying, setIsRetrying]         = useState(false)
 
   const { submitRender } = useRenderStore()
-  const { stage, jobStatus, progress, jobMessage, isTerminal, liveParts } = useRenderSocket(jobId)
+  const { stage, jobStatus, progress, jobMessage, isTerminal, liveParts, error: wsError } = useRenderSocket(jobId)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!jobId || !isTerminal) return
+    setQualityLoadFailed(false)
     setPartsLoading(true)
     getJobParts(jobId)
       .then(setParts)
@@ -292,14 +382,15 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
         setPartScores(scores)
         setQualityReports(reports)
       })
-      .catch(() => {})
+      .catch(() => setQualityLoadFailed(true))
   }, [jobId, isTerminal])
 
-  // Auto-advance to results after successful completion
+  // Auto-advance to results after completion (success + partial success)
   useEffect(() => {
     if (!isTerminal || step !== 3) return
-    const jobFailed = jobStatus?.toLowerCase().includes('fail') || jobStatus === 'cancelled'
-    if (jobFailed) return
+    const s = jobStatus ?? ''
+    const skipAdvance = s === 'failed' || s === 'interrupted' || s === 'cancelled'
+    if (skipAdvance) return
     const timer = setTimeout(() => setStep(4), 1500)
     return () => clearTimeout(timer)
   }, [isTerminal, jobStatus, step])
@@ -308,7 +399,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   function addUrl() {
     const v = urlInput.trim()
     if (!v) return
-    setSources((p) => [...p, { mode: 'youtube', value: v }])
+    setSources((p) => [...p, { mode: 'youtube' as const, value: v }])
     setUrlInput('')
   }
   function removeSource(i: number) { setSources((p) => p.filter((_, idx) => idx !== i)) }
@@ -316,26 +407,37 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   async function goToConfigure() {
     if (sources.length === 0) return
     const src = sources[0]
+    prepareCancelledRef.current = false
+    const abort = new AbortController()
+    prepareAbortRef.current = abort
     setIsPreparing(true)
     setPrepareError(null)
-    setPrepareCancelled(false)
     try {
       const result = await prepareSource({
         source_mode: src.mode,
         youtube_url: src.mode === 'youtube' ? src.value : undefined,
         source_video_path: src.mode === 'local' ? src.value : undefined,
-      })
-      if (prepareCancelled) return
+      }, abort.signal)
+      if (prepareCancelledRef.current) {
+        cancelPrepareSource(result.session_id).catch(() => {})
+        return
+      }
       setPrepareResult(result)
       setCfg((prev) => ({ ...prev, outputDir: result.export_dir || prev.outputDir }))
       setStep(2)
     } catch (e) {
-      if (!prepareCancelled) {
+      if (!prepareCancelledRef.current) {
         setPrepareError(e instanceof Error ? e.message : 'Failed to prepare source')
       }
     } finally {
       setIsPreparing(false)
     }
+  }
+
+  function handleChangeSource() {
+    setSources([])
+    setPrepareResult(null)
+    setStep(1)
   }
 
   function setCfgKey<K extends keyof ConfigState>(k: K, v: ConfigState[K]) {
@@ -359,23 +461,49 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     setSubmitError(null)
     const src = sources[0]
     const payload: RenderRequest = {
-      source_mode:         src.mode,
-      youtube_url:         src.mode === 'youtube' ? src.value : undefined,
-      source_video_path:   src.mode === 'local'   ? src.value : undefined,
+      source_mode:          src.mode,
+      source_quality_mode:  src.mode === 'youtube' ? cfg.sourceQualityMode : undefined,
+      youtube_url:          src.mode === 'youtube' ? src.value : undefined,
+      source_video_path:    src.mode === 'local'   ? src.value : undefined,
       output_dir:          cfg.outputDir || 'output',
       aspect_ratio:        RATIO_INFO[cfg.ratio].api,
       min_part_sec:        cfg.minSec,
       max_part_sec:        cfg.maxSec,
       max_export_parts:    cfg.clipCount,
-      add_subtitle:        cfg.subEnabled,
-      subtitle_style:      cfg.subStyle,
-      voice_enabled:       cfg.narrEnabled,
+      add_subtitle:                cfg.subEnabled,
+      subtitle_style:              cfg.subStyle,
+      highlight_per_word:          cfg.subHighlight,
+      sub_font_size:               cfg.subFontSize,
+      subtitle_translate_enabled:  cfg.subTranslate || undefined,
+      subtitle_target_language:    cfg.subTranslate ? cfg.subTranslateLang : undefined,
+      subtitle_emphasis:           cfg.subEmphasis ?? undefined,
+      part_order:                  cfg.partOrder,
+      structure_bias:              cfg.structureBias ?? undefined,
+      clip_lock:                   cfg.clipLock.length > 0 ? cfg.clipLock : undefined,
+      clip_exclude:                cfg.clipExclude.length > 0 ? cfg.clipExclude : undefined,
+      voice_enabled:               cfg.narrEnabled,
       voice_source:        cfg.narrEnabled ? cfg.voiceSource : undefined,
       voice_text:          cfg.narrEnabled && cfg.voiceSource === 'manual' ? cfg.voiceText : undefined,
+      voice_language:      cfg.narrEnabled ? cfg.voiceLang as 'vi-VN' | 'ja-JP' | 'en-US' | 'en-GB' : undefined,
+      voice_gender:        cfg.narrEnabled ? cfg.voiceGender : undefined,
+      tts_engine:          cfg.narrEnabled ? cfg.ttsEngine : undefined,
+      voice_mix_mode:      cfg.narrEnabled ? cfg.voiceMixMode : undefined,
       ai_director_enabled: cfg.aiEnabled,
+      multi_variant:       cfg.multiVariant || undefined,
+      cta_enabled:         cfg.ctaEnabled || undefined,
+      cta_type:            cfg.ctaEnabled ? cfg.ctaType : undefined,
+      hook_apply_enabled:  cfg.hookApplyEnabled || undefined,
+      hook_overlay_enabled: cfg.hookOverlayEnabled || undefined,
+      motion_aware_crop:   cfg.motionCrop,
       target_platform:     cfg.platform,
       effect_preset:       cfg.style,
       render_profile:      cfg.renderProfile,
+      whisper_model:       cfg.whisperModel !== 'auto' ? cfg.whisperModel : undefined,
+      ai_target_market:    cfg.aiMarket || undefined,
+      asset_logo_path:     cfg.assetLogoPath ?? undefined,
+      asset_intro_path:    cfg.assetIntroPath ?? undefined,
+      asset_outro_path:    cfg.assetOutroPath ?? undefined,
+      asset_music_profile: cfg.assetMusicProfile ?? undefined,
     }
     try {
       const id = await submitRender(payload)
@@ -393,9 +521,33 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     finally { setIsCancelling(false) }
   }
 
+  async function handleRetryRender() {
+    if (!jobId || isRetrying) return
+    setIsRetrying(true)
+    try {
+      const res = await retryRender(jobId)
+      setJobId(res.job_id)
+      setParts([]); setPartScores({}); setQualityReports({}); setQualityLoadFailed(false)
+      setStep(3)
+    } catch { /* stay on current step */ }
+    finally { setIsRetrying(false) }
+  }
+
+  async function handleResumeRender() {
+    if (!jobId || isRetrying) return
+    setIsRetrying(true)
+    try {
+      const res = await resumeRender(jobId)
+      setJobId(res.job_id)
+      setParts([]); setPartScores({}); setQualityReports({}); setQualityLoadFailed(false)
+      setStep(3)
+    } catch { /* stay on current step */ }
+    finally { setIsRetrying(false) }
+  }
+
   function handleNewRender() {
     setStep(1); setSources([]); setJobId(null)
-    setPrepareResult(null); setParts([]); setPartScores({})
+    setPrepareResult(null); setParts([]); setPartScores({}); setQualityReports({})
   }
 
   const stepMeta = [
@@ -441,7 +593,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 ? (lang === 'VI' ? 'Đang tải và xử lý video YouTube…' : 'Downloading and transcoding YouTube video…')
                 : (lang === 'VI' ? 'Đang phân tích file video…' : 'Probing local video file…')}
             </div>
-            <button className="btn-back" onClick={() => { setPrepareCancelled(true); setIsPreparing(false) }}>
+            <button className="btn-back" onClick={() => { prepareCancelledRef.current = true; prepareAbortRef.current?.abort(); setIsPreparing(false) }}>
               {lang === 'VI' ? 'HỦY' : 'CANCEL'}
             </button>
           </div>
@@ -459,7 +611,16 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 <p>{t.srcDesc}</p>
               </div>
               <div className="src-cards">
-                <div className={`src-card${srcMode === 'local' ? ' highlight' : ''}`} onClick={() => { setSrcMode('local'); fileInputRef.current?.click() }}>
+                <div className={`src-card${srcMode === 'local' ? ' highlight' : ''}`} onClick={async () => {
+                  setSrcMode('local')
+                  const api = (window as any).electronAPI
+                  if (api?.pickVideoFile) {
+                    const picked = await api.pickVideoFile()
+                    if (picked) setSources([{ mode: 'local', value: picked }])
+                  } else {
+                    fileInputRef.current?.click()
+                  }
+                }}>
                   <div className="src-card-icon">📁</div>
                   <div className="src-card-title">{t.srcLocalTitle}</div>
                   <div className="src-card-desc">{t.srcLocalDesc}</div>
@@ -485,6 +646,24 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                   onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
                 <button className="btn-add" onClick={addUrl}>{t.btnAdd}</button>
               </div>
+              {srcMode === 'youtube' && (
+                <div style={{ width: '100%', maxWidth: '760px', marginTop: '12px' }}>
+                  <div className="cfg-sec-hd" style={{ marginBottom: '6px' }}>
+                    <span>{t.cfgSrcQuality}</span>
+                    <span className="cfg-sec-api">source_quality_mode</span>
+                  </div>
+                  <div className="seg">
+                    {([
+                      { v: 'standard_1080' as const, l: t.cfgSrcQualityStd },
+                      { v: 'high_1440'     as const, l: t.cfgSrcQualityHigh },
+                      { v: 'best_available' as const, l: t.cfgSrcQualityBest },
+                    ]).map(({ v, l }) => (
+                      <div key={v} className={`seg-b${cfg.sourceQualityMode === v ? ' on' : ''}`}
+                        onClick={() => setCfg((prev) => ({ ...prev, sourceQualityMode: v }))}>{l}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {sources.length > 0 && (
                 <div className="src-list">
                   <div className="src-list-head">{t.srcAdded}</div>
@@ -518,7 +697,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               cfg={cfg} cfgTab={cfgTab} setCfgTab={setCfgTab}
               setCfgKey={setCfgKey} applyPreset={applyPreset}
               sources={sources} prepareResult={prepareResult}
-              pickOutputDir={pickOutputDir} t={t}
+              pickOutputDir={pickOutputDir} onChangeSource={handleChangeSource} t={t}
             />
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(1)}>{t.btnBack}</button>
@@ -542,22 +721,45 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               jobMessage={jobMessage ?? ''}
               isTerminal={isTerminal}
               liveParts={liveParts}
+              wsError={wsError}
               t={t}
             />
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(2)}>{t.btnConfig}</button>
               <div className="screen-footer-info" style={{ gap: '12px' }}>
-                {isTerminal
-                  ? <span style={{ color: 'var(--ok)' }}>{t.rndComplete}</span>
+                {isTerminal ? (() => {
+                  const s = jobStatus ?? ''
+                  if (s === 'failed' || s === 'interrupted')
+                    return <span style={{ color: 'var(--fail)' }}>{s === 'interrupted' ? t.rndInterrupted : t.rndFailed}</span>
+                  if (s === 'cancelled')
+                    return <span style={{ color: 'var(--text-3)' }}>{t.rndCancelled}</span>
+                  if (s === 'completed_with_errors')
+                    return <span style={{ color: 'var(--warn)' }}>{t.rndPartial}</span>
+                  return <span style={{ color: 'var(--ok)' }}>{t.rndComplete}</span>
+                })() : wsError
+                  ? <span style={{ color: 'var(--warn)', fontSize: '11px' }}>{t.rndWsError}</span>
                   : <span style={{ color: 'var(--accent)' }}>{t.rndInProgress}</span>
                 }
               </div>
-              {isTerminal
-                ? <button className="btn-next" onClick={() => setStep(4)}>{t.btnViewResults}</button>
-                : <button className="btn-cancel" onClick={handleCancelRender} disabled={isCancelling}>
-                    {isCancelling ? t.btnCancelling : t.btnCancelRender}
-                  </button>
-              }
+              {isTerminal ? (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {(jobStatus === 'failed') && (
+                    <button className="btn-back" onClick={handleRetryRender} disabled={isRetrying}>
+                      {isRetrying ? '…' : t.btnRetry}
+                    </button>
+                  )}
+                  {(jobStatus === 'interrupted') && (
+                    <button className="btn-back" onClick={handleResumeRender} disabled={isRetrying}>
+                      {isRetrying ? '…' : t.btnResume}
+                    </button>
+                  )}
+                  <button className="btn-next" onClick={() => setStep(4)}>{t.btnViewResults}</button>
+                </div>
+              ) : (
+                <button className="btn-cancel" onClick={handleCancelRender} disabled={isCancelling}>
+                  {isCancelling ? t.btnCancelling : t.btnCancelRender}
+                </button>
+              )}
             </div>
           </div>
 
@@ -565,9 +767,11 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
           <div className={`step-screen${step === 4 ? ' active' : ''}`}>
             <StepResults
               jobId={jobId} parts={parts} partScores={partScores}
-              qualityReports={qualityReports}
+              qualityReports={qualityReports} qualityLoadFailed={qualityLoadFailed}
               loading={partsLoading} t={t}
               aspectRatio={RATIO_INFO[cfg.ratio].api}
+              jobStatus={jobStatus ?? ''}
+              onRetry={handleRetryRender} isRetrying={isRetrying}
             />
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(3)}>{t.btnBackRendering}</button>
@@ -658,10 +862,157 @@ function SubtitleDemo({ style }: { style: string }) {
   )
 }
 
+// ── TranscriptPreview — lazy-loaded in Step 2 configure left panel ────────────
+function TranscriptPreview({ sessionId, t }: { sessionId: string; t: Strings }) {
+  const [segs, setSegs] = useState<TranscriptSegment[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  async function load() {
+    if (segs !== null || loading) return
+    setLoading(true)
+    try {
+      const res = await getPreviewTranscript(sessionId)
+      setSegs(res.segments ?? [])
+    } catch {
+      setSegs([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="cfg-section" style={{ marginTop: '4px' }}>
+      <div className="cfg-sec-hd" style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => { setOpen((v) => !v); if (!open) load() }}>
+        <span>{t.cfgTranscript}</span>
+        <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && (
+        <div style={{ maxHeight: '160px', overflowY: 'auto', marginTop: '6px' }}>
+          {loading ? (
+            <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>{t.cfgTranscriptLoad}</div>
+          ) : !segs?.length ? (
+            <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>{t.cfgTranscriptEmpty}</div>
+          ) : (
+            segs.slice(0, 20).map((s, i) => (
+              <div key={i} style={{ display: 'flex', gap: '8px', padding: '3px 0', fontSize: '11px', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
+                <span style={{ color: 'var(--text-3)', minWidth: '42px', fontFamily: 'var(--fb)' }}>{s.start.toFixed(1)}s</span>
+                <span style={{ color: 'var(--text-1)', lineHeight: 1.4 }}>{s.text}</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── RangeListEditor — add/remove time ranges for clip_lock / clip_exclude ────
+function RangeListEditor({
+  label, desc, apiKey, ranges, onChange, t,
+}: {
+  label: string; desc: string; apiKey: string
+  ranges: Array<{ start_sec: number; end_sec: number }>
+  onChange: (v: Array<{ start_sec: number; end_sec: number }>) => void
+  t: Strings
+}) {
+  function add() {
+    onChange([...ranges, { start_sec: 0, end_sec: 30 }])
+  }
+  function remove(i: number) {
+    onChange(ranges.filter((_, idx) => idx !== i))
+  }
+  function update(i: number, key: 'start_sec' | 'end_sec', val: number) {
+    const next = ranges.map((r, idx) => idx === i ? { ...r, [key]: val } : r)
+    onChange(next)
+  }
+
+  return (
+    <div className="cfg-section">
+      <div className="cfg-sec-hd">
+        <span>{label}</span>
+        <span className="cfg-sec-api">{apiKey}</span>
+      </div>
+      {ranges.length === 0 && (
+        <div className="tog-desc" style={{ marginBottom: '6px' }}>{desc}</div>
+      )}
+      {ranges.map((r, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
+            <input type="number" className="dir-in" min={0} step={0.5}
+              style={{ width: '72px', textAlign: 'center', fontSize: '11px' }}
+              value={r.start_sec}
+              onChange={(e) => update(i, 'start_sec', Math.max(0, +e.target.value))} />
+            <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>→</span>
+            <input type="number" className="dir-in" min={0} step={0.5}
+              style={{ width: '72px', textAlign: 'center', fontSize: '11px' }}
+              value={r.end_sec}
+              onChange={(e) => update(i, 'end_sec', Math.max(r.start_sec + 0.5, +e.target.value))} />
+            <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>s</span>
+          </div>
+          <button className="btn-xs" onClick={() => remove(i)} style={{ opacity: 0.6 }}>×</button>
+        </div>
+      ))}
+      <button className="btn-xs" onClick={add} style={{ marginTop: '2px' }}>{t.cfgAddRange}</button>
+    </div>
+  )
+}
+
+// ── AssetPicker — file upload row for creator asset paths ────────────────────
+function AssetPicker({
+  label, desc, accept, value, onChange,
+}: {
+  label: string; desc: string; accept: string
+  value: string | null; onChange: (path: string | null) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const res = await uploadFile(file)
+      onChange(res.path)
+    } catch {
+      onChange(null)
+    } finally {
+      setUploading(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0' }}>
+      <div style={{ flex: 1, minWidth: 0, marginRight: '8px' }}>
+        <div className="tog-lbl">{label}</div>
+        {value ? (
+          <div style={{ fontSize: '10px', color: 'var(--ok)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            ✓ {value.split(/[\\/]/).pop()}
+          </div>
+        ) : (
+          <div className="tog-desc">{desc}</div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+        <input ref={inputRef} type="file" accept={accept} style={{ display: 'none' }} onChange={handleFile} />
+        <button className="btn-xs" onClick={() => inputRef.current?.click()} disabled={uploading}>
+          {uploading ? '…' : value ? '↺' : '↑'}
+        </button>
+        {value && (
+          <button className="btn-xs" onClick={() => onChange(null)} style={{ opacity: 0.6 }}>×</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Step 2 — Configure ────────────────────────────────────────────────────────
 function StepConfigure({
   cfg, cfgTab, setCfgTab, setCfgKey, applyPreset,
-  sources, prepareResult, pickOutputDir, t,
+  sources, prepareResult, pickOutputDir, onChangeSource, t,
 }: {
   cfg: ConfigState; cfgTab: CfgTab; setCfgTab: (tab: CfgTab) => void
   setCfgKey: <K extends keyof ConfigState>(k: K, v: ConfigState[K]) => void
@@ -669,6 +1020,7 @@ function StepConfigure({
   sources: Source[]
   prepareResult: PrepareSourceResponse | null
   pickOutputDir: () => void
+  onChangeSource: () => void
   t: Strings
 }) {
   const src       = sources[0]
@@ -699,7 +1051,7 @@ function StepConfigure({
             <div className="cfg-src-meta">
               {prepareResult ? fmtDuration(prepareResult.duration) : (src?.mode === 'youtube' ? 'YouTube' : 'Local File')}
             </div>
-            <button className="cfg-src-change">{t.cfgChangeSource}</button>
+            <button className="cfg-src-change" onClick={onChangeSource}>{t.cfgChangeSource}</button>
           </div>
         </div>
 
@@ -739,10 +1091,6 @@ function StepConfigure({
             <div className="tog-row">
               <span className="tog-lbl">{t.cfgMotionCrop}</span>
               <Tog checked={cfg.motionCrop} onChange={(v) => setCfgKey('motionCrop', v)} />
-            </div>
-            <div className="tog-row">
-              <span className="tog-lbl">{t.cfgFps}</span>
-              <Tog checked={cfg.fps60} onChange={(v) => setCfgKey('fps60', v)} />
             </div>
           </div>
         </div>
@@ -789,6 +1137,9 @@ function StepConfigure({
           </div>
         </div>
 
+        {/* Transcript preview */}
+        {prepareResult && <TranscriptPreview sessionId={prepareResult.session_id} t={t} />}
+
       </div>{/* /cfg-left */}
 
       {/* ── CENTER ── */}
@@ -798,7 +1149,6 @@ function StepConfigure({
           <span className="pv-chip cy">{styleLabel}</span>
           <span className="pv-chip">{cfg.platform.replace(/_/g, ' ')}</span>
           <div style={{ flex: 1 }} />
-          {cfg.fps60 && <span className="pv-chip">60 FPS</span>}
           <span className="pv-chip">{cfg.minSec}s – {cfg.maxSec}s</span>
           <span className="pv-chip">{cfg.clipCount} clips</span>
         </div>
@@ -880,6 +1230,26 @@ function StepConfigure({
               </div>
             </div>
             <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>TARGET MARKET</span>
+                <span className="cfg-sec-api">ai_target_market</span>
+              </div>
+              <div className="seg" style={{ flexWrap: 'wrap', gap: '6px' }}>
+                {([
+                  { v: 'us',    l: '🇺🇸 US'     },
+                  { v: 'eu',    l: '🇪🇺 EU'     },
+                  { v: 'jp',    l: '🇯🇵 JP'     },
+                  { v: 'sea',   l: '🌏 SEA'     },
+                  { v: 'kr',    l: '🇰🇷 KR'     },
+                  { v: 'latam', l: '🌎 LATAM'   },
+                  { v: 'in',    l: '🇮🇳 India'  },
+                ]).map(({ v, l }) => (
+                  <div key={v} className={`seg-b${cfg.aiMarket === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('aiMarket', v)}>{l}</div>
+                ))}
+              </div>
+            </div>
+            <div className="cfg-section">
               <div className="cfg-sec-hd">{t.cfgAIFeatures}</div>
               <div className="tog-row">
                 <div>
@@ -894,6 +1264,93 @@ function StepConfigure({
                   <div className="tog-desc">{t.cfgMultiVariantDesc}</div>
                 </div>
                 <Tog checked={cfg.multiVariant} onChange={(v) => setCfgKey('multiVariant', v)} />
+              </div>
+            </div>
+            <div className="cfg-section">
+              <div className="tog-row">
+                <div>
+                  <div className="tog-lbl">{t.cfgCTAEnable}</div>
+                  <div className="tog-desc">{t.cfgCTAEnableDesc}</div>
+                </div>
+                <Tog checked={cfg.ctaEnabled} onChange={(v) => setCfgKey('ctaEnabled', v)} />
+              </div>
+              {cfg.ctaEnabled && (
+                <div style={{ marginTop: '10px' }}>
+                  <div className="cfg-sec-hd" style={{ marginBottom: '6px' }}>
+                    <span>{t.cfgCTAType}</span>
+                    <span className="cfg-sec-api">cta_type</span>
+                  </div>
+                  <div className="seg">
+                    {([
+                      { v: 'auto'    as const, l: t.cfgCTAAuto    },
+                      { v: 'comment' as const, l: t.cfgCTAComment  },
+                      { v: 'part_2'  as const, l: t.cfgCTAPart2   },
+                      { v: 'follow'  as const, l: t.cfgCTAFollow   },
+                    ]).map(({ v, l }) => (
+                      <div key={v} className={`seg-b${cfg.ctaType === v ? ' on' : ''}`}
+                        onClick={() => setCfgKey('ctaType', v)}>{l}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <RangeListEditor
+              label={t.cfgClipLock} desc={t.cfgClipLockDesc} apiKey="clip_lock"
+              ranges={cfg.clipLock}
+              onChange={(v) => setCfgKey('clipLock', v)}
+              t={t}
+            />
+            <RangeListEditor
+              label={t.cfgClipExclude} desc={t.cfgClipExcludeDesc} apiKey="clip_exclude"
+              ranges={cfg.clipExclude}
+              onChange={(v) => setCfgKey('clipExclude', v)}
+              t={t}
+            />
+            <div className="cfg-section">
+              <div className="tog-row">
+                <div>
+                  <div className="tog-lbl">{t.cfgHookApply}</div>
+                  <div className="tog-desc">{t.cfgHookApplyDesc}</div>
+                </div>
+                <Tog checked={cfg.hookApplyEnabled} onChange={(v) => setCfgKey('hookApplyEnabled', v)} />
+              </div>
+              {cfg.hookApplyEnabled && (
+                <div className="tog-row" style={{ marginTop: '10px' }}>
+                  <div>
+                    <div className="tog-lbl">{t.cfgHookOverlay}</div>
+                    <div className="tog-desc">{t.cfgHookOverlayDesc}</div>
+                  </div>
+                  <Tog checked={cfg.hookOverlayEnabled} onChange={(v) => setCfgKey('hookOverlayEnabled', v)} />
+                </div>
+              )}
+            </div>
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>{t.cfgStructureBias}</span>
+                <span className="cfg-sec-api">structure_bias</span>
+              </div>
+              <div className="seg">
+                {([
+                  { v: null          , l: t.cfgBiasOff      },
+                  { v: 'hook'        , l: t.cfgBiasHook      },
+                  { v: 'balanced'    , l: t.cfgBiasBalanced  },
+                  { v: 'story'       , l: t.cfgBiasStory     },
+                ] as { v: ConfigState['structureBias']; l: string }[]).map(({ v, l }) => (
+                  <div key={String(v)} className={`seg-b${cfg.structureBias === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('structureBias', v)}>{l}</div>
+                ))}
+              </div>
+            </div>
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>{t.cfgPartOrder}</span>
+                <span className="cfg-sec-api">part_order</span>
+              </div>
+              <div className="seg">
+                <div className={`seg-b${cfg.partOrder === 'viral' ? ' on' : ''}`}
+                  onClick={() => setCfgKey('partOrder', 'viral')}>⚡ {t.cfgOrderViral}</div>
+                <div className={`seg-b${cfg.partOrder === 'sequential' ? ' on' : ''}`}
+                  onClick={() => setCfgKey('partOrder', 'sequential')}>123 {t.cfgOrderSeq}</div>
               </div>
             </div>
             <div className="cfg-section">
@@ -931,20 +1388,69 @@ function StepConfigure({
             </div>
             <div className="cfg-section">
               <div className="tog-row">
-                <span className="tog-lbl">{t.cfgAutoTranslate}</span>
-                <Tog checked={cfg.autoTranslate} onChange={(v) => setCfgKey('autoTranslate', v)} />
+                <div>
+                  <span className="tog-lbl">{t.cfgHighlightWord}</span>
+                  <span className="cfg-sec-api" style={{ marginLeft: 6 }}>highlight_per_word</span>
+                </div>
+                <Tog checked={cfg.subHighlight} onChange={(v) => setCfgKey('subHighlight', v)} />
               </div>
             </div>
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>{t.cfgTargetLang}</span>
-                <span className="cfg-sec-api">subtitle_target_language</span>
+                <span>{t.cfgFontSize}: {cfg.subFontSize}px</span>
+                <span className="cfg-sec-api">sub_font_size</span>
               </div>
-              <select className="sel" value={cfg.subtitleLang} onChange={(e) => setCfgKey('subtitleLang', e.target.value)}>
-                <option value="vi">🇻🇳 Tiếng Việt</option>
-                <option value="en">🇺🇸 English</option>
-                <option value="ja">🇯🇵 日本語</option>
-              </select>
+              <input type="range" className="range-in" min={14} max={52} step={2} value={cfg.subFontSize}
+                onChange={(e) => setCfgKey('subFontSize', +e.target.value)} />
+              <div className="range-vals">
+                <span className="range-v">14px</span>
+                <span className="range-v">{cfg.subFontSize}px</span>
+                <span className="range-v">52px</span>
+              </div>
+            </div>
+            <div className="cfg-section">
+              <div className="tog-row">
+                <div>
+                  <span className="tog-lbl">{t.cfgAutoTranslate}</span>
+                  <span className="cfg-sec-api" style={{ marginLeft: 6 }}>subtitle_translate_enabled</span>
+                </div>
+                <Tog checked={cfg.subTranslate} onChange={(v) => setCfgKey('subTranslate', v)} />
+              </div>
+              {cfg.subTranslate && (
+                <div style={{ marginTop: '8px' }}>
+                  <div className="cfg-sec-hd" style={{ marginBottom: '6px' }}>
+                    <span>{t.cfgTargetLang}</span>
+                    <span className="cfg-sec-api">subtitle_target_language</span>
+                  </div>
+                  <div className="seg">
+                    {([
+                      { v: 'vi' as const, l: '🇻🇳 Việt' },
+                      { v: 'en' as const, l: '🇺🇸 English' },
+                      { v: 'ja' as const, l: '🇯🇵 日本語' },
+                    ]).map(({ v, l }) => (
+                      <div key={v} className={`seg-b${cfg.subTranslateLang === v ? ' on' : ''}`}
+                        onClick={() => setCfgKey('subTranslateLang', v)}>{l}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>{t.cfgSubEmphasis}</span>
+                <span className="cfg-sec-api">subtitle_emphasis</span>
+              </div>
+              <div className="seg">
+                {([
+                  { v: null          , l: t.cfgEmphasisOff        },
+                  { v: 'subtle'      , l: t.cfgEmphasisSubtle      },
+                  { v: 'balanced'    , l: t.cfgEmphasisBalanced    },
+                  { v: 'aggressive'  , l: t.cfgEmphasisAggressive  },
+                ] as { v: ConfigState['subEmphasis']; l: string }[]).map(({ v, l }) => (
+                  <div key={String(v)} className={`seg-b${cfg.subEmphasis === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('subEmphasis', v)}>{l}</div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -993,10 +1499,10 @@ function StepConfigure({
                 <span className="cfg-sec-api">voice_language</span>
               </div>
               <select className="sel" value={cfg.voiceLang} onChange={(e) => setCfgKey('voiceLang', e.target.value)}>
-                <option value="vi">🇻🇳 Tiếng Việt</option>
-                <option value="en-us">🇺🇸 English (US)</option>
-                <option value="en-gb">🇬🇧 English (UK)</option>
-                <option value="ja">🇯🇵 日本語</option>
+                <option value="vi-VN">🇻🇳 Tiếng Việt</option>
+                <option value="en-US">🇺🇸 English (US)</option>
+                <option value="en-GB">🇬🇧 English (UK)</option>
+                <option value="ja-JP">🇯🇵 日本語</option>
               </select>
             </div>
             <div className="cfg-section">
@@ -1024,10 +1530,28 @@ function StepConfigure({
                 <span>{t.cfgMixMode}</span>
                 <span className="cfg-sec-api">voice_mix_mode</span>
               </div>
-              <select className="sel" value={cfg.voiceMixMode} onChange={(e) => setCfgKey('voiceMixMode', e.target.value)}>
+              <select className="sel" value={cfg.voiceMixMode} onChange={(e) => setCfgKey('voiceMixMode', e.target.value as 'replace_original' | 'keep_original_low')}>
                 <option value="replace_original">Replace original audio</option>
                 <option value="keep_original_low">Keep original (low)</option>
               </select>
+            </div>
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>{t.cfgWhisperModel}</span>
+                <span className="cfg-sec-api">whisper_model</span>
+              </div>
+              <div className="seg">
+                {([
+                  { v: 'auto',   l: t.cfgWhisperAuto   },
+                  { v: 'tiny',   l: t.cfgWhisperTiny    },
+                  { v: 'base',   l: t.cfgWhisperBase    },
+                  { v: 'small',  l: t.cfgWhisperSmall   },
+                  { v: 'medium', l: t.cfgWhisperMedium  },
+                ]).map(({ v, l }) => (
+                  <div key={v} className={`seg-b${cfg.whisperModel === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('whisperModel', v)}>{l}</div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -1050,19 +1574,41 @@ function StepConfigure({
               )}
             </div>
             <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgRanking}</span>
-                <span className="cfg-sec-api">part_order</span>
-              </div>
-              <select className="sel" value={cfg.ranking} onChange={(e) => setCfgKey('ranking', e.target.value as ConfigState['ranking'])}>
-                <option value="viral">Viral Score (AI)</option>
-                <option value="sequential">Sequential</option>
-              </select>
+              <div className="cfg-sec-hd">{t.cfgAssets}</div>
+              <AssetPicker
+                label={t.cfgAssetLogo} desc={t.cfgAssetLogoDesc}
+                accept="image/png,image/jpeg"
+                value={cfg.assetLogoPath}
+                onChange={(v) => setCfgKey('assetLogoPath', v)}
+              />
+              <AssetPicker
+                label={t.cfgAssetIntro} desc={t.cfgAssetIntroDesc}
+                accept="video/mp4,video/quicktime,video/webm"
+                value={cfg.assetIntroPath}
+                onChange={(v) => setCfgKey('assetIntroPath', v)}
+              />
+              <AssetPicker
+                label={t.cfgAssetOutro} desc={t.cfgAssetOutroDesc}
+                accept="video/mp4,video/quicktime,video/webm"
+                value={cfg.assetOutroPath}
+                onChange={(v) => setCfgKey('assetOutroPath', v)}
+              />
             </div>
             <div className="cfg-section">
-              <div className="tog-row">
-                <span className="tog-lbl">{t.cfgAutoExport}</span>
-                <Tog checked={cfg.autoExport} onChange={(v) => setCfgKey('autoExport', v)} />
+              <div className="cfg-sec-hd">
+                <span>{t.cfgAssetMusicProfile}</span>
+                <span className="cfg-sec-api">asset_music_profile</span>
+              </div>
+              <div className="seg">
+                {([
+                  { v: null         , l: t.cfgAssetMusicOff       },
+                  { v: 'clean'      , l: t.cfgAssetMusicClean      },
+                  { v: 'energetic'  , l: t.cfgAssetMusicEnergetic  },
+                  { v: 'soft'       , l: t.cfgAssetMusicSoft       },
+                ] as { v: ConfigState['assetMusicProfile']; l: string }[]).map(({ v, l }) => (
+                  <div key={String(v)} className={`seg-b${cfg.assetMusicProfile === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('assetMusicProfile', v)}>{l}</div>
+                ))}
               </div>
             </div>
           </div>
@@ -1200,11 +1746,12 @@ function ClipRow({ slot, statusLabel }: { slot: ClipSlot; statusLabel: string })
 }
 
 function StepRendering({
-  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, t,
+  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, wsError, t,
 }: {
   jobId: string | null; stage: string; jobStatus: string
   progress: WsProgressSummary | null; jobMessage: string
-  isTerminal: boolean; liveParts: JobPart[]; t: Strings
+  isTerminal: boolean; liveParts: JobPart[]
+  wsError: string | null; t: Strings
 }) {
   const pct         = progress?.overall_progress_percent ?? 0
   const doneCount   = progress?.completed_parts ?? 0
@@ -1293,6 +1840,13 @@ function StepRendering({
         </div>
       </div>
 
+      {/* WS error banner */}
+      {wsError && !isTerminal && (
+        <div style={{ margin: '8px 16px', padding: '8px 12px', background: 'rgba(234,179,8,.1)', border: '1px solid rgba(234,179,8,.3)', borderRadius: '4px', fontSize: '11px', color: 'var(--warn)' }}>
+          ⚠ {t.rndWsError}
+        </div>
+      )}
+
       {/* ── Per-clip rows ── */}
       {clipSlots.length === 0 ? (
         <div className="rnd-waiting-msg">
@@ -1360,20 +1914,30 @@ function ScoreRingLg({ score }: { score: number }) {
 }
 
 function StepResults({
-  jobId, parts, partScores, qualityReports, loading, t, aspectRatio,
+  jobId, parts, partScores, qualityReports, qualityLoadFailed,
+  loading, t, aspectRatio, jobStatus, onRetry, isRetrying,
 }: {
   jobId: string | null
   parts: JobPart[]
   partScores: Record<number, number>
   qualityReports: Record<number, QualityReport | null>
+  qualityLoadFailed: boolean
   loading: boolean
   t: Strings
   aspectRatio: string
+  jobStatus: string
+  onRetry: () => void
+  isRetrying: boolean
 }) {
   const [selectedPart, setSelectedPart] = useState<JobPart | null>(null)
+  const [sortMode, setSortMode] = useState<'viral' | 'duration'>('viral')
   const doneParts  = parts.filter((p) => p.status === 'done')
   const failedParts = parts.filter((p) => p.status === 'failed')
-  const sortedDone = [...doneParts].sort((a, b) => (partScores[b.part_no] ?? 0) - (partScores[a.part_no] ?? 0))
+  const sortedDone = [...doneParts].sort((a, b) =>
+    sortMode === 'duration'
+      ? (b.duration ?? 0) - (a.duration ?? 0)
+      : (partScores[b.part_no] ?? 0) - (partScores[a.part_no] ?? 0)
+  )
 
   const outputDir = (() => {
     const f = doneParts[0]?.output_file
@@ -1417,6 +1981,11 @@ function StepResults({
     <div className="res-screen">
       {/* ── Clip grid ── */}
       <div className="res-left">
+        {jobStatus === 'completed_with_errors' && failedParts.length > 0 && (
+          <div style={{ margin: '0 0 8px', padding: '8px 12px', background: 'rgba(234,179,8,.1)', border: '1px solid rgba(234,179,8,.3)', borderRadius: '4px', fontSize: '11px', color: 'var(--warn)' }}>
+            ⚠ {failedParts.length} clip{failedParts.length !== 1 ? 's' : ''} failed — {doneParts.length} clip{doneParts.length !== 1 ? 's' : ''} rendered successfully
+          </div>
+        )}
         <div className="res-toolbar">
           <div className="res-count">
             {t.resClipsRendered(doneParts.length)}
@@ -1424,9 +1993,17 @@ function StepResults({
               <span style={{ color: 'var(--fail)', marginLeft: 8, fontSize: 11 }}>· {failedParts.length} failed</span>
             )}
           </div>
-          <div className="res-sort">
-            <button className="sort-btn on">{t.resSortViral}</button>
-            <button className="sort-btn">{t.resSortDuration}</button>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <div className="res-sort">
+              <button className={`sort-btn${sortMode === 'viral' ? ' on' : ''}`} onClick={() => setSortMode('viral')}>{t.resSortViral}</button>
+              <button className={`sort-btn${sortMode === 'duration' ? ' on' : ''}`} onClick={() => setSortMode('duration')}>{t.resSortDuration}</button>
+            </div>
+            {failedParts.length > 0 && (
+              <button className="btn-xs" style={{ color: 'var(--fail)', borderColor: 'rgba(232,64,122,.4)' }}
+                onClick={onRetry} disabled={isRetrying}>
+                {isRetrying ? '…' : t.btnRetry}
+              </button>
+            )}
           </div>
         </div>
 
@@ -1530,6 +2107,20 @@ function StepResults({
             })}
           </div>
         )}
+        {/* Failed clips detail */}
+        {failedParts.length > 0 && (
+          <div style={{ marginTop: '12px', padding: '10px 12px', background: 'rgba(232,64,122,.07)', border: '1px solid rgba(232,64,122,.2)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '10px', fontFamily: 'var(--fh)', letterSpacing: '1px', color: 'var(--fail)', marginBottom: '8px' }}>
+              {t.resFailedParts} ({failedParts.length})
+            </div>
+            {failedParts.map((p) => (
+              <div key={p.part_no} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', padding: '4px 0', borderTop: '1px solid rgba(232,64,122,.1)', fontSize: '11px' }}>
+                <span style={{ color: 'var(--fail)', fontFamily: 'var(--fh)', minWidth: 28 }}>#{String(p.part_no).padStart(2, '0')}</span>
+                <span style={{ color: 'var(--text-3)', lineHeight: 1.4 }}>{p.message || t.resNoReason}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Detail panel ── */}
@@ -1614,6 +2205,8 @@ function StepResults({
                   </div>
                 ) : selReport ? (
                   <div className="player-all-ok">✓ No issues — all quality checks passed</div>
+                ) : qualityLoadFailed ? (
+                  <div className="player-no-data" style={{ color: 'var(--warn)' }}>⚠ {t.qualityLoadFailed}</div>
                 ) : (
                   <div className="player-no-data">Quality data loading…</div>
                 )}

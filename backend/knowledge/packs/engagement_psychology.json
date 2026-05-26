@@ -1,0 +1,114 @@
+{
+  "id": "engagement_psychology",
+  "domain": "retention",
+  "version": "1.0",
+  "description": "Psychology of comments, shares, saves, and follows — what triggers each behavior",
+  "rules": [
+    {
+      "id": "comment_trigger_debate",
+      "title": "Debate/Opinion Triggers Comments",
+      "description": "Content with a debatable opinion or controversial statement generates 4.8x more comments than neutral content. The brain is compelled to respond to perceived wrongness. 'Hot take:' and 'Unpopular opinion:' prefixes are proven triggers. Comments boost distribution 2.1x.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "eu", "retention"],
+      "confidence": 0.90,
+      "recommendation": {
+        "trigger_type": "debate_or_opinion",
+        "hook_prefixes": ["Hot take:", "Unpopular opinion:", "Controversial but:"],
+        "comment_multiplier": 4.8,
+        "distribution_boost": 2.1
+      }
+    },
+    {
+      "id": "share_trigger_identity",
+      "title": "Identity Validation Triggers Shares",
+      "description": "Content that makes viewers feel understood or validates their identity gets shared 3.6x more. 'Tag someone who…' and 'This is literally me' moments are the highest-share triggers. Viewers share to express identity, not just to inform.",
+      "applies_to": ["tiktok", "instagram_reels", "us", "latam", "sea", "retention"],
+      "confidence": 0.88,
+      "recommendation": {
+        "trigger_type": "identity_validation",
+        "share_multiplier": 3.6,
+        "techniques": ["tag_someone_who", "this_is_literally_me_moment", "relatable_specific_scenario"]
+      }
+    },
+    {
+      "id": "save_trigger_utility",
+      "title": "Utility Value Triggers Saves",
+      "description": "Content with actionable utility ('save this for later') gets saved 5.2x more than entertainment content. Viewers save to reference: recipes, tutorials, tips, templates, checklists. Explicit 'save this' CTA in captions increases save rate 67%.",
+      "applies_to": ["tiktok", "instagram_reels", "youtube_shorts", "us", "eu", "in", "retention"],
+      "confidence": 0.92,
+      "recommendation": {
+        "trigger_type": "actionable_utility",
+        "save_multiplier": 5.2,
+        "top_content_types": ["recipe", "tutorial", "tip", "template", "checklist"],
+        "cta_boost_pct": 67,
+        "explicit_cta": "Save this for later"
+      }
+    },
+    {
+      "id": "follow_trigger_promise",
+      "title": "Future Value Promise Triggers Follows",
+      "description": "Ending content with a specific future value promise ('Follow for part 2', 'I post [niche] every [day]') converts 3.1x more followers than no CTA. The viewer must understand exactly what value they'll receive. Vague CTAs ('follow for more') convert 78% less.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "retention"],
+      "confidence": 0.87,
+      "recommendation": {
+        "trigger_type": "future_value_promise",
+        "follow_conversion_multiplier": 3.1,
+        "best_cta_templates": ["Follow for part 2", "I post [topic] every [day]"],
+        "avoid": "vague_follow_for_more",
+        "vague_cta_penalty_pct": 78
+      }
+    },
+    {
+      "id": "awe_wonder_share",
+      "title": "Awe and Wonder: Most Viral Share Emotion",
+      "description": "Awe (vastness, beauty, unexpected scale) is the #1 emotion driving viral shares, outperforming humor (2.3x), anger (1.8x), and sadness (3.1x) in share rate. Nature, space, unexpected skill, and radical acts of kindness trigger awe most reliably.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "eu", "jp", "retention"],
+      "confidence": 0.86,
+      "recommendation": {
+        "emotion": "awe_wonder",
+        "share_advantage_vs_humor": 2.3,
+        "share_advantage_vs_anger": 1.8,
+        "top_awe_triggers": ["unexpected_skill", "radical_scale", "acts_of_kindness", "nature_beauty"]
+      }
+    },
+    {
+      "id": "completion_reward_mechanism",
+      "title": "Reward at the End Drives Completion",
+      "description": "Videos that promise and deliver a payoff (reveal, punchline, result, surprise) at the end have 2.6x higher completion rate. The payoff must match the hook's promise. Broken promises (clickbait) destroy trust: 73% of disappointed viewers never return.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "eu", "retention"],
+      "confidence": 0.91,
+      "recommendation": {
+        "mechanism": "hook_promise_payoff_loop",
+        "completion_multiplier": 2.6,
+        "critical_rule": "payoff_must_match_hook_promise",
+        "clickbait_penalty": "73_pct_never_return"
+      }
+    },
+    {
+      "id": "social_proof_stacking",
+      "title": "Social Proof Numbers Stop Scroll",
+      "description": "Showing specific engagement numbers ('12M people watched this', '500K saves') in the hook creates FOMO-driven curiosity. Viewers need to know why so many others engaged. Specificity matters: '12.4M' outperforms 'millions' by 34%.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "latam", "hook", "retention"],
+      "confidence": 0.84,
+      "recommendation": {
+        "technique": "social_proof_number_in_hook",
+        "specificity_advantage_pct": 34,
+        "format": "exact_number_not_rounded",
+        "examples": ["12.4M people watched this", "500K people saved this recipe"]
+      }
+    },
+    {
+      "id": "nostalgia_share_trigger",
+      "title": "Nostalgia: Highest Share Rate for 25-40 Demographic",
+      "description": "Nostalgia content (90s/2000s references, childhood memories, 'remember when') generates the highest share rates for 25-40 age group (avg 9.2% share rate). Shared to reconnect with peers from that era. Platform-agnostic.",
+      "applies_to": ["tiktok", "instagram_reels", "youtube_shorts", "us", "eu", "kr", "retention"],
+      "confidence": 0.83,
+      "recommendation": {
+        "emotion": "nostalgia",
+        "target_age_group": "25-40",
+        "avg_share_rate_pct": 9.2,
+        "top_references": ["90s", "2000s", "childhood_memory"],
+        "sharing_motivation": "reconnect_with_peers"
+      }
+    }
+  ]
+}

@@ -1,0 +1,3987 @@
+[
+  {
+    "id": "camera_native_vertical_9_16",
+    "type": "camera_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Native 9:16 vertical bắt buộc — 93% viral TikTok shoot native không crop — 93% viral TikTok videos là native vertical 9:16 (1080×1920 pixels), không phải horizontal crop. Crop từ 16:9 sang 9:16 mất chất lượng, mất framing, và thiếu safe zone awareness. Native vertical maximizes resolution và composition control. Nếu source video là horizontal, phải crop thông minh: subject vào trung tâm, không có blank bars. Aspect ratio 9:16 là non-negotiable cho mọi platform.",
+    "render_usage": {
+      "subtitle_position": "center"
+    },
+    "weight": 0.93,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "jp",
+      "us",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "camera_safe_zone_tiktok",
+    "type": "camera_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "TikTok Safe Zone: Tránh 108px top, 320px bottom, 60px left, 120px right — TikTok UI elements che khuất các vùng sau (trên frame 1080×1920): Top 108px (notifications, back button); Bottom 320px (username, caption, hashtag, sound icon, follow button, share button); Left 60px; Right 120px (like/comment/share/save icons). Safe content zone: 900×1400px centered. Subtitle và text overlay phải nằm trong safe zone. Upper center là vị trí an toàn nhất cho critical text.",
+    "render_usage": {
+      "subtitle_emphasis": "viral",
+      "subtitle_position": "upper_center"
+    },
+    "weight": 0.91,
+    "tags": [
+      "eu",
+      "subtitle",
+      "us",
+      "jp",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "camera_safe_zone_reels",
+    "type": "camera_rule",
+    "platform": [
+      "instagram_reels"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Instagram Reels Safe Zone: Tránh 220px top, 420px bottom, 170px right — Instagram Reels UI elements: Top 220px (back, profile button); Bottom 420px (username, caption, audio name, like/comment/share/save, follow); Right 170px (reaction buttons). Reels có bottom UI lớn nhất trong 3 platform — cần margin dưới nhiều nhất. Safe text zone: upper third đến mid-frame. Subtitle phải center hoặc upper center — không bao giờ bottom.",
+    "render_usage": {
+      "subtitle_emphasis": "viral",
+      "subtitle_position": "center"
+    },
+    "weight": 0.9,
+    "tags": [
+      "instagram_reels",
+      "us",
+      "eu",
+      "subtitle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "camera_safe_zone_shorts",
+    "type": "camera_rule",
+    "platform": [
+      "youtube_shorts"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "YouTube Shorts Safe Zone: Tránh 140px top, 270px bottom, 190px right — YouTube Shorts UI elements: Top 140px (back, settings); Bottom 270px (title, channel name, like/dislike, comment, share, subscribe); Right 190px (interaction buttons). Shorts safe zone rộng hơn Reels một chút. Subtitle center là an toàn nhất. Text cần clear contrast — Shorts audience có thể xem trên TV screen lớn (YouTube TV auto-promoted Shorts).",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_position": "center"
+    },
+    "weight": 0.89,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "subtitle",
+      "us",
+      "jp"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "camera_subject_positioning",
+    "type": "camera_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Subject Positioning: Vertical center hoặc upper third — không bottom heavy — Subject chính (người nói, sản phẩm, action) phải nằm ở vertical center hoặc upper third của frame để tránh bị che bởi UI bottom. Rule of thirds áp dụng cho portrait orientation: key elements ở 1/3 trên hoặc 1/3 dưới (không bottom edge). Để room phía trên đầu (headroom) — framing quá tight làm cảm giác claustrophobic. Subject center + text upper = layout chuẩn nhất cho mọi platform.",
+    "render_usage": {
+      "subtitle_position": "upper_center"
+    },
+    "weight": 0.88,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "jp",
+      "us",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "camera_authenticity_over_polish",
+    "type": "camera_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "lifestyle",
+      "education",
+      "personal_brand"
+    ],
+    "style": [
+      "clean",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Authenticity signal: Raw, handheld, natural > cinematic, polished, studio — 2024-2025 dominant trend: UGC aesthetic và smartphone-shot content outperform highly produced cinematic content. Audiences perceive polished studio production as 'ad-like' và trust giảm. Handheld movement tự nhiên (không phải controlled steadicam) signal relatability. Raw, unedited-feel footage được tin tưởng hơn. Áp dụng đặc biệt mạnh cho EU (Germany), Japan, và personal brand creators. Exception: fashion/luxury brand có thể dùng aesthetic cinematic.",
+    "render_usage": {
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "clean"
+    },
+    "weight": 0.87,
+    "tags": [
+      "youtube_shorts",
+      "lifestyle",
+      "eu",
+      "personal_brand",
+      "jp",
+      "us",
+      "education",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "camera_lighting_ring_vs_natural",
+    "type": "camera_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "lifestyle"
+    ],
+    "style": [
+      "clean",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Lighting: Ring light cho consistency — natural light cho depth và authenticity — Ring light ($8.8B market, 10% CAGR 2034): consistent, even, shadowless, makes face/product clear và flattering. Tốt cho regular posting schedule cần consistency. Natural light (golden hour, window light): adds depth, warmth, authentic feel — nhưng inconsistent. EU/JP audience trust signal: natural light > ring light (feels less produced). US TikTok: ring light acceptable và common. Optimal: soft diffused LED hoặc large window = balance giữa consistency và authenticity.",
+    "render_usage": {
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "clean"
+    },
+    "weight": 0.82,
+    "tags": [
+      "youtube_shorts",
+      "lifestyle",
+      "eu",
+      "us",
+      "jp",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "camera_close_up_emphasis",
+    "type": "camera_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "lifestyle",
+      "education"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Close-up: Emotional engagement — extreme close-up = emphasis và connection — Close-up shots drive emotional engagement trong short-form. Extreme close-up (khuôn mặt điền full frame, product detail) = emphasis signal và emotional connection mạnh nhất. Wide shots: establish context, setting. Cut pattern hiệu quả: wide (context, 3-5s) → medium (subject, 5-10s) → close-up (emotion/detail, 2-5s). AI tools hiện cho phép create close-up variety từ single source clip via intelligent crop. 85% video xem không có âm → close-up giúp subtitle và expression communication.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "pacing": "2-10s"
+    },
+    "weight": 0.84,
+    "tags": [
+      "youtube_shorts",
+      "lifestyle",
+      "eu",
+      "us",
+      "jp",
+      "education",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "camera_captions_40pct_retention",
+    "type": "camera_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Captions tăng retention 40% — Meta data confirm (85% xem không âm) — Meta (Instagram) data: captions tăng retention 40% trên Reels. 85% social media video (tất cả platforms) được xem không có âm. Captions không chỉ là accessibility — chúng là primary content delivery cho silent viewers. Kết hợp với proper safe zone placement, captions là yếu tố kỹ thuật đơn lẻ có tác động retention lớn nhất có thể implement qua post-processing. Không có context nào mà không có captions là đúng.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_words_per_block": 5,
+      "subtitle_must_carry_full_meaning": true
+    },
+    "weight": 0.94,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "subtitle",
+      "us",
+      "jp",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "creator_personal_brand_hook_speed",
+    "type": "creator_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "personal_brand",
+      "lifestyle"
+    ],
+    "style": [
+      "story"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Personal Brand: Hook 1-3s, point trong 15-30s — immediate gratification mandatory — Personal brand và influencer creators: hook bắt buộc trong 1-3 giây (3-5x engagement increase khi mastered). Get to the point trong 15-30 giây — TikTok audience không chờ đợi. Show unpolished, relatable content — buyers feel closer to authentic outcomes. Trend velocity critical: hyper-aware của sounds, filters, challenges mới. Personal brand content KHÔNG được feel scripted hoặc polished như brand ad — authenticity là competitive advantage duy nhất.",
+    "render_usage": {
+      "hook": true,
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "story",
+      "pacing": "2-8s"
+    },
+    "weight": 0.89,
+    "tags": [
+      "youtube_shorts",
+      "lifestyle",
+      "eu",
+      "personal_brand",
+      "us",
+      "jp",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "creator_educational_problem_solver",
+    "type": "creator_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "education",
+      "tutorial",
+      "finance"
+    ],
+    "style": [
+      "clean",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Educational Creator: Immediate applicable value, problem-solver positioning — Educational creator phải đặt mình là reliable problem-solver với tangible value. Tutorial content builds credibility và loyalty — nhưng value phải immediately applicable, không phải theoretical. Deliver useful insights under 60s. Viewers cần tangible value, không chỉ entertainment. Best performs khi creator đang giải quyết problem mà họ đã personally experienced. Pacing chậm hơn entertainment — audience trade watch time để lấy knowledge. Hook kiểu 'Bạn đang làm X sai' hoặc 'Học X trong 60 giây' hiệu quả nhất.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "clean",
+      "subtitle_must_carry_full_meaning": true,
+      "pacing": "8-20s"
+    },
+    "weight": 0.87,
+    "tags": [
+      "youtube_shorts",
+      "tutorial",
+      "eu",
+      "finance",
+      "us",
+      "jp",
+      "education",
+      "tiktok",
+      "uk"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "creator_brand_ugc_strategy",
+    "type": "creator_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "brand",
+      "commercial"
+    ],
+    "style": [
+      "clean",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Brand Account: 71% UGC-style content — không để feel như ad — Brand và commercial accounts: 71% content nên là UGC-style (customers, fans, real usage scenarios) thay vì brand-produced polished content. 86% người dùng trust brands khi share UGC. UGC drives 10x higher conversions và 6x more engagement so với brand-produced content. Pair influencer recommendations với UGC synergy cho niche market credibility. Feature genuine customer opinions và real usage scenarios. Avoid 'ad feel' là mục tiêu số 1.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "clean"
+    },
+    "weight": 0.85,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "commercial",
+      "us",
+      "jp",
+      "instagram_reels",
+      "tiktok",
+      "brand"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "creator_ugc_authenticity_signal",
+    "type": "creator_rule",
+    "platform": [
+      "tiktok",
+      "instagram_reels"
+    ],
+    "niche": [
+      "ugc",
+      "lifestyle",
+      "review"
+    ],
+    "style": [
+      "story",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "UGC Creator: Unscripted, real problem-solving, 'someone like me' = primary signal — UGC (User Generated Content) creator: raw, authentic appeal là core value proposition. Everyday users vs. polished professionals. Authenticity signals: unscripted moments, real problem-solving on camera, genuine reactions. Skepticism về overly scripted content rất cao — audience gravitate toward 'someone like me'. Cost advantage: UGC content 71% cheaper than brand-produced nhưng convert at higher rates. Không polish quá mức — imperfection IS the feature.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "story",
+      "pacing": "4-15s"
+    },
+    "weight": 0.88,
+    "tags": [
+      "lifestyle",
+      "eu",
+      "review",
+      "ugc",
+      "us",
+      "jp",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "creator_share_triggers",
+    "type": "creator_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "entertainment",
+      "lifestyle"
+    ],
+    "style": [
+      "viral",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Psychology: Awe, surprise, humor, inspiration → Shares (high-arousal emotions) — High-arousal emotions drive viral sharing behavior. Awe, surprise, humor, inspiration → shares tăng. Awe và controlled controversy là proven shareability accelerants. Low-arousal emotions (sadness, calm) → saves nhiều hơn shares. Existing social proof (visible comments/shares) triggers more shares. Implication: content cần trigger 'I need to send this to someone' feeling. Entertainment content → share. Educational utility → save. Relatability → comment.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "subtitle_emphasis": "viral",
+      "pacing": "2-6s"
+    },
+    "weight": 0.86,
+    "tags": [
+      "entertainment",
+      "youtube_shorts",
+      "lifestyle",
+      "eu",
+      "us",
+      "jp",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "creator_save_triggers",
+    "type": "creator_rule",
+    "platform": [
+      "instagram_reels",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "education",
+      "tutorial",
+      "food",
+      "finance"
+    ],
+    "style": [
+      "clean",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Psychology: Utility và reference value → Saves (Instagram Reels algorithm priority) — Save behavior triggered bởi: emotional support cảm thấy khi xem, utility/reference value (content muốn xem lại), và practical information. Instagram Reels algorithm (2025): saves và shares weighted cao hơn views. 5,000 views + 200 shares > 20,000 views + 20 shares trong algorithm. Educational content, recipes, tutorials, financial tips có natural save advantage. Implication: educational và utility content perform tốt hơn trên Reels so với TikTok.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "subtitle_emphasis": "clean",
+      "subtitle_must_carry_full_meaning": true,
+      "pacing": "8-20s"
+    },
+    "weight": 0.84,
+    "tags": [
+      "youtube_shorts",
+      "tutorial",
+      "eu",
+      "food",
+      "finance",
+      "us",
+      "education",
+      "instagram_reels"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "creator_us_individualism_psychology",
+    "type": "creator_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "lifestyle",
+      "finance",
+      "fitness"
+    ],
+    "style": [
+      "viral",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "US Audience: Personalization, self-expression, product differentiation resonates — US và Western individualistic cultures: personalization và self-expression là primary appeal. 'This is made for YOU specifically' hook hiệu quả. Product differentiation messaging ('This is different from what you've tried') works. Identity-affirming content ('If you're the type of person who...') drives engagement. US audience comfortable với direct CTA và clear value proposition trong content. Self-improvement narrative (fitness, finance, productivity) rất mạnh.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "subtitle_emphasis": "viral",
+      "pacing": "2-8s"
+    },
+    "weight": 0.83,
+    "tags": [
+      "youtube_shorts",
+      "finance",
+      "us",
+      "fitness",
+      "tiktok",
+      "instagram_reels",
+      "lifestyle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "creator_eu_jp_collectivism_psychology",
+    "type": "creator_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "lifestyle",
+      "community"
+    ],
+    "style": [
+      "story",
+      "community_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "EU/Japan Audience: Community, group identity, social connection > individual appeal — EU và Japan thuộc collectivist cultural framework: community recommendations và group identity weighted cao hơn individual testimonials. 'People like you' và 'shared experience' hooks hiệu quả hơn 'personalized for you'. Japan: FOMO dạng group identity ('Mọi người đang làm X, bạn chưa biết sao?') triggers rapid engagement. EU: community-building content và 'belong to something' narrative. Trust dựa vào group validation, không phải individual authority.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "community_hook",
+      "subtitle_emphasis": "story",
+      "pacing": "4-15s"
+    },
+    "weight": 0.84,
+    "tags": [
+      "youtube_shorts",
+      "lifestyle",
+      "de",
+      "eu",
+      "community",
+      "jp",
+      "tiktok",
+      "uk"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "creator_tiktok_engagement_benchmark",
+    "type": "creator_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Platform Benchmark: TikTok 2.8-3.15% engagement, Reels saves/shares > views — TikTok engagement rate 2024: 2.80% (top platform). Projected 2025: 3.15%. Creator Rewards Program: $0.02-0.04 per 1K views. YouTube Shorts: 45% ad revenue share, use as funnel top cho long-form monetization. Instagram Reels: limited direct monetization, strongest cho brand partnerships và product sales. Algorithm priority: TikTok = watch time + loop; Shorts = engagement (beyond-threshold watch + interaction); Reels = skip rate reduction + saves/shares. Multi-platform repurposing với platform-specific hooks tối ưu ROI.",
+    "render_usage": {
+      "hook": true,
+      "hook_position": "opening_3s"
+    },
+    "weight": 0.82,
+    "tags": [
+      "youtube_shorts",
+      "instagram_reels",
+      "tiktok",
+      "us"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "cta_follow_001",
+    "type": "cta_pattern",
+    "platform": [
+      "tiktok",
+      "reels",
+      "shorts"
+    ],
+    "niche": [
+      "education",
+      "marketing"
+    ],
+    "style": [
+      "any"
+    ],
+    "duration_range": [
+      30,
+      120
+    ],
+    "rule": "Place CTA (follow/subscribe/link) in the last 3 seconds. Keep it short: 1 sentence max.",
+    "render_usage": {
+      "cta_position": "last_3s",
+      "hook": false,
+      "subtitle_emphasis": "highlight_cta_keyword"
+    },
+    "weight": 0.75,
+    "tags": [
+      "cta",
+      "conversion",
+      "end_card"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "failure_muted_output_001",
+    "type": "failure_pattern",
+    "platform": [
+      "tiktok",
+      "reels",
+      "shorts",
+      "youtube"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "any"
+    ],
+    "duration_range": [
+      0,
+      9999
+    ],
+    "rule": "Video with no audio stream will be muted on all platforms. Always verify audio stream presence after render.",
+    "render_usage": {
+      "qa_check": "has_audio_stream",
+      "severity": "warning",
+      "fallback": "re-render_with_source_audio"
+    },
+    "weight": 1.0,
+    "tags": [
+      "failure",
+      "audio",
+      "qa"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "tiktok_hook_001",
+    "type": "hook_pattern",
+    "platform": [
+      "tiktok",
+      "reels",
+      "shorts"
+    ],
+    "niche": [
+      "education",
+      "marketing"
+    ],
+    "style": [
+      "viral",
+      "talking_head"
+    ],
+    "duration_range": [
+      15,
+      60
+    ],
+    "rule": "Open with a clear problem or mistake in the first 2 seconds.",
+    "render_usage": {
+      "hook": true,
+      "subtitle_emphasis": "highlight_problem_keyword",
+      "pacing": "medium_fast",
+      "visual_change_interval": "2-4s"
+    },
+    "weight": 0.9,
+    "tags": [
+      "hook",
+      "retention",
+      "first_3_seconds"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "hook_curiosity_gap",
+    "type": "hook_pattern",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "education",
+      "finance",
+      "lifestyle",
+      "tutorial"
+    ],
+    "style": [
+      "viral",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Curiosity Gap Hook — tạo câu hỏi chưa được trả lời — Mở đầu bằng câu hỏi hoặc statement gây tò mò mà câu trả lời chưa được tiết lộ. Tạo cognitive tension buộc người xem ở lại để giải quyết. Ví dụ: 'Bạn có biết tại sao 90% mọi người làm sai điều này?', 'Điều này thay đổi mọi thứ...'. Hiệu quả nhất trên TikTok US (+234% completion rate) và UK (depth-seeking audience). Tránh dùng ở Germany nếu câu hỏi nghe có vẻ manipulative.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "viral",
+      "pacing": "2-5s"
+    },
+    "weight": 0.91,
+    "tags": [
+      "youtube_shorts",
+      "lifestyle",
+      "tutorial",
+      "eu",
+      "finance",
+      "us",
+      "education",
+      "instagram_reels",
+      "tiktok",
+      "uk"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "hook_pattern_interrupt",
+    "type": "hook_pattern",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "entertainment",
+      "comedy",
+      "lifestyle"
+    ],
+    "style": [
+      "viral",
+      "pattern_break"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Pattern Interrupt Hook — phá vỡ expectation trong 2 giây đầu — Sử dụng visual, audio, hoặc content contrast đột ngột để ngăn auto-scroll. Não người xem nhận dạng pattern → interrupt pattern → buộc chú ý. Kỹ thuật: im lặng đột ngột trong nền đầy nhạc, cut bất ngờ, zoom đột ngột, màu sắc tương phản cao. TikTok US: pattern interrupt 2 giây đầu = +156% FYP appearances. Universal nhưng đặc biệt mạnh với entertainment và comedy.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "pattern_break",
+      "hook_position": "opening_2s",
+      "subtitle_emphasis": "viral",
+      "pacing": "1-3s"
+    },
+    "weight": 0.88,
+    "tags": [
+      "entertainment",
+      "youtube_shorts",
+      "lifestyle",
+      "comedy",
+      "eu",
+      "us",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "hook_visual_hook",
+    "type": "hook_pattern",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "lifestyle",
+      "travel",
+      "food",
+      "fitness"
+    ],
+    "style": [
+      "clean",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Visual Hook — hình ảnh ấn tượng không cần audio — Hook hoàn toàn dựa vào visual: movement ấn tượng, visual contrast cao, transformation visible, hoặc scene đẹp/shock trong frame đầu tiên. Critical cho Japan (70%+ xem không âm), quan trọng cho tất cả market vì 80% US và 70%+ EU cũng xem không âm. Không cần caption hay audio để hook. Dùng làm hook primary khi không biết context audio của người xem.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "clean",
+      "pacing": "2-8s"
+    },
+    "weight": 0.92,
+    "tags": [
+      "youtube_shorts",
+      "lifestyle",
+      "eu",
+      "food",
+      "travel",
+      "jp",
+      "us",
+      "fitness",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "hook_payoff_first",
+    "type": "hook_pattern",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "lifestyle",
+      "tutorial",
+      "fitness",
+      "food",
+      "diy"
+    ],
+    "style": [
+      "viral",
+      "opening_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Payoff First Hook — mở đầu bằng kết quả, transformation, highlight — Không bao giờ mở đầu bằng setup. Bắt đầu bằng kết quả ấn tượng nhất, sau đó mới reveal hành trình/process. 'Before/after' reversed: show AFTER trước. Transformation content: show result ngay giây đầu. Tutorial: show finished product trước khi dạy. Đặc biệt mạnh với US TikTok — người dùng không chờ payoff nếu không thấy nó ngay.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "opening_hook",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "viral",
+      "pacing": "2-4s"
+    },
+    "weight": 0.86,
+    "tags": [
+      "youtube_shorts",
+      "tutorial",
+      "eu",
+      "food",
+      "us",
+      "fitness",
+      "diy",
+      "tiktok",
+      "lifestyle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "hook_community_identity",
+    "type": "hook_pattern",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "lifestyle",
+      "mental_health",
+      "finance",
+      "community"
+    ],
+    "style": [
+      "story",
+      "community_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Community/Identity Hook — 'bạn không phải người duy nhất cảm thấy X' — Hook tạo cảm giác belonging và shared experience. 'Nếu bạn từng...', 'Chỉ những người X mới hiểu...', 'Ai cũng nói vậy nhưng thực ra...'. Rất hiệu quả ở EU (community-building trend mạnh), UK, Germany. Tạo instant connection. Khác với curiosity gap: community hook focus vào identity và validation, không phải information gap.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "community_hook",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "story",
+      "pacing": "4-12s"
+    },
+    "weight": 0.84,
+    "tags": [
+      "youtube_shorts",
+      "lifestyle",
+      "de",
+      "eu",
+      "finance",
+      "community",
+      "mental_health",
+      "tiktok",
+      "uk"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "hook_search_intent",
+    "type": "hook_pattern",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "tutorial",
+      "education",
+      "how_to",
+      "food",
+      "travel"
+    ],
+    "style": [
+      "clean",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Search Intent Hook — hook dạng answer to a question — Hook bắt đầu như đang trả lời một câu hỏi phổ biến. 'Cách tốt nhất để X', 'Đây là lý do tại sao Y', 'Tất cả những gì bạn cần biết về Z'. Đặc biệt hiệu quả ở Japan (TikTok/YouTube dùng như search engine). Cũng mạnh với educational content US. Hook này optimize cho discoverability — người dùng đang tìm kiếm thứ này.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "clean",
+      "pacing": "5-15s"
+    },
+    "weight": 0.87,
+    "tags": [
+      "youtube_shorts",
+      "tutorial",
+      "how_to",
+      "food",
+      "travel",
+      "jp",
+      "us",
+      "education",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "hook_no_fake_urgency",
+    "type": "hook_pattern",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "clean",
+      "avoid_hard_sell"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Anti-pattern: Fake urgency và hard sell bị reject trên EU/JP — TRÁNH các hook dạng 'BUY NOW', 'LIMITED TIME ONLY', 'YOU NEED THIS NOW' trên EU và Japan market. EU (đặc biệt Germany) và Japan react rất tiêu cực với aggressive sales hook và fake urgency. Authenticity > Sales pressure. Đây là anti-pattern — documenting để AI Director biết không apply hook type này khi targeting EU/JP.",
+    "render_usage": {
+      "hook_type": "avoid_hard_sell",
+      "subtitle_emphasis": "clean"
+    },
+    "weight": 0.89,
+    "tags": [
+      "youtube_shorts",
+      "de",
+      "eu",
+      "jp",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "hook_3s_retention_critical",
+    "type": "hook_pattern",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Universal: Hook phải xong trong 3 giây đầu — không có ngoại lệ — Bất kể market hay platform, hook phải complete trong 3 giây đầu. TikTok: retention < 60% tại 3s → suppression. YouTube Shorts: swipe-away rate critical. Instagram Reels: thumb-stop trong 2-3s đầu. Japan: frame đầu tiên phải là visual hook vì audio có thể off. EU: 5 giây cũng được nhưng 3 giây vẫn optimal. KHÔNG bắt đầu bằng logo, intro, context. Bắt đầu bằng hook.",
+    "render_usage": {
+      "hook": true,
+      "hook_position": "opening_3s",
+      "pacing": "1-4s"
+    },
+    "weight": 0.94,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "jp",
+      "us",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "eu_authenticity_first",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "story",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "EU: Authenticity tuyệt đối — polished studio bị reject — EU 2025: polished studio shoot bị reject, TikTok quay ở nhà được tin tưởng hơn. 69% EU consumers trust micro-influencers 'people like me'. Raw, real content > professional production. Đây là tín hiệu quan trọng nhất với EU audience.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "story",
+      "pacing": "4-12s"
+    },
+    "weight": 0.89,
+    "tags": [
+      "youtube_shorts",
+      "de",
+      "eu",
+      "fr",
+      "instagram_reels",
+      "tiktok",
+      "uk"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "eu_community_hook",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "hook",
+      "lifestyle"
+    ],
+    "style": [
+      "story",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "EU: Community hook — shared experience, belong — Germany và UK: community-building content rất mạnh. Hook tạo cảm giác belong và shared experience hiệu quả. 'Third places' disappearing → creators build face-to-face community encounters. Hook kiểu 'bạn không phải người duy nhất cảm thấy X'.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "subtitle_emphasis": "story",
+      "pacing": "5-15s"
+    },
+    "weight": 0.84,
+    "tags": [
+      "youtube_shorts",
+      "lifestyle",
+      "de",
+      "eu",
+      "hook",
+      "tiktok",
+      "uk"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "eu_uk_explanation_depth",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "education",
+      "finance"
+    ],
+    "style": [
+      "clean",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "UK: Depth và explanation được reward — UK audience reward time put into dissecting complex matters. Gary's Economics model — explainer videos rarely under 30 minutes thành công vang dội. Trong Shorts, hook kiểu curiosity gap với depth payoff hiệu quả hơn pure entertainment.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "subtitle_emphasis": "clean",
+      "pacing": "10-30s"
+    },
+    "weight": 0.83,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "finance",
+      "education",
+      "tiktok",
+      "uk"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "eu_slower_pacing_preferred",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "story"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "EU: Pacing chậm hơn US — không quá aggressive — EU market prefer pacing chậm hơn US. Visual change interval ~2.5s (vs 1.5s của US). Không quá fast/chaotic. Balance giữa engagement và comprehension. Germany đặc biệt prefer measured, calm content.",
+    "render_usage": {
+      "subtitle_emphasis": "story",
+      "pacing": "4-12s"
+    },
+    "weight": 0.82,
+    "tags": [
+      "youtube_shorts",
+      "tiktok",
+      "eu"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "eu_travel_lifestyle_dominant",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "instagram_reels"
+    ],
+    "niche": [
+      "lifestyle",
+      "travel"
+    ],
+    "style": [
+      "story",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "EU: Travel và lifestyle dominant — French Riviera, Barcelona, Italy — Travel và fashion content dominate European TikTok. Popular destinations: French Riviera, Barcelona, Italian locations. Couple travel content và destination guides rất viral. Street style fashion cũng rất mạnh.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "story",
+      "pacing": "4-10s"
+    },
+    "weight": 0.85,
+    "tags": [
+      "eu",
+      "travel",
+      "tiktok",
+      "instagram_reels",
+      "lifestyle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "eu_no_fake_urgency",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "clean",
+      "community_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "EU: Tránh fake urgency và hard sell — EU audience, đặc biệt Germany, phản ứng rất tiêu cực với fake urgency ('BUY NOW', 'LIMITED TIME'), hard sell, và overly commercial hooks. Authenticity và trust quan trọng hơn sales pressure.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "community_hook",
+      "subtitle_emphasis": "clean"
+    },
+    "weight": 0.87,
+    "tags": [
+      "youtube_shorts",
+      "instagram_reels",
+      "tiktok",
+      "eu"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "eu_de_authenticity_extreme",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "clean",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Germany: Authenticity signal mạnh nhất EU — Germany có standard authenticity cao nhất EU. Content phải cực kỳ genuine và honest. Prefer calm, measured energy. Subtitle clean, không flashy. Raw footage được trust hơn polished production.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "clean",
+      "pacing": "8-20s"
+    },
+    "weight": 0.84,
+    "tags": [
+      "youtube_shorts",
+      "de",
+      "tiktok",
+      "eu"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "eu_fr_lifestyle_story",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "instagram_reels"
+    ],
+    "niche": [
+      "lifestyle"
+    ],
+    "style": [
+      "story",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "France: Lifestyle và storytelling — visual aesthetic cao — France TikTok/Reels: lifestyle content với visual aesthetic cao. Story-driven content, không pure entertainment. Subtitle style story phù hợp hơn viral bold style. Fashion, food, travel là top niches.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "story",
+      "pacing": "5-15s"
+    },
+    "weight": 0.81,
+    "tags": [
+      "eu",
+      "fr",
+      "tiktok",
+      "instagram_reels",
+      "lifestyle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "eu_duration_slightly_longer",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      20,
+      45
+    ],
+    "rule": "EU: Duration hơi dài hơn US (20-45s) — EU market chấp nhận clip 20-45 giây, dài hơn US một chút. Audience kiên nhẫn hơn nếu content có depth và authenticity. Không cần cắt ngắn quá mức như TikTok US.",
+    "render_usage": {
+      "pacing": "4-12s"
+    },
+    "weight": 0.8,
+    "tags": [
+      "youtube_shorts",
+      "tiktok",
+      "eu"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "jp_silent_viewing_critical",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Japan: Silent viewing là dominant — subtitle bắt buộc — Japan: người dùng tiêu thụ nội dung mà không có âm thanh, đặc biệt khi đi tàu điện hoặc ở nơi công cộng. Text overlay và subtitle có tầm quan trọng cực kỳ cao. Video phụ thuộc vào audio sẽ thất bại nặng nề.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_words_per_block": 6,
+      "subtitle_font_style": "bold_sans_serif",
+      "subtitle_must_carry_full_meaning": true
+    },
+    "weight": 0.92,
+    "tags": [
+      "youtube_shorts",
+      "subtitle",
+      "jp",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "jp_text_overlay_importance",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Japan: Text overlay critical — ý nghĩa phải đọc được không cần âm — Thị trường Japan: videos và posts dựa nhiều vào text overlays, subtitles, và detailed captions hoạt động tốt hơn đáng kể. Subtitle phải đủ nghĩa khi xem không có âm — không thể phụ thuộc vào context audio.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_words_per_block": 5,
+      "subtitle_position": "center"
+    },
+    "weight": 0.91,
+    "tags": [
+      "youtube_shorts",
+      "jp",
+      "tiktok",
+      "subtitle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "jp_authentic_over_polished",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "lifestyle",
+      "entertainment"
+    ],
+    "style": [
+      "clean",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Japan: Raw/authentic content >> polished corporate — Gen Z và younger Millennials Japan prefer raw, honest, unfiltered content hơn highly polished corporate ads. Authenticity signal rất quan trọng. Content tự nhiên, không quá chỉnh sửa được tin tưởng hơn.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "clean",
+      "pacing": "2-8s"
+    },
+    "weight": 0.88,
+    "tags": [
+      "entertainment",
+      "youtube_shorts",
+      "jp",
+      "tiktok",
+      "lifestyle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "jp_visual_hook_first",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "hook"
+    ],
+    "style": [
+      "clean",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Japan: Visual-first hook — không cần nói vẫn hook được — Vì 70%+ xem không có âm, hook hiệu quả nhất ở Japan là visual hook — hình ảnh ấn tượng, movement, hoặc visual contrast ngay frame đầu. Không nên phụ thuộc vào audio hook.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "clean"
+    },
+    "weight": 0.9,
+    "tags": [
+      "youtube_shorts",
+      "hook",
+      "jp",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "jp_search_engine_behavior",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "tutorial",
+      "lifestyle",
+      "food"
+    ],
+    "style": [
+      "clean",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Japan: TikTok/YouTube dùng như search engine — Younger Japanese users dùng TikTok, Instagram, YouTube như search engines để tìm restaurant reviews, travel ideas, product recommendations, how-to guides. Information hook dạng 'Cách tốt nhất để X' hoặc discovery hook rất hiệu quả.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "subtitle_emphasis": "clean",
+      "pacing": "5-15s"
+    },
+    "weight": 0.87,
+    "tags": [
+      "youtube_shorts",
+      "tutorial",
+      "lifestyle",
+      "food",
+      "jp",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "jp_duration_longer_accepted",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      20,
+      55
+    ],
+    "rule": "Japan: Clip dài hơn US được chấp nhận (15-60s) — Japan chấp nhận clip dài hơn US. Short, high-impact videos 15-60 giây phù hợp với mobile-first lifestyle nhưng không cần ngắn cực đoan như US market. Người dùng Japan kiên nhẫn hơn nếu content có giá trị.",
+    "render_usage": {
+      "pacing": "4-15s"
+    },
+    "weight": 0.83,
+    "tags": [
+      "youtube_shorts",
+      "jp",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "jp_no_aggressive_hook",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "clean",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Japan: Tránh hook quá aggressive hoặc hard sell — Japan: tránh hard sell hook, aggressive pacing, và audio-dependent content. Communication style indirect và subtle hơn US. Không phù hợp với kiểu hook 'YOU NEED THIS NOW' hay urgency giả tạo.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "clean",
+      "pacing": "3-10s"
+    },
+    "weight": 0.86,
+    "tags": [
+      "youtube_shorts",
+      "jp",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "jp_tutorial_how_to_strong",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "tutorial",
+      "education"
+    ],
+    "style": [
+      "clean",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Japan: Tutorial/How-to content rất mạnh — How-to content cực kỳ hiệu quả ở Japan vì thói quen dùng platform như search engine. Subtitle phải carry đủ meaning. Cut chậm hơn để người xem hiểu từng bước.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "subtitle_emphasis": "clean",
+      "pacing": "15-30s"
+    },
+    "weight": 0.88,
+    "tags": [
+      "youtube_shorts",
+      "tutorial",
+      "jp",
+      "education",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "latam_tiktok_dominant",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "instagram_reels",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "LATAM: TikTok dominant — 80%+ Mexico, 70%+ Brazil internet users trên TikTok — Latin America là fastest-growing region của TikTok globally. 80%+ Mexico internet users, 70%+ Brazil internet users dùng TikTok. Platform distribution: TikTok first, Instagram Reels second, YouTube Shorts third. Brazil publish 7 triệu Reels daily (Q1 2025) — cũng rất active trên Reels. LATAM creators multi-platform: repurpose content TikTok → Reels → Shorts. TikTok Shop monetization (5-15% affiliate commission) lucrative hơn ad revenue cho creators.",
+    "render_usage": {
+      "hook": true,
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "viral",
+      "pacing": "2-6s"
+    },
+    "weight": 0.87,
+    "tags": [
+      "youtube_shorts",
+      "latam",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "latam_entertainment_high_energy",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "instagram_reels"
+    ],
+    "niche": [
+      "entertainment",
+      "lifestyle"
+    ],
+    "style": [
+      "viral",
+      "visual_hook"
+    ],
+    "duration_range": [
+      15,
+      45
+    ],
+    "rule": "LATAM: High-energy entertainment — fast-cut, vibrant, expressive content — LATAM content culture: high energy và expressive là expectation. 70% entertainment/education split, 20% engagement content, 10% direct selling. Fast-cut editing performs well. Vibrant, colorful visual style. Expressive performance — facial expressions và body language amplified. Music-driven content (Latin music trends) rất mạnh. Humor và comedy có cultural nuance riêng — local slang và references resonate tốt hơn global humor. Platform stacking (5-6 apps daily) → high tolerance for varied content.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "viral",
+      "pacing": "2-5s"
+    },
+    "weight": 0.85,
+    "tags": [
+      "entertainment",
+      "lifestyle",
+      "latam",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "latam_language_spanish_portuguese",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "instagram_reels",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "LATAM: Spanish/Portuguese content outperform English — local language is advantage — Content bằng Spanish (Mexico, Colombia, Argentina, etc.) và Portuguese (Brazil) significantly outperform English-only content ở LATAM market. Local slang, cultural references, và region-specific trends resonate mạnh. Subtitle bằng tiếng địa phương tăng engagement. Không translate trực tiếp từ English — cần cultural adaptation, không chỉ language translation. Mexico và Brazil có cultural differences — content optimal cho một market không nhất thiết optimal cho market kia.",
+    "render_usage": {
+      "subtitle_emphasis": "viral",
+      "subtitle_words_per_block": 4,
+      "subtitle_must_carry_full_meaning": true
+    },
+    "weight": 0.86,
+    "tags": [
+      "youtube_shorts",
+      "subtitle",
+      "latam",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "india_tiktok_banned_reels_shorts_primary",
+    "type": "market_rule",
+    "platform": [
+      "instagram_reels",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "India: TikTok banned — Instagram Reels và YouTube Shorts là primary platforms — India: TikTok bị ban từ June 2020 và vẫn chưa trở lại. Primary platforms: Instagram Reels (strongest), YouTube Shorts (second). ShareChat và Moj là local alternatives cho regional language creators. Implication: không target TikTok cho India market. Reels strategy (saves + shares weighted) phù hợp với India user behavior. Audience lớn, active — India là top market cho YouTube globally. YouTube Shorts discovery mechanism rất mạnh ở India.",
+    "render_usage": {
+      "hook": true,
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "clean",
+      "subtitle_must_carry_full_meaning": true,
+      "pacing": "3-10s"
+    },
+    "weight": 0.93,
+    "tags": [
+      "youtube_shorts",
+      "india",
+      "instagram_reels",
+      "subtitle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "india_multilanguage_critical",
+    "type": "market_rule",
+    "platform": [
+      "instagram_reels",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "India: Multi-language subtitle critical — regional languages underserved và high-engagement — India có 22 official languages và hàng trăm dialects. Regional language content (Hindi, Tamil, Telugu, Kannada, Bengali, Marathi, etc.) có engagement cao hơn English-only content đáng kể. Regional language niches underserved — less competition, higher relative engagement. Instagram Reels translation features đang expand. YouTube Shorts: subtitle/caption indexing tăng discoverability cross-language. Multi-language subtitle support là competitive advantage cho creators targeting India.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_words_per_block": 5,
+      "subtitle_must_carry_full_meaning": true
+    },
+    "weight": 0.88,
+    "tags": [
+      "youtube_shorts",
+      "india",
+      "instagram_reels",
+      "subtitle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "india_captions_discovery_indexing",
+    "type": "market_rule",
+    "platform": [
+      "instagram_reels",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "India: Captions = algorithmic discovery tool — keyword-rich subtitle tăng reach — India market: captions và subtitles function như SEO/algorithmic indexing tools trên Instagram Reels và YouTube Shorts. Accurate, keyword-rich captions tăng discoverability significantly. Pattern tương tự Japan và Korea — platforms dùng caption text để index và distribute content. India creators có ý thức optimize caption cho searchability. Translation dubbing features (mouth-movement sync) gaining traction. Subtitle phải accurate và informative, không chỉ stylistic.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_words_per_block": 5,
+      "subtitle_must_carry_full_meaning": true
+    },
+    "weight": 0.84,
+    "tags": [
+      "youtube_shorts",
+      "india",
+      "instagram_reels",
+      "subtitle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "india_entertainment_education_mix",
+    "type": "market_rule",
+    "platform": [
+      "instagram_reels",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "education",
+      "lifestyle"
+    ],
+    "style": [
+      "clean",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      25,
+      60
+    ],
+    "rule": "India: Edutainment dominant — education wrapped in entertainment performs best — India YouTube và Reels: edutainment (education + entertainment hybrid) là dominant và growing format. Pure educational content có large audience. Entertainment content cũng strong. Hybrid 'edutainment' outperform pure entertainment hoặc pure education. Finance, technology, health, và career development content rất phổ biến. Hook kiểu curiosity gap kết hợp với practical utility ('5 điều bạn không biết về X') very effective. Tutorial và how-to content có very strong search intent.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "clean",
+      "pacing": "5-15s"
+    },
+    "weight": 0.83,
+    "tags": [
+      "youtube_shorts",
+      "india",
+      "education",
+      "instagram_reels",
+      "lifestyle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "sea_entertainment_dominant",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "entertainment",
+      "comedy",
+      "lifestyle"
+    ],
+    "style": [
+      "viral",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "SEA: Entertainment-first — 80% watch TikTok cho funny/viral content — Southeast Asia (Vietnam, Thailand, Indonesia, Philippines): nearly 80% người dùng xem TikTok chủ yếu cho funny và viral entertainment content. Sports content surge +57% YoY. Entertainment hook outperform educational hook rõ rệt. Influencer content drives 20%+ weekly engagement (43.5% ở Philippines). Comedy, dance, challenge, và viral trend content là top performers. Educational content cũng có audience nhưng cần entertainment wrapper để compete.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "viral",
+      "pacing": "2-6s"
+    },
+    "weight": 0.88,
+    "tags": [
+      "entertainment",
+      "youtube_shorts",
+      "lifestyle",
+      "comedy",
+      "sea",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "sea_fast_pacing",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "entertainment"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      15,
+      45
+    ],
+    "rule": "SEA: Fast pacing — high daily usage (35-40min), high tolerance cho quick cuts — SEA users spend 35-40 phút daily trên TikTok (globally top usage rate). High platform engagement → high tolerance cho fast-paced editing và quick cuts. Pacing gần với US hơn EU. SEA: trung bình 2-5s per cut phù hợp. Không slow như Japan (prefer calm pacing) hay EU (prefer measured). Entertainment fast-cut đặc biệt hiệu quả. Multi-platform stacking common — users consume across TikTok, YouTube, và local platforms.",
+    "render_usage": {
+      "subtitle_emphasis": "viral",
+      "pacing": "2-6s"
+    },
+    "weight": 0.84,
+    "tags": [
+      "entertainment",
+      "youtube_shorts",
+      "sea",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "sea_audio_on_culture",
+    "type": "market_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "entertainment",
+      "lifestyle"
+    ],
+    "style": [
+      "viral",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "SEA: Audio-on culture — khác Japan, nhưng caption vẫn cần thiết — SEA là audio-on culture rõ rệt — khác hoàn toàn với Japan (silent viewing dominant). Music-driven content, trending sounds, và audio hooks hiệu quả hơn visual-only hooks. Tuy nhiên captions vẫn cần thiết vì: (1) public/muted viewing environments vẫn tồn tại, (2) captions improve discoverability, (3) multi-language trong khu vực. Audio hook (music drop, sound effect surprise) kết hợp visual hook là optimal. Không nên design video chỉ cho silent viewing như JP approach.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "viral",
+      "subtitle_words_per_block": 4
+    },
+    "weight": 0.83,
+    "tags": [
+      "entertainment",
+      "sea",
+      "lifestyle",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "sea_local_content_strong",
+    "type": "market_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "lifestyle",
+      "ecommerce"
+    ],
+    "style": [
+      "viral",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "SEA: Local content preference — cultural và language localization critical — SEA users có strong preference cho local content: localized music, dance, và cultural daily-life content perform tốt hơn generic global content. TikTok implemented regional content boosts cho local creators. E-commerce integration rất mạnh (TikTok Shop: 30%→41% market share Vietnam 2024-2026). Creators kết hợp local culture + trending format + TikTok Shop link outperform. Language: content bằng ngôn ngữ địa phương (Vietnamese, Thai, Bahasa, Filipino) có engagement cao hơn English-only.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "subtitle_emphasis": "viral",
+      "pacing": "2-8s"
+    },
+    "weight": 0.85,
+    "tags": [
+      "ecommerce",
+      "sea",
+      "lifestyle",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "sea_ecommerce_tiktok_shop",
+    "type": "market_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "ecommerce",
+      "review",
+      "lifestyle"
+    ],
+    "style": [
+      "viral",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "SEA: TikTok Shop integration — content-commerce hybrid là dominant format — SEA market đặc biệt ở TikTok Shop integration: content + commerce hybrid là dominant format. TikTok Shop market share Vietnam tăng 30%→41% (2024-2026). Philippines: influencer content drives 43.5% weekly engagement phần lớn linked to product discovery. Live shopping và shoppable video content rất phổ biến. Hook kiểu 'Tôi thử X và đây là kết quả' (review + demo) là format viral nhất với e-commerce overlay. Disclosure và authenticity vẫn quan trọng — fake review bị reject.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "viral",
+      "pacing": "3-8s"
+    },
+    "weight": 0.82,
+    "tags": [
+      "review",
+      "ecommerce",
+      "sea",
+      "tiktok",
+      "lifestyle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "kr_kpop_music_driven",
+    "type": "market_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "entertainment",
+      "music",
+      "dance"
+    ],
+    "style": [
+      "viral",
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Korea: K-pop và music-driven hooks — content-music sync là expectation — South Korea TikTok: K-pop dance challenges và idol-reactive content dominate. Music-driven hooks hiệu quả nhất — content-music synchronization là expectation, không phải bonus. Short-form series và multi-part videos (duets, stitches, responses) boost engagement significantly. K-content influence: visual aesthetic cao, performance quality cao, sync precision cao. Creators cần music-first thinking: chọn sound → design content fit sound, không ngược lại.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "viral",
+      "pacing": "2-5s"
+    },
+    "weight": 0.86,
+    "tags": [
+      "entertainment",
+      "dance",
+      "music",
+      "kr",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "kr_captions_algorithmic_discovery",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Korea: Captions là công cụ discovery — không chỉ accessibility — South Korea: captions function như algorithmic indexing tools (giống TikTok/YouTube search indexing), không chỉ là creative element hay accessibility feature. Accurate, keyword-rich captions tăng discoverability. Culturally, captions align content với algorithmic discovery logic của platform — creators có ý thức optimize caption text cho search. Subtitle style: clean và readable (không overly styled). Content-caption alignment quan trọng hơn visual flair của subtitle.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_words_per_block": 5,
+      "subtitle_must_carry_full_meaning": true
+    },
+    "weight": 0.83,
+    "tags": [
+      "kr",
+      "youtube_shorts",
+      "tiktok",
+      "subtitle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "us_tiktok_hook_3s_retention",
+    "type": "market_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "TikTok US: Hook bắt buộc trong 3 giây đầu — 84.3% viral TikTok US dùng psychological hook triggers trong 3s đầu. Retention < 60% tại 3s bị TikTok suppression phân phối. Retention 70-85% đạt viral potential, nhận 2.2x more views.",
+    "render_usage": {
+      "hook": true,
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "viral",
+      "pacing": "2-5s",
+      "target_retention_3s": 0.75
+    },
+    "weight": 0.9,
+    "tags": [
+      "us",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "us_tiktok_curiosity_gap",
+    "type": "market_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "hook",
+      "entertainment",
+      "education"
+    ],
+    "style": [
+      "viral",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "TikTok US: Curiosity Gap Hook (+234% completion) — Curiosity gap hooks trên TikTok US tạo +234% completion rate và +178% share rate so với direct statement openings. Câu hỏi gây tò mò, open loop hiệu quả nhất.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "hook_position": "opening_3s",
+      "subtitle_emphasis": "viral"
+    },
+    "weight": 0.87,
+    "tags": [
+      "entertainment",
+      "hook",
+      "us",
+      "education",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "us_tiktok_pattern_interrupt",
+    "type": "market_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "hook",
+      "entertainment"
+    ],
+    "style": [
+      "viral",
+      "pattern_break"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "TikTok US: Pattern Interrupt (+156% FYP) — Pattern interrupt trong 2 giây đầu tạo +156% FYP appearances. Visual interrupt, audio interrupt, hoặc contextual interrupt đều hiệu quả. Silence trong platform đầy nhạc → +40% completion.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "pattern_break",
+      "hook_position": "opening_2s",
+      "subtitle_emphasis": "viral",
+      "pacing": "1-3s"
+    },
+    "weight": 0.85,
+    "tags": [
+      "entertainment",
+      "hook",
+      "us",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "us_tiktok_payoff_first",
+    "type": "market_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "hook",
+      "lifestyle",
+      "education"
+    ],
+    "style": [
+      "opening_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "TikTok US: Payoff First — mở đầu bằng kết quả — Không bao giờ mở đầu bằng setup. Mở đầu bằng kết quả, transformation, hoặc khoảnh khắc ấn tượng nhất. Sau hook mới giải thích. Mỗi 1-2 giây cần có visual/content change.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "opening_hook",
+      "hook_position": "opening_3s",
+      "pacing": "2-4s"
+    },
+    "weight": 0.83,
+    "tags": [
+      "lifestyle",
+      "hook",
+      "us",
+      "education",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "us_shorts_duration_sweet_spot",
+    "type": "market_rule",
+    "platform": [
+      "youtube_shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "YouTube Shorts US: 20-35 giây là sweet spot — Shorts viral nhất ở 20-35s. Viral Shorts giữ ~76% viewers (23s/30s clip). Swipe-away rate phải dưới 25%. Loop structure (ending kết nối beginning) trigger rewatches — YouTube đọc đây là high engagement.",
+    "render_usage": {
+      "hook": true,
+      "subtitle_emphasis": "clean",
+      "loop_structure": true,
+      "pacing": "2-6s",
+      "target_retention": 0.76
+    },
+    "weight": 0.85,
+    "tags": [
+      "youtube_shorts",
+      "us"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "us_reels_subtitle_position",
+    "type": "market_rule",
+    "platform": [
+      "instagram_reels"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Instagram Reels US: Subtitle center, tránh bottom 15% — Reels US: center positioning, tránh bottom 15% và right 10% (UI elements). 1 line per subtitle instance maximize engagement. 3-4 words per block.",
+    "render_usage": {
+      "subtitle_emphasis": "viral",
+      "subtitle_words_per_block": 3,
+      "subtitle_font_style": "bold_sans_serif",
+      "subtitle_position": "center"
+    },
+    "weight": 0.88,
+    "tags": [
+      "instagram_reels",
+      "us",
+      "subtitle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "us_education_niche_hook",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "education",
+      "tutorial"
+    ],
+    "style": [
+      "clean",
+      "curiosity_gap"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "US Education/Finance Niche: Curiosity + Utility Hook — Educational TikTok content US tăng 40% YoY 2025. Hook kiểu 'You've been doing X wrong' hoặc immediate utility ('Learn X in 60 seconds') hiệu quả nhất. Educational content optimized for completion thường outperform entertainment optimized for shares.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "curiosity_gap",
+      "subtitle_emphasis": "clean",
+      "pacing": "8-20s"
+    },
+    "weight": 0.86,
+    "tags": [
+      "youtube_shorts",
+      "tutorial",
+      "us",
+      "education",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "us_entertainment_fast_cut",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "entertainment",
+      "comedy"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "US Entertainment: Fast cut 1.5s, visual change mỗi giây — Best Shorts US có visual/content change trung bình mỗi 1.5 giây. Entertainment/comedy skit dùng 3-5s clips, minimal downtime giữa jokes. Không có 5 giây để hook — chỉ có nửa giây trước khi swipe.",
+    "render_usage": {
+      "hook": true,
+      "subtitle_emphasis": "viral",
+      "pacing": "1-4s"
+    },
+    "weight": 0.88,
+    "tags": [
+      "entertainment",
+      "youtube_shorts",
+      "comedy",
+      "us",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "us_silent_viewing",
+    "type": "market_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "US: 80% xem không có âm thanh — 80% social media video tại US được xem không có âm thanh. Subtitle là bắt buộc để giữ silent viewers. Bold sans-serif (Montserrat/Helvetica), white với black outline hoặc ngược lại cho contrast tốt nhất.",
+    "render_usage": {
+      "subtitle_emphasis": "viral",
+      "subtitle_words_per_block": 4,
+      "subtitle_font_style": "bold_sans_serif"
+    },
+    "weight": 0.92,
+    "tags": [
+      "youtube_shorts",
+      "subtitle",
+      "us",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "pacing_medium_fast_001",
+    "type": "pacing_rule",
+    "platform": [
+      "tiktok",
+      "reels"
+    ],
+    "niche": [
+      "education",
+      "entertainment"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      15,
+      60
+    ],
+    "rule": "Cut every 3-5 seconds for medium-fast pacing. Avoid cuts under 1.5 seconds unless for emphasis.",
+    "render_usage": {
+      "cut_interval_range": [
+        3,
+        5
+      ],
+      "min_cut_duration": 1.5,
+      "playback_speed": 1.1
+    },
+    "weight": 0.8,
+    "tags": [
+      "pacing",
+      "cuts",
+      "retention"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "pacing_tutorial_step_by_step",
+    "type": "pacing_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "tutorial",
+      "how_to",
+      "diy",
+      "fitness"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      30,
+      60
+    ],
+    "rule": "Tutorial: Cut 15-25s per step — người xem cần xử lý information — Tutorial và how-to content cần pacing chậm để người xem có thể follow từng bước. Cut interval 15-25 giây per step. Không cut giữa một instruction. Subtitle phải carry đủ meaning vì người xem thường xem lại. Mỗi cut = chuyển sang bước mới. Japan đặc biệt cần pacing chậm cho tutorial. US education niche cũng reward longer explanation time.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_words_per_block": 5,
+      "pacing": "15-30s"
+    },
+    "weight": 0.88,
+    "tags": [
+      "cooking",
+      "youtube_shorts",
+      "tutorial",
+      "how_to",
+      "eu",
+      "us",
+      "fitness",
+      "jp",
+      "tiktok",
+      "diy"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "pacing_entertainment_fast_cut",
+    "type": "pacing_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "entertainment",
+      "comedy"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      15,
+      35
+    ],
+    "rule": "Entertainment/Comedy: Cut 2-5s — visual change mỗi 1.5-3 giây — Entertainment, comedy skit, reaction content cần fast pacing để maintain energy. Visual/content change trung bình mỗi 1.5-3 giây. Không có 5 giây downtime giữa jokes. US TikTok entertainment: trung bình 1.5s per cut. EU entertainment chấp nhận 3s. Japan: 2-4s. Comedy timing phải precise — không pad bằng filler frames. Mỗi frame phải earn its place.",
+    "render_usage": {
+      "subtitle_emphasis": "viral",
+      "pacing": "2-5s"
+    },
+    "weight": 0.9,
+    "tags": [
+      "entertainment",
+      "youtube_shorts",
+      "comedy",
+      "eu",
+      "challenge",
+      "us",
+      "jp",
+      "tiktok",
+      "reaction"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "pacing_vlog_mixed_burst",
+    "type": "pacing_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "vlog",
+      "lifestyle",
+      "travel",
+      "food"
+    ],
+    "style": [
+      "story"
+    ],
+    "duration_range": [
+      25,
+      60
+    ],
+    "rule": "Vlog/Lifestyle: Mixed pacing — calm 12-25s + burst 2-5s tại highlight — Vlog và lifestyle content dùng dynamic pacing: đoạn narrative chậm 12-25s (context, story build), đoạn highlight/wow moment burst nhanh 2-5s. Pattern: slow build → fast highlight → slow resolution. Travel vlog điển hình: walk-through shot 15-20s → arrival reveal 3-5s → exploration montage 4-8s. France/EU lifestyle đặc biệt hiệu quả với rhythm này. Không uniform cut — vary để giữ engagement.",
+    "render_usage": {
+      "subtitle_emphasis": "story",
+      "pacing": "4-20s"
+    },
+    "weight": 0.84,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "food",
+      "fr",
+      "travel",
+      "us",
+      "vlog",
+      "tiktok",
+      "instagram_reels",
+      "lifestyle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "pacing_education_finance_depth",
+    "type": "pacing_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "education",
+      "finance",
+      "economics",
+      "science"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      35,
+      60
+    ],
+    "rule": "Education/Finance: Cut 8-20s — depth payoff cần time để land — Educational content về finance, economics, science, history cần pacing đủ chậm để concept land. Cut 8-20s cho phép explanation breath room. UK Gary's Economics model: audience reward time put into complex explanation. US education niche: educational content optimized for completion outperform entertainment. Japan: search-intent education cần rõ ràng từng bước. Đừng rush explanation để sound 'dynamic'.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_words_per_block": 6,
+      "pacing": "8-20s"
+    },
+    "weight": 0.86,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "finance",
+      "science",
+      "us",
+      "jp",
+      "uk",
+      "education",
+      "tiktok",
+      "economics"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "pacing_food_beauty_visual",
+    "type": "pacing_rule",
+    "platform": [
+      "tiktok",
+      "instagram_reels"
+    ],
+    "niche": [
+      "food",
+      "beauty",
+      "fashion",
+      "lifestyle"
+    ],
+    "style": [
+      "story"
+    ],
+    "duration_range": [
+      20,
+      45
+    ],
+    "rule": "Food/Beauty/Fashion: Cut 4-10s — visual satisfaction per shot — Food content, beauty/makeup, fashion/outfit: mỗi shot phải đủ dài để visual appeal land nhưng không quá dài để boring. 4-10s per cut. Food: cooking process cần thấy transformation (không cut quá nhanh bỏ mất satisfy). Beauty: technique cần visible. Fashion: outfit reveal 3-5s minimum. Social proof shots (reaction, taste test) có thể nhanh hơn 2-4s. France TikTok food và fashion đặc biệt mạnh với rhythm này.",
+    "render_usage": {
+      "subtitle_emphasis": "story",
+      "pacing": "4-10s"
+    },
+    "weight": 0.85,
+    "tags": [
+      "beauty",
+      "lifestyle",
+      "fashion",
+      "eu",
+      "food",
+      "fr",
+      "us",
+      "jp",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "pacing_fitness_sport_burst",
+    "type": "pacing_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "fitness",
+      "sport"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      20,
+      45
+    ],
+    "rule": "Fitness/Sport: Burst 1-4s cho action, 8-15s cho explanation — Fitness content có hai nhịp: action/exercise shots 1-4s fast cut (dynamic energy, visible movement), explanation/form correction 8-15s (cần nhìn rõ technique). Không mix: nếu đang demo exercise → fast. Nếu đang explain form → slow. Workout montage: pure fast cut 1-3s. Tutorial single exercise: slow enough to see form. Before/after reveal: hold 3-5s để transformation land.",
+    "render_usage": {
+      "subtitle_emphasis": "viral",
+      "pacing": "2-15s"
+    },
+    "weight": 0.83,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "workout",
+      "health",
+      "us",
+      "fitness",
+      "tiktok",
+      "sport"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "pacing_avoid_uniform_cuts",
+    "type": "pacing_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "vlog",
+      "lifestyle",
+      "education"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Anti-pattern: Đừng dùng uniform cut interval — vary để giữ attention — Uniform cut interval (mỗi X giây cắt một lần) tạo predictable rhythm → người xem desensitize → attention drift. Effective pacing THAY ĐỔI: slow → fast → slow (story arc), hoặc fast → slow (revelation after action). Exceptions: montage và highlight reel có thể uniform. Story-driven content phải vary. Đây là một trong những sai lầm phổ biến nhất của creators beginner.",
+    "render_usage": {
+      "pacing": "2-25s"
+    },
+    "weight": 0.82,
+    "tags": [
+      "youtube_shorts",
+      "lifestyle",
+      "eu",
+      "us",
+      "jp",
+      "vlog",
+      "education",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "pacing_eu_slower_than_us",
+    "type": "pacing_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "story"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "EU vs US: EU pacing chậm hơn US 30-50% — không import US pacing sang EU — US TikTok optimal: visual change mỗi 1.5-2s. EU optimal: visual change mỗi 2.5-4s. Germany: calm và measured là signal của credibility, không phải boredom. Importing US fast-pacing sang EU content làm audience cảm thấy overwhelming và chaotic. UK exception: entertainment/comedy gần với US pacing hơn. France và Germany: chậm hơn EU average thêm 20%.",
+    "render_usage": {
+      "subtitle_emphasis": "story",
+      "pacing": "4-15s"
+    },
+    "weight": 0.83,
+    "tags": [
+      "youtube_shorts",
+      "de",
+      "eu",
+      "fr",
+      "tiktok",
+      "uk"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "tiktok_platform_001",
+    "type": "platform_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "viral",
+      "talking_head"
+    ],
+    "duration_range": [
+      15,
+      60
+    ],
+    "rule": "TikTok favors 9:16 aspect ratio at 1080x1920 with h264 encoding and AAC audio.",
+    "render_usage": {
+      "aspect_ratio": "9:16",
+      "resolution": "1080x1920",
+      "codec": "h264",
+      "audio_codec": "aac"
+    },
+    "weight": 1.0,
+    "tags": [
+      "platform",
+      "format",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "retention_tiktok_3s_checkpoint",
+    "type": "retention_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "TikTok: 70%+ retention tại 3s = ngưỡng viral — dưới đó bị suppression — TikTok algorithm: retention 70-85% tại 3 giây đầu → nhận 2.2x more views (phân phối FYP tăng). Retention < 60% tại 3s → suppression phân phối. First 2 seconds quyết định 70% tổng retention của cả video. Đây là checkpoint quan trọng nhất với TikTok — không có ngoại lệ. Mọi quyết định về hook phải optimize cho mốc này.",
+    "render_usage": {
+      "hook": true,
+      "hook_position": "opening_3s",
+      "pacing": "1-3s",
+      "target_retention_3s": 0.7
+    },
+    "weight": 0.92,
+    "tags": [
+      "eu",
+      "us",
+      "jp",
+      "retention",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "retention_tiktok_algorithm_2025",
+    "type": "retention_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "TikTok 2025: Algorithm checkpoint mới tại 15-20 giây (không chỉ 3s) — December 2024 algorithm shift: TikTok mở rộng checkpoint từ 3-5s sang 15-20s. Video giữ được audience đến 15-20s nhận boost phân phối thứ hai. Clip cần hai pha hook: hook đầu giữ đến 3s, secondary hook giữ đến 15-20s. Implication: content không thể 'coast' sau hook đầu — phải maintain engagement qua mid-point.",
+    "render_usage": {
+      "hook": true,
+      "hook_position": "opening_3s",
+      "pacing": "2-8s",
+      "target_retention_3s": 0.7
+    },
+    "weight": 0.87,
+    "tags": [
+      "eu",
+      "us",
+      "jp",
+      "retention",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "retention_tiktok_watch_time_over_completion",
+    "type": "retention_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      30,
+      60
+    ],
+    "rule": "TikTok: Watch time tuyệt đối > Completion rate — 60s × 70% beats 10s × 100% — TikTok algorithm weight: absolute watch time quan trọng hơn completion rate. 60-giây video được xem 70% (= 42s watch) tạo 4x more algorithmic value hơn 10-giây video watched completely (= 10s watch). Implication: không nên cắt clip quá ngắn chỉ để maximize completion rate. Clip 45-60s với good hook và substance beats clip 10s được xem hết. TikTok khuyến nghị 45s là optimal.",
+    "render_usage": {
+      "pacing": "2-10s"
+    },
+    "weight": 0.85,
+    "tags": [
+      "eu",
+      "us",
+      "jp",
+      "retention",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "retention_tiktok_loop_rate",
+    "type": "retention_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      10,
+      30
+    ],
+    "rule": "TikTok: Loop rate 15-20% = strong signal — 4.1x impressions — TikTok đo loop rate (số lần video được replay / số unique viewers). Loop rate 15-20%+ = strong novelty/utility signal → algorithm boost 4.1x more impressions so với video có loop rate < 5%. Seamless loop structure (kết thúc kết nối bắt đầu liền mạch) là content strategy để trigger organic rewatch. Nhất là với educational content và short vlog có circular narrative.",
+    "render_usage": {
+      "loop_structure": true
+    },
+    "weight": 0.84,
+    "tags": [
+      "eu",
+      "us",
+      "jp",
+      "retention",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "retention_shorts_skip_decision",
+    "type": "retention_rule",
+    "platform": [
+      "youtube_shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "YouTube Shorts: Skip decision tại 8s — critical checkpoint tại 15s — YouTube Shorts: 55% viewers bị mất vào giây thứ 60. Skip decision xảy ra sớm nhất tại 8s — nếu không có secondary hook ở đây, viewers scroll tiếp. Critical algorithm checkpoint tại 15s. Viral Shorts target: 80-90% average completion rate. Clips dưới 20s cần 90-100% completion để được recommend. March 2025 change: 'Engaged Views' (watch beyond threshold + interaction) là metric chính cho monetization eligibility.",
+    "render_usage": {
+      "hook": true,
+      "hook_position": "opening_3s",
+      "loop_structure": true,
+      "pacing": "2-6s",
+      "target_retention_3s": 0.8
+    },
+    "weight": 0.88,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "us",
+      "jp",
+      "retention"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "retention_shorts_duration_optimal",
+    "type": "retention_rule",
+    "platform": [
+      "youtube_shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      25,
+      40
+    ],
+    "rule": "YouTube Shorts: 25-35s là sweet spot — viral Shorts giữ 76% viewers — YouTube Shorts optimal duration: 25-35 giây. Viral Shorts giữ ~76% viewers (ví dụ: 23s trên 30s clip). Swipe-away rate phải dưới 25%. Loop structure (ending connects to beginning) trigger rewatches → YouTube đọc là high engagement signal. Duration 25-40s là range an toàn nhất. Clip quá ngắn (<15s) không có enough watch time absolute; quá dài (>60s) completion rate drops.",
+    "render_usage": {
+      "loop_structure": true,
+      "target_retention": 0.76
+    },
+    "weight": 0.85,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "us",
+      "jp",
+      "retention"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "retention_reels_skip_rate_dominant",
+    "type": "retention_rule",
+    "platform": [
+      "instagram_reels"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "visual_hook"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Instagram Reels: Skip rate = top algorithmic factor (2025-2026) — Instagram Reels (confirmed early 2026): skip rate là yếu tố algorithm được weight cao nhất, không phải views hay likes. Lên tới 50% drop-off trong 3 giây đầu (steeper than TikTok và Shorts). Reels giữ được 50%+ retention nhận 38% reach boost. August 2025: Instagram thêm per-second retention charts giống TikTok. Implication: hook Reels phải visual và immediate — không có thời gian setup.",
+    "render_usage": {
+      "hook": true,
+      "hook_type": "visual_hook",
+      "hook_position": "opening_3s",
+      "pacing": "1-4s",
+      "target_retention_3s": 0.65
+    },
+    "weight": 0.89,
+    "tags": [
+      "retention",
+      "instagram_reels",
+      "us",
+      "eu"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "retention_reels_duration_optimal",
+    "type": "retention_rule",
+    "platform": [
+      "instagram_reels"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      20,
+      30
+    ],
+    "rule": "Instagram Reels: 20-25s optimal — saves và shares beat views — Instagram Reels optimal: 20-25s. Saves và shares được weight cao hơn view count trong algorithm (2025 confirmed). 5,000 views + 200 shares outperforms 20,000 views + 20 shares. Implication: content phải provoke save (utility, reference value) hoặc share (relatable, awe, humor) chứ không chỉ passive viewing. Educational và utility Reels có natural save advantage.",
+    "render_usage": {
+      "subtitle_emphasis": "clean"
+    },
+    "weight": 0.86,
+    "tags": [
+      "retention",
+      "instagram_reels",
+      "us",
+      "eu"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "subtitle_readability_001",
+    "type": "subtitle_rule",
+    "platform": [
+      "tiktok",
+      "reels",
+      "shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "any"
+    ],
+    "duration_range": [
+      15,
+      120
+    ],
+    "rule": "Keep subtitle blocks to 6 words or fewer for mobile readability. Center-align at 80% screen height.",
+    "render_usage": {
+      "max_words_per_block": 6,
+      "position": "center_bottom",
+      "font_size_scale": 1.0,
+      "emphasis_keywords": true
+    },
+    "weight": 0.85,
+    "tags": [
+      "subtitle",
+      "readability",
+      "mobile"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "subtitle_tiktok_viral_style",
+    "type": "subtitle_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "TikTok: Viral bold style — upper center, 3-4 words, white+shadow — TikTok US viral clips dùng bold sans-serif (Montserrat/Helvetica), ALL CAPS hoặc mixed case lớn, màu trắng với black shadow/outline mạnh. Position: upper center hoặc center để tránh bottom UI (follow button, caption, sound icon). 3-4 words per block tối ưu cho reading speed khi swipe. Font size lớn — phải đọc được khi hold phone cách mặt 40cm. Emoji accent words được (nếu brand fit). Đây là style viral nhất TikTok US 2025.",
+    "render_usage": {
+      "subtitle_emphasis": "viral",
+      "subtitle_words_per_block": 4,
+      "subtitle_font_style": "bold_sans_serif",
+      "subtitle_position": "upper_center"
+    },
+    "weight": 0.91,
+    "tags": [
+      "us",
+      "tiktok",
+      "eu",
+      "subtitle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "subtitle_youtube_shorts_clean",
+    "type": "subtitle_rule",
+    "platform": [
+      "youtube_shorts"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "YouTube Shorts: Clean readable style — center, 5-6 words, clear contrast — YouTube Shorts audience có culture xem dài hơn TikTok. Subtitle style 'clean' phù hợp hơn 'viral': font rõ ràng, không quá flashy, 5-6 words per block (audience đọc nhanh hơn). Center positioning. White với black outline hoặc semi-transparent background strip. Không ALL CAPS. Avoid overlap với Shorts UI elements (bottom bar, subscribe, like buttons). Loop structure ảnh hưởng subtitle: subtitle cuối phải match với beginning để trigger rewatch.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_words_per_block": 5,
+      "subtitle_font_style": "bold_sans_serif",
+      "subtitle_position": "center"
+    },
+    "weight": 0.88,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "subtitle",
+      "us",
+      "jp"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "subtitle_instagram_reels_center",
+    "type": "subtitle_rule",
+    "platform": [
+      "instagram_reels"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Instagram Reels: Center position, 3-4 words, tránh bottom 15% và right 10% — Instagram Reels: center positioning bắt buộc để tránh UI elements. Bottom 15% màn hình bị che bởi username, caption, music icon. Right 10% bị che bởi like/comment/share buttons. 3-4 words per block để match reading cadence của Reels scroll behavior. 1 line per subtitle instance tối ưu engagement. Bold sans-serif, white+outline. Reels audience gần với TikTok audience hơn Shorts về pacing expectations.",
+    "render_usage": {
+      "subtitle_emphasis": "viral",
+      "subtitle_words_per_block": 3,
+      "subtitle_font_style": "bold_sans_serif",
+      "subtitle_position": "center"
+    },
+    "weight": 0.88,
+    "tags": [
+      "instagram_reels",
+      "us",
+      "eu",
+      "subtitle"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "subtitle_japan_silent_critical",
+    "type": "subtitle_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Japan: Subtitle critical — phải carry full meaning không cần audio — Japan: 70%+ người dùng xem không có âm (tàu điện, nơi công cộng). Subtitle KHÔNG thể chỉ là complement cho audio — phải carry 100% meaning độc lập. 5-6 words per block (Japanese reading speed khác với English). Center position. Font rõ ràng, bold sans-serif. Không dùng style quá flashy — clean và readable ưu tiên hơn viral aesthetic. Không phụ thuộc vào context audio để hiểu nội dung.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_words_per_block": 6,
+      "subtitle_font_style": "bold_sans_serif",
+      "subtitle_position": "center",
+      "subtitle_must_carry_full_meaning": true
+    },
+    "weight": 0.93,
+    "tags": [
+      "youtube_shorts",
+      "subtitle",
+      "jp",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "subtitle_eu_story_style",
+    "type": "subtitle_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "story"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "EU: Story style — không flashy, narrative pacing, clean font — EU market (đặc biệt Germany, France) phản ứng tốt với subtitle style 'story': font clean, không ALL CAPS, mixed case natural, 5-6 words per block, pacing theo natural speech rhythm. Không dùng viral bold style quá aggressive — EU audience perceive nó là low quality hoặc overly commercial. Germany: subtitle phải feel genuine và honest, không entertainment gimmick. France: subtitle phải complement visual aesthetic.",
+    "render_usage": {
+      "subtitle_emphasis": "story",
+      "subtitle_words_per_block": 5,
+      "subtitle_font_style": "bold_sans_serif",
+      "subtitle_position": "center"
+    },
+    "weight": 0.84,
+    "tags": [
+      "youtube_shorts",
+      "de",
+      "eu",
+      "subtitle",
+      "fr",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "subtitle_silent_viewing_universal",
+    "type": "subtitle_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Universal: Silent viewing dominant — subtitle luôn required — Tất cả platforms và markets: subtitle không phải optional feature — đây là requirement cơ bản. US: 80% xem không âm. Japan: 70%+. EU: 60%+. Content không có subtitle thất bại với majority audience trước khi hook có cơ hội work. Subtitle không chỉ là accessibility feature — đây là primary content delivery mechanism cho silent viewers. Không có ngữ cảnh nào mà subtitle là bad idea.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_must_carry_full_meaning": true
+    },
+    "weight": 0.95,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "subtitle",
+      "jp",
+      "us",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "subtitle_highlight_per_word",
+    "type": "subtitle_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts"
+    ],
+    "niche": [
+      "education",
+      "talking_head",
+      "finance",
+      "tutorial"
+    ],
+    "style": [
+      "viral"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Highlight per-word: Karaoke style tăng engagement trên US TikTok — Highlight từng word khi nói (karaoke style) trên TikTok US tạo +15-30% watch time so với static subtitle. Người xem eye-tracking theo highlighted word, keeping them engaged. Hiệu quả nhất cho educational/talking-head content. Ít hiệu quả hơn cho entertainment fast-cut (subtitle change quá nhanh để track). Japan: karaoke style familiar từ cultural context → receptive. EU: mixed — UK receptive, Germany prefer static clean.",
+    "render_usage": {
+      "subtitle_emphasis": "viral",
+      "subtitle_words_per_block": 4,
+      "subtitle_font_style": "bold_sans_serif",
+      "highlight_per_word": true
+    },
+    "weight": 0.8,
+    "tags": [
+      "youtube_shorts",
+      "tutorial",
+      "talking_head",
+      "finance",
+      "us",
+      "jp",
+      "education",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "subtitle_avoid_bottom_all_platforms",
+    "type": "subtitle_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "subtitle"
+    ],
+    "style": [
+      "clean"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Anti-pattern: Bottom placement bị chặn bởi UI trên mọi platform — Bottom 15-20% của màn hình bị overlay bởi platform UI trên mọi platform: TikTok (caption, follow, hashtag), YouTube Shorts (title bar, buttons), Instagram Reels (username, caption, music). Subtitle ở đây bị che một phần hoặc hoàn toàn. Đây là anti-pattern universal — không bao giờ default subtitle vào bottom. Upper center hoặc center là safe zones. Đặc biệt quan trọng khi video có nhiều text information.",
+    "render_usage": {
+      "subtitle_emphasis": "clean",
+      "subtitle_position": "center"
+    },
+    "weight": 0.96,
+    "tags": [
+      "youtube_shorts",
+      "eu",
+      "subtitle",
+      "jp",
+      "us",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "two_line_mobile_safe",
+    "type": "subtitle_rule",
+    "platform": [
+      "tiktok"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Prefer one to two subtitle lines on mobile — Short mobile videos are easier to read when subtitles remain compact. Long lines reduce readability on small screens.",
+    "render_usage": {
+      "general": true
+    },
+    "weight": 0.8,
+    "tags": [
+      "short_form",
+      "mobile",
+      "tiktok"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "keyword_emphasis_hooks",
+    "type": "subtitle_rule",
+    "platform": [
+      "tiktok",
+      "youtube_shorts",
+      "instagram_reels"
+    ],
+    "niche": [
+      "hook"
+    ],
+    "style": [
+      "general"
+    ],
+    "duration_range": [
+      0,
+      120
+    ],
+    "rule": "Emphasise hook keywords in subtitles — Highlighting 1-2 key words per subtitle segment improves attention retention during the opening hook window.",
+    "render_usage": {
+      "general": true
+    },
+    "weight": 0.75,
+    "tags": [
+      "short_form",
+      "mobile",
+      "hook"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  },
+  {
+    "id": "visual_brightness_001",
+    "type": "visual_rule",
+    "platform": [
+      "tiktok",
+      "reels",
+      "shorts"
+    ],
+    "niche": [
+      "general"
+    ],
+    "style": [
+      "any"
+    ],
+    "duration_range": [
+      15,
+      120
+    ],
+    "rule": "First frame must not be black. Bright or high-contrast opening frame increases watch-through rate.",
+    "render_usage": {
+      "avoid_black_first_frame": true,
+      "first_frame_brightness_min": 0.3,
+      "qa_check": "first_frame_dark"
+    },
+    "weight": 0.9,
+    "tags": [
+      "visual",
+      "first_frame",
+      "retention"
+    ],
+    "aspect_ratio": [],
+    "subtitle_style": [],
+    "target_goal": [],
+    "examples": [],
+    "source": null,
+    "notes": null
+  }
+]

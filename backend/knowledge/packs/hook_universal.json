@@ -1,0 +1,117 @@
+{
+  "id": "hook_universal_v1",
+  "domain": "hook",
+  "title": "Universal Hook Patterns — All Markets / All Platforms",
+  "version": 1,
+  "tags": ["hook", "universal", "us", "jp", "eu", "tiktok", "youtube_shorts", "instagram_reels"],
+  "rules": [
+    {
+      "id": "hook_curiosity_gap",
+      "title": "Curiosity Gap Hook — tạo câu hỏi chưa được trả lời",
+      "description": "Mở đầu bằng câu hỏi hoặc statement gây tò mò mà câu trả lời chưa được tiết lộ. Tạo cognitive tension buộc người xem ở lại để giải quyết. Ví dụ: 'Bạn có biết tại sao 90% mọi người làm sai điều này?', 'Điều này thay đổi mọi thứ...'. Hiệu quả nhất trên TikTok US (+234% completion rate) và UK (depth-seeking audience). Tránh dùng ở Germany nếu câu hỏi nghe có vẻ manipulative.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "eu", "uk", "education", "finance", "lifestyle", "tutorial"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 5 },
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.91
+    },
+    {
+      "id": "hook_pattern_interrupt",
+      "title": "Pattern Interrupt Hook — phá vỡ expectation trong 2 giây đầu",
+      "description": "Sử dụng visual, audio, hoặc content contrast đột ngột để ngăn auto-scroll. Não người xem nhận dạng pattern → interrupt pattern → buộc chú ý. Kỹ thuật: im lặng đột ngột trong nền đầy nhạc, cut bất ngờ, zoom đột ngột, màu sắc tương phản cao. TikTok US: pattern interrupt 2 giây đầu = +156% FYP appearances. Universal nhưng đặc biệt mạnh với entertainment và comedy.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "eu", "entertainment", "comedy", "lifestyle"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "pattern_break",
+        "hook_position": "opening_2s",
+        "pacing": { "cut_interval_min": 1, "cut_interval_max": 3 },
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "hook_visual_hook",
+      "title": "Visual Hook — hình ảnh ấn tượng không cần audio",
+      "description": "Hook hoàn toàn dựa vào visual: movement ấn tượng, visual contrast cao, transformation visible, hoặc scene đẹp/shock trong frame đầu tiên. Critical cho Japan (70%+ xem không âm), quan trọng cho tất cả market vì 80% US và 70%+ EU cũng xem không âm. Không cần caption hay audio để hook. Dùng làm hook primary khi không biết context audio của người xem.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "jp", "eu", "lifestyle", "travel", "food", "fitness"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 8 },
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.92
+    },
+    {
+      "id": "hook_payoff_first",
+      "title": "Payoff First Hook — mở đầu bằng kết quả, transformation, highlight",
+      "description": "Không bao giờ mở đầu bằng setup. Bắt đầu bằng kết quả ấn tượng nhất, sau đó mới reveal hành trình/process. 'Before/after' reversed: show AFTER trước. Transformation content: show result ngay giây đầu. Tutorial: show finished product trước khi dạy. Đặc biệt mạnh với US TikTok — người dùng không chờ payoff nếu không thấy nó ngay.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "eu", "lifestyle", "tutorial", "fitness", "food", "diy"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "opening_hook",
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 4 },
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.86
+    },
+    {
+      "id": "hook_community_identity",
+      "title": "Community/Identity Hook — 'bạn không phải người duy nhất cảm thấy X'",
+      "description": "Hook tạo cảm giác belonging và shared experience. 'Nếu bạn từng...', 'Chỉ những người X mới hiểu...', 'Ai cũng nói vậy nhưng thực ra...'. Rất hiệu quả ở EU (community-building trend mạnh), UK, Germany. Tạo instant connection. Khác với curiosity gap: community hook focus vào identity và validation, không phải information gap.",
+      "applies_to": ["tiktok", "youtube_shorts", "eu", "uk", "de", "lifestyle", "mental_health", "finance", "community"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "community_hook",
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 4, "cut_interval_max": 12 },
+        "subtitle_emphasis": "story"
+      },
+      "confidence": 0.84
+    },
+    {
+      "id": "hook_search_intent",
+      "title": "Search Intent Hook — hook dạng answer to a question",
+      "description": "Hook bắt đầu như đang trả lời một câu hỏi phổ biến. 'Cách tốt nhất để X', 'Đây là lý do tại sao Y', 'Tất cả những gì bạn cần biết về Z'. Đặc biệt hiệu quả ở Japan (TikTok/YouTube dùng như search engine). Cũng mạnh với educational content US. Hook này optimize cho discoverability — người dùng đang tìm kiếm thứ này.",
+      "applies_to": ["tiktok", "youtube_shorts", "jp", "us", "tutorial", "education", "how_to", "food", "travel"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 5, "cut_interval_max": 15 },
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.87
+    },
+    {
+      "id": "hook_no_fake_urgency",
+      "title": "Anti-pattern: Fake urgency và hard sell bị reject trên EU/JP",
+      "description": "TRÁNH các hook dạng 'BUY NOW', 'LIMITED TIME ONLY', 'YOU NEED THIS NOW' trên EU và Japan market. EU (đặc biệt Germany) và Japan react rất tiêu cực với aggressive sales hook và fake urgency. Authenticity > Sales pressure. Đây là anti-pattern — documenting để AI Director biết không apply hook type này khi targeting EU/JP.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "eu", "jp", "de"],
+      "recommendation": {
+        "hook": false,
+        "hook_type": "avoid_hard_sell",
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.89
+    },
+    {
+      "id": "hook_3s_retention_critical",
+      "title": "Universal: Hook phải xong trong 3 giây đầu — không có ngoại lệ",
+      "description": "Bất kể market hay platform, hook phải complete trong 3 giây đầu. TikTok: retention < 60% tại 3s → suppression. YouTube Shorts: swipe-away rate critical. Instagram Reels: thumb-stop trong 2-3s đầu. Japan: frame đầu tiên phải là visual hook vì audio có thể off. EU: 5 giây cũng được nhưng 3 giây vẫn optimal. KHÔNG bắt đầu bằng logo, intro, context. Bắt đầu bằng hook.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "jp", "eu"],
+      "recommendation": {
+        "hook": true,
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 1, "cut_interval_max": 4 }
+      },
+      "confidence": 0.94
+    }
+  ]
+}

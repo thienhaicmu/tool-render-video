@@ -1,0 +1,112 @@
+{
+  "id": "retention_curves_v1",
+  "domain": "retention",
+  "title": "Retention Curves & Algorithm Checkpoints — TikTok / YouTube Shorts / Instagram Reels (2025-2026)",
+  "version": 1,
+  "tags": ["retention", "algorithm", "tiktok", "youtube_shorts", "instagram_reels", "us", "completion_rate", "loop", "watch_time"],
+  "rules": [
+    {
+      "id": "retention_tiktok_3s_checkpoint",
+      "title": "TikTok: 70%+ retention tại 3s = ngưỡng viral — dưới đó bị suppression",
+      "description": "TikTok algorithm: retention 70-85% tại 3 giây đầu → nhận 2.2x more views (phân phối FYP tăng). Retention < 60% tại 3s → suppression phân phối. First 2 seconds quyết định 70% tổng retention của cả video. Đây là checkpoint quan trọng nhất với TikTok — không có ngoại lệ. Mọi quyết định về hook phải optimize cho mốc này.",
+      "applies_to": ["tiktok", "us", "eu", "jp", "retention"],
+      "recommendation": {
+        "hook": true,
+        "hook_position": "opening_3s",
+        "target_retention_3s": 0.70,
+        "pacing": { "cut_interval_min": 1, "cut_interval_max": 3 }
+      },
+      "confidence": 0.92
+    },
+    {
+      "id": "retention_tiktok_algorithm_2025",
+      "title": "TikTok 2025: Algorithm checkpoint mới tại 15-20 giây (không chỉ 3s)",
+      "description": "December 2024 algorithm shift: TikTok mở rộng checkpoint từ 3-5s sang 15-20s. Video giữ được audience đến 15-20s nhận boost phân phối thứ hai. Clip cần hai pha hook: hook đầu giữ đến 3s, secondary hook giữ đến 15-20s. Implication: content không thể 'coast' sau hook đầu — phải maintain engagement qua mid-point.",
+      "applies_to": ["tiktok", "us", "eu", "jp", "retention"],
+      "recommendation": {
+        "hook": true,
+        "hook_position": "opening_3s",
+        "target_retention_3s": 0.70,
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 8 }
+      },
+      "confidence": 0.87
+    },
+    {
+      "id": "retention_tiktok_watch_time_over_completion",
+      "title": "TikTok: Watch time tuyệt đối > Completion rate — 60s × 70% beats 10s × 100%",
+      "description": "TikTok algorithm weight: absolute watch time quan trọng hơn completion rate. 60-giây video được xem 70% (= 42s watch) tạo 4x more algorithmic value hơn 10-giây video watched completely (= 10s watch). Implication: không nên cắt clip quá ngắn chỉ để maximize completion rate. Clip 45-60s với good hook và substance beats clip 10s được xem hết. TikTok khuyến nghị 45s là optimal.",
+      "applies_to": ["tiktok", "us", "eu", "jp", "retention"],
+      "recommendation": {
+        "target_duration_min": 30,
+        "target_duration_max": 60,
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 10 }
+      },
+      "confidence": 0.85
+    },
+    {
+      "id": "retention_tiktok_loop_rate",
+      "title": "TikTok: Loop rate 15-20% = strong signal — 4.1x impressions",
+      "description": "TikTok đo loop rate (số lần video được replay / số unique viewers). Loop rate 15-20%+ = strong novelty/utility signal → algorithm boost 4.1x more impressions so với video có loop rate < 5%. Seamless loop structure (kết thúc kết nối bắt đầu liền mạch) là content strategy để trigger organic rewatch. Nhất là với educational content và short vlog có circular narrative.",
+      "applies_to": ["tiktok", "us", "eu", "jp", "retention"],
+      "recommendation": {
+        "loop_structure": true,
+        "target_duration_min": 10,
+        "target_duration_max": 30
+      },
+      "confidence": 0.84
+    },
+    {
+      "id": "retention_shorts_skip_decision",
+      "title": "YouTube Shorts: Skip decision tại 8s — critical checkpoint tại 15s",
+      "description": "YouTube Shorts: 55% viewers bị mất vào giây thứ 60. Skip decision xảy ra sớm nhất tại 8s — nếu không có secondary hook ở đây, viewers scroll tiếp. Critical algorithm checkpoint tại 15s. Viral Shorts target: 80-90% average completion rate. Clips dưới 20s cần 90-100% completion để được recommend. March 2025 change: 'Engaged Views' (watch beyond threshold + interaction) là metric chính cho monetization eligibility.",
+      "applies_to": ["youtube_shorts", "us", "eu", "jp", "retention"],
+      "recommendation": {
+        "hook": true,
+        "hook_position": "opening_3s",
+        "target_retention_3s": 0.80,
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 6 },
+        "loop_structure": true
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "retention_shorts_duration_optimal",
+      "title": "YouTube Shorts: 25-35s là sweet spot — viral Shorts giữ 76% viewers",
+      "description": "YouTube Shorts optimal duration: 25-35 giây. Viral Shorts giữ ~76% viewers (ví dụ: 23s trên 30s clip). Swipe-away rate phải dưới 25%. Loop structure (ending connects to beginning) trigger rewatches → YouTube đọc là high engagement signal. Duration 25-40s là range an toàn nhất. Clip quá ngắn (<15s) không có enough watch time absolute; quá dài (>60s) completion rate drops.",
+      "applies_to": ["youtube_shorts", "us", "eu", "jp", "retention"],
+      "recommendation": {
+        "target_duration_min": 25,
+        "target_duration_max": 40,
+        "target_retention": 0.76,
+        "loop_structure": true
+      },
+      "confidence": 0.85
+    },
+    {
+      "id": "retention_reels_skip_rate_dominant",
+      "title": "Instagram Reels: Skip rate = top algorithmic factor (2025-2026)",
+      "description": "Instagram Reels (confirmed early 2026): skip rate là yếu tố algorithm được weight cao nhất, không phải views hay likes. Lên tới 50% drop-off trong 3 giây đầu (steeper than TikTok và Shorts). Reels giữ được 50%+ retention nhận 38% reach boost. August 2025: Instagram thêm per-second retention charts giống TikTok. Implication: hook Reels phải visual và immediate — không có thời gian setup.",
+      "applies_to": ["instagram_reels", "us", "eu", "retention"],
+      "recommendation": {
+        "hook": true,
+        "hook_position": "opening_3s",
+        "hook_type": "visual_hook",
+        "target_retention_3s": 0.65,
+        "pacing": { "cut_interval_min": 1, "cut_interval_max": 4 }
+      },
+      "confidence": 0.89
+    },
+    {
+      "id": "retention_reels_duration_optimal",
+      "title": "Instagram Reels: 20-25s optimal — saves và shares beat views",
+      "description": "Instagram Reels optimal: 20-25s. Saves và shares được weight cao hơn view count trong algorithm (2025 confirmed). 5,000 views + 200 shares outperforms 20,000 views + 20 shares. Implication: content phải provoke save (utility, reference value) hoặc share (relatable, awe, humor) chứ không chỉ passive viewing. Educational và utility Reels có natural save advantage.",
+      "applies_to": ["instagram_reels", "us", "eu", "retention"],
+      "recommendation": {
+        "target_duration_min": 20,
+        "target_duration_max": 30,
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.86
+    }
+  ]
+}

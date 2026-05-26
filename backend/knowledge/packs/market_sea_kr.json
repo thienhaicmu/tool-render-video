@@ -1,0 +1,102 @@
+{
+  "id": "market_sea_kr_v1",
+  "domain": "market",
+  "title": "Southeast Asia & South Korea Market — TikTok / YouTube Shorts / Instagram Reels",
+  "version": 1,
+  "tags": ["sea", "southeast_asia", "vietnam", "thailand", "indonesia", "philippines", "kr", "korea", "market", "tiktok", "youtube_shorts"],
+  "rules": [
+    {
+      "id": "sea_entertainment_dominant",
+      "title": "SEA: Entertainment-first — 80% watch TikTok cho funny/viral content",
+      "description": "Southeast Asia (Vietnam, Thailand, Indonesia, Philippines): nearly 80% người dùng xem TikTok chủ yếu cho funny và viral entertainment content. Sports content surge +57% YoY. Entertainment hook outperform educational hook rõ rệt. Influencer content drives 20%+ weekly engagement (43.5% ở Philippines). Comedy, dance, challenge, và viral trend content là top performers. Educational content cũng có audience nhưng cần entertainment wrapper để compete.",
+      "applies_to": ["tiktok", "youtube_shorts", "sea", "entertainment", "comedy", "lifestyle"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 6 },
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "sea_fast_pacing",
+      "title": "SEA: Fast pacing — high daily usage (35-40min), high tolerance cho quick cuts",
+      "description": "SEA users spend 35-40 phút daily trên TikTok (globally top usage rate). High platform engagement → high tolerance cho fast-paced editing và quick cuts. Pacing gần với US hơn EU. SEA: trung bình 2-5s per cut phù hợp. Không slow như Japan (prefer calm pacing) hay EU (prefer measured). Entertainment fast-cut đặc biệt hiệu quả. Multi-platform stacking common — users consume across TikTok, YouTube, và local platforms.",
+      "applies_to": ["tiktok", "youtube_shorts", "sea", "entertainment"],
+      "recommendation": {
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 6 },
+        "target_duration_min": 15,
+        "target_duration_max": 45,
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.84
+    },
+    {
+      "id": "sea_audio_on_culture",
+      "title": "SEA: Audio-on culture — khác Japan, nhưng caption vẫn cần thiết",
+      "description": "SEA là audio-on culture rõ rệt — khác hoàn toàn với Japan (silent viewing dominant). Music-driven content, trending sounds, và audio hooks hiệu quả hơn visual-only hooks. Tuy nhiên captions vẫn cần thiết vì: (1) public/muted viewing environments vẫn tồn tại, (2) captions improve discoverability, (3) multi-language trong khu vực. Audio hook (music drop, sound effect surprise) kết hợp visual hook là optimal. Không nên design video chỉ cho silent viewing như JP approach.",
+      "applies_to": ["tiktok", "sea", "entertainment", "lifestyle"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "subtitle_emphasis": "viral",
+        "subtitle_words_per_block": 4
+      },
+      "confidence": 0.83
+    },
+    {
+      "id": "sea_local_content_strong",
+      "title": "SEA: Local content preference — cultural và language localization critical",
+      "description": "SEA users có strong preference cho local content: localized music, dance, và cultural daily-life content perform tốt hơn generic global content. TikTok implemented regional content boosts cho local creators. E-commerce integration rất mạnh (TikTok Shop: 30%→41% market share Vietnam 2024-2026). Creators kết hợp local culture + trending format + TikTok Shop link outperform. Language: content bằng ngôn ngữ địa phương (Vietnamese, Thai, Bahasa, Filipino) có engagement cao hơn English-only.",
+      "applies_to": ["tiktok", "sea", "lifestyle", "ecommerce"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 8 },
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.85
+    },
+    {
+      "id": "sea_ecommerce_tiktok_shop",
+      "title": "SEA: TikTok Shop integration — content-commerce hybrid là dominant format",
+      "description": "SEA market đặc biệt ở TikTok Shop integration: content + commerce hybrid là dominant format. TikTok Shop market share Vietnam tăng 30%→41% (2024-2026). Philippines: influencer content drives 43.5% weekly engagement phần lớn linked to product discovery. Live shopping và shoppable video content rất phổ biến. Hook kiểu 'Tôi thử X và đây là kết quả' (review + demo) là format viral nhất với e-commerce overlay. Disclosure và authenticity vẫn quan trọng — fake review bị reject.",
+      "applies_to": ["tiktok", "sea", "ecommerce", "review", "lifestyle"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 3, "cut_interval_max": 8 },
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.82
+    },
+    {
+      "id": "kr_kpop_music_driven",
+      "title": "Korea: K-pop và music-driven hooks — content-music sync là expectation",
+      "description": "South Korea TikTok: K-pop dance challenges và idol-reactive content dominate. Music-driven hooks hiệu quả nhất — content-music synchronization là expectation, không phải bonus. Short-form series và multi-part videos (duets, stitches, responses) boost engagement significantly. K-content influence: visual aesthetic cao, performance quality cao, sync precision cao. Creators cần music-first thinking: chọn sound → design content fit sound, không ngược lại.",
+      "applies_to": ["tiktok", "kr", "entertainment", "music", "dance"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 5 },
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.86
+    },
+    {
+      "id": "kr_captions_algorithmic_discovery",
+      "title": "Korea: Captions là công cụ discovery — không chỉ accessibility",
+      "description": "South Korea: captions function như algorithmic indexing tools (giống TikTok/YouTube search indexing), không chỉ là creative element hay accessibility feature. Accurate, keyword-rich captions tăng discoverability. Culturally, captions align content với algorithmic discovery logic của platform — creators có ý thức optimize caption text cho search. Subtitle style: clean và readable (không overly styled). Content-caption alignment quan trọng hơn visual flair của subtitle.",
+      "applies_to": ["tiktok", "youtube_shorts", "kr", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "clean",
+        "subtitle_words_per_block": 5,
+        "subtitle_must_carry_full_meaning": true
+      },
+      "confidence": 0.83
+    }
+  ]
+}

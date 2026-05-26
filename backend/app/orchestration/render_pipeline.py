@@ -1085,7 +1085,7 @@ def run_render_pipeline(
     # Market Viral — resolve target market once; used by all part workers via closure
     _mv_cfg = getattr(payload, "market_viral", None) or {}
     _mv_cfg_enabled = isinstance(_mv_cfg, dict) and bool(_mv_cfg)
-    _mv_payload_market = getattr(payload, "viral_market", None)
+    _mv_payload_market = getattr(payload, "ai_target_market", None) or getattr(payload, "viral_market", None)
     _mv_market = str(
         _mv_payload_market
         or ((_mv_cfg.get("target_market") or "US") if isinstance(_mv_cfg, dict) else "US")
@@ -2373,6 +2373,7 @@ def run_render_pipeline(
         if getattr(payload, "ai_director_enabled", False):
             try:
                 from app.ai.director.ai_director import create_ai_edit_plan as _create_ai_plan
+                from app.ai.knowledge.knowledge_store_builder import get_pack_knowledge_store as _get_pack_store
 
                 # ── Phase 5.2: Build knowledge filters from payload ────────────────
                 _knowledge_filters: dict = {}
@@ -2455,12 +2456,14 @@ def run_render_pipeline(
                     "srt_path": str(full_srt) if full_srt_available else None,
                     "scenes": scenes,
                     "duration": source.get("duration", 0.0),
-                    "market": getattr(payload, "viral_market", None),
+                    "market": getattr(payload, "ai_target_market", None) or getattr(payload, "viral_market", None),
                     # Phase 4: source path for optional beat analysis
                     "source_path": str(source_path) if source_path else None,
                     # Phase 5.2: retrieved knowledge items and filters
                     "retrieved_knowledge": _retrieved_knowledge,
                     "knowledge_filters": _knowledge_filters,
+                    # Phase 53A: pack-based semantic knowledge store (LocalKnowledgeStore singleton)
+                    "knowledge_store": _get_pack_store(),
                 }
                 _ai_edit_plan = _create_ai_plan(payload, _ai_context)
                 if _ai_edit_plan is not None:
@@ -4032,6 +4035,45 @@ def run_render_pipeline(
                         f"first_frame_shift_applied part={idx} visual_trim={_visual_trim:.3f}s "
                         f"total_trim={_trim_offset:.3f}s effective_start={_effective_start:.3f}s accurate_cut=True")
 
+            # AI timing mutation — tighten_setup (start) + shorten_outro (end)
+            _effective_end = seg['end']
+            if (
+                getattr(payload, 'ai_timing_mutation_enabled', False)
+                and _ai_edit_plan is not None
+                and _ai_edit_plan.timing_apply.get('applied_mutations')
+            ):
+                _mutations = _ai_edit_plan.timing_apply['applied_mutations']
+                _min_sec = float(getattr(payload, 'min_part_sec', 15) or 15)
+
+                _ai_setup_delta = sum(
+                    float(m.get('delta_sec', 0.0))
+                    for m in _mutations
+                    if (
+                        m.get('mutation_type') == 'tighten_setup'
+                        and m.get('safe') is True
+                        and seg['start'] <= float(m.get('start_sec', -1)) <= seg['start'] + 5.0
+                    )
+                )
+                if _ai_setup_delta > 0:
+                    _ai_setup_delta = min(_ai_setup_delta, max(0.0, _effective_end - _effective_start - _min_sec))
+                if _ai_setup_delta > 0:
+                    _trim_offset += _ai_setup_delta
+                    _effective_start = seg['start'] + _trim_offset
+
+                _ai_outro_delta = sum(
+                    float(m.get('delta_sec', 0.0))
+                    for m in _mutations
+                    if (
+                        m.get('mutation_type') == 'shorten_outro'
+                        and m.get('safe') is True
+                        and seg['end'] - 5.0 <= float(m.get('end_sec', -1)) <= seg['end']
+                    )
+                )
+                if _ai_outro_delta > 0:
+                    _ai_outro_delta = min(_ai_outro_delta, max(0.0, _effective_end - _effective_start - _min_sec))
+                if _ai_outro_delta > 0:
+                    _effective_end -= _ai_outro_delta
+
             # Build TimelineMap and BaseClipManifest after all trim decisions are
             # final (_effective_start is settled).  Written to disk before cut_video()
             # so a crash leaves a consistent record up to the last completed step.
@@ -4040,7 +4082,7 @@ def run_render_pipeline(
             )
             _part_timeline = TimelineMap(
                 source_start=float(_effective_start),
-                source_end=float(seg["end"]),
+                source_end=float(_effective_end),
                 effective_speed=_get_effective_playback_speed(payload, _target_platform),
                 trim_offset=float(_trim_offset),
             )
@@ -4049,7 +4091,7 @@ def run_render_pipeline(
                 part_no=idx,
                 source_path=str(source_path),
                 source_start=float(_effective_start),
-                source_end=float(seg["end"]),
+                source_end=float(_effective_end),
                 payload_speed=float(payload.playback_speed or 1.07),
                 platform=_target_platform,
                 platform_delta=_part_platform_delta,
@@ -4065,7 +4107,15 @@ def run_render_pipeline(
                 timeline=_part_timeline,
                 ai_enabled=bool(getattr(payload, "ai_director_enabled", False)),
                 ai_mode=getattr(_ai_edit_plan, "mode", None) if _ai_edit_plan is not None else None,
-                ai_selected=False,  # not yet wired to AIEditPlan selection
+                ai_selected=(
+                    any(
+                        min(seg["end"], clip.end) - max(seg["start"], clip.start)
+                        >= 0.5 * min(seg["end"] - seg["start"], clip.end - clip.start)
+                        for clip in _ai_edit_plan.selected_segments
+                    )
+                    if _ai_edit_plan is not None and _ai_edit_plan.selected_segments
+                    else False
+                ),
                 ai_speed_hint=None,
             )
             write_manifest(work_dir, _part_manifest)
@@ -4073,7 +4123,7 @@ def run_render_pipeline(
             upsert_job_part(job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
             if not (payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
                 _t_cut = time.perf_counter()
-                cut_video(str(source_path), str(raw_part), _effective_start, seg["end"],
+                cut_video(str(source_path), str(raw_part), _effective_start, _effective_end,
                           retry_count=retry_count, force_accurate_cut=_force_accurate_cut)
                 _cut_ms = int((time.perf_counter() - _t_cut) * 1000)
                 logger.info("cut_video_ms=%d part=%d", _cut_ms, idx)
@@ -5828,7 +5878,7 @@ def run_render_pipeline(
                 _write_mem(
                     _result_payload,
                     context={
-                        "market": getattr(payload, "viral_market", None),
+                        "market": getattr(payload, "ai_target_market", None) or getattr(payload, "viral_market", None),
                         "mode": getattr(payload, "ai_mode", "viral_tiktok"),
                         "duration": source.get("duration", 0.0),
                     },

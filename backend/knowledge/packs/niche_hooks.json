@@ -1,0 +1,118 @@
+{
+  "id": "niche_hooks",
+  "domain": "hook",
+  "version": "1.0",
+  "description": "Niche-specific hook strategies for finance, fitness, food, beauty, gaming, education",
+  "rules": [
+    {
+      "id": "finance_fear_hook",
+      "title": "Finance: Fear + FOMO Hook Dominates",
+      "description": "Finance content hooks on loss aversion ('You're losing $X every day you don't know this') outperform gain-framing by 2.7x. Fear of missing out + specific dollar amount = immediate scroll stop. Regulatory note: avoid explicit promises of returns.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "eu", "hook"],
+      "confidence": 0.87,
+      "recommendation": {
+        "niche": "finance",
+        "hook_frame": "loss_aversion",
+        "hook_template": "You're losing $X every [period] you don't know this",
+        "engagement_multiplier": 2.7,
+        "avoid": "explicit_return_promises"
+      }
+    },
+    {
+      "id": "fitness_transformation_proof",
+      "title": "Fitness: Transformation Proof First",
+      "description": "Show the result (body transformation, weight, performance metric) in the first 2 seconds before explaining how. Fitness hooks with visible proof get 3.1x more saves. 'How I [achievement] in [timeframe]' is the top format.",
+      "applies_to": ["tiktok", "instagram_reels", "us", "sea", "hook", "retention"],
+      "confidence": 0.89,
+      "recommendation": {
+        "niche": "fitness",
+        "hook_strategy": "result_first_then_method",
+        "hook_template": "How I [achievement] in [timeframe]",
+        "save_rate_multiplier": 3.1,
+        "proof_position_sec": 2
+      }
+    },
+    {
+      "id": "food_sensory_hook",
+      "title": "Food: Sensory ASMR Hook",
+      "description": "Food content with high-quality sensory audio (sizzle, crunch, pour) in the first frame retains 58% more viewers at 5s mark. Close-up macro shot of texture + sound = the most scroll-stopping food hook. No voiceover needed in first 3s.",
+      "applies_to": ["tiktok", "instagram_reels", "youtube_shorts", "sea", "us", "jp", "hook"],
+      "confidence": 0.90,
+      "recommendation": {
+        "niche": "food",
+        "hook_type": "sensory_asmr",
+        "elements": ["macro_shot", "high_quality_audio", "texture_focus"],
+        "retention_at_5s_improvement_pct": 58,
+        "voiceover_in_first_3s": false
+      }
+    },
+    {
+      "id": "beauty_glow_up_hook",
+      "title": "Beauty: Glow-Up Reveal Format",
+      "description": "Beauty content that opens with the before state and teases the after gets 2.4x higher completion than tutorial-first format. 'Watch me transform from [relatable bad state] to [aspirational state]' drives saves and shares.",
+      "applies_to": ["tiktok", "instagram_reels", "us", "sea", "kr", "hook"],
+      "confidence": 0.88,
+      "recommendation": {
+        "niche": "beauty",
+        "format": "glow_up_reveal",
+        "hook_template": "Watch me transform from [before] to [after]",
+        "completion_multiplier": 2.4,
+        "key_driver": "aspirational_identity"
+      }
+    },
+    {
+      "id": "gaming_rage_clip_hook",
+      "title": "Gaming: Rage/Hype Clip as Hook",
+      "description": "Gaming content that opens with the peak moment (clutch play, fail, rage quit) then rewinds to context outperforms story-order content 3.4x on TikTok. Viewers need the dopamine trigger first. Best under 30s.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "sea", "kr", "hook"],
+      "confidence": 0.86,
+      "recommendation": {
+        "niche": "gaming",
+        "structure": "peak_moment_first_then_context",
+        "optimal_duration_sec": 30,
+        "engagement_multiplier": 3.4,
+        "hook_type": "clutch_or_fail_or_rage"
+      }
+    },
+    {
+      "id": "education_myth_bust",
+      "title": "Education: Myth-Busting Opens the Loop",
+      "description": "'Everything you know about [topic] is wrong' hooks have 89% higher click-through for educational content. Challenges existing belief → creates cognitive dissonance → forces completion. Must deliver genuine insight or trust is permanently lost.",
+      "applies_to": ["youtube_shorts", "tiktok", "us", "eu", "in", "hook"],
+      "confidence": 0.85,
+      "recommendation": {
+        "niche": "education",
+        "hook_template": "Everything you know about [X] is wrong",
+        "ctr_improvement_pct": 89,
+        "requirement": "must_deliver_genuine_insight",
+        "mechanism": "belief_challenge"
+      }
+    },
+    {
+      "id": "lifestyle_aspirational_identity",
+      "title": "Lifestyle: Identity Hook Drives Follow",
+      "description": "'If you [identity marker], this is for you' hooks have the highest follow-conversion rate of any lifestyle format (avg 4.2% new follower rate per viral view). Viewers self-select → higher relevance signal → better algorithm targeting.",
+      "applies_to": ["tiktok", "instagram_reels", "us", "eu", "hook"],
+      "confidence": 0.84,
+      "recommendation": {
+        "niche": "lifestyle",
+        "hook_template": "If you [identity], this is for you",
+        "follower_conversion_rate_pct": 4.2,
+        "benefit": "self_selection_improves_targeting"
+      }
+    },
+    {
+      "id": "tech_product_shock_value",
+      "title": "Tech: Shock Value Comparison Hook",
+      "description": "Tech product reveals that open with price vs value contrast ('$X gadget that replaced $3000 of equipment') get 4.1x more shares than feature-led hooks. The shock of value proposition stops scroll instantly.",
+      "applies_to": ["youtube_shorts", "tiktok", "us", "jp", "kr", "hook"],
+      "confidence": 0.83,
+      "recommendation": {
+        "niche": "tech",
+        "hook_template": "$X [product] that replaced $Y of [expensive alternative]",
+        "share_rate_multiplier": 4.1,
+        "hook_type": "value_shock"
+      }
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+{
+  "id": "market_us_v1",
+  "domain": "market",
+  "title": "United States Market — TikTok / YouTube Shorts / Instagram Reels",
+  "version": 1,
+  "tags": ["us", "market", "tiktok", "youtube_shorts", "instagram_reels", "english"],
+  "rules": [
+    {
+      "id": "us_tiktok_hook_3s_retention",
+      "title": "TikTok US: Hook bắt buộc trong 3 giây đầu",
+      "description": "84.3% viral TikTok US dùng psychological hook triggers trong 3s đầu. Retention < 60% tại 3s bị TikTok suppression phân phối. Retention 70-85% đạt viral potential, nhận 2.2x more views.",
+      "applies_to": ["tiktok", "us"],
+      "recommendation": {
+        "hook": true,
+        "hook_position": "opening_3s",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 5 },
+        "subtitle_emphasis": "viral",
+        "target_retention_3s": 0.75
+      },
+      "confidence": 0.90
+    },
+    {
+      "id": "us_tiktok_curiosity_gap",
+      "title": "TikTok US: Curiosity Gap Hook (+234% completion)",
+      "description": "Curiosity gap hooks trên TikTok US tạo +234% completion rate và +178% share rate so với direct statement openings. Câu hỏi gây tò mò, open loop hiệu quả nhất.",
+      "applies_to": ["tiktok", "us", "hook", "entertainment", "education"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "hook_position": "opening_3s",
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.87
+    },
+    {
+      "id": "us_tiktok_pattern_interrupt",
+      "title": "TikTok US: Pattern Interrupt (+156% FYP)",
+      "description": "Pattern interrupt trong 2 giây đầu tạo +156% FYP appearances. Visual interrupt, audio interrupt, hoặc contextual interrupt đều hiệu quả. Silence trong platform đầy nhạc → +40% completion.",
+      "applies_to": ["tiktok", "us", "hook", "entertainment"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "pattern_break",
+        "hook_position": "opening_2s",
+        "pacing": { "cut_interval_min": 1, "cut_interval_max": 3 },
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.85
+    },
+    {
+      "id": "us_tiktok_payoff_first",
+      "title": "TikTok US: Payoff First — mở đầu bằng kết quả",
+      "description": "Không bao giờ mở đầu bằng setup. Mở đầu bằng kết quả, transformation, hoặc khoảnh khắc ấn tượng nhất. Sau hook mới giải thích. Mỗi 1-2 giây cần có visual/content change.",
+      "applies_to": ["tiktok", "us", "hook", "lifestyle", "education"],
+      "recommendation": {
+        "hook": true,
+        "hook_position": "opening_3s",
+        "hook_type": "opening_hook",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 4 }
+      },
+      "confidence": 0.83
+    },
+    {
+      "id": "us_shorts_duration_sweet_spot",
+      "title": "YouTube Shorts US: 20-35 giây là sweet spot",
+      "description": "Shorts viral nhất ở 20-35s. Viral Shorts giữ ~76% viewers (23s/30s clip). Swipe-away rate phải dưới 25%. Loop structure (ending kết nối beginning) trigger rewatches — YouTube đọc đây là high engagement.",
+      "applies_to": ["youtube_shorts", "us"],
+      "recommendation": {
+        "hook": true,
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 6 },
+        "subtitle_emphasis": "clean",
+        "loop_structure": true,
+        "target_retention": 0.76
+      },
+      "confidence": 0.85
+    },
+    {
+      "id": "us_reels_subtitle_position",
+      "title": "Instagram Reels US: Subtitle center, tránh bottom 15%",
+      "description": "Reels US: center positioning, tránh bottom 15% và right 10% (UI elements). 1 line per subtitle instance maximize engagement. 3-4 words per block.",
+      "applies_to": ["instagram_reels", "us", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "viral",
+        "subtitle_position": "center",
+        "subtitle_words_per_block": 3,
+        "subtitle_font_style": "bold_sans_serif"
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "us_education_niche_hook",
+      "title": "US Education/Finance Niche: Curiosity + Utility Hook",
+      "description": "Educational TikTok content US tăng 40% YoY 2025. Hook kiểu 'You've been doing X wrong' hoặc immediate utility ('Learn X in 60 seconds') hiệu quả nhất. Educational content optimized for completion thường outperform entertainment optimized for shares.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "education", "tutorial"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "pacing": { "cut_interval_min": 8, "cut_interval_max": 20 },
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.86
+    },
+    {
+      "id": "us_entertainment_fast_cut",
+      "title": "US Entertainment: Fast cut 1.5s, visual change mỗi giây",
+      "description": "Best Shorts US có visual/content change trung bình mỗi 1.5 giây. Entertainment/comedy skit dùng 3-5s clips, minimal downtime giữa jokes. Không có 5 giây để hook — chỉ có nửa giây trước khi swipe.",
+      "applies_to": ["tiktok", "youtube_shorts", "us", "entertainment", "comedy"],
+      "recommendation": {
+        "hook": true,
+        "pacing": { "cut_interval_min": 1, "cut_interval_max": 4 },
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "us_silent_viewing",
+      "title": "US: 80% xem không có âm thanh",
+      "description": "80% social media video tại US được xem không có âm thanh. Subtitle là bắt buộc để giữ silent viewers. Bold sans-serif (Montserrat/Helvetica), white với black outline hoặc ngược lại cho contrast tốt nhất.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "viral",
+        "subtitle_font_style": "bold_sans_serif",
+        "subtitle_words_per_block": 4
+      },
+      "confidence": 0.92
+    }
+  ]
+}

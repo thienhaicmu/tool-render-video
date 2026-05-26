@@ -60,14 +60,24 @@ export interface PrepareSourceResponse {
   export_dir: string
 }
 
-export async function prepareSource(body: {
-  source_mode: 'youtube' | 'local'
-  youtube_url?: string
-  source_video_path?: string
-}): Promise<PrepareSourceResponse> {
+export async function prepareSource(
+  body: {
+    source_mode: 'youtube' | 'local'
+    youtube_url?: string
+    source_video_path?: string
+  },
+  signal?: AbortSignal,
+): Promise<PrepareSourceResponse> {
   return apiFetch<PrepareSourceResponse>('/api/render/prepare-source', {
     method: 'POST',
     body: JSON.stringify(body),
+    signal,
+  })
+}
+
+export async function cancelPrepareSource(sessionId: string): Promise<void> {
+  return apiFetch<void>(`/api/render/prepare-source/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
   })
 }
 

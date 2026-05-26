@@ -149,7 +149,7 @@ class RenderRequest(BaseModel):
 
     # Subtitle
     add_subtitle: bool = True
-    subtitle_style: Optional[str] = "pro_karaoke"
+    subtitle_style: Optional[str] = "tiktok_bounce_v1"
     subtitle_viral_min_score: int = 0
     subtitle_viral_top_ratio: float = 1.0
     subtitle_only_viral_high: bool = False
@@ -212,6 +212,7 @@ class RenderRequest(BaseModel):
     subtitle_target_language: str = "en"
     market_viral: Optional[dict] = None
     viral_market: Optional[str] = None
+    ai_target_market: Optional[str] = None
     hook_applied_text: Optional[str] = None
     hook_apply_enabled: bool = False
     hook_overlay_enabled: bool = False
@@ -228,7 +229,7 @@ class RenderRequest(BaseModel):
     ai_auto_cut: bool = True
     ai_target_duration: Optional[int] = None
     ai_use_semantic_hooks: bool = True
-    ai_use_rag_memory: bool = False
+    ai_use_rag_memory: bool = True
     # AI Render Influence (Phase 10) — opt-in only; false = original behavior preserved.
     ai_render_influence_enabled: bool = False
     # AI Beat Execution (Phase 11) — opt-in beat-aware planning; defaults preserve old behavior.

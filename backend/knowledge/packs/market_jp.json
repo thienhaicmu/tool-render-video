@@ -1,0 +1,111 @@
+{
+  "id": "market_jp_v1",
+  "domain": "market",
+  "title": "Japan Market — TikTok / YouTube Shorts / Instagram Reels",
+  "version": 1,
+  "tags": ["jp", "japan", "market", "tiktok", "youtube_shorts", "japanese"],
+  "rules": [
+    {
+      "id": "jp_silent_viewing_critical",
+      "title": "Japan: Silent viewing là dominant — subtitle bắt buộc",
+      "description": "Japan: người dùng tiêu thụ nội dung mà không có âm thanh, đặc biệt khi đi tàu điện hoặc ở nơi công cộng. Text overlay và subtitle có tầm quan trọng cực kỳ cao. Video phụ thuộc vào audio sẽ thất bại nặng nề.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "jp", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "clean",
+        "subtitle_words_per_block": 6,
+        "subtitle_font_style": "bold_sans_serif",
+        "subtitle_must_carry_full_meaning": true
+      },
+      "confidence": 0.92
+    },
+    {
+      "id": "jp_text_overlay_importance",
+      "title": "Japan: Text overlay critical — ý nghĩa phải đọc được không cần âm",
+      "description": "Thị trường Japan: videos và posts dựa nhiều vào text overlays, subtitles, và detailed captions hoạt động tốt hơn đáng kể. Subtitle phải đủ nghĩa khi xem không có âm — không thể phụ thuộc vào context audio.",
+      "applies_to": ["tiktok", "youtube_shorts", "jp", "subtitle"],
+      "recommendation": {
+        "subtitle_emphasis": "clean",
+        "subtitle_position": "center",
+        "subtitle_words_per_block": 5
+      },
+      "confidence": 0.91
+    },
+    {
+      "id": "jp_authentic_over_polished",
+      "title": "Japan: Raw/authentic content >> polished corporate",
+      "description": "Gen Z và younger Millennials Japan prefer raw, honest, unfiltered content hơn highly polished corporate ads. Authenticity signal rất quan trọng. Content tự nhiên, không quá chỉnh sửa được tin tưởng hơn.",
+      "applies_to": ["tiktok", "youtube_shorts", "jp", "lifestyle", "entertainment"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 8 },
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "jp_visual_hook_first",
+      "title": "Japan: Visual-first hook — không cần nói vẫn hook được",
+      "description": "Vì 70%+ xem không có âm, hook hiệu quả nhất ở Japan là visual hook — hình ảnh ấn tượng, movement, hoặc visual contrast ngay frame đầu. Không nên phụ thuộc vào audio hook.",
+      "applies_to": ["tiktok", "youtube_shorts", "jp", "hook"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "hook_position": "opening_3s",
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.90
+    },
+    {
+      "id": "jp_search_engine_behavior",
+      "title": "Japan: TikTok/YouTube dùng như search engine",
+      "description": "Younger Japanese users dùng TikTok, Instagram, YouTube như search engines để tìm restaurant reviews, travel ideas, product recommendations, how-to guides. Information hook dạng 'Cách tốt nhất để X' hoặc discovery hook rất hiệu quả.",
+      "applies_to": ["tiktok", "youtube_shorts", "jp", "tutorial", "lifestyle", "food"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "subtitle_emphasis": "clean",
+        "pacing": { "cut_interval_min": 5, "cut_interval_max": 15 }
+      },
+      "confidence": 0.87
+    },
+    {
+      "id": "jp_duration_longer_accepted",
+      "title": "Japan: Clip dài hơn US được chấp nhận (15-60s)",
+      "description": "Japan chấp nhận clip dài hơn US. Short, high-impact videos 15-60 giây phù hợp với mobile-first lifestyle nhưng không cần ngắn cực đoan như US market. Người dùng Japan kiên nhẫn hơn nếu content có giá trị.",
+      "applies_to": ["tiktok", "youtube_shorts", "jp"],
+      "recommendation": {
+        "target_duration_min": 20,
+        "target_duration_max": 55,
+        "pacing": { "cut_interval_min": 4, "cut_interval_max": 15 }
+      },
+      "confidence": 0.83
+    },
+    {
+      "id": "jp_no_aggressive_hook",
+      "title": "Japan: Tránh hook quá aggressive hoặc hard sell",
+      "description": "Japan: tránh hard sell hook, aggressive pacing, và audio-dependent content. Communication style indirect và subtle hơn US. Không phù hợp với kiểu hook 'YOU NEED THIS NOW' hay urgency giả tạo.",
+      "applies_to": ["tiktok", "youtube_shorts", "jp"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "visual_hook",
+        "subtitle_emphasis": "clean",
+        "pacing": { "cut_interval_min": 3, "cut_interval_max": 10 }
+      },
+      "confidence": 0.86
+    },
+    {
+      "id": "jp_tutorial_how_to_strong",
+      "title": "Japan: Tutorial/How-to content rất mạnh",
+      "description": "How-to content cực kỳ hiệu quả ở Japan vì thói quen dùng platform như search engine. Subtitle phải carry đủ meaning. Cut chậm hơn để người xem hiểu từng bước.",
+      "applies_to": ["tiktok", "youtube_shorts", "jp", "tutorial", "education"],
+      "recommendation": {
+        "hook": true,
+        "hook_type": "curiosity_gap",
+        "pacing": { "cut_interval_min": 15, "cut_interval_max": 30 },
+        "subtitle_emphasis": "clean"
+      },
+      "confidence": 0.88
+    }
+  ]
+}

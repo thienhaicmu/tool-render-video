@@ -26,6 +26,8 @@ export interface RenderFormState {
   reframe_mode: string
   frame_scale_x: number
   frame_scale_y: number
+  // AI market targeting
+  ai_target_market: string
 }
 
 export interface RenderFormErrors {

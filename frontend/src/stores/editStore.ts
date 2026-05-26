@@ -57,7 +57,7 @@ export const DEFAULT_EDIT_SETTINGS: EditSettings = {
   partOrder:         'viral',
 
   addSubtitle:       true,
-  subtitleStyle:     'karaoke',
+  subtitleStyle:     'tiktok_bounce_v1',
   subFontSize:       28,
   highlightPerWord:  true,
 

@@ -1,0 +1,110 @@
+{
+  "id": "pacing_by_content_v1",
+  "domain": "pacing",
+  "title": "Pacing Rules by Content Type — Tutorial / Entertainment / Vlog / Education",
+  "version": 1,
+  "tags": ["pacing", "tutorial", "entertainment", "vlog", "education", "comedy", "lifestyle", "finance", "food", "travel", "fitness"],
+  "rules": [
+    {
+      "id": "pacing_tutorial_step_by_step",
+      "title": "Tutorial: Cut 15-25s per step — người xem cần xử lý information",
+      "description": "Tutorial và how-to content cần pacing chậm để người xem có thể follow từng bước. Cut interval 15-25 giây per step. Không cut giữa một instruction. Subtitle phải carry đủ meaning vì người xem thường xem lại. Mỗi cut = chuyển sang bước mới. Japan đặc biệt cần pacing chậm cho tutorial. US education niche cũng reward longer explanation time.",
+      "applies_to": ["tiktok", "youtube_shorts", "tutorial", "how_to", "diy", "cooking", "fitness", "us", "jp", "eu"],
+      "recommendation": {
+        "pacing": { "cut_interval_min": 15, "cut_interval_max": 30 },
+        "target_duration_min": 30,
+        "target_duration_max": 60,
+        "subtitle_emphasis": "clean",
+        "subtitle_words_per_block": 5
+      },
+      "confidence": 0.88
+    },
+    {
+      "id": "pacing_entertainment_fast_cut",
+      "title": "Entertainment/Comedy: Cut 2-5s — visual change mỗi 1.5-3 giây",
+      "description": "Entertainment, comedy skit, reaction content cần fast pacing để maintain energy. Visual/content change trung bình mỗi 1.5-3 giây. Không có 5 giây downtime giữa jokes. US TikTok entertainment: trung bình 1.5s per cut. EU entertainment chấp nhận 3s. Japan: 2-4s. Comedy timing phải precise — không pad bằng filler frames. Mỗi frame phải earn its place.",
+      "applies_to": ["tiktok", "youtube_shorts", "entertainment", "comedy", "reaction", "challenge", "us", "eu", "jp"],
+      "recommendation": {
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 5 },
+        "target_duration_min": 15,
+        "target_duration_max": 35,
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.90
+    },
+    {
+      "id": "pacing_vlog_mixed_burst",
+      "title": "Vlog/Lifestyle: Mixed pacing — calm 12-25s + burst 2-5s tại highlight",
+      "description": "Vlog và lifestyle content dùng dynamic pacing: đoạn narrative chậm 12-25s (context, story build), đoạn highlight/wow moment burst nhanh 2-5s. Pattern: slow build → fast highlight → slow resolution. Travel vlog điển hình: walk-through shot 15-20s → arrival reveal 3-5s → exploration montage 4-8s. France/EU lifestyle đặc biệt hiệu quả với rhythm này. Không uniform cut — vary để giữ engagement.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "vlog", "lifestyle", "travel", "food", "eu", "fr", "us"],
+      "recommendation": {
+        "pacing": { "cut_interval_min": 4, "cut_interval_max": 20 },
+        "target_duration_min": 25,
+        "target_duration_max": 60,
+        "subtitle_emphasis": "story"
+      },
+      "confidence": 0.84
+    },
+    {
+      "id": "pacing_education_finance_depth",
+      "title": "Education/Finance: Cut 8-20s — depth payoff cần time để land",
+      "description": "Educational content về finance, economics, science, history cần pacing đủ chậm để concept land. Cut 8-20s cho phép explanation breath room. UK Gary's Economics model: audience reward time put into complex explanation. US education niche: educational content optimized for completion outperform entertainment. Japan: search-intent education cần rõ ràng từng bước. Đừng rush explanation để sound 'dynamic'.",
+      "applies_to": ["tiktok", "youtube_shorts", "education", "finance", "economics", "science", "us", "eu", "uk", "jp"],
+      "recommendation": {
+        "pacing": { "cut_interval_min": 8, "cut_interval_max": 20 },
+        "target_duration_min": 35,
+        "target_duration_max": 60,
+        "subtitle_emphasis": "clean",
+        "subtitle_words_per_block": 6
+      },
+      "confidence": 0.86
+    },
+    {
+      "id": "pacing_food_beauty_visual",
+      "title": "Food/Beauty/Fashion: Cut 4-10s — visual satisfaction per shot",
+      "description": "Food content, beauty/makeup, fashion/outfit: mỗi shot phải đủ dài để visual appeal land nhưng không quá dài để boring. 4-10s per cut. Food: cooking process cần thấy transformation (không cut quá nhanh bỏ mất satisfy). Beauty: technique cần visible. Fashion: outfit reveal 3-5s minimum. Social proof shots (reaction, taste test) có thể nhanh hơn 2-4s. France TikTok food và fashion đặc biệt mạnh với rhythm này.",
+      "applies_to": ["tiktok", "instagram_reels", "food", "beauty", "fashion", "lifestyle", "eu", "fr", "us", "jp"],
+      "recommendation": {
+        "pacing": { "cut_interval_min": 4, "cut_interval_max": 10 },
+        "target_duration_min": 20,
+        "target_duration_max": 45,
+        "subtitle_emphasis": "story"
+      },
+      "confidence": 0.85
+    },
+    {
+      "id": "pacing_fitness_sport_burst",
+      "title": "Fitness/Sport: Burst 1-4s cho action, 8-15s cho explanation",
+      "description": "Fitness content có hai nhịp: action/exercise shots 1-4s fast cut (dynamic energy, visible movement), explanation/form correction 8-15s (cần nhìn rõ technique). Không mix: nếu đang demo exercise → fast. Nếu đang explain form → slow. Workout montage: pure fast cut 1-3s. Tutorial single exercise: slow enough to see form. Before/after reveal: hold 3-5s để transformation land.",
+      "applies_to": ["tiktok", "youtube_shorts", "fitness", "sport", "workout", "health", "us", "eu"],
+      "recommendation": {
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 15 },
+        "target_duration_min": 20,
+        "target_duration_max": 45,
+        "subtitle_emphasis": "viral"
+      },
+      "confidence": 0.83
+    },
+    {
+      "id": "pacing_avoid_uniform_cuts",
+      "title": "Anti-pattern: Đừng dùng uniform cut interval — vary để giữ attention",
+      "description": "Uniform cut interval (mỗi X giây cắt một lần) tạo predictable rhythm → người xem desensitize → attention drift. Effective pacing THAY ĐỔI: slow → fast → slow (story arc), hoặc fast → slow (revelation after action). Exceptions: montage và highlight reel có thể uniform. Story-driven content phải vary. Đây là một trong những sai lầm phổ biến nhất của creators beginner.",
+      "applies_to": ["tiktok", "youtube_shorts", "instagram_reels", "us", "eu", "jp", "vlog", "lifestyle", "education"],
+      "recommendation": {
+        "pacing": { "cut_interval_min": 2, "cut_interval_max": 25 }
+      },
+      "confidence": 0.82
+    },
+    {
+      "id": "pacing_eu_slower_than_us",
+      "title": "EU vs US: EU pacing chậm hơn US 30-50% — không import US pacing sang EU",
+      "description": "US TikTok optimal: visual change mỗi 1.5-2s. EU optimal: visual change mỗi 2.5-4s. Germany: calm và measured là signal của credibility, không phải boredom. Importing US fast-pacing sang EU content làm audience cảm thấy overwhelming và chaotic. UK exception: entertainment/comedy gần với US pacing hơn. France và Germany: chậm hơn EU average thêm 20%.",
+      "applies_to": ["tiktok", "youtube_shorts", "eu", "de", "fr", "uk"],
+      "recommendation": {
+        "pacing": { "cut_interval_min": 4, "cut_interval_max": 15 },
+        "subtitle_emphasis": "story"
+      },
+      "confidence": 0.83
+    }
+  ]
+}

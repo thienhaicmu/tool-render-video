@@ -90,18 +90,34 @@ export function SourceSection({ state, errors, onChange }: SourceSectionProps) {
           error={errors.source_video_path}
           hint="Absolute path to the source video file"
         >
-          <input
-            type="text"
-            value={state.source_video_path}
-            onChange={(e) => onChange('source_video_path', e.target.value)}
-            placeholder="C:\Videos\source.mp4"
-            style={{
-              ...inputStyle,
-              borderColor: errors.source_video_path ? 'var(--color-error)' : 'var(--color-border)',
-            }}
-            aria-label="Source Video Path"
-            data-testid="source-video-path-input"
-          />
+          <div style={filePickerRowStyle}>
+            <input
+              type="text"
+              value={state.source_video_path}
+              onChange={(e) => onChange('source_video_path', e.target.value)}
+              placeholder="C:\Videos\source.mp4"
+              style={{
+                ...inputStyle,
+                borderColor: errors.source_video_path ? 'var(--color-error)' : 'var(--color-border)',
+                flex: 1,
+              }}
+              aria-label="Source Video Path"
+              data-testid="source-video-path-input"
+            />
+            <button
+              type="button"
+              style={browseButtonStyle}
+              onClick={async () => {
+                const api = (window as any).electronAPI
+                if (api?.pickVideoFile) {
+                  const picked = await api.pickVideoFile()
+                  if (picked) onChange('source_video_path', picked)
+                }
+              }}
+            >
+              Browse
+            </button>
+          </div>
         </FormField>
       )}
     </section>
@@ -134,6 +150,25 @@ const toggleBtnStyle: React.CSSProperties = {
   borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   transition: `background-color var(--duration-fast), color var(--duration-fast)`,
+}
+
+const filePickerRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 'var(--space-2)',
+  alignItems: 'center',
+}
+
+const browseButtonStyle: React.CSSProperties = {
+  padding: '8px 14px',
+  fontSize: 'var(--font-size-sm)',
+  fontWeight: 'var(--font-weight-medium)' as unknown as number,
+  color: 'var(--color-text-secondary)',
+  backgroundColor: 'var(--color-bg-elevated)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+  flexShrink: 0,
 }
 
 const inputStyle: React.CSSProperties = {

@@ -1,0 +1,103 @@
+{
+  "id": "audio_music_patterns",
+  "domain": "audio",
+  "version": "1.0",
+  "description": "Trending audio and music selection patterns for viral short-form video",
+  "rules": [
+    {
+      "id": "trending_sound_boost",
+      "title": "Trending Audio = Algorithmic Boost",
+      "description": "Videos using trending audio receive 2.4x more impressions on TikTok. The algorithm actively pushes content using sounds with velocity (rapid saves/uses). Peak window is 48-72h after a sound starts trending.",
+      "applies_to": ["tiktok", "hook", "viral"],
+      "confidence": 0.92,
+      "recommendation": {
+        "audio_strategy": "use_trending_sound",
+        "timing_window_hours": 72,
+        "impression_multiplier": 2.4
+      }
+    },
+    {
+      "id": "first_3s_audio_hook",
+      "title": "Audio Hook in First 3 Seconds",
+      "description": "The audio drop, beat change, or voiceover reveal in the first 3 seconds creates a retention spike. Videos that delay audio hook past 3s lose 31% of viewers before it lands.",
+      "applies_to": ["tiktok", "youtube_shorts", "hook", "retention"],
+      "confidence": 0.89,
+      "recommendation": {
+        "audio_hook_position_sec": 3,
+        "hook_type": "beat_drop_or_reveal",
+        "retention_impact": "high"
+      }
+    },
+    {
+      "id": "silent_caption_optimization",
+      "title": "85% Watch Without Sound — Optimize for Both",
+      "description": "85% of Facebook and 40% of TikTok views happen without audio. Content must work visually with captions while also rewarding audio-on viewers with extra value (music, voice energy).",
+      "applies_to": ["tiktok", "instagram_reels", "eu", "subtitle"],
+      "confidence": 0.88,
+      "recommendation": {
+        "subtitle_required": true,
+        "audio_bonus_layer": true,
+        "silent_first_design": true
+      }
+    },
+    {
+      "id": "original_audio_authority",
+      "title": "Original Audio Builds Creator Authority",
+      "description": "Creators who produce original sounds that others use gain compound reach. Original audio saves correlate 0.73 with follower conversion rate. Encourage unique voiceover styles over generic music.",
+      "applies_to": ["tiktok", "creator", "us"],
+      "confidence": 0.82,
+      "recommendation": {
+        "audio_type": "original_voiceover_or_sound",
+        "follower_conversion_correlation": 0.73
+      }
+    },
+    {
+      "id": "music_energy_pacing_match",
+      "title": "Music BPM Must Match Edit Pacing",
+      "description": "Cut frequency should align with music tempo. 120-140 BPM for fast cuts (2-3s/cut), 80-100 BPM for medium cuts (4-6s/cut). Mismatched BPM/cut rate reduces watch time by 18%.",
+      "applies_to": ["pacing", "us", "latam", "sea"],
+      "confidence": 0.85,
+      "recommendation": {
+        "fast_cut_bpm_range": [120, 140],
+        "medium_cut_bpm_range": [80, 100],
+        "mismatch_penalty_watch_time_pct": 18
+      }
+    },
+    {
+      "id": "voice_energy_retention",
+      "title": "Voice Energy is Retention Signal",
+      "description": "Monotone voiceover loses 44% of viewers by second 15. Dynamic voice (pitch variation, strategic pauses, emphasis on key words) keeps completion rate 2.1x higher. Sentence-end drops lose attention.",
+      "applies_to": ["podcast", "education", "us", "eu"],
+      "confidence": 0.87,
+      "recommendation": {
+        "voice_style": "dynamic_varied_pitch",
+        "avoid": "monotone",
+        "completion_rate_multiplier": 2.1
+      }
+    },
+    {
+      "id": "k_pop_sea_music_first",
+      "title": "KR/SEA: Music-First Content Strategy",
+      "description": "Korea and Southeast Asia audiences engage with music-driven content 3.2x more than talk-first. Music sets emotional context before hook. Lyrics and music reactions outperform pure commentary.",
+      "applies_to": ["kr", "sea", "tiktok"],
+      "confidence": 0.86,
+      "recommendation": {
+        "content_structure": "music_first_then_hook",
+        "engagement_multiplier": 3.2,
+        "top_formats": ["music_reaction", "lyric_overlay", "dance_trend"]
+      }
+    },
+    {
+      "id": "audio_loop_completion",
+      "title": "Loopable Audio Drives Replay Rate",
+      "description": "Audio that loops seamlessly (no abrupt end) increases TikTok replay rate by 34%. Continuous music without a definitive ending tricks the autoplay loop. Replay rate >15% = major distribution signal.",
+      "applies_to": ["tiktok", "retention", "viral"],
+      "confidence": 0.84,
+      "recommendation": {
+        "audio_design": "loopable_no_hard_stop",
+        "replay_rate_increase_pct": 34,
+        "target_replay_rate_pct": 15
+      }
+    }
+  ]
+}
