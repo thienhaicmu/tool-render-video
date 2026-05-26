@@ -84,6 +84,9 @@ from app.orchestration.qa_pipeline import (
     _validate_render_output,
 )
 from app.orchestration.part_plan import PartExecutionPlan
+from app.orchestration.part_assets import PartAssets
+from app.orchestration.visual_analysis import VisualAnalysisResult
+from app.orchestration.camera_strategy import CameraStrategy
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
 # final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
@@ -1652,6 +1655,17 @@ def run_render_pipeline(
         )
         _job_log(effective_channel, job_id, f"{'cache_hit' if _scene_cache_hit else 'cache_miss'} type=scene_detect scenes={len(scenes)} elapsed_ms={_scene_ms}")
         _job_log(effective_channel, job_id, f"Scene detection done: {len(scenes)} scenes in {_scene_ms}ms")
+
+        # Layer 4 → Layer 5 boundary: capture Visual Analysis outputs before segment building.
+        _visual_analysis = VisualAnalysisResult(
+            scene_count=len(scenes),
+            detection_ms=_scene_ms,
+            cache_hit=_scene_cache_hit,
+        )
+        logger.info(
+            "visual_analysis scene_count=%d detection_ms=%d cache_hit=%s",
+            _visual_analysis.scene_count, _visual_analysis.detection_ms, _visual_analysis.cache_hit,
+        )
 
         # ── Phase 5.4: Early AI pacing retrieval (before segment building) ─────
         # Runs only when ai_director_enabled=True. Retrieves knowledge to get
@@ -3229,206 +3243,25 @@ def run_render_pipeline(
         except Exception:
             _src_stat_for_motion = None
 
-        def _process_one_part(idx: int, seg: dict):
-            raw_part = work_dir / f"{source['slug']}_part_{idx:03d}_raw.mp4"
-            srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.srt"
-            ass_part = work_dir / f"{source['slug']}_part_{idx:03d}.ass"
-            _variant_type = str(seg.get("variant_type") or "")
-            if _variant_type:
-                final_part = output_dir / f"{_output_stem}_{_variant_type}.mp4"
-                part_name  = f"{_output_stem}_{_variant_type}.mp4"
-            else:
-                final_part = output_dir / f"{_output_stem}_part_{idx:03d}.mp4"
-                part_name  = f"{_output_stem}_part_{idx:03d}.mp4"
+        def _prepare_part_assets(
+            idx,
+            seg,
+            srt_part,
+            ass_part,
+            translated_srt_part,
+            _effective_start,
+            _part_manifest,
+            part_name,
+            final_part,
+        ):
+            # Layer 7: Overlay Asset Prep — subtitle slicing, ASS conversion, hook formatting,
+            # text-layer assembly. Returns PartAssets + raw timing/meta for Layer 8 callers.
             _sub_target_lang = getattr(payload, "subtitle_target_language", "en")
-            translated_srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.{_sub_target_lang}.srt"
-            _srt_meta: dict = {}  # populated by subtitle slice; used for cover frame scoring (UP15)
-            _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} start", kind="debug")
-            # Debug artifact: per-part segment metadata JSON
-            import os as _os2
-            if _os2.getenv("RENDER_DEBUG_LOG", "0") == "1":
-                try:
-                    import json as _json2
-                    _meta_path = work_dir / f"{source['slug']}_part_{idx:03d}_meta.json"
-                    _meta_data = {
-                        "part": idx,
-                        "start": float(seg.get("start", 0)),
-                        "end": float(seg.get("end", 0)),
-                        "duration": float(seg.get("duration", 0)),
-                        "viral_score": float(seg.get("viral_score", 0)),
-                        "motion_score": float(seg.get("motion_score", 0)),
-                        "hook_score": float(seg.get("hook_score", 0)),
-                        "content_type": seg.get("content_type_hint", ""),
-                        "variant": seg.get("variant_type", ""),
-                        "files": {
-                            "raw": str(raw_part),
-                            "srt": str(srt_part),
-                            "ass": str(ass_part),
-                            "output": str(final_part),
-                        },
-                    }
-                    _meta_path.write_text(_json2.dumps(_meta_data, indent=2), encoding="utf-8")
-                    logger.debug("debug_artifact segment_meta=%s", _meta_path)
-                except Exception as _meta_exc:
-                    logger.debug("debug_artifact segment_meta_failed part=%d: %s", idx, _meta_exc)
-
-            # Bail out immediately if job was cancelled before this part started
-            if cancel_registry.is_cancelled(job_id):
-                raise cancel_registry.JobCancelledError()
-            # Expose the cancel event to _run_ffmpeg_with_retry via thread-local so
-            # FFmpeg Popen can be killed mid-encode without changing every call site.
-            _cancel_ev = cancel_registry.get_event(job_id)
-            if _cancel_ev is not None:
-                set_thread_cancel_event(_cancel_ev)
-
-            _existing_part_info = existing_parts.get(idx, {})
-            if (
-                payload.resume_from_last
-                and ((_existing_part_info.get("status") or "").lower() == "done")
-                and final_part.exists()
-                and final_part.stat().st_size > 0
-                and _resume_output_valid(final_part)
-            ):
-                upsert_job_part(job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Skipped (already rendered)")
-                _job_log(effective_channel, job_id, f"Part {idx} skipped: final output already exists", kind="debug")
-                return {"idx": idx, "output": str(final_part), "row": None, "skipped": True}
-
-            # Worker thread has claimed this part — mark as WAITING before any I/O so
-            # the UI can distinguish "queued but not yet started" from "claimed by a thread".
-            upsert_job_part(job_id, idx, part_name, JobPartStage.WAITING, 5, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), "", "Waiting for worker")
-
-            # P4 per-output opening optimization state
-            _trim_offset = 0.0
-            _hook_subtitle_formatted = False
             _srt_count = 0
-
-            # Performance timing — all in milliseconds, logged at part end
-            _t_part_start = time.perf_counter()
-            _cut_ms = _first_frame_scan_ms = _subtitle_ass_ms = 0
-            _render_ms = _micro_pacing_ms = _quality_validation_ms = 0
-
-            # P4-3: Start silence trim — detect and skip leading dead air (all output clips)
-            try:
-                _trim_offset = detect_silence_trim_offset(str(source_path), seg["start"], seg["end"])
-            except Exception:
-                _trim_offset = 0.0
-            # Safety: don't trim if effective clip would be shorter than 3 seconds
-            if _trim_offset > 0 and (seg["end"] - seg["start"] - _trim_offset) < 3.0:
-                _trim_offset = 0.0
-            if _trim_offset > 0:
-                _emit_render_event(
-                    channel_code=effective_channel,
-                    job_id=job_id,
-                    event="silence_trim_applied",
-                    level="INFO",
-                    message=f"Silence trim: {_trim_offset:.3f}s removed from part {idx} start",
-                    step="render.silence_trim",
-                    context={
-                        "part_no": idx,
-                        "trim_offset_sec": _trim_offset,
-                        "original_start": seg["start"],
-                        "effective_start": seg["start"] + _trim_offset,
-                    },
-                )
-                _job_log(effective_channel, job_id, f"Part {idx} silence trim: {_trim_offset:.3f}s offset applied")
-            _effective_start = seg["start"] + _trim_offset
-
-            # P4-X: Bad first-frame scan — detect black/dark opening frames and shift start up to 1.0s.
-            _visual_trim = 0.0
-            _force_accurate_cut = False
-            try:
-                logger.info("first_frame_scan_started part_no=%d effective_start=%.3f", idx, _effective_start)
-                _t_ff = time.perf_counter()
-                _visual_trim = detect_bad_first_frame(str(source_path), _effective_start, seg["end"])
-                _first_frame_scan_ms = int((time.perf_counter() - _t_ff) * 1000)
-                logger.info("first_frame_scan_ms=%d part=%d shift=%.3f", _first_frame_scan_ms, idx, _visual_trim)
-            except Exception:
-                _visual_trim = 0.0
-            if _visual_trim > 0:
-                _candidate_total = _trim_offset + _visual_trim
-                if (seg["end"] - seg["start"] - _candidate_total) >= 3.0:
-                    _trim_offset = _candidate_total
-                    _effective_start = seg["start"] + _trim_offset
-                    _force_accurate_cut = True
-                    _emit_render_event(
-                        channel_code=effective_channel,
-                        job_id=job_id,
-                        event="first_frame_shift_applied",
-                        level="INFO",
-                        message=f"Bad first frame detected: shifted part {idx} start by {_visual_trim:.3f}s",
-                        step="render.first_frame_scan",
-                        context={
-                            "part_no": idx,
-                            "visual_trim_sec": _visual_trim,
-                            "total_trim_sec": _trim_offset,
-                            "effective_start": _effective_start,
-                            "force_accurate_cut": True,
-                        },
-                    )
-                    _job_log(effective_channel, job_id,
-                        f"first_frame_shift_applied part={idx} visual_trim={_visual_trim:.3f}s "
-                        f"total_trim={_trim_offset:.3f}s effective_start={_effective_start:.3f}s accurate_cut=True")
-
-            # Build TimelineMap and BaseClipManifest after all trim decisions are
-            # final (_effective_start is settled).  Written to disk before cut_video()
-            # so a crash leaves a consistent record up to the last completed step.
-            _part_platform_delta = float(
-                _PLATFORM_PROFILES.get(_target_platform, {}).get("speed_delta", 0.0)
-            )
-            _part_timeline = TimelineMap(
-                source_start=float(_effective_start),
-                source_end=float(seg["end"]),
-                effective_speed=_get_effective_playback_speed(payload, _target_platform),
-                trim_offset=float(_trim_offset),
-            )
-            _part_manifest = BaseClipManifest(
-                job_id=job_id,
-                part_no=idx,
-                source_path=str(source_path),
-                source_start=float(_effective_start),
-                source_end=float(seg["end"]),
-                payload_speed=float(payload.playback_speed or 1.07),
-                platform=_target_platform,
-                platform_delta=_part_platform_delta,
-                effective_speed=_part_timeline.effective_speed,
-                variant_type=seg.get("variant_type"),
-                variant_speed=(
-                    float(seg["variant_playback_speed"])
-                    if seg.get("variant_playback_speed") is not None else None
-                ),
-                silence_trim_offset=float(_trim_offset - _visual_trim)
-                    if _visual_trim > 0 else float(_trim_offset),
-                visual_trim_offset=float(_visual_trim),
-                timeline=_part_timeline,
-                ai_enabled=bool(getattr(payload, "ai_director_enabled", False)),
-                ai_mode=getattr(_ai_edit_plan, "mode", None) if _ai_edit_plan is not None else None,
-                ai_selected=False,  # not yet wired to AIEditPlan selection
-                ai_speed_hint=None,
-            )
-            write_manifest(work_dir, _part_manifest)
-
-            upsert_job_part(job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
-            if not (payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
-                _t_cut = time.perf_counter()
-                cut_video(str(source_path), str(raw_part), _effective_start, seg["end"],
-                          retry_count=retry_count, force_accurate_cut=_force_accurate_cut)
-                _cut_ms = int((time.perf_counter() - _t_cut) * 1000)
-                logger.info("cut_video_ms=%d part=%d", _cut_ms, idx)
-                if _force_accurate_cut:
-                    _emit_render_event(
-                        channel_code=effective_channel,
-                        job_id=job_id,
-                        event="accurate_cut_forced",
-                        level="INFO",
-                        message=f"Accurate re-encode cut used for part {idx} (bad first frame shift)",
-                        step="render.cut",
-                        context={"part_no": idx, "effective_start": _effective_start},
-                    )
-                _job_log(effective_channel, job_id, f"Part {idx} cut done", kind="debug")
-            else:
-                _job_log(effective_channel, job_id, f"Part {idx} cut skipped (raw exists)", kind="debug")
-            _part_manifest.cut_path = str(raw_part)
-            write_manifest(work_dir, _part_manifest)
+            _hook_subtitle_formatted = False
+            _srt_meta: dict = {}
+            _subtitle_ass_ms = 0
+            _effective_subtitle_style = ""
 
             subtitle_selected_by_rule = subtitle_enabled_by_idx.get(idx, False)
             part_subtitle_enabled = subtitle_selected_by_rule
@@ -4031,6 +3864,235 @@ def run_render_pipeline(
                         context={"part_no": idx, "reason": _hook_source},
                     )
 
+            # Layer 7 → Layer 8 boundary: capture all overlay-asset-prep outputs.
+            _pa = PartAssets(
+                subtitle_enabled=part_subtitle_enabled,
+                srt_path=str(srt_part) if part_subtitle_enabled and srt_part.exists() else None,
+                ass_path=str(ass_part) if part_subtitle_enabled and ass_part.exists() else None,
+                subtitle_count=_srt_count,
+                hook_subtitle_formatted=_hook_subtitle_formatted,
+                hook_overlay_applied=_hook_overlay_applied_for_part,
+                text_layers=list(_part_text_layers),
+                text_layers_overlay=list(_part_text_layers_overlay),
+                subtitle_style=_effective_subtitle_style,
+            )
+            logger.info(
+                "part_assets part=%d subtitle=%s srt_count=%d "
+                "hook_format=%s hook_overlay=%s text_layers=%d",
+                idx, _pa.subtitle_enabled, _pa.subtitle_count,
+                _pa.hook_subtitle_formatted, _pa.hook_overlay_applied,
+                len(_pa.text_layers),
+            )
+            return _pa, _srt_count, _srt_meta, _hook_subtitle_formatted, _subtitle_ass_ms
+
+        def _process_one_part(idx: int, seg: dict):
+            raw_part = work_dir / f"{source['slug']}_part_{idx:03d}_raw.mp4"
+            srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.srt"
+            ass_part = work_dir / f"{source['slug']}_part_{idx:03d}.ass"
+            _variant_type = str(seg.get("variant_type") or "")
+            if _variant_type:
+                final_part = output_dir / f"{_output_stem}_{_variant_type}.mp4"
+                part_name  = f"{_output_stem}_{_variant_type}.mp4"
+            else:
+                final_part = output_dir / f"{_output_stem}_part_{idx:03d}.mp4"
+                part_name  = f"{_output_stem}_part_{idx:03d}.mp4"
+            _sub_target_lang = getattr(payload, "subtitle_target_language", "en")
+            translated_srt_part = work_dir / f"{source['slug']}_part_{idx:03d}.{_sub_target_lang}.srt"
+            _job_log(effective_channel, job_id, f"Part {idx}/{total_parts} start", kind="debug")
+            # Debug artifact: per-part segment metadata JSON
+            import os as _os2
+            if _os2.getenv("RENDER_DEBUG_LOG", "0") == "1":
+                try:
+                    import json as _json2
+                    _meta_path = work_dir / f"{source['slug']}_part_{idx:03d}_meta.json"
+                    _meta_data = {
+                        "part": idx,
+                        "start": float(seg.get("start", 0)),
+                        "end": float(seg.get("end", 0)),
+                        "duration": float(seg.get("duration", 0)),
+                        "viral_score": float(seg.get("viral_score", 0)),
+                        "motion_score": float(seg.get("motion_score", 0)),
+                        "hook_score": float(seg.get("hook_score", 0)),
+                        "content_type": seg.get("content_type_hint", ""),
+                        "variant": seg.get("variant_type", ""),
+                        "files": {
+                            "raw": str(raw_part),
+                            "srt": str(srt_part),
+                            "ass": str(ass_part),
+                            "output": str(final_part),
+                        },
+                    }
+                    _meta_path.write_text(_json2.dumps(_meta_data, indent=2), encoding="utf-8")
+                    logger.debug("debug_artifact segment_meta=%s", _meta_path)
+                except Exception as _meta_exc:
+                    logger.debug("debug_artifact segment_meta_failed part=%d: %s", idx, _meta_exc)
+
+            # Bail out immediately if job was cancelled before this part started
+            if cancel_registry.is_cancelled(job_id):
+                raise cancel_registry.JobCancelledError()
+            # Expose the cancel event to _run_ffmpeg_with_retry via thread-local so
+            # FFmpeg Popen can be killed mid-encode without changing every call site.
+            _cancel_ev = cancel_registry.get_event(job_id)
+            if _cancel_ev is not None:
+                set_thread_cancel_event(_cancel_ev)
+
+            _existing_part_info = existing_parts.get(idx, {})
+            if (
+                payload.resume_from_last
+                and ((_existing_part_info.get("status") or "").lower() == "done")
+                and final_part.exists()
+                and final_part.stat().st_size > 0
+                and _resume_output_valid(final_part)
+            ):
+                upsert_job_part(job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Skipped (already rendered)")
+                _job_log(effective_channel, job_id, f"Part {idx} skipped: final output already exists", kind="debug")
+                return {"idx": idx, "output": str(final_part), "row": None, "skipped": True}
+
+            # Worker thread has claimed this part — mark as WAITING before any I/O so
+            # the UI can distinguish "queued but not yet started" from "claimed by a thread".
+            upsert_job_part(job_id, idx, part_name, JobPartStage.WAITING, 5, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), "", "Waiting for worker")
+
+            # P4 per-output opening optimization state
+            _trim_offset = 0.0
+
+            # Performance timing — all in milliseconds, logged at part end
+            _t_part_start = time.perf_counter()
+            _cut_ms = _first_frame_scan_ms = 0
+            _subtitle_ass_ms = 0  # set by _prepare_part_assets
+            _render_ms = _micro_pacing_ms = _quality_validation_ms = 0
+
+            # P4-3: Start silence trim — detect and skip leading dead air (all output clips)
+            try:
+                _trim_offset = detect_silence_trim_offset(str(source_path), seg["start"], seg["end"])
+            except Exception:
+                _trim_offset = 0.0
+            # Safety: don't trim if effective clip would be shorter than 3 seconds
+            if _trim_offset > 0 and (seg["end"] - seg["start"] - _trim_offset) < 3.0:
+                _trim_offset = 0.0
+            if _trim_offset > 0:
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="silence_trim_applied",
+                    level="INFO",
+                    message=f"Silence trim: {_trim_offset:.3f}s removed from part {idx} start",
+                    step="render.silence_trim",
+                    context={
+                        "part_no": idx,
+                        "trim_offset_sec": _trim_offset,
+                        "original_start": seg["start"],
+                        "effective_start": seg["start"] + _trim_offset,
+                    },
+                )
+                _job_log(effective_channel, job_id, f"Part {idx} silence trim: {_trim_offset:.3f}s offset applied")
+            _effective_start = seg["start"] + _trim_offset
+
+            # P4-X: Bad first-frame scan — detect black/dark opening frames and shift start up to 1.0s.
+            _visual_trim = 0.0
+            _force_accurate_cut = False
+            try:
+                logger.info("first_frame_scan_started part_no=%d effective_start=%.3f", idx, _effective_start)
+                _t_ff = time.perf_counter()
+                _visual_trim = detect_bad_first_frame(str(source_path), _effective_start, seg["end"])
+                _first_frame_scan_ms = int((time.perf_counter() - _t_ff) * 1000)
+                logger.info("first_frame_scan_ms=%d part=%d shift=%.3f", _first_frame_scan_ms, idx, _visual_trim)
+            except Exception:
+                _visual_trim = 0.0
+            if _visual_trim > 0:
+                _candidate_total = _trim_offset + _visual_trim
+                if (seg["end"] - seg["start"] - _candidate_total) >= 3.0:
+                    _trim_offset = _candidate_total
+                    _effective_start = seg["start"] + _trim_offset
+                    _force_accurate_cut = True
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="first_frame_shift_applied",
+                        level="INFO",
+                        message=f"Bad first frame detected: shifted part {idx} start by {_visual_trim:.3f}s",
+                        step="render.first_frame_scan",
+                        context={
+                            "part_no": idx,
+                            "visual_trim_sec": _visual_trim,
+                            "total_trim_sec": _trim_offset,
+                            "effective_start": _effective_start,
+                            "force_accurate_cut": True,
+                        },
+                    )
+                    _job_log(effective_channel, job_id,
+                        f"first_frame_shift_applied part={idx} visual_trim={_visual_trim:.3f}s "
+                        f"total_trim={_trim_offset:.3f}s effective_start={_effective_start:.3f}s accurate_cut=True")
+
+            # Build TimelineMap and BaseClipManifest after all trim decisions are
+            # final (_effective_start is settled).  Written to disk before cut_video()
+            # so a crash leaves a consistent record up to the last completed step.
+            _part_platform_delta = float(
+                _PLATFORM_PROFILES.get(_target_platform, {}).get("speed_delta", 0.0)
+            )
+            _part_timeline = TimelineMap(
+                source_start=float(_effective_start),
+                source_end=float(seg["end"]),
+                effective_speed=_get_effective_playback_speed(payload, _target_platform),
+                trim_offset=float(_trim_offset),
+            )
+            _part_manifest = BaseClipManifest(
+                job_id=job_id,
+                part_no=idx,
+                source_path=str(source_path),
+                source_start=float(_effective_start),
+                source_end=float(seg["end"]),
+                payload_speed=float(payload.playback_speed or 1.07),
+                platform=_target_platform,
+                platform_delta=_part_platform_delta,
+                effective_speed=_part_timeline.effective_speed,
+                variant_type=seg.get("variant_type"),
+                variant_speed=(
+                    float(seg["variant_playback_speed"])
+                    if seg.get("variant_playback_speed") is not None else None
+                ),
+                silence_trim_offset=float(_trim_offset - _visual_trim)
+                    if _visual_trim > 0 else float(_trim_offset),
+                visual_trim_offset=float(_visual_trim),
+                timeline=_part_timeline,
+                ai_enabled=bool(getattr(payload, "ai_director_enabled", False)),
+                ai_mode=getattr(_ai_edit_plan, "mode", None) if _ai_edit_plan is not None else None,
+                ai_selected=False,  # not yet wired to AIEditPlan selection
+                ai_speed_hint=None,
+            )
+            write_manifest(work_dir, _part_manifest)
+
+            upsert_job_part(job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
+            if not (payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
+                _t_cut = time.perf_counter()
+                cut_video(str(source_path), str(raw_part), _effective_start, seg["end"],
+                          retry_count=retry_count, force_accurate_cut=_force_accurate_cut)
+                _cut_ms = int((time.perf_counter() - _t_cut) * 1000)
+                logger.info("cut_video_ms=%d part=%d", _cut_ms, idx)
+                if _force_accurate_cut:
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="accurate_cut_forced",
+                        level="INFO",
+                        message=f"Accurate re-encode cut used for part {idx} (bad first frame shift)",
+                        step="render.cut",
+                        context={"part_no": idx, "effective_start": _effective_start},
+                    )
+                _job_log(effective_channel, job_id, f"Part {idx} cut done", kind="debug")
+            else:
+                _job_log(effective_channel, job_id, f"Part {idx} cut skipped (raw exists)", kind="debug")
+            _part_manifest.cut_path = str(raw_part)
+            write_manifest(work_dir, _part_manifest)
+
+            (_part_assets, _srt_count, _srt_meta,
+             _hook_subtitle_formatted, _subtitle_ass_ms) = _prepare_part_assets(
+                idx, seg, srt_part, ass_part, translated_srt_part,
+                _effective_start, _part_manifest, part_name, final_part,
+            )
+            part_subtitle_enabled = _part_assets.subtitle_enabled
+            _part_text_layers = list(_part_assets.text_layers)
+            _part_text_layers_overlay = list(_part_assets.text_layers_overlay)
+            _effective_subtitle_style = _part_assets.subtitle_style
             overlay_title = (payload.title_overlay_text or "").strip() or source["title"]
             upsert_job_part(job_id, idx, part_name, JobPartStage.RENDERING, 70, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Rendering final video")
 
@@ -4118,6 +4180,21 @@ def run_render_pipeline(
                 _part_plan.force_accurate_cut, _part_plan.subtitle_enabled,
                 _part_plan.motion_aware_crop, _part_plan.reframe_mode,
                 _part_plan.voice_enabled, _part_plan.playback_speed, _part_plan.video_crf,
+            )
+            # Layer 6.5: camera/framing decision point — explicit before FFmpeg execution.
+            _camera_strategy = CameraStrategy(
+                aspect_ratio=payload.aspect_ratio,
+                frame_scale_x=int(payload.frame_scale_x),
+                frame_scale_y=int(payload.frame_scale_y),
+                motion_aware_crop=bool(payload.motion_aware_crop),
+                reframe_mode=str(getattr(payload, "reframe_mode", "subject")),
+                content_type=_vf_ct,
+            )
+            logger.info(
+                "camera_strategy part=%d mode=%s crop=%s reframe=%s aspect=%s scale=%dx%d",
+                idx, _camera_strategy.camera_mode, _camera_strategy.motion_aware_crop,
+                _camera_strategy.reframe_mode, _camera_strategy.aspect_ratio,
+                _camera_strategy.frame_scale_x, _camera_strategy.frame_scale_y,
             )
             # When FEATURE_OVERLAY_AFTER_BASE_CLIP is set without FEATURE_BASE_CLIP_FIRST,
             # the overlay has no base clip to work with — warn once per part and fall back.
