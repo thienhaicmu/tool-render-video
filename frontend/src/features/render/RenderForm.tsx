@@ -11,6 +11,7 @@ import type { RenderFormState, RenderFormErrors } from './RenderForm.types'
 import { SourceSection } from './components/SourceSection'
 import { OutputSection } from './components/OutputSection'
 import { CreativeSection } from './components/CreativeSection'
+import { FrameSection } from './components/FrameSection'
 import { SubtitleSection } from './components/SubtitleSection'
 import { AdvancedSection } from './components/AdvancedSection'
 import { SummaryCard } from './components/SummaryCard'
@@ -35,6 +36,10 @@ export const DEFAULT_FORM_STATE: RenderFormState = {
   remotion_hook_intro: true,
   title_overlay_text: '',
   playback_speed: 1.0,
+  motion_aware_crop: false,
+  reframe_mode: 'subject',
+  frame_scale_x: 100,
+  frame_scale_y: 106,
 }
 
 interface RenderFormProps {
@@ -100,6 +105,7 @@ export function RenderForm({ onSubmitSuccess }: RenderFormProps) {
         <SourceSection state={formState} errors={errors} onChange={handleChange} />
         <OutputSection state={formState} errors={errors} onChange={handleChange} />
         <CreativeSection state={formState} onChange={handleChange} />
+        <FrameSection state={formState} onChange={handleChange} />
         <SubtitleSection state={formState} onChange={handleChange} />
         <AdvancedSection state={formState} errors={errors} onChange={handleChange} />
       </div>

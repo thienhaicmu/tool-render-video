@@ -21,6 +21,11 @@ export interface RenderFormState {
   remotion_hook_intro: boolean
   title_overlay_text: string
   playback_speed: number
+  // Frame & Motion
+  motion_aware_crop: boolean
+  reframe_mode: string
+  frame_scale_x: number
+  frame_scale_y: number
 }
 
 export interface RenderFormErrors {

@@ -88,6 +88,10 @@ export interface RenderRequest {
 
   // Frame / crop
   aspect_ratio?: string
+  motion_aware_crop?: boolean
+  reframe_mode?: string
+  frame_scale_x?: number
+  frame_scale_y?: number
 
   // Overlay / effect
   add_title_overlay?: boolean

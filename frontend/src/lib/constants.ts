@@ -102,6 +102,15 @@ export function getQualityVariant(score: number): QualityVariant {
   return 'neutral'
 }
 
+// ── Reframe modes (motion_aware_crop tracking strategy) ──────────────────────
+
+export const REFRAME_MODES = [
+  { value: 'subject', label: 'Subject (Face + Body)', description: 'Tracks the main person in frame — face and body detection' },
+  { value: 'motion',  label: 'Motion',                description: 'Legacy pixel-difference motion tracking' },
+] as const
+
+export type ReframeModeValue = typeof REFRAME_MODES[number]['value']
+
 // ── Validation helpers ────────────────────────────────────────────────────────
 
 /** Clamp playback_speed to [0.5, 1.5] per §6.7 */
