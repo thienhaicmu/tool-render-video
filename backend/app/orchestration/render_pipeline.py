@@ -83,6 +83,7 @@ from app.orchestration.qa_pipeline import (
     _stall_deadline,
     _validate_render_output,
 )
+from app.orchestration.part_plan import PartExecutionPlan
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
 # final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
@@ -4087,6 +4088,37 @@ def run_render_pipeline(
                     )
                 except Exception:
                     _motion_ck = None
+            _part_plan = PartExecutionPlan(
+                part_no=idx,
+                source_start=float(seg["start"]),
+                source_end=float(seg["end"]),
+                effective_start=_effective_start,
+                trim_offset_sec=_trim_offset,
+                visual_trim_sec=_visual_trim,
+                force_accurate_cut=_force_accurate_cut,
+                subtitle_enabled=part_subtitle_enabled,
+                motion_aware_crop=bool(payload.motion_aware_crop),
+                reframe_mode=str(getattr(payload, "reframe_mode", "subject")),
+                frame_scale_x=int(payload.frame_scale_x),
+                frame_scale_y=int(payload.frame_scale_y),
+                content_type=_vf_ct,
+                video_crf=_part_video_crf,
+                bitrate_profile=_vf_bitrate_profile,
+                voice_enabled=bool(getattr(payload, "voice_enabled", False)),
+                voice_source=str(getattr(payload, "voice_source", "none")),
+                playback_speed=float(
+                    max(0.5, min(1.5, float(payload.playback_speed or 1.07)
+                           + _PLATFORM_PROFILES.get(_target_platform, {}).get("speed_delta", 0.0)))
+                ),
+            )
+            logger.info(
+                "part_execution_plan part=%d trim=%.3f+%.3f accurate_cut=%s "
+                "subtitle=%s crop=%s reframe=%s voice=%s speed=%.3f crf=%d",
+                _part_plan.part_no, _part_plan.trim_offset_sec, _part_plan.visual_trim_sec,
+                _part_plan.force_accurate_cut, _part_plan.subtitle_enabled,
+                _part_plan.motion_aware_crop, _part_plan.reframe_mode,
+                _part_plan.voice_enabled, _part_plan.playback_speed, _part_plan.video_crf,
+            )
             # When FEATURE_OVERLAY_AFTER_BASE_CLIP is set without FEATURE_BASE_CLIP_FIRST,
             # the overlay has no base clip to work with — warn once per part and fall back.
             if _FEATURE_OVERLAY_AFTER_BASE_CLIP and not _FEATURE_BASE_CLIP_FIRST:
