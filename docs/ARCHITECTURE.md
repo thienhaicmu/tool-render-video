@@ -38,8 +38,18 @@ SQLite job state + in-process job queue
 Render pipeline: backend/app/orchestration/render_pipeline.py
         |
         +--> Source prep / yt-dlp / local validation / preview session
-        +--> Scene detection / segment generation / scoring
-        +--> AI Director metadata planning
+        +--> Scene detection / segment generation
+        |
+        +--> [Layer 4.5] ContentAnalyzer (Pass 1 — single-pass content understanding)
+        |       +--> Transcript normalization (SRT → chunks)
+        |       +--> Emotion arc / pacing / beat analysis
+        |       +--> Narrative arc (hook / build / climax / outro)
+        |       +--> Hook position scoring
+        |       +--> Speaker segmentation
+        |       --> ContentAnalysisResult (shared by all downstream AI consumers)
+        |
+        +--> Segment scoring (viral_scorer — enriched with narrative_phase, hook_proximity)
+        +--> AI Director metadata planning (reads ContentAnalysisResult — no re-analysis)
         +--> Subtitle / translation / ASS styling
         +--> Motion crop / reframe
         +--> Voice narration / audio mix
@@ -173,14 +183,68 @@ Bounded execution exists, but only through explicit opt-in surfaces such as `ai_
 | Explainability | Semi-stable implementation | Useful product surface, but schema may evolve. |
 | Quality evaluator | Semi-stable implementation | Evaluation-only; should not mutate files or fail jobs. |
 
+## Two-Pass AI Architecture
+
+**Stability marker: Semi-stable implementation**
+
+The AI pipeline follows a two-pass design where content understanding is separated from clip-level technical decisions.
+
+### Pass 1 — Content Understanding (Phase 46, render_pipeline.py)
+
+`ContentAnalyzer.analyze()` runs once per job after early transcription and produces a `ContentAnalysisResult` dataclass. This is Layer 4.5 — between scene detection and segment selection.
+
+```
+ContentAnalysisResult fields
+  .chunks              — normalized transcript (shared, no re-read)
+  .narrative_arc       — hook / build / climax / outro windows
+  .hook_positions      — top 5 hook candidates with scores
+  .dominant_emotion    — emotion label + score
+  .emotion_arc         — per-window emotion map (6 windows)
+  .speaker_segments    — pause-gap speaker groups
+  .beat_available      — beat detection result
+  .bpm / .beat_count / .energy_level
+  .pacing_style / .suggested_cut_style
+  .silence_penalty
+```
+
+**Feature flags** (both default `False` — Contract 2 compliant):
+- `ai_content_driven_selection` — AI Director segment selections override heuristic scored[]
+- `ai_early_transcription` — Whisper runs before scene detection
+
+### Pass 2 — Technical AI per consumer
+
+Every downstream AI consumer reads from `ContentAnalysisResult` instead of running its own analysis:
+
+| Consumer | What it reads | What it previously did |
+|---|---|---|
+| `viral_scorer.score_segments()` | `narrative_arc`, `hook_positions` | No content enrichment |
+| `clip_selector.select_ai_segments()` | `hook_positions` → candidate boost | No content awareness |
+| `ai_director._build_plan()` — chunks | `chunks` | Re-read and re-parsed SRT file |
+| `ai_director._build_plan()` — pacing | `pacing_style`, `bpm`, `emotion`, `beat_count` | Re-ran `analyze_beats` + `analyze_pacing_emotion` |
+
+### New fields produced by Pass 1 enrichment
+
+`scored[]` dicts (output of `viral_scorer`) now carry:
+- `narrative_phase` — which arc phase the clip falls in ("hook", "build", "climax", "outro")
+- `hook_proximity_score` — 0–100 proximity to nearest hook position
+
+`AIClipPlan` candidates (output of `clip_selector`) now carry:
+- score bonus up to +5 when candidate starts within 8s of a known hook position
+- `hook_proximity` appended to reason string when boost applied
+
+### Fallback behavior
+
+When `ContentAnalysisResult.available=False` (no transcript, analyzer exception, or feature flags off), every consumer falls back to its original independent analysis path. No behavior change for existing jobs.
+
 ## Render Intelligence Layer
 
 **Stability marker: Semi-stable implementation**
 
 Render intelligence includes more than cutting clips:
 
-- `viral_scorer.py` scores segments for viral potential, motion, position, and hook timing.
+- `viral_scorer.py` scores segments for viral potential, motion, position, hook timing, narrative phase, and hook proximity.
 - `viral_scoring.py` scores market fit for US/EU/JP using hook, keywords, duration, tone, and readability.
+- `ContentAnalyzer` runs a single-pass content analysis shared by all downstream consumers.
 - AI modules under `retention`, `story`, `timing`, `subtitles`, `camera`, `quality`, `output`, `creator_*`, and `orchestrator` provide advisory intelligence.
 - `render_pipeline.py` computes output ranking, best clip, quality penalties, partial-success metadata, and result JSON summaries.
 

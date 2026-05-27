@@ -329,7 +329,33 @@ def _classify_content_type_v2(
     return "montage"
 
 
-def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
+def _find_narrative_phase(seg_start: float, seg_end: float, narrative_arc: list) -> str:
+    """Return the narrative phase label with greatest overlap for a segment."""
+    if not narrative_arc:
+        return "unknown"
+    best_phase, best_overlap = "unknown", 0.0
+    for window in narrative_arc:
+        overlap = max(0.0, min(seg_end, float(window.get("end", 0))) - max(seg_start, float(window.get("start", 0))))
+        if overlap > best_overlap:
+            best_overlap, best_phase = overlap, str(window.get("phase", "unknown"))
+    return best_phase
+
+
+def _find_hook_proximity(seg_start: float, hook_positions: list) -> float:
+    """Return 0-100 score: how close seg_start is to the nearest significant hook position."""
+    if not hook_positions:
+        return 0.0
+    best = 0.0
+    for h in hook_positions:
+        dist = abs(seg_start - float(h.get("time", 0)))
+        hook_score = float(h.get("score", 0))
+        if dist <= 10.0 and hook_score > 0:
+            proximity = max(0.0, 1.0 - dist / 10.0) * min(1.0, hook_score / 100.0)
+            best = max(best, proximity)
+    return round(best * 100.0, 1)
+
+
+def score_segments(segments: List[Dict], scenes: List[Dict], content_analysis=None) -> List[Dict]:
     """
     Score all segments and return them sorted by viral_score descending.
     Uses ML model if trained, otherwise falls back to heuristic scoring.
@@ -422,6 +448,13 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
         _real_speech = float(seg.get("speech_density_score", 0.0))
         _speech_density_score = int(_real_speech) if _real_speech > 0 else min(100, 45 + len(seg_scenes) * 3)
 
+        # ── Phase 3b: ContentAnalysis enrichment ─────────────────────────────────
+        _arc = getattr(content_analysis, "narrative_arc", None) or []
+        _hooks = getattr(content_analysis, "hook_positions", None) or []
+        _seg_start = float(seg.get("start", 0))
+        _narrative_phase = _find_narrative_phase(_seg_start, float(seg.get("end", 0)), _arc)
+        _hook_proximity = _find_hook_proximity(_seg_start, _hooks)
+
         scored.append({
             **seg,
             "duration": round(duration, 2),
@@ -434,6 +467,8 @@ def score_segments(segments: List[Dict], scenes: List[Dict]) -> List[Dict]:
             "scene_change_score": min(100, len(seg_scenes) * 6),
             "content_type_hint": content_type_hint,
             "selection_reason": selection_reason,
+            "narrative_phase": _narrative_phase,
+            "hook_proximity_score": _hook_proximity,
             "_features": features,       # stored for feedback recording
             "_scoring_mode": scoring_mode,
         })

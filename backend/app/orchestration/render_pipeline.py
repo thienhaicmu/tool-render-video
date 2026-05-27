@@ -127,6 +127,51 @@ def _smart_output_stem(hook_text: str, source_title: str, job_id: str) -> str:
     return f"render_{job_id[:8]}"
 
 
+def _map_ai_segments_to_scored(ai_clips: list, heuristic_scored: list) -> list:
+    """
+    Map AIClipPlan list onto heuristic scored[] dicts via time-overlap matching.
+    Preserves all heuristic score fields (viral_score, motion_score, hook_score).
+    AI's start/end boundaries override heuristic boundaries when overlap >= 30%.
+    AI clips with no matching heuristic segment synthesize a minimal scored dict.
+    """
+    result = []
+    used: set = set()
+    for clip in ai_clips:
+        best_idx, best_ratio = None, 0.0
+        for i, seg in enumerate(heuristic_scored):
+            if i in used:
+                continue
+            s, e = float(seg.get("start", 0)), float(seg.get("end", 0))
+            overlap = max(0.0, min(e, clip.end) - max(s, clip.start))
+            min_dur = min(e - s, clip.end - clip.start)
+            ratio = overlap / min_dur if min_dur > 0 else 0.0
+            if ratio > best_ratio:
+                best_ratio, best_idx = ratio, i
+        if best_idx is not None and best_ratio >= 0.30:
+            seg = dict(heuristic_scored[best_idx])
+            seg["start"] = clip.start
+            seg["end"] = clip.end
+            seg["duration"] = round(clip.end - clip.start, 3)
+            seg["ai_content_selected"] = True
+            seg["ai_select_reason"] = clip.reason
+            seg["ai_select_score"] = clip.score
+            used.add(best_idx)
+            result.append(seg)
+        else:
+            result.append({
+                "start": clip.start,
+                "end": clip.end,
+                "duration": round(clip.end - clip.start, 3),
+                "viral_score": max(0, min(100, int(clip.score))),
+                "motion_score": 0,
+                "hook_score": 0,
+                "ai_content_selected": True,
+                "ai_select_reason": clip.reason,
+                "ai_select_score": clip.score,
+            })
+    return result
+
+
 # UP28 — Render cache helpers (transcription + scene detection)
 _RENDER_CACHE_TTL_SEC = 72 * 3600  # 72 h
 
@@ -1567,6 +1612,13 @@ def run_render_pipeline(
                     context={"recovery_strategy": "skip_voice"},
                 )
 
+        # full_srt hoisted here: Phase 45 early transcription may populate it
+        # before segment building. Existing subtitle block reads _early_transcription_done
+        # and skips Whisper when already done.
+        full_srt = work_dir / f"{source['slug']}_full.srt"
+        full_srt_available = False
+        _early_transcription_done = False
+
         _set_stage(JobStage.SCENE_DETECTION, 15, "Detecting scenes")
         _emit_render_event(
             channel_code=effective_channel,
@@ -1614,6 +1666,157 @@ def run_render_pipeline(
             "visual_analysis scene_count=%d detection_ms=%d cache_hit=%s",
             _visual_analysis.scene_count, _visual_analysis.detection_ms, _visual_analysis.cache_hit,
         )
+
+        # ── Phase 45: Early transcription for AI content understanding ──────────
+        # Fires before segment building when ai_early_transcription=True OR
+        # ai_content_driven_selection=True. Produces full_srt for AI Director and
+        # S4.1/S4.2/S4.5 refinements BEFORE the heuristic viral-score filter cuts
+        # the candidate pool. On any failure → full_srt_available stays False,
+        # render continues unchanged. NEVER raises. NEVER changes stage names.
+        if (
+            getattr(payload, "ai_early_transcription", False)
+            or getattr(payload, "ai_content_driven_selection", False)
+        ):
+            try:
+                _p45_has_audio = has_audio_stream(str(source_path))
+                _p45_resume_hit = (
+                    payload.resume_from_last
+                    and full_srt.exists()
+                    and full_srt.stat().st_size > 0
+                )
+                if not _p45_has_audio:
+                    _job_log(effective_channel, job_id,
+                             "phase45_early_transcription_skipped: no audio stream",
+                             kind="warning")
+                elif _p45_resume_hit:
+                    full_srt_available = True
+                    _early_transcription_done = True
+                    _job_log(effective_channel, job_id,
+                             "phase45_early_transcription: resume hit, reusing existing SRT")
+                else:
+                    _p45_model = tuned["whisper_model"]
+                    _p45_engine = getattr(payload, "subtitle_transcription_engine", "default")
+                    _p45_cache_key = f"{_p45_engine}_{int(bool(payload.highlight_per_word))}"
+                    _p45_cached = _transcription_cache_get(str(source_path), _p45_model, _p45_cache_key)
+                    if _p45_cached is not None:
+                        shutil.copy2(str(_p45_cached), str(full_srt))
+                        full_srt_available = bool(full_srt.exists() and full_srt.stat().st_size > 0)
+                        _early_transcription_done = full_srt_available
+                        _job_log(effective_channel, job_id,
+                                 f"phase45_early_transcription: cache_hit model={_p45_model} "
+                                 f"available={full_srt_available}")
+                    else:
+                        _set_stage(JobStage.TRANSCRIBING_FULL, 17, "Transcribing for AI analysis")
+                        _t_p45 = time.perf_counter()
+                        _p45_hb_stop = threading.Event()
+
+                        def _p45_hb_fn(_stop=_p45_hb_stop, _m=_p45_model):
+                            _pct = 18
+                            while not _stop.wait(12):
+                                _el = round(time.perf_counter() - _t_p45)
+                                update_job_progress(
+                                    job_id, JobStage.TRANSCRIBING_FULL, _pct,
+                                    f"Transcribing for AI analysis… ({_el}s)"
+                                )
+                                _pct = _pct + 1 if _pct < 22 else 22
+
+                        _p45_hb = threading.Thread(
+                            target=_p45_hb_fn, daemon=True,
+                            name=f"p45_transcribe_hb_{job_id[:8]}"
+                        )
+                        _p45_hb.start()
+                        _job_log(effective_channel, job_id,
+                                 f"phase45_early_transcription_started model={_p45_model}")
+                        _emit_render_event(
+                            channel_code=effective_channel, job_id=job_id,
+                            event="early_transcription_started",
+                            level="INFO",
+                            message=f"Phase 45: Transcribing for AI content analysis model={_p45_model}",
+                            step="ai_director.transcribe",
+                            context={"whisper_model": _p45_model},
+                        )
+                        try:
+                            _p45_result = transcribe_with_adapter(
+                                str(source_path), str(full_srt),
+                                engine=_p45_engine,
+                                model_name=_p45_model,
+                                retry_count=retry_count,
+                                highlight_per_word=payload.highlight_per_word,
+                                logger=logger,
+                            )
+                            full_srt_available = bool(full_srt.exists() and full_srt.stat().st_size > 0)
+                            _early_transcription_done = full_srt_available
+                            _p45_ms = int((time.perf_counter() - _t_p45) * 1000)
+                            if _early_transcription_done:
+                                _transcription_cache_put(
+                                    str(source_path), _p45_model, _p45_cache_key, full_srt
+                                )
+                            _job_log(effective_channel, job_id,
+                                     f"phase45_early_transcription_done model={_p45_model} "
+                                     f"available={full_srt_available} elapsed_ms={_p45_ms}")
+                            _emit_render_event(
+                                channel_code=effective_channel, job_id=job_id,
+                                event="early_transcription_completed",
+                                level="INFO",
+                                message=f"Phase 45: Early transcription complete elapsed={_p45_ms}ms",
+                                step="ai_director.transcribe",
+                                context={"whisper_model": _p45_model, "elapsed_ms": _p45_ms,
+                                         "available": full_srt_available},
+                            )
+                        except Exception as _p45_exc:
+                            full_srt_available = False
+                            _early_transcription_done = False
+                            _safe_unlink(full_srt)
+                            _job_log(effective_channel, job_id,
+                                     f"phase45_early_transcription_failed: {_p45_exc}",
+                                     kind="warning")
+                        finally:
+                            _p45_hb_stop.set()
+                            _p45_hb.join(timeout=2)
+            except Exception as _p45_outer_err:
+                _job_log(effective_channel, job_id,
+                         f"phase45_early_transcription_outer_failed: {_p45_outer_err}",
+                         kind="warning")
+
+        # ── Phase 46: Content analysis (single-pass, before segment building) ──
+        # Runs when transcript is available (full_srt_available=True).
+        # Produces ContentAnalysisResult shared by AI Director, segment scoring,
+        # and S4.x refinements — each consumer reads pre-computed analysis instead
+        # of re-running analyzers independently. Advisory metadata only.
+        # NEVER raises. NEVER modifies payload. NEVER crashes render.
+        _content_analysis = None
+        if full_srt_available:
+            try:
+                from app.ai.content.content_analyzer import ContentAnalyzer as _ContentAnalyzer
+                _t_ca = time.perf_counter()
+                _content_analysis = _ContentAnalyzer.analyze(
+                    source_path=str(source_path),
+                    srt_path=str(full_srt),
+                    source_duration=float(source.get("duration", 0.0)),
+                )
+                _ca_ms = int((time.perf_counter() - _t_ca) * 1000)
+                if _content_analysis.available:
+                    _job_log(
+                        effective_channel, job_id,
+                        f"phase46_content_analysis: chunks={len(_content_analysis.chunks)} "
+                        f"emotion={_content_analysis.dominant_emotion} "
+                        f"arc_phases={len(_content_analysis.narrative_arc)} "
+                        f"hooks={len(_content_analysis.hook_positions)} "
+                        f"beat={_content_analysis.beat_available} "
+                        f"elapsed_ms={_ca_ms}",
+                    )
+                else:
+                    _job_log(
+                        effective_channel, job_id,
+                        f"phase46_content_analysis_unavailable: {_content_analysis.warnings}",
+                        kind="warning",
+                    )
+            except Exception as _ca_err:
+                _job_log(
+                    effective_channel, job_id,
+                    f"phase46_content_analysis_failed: {_ca_err}",
+                    kind="warning",
+                )
 
         # ── Phase 5.4: Early AI pacing retrieval (before segment building) ─────
         # Runs only when ai_director_enabled=True. Retrieves knowledge to get
@@ -1753,7 +1956,7 @@ def run_render_pipeline(
                 _clip_ms = int((time.perf_counter() - _t_clip) * 1000)
                 _job_log(effective_channel, job_id, f"clip_scoring_done scenes={len(scenes)} elapsed_ms={_clip_ms}")
             segments = build_segments_from_scenes(scenes, source["duration"], _seg_min_sec, _seg_max_sec)
-            scored = score_segments(segments, scenes)
+            scored = score_segments(segments, scenes, content_analysis=_content_analysis)
             _job_log(effective_channel, job_id, f"score_cache_miss type=segment_scores segments={len(scored)}")
             if _score_ck:
                 _score_cache_put(_score_ck, scored)
@@ -2064,8 +2267,8 @@ def run_render_pipeline(
         total_parts = len(scored)
         rows = []
         outputs = []
-        full_srt = work_dir / f"{source['slug']}_full.srt"
-        full_srt_available = False
+        # full_srt and full_srt_available initialized before scene detection (Phase 45 hoist).
+        # _early_transcription_done=True means Phase 45 already ran Whisper — subtitle block skips.
         existing_parts = {int(x["part_no"]): x for x in list_job_parts(job_id)}
         _job_log(effective_channel, job_id, f"Segment building done: {total_parts} parts")
         # Diagnostic: per-segment selection summary (always at INFO for QA traceability)
@@ -2130,9 +2333,16 @@ def run_render_pipeline(
 
         if payload.add_subtitle and any(subtitle_enabled_by_idx.values()):
             _set_stage(JobStage.TRANSCRIBING_FULL, 28, "Transcribing full video once")
-            if payload.resume_from_last and full_srt.exists() and full_srt.stat().st_size > 0:
-                full_srt_available = True
-                _job_log(effective_channel, job_id, "Reuse existing full transcription", kind="debug")
+            if (
+                (payload.resume_from_last and full_srt.exists() and full_srt.stat().st_size > 0)
+                or _early_transcription_done
+            ):
+                if not full_srt_available:
+                    full_srt_available = full_srt.exists() and full_srt.stat().st_size > 0
+                _srt_source = "early_transcription" if _early_transcription_done else "resume"
+                _job_log(effective_channel, job_id,
+                         f"subtitle_transcription_skipped source={_srt_source}: reusing existing SRT",
+                         kind="debug")
             else:
                 source_has_audio = has_audio_stream(str(source_path))
                 if not source_has_audio:
@@ -2411,6 +2621,8 @@ def run_render_pipeline(
                     "knowledge_filters": _knowledge_filters,
                     # Phase 53A: pack-based semantic knowledge store (LocalKnowledgeStore singleton)
                     "knowledge_store": _get_pack_store(),
+                    # Phase 46: pre-computed content analysis (ContentAnalysisResult | None)
+                    "content_analysis": _content_analysis,
                 }
                 _ai_edit_plan = _create_ai_plan(payload, _ai_context)
                 if _ai_edit_plan is not None:
@@ -2467,6 +2679,58 @@ def run_render_pipeline(
                 _job_log(
                     effective_channel, job_id,
                     f"feedback_learning_skipped: {_fb_err}",
+                    kind="warning",
+                )
+
+        # ── Phase 44: AI content-driven segment selection ──────────────────────
+        # Replaces heuristic scored[] with AI Director's content-aware selections.
+        # ONLY fires when all three conditions hold:
+        #   1. ai_content_driven_selection=True (opt-in, default False)
+        #   2. _ai_edit_plan is not None and not fallback_used
+        #   3. selected_segments is non-empty (AI produced real content selections)
+        # On any failure or empty result → falls back to existing scored[] silently.
+        # NEVER raises. NEVER corrupts render. Feature flag=False → zero code executed.
+        if (
+            getattr(payload, "ai_content_driven_selection", False)
+            and _ai_edit_plan is not None
+            and not _ai_edit_plan.fallback_used
+            and _ai_edit_plan.selected_segments
+        ):
+            try:
+                _ai_mapped = _map_ai_segments_to_scored(
+                    _ai_edit_plan.selected_segments, scored
+                )
+                if _ai_mapped:
+                    _job_log(
+                        effective_channel, job_id,
+                        f"phase44_ai_content_selection: ai_clips={len(_ai_mapped)} "
+                        f"replaced heuristic={len(scored)} "
+                        f"(ai_mode={_ai_edit_plan.mode})",
+                        kind="info",
+                    )
+                    _emit_render_event(
+                        channel_code=effective_channel, job_id=job_id,
+                        event="ai_content_selection_applied",
+                        level="INFO",
+                        message=f"Phase 44: AI content-driven selection active — {len(_ai_mapped)} clips",
+                        step="ai_director.selection",
+                        context={
+                            "ai_clips": len(_ai_mapped),
+                            "heuristic_clips": len(scored),
+                            "ai_mode": _ai_edit_plan.mode,
+                        },
+                    )
+                    scored = _ai_mapped
+                else:
+                    _job_log(
+                        effective_channel, job_id,
+                        "phase44_ai_content_selection_empty: fallback to heuristic scored[]",
+                        kind="warning",
+                    )
+            except Exception as _p44_err:
+                _job_log(
+                    effective_channel, job_id,
+                    f"phase44_ai_content_selection_failed: {_p44_err} — heuristic scored[] unchanged",
                     kind="warning",
                 )
 

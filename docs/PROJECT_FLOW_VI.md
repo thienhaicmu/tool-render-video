@@ -104,15 +104,21 @@ FastAPI routes
 SQLite jobs + job_parts
         |
         v
-AI Director + render intelligence
-        |
-        v
 Render pipeline
         |
-        +--> Subtitle
-        +--> Voice
-        +--> Motion crop
-        +--> FFmpeg
+        +--> Scene detection + segment generation
+        |
+        +--> [Layer 4.5] ContentAnalyzer (Pass 1 — hiểu nội dung một lần)
+        |       - normalize transcript chunks
+        |       - emotion arc + dominant emotion
+        |       - narrative arc (hook/build/climax/outro)
+        |       - hook positions (top 5, có score)
+        |       - beat / bpm / pacing style
+        |       --> ContentAnalysisResult (dùng chung cho tất cả consumer)
+        |
+        +--> Segment scoring (viral_scorer — nhận narrative_phase + hook_proximity)
+        +--> AI Director (đọc ContentAnalysisResult, không chạy lại analyzer)
+        +--> Subtitle / Voice / Motion crop / FFmpeg
         |
         v
 Output clips + result_json
@@ -149,10 +155,13 @@ Input
   -> editor session
   -> queue job
   -> scene detection
+  -> [Phase 45 opt-in] early Whisper transcription (trước khi chọn clip)
   -> segment generation
-  -> viral/hook/motion scoring
-  -> subtitle transcription
-  -> AI Director planning
+  -> [Phase 46] ContentAnalyzer.analyze() → ContentAnalysisResult (Layer 4.5)
+  -> viral/hook/motion scoring (enriched: narrative_phase, hook_proximity_score)
+  -> [Phase 44 opt-in] AI Director selections override scored[]
+  -> AI Director planning (reads ContentAnalysisResult — không re-run analyzers)
+  -> subtitle transcription (skip nếu đã chạy Phase 45)
   -> subtitle slicing/translation/styling
   -> motion crop/reframe
   -> voice/TTS
@@ -228,6 +237,10 @@ Scoring không chỉ để sort clip. Nó là một phần của output intellig
 - motion score
 - market score
 - retention metadata nếu có
+- `narrative_phase` — clip thuộc phase nào trong arc (hook/build/climax/outro), từ ContentAnalysisResult
+- `hook_proximity_score` — 0–100, mức gần với vị trí hook mạnh nhất, từ ContentAnalysisResult
+
+Hai field mới được thêm bằng `score_segments(segments, scenes, content_analysis=...)` — nếu không có `content_analysis`, trả về giá trị mặc định an toàn ("unknown" / 0.0).
 
 ### 4.7 AI Director
 
@@ -235,10 +248,21 @@ File:
 
 - `backend/app/ai/director/ai_director.py`
 - `backend/app/ai/director/edit_plan_schema.py`
+- `backend/app/ai/director/clip_selector.py`
 
 AI Director tạo `AIEditPlan`. Nếu fail, pipeline tiếp tục render bình thường.
 
 Đây là contract quan trọng.
+
+Từ Phase 3c, AI Director đọc trực tiếp từ `ContentAnalysisResult` thay vì chạy lại các analyzer:
+
+| Trước Phase 3c | Sau Phase 3c |
+|---|---|
+| `_resolve_transcript_chunks()` re-read SRT | Dùng `ContentAnalysisResult.chunks` |
+| `_build_pacing_plan()` re-run beat + emotion | Dùng `ContentAnalysisResult.pacing_style`, `.bpm`, `.emotion` |
+| `clip_selector` không biết hook positions | Boost candidates gần hook positions (≤8s → +5 điểm) |
+
+Fallback: khi `ContentAnalysisResult.available=False`, các path cũ vẫn chạy bình thường.
 
 ### 4.8 Subtitle
 
@@ -329,25 +353,58 @@ Không được tùy tiện xóa:
 
 AI Director không phải một model duy nhất. Nó là hệ thống nhiều phase.
 
-Các nhóm module chính:
+### 5.1 Two-Pass AI Architecture
 
-- analyzers: transcript, hook, emotion, beat, silence, vision
-- director: clip selector, camera planner, subtitle planner, render influence
-- subtitles: density, emotion, emphasis, execution
-- camera: apply guidance, camera quality
-- retention/story/timing: logic giữ người xem
-- market: tối ưu theo market
-- creator: preference, style, feedback, adaptive memory
-- output/quality: rank và evaluate output
-- explainability: tạo lý do dễ hiểu
+Kiến trúc hiện tại chia AI thành 2 pass:
 
-Nguyên tắc:
+```text
+Pass 1 — ContentAnalyzer (hiểu nội dung, chạy 1 lần)
+  backend/app/ai/content/content_analyzer.py
+  backend/app/orchestration/content_analysis.py  ← ContentAnalysisResult dataclass
+
+  Input:  SRT path + source path + duration
+  Output: ContentAnalysisResult
+    - chunks (normalized transcript)
+    - narrative_arc (4 windows: hook/build/climax/outro)
+    - hook_positions (top 5, scored)
+    - dominant_emotion + emotion_arc (6 windows)
+    - speaker_segments
+    - beat_available, bpm, beat_count, energy_level
+    - pacing_style, suggested_cut_style
+    - silence_penalty
+
+Pass 2 — Technical AI per consumer (đọc ContentAnalysisResult, không chạy lại)
+  viral_scorer  → narrative_phase, hook_proximity_score vào scored[]
+  clip_selector → boost candidates gần hook positions
+  ai_director   → chunks, pacing, emotion từ ContentAnalysisResult
+```
+
+Thiết kế này đảm bảo:
+- Mỗi analyzer (beat, emotion, transcript) chỉ chạy 1 lần per job
+- Kết quả phân tích nhất quán giữa các consumer
+- Khi không có transcript, fallback về path cũ — không có regression
+
+### 5.2 Các nhóm module chính
+
+- `app/ai/content/`: ContentAnalyzer — single-pass content understanding (Layer 4.5)
+- `app/ai/analyzers/`: transcript, hook, emotion, beat, silence, structure, diversity
+- `app/ai/director/`: clip_selector, camera_planner, subtitle_planner, render_influence
+- `app/ai/subtitles/`: density, emotion, emphasis, execution
+- `app/ai/camera/`: apply guidance, camera quality
+- `app/ai/retention/`, `story/`, `timing/`: logic giữ người xem
+- `app/ai/market/`: tối ưu theo market
+- `app/ai/creator/`: preference, style, feedback, adaptive memory
+- `app/ai/output/`, `quality/`: rank và evaluate output
+- `app/ai/packaging/`, `debug/`, `explainability/`: metadata và explainability
+
+### 5.3 Nguyên tắc
 
 - AI tạo metadata trước.
 - AI advisory là mặc định.
 - Execution phải opt-in.
 - Nếu thiếu dữ liệu, fallback an toàn.
 - Không phá pipeline cũ.
+- ContentAnalysisResult là Layer 4.5 boundary — không được skip nếu transcript có.
 
 ## 6. AI Output Intelligence
 

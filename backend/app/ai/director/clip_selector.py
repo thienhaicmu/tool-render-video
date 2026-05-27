@@ -68,6 +68,7 @@ def select_ai_segments(
     mode_config: dict,
     target_duration: float | None = None,
     memory_context: dict | None = None,
+    content_analysis=None,
 ) -> list[dict]:
     """Select the best transcript windows using hook + density + duration scoring.
 
@@ -101,6 +102,8 @@ def select_ai_segments(
 
     if not candidates:
         return _select_from_scenes(scenes or [], target_min, target_max)
+
+    candidates = _apply_hook_proximity_boost(candidates, content_analysis)
 
     selected = _select_diverse(candidates, goal, _MAX_SEGMENTS, diversity_scale=retry_scales["diversity"])
     return _apply_memory_bonus(selected, memory_context)
@@ -365,6 +368,47 @@ def _apply_memory_bonus(
     reason = top.get("reason", "ai_scored")
     top["reason"] = f"{reason}, rag_match" if reason else "rag_match"
     return [top] + segments[1:]
+
+
+def _apply_hook_proximity_boost(
+    candidates: list[dict],
+    content_analysis,
+) -> list[dict]:
+    """Boost candidate scores when they start near a pre-identified hook position.
+
+    Max boost: +5.0 (same magnitude as memory bonus to keep relative influence balanced).
+    Formula: boost = proximity_factor * (hook_score / 100) * 5.0
+      - proximity_factor = max(0, 1 - dist / 8.0)  [falls to zero at 8s distance]
+      - hook_score = score field from ContentAnalysisResult.hook_positions (0–100)
+
+    Candidates are re-sorted after boosting. Never raises.
+    """
+    hook_positions = getattr(content_analysis, "hook_positions", None) or []
+    if not hook_positions:
+        return candidates
+
+    try:
+        for c in candidates:
+            best_boost = 0.0
+            c_start = float(c.get("start", 0))
+            for h in hook_positions:
+                dist = abs(c_start - float(h.get("time", 0)))
+                if dist >= 8.0:
+                    continue
+                h_score = float(h.get("score", 0))
+                if h_score <= 0:
+                    continue
+                boost = max(0.0, 1.0 - dist / 8.0) * (h_score / 100.0) * 5.0
+                best_boost = max(best_boost, boost)
+            if best_boost > 0:
+                c["score"] = round(min(100.0, c["score"] + best_boost), 2)
+                reason = c.get("reason", "ai_scored")
+                c["reason"] = f"{reason}, hook_proximity" if reason else "hook_proximity"
+        candidates.sort(key=lambda x: x["score"], reverse=True)
+    except Exception:
+        pass  # never block clip selection on boost failure
+
+    return candidates
 
 
 def _select_from_scenes(scenes: list[dict], t_min: float, t_max: float) -> list[dict]:

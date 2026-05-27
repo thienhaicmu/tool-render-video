@@ -195,8 +195,21 @@ def _build_plan(
             warnings.append(f"dna_error:{type(exc).__name__}")
             logger.debug("ai_director_dna_failed job_id=%s: %s", job_id, exc)
 
+    # --- Content analysis (Phase 3c-iii: hoist before transcript so chunks can be reused) ---
+    content_analysis = context.get("content_analysis")
+
     # --- Transcript resolution ---
-    chunks = _resolve_transcript_chunks(context, warnings)
+    # Phase 3c-iii: use pre-normalized chunks from ContentAnalysisResult when available —
+    # avoids a second SRT read + normalize_transcript_chunks pass.
+    _ca_chunks = (
+        getattr(content_analysis, "chunks", None)
+        if content_analysis and getattr(content_analysis, "available", False)
+        else None
+    )
+    if _ca_chunks:
+        chunks = list(_ca_chunks)
+    else:
+        chunks = _resolve_transcript_chunks(context, warnings)
     if not chunks:
         fallback_used = True
         warnings.append("no_transcript_available")
@@ -231,6 +244,7 @@ def _build_plan(
         mode_config=mode_config,
         target_duration=target_duration,
         memory_context=memory_ctx or None,
+        content_analysis=content_analysis,
     )
 
     # S2.5: Single bounded retry when first-pass confidence is weak.
@@ -253,6 +267,7 @@ def _build_plan(
                     mode_config=retry_config,
                     target_duration=target_duration,
                     memory_context=memory_ctx or None,
+                    content_analysis=content_analysis,
                 )
                 second_conf = _retry_evaluate(retry_raw)
                 if retry_raw and second_conf >= first_conf + _RETRY_MIN_IMPROVEMENT:
@@ -285,7 +300,24 @@ def _build_plan(
         warnings.append("no_segments_selected")
 
     # --- Phase 4: Pacing plan (needed by Phase 5 planners) ---
-    pacing_plan = _build_pacing_plan(chunks, context, mode_config, warnings)
+    # Phase 3c-ii: use pre-computed ContentAnalysisResult when available — avoids
+    # re-running analyze_pacing_emotion and analyze_beats that ContentAnalyzer
+    # already ran in Phase 46 of render_pipeline.py.
+    _ca = content_analysis
+    if _ca is not None and getattr(_ca, "available", False):
+        pacing_plan = AIPacingPlan(
+            beat_available=bool(getattr(_ca, "beat_available", False)),
+            bpm=getattr(_ca, "bpm", None),
+            beat_count=int(getattr(_ca, "beat_count", 0) or 0),
+            energy_level=getattr(_ca, "energy_level", None),
+            pacing_style=str(getattr(_ca, "pacing_style", None) or mode_config.get("pacing_style", "default")),
+            emotion=str(getattr(_ca, "dominant_emotion", "neutral")),
+            emotion_score=float(getattr(_ca, "emotion_score", 0.0)),
+            suggested_cut_style=str(getattr(_ca, "suggested_cut_style", "standard")),
+            warnings=[],
+        )
+    else:
+        pacing_plan = _build_pacing_plan(chunks, context, mode_config, warnings)
 
     # --- Phase 5: Camera + Subtitle planning ---
     pacing_ctx = {

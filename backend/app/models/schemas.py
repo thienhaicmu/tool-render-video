@@ -266,6 +266,16 @@ class RenderRequest(BaseModel):
     # AI Multi-Clip Batch Planning (Phase 37) — opt-in; planning-only, never executes batch renders.
     ai_clip_batch_planning_enabled: bool = False
     ai_clip_batch_limit: int = 5
+    # AI Content-Driven Selection (Phase 44) — opt-in; requires ai_director_enabled=True.
+    # When True: AI Director's segment selections from transcript override heuristic scored[].
+    # When False (default): existing heuristic sort+select behavior unchanged.
+    ai_content_driven_selection: bool = False
+    # AI Early Transcription (Phase 45) — opt-in; run Whisper before segment selection.
+    # When True: transcription runs immediately after scene detection, before scored[] is built.
+    # Enables S4.1/S4.2/S4.5 refinements to operate on the full candidate pool.
+    # Combines with ai_content_driven_selection for full content-first pipeline.
+    # When False (default): transcription runs at subtitle stage as before.
+    ai_early_transcription: bool = False
 
     # UP26: Pro Timeline Steering — creator guidance signals (above DNA, below explicit lock)
     # clip_lock: [{start_sec, end_sec}] — candidate ranges creator wants included
