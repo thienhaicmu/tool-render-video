@@ -251,6 +251,11 @@ interface ConfigState {
   narrationStyle:  'auto' | 'energetic' | 'calm' | 'emotional'
   subDensity:      'auto' | 'low' | 'medium' | 'high'
   subLanguage:     string
+  // AI Analyzer mode
+  aiAnalysisMode:  'local' | 'cloud' | 'hybrid'
+  aiCloudProvider: 'groq' | 'openai'
+  aiCloudApiKey:   string
+  aiCloudModel:    string
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -332,7 +337,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     clipLock: [], clipExclude: [],
     motionCrop: false,
     subEnabled: true, subStyle: 'tiktok_bounce_v1',
-    subHighlight: true, subFontSize: 28, subTranslate: false, subTranslateLang: 'en',
+    subHighlight: true, subFontSize: 72, subTranslate: false, subTranslateLang: 'en',
     subEmphasis: null, partOrder: 'viral',
     assetLogoPath: null, assetIntroPath: null, assetOutroPath: null, assetMusicProfile: null,
     whisperModel: 'auto',
@@ -344,6 +349,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     energyStyle: 'auto', hookStrength: 'balanced', focusMode: 'auto',
     outputLanguage: 'auto', narrationStyle: 'auto',
     subDensity: 'auto', subLanguage: 'auto',
+    aiAnalysisMode: 'hybrid', aiCloudProvider: 'groq', aiCloudApiKey: '', aiCloudModel: '',
   })
 
   const [jobId, setJobId]               = useState<string | null>(null)
@@ -474,6 +480,11 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       tts_engine:          cfg.narrEnabled ? cfg.ttsEngine : undefined,
       voice_mix_mode:      cfg.narrEnabled ? cfg.voiceMixMode : undefined,
       ai_director_enabled: cfg.aiEnabled,
+      ai_analysis_mode:    cfg.aiEnabled ? cfg.aiAnalysisMode : undefined,
+      ai_cloud_enabled:    cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' && !!cfg.aiCloudApiKey,
+      ai_cloud_provider:   cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' ? cfg.aiCloudProvider : undefined,
+      ai_cloud_api_key:    cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' && cfg.aiCloudApiKey ? cfg.aiCloudApiKey : undefined,
+      ai_cloud_model:      cfg.aiEnabled && cfg.aiCloudModel ? cfg.aiCloudModel : undefined,
       multi_variant:       cfg.multiVariant || undefined,
       cta_enabled:         cfg.ctaEnabled || undefined,
       cta_type:            cfg.ctaEnabled ? cfg.ctaType : undefined,
@@ -673,6 +684,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               wsError={wsError}
               t={t}
               aspectRatio={RATIO_INFO[cfg.ratio].api}
+              aiAnalysisMode={cfg.aiAnalysisMode}
+              aiCloudProvider={cfg.aiCloudProvider}
             />
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(2)}>{t.btnConfig}</button>
@@ -722,6 +735,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               aspectRatio={RATIO_INFO[cfg.ratio].api}
               jobStatus={jobStatus ?? ''}
               onRetry={handleRetryRender} isRetrying={isRetrying}
+              aiAnalysisMode={cfg.aiAnalysisMode}
+              aiCloudProvider={cfg.aiCloudProvider}
             />
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(3)}>{t.btnBackRendering}</button>
@@ -793,7 +808,7 @@ function SubtitleDemo({ style }: { style: string }) {
 
   const textStyle = variants[style] ?? variants['pro_karaoke']
   const hlColor: Record<string, string> = {
-    pro_karaoke: '#FFD700', tiktok_bounce_v1: '#00E5C8', viral_bold: '#fff',
+    pro_karaoke: '#00FF00', tiktok_bounce_v1: '#00E5C8', viral_bold: '#fff',
     bold_cap: '#00E5C8', gaming: '#fff',
   }
   const hlC = hlColor[style] ?? 'var(--cyan)'
@@ -805,6 +820,71 @@ function SubtitleDemo({ style }: { style: string }) {
         <span style={{ color: hlC, WebkitTextFillColor: hlC }}> AI Clip</span>
         {' '}Studio
       </span>
+    </div>
+  )
+}
+
+// ── SubStyleCard — visual style card for subtitle style picker ────────────────
+function SubStyleCard({ id, label, selected, onSelect }: {
+  id: string; label: string; selected: boolean; onSelect: () => void
+}) {
+  const PREVIEWS: Record<string, React.ReactNode> = {
+    tiktok_bounce_v1: (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+        <span style={{ color: '#fff', fontSize: '11px', fontWeight: 800, fontFamily: 'var(--fh)', letterSpacing: '.3px', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000' }}>YOU GO</span>
+        <span style={{ color: '#00FFFF', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', letterSpacing: '.3px', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000' }}>THAT WAY TOO</span>
+      </div>
+    ),
+    viral_bold: (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+        <span style={{ color: '#fff', fontSize: '11px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', letterSpacing: '1px', textShadow: '-1.5px -1.5px 0 #000,1.5px 1.5px 0 #000,1.5px -1.5px 0 #000,-1.5px 1.5px 0 #000' }}>YOU GO</span>
+        <span style={{ color: '#FFE500', fontSize: '14px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', letterSpacing: '.5px', textShadow: '-1.5px -1.5px 0 #000,1.5px 1.5px 0 #000,1.5px -1.5px 0 #000,-1.5px 1.5px 0 #000' }}>THAT WAY</span>
+      </div>
+    ),
+    bold_cap: (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+        <span style={{ color: '#fff', fontSize: '11px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,0 2px 8px rgba(0,0,0,.9)' }}>BOLD</span>
+        <span style={{ color: '#fff', fontSize: '14px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,0 2px 8px rgba(0,0,0,.9)' }}>CAPTION</span>
+      </div>
+    ),
+    clean_pro: (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+        <span style={{ color: '#fff', fontSize: '10px', fontWeight: 400, fontFamily: 'var(--fb)', textShadow: '0 1px 6px rgba(0,0,0,.9)' }}>clean subtitle</span>
+        <span style={{ color: '#fff', fontSize: '10px', fontWeight: 400, fontFamily: 'var(--fb)', textShadow: '0 1px 6px rgba(0,0,0,.9)' }}>professional</span>
+      </div>
+    ),
+    story_clean_01: (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+        <span style={{ background: 'rgba(0,0,0,.6)', padding: '3px 10px', borderRadius: '2px', color: '#f6f6f6', fontSize: '10px', fontWeight: 500, fontFamily: 'var(--fb)', display: 'inline-block' }}>story clean</span>
+        <span style={{ background: 'rgba(0,0,0,.6)', padding: '3px 10px', borderRadius: '2px', color: '#f6f6f6', fontSize: '10px', fontWeight: 500, fontFamily: 'var(--fb)', display: 'inline-block' }}>subtitle</span>
+      </div>
+    ),
+    gaming: (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+        <span style={{ color: '#fff', fontSize: '11px', fontWeight: 700, fontFamily: 'var(--fh)', letterSpacing: '1px', textShadow: '-1px -1px 0 #000,1px 1px 0 #000' }}>GAMING</span>
+        <span style={{ color: '#00E5C8', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--fh)', letterSpacing: '1px', textShadow: '0 0 12px rgba(0,229,200,.9),-1px -1px 0 #000,1px 1px 0 #000' }}>MODE ON</span>
+      </div>
+    ),
+    pro_karaoke: (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+        <span style={{ color: 'rgba(255,255,255,0.55)', fontSize: '9px', fontWeight: 700, fontFamily: 'var(--fh)', letterSpacing: '.3px', textShadow: '-1px -1px 0 #000,1px 1px 0 #000' }}>THAT WAY TOO</span>
+        <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+          <span style={{ color: '#00FF00', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,0 0 8px rgba(0,255,0,.6)' }}>YOU</span>
+          <span style={{ color: '#fff', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '-1px -1px 0 #000,1px 1px 0 #000' }}>GO</span>
+        </div>
+      </div>
+    ),
+  }
+
+  return (
+    <div
+      className={`sub-style-card${selected ? ' on' : ''}`}
+      onClick={onSelect}
+    >
+      <div className="ssc-frame">
+        {PREVIEWS[id] ?? <span style={{ color: '#888', fontSize: '10px' }}>{label}</span>}
+      </div>
+      <span className="ssc-label">{label}</span>
     </div>
   )
 }
@@ -848,7 +928,7 @@ function TranscriptOverlay({ sessionId, subStyle, subEnabled }: { sessionId: str
     gaming:           { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 700, color: '#00E5C8', letterSpacing: '1px', textShadow: '0 0 12px rgba(0,229,200,.8)' },
   }
   const hlColor: Record<string, string> = {
-    pro_karaoke: '#FFD700', tiktok_bounce_v1: '#00E5C8', viral_bold: '#fff',
+    pro_karaoke: '#00FF00', tiktok_bounce_v1: '#00E5C8', viral_bold: '#fff',
     bold_cap: '#00E5C8', gaming: '#fff',
   }
   const style = variants[subStyle] ?? variants['clean_pro']
@@ -1258,6 +1338,78 @@ function StepConfigure({
                 </div>
                 <Tog checked={cfg.aiEnabled} onChange={(v) => setCfgKey('aiEnabled', v)} />
               </div>
+
+              {/* AI Analyzer Mode — only shown when AI Director is on */}
+              {cfg.aiEnabled && (
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                  {/* Mode selector */}
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' as const, color: 'var(--text-tertiary)' }}>
+                    Analyzer
+                  </div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {(['local', 'cloud', 'hybrid'] as const).map((m) => (
+                      <button key={m} onClick={() => setCfgKey('aiAnalysisMode', m)} style={{
+                        flex: 1, padding: '5px 0', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                        cursor: 'pointer', border: `1px solid ${cfg.aiAnalysisMode === m ? '#a855f7' : 'var(--border-default)'}`,
+                        backgroundColor: cfg.aiAnalysisMode === m ? 'rgba(168,85,247,.15)' : 'transparent',
+                        color: cfg.aiAnalysisMode === m ? '#a855f7' : 'var(--text-secondary)',
+                        transition: 'all .12s', textTransform: 'capitalize' as const,
+                      }}>
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                    {cfg.aiAnalysisMode === 'local' && 'Offline — no API cost'}
+                    {cfg.aiAnalysisMode === 'cloud' && 'Cloud only — best quality'}
+                    {cfg.aiAnalysisMode === 'hybrid' && '70% cloud + 30% local'}
+                  </div>
+
+                  {/* Provider + API Key — only for cloud/hybrid */}
+                  {cfg.aiAnalysisMode !== 'local' && (
+                    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6, marginTop: 4 }}>
+                      {/* Provider pills */}
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {(['groq', 'openai'] as const).map((p) => (
+                          <button key={p} onClick={() => setCfgKey('aiCloudProvider', p)} style={{
+                            flex: 1, padding: '4px 0', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                            cursor: 'pointer', border: `1px solid ${cfg.aiCloudProvider === p ? '#3b82f6' : 'var(--border-default)'}`,
+                            backgroundColor: cfg.aiCloudProvider === p ? 'rgba(59,130,246,.15)' : 'transparent',
+                            color: cfg.aiCloudProvider === p ? '#3b82f6' : 'var(--text-secondary)',
+                            transition: 'all .12s',
+                          }}>
+                            {p === 'groq' ? 'Groq (Free)' : 'OpenAI'}
+                          </button>
+                        ))}
+                      </div>
+                      {/* API Key */}
+                      <input
+                        type="password"
+                        value={cfg.aiCloudApiKey}
+                        onChange={(e) => setCfgKey('aiCloudApiKey', e.target.value)}
+                        placeholder={cfg.aiCloudProvider === 'groq' ? 'gsk_...' : 'sk-...'}
+                        style={{
+                          width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
+                          border: '1px solid var(--border-default)', backgroundColor: 'var(--surface-input)',
+                          color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' as const,
+                        }}
+                      />
+                      {/* Model (optional) */}
+                      <input
+                        type="text"
+                        value={cfg.aiCloudModel}
+                        onChange={(e) => setCfgKey('aiCloudModel', e.target.value)}
+                        placeholder={cfg.aiCloudProvider === 'groq' ? 'llama-3.3-70b-versatile (optional)' : 'gpt-4o-mini (optional)'}
+                        style={{
+                          width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
+                          border: '1px solid var(--border-default)', backgroundColor: 'var(--surface-input)',
+                          color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' as const,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
           </div>
@@ -1272,17 +1424,47 @@ function StepConfigure({
               </div>
             </div>
 
-            {/* F. Style — 3 simplified groups */}
+            {/* F. Style cards */}
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>STYLE</span>
                 <span className="cfg-sec-api">subtitle_style</span>
               </div>
-              <div className="seg">
-                {SUB_STYLE_GROUPS.map(g => (
-                  <div key={g.set} className={`seg-b${activeSubGroup === g.set ? ' on' : ''}`}
-                    onClick={() => setCfgKey('subStyle', g.set)}>{g.label}</div>
+              <div className="sub-style-grid">
+                {([
+                  { id: 'pro_karaoke',       label: 'Karaoke' },
+                  { id: 'tiktok_bounce_v1',  label: 'Bounce'  },
+                  { id: 'viral_bold',        label: 'Viral'   },
+                  { id: 'bold_cap',          label: 'Caps'    },
+                  { id: 'clean_pro',         label: 'Clean'   },
+                  { id: 'story_clean_01',    label: 'Story'   },
+                  { id: 'gaming',            label: 'Gaming'  },
+                ] as const).map(({ id, label }) => (
+                  <SubStyleCard
+                    key={id} id={id} label={label}
+                    selected={cfg.subStyle === id}
+                    onSelect={() => setCfgKey('subStyle', id)}
+                  />
                 ))}
+              </div>
+            </div>
+
+            {/* Font size */}
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>{t.cfgFontSize}</span>
+                <span className="cfg-sec-api">sub_font_size</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <input
+                  type="range" min={32} max={120} step={4}
+                  value={cfg.subFontSize}
+                  onChange={(e) => setCfgKey('subFontSize', Number(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontFamily: 'var(--fh)', fontSize: '13px', fontWeight: 700, minWidth: '36px', textAlign: 'right', color: 'var(--accent)' }}>
+                  {cfg.subFontSize}
+                </span>
               </div>
             </div>
 
@@ -1641,11 +1823,13 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio }: {
 
 function StepRendering({
   jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, wsError, t, aspectRatio,
+  aiAnalysisMode, aiCloudProvider,
 }: {
   jobId: string | null; stage: string; jobStatus: string
   progress: WsProgressSummary | null; jobMessage: string
   isTerminal: boolean; liveParts: JobPart[]
   wsError: string | null; t: Strings; aspectRatio: string
+  aiAnalysisMode?: string; aiCloudProvider?: string
 }) {
   const pct         = progress?.overall_progress_percent ?? 0
   const doneCount   = progress?.completed_parts ?? 0
@@ -1690,78 +1874,138 @@ function StepRendering({
   return (
     <div className="rnd-screen">
 
-      {/* ── Compact header: pipeline + overall bar ── */}
-      <div className="rndv-header">
-        {/* Pipeline nodes */}
-        <div className="rndv-pipeline">
-          {phases.map((ph, idx) => {
-            const state = idx < activePhaseIdx ? 'done' : idx === activePhaseIdx ? 'active' : 'pending'
-            return (
-              <React.Fragment key={ph.key}>
-                <div className={`rndv-phase rndv-phase-${state}`}>
-                  <div className="rndv-phase-dot">
-                    {state === 'done' ? '✓' : state === 'active' ? <span className="rndv-phase-pulse" /> : idx + 1}
-                  </div>
-                  <span className="rndv-phase-label">{ph.label}</span>
-                </div>
-                {idx < phases.length - 1 && (
-                  <div className={`rndv-phase-line${idx < activePhaseIdx ? ' done' : ''}`} />
-                )}
-              </React.Fragment>
-            )
-          })}
+      {/* rdCard — job summary */}
+      <div className="rd-card">
+        <div className="rd-card-head">
+          <div className="rd-head-left">
+            <span className={`rd-status-badge rd-status-${isFailed ? 'failed' : isTerminal ? 'done' : 'running'}`}>
+              {isFailed ? 'FAILED' : isTerminal ? 'DONE' : 'RENDERING'}
+            </span>
+            <span className="rd-card-title">
+              {isFailed ? t.rndFailed : isTerminal ? t.rndComplete : t.rndInProgress}
+            </span>
+          </div>
+          {!isTerminal && jobId && <span className="rd-elapsed">{mm}:{ss}</span>}
         </div>
 
-        {/* Overall progress row */}
-        <div className="rndv-overall">
-          <div className="rndv-overall-left">
-            <span className="rndv-overall-pct">{Math.round(pct)}<span className="rndv-overall-sym">%</span></span>
-            <div className="rndv-overall-meta">
-              {totalCount > 0 && (
-                <span className="rndv-overall-clips">
-                  {t.rndClipsDone(doneCount, totalCount)}
-                  {failedCount > 0 && <span className="rndv-clips-failed"> · {t.rndClipsFailed(failedCount)}</span>}
-                </span>
-              )}
-              <span className="rndv-overall-msg">{displayMsg}</span>
-            </div>
+        <div className="rd-step-text">
+          {activePhaseIdx >= 0 && phases[activePhaseIdx]
+            ? `${phases[activePhaseIdx].label}${displayMsg ? ' — ' + displayMsg : ''}`
+            : displayMsg}
+        </div>
+
+        {clipSlots.length > 0 && (
+          <div className="rd-seg-bar">
+            {clipSlots.map(slot => (
+              <div key={slot.part_no} className={`rd-seg rd-seg-${clipStateKey(slot.status)}`}
+                title={`Clip ${slot.part_no}: ${slot.status}`} />
+            ))}
           </div>
-          <div className="rndv-overall-right">
-            <div className="rndv-overall-bar-track">
-              <div className="rndv-overall-bar-fill" style={{ width: `${pct}%` }} />
+        )}
+
+        <div className="rd-overall">
+          <span className="rd-overall-pct">{Math.round(pct)}%</span>
+          <div className="rd-overall-right">
+            {totalCount > 0 && (
+              <span className="rd-clips-text">
+                {t.rndClipsDone(doneCount, totalCount)}
+                {failedCount > 0 && <span style={{ color: 'var(--fail)' }}> · {t.rndClipsFailed(failedCount)}</span>}
+              </span>
+            )}
+            <div className="rd-bar-track">
+              <div className="rd-bar-fill" style={{ width: `${pct}%` }} />
             </div>
-            {!isTerminal && jobId && <span className="rndv-elapsed">{mm}:{ss}</span>}
           </div>
         </div>
       </div>
 
-      {/* WS error banner */}
+      {/* AI insights strip */}
+      {aiAnalysisMode && (
+        <div className="rd-ai-panel">
+          <div className="rd-ai-head">
+            <span className="rd-ai-label">AI Director</span>
+            <span className={`rd-ai-mode-badge rd-ai-${aiAnalysisMode}`}>
+              {aiAnalysisMode === 'hybrid' ? '⚡ Hybrid' : aiAnalysisMode === 'cloud' ? '☁ Cloud' : '💻 Local'}
+            </span>
+            {aiAnalysisMode !== 'local' && aiCloudProvider && (
+              <span className="rd-ai-provider">{aiCloudProvider === 'groq' ? 'Groq' : 'OpenAI'}</span>
+            )}
+          </div>
+          <div className="rd-ai-body">
+            {stage === 'analyze' && !isTerminal
+              ? <><span className="rd-ai-pulse" /> AI Director analyzing content — selecting best moments…</>
+              : stage === 'transcribe' && !isTerminal
+              ? 'Transcribing audio — Whisper AI processing…'
+              : stage === 'render' && !isTerminal && totalCount > 0
+              ? `Rendering ${totalCount} clip${totalCount !== 1 ? 's' : ''} — AI scene tracking active`
+              : isTerminal && !isFailed
+              ? `Analysis complete — ${doneCount} clip${doneCount !== 1 ? 's' : ''} selected`
+              : displayMsg || 'Processing…'
+            }
+          </div>
+        </div>
+      )}
+
+      {/* WS error */}
       {wsError && !isTerminal && (
-        <div style={{ margin: '8px 16px', padding: '8px 12px', background: 'rgba(234,179,8,.1)', border: '1px solid rgba(234,179,8,.3)', borderRadius: '4px', fontSize: '11px', color: 'var(--warn)' }}>
+        <div style={{ padding: '8px 16px', background: 'rgba(234,179,8,.1)', borderBottom: '1px solid rgba(234,179,8,.2)', fontSize: '11px', color: 'var(--warn)', flexShrink: 0 }}>
           ⚠ {t.rndWsError}
         </div>
       )}
 
-      {/* ── Per-clip rows ── */}
+      {/* Clip queue rows */}
       {clipSlots.length === 0 ? (
         <div className="rnd-waiting-msg">
           <span className="rnd-waiting-dot" />
           <span>
             {t.rndPreparing}
-            {jobMessage && (
-              <span style={{ display: 'block', fontSize: '10px', opacity: 0.55, marginTop: 2 }}>
-                {jobMessage}
-              </span>
-            )}
+            {jobMessage && <span style={{ display: 'block', fontSize: '10px', opacity: .55, marginTop: 2 }}>{jobMessage}</span>}
           </span>
         </div>
       ) : (
-        <div className="rndv-clip-list">
-          {clipSlots.map((slot) => (
-            <ClipRow key={slot.part_no} slot={slot} statusLabel={getStatusLabel(slot.status)} jobId={jobId} thumbRatio={thumbRatio} />
-          ))}
+        <div className="rd-queue-scroll">
+          {clipSlots.map(slot => {
+            const stateKey = clipStateKey(slot.status)
+            const activity = ACTIVITY_LABELS[slot.status.toLowerCase()] ?? ''
+            return (
+              <div key={slot.part_no} className={`rd-queue-row rd-row-${stateKey}`}>
+                <div className="rd-row-head">
+                  <span className="rd-row-name">Clip {String(slot.part_no).padStart(2, '0')}</span>
+                  <span className={`rd-row-badge rd-badge-${stateKey}`}>{getStatusLabel(slot.status)}</span>
+                </div>
+                <div className="rd-row-bar-track">
+                  <div className="rd-row-bar-fill" style={{ width: `${slot.progress_percent}%` }} />
+                </div>
+                {activity && <div className="rd-row-stage">{activity}</div>}
+                {stateKey === 'done' && jobId && (
+                  <div className="rd-row-actions">
+                    <a className="rd-row-btn" href={getPartMediaUrl(jobId, slot.part_no)} target="_blank" rel="noreferrer">Preview</a>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
+
+      {/* abpToolbar — bottom sticky */}
+      <div className="rd-abp-toolbar">
+        <div className="rd-abp-job">
+          <div className="rd-abp-title">{jobId ? jobId.slice(-12) : '—'}</div>
+          <div className="rd-abp-meta">{totalCount > 0 ? `${totalCount} clips · ${aspectRatio}` : aspectRatio}</div>
+        </div>
+        <div className="rd-abp-progress">
+          <div className="rd-abp-bar-track">
+            <div className="rd-abp-bar-fill" style={{ width: `${pct}%` }} />
+          </div>
+          <div className="rd-abp-msg">{displayMsg}</div>
+        </div>
+        <span className="rd-abp-pct">{Math.round(pct)}%</span>
+        <span className={`rd-abp-badge rd-status-${isFailed ? 'failed' : isTerminal ? 'done' : 'running'}`}>
+          {isFailed ? 'FAILED' : isTerminal ? 'DONE' : 'RUNNING'}
+        </span>
+      </div>
+
     </div>
   )
 }
@@ -1818,6 +2062,7 @@ function ScoreRingLg({ score }: { score: number }) {
 function StepResults({
   jobId, parts, partScores, qualityReports, qualityLoadFailed,
   loading, t, aspectRatio, jobStatus, onRetry, isRetrying,
+  aiAnalysisMode, aiCloudProvider,
 }: {
   jobId: string | null
   parts: JobPart[]
@@ -1830,6 +2075,8 @@ function StepResults({
   jobStatus: string
   onRetry: () => void
   isRetrying: boolean
+  aiAnalysisMode?: string
+  aiCloudProvider?: string
 }) {
   const [selectedPart, setSelectedPart] = useState<JobPart | null>(null)
   const [sortMode, setSortMode] = useState<'viral' | 'duration'>('viral')
@@ -1867,6 +2114,13 @@ function StepResults({
 
   // '9:16' → '9/16', '3:4' → '3/4', '1:1' → '1/1'
   const thumbRatio = aspectRatio.replace(':', '/')
+  const bestScore = Object.values(partScores).length > 0 ? Math.max(...Object.values(partScores)) : 0
+  const totalDurSec = doneParts.reduce((s, p) => s + (p.duration ?? 0), 0)
+  const totalDurFmt = `${Math.floor(totalDurSec / 60)}:${String(Math.floor(totalDurSec % 60)).padStart(2, '0')}`
+  const fmtDur = (sec: number | null | undefined): string => {
+    if (!sec) return ''
+    return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`
+  }
 
   if (!jobId) {
     return (
@@ -1880,85 +2134,111 @@ function StepResults({
 
   return (
     <div className="res-screen">
-      {/* ── Clip grid ── */}
+      {/* ── LEFT ── */}
       <div className="res-left">
-        {jobStatus === 'completed_with_errors' && failedParts.length > 0 && (
-          <div style={{ margin: '0 0 8px', padding: '8px 12px', background: 'rgba(234,179,8,.1)', border: '1px solid rgba(234,179,8,.3)', borderRadius: '4px', fontSize: '11px', color: 'var(--warn)' }}>
-            ⚠ {failedParts.length} clip{failedParts.length !== 1 ? 's' : ''} failed — {doneParts.length} clip{doneParts.length !== 1 ? 's' : ''} rendered successfully
-          </div>
-        )}
-        <div className="res-toolbar">
-          <div className="res-count">
-            {t.resClipsRendered(doneParts.length)}
-            {failedParts.length > 0 && (
-              <span style={{ color: 'var(--fail)', marginLeft: 8, fontSize: 11 }}>· {failedParts.length} failed</span>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <div className="res-sort">
-              <button className={`sort-btn${sortMode === 'viral' ? ' on' : ''}`} onClick={() => setSortMode('viral')}>{t.resSortViral}</button>
-              <button className={`sort-btn${sortMode === 'duration' ? ' on' : ''}`} onClick={() => setSortMode('duration')}>{t.resSortDuration}</button>
+
+        {/* Hero banner */}
+        <div className="res-hero">
+          <div className="res-hero-bg" />
+          <div className="res-hero-content">
+            <div className="res-hero-left">
+              <div className="res-complete-row">
+                <div className="res-complete-icon">✓</div>
+                <div>
+                  <div className="res-kicker">Render Complete</div>
+                  <div className="res-hero-title">
+                    {doneParts.length} clip{doneParts.length !== 1 ? 's' : ''} ready to publish
+                  </div>
+                </div>
+              </div>
+              <div className="res-vtags">
+                {bestScore >= 75 && <span className="res-vtag vtag-green">🔥 High engagement</span>}
+                {doneParts.some(p => p.hook_score > 65) && <span className="res-vtag vtag-purple">⚡ Hook detected</span>}
+                {aiAnalysisMode && (
+                  <span className={`res-vtag vtag-${aiAnalysisMode === 'cloud' ? 'blue' : aiAnalysisMode === 'hybrid' ? 'purple' : 'teal'}`}>
+                    {aiAnalysisMode === 'hybrid' ? '⚡ Hybrid AI' : aiAnalysisMode === 'cloud' ? `☁ Cloud${aiCloudProvider ? ' · ' + aiCloudProvider : ''}` : '💻 Local AI'}
+                  </span>
+                )}
+              </div>
             </div>
-            {failedParts.length > 0 && (
-              <button className="btn-xs" style={{ color: 'var(--fail)', borderColor: 'rgba(232,64,122,.4)' }}
-                onClick={onRetry} disabled={isRetrying}>
-                {isRetrying ? '…' : t.btnRetry}
-              </button>
-            )}
+            <div className="res-hero-right">
+              <div className="res-kpi-row">
+                <div className="res-kpi green">
+                  <strong>{bestScore > 0 ? Math.round(bestScore) : '—'}</strong>
+                  <span>Top Score</span>
+                </div>
+                <div className="res-kpi blue">
+                  <strong>{doneParts.length}</strong>
+                  <span>Clips</span>
+                </div>
+                <div className="res-kpi">
+                  <strong>{totalDurFmt}</strong>
+                  <span>Total</span>
+                </div>
+              </div>
+              {outputDir && (
+                <button className="res-export-btn" onClick={openOutputFolder}>Open Folder</button>
+              )}
+            </div>
           </div>
         </div>
 
-        {outputDir && (
-          <div className="res-output-banner">
-            <span className="res-output-icon">📁</span>
-            <span className="res-output-path" title={outputDir}>{outputDir}</span>
-            <button className="res-open-btn" onClick={openOutputFolder}>Open Folder</button>
+        {/* Partial failure warning */}
+        {jobStatus === 'completed_with_errors' && failedParts.length > 0 && (
+          <div style={{ padding: '8px 16px', background: 'rgba(234,179,8,.1)', borderBottom: '1px solid rgba(234,179,8,.2)', fontSize: '11px', color: 'var(--warn)', display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            <span>⚠ {failedParts.length} clip{failedParts.length !== 1 ? 's' : ''} failed — {doneParts.length} rendered successfully</span>
+            <button className="btn-xs" style={{ color: 'var(--fail)', borderColor: 'rgba(232,64,122,.4)', marginLeft: 'auto' }}
+              onClick={onRetry} disabled={isRetrying}>
+              {isRetrying ? '…' : t.btnRetry}
+            </button>
           </div>
         )}
 
+        {/* Sort / count bar */}
+        <div className="res-bar">
+          <span className="res-count">{t.resClipsRendered(doneParts.length)}</span>
+          <div className="res-sort">
+            <button className={`sort-btn${sortMode === 'viral' ? ' on' : ''}`} onClick={() => setSortMode('viral')}>{t.resSortViral}</button>
+            <button className={`sort-btn${sortMode === 'duration' ? ' on' : ''}`} onClick={() => setSortMode('duration')}>{t.resSortDuration}</button>
+          </div>
+        </div>
+
+        {/* Clip cards — horizontal scroll */}
         {loading ? (
           <div className="rw-empty">
             <div style={{ width: 32, height: 32, border: '2px solid var(--border-hi)', borderTop: '2px solid var(--accent)', borderRadius: '50%', animation: 'rw-spin 0.8s linear infinite' }} />
             {t.resLoading}
           </div>
         ) : doneParts.length === 0 ? (
-          <div className="rw-empty">
-            <span className="rw-empty-icon">📭</span>{t.resNoClips}
-          </div>
+          <div className="rw-empty"><span className="rw-empty-icon">📭</span>{t.resNoClips}</div>
         ) : (
-          <div className="clip-grid-area">
+          <div className="clip-cards-row">
             {sortedDone.map((part, i) => {
-              const score     = partScores[part.part_no]
-              const report    = qualityReports[part.part_no]
-              const thumbUrl  = getPartThumbnailUrl(jobId, part.part_no)
-              const isBest    = i === 0
+              const score      = partScores[part.part_no]
+              const thumbUrl   = getPartThumbnailUrl(jobId, part.part_no)
               const isSelected = selectedPart?.part_no === part.part_no
-              const tier      = score !== undefined ? aiTier(score) : null
-              const issueCount = report?.issues?.length ?? 0
+              const tier       = score !== undefined ? aiTier(score) : null
+              const durFmt     = fmtDur(part.duration)
+              const scoreCol   = score !== undefined
+                ? (score >= 70 ? 'var(--ok)' : score >= 50 ? 'var(--warn)' : 'var(--fail)')
+                : ''
 
               return (
                 <div
                   key={part.part_no}
-                  className={`clip-card${isSelected ? ' selected' : ''}`}
+                  className={`clip-card2${i === 0 ? ' is-top' : ''}${isSelected ? ' selected' : ''}`}
                   onClick={() => setSelectedPart(isSelected ? null : part)}
                 >
-                  {/* Thumbnail — aspect ratio matches the rendered output */}
-                  <div className="clip-thumb" style={{ aspectRatio: thumbRatio }}>
+                  {/* Thumb */}
+                  <div className="clip-thumb2" style={{ aspectRatio: thumbRatio }}>
                     <img src={thumbUrl} alt={`Clip ${part.part_no}`}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-
-                    {/* Top-left: BEST badge */}
-                    {isBest && <span className="clip-best">BEST</span>}
-
-                    {/* Top-right: AI score ring */}
+                    <div className="clip-rank">#{i + 1}</div>
                     {score !== undefined && (
-                      <div className="clip-score-ring">
-                        <ScoreRingSm score={score} />
-                      </div>
+                      <div className="clip-score-badge" style={{ color: scoreCol, borderColor: scoreCol }}>{Math.round(score)}</div>
                     )}
-
-                    {/* Hover overlay */}
+                    {durFmt && <div className="clip-dur-badge">{durFmt}</div>}
                     <div className="clip-overlay">
                       <a href={getPartMediaUrl(jobId, part.part_no)} target="_blank" rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}>
@@ -1971,46 +2251,45 @@ function StepResults({
                     </div>
                   </div>
 
-                  {/* Info bar */}
-                  <div className="clip-info">
-                    <div className="clip-row-top">
-                      <span className="clip-num-lbl">#{String(part.part_no).padStart(2, '0')}</span>
+                  {/* Info */}
+                  <div className="clip-info2">
+                    <div className="clip-info2-top">
+                      <span className="clip-num-lbl2">Clip {String(part.part_no).padStart(2, '0')}</span>
                       {tier && <span className={`clip-ai-badge ${tier.cls}`}>{tier.label}</span>}
                     </div>
-
-                    {/* Hook / Viral score pills */}
-                    {(part.hook_score > 0 || part.viral_score > 0) && (
-                      <div className="clip-scores-row">
-                        {part.hook_score > 0 && (
-                          <span className="clip-score-pill hook">
-                            Hook {Math.round(part.hook_score)}%
-                          </span>
-                        )}
-                        {part.viral_score > 0 && (
-                          <span className="clip-score-pill viral">
-                            Viral {Math.round(part.viral_score)}%
-                          </span>
-                        )}
+                    {score !== undefined && (
+                      <div className="clip-score-bar-track">
+                        <div className="clip-score-bar-fill" style={{ width: `${score}%`, background: scoreCol }} />
                       </div>
                     )}
-
-                    {issueCount > 0 ? (
-                      <div className="clip-issue-row">
-                        <span className="clip-issue-dot" />
-                        {issueCount} issue{issueCount > 1 ? 's' : ''}
+                    {(part.hook_score > 0 || part.viral_score > 0) && (
+                      <div className="clip-scores-row">
+                        {part.hook_score > 0 && <span className="clip-score-pill hook">Hook {Math.round(part.hook_score)}%</span>}
+                        {part.viral_score > 0 && <span className="clip-score-pill viral">Viral {Math.round(part.viral_score)}%</span>}
                       </div>
-                    ) : report ? (
-                      <div className="clip-ok-row">✓ Passed</div>
-                    ) : null}
+                    )}
+                    <div className="clip-actions2">
+                      <a className="clip-save-btn"
+                        href={getPartMediaUrl(jobId, part.part_no)}
+                        download={`clip_${part.part_no}.mp4`}
+                        onClick={(e) => e.stopPropagation()}>
+                        Save
+                      </a>
+                      <button className="clip-more-btn" title="Details"
+                        onClick={(e) => { e.stopPropagation(); setSelectedPart(isSelected ? null : part) }}>
+                        ···
+                      </button>
+                    </div>
                   </div>
                 </div>
               )
             })}
           </div>
         )}
-        {/* Failed clips detail */}
+
+        {/* Failed clips */}
         {failedParts.length > 0 && (
-          <div style={{ marginTop: '12px', padding: '10px 12px', background: 'rgba(232,64,122,.07)', border: '1px solid rgba(232,64,122,.2)', borderRadius: '6px' }}>
+          <div style={{ margin: '12px 16px 0', padding: '10px 12px', background: 'rgba(232,64,122,.07)', border: '1px solid rgba(232,64,122,.2)', borderRadius: '6px' }}>
             <div style={{ fontSize: '10px', fontFamily: 'var(--fh)', letterSpacing: '1px', color: 'var(--fail)', marginBottom: '8px' }}>
               {t.resFailedParts} ({failedParts.length})
             </div>

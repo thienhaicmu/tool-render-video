@@ -189,6 +189,7 @@ def srt_to_ass_karaoke(
     shadow_size: int = 1,
     x_percent: float = 50.0,
     text_overlay_margin_v: int | None = None,
+    show_context: bool = True,
 ):
     """Pro karaoke-style subtitle.
 
@@ -241,6 +242,21 @@ def srt_to_ass_karaoke(
         f"2,30,30,{effective_margin_v},1"
     )
 
+    # Context style — smaller font above the active line, static white text
+    _ctx_font_size  = max(20, round(_eff_font_size * 0.65))
+    _ctx_outline    = max(1, round(_eff_outline * 0.75))
+    _ctx_shadow     = max(0, round(_eff_shadow  * 0.75))
+    _ctx_margin_v   = effective_margin_v + round(_eff_font_size * 1.55)
+    context_style_line = (
+        f"Style: Context,{font_name},{_ctx_font_size},"
+        f"{base_color},{base_color},"
+        f"{outline_color},{back_color},"
+        f"0,0,0,0,100,{scale_y},0,0,1,{_ctx_outline},{_ctx_shadow},"
+        f"2,30,30,{_ctx_margin_v},1"
+    )
+
+    _ctx_styles = f"\n{context_style_line}" if show_context else ""
+
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -250,7 +266,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-{style_line}
+{style_line}{_ctx_styles}
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -258,17 +274,29 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     # Inject \pos(x,y) when subtitle is not centered. Default 50 → no tag.
     _pos_tag = ""
+    _ctx_pos_tag = ""
     if abs(x_percent - 50.0) > 0.5:
         _px = round(1080 * x_percent / 100)
         _py = play_res_y - effective_margin_v
         _pos_tag = "{\\pos(" + str(_px) + "," + str(_py) + ")}"
+        _ctx_py = play_res_y - _ctx_margin_v
+        _ctx_pos_tag = "{\\pos(" + str(_px) + "," + str(_ctx_py) + ")}"
 
     out = [header]
+    prev_plain_text: str | None = None
     for group in groups:
         g_start = group[0]["start"]
         g_end = group[-1]["end"]
 
+        # Context line: show previous group's plain text above the active line
+        if show_context and prev_plain_text:
+            out.append(
+                f"Dialogue: 0,{_ass_time(g_start)},{_ass_time(g_end)},"
+                f"Context,,0,0,0,,{_ctx_pos_tag}{prev_plain_text}\n"
+            )
+
         # Build karaoke text: {\kN}word  (N = duration in centiseconds)
+        plain_parts = []
         parts = []
         for w in group:
             dur_cs = max(1, int(round((w["end"] - w["start"]) * 100)))
@@ -276,8 +304,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # are inserted around the escaped word so they survive as ASS overrides.
             word = _ass_escape_text(w["text"])
             parts.append(f"{{\\k{dur_cs}}}{word}")
+            plain_parts.append(w["text"])
 
         text = " ".join(parts)
+        prev_plain_text = _ass_escape_text(" ".join(plain_parts))
         out.append(
             f"Dialogue: 0,{_ass_time(g_start)},{_ass_time(g_end)},"
             f"Default,,0,0,0,,{_pos_tag}{text}\n"

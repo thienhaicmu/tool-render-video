@@ -34,6 +34,10 @@ const VALID_STATE: RenderFormState = {
   frame_scale_x: 1.0,
   frame_scale_y: 1.0,
   ai_target_market: 'us',
+  ai_analysis_mode: 'hybrid',
+  ai_cloud_provider: 'groq',
+  ai_cloud_api_key: '',
+  ai_cloud_model: '',
 }
 
 describe('validateRenderForm — output_dir', () => {

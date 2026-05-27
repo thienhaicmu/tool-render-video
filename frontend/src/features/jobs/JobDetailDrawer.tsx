@@ -7,10 +7,12 @@ import { Button } from '../../components/ui/Button'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { JobStatusBadge } from './JobStatusBadge'
 import { formatDateTime } from './jobs.utils'
-import { getJob } from '../../api/jobs'
-import type { JobStatus } from '../../types/api'
+import { getJob, getJobParts } from '../../api/jobs'
+import type { JobStatus, JobPart } from '../../types/api'
 import { QualityPanel } from '../quality/QualityPanel'
 import { JobProgressPanel } from '../progress/JobProgressPanel'
+import { AiSummaryCard } from './AiSummaryCard'
+import { OutputClipGallery } from './OutputClipGallery'
 import { useEditorStore } from '../../stores/editorStore'
 import { useUIStore } from '../../stores/uiStore'
 
@@ -30,6 +32,9 @@ interface ParsedPayload {
   aspect_ratio?: string
   subtitle_style?: string
   effect_preset?: string
+  ai_director_enabled?: boolean
+  ai_analysis_mode?: string
+  ai_cloud_provider?: string
 }
 
 function parsePayload(payloadJson: string): ParsedPayload | null {
@@ -40,9 +45,21 @@ function parsePayload(payloadJson: string): ParsedPayload | null {
   }
 }
 
+function parseBestPartNo(resultJson: string): number | undefined {
+  try {
+    const r = JSON.parse(resultJson) as Record<string, unknown>
+    if (typeof r.best_part_no === 'number') return r.best_part_no
+    return undefined
+  } catch {
+    return undefined
+  }
+}
+
 function truncate(str: string, maxLen = 60): string {
   return str.length > maxLen ? str.slice(0, maxLen) + '…' : str
 }
+
+const TERMINAL_STATUSES = new Set(['completed', 'completed_with_errors', 'failed', 'partial', 'interrupted', 'cancelled'])
 
 function PayloadSection({ payloadJson }: { payloadJson: string }) {
   const [expanded, setExpanded] = useState(false)
@@ -146,6 +163,7 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
 
 export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
   const [job, setJob] = useState<JobStatus | null>(null)
+  const [parts, setParts] = useState<JobPart[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -156,8 +174,19 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
     let cancelled = false
     setLoading(true)
     setError(null)
+    setParts([])
     getJob(jobId)
-      .then((data) => { if (!cancelled) { setJob(data); setLoading(false) } })
+      .then((data) => {
+        if (!cancelled) {
+          setJob(data)
+          setLoading(false)
+          if (TERMINAL_STATUSES.has(data.status)) {
+            getJobParts(jobId)
+              .then((p) => { if (!cancelled) setParts(p) })
+              .catch(() => {})
+          }
+        }
+      })
       .catch((err) => { if (!cancelled) { setError(err.message ?? 'Failed to load job'); setLoading(false) } })
     return () => { cancelled = true }
   }, [jobId])
@@ -305,6 +334,11 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
               <ProgressBar value={job.progress_percent} />
             </div>
 
+            {/* AI Summary (terminal jobs only) */}
+            {TERMINAL_STATUSES.has(job.status) && (
+              <AiSummaryCard payloadJson={job.payload_json} resultJson={job.result_json} />
+            )}
+
             {/* Open in Editor */}
             {(() => {
               const isEditorAvailable = ['completed', 'partial', 'completed_with_errors'].includes(job.status)
@@ -327,6 +361,11 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
               )
             })()}
 
+            {/* Output Clip Gallery (terminal jobs with parts) */}
+            {parts.length > 0 && (
+              <OutputClipGallery parts={parts} bestPartNo={parseBestPartNo(job.result_json)} />
+            )}
+
             {/* Payload */}
             <PayloadSection payloadJson={job.payload_json} />
 
@@ -339,6 +378,7 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
                 jobId={job.job_id}
                 initialStatus={job.status}
                 initialProgress={job.progress_percent}
+                payloadJson={job.payload_json}
                 compact
               />
             </section>

@@ -15,8 +15,9 @@ import { isTerminalStatus } from '../../types/enums'
 import { isActiveStatus } from '../jobs/jobs.utils'
 import { ConnectionStatusBadge } from './ConnectionStatusBadge'
 import { ProgressStageTimeline } from './ProgressStageTimeline'
-import { ProgressPartList } from './ProgressPartList'
+import { ProgressClipsGrid } from './ProgressClipsGrid'
 import { ProgressMessageLog } from './ProgressMessageLog'
+import { AiActivityPanel } from './AiActivityPanel'
 import {
   normalizeProgressPercent,
   getStageLabel,
@@ -25,6 +26,7 @@ import {
   extractLatestMessage,
 } from './progress.utils'
 import { MAX_LOG_MESSAGES } from './progress.types'
+import type { LogMessage } from './progress.types'
 import './JobProgressPanel.css'
 
 export interface JobProgressPanelProps {
@@ -32,6 +34,7 @@ export interface JobProgressPanelProps {
   initialStatus?: string
   initialProgress?: number
   compact?: boolean
+  payloadJson?: string
 }
 
 /** Inner component that always calls useRenderSocket (hooks must not be conditional) */
@@ -43,16 +46,18 @@ function ActiveProgressPanel({
   onCancelRequest,
   isCanceling,
   showCancel,
+  payloadJson,
 }: {
   jobId: string
   initialProgress: number
-  messages: string[]
-  onNewMessage: (msg: string) => void
+  messages: LogMessage[]
+  onNewMessage: (msg: LogMessage) => void
   onCancelRequest: () => void
   isCanceling: boolean
   showCancel: boolean
+  payloadJson: string
 }) {
-  const { stage, jobStatus, jobMessage, progress, isConnected, isTerminal, error } =
+  const { stage, jobStatus, jobMessage, progress, liveParts, isConnected, isTerminal, error } =
     useRenderSocket(jobId)
 
   // Track new messages
@@ -61,7 +66,9 @@ function ActiveProgressPanel({
     const extracted = extractLatestMessage(jobMessage)
     if (extracted && extracted !== prevMessage.current) {
       prevMessage.current = extracted
-      onNewMessage(extracted)
+      const now = new Date()
+      const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+      onNewMessage({ text: extracted, ts })
     }
   }, [jobMessage, onNewMessage])
 
@@ -96,8 +103,16 @@ function ActiveProgressPanel({
         <ProgressBar value={overallPct} />
       </div>
 
-      {/* Per-part list */}
-      <ProgressPartList
+      {/* AI Activity Panel */}
+      <AiActivityPanel
+        payloadJson={payloadJson}
+        currentStage={stage ?? progress?.current_stage ?? null}
+        messages={messages.map((m) => m.text)}
+      />
+
+      {/* Clips Grid */}
+      <ProgressClipsGrid
+        liveParts={liveParts}
         activeParts={activeParts}
         completedParts={completedParts}
         failedParts={failedParts}
@@ -172,15 +187,16 @@ export function JobProgressPanel({
   initialStatus = '',
   initialProgress = 0,
   compact: _compact = false,
+  payloadJson = '',
 }: JobProgressPanelProps) {
-  const [messages, setMessages] = useState<string[]>([])
+  const [messages, setMessages] = useState<LogMessage[]>([])
   const [isCanceling, setIsCanceling] = useState(false)
   const addNotification = useUIStore((s) => s.addNotification)
 
   const isJobTerminal = isTerminalStatus(initialStatus)
   const showCancel = isActiveStatus(initialStatus)
 
-  const handleNewMessage = (msg: string) => {
+  const handleNewMessage = (msg: LogMessage) => {
     setMessages((prev) => {
       const next = [...prev, msg]
       return next.length > MAX_LOG_MESSAGES ? next.slice(-MAX_LOG_MESSAGES) : next
@@ -219,6 +235,7 @@ export function JobProgressPanel({
       onCancelRequest={() => void handleCancelRequest()}
       isCanceling={isCanceling}
       showCancel={showCancel}
+      payloadJson={payloadJson}
     />
   )
 }

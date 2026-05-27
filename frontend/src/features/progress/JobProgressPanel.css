@@ -30,3 +30,12 @@
   font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
 }
+
+@keyframes ai-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.ai-dot-pulse {
+  animation: ai-pulse 1.5s ease-in-out infinite;
+}

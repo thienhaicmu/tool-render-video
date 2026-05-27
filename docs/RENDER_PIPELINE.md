@@ -197,12 +197,34 @@ Primary file:
 
 The AI Director creates an `AIEditPlan` from transcript, scene, duration, source, market, memory, pacing, subtitle, camera, creator, and quality signals.
 
+### Hybrid Analysis bootstrap (Phase HY)
+
+Before clip selection, `_build_plan()` calls `_bootstrap_hybrid_analyzer()` which runs the Hybrid Analysis layer (`backend/app/ai/analysis/`). This produces an `AnalysisSignals` object that enriches downstream decisions:
+
+```text
+_build_plan() entry
+  -> chunks resolved from ContentAnalysisResult or SRT
+  -> _bootstrap_hybrid_analyzer(request, chunks, context)
+       -> LocalAnalyzer  (always runs)
+       -> CloudAnalyzer  (runs if ai_cloud_enabled=True)
+       -> MergeStrategy  (cloud 70% / local 30%)
+       -> AnalysisSignals
+  -> select_ai_segments(..., enrichment=signals)
+       -> _apply_cloud_enrichment() blends cloud scores into candidates
+  -> pacing_ctx enriched with cloud emotion + subtitle/camera hints
+  -> camera_planner + subtitle_planner receive enriched pacing_ctx
+```
+
+If `_bootstrap_hybrid_analyzer()` fails for any reason, it returns `None` and all downstream code treats `_analysis_signals=None` as a no-op — no behavior change from the pre-hybrid path.
+
 Important safety contract:
 
 - If AI Director fails, render continues.
 - AI plan metadata is optional.
 - AI phases must not assume internet/cloud/GPU.
 - Most AI phases are advisory or metadata-only.
+- Cloud analysis requires explicit `ai_cloud_enabled=True` — never activates by default.
+- Cloud API failures fall back to local-only analysis transparently.
 
 ## Advisory Metadata vs Bounded Render Influence
 
@@ -213,14 +235,26 @@ The pipeline distinguishes:
 - **Advisory AI:** plans, reasons, scores, recommends, explains.
 - **Bounded AI execution:** opt-in, narrow payload influence under safety gates.
 
-`ai_render_influence_enabled` allows `backend/app/ai/director/render_influence.py` to apply small safe changes. Current examples include limited subtitle/camera influence. It must not rewrite playback speed, segment timing, FFmpeg commands, output validation, or executor behavior.
+`ai_render_influence_enabled` allows `backend/app/ai/director/render_influence.py` to apply small safe changes. Current bounded influence surfaces:
+
+| Payload field | Set by | Effect |
+|---|---|---|
+| `motion_aware_crop` | camera_plan behavior in {fast_follow, dramatic_push, slow_reveal} | Enables MediaPipe subject tracking |
+| `reframe_mode` | camera_plan mode + cloud_camera_behavior hint | Changes crop strategy |
+| `highlight_per_word` | subtitle_plan highlight_keywords=True | Per-word ASS emphasis markers |
+| `subtitle_style` | subtitle promotion engine (confidence ≥ 0.80) | Font/color/position preset |
+
+The Hybrid Analysis layer improves the quality of these decisions by providing cloud-enriched emotion signals, camera hints, and subtitle hints to the planners — but it does not add new bounded influence surfaces.
+
+It must not rewrite playback speed, segment timing, FFmpeg commands, output validation, or executor behavior.
 
 ### What must not break: AI influence
 
-- Defaults must keep AI off.
+- Defaults must keep AI off (`ai_cloud_enabled=False`, `ai_render_influence_enabled` default).
 - Render must work when AI modules return fallback metadata.
 - Bounded influence must remain traceable in `ai_render_influence`.
 - Advisory-only phases must not silently become execution phases.
+- `AnalysisSignals` must never directly write to FFmpeg parameters — only through the existing `render_influence.py` gate.
 
 ## Subtitle Pipeline
 

@@ -9,6 +9,11 @@ Public API:
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.ai.analysis.signals import AnalysisSignals
+
 from app.ai.analyzers.hook_analyzer import (
     score_hook_text,
     score_hook_intelligence,
@@ -69,6 +74,7 @@ def select_ai_segments(
     target_duration: float | None = None,
     memory_context: dict | None = None,
     content_analysis=None,
+    enrichment: "AnalysisSignals | None" = None,
 ) -> list[dict]:
     """Select the best transcript windows using hook + density + duration scoring.
 
@@ -102,6 +108,9 @@ def select_ai_segments(
 
     if not candidates:
         return _select_from_scenes(scenes or [], target_min, target_max)
+
+    if enrichment is not None:
+        candidates = _apply_cloud_enrichment(candidates, enrichment)
 
     candidates = _apply_hook_proximity_boost(candidates, content_analysis)
 
@@ -408,6 +417,47 @@ def _apply_hook_proximity_boost(
     except Exception:
         pass  # never block clip selection on boost failure
 
+    return candidates
+
+
+def _apply_cloud_enrichment(
+    candidates: list[dict],
+    enrichment: "AnalysisSignals",
+) -> list[dict]:
+    """Blend cloud clip scores into local candidate scores.
+
+    For each local candidate, finds the closest cloud ClipSignal within
+    _CLOUD_MATCH_TOLERANCE seconds. Blends scores and overrides hook_type
+    when the cloud signal is more specific. Re-sorts by score after blending.
+    Never raises — returns candidates unchanged on any error.
+    """
+    _CLOUD_MATCH_TOLERANCE = 8.0
+    _CLOUD_WEIGHT = 0.70
+    _LOCAL_WEIGHT = 0.30
+
+    if not enrichment.clip_signals:
+        return candidates
+    try:
+        for cand in candidates:
+            c_start = float(cand.get("start", 0.0))
+            best_match = None
+            best_dist = float("inf")
+            for cs in enrichment.clip_signals:
+                dist = abs(cs.start - c_start)
+                if dist < best_dist and dist <= _CLOUD_MATCH_TOLERANCE:
+                    best_dist = dist
+                    best_match = cs
+            if best_match is not None:
+                orig = float(cand.get("score", 50.0))
+                blended = orig * _LOCAL_WEIGHT + best_match.hook_score * _CLOUD_WEIGHT
+                cand["score"] = round(max(0.0, min(100.0, blended)), 2)
+                if best_match.hook_type and best_match.hook_type != "none":
+                    cand["hook_intelligence_type"] = best_match.hook_type
+                if best_match.reason:
+                    cand["reason"] = f"[hybrid] {best_match.reason}"
+        candidates.sort(key=lambda x: float(x.get("score", 0.0)), reverse=True)
+    except Exception:
+        pass  # never block clip selection on enrichment failure
     return candidates
 
 

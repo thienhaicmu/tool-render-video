@@ -155,11 +155,11 @@ class RenderRequest(BaseModel):
     subtitle_only_viral_high: bool = False
     subtitle_transcription_engine: Literal["default", "faster_whisper", "whisperx"] = "default"
     highlight_per_word: bool = False
-    sub_font_size: int = 46
+    sub_font_size: int = 72
     sub_font: str = "Bungee"
     sub_margin_v: int = 170
     sub_color: str = "#FFFFFF"
-    sub_highlight: str = "#FFFF00"
+    sub_highlight: str = "#00FF00"
     sub_outline: int = 3
     sub_x_percent: float = 50.0
 
@@ -276,6 +276,18 @@ class RenderRequest(BaseModel):
     # Combines with ai_content_driven_selection for full content-first pipeline.
     # When False (default): transcription runs at subtitle stage as before.
     ai_early_transcription: bool = False
+    # AI Cloud Analyzer — optional one-call-per-job cloud enrichment for clip selection,
+    # subtitle hints, and camera hints. Falls back to local analyzers if disabled or on error.
+    # ai_cloud_provider: "openai" | "groq"
+    # ai_cloud_model: None = use provider default (gpt-4o-mini / llama-3.1-8b-instant)
+    ai_cloud_enabled: bool = False
+    ai_cloud_provider: Optional[str] = None
+    ai_cloud_api_key: Optional[str] = None
+    ai_cloud_model: Optional[str] = None
+    # AI Analyzer mode — controls which analysis tier runs.
+    # "local": offline only, no API cost; "cloud": cloud result 100%;
+    # "hybrid" (default/None): 70% cloud + 30% local merge.
+    ai_analysis_mode: Optional[Literal["local", "cloud", "hybrid"]] = None
 
     # UP26: Pro Timeline Steering — creator guidance signals (above DNA, below explicit lock)
     # clip_lock: [{start_sec, end_sec}] — candidate ranges creator wants included

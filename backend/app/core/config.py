@@ -36,3 +36,10 @@ REQUEST_LOG = LOGS_DIR / "request.log"   # Type 1: request/validation errors
 
 for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, DATABASE_PATH.parent]:
     p.mkdir(parents=True, exist_ok=True)
+
+# AI Cloud Analyzer — server-side defaults read from environment / .env
+# These are fallbacks used when RenderRequest does not supply ai_cloud_api_key.
+AI_CLOUD_ENABLED  : bool = os.getenv("AI_CLOUD_ENABLED", "0") == "1"
+AI_CLOUD_PROVIDER : str  = os.getenv("AI_CLOUD_PROVIDER", "groq")
+AI_CLOUD_API_KEY  : str  = os.getenv("AI_CLOUD_API_KEY", "")
+AI_CLOUD_MODEL    : str  = os.getenv("AI_CLOUD_MODEL", "")

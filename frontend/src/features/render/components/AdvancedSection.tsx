@@ -33,6 +33,81 @@ export function AdvancedSection({ state, errors, onChange }: AdvancedSectionProp
 
       {state.ai_director_enabled && (
         <>
+          <FormField label="AI Analyzer Mode">
+            <div style={modeTabsStyle}>
+              {(['local', 'cloud', 'hybrid'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => onChange('ai_analysis_mode', m)}
+                  style={{
+                    ...modeTabStyle,
+                    ...(state.ai_analysis_mode === m ? modeTabActiveStyle : {}),
+                  }}
+                  data-testid={`ai-mode-${m}`}
+                >
+                  {m === 'local' ? 'Local' : m === 'cloud' ? 'Cloud' : 'Hybrid'}
+                </button>
+              ))}
+            </div>
+            <p style={modeDescStyle}>
+              {state.ai_analysis_mode === 'local' && 'Offline only — no API cost, fastest.'}
+              {state.ai_analysis_mode === 'cloud' && 'Cloud result only — best quality, uses API quota.'}
+              {state.ai_analysis_mode === 'hybrid' && '70% cloud + 30% local — recommended balance.'}
+            </p>
+          </FormField>
+
+          {(state.ai_analysis_mode === 'cloud' || state.ai_analysis_mode === 'hybrid') && (
+            <>
+              <FormField label="Provider">
+                <div style={modeTabsStyle}>
+                  {(['groq', 'openai'] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => onChange('ai_cloud_provider', p)}
+                      style={{
+                        ...modeTabStyle,
+                        ...(state.ai_cloud_provider === p ? modeTabActiveStyle : {}),
+                      }}
+                      data-testid={`ai-provider-${p}`}
+                    >
+                      {p === 'groq' ? 'Groq (Free)' : 'OpenAI'}
+                    </button>
+                  ))}
+                </div>
+              </FormField>
+
+              <FormField label="API Key" hint="Stored in memory only — not saved to disk">
+                <input
+                  type="password"
+                  value={state.ai_cloud_api_key}
+                  onChange={(e) => onChange('ai_cloud_api_key', e.target.value)}
+                  placeholder={state.ai_cloud_provider === 'groq' ? 'gsk_...' : 'sk-...'}
+                  style={{ ...inputStyle, width: '100%', borderColor: 'var(--color-border)' }}
+                  aria-label="Cloud API Key"
+                  data-testid="ai-cloud-api-key-input"
+                />
+              </FormField>
+
+              <FormField label="Model" hint="Optional — leave blank for provider default">
+                <input
+                  type="text"
+                  value={state.ai_cloud_model}
+                  onChange={(e) => onChange('ai_cloud_model', e.target.value)}
+                  placeholder={
+                    state.ai_cloud_provider === 'groq'
+                      ? 'llama-3.3-70b-versatile'
+                      : 'gpt-4o-mini'
+                  }
+                  style={{ ...inputStyle, width: '100%', borderColor: 'var(--color-border)' }}
+                  aria-label="Cloud Model"
+                  data-testid="ai-cloud-model-input"
+                />
+              </FormField>
+            </>
+          )}
+
           <FormField label="Hook Overlay">
             <label style={toggleLabelStyle}>
               <input
@@ -186,4 +261,34 @@ const inputStyle: React.CSSProperties = {
   outline: 'none',
   boxSizing: 'border-box',
   fontFamily: 'var(--font-family-base)',
+}
+
+const modeTabsStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: '4px',
+}
+
+const modeTabStyle: React.CSSProperties = {
+  flex: 1,
+  padding: '6px 12px',
+  fontSize: 'var(--font-size-sm)',
+  color: 'var(--color-text-secondary)',
+  backgroundColor: 'var(--color-bg-elevated)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)',
+  cursor: 'pointer',
+  fontFamily: 'var(--font-family-base)',
+  fontWeight: 500,
+}
+
+const modeTabActiveStyle: React.CSSProperties = {
+  color: '#fff',
+  backgroundColor: 'var(--color-accent)',
+  borderColor: 'var(--color-accent)',
+}
+
+const modeDescStyle: React.CSSProperties = {
+  fontSize: 'var(--font-size-xs)',
+  color: 'var(--color-text-secondary)',
+  margin: '4px 0 0 0',
 }

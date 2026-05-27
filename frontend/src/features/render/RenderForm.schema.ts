@@ -114,6 +114,19 @@ export function buildRenderPayload(state: RenderFormState): RenderRequest {
     payload.ai_target_market = state.ai_target_market
   }
 
+  // AI Analyzer mode
+  payload.ai_analysis_mode = state.ai_analysis_mode
+  if (state.ai_analysis_mode === 'cloud' || state.ai_analysis_mode === 'hybrid') {
+    if (state.ai_cloud_api_key.trim()) {
+      payload.ai_cloud_enabled = true
+      payload.ai_cloud_provider = state.ai_cloud_provider || 'groq'
+      payload.ai_cloud_api_key = state.ai_cloud_api_key
+      if (state.ai_cloud_model.trim()) {
+        payload.ai_cloud_model = state.ai_cloud_model
+      }
+    }
+  }
+
   return payload
 }
 

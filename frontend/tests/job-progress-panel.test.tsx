@@ -283,7 +283,13 @@ describe('JobProgressPanel — Cancel button', () => {
 
 describe('JobProgressPanel — message log', () => {
   it('shows up to 5 messages without collapsing', () => {
-    const msgs = ['msg1', 'msg2', 'msg3', 'msg4', 'msg5']
+    const msgs = [
+      { text: 'msg1', ts: '10:00' },
+      { text: 'msg2', ts: '10:01' },
+      { text: 'msg3', ts: '10:02' },
+      { text: 'msg4', ts: '10:03' },
+      { text: 'msg5', ts: '10:04' },
+    ]
     render(<ProgressMessageLog messages={msgs} />)
     expect(screen.getByTestId('progress-message-log')).toBeTruthy()
   })

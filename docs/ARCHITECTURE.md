@@ -236,6 +236,72 @@ Every downstream AI consumer reads from `ContentAnalysisResult` instead of runni
 
 When `ContentAnalysisResult.available=False` (no transcript, analyzer exception, or feature flags off), every consumer falls back to its original independent analysis path. No behavior change for existing jobs.
 
+## Hybrid Analysis Layer
+
+**Stability marker: Experimental / needs verification**
+
+The hybrid analysis layer (`backend/app/ai/analysis/`) provides a unified interface for combining local rule-based analyzers with optional cloud AI enrichment. It sits inside `ai_director._build_plan()` and runs once per job, before clip selection.
+
+### Architecture
+
+```text
+Transcript chunks + context
+        |
+        v
+HybridAnalyzer  (ai/analysis/hybrid_analyzer.py)
+  |-- LocalAnalyzer  (always runs, never fails)
+  |     |-- hook_analyzer.py    — regex hook scoring, 9 types
+  |     └── emotion_analyzer.py — keyword emotion detection
+  |
+  |-- CloudAnalyzer  (optional, gated by ai_cloud_enabled=False)
+  |     |-- OpenAIProvider  — gpt-4o-mini (~$0.0003/video)
+  |     └── GroqProvider    — llama-3.1-8b-instant (free tier)
+  |
+  └── MergeStrategy  (ai/analysis/merger.py)
+        — cloud 70% / local 30% for semantic signals
+        — cloud subtitle/camera hints take priority when present
+        |
+        v
+  AnalysisSignals  (unified output schema)
+    .clip_signals     — per-window hook scores + relevance + hook_type
+    .emotion          — dominant emotion label + score
+    .subtitle_hints   — style_preset, highlight_keywords, density
+    .camera_hints     — behavior, zoom_strength, follow_strength
+    .confidence       — blended confidence 0–1
+    .source           — "local" | "cloud" | "hybrid"
+```
+
+### What AnalysisSignals flows into
+
+| Downstream | Effect |
+|---|---|
+| `clip_selector._apply_cloud_enrichment()` | Blends cloud hook scores into local candidate scores; re-sorts candidates |
+| `pacing_ctx` in `_build_plan()` | Cloud emotion overrides local when confidence ≥ 40 |
+| `pacing_ctx` cloud hint fields | `cloud_subtitle_density`, `cloud_subtitle_preset`, `cloud_camera_behavior` available to planners |
+| `camera_planner` | Receives enriched pacing_ctx → better behavior decisions |
+| `subtitle_planner` | Receives enriched pacing_ctx → better tone/density/emphasis decisions |
+
+### What AnalysisSignals does NOT touch
+
+The analysis layer never writes to `payload`, never calls FFmpeg, never writes to SQLite, and never modifies `render_pipeline.py` state. The only path from `AnalysisSignals` to actual FFmpeg parameters is through the existing `render_influence.py` gate (unchanged).
+
+### Contract 2 compliance
+
+All four new `RenderRequest` fields default to `False` / `None`:
+
+```python
+ai_cloud_enabled: bool = False
+ai_cloud_provider: Optional[str] = None   # "openai" | "groq"
+ai_cloud_api_key: Optional[str] = None
+ai_cloud_model: Optional[str] = None      # None = provider default
+```
+
+Cloud analysis is entirely disabled unless `ai_cloud_enabled=True` is explicitly set. Existing jobs never activate it on replay.
+
+### Extension points
+
+Adding a new cloud provider requires one new file implementing `CloudAnalyzerBase._call_api()`. Adding a new local analyzer requires extending `LocalAnalyzer._score_clips()`. Neither change requires modifying `ai_director.py`.
+
 ## Render Intelligence Layer
 
 **Stability marker: Semi-stable implementation**

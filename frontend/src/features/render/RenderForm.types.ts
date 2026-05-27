@@ -28,6 +28,11 @@ export interface RenderFormState {
   frame_scale_y: number
   // AI market targeting
   ai_target_market: string
+  // AI Analyzer mode
+  ai_analysis_mode: 'local' | 'cloud' | 'hybrid'
+  ai_cloud_provider: string
+  ai_cloud_api_key: string
+  ai_cloud_model: string
 }
 
 export interface RenderFormErrors {

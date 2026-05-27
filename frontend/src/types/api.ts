@@ -131,6 +131,13 @@ export interface RenderRequest {
   cta_enabled?: boolean
   cta_type?: 'auto' | 'comment' | 'part_2' | 'follow'
 
+  // AI Cloud Analyzer
+  ai_cloud_enabled?: boolean
+  ai_cloud_provider?: string | null
+  ai_cloud_api_key?: string | null
+  ai_cloud_model?: string | null
+  ai_analysis_mode?: 'local' | 'cloud' | 'hybrid' | null
+
   // Pro Timeline Steering (UP26)
   clip_lock?: TimeRange[] | null
   clip_exclude?: TimeRange[] | null

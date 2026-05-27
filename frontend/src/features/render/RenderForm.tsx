@@ -41,6 +41,10 @@ export const DEFAULT_FORM_STATE: RenderFormState = {
   frame_scale_x: 100,
   frame_scale_y: 106,
   ai_target_market: 'us',
+  ai_analysis_mode: 'hybrid',
+  ai_cloud_provider: 'groq',
+  ai_cloud_api_key: '',
+  ai_cloud_model: '',
 }
 
 interface RenderFormProps {

@@ -2,7 +2,7 @@
  * Render API — POST /api/render/process, cancel, status
  */
 import { apiFetch, BASE_URL } from './client'
-import type { RenderRequest, RenderResponse, JobStatus } from '../types/api'
+import type { RenderRequest, RenderResponse } from '../types/api'
 
 /**
  * Submit a new render job.

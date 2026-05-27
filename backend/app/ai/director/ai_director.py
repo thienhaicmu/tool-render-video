@@ -118,6 +118,92 @@ except ImportError:
 
 logger = logging.getLogger("app.ai.director")
 
+# ── Hybrid Analyzer bootstrap ─────────────────────────────────────────────────
+# Lazy import so the analysis layer doesn't load at module import time.
+# If the analysis package is missing (e.g. stripped install), the director
+# continues with local-only behavior — Contract 3 compliant.
+try:
+    from app.ai.analysis.hybrid_analyzer import HybridAnalyzer as _HybridAnalyzer
+    from app.ai.analysis.local_analyzer import LocalAnalyzer as _LocalAnalyzer
+    from app.ai.analysis.signals import AnalysisSignals as _AnalysisSignals
+    _HYBRID_AVAILABLE = True
+except ImportError:
+    _HYBRID_AVAILABLE = False
+    _HybridAnalyzer = None  # type: ignore[assignment,misc]
+    _LocalAnalyzer = None   # type: ignore[assignment,misc]
+    _AnalysisSignals = None # type: ignore[assignment,misc]
+
+
+def _bootstrap_hybrid_analyzer(request: Any, chunks: list, context: dict):
+    """Build and run analysis. Returns AnalysisSignals or None on any error.
+
+    mode "local"  → LocalAnalyzer only, no cloud call
+    mode "cloud"  → CloudAnalyzer result directly, falls back to local on cloud failure
+    mode "hybrid" / None → HybridAnalyzer 70% cloud + 30% local merge (default)
+
+    Priority order for cloud credentials:
+    1. request.ai_cloud_* fields (per-request explicit)
+    2. config.AI_CLOUD_* env vars from .env / environment (server-side default)
+    3. No cloud — local-only analysis
+    """
+    if not _HYBRID_AVAILABLE:
+        return None
+    try:
+        from app.core.config import (
+            AI_CLOUD_ENABLED as _CFG_ENABLED,
+            AI_CLOUD_PROVIDER as _CFG_PROVIDER,
+            AI_CLOUD_API_KEY as _CFG_KEY,
+            AI_CLOUD_MODEL as _CFG_MODEL,
+        )
+
+        mode = str(getattr(request, "ai_analysis_mode", None) or "").strip().lower() or None
+        analysis_ctx = {
+            "goal": context.get("goal", str(getattr(request, "ai_mode", "viral_tiktok") or "")),
+            "duration": float(context.get("duration") or 0.0),
+        }
+        local = _LocalAnalyzer()
+
+        # "local" mode: skip cloud entirely, no API call
+        if mode == "local":
+            return _HybridAnalyzer(local=local, cloud=None).analyze(chunks, analysis_ctx)
+
+        # Resolve cloud credentials: request fields first, config fallback second
+        req_enabled  = bool(getattr(request, "ai_cloud_enabled", False))
+        req_provider = str(getattr(request, "ai_cloud_provider", "") or "")
+        req_key      = str(getattr(request, "ai_cloud_api_key", "") or "")
+        req_model    = getattr(request, "ai_cloud_model", None) or None
+
+        if req_enabled and req_key:
+            provider, api_key, model = req_provider, req_key, req_model
+        elif _CFG_ENABLED and _CFG_KEY:
+            provider = req_provider or _CFG_PROVIDER
+            api_key  = _CFG_KEY
+            model    = req_model or (_CFG_MODEL or None)
+        else:
+            provider = api_key = ""
+            model = None
+
+        cloud = None
+        if api_key and provider == "openai":
+            from app.ai.analysis.cloud.openai_provider import OpenAIProvider
+            cloud = OpenAIProvider(api_key=api_key, model=model)
+        elif api_key and provider == "groq":
+            from app.ai.analysis.cloud.groq_provider import GroqProvider
+            cloud = GroqProvider(api_key=api_key, model=model)
+
+        # "cloud" mode: return cloud result directly, fallback to local on cloud failure
+        if mode == "cloud" and cloud is not None:
+            cloud_result = cloud.analyze(chunks, analysis_ctx)
+            if cloud_result is not None:
+                return cloud_result
+            return local.analyze(chunks, analysis_ctx)
+
+        # "hybrid" / None (default): HybridAnalyzer 70% cloud + 30% local merge
+        return _HybridAnalyzer(local=local, cloud=cloud).analyze(chunks, analysis_ctx)
+    except Exception as exc:
+        logger.debug("ai_director_hybrid_bootstrap_failed: %s", exc)
+        return None
+
 
 def create_ai_edit_plan(request: Any, context: dict) -> Optional[AIEditPlan]:
     """Create an AI edit plan for the render request.
@@ -215,6 +301,20 @@ def _build_plan(
         warnings.append("no_transcript_available")
         logger.info("ai_director_no_segments_fallback job_id=%s: no transcript; using scene fallback", job_id)
 
+    # --- Hybrid Analyzer (Phase HY): run local + optional cloud once on full transcript ---
+    # Result enriches clip_selector scoring and pacing context for planners.
+    # Always safe: returns None on any failure → downstream uses local-only signals.
+    _analysis_signals = _bootstrap_hybrid_analyzer(request, chunks, context)
+    if _analysis_signals:
+        logger.debug(
+            "ai_director_hybrid_signals job_id=%s source=%s clips=%d confidence=%.2f warnings=%s",
+            job_id,
+            _analysis_signals.source,
+            len(_analysis_signals.clip_signals),
+            _analysis_signals.confidence,
+            _analysis_signals.warnings,
+        )
+
     # --- RAG memory context ---
     memory_ctx: dict = {}
     if bool(getattr(request, "ai_use_rag_memory", False)):
@@ -245,6 +345,7 @@ def _build_plan(
         target_duration=target_duration,
         memory_context=memory_ctx or None,
         content_analysis=content_analysis,
+        enrichment=_analysis_signals,
     )
 
     # S2.5: Single bounded retry when first-pass confidence is weak.
@@ -268,6 +369,7 @@ def _build_plan(
                     target_duration=target_duration,
                     memory_context=memory_ctx or None,
                     content_analysis=content_analysis,
+                    enrichment=_analysis_signals,
                 )
                 second_conf = _retry_evaluate(retry_raw)
                 if retry_raw and second_conf >= first_conf + _RETRY_MIN_IMPROVEMENT:
@@ -328,6 +430,21 @@ def _build_plan(
         "beat_available": pacing_plan.beat_available,
         "bpm": pacing_plan.bpm,
     }
+    # Phase HY: override emotion signals with hybrid analyzer when cloud confidence is high
+    if _analysis_signals and _analysis_signals.source in ("cloud", "hybrid"):
+        _emo = _analysis_signals.emotion
+        if _emo.score >= 40.0:
+            pacing_ctx["emotion"] = _emo.dominant
+            pacing_ctx["emotion_score"] = _emo.score
+        # Expose cloud subtitle/camera hints to planners via pacing_ctx extensions
+        if _analysis_signals.subtitle_hints:
+            pacing_ctx["cloud_subtitle_density"] = _analysis_signals.subtitle_hints.density
+            pacing_ctx["cloud_subtitle_preset"] = _analysis_signals.subtitle_hints.style_preset
+            pacing_ctx["cloud_highlight_keywords"] = _analysis_signals.subtitle_hints.highlight_keywords
+        if _analysis_signals.camera_hints:
+            pacing_ctx["cloud_camera_behavior"] = _analysis_signals.camera_hints.behavior
+            pacing_ctx["cloud_zoom_strength"] = _analysis_signals.camera_hints.zoom_strength
+            pacing_ctx["cloud_follow_strength"] = _analysis_signals.camera_hints.follow_strength
     transcript_ctx = {
         "text": " ".join(c.get("text", "") for c in chunks[:10]),
         "chunk_count": len(chunks),
