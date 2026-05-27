@@ -2,6 +2,9 @@
  * Utility functions for the jobs/history feature module.
  */
 import type { HistoryItem } from '../../types/api'
+import { isTerminalStatus } from '../../types/enums'
+
+export { isTerminalStatus }
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -43,12 +46,7 @@ export function formatDateTime(isoString: string): string {
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 
-const TERMINAL_STATUSES = new Set(['completed', 'partial', 'failed', 'cancelled', 'interrupted'])
 const ACTIVE_STATUSES = new Set(['running', 'queued', 'cancelling'])
-
-export function isTerminalStatus(status: string): boolean {
-  return TERMINAL_STATUSES.has(status)
-}
 
 export function isActiveStatus(status: string): boolean {
   return ACTIVE_STATUSES.has(status)

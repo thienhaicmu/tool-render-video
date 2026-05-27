@@ -135,7 +135,7 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
           )}
           {isDone && job.output_path && (
             <button
-              onClick={() => { const w = window as any; w.electronAPI?.openPath?.(job.output_dir) }}
+              onClick={() => { window.electronAPI?.openPath?.(job.output_dir) }}
               style={{
                 padding: '3px 9px', borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: 'pointer',
                 border: '1px solid var(--border-hi)', background: 'var(--accent-dim)',

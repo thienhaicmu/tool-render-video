@@ -152,11 +152,8 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
   }, [refresh])
 
   const pickDir = async () => {
-    const api = (window as any).electronAPI
-    if (api?.pickDirectory) {
-      const dir = await api.pickDirectory()
-      if (dir) setOutputDir(dir)
-    }
+    const dir = await window.electronAPI?.pickDirectory?.()
+    if (dir) setOutputDir(dir)
   }
 
   const handleAdd = async () => {

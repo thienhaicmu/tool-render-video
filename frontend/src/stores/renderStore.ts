@@ -10,9 +10,6 @@ export interface RenderStore {
   activeJobId: string | null
 
   submitRender: (payload: RenderRequest) => Promise<string>
-  updateJobStatus: (jobId: string, status: Partial<JobStatus>) => void
-  setActiveJob: (jobId: string | null) => void
-  clearJobs: () => void
 }
 
 export const useRenderStore = create<RenderStore>((set) => ({
@@ -41,25 +38,5 @@ export const useRenderStore = create<RenderStore>((set) => ({
       },
     }))
     return jobId
-  },
-
-  updateJobStatus: (jobId: string, status: Partial<JobStatus>) => {
-    set((state) => ({
-      jobs: {
-        ...state.jobs,
-        [jobId]: {
-          ...state.jobs[jobId],
-          ...status,
-        } as JobStatus,
-      },
-    }))
-  },
-
-  setActiveJob: (jobId: string | null) => {
-    set({ activeJobId: jobId })
-  },
-
-  clearJobs: () => {
-    set({ jobs: {}, activeJobId: null })
   },
 }))

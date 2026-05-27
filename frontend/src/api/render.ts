@@ -16,14 +16,6 @@ export async function submitRender(payload: RenderRequest): Promise<RenderRespon
 }
 
 /**
- * Get render job status via the render router.
- * GET /api/render/jobs/{jobId}
- */
-export async function getRenderStatus(jobId: string): Promise<JobStatus> {
-  return apiFetch<JobStatus>(`/api/render/jobs/${encodeURIComponent(jobId)}`)
-}
-
-/**
  * Cancel a running render job.
  * POST /api/render/{jobId}/cancel
  */

@@ -439,11 +439,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     setCfg((prev) => ({ ...prev, preset: id, platform: p.platform, ratio: 'r916' }))
   }
   async function pickOutputDir() {
-    const ea = (window as Window & { electronAPI?: { pickDirectory?: () => Promise<string | null> } }).electronAPI
-    if (ea?.pickDirectory) {
-      const dir = await ea.pickDirectory()
-      if (dir) setCfgKey('outputDir', dir)
-    }
+    const dir = await window.electronAPI?.pickDirectory?.()
+    if (dir) setCfgKey('outputDir', dir)
   }
 
   // ── Render actions ──────────────────────────────────────────────────────────
@@ -606,13 +603,9 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               </div>
               <div className="src-cards">
                 <div className="src-card highlight" onClick={async () => {
-                  const api = (window as any).electronAPI
-                  if (api?.pickVideoFile) {
-                    const picked = await api.pickVideoFile()
-                    if (picked) setSources([{ value: picked }])
-                  } else {
-                    fileInputRef.current?.click()
-                  }
+                  const picked = await window.electronAPI?.pickVideoFile?.()
+                  if (picked) setSources([{ value: picked }])
+                  else fileInputRef.current?.click()
                 }}>
                   <div className="src-card-icon">📁</div>
                   <div className="src-card-title">{t.srcLocalTitle}</div>
@@ -1856,8 +1849,7 @@ function StepResults({
   })()
 
   const openOutputFolder = async () => {
-    const api = (window as any).electronAPI
-    if (api?.openPath && outputDir) await api.openPath(outputDir)
+    if (outputDir) await window.electronAPI?.openPath?.(outputDir)
   }
 
   const selScore  = selectedPart ? partScores[selectedPart.part_no] : undefined

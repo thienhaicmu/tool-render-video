@@ -108,11 +108,8 @@ export function SourceSection({ state, errors, onChange }: SourceSectionProps) {
               type="button"
               style={browseButtonStyle}
               onClick={async () => {
-                const api = (window as any).electronAPI
-                if (api?.pickVideoFile) {
-                  const picked = await api.pickVideoFile()
-                  if (picked) onChange('source_video_path', picked)
-                }
+                const picked = await window.electronAPI?.pickVideoFile?.()
+                if (picked) onChange('source_video_path', picked)
               }}
             >
               Browse

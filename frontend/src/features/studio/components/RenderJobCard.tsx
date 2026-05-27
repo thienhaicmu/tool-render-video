@@ -32,9 +32,7 @@ export function RenderJobCard({
   const [isHovered, setIsHovered] = useState(false)
 
   const openFolder = async () => {
-    const api = (window as any).electronAPI
-    if (!api?.openPath || !outputDir) return
-    await api.openPath(outputDir)
+    if (outputDir) await window.electronAPI?.openPath?.(outputDir)
   }
 
   const timeText = createdAt ? relativeTime(createdAt) : null

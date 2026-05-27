@@ -1,7 +1,8 @@
 import { create } from 'zustand'
+import type { Platform, RenderProfile } from '../types/enums'
 
-export type TargetPlatform = 'tiktok' | 'youtube_shorts' | 'instagram_reels'
-export type RenderProfile = 'fast' | 'balanced' | 'quality' | 'best'
+export type { RenderProfile }
+export type TargetPlatform = Platform
 export type PartOrder = 'viral' | 'sequential'
 export type VideoType = 'auto' | 'viral' | 'storytelling' | 'educational' | 'emotional' | 'high_retention'
 export type EnergyStyle = 'auto' | 'fast' | 'balanced' | 'slow'

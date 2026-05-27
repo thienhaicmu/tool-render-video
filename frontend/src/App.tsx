@@ -13,6 +13,7 @@ import { StudioScreen } from './features/studio/StudioScreen'
 import { DownloaderScreen } from './features/downloader/DownloaderScreen'
 import { ClipStudio } from './features/clip-studio/ClipStudio'
 import { Notifications } from './components/ui/Notifications'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
 
 function SettingsPanel() {
   return <div style={{ padding: 'var(--space-6)', color: 'var(--color-text-secondary)' }}>Settings panel — Phase 6.1</div>
@@ -49,16 +50,20 @@ export function App() {
 
   if (FULLSCREEN_PANELS.includes(activePanel)) {
     return (
-      <div style={{ position: 'fixed', inset: 0, zIndex: 100 }}>
-        <ActiveScreen />
-        <Notifications />
-      </div>
+      <ErrorBoundary>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100 }}>
+          <ActiveScreen />
+          <Notifications />
+        </div>
+      </ErrorBoundary>
     )
   }
 
   return (
-    <AppShell>
-      <ActiveScreen />
-    </AppShell>
+    <ErrorBoundary>
+      <AppShell>
+        <ActiveScreen />
+      </AppShell>
+    </ErrorBoundary>
   )
 }

@@ -469,9 +469,8 @@ export function ResultsStep({ jobId, sessionOutputDir, onNewProject }: ResultsSt
   }, [jobId])
 
   const openFolder = async () => {
-    const api = (window as any).electronAPI
-    if (api?.openPath && sessionOutputDir) {
-      await api.openPath(sessionOutputDir)
+    if (sessionOutputDir && window.electronAPI?.openPath) {
+      await window.electronAPI.openPath(sessionOutputDir)
     } else {
       alert('Open folder: ' + (sessionOutputDir || 'output directory'))
     }

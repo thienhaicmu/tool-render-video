@@ -23,7 +23,6 @@ export interface EditorStore {
   setDuration: (durationSec: number) => void
   setTrim: (start: number, end: number) => void
   resetTrim: () => void
-  closeEditor: () => void
 }
 
 // Build media URL from job/part
@@ -72,15 +71,4 @@ export const useEditorStore = create<EditorStore>((set, _get) => ({
     }))
   },
 
-  closeEditor: () => {
-    set({
-      selectedJobId: null,
-      selectedPartNo: null,
-      mediaUrl: null,
-      durationSec: 0,
-      trimStartSec: 0,
-      trimEndSec: 0,
-      isDirty: false,
-    })
-  },
 }))

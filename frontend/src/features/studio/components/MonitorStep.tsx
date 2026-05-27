@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { getJobHistory } from '../../../api/jobs'
 import { BASE_URL } from '../../../api/client'
 import { useI18n } from '../../../i18n/useI18n'
+import { isTerminalStatus } from '../../../types/enums'
 import type { HistoryItem } from '../../../types/api'
 
 interface MonitorStepProps {
@@ -488,8 +489,7 @@ function HistoryRow({ item }: { item: HistoryItem }) {
   const statusLabel = isCompleted ? 'Done' : isFailed ? 'Failed' : isQueued ? 'Queued' : 'Running'
 
   const openFolder = async () => {
-    const api = (window as any).electronAPI
-    if (api?.openPath && item.output_dir) await api.openPath(item.output_dir)
+    if (item.output_dir) await window.electronAPI?.openPath?.(item.output_dir)
   }
 
   return (
@@ -556,8 +556,6 @@ function HistoryRow({ item }: { item: HistoryItem }) {
 
 // ── MonitorStep ────────────────────────────────────────────────────────────────
 
-const TERMINAL_STATUSES = new Set(['completed', 'completed_with_errors', 'failed', 'cancelled', 'interrupted'])
-
 export function MonitorStep({ jobId, onComplete }: MonitorStepProps) {
   const { t } = useI18n()
   const [items, setItems] = useState<HistoryItem[]>([])
@@ -607,7 +605,7 @@ export function MonitorStep({ jobId, onComplete }: MonitorStepProps) {
         setEtaSec(typeof summary.eta_seconds === 'number' ? summary.eta_seconds : null)
         if (Array.isArray(data.parts)) setLiveParts(data.parts as LivePart[])
         const status: string = summary.status ?? data.job?.status ?? ''
-        if (TERMINAL_STATUSES.has(status)) {
+        if (isTerminalStatus(status)) {
           ws.close(); poll()
           if (status === 'completed' || status === 'completed_with_errors') onComplete()
         }
