@@ -12,38 +12,48 @@ if (-not (Test-Path $BackendVenvPy)) {
 }
 
 # ── 1. Locate and verify bundled FFmpeg — HARD FAIL if missing ───────────────
-Write-Host "==> Locating bundled ffmpeg / ffprobe"
-$localFfmpeg = Get-ChildItem -Path $Root -Recurse -Filter ffmpeg.exe -File -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -notmatch '\\node_modules\\' } |
-    Select-Object -First 1
-$localFfprobe = Get-ChildItem -Path $Root -Recurse -Filter ffprobe.exe -File -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -notmatch '\\node_modules\\' } |
-    Select-Object -First 1
+Write-Host "==> Locating ffmpeg / ffprobe"
 
-if (-not $localFfmpeg) {
+# Resolve paths immediately to plain strings so they survive long PyInstaller runs
+function Resolve-FfmpegPath($name) {
+    # 1. Look inside project (excluding node_modules)
+    $found = Get-ChildItem -Path $Root -Recurse -Filter $name -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '\\node_modules\\' } |
+        Select-Object -First 1
+    if ($found) { return $found.FullName }
+    # 2. Fall back to system PATH
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    return $null
+}
+
+$ffmpegPath  = Resolve-FfmpegPath "ffmpeg.exe"
+$ffprobePath = Resolve-FfmpegPath "ffprobe.exe"
+
+if (-not $ffmpegPath) {
     throw @"
-HARD FAIL: ffmpeg.exe not found anywhere under $Root.
-The offline package cannot be built without a bundled ffmpeg binary.
-Place ffmpeg.exe (and ffprobe.exe) in $Root\tools\ffmpeg\ and retry.
+HARD FAIL: ffmpeg.exe not found in project or system PATH.
+Place ffmpeg.exe + ffprobe.exe in $Root\tools\ffmpeg\ and retry.
 Download: https://github.com/BtbN/FFmpeg-Builds/releases
 "@
 }
-if (-not $localFfprobe) {
-    throw @"
-HARD FAIL: ffprobe.exe not found anywhere under $Root.
-ffprobe.exe must accompany ffmpeg.exe. Place it alongside ffmpeg.exe and retry.
-"@
+if (-not $ffprobePath) {
+    throw "HARD FAIL: ffprobe.exe not found. It must accompany ffmpeg.exe."
 }
 
-Write-Host "  ffmpeg  : $($localFfmpeg.FullName)"
-Write-Host "  ffprobe : $($localFfprobe.FullName)"
+Write-Host "  ffmpeg  : $ffmpegPath"
+Write-Host "  ffprobe : $ffprobePath"
 
 # Verify the binary actually runs before wasting time on a full build
 Write-Host "==> Verifying ffmpeg binary"
-$ffmpegVersion = & $localFfmpeg.FullName -version 2>&1 | Select-Object -First 1
-if ($LASTEXITCODE -ne 0) {
-    throw "HARD FAIL: ffmpeg.exe found at $($localFfmpeg.FullName) but 'ffmpeg -version' returned exit code $LASTEXITCODE. Binary may be corrupt."
+$ffmpegResult = Start-Process -FilePath $ffmpegPath -ArgumentList "-version" -Wait -PassThru -NoNewWindow `
+    -RedirectStandardOutput "$env:TEMP\ffver_out.txt" -RedirectStandardError "$env:TEMP\ffver_err.txt" `
+    -ErrorAction SilentlyContinue
+if ($ffmpegResult.ExitCode -ne 0) {
+    throw "HARD FAIL: '$ffmpegPath' -version returned exit code $($ffmpegResult.ExitCode). Binary may be corrupt."
 }
+$ffmpegVersion = (Get-Content "$env:TEMP\ffver_out.txt" -ErrorAction SilentlyContinue | Select-Object -First 1)
+if (-not $ffmpegVersion) { $ffmpegVersion = (Get-Content "$env:TEMP\ffver_err.txt" -ErrorAction SilentlyContinue | Select-Object -First 1) }
 Write-Host "  $ffmpegVersion"
 
 # ── 2. Build backend executable (onedir, no UPX) ─────────────────────────────
@@ -81,8 +91,8 @@ Copy-Item -Path "$onedirSrc\*" -Destination $BackendExeOut -Recurse -Force
 # ── 4. Copy bundled ffmpeg binaries ──────────────────────────────────────────
 Write-Host "==> Copy bundled ffmpeg binaries into desktop resources"
 New-Item -ItemType Directory -Path $FfmpegOut -Force | Out-Null
-Copy-Item -Path $localFfmpeg.FullName  -Destination (Join-Path $FfmpegOut "ffmpeg.exe")  -Force
-Copy-Item -Path $localFfprobe.FullName -Destination (Join-Path $FfmpegOut "ffprobe.exe") -Force
+Copy-Item -Path $ffmpegPath  -Destination (Join-Path $FfmpegOut "ffmpeg.exe")  -Force
+Copy-Item -Path $ffprobePath -Destination (Join-Path $FfmpegOut "ffprobe.exe") -Force
 
 # ── 5. Build desktop portable EXE ────────────────────────────────────────────
 Write-Host "==> Build desktop portable EXE"

@@ -580,6 +580,25 @@ The render pipeline handles `None` returns from AI modules with fallback behavio
 
 ---
 
+## ⛔ render-flow.html — Prototype Only, Never "Done" Until Ported
+
+`render-flow.html` is a standalone visual prototype. It is **NOT** the real UI.
+
+**Rule:** Any design change made in `render-flow.html` is NOT done until the same change is implemented in the real files:
+
+| Real file | Role |
+|-----------|------|
+| `frontend/src/features/clip-studio/render/RenderWorkflow.tsx` | All rendering/results screen logic and JSX |
+| `frontend/src/features/clip-studio/render/RenderWorkflow.css` | All rendering/results screen styles |
+
+**Enforcement:**
+- Never report a UI task as complete after editing `render-flow.html` only
+- Always port prototype changes to `RenderWorkflow.tsx` + `RenderWorkflow.css` before marking done
+- `render-flow.html` may be used to sketch/prototype, but the real implementation is the only source of truth
+- When comparing "what the screen should look like," read the prototype for design intent, then implement in `RenderWorkflow.tsx`
+
+---
+
 ## Quick Commands
 
 ```powershell

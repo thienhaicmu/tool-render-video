@@ -1967,16 +1967,25 @@ function StepRendering({
           {clipSlots.map(slot => {
             const stateKey = clipStateKey(slot.status)
             const activity = ACTIVITY_LABELS[slot.status.toLowerCase()] ?? ''
+            const livePart = liveParts.find(p => p.part_no === slot.part_no)
+            const durSec   = livePart?.duration ?? 0
+            const durLabel = durSec > 0
+              ? `${Math.floor(durSec / 60)}:${String(Math.floor(durSec % 60)).padStart(2, '0')}`
+              : null
+            const stageText = activity || (stateKey === 'done' ? 'Completed' : stateKey === 'failed' ? 'Failed' : 'Waiting to start…')
             return (
               <div key={slot.part_no} className={`rd-queue-row rd-row-${stateKey}`}>
                 <div className="rd-row-head">
-                  <span className="rd-row-name">Clip {String(slot.part_no).padStart(2, '0')}</span>
+                  <span className="rd-row-name">
+                    Clip {String(slot.part_no).padStart(2, '0')}
+                    {durLabel && <span className="rd-row-dur"> · {durLabel}</span>}
+                  </span>
                   <span className={`rd-row-badge rd-badge-${stateKey}`}>{getStatusLabel(slot.status)}</span>
                 </div>
                 <div className="rd-row-bar-track">
                   <div className="rd-row-bar-fill" style={{ width: `${slot.progress_percent}%` }} />
                 </div>
-                {activity && <div className="rd-row-stage">{activity}</div>}
+                <div className="rd-row-stage">{stageText}</div>
                 {stateKey === 'done' && jobId && (
                   <div className="rd-row-actions">
                     <a className="rd-row-btn" href={getPartMediaUrl(jobId, slot.part_no)} target="_blank" rel="noreferrer">Preview</a>
