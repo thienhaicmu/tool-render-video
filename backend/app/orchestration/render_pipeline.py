@@ -2446,6 +2446,30 @@ def run_render_pipeline(
                     kind="warning",
                 )
 
+        # ── Phase 43: Creator feedback learning pack (advisory metadata only) ──
+        if _ai_edit_plan is not None and getattr(payload, "ai_director_enabled", False):
+            try:
+                from app.ai.feedback.feedback_learning import build_feedback_learning_pack
+                _feedback_pack = build_feedback_learning_pack(
+                    _ai_edit_plan,
+                    payload=payload,
+                    context={"job_id": job_id},
+                )
+                if _feedback_pack is not None:
+                    _ai_edit_plan.creator_feedback_intelligence = _feedback_pack.to_dict()
+                    _job_log(
+                        effective_channel, job_id,
+                        f"feedback_learning: {len(getattr(_feedback_pack, 'feedback_signals', []))} signals, "
+                        f"{len(getattr(_feedback_pack, 'ranking_biases', []))} biases computed",
+                        kind="info",
+                    )
+            except Exception as _fb_err:
+                _job_log(
+                    effective_channel, job_id,
+                    f"feedback_learning_skipped: {_fb_err}",
+                    kind="warning",
+                )
+
         # ── Phase 5.3: Apply execution hints from AI plan (advisory, safe, bounded) ──
         # Reads execution_hints from plan.knowledge_injection (set by ai_director).
         # If ai_director_enabled=False, _ai_edit_plan is None → this block is skipped.
