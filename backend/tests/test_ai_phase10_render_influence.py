@@ -71,10 +71,10 @@ def _make_plan(
 # 1. Schema: default ai_render_influence_enabled is False
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_schema_default_ai_render_influence_disabled():
+def test_schema_default_ai_render_influence_enabled():
     from app.models.schemas import RenderRequest
     req = RenderRequest()
-    assert req.ai_render_influence_enabled is False
+    assert req.ai_render_influence_enabled is True
 
 
 def test_schema_ai_render_influence_can_be_enabled():
@@ -84,12 +84,11 @@ def test_schema_ai_render_influence_can_be_enabled():
 
 
 def test_schema_backward_compat_old_request_unchanged():
-    """Old requests without the new field must behave as before (field absent = False)."""
+    """AI fields default to True — AI Director is always on by default."""
     from app.models.schemas import RenderRequest
     req = RenderRequest()
-    # All AI fields default off — nothing changes for old callers
-    assert req.ai_director_enabled is False
-    assert req.ai_render_influence_enabled is False
+    assert req.ai_director_enabled is True
+    assert req.ai_render_influence_enabled is True
 
 
 # ─────────────────────────────────────────────────────────────────────────────

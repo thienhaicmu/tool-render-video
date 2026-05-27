@@ -1,477 +1,379 @@
-import { useState, useEffect, useRef } from 'react'
-import { createDownloadBatch, retryDownloadItems } from '../../api/download'
-import { getJobParts } from '../../api/jobs'
-import { useI18n } from '../../i18n/useI18n'
-import type { JobPart } from '../../types/api'
+import { useEffect, useRef, useState } from 'react'
+import {
+  startBatch, listJobs, cancelJob, subscribeJob,
+  formatFilesize, platformLabel, platformColor,
+  type DownloadJob,
+} from '../../api/platformDownloader'
 
-type PartStatus = JobPart['status'] | 'done' | 'failed' | 'downloading' | 'waiting' | 'unsupported'
+// ── Platform chips ─────────────────────────────────────────────────────────────
 
-interface TrackItem {
-  part_no: number
-  url: string
-  status: PartStatus
-  progress: number
-  output_file: string
-  message: string
+const PLATFORMS = [
+  { id: 'youtube',   label: 'YouTube',   color: '#FF4040' },
+  { id: 'tiktok',    label: 'TikTok',    color: '#00E5C8' },
+  { id: 'instagram', label: 'Instagram', color: '#C13584' },
+  { id: 'facebook',  label: 'Facebook',  color: '#4D7CFF' },
+  { id: 'twitter',   label: 'X / Twitter', color: '#8A93B0' },
+  { id: 'bilibili',  label: 'Bilibili',  color: '#00A1D6' },
+]
+
+const QUALITY_OPTS = [
+  { v: 'best',  l: 'Best'  },
+  { v: '1080p', l: '1080p' },
+  { v: '720p',  l: '720p'  },
+  { v: '480p',  l: '480p'  },
+]
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function ProgressBar({ value, color }: { value: number; color: string }) {
+  return (
+    <div style={{ height: 3, borderRadius: 99, background: 'var(--bg-hover)', overflow: 'hidden', width: '100%' }}>
+      <div style={{
+        height: '100%', width: `${Math.min(100, value)}%`, borderRadius: 99,
+        background: `linear-gradient(90deg, ${color}, ${color}99)`,
+        transition: 'width .4s ease',
+        boxShadow: `0 0 8px ${color}55`,
+      }} />
+    </div>
+  )
 }
 
-const POLL_INTERVAL_MS = 1800
-const TERMINAL_PART_STATUSES = new Set(['done', 'failed', 'unsupported'])
-
-function isJobTerminal(parts: TrackItem[]): boolean {
-  return parts.length > 0 && parts.every((p) => TERMINAL_PART_STATUSES.has(p.status as string))
-}
-
-function statusColor(status: PartStatus): string {
-  if (status === 'done') return 'var(--status-success)'
-  if (status === 'failed' || status === 'unsupported') return 'var(--status-error)'
-  if (status === 'downloading') return 'var(--accent-primary)'
-  return 'var(--text-tertiary)'
-}
-
-export function DownloaderScreen() {
-  const { t } = useI18n()
-  const [urlInput, setUrlInput] = useState('')
-  const [outputDir, setOutputDir] = useState('downloads')
-  const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const [jobId, setJobId] = useState<string | null>(null)
-  const [tracks, setTracks] = useState<TrackItem[]>([])
-  const [done, setDone] = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  useEffect(() => {
-    if (!jobId) return
-    setDone(false)
-    const poll = async () => {
-      try {
-        const parts = await getJobParts(jobId)
-        const mapped: TrackItem[] = parts.map((p) => ({
-          part_no: p.part_no,
-          url: p.output_file || '',
-          status: p.status as PartStatus,
-          progress: p.progress_percent,
-          output_file: p.output_file || '',
-          message: (p as any).message || '',
-        }))
-        setTracks(mapped)
-        if (isJobTerminal(mapped)) {
-          setDone(true)
-          if (pollRef.current) clearInterval(pollRef.current)
-        }
-      } catch { /* silent — keep polling */ }
-    }
-    poll()
-    pollRef.current = setInterval(poll, POLL_INTERVAL_MS)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [jobId])
-
-  const parseUrls = (raw: string): string[] =>
-    raw.split(/[\n,]+/).map((u) => u.trim()).filter(Boolean)
-
-  const pickOutputDir = async () => {
-    const api = (window as any).electronAPI
-    if (!api?.pickOutputDir) return
-    const picked: string | null = await api.pickOutputDir()
-    if (picked) setOutputDir(picked)
-  }
-
-  const openFolder = async () => {
-    const api = (window as any).electronAPI
-    if (!api?.openPath || !outputDir.trim()) return
-    await api.openPath(outputDir.trim())
-  }
-
-  const handleSubmit = async () => {
-    const urls = parseUrls(urlInput)
-    if (urls.length === 0) { setSubmitError(t('dl_error_no_urls')); return }
-    if (!outputDir.trim()) { setSubmitError(t('dl_error_no_folder')); return }
-    setSubmitting(true)
-    setSubmitError(null)
-    setJobId(null)
-    setTracks([])
-    setDone(false)
-    try {
-      const res = await createDownloadBatch(urls, outputDir.trim())
-      setTracks(res.items.map((item) => ({
-        part_no: item.part_no,
-        url: item.url,
-        status: 'waiting' as PartStatus,
-        progress: 0,
-        output_file: '',
-        message: 'Queued',
-      })))
-      setJobId(res.job_id)
-    } catch (err: any) {
-      setSubmitError(err?.detail || err?.message || 'Download failed — check the URLs and try again.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleRetryFailed = async () => {
-    if (!jobId) return
-    const failedNos = tracks.filter((t) => t.status === 'failed').map((t) => t.part_no)
-    if (failedNos.length === 0) return
-    try {
-      await retryDownloadItems(jobId, failedNos)
-      setDone(false)
-      setTracks((prev) => prev.map((tr) => failedNos.includes(tr.part_no)
-        ? { ...tr, status: 'waiting', progress: 0, message: 'Retrying' }
-        : tr,
-      ))
-      if (pollRef.current) clearInterval(pollRef.current)
-      pollRef.current = setInterval(async () => {
-        try {
-          const parts = await getJobParts(jobId)
-          const mapped: TrackItem[] = parts.map((p) => ({
-            part_no: p.part_no,
-            url: p.output_file || '',
-            status: p.status as PartStatus,
-            progress: p.progress_percent,
-            output_file: p.output_file || '',
-            message: (p as any).message || '',
-          }))
-          setTracks(mapped)
-          if (isJobTerminal(mapped)) {
-            setDone(true)
-            if (pollRef.current) clearInterval(pollRef.current)
-          }
-        } catch { /* silent */ }
-      }, POLL_INTERVAL_MS)
-    } catch (err: any) {
-      setSubmitError(err?.detail || 'Retry failed.')
-    }
-  }
-
-  function statusLabel(status: PartStatus): string {
-    if (status === 'done') return t('dl_status_saved')
-    if (status === 'failed') return t('dl_status_failed')
-    if (status === 'unsupported') return t('dl_status_unsupported')
-    if (status === 'downloading') return t('dl_status_downloading')
-    if (status === 'waiting') return t('dl_status_waiting')
-    return status
-  }
-
-  const failedCount = tracks.filter((tr) => tr.status === 'failed').length
-  const doneCount = tracks.filter((tr) => tr.status === 'done').length
-  const totalCount = tracks.length
+function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: string) => void }) {
+  const isDone   = job.status === 'done'
+  const isFailed = job.status === 'failed'
+  const isActive = job.status === 'downloading' || job.status === 'queued'
+  const color    = platformColor(job.platform)
+  const label    = platformLabel(job.platform)
 
   return (
-    <div style={styles.page}>
-      <div style={styles.inner}>
-        {/* Header */}
-        <div style={styles.header}>
-          <h1 style={styles.title}>{t('dl_title')}</h1>
-          <p style={styles.subtitle}>{t('dl_subtitle')}</p>
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: 8,
+      overflow: 'hidden',
+      transition: 'border-color .15s',
+    }}>
+      {/* Top color accent */}
+      <div style={{ height: 2, background: `linear-gradient(90deg, ${color}, transparent)` }} />
+
+      <div style={{ padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        {/* Platform badge */}
+        <div style={{
+          width: 32, height: 32, borderRadius: 6, flexShrink: 0,
+          background: color + '18', border: `1px solid ${color}33`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 9, fontWeight: 900, color: color, letterSpacing: '-.02em',
+          fontFamily: 'var(--fh)',
+        }}>
+          {label.slice(0, 3).toUpperCase()}
         </div>
 
-        {/* Input card */}
-        <div style={styles.card}>
-          <label style={styles.label}>{t('dl_label_urls')}</label>
-          <textarea
-            placeholder={'https://www.youtube.com/watch?v=...\nhttps://www.tiktok.com/...'}
-            value={urlInput}
-            onChange={(e) => { setUrlInput(e.target.value); setSubmitError(null) }}
-            disabled={submitting}
-            rows={4}
-            style={{
-              ...styles.textarea,
-              borderColor: submitError ? 'var(--status-error)' : 'var(--border-default)',
-            }}
-          />
-          <span style={styles.hintText}>{t('dl_url_hint')}</span>
-
-          <label style={{ ...styles.label, marginTop: 'var(--space-3)' }}>{t('dl_label_save')}</label>
-          <div style={styles.folderRow}>
-            <input
-              type="text"
-              value={outputDir}
-              onChange={(e) => { setOutputDir(e.target.value); setSubmitError(null) }}
-              placeholder={t('dl_folder_placeholder')}
-              disabled={submitting}
-              style={styles.folderInput}
-            />
-            <button onClick={pickOutputDir} disabled={submitting} style={styles.browseBtn} title="Browse folder">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-              </svg>
-              <span style={{ fontSize: '11px' }}>{t('dl_btn_browse')}</span>
-            </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Title */}
+          <div style={{
+            fontSize: 12, fontWeight: 600, color: 'var(--text-1)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            marginBottom: 4,
+          }}>
+            {job.filename || job.title || job.url}
           </div>
-          <span style={styles.hintText}>{t('dl_folder_hint')}</span>
 
-          {submitError && <div style={styles.errorBox}>{submitError}</div>}
-
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !urlInput.trim()}
-            style={{
-              ...styles.submitBtn,
-              opacity: submitting || !urlInput.trim() ? 0.5 : 1,
-              cursor: submitting || !urlInput.trim() ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {submitting ? t('dl_btn_starting') : `⬇ ${t('dl_btn_start')}`}
-          </button>
-        </div>
-
-        {/* Progress */}
-        {tracks.length > 0 && (
-          <div style={styles.card}>
-            <div style={styles.progressHeader}>
-              <span style={styles.progressTitle}>
-                {done
-                  ? `${t('dl_progress_done')} — ${doneCount}/${totalCount}`
-                  : `${t('dl_progress_downloading')} — ${doneCount}/${totalCount}`}
-              </span>
-              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                {done && failedCount > 0 && (
-                  <button onClick={handleRetryFailed} style={styles.retryBtn}>
-                    ↺ {t('dl_retry')} {failedCount}
-                  </button>
-                )}
-                {done && doneCount > 0 && (
-                  <button onClick={openFolder} style={styles.openBtn}>
-                    📂 {t('dl_btn_open')}
-                  </button>
-                )}
+          {isActive && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <ProgressBar value={job.progress} color={color} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10 }}>
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%', background: color,
+                  flexShrink: 0, boxShadow: `0 0 5px ${color}`,
+                  animation: 'dl-pulse 1.4s ease-in-out infinite',
+                }} />
+                <span style={{ color: 'var(--text-2)', fontWeight: 600 }}>
+                  {job.status === 'queued' ? 'Queued…' : `${job.progress}%`}
+                </span>
+                {job.speed_str && <span style={{ color }}>{job.speed_str}</span>}
+                {job.eta_str && <span style={{ color: 'var(--text-3)' }}>· {job.eta_str}</span>}
               </div>
             </div>
+          )}
 
-            <div style={styles.trackList}>
-              {tracks.map((track, i) => {
-                const rawUrl = parseUrls(urlInput)[i] ?? track.url
-                const displayUrl = rawUrl.length > 60 ? rawUrl.slice(0, 57) + '…' : rawUrl
-                const color = statusColor(track.status)
-                const pct = track.status === 'done' ? 100 : track.progress
-
-                return (
-                  <div key={track.part_no} style={styles.trackRow}>
-                    <div style={styles.trackTop}>
-                      <span style={styles.trackUrl}>{displayUrl}</span>
-                      <span style={{ ...styles.trackStatus, color }}>
-                        {statusLabel(track.status)}
-                      </span>
-                    </div>
-                    {track.message && track.status !== 'done' && (
-                      <span style={styles.trackMsg}>{track.message}</span>
-                    )}
-                    <div style={styles.progressTrack}>
-                      <div style={{ ...styles.progressFill, width: `${pct}%`, backgroundColor: color, transition: 'width 0.4s ease-out' }} />
-                    </div>
-                    <div style={styles.trackBottom}>
-                      <span style={styles.trackPct}>{pct}%</span>
-                      {track.status === 'done' && track.output_file && (
-                        <span style={styles.savedPath}>
-                          ✓ {track.output_file.split(/[/\\]/).slice(-2).join('/')}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+          {isDone && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 10, color: 'var(--ok)', fontWeight: 700 }}>✓ Done</span>
+              {job.height > 0 && (
+                <span style={{
+                  fontSize: 9, padding: '1px 5px', borderRadius: 4,
+                  background: 'rgba(0,200,150,.12)', color: 'var(--ok)',
+                  border: '1px solid rgba(0,200,150,.2)', fontWeight: 600,
+                }}>
+                  {job.height}p{job.fps > 30 ? `·${Math.round(job.fps)}fps` : ''}
+                </span>
+              )}
+              {job.filesize > 0 && (
+                <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{formatFilesize(job.filesize)}</span>
+              )}
             </div>
-          </div>
-        )}
+          )}
 
-        {done && (
-          <button
-            onClick={() => { setUrlInput(''); setTracks([]); setJobId(null); setDone(false); setSubmitError(null) }}
-            style={styles.newDownloadBtn}
-          >
-            {t('dl_btn_new')}
-          </button>
-        )}
+          {isFailed && (
+            <div style={{ fontSize: 10, color: 'var(--fail)', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span>✕</span>
+              <span>{job.error_msg || 'Download failed'}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div style={{ flexShrink: 0, alignSelf: 'center' }}>
+          {isActive && (
+            <button onClick={() => onCancel(job.id)} style={{
+              padding: '3px 9px', borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              border: '1px solid var(--border-hi)', background: 'rgba(232,64,122,.1)',
+              color: 'var(--fail)', transition: 'all .12s',
+            }}>
+              ✕
+            </button>
+          )}
+          {isDone && job.output_path && (
+            <button
+              onClick={() => { const w = window as any; w.electronAPI?.openPath?.(job.output_dir) }}
+              style={{
+                padding: '3px 9px', borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                border: '1px solid var(--border-hi)', background: 'var(--accent-dim)',
+                color: 'var(--accent)', transition: 'all .12s',
+              }}
+            >
+              ↗
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    flex: 1,
-    overflowY: 'auto',
-    backgroundColor: 'var(--surface-base)',
-    padding: 'var(--space-8) var(--space-6)',
-  },
-  inner: {
-    maxWidth: '640px',
-    margin: '0 auto',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--space-6)',
-  },
-  header: { display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' },
-  title: {
-    margin: 0,
-    fontSize: 'var(--text-2xl)',
-    fontWeight: 'var(--weight-semibold)' as unknown as number,
-    color: 'var(--text-primary)',
-    letterSpacing: '-0.02em',
-  },
-  subtitle: {
-    margin: 0,
-    fontSize: 'var(--text-base)',
-    color: 'var(--text-secondary)',
-  },
-  card: {
-    backgroundColor: 'var(--surface-card)',
-    border: '1px solid var(--border-default)',
-    borderRadius: '12px',
-    padding: 'var(--space-5)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--space-2)',
-  },
-  label: {
-    fontSize: 'var(--text-sm)',
-    fontWeight: 'var(--weight-medium)' as unknown as number,
-    color: 'var(--text-secondary)',
-  },
-  textarea: {
-    width: '100%',
-    backgroundColor: 'var(--surface-input)',
-    border: '1px solid var(--border-default)',
-    borderRadius: '8px',
-    color: 'var(--text-primary)',
-    fontSize: 'var(--text-sm)',
-    fontFamily: 'var(--font-mono)',
-    padding: 'var(--space-3)',
-    resize: 'vertical' as const,
-    outline: 'none',
-    boxSizing: 'border-box' as const,
-    lineHeight: 1.6,
-  },
-  folderRow: {
-    display: 'flex',
-    gap: 'var(--space-2)',
-    alignItems: 'stretch',
-  },
-  folderInput: {
-    flex: 1,
-    height: '38px',
-    backgroundColor: 'var(--surface-input)',
-    border: '1px solid var(--border-default)',
-    borderRadius: '8px',
-    color: 'var(--text-primary)',
-    fontSize: 'var(--text-sm)',
-    fontFamily: 'var(--font-mono)',
-    padding: '0 var(--space-3)',
-    outline: 'none',
-    boxSizing: 'border-box' as const,
-  },
-  browseBtn: {
-    height: '38px',
-    padding: '0 var(--space-3)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    flexShrink: 0,
-    backgroundColor: 'var(--surface-input)',
-    border: '1px solid var(--border-default)',
-    borderRadius: '8px',
-    color: 'var(--text-secondary)',
-    cursor: 'pointer',
-    transition: 'background-color 0.15s ease',
-    whiteSpace: 'nowrap' as const,
-  },
-  hintText: {
-    fontSize: 'var(--text-xs)',
-    color: 'var(--text-tertiary)',
-  },
-  errorBox: {
-    padding: 'var(--space-2) var(--space-3)',
-    borderRadius: '6px',
-    backgroundColor: 'var(--status-error-bg)',
-    color: 'var(--status-error)',
-    fontSize: 'var(--text-sm)',
-    border: '1px solid rgba(224, 82, 82, 0.3)',
-  },
-  submitBtn: {
-    marginTop: 'var(--space-2)',
-    height: '44px',
-    border: 'none',
-    borderRadius: '10px',
-    background: 'linear-gradient(135deg, #a855f7 0%, #4d7cff 100%)',
-    color: '#fff',
-    fontSize: 'var(--text-base)',
-    fontWeight: 'var(--weight-semibold)' as unknown as number,
-    cursor: 'pointer',
-    transition: 'opacity 0.15s ease',
-    letterSpacing: '0.01em',
-  },
-  progressHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 'var(--space-1)',
-    flexWrap: 'wrap' as const,
-    gap: 'var(--space-2)',
-  },
-  progressTitle: {
-    fontSize: 'var(--text-sm)',
-    fontWeight: 'var(--weight-semibold)' as unknown as number,
-    color: 'var(--text-primary)',
-  },
-  retryBtn: {
-    height: '28px',
-    padding: '0 var(--space-3)',
-    border: '1px solid var(--status-error)',
-    borderRadius: '6px',
-    backgroundColor: 'var(--status-error-bg)',
-    color: 'var(--status-error)',
-    fontSize: 'var(--text-xs)',
-    fontWeight: 'var(--weight-medium)' as unknown as number,
-    cursor: 'pointer',
-  },
-  openBtn: {
-    height: '28px',
-    padding: '0 var(--space-3)',
-    border: '1px solid var(--border-default)',
-    borderRadius: '6px',
-    backgroundColor: 'var(--surface-panel)',
-    color: 'var(--text-secondary)',
-    fontSize: 'var(--text-xs)',
-    fontWeight: 'var(--weight-medium)' as unknown as number,
-    cursor: 'pointer',
-  },
-  trackList: { display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' },
-  trackRow: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    padding: 'var(--space-3)',
-    backgroundColor: 'var(--surface-panel)',
-    borderRadius: '8px',
-    border: '1px solid var(--border-subtle)',
-  },
-  trackTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-2)' },
-  trackUrl: {
-    fontSize: 'var(--text-sm)',
-    color: 'var(--text-primary)',
-    fontFamily: 'var(--font-mono)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap' as const,
-    flex: 1,
-  },
-  trackStatus: { fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-medium)' as unknown as number, flexShrink: 0 },
-  trackMsg: { fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' },
-  progressTrack: { width: '100%', height: '4px', backgroundColor: 'var(--border-subtle)', borderRadius: '2px', overflow: 'hidden', marginTop: '2px' },
-  progressFill: { height: '100%', borderRadius: '2px' },
-  trackBottom: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  trackPct: { fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' },
-  savedPath: { fontSize: 'var(--text-xs)', color: 'var(--status-success)', fontFamily: 'var(--font-mono)', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
-  newDownloadBtn: {
-    alignSelf: 'center',
-    height: '36px',
-    padding: '0 var(--space-5)',
-    border: '1px solid var(--border-default)',
-    borderRadius: '8px',
-    backgroundColor: 'transparent',
-    color: 'var(--text-secondary)',
-    fontSize: 'var(--text-sm)',
-    cursor: 'pointer',
-  },
+// ── Main ───────────────────────────────────────────────────────────────────────
+
+export function DownloaderScreen() {
+  const [urlInput, setUrlInput]     = useState('')
+  const [outputDir, setOutputDir]   = useState('')
+  const [quality, setQuality]       = useState('best')
+  const [jobs, setJobs]             = useState<DownloadJob[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const wsRefs = useRef<Map<string, WebSocket>>(new Map())
+
+  useEffect(() => { listJobs().then(setJobs).catch(() => {}) }, [])
+
+  function updateJob(updated: DownloadJob) {
+    setJobs(prev => {
+      const idx = prev.findIndex(j => j.id === updated.id)
+      if (idx === -1) return [updated, ...prev]
+      const next = [...prev]; next[idx] = updated; return next
+    })
+  }
+
+  function subscribeNewJob(jobId: string) {
+    if (wsRefs.current.has(jobId)) return
+    const ws = subscribeJob(jobId, updateJob, () => wsRefs.current.delete(jobId))
+    wsRefs.current.set(jobId, ws)
+  }
+
+  async function handleDownload() {
+    const urls = urlInput.split('\n').map(u => u.trim()).filter(Boolean)
+    if (!urls.length) return
+    if (!outputDir.trim()) { setError('Vui lòng chọn thư mục lưu'); return }
+    setSubmitting(true); setError(null)
+    try {
+      const res = await startBatch(urls, outputDir, quality)
+      for (const j of res.jobs) {
+        setJobs(prev => [{
+          id: j.job_id, url: j.url, platform: j.platform,
+          status: 'queued', progress: 0, speed_str: '', eta_str: '',
+          output_path: '', output_dir: outputDir, filename: '', title: '',
+          duration: 0, height: 0, fps: 0, filesize: 0, error_msg: '',
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        }, ...prev])
+        subscribeNewJob(j.job_id)
+      }
+      setUrlInput('')
+    } catch (e: any) {
+      setError(e.message || 'Tải thất bại')
+    } finally { setSubmitting(false) }
+  }
+
+  async function handleCancel(jobId: string) {
+    wsRefs.current.get(jobId)?.close()
+    wsRefs.current.delete(jobId)
+    await cancelJob(jobId).catch(() => {})
+    setJobs(prev => prev.filter(j => j.id !== jobId))
+  }
+
+  const activeCount = jobs.filter(j => j.status === 'downloading' || j.status === 'queued').length
+  const doneCount   = jobs.filter(j => j.status === 'done').length
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-base)' }}>
+      <style>{`@keyframes dl-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }`}</style>
+
+      {/* ── Header ───────────────────────────────────────────────────────── */}
+      <div style={{
+        padding: '14px 18px 12px', flexShrink: 0,
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg-panel)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div>
+            <div style={{ fontFamily: 'var(--fh)', fontSize: 15, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.5px' }}>
+              DOWNLOADER
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>
+              No watermark · Best quality · YouTube · TikTok · IG · và hơn thế
+            </div>
+          </div>
+          {(activeCount > 0 || doneCount > 0) && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              {activeCount > 0 && (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                  background: 'var(--accent-dim)', color: 'var(--accent)',
+                  border: '1px solid rgba(123,97,255,.3)',
+                }}>
+                  {activeCount} đang tải
+                </span>
+              )}
+              {doneCount > 0 && (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                  background: 'rgba(0,200,150,.12)', color: 'var(--ok)',
+                  border: '1px solid rgba(0,200,150,.2)',
+                }}>
+                  {doneCount} xong
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Platform badges */}
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {PLATFORMS.map(p => (
+            <span key={p.id} style={{
+              fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+              background: p.color + '15', border: `1px solid ${p.color}25`, color: p.color,
+              fontFamily: 'var(--fh)', letterSpacing: '.4px',
+            }}>
+              {p.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Input panel ──────────────────────────────────────────────────── */}
+      <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--bg-panel)' }}>
+
+        {/* URL textarea */}
+        <div className="cfg-sec-hd" style={{ marginBottom: 6 }}>
+          <span>URL VIDEO</span>
+          <span className="cfg-sec-api">1 URL mỗi dòng</span>
+        </div>
+        <textarea
+          value={urlInput}
+          onChange={e => setUrlInput(e.target.value)}
+          placeholder={'https://youtube.com/watch?v=...\nhttps://tiktok.com/@user/video/...'}
+          rows={3}
+          style={{
+            width: '100%', padding: '8px 10px', borderRadius: 6, fontSize: 11,
+            border: '1px solid var(--border)', background: 'var(--bg-card)',
+            color: 'var(--text-1)', resize: 'vertical', outline: 'none',
+            fontFamily: 'var(--fb)', boxSizing: 'border-box', lineHeight: 1.6,
+            transition: 'border-color .15s',
+          }}
+          onFocus={e => e.currentTarget.style.borderColor = 'var(--border-hi)'}
+          onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
+        />
+
+        {/* Folder row */}
+        <div style={{ marginTop: 8 }}>
+          <div className="cfg-sec-hd" style={{ marginBottom: 5 }}>
+            <span>THƯ MỤC LƯU</span>
+          </div>
+          <input
+            value={outputDir}
+            onChange={e => setOutputDir(e.target.value)}
+            placeholder="D:\Videos\Downloads"
+            style={{
+              width: '100%', padding: '6px 10px', borderRadius: 6, fontSize: 11,
+              border: '1px solid var(--border)', background: 'var(--bg-card)',
+              color: 'var(--text-1)', outline: 'none', boxSizing: 'border-box',
+              fontFamily: 'var(--fb)', transition: 'border-color .15s',
+            }}
+            onFocus={e => e.currentTarget.style.borderColor = 'var(--border-hi)'}
+            onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
+          />
+        </div>
+
+        {/* Quality + button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {QUALITY_OPTS.map(({ v, l }) => (
+              <div key={v}
+                className={`seg-b${quality === v ? ' on' : ''}`}
+                onClick={() => setQuality(v)}
+                style={{ fontSize: 10 }}>
+                {l}
+              </div>
+            ))}
+          </div>
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={handleDownload}
+            disabled={submitting || !urlInput.trim()}
+            style={{
+              padding: '7px 22px', borderRadius: 6, border: 'none',
+              fontSize: 12, fontWeight: 700, cursor: submitting || !urlInput.trim() ? 'not-allowed' : 'pointer',
+              background: submitting || !urlInput.trim()
+                ? 'var(--bg-card)'
+                : 'var(--grad-btn)',
+              color: submitting || !urlInput.trim() ? 'var(--text-3)' : '#fff',
+              fontFamily: 'var(--fh)', letterSpacing: '.5px',
+              boxShadow: submitting || !urlInput.trim() ? 'none' : '0 4px 14px rgba(123,97,255,.3)',
+              transition: 'all .15s', whiteSpace: 'nowrap',
+            }}
+          >
+            {submitting ? '…' : '↓ TẢI XUỐNG'}
+          </button>
+        </div>
+
+        {error && (
+          <div style={{
+            marginTop: 8, fontSize: 11, color: 'var(--fail)',
+            padding: '6px 10px', borderRadius: 6,
+            background: 'rgba(232,64,122,.08)', border: '1px solid rgba(232,64,122,.2)',
+          }}>
+            {error}
+          </div>
+        )}
+      </div>
+
+      {/* ── Queue ────────────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 18px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {jobs.length === 0 ? (
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: 8, opacity: .4, padding: '48px 0',
+          }}>
+            <div style={{ fontSize: 28, color: 'var(--text-3)' }}>↓</div>
+            <div style={{ fontFamily: 'var(--fh)', fontSize: 12, fontWeight: 700, color: 'var(--text-2)', letterSpacing: '.5px' }}>
+              CHƯA CÓ VIDEO
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center' }}>
+              Dán URL vào ô trên và nhấn Tải xuống
+            </div>
+          </div>
+        ) : (
+          jobs.map(job => <DownloadCard key={job.id} job={job} onCancel={handleCancel} />)
+        )}
+      </div>
+    </div>
+  )
 }

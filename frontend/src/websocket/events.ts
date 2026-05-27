@@ -11,12 +11,22 @@ export type { WebSocketEvent, WebSocketErrorEvent }
  * Matches backend JobStage enum (app/core/stage.py).
  */
 export enum RenderStage {
+  Queued = 'queued',
   Starting = 'starting',
+  Running = 'running',
+  Analyzing = 'analyzing',
+  Downloading = 'downloading',       // kept for backward compat with stored records
+  SceneDetection = 'scene_detection',
   SegmentBuilding = 'segment_building',
+  TranscribingFull = 'transcribing_full',
   Rendering = 'rendering',
-  Finalizing = 'finalizing',
-  Complete = 'complete',
-  Error = 'error',
+  RenderingParallel = 'rendering_parallel',
+  WritingReport = 'writing_report',
+  Done = 'done',
+  Failed = 'failed',
+  Complete = 'complete',             // legacy alias
+  Finalizing = 'finalizing',         // legacy alias
+  Error = 'error',                   // legacy alias
 }
 
 /**

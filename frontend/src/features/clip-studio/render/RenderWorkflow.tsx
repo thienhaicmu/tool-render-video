@@ -6,7 +6,6 @@ import { useRenderSocket } from '../../../hooks/useRenderSocket'
 import { prepareSource, getPreviewVideoUrl, cancelRender, cancelPrepareSource, retryRender, resumeRender, getPreviewTranscript } from '../../../api/render'
 import type { TranscriptSegment } from '../../../api/render'
 import { getJobParts, getJobQualitySummary } from '../../../api/jobs'
-import { uploadFile } from '../../../api/upload'
 import { BASE_URL } from '../../../api/client'
 import type { RenderRequest, JobPart, WsProgressSummary, QualityReport } from '../../../types/api'
 import type { PrepareSourceResponse } from '../../../api/render'
@@ -21,15 +20,10 @@ const T = {
     stepRes: 'RESULTS',       stepResSub: 'Your clips',
     // Source screen
     srcHeadline: 'Add Your Video Source',
-    srcDesc: 'Upload a local file or paste a YouTube / TikTok URL',
+    srcDesc: 'Select a local video file to get started. Use the Download tab for YouTube / TikTok.',
     srcLocalTitle: 'Local File',
     srcLocalDesc: 'Import MP4, MOV, MKV or WEBM from your computer. No internet required.',
-    srcYtTitle: 'YouTube / URL',
-    srcYtDesc: 'Paste a YouTube, TikTok, Instagram or any supported URL. Auto-downloads at best quality.',
-    srcBatchTitle: 'Batch Mode',
-    srcBatchDesc: 'Add multiple URLs at once. AI Director processes each one automatically.',
-    srcOr: 'OR PASTE URL',
-    srcAdded: 'SOURCES ADDED',
+    srcAdded: 'SOURCE ADDED',
     btnAdd: 'ADD',
     btnConfigure: 'CONFIGURE →',
     stepOf: (s: number) => `Step ${s} of 4`,
@@ -56,7 +50,6 @@ const T = {
     cfgBiasHook: 'Hook', cfgBiasBalanced: 'Balanced', cfgBiasStory: 'Story',
     cfgSubEmphasis: 'SUBTITLE EMPHASIS', cfgEmphasisOff: 'Off',
     cfgEmphasisSubtle: 'Subtle', cfgEmphasisBalanced: 'Balanced', cfgEmphasisAggressive: 'Aggressive',
-    cfgSrcQuality: 'DOWNLOAD QUALITY', cfgSrcQualityStd: '1080p', cfgSrcQualityHigh: '1440p', cfgSrcQualityBest: 'Best',
     cfgAssets: 'CREATOR ASSETS',
     cfgAssetLogo: 'Logo / Watermark', cfgAssetLogoDesc: 'PNG/JPEG corner overlay',
     cfgAssetIntro: 'Intro Sting', cfgAssetIntroDesc: 'Short clip prepended to each output',
@@ -115,14 +108,9 @@ const T = {
     stepRnd: 'ĐANG RENDER',   stepRndSub: 'Xử lý',
     stepRes: 'KẾT QUẢ',      stepResSub: 'Clip của bạn',
     srcHeadline: 'Thêm Nguồn Video',
-    srcDesc: 'Tải file lên hoặc dán link YouTube / TikTok',
+    srcDesc: 'Chọn file video trên máy. Dùng tab Download để tải YouTube / TikTok.',
     srcLocalTitle: 'File trên máy',
     srcLocalDesc: 'Import MP4, MOV, MKV hoặc WEBM từ máy tính. Không cần internet.',
-    srcYtTitle: 'YouTube / URL',
-    srcYtDesc: 'Dán link YouTube, TikTok, Instagram. Tự tải về chất lượng tốt nhất.',
-    srcBatchTitle: 'Hàng loạt',
-    srcBatchDesc: 'Thêm nhiều link cùng lúc. AI Director xử lý và tạo clip tối ưu.',
-    srcOr: 'HOẶC DÁN LINK',
     srcAdded: 'NGUỒN ĐÃ THÊM',
     btnAdd: 'THÊM',
     btnConfigure: 'CẤU HÌNH →',
@@ -149,7 +137,6 @@ const T = {
     cfgBiasHook: 'Hook', cfgBiasBalanced: 'Cân bằng', cfgBiasStory: 'Câu chuyện',
     cfgSubEmphasis: 'NHẤN MẠNH PHỤ ĐỀ', cfgEmphasisOff: 'Tắt',
     cfgEmphasisSubtle: 'Nhẹ', cfgEmphasisBalanced: 'Cân bằng', cfgEmphasisAggressive: 'Mạnh',
-    cfgSrcQuality: 'CHẤT LƯỢNG TẢI', cfgSrcQualityStd: '1080p', cfgSrcQualityHigh: '1440p', cfgSrcQualityBest: 'Tốt nhất',
     cfgAssets: 'TÀI NGUYÊN CREATOR',
     cfgAssetLogo: 'Logo / Watermark', cfgAssetLogoDesc: 'Overlay góc PNG/JPEG',
     cfgAssetIntro: 'Intro', cfgAssetIntroDesc: 'Clip ngắn thêm vào đầu mỗi output',
@@ -207,11 +194,10 @@ function useT(lang: Lang): Strings { return T[lang] as Strings }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3 | 4
-type SourceMode = 'youtube' | 'local'
-type Ratio = 'r916' | 'r34' | 'r11'
+type Ratio = 'r916' | 'r34' | 'r45' | 'r11' | 'r169'
 type CfgTab = 'ai' | 'sub' | 'narr' | 'output'
 
-interface Source { mode: SourceMode; value: string }
+interface Source { value: string }
 
 interface ConfigState {
   preset:        string
@@ -239,7 +225,6 @@ interface ConfigState {
   subTranslate:     boolean
   subTranslateLang: 'vi' | 'en' | 'ja'
   subEmphasis:      'subtle' | 'balanced' | 'aggressive' | null
-  sourceQualityMode: 'standard_1080' | 'high_1440' | 'best_available'
   assetLogoPath:     string | null
   assetIntroPath:    string | null
   assetOutroPath:    string | null
@@ -254,7 +239,18 @@ interface ConfigState {
   voiceText:     string
   voiceMixMode:  'replace_original' | 'keep_original_low'
   outputDir:     string
-  renderProfile: 'fast' | 'balanced' | 'quality'
+  renderProfile: 'fast' | 'balanced' | 'quality' | 'best'
+  // v2 goal fields
+  targetDuration:  number
+  outputCount:     number
+  videoType:       'auto' | 'viral' | 'storytelling' | 'educational' | 'emotional' | 'high_retention'
+  energyStyle:     'auto' | 'fast' | 'balanced' | 'slow'
+  hookStrength:    'aggressive' | 'balanced' | 'soft'
+  focusMode:       'auto' | 'face' | 'object' | 'center'
+  outputLanguage:  string
+  narrationStyle:  'auto' | 'energetic' | 'calm' | 'emotional'
+  subDensity:      'auto' | 'low' | 'medium' | 'high'
+  subLanguage:     string
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -274,28 +270,28 @@ const STYLES = [
   { id: 'high_contrast',  ico: '⬜', label: 'BOLD'    },
 ]
 
-const SUB_STYLES = [
-  { id: 'tiktok_bounce_v1',label: 'BOUNCE'    },
-  { id: 'viral_bold',      label: 'VIRAL'     },
-  { id: 'bold_cap',        label: 'BOLD CAP'  },
-  { id: 'story_clean_01',  label: 'STORY'     },
-  { id: 'boxed_caption',   label: 'BOXED'     },
-  { id: 'clean_pro',       label: 'CLEAN PRO' },
-  { id: 'gaming',          label: 'GAMING'    },
-]
 
 const RATIO_INFO: Record<Ratio, { label: string; sub: string; api: string }> = {
   r916: { label: '9:16', sub: '1080×1920', api: '9:16' },
   r34:  { label: '3:4',  sub: '1080×1440', api: '3:4'  },
+  r45:  { label: '4:5',  sub: '1080×1350', api: '4:5'  },
   r11:  { label: '1:1',  sub: '1080×1080', api: '1:1'  },
+  r169: { label: '16:9', sub: '1920×1080', api: '16:9' },
 }
+
+const SUB_STYLE_GROUPS = [
+  { label: 'Minimal', set: 'clean_pro',        ids: ['clean_pro', 'story_clean_01'] },
+  { label: 'Karaoke', set: 'tiktok_bounce_v1', ids: ['tiktok_bounce_v1', 'viral_bold'] },
+  { label: 'Emphasis', set: 'bold_cap',         ids: ['bold_cap', 'boxed_caption', 'gaming'] },
+]
+
+const QUALITY_MAP = [
+  { v: 'fast'    as const, l: '720p'  },
+  { v: 'quality' as const, l: '1080p' },
+  { v: 'best'    as const, l: '2K'    },
+]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function extractYouTubeId(url: string): string | null {
-  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/)
-  return m?.[1] ?? null
-}
-
 function getPartThumbnailUrl(jobId: string, partNo: number): string {
   return `${BASE_URL}/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/thumbnail?t=0.5&w=320`
 }
@@ -320,8 +316,6 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const t = useT(lang)
   const [step, setStep]       = useState<Step>(1)
   const [sources, setSources] = useState<Source[]>([])
-  const [urlInput, setUrlInput] = useState('')
-  const [srcMode, setSrcMode] = useState<SourceMode>('youtube')
 
   const [prepareResult, setPrepareResult] = useState<PrepareSourceResponse | null>(null)
   const [isPreparing, setIsPreparing]     = useState(false)
@@ -331,22 +325,25 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
 
   const [cfgTab, setCfgTab] = useState<CfgTab>('ai')
   const [cfg, setCfg] = useState<ConfigState>({
-    preset: 'viral', ratio: 'r916', minSec: 15, maxSec: 60, clipCount: 5,
+    preset: 'viral', ratio: 'r916', minSec: 30, maxSec: 60, clipCount: 5,
     style: 'slay_soft_01', platform: 'tiktok', aiMarket: 'us',
     aiEnabled: true, multiVariant: false, ctaEnabled: false, ctaType: 'auto',
     hookApplyEnabled: false, hookOverlayEnabled: false, structureBias: null,
     clipLock: [], clipExclude: [],
-    motionCrop: true,
+    motionCrop: false,
     subEnabled: true, subStyle: 'tiktok_bounce_v1',
     subHighlight: true, subFontSize: 28, subTranslate: false, subTranslateLang: 'en',
     subEmphasis: null, partOrder: 'viral',
-    sourceQualityMode: 'standard_1080',
     assetLogoPath: null, assetIntroPath: null, assetOutroPath: null, assetMusicProfile: null,
     whisperModel: 'auto',
     narrEnabled: false, voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
     voiceSource: 'subtitle', voiceText: '', voiceMixMode: 'replace_original',
     outputDir: '',
     renderProfile: 'balanced',
+    targetDuration: 90, outputCount: 1, videoType: 'auto',
+    energyStyle: 'auto', hookStrength: 'balanced', focusMode: 'auto',
+    outputLanguage: 'auto', narrationStyle: 'auto',
+    subDensity: 'auto', subLanguage: 'auto',
   })
 
   const [jobId, setJobId]               = useState<string | null>(null)
@@ -396,12 +393,6 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   }, [isTerminal, jobStatus, step])
 
   // ── Source actions ──────────────────────────────────────────────────────────
-  function addUrl() {
-    const v = urlInput.trim()
-    if (!v) return
-    setSources((p) => [...p, { mode: 'youtube' as const, value: v }])
-    setUrlInput('')
-  }
   function removeSource(i: number) { setSources((p) => p.filter((_, idx) => idx !== i)) }
 
   async function goToConfigure() {
@@ -414,9 +405,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     setPrepareError(null)
     try {
       const result = await prepareSource({
-        source_mode: src.mode,
-        youtube_url: src.mode === 'youtube' ? src.value : undefined,
-        source_video_path: src.mode === 'local' ? src.value : undefined,
+        source_mode: 'local',
+        source_video_path: src.value,
       }, abort.signal)
       if (prepareCancelledRef.current) {
         cancelPrepareSource(result.session_id).catch(() => {})
@@ -461,10 +451,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     setSubmitError(null)
     const src = sources[0]
     const payload: RenderRequest = {
-      source_mode:          src.mode,
-      source_quality_mode:  src.mode === 'youtube' ? cfg.sourceQualityMode : undefined,
-      youtube_url:          src.mode === 'youtube' ? src.value : undefined,
-      source_video_path:    src.mode === 'local'   ? src.value : undefined,
+      source_mode:       'local',
+      source_video_path: src.value,
       output_dir:          cfg.outputDir || 'output',
       aspect_ratio:        RATIO_INFO[cfg.ratio].api,
       min_part_sec:        cfg.minSec,
@@ -494,12 +482,20 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       cta_type:            cfg.ctaEnabled ? cfg.ctaType : undefined,
       hook_apply_enabled:  cfg.hookApplyEnabled || undefined,
       hook_overlay_enabled: cfg.hookOverlayEnabled || undefined,
-      motion_aware_crop:   cfg.motionCrop,
+      motion_aware_crop:   cfg.focusMode === 'face' || cfg.focusMode === 'object',
       target_platform:     cfg.platform,
       effect_preset:       cfg.style,
       render_profile:      cfg.renderProfile,
       whisper_model:       cfg.whisperModel !== 'auto' ? cfg.whisperModel : undefined,
       ai_target_market:    cfg.aiMarket || undefined,
+      target_duration:     cfg.targetDuration,
+      output_count:        cfg.outputCount,
+      video_type:          cfg.videoType,
+      energy_style:        cfg.energyStyle,
+      hook_strength:       cfg.hookStrength,
+      reframe_mode:        cfg.focusMode,
+      output_language:     cfg.outputLanguage !== 'auto' ? cfg.outputLanguage : undefined,
+      narration_style:     cfg.narrationStyle,
       asset_logo_path:     cfg.assetLogoPath ?? undefined,
       asset_intro_path:    cfg.assetIntroPath ?? undefined,
       asset_outro_path:    cfg.assetOutroPath ?? undefined,
@@ -589,9 +585,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               {lang === 'VI' ? 'ĐANG CHUẨN BỊ NGUỒN' : 'PREPARING SOURCE'}
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-3)', lineHeight: 1.6 }}>
-              {sources[0]?.mode === 'youtube'
-                ? (lang === 'VI' ? 'Đang tải và xử lý video YouTube…' : 'Downloading and transcoding YouTube video…')
-                : (lang === 'VI' ? 'Đang phân tích file video…' : 'Probing local video file…')}
+              {lang === 'VI' ? 'Đang phân tích file video…' : 'Probing local video file…'}
             </div>
             <button className="btn-back" onClick={() => { prepareCancelledRef.current = true; prepareAbortRef.current?.abort(); setIsPreparing(false) }}>
               {lang === 'VI' ? 'HỦY' : 'CANCEL'}
@@ -611,12 +605,11 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 <p>{t.srcDesc}</p>
               </div>
               <div className="src-cards">
-                <div className={`src-card${srcMode === 'local' ? ' highlight' : ''}`} onClick={async () => {
-                  setSrcMode('local')
+                <div className="src-card highlight" onClick={async () => {
                   const api = (window as any).electronAPI
                   if (api?.pickVideoFile) {
                     const picked = await api.pickVideoFile()
-                    if (picked) setSources([{ mode: 'local', value: picked }])
+                    if (picked) setSources([{ value: picked }])
                   } else {
                     fileInputRef.current?.click()
                   }
@@ -626,53 +619,16 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                   <div className="src-card-desc">{t.srcLocalDesc}</div>
                   <span className="src-card-badge">MP4 · MOV · MKV · WEBM</span>
                 </div>
-                <div className={`src-card${srcMode === 'youtube' ? ' highlight' : ''}`} onClick={() => setSrcMode('youtube')}>
-                  <div className="src-card-icon">🌐</div>
-                  <div className="src-card-title">{t.srcYtTitle}</div>
-                  <div className="src-card-desc">{t.srcYtDesc}</div>
-                  <span className="src-card-badge">YT · TikTok · IG · FB</span>
-                </div>
-                <div className="src-card" onClick={() => setSrcMode('youtube')}>
-                  <div className="src-card-icon">⚡</div>
-                  <div className="src-card-title">{t.srcBatchTitle}</div>
-                  <div className="src-card-desc">{t.srcBatchDesc}</div>
-                  <span className="src-card-badge" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>PRO FEATURE</span>
-                </div>
               </div>
-              <div className="src-or"><span>{t.srcOr}</span></div>
-              <div className="url-box">
-                <input className="url-input-big" placeholder="https://youtube.com/watch?v=…" value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
-                <button className="btn-add" onClick={addUrl}>{t.btnAdd}</button>
-              </div>
-              {srcMode === 'youtube' && (
-                <div style={{ width: '100%', maxWidth: '760px', marginTop: '12px' }}>
-                  <div className="cfg-sec-hd" style={{ marginBottom: '6px' }}>
-                    <span>{t.cfgSrcQuality}</span>
-                    <span className="cfg-sec-api">source_quality_mode</span>
-                  </div>
-                  <div className="seg">
-                    {([
-                      { v: 'standard_1080' as const, l: t.cfgSrcQualityStd },
-                      { v: 'high_1440'     as const, l: t.cfgSrcQualityHigh },
-                      { v: 'best_available' as const, l: t.cfgSrcQualityBest },
-                    ]).map(({ v, l }) => (
-                      <div key={v} className={`seg-b${cfg.sourceQualityMode === v ? ' on' : ''}`}
-                        onClick={() => setCfg((prev) => ({ ...prev, sourceQualityMode: v }))}>{l}</div>
-                    ))}
-                  </div>
-                </div>
-              )}
               {sources.length > 0 && (
                 <div className="src-list">
                   <div className="src-list-head">{t.srcAdded}</div>
                   {sources.map((s, i) => (
                     <div key={i} className="src-item">
-                      <div className="src-item-thumb">{s.mode === 'youtube' ? '▶' : '📄'}</div>
+                      <div className="src-item-thumb">📄</div>
                       <div className="src-item-info">
                         <div className="src-item-url">{s.value}</div>
-                        <div className="src-item-meta">{s.mode === 'youtube' ? 'YouTube URL' : lang === 'VI' ? 'File trên máy' : 'Local File'}</div>
+                        <div className="src-item-meta">{lang === 'VI' ? 'File trên máy' : 'Local File'}</div>
                       </div>
                       <button className="src-item-del" onClick={() => removeSource(i)}>×</button>
                     </div>
@@ -723,6 +679,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               liveParts={liveParts}
               wsError={wsError}
               t={t}
+              aspectRatio={RATIO_INFO[cfg.ratio].api}
             />
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(2)}>{t.btnConfig}</button>
@@ -791,10 +748,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
         ref={fileInputRef} type="file" accept="video/*" style={{ display: 'none' }}
         onChange={(e) => {
           const f = e.target.files?.[0]
-          if (f) {
-            setSrcMode('local')
-            setSources([{ mode: 'local', value: (f as File & { path?: string }).path || f.name }])
-          }
+          if (f) setSources([{ value: (f as File & { path?: string }).path || f.name }])
         }}
       />
     </div>
@@ -862,159 +816,96 @@ function SubtitleDemo({ style }: { style: string }) {
   )
 }
 
-// ── TranscriptPreview — lazy-loaded in Step 2 configure left panel ────────────
-function TranscriptPreview({ sessionId, t }: { sessionId: string; t: Strings }) {
+// ── TranscriptOverlay — subtitle preview overlaid on video, cycles through segs ──
+function TranscriptOverlay({ sessionId, subStyle, subEnabled }: { sessionId: string; subStyle: string; subEnabled: boolean }) {
   const [segs, setSegs] = useState<TranscriptSegment[] | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [open, setOpen] = useState(false)
+  const [idx, setIdx] = useState(0)
 
-  async function load() {
-    if (segs !== null || loading) return
-    setLoading(true)
-    try {
-      const res = await getPreviewTranscript(sessionId)
-      setSegs(res.segments ?? [])
-    } catch {
-      setSegs([])
-    } finally {
-      setLoading(false)
-    }
+  useEffect(() => {
+    let cancelled = false
+    getPreviewTranscript(sessionId).then(res => {
+      if (!cancelled) setSegs(res.segments?.slice(0, 30) ?? [])
+    }).catch(() => {
+      if (!cancelled) setSegs([])
+    })
+    return () => { cancelled = true }
+  }, [sessionId])
+
+  useEffect(() => {
+    if (!segs?.length) return
+    const id = setInterval(() => setIdx(i => (i + 1) % segs.length), 2500)
+    return () => clearInterval(id)
+  }, [segs])
+
+  if (!segs?.length) return null
+
+  const text = segs[idx]?.text ?? ''
+  const words = text.trim().split(/\s+/)
+  const hlIdx = Math.floor(words.length / 2)
+
+  // Style variants matching SubtitleDemo
+  const variants: Record<string, React.CSSProperties> = {
+    pro_karaoke:      { fontFamily: 'var(--fh)', fontSize: '13px', fontWeight: 800, color: '#fff', textShadow: '-1px -1px 0 #000, 1px 1px 0 #000' },
+    tiktok_bounce_v1: { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 900, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,.9)' },
+    viral_bold:       { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 900, color: '#fff', letterSpacing: '1px', textShadow: '0 2px 10px rgba(0,0,0,.9)' },
+    bold_cap:         { fontFamily: 'var(--fh)', fontSize: '13px', fontWeight: 900, color: '#fff', textTransform: 'uppercase' as const, textShadow: '0 2px 8px rgba(0,0,0,.9)' },
+    boxed_caption:    { fontFamily: 'var(--fb)', fontSize: '12px', fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,.75)', padding: '3px 8px', borderRadius: '4px' },
+    story_clean_01:   { fontFamily: 'var(--fb)', fontSize: '12px', fontWeight: 400, color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,.9)' },
+    clean_pro:        { fontFamily: 'var(--fb)', fontSize: '13px', fontWeight: 400, color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,.9)' },
+    gaming:           { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 700, color: '#00E5C8', letterSpacing: '1px', textShadow: '0 0 12px rgba(0,229,200,.8)' },
   }
+  const hlColor: Record<string, string> = {
+    pro_karaoke: '#FFD700', tiktok_bounce_v1: '#00E5C8', viral_bold: '#fff',
+    bold_cap: '#00E5C8', gaming: '#fff',
+  }
+  const style = variants[subStyle] ?? variants['clean_pro']
+  const hlC = hlColor[subStyle] ?? 'var(--cyan)'
+
+  // Position badge bottom-center inside the frame
+  const showSub = subEnabled
 
   return (
-    <div className="cfg-section" style={{ marginTop: '4px' }}>
-      <div className="cfg-sec-hd" style={{ cursor: 'pointer', userSelect: 'none' }}
-        onClick={() => { setOpen((v) => !v); if (!open) load() }}>
-        <span>{t.cfgTranscript}</span>
-        <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>{open ? '▲' : '▼'}</span>
+    <div style={{
+      position: 'absolute', bottom: '18%', left: 0, right: 0,
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      gap: '2px', padding: '0 8px', pointerEvents: 'none',
+    }}>
+      {/* transcript ticker — always visible */}
+      <div style={{
+        background: 'rgba(0,0,0,.55)', borderRadius: '4px', padding: '3px 8px',
+        fontSize: '9px', color: 'rgba(255,255,255,.7)', fontFamily: 'var(--fb)',
+        maxWidth: '90%', textAlign: 'center', lineHeight: 1.4,
+        display: showSub ? 'none' : 'block',
+      }}>
+        {text}
       </div>
-      {open && (
-        <div style={{ maxHeight: '160px', overflowY: 'auto', marginTop: '6px' }}>
-          {loading ? (
-            <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>{t.cfgTranscriptLoad}</div>
-          ) : !segs?.length ? (
-            <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>{t.cfgTranscriptEmpty}</div>
-          ) : (
-            segs.slice(0, 20).map((s, i) => (
-              <div key={i} style={{ display: 'flex', gap: '8px', padding: '3px 0', fontSize: '11px', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
-                <span style={{ color: 'var(--text-3)', minWidth: '42px', fontFamily: 'var(--fb)' }}>{s.start.toFixed(1)}s</span>
-                <span style={{ color: 'var(--text-1)', lineHeight: 1.4 }}>{s.text}</span>
-              </div>
-            ))
-          )}
+
+      {/* subtitle style preview */}
+      {showSub && (
+        <div style={{ ...style, maxWidth: '90%', textAlign: 'center', lineHeight: 1.5 }}>
+          {words.map((w, i) => (
+            <span key={i}>
+              {i === hlIdx
+                ? <span style={{ color: hlC, WebkitTextFillColor: hlC }}>{w}</span>
+                : w}
+              {i < words.length - 1 ? ' ' : ''}
+            </span>
+          ))}
         </div>
       )}
     </div>
   )
 }
 
-// ── RangeListEditor — add/remove time ranges for clip_lock / clip_exclude ────
-function RangeListEditor({
-  label, desc, apiKey, ranges, onChange, t,
-}: {
-  label: string; desc: string; apiKey: string
-  ranges: Array<{ start_sec: number; end_sec: number }>
-  onChange: (v: Array<{ start_sec: number; end_sec: number }>) => void
-  t: Strings
-}) {
-  function add() {
-    onChange([...ranges, { start_sec: 0, end_sec: 30 }])
-  }
-  function remove(i: number) {
-    onChange(ranges.filter((_, idx) => idx !== i))
-  }
-  function update(i: number, key: 'start_sec' | 'end_sec', val: number) {
-    const next = ranges.map((r, idx) => idx === i ? { ...r, [key]: val } : r)
-    onChange(next)
-  }
-
-  return (
-    <div className="cfg-section">
-      <div className="cfg-sec-hd">
-        <span>{label}</span>
-        <span className="cfg-sec-api">{apiKey}</span>
-      </div>
-      {ranges.length === 0 && (
-        <div className="tog-desc" style={{ marginBottom: '6px' }}>{desc}</div>
-      )}
-      {ranges.map((r, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
-            <input type="number" className="dir-in" min={0} step={0.5}
-              style={{ width: '72px', textAlign: 'center', fontSize: '11px' }}
-              value={r.start_sec}
-              onChange={(e) => update(i, 'start_sec', Math.max(0, +e.target.value))} />
-            <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>→</span>
-            <input type="number" className="dir-in" min={0} step={0.5}
-              style={{ width: '72px', textAlign: 'center', fontSize: '11px' }}
-              value={r.end_sec}
-              onChange={(e) => update(i, 'end_sec', Math.max(r.start_sec + 0.5, +e.target.value))} />
-            <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>s</span>
-          </div>
-          <button className="btn-xs" onClick={() => remove(i)} style={{ opacity: 0.6 }}>×</button>
-        </div>
-      ))}
-      <button className="btn-xs" onClick={add} style={{ marginTop: '2px' }}>{t.cfgAddRange}</button>
-    </div>
-  )
-}
-
-// ── AssetPicker — file upload row for creator asset paths ────────────────────
-function AssetPicker({
-  label, desc, accept, value, onChange,
-}: {
-  label: string; desc: string; accept: string
-  value: string | null; onChange: (path: string | null) => void
-}) {
-  const [uploading, setUploading] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    try {
-      const res = await uploadFile(file)
-      onChange(res.path)
-    } catch {
-      onChange(null)
-    } finally {
-      setUploading(false)
-      if (inputRef.current) inputRef.current.value = ''
-    }
-  }
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0' }}>
-      <div style={{ flex: 1, minWidth: 0, marginRight: '8px' }}>
-        <div className="tog-lbl">{label}</div>
-        {value ? (
-          <div style={{ fontSize: '10px', color: 'var(--ok)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            ✓ {value.split(/[\\/]/).pop()}
-          </div>
-        ) : (
-          <div className="tog-desc">{desc}</div>
-        )}
-      </div>
-      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-        <input ref={inputRef} type="file" accept={accept} style={{ display: 'none' }} onChange={handleFile} />
-        <button className="btn-xs" onClick={() => inputRef.current?.click()} disabled={uploading}>
-          {uploading ? '…' : value ? '↺' : '↑'}
-        </button>
-        {value && (
-          <button className="btn-xs" onClick={() => onChange(null)} style={{ opacity: 0.6 }}>×</button>
-        )}
-      </div>
-    </div>
-  )
-}
 
 // ── Step 2 — Configure ────────────────────────────────────────────────────────
 function StepConfigure({
   cfg, cfgTab, setCfgTab, setCfgKey, applyPreset,
   sources, prepareResult, pickOutputDir, onChangeSource, t,
 }: {
-  cfg: ConfigState; cfgTab: CfgTab; setCfgTab: (tab: CfgTab) => void
+  cfg: ConfigState
+  cfgTab: CfgTab
+  setCfgTab: (tab: CfgTab) => void
   setCfgKey: <K extends keyof ConfigState>(k: K, v: ConfigState[K]) => void
   applyPreset: (id: string) => void
   sources: Source[]
@@ -1023,134 +914,167 @@ function StepConfigure({
   onChangeSource: () => void
   t: Strings
 }) {
-  const src       = sources[0]
-  const ratioInfo = RATIO_INFO[cfg.ratio]
+  void applyPreset
+  const src          = sources[0]
+  const ratioInfo    = RATIO_INFO[cfg.ratio]
   const previewVideoUrl = prepareResult ? getPreviewVideoUrl(prepareResult.session_id) : null
-  const ytThumb = src?.mode === 'youtube'
-    ? (() => { const id = extractYouTubeId(src.value); return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null })()
-    : null
-  const styleLabel = STYLES.find(s => s.id === cfg.style)?.label ?? cfg.style
+  const styleLabel   = STYLES.find(s => s.id === cfg.style)?.label ?? cfg.style
+  const activeSubGroup = SUB_STYLE_GROUPS.find(g => g.ids.includes(cfg.subStyle))?.set ?? 'clean_pro'
+  const qualityLabel   = QUALITY_MAP.find(q => q.v === cfg.renderProfile)?.l ?? '1080p'
 
   return (
     <div className="cfg-screen">
-      {/* ── LEFT ── */}
+
+      {/* ── LEFT ──────────────────────────────────────────────────────────── */}
       <div className="cfg-left">
 
-        {/* Source info */}
+        {/* Source card */}
         <div className="cfg-src-card">
-          <div className="cfg-src-thumb">
-            {ytThumb
-              ? <img src={ytThumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : (src?.mode === 'youtube' ? '🎬' : '📁')
-            }
-          </div>
+          <div className="cfg-src-thumb">📁</div>
           <div className="cfg-src-info">
             <div className="cfg-src-name">
               {prepareResult?.title || (src?.value ? src.value.slice(0, 28) + '…' : 'No source')}
             </div>
             <div className="cfg-src-meta">
-              {prepareResult ? fmtDuration(prepareResult.duration) : (src?.mode === 'youtube' ? 'YouTube' : 'Local File')}
+              {prepareResult ? fmtDuration(prepareResult.duration) : 'Local File'}
             </div>
             <button className="cfg-src-change" onClick={onChangeSource}>{t.cfgChangeSource}</button>
           </div>
         </div>
 
-        {/* Quick presets */}
-        <div className="cfg-section">
-          <div className="cfg-sec-hd">{t.cfgQuickPresets}</div>
-          <div className="preset-list">
-            {PRESETS.map((p) => (
-              <div key={p.id} className={`preset-card${cfg.preset === p.id ? ' on' : ''}`} onClick={() => applyPreset(p.id)}>
-                <div className="preset-icon-wrap">{p.icon}</div>
-                <div className="preset-info">
-                  <div className="preset-name">{p.name}</div>
-                  <div className="preset-desc">{p.desc}</div>
-                </div>
-                <div className="preset-badge-ai">AI</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Frame / Ratio */}
+        {/* C. Duration — min / max clip length */}
         <div className="cfg-section">
           <div className="cfg-sec-hd">
-            <span>{t.cfgFrame}</span>
-            <span className="cfg-sec-api">aspect_ratio</span>
+            <span>CLIP DURATION</span>
+            <span className="cfg-sec-api">min_part_sec · max_part_sec</span>
           </div>
-          <div className="ratio-cards">
-            {(['r916', 'r34', 'r11'] as Ratio[]).map((r) => (
-              <div key={r} className={`ratio-card${cfg.ratio === r ? ' on' : ''}`} onClick={() => setCfgKey('ratio', r)}>
-                <div className={`ratio-vis ${r}-v`} />
-                <div className="ratio-lbl">{RATIO_INFO[r].label}</div>
-                <div className="ratio-sub">{RATIO_INFO[r].sub}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+            {[
+              { min: 30,  max: 60  },
+              { min: 45,  max: 90  },
+              { min: 60,  max: 120 },
+              { min: 90,  max: 180 },
+            ].map(({ min, max }) => (
+              <div key={`${min}-${max}`}
+                className={`seg-b${cfg.minSec === min && cfg.maxSec === max ? ' on' : ''}`}
+                onClick={() => { setCfgKey('minSec', min); setCfgKey('maxSec', max) }}>
+                {min}–{max}s
               </div>
             ))}
           </div>
-          <div style={{ marginTop: '12px' }}>
-            <div className="tog-row">
-              <span className="tog-lbl">{t.cfgMotionCrop}</span>
-              <Tog checked={cfg.motionCrop} onChange={(v) => setCfgKey('motionCrop', v)} />
-            </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--text-3)', width: '28px' }}>MIN</span>
+            <input
+              type="number" min={15} max={300} value={cfg.minSec}
+              onChange={e => { const v = parseInt(e.target.value, 10); if (!isNaN(v)) setCfgKey('minSec', Math.max(15, Math.min(300, v))) }}
+              style={{ width: '56px', padding: '3px 5px', borderRadius: '5px', fontSize: '11px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-1)', textAlign: 'right', outline: 'none' }}
+            />
+            <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>s</span>
+            <span style={{ fontSize: '10px', color: 'var(--text-3)', width: '28px', marginLeft: '6px' }}>MAX</span>
+            <input
+              type="number" min={15} max={600} value={cfg.maxSec}
+              onChange={e => { const v = parseInt(e.target.value, 10); if (!isNaN(v)) setCfgKey('maxSec', Math.max(15, Math.min(600, v))) }}
+              style={{ width: '56px', padding: '3px 5px', borderRadius: '5px', fontSize: '11px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-1)', textAlign: 'right', outline: 'none' }}
+            />
+            <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>s</span>
           </div>
         </div>
 
-        {/* Duration */}
+        {/* D. Output count */}
         <div className="cfg-section">
-          <div className="cfg-sec-hd">{t.cfgDuration}</div>
-          <div className="field">
-            <div className="fl">
-              <span>{t.cfgMinClip}</span>
-              <span className="fl-api">min_part_sec</span>
-            </div>
-            <input type="range" className="range-in" min={5} max={120} value={cfg.minSec}
-              onChange={(e) => setCfgKey('minSec', +e.target.value)} />
-            <div className="range-vals">
-              <span className="range-v">5s</span>
-              <span className="range-v">{cfg.minSec}s</span>
-              <span className="range-v">120s</span>
-            </div>
+          <div className="cfg-sec-hd">
+            <span>OUTPUT VIDEOS</span>
+            <span className="cfg-sec-api">output_count</span>
           </div>
-          <div className="field">
-            <div className="fl">
-              <span>{t.cfgMaxClip}</span>
-              <span className="fl-api">max_part_sec</span>
-            </div>
-            <input type="range" className="range-in" min={10} max={300} value={cfg.maxSec}
-              onChange={(e) => setCfgKey('maxSec', +e.target.value)} />
-            <div className="range-vals">
-              <span className="range-v">10s</span>
-              <span className="range-v">{cfg.maxSec}s</span>
-              <span className="range-v">300s</span>
-            </div>
-          </div>
-          <div className="field">
-            <div className="fl">
-              <span>{t.cfgClipCount}</span>
-              <span className="fl-api">max_export_parts</span>
-            </div>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {[1, 3, 5, 10].map(v => (
+              <div key={v} className={`seg-b${cfg.outputCount === v ? ' on' : ''}`}
+                onClick={() => setCfgKey('outputCount', v)}>{v}</div>
+            ))}
             <div className="clip-count-row">
-              <button className="cnt-btn" onClick={() => setCfgKey('clipCount', Math.max(1, cfg.clipCount - 1))}>−</button>
-              <span className="cnt-val">{cfg.clipCount}</span>
-              <button className="cnt-btn" onClick={() => setCfgKey('clipCount', Math.min(50, cfg.clipCount + 1))}>+</button>
+              <button className="cnt-btn" onClick={() => setCfgKey('outputCount', Math.max(1, cfg.outputCount - 1))}>−</button>
+              <span className="cnt-val">{cfg.outputCount}</span>
+              <button className="cnt-btn" onClick={() => setCfgKey('outputCount', Math.min(20, cfg.outputCount + 1))}>+</button>
             </div>
           </div>
         </div>
 
-        {/* Transcript preview */}
-        {prepareResult && <TranscriptPreview sessionId={prepareResult.session_id} t={t} />}
+        {/* A. Platform */}
+        <div className="cfg-section">
+          <div className="cfg-sec-hd">
+            <span>{t.cfgPlatform}</span>
+            <span className="cfg-sec-api">target_platform</span>
+          </div>
+          <div className="seg">
+            {([
+              { v: 'tiktok'          as const, l: 'TikTok'   },
+              { v: 'youtube_shorts'  as const, l: 'YT Short' },
+              { v: 'instagram_reels' as const, l: 'Reels'    },
+            ]).map(({ v, l }) => (
+              <div key={v} className={`seg-b${cfg.platform === v ? ' on' : ''}`}
+                onClick={() => setCfgKey('platform', v)}>{l}</div>
+            ))}
+          </div>
+        </div>
+
+        {/* A. Frame */}
+        <div className="cfg-section">
+          <div className="cfg-sec-hd">
+            <span>FRAME</span>
+            <span className="cfg-sec-api">aspect_ratio</span>
+          </div>
+          <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
+            {(['r916', 'r34', 'r45', 'r11', 'r169'] as Ratio[]).map(r => (
+              <div key={r} className={`seg-b${cfg.ratio === r ? ' on' : ''}`}
+                onClick={() => setCfgKey('ratio', r)}>{RATIO_INFO[r].label}</div>
+            ))}
+          </div>
+        </div>
+
+        {/* A. Quality */}
+        <div className="cfg-section">
+          <div className="cfg-sec-hd">
+            <span>QUALITY</span>
+            <span className="cfg-sec-api">render_profile</span>
+          </div>
+          <div className="seg">
+            {QUALITY_MAP.map(({ v, l }) => (
+              <div key={v} className={`seg-b${cfg.renderProfile === v ? ' on' : ''}`}
+                onClick={() => setCfgKey('renderProfile', v)}>{l}</div>
+            ))}
+          </div>
+        </div>
+
+        {/* M. Output folder */}
+        <div className="cfg-section">
+          <div className="cfg-sec-hd">
+            <span>{t.cfgSaveFolder}</span>
+            <span className="cfg-sec-api">output_dir</span>
+          </div>
+          <div className="dir-row">
+            <input className="dir-in" type="text" placeholder="D:\Videos\Output" value={cfg.outputDir}
+              onChange={(e) => setCfgKey('outputDir', e.target.value)} />
+            <button className="btn-xs" onClick={pickOutputDir}>Browse</button>
+          </div>
+          {prepareResult?.export_dir && (
+            <div style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '6px', wordBreak: 'break-all', lineHeight: 1.5 }}>
+              Default: {prepareResult.export_dir}
+            </div>
+          )}
+        </div>
 
       </div>{/* /cfg-left */}
 
-      {/* ── CENTER ── */}
+      {/* ── CENTER ────────────────────────────────────────────────────────── */}
       <div className="cfg-center">
         <div className="cfg-center-top">
           <span className="pv-chip ac">{ratioInfo.label} · {ratioInfo.sub}</span>
           <span className="pv-chip cy">{styleLabel}</span>
           <span className="pv-chip">{cfg.platform.replace(/_/g, ' ')}</span>
           <div style={{ flex: 1 }} />
-          <span className="pv-chip">{cfg.minSec}s – {cfg.maxSec}s</span>
-          <span className="pv-chip">{cfg.clipCount} clips</span>
+          <span className="pv-chip">{cfg.targetDuration}s</span>
+          <span className="pv-chip">×{cfg.outputCount}</span>
+          <span className="pv-chip">{qualityLabel}</span>
         </div>
 
         <div className="cfg-canvas">
@@ -1165,9 +1089,6 @@ function StepConfigure({
                 autoPlay muted loop playsInline
                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
               />
-            ) : ytThumb ? (
-              <img src={ytThumb} alt="thumbnail"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             ) : (
               <div className="pv-placeholder">
                 <span className="pv-play">▶</span>
@@ -1175,6 +1096,9 @@ function StepConfigure({
               </div>
             )}
             {cfg.subEnabled && <SubtitleDemo style={cfg.subStyle} />}
+            {prepareResult && (
+              <TranscriptOverlay sessionId={prepareResult.session_id} subStyle={cfg.subStyle} subEnabled={cfg.subEnabled} />
+            )}
           </div>
         </div>
 
@@ -1195,14 +1119,13 @@ function StepConfigure({
         </div>
       </div>{/* /cfg-center */}
 
-      {/* ── RIGHT ── */}
+      {/* ── RIGHT ─────────────────────────────────────────────────────────── */}
       <div className="cfg-right">
         <div className="cfg-tabs">
           {([
-            { id: 'ai' as CfgTab,     label: t.cfgTabAI     },
-            { id: 'sub' as CfgTab,    label: t.cfgTabSub    },
-            { id: 'narr' as CfgTab,   label: t.cfgTabNarr   },
-            { id: 'output' as CfgTab, label: t.cfgTabOutput  },
+            { id: 'ai'     as CfgTab, label: t.cfgTabAI     },
+            { id: 'sub'    as CfgTab, label: t.cfgTabSub    },
+            { id: 'narr'   as CfgTab, label: t.cfgTabNarr   },
           ]).map((tab) => (
             <button key={tab.id} className={`cfg-tab${cfgTab === tab.id ? ' on' : ''}`} onClick={() => setCfgTab(tab.id)}>
               {tab.label}
@@ -1211,46 +1134,130 @@ function StepConfigure({
         </div>
 
         <div className="cfg-tab-body">
-          {/* AI tab */}
+
+          {/* ── AI tab ── */}
           <div className={`cfg-tab-pane${cfgTab === 'ai' ? ' active' : ''}`}>
+
+            {/* E. Video type */}
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>{t.cfgPlatform}</span>
-                <span className="cfg-sec-api">target_platform</span>
+                <span>VIDEO TYPE</span>
+                <span className="cfg-sec-api">video_type</span>
               </div>
-              <div className="seg">
+              <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
                 {([
-                  { v: 'tiktok' as const,           l: 'TikTok'  },
-                  { v: 'youtube_shorts' as const,    l: 'YT Short'},
-                  { v: 'instagram_reels' as const,   l: 'Reels'   },
+                  { v: 'auto'          as ConfigState['videoType'], l: 'Auto'      },
+                  { v: 'viral'         as ConfigState['videoType'], l: 'Viral'     },
+                  { v: 'storytelling'  as ConfigState['videoType'], l: 'Story'     },
+                  { v: 'educational'   as ConfigState['videoType'], l: 'Edu'       },
+                  { v: 'emotional'     as ConfigState['videoType'], l: 'Emotional' },
+                  { v: 'high_retention'as ConfigState['videoType'], l: 'Retention' },
                 ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.platform === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('platform', v)}>{l}</div>
+                  <div key={v} className={`seg-b${cfg.videoType === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('videoType', v)}>{l}</div>
                 ))}
               </div>
             </div>
+
+            {/* I. Market */}
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>TARGET MARKET</span>
+                <span>MARKET</span>
                 <span className="cfg-sec-api">ai_target_market</span>
               </div>
-              <div className="seg" style={{ flexWrap: 'wrap', gap: '6px' }}>
+              <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
                 {([
-                  { v: 'us',    l: '🇺🇸 US'     },
-                  { v: 'eu',    l: '🇪🇺 EU'     },
-                  { v: 'jp',    l: '🇯🇵 JP'     },
-                  { v: 'sea',   l: '🌏 SEA'     },
-                  { v: 'kr',    l: '🇰🇷 KR'     },
-                  { v: 'latam', l: '🌎 LATAM'   },
-                  { v: 'in',    l: '🇮🇳 India'  },
+                  { v: 'us',  l: '🇺🇸 US'  },
+                  { v: 'vn',  l: '🇻🇳 VN'  },
+                  { v: 'jp',  l: '🇯🇵 JP'  },
+                  { v: 'kr',  l: '🇰🇷 KR'  },
+                  { v: 'eu',  l: '🇪🇺 EU'  },
+                  { v: 'sea', l: '🌏 SEA' },
                 ]).map(({ v, l }) => (
                   <div key={v} className={`seg-b${cfg.aiMarket === v ? ' on' : ''}`}
                     onClick={() => setCfgKey('aiMarket', v)}>{l}</div>
                 ))}
               </div>
             </div>
+
+            {/* K. Energy */}
             <div className="cfg-section">
-              <div className="cfg-sec-hd">{t.cfgAIFeatures}</div>
+              <div className="cfg-sec-hd">
+                <span>ENERGY</span>
+                <span className="cfg-sec-api">energy_style</span>
+              </div>
+              <div className="seg">
+                {([
+                  { v: 'auto'     as ConfigState['energyStyle'], l: 'Auto'     },
+                  { v: 'fast'     as ConfigState['energyStyle'], l: 'Fast'     },
+                  { v: 'balanced' as ConfigState['energyStyle'], l: 'Balanced' },
+                  { v: 'slow'     as ConfigState['energyStyle'], l: 'Slow'     },
+                ]).map(({ v, l }) => (
+                  <div key={v} className={`seg-b${cfg.energyStyle === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('energyStyle', v)}>{l}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* L. Hook strength */}
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>HOOK</span>
+                <span className="cfg-sec-api">hook_strength</span>
+              </div>
+              <div className="seg">
+                {([
+                  { v: 'aggressive' as ConfigState['hookStrength'], l: 'Aggressive' },
+                  { v: 'balanced'   as ConfigState['hookStrength'], l: 'Balanced'   },
+                  { v: 'soft'       as ConfigState['hookStrength'], l: 'Soft'       },
+                ]).map(({ v, l }) => (
+                  <div key={v} className={`seg-b${cfg.hookStrength === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('hookStrength', v)}>{l}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* J. Focus mode */}
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>FOCUS</span>
+                <span className="cfg-sec-api">reframe_mode</span>
+              </div>
+              <div className="seg">
+                {([
+                  { v: 'auto'   as ConfigState['focusMode'], l: 'Auto'   },
+                  { v: 'face'   as ConfigState['focusMode'], l: 'Face'   },
+                  { v: 'object' as ConfigState['focusMode'], l: 'Object' },
+                  { v: 'center' as ConfigState['focusMode'], l: 'Center' },
+                ]).map(({ v, l }) => (
+                  <div key={v} className={`seg-b${cfg.focusMode === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('focusMode', v)}>{l}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* H. Output language */}
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>OUTPUT LANGUAGE</span>
+                <span className="cfg-sec-api">output_language</span>
+              </div>
+              <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
+                {([
+                  { v: 'auto', l: 'Keep original' },
+                  { v: 'vi',   l: '🇻🇳 VI'        },
+                  { v: 'en',   l: '🇺🇸 EN'        },
+                  { v: 'ja',   l: '🇯🇵 JA'        },
+                  { v: 'ko',   l: '🇰🇷 KO'        },
+                ]).map(({ v, l }) => (
+                  <div key={v} className={`seg-b${cfg.outputLanguage === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('outputLanguage', v)}>{l}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* AI Director */}
+            <div className="cfg-section">
               <div className="tog-row">
                 <div>
                   <div className="tog-lbl">{t.cfgAIDirector}</div>
@@ -1258,175 +1265,80 @@ function StepConfigure({
                 </div>
                 <Tog checked={cfg.aiEnabled} onChange={(v) => setCfgKey('aiEnabled', v)} />
               </div>
-              <div className="tog-row" style={{ marginTop: '10px' }}>
-                <div>
-                  <div className="tog-lbl">{t.cfgMultiVariant}</div>
-                  <div className="tog-desc">{t.cfgMultiVariantDesc}</div>
-                </div>
-                <Tog checked={cfg.multiVariant} onChange={(v) => setCfgKey('multiVariant', v)} />
-              </div>
             </div>
-            <div className="cfg-section">
-              <div className="tog-row">
-                <div>
-                  <div className="tog-lbl">{t.cfgCTAEnable}</div>
-                  <div className="tog-desc">{t.cfgCTAEnableDesc}</div>
-                </div>
-                <Tog checked={cfg.ctaEnabled} onChange={(v) => setCfgKey('ctaEnabled', v)} />
-              </div>
-              {cfg.ctaEnabled && (
-                <div style={{ marginTop: '10px' }}>
-                  <div className="cfg-sec-hd" style={{ marginBottom: '6px' }}>
-                    <span>{t.cfgCTAType}</span>
-                    <span className="cfg-sec-api">cta_type</span>
-                  </div>
-                  <div className="seg">
-                    {([
-                      { v: 'auto'    as const, l: t.cfgCTAAuto    },
-                      { v: 'comment' as const, l: t.cfgCTAComment  },
-                      { v: 'part_2'  as const, l: t.cfgCTAPart2   },
-                      { v: 'follow'  as const, l: t.cfgCTAFollow   },
-                    ]).map(({ v, l }) => (
-                      <div key={v} className={`seg-b${cfg.ctaType === v ? ' on' : ''}`}
-                        onClick={() => setCfgKey('ctaType', v)}>{l}</div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <RangeListEditor
-              label={t.cfgClipLock} desc={t.cfgClipLockDesc} apiKey="clip_lock"
-              ranges={cfg.clipLock}
-              onChange={(v) => setCfgKey('clipLock', v)}
-              t={t}
-            />
-            <RangeListEditor
-              label={t.cfgClipExclude} desc={t.cfgClipExcludeDesc} apiKey="clip_exclude"
-              ranges={cfg.clipExclude}
-              onChange={(v) => setCfgKey('clipExclude', v)}
-              t={t}
-            />
-            <div className="cfg-section">
-              <div className="tog-row">
-                <div>
-                  <div className="tog-lbl">{t.cfgHookApply}</div>
-                  <div className="tog-desc">{t.cfgHookApplyDesc}</div>
-                </div>
-                <Tog checked={cfg.hookApplyEnabled} onChange={(v) => setCfgKey('hookApplyEnabled', v)} />
-              </div>
-              {cfg.hookApplyEnabled && (
-                <div className="tog-row" style={{ marginTop: '10px' }}>
-                  <div>
-                    <div className="tog-lbl">{t.cfgHookOverlay}</div>
-                    <div className="tog-desc">{t.cfgHookOverlayDesc}</div>
-                  </div>
-                  <Tog checked={cfg.hookOverlayEnabled} onChange={(v) => setCfgKey('hookOverlayEnabled', v)} />
-                </div>
-              )}
-            </div>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgStructureBias}</span>
-                <span className="cfg-sec-api">structure_bias</span>
-              </div>
-              <div className="seg">
-                {([
-                  { v: null          , l: t.cfgBiasOff      },
-                  { v: 'hook'        , l: t.cfgBiasHook      },
-                  { v: 'balanced'    , l: t.cfgBiasBalanced  },
-                  { v: 'story'       , l: t.cfgBiasStory     },
-                ] as { v: ConfigState['structureBias']; l: string }[]).map(({ v, l }) => (
-                  <div key={String(v)} className={`seg-b${cfg.structureBias === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('structureBias', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgPartOrder}</span>
-                <span className="cfg-sec-api">part_order</span>
-              </div>
-              <div className="seg">
-                <div className={`seg-b${cfg.partOrder === 'viral' ? ' on' : ''}`}
-                  onClick={() => setCfgKey('partOrder', 'viral')}>⚡ {t.cfgOrderViral}</div>
-                <div className={`seg-b${cfg.partOrder === 'sequential' ? ' on' : ''}`}
-                  onClick={() => setCfgKey('partOrder', 'sequential')}>123 {t.cfgOrderSeq}</div>
-              </div>
-            </div>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgRenderProfile}</span>
-                <span className="cfg-sec-api">render_profile</span>
-              </div>
-              <select className="sel" value={cfg.renderProfile} onChange={(e) => setCfgKey('renderProfile', e.target.value as ConfigState['renderProfile'])}>
-                <option value="fast">Fast</option>
-                <option value="balanced">Balanced</option>
-                <option value="quality">Quality</option>
-              </select>
-            </div>
+
           </div>
 
-          {/* SUB tab */}
+          {/* ── SUB tab ── */}
           <div className={`cfg-tab-pane${cfgTab === 'sub' ? ' active' : ''}`}>
+
             <div className="cfg-section">
               <div className="tog-row">
                 <span className="tog-lbl">{t.cfgEnableSub}</span>
                 <Tog checked={cfg.subEnabled} onChange={(v) => setCfgKey('subEnabled', v)} />
               </div>
             </div>
+
+            {/* F. Style — 3 simplified groups */}
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>{t.cfgSubStyle}</span>
+                <span>STYLE</span>
                 <span className="cfg-sec-api">subtitle_style</span>
               </div>
-              <div className="sub-grid">
-                {SUB_STYLES.map((s) => (
-                  <div key={s.id} className={`sub-b${cfg.subStyle === s.id ? ' on' : ''}`}
-                    onClick={() => setCfgKey('subStyle', s.id)}>{s.label}</div>
+              <div className="seg">
+                {SUB_STYLE_GROUPS.map(g => (
+                  <div key={g.set} className={`seg-b${activeSubGroup === g.set ? ' on' : ''}`}
+                    onClick={() => setCfgKey('subStyle', g.set)}>{g.label}</div>
                 ))}
               </div>
             </div>
-            <div className="cfg-section">
-              <div className="tog-row">
-                <div>
-                  <span className="tog-lbl">{t.cfgHighlightWord}</span>
-                  <span className="cfg-sec-api" style={{ marginLeft: 6 }}>highlight_per_word</span>
-                </div>
-                <Tog checked={cfg.subHighlight} onChange={(v) => setCfgKey('subHighlight', v)} />
-              </div>
-            </div>
+
+            {/* F. Language */}
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>{t.cfgFontSize}: {cfg.subFontSize}px</span>
-                <span className="cfg-sec-api">sub_font_size</span>
+                <span>LANGUAGE</span>
               </div>
-              <input type="range" className="range-in" min={14} max={52} step={2} value={cfg.subFontSize}
-                onChange={(e) => setCfgKey('subFontSize', +e.target.value)} />
-              <div className="range-vals">
-                <span className="range-v">14px</span>
-                <span className="range-v">{cfg.subFontSize}px</span>
-                <span className="range-v">52px</span>
+              <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
+                {(['auto', 'vi', 'en', 'ja', 'ko'] as string[]).map(v => (
+                  <div key={v} className={`seg-b${cfg.subLanguage === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('subLanguage', v)}>{v === 'auto' ? 'Auto' : v.toUpperCase()}</div>
+                ))}
               </div>
             </div>
+
+            {/* F. Amount */}
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>AMOUNT</span>
+                <span className="cfg-sec-api">subtitle_density</span>
+              </div>
+              <div className="seg">
+                {([
+                  { v: 'low'    as ConfigState['subDensity'], l: 'Low'    },
+                  { v: 'medium' as ConfigState['subDensity'], l: 'Medium' },
+                  { v: 'high'   as ConfigState['subDensity'], l: 'High'   },
+                ]).map(({ v, l }) => (
+                  <div key={v} className={`seg-b${cfg.subDensity === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('subDensity', v)}>{l}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* Auto-translate */}
             <div className="cfg-section">
               <div className="tog-row">
                 <div>
                   <span className="tog-lbl">{t.cfgAutoTranslate}</span>
-                  <span className="cfg-sec-api" style={{ marginLeft: 6 }}>subtitle_translate_enabled</span>
                 </div>
                 <Tog checked={cfg.subTranslate} onChange={(v) => setCfgKey('subTranslate', v)} />
               </div>
               {cfg.subTranslate && (
                 <div style={{ marginTop: '8px' }}>
-                  <div className="cfg-sec-hd" style={{ marginBottom: '6px' }}>
-                    <span>{t.cfgTargetLang}</span>
-                    <span className="cfg-sec-api">subtitle_target_language</span>
-                  </div>
                   <div className="seg">
                     {([
-                      { v: 'vi' as const, l: '🇻🇳 Việt' },
+                      { v: 'vi' as const, l: '🇻🇳 Việt'   },
                       { v: 'en' as const, l: '🇺🇸 English' },
-                      { v: 'ja' as const, l: '🇯🇵 日本語' },
+                      { v: 'ja' as const, l: '🇯🇵 日本語'   },
                     ]).map(({ v, l }) => (
                       <div key={v} className={`seg-b${cfg.subTranslateLang === v ? ' on' : ''}`}
                         onClick={() => setCfgKey('subTranslateLang', v)}>{l}</div>
@@ -1435,43 +1347,80 @@ function StepConfigure({
                 </div>
               )}
             </div>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgSubEmphasis}</span>
-                <span className="cfg-sec-api">subtitle_emphasis</span>
-              </div>
-              <div className="seg">
-                {([
-                  { v: null          , l: t.cfgEmphasisOff        },
-                  { v: 'subtle'      , l: t.cfgEmphasisSubtle      },
-                  { v: 'balanced'    , l: t.cfgEmphasisBalanced    },
-                  { v: 'aggressive'  , l: t.cfgEmphasisAggressive  },
-                ] as { v: ConfigState['subEmphasis']; l: string }[]).map(({ v, l }) => (
-                  <div key={String(v)} className={`seg-b${cfg.subEmphasis === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('subEmphasis', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
+
           </div>
 
-          {/* NARR tab */}
+          {/* ── NARR tab ── */}
           <div className={`cfg-tab-pane${cfgTab === 'narr' ? ' active' : ''}`}>
+
             <div className="cfg-section">
               <div className="tog-row">
                 <span className="tog-lbl">{t.cfgEnableVoice}</span>
                 <Tog checked={cfg.narrEnabled} onChange={(v) => setCfgKey('narrEnabled', v)} />
               </div>
             </div>
+
+            {/* G. Language */}
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>{t.cfgVoiceSource}</span>
+                <span>LANGUAGE</span>
+                <span className="cfg-sec-api">voice_language</span>
+              </div>
+              <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
+                {([
+                  { v: 'vi-VN' as const, l: '🇻🇳 VI'    },
+                  { v: 'en-US' as const, l: '🇺🇸 EN'    },
+                  { v: 'en-GB' as const, l: '🇬🇧 EN-GB' },
+                  { v: 'ja-JP' as const, l: '🇯🇵 JA'    },
+                ]).map(({ v, l }) => (
+                  <div key={v} className={`seg-b${cfg.voiceLang === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('voiceLang', v)}>{l}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* G. Voice gender */}
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>VOICE</span>
+                <span className="cfg-sec-api">voice_gender</span>
+              </div>
+              <div className="seg">
+                <div className={`seg-b${cfg.voiceGender === 'female' ? ' on' : ''}`} onClick={() => setCfgKey('voiceGender', 'female')}>♀ Female</div>
+                <div className={`seg-b${cfg.voiceGender === 'male'   ? ' on' : ''}`} onClick={() => setCfgKey('voiceGender', 'male')}>♂ Male</div>
+              </div>
+            </div>
+
+            {/* G. Style */}
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>STYLE</span>
+                <span className="cfg-sec-api">narration_style</span>
+              </div>
+              <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
+                {([
+                  { v: 'auto'      as ConfigState['narrationStyle'], l: 'Auto'      },
+                  { v: 'energetic' as ConfigState['narrationStyle'], l: 'Energetic' },
+                  { v: 'calm'      as ConfigState['narrationStyle'], l: 'Calm'      },
+                  { v: 'emotional' as ConfigState['narrationStyle'], l: 'Emotional' },
+                ]).map(({ v, l }) => (
+                  <div key={v} className={`seg-b${cfg.narrationStyle === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('narrationStyle', v)}>{l}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* G. Source */}
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>SOURCE</span>
                 <span className="cfg-sec-api">voice_source</span>
               </div>
               <div className="seg" style={{ flexDirection: 'column', gap: '3px' }}>
                 {([
-                  { v: 'subtitle' as const,             l: t.cfgVoiceSrcAuto,   d: t.cfgVoiceSrcAutoDesc   },
-                  { v: 'translated_subtitle' as const,  l: t.cfgVoiceSrcTrans,  d: t.cfgVoiceSrcTransDesc  },
-                  { v: 'manual' as const,               l: t.cfgVoiceSrcManual, d: t.cfgVoiceSrcManualDesc },
+                  { v: 'subtitle'            as const, l: t.cfgVoiceSrcAuto,   d: t.cfgVoiceSrcAutoDesc   },
+                  { v: 'translated_subtitle' as const, l: t.cfgVoiceSrcTrans,  d: t.cfgVoiceSrcTransDesc  },
+                  { v: 'manual'              as const, l: t.cfgVoiceSrcManual, d: t.cfgVoiceSrcManualDesc },
                 ]).map(({ v, l, d }) => (
                   <div key={v} className={`seg-b${cfg.voiceSource === v ? ' on' : ''}`}
                     style={{ textAlign: 'left', padding: '7px 10px' }}
@@ -1493,125 +1442,9 @@ function StepConfigure({
                 </div>
               )}
             </div>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgVoiceLang}</span>
-                <span className="cfg-sec-api">voice_language</span>
-              </div>
-              <select className="sel" value={cfg.voiceLang} onChange={(e) => setCfgKey('voiceLang', e.target.value)}>
-                <option value="vi-VN">🇻🇳 Tiếng Việt</option>
-                <option value="en-US">🇺🇸 English (US)</option>
-                <option value="en-GB">🇬🇧 English (UK)</option>
-                <option value="ja-JP">🇯🇵 日本語</option>
-              </select>
-            </div>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgVoiceGender}</span>
-                <span className="cfg-sec-api">voice_gender</span>
-              </div>
-              <div className="seg">
-                <div className={`seg-b${cfg.voiceGender === 'female' ? ' on' : ''}`} onClick={() => setCfgKey('voiceGender', 'female')}>♀ Female</div>
-                <div className={`seg-b${cfg.voiceGender === 'male'   ? ' on' : ''}`} onClick={() => setCfgKey('voiceGender', 'male')}>♂ Male</div>
-              </div>
-            </div>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgEngine}</span>
-                <span className="cfg-sec-api">tts_engine</span>
-              </div>
-              <div className="seg">
-                <div className={`seg-b${cfg.ttsEngine === 'edge' ? ' on' : ''}`} onClick={() => setCfgKey('ttsEngine', 'edge')} title="Fast, free">Edge TTS</div>
-                <div className={`seg-b${cfg.ttsEngine === 'xtts' ? ' on' : ''}`} onClick={() => setCfgKey('ttsEngine', 'xtts')} title="Local AI">XTTS AI</div>
-              </div>
-            </div>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgMixMode}</span>
-                <span className="cfg-sec-api">voice_mix_mode</span>
-              </div>
-              <select className="sel" value={cfg.voiceMixMode} onChange={(e) => setCfgKey('voiceMixMode', e.target.value as 'replace_original' | 'keep_original_low')}>
-                <option value="replace_original">Replace original audio</option>
-                <option value="keep_original_low">Keep original (low)</option>
-              </select>
-            </div>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgWhisperModel}</span>
-                <span className="cfg-sec-api">whisper_model</span>
-              </div>
-              <div className="seg">
-                {([
-                  { v: 'auto',   l: t.cfgWhisperAuto   },
-                  { v: 'tiny',   l: t.cfgWhisperTiny    },
-                  { v: 'base',   l: t.cfgWhisperBase    },
-                  { v: 'small',  l: t.cfgWhisperSmall   },
-                  { v: 'medium', l: t.cfgWhisperMedium  },
-                ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.whisperModel === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('whisperModel', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
+
           </div>
 
-          {/* OUTPUT tab */}
-          <div className={`cfg-tab-pane${cfgTab === 'output' ? ' active' : ''}`}>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgSaveFolder}</span>
-                <span className="cfg-sec-api">output_dir</span>
-              </div>
-              <div className="dir-row">
-                <input className="dir-in" type="text" placeholder="D:\Videos\Output" value={cfg.outputDir}
-                  onChange={(e) => setCfgKey('outputDir', e.target.value)} />
-                <button className="btn-xs" onClick={pickOutputDir} title="Browse">Browse</button>
-              </div>
-              {prepareResult?.export_dir && (
-                <div style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '6px', wordBreak: 'break-all', lineHeight: 1.5 }}>
-                  Default: {prepareResult.export_dir}
-                </div>
-              )}
-            </div>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">{t.cfgAssets}</div>
-              <AssetPicker
-                label={t.cfgAssetLogo} desc={t.cfgAssetLogoDesc}
-                accept="image/png,image/jpeg"
-                value={cfg.assetLogoPath}
-                onChange={(v) => setCfgKey('assetLogoPath', v)}
-              />
-              <AssetPicker
-                label={t.cfgAssetIntro} desc={t.cfgAssetIntroDesc}
-                accept="video/mp4,video/quicktime,video/webm"
-                value={cfg.assetIntroPath}
-                onChange={(v) => setCfgKey('assetIntroPath', v)}
-              />
-              <AssetPicker
-                label={t.cfgAssetOutro} desc={t.cfgAssetOutroDesc}
-                accept="video/mp4,video/quicktime,video/webm"
-                value={cfg.assetOutroPath}
-                onChange={(v) => setCfgKey('assetOutroPath', v)}
-              />
-            </div>
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>{t.cfgAssetMusicProfile}</span>
-                <span className="cfg-sec-api">asset_music_profile</span>
-              </div>
-              <div className="seg">
-                {([
-                  { v: null         , l: t.cfgAssetMusicOff       },
-                  { v: 'clean'      , l: t.cfgAssetMusicClean      },
-                  { v: 'energetic'  , l: t.cfgAssetMusicEnergetic  },
-                  { v: 'soft'       , l: t.cfgAssetMusicSoft       },
-                ] as { v: ConfigState['assetMusicProfile']; l: string }[]).map(({ v, l }) => (
-                  <div key={String(v)} className={`seg-b${cfg.assetMusicProfile === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('assetMusicProfile', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-          </div>
         </div>
       </div>{/* /cfg-right */}
     </div>
@@ -1669,7 +1502,9 @@ const STEP_NODES = [
   { key: 'rendering',    label: 'Render' },
 ]
 
-function ClipRow({ slot, statusLabel }: { slot: ClipSlot; statusLabel: string }) {
+function ClipRow({ slot, statusLabel, jobId, thumbRatio }: {
+  slot: ClipSlot; statusLabel: string; jobId: string | null; thumbRatio: string
+}) {
   const state   = clipStateKey(slot.status)
   const pct     = slot.progress_percent
   const isDone  = state === 'done'
@@ -1677,67 +1512,133 @@ function ClipRow({ slot, statusLabel }: { slot: ClipSlot; statusLabel: string })
   const isWait  = state === 'waiting'
   const isActive = state === 'active'
   const activity = ACTIVITY_LABELS[slot.status.toLowerCase()] ?? ''
-
-  // Which step node is active/done inside this clip row
   const activeStepIdx = STEP_NODES.findIndex((n) => n.key === slot.status.toLowerCase())
 
+  const thumbUrl = jobId ? getPartThumbnailUrl(jobId, slot.part_no) : null
+
+  const ACCENT: Record<string, string> = {
+    done:    '#34C878',
+    failed:  '#ef4444',
+    active:  '#a855f7',
+    waiting: '#6b7280',
+  }
+  const accentColor = ACCENT[state] ?? '#6b7280'
+
   return (
-    <div className={`rndv-row rndv-row-${state}`}>
+    <div style={{
+      display: 'flex',
+      borderRadius: 10,
+      overflow: 'hidden',
+      background: 'var(--bg-card)',
+      border: `1px solid ${isActive ? 'rgba(168,85,247,.25)' : 'var(--border)'}`,
+      boxShadow: isActive ? '0 0 10px rgba(168,85,247,.08)' : 'none',
+      transition: 'border-color .15s',
+    }}>
       {/* Left accent bar */}
-      <div className="rndv-row-accent" />
+      <div style={{ width: 3, flexShrink: 0, background: `linear-gradient(180deg,${accentColor},${accentColor}55)` }} />
 
-      <div className="rndv-row-body">
-        {/* Top line: number badge · status badge · bar · pct */}
-        <div className="rndv-row-top">
-          <div className="rndv-clip-num">#{slot.part_no}</div>
-
-          <div className={`rndv-badge rndv-badge-${state}`}>
-            {isActive && <span className="rndv-live-dot" />}
-            {isDone && <span className="rndv-check">✓</span>}
-            {isFail && <span className="rndv-fail-x">✕</span>}
-            <span className="rndv-badge-label">{statusLabel}</span>
+      {/* Thumbnail */}
+      <div style={{
+        width: 52, flexShrink: 0,
+        aspectRatio: thumbRatio,
+        background: 'rgba(255,255,255,.04)',
+        overflow: 'hidden', position: 'relative',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {thumbUrl && isDone ? (
+          <img
+            src={thumbUrl}
+            alt=""
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+          />
+        ) : (
+          <span style={{ fontSize: 16, opacity: .25 }}>
+            {isFail ? '✕' : isWait ? '○' : isActive ? '▶' : '✓'}
+          </span>
+        )}
+        {/* Progress overlay for active clips */}
+        {isActive && (
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0, height: 3,
+            background: 'rgba(255,255,255,.08)',
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${pct}%`,
+              background: `linear-gradient(90deg,${accentColor},#4d7cff)`,
+              transition: 'width .4s ease',
+            }} />
           </div>
+        )}
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, padding: '8px 12px', minWidth: 0 }}>
+        {/* Top line */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: isActive ? 6 : 0 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', fontFamily: 'monospace', flexShrink: 0 }}>
+            #{String(slot.part_no).padStart(2, '0')}
+          </span>
+
+          <span style={{
+            fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20, flexShrink: 0,
+            background: `${accentColor}20`, color: accentColor,
+            animation: isActive ? 'rndv-badge-pulse 1.4s ease-in-out infinite' : 'none',
+          }}>
+            {isActive && <span style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: accentColor, marginRight: 4, verticalAlign: 'middle' }} />}
+            {statusLabel}
+          </span>
 
           {/* Progress bar */}
-          <div className="rndv-bar-wrap">
-            <div className="rndv-bar-track">
-              <div
-                className={`rndv-bar-fill rndv-bar-${state}`}
-                style={{ width: `${isDone ? 100 : isFail || isWait ? 0 : pct}%` }}
-              />
-            </div>
+          <div style={{ flex: 1, height: 3, borderRadius: 99, background: 'rgba(255,255,255,.07)', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 99,
+              width: `${isDone ? 100 : isFail || isWait ? 0 : pct}%`,
+              background: isDone
+                ? 'linear-gradient(90deg,#34C878,#22c55e)'
+                : `linear-gradient(90deg,${accentColor},#4d7cff)`,
+              transition: 'width .4s ease',
+            }} />
           </div>
 
-          {/* Percentage / status indicator */}
-          <div className={`rndv-pct rndv-pct-${state}`}>
+          <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'monospace', flexShrink: 0, color: accentColor }}>
             {isDone ? '100%' : isFail ? 'ERR' : isWait ? '—' : `${pct}%`}
-          </div>
+          </span>
         </div>
 
-        {/* Active clip: step nodes + activity label */}
+        {/* Active: step nodes + activity */}
         {isActive && (
-          <div className="rndv-row-detail">
-            {/* Mini step nodes */}
-            <div className="rndv-steps">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               {STEP_NODES.map((n, i) => {
-                const stepState = i < activeStepIdx ? 'done' : i === activeStepIdx ? 'active' : 'pending'
+                const st = i < activeStepIdx ? 'done' : i === activeStepIdx ? 'active' : 'pending'
+                const col = st === 'done' ? '#34C878' : st === 'active' ? '#a855f7' : '#6b7280'
                 return (
                   <React.Fragment key={n.key}>
-                    <div className={`rndv-step rndv-step-${stepState}`}>
-                      <div className="rndv-step-dot">
-                        {stepState === 'done' ? '✓' : stepState === 'active' ? <span className="rndv-step-pulse" /> : null}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <div style={{
+                        width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                        border: `2px solid ${col}`,
+                        background: st === 'done' ? col : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 7,
+                      }}>
+                        {st === 'done' && <span style={{ color: '#000' }}>✓</span>}
+                        {st === 'active' && <span style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: col, animation: 'rndv-badge-pulse 1.2s ease-in-out infinite' }} />}
                       </div>
-                      <span className="rndv-step-label">{n.label}</span>
+                      <span style={{ fontSize: 9, color: col, fontWeight: st === 'active' ? 700 : 500 }}>{n.label}</span>
                     </div>
                     {i < STEP_NODES.length - 1 && (
-                      <div className={`rndv-step-line${i < activeStepIdx ? ' done' : ''}`} />
+                      <div style={{ flex: 1, height: 1, background: i < activeStepIdx ? '#34C878' : 'rgba(255,255,255,.1)', maxWidth: 20 }} />
                     )}
                   </React.Fragment>
                 )
               })}
             </div>
-            {/* Activity text */}
-            {activity && <div className="rndv-activity">{activity}</div>}
+            {activity && (
+              <div style={{ fontSize: 9, color: 'var(--text-3)', paddingLeft: 2 }}>{activity}</div>
+            )}
           </div>
         )}
       </div>
@@ -1746,12 +1647,12 @@ function ClipRow({ slot, statusLabel }: { slot: ClipSlot; statusLabel: string })
 }
 
 function StepRendering({
-  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, wsError, t,
+  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, wsError, t, aspectRatio,
 }: {
   jobId: string | null; stage: string; jobStatus: string
   progress: WsProgressSummary | null; jobMessage: string
   isTerminal: boolean; liveParts: JobPart[]
-  wsError: string | null; t: Strings
+  wsError: string | null; t: Strings; aspectRatio: string
 }) {
   const pct         = progress?.overall_progress_percent ?? 0
   const doneCount   = progress?.completed_parts ?? 0
@@ -1777,6 +1678,7 @@ function StepRendering({
   ]
   const activePhaseIdx = getActivePhaseIdx(stage, jobStatus)
   const clipSlots      = buildClipSlots(liveParts, progress)
+  const thumbRatio     = aspectRatio.replace(':', '/')
 
   function getStatusLabel(s: string): string {
     const sl = s.toLowerCase()
@@ -1851,12 +1753,19 @@ function StepRendering({
       {clipSlots.length === 0 ? (
         <div className="rnd-waiting-msg">
           <span className="rnd-waiting-dot" />
-          {t.rndPreparing}
+          <span>
+            {t.rndPreparing}
+            {jobMessage && (
+              <span style={{ display: 'block', fontSize: '10px', opacity: 0.55, marginTop: 2 }}>
+                {jobMessage}
+              </span>
+            )}
+          </span>
         </div>
       ) : (
         <div className="rndv-clip-list">
           {clipSlots.map((slot) => (
-            <ClipRow key={slot.part_no} slot={slot} statusLabel={getStatusLabel(slot.status)} />
+            <ClipRow key={slot.part_no} slot={slot} statusLabel={getStatusLabel(slot.status)} jobId={jobId} thumbRatio={thumbRatio} />
           ))}
         </div>
       )}

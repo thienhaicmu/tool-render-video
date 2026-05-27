@@ -43,6 +43,7 @@ function ClipRow({
   onClick: () => void
 }) {
   const [thumbError, setThumbError] = useState(false)
+  const [thumbRatio, setThumbRatio] = useState('9/16')
   const thumbSrc = `${BASE_URL}/api/render/jobs/${encodeURIComponent(jobId)}/parts/${part.part_no}/thumbnail?t=0.5&w=80`
 
   return (
@@ -61,10 +62,10 @@ function ClipRow({
         marginBottom: '2px',
       }}
     >
-      {/* Mini vertical thumbnail */}
+      {/* Mini thumbnail — aspect ratio follows actual video output */}
       <div style={{
         width: '32px',
-        height: '56px',
+        aspectRatio: thumbRatio,
         borderRadius: '5px',
         overflow: 'hidden',
         flexShrink: 0,
@@ -76,10 +77,16 @@ function ClipRow({
             src={thumbSrc}
             alt=""
             onError={() => setThumbError(true)}
+            onLoad={(e) => {
+              const img = e.currentTarget
+              if (img.naturalWidth && img.naturalHeight) {
+                setThumbRatio(`${img.naturalWidth}/${img.naturalHeight}`)
+              }
+            }}
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
         ) : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '100%', height: '100%', minHeight: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: '10px', opacity: 0.2, color: '#fff' }}>▶</span>
           </div>
         )}

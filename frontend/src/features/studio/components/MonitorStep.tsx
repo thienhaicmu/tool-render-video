@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getJobHistory } from '../../../api/jobs'
+import { BASE_URL } from '../../../api/client'
 import { useI18n } from '../../../i18n/useI18n'
 import type { HistoryItem } from '../../../types/api'
 
@@ -128,8 +129,9 @@ const STEP_STYLES: Record<string, StepStyle> = {
   skipped:      { label: 'Skipped',    color: 'var(--text-tertiary)',  bg: 'var(--surface-input)' },
 }
 
+
 const STEP_ICONS: Record<string, string> = {
-  waiting: '○', cutting: '✂', transcribing: '♦',
+  waiting: '○', queued: '○', cutting: '✂', transcribing: '♦',
   rendering: '▶', done: '✓', failed: '✕', skipped: '–',
 }
 
@@ -137,113 +139,193 @@ function stepStyle(status: string): StepStyle {
   return STEP_STYLES[status] ?? { label: status, color: 'var(--text-tertiary)', bg: 'var(--surface-input)' }
 }
 
-// ── Clip list ──────────────────────────────────────────────────────────────────
+// ── Clip thumbnail card ────────────────────────────────────────────────────────
 
-function ClipList({ parts, totalCount }: { parts: LivePart[]; totalCount: number }) {
-  // Build full clip rows: use live data if available, else show placeholder
+function ClipCard({ part, jobId }: { part: LivePart; jobId: string }) {
+  const [thumbError, setThumbError] = useState(false)
+  const [thumbRatio, setThumbRatio] = useState('9/16')
+  const ss = stepStyle(part.status)
+  const isActive = !!ss.pulse
+  const isDone = part.status === 'done'
+  const isFailed = part.status === 'failed'
+  const showThumb = !thumbError && (isDone || isActive)
+  const thumbSrc = `${BASE_URL}/api/render/jobs/${encodeURIComponent(jobId)}/parts/${part.part_no}/thumbnail?t=0.5&w=80`
+  const icon = STEP_ICONS[part.status] ?? '○'
+
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '6px',
+      width: '60px',
+      flexShrink: 0,
+    }}>
+      {/* Thumbnail */}
+      <div style={{
+        width: '54px',
+        aspectRatio: thumbRatio,
+        borderRadius: '8px',
+        overflow: 'hidden',
+        backgroundColor: '#0A0C11',
+        border: `1.5px solid ${
+          isDone ? 'rgba(52,200,120,0.4)'
+          : isFailed ? 'rgba(224,82,82,0.4)'
+          : isActive ? 'rgba(168,85,247,0.45)'
+          : 'var(--border-subtle)'
+        }`,
+        position: 'relative',
+        flexShrink: 0,
+        boxShadow: isActive ? '0 0 10px rgba(168,85,247,0.25)' : 'none',
+        transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+      }}>
+        {/* Thumbnail image or placeholder */}
+        {showThumb ? (
+          <img
+            src={thumbSrc}
+            alt=""
+            onError={() => setThumbError(true)}
+            onLoad={(e) => {
+              const img = e.currentTarget
+              if (img.naturalWidth && img.naturalHeight) {
+                setThumbRatio(`${img.naturalWidth}/${img.naturalHeight}`)
+              }
+            }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <div style={{
+            width: '100%',
+            height: '100%',
+            minHeight: '80px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            gap: '4px',
+          }}>
+            <span style={{ fontSize: '16px', color: ss.color, opacity: isDone || isFailed ? 1 : 0.45, lineHeight: 1 }}>
+              {icon}
+            </span>
+            <span style={{ fontSize: '8px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
+              #{part.part_no}
+            </span>
+          </div>
+        )}
+
+        {/* Progress bar overlay (active clips) */}
+        {isActive && (
+          <div style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '3px',
+            backgroundColor: 'rgba(0,0,0,0.4)',
+          }}>
+            {part.progress_percent > 0 ? (
+              <div style={{
+                height: '100%',
+                width: `${part.progress_percent}%`,
+                background: 'linear-gradient(90deg, #a855f7, #4d7cff)',
+                transition: 'width 0.4s ease',
+                boxShadow: '0 0 4px rgba(168,85,247,0.8)',
+              }} />
+            ) : (
+              <div style={{
+                height: '100%',
+                width: '35%',
+                background: 'linear-gradient(90deg, #a855f7, #4d7cff)',
+                animation: 'mon-slide 1.8s ease-in-out infinite',
+              }} />
+            )}
+          </div>
+        )}
+
+        {/* Pulse ring for active */}
+        {isActive && (
+          <div style={{
+            position: 'absolute',
+            top: '5px',
+            right: '5px',
+            width: '7px',
+            height: '7px',
+            borderRadius: '50%',
+            backgroundColor: ss.color,
+            animation: 'mon-pulse 1.5s ease-in-out infinite',
+          }} />
+        )}
+      </div>
+
+      {/* Clip number */}
+      <span style={{
+        fontSize: '9px',
+        fontWeight: 700,
+        color: 'var(--text-tertiary)',
+        fontFamily: 'var(--font-mono)',
+      }}>
+        #{part.part_no}
+      </span>
+
+      {/* Status label */}
+      <span style={{
+        fontSize: '8px',
+        fontWeight: 700,
+        color: ss.color,
+        letterSpacing: '0.03em',
+        textAlign: 'center' as const,
+        lineHeight: 1.2,
+        animation: isActive ? 'mon-pulse 2s ease-in-out infinite' : 'none',
+      }}>
+        {ss.label}
+        {isActive && part.progress_percent > 0 && (
+          <span style={{ display: 'block', color: '#a855f7', marginTop: '1px' }}>
+            {part.progress_percent}%
+          </span>
+        )}
+      </span>
+    </div>
+  )
+}
+
+// ── Clip grid ──────────────────────────────────────────────────────────────────
+
+function ClipList({ parts, totalCount, jobId }: { parts: LivePart[]; totalCount: number; jobId: string }) {
   const partMap = new Map(parts.map((p) => [p.part_no, p]))
   const rows: LivePart[] = Array.from({ length: Math.max(totalCount, parts.length) }, (_, i) => {
     const no = i + 1
     return partMap.get(no) ?? { part_no: no, status: 'waiting', progress_percent: 0 }
   })
 
+  const doneCount = parts.filter((p) => p.status === 'done').length
+  const failedCount = parts.filter((p) => p.status === 'failed').length
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+    <div>
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
-        padding: '0 0 6px 0',
+        padding: '0 0 8px 0',
         borderBottom: '1px solid var(--border-subtle)',
-        marginBottom: '4px',
+        marginBottom: '10px',
       }}>
         <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-tertiary)', letterSpacing: '0.08em', textTransform: 'uppercase' as const }}>
           Clips — {rows.length} total
         </span>
         <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
-          {parts.filter((p) => p.status === 'done').length} done
-          {parts.filter((p) => p.status === 'failed').length > 0
-            ? ` · ${parts.filter((p) => p.status === 'failed').length} failed` : ''}
+          {doneCount} done{failedCount > 0 ? ` · ${failedCount} failed` : ''}
         </span>
       </div>
 
-      {rows.map((p) => {
-        const ss = stepStyle(p.status)
-        const icon = STEP_ICONS[p.status] ?? '○'
-        const isActive = ss.pulse
-        const isDone = p.status === 'done'
-
-        return (
-          <div
-            key={p.part_no}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '8px 10px',
-              borderRadius: '8px',
-              backgroundColor: isActive ? 'rgba(168,85,247,0.03)' : 'transparent',
-              border: `1px solid ${isActive ? 'rgba(168,85,247,0.12)' : 'var(--border-subtle)'}`,
-              transition: 'all 0.2s ease',
-            }}
-          >
-            {/* Clip number */}
-            <span style={{
-              fontSize: '10px',
-              fontWeight: 700,
-              color: 'var(--text-tertiary)',
-              fontFamily: 'var(--font-mono)',
-              flexShrink: 0,
-              width: '36px',
-            }}>
-              Clip {p.part_no}
-            </span>
-
-            {/* Step progress bar (only for active clips) */}
-            {isActive && p.progress_percent > 0 ? (
-              <div style={{ flex: 1, height: '3px', backgroundColor: 'var(--surface-input)', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${p.progress_percent}%`,
-                  background: 'linear-gradient(90deg, #a855f7, #4d7cff)',
-                  borderRadius: '2px',
-                  transition: 'width 0.4s ease',
-                }} />
-              </div>
-            ) : (
-              <div style={{ flex: 1, height: '3px', backgroundColor: isDone ? 'rgba(52,200,120,0.3)' : 'var(--surface-input)', borderRadius: '2px' }} />
-            )}
-
-            {/* Status pill */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '6px',
-              backgroundColor: ss.bg,
-              flexShrink: 0,
-              animation: isActive ? 'mon-pulse 2s ease-in-out infinite' : 'none',
-            }}>
-              <span style={{ fontSize: '9px', color: ss.color, lineHeight: 1 }}>{icon}</span>
-              <span style={{
-                fontSize: '10px',
-                fontWeight: 700,
-                color: ss.color,
-                letterSpacing: '0.03em',
-              }}>
-                {ss.label}
-              </span>
-            </div>
-
-            {/* Progress percent (active only) */}
-            {isActive && p.progress_percent > 0 && (
-              <span style={{ fontSize: '10px', color: '#a855f7', fontWeight: 600, flexShrink: 0, width: '30px', textAlign: 'right' as const, fontFamily: 'var(--font-mono)' }}>
-                {p.progress_percent}%
-              </span>
-            )}
-          </div>
-        )
-      })}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '10px',
+      }}>
+        {rows.map((p) => (
+          <ClipCard key={p.part_no} part={p} jobId={jobId} />
+        ))}
+      </div>
     </div>
   )
 }
@@ -252,6 +334,7 @@ function ClipList({ parts, totalCount }: { parts: LivePart[]; totalCount: number
 
 interface ActivePanelProps {
   item: HistoryItem
+  jobId: string
   progress: number
   stage: string
   etaSec: number | null
@@ -260,7 +343,7 @@ interface ActivePanelProps {
   onCancel: () => void
 }
 
-function ActivePanel({ item, progress, stage, etaSec, liveParts, wsConnected, onCancel }: ActivePanelProps) {
+function ActivePanel({ item, jobId, progress, stage, etaSec, liveParts, wsConnected, onCancel }: ActivePanelProps) {
   const isDone = item.status === 'completed' || item.status === 'completed_with_errors'
   const isFailed = item.status === 'failed' || item.status === 'cancelled'
   const isRunning = !isDone && !isFailed
@@ -387,8 +470,8 @@ function ActivePanel({ item, progress, stage, etaSec, liveParts, wsConnected, on
       {/* Pipeline stage track */}
       <PipelineTrack stage={stage} done={isDone} />
 
-      {/* Clip list */}
-      <ClipList parts={liveParts} totalCount={item.total_count || 0} />
+      {/* Clip grid */}
+      <ClipList parts={liveParts} totalCount={item.total_count || 0} jobId={jobId} />
     </div>
   )
 }
@@ -582,9 +665,10 @@ export function MonitorStep({ jobId, onComplete }: MonitorStepProps) {
 
       <div style={s.page}>
         {/* ── Active job panel ── */}
-        {currentItem && (
+        {currentItem && jobId && (
           <ActivePanel
             item={currentItem}
+            jobId={jobId}
             progress={progress}
             stage={stage}
             etaSec={etaSec}

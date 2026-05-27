@@ -7,6 +7,8 @@ const crypto = require('crypto');
 
 const BACKEND_URL = 'http://127.0.0.1:8000';
 const HEALTH_URL = `${BACKEND_URL}/health`;
+const VITE_DEV_URL = 'http://localhost:5173';
+const isDev = process.env.ELECTRON_DEV === '1';
 const DEV_ROOT = path.resolve(__dirname, '..');
 const APP_ROOT = app.isPackaged ? process.resourcesPath : DEV_ROOT;
 const BACKEND_DIR = path.join(APP_ROOT, 'backend');
@@ -400,9 +402,13 @@ function createWindow() {
     closeSplash();
     mainWindow.show();
   });
-  // Force fresh UI load to avoid stale cached index.html after frontend updates.
-  mainWindow.webContents.session.clearCache().catch(() => {});
-  mainWindow.loadURL(`${BACKEND_URL}/?v=${Date.now()}`);
+  if (isDev) {
+    mainWindow.loadURL(VITE_DEV_URL);
+  } else {
+    // Force fresh UI load to avoid stale cached index.html after frontend updates.
+    mainWindow.webContents.session.clearCache().catch(() => {});
+    mainWindow.loadURL(`${BACKEND_URL}/?v=${Date.now()}`);
+  }
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -410,10 +416,14 @@ function createWindow() {
 async function bootstrap() {
   createSplash();
   try {
-    sendSplash('Checking render engine...');
-    const ready = await healthCheck();
-    if (!ready) {
-      await startBackend();
+    if (isDev) {
+      sendSplash('Dev mode — waiting for backend on :8000 ...');
+    } else {
+      sendSplash('Checking render engine...');
+      const ready = await healthCheck();
+      if (!ready) {
+        await startBackend();
+      }
     }
     const maxWait = 120000;
     const ok = await waitBackendReady(maxWait, (elapsed) => {

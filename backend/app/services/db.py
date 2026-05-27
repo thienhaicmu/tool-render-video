@@ -28,4 +28,12 @@ from app.db.creator_repo import (
     upsert_creator_prefs,
 )
 
+from app.db.download_repo import (
+    create_download_job,
+    update_download_job,
+    get_download_job,
+    list_download_jobs,
+    delete_download_job,
+)
+
 logger = logging.getLogger("app.db")

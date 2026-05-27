@@ -1,0 +1,10 @@
+{
+  "name": "tool-render-video",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "powershell -ExecutionPolicy Bypass -File dev.ps1",
+    "dev": "powershell -ExecutionPolicy Bypass -File dev.ps1",
+    "backend": "powershell -ExecutionPolicy Bypass -File run-backend-v2.ps1"
+  }
+}

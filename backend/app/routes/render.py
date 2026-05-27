@@ -201,7 +201,7 @@ def prepare_source(payload: PrepareSourceRequest):
         step="render.prepare_source",
     )
     try:
-        mode = (payload.source_mode or "youtube").lower().strip()
+        mode = (payload.source_mode or "local").lower().strip()
         _emit_render_event(
             channel_code="preview",
             job_id=session_id,
@@ -317,7 +317,7 @@ def prepare_source(payload: PrepareSourceRequest):
             level="ERROR",
             message=f"Source preparation failed: {exc.detail}",
             step="render.prepare_source.error",
-            context={"source_mode": (payload.source_mode or "youtube").lower().strip(), "url": (payload.youtube_url or "").strip(), "path": (payload.source_video_path or "").strip()},
+            context={"source_mode": (payload.source_mode or "local").lower().strip(), "url": (payload.youtube_url or "").strip(), "path": (payload.source_video_path or "").strip()},
             exception=exc,
             traceback_text=traceback.format_exc(),
         )
@@ -331,7 +331,7 @@ def prepare_source(payload: PrepareSourceRequest):
             level="ERROR",
             message=f"Source preparation failed: {exc}",
             step="render.prepare_source.error",
-            context={"source_mode": (payload.source_mode or "youtube").lower().strip(), "url": (payload.youtube_url or "").strip(), "path": (payload.source_video_path or "").strip()},
+            context={"source_mode": (payload.source_mode or "local").lower().strip(), "url": (payload.youtube_url or "").strip(), "path": (payload.source_video_path or "").strip()},
             exception=exc,
             traceback_text=traceback.format_exc(),
         )

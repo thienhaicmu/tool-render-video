@@ -247,10 +247,10 @@ class TestRenderRequestInstantiation:
         req = RenderRequest()
         assert req.target_platform == "youtube_shorts"
 
-    def test_default_ai_director_disabled(self):
+    def test_default_ai_director_enabled(self):
         from backend.app.models.schemas import RenderRequest
         req = RenderRequest()
-        assert req.ai_director_enabled is False
+        assert req.ai_director_enabled is True
 
     def test_model_dump_is_serializable(self):
         """model_dump() should produce a JSON-serializable dict."""

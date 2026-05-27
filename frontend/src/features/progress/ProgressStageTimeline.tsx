@@ -10,23 +10,32 @@ interface Stage {
 }
 
 const STAGES: Stage[] = [
-  { key: 'queued',     label: 'Queued' },
-  { key: 'analyzing',  label: 'Analyzing' },
-  { key: 'rendering',  label: 'Rendering' },
-  { key: 'finalizing', label: 'Finalizing' },
-  { key: 'complete',   label: 'Complete' },
+  { key: 'queued',        label: 'Queued' },
+  { key: 'analyzing',     label: 'Analyzing' },
+  { key: 'rendering',     label: 'Rendering' },
+  { key: 'writing_report', label: 'Finishing' },
+  { key: 'done',          label: 'Done' },
 ]
 
 /** Map backend stage to milestone index */
 function stageToIndex(stage: string | null | undefined): number {
   switch (stage) {
-    case 'starting':         return 0
-    case 'segment_building': return 1
-    case 'rendering':        return 2
-    case 'finalizing':       return 3
+    case 'queued':
+    case 'starting':
+    case 'running':            return 0
+    case 'analyzing':
+    case 'downloading':        // backward compat with stored records
+    case 'scene_detection':
+    case 'segment_building':
+    case 'transcribing_full':  return 1
+    case 'rendering':
+    case 'rendering_parallel': return 2
+    case 'writing_report':     return 3
+    case 'done':
     case 'complete':
-    case 'error':            return 4
-    default:                 return 0
+    case 'finalizing':         return 4
+    case 'failed':             return 4
+    default:                   return 0
   }
 }
 

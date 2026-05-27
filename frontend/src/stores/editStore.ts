@@ -3,6 +3,12 @@ import { create } from 'zustand'
 export type TargetPlatform = 'tiktok' | 'youtube_shorts' | 'instagram_reels'
 export type RenderProfile = 'fast' | 'balanced' | 'quality' | 'best'
 export type PartOrder = 'viral' | 'sequential'
+export type VideoType = 'auto' | 'viral' | 'storytelling' | 'educational' | 'emotional' | 'high_retention'
+export type EnergyStyle = 'auto' | 'fast' | 'balanced' | 'slow'
+export type HookStrength = 'aggressive' | 'balanced' | 'soft'
+export type FocusMode = 'auto' | 'face' | 'object' | 'center'
+export type TargetMarket = 'US' | 'VN' | 'JP' | 'KR' | 'EU' | 'SEA'
+export type NarrationStyle = 'auto' | 'energetic' | 'calm' | 'emotional'
 
 export interface ClipRange {
   start_sec: number
@@ -35,6 +41,21 @@ export interface EditSettings {
   reframeMode: string
 
   clipLock: ClipRange[] | null
+
+  // v2 vision fields
+  targetDuration: number
+  outputCount: number
+  videoType: VideoType
+  energyStyle: EnergyStyle
+  hookStrength: HookStrength
+  focusMode: FocusMode
+  targetMarket: TargetMarket
+  outputLanguage: string
+  narrationEnabled: boolean
+  narrationLanguage: string
+  narrationStyle: NarrationStyle
+  sourceVideoPath: string
+  outputDir: string
 }
 
 const PLATFORM_PRESETS: Record<TargetPlatform, Pick<EditSettings, 'aspectRatio' | 'outputFps'>> = {
@@ -65,10 +86,25 @@ export const DEFAULT_EDIT_SETTINGS: EditSettings = {
   voiceLanguage:     'en-US',
   voiceGender:       'female',
 
-  motionAwareCrop:   false,
+  motionAwareCrop:   true,
   reframeMode:       'subject',
 
   clipLock:          null,
+
+  // v2 vision fields
+  targetDuration:    90,
+  outputCount:       1,
+  videoType:         'auto',
+  energyStyle:       'auto',
+  hookStrength:      'balanced',
+  focusMode:         'auto',
+  targetMarket:      'US',
+  outputLanguage:    'auto',
+  narrationEnabled:  false,
+  narrationLanguage: 'vi',
+  narrationStyle:    'auto',
+  sourceVideoPath:   '',
+  outputDir:         '',
 }
 
 interface EditStore {

@@ -18,7 +18,7 @@ from fastapi import HTTPException
 from app.models.schemas import RenderRequest
 from app.services.db import upsert_job, update_job_progress, upsert_job_part, list_job_parts, close_thread_conn
 from app.services.channel_service import ensure_channel
-from app.services.downloader import download_youtube, slugify
+from app.services.downloader import slugify
 from app.services.scene_detector import detect_scenes
 from app.services.segment_builder import build_segments_from_scenes, refine_segment_boundaries, refine_cuts_for_naturalness
 from app.services.clip_scorer import score_scenes_clip, CLIP_SCORER_VERSION
@@ -37,7 +37,7 @@ from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
 from app.services.viral_scorer import score_segments, apply_retention_proxy
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
 from app.services.report_service import append_rows
-from app.core.config import TEMP_DIR, CHANNELS_DIR, LOGS_DIR
+from app.core.config import TEMP_DIR, CHANNELS_DIR, LOGS_DIR, APP_DATA_DIR
 from app.core.stage import JobStage, JobPartStage, STAGE_TO_EVENT
 from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin, _summarize_ffmpeg_stderr
 from app.services.text_overlay import normalize_text_layers, MAX_TEXT_LAYERS
@@ -142,7 +142,7 @@ def _scene_cache_get(source_path: str) -> list | None:
             return None
         st = sp.stat()
         key = _render_cache_key(source_path, st.st_mtime, st.st_size)
-        cache_file = Path(tempfile.gettempdir()) / "render_cache" / "scene_detect" / f"{key}.json"
+        cache_file = APP_DATA_DIR / "cache" / "scene_detect" / f"{key}.json"
         if not cache_file.exists():
             return None
         if time.time() - cache_file.stat().st_mtime > _RENDER_CACHE_TTL_SEC:
@@ -158,7 +158,7 @@ def _scene_cache_put(source_path: str, scenes: list) -> None:
         sp = Path(source_path)
         st = sp.stat()
         key = _render_cache_key(source_path, st.st_mtime, st.st_size)
-        cache_dir = Path(tempfile.gettempdir()) / "render_cache" / "scene_detect"
+        cache_dir = APP_DATA_DIR / "cache" / "scene_detect"
         cache_dir.mkdir(parents=True, exist_ok=True)
         (cache_dir / f"{key}.json").write_text(json.dumps(scenes), encoding="utf-8")
     except Exception:
@@ -172,7 +172,7 @@ def _transcription_cache_get(source_path: str, model_name: str, cache_suffix: st
             return None
         st = sp.stat()
         key = _render_cache_key(source_path, st.st_mtime, st.st_size, model_name, cache_suffix)
-        cache_file = Path(tempfile.gettempdir()) / "render_cache" / "transcription" / f"{key}.srt"
+        cache_file = APP_DATA_DIR / "cache" / "transcription" / f"{key}.srt"
         if not cache_file.exists():
             return None
         if time.time() - cache_file.stat().st_mtime > _RENDER_CACHE_TTL_SEC:
@@ -190,7 +190,7 @@ def _transcription_cache_put(source_path: str, model_name: str, cache_suffix: st
         sp = Path(source_path)
         st = sp.stat()
         key = _render_cache_key(source_path, st.st_mtime, st.st_size, model_name, cache_suffix)
-        cache_dir = Path(tempfile.gettempdir()) / "render_cache" / "transcription"
+        cache_dir = APP_DATA_DIR / "cache" / "transcription"
         cache_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(srt_path), str(cache_dir / f"{key}.srt"))
     except Exception:
@@ -199,7 +199,7 @@ def _transcription_cache_put(source_path: str, model_name: str, cache_suffix: st
 
 def _score_cache_get(key: str) -> list | None:
     try:
-        cache_file = Path(tempfile.gettempdir()) / "render_cache" / "segment_scores" / f"{key}.json"
+        cache_file = APP_DATA_DIR / "cache" / "segment_scores" / f"{key}.json"
         if not cache_file.exists():
             return None
         if time.time() - cache_file.stat().st_mtime > _RENDER_CACHE_TTL_SEC:
@@ -212,7 +212,7 @@ def _score_cache_get(key: str) -> list | None:
 
 def _score_cache_put(key: str, scored: list) -> None:
     try:
-        cache_dir = Path(tempfile.gettempdir()) / "render_cache" / "segment_scores"
+        cache_dir = APP_DATA_DIR / "cache" / "segment_scores"
         cache_dir.mkdir(parents=True, exist_ok=True)
         (cache_dir / f"{key}.json").write_text(json.dumps(scored), encoding="utf-8")
     except Exception:
@@ -1285,7 +1285,7 @@ def run_render_pipeline(
                 "the session may have expired or the server was restarted. "
                 "Please re-open the editor to re-prepare the source."
             )
-        detected_source_mode = "session" if sess else ((payload.source_mode or "youtube").lower())
+        detected_source_mode = "session" if sess else "local"
         _emit_render_event(
             channel_code=effective_channel,
             job_id=job_id,
@@ -1332,7 +1332,12 @@ def run_render_pipeline(
                 context={"strategy": "editor_session"},
             )
             _job_log(effective_channel, job_id, f"Reusing editor session video: {source_path}")
-        elif (payload.source_mode or "youtube").lower() == "local":
+        else:
+            if payload.source_mode and payload.source_mode.lower() not in ("local",):
+                raise RuntimeError(
+                    f"Unsupported source_mode '{payload.source_mode}'. "
+                    "Only local video files are supported."
+                )
             source_path = Path(payload.source_video_path or "").expanduser().resolve()
             if not source_path.exists() or not source_path.is_file():
                 raise RuntimeError(
@@ -1365,63 +1370,6 @@ def run_render_pipeline(
                 context={"strategy": "local_source"},
             )
             _job_log(effective_channel, job_id, f"Local source selected: {source_path}")
-        else:
-            yt_url = (payload.youtube_url or "").strip() or (payload.youtube_urls[0] if payload.youtube_urls else "")
-            _job_log(effective_channel, job_id, f"YouTube source URL: {yt_url}")
-            _emit_render_event(
-                channel_code=effective_channel,
-                job_id=job_id,
-                event="render.prepare_source.prepare_paths",
-                level="INFO",
-                message="Preparing source paths",
-                step="render.prepare_source.prepare_paths",
-                context={"work_dir": str(work_dir)},
-            )
-            _emit_render_event(
-                channel_code=effective_channel,
-                job_id=job_id,
-                event="render.prepare_source.select_strategy",
-                level="INFO",
-                message="Selecting YouTube download strategy",
-                step="render.prepare_source.select_strategy",
-                context={"strategy": "youtube_download", "url": yt_url},
-            )
-            _emit_render_event(
-                channel_code=effective_channel,
-                job_id=job_id,
-                event="render.download.start",
-                level="INFO",
-                message="Downloading source from YouTube",
-                step="render.download",
-                context={"url": yt_url, "source_quality_mode": payload.source_quality_mode},
-            )
-            source = download_youtube(
-                yt_url,
-                work_dir,
-                quality_mode=payload.source_quality_mode,
-                cancel_event=cancel_registry.get_event(job_id),
-            )
-            _emit_render_event(
-                channel_code=effective_channel,
-                job_id=job_id,
-                event="render.download.success",
-                level="INFO",
-                message="YouTube source downloaded",
-                step="render.download",
-                context={
-                    "title": source.get("title", ""),
-                    "duration": source.get("duration", 0),
-                    "format": source.get("selected_format", ""),
-                },
-            )
-            _job_log(
-                effective_channel,
-                job_id,
-                f"Downloaded source: {source['title']} ({source['duration']}s) | "
-                f"height={source.get('selected_height', 0)} fps={source.get('selected_fps', 0)} "
-                f"format={source.get('selected_format', '')}",
-            )
-            source_path = Path(source["filepath"])
         _emit_render_event(
             channel_code=effective_channel,
             job_id=job_id,
@@ -1499,8 +1447,7 @@ def run_render_pipeline(
             _job_log(effective_channel, job_id, f"Edits applied → {edited_path} | new_duration={source['duration']}s")
 
         # Pre-render source preflight: catch local files moved/deleted after initial validation
-        _detected_source_mode = (payload.source_mode or "youtube").lower()
-        if _detected_source_mode == "local" and not source_path.exists():
+        if detected_source_mode == "local" and not source_path.exists():
             raise RuntimeError(
                 f"Render stopped: the source video file was moved or deleted.\n"
                 f"Path: {source_path}\n"

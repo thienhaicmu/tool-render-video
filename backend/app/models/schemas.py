@@ -37,7 +37,7 @@ class ChannelInfo(BaseModel):
 # ── Render ───────────────────────────────────────────────────────────────
 
 class PrepareSourceRequest(BaseModel):
-    source_mode: Optional[str] = "youtube"
+    source_mode: Optional[str] = "local"
     youtube_url: Optional[str] = ""
     source_video_path: Optional[str] = ""
     session_id: Optional[str] = None  # client-provided UUID; server generates one if absent
@@ -108,7 +108,7 @@ class TextLayerConfig(BaseModel):
 
 class RenderRequest(BaseModel):
     # Source
-    source_mode: Optional[str] = "youtube"
+    source_mode: Optional[str] = "local"
     source_quality_mode: str = "standard_1080"
     youtube_url: Optional[str] = ""
     youtube_urls: Optional[list[str]] = Field(default_factory=list)
@@ -167,7 +167,7 @@ class RenderRequest(BaseModel):
     aspect_ratio: str = "3:4"
     frame_scale_x: int = 100
     frame_scale_y: int = 106
-    motion_aware_crop: bool = False
+    motion_aware_crop: bool = True
     reframe_mode: str = "subject"
 
     # Overlay / effect
@@ -214,7 +214,7 @@ class RenderRequest(BaseModel):
     viral_market: Optional[str] = None
     ai_target_market: Optional[str] = None
     hook_applied_text: Optional[str] = None
-    hook_apply_enabled: bool = False
+    hook_apply_enabled: bool = True
     hook_overlay_enabled: bool = False
     hook_score: Optional[float] = None
     subtitle_edits: Optional[list] = None
@@ -223,15 +223,15 @@ class RenderRequest(BaseModel):
     auto_best_export_enabled: bool = False
     auto_best_export_count: int = 3
 
-    # AI Director (Phase 1) — all default to disabled so old requests are unaffected.
-    ai_director_enabled: bool = False
+    # AI Director (Phase 1) — enabled by default; AI is the primary editor.
+    ai_director_enabled: bool = True
     ai_mode: str = "viral_tiktok"
     ai_auto_cut: bool = True
     ai_target_duration: Optional[int] = None
     ai_use_semantic_hooks: bool = True
     ai_use_rag_memory: bool = True
-    # AI Render Influence (Phase 10) — opt-in only; false = original behavior preserved.
-    ai_render_influence_enabled: bool = False
+    # AI Render Influence (Phase 10) — enabled by default.
+    ai_render_influence_enabled: bool = True
     # AI Beat Execution (Phase 11) — opt-in beat-aware planning; defaults preserve old behavior.
     ai_beat_execution_enabled: bool = False
     ai_beat_pulse_enabled: bool = True
@@ -288,6 +288,32 @@ class RenderRequest(BaseModel):
     asset_outro_path: Optional[str] = None
     asset_music_profile: Optional[str] = None
     asset_brand_subtitle: Optional[str] = None
+
+    # ── New vision fields (v2) ────────────────────────────────────────────────
+    # Output Goals
+    target_duration: int = 90
+    output_count: int = 1
+    video_type: str = "auto"          # auto|viral|storytelling|educational|emotional|high_retention
+
+    # AI Style
+    energy_style: str = "auto"        # auto|fast|balanced|slow
+    hook_strength: str = "balanced"   # aggressive|balanced|soft
+
+    # Market & Language
+    output_language: str = "auto"     # auto|vi|en|ja|ko
+
+    # Narration (AI-directed)
+    narration_style: str = "auto"     # auto|energetic|calm|emotional
+
+    @field_validator("target_duration")
+    @classmethod
+    def _validate_target_duration(cls, v: int) -> int:
+        return max(60, min(350, int(v)))
+
+    @field_validator("output_count")
+    @classmethod
+    def _validate_output_count(cls, v: int) -> int:
+        return max(1, min(20, int(v)))
 
     @field_validator("ai_clip_min_duration_sec")
     @classmethod

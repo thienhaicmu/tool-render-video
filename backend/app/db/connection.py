@@ -233,6 +233,37 @@ def init_db():
         )
         """
     )
+    # ── Platform downloader jobs (standalone, not tied to render pipeline) ────
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS download_jobs (
+            id          TEXT PRIMARY KEY,
+            url         TEXT NOT NULL,
+            platform    TEXT DEFAULT '',
+            status      TEXT DEFAULT 'queued',
+            progress    INTEGER DEFAULT 0,
+            speed_str   TEXT DEFAULT '',
+            eta_str     TEXT DEFAULT '',
+            output_path TEXT DEFAULT '',
+            output_dir  TEXT DEFAULT '',
+            filename    TEXT DEFAULT '',
+            title       TEXT DEFAULT '',
+            duration    REAL DEFAULT 0,
+            height      INTEGER DEFAULT 0,
+            fps         REAL DEFAULT 0,
+            filesize    INTEGER DEFAULT 0,
+            error_msg   TEXT DEFAULT '',
+            created_at  TEXT DEFAULT (datetime('now')),
+            updated_at  TEXT DEFAULT (datetime('now'))
+        )
+        """
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_dl_jobs_status ON download_jobs(status)"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_dl_jobs_created ON download_jobs(created_at DESC)"
+    )
     conn.commit()
     conn.close()
 

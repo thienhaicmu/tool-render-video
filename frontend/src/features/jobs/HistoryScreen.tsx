@@ -5,7 +5,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import './HistoryScreen.css'
 
-import { Button } from '../../components/ui/Button'
 import { JobList } from './JobList'
 import { JobFilters } from './JobFilters'
 import { JobDetailDrawer } from './JobDetailDrawer'
@@ -165,20 +164,59 @@ export function HistoryScreen() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
+  const activeCount    = items.filter(i => isActiveStatus(i.status)).length
+  const completedCount = items.filter(i => i.status === 'completed' || i.status === 'partial').length
+  const failedCount    = items.filter(i => i.status === 'failed').length
+
   return (
     <div className="history-screen">
-      {/* Header */}
-      <div className="history-header">
-        <h1>Render History</h1>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={refreshJobs}
-          disabled={loading}
-          data-testid="refresh-btn"
-        >
-          {loading ? 'Loading…' : 'Refresh'}
-        </Button>
+      <style>{`@keyframes job-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }`}</style>
+
+      {/* ── Header ── */}
+      <div style={{
+        padding: '14px 18px 12px', flexShrink: 0,
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg-panel)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div>
+            <div style={{ fontFamily: 'var(--fh)', fontSize: 15, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.5px' }}>
+              LỊCH SỬ RENDER
+            </div>
+            {items.length > 0 && (
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>
+                {items.length} job · {completedCount} xong · {failedCount > 0 ? `${failedCount} lỗi · ` : ''}{activeCount > 0 ? `${activeCount} đang chạy` : ''}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {activeCount > 0 && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                background: 'var(--accent-dim)', color: 'var(--accent)',
+                border: '1px solid rgba(123,97,255,.3)',
+              }}>
+                {activeCount} đang chạy
+              </span>
+            )}
+            <button
+              onClick={refreshJobs}
+              disabled={loading}
+              data-testid="refresh-btn"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px',
+                borderRadius: 6, border: '1px solid var(--border)',
+                background: 'var(--bg-card)', color: 'var(--text-2)',
+                fontSize: 11, fontFamily: 'var(--fh)', fontWeight: 700, letterSpacing: '.4px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? .5 : 1, transition: 'opacity .12s',
+              }}
+            >
+              <span style={{ fontSize: 12, display: 'inline-block', animation: loading ? 'job-pulse 1s linear infinite' : undefined }}>↺</span>
+              {loading ? 'ĐANG TẢI…' : 'LÀM MỚI'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Filters */}

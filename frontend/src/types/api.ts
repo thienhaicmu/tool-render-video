@@ -142,6 +142,15 @@ export interface RenderRequest {
   asset_intro_path?: string | null
   asset_outro_path?: string | null
   asset_music_profile?: 'clean' | 'energetic' | 'soft' | null
+
+  // Vision v2 fields
+  target_duration?: number
+  output_count?: number
+  video_type?: string
+  energy_style?: string
+  hook_strength?: string
+  output_language?: string
+  narration_style?: string
 }
 
 // ── RenderResponse ────────────────────────────────────────────────────────────

@@ -170,7 +170,7 @@ class TestInitDbLiveTablesPresent:
         finally:
             conn.close()
 
-    def test_exactly_three_live_tables(self, tmp_path, monkeypatch):
+    def test_exactly_four_live_tables(self, tmp_path, monkeypatch):
         _reset_db_path(monkeypatch, tmp_path / "test.db")
         from app.db.connection import get_conn, init_db
         init_db()
@@ -179,7 +179,7 @@ class TestInitDbLiveTablesPresent:
             tables = _get_tables(conn)
             # Exclude the write-check helper table if present
             real_tables = {t for t in tables if t != "__db_write_check"}
-            assert real_tables == {"jobs", "job_parts", "creator_prefs"}, (
+            assert real_tables == {"jobs", "job_parts", "creator_prefs", "download_jobs"}, (
                 f"Unexpected tables after init_db(): {real_tables}"
             )
         finally:

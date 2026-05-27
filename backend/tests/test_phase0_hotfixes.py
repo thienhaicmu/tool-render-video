@@ -276,16 +276,15 @@ class TestDownloadYouTubeTimeout:
             "Progress hook in download_youtube() must check cancel_event.is_set()"
         )
 
-    def test_render_pipeline_passes_cancel_event_to_download(self):
-        """render_pipeline.py must forward the job cancel_event to
-        download_youtube() so a cancelled job can abort a stalled download."""
+    def test_render_pipeline_does_not_call_download_youtube(self):
+        """render_pipeline.py must not call download_youtube() — only local
+        video files are supported as render sources."""
         from app.orchestration import render_pipeline
 
         src = inspect.getsource(render_pipeline)
-        assert "cancel_event=cancel_registry.get_event(job_id)" in src, (
-            "render_pipeline.py must pass "
-            "cancel_event=cancel_registry.get_event(job_id) "
-            "to download_youtube()"
+        assert "download_youtube" not in src, (
+            "render_pipeline.py must not call download_youtube() — "
+            "YouTube URL source mode has been removed; only local video files are supported"
         )
 
     def test_cancel_event_set_raises_on_download(self, tmp_path):

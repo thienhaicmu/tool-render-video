@@ -11,15 +11,12 @@ from app.services.channel_service import ensure_channel
 from app.services.maintenance import prune_job_logs, prune_preview_dirs, prune_render_temp_dirs
 from app.core.config import APP_DATA_DIR, CHANNELS_DIR, TEMP_DIR
 from app.routes.channels import router as channels_router
-from app.routes.download import router as download_router
 from app.routes.render import router as render_router
 from app.routes.jobs import router as jobs_router
 from app.routes.voice import router as voice_router
-from app.routes.viral import router as viral_router
-from app.routes.subtitle import router as subtitle_router
-from app.routes.creator import router as creator_router
 from app.routes.files import router as files_router
 from app.routes.editing import router as editing_router
+from app.routes.platform_downloader import router as platform_downloader_router
 from app.services.job_manager import recover_pending_render_jobs, shutdown as shutdown_job_manager
 from app.services.warmup import start_warmup, get_status as warmup_status
 from app.core.ui_gate import resolve_static_directory
@@ -100,7 +97,6 @@ os.environ.setdefault("TMP",  str(_DATA_DIR / "tmp"))
 
 app = FastAPI(title="YT TikTok Desktop Local Platform")
 app.include_router(channels_router)
-app.include_router(download_router)
 app.include_router(render_router)
 app.include_router(jobs_router)
 # Security: POST /api/dev/command executes arbitrary shell commands with no auth.
@@ -109,11 +105,9 @@ if os.getenv("ENABLE_DEVTOOLS") == "1":
     from app.routes.devtools import router as devtools_router
     app.include_router(devtools_router)
 app.include_router(voice_router)
-app.include_router(viral_router)
-app.include_router(subtitle_router)
-app.include_router(creator_router)
 app.include_router(files_router)
 app.include_router(editing_router)
+app.include_router(platform_downloader_router)
 # Static file mount — path and name vary by UI version so both can coexist safely
 if _UI_VERSION == "v2":
     # static-v2 index.html uses relative paths (assets/…) so mount at /assets

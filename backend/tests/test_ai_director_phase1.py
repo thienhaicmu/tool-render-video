@@ -370,7 +370,7 @@ def test_render_request_has_ai_director_fields():
 
     req = RenderRequest()
     assert hasattr(req, "ai_director_enabled")
-    assert req.ai_director_enabled is False  # default must be False (no regression)
+    assert req.ai_director_enabled is True  # AI Director always on by default
     assert hasattr(req, "ai_mode")
     assert hasattr(req, "ai_auto_cut")
     assert hasattr(req, "ai_target_duration")
@@ -378,9 +378,9 @@ def test_render_request_has_ai_director_fields():
     assert hasattr(req, "ai_use_rag_memory")
 
 
-def test_render_request_ai_director_disabled_by_default():
-    """Old render requests without ai_director_enabled must behave exactly as before."""
+def test_render_request_ai_director_enabled_by_default():
+    """AI Director must be on by default — it is always active."""
     from app.models.schemas import RenderRequest
 
     req = RenderRequest(source_video_path="/tmp/test.mp4")
-    assert req.ai_director_enabled is False
+    assert req.ai_director_enabled is True

@@ -6,7 +6,8 @@ class JobStage(str, Enum):
     QUEUED             = "queued"
     STARTING           = "starting"
     RUNNING            = "running"            # batch job lifecycle
-    DOWNLOADING        = "downloading"
+    ANALYZING          = "analyzing"          # local video analysis (replaces download stage)
+    DOWNLOADING        = "downloading"        # kept for backward compat with stored records
     SCENE_DETECTION    = "scene_detection"
     SEGMENT_BUILDING   = "segment_building"
     TRANSCRIBING_FULL  = "transcribing_full"
@@ -34,6 +35,7 @@ STAGE_TO_EVENT: dict[str, str] = {
     JobStage.QUEUED:             "render.start",
     JobStage.STARTING:           "render.start",
     JobStage.RUNNING:            "render.start",
+    JobStage.ANALYZING:          "render.analyze.start",
     JobStage.DOWNLOADING:        "render.download.start",
     JobStage.SCENE_DETECTION:    "render.scene.detect.start",
     JobStage.SEGMENT_BUILDING:   "render.segment.build.start",

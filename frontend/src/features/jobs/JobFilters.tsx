@@ -1,6 +1,3 @@
-/**
- * JobFilters — search input + status filter dropdown.
- */
 import type { StatusFilter } from './jobs.types'
 
 export interface JobFiltersProps {
@@ -10,70 +7,78 @@ export interface JobFiltersProps {
   onStatusFilterChange: (value: StatusFilter) => void
 }
 
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: 'all',       label: 'All'       },
-  { value: 'running',   label: 'Rendering' },
-  { value: 'completed', label: 'Complete'  },
-  { value: 'failed',    label: 'Failed'    },
-  { value: 'cancelled', label: 'Canceled'  },
+const STATUS_OPTIONS: { value: StatusFilter; label: string; color?: string }[] = [
+  { value: 'all',       label: 'Tất cả' },
+  { value: 'running',   label: 'Đang chạy', color: 'var(--accent)' },
+  { value: 'completed', label: 'Xong',       color: 'var(--ok)'     },
+  { value: 'failed',    label: 'Lỗi',        color: 'var(--fail)'   },
+  { value: 'cancelled', label: 'Đã hủy',     color: 'var(--text-3)' },
 ]
 
-export function JobFilters({
-  search,
-  onSearchChange,
-  statusFilter,
-  onStatusFilterChange,
-}: JobFiltersProps) {
+export function JobFilters({ search, onSearchChange, statusFilter, onStatusFilterChange }: JobFiltersProps) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 'var(--space-3)',
-        padding: 'var(--space-4)',
-        borderBottom: '1px solid var(--color-border)',
-        alignItems: 'center',
-      }}
-    >
-      <input
-        type="text"
-        value={search}
-        onChange={(e) => onSearchChange(e.target.value)}
-        placeholder="Search by title, source, or job ID"
-        data-testid="history-search-input"
-        style={{
-          flex: 1,
-          padding: '6px 12px',
-          backgroundColor: 'var(--color-bg-elevated)',
-          color: 'var(--color-text-primary)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          fontSize: 'var(--font-size-sm)',
-          fontFamily: 'var(--font-family-base)',
-          outline: 'none',
-        }}
-      />
-      <select
-        value={statusFilter}
-        onChange={(e) => onStatusFilterChange(e.target.value as StatusFilter)}
-        data-testid="history-status-filter"
-        style={{
-          padding: '6px 10px',
-          backgroundColor: 'var(--color-bg-elevated)',
-          color: 'var(--color-text-primary)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          fontSize: 'var(--font-size-sm)',
-          fontFamily: 'var(--font-family-base)',
-          cursor: 'pointer',
-          outline: 'none',
-        }}
-      >
-        {STATUS_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+    <div style={{
+      padding: '10px 14px',
+      borderBottom: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column', gap: 7, flexShrink: 0,
+      background: 'var(--bg-panel)',
+    }}>
+      {/* Search */}
+      <div style={{ position: 'relative' }}>
+        <span style={{
+          position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)',
+          fontSize: 12, color: 'var(--text-3)', pointerEvents: 'none',
+        }}>⌕</span>
+        <input
+          type="text"
+          value={search}
+          onChange={e => onSearchChange(e.target.value)}
+          placeholder="Tìm kiếm theo tên hoặc nguồn..."
+          data-testid="history-search-input"
+          style={{
+            width: '100%', height: 30, paddingLeft: 26, paddingRight: 10,
+            background: 'var(--bg-card)', color: 'var(--text-1)',
+            border: '1px solid var(--border)', borderRadius: 6, fontSize: 11,
+            fontFamily: 'var(--fb)', outline: 'none', boxSizing: 'border-box',
+            transition: 'border-color .12s',
+          }}
+          onFocus={e => e.currentTarget.style.borderColor = 'var(--border-hi)'}
+          onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
+        />
+      </div>
+
+      {/* Filter pills */}
+      <div style={{ display: 'flex', gap: 4 }}>
+        {STATUS_OPTIONS.map(opt => {
+          const active = statusFilter === opt.value
+          return (
+            <button
+              key={opt.value}
+              data-testid={opt.value === 'all' ? 'history-status-filter' : undefined}
+              onClick={() => onStatusFilterChange(opt.value)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '3px 9px', borderRadius: 20, fontSize: 10,
+                fontWeight: 700, fontFamily: 'var(--fh)', letterSpacing: '.4px',
+                cursor: 'pointer', border: 'none', transition: 'all .12s',
+                background: active ? (opt.color ? opt.color + '22' : 'var(--accent-dim)') : 'var(--bg-card)',
+                color: active ? (opt.color ?? 'var(--accent)') : 'var(--text-3)',
+                boxShadow: active
+                  ? `0 0 0 1px ${opt.color ?? 'var(--accent)'}55`
+                  : '0 0 0 1px var(--border)',
+              }}
+            >
+              {opt.color && (
+                <span style={{
+                  width: 5, height: 5, borderRadius: '50%',
+                  background: opt.color, flexShrink: 0,
+                }} />
+              )}
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
