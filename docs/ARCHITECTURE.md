@@ -49,7 +49,19 @@ Render pipeline: backend/app/orchestration/render_pipeline.py
         |       --> ContentAnalysisResult (shared by all downstream AI consumers)
         |
         +--> Segment scoring (viral_scorer — enriched with narrative_phase, hook_proximity)
+        |
+        +--> [Phase 1] Unified Scoring
+        |       +--> select_ai_segments(transcript chunks)
+        |       +--> match AI windows to heuristic segments by time overlap (>=30%)
+        |       +--> write ai_blend_bonus (0-15 pts) onto matched segments
+        |       --> blended score flows through hook-first + story-arc sequencing
+        |
         +--> AI Director metadata planning (reads ContentAnalysisResult — no re-analysis)
+        |       +--> [Phase 2] Cloud reranker (Groq): clip_type, thumbnail_sec, drop signal
+        |       +--> [Phase 5] Audio energy analyzer: exclamation density, ALL-CAPS,
+        |       |     energy keywords, speech acceleration (0-20 pts, transcript-only)
+        |       +--> [Phase 6] Feedback bias: channel rating history -> hook_type/clip_type bonus
+        |
         +--> Subtitle / translation / ASS styling
         +--> Motion crop / reframe
         +--> Voice narration / audio mix
@@ -70,12 +82,12 @@ Output clips, reports, result_json, logs
 | Static frontend | `backend/static/index.html`, `backend/static/js/*`, `backend/static/css/app.css` | Render setup, editor, download view, history, job monitor, output gallery. |
 | FastAPI app | `backend/app/main.py` | Mounts static UI, registers routes, initializes DB, starts warmup/recovery tasks. |
 | API routes | `backend/app/routes/*.py` | Render preparation/submission, jobs, downloads, voice profiles, upload/channels. |
-| Job system | `backend/app/services/job_manager.py`, `backend/app/services/db.py` | SQLite job/part rows, in-process priority queue, startup recovery. |
+| Job system | `backend/app/services/job_manager.py`, `backend/app/services/db.py` | SQLite job/part rows, in-process priority queue (O(1) duplicate check via mirror set), startup recovery. |
 | Render pipeline | `backend/app/orchestration/render_pipeline.py` | End-to-end render orchestration, pre-render setup, render loop, and result JSON assembly. Reduced from 5,816 → 2,959 lines in Phase A (A-1..A-4). |
 | Render pipeline helpers | `backend/app/orchestration/pipeline_helpers.py` | Subtitle slicing, SRT/ASS utilities, CTA blocks, platform profiles, playback speed helpers. Extracted in Phase A-1. |
 | Render pipeline AI phases | `backend/app/orchestration/pipeline_ai_phases.py` | AI Director invocation, timing mutations, emphasis config, visual intensity, cover hint resolution. Extracted in Phase A-2. |
 | Part renderer | `backend/app/orchestration/stages/part_renderer.py` | `PartRenderContext` dataclass + `prepare_part_assets()` + `process_one_part()`. Carries all per-part render logic (cut, transcribe, subtitle, voice, FFmpeg, QA, scoring). Extracted in Phase A-3. |
-| Pre-render scenes | `backend/app/orchestration/pipeline_pre_render.py` | Scene detection, segment building, viral scoring, early transcription, visual analysis, content analysis. `run_pre_render_scenes()` → `PreRenderScenesResult`. Extracted in Phase A-6. |
+| Pre-render scenes | `backend/app/orchestration/pipeline_pre_render.py` | Scene detection, segment building, viral scoring, early transcription, visual analysis, content analysis, unified AI score blend (Phase 1). `run_pre_render_scenes()` → `PreRenderScenesResult`. Extracted in Phase A-6. |
 | Render loop | `backend/app/orchestration/pipeline_render_loop.py` | JOB_SEMAPHORE acquire/release, worker throttle, sequential/parallel FFmpeg encode loop, per-part failure handling. `run_render_loop()` → `RenderLoopResult`. Extracted in Phase A-7. |
 | Render services | `backend/app/services/*.py` | FFmpeg, subtitles, motion crop, TTS, translation, scoring, downloader, reports. |
 | AI intelligence | `backend/app/ai/**` | AI Director, scoring, planning, creator/market/subtitle/camera/quality metadata. |
@@ -94,8 +106,8 @@ Important routes:
 | `/api/jobs` | `backend/app/routes/jobs.py` | Job/part state, logs, history, WebSocket progress, media streaming. |
 | `/api/download` | `backend/app/routes/download.py` | Standalone batch downloader. |
 | `/api/voice` | `backend/app/routes/voice.py` | Voice profile list APIs. |
-| `/api/upload` | `backend/app/routes/upload.py` | Upload automation and scheduler APIs. |
 | `/api/channels` | `backend/app/routes/channels.py` | Channel and output-folder management. |
+| `/api/feedback` | `backend/app/routes/feedback.py` | Per-clip user ratings (thumbs up/down), channel feedback summary, hook_type scores. |
 
 There is no `backend/app/api` package in the current implementation; the real API layer is `backend/app/routes`.
 
@@ -298,6 +310,9 @@ HybridAnalyzer  (ai/analysis/hybrid_analyzer.py)
         v
   AnalysisSignals  (unified output schema)
     .clip_signals     — per-window hook scores + relevance + hook_type
+                        + clip_type (hook/payoff/educational/emotional/transition)  [Phase 2]
+                        + thumbnail_sec                                              [Phase 2]
+                        + drop flag (cloud reranker signals low quality)            [Phase 2]
     .emotion          — dominant emotion label + score
     .subtitle_hints   — style_preset, highlight_keywords, density
     .camera_hints     — behavior, zoom_strength, follow_strength
@@ -309,7 +324,9 @@ HybridAnalyzer  (ai/analysis/hybrid_analyzer.py)
 
 | Downstream | Effect |
 |---|---|
-| `clip_selector._apply_cloud_enrichment()` | Blends cloud hook scores into local candidate scores; re-sorts candidates |
+| `clip_selector._apply_cloud_enrichment()` | Blends cloud hook scores into local candidate scores; copies clip_type and thumbnail_sec; drops clips flagged drop=True [Phase 2] |
+| `clip_selector._select_diverse()` | Applies clip_type diversity penalty — too many clips of same type reduces score [Phase 2] |
+| `audio_energy_analyzer.score_audio_energy()` | Transcript-only audio energy proxy: exclamation density, ALL-CAPS, energy keywords, speech acceleration (0-20 pts per clip) [Phase 5] |
 | `pacing_ctx` in `_build_plan()` | Cloud emotion overrides local when confidence ≥ 40 |
 | `pacing_ctx` cloud hint fields | `cloud_subtitle_density`, `cloud_subtitle_preset`, `cloud_camera_behavior` available to planners |
 | `camera_planner` | Receives enriched pacing_ctx → better behavior decisions |
@@ -335,6 +352,103 @@ Cloud analysis is entirely disabled unless `ai_cloud_enabled=True` is explicitly
 ### Extension points
 
 Adding a new cloud provider requires one new file implementing `CloudAnalyzerBase._call_api()`. Adding a new local analyzer requires extending `LocalAnalyzer._score_clips()`. Neither change requires modifying `ai_director.py`.
+
+## Unified Scoring Layer (Phase 1)
+
+**Stability marker: Semi-stable implementation**
+
+When Phase 46 content analysis produces transcript chunks, `pipeline_pre_render.py` runs
+`select_ai_segments()` (the same function used by AI Director) and blends the resulting
+scores back into the heuristic `scored[]` list before final sorting.
+
+### How it works
+
+```text
+Phase 46 ContentAnalysisResult.chunks (transcript)
+        |
+        v
+select_ai_segments(chunks, scenes, mode_config)
+        |
+        v
+For each heuristic segment:
+    find best-overlap AI window (>= 30% of segment duration)
+    ai_blend_bonus = min(15.0, ai_score * 0.15)
+        |
+        v
+Sort key: (viral_score + ai_blend_bonus) x structure_bias x dna_bonus x platform_hook
+        |
+        v
+Hook-first sequencing -> Story arc (hook -> build -> payoff)
+```
+
+### Properties
+
+- **Max influence:** +15 pts onto a viral_score that typically ranges 0-150 (~10% max)
+- **Non-replacing:** heuristic segments are kept; only their sort weight changes
+- **Idempotent fallback:** any exception logs and continues with unblended scores
+- **ENV gate:** `UNIFIED_SCORING_ENABLED=0` disables entirely
+- **Cache-safe:** `ai_blend_bonus` is computed after score cache read/write (never cached itself)
+- **Activates when:** `ai_early_transcription=True` or `ai_content_driven_selection=True`
+
+### Relationship to Phase 44
+
+| Condition | Result |
+|-----------|--------|
+| `ai_content_driven_selection=False` | Phase 1 blends AI scores into heuristic order |
+| `ai_content_driven_selection=True` | Phase 44 replaces `scored[]` entirely; Phase 1 blend already baked in |
+
+---
+
+## Feedback Learning Loop (Phase 6)
+
+**Stability marker: Experimental / needs verification**
+
+Users can rate individual rendered clips with thumbs up/down in the results screen.
+Ratings accumulate per channel and are applied as score bonuses/penalties in future renders
+for the same channel.
+
+### Data model
+
+```sql
+clip_feedback (
+    job_id, part_no, channel_code, goal,
+    rating INTEGER CHECK(rating IN (-1, 1)),
+    hook_type, clip_type,
+    start_sec, end_sec, duration_sec,
+    rated_at,
+    UNIQUE(job_id, part_no)
+)
+```
+
+### Learning signal flow
+
+```text
+User clicks thumbs up/down on a clip in StepResults (frontend)
+        |
+POST /api/feedback/jobs/{id}/parts/{no}
+        |
+clip_feedback table (channel_code + goal + hook_type + clip_type)
+        |
+        v (next render for same channel)
+feedback_scorer.build_feedback_context(channel_code, goal)
+    -> hook_type_net: {hook_type: liked_count - disliked_count}
+    -> clip_type_net: {clip_type: liked_count - disliked_count}
+    -> avg_liked_position: float (position bias)
+        |
+apply_feedback_bias(candidates, feedback_context)
+    -> hook_type bonus/penalty (max +-4 pts)
+    -> clip_type bonus/penalty (max +-2 pts)
+    -> position bias (max +1.5 pts)
+```
+
+### Safety properties
+
+- Rating the same clip twice toggles it off (DELETE then re-rate)
+- `build_feedback_context` returns empty dict on any DB error
+- `apply_feedback_bias` catches all exceptions — failure is silent and advisory only
+- ENV gate: `FEEDBACK_SCORING_ENABLED=0` disables entirely
+
+---
 
 ## Render Intelligence Layer
 

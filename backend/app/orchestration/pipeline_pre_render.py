@@ -425,6 +425,51 @@ def run_pre_render_scenes(
         _job_log(effective_channel, job_id, f"score_cache_miss type=segment_scores segments={len(scored)}")
         if _score_ck:
             _score_cache_put(_score_ck, scored)
+    # Phase 1: Unified scoring -- AI transcript blend
+    # When Phase 46 content analysis produced chunks, run select_ai_segments()
+    # to get transcript-based scores and blend them into heuristic viral_score
+    # as a soft bonus (max +15 pts). Applied on both cache-hit and cache-miss
+    # paths so the blend is always fresh. ENV gate: UNIFIED_SCORING_ENABLED=0.
+    if os.getenv("UNIFIED_SCORING_ENABLED", "1") == "1":
+        _us_chunks = (
+            getattr(_content_analysis, "chunks", None)
+            if _content_analysis is not None and getattr(_content_analysis, "available", False)
+            else None
+        ) or []
+        if _us_chunks:
+            try:
+                from app.ai.director.clip_selector import select_ai_segments as _sel_ai
+                from app.ai.config.ai_modes import get_mode_config as _get_mode_cfg
+                _us_mode = _get_mode_cfg(
+                    str(getattr(payload, "video_type", "") or "viral_tiktok")
+                )
+                _us_segs = _sel_ai(
+                    chunks=_us_chunks,
+                    scenes=scenes,
+                    duration=float(source.get("duration", 0) or 0),
+                    mode_config=_us_mode,
+                )
+                if _us_segs:
+                    for _seg in scored:
+                        _s = float(_seg.get("start", 0))
+                        _e = float(_seg.get("end", 0))
+                        _seg_dur = max(_e - _s, 1.0)
+                        _best_bonus = 0.0
+                        for _ai in _us_segs:
+                            _ov = max(0.0, min(_e, float(_ai.get("end", 0))) - max(_s, float(_ai.get("start", 0))))
+                            if _ov / _seg_dur >= 0.30:
+                                _best_bonus = max(_best_bonus, min(15.0, float(_ai.get("score", 0)) * 0.15))
+                        if _best_bonus > 0.0:
+                            _seg["ai_blend_bonus"] = round(_best_bonus, 2)
+                    _us_matched = sum(1 for s in scored if "ai_blend_bonus" in s)
+                    _us_max = max((s.get("ai_blend_bonus", 0.0) for s in scored), default=0.0)
+                    _job_log(
+                        effective_channel, job_id,
+                        f"unified_scoring: ai_segs={len(_us_segs)} matched={_us_matched}/{len(scored)} "
+                        f"max_bonus={_us_max:.1f}",
+                    )
+            except Exception as _us_err:
+                _job_log(effective_channel, job_id, f"unified_scoring_skipped: {_us_err}", kind="warning")
     # UP26: Clip exclude â€” remove creator-blacklisted timestamp ranges before selection
     _clip_exclude = [x for x in (getattr(payload, 'clip_exclude', None) or []) if isinstance(x, dict)]
     if _clip_exclude:
@@ -470,7 +515,7 @@ def run_pre_render_scenes(
     _combined_enabled = bool(getattr(payload, "combined_scoring_enabled", False))
     if _combined_enabled:
         def _provisional_combined(s):
-            vs = float(s.get("viral_score", 0) or 0)
+            vs = float(s.get("viral_score", 0) or 0) + float(s.get("ai_blend_bonus", 0) or 0)
             hs = float(s.get("hook_text_score") or s.get("hook_timing_score") or
                        s.get("hook_opening_score") or s.get("hook_score") or 0)
             # mv not yet computed; fallback = vs â†’ vs*0.50 + vs*0.30 + hs*0.20 = vs*0.80 + hs*0.20
@@ -481,7 +526,7 @@ def run_pre_render_scenes(
     else:
         scored.sort(
             key=lambda x: (
-                int(x.get("viral_score", 0) * _sb_viral_mult)
+                int((x.get("viral_score", 0) + x.get("ai_blend_bonus", 0)) * _sb_viral_mult)
                 + (8 if _apply_motion_boost and int(x.get("motion_score", 0)) >= HIGH_MOTION_MIN_SCORE else 0)
                 + int(float(x.get("hook_score", 0) or 0) * (_platform_hook_bonus + _dna_hook_bonus) / 100 * _sb_hook_mult),
                 int(x.get("motion_score", 0)),
@@ -604,10 +649,8 @@ def run_pre_render_scenes(
         # P4-1: Hook-first sequencing â€” strongest hook at index 0
         def _hook_score(c):
             return (
-                c.get("combined_score")
-                or c.get("market_viral_score")
-                or c.get("viral_score")
-                or 0
+                float(c.get("combined_score") or c.get("market_viral_score") or c.get("viral_score") or 0)
+                + float(c.get("ai_blend_bonus", 0) or 0)
             )
         _sorted = sorted(scored, key=_hook_score, reverse=True)
         _best = _sorted[0]
@@ -690,7 +733,7 @@ def run_pre_render_scenes(
             if _dominant_ct in ("interview", "tutorial", "vlog"):
                 _arc_build.sort(key=lambda s: float(s.get("start", 0) or 0))
             else:
-                _arc_build.sort(key=lambda s: float(s.get("viral_score", 0) or 0), reverse=True)
+                _arc_build.sort(key=lambda s: float(s.get("viral_score", 0) or 0) + float(s.get("ai_blend_bonus", 0) or 0), reverse=True)
     
             scored = [_arc_hook] + _arc_build + [_arc_payoff]
     

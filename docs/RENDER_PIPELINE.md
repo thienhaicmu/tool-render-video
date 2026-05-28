@@ -30,8 +30,14 @@ Input payload
                  optional editor trim/volume, optional source archive
   -> [Layer 4]   scene detection  ──► VisualAnalysisResult
   -> [Layer 5]   segment generation, viral/hook/motion scoring
+  -> [Layer 5.1] Phase 1 unified scoring: AI transcript blend via select_ai_segments()
+                 ai_blend_bonus (0-15 pts) written onto matched segments before final sort
+                 ENV gate: UNIFIED_SCORING_ENABLED=0 to disable
   -> optional full subtitle transcription
-  -> optional AI Director planning
+  -> optional AI Director planning:
+                 Phase 2: cloud reranker (Groq) -> clip_type, thumbnail_sec, drop signal
+                 Phase 5: audio energy analyzer (transcript-based, 0-20 pts per clip)
+                 Phase 6: feedback bias (channel rating history -> hook_type/clip_type bonus)
   -> optional bounded AI render influence
   -- per-part loop --
   -> [Layer 6]   per-part execution plan (cut, speed, SRT inputs)
