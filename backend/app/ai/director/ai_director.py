@@ -225,6 +225,11 @@ def _bootstrap_hybrid_analyzer(request: Any, chunks: list, context: dict):
             cloud = GroqProvider(api_key=api_key, model=model)
 
         # "cloud" mode: return cloud result directly, fallback to local on cloud failure
+        if mode == "cloud" and cloud is None:
+            logger.warning(
+                "ai_director_cloud_mode_no_credentials: mode=cloud requested but no valid "
+                "provider/api_key resolved — falling back to local analysis"
+            )
         if mode == "cloud" and cloud is not None:
             cloud_result = cloud.analyze(chunks, analysis_ctx)
             if cloud_result is not None:

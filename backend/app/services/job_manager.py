@@ -267,5 +267,11 @@ def recover_pending_render_jobs():
             logger.info(
                 "Startup: marked %d job(s) as interrupted. User can resume from UI.", marked
             )
+        else:
+            logger.info(
+                "Startup: no interrupted jobs — queue is clean. "
+                "Note: jobs queued in memory at shutdown are not auto-restarted; "
+                "only DB-persisted jobs with status 'queued'/'running' are recovered."
+            )
     except Exception as exc:
         logger.warning("Job recovery marking failed (non-fatal): %s", exc)

@@ -835,8 +835,12 @@ def quick_process(payload: QuickProcessRequest):
         raise HTTPException(status_code=400, detail="resize_width and resize_height must be provided together")
     if payload.resize_width is not None and payload.resize_width <= 0:
         raise HTTPException(status_code=400, detail="resize_width must be > 0")
+    if payload.resize_width is not None and payload.resize_width > 7680:
+        raise HTTPException(status_code=400, detail="resize_width must be <= 7680 (8K)")
     if payload.resize_height is not None and payload.resize_height <= 0:
         raise HTTPException(status_code=400, detail="resize_height must be > 0")
+    if payload.resize_height is not None and payload.resize_height > 4320:
+        raise HTTPException(status_code=400, detail="resize_height must be <= 4320 (8K)")
     if payload.black_min_duration <= 0:
         raise HTTPException(status_code=400, detail="black_min_duration must be > 0")
     if payload.black_threshold < 0 or payload.black_threshold > 1:

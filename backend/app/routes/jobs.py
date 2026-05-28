@@ -29,23 +29,38 @@ def _classify_error_kind(job: dict) -> str:
 
     Only called when job status == 'failed'. Returns a stable string constant
     that the frontend maps to a human-readable label and icon.
+
+    Classification priority:
+      1. Stage field — pipeline-controlled value, never user input.
+      2. Message field — only matched against specific technical strings that
+         cannot plausibly appear in user-supplied titles or paths.
     """
-    stage = (job.get("stage") or "").upper()
+    stage = (job.get("stage") or "").upper().strip()
     msg   = (job.get("message") or "").lower()
 
-    if stage == "DOWNLOADING" or "download" in msg or "yt-dlp" in msg or "youtube" in msg:
+    # Stage-primary: pipeline sets these, not user input
+    if stage == "DOWNLOADING":
         return "DOWNLOAD_FAILED"
-    if stage == "TRANSCRIBING" or "whisper" in msg or "transcri" in msg:
+    if stage == "TRANSCRIBING":
         return "WHISPER_FAILED"
+    if stage in ("CANCELLED", "CANCELLING"):
+        return "CANCELLED"
+
+    # Technical error strings unlikely to appear in user-supplied content
     if "not found on disk" in msg or "source file not found" in msg or "filenotfounderror" in msg:
         return "SOURCE_NOT_FOUND"
-    if "ffmpeg" in msg or "encode" in msg or "mux" in msg:
+    if "ffmpeg render failed" in msg or "ffmpeg timed out" in msg or "ffmpeg cancelled" in msg:
         return "FFMPEG_FAILED"
-    if "qa" in stage or "quality" in msg or "validation" in msg or "corrupt" in msg:
+    if "qa" in stage or "output validation failed" in msg or "output file too small" in msg or "corrupt" in msg:
         return "QA_FAILED"
-    if "voice" in msg or "tts" in msg or "narration" in msg:
+    if "tts failed" in msg or "voice synthesis" in msg or "narration failed" in msg:
         return "VOICE_FAILED"
-    if stage == "CANCELLED" or "cancel" in msg:
+    # Fallback message signals for missing stage (e.g. old jobs, edge paths)
+    if "yt-dlp" in msg or "download failed" in msg:
+        return "DOWNLOAD_FAILED"
+    if "whisper" in msg or "transcription failed" in msg:
+        return "WHISPER_FAILED"
+    if "cancel" in stage or ("cancel" in msg and "not" not in msg):
         return "CANCELLED"
     return "RENDER_FAILED"
 
