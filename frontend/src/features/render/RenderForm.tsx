@@ -18,8 +18,7 @@ import { SummaryCard } from './components/SummaryCard'
 import './RenderForm.css'
 
 export const DEFAULT_FORM_STATE: RenderFormState = {
-  source_mode: 'youtube',
-  youtube_url: '',
+  source_mode: 'local',
   source_video_path: '',
   output_dir: '',
   target_platform: 'youtube_shorts',

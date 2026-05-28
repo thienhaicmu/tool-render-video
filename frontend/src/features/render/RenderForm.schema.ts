@@ -27,17 +27,9 @@ export function validateRenderForm(state: RenderFormState): RenderFormErrors {
     errors.output_dir = 'Output directory is required'
   }
 
-  // Source mode validation
-  if (state.source_mode === 'youtube') {
-    if (!state.youtube_url || state.youtube_url.trim() === '') {
-      errors.youtube_url = 'YouTube URL is required'
-    } else if (!state.youtube_url.trim().startsWith('http')) {
-      errors.youtube_url = 'YouTube URL must start with http'
-    }
-  } else if (state.source_mode === 'local') {
-    if (!state.source_video_path || state.source_video_path.trim() === '') {
-      errors.source_video_path = 'Source video path is required'
-    }
+  // Source mode validation (local only)
+  if (!state.source_video_path || state.source_video_path.trim() === '') {
+    errors.source_video_path = 'Source video path is required'
   }
 
   // min_part_sec: must be >= 5
@@ -94,11 +86,7 @@ export function buildRenderPayload(state: RenderFormState): RenderRequest {
     playback_speed: state.playback_speed,
   }
 
-  if (state.source_mode === 'youtube') {
-    payload.youtube_url = state.youtube_url
-  } else {
-    payload.source_video_path = state.source_video_path
-  }
+  payload.source_video_path = state.source_video_path
 
   if (state.title_overlay_text && state.title_overlay_text.trim() !== '') {
     payload.title_overlay_text = state.title_overlay_text

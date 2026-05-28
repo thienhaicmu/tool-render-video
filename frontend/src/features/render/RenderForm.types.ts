@@ -3,8 +3,7 @@
  */
 
 export interface RenderFormState {
-  source_mode: 'youtube' | 'local'
-  youtube_url: string
+  source_mode: 'local'
   source_video_path: string
   output_dir: string
   target_platform: string
@@ -37,7 +36,6 @@ export interface RenderFormState {
 
 export interface RenderFormErrors {
   output_dir?: string
-  youtube_url?: string
   source_video_path?: string
   min_part_sec?: string
   max_part_sec?: string

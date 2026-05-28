@@ -23,7 +23,7 @@ export function SummaryCard({ state, isValid, isSubmitting, onSubmit }: SummaryC
       <h3 style={headingStyle}>Render Summary</h3>
 
       <dl style={dlStyle}>
-        <SummaryRow label="Source" value={state.source_mode === 'youtube' ? 'YouTube' : 'Local File'} />
+        <SummaryRow label="Source" value="Local File" />
         <SummaryRow label="Platform" value={state.target_platform} />
         <SummaryRow label="Aspect" value={state.aspect_ratio} />
         <SummaryRow label="Duration" value={`${state.min_part_sec}s – ${state.max_part_sec}s`} />
