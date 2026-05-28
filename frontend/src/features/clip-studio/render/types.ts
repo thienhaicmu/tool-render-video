@@ -55,10 +55,11 @@ export interface ConfigState {
   narrationStyle:  'auto' | 'energetic' | 'calm' | 'emotional'
   subDensity:      'auto' | 'low' | 'medium' | 'high'
   subLanguage:     string
-  aiAnalysisMode:  'local' | 'cloud' | 'hybrid'
-  aiCloudProvider: 'groq' | 'openai'
-  aiCloudApiKey:   string
-  aiCloudModel:    string
+  aiAnalysisMode:    'local' | 'cloud' | 'hybrid'
+  aiCloudProvider:   'groq' | 'openai'
+  aiCloudApiKey:     string
+  aiCloudModel:      string
+  aiContentDriven:   boolean
 }
 
 export type ClipSlot = {

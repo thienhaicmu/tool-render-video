@@ -419,6 +419,8 @@ def api_get_job_ai_summary(job_id: str):
         for e in output_ranking
     ]
 
+    hybrid_analysis: dict = ai_director.get("hybrid_analysis") or {}
+
     return {
         "job_id":           job_id,
         "available":        True,
@@ -435,6 +437,7 @@ def api_get_job_ai_summary(job_id: str):
         "rejected_count":   len(rejected_segments),
         "rejected_segments": rejected_segments,
         "output_ranking_warning": result.get("output_ranking_warning") or "",
+        "hybrid_analysis":  hybrid_analysis,
     }
 
 

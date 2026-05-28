@@ -28,7 +28,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const prepareAbortRef                   = useRef<AbortController | null>(null)
 
   const [cfgTab, setCfgTab] = useState<CfgTab>('ai')
-  const [cfg, setCfg] = useState<ConfigState>({
+  const [cfg, setCfg] = useState<ConfigState>(() => ({
     preset: 'viral', ratio: 'r916', minSec: 30, maxSec: 60, clipCount: 5,
     style: 'slay_soft_01', platform: 'tiktok', aiMarket: 'us',
     aiEnabled: true, multiVariant: false, ctaEnabled: false, ctaType: 'auto',
@@ -48,8 +48,12 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     energyStyle: 'auto', hookStrength: 'balanced', focusMode: 'auto',
     outputLanguage: 'auto', narrationStyle: 'auto',
     subDensity: 'auto', subLanguage: 'auto',
-    aiAnalysisMode: 'hybrid', aiCloudProvider: 'groq', aiCloudApiKey: '', aiCloudModel: '',
-  })
+    aiAnalysisMode: 'hybrid',
+    aiCloudProvider:  (localStorage.getItem('rw_ai_cloud_provider') as 'groq' | 'openai') ?? 'groq',
+    aiCloudApiKey:    localStorage.getItem('rw_ai_cloud_api_key') ?? '',
+    aiCloudModel:     '',
+    aiContentDriven:  false,
+  }))
 
   const [jobId, setJobId]               = useState<string | null>(null)
   const [submitError, setSubmitError]   = useState<string | null>(null)
@@ -157,6 +161,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   }
 
   function setCfgKey<K extends keyof ConfigState>(k: K, v: ConfigState[K]) {
+    if (k === 'aiCloudApiKey')   localStorage.setItem('rw_ai_cloud_api_key', v as string)
+    if (k === 'aiCloudProvider') localStorage.setItem('rw_ai_cloud_provider', v as string)
     setCfg((p) => ({ ...p, [k]: v }))
   }
   function applyPreset(id: string) {
@@ -199,12 +205,13 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       voice_gender:        cfg.narrEnabled ? cfg.voiceGender : undefined,
       tts_engine:          cfg.narrEnabled ? cfg.ttsEngine : undefined,
       voice_mix_mode:      cfg.narrEnabled ? cfg.voiceMixMode : undefined,
-      ai_director_enabled: cfg.aiEnabled,
-      ai_analysis_mode:    cfg.aiEnabled ? cfg.aiAnalysisMode : undefined,
-      ai_cloud_enabled:    cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' && !!cfg.aiCloudApiKey,
-      ai_cloud_provider:   cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' ? cfg.aiCloudProvider : undefined,
-      ai_cloud_api_key:    cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' && cfg.aiCloudApiKey ? cfg.aiCloudApiKey : undefined,
-      ai_cloud_model:      cfg.aiEnabled && cfg.aiCloudModel ? cfg.aiCloudModel : undefined,
+      ai_director_enabled:        cfg.aiEnabled,
+      ai_analysis_mode:           cfg.aiEnabled ? cfg.aiAnalysisMode : undefined,
+      ai_cloud_enabled:           cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' && !!cfg.aiCloudApiKey,
+      ai_cloud_provider:          cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' ? cfg.aiCloudProvider : undefined,
+      ai_cloud_api_key:           cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' && cfg.aiCloudApiKey ? cfg.aiCloudApiKey : undefined,
+      ai_cloud_model:             cfg.aiEnabled && cfg.aiCloudModel ? cfg.aiCloudModel : undefined,
+      ai_content_driven_selection: cfg.aiEnabled && cfg.aiContentDriven || undefined,
       multi_variant:       cfg.multiVariant || undefined,
       cta_enabled:         cfg.ctaEnabled || undefined,
       cta_type:            cfg.ctaEnabled ? cfg.ctaType : undefined,

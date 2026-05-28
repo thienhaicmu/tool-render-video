@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { BASE_URL } from '../../../../api/client'
-import { getPreviewVideoUrl, getPreviewTranscript } from '../../../../api/render'
+import { getPreviewVideoUrl, getPreviewTranscript, testCloudAi } from '../../../../api/render'
 import type { TranscriptSegment, PrepareSourceResponse } from '../../../../api/render'
 import type { ConfigState, CfgTab, Source, Ratio } from '../types'
 import type { Strings } from '../i18n'
@@ -280,6 +280,33 @@ export function StepConfigure({
   void applyPreset
   const [cfgMode, setCfgMode] = React.useState<'quick' | 'advanced'>('quick')
   const adv = cfgMode === 'advanced'
+
+  type TestStatus = 'idle' | 'testing' | 'ok' | 'error'
+  const [testStatus, setTestStatus] = React.useState<TestStatus>('idle')
+  const [testMsg, setTestMsg]       = React.useState('')
+
+  async function handleTestConnection() {
+    if (!cfg.aiCloudApiKey) return
+    setTestStatus('testing')
+    setTestMsg('')
+    try {
+      const res = await testCloudAi(
+        cfg.aiCloudProvider,
+        cfg.aiCloudApiKey,
+        cfg.aiCloudModel || undefined,
+      )
+      if (res.ok) {
+        setTestStatus('ok')
+        setTestMsg(`${res.model} · ${res.latency_ms}ms`)
+      } else {
+        setTestStatus('error')
+        setTestMsg(res.error ?? 'Connection failed')
+      }
+    } catch {
+      setTestStatus('error')
+      setTestMsg('Request failed')
+    }
+  }
 
   const src          = sources[0]
   const ratioInfo    = RATIO_INFO[cfg.ratio]
@@ -710,17 +737,39 @@ export function StepConfigure({
                           </button>
                         ))}
                       </div>
-                      <input
-                        type="password"
-                        value={cfg.aiCloudApiKey}
-                        onChange={(e) => setCfgKey('aiCloudApiKey', e.target.value)}
-                        placeholder={cfg.aiCloudProvider === 'groq' ? 'gsk_...' : 'sk-...'}
-                        style={{
-                          width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
-                          border: '1px solid var(--border-default)', backgroundColor: 'var(--surface-input)',
-                          color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' as const,
-                        }}
-                      />
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <input
+                          type="password"
+                          value={cfg.aiCloudApiKey}
+                          onChange={(e) => { setCfgKey('aiCloudApiKey', e.target.value); setTestStatus('idle') }}
+                          placeholder={cfg.aiCloudProvider === 'groq' ? 'gsk_...' : 'sk-...'}
+                          style={{
+                            flex: 1, padding: '6px 8px', borderRadius: 6, fontSize: 11,
+                            border: `1px solid ${testStatus === 'ok' ? '#22c55e' : testStatus === 'error' ? '#ef4444' : 'var(--border-default)'}`,
+                            backgroundColor: 'var(--surface-input)',
+                            color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' as const,
+                          }}
+                        />
+                        <button
+                          onClick={handleTestConnection}
+                          disabled={!cfg.aiCloudApiKey || testStatus === 'testing'}
+                          style={{
+                            padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                            cursor: cfg.aiCloudApiKey && testStatus !== 'testing' ? 'pointer' : 'not-allowed',
+                            border: '1px solid var(--border-default)',
+                            backgroundColor: testStatus === 'ok' ? 'rgba(34,197,94,.15)' : testStatus === 'error' ? 'rgba(239,68,68,.12)' : 'var(--surface-input)',
+                            color: testStatus === 'ok' ? '#22c55e' : testStatus === 'error' ? '#ef4444' : 'var(--text-secondary)',
+                            whiteSpace: 'nowrap' as const, flexShrink: 0,
+                          }}
+                        >
+                          {testStatus === 'testing' ? '...' : testStatus === 'ok' ? '✓' : testStatus === 'error' ? '✗' : 'Test'}
+                        </button>
+                      </div>
+                      {(testStatus === 'ok' || testStatus === 'error') && (
+                        <div style={{ fontSize: 10, color: testStatus === 'ok' ? '#22c55e' : '#ef4444', marginTop: -2 }}>
+                          {testStatus === 'ok' ? `Connected · ${testMsg}` : testMsg}
+                        </div>
+                      )}
                       <input
                         type="text"
                         value={cfg.aiCloudModel}
@@ -734,6 +783,34 @@ export function StepConfigure({
                       />
                     </div>
                   )}
+
+                  {/* AI Content-Driven Selection */}
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-default)' }}>
+                    <div className="tog-row" style={{ alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+                          AI selects clips
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2, lineHeight: 1.4 }}>
+                          {cfg.aiAnalysisMode === 'local'
+                            ? 'AI picks clips from transcript analysis. Add cloud key for best results.'
+                            : cfg.aiCloudApiKey
+                              ? 'AI overrides heuristic clip ranking with semantic selection.'
+                              : 'Enter API key above to enable cloud-powered clip selection.'}
+                        </div>
+                      </div>
+                      <Tog
+                        checked={cfg.aiContentDriven}
+                        onChange={(v) => setCfgKey('aiContentDriven', v)}
+                      />
+                    </div>
+                    {cfg.aiContentDriven && (
+                      <div style={{ fontSize: 10, color: '#a855f7', marginTop: 4 }}>
+                        ✦ AI will read transcript early and select the best clips semantically
+                      </div>
+                    )}
+                  </div>
+
                 </div>
               )}
             </div>

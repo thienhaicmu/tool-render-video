@@ -794,6 +794,81 @@ def download_health(payload: DownloadHealthRequest):
     return check_youtube_download_health(url)
 
 
+@router.post("/test-cloud-ai")
+def test_cloud_ai(body: dict):
+    """Validate cloud AI provider credentials.
+
+    Sends a minimal prompt and returns latency. Never touches the render pipeline.
+    Body: { provider: "groq"|"openai", api_key: str, model?: str }
+    """
+    import time
+    provider = str(body.get("provider") or "groq").lower()
+    api_key  = str(body.get("api_key") or "").strip()
+    model    = body.get("model") or None
+
+    if not api_key:
+        raise HTTPException(status_code=400, detail="api_key is required")
+
+    _GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+    _TEST_MESSAGES = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user",   "content": "Reply with the single word: ready"},
+    ]
+
+    t0 = time.monotonic()
+    try:
+        if provider == "groq":
+            resolved_model = model or "llama-3.1-8b-instant"
+            try:
+                from groq import Groq as _GroqClient
+                client = _GroqClient(api_key=api_key)
+                resp = client.chat.completions.create(
+                    model=resolved_model,
+                    messages=_TEST_MESSAGES,
+                    max_tokens=8,
+                    temperature=0.0,
+                    timeout=10,
+                )
+            except ImportError:
+                import openai as _openai
+                client = _openai.OpenAI(api_key=api_key, base_url=_GROQ_BASE_URL, timeout=10)
+                resp = client.chat.completions.create(
+                    model=resolved_model,
+                    messages=_TEST_MESSAGES,
+                    max_tokens=8,
+                    temperature=0.0,
+                )
+        elif provider == "openai":
+            import openai as _openai
+            resolved_model = model or "gpt-4o-mini"
+            client = _openai.OpenAI(api_key=api_key, timeout=10)
+            resp = client.chat.completions.create(
+                model=resolved_model,
+                messages=_TEST_MESSAGES,
+                max_tokens=8,
+                temperature=0.0,
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        return {"ok": True, "provider": provider, "model": resolved_model, "latency_ms": latency_ms}
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        msg = str(exc)
+        # Shorten verbose SDK error messages for the UI
+        if "invalid_api_key" in msg.lower() or "authentication" in msg.lower() or "401" in msg:
+            msg = "Invalid API key"
+        elif "model" in msg.lower() and ("not found" in msg.lower() or "does not exist" in msg.lower()):
+            msg = f"Model not found: {resolved_model}"  # type: ignore[possibly-undefined]
+        elif "connection" in msg.lower() or "timeout" in msg.lower():
+            msg = "Connection failed — check network"
+        logger.debug("test_cloud_ai_failed provider=%s: %s", provider, exc)
+        return {"ok": False, "provider": provider, "error": msg, "latency_ms": latency_ms}
+
 
 @router.post("/quick-process")
 def quick_process(payload: QuickProcessRequest):

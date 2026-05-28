@@ -137,6 +137,7 @@ export interface RenderRequest {
   ai_cloud_api_key?: string | null
   ai_cloud_model?: string | null
   ai_analysis_mode?: 'local' | 'cloud' | 'hybrid' | null
+  ai_content_driven_selection?: boolean
 
   // Pro Timeline Steering (UP26)
   clip_lock?: TimeRange[] | null

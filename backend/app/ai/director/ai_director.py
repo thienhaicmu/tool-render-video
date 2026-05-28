@@ -1297,6 +1297,17 @@ def _build_plan(
             plan.knowledge_injection.setdefault("validation_fixups", [])
             plan.knowledge_injection.setdefault("validation_warnings", [])
 
+    if _analysis_signals:
+        try:
+            plan.hybrid_analysis = {
+                "source": str(_analysis_signals.source),
+                "confidence": round(float(_analysis_signals.confidence), 3),
+                "clips_analyzed": int(len(_analysis_signals.clip_signals)),
+                "warnings": list(_analysis_signals.warnings),
+            }
+        except Exception:
+            pass
+
     return plan
 
 

@@ -295,6 +295,9 @@ class AIEditPlan:
     # Soft Beta RC1 — per-module clip coverage (observability only, no behavior effect)
     # Format: {"packaging": {"enabled": bool, "clips_attempted": int, "clips_processed": int}, ...}
     s3_health_summary: dict = field(default_factory=dict)
+    # Hybrid Analyzer provenance — source ("local"/"cloud"/"hybrid"), confidence, clip count.
+    # Populated just before plan return; empty dict when hybrid analyzer did not run.
+    hybrid_analysis: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         # Compact confidence subset exposed as top-level key for easy result_json access.
@@ -439,4 +442,5 @@ class AIEditPlan:
             "clip_platform_adaptation":           dict(self.clip_platform_adaptation),
             "clip_production_debug":              dict(self.clip_production_debug),
             "s3_health_summary":                  dict(self.s3_health_summary),
+            "hybrid_analysis":                    dict(self.hybrid_analysis),
         }

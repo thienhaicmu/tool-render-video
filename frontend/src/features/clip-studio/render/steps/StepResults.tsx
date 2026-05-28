@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import type { JobPart, QualityReport, PartRankResult } from '../../../../types/api'
 import { getJobAiSummary, deletePartOutput } from '../../../../api/jobs'
-import type { JobAiSummary } from '../../../../api/jobs'
+import type { JobAiSummary, HybridAnalysis } from '../../../../api/jobs'
 import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 
@@ -50,6 +50,33 @@ function ScoreRingLg({ score }: { score: number }) {
       </div>
     </div>
   )
+}
+
+function HybridAnalysisBadge({
+  hybrid, fallbackMode, fallbackProvider,
+}: {
+  hybrid?: HybridAnalysis
+  fallbackMode?: string
+  fallbackProvider?: string
+}) {
+  if (hybrid && Object.keys(hybrid).length > 0) {
+    const src = hybrid.source
+    const pct = Math.round(hybrid.confidence * 100)
+    const label =
+      src === 'cloud'  ? `☁ Cloud AI · ${pct}%` :
+      src === 'hybrid' ? `⚡ Hybrid AI · ${pct}%` :
+                         `💻 Local AI · ${pct}%`
+    const cls = src === 'cloud' ? 'vtag-blue' : src === 'hybrid' ? 'vtag-purple' : 'vtag-teal'
+    const title = `${hybrid.clips_analyzed} clips analyzed${hybrid.warnings.length ? ' · ' + hybrid.warnings.join(', ') : ''}`
+    return <span className={`res-vtag ${cls}`} title={title}>{label}</span>
+  }
+  if (!fallbackMode) return null
+  const label =
+    fallbackMode === 'hybrid' ? '⚡ Hybrid AI' :
+    fallbackMode === 'cloud'  ? `☁ Cloud${fallbackProvider ? ' · ' + fallbackProvider : ''}` :
+                                '💻 Local AI'
+  const cls = fallbackMode === 'cloud' ? 'vtag-blue' : fallbackMode === 'hybrid' ? 'vtag-purple' : 'vtag-teal'
+  return <span className={`res-vtag ${cls}`}>{label}</span>
 }
 
 export function StepResults({
@@ -170,11 +197,11 @@ export function StepResults({
               <div className="res-vtags">
                 {bestScore >= 75 && <span className="res-vtag vtag-green">🔥 High engagement</span>}
                 {doneParts.some(p => p.hook_score > 65) && <span className="res-vtag vtag-purple">⚡ Hook detected</span>}
-                {aiAnalysisMode && (
-                  <span className={`res-vtag vtag-${aiAnalysisMode === 'cloud' ? 'blue' : aiAnalysisMode === 'hybrid' ? 'purple' : 'teal'}`}>
-                    {aiAnalysisMode === 'hybrid' ? '⚡ Hybrid AI' : aiAnalysisMode === 'cloud' ? `☁ Cloud${aiCloudProvider ? ' · ' + aiCloudProvider : ''}` : '💻 Local AI'}
-                  </span>
-                )}
+                <HybridAnalysisBadge
+                  hybrid={aiSummary?.hybrid_analysis}
+                  fallbackMode={aiAnalysisMode}
+                  fallbackProvider={aiCloudProvider}
+                />
               </div>
             </div>
             <div className="res-hero-right">

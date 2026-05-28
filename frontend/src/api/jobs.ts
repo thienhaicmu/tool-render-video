@@ -137,6 +137,13 @@ export interface RejectedSegment {
   reject_reason: string
 }
 
+export interface HybridAnalysis {
+  source: 'local' | 'cloud' | 'hybrid'
+  confidence: number
+  clips_analyzed: number
+  warnings: string[]
+}
+
 export interface JobAiSummary {
   job_id: string
   available: boolean
@@ -153,6 +160,7 @@ export interface JobAiSummary {
   rejected_count: number
   rejected_segments: RejectedSegment[]
   output_ranking_warning: string
+  hybrid_analysis?: HybridAnalysis
 }
 
 export async function getJobAiSummary(jobId: string): Promise<JobAiSummary> {

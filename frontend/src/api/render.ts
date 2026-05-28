@@ -90,3 +90,22 @@ export async function getPreviewTranscript(
     `/api/render/preview-transcript/${encodeURIComponent(sessionId)}`,
   )
 }
+
+export interface CloudAiTestResult {
+  ok: boolean
+  provider: string
+  model?: string
+  latency_ms: number
+  error?: string
+}
+
+export async function testCloudAi(
+  provider: 'groq' | 'openai',
+  api_key: string,
+  model?: string,
+): Promise<CloudAiTestResult> {
+  return apiFetch<CloudAiTestResult>('/api/render/test-cloud-ai', {
+    method: 'POST',
+    body: JSON.stringify({ provider, api_key, model: model || null }),
+  })
+}
