@@ -61,20 +61,20 @@ class TestSubtitleTimingInvariant:
         )
 
     def test_per_part_subtitle_transcribes_raw_clip(self):
-        """render_pipeline.py must call transcribe_with_adapter on the already-cut
-        raw_part clip for per-part subtitle generation, not slice the full-source SRT.
-        Timestamps are naturally zero-based when Whisper reads a clip that starts at t=0,
-        so no rebase arithmetic is needed and timing is correct by construction."""
+        """Per-part subtitle logic must call transcribe_with_adapter on the already-cut
+        raw_part clip, not slice the full-source SRT.
+        Logic lives in part_renderer.py (Phase A-3 extraction) — check both modules."""
         from app.orchestration import render_pipeline
+        from app.orchestration.stages import part_renderer
 
-        src = inspect.getsource(render_pipeline)
+        src = inspect.getsource(render_pipeline) + inspect.getsource(part_renderer)
         assert "SUBTITLE_PER_PART_MODEL" in src, (
-            "render_pipeline.py must reference SUBTITLE_PER_PART_MODEL to configure "
-            "the per-part transcription model (used in _prepare_part_assets)"
+            "per-part transcription model config (SUBTITLE_PER_PART_MODEL) must exist "
+            "in render_pipeline.py or part_renderer.py"
         )
         assert "str(raw_part)" in src, (
-            "render_pipeline.py must pass str(raw_part) as the audio source to "
-            "transcribe_with_adapter() so subtitle timestamps start at 0 by construction"
+            "transcribe_with_adapter() must receive str(raw_part) so subtitle timestamps "
+            "start at 0 by construction — must exist in render_pipeline.py or part_renderer.py"
         )
 
 
@@ -209,15 +209,16 @@ class TestMixNarrationAudioAtempo:
     # ------------------------------------------------------------------
 
     def test_render_pipeline_passes_playback_speed_to_mix(self):
-        """render_pipeline.py must pass playback_speed= to mix_narration_audio().
-        Omitting it silently uses the default (1.0) and skips atempo at all speeds."""
+        """mix_narration_audio() must receive playback_speed=_get_effective_playback_speed.
+        Omitting it silently uses default (1.0) and skips atempo at all speeds.
+        Logic lives in part_renderer.py (Phase A-3 extraction) — check both modules."""
         from app.orchestration import render_pipeline
+        from app.orchestration.stages import part_renderer
 
-        src = inspect.getsource(render_pipeline)
+        src = inspect.getsource(render_pipeline) + inspect.getsource(part_renderer)
         assert "playback_speed=_get_effective_playback_speed" in src, (
-            "render_pipeline.py must pass "
-            "playback_speed=_get_effective_playback_speed(payload, _target_platform) "
-            "to mix_narration_audio()"
+            "playback_speed=_get_effective_playback_speed(...) must be passed to "
+            "mix_narration_audio() in render_pipeline.py or part_renderer.py"
         )
 
 

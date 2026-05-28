@@ -71,7 +71,10 @@ Output clips, reports, result_json, logs
 | FastAPI app | `backend/app/main.py` | Mounts static UI, registers routes, initializes DB, starts warmup/recovery tasks. |
 | API routes | `backend/app/routes/*.py` | Render preparation/submission, jobs, downloads, voice profiles, upload/channels. |
 | Job system | `backend/app/services/job_manager.py`, `backend/app/services/db.py` | SQLite job/part rows, in-process priority queue, startup recovery. |
-| Render pipeline | `backend/app/orchestration/render_pipeline.py` | End-to-end render orchestration and result JSON assembly. |
+| Render pipeline | `backend/app/orchestration/render_pipeline.py` | End-to-end render orchestration, pre-render setup, render loop, and result JSON assembly. Reduced from 5,816 → 2,959 lines in Phase A (A-1..A-4). |
+| Render pipeline helpers | `backend/app/orchestration/pipeline_helpers.py` | Subtitle slicing, SRT/ASS utilities, CTA blocks, platform profiles, playback speed helpers. Extracted in Phase A-1. |
+| Render pipeline AI phases | `backend/app/orchestration/pipeline_ai_phases.py` | AI Director invocation, timing mutations, emphasis config, visual intensity, cover hint resolution. Extracted in Phase A-2. |
+| Part renderer | `backend/app/orchestration/stages/part_renderer.py` | `PartRenderContext` dataclass + `prepare_part_assets()` + `process_one_part()`. Carries all per-part render logic (cut, transcribe, subtitle, voice, FFmpeg, QA, scoring). Extracted in Phase A-3. |
 | Render services | `backend/app/services/*.py` | FFmpeg, subtitles, motion crop, TTS, translation, scoring, downloader, reports. |
 | AI intelligence | `backend/app/ai/**` | AI Director, scoring, planning, creator/market/subtitle/camera/quality metadata. |
 
