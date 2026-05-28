@@ -7,9 +7,9 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_parts_bulk, get_job, delete_job, clear_part_output
+from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_parts_bulk, get_job, delete_job, clear_part_output, save_error_kind
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR, TEMP_DIR
 from app.quality.report_locator import load_quality_report_for_part
@@ -296,8 +296,15 @@ def _resolve_job_log_path(row: dict, job_id: str) -> Path:
 
 
 @router.get("")
-def api_list_jobs():
-    return {"items": list_jobs()}
+def api_list_jobs(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    response: Response = None,
+):
+    items = list_jobs_page(limit, offset)
+    if response is not None:
+        response.headers["X-Deprecated"] = "use /api/jobs/history instead"
+    return {"items": items, "limit": limit, "offset": offset}
 
 
 @router.get("/history")
@@ -338,6 +345,8 @@ def api_get_job(job_id: str):
     row = get_job(job_id)
     if not row:
         raise HTTPException(status_code=404, detail="Job not found")
+    if row.get("status") == "failed" and not row.get("error_kind"):
+        row = {**row, "error_kind": _classify_error_kind(row)}
     return row
 
 
@@ -636,7 +645,12 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
             if fp != last_fp or is_terminal:
                 job_payload = job
                 if is_terminal and job.get("status") == "failed":
-                    job_payload = {**job, "error_kind": _classify_error_kind(job)}
+                    kind = _classify_error_kind(job)
+                    try:
+                        save_error_kind(job_id, kind)
+                    except Exception:
+                        pass
+                    job_payload = {**job, "error_kind": kind}
                 await websocket.send_json({"job": job_payload, "parts": parts, "summary": summary})
                 last_fp = fp
             # Close WS on any terminal status so the stream doesn't linger.

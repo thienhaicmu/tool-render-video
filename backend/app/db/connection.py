@@ -217,6 +217,7 @@ def init_db():
             "result_json": "result_json TEXT",
             "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
             "priority": "priority INTEGER DEFAULT 0",
+            "error_kind": "error_kind TEXT",
         },
     )
     _ensure_columns(

@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
 import { useUIStore } from '../stores/uiStore'
+import { useRenderStore } from '../stores/renderStore'
+import { isTerminalStatus } from '../types/enums'
 import { useI18n } from '../i18n/useI18n'
 import type { ActivePanel } from '../stores/uiStore'
 
@@ -223,7 +225,18 @@ export function Sidebar() {
   const { activePanel, setActivePanel } = useUIStore()
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
 
-  const sharedProps = { activePanel, hoveredItem, setHoveredItem, setActivePanel }
+  const { jobs, activeJobId } = useRenderStore()
+  const activeJobStatus = activeJobId ? jobs[activeJobId]?.status : null
+  const hasActiveRender = !!activeJobId && !!activeJobStatus && !isTerminalStatus(activeJobStatus)
+
+  function safeNavigate(panel: ActivePanel) {
+    if (hasActiveRender && panel !== activePanel) {
+      if (!window.confirm('Render job đang chạy. Chuyển trang sẽ mất kết nối progress. Tiếp tục?')) return
+    }
+    setActivePanel(panel)
+  }
+
+  const sharedProps = { activePanel, hoveredItem, setHoveredItem, setActivePanel: safeNavigate }
 
   return (
     <aside style={styles.sidebar}>

@@ -49,6 +49,15 @@ def update_job_progress(job_id: str, stage: str, progress_percent: int, message:
     conn.commit()
 
 
+def save_error_kind(job_id: str, kind: str) -> None:
+    with db_conn() as conn:
+        conn.execute(
+            "UPDATE jobs SET error_kind = ?, updated_at = CURRENT_TIMESTAMP WHERE job_id = ?",
+            (kind, job_id),
+        )
+        conn.commit()
+
+
 def delete_job(job_id: str) -> None:
     """Permanently delete a job and all its parts from the database."""
     with db_conn() as conn:

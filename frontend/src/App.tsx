@@ -6,7 +6,6 @@ import React from 'react'
 import { AppShell } from './layouts/AppShell'
 import { useUIStore } from './stores/uiStore'
 import type { ActivePanel } from './stores/uiStore'
-import { RenderSetupScreen } from './features/render/RenderSetupScreen'
 import { HistoryScreen } from './features/jobs/HistoryScreen'
 import { EditorScreen } from './features/editor/EditorScreen'
 import { StudioScreen } from './features/studio/StudioScreen'
@@ -34,7 +33,7 @@ const PANEL_MAP: Record<ActivePanel, React.ComponentType> = {
   settings:      SettingsScreen,
   download:      DownloaderScreen,
   // Deprecated aliases — do not add new usage
-  render:        RenderSetupScreen,
+  render:        HistoryScreen,
   history:       HistoryScreen,
   editor:        EditorScreen,
 }

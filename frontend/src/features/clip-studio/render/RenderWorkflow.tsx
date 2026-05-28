@@ -2153,7 +2153,12 @@ function StepRendering({
         )}
 
         <div className="rd-overall">
-          <span className="rd-overall-pct">{Math.round(pct)}%</span>
+          <span className="rd-overall-pct">
+            {Math.round(pct)}%
+            {!isTerminal && pct > 0 && pct < 100 && (
+              <span style={{ fontSize: '0.65em', opacity: 0.45, marginLeft: 4, fontWeight: 400 }}>est.</span>
+            )}
+          </span>
           <div className="rd-overall-right">
             {totalCount > 0 && (
               <span className="rd-clips-text">

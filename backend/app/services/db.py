@@ -20,6 +20,7 @@ from app.db.jobs_repo import (
     list_job_parts_bulk,
     list_jobs,
     list_jobs_page,
+    save_error_kind,
     update_job_progress,
     upsert_job,
     upsert_job_part,

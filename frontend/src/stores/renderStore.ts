@@ -10,6 +10,7 @@ export interface RenderStore {
   activeJobId: string | null
 
   submitRender: (payload: RenderRequest) => Promise<string>
+  updateJobStatus: (jobId: string, status: string) => void
 }
 
 export const useRenderStore = create<RenderStore>((set) => ({
@@ -38,5 +39,18 @@ export const useRenderStore = create<RenderStore>((set) => ({
       },
     }))
     return jobId
+  },
+
+  updateJobStatus: (jobId: string, status: string) => {
+    set((state) => {
+      const existing = state.jobs[jobId]
+      if (!existing) return state
+      return {
+        jobs: {
+          ...state.jobs,
+          [jobId]: { ...existing, status, updated_at: new Date().toISOString() },
+        },
+      }
+    })
   },
 }))

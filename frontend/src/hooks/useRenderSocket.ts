@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RenderSocketClient } from '../websocket/RenderSocketClient'
 import { isTerminalStatus } from '../types/enums'
+import { useRenderStore } from '../stores/renderStore'
 import type { WsProgressSummary, JobPart, JobErrorKind } from '../types/api'
 
 export interface RenderSocketState {
@@ -20,15 +21,20 @@ export interface RenderSocketState {
 }
 
 export function useRenderSocket(jobId: string | null): RenderSocketState {
-  const clientRef = useRef<RenderSocketClient | null>(null)
-  const [stage, setStage] = useState<string | null>(null)
-  const [jobStatus, setJobStatus] = useState<string | null>(null)
+  const clientRef    = useRef<RenderSocketClient | null>(null)
+  const progressRef  = useRef<string>('')   // fingerprint to skip no-op updates
+  const partsRef     = useRef<string>('')
+
+  const [stage, setStage]           = useState<string | null>(null)
+  const [jobStatus, setJobStatus]   = useState<string | null>(null)
   const [jobMessage, setJobMessage] = useState<string | null>(null)
-  const [progress, setProgress] = useState<WsProgressSummary | null>(null)
-  const [liveParts, setLiveParts] = useState<JobPart[]>([])
+  const [progress, setProgress]     = useState<WsProgressSummary | null>(null)
+  const [liveParts, setLiveParts]   = useState<JobPart[]>([])
   const [isConnected, setIsConnected] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [errorKind, setErrorKind] = useState<JobErrorKind | null>(null)
+  const [error, setError]           = useState<string | null>(null)
+  const [errorKind, setErrorKind]   = useState<JobErrorKind | null>(null)
+
+  const updateJobStatus = useRenderStore((s) => s.updateJobStatus)
 
   useEffect(() => {
     if (!jobId) return
@@ -43,14 +49,28 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
     })
 
     client.onProgress((summary, parts) => {
-      setProgress(summary)
-      if (parts.length > 0) setLiveParts(parts)
+      // Only trigger re-render if data materially changed
+      const pKey = `${summary.overall_progress_percent}|${summary.completed_parts}|${summary.failed_parts}|${summary.active_parts}`
+      if (pKey !== progressRef.current) {
+        progressRef.current = pKey
+        setProgress(summary)
+      }
+      if (parts.length > 0) {
+        const partsKey = parts.map(p => `${p.part_no}:${p.status}:${p.progress_percent}`).join(',')
+        if (partsKey !== partsRef.current) {
+          partsRef.current = partsKey
+          setLiveParts(parts)
+        }
+      }
     })
 
     client.onComplete((event) => {
-      setJobStatus(event.job.status)
+      const status = event.job.status
+      setJobStatus(status)
       setErrorKind(event.job.error_kind ?? null)
       setIsConnected(false)
+      // Sync terminal status into the store so any component reading store sees correct state
+      updateJobStatus(jobId, status)
     })
 
     client.onError((err) => {
@@ -64,7 +84,7 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
       client.disconnect()
       clientRef.current = null
     }
-  }, [jobId])
+  }, [jobId, updateJobStatus])
 
   return {
     stage,
