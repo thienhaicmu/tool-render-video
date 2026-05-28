@@ -276,6 +276,29 @@ def init_db():
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_dl_jobs_created ON download_jobs(created_at DESC)"
     )
+    # ── Clip feedback (Phase 6) — user ratings that bias future AI clip selection ─
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clip_feedback (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id       TEXT    NOT NULL,
+            part_no      INTEGER NOT NULL,
+            channel_code TEXT    NOT NULL DEFAULT '',
+            goal         TEXT    NOT NULL DEFAULT '',
+            rating       INTEGER NOT NULL CHECK(rating IN (-1, 1)),
+            hook_type    TEXT    NOT NULL DEFAULT 'none',
+            clip_type    TEXT    NOT NULL DEFAULT 'unknown',
+            start_sec    REAL    NOT NULL DEFAULT 0.0,
+            end_sec      REAL    NOT NULL DEFAULT 0.0,
+            duration_sec REAL    NOT NULL DEFAULT 0.0,
+            rated_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(job_id, part_no)
+        )
+        """
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_feedback_channel ON clip_feedback(channel_code, goal)"
+    )
     conn.commit()
     conn.close()
 

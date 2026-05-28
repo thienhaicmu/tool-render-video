@@ -1160,6 +1160,15 @@
   color: var(--text-3); font-size: 14px; cursor: pointer; transition: border-color .15s;
 }
 .clip-more-btn:hover { border-color: var(--border-hi); color: var(--text-2); }
+.clip-fb-btn {
+  width: 28px; height: 28px; padding: 0; border-radius: 4px;
+  background: rgba(255,255,255,.04); border: 1px solid var(--border);
+  font-size: 13px; cursor: pointer; transition: background .15s, border-color .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.clip-fb-btn:hover { background: rgba(255,255,255,.1); border-color: var(--border-hi); }
+.clip-fb-btn.active-like { background: rgba(52,200,120,.18); border-color: rgba(52,200,120,.5); }
+.clip-fb-btn.active-dislike { background: rgba(232,64,122,.15); border-color: rgba(232,64,122,.4); }
 
 /* ── Player / detail panel ── */
 .player-panel {

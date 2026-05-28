@@ -8,6 +8,8 @@ from app.services.encoder_helpers import (
     map_preset_for_encoder as _map_preset_for_encoder,
     safe_filter_path as _safe_filter_path,
     detect_windows_fontfile as _detect_windows_fontfile,
+    detect_windows_fonts_dir as _detect_windows_fonts_dir,
+    get_custom_fonts_dir as _get_custom_fonts_dir,
 )
 from app.services.text_overlay import append_text_layer_filters
 from app.services.render.ffmpeg_helpers import (
@@ -81,7 +83,11 @@ def composite_overlays_on_base_clip(
         # 1. Subtitle burn-in — output-timeline ASS; base_clip PTS already matches.
         if _has_subtitle:
             safe_ass = _safe_filter_path(str(Path(subtitle_ass).resolve()))
-            vf_parts.append(f"ass='{safe_ass}'")
+            fonts_dir = _get_custom_fonts_dir() or _detect_windows_fonts_dir()
+            if fonts_dir:
+                vf_parts.append(f"ass='{safe_ass}':fontsdir='{_safe_filter_path(fonts_dir)}'")
+            else:
+                vf_parts.append(f"ass='{safe_ass}'")
 
         # 2. Title drawtext — enable='lt(t,3)' means first 3 output seconds on base_clip PTS.
         if _has_title:

@@ -51,6 +51,7 @@ _cond = threading.Condition(_lock)          # wait/notify for scheduler
 # Min-heap entries: (-priority, seq, job_id, fn, args, kwargs)
 # Negated priority → highest int pops first; seq gives FIFO within a tier.
 _pending: list[tuple] = []
+_pending_job_ids: set[str] = set()         # O(1) mirror of job_ids in _pending
 _seq: int = 0                               # monotonic counter, never reset
 
 _active_job_ids: set[str] = set()          # jobs currently executing
@@ -111,6 +112,7 @@ def _scheduler_loop() -> None:
                 _cond.wait(timeout=5.0)
 
             neg_pri, seq, job_id, fn, args, kwargs = heapq.heappop(_pending)
+            _pending_job_ids.discard(job_id)
             _active_job_ids.add(job_id)
 
         # DB write + executor.submit both happen outside the lock so they
@@ -183,12 +185,13 @@ def submit_job(job_id: str, fn: Callable, *args, priority: int = 0, **kwargs) ->
         if job_id in _active_job_ids:
             logger.debug("Job %s already running — skip duplicate submit", job_id)
             return False
-        if any(entry[2] == job_id for entry in _pending):
+        if job_id in _pending_job_ids:
             logger.debug("Job %s already pending — skip duplicate submit", job_id)
             return False
 
         _seq += 1
         heapq.heappush(_pending, (-priority, _seq, job_id, fn, args, kwargs))
+        _pending_job_ids.add(job_id)
         _cond.notify_all()
 
     logger.info(
@@ -201,7 +204,7 @@ def submit_job(job_id: str, fn: Callable, *args, priority: int = 0, **kwargs) ->
 def is_running(job_id: str) -> bool:
     """True if the job is currently executing OR waiting in the pending queue."""
     with _lock:
-        return job_id in _active_job_ids or any(e[2] == job_id for e in _pending)
+        return job_id in _active_job_ids or job_id in _pending_job_ids
 
 
 def active_count() -> int:

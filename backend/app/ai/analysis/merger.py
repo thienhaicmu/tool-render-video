@@ -72,6 +72,8 @@ def _merge_clips(
                 relevance_score=max(0.0, min(100.0, blended_rel)),
                 reason=match.reason or ls.reason,
                 source="hybrid",
+                clip_type=match.clip_type if match.clip_type != "unknown" else ls.clip_type,
+                thumbnail_sec=match.thumbnail_sec if match.thumbnail_sec is not None else ls.thumbnail_sec,
             ))
         else:
             result.append(ls)

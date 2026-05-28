@@ -19,7 +19,8 @@ Return JSON with exactly these keys:
 {{
   "clip_signals": [
     {{"start": 10.5, "end": 75.0, "hook_score": 85, "hook_type": "curiosity",
-      "relevance_score": 90, "reason": "strong hook with clear payoff"}}
+      "relevance_score": 90, "reason": "strong hook with clear payoff",
+      "clip_type": "hook", "thumbnail_sec": 12.0, "drop": false}}
   ],
   "emotion": {{"dominant": "urgency", "score": 78}},
   "subtitle_hints": {{
@@ -37,6 +38,9 @@ Return JSON with exactly these keys:
 Rules:
 - clip_signals: 1-5 best clips, start/end in seconds, all scores 0-100
 - hook_type: curiosity|surprise|warning|authority|problem|story|contrarian|result_first|none
+- clip_type: hook|payoff|educational|emotional|transition
+- thumbnail_sec: best frame time in seconds for a thumbnail (must be within start..end range)
+- drop: true if this clip is low quality and should be excluded; false otherwise
 - subtitle_hints.style_preset: viral_bold|clean_pro|boxed_caption|null
 - subtitle_hints.density: compact|normal|relaxed
 - camera_hints.behavior: dramatic_push|fast_follow|slow_reveal|subject_lock|none

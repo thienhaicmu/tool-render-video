@@ -21,6 +21,9 @@ _VALID_HOOK_TYPES = frozenset({
     "curiosity", "surprise", "warning", "authority",
     "problem", "story", "contrarian", "result_first", "none",
 })
+_VALID_CLIP_TYPES = frozenset({
+    "hook", "payoff", "educational", "emotional", "transition", "unknown",
+})
 _VALID_CAMERA_BEHAVIORS = frozenset({
     "dramatic_push", "fast_follow", "slow_reveal", "subject_lock", "none",
 })
@@ -78,9 +81,16 @@ def _parse_clips(raw_list: list) -> list[ClipSignal]:
     signals: list[ClipSignal] = []
     for item in raw_list[:5]:  # cap at 5 clips
         try:
+            if item.get("drop") is True:
+                continue
             hook_type = str(item.get("hook_type", "none"))
             if hook_type not in _VALID_HOOK_TYPES:
                 hook_type = "none"
+            clip_type = str(item.get("clip_type", "unknown"))
+            if clip_type not in _VALID_CLIP_TYPES:
+                clip_type = "unknown"
+            raw_thumb = item.get("thumbnail_sec")
+            thumbnail_sec = float(raw_thumb) if raw_thumb is not None else None
             signals.append(ClipSignal(
                 start=float(item["start"]),
                 end=float(item["end"]),
@@ -89,6 +99,8 @@ def _parse_clips(raw_list: list) -> list[ClipSignal]:
                 relevance_score=max(0.0, min(100.0, float(item.get("relevance_score", 50)))),
                 reason=str(item.get("reason", "")),
                 source="cloud",
+                clip_type=clip_type,
+                thumbnail_sec=thumbnail_sec,
             ))
         except (KeyError, ValueError, TypeError):
             continue

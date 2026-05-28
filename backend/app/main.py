@@ -17,6 +17,7 @@ from app.routes.voice import router as voice_router
 from app.routes.files import router as files_router
 from app.routes.editing import router as editing_router
 from app.routes.platform_downloader import router as platform_downloader_router
+from app.routes.feedback import router as feedback_router
 from app.services.job_manager import recover_pending_render_jobs, shutdown as shutdown_job_manager
 from app.services.warmup import start_warmup, get_status as warmup_status
 from app.core.ui_gate import resolve_static_directory
@@ -108,6 +109,7 @@ app.include_router(voice_router)
 app.include_router(files_router)
 app.include_router(editing_router)
 app.include_router(platform_downloader_router)
+app.include_router(feedback_router)
 # Static file mount — path and name vary by UI version so both can coexist safely
 if _UI_VERSION == "v2":
     # static-v2 index.html uses relative paths (assets/…) so mount at /assets

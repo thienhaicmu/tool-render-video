@@ -22,6 +22,8 @@ from app.ai.analyzers.hook_analyzer import (
 )
 from app.ai.analyzers.moment_analyzer import score_best_moment
 from app.ai.analyzers.silence_analyzer import estimate_silence_penalty, score_speech_density
+from app.ai.analyzers.audio_energy_analyzer import score_audio_energy
+from app.ai.analyzers.feedback_scorer import apply_feedback_bias
 
 try:
     from app.ai.analyzers.structure_analyzer import (
@@ -65,6 +67,12 @@ _DEFAULT_WEIGHTS: dict[str, float] = {
 # Cap returned segments per plan to keep downstream logic manageable.
 _MAX_SEGMENTS = 5
 
+# Fine-scan parameters (Phase 4)
+_FINE_SCAN_RADIUS_SEC = 15.0   # scan ±N seconds around each top coarse candidate
+_FINE_SCAN_TOP_N      = 3      # fine-scan around the top N coarse results
+_FINE_SCAN_DEDUP_SEC  = 5.0    # candidates within this distance treated as duplicates
+_FINE_SCAN_MIN_CHUNKS = 15     # only worth running when transcript has enough chunks
+
 
 def select_ai_segments(
     chunks: list[dict],
@@ -75,6 +83,8 @@ def select_ai_segments(
     memory_context: dict | None = None,
     content_analysis=None,
     enrichment: "AnalysisSignals | None" = None,
+    max_segments: int = _MAX_SEGMENTS,
+    feedback_context: dict | None = None,
 ) -> list[dict]:
     """Select the best transcript windows using hook + density + duration scoring.
 
@@ -109,12 +119,27 @@ def select_ai_segments(
     if not candidates:
         return _select_from_scenes(scenes or [], target_min, target_max)
 
+    # Phase 4: Fine-scan ±_FINE_SCAN_RADIUS_SEC around top coarse candidates.
+    # Only runs when transcript is long enough for coarse sampling to have skipped chunks.
+    if len(chunks) >= _FINE_SCAN_MIN_CHUNKS:
+        fine = _fine_scan_around(
+            chunks, candidates[:_FINE_SCAN_TOP_N],
+            target_min, target_max, weights, goal, retry_scales,
+        )
+        if fine:
+            merged = candidates + fine
+            merged.sort(key=lambda c: c["score"], reverse=True)
+            candidates = _deduplicate_by_proximity(merged, _FINE_SCAN_DEDUP_SEC)
+
     if enrichment is not None:
         candidates = _apply_cloud_enrichment(candidates, enrichment)
 
+    if feedback_context is not None:
+        candidates = apply_feedback_bias(candidates, feedback_context)
+
     candidates = _apply_hook_proximity_boost(candidates, content_analysis)
 
-    selected = _select_diverse(candidates, goal, _MAX_SEGMENTS, diversity_scale=retry_scales["diversity"])
+    selected = _select_diverse(candidates, goal, max_segments, diversity_scale=retry_scales["diversity"])
     return _apply_memory_bonus(selected, memory_context)
 
 
@@ -244,6 +269,12 @@ def _build_and_score_candidates(
         )
         final = round(min(100.0, final + structure_raw * 0.15 * structure_scale), 2)
 
+        # Phase 5: audio energy proxy bonus — max +4 effective ([0,20] * 0.20).
+        # Detects high-energy windows via exclamation density, caps, energy
+        # keywords, and speech acceleration — no audio file required.
+        energy_raw = score_audio_energy(win_chunks, win["start"], win["end"], goal)
+        final = round(min(100.0, final + energy_raw * 0.20), 2)
+
         parts: list[str] = []
         if hook_s >= 60:
             parts.append(f"hook={hook_s:.0f}")
@@ -255,6 +286,8 @@ def _build_and_score_candidates(
             parts.append(f"moment={moment_raw:.0f}")
         if structure_raw >= 5.0:
             parts.append(f"structure={structure_raw:.0f}")
+        if energy_raw >= 5.0:
+            parts.append(f"energy={energy_raw:.0f}")
 
         candidates.append({
             "start":          win["start"],
@@ -332,6 +365,14 @@ def _select_diverse(
                 ) * diversity_scale
             else:
                 penalty = 0.0
+
+            # Phase 2: clip_type diversity — penalise repeating the same clip_type
+            cand_clip_type = c.get("clip_type", "unknown")
+            if cand_clip_type != "unknown" and selected:
+                same_type_count = sum(
+                    1 for s in selected if s.get("clip_type") == cand_clip_type
+                )
+                penalty += same_type_count * 3.0 * diversity_scale
 
             adj = c["score"] - penalty
             if adj > best_adj:
@@ -455,10 +496,143 @@ def _apply_cloud_enrichment(
                     cand["hook_intelligence_type"] = best_match.hook_type
                 if best_match.reason:
                     cand["reason"] = f"[hybrid] {best_match.reason}"
+                if best_match.clip_type and best_match.clip_type != "unknown":
+                    cand["clip_type"] = best_match.clip_type
+                if best_match.thumbnail_sec is not None:
+                    cand["thumbnail_sec"] = best_match.thumbnail_sec
         candidates.sort(key=lambda x: float(x.get("score", 0.0)), reverse=True)
     except Exception:
         pass  # never block clip selection on enrichment failure
     return candidates
+
+
+def _fine_scan_around(
+    chunks: list[dict],
+    top_candidates: list[dict],
+    t_min: float,
+    t_max: float,
+    weights: dict[str, float],
+    goal: str,
+    retry_scales: dict | None,
+) -> list[dict]:
+    """Step-1 scan in ±_FINE_SCAN_RADIUS_SEC around each top coarse candidate.
+
+    The coarse pass uses step=len(chunks)//12, which may skip over the optimal
+    entry point by several chunks. This pass closes that gap by evaluating every
+    chunk start within the radius, producing more precisely aligned candidates.
+
+    Returns scored candidate dicts (same schema as _build_and_score_candidates).
+    Never raises — returns [] on any error.
+    """
+    if not chunks or not top_candidates:
+        return []
+    try:
+        moment_scale   = retry_scales.get("moment",    1.0) if retry_scales else 1.0
+        structure_scale = retry_scales.get("structure", 1.0) if retry_scales else 1.0
+        total_duration  = float(chunks[-1].get("end") or 1.0)
+
+        scanned_indices: set[int] = set()
+        fine_candidates: list[dict] = []
+
+        for c in top_candidates:
+            center = float(c.get("start", 0.0))
+            lo = center - _FINE_SCAN_RADIUS_SEC
+            hi = center + _FINE_SCAN_RADIUS_SEC
+
+            for idx, chunk in enumerate(chunks):
+                chunk_start = float(chunk.get("start") or 0.0)
+                if chunk_start < lo:
+                    continue
+                if chunk_start > hi:
+                    break
+                if idx in scanned_indices:
+                    continue
+                scanned_indices.add(idx)
+
+                win = _build_window(chunks, idx, t_max)
+                if not win or win["duration"] < t_min * 0.4:
+                    continue
+
+                if _STRUCTURE_AVAILABLE and _STRUCTURE_ENABLED:
+                    new_idx, _ = _struct_find_entry(chunks, idx, goal, t_min * 0.4, win["end"])
+                    if new_idx != idx:
+                        trimmed = _build_window(chunks, new_idx, t_max)
+                        if trimmed and trimmed["duration"] >= t_min * 0.4:
+                            win = trimmed
+
+                win_chunks = win["chunks"]
+                opening_text = get_opening_window_text(win_chunks, win["start"])
+                base_hook    = score_hook_text(opening_text)
+                intel_bonus  = score_hook_intelligence(opening_text, goal)
+                hook_s       = min(100.0, base_hook + intel_bonus)
+                hook_type    = detect_hook_type(opening_text) if opening_text else "none"
+                phases       = (
+                    _struct_analyze(win_chunks, win["start"], win["end"]).get("phases_detected", [])
+                    if _STRUCTURE_AVAILABLE and _STRUCTURE_ENABLED else []
+                )
+                density_s  = (
+                    sum(score_speech_density(ch) for ch in win_chunks) / len(win_chunks)
+                    if win_chunks else 0.0
+                )
+                silence_pen = estimate_silence_penalty(win_chunks)
+                dur_s       = _duration_fit_score(win["duration"], t_min, t_max)
+
+                final = (
+                    hook_s   * weights["hook"]
+                    + density_s * weights["density"]
+                    + dur_s     * weights["duration"]
+                    - silence_pen * weights["silence"]
+                )
+                final = max(0.0, min(100.0, final))
+
+                moment_raw = score_best_moment(win_chunks, win["start"], win["end"], goal)
+                final = min(100.0, final + moment_raw * 0.25 * moment_scale)
+
+                structure_raw = (
+                    _struct_score(win_chunks, win["start"], win["end"], goal)
+                    if _STRUCTURE_AVAILABLE and _STRUCTURE_ENABLED else 0.0
+                )
+                final = round(min(100.0, final + structure_raw * 0.15 * structure_scale), 2)
+
+                parts: list[str] = ["fine_scan"]
+                if hook_s >= 60:
+                    parts.append(f"hook={hook_s:.0f}")
+                if density_s >= 60:
+                    parts.append(f"density={density_s:.0f}")
+
+                fine_candidates.append({
+                    "start":           win["start"],
+                    "end":             win["end"],
+                    "score":           final,
+                    "reason":          ", ".join(parts),
+                    "source":          "local_ai_fine",
+                    "duration":        win["duration"],
+                    "_hook_type":      hook_type,
+                    "_phases":         phases,
+                    "_position_ratio": win["start"] / max(total_duration, 1.0),
+                })
+
+        return fine_candidates
+    except Exception:
+        return []
+
+
+def _deduplicate_by_proximity(
+    candidates: list[dict],
+    tolerance_sec: float,
+) -> list[dict]:
+    """Remove candidates whose start is within tolerance_sec of a higher-scored one.
+
+    Assumes candidates are sorted descending by score (highest first).
+    Preserves the original score — proximity dedup is for ordering only.
+    """
+    result: list[dict] = []
+    for c in candidates:
+        c_start = float(c.get("start", 0.0))
+        if any(abs(c_start - float(r.get("start", 0.0))) < tolerance_sec for r in result):
+            continue
+        result.append(c)
+    return result
 
 
 def _select_from_scenes(scenes: list[dict], t_min: float, t_max: float) -> list[dict]:

@@ -249,21 +249,104 @@ _GOAL_MULTIPLIERS: dict[str, dict[str, float]] = {
 }
 
 # ---------------------------------------------------------------------------
-# Reference phrases for semantic similarity
+# Reference phrases for semantic similarity — EN + VI, all 9 hook types
 # ---------------------------------------------------------------------------
 
 _REFERENCE_HOOKS: list[str] = [
+    # Curiosity gap
     "nobody tells you this",
-    "this changed everything",
-    "wait for it",
-    "you need to know this",
-    "the truth is",
-    "most people get this wrong",
-    "I was shocked",
-    "before you do this",
-    "stop doing this",
-    "here is why",
+    "wait until you see what happens next",
+    "you won't believe what I discovered",
+    "bạn không biết điều bí mật này",
+    "ít ai biết được sự thật này",
+    # Warning / urgency
+    "stop doing this immediately",
+    "before you do this you need to watch this",
+    "the biggest mistake most people make",
+    "đừng bao giờ làm điều này nếu bạn muốn thành công",
+    "cảnh báo quan trọng bạn cần biết ngay",
+    # Surprise / contrarian
+    "this changed everything for me",
+    "I was completely wrong about this",
+    "most people get this completely wrong",
+    "everything you know about this is wrong",
+    "điều này thay đổi tất cả những gì tôi biết",
+    "ngược lại với những gì mọi người nghĩ",
+    # Authority / proof
+    "I tested this for 30 days and here are the results",
+    "after years of experience here is what I learned",
+    "the results shocked even me",
+    "tôi đã thử điều này và kết quả thực sự bất ngờ",
+    "sau nhiều năm kinh nghiệm đây là điều tôi học được",
+    # Problem / solution
+    "here is the real reason this keeps failing",
+    "the truth is nobody wants to admit this",
+    "sự thật là tại sao hầu hết mọi người không thành công",
+    "đây là lý do thực sự khiến bạn thất bại",
+    # Story
+    "it all started when I made one decision",
+    "I was struggling until I discovered this",
+    "câu chuyện bắt đầu khi tôi đưa ra quyết định đó",
+    "tôi đã thất bại liên tục cho đến khi tìm ra điều này",
+    # Result first
+    "I went from zero to success using this method",
+    "how I achieved this in just 30 days",
+    "tôi đã đi từ không có gì đến thành công nhờ điều này",
+    "đây là cách tôi đạt được kết quả chỉ trong một tháng",
+    # Challenge
+    "I did this every single day for a month",
+    "what actually happens when you try this for 30 days",
+    "tôi đã làm điều này mỗi ngày và kết quả thay đổi cuộc đời tôi",
+    # Weak openers (low similarity anchors — help calibrate the scale)
+    "so today we are going to talk about something",
+    "hello everyone welcome back to my channel today",
 ]
+
+# ---------------------------------------------------------------------------
+# Goal-specific exemplar sets for goal-aware semantic scoring
+# ---------------------------------------------------------------------------
+
+_GOAL_EXEMPLARS: dict[str, list[str]] = {
+    "viral": [
+        "you won't believe what happened next",
+        "this is the most shocking thing I have ever seen",
+        "nobody is talking about this but everyone needs to know",
+        "wait until the very end of this video",
+        "điều bất ngờ nhất tôi từng chứng kiến trong cuộc đời",
+        "không ai nói cho bạn biết điều này nhưng bạn cần phải biết",
+    ],
+    "education": [
+        "here is the exact step by step process to achieve this",
+        "let me explain precisely how this works and why it matters",
+        "the most important concept you need to understand about this topic",
+        "đây là hướng dẫn từng bước chính xác để đạt được điều này",
+        "hãy để tôi giải thích rõ ràng cách hoạt động của điều này",
+        "khái niệm quan trọng nhất bạn cần hiểu về chủ đề này",
+    ],
+    "podcast": [
+        "this conversation will completely change how you think about",
+        "we need to have an honest discussion about this important topic",
+        "my guest today completely transformed my perspective on life",
+        "cuộc trò chuyện này sẽ thay đổi hoàn toàn cách bạn nhìn nhận",
+        "hôm nay chúng ta cần thảo luận thẳng thắn về vấn đề quan trọng này",
+    ],
+    "product": [
+        "this product completely changed the way I do everything",
+        "the before and after results using this for 30 days",
+        "I tested every product on the market and this is the winner",
+        "sản phẩm này thay đổi hoàn toàn cách tôi làm mọi thứ",
+        "kết quả trước và sau khi sử dụng sản phẩm này 30 ngày",
+        "tôi đã thử tất cả sản phẩm trên thị trường và đây là cái tốt nhất",
+    ],
+    "storytelling": [
+        "the day my entire life changed forever was unexpected",
+        "I never in a million years expected this to happen to me",
+        "this is the story of how one moment transformed everything",
+        "ngày mà cuộc đời tôi thay đổi mãi mãi là một ngày bình thường",
+        "tôi không bao giờ nghĩ điều này sẽ xảy ra với tôi",
+        "đây là câu chuyện về cách một khoảnh khắc thay đổi tất cả",
+    ],
+}
 
 # ---------------------------------------------------------------------------
 # Rule-based signals (kept light — no heavy deps)
@@ -330,6 +413,7 @@ def _rule_score(text: str) -> float:
 
 _model = None        # SentenceTransformer instance or False (failed)
 _ref_vectors: Optional[list] = None
+_goal_ref_vectors: dict[str, list] = {}   # cached per-goal exemplar embeddings
 _MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 
@@ -362,6 +446,21 @@ def _load_model():
         return False
 
 
+def _ensure_goal_vectors(goal: str) -> bool:
+    """Pre-compute and cache embeddings for goal-specific exemplars."""
+    if not _load_model() or not goal or goal not in _GOAL_EXEMPLARS:
+        return False
+    if goal in _goal_ref_vectors:
+        return True
+    try:
+        _goal_ref_vectors[goal] = _model.encode(  # type: ignore[union-attr]
+            _GOAL_EXEMPLARS[goal], convert_to_numpy=False
+        )
+        return True
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Public API — existing (unchanged)
 # ---------------------------------------------------------------------------
@@ -375,9 +474,39 @@ def score_hook_text_semantic(text: str) -> Optional[float]:
     if not _load_model():
         return None
     try:
-        vec = _model.encode([str(text or "")], convert_to_numpy=False)[0]
-        best = max(_cosine(vec, r) for r in _ref_vectors)
+        vec = _model.encode([str(text or "")], convert_to_numpy=False)[0]  # type: ignore[union-attr]
+        best = max(_cosine(vec, r) for r in _ref_vectors)  # type: ignore[union-attr]
         return max(0.0, min(100.0, best * 100.0))
+    except Exception:
+        return None
+
+
+def score_hook_semantic_by_goal(text: str, goal: str = "") -> Optional[float]:
+    """Similarity score (0-100) against goal-specific exemplars + general hooks.
+
+    Uses goal exemplars when available, blended with general reference hooks.
+    Returns None when sentence-transformers is unavailable.
+    """
+    if not _load_model():
+        return None
+    try:
+        vec = _model.encode([str(text or "")], convert_to_numpy=False)[0]  # type: ignore[union-attr]
+
+        goal_key = str(goal or "").lower().strip()
+        if _ensure_goal_vectors(goal_key):
+            goal_sim = max(_cosine(vec, r) for r in _goal_ref_vectors[goal_key])
+        else:
+            goal_sim = 0.0
+
+        general_sim = max(_cosine(vec, r) for r in _ref_vectors)  # type: ignore[union-attr]
+
+        # Weight goal-specific similarity higher when available
+        if goal_sim > 0.0:
+            best_sim = goal_sim * 0.65 + general_sim * 0.35
+        else:
+            best_sim = general_sim
+
+        return max(0.0, min(100.0, best_sim * 100.0))
     except Exception:
         return None
 
@@ -446,24 +575,40 @@ def score_hook_intelligence(text: str, goal: str = "") -> float:
     """Score goal-aware hook bonus for a candidate's opening window.
 
     Returns an additive bonus in [0, +20] applied to hook_opening_score.
-    Returns 0.0 when:
-      - HOOK_INTELLIGENCE_ENABLED is False (env gate)
-      - text is empty (graceful degradation when no transcript)
-      - no hook type is detected
+    Two signals combined:
+      1. Regex path — pattern-matched hook type × goal multiplier (dominant)
+      2. Semantic path — goal-aware exemplar similarity (catches regex misses,
+         e.g. novel phrasing, Vietnamese hooks not in pattern list)
 
-    Goal-aware multipliers bias the bonus toward hook types that resonate
-    with the creator's declared goal without overriding their intent.
-    Unknown or absent goals use a neutral multiplier of 1.0.
+    Returns 0.0 when HOOK_INTELLIGENCE_ENABLED is False or text is empty.
+    Never raises.
     """
     if not HOOK_INTELLIGENCE_ENABLED or not text:
         return 0.0
 
-    hook_type = detect_hook_type(text)
-    if hook_type == "none":
-        return 0.0
-
-    base_bonus = 10.0
     goal_key = str(goal or "").lower().strip()
-    multiplier = _GOAL_MULTIPLIERS.get(goal_key, {}).get(hook_type, 1.0)
+    hook_type = detect_hook_type(text)
 
-    return max(0.0, min(20.0, base_bonus * multiplier))
+    # Regex path
+    if hook_type != "none":
+        multiplier = _GOAL_MULTIPLIERS.get(goal_key, {}).get(hook_type, 1.0)
+        regex_bonus = 10.0 * multiplier  # [0, 20]
+    else:
+        regex_bonus = 0.0
+
+    # Semantic path — goal-aware (activates only when sentence-transformers installed)
+    semantic_sim = score_hook_semantic_by_goal(text, goal_key)
+    if semantic_sim is not None and semantic_sim > 55.0:
+        # [55, 100] → [0, 15]; lower ceiling than regex to keep regex dominant
+        semantic_bonus = (semantic_sim - 55.0) / 45.0 * 15.0
+    else:
+        semantic_bonus = 0.0
+
+    if hook_type != "none":
+        # Regex detected: semantic adds a small boost (up to +4)
+        result = regex_bonus + semantic_bonus * 0.27
+    else:
+        # Regex missed: semantic is the only signal (catches novel/VI hooks)
+        result = semantic_bonus
+
+    return max(0.0, min(20.0, result))

@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { JobPart, QualityReport, PartRankResult } from '../../../../types/api'
 import { getJobAiSummary, deletePartOutput } from '../../../../api/jobs'
 import type { JobAiSummary, HybridAnalysis } from '../../../../api/jobs'
 import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
+import { BASE_URL } from '../../../../api/client'
 
 function aiTier(score: number): { label: string; cls: string } {
   if (score >= 85) return { label: 'VIRAL READY', cls: 'tier-viral' }
@@ -82,7 +83,7 @@ function HybridAnalysisBadge({
 export function StepResults({
   jobId, parts, partScores, partRanks, qualityReports, qualityLoadFailed,
   loading, t, aspectRatio, jobStatus, onRetry, isRetrying,
-  aiAnalysisMode, aiCloudProvider,
+  aiAnalysisMode, aiCloudProvider, goal,
 }: {
   jobId: string | null
   parts: JobPart[]
@@ -98,12 +99,57 @@ export function StepResults({
   isRetrying: boolean
   aiAnalysisMode?: string
   aiCloudProvider?: string
+  goal?: string
 }) {
   const [selectedPart, setSelectedPart] = useState<JobPart | null>(null)
   const [sortMode, setSortMode] = useState<'viral' | 'duration' | 'newest'>('viral')
   const [aiSummary, setAiSummary] = useState<JobAiSummary | null>(null)
   const [aiSummaryOpen, setAiSummaryOpen] = useState(false)
   const [deletedOutputs, setDeletedOutputs] = useState<Set<number>>(new Set())
+  const [feedbackRatings, setFeedbackRatings] = useState<Record<number, 1 | -1 | null>>({})
+
+  const handleFeedback = useCallback(async (partNo: number, rating: 1 | -1, part: JobPart) => {
+    if (!jobId) return
+    const current = feedbackRatings[partNo]
+    const newRating = current === rating ? null : rating
+    setFeedbackRatings(prev => ({ ...prev, [partNo]: newRating }))
+    try {
+      if (newRating === null) {
+        await fetch(`${BASE_URL}/api/feedback/jobs/${encodeURIComponent(jobId)}/parts/${partNo}`, { method: 'DELETE' })
+      } else {
+        await fetch(`${BASE_URL}/api/feedback/jobs/${encodeURIComponent(jobId)}/parts/${partNo}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rating: newRating,
+            goal: goal ?? '',
+            channel_code: '',
+            hook_type: 'none',
+            clip_type: 'unknown',
+            start_sec: 0,
+            end_sec: part.duration ?? 0,
+            duration_sec: part.duration ?? 0,
+          }),
+        })
+      }
+    } catch { /* fire-and-forget — UI already updated */ }
+  }, [jobId, feedbackRatings, goal])
+
+  // Restore ratings from server when job changes
+  useEffect(() => {
+    if (!jobId) return
+    const doneParts = parts.filter(p => p.status === 'done')
+    doneParts.forEach(async (p) => {
+      try {
+        const res = await fetch(`${BASE_URL}/api/feedback/jobs/${encodeURIComponent(jobId)}/parts/${p.part_no}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (data?.rating) {
+          setFeedbackRatings(prev => ({ ...prev, [p.part_no]: data.rating as 1 | -1 }))
+        }
+      } catch { /* ignore */ }
+    })
+  }, [jobId])
 
   async function handleDeleteOutput(partNo: number) {
     if (!jobId) return
@@ -445,6 +491,16 @@ export function StepResults({
                         onClick={(e) => e.stopPropagation()}>
                         Save
                       </a>
+                      <button
+                        title="Good clip"
+                        className={`clip-fb-btn${feedbackRatings[part.part_no] === 1 ? ' active-like' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); handleFeedback(part.part_no, 1, part) }}
+                      >👍</button>
+                      <button
+                        title="Bad clip"
+                        className={`clip-fb-btn${feedbackRatings[part.part_no] === -1 ? ' active-dislike' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); handleFeedback(part.part_no, -1, part) }}
+                      >👎</button>
                       {part.output_file && (
                         <button
                           title="Copy path"

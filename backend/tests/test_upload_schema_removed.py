@@ -179,7 +179,9 @@ class TestInitDbLiveTablesPresent:
             tables = _get_tables(conn)
             # Exclude the write-check helper table if present
             real_tables = {t for t in tables if t != "__db_write_check"}
-            assert real_tables == {"jobs", "job_parts", "creator_prefs", "download_jobs"}, (
+            assert real_tables == {
+                "jobs", "job_parts", "creator_prefs", "download_jobs", "clip_feedback",
+            }, (
                 f"Unexpected tables after init_db(): {real_tables}"
             )
         finally:

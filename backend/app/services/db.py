@@ -39,4 +39,11 @@ from app.db.download_repo import (
     delete_download_job,
 )
 
+from app.db.feedback_repo import (
+    upsert_clip_feedback,
+    get_clip_feedback,
+    list_feedback_for_channel,
+    delete_clip_feedback,
+)
+
 logger = logging.getLogger("app.db")

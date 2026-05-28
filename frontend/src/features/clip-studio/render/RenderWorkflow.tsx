@@ -497,6 +497,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               onRetry={handleRetryRender} isRetrying={isRetrying}
               aiAnalysisMode={cfg.aiAnalysisMode}
               aiCloudProvider={cfg.aiCloudProvider}
+              goal={cfg.videoType}
             />
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(3)}>{t.btnBackRendering}</button>

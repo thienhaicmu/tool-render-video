@@ -20,6 +20,8 @@ class ClipSignal:
     relevance_score: float = 50.0     # 0-100, semantic relevance from cloud
     reason: str = ""
     source: str = "local"             # "local" | "cloud" | "hybrid"
+    clip_type: str = "unknown"        # hook|payoff|educational|emotional|transition
+    thumbnail_sec: Optional[float] = None  # suggested thumbnail frame in seconds
 
 
 @dataclass

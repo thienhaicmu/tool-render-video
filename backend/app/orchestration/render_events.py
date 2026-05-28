@@ -69,8 +69,11 @@ def _job_log(channel_code: str, job_id: str, message: str, kind: str = "info"):
     log_dir = _JOB_LOG_DIRS.get(job_id) or (CHANNELS_DIR / channel_code / "logs")
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{job_id}.log"
-    with log_path.open("a", encoding="utf-8") as f:
-        f.write(f"[{datetime.utcnow().isoformat()}Z] [{kind.upper()}] {message}\n")
+    try:
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(f"[{datetime.utcnow().isoformat()}Z] [{kind.upper()}] {message}\n")
+    except Exception:
+        pass
 
 
 def _emit_render_event(
