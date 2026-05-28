@@ -75,6 +75,8 @@ Output clips, reports, result_json, logs
 | Render pipeline helpers | `backend/app/orchestration/pipeline_helpers.py` | Subtitle slicing, SRT/ASS utilities, CTA blocks, platform profiles, playback speed helpers. Extracted in Phase A-1. |
 | Render pipeline AI phases | `backend/app/orchestration/pipeline_ai_phases.py` | AI Director invocation, timing mutations, emphasis config, visual intensity, cover hint resolution. Extracted in Phase A-2. |
 | Part renderer | `backend/app/orchestration/stages/part_renderer.py` | `PartRenderContext` dataclass + `prepare_part_assets()` + `process_one_part()`. Carries all per-part render logic (cut, transcribe, subtitle, voice, FFmpeg, QA, scoring). Extracted in Phase A-3. |
+| Pre-render scenes | `backend/app/orchestration/pipeline_pre_render.py` | Scene detection, segment building, viral scoring, early transcription, visual analysis, content analysis. `run_pre_render_scenes()` → `PreRenderScenesResult`. Extracted in Phase A-6. |
+| Render loop | `backend/app/orchestration/pipeline_render_loop.py` | JOB_SEMAPHORE acquire/release, worker throttle, sequential/parallel FFmpeg encode loop, per-part failure handling. `run_render_loop()` → `RenderLoopResult`. Extracted in Phase A-7. |
 | Render services | `backend/app/services/*.py` | FFmpeg, subtitles, motion crop, TTS, translation, scoring, downloader, reports. |
 | AI intelligence | `backend/app/ai/**` | AI Director, scoring, planning, creator/market/subtitle/camera/quality metadata. |
 
