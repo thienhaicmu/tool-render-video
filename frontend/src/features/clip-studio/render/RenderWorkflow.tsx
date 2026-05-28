@@ -186,7 +186,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       aspect_ratio:        RATIO_INFO[cfg.ratio].api,
       min_part_sec:        cfg.minSec,
       max_part_sec:        cfg.maxSec,
-      max_export_parts:    cfg.clipCount,
+      max_export_parts:    cfg.outputCount,
       add_subtitle:                cfg.subEnabled,
       subtitle_style:              cfg.subStyle,
       highlight_per_word:          cfg.subHighlight,
