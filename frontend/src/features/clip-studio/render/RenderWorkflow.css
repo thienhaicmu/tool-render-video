@@ -1103,7 +1103,7 @@
 .clip-cards-row::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
 
 .clip-card2 {
-  width: 155px; flex-shrink: 0;
+  width: 200px; flex-shrink: 0;
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: 6px; overflow: hidden;
   cursor: pointer; transition: border-color .18s, transform .18s, box-shadow .18s;
@@ -1138,26 +1138,26 @@
   padding: 2px 6px; font-family: var(--fo, monospace); font-size: 9px; font-weight: 700; color: #fff; z-index: 2;
 }
 
-.clip-info2 { padding: 8px 9px 9px; }
-.clip-info2-top { display: flex; align-items: center; gap: 5px; margin-bottom: 5px; }
-.clip-num-lbl2 { font-family: var(--fh); font-size: 10px; font-weight: 700; color: var(--text-2); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clip-info2 { padding: 9px 11px 10px; }
+.clip-info2-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.clip-num-lbl2 { font-family: var(--fh); font-size: 11px; font-weight: 700; color: var(--text-2); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .clip-score-bar-track { height: 2px; background: rgba(255,255,255,.1); border-radius: 1px; overflow: hidden; margin-bottom: 6px; }
 .clip-score-bar-fill  { height: 100%; border-radius: 1px; transition: width .5s; }
 
-.clip-actions2 { display: flex; gap: 4px; margin-top: 7px; }
+.clip-actions2 { display: flex; gap: 5px; margin-top: 8px; }
 .clip-save-btn {
   flex: 1; text-align: center; text-decoration: none;
-  font-family: var(--fh); font-size: 10px; font-weight: 700; letter-spacing: .4px;
-  padding: 5px 0; border-radius: 3px;
+  font-family: var(--fh); font-size: 11px; font-weight: 700; letter-spacing: .4px;
+  padding: 6px 0; border-radius: 4px;
   background: var(--accent-dim); border: 1px solid rgba(123,97,255,.4); color: var(--accent);
   cursor: pointer; transition: opacity .15s; display: block;
 }
 .clip-save-btn:hover { opacity: .8; }
 .clip-more-btn {
-  width: 28px; padding: 0; border-radius: 3px;
+  width: 32px; padding: 0; border-radius: 4px;
   background: rgba(255,255,255,.04); border: 1px solid var(--border);
-  color: var(--text-3); font-size: 13px; cursor: pointer; transition: border-color .15s;
+  color: var(--text-3); font-size: 14px; cursor: pointer; transition: border-color .15s;
 }
 .clip-more-btn:hover { border-color: var(--border-hi); color: var(--text-2); }
 
