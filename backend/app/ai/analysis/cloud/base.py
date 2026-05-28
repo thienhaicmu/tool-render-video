@@ -34,13 +34,13 @@ class CloudAnalyzerBase(AnalyzerContract):
                 return None
             result = parse_response(raw)
             if result:
-                logger.debug(
+                logger.info(
                     "cloud_analyzer_ok provider=%s clips=%d confidence=%.2f",
                     self.provider_name, len(result.clip_signals), result.confidence,
                 )
             return result
         except Exception as exc:
-            logger.debug("cloud_analyzer_failed provider=%s: %s", self.provider_name, exc)
+            logger.warning("cloud_analyzer_failed provider=%s: %s", self.provider_name, exc)
             return None
 
     def _call_api(self, prompt: str) -> Optional[str]:
