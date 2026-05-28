@@ -69,6 +69,7 @@ backend/dist/
 *.sqlite3
 .env
 .env.*
+!.env.example
 reports/
 temp/
 
