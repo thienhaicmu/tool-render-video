@@ -98,29 +98,58 @@ There is no `backend/app/api` package in the current implementation; the real AP
 
 **Stability marker: Semi-stable implementation**
 
-The frontend is static HTML/CSS/JS under `backend/static`.
+The frontend is a React 18 + TypeScript application built with Vite. Source lives in `frontend/src/`. Built output is served from `backend/static-v2/` via `ui_gate.py`.
 
-Important files:
+The old static JS frontend (`backend/static/`) is legacy. All active development targets the React app.
 
-| File | Responsibility |
+### Panel routing
+
+There is no React Router. Navigation is controlled by a `activePanel` string in `uiStore` (Zustand). `App.tsx` maps panel keys to top-level screen components.
+
+| Panel key | Component | Notes |
+|---|---|---|
+| `clip-studio` | `ClipStudio` | Primary workflow — fullscreen, bypasses AppShell |
+| `home` / `library` | `HistoryScreen` | Job history with filters and detail drawer |
+| `download` | `DownloaderScreen` | YouTube/platform batch download |
+| `studio` | `StudioScreen` | Source hero → ClipStudio redirect |
+| `settings` | `SettingsScreen` | App settings |
+| `render` | `RenderSetupScreen` | Deprecated — local file only, no YouTube |
+
+### Feature modules
+
+| Directory | Purpose |
 |---|---|
-| `backend/static/index.html` | DOM structure and stable IDs for render, download, history, editor, monitor, output gallery. |
-| `backend/static/js/globals.js` | Shared runtime state such as `currentJobId`, poll timers, WebSocket handle, selected paths. |
-| `backend/static/js/nav.js` | View switching: Render, Download, History, Settings, Editor. |
-| `backend/static/js/render-engine.js` | Prepare-source, submit render payload, polling/WebSocket connection. |
-| `backend/static/js/render-ui.js` | Render monitor, logs, output gallery, AI insight/strategy panels, history cards. |
-| `backend/static/js/editor-view.js` | Preview session editor, trim/volume, subtitles, voice, text layers, final payload assembly. |
-| `backend/static/css/app.css` | Full UI styling and state selectors. |
+| `features/clip-studio/` | 4-step render workflow: Source → Configure → Rendering → Results |
+| `features/jobs/` | History screen, job list, filters, detail drawer |
+| `features/downloader/` | YouTube/platform downloader UI |
+| `features/studio/` | Source selection hero for ClipStudio |
+| `features/render/` | Deprecated render form — local file only |
 
-The frontend is feature-rich but fragile. State is shared across large JS files, and many behaviors depend on exact DOM IDs.
+### State management
+
+| Store | Purpose |
+|---|---|
+| `uiStore` | Active panel, toast notifications, render step |
+| `renderStore` | Active job ID, job submission; written on submit only |
+
+**Known debt**: `renderStore` is not updated from WebSocket events. Components that need live job state must use `useRenderSocket` hook directly.
+
+### WebSocket and polling
+
+- `useRenderSocket(jobId)` — connects to `WS /api/jobs/{job_id}/ws`, emits progress every 500ms
+- `GET /api/jobs/{job_id}` — HTTP polling fallback; must remain functional per frozen contract
+- Both paths must carry equivalent state; no progress data may be WebSocket-exclusive
 
 ### What must not break: UI
 
-- Preserve DOM IDs used by render setup, editor, progress monitor, logs, output gallery, and center preview.
-- Preserve `currentJobId`, polling, and WebSocket state behavior unless all callers are updated together.
-- Preserve Render / Download / History / Settings navigation behavior.
-- Preserve output gallery media links and part streaming endpoints.
-- Preserve editor session behavior around `edit_session_id`.
+- WebSocket event shape: `{job, parts[], summary}` — all three keys required
+- HTTP polling fallback — must return same state as WebSocket
+- Job stage names: `QUEUED → DOWNLOADING → RENDERING → DONE`
+- Part status names: `QUEUED → WAITING → CUTTING → TRANSCRIBING → RENDERING → DONE`
+- `result_json` fields: `output_rank_score`, `is_best_output`, `is_best_clip` — consumed by history UI
+- Media streaming endpoints: `/api/jobs/{id}/parts/{no}/media` — used by clip viewer
+
+See `docs/FRONTEND_ARCHITECTURE.md` for full component-level detail.
 
 ## Desktop Shell Architecture
 
