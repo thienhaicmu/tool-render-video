@@ -1892,8 +1892,8 @@ const STEP_NODES = [
   { key: 'rendering',    label: 'Render' },
 ]
 
-function ClipRow({ slot, statusLabel, jobId, thumbRatio }: {
-  slot: ClipSlot; statusLabel: string; jobId: string | null; thumbRatio: string
+function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
+  slot: ClipSlot; statusLabel: string; jobId: string | null; thumbRatio: string; compact?: boolean
 }) {
   const state   = clipStateKey(slot.status)
   const pct     = slot.progress_percent
@@ -1913,6 +1913,36 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio }: {
     waiting: '#6b7280',
   }
   const accentColor = ACCENT[state] ?? '#6b7280'
+
+  if (compact) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '5px 10px', borderRadius: 7,
+        background: isDone ? 'rgba(52,200,120,.04)' : 'transparent',
+        border: `1px solid ${isDone ? 'rgba(52,200,120,.1)' : 'rgba(255,255,255,.04)'}`,
+      }}>
+        <span style={{ fontSize: 13, color: accentColor, flexShrink: 0, width: 14, textAlign: 'center', lineHeight: 1 }}>
+          {isDone ? '✓' : '○'}
+        </span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', fontFamily: 'monospace', flexShrink: 0 }}>
+          #{String(slot.part_no).padStart(2, '0')}
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--text-3)', flex: 1 }}>{statusLabel}</span>
+        {slot.duration != null && slot.duration > 0 && (
+          <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-3)', flexShrink: 0 }}>
+            {Math.floor(slot.duration / 60)}:{String(Math.floor(slot.duration % 60)).padStart(2, '0')}
+          </span>
+        )}
+        {isDone && jobId && (
+          <a href={getPartMediaUrl(jobId, slot.part_no)} target="_blank" rel="noreferrer"
+            style={{ fontSize: 9, color: '#34C878', textDecoration: 'none', fontWeight: 700, letterSpacing: '.04em', flexShrink: 0 }}>
+            ▶
+          </a>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div style={{
@@ -2225,6 +2255,7 @@ function StepRendering({
               statusLabel={getStatusLabel(slot.status)}
               jobId={jobId}
               thumbRatio={thumbRatio}
+              compact={clipStateKey(slot.status) === 'done' || clipStateKey(slot.status) === 'waiting'}
             />
           ))}
         </div>
@@ -2322,7 +2353,7 @@ function StepResults({
   aiCloudProvider?: string
 }) {
   const [selectedPart, setSelectedPart] = useState<JobPart | null>(null)
-  const [sortMode, setSortMode] = useState<'viral' | 'duration'>('viral')
+  const [sortMode, setSortMode] = useState<'viral' | 'duration' | 'newest'>('viral')
   const [aiSummary, setAiSummary] = useState<JobAiSummary | null>(null)
   const [aiSummaryOpen, setAiSummaryOpen] = useState(false)
   const [deletedOutputs, setDeletedOutputs] = useState<Set<number>>(new Set())
@@ -2346,9 +2377,11 @@ function StepResults({
   const sortedDone = [...doneParts].sort((a, b) =>
     sortMode === 'duration'
       ? (b.duration ?? 0) - (a.duration ?? 0)
-      : Object.keys(partRanks).length > 0
-        ? (partRanks[a.part_no]?.output_rank ?? 999) - (partRanks[b.part_no]?.output_rank ?? 999)
-        : (partScores[b.part_no] ?? 0) - (partScores[a.part_no] ?? 0)
+      : sortMode === 'newest'
+        ? b.part_no - a.part_no
+        : Object.keys(partRanks).length > 0
+          ? (partRanks[a.part_no]?.output_rank ?? 999) - (partRanks[b.part_no]?.output_rank ?? 999)
+          : (partScores[b.part_no] ?? 0) - (partScores[a.part_no] ?? 0)
   )
 
   const outputDir = (() => {
@@ -2560,6 +2593,7 @@ function StepResults({
           <div className="res-sort">
             <button className={`sort-btn${sortMode === 'viral' ? ' on' : ''}`} onClick={() => setSortMode('viral')}>{t.resSortViral}</button>
             <button className={`sort-btn${sortMode === 'duration' ? ' on' : ''}`} onClick={() => setSortMode('duration')}>{t.resSortDuration}</button>
+            <button className={`sort-btn${sortMode === 'newest' ? ' on' : ''}`} onClick={() => setSortMode('newest')}>{t.resSortNewest}</button>
           </div>
         </div>
 
@@ -2602,7 +2636,9 @@ function StepResults({
                       : <div className="clip-rank">#{rank?.output_rank ?? i + 1}</div>
                     }
                     {dispScore !== undefined && (
-                      <div className="clip-score-badge" style={{ color: scoreCol, borderColor: scoreCol }}>{Math.round(dispScore)}</div>
+                      <div className="clip-score-ring">
+                        <ScoreRingSm score={Math.round(dispScore)} />
+                      </div>
                     )}
                     {durFmt && <div className="clip-dur-badge">{durFmt}</div>}
                     <div className="clip-overlay">
@@ -2622,6 +2658,16 @@ function StepResults({
                     <div className="clip-info2-top">
                       <span className="clip-num-lbl2">Clip {String(part.part_no).padStart(2, '0')}</span>
                       {tier && <span className={`clip-ai-badge ${tier.cls}`}>{tier.label}</span>}
+                      {rank?.confidence_tier && (
+                        <span style={{
+                          fontSize: 7, fontWeight: 700, padding: '1px 5px', borderRadius: 99, flexShrink: 0,
+                          background: rank.confidence_tier === 'strong' ? 'rgba(52,200,120,.12)' : 'rgba(234,179,8,.1)',
+                          color: rank.confidence_tier === 'strong' ? '#34C878' : '#eab308',
+                          letterSpacing: '.05em', textTransform: 'uppercase',
+                        }}>
+                          {rank.confidence_tier === 'strong' ? 'STRONG' : rank.confidence_tier === 'worth_testing' ? 'TEST' : 'EXP'}
+                        </span>
+                      )}
                     </div>
                     {dispScore !== undefined && (
                       <div className="clip-score-bar-track">
