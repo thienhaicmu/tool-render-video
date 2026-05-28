@@ -88,6 +88,25 @@ from app.orchestration.part_assets import PartAssets
 from app.orchestration.visual_analysis import VisualAnalysisResult
 from app.orchestration.camera_strategy import CameraStrategy
 from app.orchestration.render_output import RenderOutputResult
+from app.orchestration.pipeline_cache import (
+    _RENDER_CACHE_TTL_SEC,
+    _render_cache_key,
+    _scene_cache_get, _scene_cache_put,
+    _transcription_cache_get, _transcription_cache_put,
+    _score_cache_get, _score_cache_put,
+)
+from app.orchestration.pipeline_ranking import (
+    resolve_combined_score_weights,
+    _score_component, _first_score,
+    _output_ranking_detail, _output_ranking_reason,
+    _compute_output_ranking_entry,
+)
+from app.orchestration.pipeline_config import (
+    _resolve_profile, _probe_video_duration,
+    extract_text_from_srt,
+    _reserve_source_path_in_dir, _reserve_source_path,
+    _sanitize_channel_subdir, _resolve_output_dir,
+)
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
 # final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
@@ -172,96 +191,9 @@ def _map_ai_segments_to_scored(ai_clips: list, heuristic_scored: list) -> list:
     return result
 
 
-# UP28 — Render cache helpers (transcription + scene detection)
-_RENDER_CACHE_TTL_SEC = 72 * 3600  # 72 h
-
-
-def _render_cache_key(*parts) -> str:
-    return hashlib.md5("|".join(str(p) for p in parts).encode()).hexdigest()
-
-
-def _scene_cache_get(source_path: str) -> list | None:
-    try:
-        sp = Path(source_path)
-        if not sp.exists():
-            return None
-        st = sp.stat()
-        key = _render_cache_key(source_path, st.st_mtime, st.st_size)
-        cache_file = APP_DATA_DIR / "cache" / "scene_detect" / f"{key}.json"
-        if not cache_file.exists():
-            return None
-        if time.time() - cache_file.stat().st_mtime > _RENDER_CACHE_TTL_SEC:
-            cache_file.unlink(missing_ok=True)
-            return None
-        return json.loads(cache_file.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-
-
-def _scene_cache_put(source_path: str, scenes: list) -> None:
-    try:
-        sp = Path(source_path)
-        st = sp.stat()
-        key = _render_cache_key(source_path, st.st_mtime, st.st_size)
-        cache_dir = APP_DATA_DIR / "cache" / "scene_detect"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        (cache_dir / f"{key}.json").write_text(json.dumps(scenes), encoding="utf-8")
-    except Exception:
-        pass
-
-
-def _transcription_cache_get(source_path: str, model_name: str, cache_suffix: str) -> Path | None:
-    try:
-        sp = Path(source_path)
-        if not sp.exists():
-            return None
-        st = sp.stat()
-        key = _render_cache_key(source_path, st.st_mtime, st.st_size, model_name, cache_suffix)
-        cache_file = APP_DATA_DIR / "cache" / "transcription" / f"{key}.srt"
-        if not cache_file.exists():
-            return None
-        if time.time() - cache_file.stat().st_mtime > _RENDER_CACHE_TTL_SEC:
-            cache_file.unlink(missing_ok=True)
-            return None
-        return cache_file
-    except Exception:
-        return None
-
-
-def _transcription_cache_put(source_path: str, model_name: str, cache_suffix: str, srt_path: Path) -> None:
-    try:
-        if not srt_path.exists() or srt_path.stat().st_size == 0:
-            return
-        sp = Path(source_path)
-        st = sp.stat()
-        key = _render_cache_key(source_path, st.st_mtime, st.st_size, model_name, cache_suffix)
-        cache_dir = APP_DATA_DIR / "cache" / "transcription"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(srt_path), str(cache_dir / f"{key}.srt"))
-    except Exception:
-        pass
-
-
-def _score_cache_get(key: str) -> list | None:
-    try:
-        cache_file = APP_DATA_DIR / "cache" / "segment_scores" / f"{key}.json"
-        if not cache_file.exists():
-            return None
-        if time.time() - cache_file.stat().st_mtime > _RENDER_CACHE_TTL_SEC:
-            cache_file.unlink(missing_ok=True)
-            return None
-        return json.loads(cache_file.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-
-
-def _score_cache_put(key: str, scored: list) -> None:
-    try:
-        cache_dir = APP_DATA_DIR / "cache" / "segment_scores"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        (cache_dir / f"{key}.json").write_text(json.dumps(scored), encoding="utf-8")
-    except Exception:
-        pass
+# _RENDER_CACHE_TTL_SEC, _render_cache_key, _scene_cache_get/put,
+# _transcription_cache_get/put, _score_cache_get/put
+# → moved to app.orchestration.pipeline_cache (C-1)
 
 
 _PLAY_RES_Y_MAP = {"9:16": 1920, "1:1": 1080, "3:4": 1440, "4:5": 1440, "16:9": 1080}
@@ -627,252 +559,16 @@ def _aspect_play_res_y(aspect_ratio: str) -> int:
         return 1440
     return val
 
-def resolve_combined_score_weights(
-    target_market: "str | None",
-    has_market_score: bool,
-    has_hook_score: bool,
-    duration: "float | None",
-    adaptive_enabled: bool,
-) -> dict:
-    """Return combined-score weights that always sum to 1.0.
-
-    When adaptive_enabled=False returns fixed P3-2 defaults.
-    When True applies market/availability/duration adjustments then normalizes.
-    """
-    BASE_VIRAL  = 0.50
-    BASE_MARKET = 0.30
-    BASE_HOOK   = 0.20
-
-    if not adaptive_enabled:
-        return {
-            "viral_weight":  BASE_VIRAL,
-            "market_weight": BASE_MARKET,
-            "hook_weight":   BASE_HOOK,
-            "reason":        "fixed",
-        }
-
-    w_v = BASE_VIRAL
-    w_m = BASE_MARKET
-    w_h = BASE_HOOK
-    reasons: list[str] = []
-
-    # ── Market adjustment ──────────────────────────────────────────────────
-    market = (target_market or "US").upper()
-    if market == "US":
-        w_h += 0.05; w_v += 0.05; w_m -= 0.10
-        reasons.append("US:hook+viral")
-    elif market == "EU":
-        w_m += 0.10; w_h -= 0.05; w_v -= 0.05
-        reasons.append("EU:market+")
-    elif market == "JP":
-        w_m += 0.05; w_h += 0.05; w_v -= 0.10
-        reasons.append("JP:market+hook")
-
-    # ── Missing score redistribution ───────────────────────────────────────
-    if not has_market_score:
-        half = w_m / 2.0
-        w_v += half; w_h += half; w_m = 0.0
-        reasons.append("no_mv:redistribute")
-
-    if not has_hook_score:
-        half = w_h / 2.0
-        w_v += half; w_m += half; w_h = 0.0
-        reasons.append("no_hook:redistribute")
-
-    # ── Duration adjustment ────────────────────────────────────────────────
-    dur = float(duration or 0)
-    if dur > 90:
-        w_v += 0.05; w_h -= 0.05
-        reasons.append("long:viral+")
-    elif 0 < dur < 10:
-        w_h += 0.05; w_m -= 0.05
-        reasons.append("short:hook+")
-    # 10–90 s: no change
-
-    # ── Clamp each active weight to [0.10, 0.70] ──────────────────────────
-    W_MIN, W_MAX = 0.10, 0.70
-    w_v = max(W_MIN, min(W_MAX, w_v))
-    if has_market_score and w_m > 0:
-        w_m = max(W_MIN, min(W_MAX, w_m))
-    if has_hook_score and w_h > 0:
-        w_h = max(W_MIN, min(W_MAX, w_h))
-
-    # ── Normalize → sum = 1.0 ─────────────────────────────────────────────
-    total = w_v + w_m + w_h
-    if total > 0:
-        w_v /= total; w_m /= total; w_h /= total
-    else:
-        w_v, w_m, w_h = 1.0, 0.0, 0.0
-
-    return {
-        "viral_weight":  round(w_v, 4),
-        "market_weight": round(w_m, 4),
-        "hook_weight":   round(w_h, 4),
-        "reason":        ";".join(reasons) or "adaptive_default",
-    }
-
-
-def _score_component(value, default: float = 50.0) -> float:
-    """Return a clamped 0-100 score, using neutral default only when missing."""
-    if value is None or value == "":
-        return default
-    try:
-        return max(0.0, min(100.0, float(value)))
-    except (TypeError, ValueError):
-        return default
-
+# resolve_combined_score_weights, _score_component, _first_score,
+# _RANKING_WEIGHTS, _output_ranking_detail, _output_ranking_reason,
+# _compute_output_ranking_entry
+# → moved to app.orchestration.pipeline_ranking (C-1)
 
 # _maybe_prepend_remotion_hook_intro, _maybe_prepend_asset_intro,
 # _maybe_append_asset_outro, _maybe_apply_asset_logo
 # → moved to app.orchestration.asset_pipeline (Phase 4B)
 
-
-
 # _maybe_cleanup_narration_audio → moved to app.orchestration.audio_pipeline (Phase 4D)
-
-
-def _first_score(seg: dict, names: list[str], default: float = 50.0) -> float:
-    for name in names:
-        if name in seg and seg.get(name) not in (None, ""):
-            return _score_component(seg.get(name), default=default)
-    return default
-
-
-_RANKING_WEIGHTS: dict[str, float] = {
-    "segment_viral_score":  0.35,
-    "hook_score":           0.20,
-    "retention_score":      0.20,
-    "speech_density_score": 0.10,
-    "market_score":         0.10,
-    "duration_fit_score":   0.05,
-}
-
-
-def _output_ranking_detail(components: dict) -> dict:
-    contribs = {k: components.get(k, 50.0) * w for k, w in _RANKING_WEIGHTS.items()}
-    total = sum(contribs.values()) or 1.0
-    ranked = sorted(contribs.items(), key=lambda x: x[1], reverse=True)
-    top_signal, top_contrib = ranked[0]
-    material = [s for s, c in ranked if c >= top_contrib * 0.60]
-    suppressed = [s for s, c in ranked[1:] if c < top_contrib * 0.60 and components.get(s, 50.0) >= 65]
-    return {
-        "dominant_signal": top_signal,
-        "dominant_pct": round(top_contrib / total * 100, 1),
-        "material_signals": material,
-        "suppressed_signals": suppressed,
-    }
-
-
-def _output_ranking_reason(components: dict) -> str:
-    content_type = str(components.get("content_type_hint") or "")
-    detail = _output_ranking_detail(components)
-
-    def _label(signal: str, raw: float) -> "str | None":
-        if signal == "segment_viral_score":
-            if raw >= 65:
-                if content_type == "montage":
-                    return "High visual energy"
-                if content_type in ("interview", "tutorial"):
-                    return "Strong spoken segment"
-                return "Strong segment"
-        elif signal == "hook_score":
-            if raw >= 60:
-                return ("Strong spoken hook" if content_type in ("interview", "commentary", "tutorial", "podcast")
-                        else "Strong opening hook")
-            if raw < 40:
-                return "Weak opening"
-        elif signal == "retention_score":
-            if raw >= 65:
-                return ("High engagement energy" if content_type in ("interview", "tutorial") else "Good retention")
-        elif signal == "speech_density_score":
-            if raw >= 60 and content_type in ("interview", "commentary", "tutorial", "podcast"):
-                return "Dense spoken content"
-            if raw < 20 and content_type == "montage":
-                return "Pure visual"
-        elif signal == "market_score":
-            if raw >= 65:
-                return "Good market match"
-        elif signal == "duration_fit_score":
-            if raw >= 75:
-                return "Ideal duration"
-        return None
-
-    reasons: list[str] = []
-    for sig in detail["material_signals"]:
-        if len(reasons) >= 2:
-            break
-        label = _label(sig, components.get(sig, 50.0))
-        if label and label not in reasons:
-            reasons.append(label)
-
-    if not reasons:
-        if content_type == "montage":
-            reasons.append("High-energy montage")
-        elif content_type in ("interview", "commentary", "tutorial"):
-            reasons.append("Quality spoken content")
-        else:
-            reasons.append("Balanced clip signals")
-
-    return ", ".join(reasons[:2])
-
-
-def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, payload_hook_score=None) -> dict:
-    segment_viral_score = _first_score(seg, ["viral_score"], default=50.0)
-    hook_score = _first_score(
-        seg,
-        ["hook_text_score", "hook_timing_score", "hook_score", "hook_opening_score"],
-        default=_score_component(payload_hook_score, default=50.0),
-    )
-    retention_score = _first_score(seg, ["retention_score"], default=50.0)
-    speech_density_score = _first_score(seg, ["speech_density_score"], default=50.0)
-    market_score = _first_score(seg, ["mv_viral_score", "market_viral_score"], default=50.0)
-    duration_fit_score = _first_score(seg, ["duration_fit_score"], default=50.0)
-    continuity_score = _first_score(seg, ["continuity_score"], default=50.0)
-
-    raw_score = (
-        segment_viral_score * 0.35
-        + hook_score * 0.20
-        + retention_score * 0.20
-        + speech_density_score * 0.10
-        + market_score * 0.10
-        + duration_fit_score * 0.05
-    )
-    output_score = round(max(0.0, min(100.0, raw_score)), 1)
-    components = {
-        "segment_viral_score": round(segment_viral_score, 1),
-        "hook_score": round(hook_score, 1),
-        "retention_score": round(retention_score, 1),
-        "speech_density_score": round(speech_density_score, 1),
-        "market_score": round(market_score, 1),
-        "duration_fit_score": round(duration_fit_score, 1),
-        "continuity_score": round(continuity_score, 1),
-        "content_type_hint": str(seg.get("content_type_hint") or ""),
-    }
-
-    _detail = _output_ranking_detail(components)
-    return {
-        "part_no": part_no,
-        "output_file": output_file,
-        "output_rank": 0,
-        "output_score": output_score,
-        "is_best_clip": False,
-        "ranking_reason": _output_ranking_reason(components),
-        "ranking_components": components,
-        "dominant_signal": _detail["dominant_signal"],
-        "suppressed_signals": _detail["suppressed_signals"],
-        "selection_reason": seg.get("selection_reason", ""),
-        # Backward-compatible aliases consumed by existing render UI.
-        "output_rank_score": output_score,
-        "is_best_output": False,
-        "reasons": [
-            f"segment_viral={components['segment_viral_score']}",
-            f"hook={components['hook_score']}",
-            f"retention={components['retention_score']}",
-            f"speech_density={components['speech_density_score']}",
-            f"market={components['market_score']}",
-            f"duration_fit={components['duration_fit_score']}",
-        ],
-    }
 
 
 # _PROGRESS_TICK_SEC, _render_progress_timer → moved to app.orchestration.render_events (Phase 4D)
@@ -982,137 +678,20 @@ def _validate_text_layers_or_400(payload: RenderRequest) -> list[dict]:
         raise HTTPException(status_code=400, detail=f"Invalid text_layers: {exc}") from exc
 
 
-def _resolve_profile(payload: RenderRequest):
-    profile = (payload.render_profile or "quality").lower()
-    defaults = {
-        # fast: quick turnaround, acceptable quality — base keeps CPU transcription fast
-        "fast":     {"video_preset": "veryfast", "video_crf": 23, "whisper_model": "base",     "transition_sec": 0.05},
-        # balanced: good quality/speed — small keeps CPU latency acceptable (~30s vs 90-120s for large-v3)
-        "balanced": {"video_preset": "medium",   "video_crf": 18, "whisper_model": "small",    "transition_sec": 0.06},
-        # quality: high quality — large-v3 gives near-perfect transcript accuracy
-        "quality":  {"video_preset": "slow",     "video_crf": 15, "whisper_model": "large-v3", "transition_sec": 0.06},
-        # best: maximum quality — large-v3 is the ceiling for open-weight ASR
-        "best":     {"video_preset": "slower",   "video_crf": 13, "whisper_model": "large-v3", "transition_sec": 0.08},
-    }
-    picked = defaults.get(profile, defaults["quality"])
-    if payload.video_preset:
-        logger.info("profile_override_used: video_preset=%s (profile=%s default=%s)", payload.video_preset, profile, picked["video_preset"])
-    if payload.video_crf is not None:
-        logger.info("profile_override_used: video_crf=%s (profile=%s default=%s)", payload.video_crf, profile, picked["video_crf"])
-    whisper_model = payload.whisper_model
-    if (whisper_model or "auto").lower() == "auto":
-        whisper_model = picked["whisper_model"]
-    return {
-        "video_preset": payload.video_preset or picked["video_preset"],
-        "video_crf": max(12, min(32, int(payload.video_crf or picked["video_crf"]))),
-        "whisper_model": whisper_model,
-        "transition_sec": max(0.0, min(1.5, float(payload.transition_sec if payload.transition_sec is not None else picked["transition_sec"]))),
-    }
-
-
-def _probe_video_duration(video_path: Path) -> int:
-    cmd = [
-        get_ffprobe_bin(),
-        "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
-        str(video_path),
-    ]
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return max(0, int(float((r.stdout or "0").strip() or 0)))
-    except Exception:
-        return 0
-
-
-def extract_text_from_srt(srt_path: str) -> str:
-    import re
-    try:
-        text_lines = []
-        with open(srt_path, encoding="utf-8", errors="replace") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                if re.match(r"^\d+$", line):
-                    continue
-                if "-->" in line:
-                    continue
-                text_lines.append(line)
-        text = " ".join(text_lines)
-        text = re.sub(r" {2,}", " ", text).strip()
-        if text and text[-1] not in ".!?":
-            text += "."
-        return text
-    except Exception:
-        return ""
-
-
-def _reserve_source_path_in_dir(source_dir: Path, slug: str, ext: str = ".mp4") -> Path:
-    source_dir.mkdir(parents=True, exist_ok=True)
-    base = source_dir / f"{slug}{ext}"
-    if not base.exists():
-        return base
-    idx = 1
-    while True:
-        candidate = source_dir / f"{slug}_{idx}{ext}"
-        if not candidate.exists():
-            return candidate
-        idx += 1
-
-
-def _reserve_source_path(channel_code: str, slug: str, ext: str = ".mp4") -> Path:
-    return _reserve_source_path_in_dir(CHANNELS_DIR / channel_code / "upload" / "source", slug, ext=ext)
-
+# _resolve_profile, _probe_video_duration, extract_text_from_srt,
+# _reserve_source_path_in_dir, _reserve_source_path,
+# _sanitize_channel_subdir, _resolve_output_dir
+# → moved to app.orchestration.pipeline_config (C-1)
 
 # _safe_unlink → moved to app.orchestration.render_events (Phase 4B)
 
-
 # _failed_part_progress → moved to app.orchestration.qa_pipeline (Phase 4C)
-
 
 # _validate_render_output → moved to app.orchestration.qa_pipeline (Phase 4C)
 
-
 # _assess_output_quality → moved to app.orchestration.qa_pipeline (Phase 4C)
 
-
 # _render_part_failure_detail → moved to app.orchestration.qa_pipeline (Phase 4C)
-
-
-def _sanitize_channel_subdir(value: str | None) -> str:
-    raw = (value or "Video").strip().replace("\\", "/")
-    raw = raw.strip("/")
-    if not raw:
-        return "Video"
-    parts = [p for p in raw.split("/") if p not in ("", ".", "..")]
-    safe = "/".join(parts).strip()
-    return safe or "Video"
-
-
-def _resolve_output_dir(channel_code: str, raw_output_dir: str, render_output_subdir: str | None = None) -> Path:
-    raw = (raw_output_dir or "").strip()
-    channel_base = (CHANNELS_DIR / channel_code).resolve()
-    fallback = channel_base / _sanitize_channel_subdir(render_output_subdir)
-    if not raw:
-        return fallback
-
-    norm = raw.replace("\\", "/")
-    legacy_prefix = f"/data/channels/{channel_code}/"
-    legacy_prefix_no_slash = f"data/channels/{channel_code}/"
-    if norm.startswith(legacy_prefix):
-        rel = norm[len(legacy_prefix):]
-        return (channel_base / rel).resolve()
-    if norm.startswith(legacy_prefix_no_slash):
-        rel = norm[len(legacy_prefix_no_slash):]
-        return (channel_base / rel).resolve()
-    if norm.startswith("/data/channels/"):
-        return fallback
-
-    p = Path(raw)
-    if p.is_absolute():
-        return p
-    return (Path.cwd() / p).resolve()
 
 
 def run_render_pipeline(

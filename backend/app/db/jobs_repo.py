@@ -3,7 +3,7 @@ import logging
 from app.db.connection import (
     _json_dumps,
     _thread_conn,
-    get_conn,
+    db_conn,
 )
 
 logger = logging.getLogger("app.db")
@@ -12,8 +12,7 @@ logger = logging.getLogger("app.db")
 def upsert_job(job_id: str, kind: str, channel_code: str, status: str,
                payload=None, result=None, stage: str = '', progress_percent: int = 0,
                message: str = '', priority: int = 0):
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         conn.execute(
             """
             INSERT INTO jobs (job_id, kind, channel_code, status, stage, progress_percent, message, payload_json, result_json, priority, created_at, updated_at)
@@ -32,8 +31,6 @@ def upsert_job(job_id: str, kind: str, channel_code: str, status: str,
             (job_id, kind, channel_code, status, stage, progress_percent, message, _json_dumps(payload), _json_dumps(result), priority)
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def update_job_progress(job_id: str, stage: str, progress_percent: int, message: str = '', status: str | None = None):
@@ -54,13 +51,10 @@ def update_job_progress(job_id: str, stage: str, progress_percent: int, message:
 
 def delete_job(job_id: str) -> None:
     """Permanently delete a job and all its parts from the database."""
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         conn.execute("DELETE FROM job_parts WHERE job_id = ?", (job_id,))
         conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
         conn.commit()
-    finally:
-        conn.close()
 
 
 def upsert_job_part(job_id: str, part_no: int, part_name: str, status: str,
@@ -93,21 +87,15 @@ def upsert_job_part(job_id: str, part_no: int, part_name: str, status: str,
 
 
 def get_job(job_id: str):
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         row = conn.execute('SELECT * FROM jobs WHERE job_id = ?', (job_id,)).fetchone()
         return dict(row) if row else None
-    finally:
-        conn.close()
 
 
 def list_jobs():
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         rows = conn.execute('SELECT * FROM jobs ORDER BY created_at DESC').fetchall()
         return [dict(r) for r in rows]
-    finally:
-        conn.close()
 
 
 def list_jobs_page(limit: int, offset: int) -> list[dict]:
@@ -116,15 +104,12 @@ def list_jobs_page(limit: int, offset: int) -> list[dict]:
     Executes a single query with SQL-level LIMIT/OFFSET so only the requested
     rows are transferred from SQLite, regardless of total table size.
     """
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         rows = conn.execute(
             'SELECT * FROM jobs ORDER BY updated_at DESC, created_at DESC LIMIT ? OFFSET ?',
             (limit, offset),
         ).fetchall()
         return [dict(r) for r in rows]
-    finally:
-        conn.close()
 
 
 def list_job_parts_bulk(job_ids: list[str]) -> dict[str, list[dict]]:
@@ -137,8 +122,7 @@ def list_job_parts_bulk(job_ids: list[str]) -> dict[str, list[dict]]:
     if not job_ids:
         return {}
     placeholders = ','.join('?' * len(job_ids))
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         rows = conn.execute(
             f'SELECT * FROM job_parts WHERE job_id IN ({placeholders}) ORDER BY job_id, part_no ASC',
             job_ids,
@@ -150,14 +134,19 @@ def list_job_parts_bulk(job_ids: list[str]) -> dict[str, list[dict]]:
             if jid in result:
                 result[jid].append(d)
         return result
-    finally:
-        conn.close()
 
 
 def list_job_parts(job_id: str):
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         rows = conn.execute('SELECT * FROM job_parts WHERE job_id = ? ORDER BY part_no ASC', (job_id,)).fetchall()
         return [dict(r) for r in rows]
-    finally:
-        conn.close()
+
+
+def clear_part_output(job_id: str, part_no: int) -> None:
+    """Clear output_file for a single part (file deleted by caller)."""
+    with db_conn() as conn:
+        conn.execute(
+            "UPDATE job_parts SET output_file='', updated_at=CURRENT_TIMESTAMP WHERE job_id=? AND part_no=?",
+            (job_id, part_no),
+        )
+        conn.commit()

@@ -9,6 +9,7 @@ import type {
   QualityReport,
   QualitySummary,
   QueueStatus,
+  PartRankResult,
 } from '../types/api'
 
 /**
@@ -91,6 +92,85 @@ export async function deleteJob(
 export async function getJobParts(jobId: string): Promise<JobPart[]> {
   const result = await apiFetch<{ items: JobPart[] }>(`/api/jobs/${encodeURIComponent(jobId)}/parts`)
   return result.items ?? []
+}
+
+/**
+ * Parse result_json.output_ranking into a part_no-keyed map.
+ * Returns empty map if result_json is absent, malformed, or ranking is unavailable.
+ * GET /api/jobs/{jobId}
+ */
+export async function getJobRanking(jobId: string): Promise<Record<number, PartRankResult>> {
+  const job = await getJob(jobId)
+  try {
+    const result = JSON.parse(job.result_json || '{}')
+    const ranking: PartRankResult[] = result.output_ranking ?? []
+    const map: Record<number, PartRankResult> = {}
+    for (const entry of ranking) {
+      if (entry.part_no != null) map[entry.part_no] = entry
+    }
+    return map
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * AI decision summary for a completed job.
+ * GET /api/jobs/{jobId}/ai-summary
+ */
+export interface AiRankEntry {
+  part_no: number
+  rank: number
+  score: number
+  reason: string
+  dominant_signal: string
+  confidence_tier: string
+  is_best_clip: boolean
+}
+
+export interface RejectedSegment {
+  part_no: number
+  viral_score: number
+  hook_score: number
+  motion_score: number
+  duration: number
+  reject_reason: string
+}
+
+export interface JobAiSummary {
+  job_id: string
+  available: boolean
+  director_enabled: boolean
+  story: Record<string, unknown>
+  ai_ux: Record<string, unknown>
+  output_count: number
+  best_part_no: number | null
+  best_score: number | null
+  best_reason: string
+  confidence_tier: string
+  score_margin: number | null
+  ranking_summary: AiRankEntry[]
+  rejected_count: number
+  rejected_segments: RejectedSegment[]
+  output_ranking_warning: string
+}
+
+export async function getJobAiSummary(jobId: string): Promise<JobAiSummary> {
+  return apiFetch<JobAiSummary>(`/api/jobs/${encodeURIComponent(jobId)}/ai-summary`)
+}
+
+/**
+ * Delete the output file of a single rendered part.
+ * DELETE /api/jobs/{jobId}/parts/{partNo}/output
+ */
+export async function deletePartOutput(
+  jobId: string,
+  partNo: number,
+): Promise<{ job_id: string; part_no: number; deleted: boolean }> {
+  return apiFetch(
+    `/api/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/output`,
+    { method: 'DELETE' },
+  )
 }
 
 // ── NOTE: Do NOT use GET /api/jobs (unbounded). Use getJobHistory() instead. ──

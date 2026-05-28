@@ -2,7 +2,7 @@
  * HistoryScreen — top-level history panel.
  * Manages fetch, pagination, filtering, and action handlers.
  */
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import './HistoryScreen.css'
 
 import { JobList } from './JobList'
@@ -39,6 +39,9 @@ export function HistoryScreen() {
 
   const addNotification = useUIStore((s) => s.addNotification)
 
+  // ── Auto-refresh when active jobs exist ───────────────────────────────────
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchPage = useCallback(async (newOffset: number) => {
     setLoading(true)
@@ -62,6 +65,16 @@ export function HistoryScreen() {
   }, [fetchPage])
 
   const refreshJobs = useCallback(() => fetchPage(offset), [fetchPage, offset])
+
+  // Auto-refresh every 5s while any job is active
+  useEffect(() => {
+    if (autoRefreshRef.current) clearInterval(autoRefreshRef.current)
+    const hasActive = items.some(i => isActiveStatus(i.status))
+    if (hasActive) {
+      autoRefreshRef.current = setInterval(() => fetchPage(offset), 5000)
+    }
+    return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current) }
+  }, [items, offset, fetchPage])
 
   // ── Filtered items ────────────────────────────────────────────────────────
   const filteredItems = useMemo(() => {
@@ -174,48 +187,43 @@ export function HistoryScreen() {
 
       {/* ── Header ── */}
       <div style={{
-        padding: '14px 18px 12px', flexShrink: 0,
+        padding: '11px 14px 10px', flexShrink: 0,
         borderBottom: '1px solid var(--border)',
         background: 'var(--bg-panel)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <div>
-            <div style={{ fontFamily: 'var(--fh)', fontSize: 15, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.5px' }}>
-              LỊCH SỬ RENDER
+        <div>
+          <div style={{ fontFamily: 'var(--fh)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.6px' }}>
+            LỊCH SỬ RENDER
+          </div>
+          {items.length > 0 && (
+            <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 1 }}>
+              {items.length} job · {completedCount} xong{failedCount > 0 ? ` · ${failedCount} lỗi` : ''}{activeCount > 0 ? ` · ${activeCount} chạy` : ''}
             </div>
-            {items.length > 0 && (
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>
-                {items.length} job · {completedCount} xong · {failedCount > 0 ? `${failedCount} lỗi · ` : ''}{activeCount > 0 ? `${activeCount} đang chạy` : ''}
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {activeCount > 0 && (
-              <span style={{
-                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                background: 'var(--accent-dim)', color: 'var(--accent)',
-                border: '1px solid rgba(123,97,255,.3)',
-              }}>
-                {activeCount} đang chạy
-              </span>
-            )}
-            <button
-              onClick={refreshJobs}
-              disabled={loading}
-              data-testid="refresh-btn"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px',
-                borderRadius: 6, border: '1px solid var(--border)',
-                background: 'var(--bg-card)', color: 'var(--text-2)',
-                fontSize: 11, fontFamily: 'var(--fh)', fontWeight: 700, letterSpacing: '.4px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? .5 : 1, transition: 'opacity .12s',
-              }}
-            >
-              <span style={{ fontSize: 12, display: 'inline-block', animation: loading ? 'job-pulse 1s linear infinite' : undefined }}>↺</span>
-              {loading ? 'ĐANG TẢI…' : 'LÀM MỚI'}
-            </button>
-          </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+          {activeCount > 0 && (
+            <span style={{
+              fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+              background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid rgba(123,97,255,.3)',
+            }}>
+              {activeCount} chạy
+            </span>
+          )}
+          <button
+            onClick={refreshJobs}
+            disabled={loading}
+            data-testid="refresh-btn"
+            style={{
+              fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
+              border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-2)',
+              fontFamily: 'var(--fh)', letterSpacing: '.4px',
+              cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? .5 : 1,
+            }}
+          >
+            {loading ? '…' : '↺'}
+          </button>
         </div>
       </div>
 

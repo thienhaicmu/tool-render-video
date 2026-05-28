@@ -1,4 +1,5 @@
 
+import contextlib
 import json
 import logging
 import os
@@ -84,6 +85,16 @@ def get_conn():
     conn.execute('PRAGMA synchronous=NORMAL;')
     conn.execute('PRAGMA foreign_keys=ON;')
     return conn
+
+
+@contextlib.contextmanager
+def db_conn():
+    """Context manager for HTTP-path DB access. Always closes the connection on exit."""
+    conn = get_conn()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 # Thread-local connection cache — used only by high-frequency render-path writers

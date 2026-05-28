@@ -12,12 +12,9 @@ import { EditorScreen } from './features/editor/EditorScreen'
 import { StudioScreen } from './features/studio/StudioScreen'
 import { DownloaderScreen } from './features/downloader/DownloaderScreen'
 import { ClipStudio } from './features/clip-studio/ClipStudio'
+import { SettingsScreen } from './features/settings/SettingsScreen'
 import { Notifications } from './components/ui/Notifications'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
-
-function SettingsPanel() {
-  return <div style={{ padding: 'var(--space-6)', color: 'var(--color-text-secondary)' }}>Settings panel — Phase 6.1</div>
-}
 
 function PublishPlaceholder() {
   return (
@@ -34,7 +31,7 @@ const PANEL_MAP: Record<ActivePanel, React.ComponentType> = {
   studio:        StudioScreen,
   library:       HistoryScreen,
   publish:       PublishPlaceholder,
-  settings:      SettingsPanel,
+  settings:      SettingsScreen,
   download:      DownloaderScreen,
   // Deprecated aliases — do not add new usage
   render:        RenderSetupScreen,

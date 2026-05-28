@@ -5,17 +5,6 @@ import {
   type DownloadJob,
 } from '../../api/platformDownloader'
 
-// ── Platform chips ─────────────────────────────────────────────────────────────
-
-const PLATFORMS = [
-  { id: 'youtube',   label: 'YouTube',   color: '#FF4040' },
-  { id: 'tiktok',    label: 'TikTok',    color: '#00E5C8' },
-  { id: 'instagram', label: 'Instagram', color: '#C13584' },
-  { id: 'facebook',  label: 'Facebook',  color: '#4D7CFF' },
-  { id: 'twitter',   label: 'X / Twitter', color: '#8A93B0' },
-  { id: 'bilibili',  label: 'Bilibili',  color: '#00A1D6' },
-]
-
 const QUALITY_OPTS = [
   { v: 'best',  l: 'Best'  },
   { v: '1080p', l: '1080p' },
@@ -23,129 +12,167 @@ const QUALITY_OPTS = [
   { v: '480p',  l: '480p'  },
 ]
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
+// ── DownloadCard ───────────────────────────────────────────────────────────────
 
-function ProgressBar({ value, color }: { value: number; color: string }) {
-  return (
-    <div style={{ height: 3, borderRadius: 99, background: 'var(--bg-hover)', overflow: 'hidden', width: '100%' }}>
-      <div style={{
-        height: '100%', width: `${Math.min(100, value)}%`, borderRadius: 99,
-        background: `linear-gradient(90deg, ${color}, ${color}99)`,
-        transition: 'width .4s ease',
-        boxShadow: `0 0 8px ${color}55`,
-      }} />
-    </div>
-  )
-}
-
-function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: string) => void }) {
+function DownloadCard({
+  job, onCancel, onRetry,
+}: { job: DownloadJob; onCancel: (id: string) => void; onRetry: (job: DownloadJob) => void }) {
   const isDone   = job.status === 'done'
   const isFailed = job.status === 'failed'
-  const isActive = job.status === 'downloading' || job.status === 'queued'
+  const isQueued = job.status === 'queued'
+  const isActive = job.status === 'downloading' || isQueued
   const color    = platformColor(job.platform)
   const label    = platformLabel(job.platform)
 
+  const displayName = job.filename || job.title || ''
+  const displayUrl  = job.url ? (job.url.length > 52 ? job.url.slice(0, 52) + '…' : job.url) : ''
+
+  const openFolder = () => {
+    const dir = job.output_dir || (job.output_path
+      ? (() => { const sep = job.output_path.includes('\\') ? '\\' : '/'; return job.output_path.substring(0, job.output_path.lastIndexOf(sep)) })()
+      : '')
+    if (dir) window.electronAPI?.openPath?.(dir)
+  }
+
+  const copyPath = () => {
+    if (job.output_path) navigator.clipboard.writeText(job.output_path).catch(() => {})
+  }
+
   return (
     <div style={{
-      background: 'var(--bg-card)',
+      background: 'var(--bg-card)', borderRadius: 8,
       border: '1px solid var(--border)',
-      borderRadius: 8,
-      overflow: 'hidden',
+      display: 'flex', overflow: 'hidden',
       transition: 'border-color .15s',
     }}>
-      {/* Top color accent */}
-      <div style={{ height: 2, background: `linear-gradient(90deg, ${color}, transparent)` }} />
+      {/* Left accent */}
+      <div style={{
+        width: 3, flexShrink: 0,
+        background: isDone ? 'var(--ok)' : isFailed ? 'var(--fail)' : isQueued ? 'var(--border-hi)' : color,
+        opacity: isQueued ? 0.4 : 1,
+      }} />
 
-      <div style={{ padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-        {/* Platform badge */}
-        <div style={{
-          width: 32, height: 32, borderRadius: 6, flexShrink: 0,
-          background: color + '18', border: `1px solid ${color}33`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 9, fontWeight: 900, color: color, letterSpacing: '-.02em',
-          fontFamily: 'var(--fh)',
-        }}>
-          {label.slice(0, 3).toUpperCase()}
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Title */}
-          <div style={{
-            fontSize: 12, fontWeight: 600, color: 'var(--text-1)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            marginBottom: 4,
+      <div style={{ flex: 1, minWidth: 0, padding: '10px 12px' }}>
+        {/* Row 1: platform badge + name + cancel */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+          <span style={{
+            fontSize: 8, fontWeight: 900, padding: '2px 5px', borderRadius: 4, flexShrink: 0, marginTop: 1,
+            background: color + '18', border: `1px solid ${color}30`, color,
+            fontFamily: 'var(--fh)', letterSpacing: '.02em',
           }}>
-            {job.filename || job.title || job.url}
+            {label.slice(0, 3).toUpperCase()}
+          </span>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {displayName ? (
+              <>
+                <div style={{
+                  fontSize: 12, fontWeight: 600, color: 'var(--text-1)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3,
+                }}>
+                  {displayName}
+                </div>
+                <div style={{
+                  fontSize: 9, color: 'var(--text-3)', marginTop: 1,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {displayUrl}
+                </div>
+              </>
+            ) : (
+              <div style={{
+                fontSize: 11, color: 'var(--text-2)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {displayUrl}
+              </div>
+            )}
           </div>
 
           {isActive && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <ProgressBar value={job.progress} color={color} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10 }}>
-                <span style={{
-                  width: 6, height: 6, borderRadius: '50%', background: color,
-                  flexShrink: 0, boxShadow: `0 0 5px ${color}`,
-                  animation: 'dl-pulse 1.4s ease-in-out infinite',
-                }} />
-                <span style={{ color: 'var(--text-2)', fontWeight: 600 }}>
-                  {job.status === 'queued' ? 'Queued…' : `${job.progress}%`}
-                </span>
-                {job.speed_str && <span style={{ color }}>{job.speed_str}</span>}
-                {job.eta_str && <span style={{ color: 'var(--text-3)' }}>· {job.eta_str}</span>}
-              </div>
-            </div>
-          )}
-
-          {isDone && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 10, color: 'var(--ok)', fontWeight: 700 }}>✓ Done</span>
-              {job.height > 0 && (
-                <span style={{
-                  fontSize: 9, padding: '1px 5px', borderRadius: 4,
-                  background: 'rgba(0,200,150,.12)', color: 'var(--ok)',
-                  border: '1px solid rgba(0,200,150,.2)', fontWeight: 600,
-                }}>
-                  {job.height}p{job.fps > 30 ? `·${Math.round(job.fps)}fps` : ''}
-                </span>
-              )}
-              {job.filesize > 0 && (
-                <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{formatFilesize(job.filesize)}</span>
-              )}
-            </div>
-          )}
-
-          {isFailed && (
-            <div style={{ fontSize: 10, color: 'var(--fail)', display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span>✕</span>
-              <span>{job.error_msg || 'Download failed'}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div style={{ flexShrink: 0, alignSelf: 'center' }}>
-          {isActive && (
             <button onClick={() => onCancel(job.id)} style={{
-              padding: '3px 9px', borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: 'pointer',
-              border: '1px solid var(--border-hi)', background: 'rgba(232,64,122,.1)',
-              color: 'var(--fail)', transition: 'all .12s',
-            }}>
-              ✕
-            </button>
-          )}
-          {isDone && job.output_path && (
-            <button
-              onClick={() => { window.electronAPI?.openPath?.(job.output_dir) }}
-              style={{
-                padding: '3px 9px', borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                border: '1px solid var(--border-hi)', background: 'var(--accent-dim)',
-                color: 'var(--accent)', transition: 'all .12s',
-              }}
-            >
-              ↗
-            </button>
+              flexShrink: 0, padding: '2px 7px', borderRadius: 5,
+              fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              border: '1px solid rgba(232,64,122,.3)', background: 'rgba(232,64,122,.08)',
+              color: 'var(--fail)', lineHeight: 1,
+            }}>✕</button>
           )}
         </div>
+
+        {/* Active: progress */}
+        {isActive && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ flex: 1, height: 4, borderRadius: 99, background: 'var(--bg-hover)', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 99,
+                  width: isQueued ? '100%' : `${Math.min(100, job.progress)}%`,
+                  background: isQueued
+                    ? 'repeating-linear-gradient(90deg,var(--border) 0,var(--border-hi) 8px,var(--border) 16px)'
+                    : `linear-gradient(90deg, ${color}, ${color}bb)`,
+                  transition: isQueued ? 'none' : 'width .4s ease',
+                  boxShadow: isQueued ? 'none' : `0 0 6px ${color}55`,
+                  animation: isQueued ? 'dl-stripe 1s linear infinite' : 'none',
+                }} />
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 700, color: isQueued ? 'var(--text-3)' : 'var(--text-2)', flexShrink: 0 }}>
+                {isQueued ? 'queued' : `${job.progress}%`}
+              </span>
+            </div>
+            {!isQueued && (job.speed_str || job.eta_str) && (
+              <div style={{ display: 'flex', gap: 8, fontSize: 9, color: 'var(--text-3)' }}>
+                {job.speed_str && <span style={{ color }}>{job.speed_str}</span>}
+                {job.eta_str && <span>ETA {job.eta_str}</span>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Done */}
+        {isDone && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--ok)' }}>✓ Done</span>
+            {job.height > 0 && (
+              <span style={{
+                fontSize: 9, padding: '1px 5px', borderRadius: 4, fontWeight: 600,
+                background: 'rgba(0,200,150,.1)', color: 'var(--ok)', border: '1px solid rgba(0,200,150,.2)',
+              }}>
+                {job.height}p{job.fps > 30 ? ` · ${Math.round(job.fps)}fps` : ''}
+              </span>
+            )}
+            {job.filesize > 0 && (
+              <span style={{ fontSize: 9, color: 'var(--text-3)' }}>{formatFilesize(job.filesize)}</span>
+            )}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+              {job.output_path && (
+                <button onClick={copyPath} title="Copy path" style={{
+                  fontSize: 9, padding: '2px 7px', borderRadius: 5, cursor: 'pointer',
+                  border: '1px solid var(--border)', background: 'var(--bg-hover)', color: 'var(--text-3)',
+                }}>Copy</button>
+              )}
+              {job.output_dir && (
+                <button onClick={openFolder} title="Open folder" style={{
+                  fontSize: 9, padding: '2px 7px', borderRadius: 5, cursor: 'pointer',
+                  border: '1px solid var(--border)', background: 'var(--bg-hover)', color: 'var(--text-3)',
+                }}>📂</button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Failed */}
+        {isFailed && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 10, color: 'var(--fail)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              ✕ {job.error_msg || 'Download failed'}
+            </span>
+            <button onClick={() => onRetry(job)} style={{
+              flexShrink: 0, padding: '2px 9px', borderRadius: 5,
+              fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'var(--bg-hover)', color: 'var(--text-2)',
+            }}>↺ Retry</button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -162,7 +189,15 @@ export function DownloaderScreen() {
   const [error, setError]           = useState<string | null>(null)
   const wsRefs = useRef<Map<string, WebSocket>>(new Map())
 
-  useEffect(() => { listJobs().then(setJobs).catch(() => {}) }, [])
+  useEffect(() => {
+    listJobs().then(jobsList => {
+      setJobs(jobsList)
+      for (const j of jobsList) {
+        if (j.status === 'queued' || j.status === 'downloading') subscribeNewJob(j.id)
+      }
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function updateJob(updated: DownloadJob) {
     setJobs(prev => {
@@ -196,8 +231,8 @@ export function DownloaderScreen() {
         subscribeNewJob(j.job_id)
       }
       setUrlInput('')
-    } catch (e: any) {
-      setError(e.message || 'Tải thất bại')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Tải thất bại')
     } finally { setSubmitting(false) }
   }
 
@@ -208,136 +243,167 @@ export function DownloaderScreen() {
     setJobs(prev => prev.filter(j => j.id !== jobId))
   }
 
+  async function handleRetry(job: DownloadJob) {
+    setError(null)
+    try {
+      const res = await startBatch([job.url], job.output_dir || outputDir, quality)
+      for (const j of res.jobs) {
+        setJobs(prev => [{
+          id: j.job_id, url: j.url, platform: j.platform,
+          status: 'queued', progress: 0, speed_str: '', eta_str: '',
+          output_path: '', output_dir: job.output_dir || outputDir,
+          filename: '', title: job.title, duration: 0,
+          height: 0, fps: 0, filesize: 0, error_msg: '',
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        }, ...prev.filter(p => p.id !== job.id)])
+        subscribeNewJob(j.job_id)
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Retry thất bại')
+    }
+  }
+
+  function handleClearDone() {
+    setJobs(prev => prev.filter(j => j.status === 'queued' || j.status === 'downloading'))
+  }
+
   const activeCount = jobs.filter(j => j.status === 'downloading' || j.status === 'queued').length
   const doneCount   = jobs.filter(j => j.status === 'done').length
+  const failedCount = jobs.filter(j => j.status === 'failed').length
+  const urlCount    = urlInput.split('\n').map(u => u.trim()).filter(Boolean).length
+  const canSubmit   = !submitting && urlInput.trim().length > 0
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-base)' }}>
-      <style>{`@keyframes dl-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }`}</style>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-base)', overflow: 'hidden' }}>
+      <style>{`
+        @keyframes dl-pulse  { 0%,100%{opacity:1}  50%{opacity:.4} }
+        @keyframes dl-stripe { 0%{background-position:0 0} 100%{background-position:32px 0} }
+      `}</style>
 
-      {/* ── Header ───────────────────────────────────────────────────────── */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={{
-        padding: '14px 18px 12px', flexShrink: 0,
+        padding: '12px 16px 10px', flexShrink: 0,
         borderBottom: '1px solid var(--border)',
         background: 'var(--bg-panel)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <div>
-            <div style={{ fontFamily: 'var(--fh)', fontSize: 15, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.5px' }}>
-              DOWNLOADER
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>
-              No watermark · Best quality · YouTube · TikTok · IG · và hơn thế
-            </div>
+        <div>
+          <div style={{ fontFamily: 'var(--fh)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.6px' }}>
+            DOWNLOADER
           </div>
-          {(activeCount > 0 || doneCount > 0) && (
-            <div style={{ display: 'flex', gap: 6 }}>
-              {activeCount > 0 && (
-                <span style={{
-                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                  background: 'var(--accent-dim)', color: 'var(--accent)',
-                  border: '1px solid rgba(123,97,255,.3)',
-                }}>
-                  {activeCount} đang tải
-                </span>
-              )}
-              {doneCount > 0 && (
-                <span style={{
-                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                  background: 'rgba(0,200,150,.12)', color: 'var(--ok)',
-                  border: '1px solid rgba(0,200,150,.2)',
-                }}>
-                  {doneCount} xong
-                </span>
-              )}
-            </div>
+          <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 1 }}>
+            YouTube · TikTok · Instagram · Facebook · và hơn thế
+          </div>
+        </div>
+
+        {(activeCount > 0 || doneCount > 0 || failedCount > 0) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            {activeCount > 0 && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid rgba(123,97,255,.3)',
+              }}>
+                {activeCount} đang tải
+              </span>
+            )}
+            {doneCount > 0 && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                background: 'rgba(0,200,150,.1)', color: 'var(--ok)', border: '1px solid rgba(0,200,150,.2)',
+              }}>
+                {doneCount} xong
+              </span>
+            )}
+            {failedCount > 0 && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                background: 'rgba(232,64,122,.1)', color: 'var(--fail)', border: '1px solid rgba(232,64,122,.25)',
+              }}>
+                {failedCount} lỗi
+              </span>
+            )}
+            {(doneCount > 0 || failedCount > 0) && (
+              <button onClick={handleClearDone} style={{
+                fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer',
+              }}>
+                Xóa xong
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Input panel ────────────────────────────────────────────────────── */}
+      <div style={{ padding: '10px 16px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--bg-panel)' }}>
+
+        {/* URL input */}
+        <div style={{ position: 'relative', marginBottom: 8 }}>
+          <textarea
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+            placeholder={'Dán URL vào đây — mỗi URL một dòng\nhttps://youtube.com/watch?v=...\nhttps://tiktok.com/@user/video/...'}
+            rows={3}
+            style={{
+              width: '100%', padding: '8px 10px', borderRadius: 7, fontSize: 11,
+              border: '1px solid var(--border)', background: 'var(--bg-card)',
+              color: 'var(--text-1)', resize: 'none', outline: 'none',
+              fontFamily: 'var(--fb)', boxSizing: 'border-box', lineHeight: 1.65,
+              transition: 'border-color .15s',
+            }}
+            onFocus={e => e.currentTarget.style.borderColor = 'var(--border-hi)'}
+            onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
+          />
+          {urlCount > 0 && (
+            <span style={{
+              position: 'absolute', bottom: 7, right: 8,
+              fontSize: 9, fontWeight: 700, color: 'var(--accent)',
+              background: 'var(--bg-card)', padding: '0 3px',
+            }}>
+              {urlCount} URL
+            </span>
           )}
         </div>
 
-        {/* Platform badges */}
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {PLATFORMS.map(p => (
-            <span key={p.id} style={{
-              fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
-              background: p.color + '15', border: `1px solid ${p.color}25`, color: p.color,
-              fontFamily: 'var(--fh)', letterSpacing: '.4px',
-            }}>
-              {p.label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Input panel ──────────────────────────────────────────────────── */}
-      <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--bg-panel)' }}>
-
-        {/* URL textarea */}
-        <div className="cfg-sec-hd" style={{ marginBottom: 6 }}>
-          <span>URL VIDEO</span>
-          <span className="cfg-sec-api">1 URL mỗi dòng</span>
-        </div>
-        <textarea
-          value={urlInput}
-          onChange={e => setUrlInput(e.target.value)}
-          placeholder={'https://youtube.com/watch?v=...\nhttps://tiktok.com/@user/video/...'}
-          rows={3}
+        {/* Folder input */}
+        <input
+          value={outputDir}
+          onChange={e => setOutputDir(e.target.value)}
+          placeholder="Thư mục lưu — D:\Videos\Downloads"
           style={{
-            width: '100%', padding: '8px 10px', borderRadius: 6, fontSize: 11,
+            width: '100%', padding: '6px 10px', borderRadius: 7, fontSize: 11,
             border: '1px solid var(--border)', background: 'var(--bg-card)',
-            color: 'var(--text-1)', resize: 'vertical', outline: 'none',
-            fontFamily: 'var(--fb)', boxSizing: 'border-box', lineHeight: 1.6,
-            transition: 'border-color .15s',
+            color: 'var(--text-1)', outline: 'none', boxSizing: 'border-box',
+            fontFamily: 'var(--fb)', transition: 'border-color .15s', marginBottom: 8,
           }}
           onFocus={e => e.currentTarget.style.borderColor = 'var(--border-hi)'}
           onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
         />
 
-        {/* Folder row */}
-        <div style={{ marginTop: 8 }}>
-          <div className="cfg-sec-hd" style={{ marginBottom: 5 }}>
-            <span>THƯ MỤC LƯU</span>
-          </div>
-          <input
-            value={outputDir}
-            onChange={e => setOutputDir(e.target.value)}
-            placeholder="D:\Videos\Downloads"
-            style={{
-              width: '100%', padding: '6px 10px', borderRadius: 6, fontSize: 11,
-              border: '1px solid var(--border)', background: 'var(--bg-card)',
-              color: 'var(--text-1)', outline: 'none', boxSizing: 'border-box',
-              fontFamily: 'var(--fb)', transition: 'border-color .15s',
-            }}
-            onFocus={e => e.currentTarget.style.borderColor = 'var(--border-hi)'}
-            onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
-          />
-        </div>
-
         {/* Quality + button */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-          <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 3, background: 'var(--bg-hover)', borderRadius: 6, padding: 2 }}>
             {QUALITY_OPTS.map(({ v, l }) => (
-              <div key={v}
-                className={`seg-b${quality === v ? ' on' : ''}`}
-                onClick={() => setQuality(v)}
-                style={{ fontSize: 10 }}>
-                {l}
-              </div>
+              <button key={v} onClick={() => setQuality(v)} style={{
+                padding: '3px 10px', borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                border: 'none', transition: 'all .12s',
+                background: quality === v ? 'var(--bg-card)' : 'transparent',
+                color: quality === v ? 'var(--accent)' : 'var(--text-3)',
+                boxShadow: quality === v ? '0 1px 4px rgba(0,0,0,.18)' : 'none',
+              }}>{l}</button>
             ))}
           </div>
           <div style={{ flex: 1 }} />
           <button
             onClick={handleDownload}
-            disabled={submitting || !urlInput.trim()}
+            disabled={!canSubmit}
             style={{
-              padding: '7px 22px', borderRadius: 6, border: 'none',
-              fontSize: 12, fontWeight: 700, cursor: submitting || !urlInput.trim() ? 'not-allowed' : 'pointer',
-              background: submitting || !urlInput.trim()
-                ? 'var(--bg-card)'
-                : 'var(--grad-btn)',
-              color: submitting || !urlInput.trim() ? 'var(--text-3)' : '#fff',
-              fontFamily: 'var(--fh)', letterSpacing: '.5px',
-              boxShadow: submitting || !urlInput.trim() ? 'none' : '0 4px 14px rgba(123,97,255,.3)',
-              transition: 'all .15s', whiteSpace: 'nowrap',
+              padding: '7px 20px', borderRadius: 7, border: 'none',
+              fontSize: 12, fontWeight: 700, fontFamily: 'var(--fh)', letterSpacing: '.4px',
+              cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'all .15s',
+              background: canSubmit ? 'var(--grad-btn)' : 'var(--bg-hover)',
+              color: canSubmit ? '#fff' : 'var(--text-3)',
+              boxShadow: canSubmit ? '0 3px 12px rgba(123,97,255,.3)' : 'none',
             }}
           >
             {submitting ? '…' : '↓ TẢI XUỐNG'}
@@ -348,30 +414,41 @@ export function DownloaderScreen() {
           <div style={{
             marginTop: 8, fontSize: 11, color: 'var(--fail)',
             padding: '6px 10px', borderRadius: 6,
-            background: 'rgba(232,64,122,.08)', border: '1px solid rgba(232,64,122,.2)',
+            background: 'rgba(232,64,122,.07)', border: '1px solid rgba(232,64,122,.2)',
           }}>
             {error}
           </div>
         )}
       </div>
 
-      {/* ── Queue ────────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 18px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* ── Queue ──────────────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
         {jobs.length === 0 ? (
           <div style={{
-            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', gap: 8, opacity: .4, padding: '48px 0',
+            height: '100%', display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 8, opacity: .35,
           }}>
-            <div style={{ fontSize: 28, color: 'var(--text-3)' }}>↓</div>
-            <div style={{ fontFamily: 'var(--fh)', fontSize: 12, fontWeight: 700, color: 'var(--text-2)', letterSpacing: '.5px' }}>
+            <div style={{ fontSize: 32 }}>↓</div>
+            <div style={{ fontFamily: 'var(--fh)', fontSize: 11, fontWeight: 700, color: 'var(--text-2)', letterSpacing: '.6px' }}>
               CHƯA CÓ VIDEO
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center' }}>
-              Dán URL vào ô trên và nhấn Tải xuống
-            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-3)' }}>Dán URL vào ô trên và nhấn Tải xuống</div>
           </div>
         ) : (
-          jobs.map(job => <DownloadCard key={job.id} job={job} onCancel={handleCancel} />)
+          <>
+            {/* Queue count header */}
+            <div style={{
+              padding: '8px 16px 4px', fontSize: 9, fontWeight: 700,
+              color: 'var(--text-3)', letterSpacing: '.08em', textTransform: 'uppercase',
+            }}>
+              Hàng đợi — {jobs.length} video
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 16px 16px' }}>
+              {jobs.map(job => (
+                <DownloadCard key={job.id} job={job} onCancel={handleCancel} onRetry={handleRetry} />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

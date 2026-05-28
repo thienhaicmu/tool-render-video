@@ -69,3 +69,17 @@ export function canRerun(item: HistoryItem): boolean {
 export function canDelete(item: HistoryItem): boolean {
   return isTerminalStatus(item.status)
 }
+
+// ── Date grouping ─────────────────────────────────────────────────────────────
+
+export function dateGroup(isoString: string): string {
+  const d = new Date(isoString)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today.getTime() - 86400000)
+  const itemDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  if (itemDay.getTime() === today.getTime()) return 'Hôm nay'
+  if (itemDay.getTime() === yesterday.getTime()) return 'Hôm qua'
+  if (now.getTime() - d.getTime() < 7 * 86400000) return 'Tuần này'
+  return d.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })
+}

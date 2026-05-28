@@ -70,6 +70,82 @@ def get_queue_status():
     return {"active_renders": active, "max_renders": _JOB_SEM_VALUE}
 
 
+@router.get("/system-info")
+def get_system_info():
+    """Read-only system snapshot for the Settings screen.
+
+    Returns cache sizes, job counts, and runtime config. Never mutates state.
+    """
+    from app.core.config import APP_DATA_DIR, DATABASE_PATH
+    from app.services.db import list_jobs
+
+    def _dir_size_mb(path: Path) -> float:
+        try:
+            total = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+            return round(total / 1_048_576, 1)
+        except Exception:
+            return 0.0
+
+    def _file_size_mb(path: Path) -> float:
+        try:
+            return round(path.stat().st_size / 1_048_576, 1) if path.exists() else 0.0
+        except Exception:
+            return 0.0
+
+    cache_dir = APP_DATA_DIR / "cache"
+    cache_subdirs = {}
+    if cache_dir.exists():
+        for sub in cache_dir.iterdir():
+            if sub.is_dir():
+                cache_subdirs[sub.name] = _dir_size_mb(sub)
+
+    try:
+        jobs = list_jobs()
+        total_jobs     = len(jobs)
+        completed_jobs = sum(1 for j in jobs if j.get("status") in ("completed", "completed_with_errors"))
+        failed_jobs    = sum(1 for j in jobs if j.get("status") == "failed")
+        active_jobs    = sum(1 for j in jobs if j.get("status") in ("running", "queued", "cancelling"))
+    except Exception:
+        total_jobs = completed_jobs = failed_jobs = active_jobs = 0
+
+    return {
+        "cache": {
+            "total_mb":   round(sum(cache_subdirs.values()), 1),
+            "subdirs":    cache_subdirs,
+            "cache_dir":  str(cache_dir),
+        },
+        "database": {
+            "path":    str(DATABASE_PATH),
+            "size_mb": _file_size_mb(DATABASE_PATH),
+        },
+        "jobs": {
+            "total":     total_jobs,
+            "completed": completed_jobs,
+            "failed":    failed_jobs,
+            "active":    active_jobs,
+        },
+    }
+
+
+@router.post("/cache/clear")
+def clear_render_cache():
+    """Delete all files under APP_DATA_DIR/cache. Non-destructive to job records."""
+    from app.core.config import APP_DATA_DIR
+    cache_dir = APP_DATA_DIR / "cache"
+    deleted = 0
+    freed_mb = 0.0
+    if cache_dir.exists():
+        for f in cache_dir.rglob("*"):
+            if f.is_file():
+                try:
+                    freed_mb += f.stat().st_size / 1_048_576
+                    f.unlink()
+                    deleted += 1
+                except Exception:
+                    pass
+    return {"deleted_files": deleted, "freed_mb": round(freed_mb, 1)}
+
+
 @router.get("/ai-diagnostics")
 def get_ai_diagnostics():
     """Read-only AI runtime diagnostics.
@@ -167,6 +243,8 @@ def _validate_render_source(payload: RenderRequest):
             raise HTTPException(status_code=400, detail="source_video_path is required when source_mode='local'")
         if yt:
             raise HTTPException(status_code=400, detail="youtube_url must be empty when source_mode='local'")
+        if not Path(local).exists():
+            raise HTTPException(status_code=400, detail=f"Source file not found on disk: {local}")
     _validate_output_dir(payload)
     if output_mode == "channel":
         channel = (payload.channel_code or "").strip()
@@ -1170,5 +1248,44 @@ def get_render_part_thumbnail(job_id: str, part_no: int, t: float = 0.5, w: int 
         headers={
             "Cache-Control": "public, max-age=86400",
             "Content-Length": str(len(jpeg)),
+        },
+    )
+
+
+@router.get("/subtitle-preview")
+def api_subtitle_preview(
+    style: str = "tiktok_bounce_v1",
+    aspect_ratio: str = "9:16",
+    font_size: int = 0,
+    text: str = "This is a preview subtitle",
+):
+    """Return a PNG frame with the subtitle style rendered by libass.
+
+    Uses the same ASSPreset pipeline as real renders so the preview matches
+    actual output exactly. Cached by the browser for 1 hour.
+    """
+    from fastapi.responses import Response
+    from app.services.subtitles.ass_core import render_subtitle_preview
+
+    safe_ratio = aspect_ratio if aspect_ratio in ("9:16", "3:4", "4:5", "1:1", "16:9") else "9:16"
+    safe_size  = max(0, min(200, int(font_size)))
+    safe_text  = (text or "Preview subtitle")[:200].replace("\n", " ").strip()
+
+    try:
+        png = render_subtitle_preview(
+            subtitle_style=style,
+            font_size=safe_size,
+            aspect_ratio=safe_ratio,
+            sample_text=safe_text,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Subtitle preview failed: {exc}")
+
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "Content-Length": str(len(png)),
         },
     )

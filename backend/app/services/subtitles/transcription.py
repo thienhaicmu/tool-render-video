@@ -103,6 +103,9 @@ def transcribe_to_srt(
     When highlight_per_word=True, uses Whisper word_timestamps to produce
     one SRT entry per word — required for word-by-word pop animation.
     Falls back to segment-level if word timestamps are unavailable.
+
+    Fallback chain: primary model → "tiny" model → raises TranscriptionError.
+    Caller is responsible for catching and handling gracefully.
     """
     audio_path = str(Path(srt_path).with_suffix(".wav"))
     _ensure_ffmpeg_in_path_for_whisper()
@@ -112,28 +115,69 @@ def transcribe_to_srt(
     ], retries=retry_count)
 
     try:
-        model = get_whisper_model(model_name)
-        transcribe_lock = _get_transcribe_lock(model_name)
-
-        if highlight_per_word:
-            try:
-                result = _transcribe_with_retry(model, audio_path, retries=retry_count, transcribe_lock=transcribe_lock, word_timestamps=True)
-                _write_word_level_srt(result, srt_path)
-                return result
-            except Exception as exc:
-                logger.warning(
-                    "word_level_transcription_failed model=%s audio=%s error=%s fallback=segment_level",
-                    model_name,
-                    Path(audio_path).name,
-                    exc,
-                )
-
-        result = _transcribe_with_retry(model, audio_path, retries=retry_count, transcribe_lock=transcribe_lock)
-        _write_segment_level_srt(result, srt_path)
-        return result
+        return _transcribe_with_model(
+            audio_path, srt_path, model_name, retry_count, highlight_per_word,
+        )
+    except Exception as primary_exc:
+        # Fallback: try "tiny" when primary model fails (OOM, corrupt model, etc.)
+        fallback = "tiny"
+        if model_name == fallback:
+            logger.error(
+                "transcription_failed_no_fallback model=%s audio=%s error=%s",
+                model_name, Path(audio_path).name, primary_exc,
+            )
+            raise
+        logger.warning(
+            "transcription_primary_failed model=%s error=%s — retrying with %s",
+            model_name, primary_exc, fallback,
+        )
+        try:
+            return _transcribe_with_model(
+                audio_path, srt_path, fallback, retry_count=1, highlight_per_word=False,
+            )
+        except Exception as fallback_exc:
+            logger.error(
+                "transcription_fallback_failed model=%s error=%s",
+                fallback, fallback_exc,
+            )
+            raise RuntimeError(
+                f"Transcription failed with both '{model_name}' and '{fallback}'. "
+                f"Primary error: {primary_exc}. Fallback error: {fallback_exc}"
+            ) from fallback_exc
     finally:
-        # Always remove extracted WAV — avoids orphan if Whisper fails mid-job
         Path(audio_path).unlink(missing_ok=True)
+
+
+def _transcribe_with_model(
+    audio_path: str,
+    srt_path: str,
+    model_name: str,
+    retry_count: int,
+    highlight_per_word: bool,
+):
+    """Run transcription with a specific model. Raises on failure."""
+    model = get_whisper_model(model_name)
+    transcribe_lock = _get_transcribe_lock(model_name)
+
+    if highlight_per_word:
+        try:
+            result = _transcribe_with_retry(
+                model, audio_path, retries=retry_count,
+                transcribe_lock=transcribe_lock, word_timestamps=True,
+            )
+            _write_word_level_srt(result, srt_path)
+            return result
+        except Exception as exc:
+            logger.warning(
+                "word_level_transcription_failed model=%s audio=%s error=%s fallback=segment_level",
+                model_name, Path(audio_path).name, exc,
+            )
+
+    result = _transcribe_with_retry(
+        model, audio_path, retries=retry_count, transcribe_lock=transcribe_lock,
+    )
+    _write_segment_level_srt(result, srt_path)
+    return result
 
 
 def _write_word_level_srt(result: dict, srt_path: str):

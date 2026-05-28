@@ -2,6 +2,7 @@ import logging
 
 from app.db.connection import (
     close_thread_conn,
+    db_conn,
     get_conn,
     init_db,
     _json_dumps,
@@ -12,6 +13,7 @@ from app.db.connection import (
 )
 
 from app.db.jobs_repo import (
+    clear_part_output,
     delete_job,
     get_job,
     list_job_parts,

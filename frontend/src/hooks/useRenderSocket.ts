@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RenderSocketClient } from '../websocket/RenderSocketClient'
 import { isTerminalStatus } from '../types/enums'
-import type { WsProgressSummary, JobPart } from '../types/api'
+import type { WsProgressSummary, JobPart, JobErrorKind } from '../types/api'
 
 export interface RenderSocketState {
   stage: string | null
@@ -16,6 +16,7 @@ export interface RenderSocketState {
   isConnected: boolean
   isTerminal: boolean           // derived from jobStatus
   error: string | null
+  errorKind: JobErrorKind | null  // structured error classification, set on FAILED
 }
 
 export function useRenderSocket(jobId: string | null): RenderSocketState {
@@ -27,6 +28,7 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
   const [liveParts, setLiveParts] = useState<JobPart[]>([])
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorKind, setErrorKind] = useState<JobErrorKind | null>(null)
 
   useEffect(() => {
     if (!jobId) return
@@ -47,6 +49,7 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
 
     client.onComplete((event) => {
       setJobStatus(event.job.status)
+      setErrorKind(event.job.error_kind ?? null)
       setIsConnected(false)
     })
 
@@ -72,5 +75,6 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
     isConnected,
     isTerminal: isTerminalStatus(jobStatus ?? ''),
     error,
+    errorKind,
   }
 }

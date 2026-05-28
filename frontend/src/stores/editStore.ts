@@ -65,7 +65,7 @@ const PLATFORM_PRESETS: Record<TargetPlatform, Pick<EditSettings, 'aspectRatio' 
   instagram_reels:   { aspectRatio: '9:16', outputFps: 30 },
 }
 
-export const DEFAULT_EDIT_SETTINGS: EditSettings = {
+const DEFAULT_EDIT_SETTINGS: EditSettings = {
   targetPlatform:    'tiktok',
   aspectRatio:       '9:16',
   selectedFormats:   ['9:16'],

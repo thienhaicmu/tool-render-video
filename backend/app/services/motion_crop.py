@@ -5,12 +5,13 @@ import json
 import math
 import os
 import subprocess
-import tempfile
 import time
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
+
+from app.core.config import APP_DATA_DIR
 
 # UP28.1 — Motion path cache
 _MOTION_CACHE_TTL_SEC = 72 * 3600
@@ -22,7 +23,7 @@ def _motion_cache_key(*parts) -> str:
 
 def _motion_path_cache_get(key: str):
     try:
-        cache_file = Path(tempfile.gettempdir()) / "render_cache" / "motion_path" / f"{key}.json"
+        cache_file = APP_DATA_DIR / "cache" / "motion_path" / f"{key}.json"
         if not cache_file.exists():
             return None
         if time.time() - cache_file.stat().st_mtime > _MOTION_CACHE_TTL_SEC:
@@ -37,7 +38,7 @@ def _motion_path_cache_get(key: str):
 
 def _motion_path_cache_put(key: str, centers: list, fps: float) -> None:
     try:
-        cache_dir = Path(tempfile.gettempdir()) / "render_cache" / "motion_path"
+        cache_dir = APP_DATA_DIR / "cache" / "motion_path"
         cache_dir.mkdir(parents=True, exist_ok=True)
         data = {"centers": [list(c) for c in centers], "fps": fps}
         (cache_dir / f"{key}.json").write_text(json.dumps(data), encoding="utf-8")

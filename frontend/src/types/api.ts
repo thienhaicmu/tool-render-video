@@ -180,6 +180,16 @@ export type JobStatusValue =
   | 'cancelled'
   | 'cancelling'
 
+export type JobErrorKind =
+  | 'DOWNLOAD_FAILED'
+  | 'WHISPER_FAILED'
+  | 'SOURCE_NOT_FOUND'
+  | 'FFMPEG_FAILED'
+  | 'QA_FAILED'
+  | 'VOICE_FAILED'
+  | 'CANCELLED'
+  | 'RENDER_FAILED'
+
 export interface JobStatus {
   job_id: string
   kind: 'render' | 'render_batch' | 'download'
@@ -191,6 +201,8 @@ export interface JobStatus {
   result_json: string
   created_at: string
   updated_at: string
+  /** Populated by backend only when status === 'failed'. Additive — safe to add. */
+  error_kind?: JobErrorKind | null
 }
 
 // ── JobPart (from GET /api/jobs/{job_id}/parts) ───────────────────────────────
@@ -266,6 +278,33 @@ export interface QualitySummary {
   job_id: string
   parts: QualityPartSummary[]
   summary: QualitySummaryAggregate
+}
+
+// ── AI Output Ranking (from result_json.output_ranking[]) ────────────────────
+
+export interface PartRankComponents {
+  segment_viral_score: number
+  hook_score: number
+  retention_score: number
+  speech_density_score: number
+  market_score: number
+  duration_fit_score: number
+  continuity_score: number
+  content_type_hint?: string
+}
+
+export interface PartRankResult {
+  part_no: number
+  output_rank: number           // 1 = best
+  output_rank_score: number     // 0-100 composite engagement score
+  is_best_clip: boolean
+  is_best_output: boolean
+  ranking_reason: string
+  ranking_components: PartRankComponents
+  dominant_signal?: string
+  suppressed_signals?: string[]
+  confidence_tier?: 'strong' | 'worth_testing' | 'experimental'
+  score_margin?: number
 }
 
 // ── WebSocket event (from docs/ui/UI_BACKEND_CONTRACT.md §11) ─────────────────

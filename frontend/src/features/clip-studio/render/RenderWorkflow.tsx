@@ -2,12 +2,14 @@ import React, { useState, useRef, useEffect } from 'react'
 import './RenderWorkflow.css'
 import type { Lang } from '../ClipStudio'
 import { useRenderStore } from '../../../stores/renderStore'
+import { useUIStore } from '../../../stores/uiStore'
 import { useRenderSocket } from '../../../hooks/useRenderSocket'
 import { prepareSource, getPreviewVideoUrl, cancelRender, cancelPrepareSource, retryRender, resumeRender, getPreviewTranscript } from '../../../api/render'
 import type { TranscriptSegment } from '../../../api/render'
-import { getJobParts, getJobQualitySummary } from '../../../api/jobs'
+import { getJobParts, getJobQualitySummary, getJobRanking, getJobAiSummary, deletePartOutput } from '../../../api/jobs'
+import type { JobAiSummary } from '../../../api/jobs'
 import { BASE_URL } from '../../../api/client'
-import type { RenderRequest, JobPart, WsProgressSummary, QualityReport } from '../../../types/api'
+import type { RenderRequest, JobPart, WsProgressSummary, QualityReport, JobErrorKind, PartRankResult } from '../../../types/api'
 import type { PrepareSourceResponse } from '../../../api/render'
 
 // ── i18n ──────────────────────────────────────────────────────────────────────
@@ -101,6 +103,14 @@ const T = {
     resFailedParts: 'Failed Clips', resNoReason: 'No detail available',
     btnRetry: 'RETRY FAILED', btnResume: 'RESUME',
     qualityLoadFailed: 'Quality data could not be loaded',
+    errKindDownload: 'Download failed — check URL or disk space',
+    errKindWhisper: 'Transcription failed — try a smaller Whisper model',
+    errKindSource: 'Source file not found — it may have been moved or deleted',
+    errKindFfmpeg: 'FFmpeg encoding error — check render logs',
+    errKindQa: 'Output validation failed — video may be corrupt or empty',
+    errKindVoice: 'Voiceover failed — TTS engine error',
+    errKindCancelled: 'Render was cancelled',
+    errKindRender: 'Render failed — check logs for details',
   },
   VI: {
     stepSrc: 'NGUỒN',         stepSrcSub: 'Thêm video',
@@ -186,11 +196,44 @@ const T = {
     resFailedParts: 'Clip thất bại', resNoReason: 'Không có chi tiết',
     btnRetry: 'THỬ LẠI', btnResume: 'TIẾP TỤC',
     qualityLoadFailed: 'Không tải được dữ liệu chất lượng',
+    errKindDownload: 'Tải về thất bại — kiểm tra URL hoặc dung lượng ổ đĩa',
+    errKindWhisper: 'Phiên âm thất bại — thử model Whisper nhỏ hơn',
+    errKindSource: 'Không tìm thấy file nguồn — có thể đã bị di chuyển hoặc xóa',
+    errKindFfmpeg: 'Lỗi mã hóa FFmpeg — xem nhật ký render',
+    errKindQa: 'Kiểm tra output thất bại — video bị hỏng hoặc trống',
+    errKindVoice: 'Thuyết minh thất bại — lỗi TTS engine',
+    errKindCancelled: 'Render đã bị hủy',
+    errKindRender: 'Render thất bại — xem nhật ký để biết chi tiết',
   },
 } as const
 
 type Strings = { [K in keyof typeof T['EN']]: typeof T['EN'][K] extends string ? string : typeof T['EN'][K] }
 function useT(lang: Lang): Strings { return T[lang] as Strings }
+
+const ERROR_KIND_KEY: Record<JobErrorKind, keyof Pick<Strings,
+  'errKindDownload' | 'errKindWhisper' | 'errKindSource' | 'errKindFfmpeg' |
+  'errKindQa' | 'errKindVoice' | 'errKindCancelled' | 'errKindRender'
+>> = {
+  DOWNLOAD_FAILED: 'errKindDownload',
+  WHISPER_FAILED:  'errKindWhisper',
+  SOURCE_NOT_FOUND:'errKindSource',
+  FFMPEG_FAILED:   'errKindFfmpeg',
+  QA_FAILED:       'errKindQa',
+  VOICE_FAILED:    'errKindVoice',
+  CANCELLED:       'errKindCancelled',
+  RENDER_FAILED:   'errKindRender',
+}
+
+const ERROR_FIX_STEPS: Record<JobErrorKind, string[]> = {
+  DOWNLOAD_FAILED:  ['Check the YouTube URL is valid and not private/region-locked', 'Verify disk space on the output drive', 'Try switching to local file mode if download keeps failing'],
+  WHISPER_FAILED:   ['Switch to a smaller Whisper model (e.g. "small" instead of "medium")', 'Check available RAM — Whisper needs ~4 GB for large models', 'Disable transcription and use manual subtitles'],
+  SOURCE_NOT_FOUND: ['Verify the source file still exists at the original path', 'Re-add the source in Step 1 and render again'],
+  FFMPEG_FAILED:    ['Check the render log in the Output folder for the full FFmpeg error', 'Try switching render quality to "Fast" and retry', 'Ensure the output folder has write permissions'],
+  QA_FAILED:        ['The exported video was empty or corrupt — check disk space', 'Retry the render — this can occur if the machine was low on memory', 'Check FFmpeg log in the output folder for codec errors'],
+  VOICE_FAILED:     ['Disable voiceover and re-render subtitles only', 'Check that the TTS engine is installed and not rate-limited', 'Switch voice source to "subtitle" instead of "manual"'],
+  CANCELLED:        ['Render was cancelled — click Retry to restart from scratch'],
+  RENDER_FAILED:    ['Open the output folder and check render.log for the root cause', 'Retry once — transient errors (memory spike, process collision) often resolve', 'Reduce concurrent jobs in Settings if rendering multiple videos'],
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3 | 4
@@ -358,13 +401,16 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
 
   const [parts, setParts]                   = useState<JobPart[]>([])
   const [partScores, setPartScores]         = useState<Record<number, number>>({})
+  const [partRanks, setPartRanks]           = useState<Record<number, PartRankResult>>({})
   const [qualityReports, setQualityReports] = useState<Record<number, QualityReport | null>>({})
   const [qualityLoadFailed, setQualityLoadFailed] = useState(false)
   const [partsLoading, setPartsLoading]     = useState(false)
   const [isRetrying, setIsRetrying]         = useState(false)
+  const [rawMsgOpen, setRawMsgOpen]         = useState(false)
 
   const { submitRender } = useRenderStore()
-  const { stage, jobStatus, progress, jobMessage, isTerminal, liveParts, error: wsError } = useRenderSocket(jobId)
+  const addNotification = useUIStore((s) => s.addNotification)
+  const { stage, jobStatus, progress, jobMessage, isTerminal, liveParts, error: wsError, errorKind } = useRenderSocket(jobId)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -386,6 +432,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
         setQualityReports(reports)
       })
       .catch(() => setQualityLoadFailed(true))
+    getJobRanking(jobId).then(setPartRanks).catch(() => {})
   }, [jobId, isTerminal])
 
   // Auto-advance to results after completion (success + partial success)
@@ -397,6 +444,23 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     const timer = setTimeout(() => setStep(4), 1500)
     return () => clearTimeout(timer)
   }, [isTerminal, jobStatus, step])
+
+  // E-2 — toast notification on job terminal
+  useEffect(() => {
+    if (!isTerminal || !jobId) return
+    const s = jobStatus ?? ''
+    const doneCount = progress?.completed_parts ?? 0
+    if (s === 'completed' || s === 'completed_with_errors' || s === 'partial') {
+      addNotification({
+        type: 'success',
+        title: 'Render complete',
+        message: doneCount > 0 ? `${doneCount} clip${doneCount !== 1 ? 's' : ''} ready` : undefined,
+      })
+    } else if (s === 'failed') {
+      addNotification({ type: 'error', title: 'Render failed', message: jobMessage || undefined })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTerminal])
 
   // ── Source actions ──────────────────────────────────────────────────────────
   function removeSource(i: number) { setSources((p) => p.filter((_, idx) => idx !== i)) }
@@ -705,19 +769,55 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 }
               </div>
               {isTerminal ? (
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {(jobStatus === 'failed') && (
-                    <button className="btn-back" onClick={handleRetryRender} disabled={isRetrying}>
-                      {isRetrying ? '…' : t.btnRetry}
-                    </button>
+                <>
+                  {(jobStatus === 'failed') && errorKind && (
+                    <div style={{ marginBottom: 8 }}>
+                      {/* Error label */}
+                      <div style={{ fontSize: 11, color: 'var(--error, #e74c3c)', fontWeight: 700, marginBottom: 6 }}>
+                        {t[ERROR_KIND_KEY[errorKind]] as string}
+                      </div>
+                      {/* Fix steps */}
+                      <ul style={{ margin: '0 0 6px 14px', padding: 0, fontSize: 10, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                        {ERROR_FIX_STEPS[errorKind].map((step, i) => (
+                          <li key={i}>{step}</li>
+                        ))}
+                      </ul>
+                      {/* Raw message toggle */}
+                      {jobMessage && (
+                        <div>
+                          <button
+                            onClick={() => setRawMsgOpen(o => !o)}
+                            style={{ fontSize: 9, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                          >
+                            {rawMsgOpen ? 'Hide detail' : 'Show raw error'}
+                          </button>
+                          {rawMsgOpen && (
+                            <pre style={{
+                              marginTop: 6, padding: '6px 8px', borderRadius: 5,
+                              background: 'rgba(0,0,0,.35)', fontSize: 9, color: 'var(--text-2)',
+                              whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 120, overflowY: 'auto',
+                            }}>
+                              {jobMessage}
+                            </pre>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
-                  {(jobStatus === 'interrupted') && (
-                    <button className="btn-back" onClick={handleResumeRender} disabled={isRetrying}>
-                      {isRetrying ? '…' : t.btnResume}
-                    </button>
-                  )}
-                  <button className="btn-next" onClick={() => setStep(4)}>{t.btnViewResults}</button>
-                </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {(jobStatus === 'failed') && (
+                      <button className="btn-back" onClick={handleRetryRender} disabled={isRetrying}>
+                        {isRetrying ? '…' : t.btnRetry}
+                      </button>
+                    )}
+                    {(jobStatus === 'interrupted') && (
+                      <button className="btn-back" onClick={handleResumeRender} disabled={isRetrying}>
+                        {isRetrying ? '…' : t.btnResume}
+                      </button>
+                    )}
+                    <button className="btn-next" onClick={() => setStep(4)}>{t.btnViewResults}</button>
+                  </div>
+                </>
               ) : (
                 <button className="btn-cancel" onClick={handleCancelRender} disabled={isCancelling}>
                   {isCancelling ? t.btnCancelling : t.btnCancelRender}
@@ -729,7 +829,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
           {/* STEP 4 */}
           <div className={`step-screen${step === 4 ? ' active' : ''}`}>
             <StepResults
-              jobId={jobId} parts={parts} partScores={partScores}
+              jobId={jobId} parts={parts} partScores={partScores} partRanks={partRanks}
               qualityReports={qualityReports} qualityLoadFailed={qualityLoadFailed}
               loading={partsLoading} t={t}
               aspectRatio={RATIO_INFO[cfg.ratio].api}
@@ -820,6 +920,57 @@ function SubtitleDemo({ style }: { style: string }) {
         <span style={{ color: hlC, WebkitTextFillColor: hlC }}> AI Clip</span>
         {' '}Studio
       </span>
+    </div>
+  )
+}
+
+// ── SubtitlePreview — real FFmpeg/libass rendered preview frame ───────────────
+function SubtitlePreview({ style, aspectRatio, fontSize }: {
+  style: string; aspectRatio: string; fontSize: number
+}) {
+  const [imgSrc, setImgSrc] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [failed, setFailed]  = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    setFailed(false)
+    const params = new URLSearchParams({
+      style,
+      aspect_ratio: aspectRatio,
+      font_size: String(fontSize > 0 ? fontSize : 0),
+      text: 'This is a preview subtitle',
+    })
+    const url = `${BASE_URL}/api/render/subtitle-preview?${params}`
+    const timer = setTimeout(() => {
+      const img = new Image()
+      img.onload  = () => { setImgSrc(url); setLoading(false) }
+      img.onerror = () => { setFailed(true); setLoading(false) }
+      img.src = url
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [style, aspectRatio, fontSize])
+
+  if (failed) return <SubtitleDemo style={style} />
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'stretch' }}>
+      {loading && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'rgba(17,24,39,.85)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 24,
+        }}>
+          <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid rgba(255,255,255,.15)', borderTopColor: 'var(--accent)', animation: 'rw-spin .8s linear infinite' }} />
+        </div>
+      )}
+      {imgSrc && (
+        <img
+          src={imgSrc}
+          alt="Subtitle preview"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      )}
     </div>
   )
 }
@@ -988,6 +1139,9 @@ function StepConfigure({
   t: Strings
 }) {
   void applyPreset
+  const [cfgMode, setCfgMode] = React.useState<'quick' | 'advanced'>('quick')
+  const adv = cfgMode === 'advanced'
+
   const src          = sources[0]
   const ratioInfo    = RATIO_INFO[cfg.ratio]
   const previewVideoUrl = prepareResult ? getPreviewVideoUrl(prepareResult.session_id) : null
@@ -1000,6 +1154,27 @@ function StepConfigure({
 
       {/* ── LEFT ──────────────────────────────────────────────────────────── */}
       <div className="cfg-left">
+
+        {/* ── Quick / Advanced mode toggle ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <div style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: 3, gap: 3 }}>
+            {(['quick', 'advanced'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setCfgMode(m)}
+                style={{
+                  padding: '4px 14px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+                  letterSpacing: '.04em', textTransform: 'uppercase', cursor: 'pointer', border: 'none',
+                  background: cfgMode === m ? 'var(--accent)' : 'transparent',
+                  color: cfgMode === m ? '#fff' : 'var(--text-3)',
+                  transition: 'background .12s, color .12s',
+                }}
+              >
+                {m === 'quick' ? 'Quick' : 'Advanced'}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Source card */}
         <div className="cfg-src-card">
@@ -1035,6 +1210,7 @@ function StepConfigure({
               </div>
             ))}
           </div>
+          {adv && (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px' }}>
             <span style={{ fontSize: '10px', color: 'var(--text-3)', width: '28px' }}>MIN</span>
             <input
@@ -1051,6 +1227,7 @@ function StepConfigure({
             />
             <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>s</span>
           </div>
+          )}
         </div>
 
         {/* D. Output count */}
@@ -1105,6 +1282,7 @@ function StepConfigure({
         </div>
 
         {/* A. Quality */}
+        {adv && (
         <div className="cfg-section">
           <div className="cfg-sec-hd">
             <span>QUALITY</span>
@@ -1117,6 +1295,7 @@ function StepConfigure({
             ))}
           </div>
         </div>
+        )}
 
         {/* M. Output folder */}
         <div className="cfg-section">
@@ -1156,11 +1335,20 @@ function StepConfigure({
             <span className="pvc tl" /><span className="pvc tr" />
             <span className="pvc bl" /><span className="pvc br" />
             {previewVideoUrl ? (
-              <video
-                key={previewVideoUrl}
-                src={previewVideoUrl}
-                autoPlay muted loop playsInline
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              <>
+                <video
+                  key={previewVideoUrl}
+                  src={previewVideoUrl}
+                  autoPlay muted loop playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+                {cfg.subEnabled && <SubtitleDemo style={cfg.subStyle} />}
+              </>
+            ) : cfg.subEnabled ? (
+              <SubtitlePreview
+                style={cfg.subStyle}
+                aspectRatio={RATIO_INFO[cfg.ratio].api}
+                fontSize={cfg.subFontSize}
               />
             ) : (
               <div className="pv-placeholder">
@@ -1168,7 +1356,6 @@ function StepConfigure({
                 <span className="pv-hint">Preview updates as you configure</span>
               </div>
             )}
-            {cfg.subEnabled && <SubtitleDemo style={cfg.subStyle} />}
             {prepareResult && (
               <TranscriptOverlay sessionId={prepareResult.session_id} subStyle={cfg.subStyle} subEnabled={cfg.subEnabled} />
             )}
@@ -1233,6 +1420,7 @@ function StepConfigure({
             </div>
 
             {/* I. Market */}
+            {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>MARKET</span>
@@ -1252,8 +1440,10 @@ function StepConfigure({
                 ))}
               </div>
             </div>
+            )}
 
             {/* K. Energy */}
+            {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>ENERGY</span>
@@ -1271,8 +1461,10 @@ function StepConfigure({
                 ))}
               </div>
             </div>
+            )}
 
             {/* L. Hook strength */}
+            {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>HOOK</span>
@@ -1289,8 +1481,10 @@ function StepConfigure({
                 ))}
               </div>
             </div>
+            )}
 
             {/* J. Focus mode */}
+            {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>FOCUS</span>
@@ -1308,8 +1502,10 @@ function StepConfigure({
                 ))}
               </div>
             </div>
+            )}
 
             {/* H. Output language */}
+            {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>OUTPUT LANGUAGE</span>
@@ -1328,6 +1524,7 @@ function StepConfigure({
                 ))}
               </div>
             </div>
+            )}
 
             {/* AI Director */}
             <div className="cfg-section">
@@ -1450,6 +1647,7 @@ function StepConfigure({
             </div>
 
             {/* Font size */}
+            {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>{t.cfgFontSize}</span>
@@ -1467,8 +1665,10 @@ function StepConfigure({
                 </span>
               </div>
             </div>
+            )}
 
             {/* F. Language */}
+            {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>LANGUAGE</span>
@@ -1480,8 +1680,10 @@ function StepConfigure({
                 ))}
               </div>
             </div>
+            )}
 
             {/* F. Amount */}
+            {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>AMOUNT</span>
@@ -1498,8 +1700,10 @@ function StepConfigure({
                 ))}
               </div>
             </div>
+            )}
 
             {/* Auto-translate */}
+            {adv && (
             <div className="cfg-section">
               <div className="tog-row">
                 <div>
@@ -1522,6 +1726,7 @@ function StepConfigure({
                 </div>
               )}
             </div>
+            )}
 
           </div>
 
@@ -1567,6 +1772,7 @@ function StepConfigure({
             </div>
 
             {/* G. Style */}
+            {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>STYLE</span>
@@ -1584,8 +1790,10 @@ function StepConfigure({
                 ))}
               </div>
             </div>
+            )}
 
             {/* G. Source */}
+            {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>SOURCE</span>
@@ -1617,6 +1825,7 @@ function StepConfigure({
                 </div>
               )}
             </div>
+            )}
 
           </div>
 
@@ -1628,11 +1837,17 @@ function StepConfigure({
 
 // ── Step 3 — Rendering ────────────────────────────────────────────────────────
 
-type ClipSlot = { part_no: number; status: string; progress_percent: number }
+type ClipSlot = { part_no: number; status: string; progress_percent: number; duration?: number; message?: string }
 
 function buildClipSlots(liveParts: JobPart[], progress: WsProgressSummary | null): ClipSlot[] {
   if (liveParts.length > 0) {
-    return liveParts.map((p) => ({ part_no: p.part_no, status: p.status, progress_percent: p.progress_percent ?? 0 }))
+    return liveParts.map((p) => ({
+      part_no: p.part_no,
+      status: p.status,
+      progress_percent: p.progress_percent ?? 0,
+      duration: p.duration,
+      message: p.message,
+    }))
   }
   if (!progress) return []
   const slots: ClipSlot[] = []
@@ -1754,6 +1969,11 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: isActive ? 6 : 0 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', fontFamily: 'monospace', flexShrink: 0 }}>
             #{String(slot.part_no).padStart(2, '0')}
+            {slot.duration != null && slot.duration > 0 && (
+              <span style={{ fontWeight: 400, opacity: 0.55, marginLeft: 4 }}>
+                {Math.floor(slot.duration / 60)}:{String(Math.floor(slot.duration % 60)).padStart(2, '0')}
+              </span>
+            )}
           </span>
 
           <span style={{
@@ -1811,9 +2031,27 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio }: {
                 )
               })}
             </div>
-            {activity && (
-              <div style={{ fontSize: 9, color: 'var(--text-3)', paddingLeft: 2 }}>{activity}</div>
+            {(slot.message || activity) && (
+              <div style={{ fontSize: 9, color: 'var(--text-3)', paddingLeft: 2 }}>
+                {slot.message || activity}
+              </div>
             )}
+          </div>
+        )}
+        {isFail && slot.message && (
+          <div style={{ fontSize: 9, color: 'var(--fail)', opacity: 0.8, paddingLeft: 2, marginTop: 4, lineHeight: 1.4 }}>
+            {slot.message}
+          </div>
+        )}
+        {isDone && jobId && (
+          <div style={{ marginTop: 4 }}>
+            <a
+              href={getPartMediaUrl(jobId, slot.part_no)}
+              target="_blank" rel="noreferrer"
+              style={{ fontSize: 9, color: '#34C878', textDecoration: 'none', fontWeight: 700, letterSpacing: '.04em' }}
+            >
+              ▶ PREVIEW
+            </a>
           </div>
         )}
       </div>
@@ -1845,6 +2083,10 @@ function StepRendering({
   }, [isTerminal])
   const mm = Math.floor(elapsed / 60).toString().padStart(2, '0')
   const ss = (elapsed % 60).toString().padStart(2, '0')
+
+  const etaSec = pct > 2 && !isTerminal ? Math.round(elapsed * (100 - pct) / pct) : null
+  const etaMm  = etaSec !== null ? Math.floor(etaSec / 60).toString().padStart(2, '0') : null
+  const etaSs  = etaSec !== null ? (etaSec % 60).toString().padStart(2, '0') : null
 
   const phases = [
     { key: 'download',   label: t.rndPhaseDownload },
@@ -1885,7 +2127,14 @@ function StepRendering({
               {isFailed ? t.rndFailed : isTerminal ? t.rndComplete : t.rndInProgress}
             </span>
           </div>
-          {!isTerminal && jobId && <span className="rd-elapsed">{mm}:{ss}</span>}
+          {!isTerminal && jobId && (
+            <span className="rd-elapsed">
+              {mm}:{ss}
+              {etaMm !== null && (
+                <span style={{ opacity: 0.5, marginLeft: 6, fontWeight: 400 }}>ETA {etaMm}:{etaSs}</span>
+              )}
+            </span>
+          )}
         </div>
 
         <div className="rd-step-text">
@@ -1963,37 +2212,16 @@ function StepRendering({
           </span>
         </div>
       ) : (
-        <div className="rd-queue-scroll">
-          {clipSlots.map(slot => {
-            const stateKey = clipStateKey(slot.status)
-            const activity = ACTIVITY_LABELS[slot.status.toLowerCase()] ?? ''
-            const livePart = liveParts.find(p => p.part_no === slot.part_no)
-            const durSec   = livePart?.duration ?? 0
-            const durLabel = durSec > 0
-              ? `${Math.floor(durSec / 60)}:${String(Math.floor(durSec % 60)).padStart(2, '0')}`
-              : null
-            const stageText = activity || (stateKey === 'done' ? 'Completed' : stateKey === 'failed' ? 'Failed' : 'Waiting to start…')
-            return (
-              <div key={slot.part_no} className={`rd-queue-row rd-row-${stateKey}`}>
-                <div className="rd-row-head">
-                  <span className="rd-row-name">
-                    Clip {String(slot.part_no).padStart(2, '0')}
-                    {durLabel && <span className="rd-row-dur"> · {durLabel}</span>}
-                  </span>
-                  <span className={`rd-row-badge rd-badge-${stateKey}`}>{getStatusLabel(slot.status)}</span>
-                </div>
-                <div className="rd-row-bar-track">
-                  <div className="rd-row-bar-fill" style={{ width: `${slot.progress_percent}%` }} />
-                </div>
-                <div className="rd-row-stage">{stageText}</div>
-                {stateKey === 'done' && jobId && (
-                  <div className="rd-row-actions">
-                    <a className="rd-row-btn" href={getPartMediaUrl(jobId, slot.part_no)} target="_blank" rel="noreferrer">Preview</a>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+        <div className="rd-queue-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 12px' }}>
+          {clipSlots.map(slot => (
+            <ClipRow
+              key={slot.part_no}
+              slot={slot}
+              statusLabel={getStatusLabel(slot.status)}
+              jobId={jobId}
+              thumbRatio={thumbRatio}
+            />
+          ))}
         </div>
       )}
 
@@ -2069,13 +2297,14 @@ function ScoreRingLg({ score }: { score: number }) {
 }
 
 function StepResults({
-  jobId, parts, partScores, qualityReports, qualityLoadFailed,
+  jobId, parts, partScores, partRanks, qualityReports, qualityLoadFailed,
   loading, t, aspectRatio, jobStatus, onRetry, isRetrying,
   aiAnalysisMode, aiCloudProvider,
 }: {
   jobId: string | null
   parts: JobPart[]
   partScores: Record<number, number>
+  partRanks: Record<number, PartRankResult>
   qualityReports: Record<number, QualityReport | null>
   qualityLoadFailed: boolean
   loading: boolean
@@ -2089,12 +2318,32 @@ function StepResults({
 }) {
   const [selectedPart, setSelectedPart] = useState<JobPart | null>(null)
   const [sortMode, setSortMode] = useState<'viral' | 'duration'>('viral')
+  const [aiSummary, setAiSummary] = useState<JobAiSummary | null>(null)
+  const [aiSummaryOpen, setAiSummaryOpen] = useState(false)
+  const [deletedOutputs, setDeletedOutputs] = useState<Set<number>>(new Set())
+
+  async function handleDeleteOutput(partNo: number) {
+    if (!jobId) return
+    if (!window.confirm(`Delete output file for clip #${partNo}? This cannot be undone.`)) return
+    try {
+      await deletePartOutput(jobId, partNo)
+      setDeletedOutputs(prev => new Set([...prev, partNo]))
+    } catch { /* file may already be gone */ }
+  }
+
+  useEffect(() => {
+    if (!jobId) return
+    getJobAiSummary(jobId).then(s => { if (s.available) setAiSummary(s) }).catch(() => {})
+  }, [jobId])
+
   const doneParts  = parts.filter((p) => p.status === 'done')
   const failedParts = parts.filter((p) => p.status === 'failed')
   const sortedDone = [...doneParts].sort((a, b) =>
     sortMode === 'duration'
       ? (b.duration ?? 0) - (a.duration ?? 0)
-      : (partScores[b.part_no] ?? 0) - (partScores[a.part_no] ?? 0)
+      : Object.keys(partRanks).length > 0
+        ? (partRanks[a.part_no]?.output_rank ?? 999) - (partRanks[b.part_no]?.output_rank ?? 999)
+        : (partScores[b.part_no] ?? 0) - (partScores[a.part_no] ?? 0)
   )
 
   const outputDir = (() => {
@@ -2109,6 +2358,7 @@ function StepResults({
   }
 
   const selScore  = selectedPart ? partScores[selectedPart.part_no] : undefined
+  const selRank   = selectedPart ? partRanks[selectedPart.part_no] : undefined
   const selReport = selectedPart ? qualityReports[selectedPart.part_no] : undefined
 
   const fmtMetric = (v: unknown): string => {
@@ -2203,6 +2453,102 @@ function StepResults({
           </div>
         )}
 
+        {/* AI Summary card */}
+        {aiSummary && (
+          <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+            <button
+              onClick={() => setAiSummaryOpen(o => !o)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 16px', background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textAlign: 'left',
+              }}
+            >
+              <span style={{ color: 'var(--accent)', fontSize: 13 }}>✦</span>
+              AI Analysis
+              {aiSummary.confidence_tier && (
+                <span style={{
+                  fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, marginLeft: 4,
+                  background: aiSummary.confidence_tier === 'strong' ? 'rgba(52,200,120,.15)' : 'rgba(234,179,8,.12)',
+                  color: aiSummary.confidence_tier === 'strong' ? '#34c878' : '#eab308',
+                }}>
+                  {aiSummary.confidence_tier}
+                </span>
+              )}
+              {aiSummary.best_score !== null && (
+                <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>
+                  Best: #{aiSummary.best_part_no} · {aiSummary.best_score}%
+                </span>
+              )}
+              <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: aiSummary.best_score !== null ? 0 : 'auto' }}>
+                {aiSummaryOpen ? '▲' : '▼'}
+              </span>
+            </button>
+
+            {aiSummaryOpen && (
+              <div style={{ padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+                {/* Best clip reason */}
+                {aiSummary.best_reason && (
+                  <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                    <span style={{ color: 'var(--accent)', marginRight: 4 }}>★</span>
+                    {aiSummary.best_reason}
+                    {aiSummary.score_margin !== null && (
+                      <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 6 }}>
+                        (+{aiSummary.score_margin.toFixed(1)} vs #2)
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Story arc */}
+                {typeof aiSummary.story === 'object' && (aiSummary.story as Record<string,unknown>)['description'] && (
+                  <div style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5, borderLeft: '2px solid var(--accent)', paddingLeft: 8 }}>
+                    {String((aiSummary.story as Record<string,unknown>)['description'])}
+                  </div>
+                )}
+
+                {/* Compact ranking table */}
+                {aiSummary.ranking_summary.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 5 }}>
+                      Clip Ranking
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      {aiSummary.ranking_summary.map(r => (
+                        <div key={r.part_no} style={{
+                          display: 'flex', alignItems: 'center', gap: 8, fontSize: 10,
+                          padding: '3px 8px', borderRadius: 5,
+                          background: r.is_best_clip ? 'rgba(var(--accent-rgb,.15),0.15)' : 'rgba(255,255,255,.03)',
+                        }}>
+                          <span style={{ width: 14, textAlign: 'center', fontWeight: 700, color: r.rank === 1 ? 'var(--accent)' : 'var(--text-3)' }}>#{r.rank}</span>
+                          <span style={{ color: 'var(--text-2)' }}>Part {r.part_no}</span>
+                          <span style={{ fontWeight: 700, color: r.score >= 75 ? 'var(--ok)' : r.score >= 50 ? 'var(--warn)' : 'var(--text-3)' }}>{r.score}%</span>
+                          {r.dominant_signal && <span style={{ color: 'var(--text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.dominant_signal.replace(/_/g, ' ')}</span>}
+                          {r.is_best_clip && <span style={{ fontSize: 9, color: 'var(--accent)', fontWeight: 700 }}>BEST</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Rejected segments count */}
+                {aiSummary.rejected_count > 0 && (
+                  <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                    {aiSummary.rejected_count} segment{aiSummary.rejected_count !== 1 ? 's' : ''} evaluated but not selected
+                  </div>
+                )}
+
+                {/* Warning */}
+                {aiSummary.output_ranking_warning && (
+                  <div style={{ fontSize: 10, color: 'var(--warn)' }}>⚠ {aiSummary.output_ranking_warning}</div>
+                )}
+
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Sort / count bar */}
         <div className="res-bar">
           <span className="res-count">{t.resClipsRendered(doneParts.length)}</span>
@@ -2223,19 +2569,22 @@ function StepResults({
         ) : (
           <div className="clip-cards-row">
             {sortedDone.map((part, i) => {
-              const score      = partScores[part.part_no]
+              const rank       = partRanks[part.part_no]
+              const qualScore  = partScores[part.part_no]
+              const dispScore  = rank?.output_rank_score ?? qualScore
               const thumbUrl   = getPartThumbnailUrl(jobId, part.part_no)
               const isSelected = selectedPart?.part_no === part.part_no
-              const tier       = score !== undefined ? aiTier(score) : null
+              const tier       = dispScore !== undefined ? aiTier(dispScore) : null
               const durFmt     = fmtDur(part.duration)
-              const scoreCol   = score !== undefined
-                ? (score >= 70 ? 'var(--ok)' : score >= 50 ? 'var(--warn)' : 'var(--fail)')
+              const scoreCol   = dispScore !== undefined
+                ? (dispScore >= 70 ? 'var(--ok)' : dispScore >= 50 ? 'var(--warn)' : 'var(--fail)')
                 : ''
+              const isBest     = rank?.is_best_clip === true
 
               return (
                 <div
                   key={part.part_no}
-                  className={`clip-card2${i === 0 ? ' is-top' : ''}${isSelected ? ' selected' : ''}`}
+                  className={`clip-card2${isBest ? ' is-top' : ''}${isSelected ? ' selected' : ''}`}
                   onClick={() => setSelectedPart(isSelected ? null : part)}
                 >
                   {/* Thumb */}
@@ -2243,9 +2592,12 @@ function StepResults({
                     <img src={thumbUrl} alt={`Clip ${part.part_no}`}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                    <div className="clip-rank">#{i + 1}</div>
-                    {score !== undefined && (
-                      <div className="clip-score-badge" style={{ color: scoreCol, borderColor: scoreCol }}>{Math.round(score)}</div>
+                    {isBest
+                      ? <div className="clip-rank" style={{ background: 'linear-gradient(135deg,#f59e0b,#f97316)', color: '#000' }}>★ BEST</div>
+                      : <div className="clip-rank">#{rank?.output_rank ?? i + 1}</div>
+                    }
+                    {dispScore !== undefined && (
+                      <div className="clip-score-badge" style={{ color: scoreCol, borderColor: scoreCol }}>{Math.round(dispScore)}</div>
                     )}
                     {durFmt && <div className="clip-dur-badge">{durFmt}</div>}
                     <div className="clip-overlay">
@@ -2266,12 +2618,32 @@ function StepResults({
                       <span className="clip-num-lbl2">Clip {String(part.part_no).padStart(2, '0')}</span>
                       {tier && <span className={`clip-ai-badge ${tier.cls}`}>{tier.label}</span>}
                     </div>
-                    {score !== undefined && (
+                    {dispScore !== undefined && (
                       <div className="clip-score-bar-track">
-                        <div className="clip-score-bar-fill" style={{ width: `${score}%`, background: scoreCol }} />
+                        <div className="clip-score-bar-fill" style={{ width: `${dispScore}%`, background: scoreCol }} />
                       </div>
                     )}
-                    {(part.hook_score > 0 || part.viral_score > 0) && (
+                    {rank?.ranking_reason && (
+                      <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2, lineHeight: 1.3 }}>{rank.ranking_reason}</div>
+                    )}
+                    {rank?.dominant_signal && (
+                      <div style={{ fontSize: 8, marginTop: 3, color: 'rgba(168,85,247,.75)', fontWeight: 700, letterSpacing: '.02em' }}>
+                        ↑ {rank.dominant_signal.replace(/_/g, ' ')}
+                      </div>
+                    )}
+                    {rank?.suppressed_signals && rank.suppressed_signals.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, marginTop: 2 }}>
+                        {rank.suppressed_signals.slice(0, 2).map((s, i) => (
+                          <span key={i} style={{
+                            fontSize: 7, padding: '1px 4px', borderRadius: 99,
+                            background: 'rgba(239,68,68,.1)', color: 'rgba(239,68,68,.6)',
+                          }}>
+                            ↓ {s.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {!rank && (part.hook_score > 0 || part.viral_score > 0) && (
                       <div className="clip-scores-row">
                         {part.hook_score > 0 && <span className="clip-score-pill hook">Hook {Math.round(part.hook_score)}%</span>}
                         {part.viral_score > 0 && <span className="clip-score-pill viral">Viral {Math.round(part.viral_score)}%</span>}
@@ -2284,6 +2656,57 @@ function StepResults({
                         onClick={(e) => e.stopPropagation()}>
                         Save
                       </a>
+                      {part.output_file && (
+                        <button
+                          title="Copy path"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            navigator.clipboard.writeText(part.output_file).catch(() => {})
+                          }}
+                          style={{
+                            fontSize: 10, padding: '2px 7px', borderRadius: 5,
+                            border: '1px solid var(--border)', background: 'var(--bg-hover)',
+                            color: 'var(--text-3)', cursor: 'pointer',
+                          }}
+                        >
+                          Copy
+                        </button>
+                      )}
+                      {part.output_file && !deletedOutputs.has(part.part_no) && (
+                        <button
+                          title="Open folder"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const f = part.output_file
+                            const sep = f.includes('\\') ? '\\' : '/'
+                            const dir = f.substring(0, f.lastIndexOf(sep)) || f
+                            window.electronAPI?.openPath?.(dir)
+                          }}
+                          style={{
+                            fontSize: 10, padding: '2px 7px', borderRadius: 5,
+                            border: '1px solid var(--border)', background: 'var(--bg-hover)',
+                            color: 'var(--text-3)', cursor: 'pointer',
+                          }}
+                        >
+                          📂
+                        </button>
+                      )}
+                      {part.output_file && !deletedOutputs.has(part.part_no) && (
+                        <button
+                          title="Delete output file"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteOutput(part.part_no) }}
+                          style={{
+                            fontSize: 10, padding: '2px 7px', borderRadius: 5,
+                            border: '1px solid rgba(232,64,122,.3)', background: 'rgba(232,64,122,.08)',
+                            color: 'var(--fail)', cursor: 'pointer',
+                          }}
+                        >
+                          🗑
+                        </button>
+                      )}
+                      {deletedOutputs.has(part.part_no) && (
+                        <span style={{ fontSize: 9, color: 'var(--text-3)', padding: '2px 5px' }}>deleted</span>
+                      )}
                       <button className="clip-more-btn" title="Details"
                         onClick={(e) => { e.stopPropagation(); setSelectedPart(isSelected ? null : part) }}>
                         ···
@@ -2334,11 +2757,86 @@ function StepResults({
                 />
               </div>
 
-              {/* Score ring + tier */}
-              {selScore !== undefined && <ScoreRingLg score={selScore} />}
+              {/* Score ring: rank score preferred, quality score as fallback */}
+              {(selRank?.output_rank_score ?? selScore) !== undefined && (
+                <ScoreRingLg score={selRank?.output_rank_score ?? selScore!} />
+              )}
 
-              {/* Hook / Viral / Motion score bars */}
-              {selectedPart && (selectedPart.hook_score > 0 || selectedPart.viral_score > 0 || selectedPart.motion_score > 0) && (
+              {/* AI Ranking breakdown — shown when result_json ranking is available */}
+              {selRank && (
+                <div className="player-section">
+                  <div className="player-section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    AI Rank Score
+                    {selRank.confidence_tier && (
+                      <span style={{
+                        fontSize: 8, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
+                        background: selRank.confidence_tier === 'strong' ? 'rgba(52,200,120,.15)' : 'rgba(234,179,8,.12)',
+                        color: selRank.confidence_tier === 'strong' ? '#34C878' : '#eab308',
+                        letterSpacing: '.05em',
+                      }}>
+                        {selRank.confidence_tier === 'strong' ? 'STRONG' : selRank.confidence_tier === 'worth_testing' ? 'WORTH TESTING' : 'EXPERIMENTAL'}
+                      </span>
+                    )}
+                    {selRank.score_margin !== undefined && (
+                      <span style={{ fontSize: 9, color: 'var(--text-3)', marginLeft: 'auto' }}>
+                        +{selRank.score_margin.toFixed(1)} vs #2
+                      </span>
+                    )}
+                  </div>
+                  {selRank.ranking_reason && (
+                    <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 8, lineHeight: 1.4 }}>{selRank.ranking_reason}</div>
+                  )}
+                  <div className="player-score-bars">
+                    {([
+                      ['Viral',     selRank.ranking_components.segment_viral_score, 'psb-viral'],
+                      ['Hook',      selRank.ranking_components.hook_score,           'psb-hook'],
+                      ['Retention', selRank.ranking_components.retention_score,      'psb-motion'],
+                      ['Speech',    selRank.ranking_components.speech_density_score, 'psb-hook'],
+                      ['Market',    selRank.ranking_components.market_score,         'psb-viral'],
+                      ['Duration',  selRank.ranking_components.duration_fit_score,   'psb-motion'],
+                    ] as [string, number, string][]).map(([label, val, cls]) => (
+                      <div key={label} className="psb-row">
+                        <span className="psb-label">{label}</span>
+                        <div className="psb-track">
+                          <div className={`psb-fill ${cls}`} style={{ width: `${val}%` }} />
+                        </div>
+                        <span className="psb-val">{Math.round(val)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  {(selRank.dominant_signal || (selRank.suppressed_signals && selRank.suppressed_signals.length > 0) || selRank.ranking_components.content_type_hint) && (
+                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {selRank.dominant_signal && (
+                        <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                          Dominant: <span style={{ color: 'var(--accent)' }}>{selRank.dominant_signal.replace(/_/g, ' ')}</span>
+                        </div>
+                      )}
+                      {selRank.suppressed_signals && selRank.suppressed_signals.length > 0 && (
+                        <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                          Suppressed:{' '}
+                          {selRank.suppressed_signals.map((s, i) => (
+                            <span key={i} style={{
+                              display: 'inline-block', marginRight: 4, padding: '1px 6px',
+                              borderRadius: 99, background: 'rgba(239,68,68,.1)',
+                              color: 'rgba(239,68,68,.7)', fontSize: 9,
+                            }}>
+                              {s.replace(/_/g, ' ')}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {selRank.ranking_components.content_type_hint && (
+                        <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                          Content type: <span style={{ color: 'var(--text-2)' }}>{selRank.ranking_components.content_type_hint.replace(/_/g, ' ')}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Hook / Viral / Motion score bars (when no ranking data) */}
+              {!selRank && selectedPart && (selectedPart.hook_score > 0 || selectedPart.viral_score > 0 || selectedPart.motion_score > 0) && (
                 <div className="player-score-bars">
                   {selectedPart.hook_score > 0 && (
                     <div className="psb-row">

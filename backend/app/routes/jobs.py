@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_parts_bulk, get_job, delete_job
+from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_parts_bulk, get_job, delete_job, clear_part_output
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR, TEMP_DIR
 from app.quality.report_locator import load_quality_report_for_part
@@ -22,6 +22,32 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 _STUCK_THRESHOLD_S = 120   # seconds with no DB update before a part is flagged stuck
 _ACTIVE_STATUSES   = {"waiting", "cutting", "transcribing", "rendering", "downloading"}
 _TERMINAL_STATUSES = frozenset({"completed", "completed_with_errors", "failed", "interrupted", "cancelled"})
+
+
+def _classify_error_kind(job: dict) -> str:
+    """Map job stage + message to a structured error kind for frontend display.
+
+    Only called when job status == 'failed'. Returns a stable string constant
+    that the frontend maps to a human-readable label and icon.
+    """
+    stage = (job.get("stage") or "").upper()
+    msg   = (job.get("message") or "").lower()
+
+    if stage == "DOWNLOADING" or "download" in msg or "yt-dlp" in msg or "youtube" in msg:
+        return "DOWNLOAD_FAILED"
+    if stage == "TRANSCRIBING" or "whisper" in msg or "transcri" in msg:
+        return "WHISPER_FAILED"
+    if "not found on disk" in msg or "source file not found" in msg or "filenotfounderror" in msg:
+        return "SOURCE_NOT_FOUND"
+    if "ffmpeg" in msg or "encode" in msg or "mux" in msg:
+        return "FFMPEG_FAILED"
+    if "qa" in stage or "quality" in msg or "validation" in msg or "corrupt" in msg:
+        return "QA_FAILED"
+    if "voice" in msg or "tts" in msg or "narration" in msg:
+        return "VOICE_FAILED"
+    if stage == "CANCELLED" or "cancel" in msg:
+        return "CANCELLED"
+    return "RENDER_FAILED"
 
 
 def _parse_json(raw):
@@ -320,6 +346,74 @@ def api_get_job_parts(job_id: str):
     return {"items": list_job_parts(job_id)}
 
 
+@router.get("/{job_id}/ai-summary")
+def api_get_job_ai_summary(job_id: str):
+    """Return structured AI decision data for a job.
+
+    Parses result_json and returns job-level AI reasoning: director plan, story,
+    ranking summary, and segment-level context for all evaluated clips (including
+    those not selected as final outputs).
+    """
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    result = _parse_json(row.get("result_json"))
+    if not result:
+        return {"job_id": job_id, "available": False}
+
+    output_ranking: list[dict] = result.get("output_ranking") or []
+    best_clip: dict | None     = result.get("best_clip")
+    all_segments: list[dict]   = result.get("segments") or []
+    ai_director: dict          = result.get("ai_director") or {}
+    ai_ux: dict                = result.get("ai_ux") or {}
+    story: dict                = result.get("story") or {}
+
+    selected_part_nos = {int(e.get("part_no", 0)) for e in output_ranking}
+    rejected_segments = [
+        {
+            "part_no":       i + 1,
+            "viral_score":   float(s.get("viral_score") or 0),
+            "hook_score":    float(s.get("hook_score") or 0),
+            "motion_score":  float(s.get("motion_score") or 0),
+            "duration":      float(s.get("duration") or 0),
+            "reject_reason": s.get("reject_reason") or s.get("skip_reason") or "",
+        }
+        for i, s in enumerate(all_segments)
+        if (i + 1) not in selected_part_nos
+    ]
+
+    ranking_summary = [
+        {
+            "part_no":          int(e.get("part_no", 0)),
+            "rank":             int(e.get("output_rank", 0)),
+            "score":            round(float(e.get("output_rank_score") or e.get("output_score") or 0), 1),
+            "reason":           e.get("ranking_reason") or "",
+            "dominant_signal":  e.get("dominant_signal") or "",
+            "confidence_tier":  e.get("confidence_tier") or "",
+            "is_best_clip":     bool(e.get("is_best_clip")),
+        }
+        for e in output_ranking
+    ]
+
+    return {
+        "job_id":           job_id,
+        "available":        True,
+        "director_enabled": bool(ai_director.get("enabled")),
+        "story":            story,
+        "ai_ux":            ai_ux,
+        "output_count":     len(output_ranking),
+        "best_part_no":     int(best_clip.get("part_no", 0)) if best_clip else None,
+        "best_score":       round(float(best_clip.get("output_rank_score") or best_clip.get("output_score") or 0), 1) if best_clip else None,
+        "best_reason":      best_clip.get("ranking_reason") or "" if best_clip else "",
+        "confidence_tier":  best_clip.get("confidence_tier") or "" if best_clip else "",
+        "score_margin":     best_clip.get("score_margin") if best_clip else None,
+        "ranking_summary":  ranking_summary,
+        "rejected_count":   len(rejected_segments),
+        "rejected_segments": rejected_segments,
+        "output_ranking_warning": result.get("output_ranking_warning") or "",
+    }
+
+
 @router.get("/{job_id}/logs")
 def api_get_job_logs(job_id: str, lines: int = 120):
     row = get_job(job_id)
@@ -540,7 +634,10 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
             # Always send when something material changed or on terminal — never
             # suppress terminal events even if fingerprint matches a prior tick.
             if fp != last_fp or is_terminal:
-                await websocket.send_json({"job": job, "parts": parts, "summary": summary})
+                job_payload = job
+                if is_terminal and job.get("status") == "failed":
+                    job_payload = {**job, "error_kind": _classify_error_kind(job)}
+                await websocket.send_json({"job": job_payload, "parts": parts, "summary": summary})
                 last_fp = fp
             # Close WS on any terminal status so the stream doesn't linger.
             # Must match TERMINAL_STATUSES in frontend transport.js.
@@ -556,6 +653,47 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
 @router.post("/cleanup/logs")
 def api_cleanup_logs(keep_last: int = 30, older_than_days: int = 10):
     return prune_job_logs(CHANNELS_DIR, keep_last=keep_last, older_than_days=older_than_days)
+
+
+@router.delete("/{job_id}/parts/{part_no}/output")
+def delete_part_output_endpoint(job_id: str, part_no: int):
+    """Delete the output file of a single rendered part and clear its DB path.
+
+    The file is only deleted when its resolved path is inside an allowed root
+    (CHANNELS_DIR or TEMP_DIR). Files outside those roots are rejected.
+    Cannot be called while the job is running or queued.
+    """
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if (row.get("status") or "").lower() in ("running", "queued"):
+        raise HTTPException(status_code=409, detail="Cannot delete output of a running job")
+
+    parts = list_job_parts(job_id)
+    part = next((p for p in parts if p.get("part_no") == part_no), None)
+    if not part:
+        raise HTTPException(status_code=404, detail=f"Part {part_no} not found")
+
+    out = str(part.get("output_file") or "").strip()
+    deleted = False
+    if out:
+        _safe_roots = tuple(r.resolve() for r in [CHANNELS_DIR, TEMP_DIR] if r.exists())
+        try:
+            p = Path(out).resolve()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid output file path")
+        if not any(p == r or p.is_relative_to(r) for r in _safe_roots):
+            raise HTTPException(status_code=403, detail="Output file is outside allowed roots")
+        try:
+            p.unlink(missing_ok=True)
+            deleted = True
+            logger.info("delete_part_output: removed job_id=%s part_no=%d path=%s", job_id, part_no, p)
+        except Exception as exc:
+            logger.warning("delete_part_output: failed job_id=%s part_no=%d: %s", job_id, part_no, exc)
+            raise HTTPException(status_code=500, detail=f"Failed to delete file: {exc}") from exc
+
+    clear_part_output(job_id, part_no)
+    return {"job_id": job_id, "part_no": part_no, "deleted": deleted}
 
 
 @router.delete("/{job_id}")
