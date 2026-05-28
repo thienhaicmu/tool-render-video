@@ -60,13 +60,21 @@ Write-Host "  $ffmpegVersion"
 Write-Host "==> Build offline backend executable (onedir)"
 Push-Location $BackendDir
 try {
+    # Native executables (pip, playwright, PyInstaller) write to stderr normally.
+    # Temporarily suspend Stop mode so PS5.1 doesn't treat stderr output as an error.
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     & $BackendVenvPy -m pip install pyinstaller --quiet
+    if ($LASTEXITCODE -ne 0) { $ErrorActionPreference = $prev; throw "pip install pyinstaller failed (exit $LASTEXITCODE)" }
 
     # Ensure Playwright browser binaries exist in local Python env before freezing.
     & $BackendVenvPy -m playwright install chromium
+    if ($LASTEXITCODE -ne 0) { $ErrorActionPreference = $prev; throw "playwright install chromium failed (exit $LASTEXITCODE)" }
 
     # Use the maintained spec file — it handles onedir + no-UPX + collect-all.
     & $BackendVenvPy -m PyInstaller --noconfirm --clean render-backend.spec
+    $pyiExit = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    if ($pyiExit -ne 0) { throw "PyInstaller failed (exit $pyiExit)" }
 } finally {
     Pop-Location
 }

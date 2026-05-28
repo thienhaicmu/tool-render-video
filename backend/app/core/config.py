@@ -2,6 +2,14 @@ import sys
 from pathlib import Path
 import os
 
+# Load .env from project root — must run before any os.getenv() call.
+# override=False: real environment variables always win over .env values.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(Path(__file__).resolve().parents[3] / ".env", override=False)
+except Exception:
+    pass
+
 
 def _default_app_data_dir() -> Path:
     """Return a stable data directory that survives PyInstaller packaging.
