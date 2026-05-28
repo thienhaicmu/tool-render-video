@@ -208,7 +208,7 @@ def _bootstrap_hybrid_analyzer(request: Any, chunks: list, context: dict):
 
         if req_enabled and req_key:
             provider, api_key, model = req_provider, req_key, req_model
-        elif _CFG_ENABLED and _CFG_KEY:
+        elif _CFG_KEY:
             provider = req_provider or _CFG_PROVIDER
             api_key  = _CFG_KEY
             model    = req_model or (_CFG_MODEL or None)
