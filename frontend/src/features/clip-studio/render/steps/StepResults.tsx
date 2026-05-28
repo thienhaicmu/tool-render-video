@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import type { JobPart, QualityReport, PartRankResult } from '../../../../types/api'
 import { getJobAiSummary, deletePartOutput } from '../../../../api/jobs'
 import type { JobAiSummary, HybridAnalysis } from '../../../../api/jobs'
@@ -284,7 +284,7 @@ export function StepResults({
                   </div>
                 )}
 
-                {typeof aiSummary.story === 'object' && (aiSummary.story as Record<string,unknown>)['description'] && (
+                {typeof aiSummary.story === 'object' && (aiSummary.story as Record<string,unknown>)['description'] != null && (
                   <div style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5, borderLeft: '2px solid var(--accent)', paddingLeft: 8 }}>
                     {String((aiSummary.story as Record<string,unknown>)['description'])}
                   </div>

@@ -22,5 +22,6 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src", "tests"]
+  "include": ["src"],
+  "exclude": ["tests"]
 }

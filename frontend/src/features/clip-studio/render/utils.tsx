@@ -1,4 +1,3 @@
-import React from 'react'
 import { BASE_URL } from '../../../api/client'
 
 export function getPartThumbnailUrl(jobId: string, partNo: number): string {

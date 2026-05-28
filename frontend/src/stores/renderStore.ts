@@ -48,7 +48,7 @@ export const useRenderStore = create<RenderStore>((set) => ({
       return {
         jobs: {
           ...state.jobs,
-          [jobId]: { ...existing, status, updated_at: new Date().toISOString() },
+          [jobId]: { ...existing, status: status as JobStatus['status'], updated_at: new Date().toISOString() },
         },
       }
     })

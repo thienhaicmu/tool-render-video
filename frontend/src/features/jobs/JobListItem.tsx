@@ -35,7 +35,7 @@ export function JobListItem({
   const st = STATUS_CFG[item.status] ?? FALLBACK
   const progressPct = item.total_count > 0
     ? Math.round((item.completed_count / item.total_count) * 100)
-    : item.progress_percent ?? 0
+    : 0
 
   return (
     <div

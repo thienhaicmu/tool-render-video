@@ -56,7 +56,7 @@ function MetaChip({ label, value }: { label: string; value: string }) {
   )
 }
 
-function ClipCard({ part, isBest, jobId }: { part: JobPart; isBest: boolean; jobId: string }) {
+function ClipCard({ part, isBest }: { part: JobPart; isBest: boolean; jobId: string }) {
   const isDone   = part.status === 'done'
   const isFailed = part.status === 'failed'
   const score    = part.viral_score > 0 ? part.viral_score : part.hook_score
@@ -232,7 +232,7 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
   const failedParts = parts.filter(p => p.status === 'failed')
   const outputDir = doneParts[0]?.output_file
     ? (() => { const f = doneParts[0].output_file; const sep = f.includes('\\') ? '\\' : '/'; return f.substring(0, f.lastIndexOf(sep)) })()
-    : job.output_dir
+    : (job as unknown as { output_dir?: string | null }).output_dir
 
   const canRetry  = ['completed_with_errors', 'partial', 'failed'].includes(job.status) && failedParts.length > 0
   const canRerun  = TERMINAL.has(job.status)
@@ -254,7 +254,7 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
               fontFamily: 'var(--fh)', letterSpacing: '.3px',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
-              {job.title || job.job_id.slice(0, 16)}
+              {(job as unknown as { title?: string }).title || job.job_id.slice(0, 16)}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <span style={{
