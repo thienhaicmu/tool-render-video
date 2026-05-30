@@ -223,6 +223,10 @@ def download_public_video(url: str, temp_dir: Path, progress_callback=None) -> d
         p = Path(cookiefile).expanduser()
         if p.is_file():
             opts["cookiefile"] = str(p)
+    else:
+        browser_name = (os.getenv("YTDLP_COOKIES_FROM_BROWSER", "") or "").strip().lower()
+        if browser_name:
+            opts["cookiesfrombrowser"] = (browser_name, None, None, None)
 
     try:
         with YoutubeDL(opts) as ydl:
@@ -298,6 +302,10 @@ def check_youtube_download_health(url: str) -> dict:
             p = Path(cookiefile).expanduser()
             if p.is_file():
                 opts["cookiefile"] = str(p)
+        else:
+            browser_name = (os.getenv("YTDLP_COOKIES_FROM_BROWSER", "") or "").strip().lower()
+            if browser_name:
+                opts["cookiesfrombrowser"] = (browser_name, None, None, None)
         try:
             with YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -421,12 +429,18 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
 
     common["progress_hooks"] = [_yt_progress_hook]
 
-    # Optional cookie file for unlocking higher-quality formats
+    # Optional cookie auth for age-restricted / login-required videos.
+    # Priority: YTDLP_COOKIEFILE (explicit file) > YTDLP_COOKIES_FROM_BROWSER (live browser).
+    # Set YTDLP_COOKIES_FROM_BROWSER=chrome (or firefox / edge / brave / chromium).
     cookiefile = (os.getenv("YTDLP_COOKIEFILE", "") or "").strip()
     if cookiefile:
         p = Path(cookiefile).expanduser()
         if p.is_file():
             common["cookiefile"] = str(p)
+    else:
+        browser_name = (os.getenv("YTDLP_COOKIES_FROM_BROWSER", "") or "").strip().lower()
+        if browser_name:
+            common["cookiesfrombrowser"] = (browser_name, None, None, None)
 
     def _try_download(opts: dict) -> dict:
         with YoutubeDL(opts) as ydl:
@@ -532,8 +546,10 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
             "extractor_retries": 2,
             **client_kwargs,
         }
-        if cookiefile:
+        if "cookiefile" in common:
             probe_opts["cookiefile"] = common["cookiefile"]
+        elif "cookiesfrombrowser" in common:
+            probe_opts["cookiesfrombrowser"] = common["cookiesfrombrowser"]
         with YoutubeDL(probe_opts) as ydl:
             return ydl.extract_info(url, download=False)
 
