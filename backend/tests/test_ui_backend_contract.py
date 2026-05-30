@@ -62,9 +62,10 @@ class TestRenderEndpoints:
         resp = client.post("/api/render/process", json={})
         assert resp.status_code in (400, 422)
 
-    def test_batch_endpoint_exists(self):
+    def test_batch_endpoint_removed(self):
+        """POST /api/render/process/batch was removed — must return 404/405, not 400/422."""
         resp = client.post("/api/render/process/batch", json={})
-        assert resp.status_code in (400, 422)
+        assert resp.status_code in (404, 405)
 
     def test_prepare_source_endpoint_exists(self):
         resp = client.post("/api/render/prepare-source", json={"source_mode": "youtube", "youtube_url": ""})

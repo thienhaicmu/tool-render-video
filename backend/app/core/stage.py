@@ -27,6 +27,7 @@ class JobPartStage(str, Enum):
     RENDERING    = "rendering"
     DONE         = "done"
     FAILED       = "failed"
+    SKIPPED      = "skipped"
 
 
 # Maps JobStage → structured event name used by _emit_render_event().

@@ -10,7 +10,7 @@ interface SourceHeroProps {
     id: string,
     title: string,
     duration: number,
-    sourceMode: 'youtube' | 'local',
+    sourceMode: 'local',
     outputDir: string,
   ) => void
 }

@@ -48,6 +48,31 @@ function SubtitleDemo({ style }: { style: string }) {
       fontFamily: 'var(--fh)', fontSize: '15px', fontWeight: 700, color: '#00E5C8', letterSpacing: '1px',
       textShadow: '0 0 12px rgba(0,229,200,.8), -1px -1px 0 #000, 1px 1px 0 #000',
     },
+    neon_glow: {
+      fontFamily: 'var(--fh)', fontSize: '16px', fontWeight: 900, color: '#fff', letterSpacing: '.5px',
+      textShadow: '0 0 8px #0ff, 0 0 20px #0ff, -2px -2px 0 #0ff, 2px 2px 0 #0ff',
+    },
+    fire_bold: {
+      fontFamily: 'var(--fh)', fontSize: '18px', fontWeight: 900, color: '#FFE500', textTransform: 'uppercase',
+      textShadow: '-2px -2px 0 #FF4500, 2px 2px 0 #FF4500, 0 0 10px rgba(255,69,0,.6)',
+    },
+    color_pop: {
+      fontFamily: 'var(--fh)', fontSize: '18px', fontWeight: 900, color: '#FFE500',
+      textShadow: '-3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000',
+    },
+    dark_card: {
+      fontFamily: 'var(--fb)', fontSize: '13px', fontWeight: 700, color: '#fff',
+      background: 'rgba(0,0,0,.78)', padding: '5px 14px', borderRadius: '4px',
+      display: 'inline-block',
+    },
+    slay_soft: {
+      fontFamily: 'var(--fh)', fontSize: '16px', fontWeight: 800, color: '#fff',
+      textShadow: '-2px -2px 0 #FF69B4, 2px 2px 0 #FF69B4, 0 0 12px rgba(255,105,180,.5)',
+    },
+    bold_stroke: {
+      fontFamily: 'var(--fh)', fontSize: '19px', fontWeight: 900, color: '#fff', textTransform: 'uppercase',
+      textShadow: '-3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000, -3px 0 0 #000, 3px 0 0 #000',
+    },
   }
 
   const textStyle = variants[style] ?? variants['pro_karaoke']
@@ -119,56 +144,39 @@ function SubtitlePreview({ style, aspectRatio, fontSize }: {
   )
 }
 
-// ── SubStyleCard — visual style card for subtitle style picker ────────────────
+// ── SubStyleCard — loads real FFmpeg/libass preview from /api/render/subtitle-preview
+// Falls back to CSS approximation only when backend is unreachable.
 function SubStyleCard({ id, label, selected, onSelect }: {
   id: string; label: string; selected: boolean; onSelect: () => void
 }) {
-  const PREVIEWS: Record<string, React.ReactNode> = {
-    tiktok_bounce_v1: (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-        <span style={{ color: '#fff', fontSize: '11px', fontWeight: 800, fontFamily: 'var(--fh)', letterSpacing: '.3px', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000' }}>YOU GO</span>
-        <span style={{ color: '#00FFFF', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', letterSpacing: '.3px', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000' }}>THAT WAY TOO</span>
-      </div>
-    ),
-    viral_bold: (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
-        <span style={{ color: '#fff', fontSize: '11px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', letterSpacing: '1px', textShadow: '-1.5px -1.5px 0 #000,1.5px 1.5px 0 #000,1.5px -1.5px 0 #000,-1.5px 1.5px 0 #000' }}>YOU GO</span>
-        <span style={{ color: '#FFE500', fontSize: '14px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', letterSpacing: '.5px', textShadow: '-1.5px -1.5px 0 #000,1.5px 1.5px 0 #000,1.5px -1.5px 0 #000,-1.5px 1.5px 0 #000' }}>THAT WAY</span>
-      </div>
-    ),
-    bold_cap: (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-        <span style={{ color: '#fff', fontSize: '11px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,0 2px 8px rgba(0,0,0,.9)' }}>BOLD</span>
-        <span style={{ color: '#fff', fontSize: '14px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,0 2px 8px rgba(0,0,0,.9)' }}>CAPTION</span>
-      </div>
-    ),
-    clean_pro: (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-        <span style={{ color: '#fff', fontSize: '10px', fontWeight: 400, fontFamily: 'var(--fb)', textShadow: '0 1px 6px rgba(0,0,0,.9)' }}>clean subtitle</span>
-        <span style={{ color: '#fff', fontSize: '10px', fontWeight: 400, fontFamily: 'var(--fb)', textShadow: '0 1px 6px rgba(0,0,0,.9)' }}>professional</span>
-      </div>
-    ),
-    story_clean_01: (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-        <span style={{ background: 'rgba(0,0,0,.6)', padding: '3px 10px', borderRadius: '2px', color: '#f6f6f6', fontSize: '10px', fontWeight: 500, fontFamily: 'var(--fb)', display: 'inline-block' }}>story clean</span>
-        <span style={{ background: 'rgba(0,0,0,.6)', padding: '3px 10px', borderRadius: '2px', color: '#f6f6f6', fontSize: '10px', fontWeight: 500, fontFamily: 'var(--fb)', display: 'inline-block' }}>subtitle</span>
-      </div>
-    ),
-    gaming: (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-        <span style={{ color: '#fff', fontSize: '11px', fontWeight: 700, fontFamily: 'var(--fh)', letterSpacing: '1px', textShadow: '-1px -1px 0 #000,1px 1px 0 #000' }}>GAMING</span>
-        <span style={{ color: '#00E5C8', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--fh)', letterSpacing: '1px', textShadow: '0 0 12px rgba(0,229,200,.9),-1px -1px 0 #000,1px 1px 0 #000' }}>MODE ON</span>
-      </div>
-    ),
-    pro_karaoke: (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-        <span style={{ color: 'rgba(255,255,255,0.55)', fontSize: '9px', fontWeight: 700, fontFamily: 'var(--fh)', letterSpacing: '.3px', textShadow: '-1px -1px 0 #000,1px 1px 0 #000' }}>THAT WAY TOO</span>
-        <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-          <span style={{ color: '#00FF00', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,0 0 8px rgba(0,255,0,.6)' }}>YOU</span>
-          <span style={{ color: '#fff', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '-1px -1px 0 #000,1px 1px 0 #000' }}>GO</span>
-        </div>
-      </div>
-    ),
+  const [imgSrc, setImgSrc] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const params = new URLSearchParams({ style: id, aspect_ratio: '9:16', font_size: '0', text: 'AI Clip' })
+    const url = `${BASE_URL}/api/render/subtitle-preview?${params}`
+    const img = new Image()
+    img.onload  = () => { if (!cancelled) setImgSrc(url) }
+    img.onerror = () => { if (!cancelled) setFailed(true) }
+    img.src = url
+    return () => { cancelled = true }
+  }, [id])
+
+  // CSS fallbacks — shown only when backend is unavailable
+  const CSS_FALLBACK: Record<string, React.ReactNode> = {
+    tiktok_bounce_v1: <span style={{ color: '#fff', fontSize: '12px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000' }}>BOUNCE</span>,
+    viral_bold:  <span style={{ color: '#FFE500', fontSize: '12px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-1.5px -1.5px 0 #000,1.5px 1.5px 0 #000,1.5px -1.5px 0 #000,-1.5px 1.5px 0 #000' }}>VIRAL</span>,
+    bold_cap:    <span style={{ color: '#fff', fontSize: '12px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,0 2px 8px rgba(0,0,0,.9)' }}>CAPS</span>,
+    clean_pro:   <span style={{ color: '#fff', fontSize: '11px', fontWeight: 400, fontFamily: 'var(--fb)', textShadow: '0 1px 6px rgba(0,0,0,.9)' }}>Clean</span>,
+    story_clean_01: <span style={{ background: 'rgba(0,0,0,.6)', padding: '2px 8px', borderRadius: '2px', color: '#f6f6f6', fontSize: '10px', fontWeight: 500, fontFamily: 'var(--fb)', display: 'inline-block' }}>Story</span>,
+    gaming:      <span style={{ color: '#00E5C8', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--fh)', letterSpacing: '1px', textShadow: '0 0 10px rgba(0,229,200,.9),-1px -1px 0 #000,1px 1px 0 #000' }}>GAMING</span>,
+    neon_glow:   <span style={{ color: '#fff', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '0 0 8px #0ff,0 0 18px #0ff,-1px -1px 0 #0ff,1px 1px 0 #0ff' }}>NEON</span>,
+    fire_bold:   <span style={{ color: '#FFE500', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-1.5px -1.5px 0 #FF4500,1.5px 1.5px 0 #FF4500,0 0 8px rgba(255,69,0,.7)' }}>FIRE</span>,
+    color_pop:   <span style={{ color: '#FFE500', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000' }}>POP!</span>,
+    dark_card:   <span style={{ background: 'rgba(0,0,0,.78)', padding: '2px 10px', borderRadius: '4px', color: '#fff', fontSize: '10px', fontWeight: 600, fontFamily: 'var(--fb)', display: 'inline-block' }}>Card</span>,
+    slay_soft:   <span style={{ color: '#fff', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '-1.5px -1.5px 0 #FF69B4,1.5px 1.5px 0 #FF69B4,0 0 8px rgba(255,105,180,.5)' }}>SLAY</span>,
+    bold_stroke: <span style={{ color: '#fff', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,-2px 0 0 #000,2px 0 0 #000' }}>STROKE</span>,
   }
 
   return (
@@ -176,8 +184,18 @@ function SubStyleCard({ id, label, selected, onSelect }: {
       className={`sub-style-card${selected ? ' on' : ''}`}
       onClick={onSelect}
     >
-      <div className="ssc-frame">
-        {PREVIEWS[id] ?? <span style={{ color: '#888', fontSize: '10px' }}>{label}</span>}
+      <div className="ssc-frame" style={{ overflow: 'hidden' }}>
+        {imgSrc ? (
+          <img src={imgSrc} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        ) : failed ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+            {CSS_FALLBACK[id] ?? <span style={{ color: '#888', fontSize: '10px' }}>{label}</span>}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid rgba(255,255,255,.15)', borderTopColor: 'var(--accent)', animation: 'rw-spin .8s linear infinite' }} />
+          </div>
+        )}
       </div>
       <span className="ssc-label">{label}</span>
     </div>
@@ -214,16 +232,24 @@ function TranscriptOverlay({ sessionId, subStyle, subEnabled }: { sessionId: str
   const variants: Record<string, React.CSSProperties> = {
     pro_karaoke:      { fontFamily: 'var(--fh)', fontSize: '13px', fontWeight: 800, color: '#fff', textShadow: '-1px -1px 0 #000, 1px 1px 0 #000' },
     tiktok_bounce_v1: { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 900, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,.9)' },
-    viral_bold:       { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 900, color: '#fff', letterSpacing: '1px', textShadow: '0 2px 10px rgba(0,0,0,.9)' },
+    viral_bold:       { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 900, color: '#FFE500', letterSpacing: '1px', textShadow: '-1px -1px 0 #000,1px 1px 0 #000' },
     bold_cap:         { fontFamily: 'var(--fh)', fontSize: '13px', fontWeight: 900, color: '#fff', textTransform: 'uppercase' as const, textShadow: '0 2px 8px rgba(0,0,0,.9)' },
     boxed_caption:    { fontFamily: 'var(--fb)', fontSize: '12px', fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,.75)', padding: '3px 8px', borderRadius: '4px' },
     story_clean_01:   { fontFamily: 'var(--fb)', fontSize: '12px', fontWeight: 400, color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,.9)' },
     clean_pro:        { fontFamily: 'var(--fb)', fontSize: '13px', fontWeight: 400, color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,.9)' },
     gaming:           { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 700, color: '#00E5C8', letterSpacing: '1px', textShadow: '0 0 12px rgba(0,229,200,.8)' },
+    neon_glow:        { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 900, color: '#fff', textShadow: '0 0 8px #0ff,0 0 18px #0ff,-1px -1px 0 #0ff,1px 1px 0 #0ff' },
+    fire_bold:        { fontFamily: 'var(--fh)', fontSize: '15px', fontWeight: 900, color: '#FFE500', textTransform: 'uppercase' as const, textShadow: '-1.5px -1.5px 0 #FF4500,1.5px 1.5px 0 #FF4500' },
+    color_pop:        { fontFamily: 'var(--fh)', fontSize: '15px', fontWeight: 900, color: '#FFE500', textShadow: '-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000' },
+    dark_card:        { fontFamily: 'var(--fb)', fontSize: '13px', fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,.78)', padding: '3px 10px', borderRadius: '4px' },
+    slay_soft:        { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 900, color: '#fff', textShadow: '-1.5px -1.5px 0 #FF69B4,1.5px 1.5px 0 #FF69B4,0 0 10px rgba(255,105,180,.5)' },
+    bold_stroke:      { fontFamily: 'var(--fh)', fontSize: '15px', fontWeight: 900, color: '#fff', textTransform: 'uppercase' as const, textShadow: '-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,-2px 0 0 #000,2px 0 0 #000' },
   }
   const hlColor: Record<string, string> = {
     pro_karaoke: '#00FF00', tiktok_bounce_v1: '#00E5C8', viral_bold: '#fff',
-    bold_cap: '#00E5C8', gaming: '#fff',
+    bold_cap: '#00E5C8', gaming: '#fff', neon_glow: '#0ff',
+    fire_bold: '#fff', color_pop: '#fff', dark_card: '#0ff',
+    slay_soft: '#FF69B4', bold_stroke: '#FFE500',
   }
   const style = variants[subStyle] ?? variants['clean_pro']
   const hlC = hlColor[subStyle] ?? 'var(--cyan)'
@@ -705,7 +731,10 @@ export function StepConfigure({
                   </div>
                   <div style={{ display: 'flex', gap: 4 }}>
                     {(['local', 'cloud', 'hybrid'] as const).map((m) => (
-                      <button key={m} onClick={() => setCfgKey('aiAnalysisMode', m)} style={{
+                      <button key={m} onClick={() => {
+                        setCfgKey('aiAnalysisMode', m)
+                        if (m !== 'local' && cfg.aiCloudApiKey) setCfgKey('aiContentDriven', true)
+                      }} style={{
                         flex: 1, padding: '5px 0', borderRadius: 6, fontSize: 11, fontWeight: 600,
                         cursor: 'pointer', border: `1px solid ${cfg.aiAnalysisMode === m ? '#a855f7' : 'var(--border-default)'}`,
                         backgroundColor: cfg.aiAnalysisMode === m ? 'rgba(168,85,247,.15)' : 'transparent',
@@ -741,7 +770,12 @@ export function StepConfigure({
                         <input
                           type="password"
                           value={cfg.aiCloudApiKey}
-                          onChange={(e) => { setCfgKey('aiCloudApiKey', e.target.value); setTestStatus('idle') }}
+                          onChange={(e) => {
+                            const key = e.target.value
+                            setCfgKey('aiCloudApiKey', key)
+                            setTestStatus('idle')
+                            if (key) setCfgKey('aiContentDriven', true)
+                          }}
                           placeholder={cfg.aiCloudProvider === 'groq' ? 'gsk_...' : 'sk-...'}
                           style={{
                             flex: 1, padding: '6px 8px', borderRadius: 6, fontSize: 11,
@@ -834,10 +868,15 @@ export function StepConfigure({
               </div>
               <div className="sub-style-grid">
                 {([
-                  { id: 'pro_karaoke',       label: 'Karaoke' },
                   { id: 'tiktok_bounce_v1',  label: 'Bounce'  },
                   { id: 'viral_bold',        label: 'Viral'   },
                   { id: 'bold_cap',          label: 'Caps'    },
+                  { id: 'neon_glow',         label: 'Neon'    },
+                  { id: 'fire_bold',         label: 'Fire'    },
+                  { id: 'color_pop',         label: 'Pop'     },
+                  { id: 'slay_soft',         label: 'Slay'    },
+                  { id: 'bold_stroke',       label: 'Stroke'  },
+                  { id: 'dark_card',         label: 'Card'    },
                   { id: 'clean_pro',         label: 'Clean'   },
                   { id: 'story_clean_01',    label: 'Story'   },
                   { id: 'gaming',            label: 'Gaming'  },
@@ -859,13 +898,13 @@ export function StepConfigure({
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <input
-                  type="range" min={32} max={120} step={4}
+                  type="range" min={0} max={200} step={8}
                   value={cfg.subFontSize}
                   onChange={(e) => setCfgKey('subFontSize', Number(e.target.value))}
                   style={{ flex: 1 }}
                 />
-                <span style={{ fontFamily: 'var(--fh)', fontSize: '13px', fontWeight: 700, minWidth: '36px', textAlign: 'right', color: 'var(--accent)' }}>
-                  {cfg.subFontSize}
+                <span style={{ fontFamily: 'var(--fh)', fontSize: '13px', fontWeight: 700, minWidth: '40px', textAlign: 'right', color: 'var(--accent)' }}>
+                  {cfg.subFontSize === 0 ? 'Auto' : cfg.subFontSize}
                 </span>
               </div>
             </div>

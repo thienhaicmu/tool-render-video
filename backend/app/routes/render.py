@@ -221,30 +221,32 @@ def _validate_render_source(payload: RenderRequest):
     if output_mode not in ("channel", "manual"):
         raise HTTPException(status_code=400, detail="output_mode must be 'channel' or 'manual'")
 
-    # When an editor session is provided, the pipeline uses the session's video_path
-    # instead of downloading; skip source-URL/path validation entirely.
+    # When an editor session is provided, the pipeline uses the session's video_path;
+    # skip source-path validation entirely.
     if (getattr(payload, "edit_session_id", None) or "").strip():
         _validate_output_dir(payload)
         return
 
-    mode = (payload.source_mode or "youtube").lower().strip()
-    yt = (payload.youtube_url or "").strip()
-    yt_many = [str(x).strip() for x in (payload.youtube_urls or []) if str(x).strip()]
+    mode = (payload.source_mode or "local").lower().strip()
     local = (payload.source_video_path or "").strip()
-    if mode not in ("youtube", "local"):
-        raise HTTPException(status_code=400, detail="source_mode must be 'youtube' or 'local'")
-    if mode == "youtube":
-        if not yt and not yt_many:
-            raise HTTPException(status_code=400, detail="youtube_url or youtube_urls is required when source_mode='youtube'")
-        if local:
-            raise HTTPException(status_code=400, detail="source_video_path must be empty when source_mode='youtube'")
-    else:
-        if not local:
-            raise HTTPException(status_code=400, detail="source_video_path is required when source_mode='local'")
-        if yt:
-            raise HTTPException(status_code=400, detail="youtube_url must be empty when source_mode='local'")
-        if not Path(local).exists():
-            raise HTTPException(status_code=400, detail=f"Source file not found on disk: {local}")
+
+    # Render pipeline only accepts local files. YouTube/platform sources must be
+    # downloaded first via POST /api/render/prepare-source → then pass edit_session_id.
+    if mode != "local":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"source_mode='{mode}' is not supported by /api/render/process. "
+                "To render a YouTube or platform video, first call "
+                "POST /api/render/prepare-source to download it, "
+                "then pass the returned session_id as edit_session_id."
+            ),
+        )
+
+    if not local:
+        raise HTTPException(status_code=400, detail="source_video_path is required when source_mode='local'")
+    if not Path(local).exists():
+        raise HTTPException(status_code=400, detail=f"Source file not found on disk: {local}")
     _validate_output_dir(payload)
     if output_mode == "channel":
         channel = (payload.channel_code or "").strip()
@@ -614,146 +616,6 @@ def create_render_job(payload: RenderRequest):
     resume_mode = bool(existing) and payload.resume_from_last
     _queue_render_job(job_id, effective_channel, payload, resume_mode=resume_mode, queued_message="Job queued")
     return {"job_id": job_id, "status": "queued", "resume_mode": resume_mode}
-
-
-@router.post("/process/batch")
-def create_render_batch(payload: RenderRequest):
-    try:
-        _validate_render_source(payload)
-        _validate_text_layers_or_400(payload)
-    except HTTPException as exc:
-        logger.warning("Batch render request rejected (HTTP %s): %s", exc.status_code, exc.detail)
-        _emit_request_event(route="/api/render/process/batch", status_code=exc.status_code, detail=str(exc.detail), channel_code=(payload.channel_code or "").strip())
-        raise
-    effective_channel = (payload.channel_code or "").strip() or "manual"
-    if (payload.source_mode or "youtube").lower() != "youtube":
-        raise HTTPException(status_code=400, detail="Batch mode supports youtube source only")
-    urls = [str(x).strip() for x in (payload.youtube_urls or []) if str(x).strip()]
-    if not urls and (payload.youtube_url or "").strip():
-        urls = [(payload.youtube_url or "").strip()]
-    if len(urls) < 2:
-        raise HTTPException(status_code=400, detail="Batch mode requires at least 2 youtube URLs")
-
-    batch_id = str(uuid.uuid4())
-    child_job_ids: list[str] = [str(uuid.uuid4()) for _ in urls]
-    upsert_job(
-        batch_id,
-        "render_batch",
-        effective_channel,
-        "queued",
-        payload.model_dump(),
-        {"count": len(urls)},
-        stage=JobStage.QUEUED,
-        progress_percent=0,
-        message=f"Batch queued with {len(urls)} urls",
-    )
-
-    def _run_batch():
-        try:
-            upsert_job(
-                batch_id,
-                "render_batch",
-                effective_channel,
-                "running",
-                payload.model_dump(),
-                {"count": len(urls), "jobs": child_job_ids},
-                stage=JobStage.RUNNING,
-                progress_percent=1,
-                message="Batch running",
-            )
-            for idx, (url, child_id) in enumerate(zip(urls, child_job_ids), start=1):
-                from app.services import cancel_registry
-                if cancel_registry.is_cancelled(batch_id):
-                    logger.info("Batch %s: cancel requested — stopping after %d/%d", batch_id, idx - 1, len(urls))
-                    upsert_job(
-                        batch_id, "render_batch", effective_channel, "cancelled",
-                        payload.model_dump(), {"count": len(urls), "jobs": child_job_ids},
-                        stage=JobStage.DONE, progress_percent=100,
-                        message=f"Batch cancelled after {idx - 1}/{len(urls)} items",
-                    )
-                    return
-                child_payload = RenderRequest(**{**payload.model_dump(), "youtube_url": url, "youtube_urls": [url], "resume_job_id": None})
-                upsert_job(
-                    child_id,
-                    "render",
-                    effective_channel,
-                    "queued",
-                    child_payload.model_dump(),
-                    {},
-                    stage=JobStage.QUEUED,
-                    progress_percent=0,
-                    message=f"Queued by batch {batch_id[:8]} ({idx}/{len(urls)})",
-                )
-                # Route child through submit_job so it is tracked by job_manager
-                # (appears in _active_job_ids, respects MAX_CONCURRENT_JOBS).
-                # A threading.Event lets the batch coordinator wait for this child
-                # to finish before moving to the next without busy-polling.
-                # The try/finally inside _child_fn guarantees _done is always set,
-                # even if process_render raises an exception.
-                _done = threading.Event()
-                def _child_fn(_id=child_id, _p=child_payload, _ev=_done):
-                    try:
-                        process_render(_id, _p, False)
-                    finally:
-                        _ev.set()
-                submitted = submit_job(child_id, _child_fn)
-                if submitted:
-                    completed_in_time = _done.wait(timeout=7200)  # 2h hard ceiling per child
-                    if not completed_in_time:
-                        logger.error(
-                            "Batch child %s timed out waiting (7200s) — marking failed and continuing", child_id
-                        )
-                        update_job_progress(child_id, "timeout", 100, "Child timed out in batch", status="failed")
-                # If submit_job returned False the child_id was already tracked
-                # (duplicate submission guard) — skip the wait; the DB status
-                # reflects the real outcome when batch progress is written below.
-                pct = int((idx / len(urls)) * 100)
-                upsert_job(
-                    batch_id,
-                    "render_batch",
-                    effective_channel,
-                    "running",
-                    payload.model_dump(),
-                    {"count": len(urls), "jobs": child_job_ids},
-                    stage=JobStage.RUNNING,
-                    progress_percent=pct,
-                    message=f"Processed {idx}/{len(urls)} links",
-                )
-            upsert_job(
-                batch_id,
-                "render_batch",
-                effective_channel,
-                "completed",
-                payload.model_dump(),
-                {"count": len(urls), "jobs": child_job_ids},
-                stage=JobStage.DONE,
-                progress_percent=100,
-                message=f"Batch completed: {len(urls)} links",
-            )
-        except Exception as exc:
-            upsert_job(
-                batch_id,
-                "render_batch",
-                effective_channel,
-                "failed",
-                payload.model_dump(),
-                {"count": len(urls), "jobs": child_job_ids, "error": str(exc)},
-                stage=JobStage.FAILED,
-                progress_percent=100,
-                message=f"Batch failed: {exc}",
-            )
-
-    # The batch coordinator is a supervisor, not a render worker: it submits
-    # child jobs and waits for each one — it does no CPU/GPU work itself.
-    # Running it via submit_job() would occupy a job_manager slot, causing
-    # deadlock when MAX_CONCURRENT_JOBS=1 (coordinator holds the only slot;
-    # no slot is free for children to be dispatched).
-    # A daemon thread avoids this: the coordinator is never in _active_job_ids,
-    # so children submitted via submit_job() can be dispatched at any concurrency
-    # level. All FFmpeg-level limits (JOB_SEMAPHORE, MAX_CONCURRENT_JOBS) still
-    # apply to each child through the normal submit_job path.
-    threading.Thread(target=_run_batch, daemon=True, name=f"batch-{batch_id[:8]}").start()
-    return {"batch_id": batch_id, "job_ids": child_job_ids, "count": len(urls), "status": "queued"}
 
 
 @router.post("/upload-local")

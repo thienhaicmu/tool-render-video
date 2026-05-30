@@ -18,11 +18,14 @@ _HL_CLOSE = ""
 
 
 def _compute_subtitle_scale(play_res_x: int = 1080, play_res_y: int = 1440) -> dict:
-    base = min(max(1, int(play_res_x)), max(1, int(play_res_y)))
+    # Use height (play_res_y) as base — portrait-first scaling.
+    # Previously used min(x,y)=1080 for 9:16 video → font 54/1920 = 2.8% (too small).
+    # Height-based: 1920*0.05 = 96px = 5% → matches TikTok/Reels native subtitle size.
+    base = max(1, int(play_res_y))
     return {
         "font_size": max(24, int(base * 0.05)),
-        "outline":   max(1, round(base * 0.003)),
-        "shadow":    max(1, round(base * 0.004)),
+        "outline":   max(1, round(base * 0.0025)),
+        "shadow":    max(1, round(base * 0.002)),
     }
 
 
@@ -50,6 +53,10 @@ _PRESET_MOTION_FX: dict[str, str] = {
     # Energetic — Anton at large sizes reads best with snap-fast settle
     "viral":            r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
     "gaming":           r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
+    "neon_glow":        r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
+    "fire_bold":        r"{\fscx118\fscy118\t(0,130,\fscx100\fscy100)}",
+    "bold_stroke":      r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
+    "color_pop":        r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
     # Classic TikTok — punchy but softer than pre-OQ-1.4 (was 122%/200ms)
     "tiktok_bounce_v1": r"{\fscx112\fscy112\t(0,150,\fscx100\fscy100)}",
     "viral_bold":       r"{\fscx112\fscy112\t(0,150,\fscx100\fscy100)}",
@@ -57,6 +64,7 @@ _PRESET_MOTION_FX: dict[str, str] = {
     # Editorial / story — soft micro-pop: gentle entry, longer settle
     "story_clean_01":   r"{\fscx108\fscy108\t(0,160,\fscx100\fscy100)}",
     "clean_pro":        r"{\fscx106\fscy106\t(0,160,\fscx100\fscy100)}",
+    "slay_soft":        r"{\fscx108\fscy108\t(0,160,\fscx100\fscy100)}",
 }
 _MOTION_FX_DEFAULT = r"{\fscx112\fscy112\t(0,150,\fscx100\fscy100)}"
 
@@ -99,7 +107,7 @@ _PRESETS: dict[str, ASSPreset] = {
         outline_color="&H00000000", back_color="&H90000000",
         bold=0, border_style=1, outline_default=4, shadow_default=2,
         alignment=2, margin_l=30, margin_r=30, wrap_max_em=16.0,
-        bounce_fx=True, auto_scale=False, heavy_scale=False, margin_v_ratio=0.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
         spacing=0.3,
     ),
     "bold_cap": ASSPreset(
@@ -117,7 +125,7 @@ _PRESETS: dict[str, ASSPreset] = {
         outline_color="&H00000000", back_color="&H80000000",
         bold=0, border_style=1, outline_default=3, shadow_default=1,
         alignment=2, margin_l=40, margin_r=40, wrap_max_em=16.0,
-        bounce_fx=True, auto_scale=False, heavy_scale=False, margin_v_ratio=0.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
         spacing=0.5,
     ),
     "viral_bold": ASSPreset(
@@ -199,6 +207,90 @@ _PRESETS: dict[str, ASSPreset] = {
         bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.20,
         spacing=0.3,
     ),
+
+    # ── CapCut-inspired visual presets ──────────────────────────────────────────
+
+    # neon_glow: white text + thick cyan outline + purple shadow = neon sign look.
+    # Good for: night life, music, gaming, high-energy content.
+    "neon_glow": ASSPreset(
+        id="neon_glow", font_default="Bungee", base_font_size=50,
+        primary_color="&H00FFFFFF", secondary_color="&H00FFFF00",
+        # outline_color: cyan (#00FFFF) in ASS BBGGRR = BB=FF GG=FF RR=00 → &H00FFFF00
+        outline_color="&H00FFFF00",
+        # back_color: semi-transparent purple = RGB(128,0,255) → BB=FF GG=00 RR=80 → &H80FF0080
+        back_color="&H80FF0080",
+        bold=-1, border_style=1, outline_default=6, shadow_default=4,
+        alignment=2, margin_l=25, margin_r=25, wrap_max_em=14.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.20,
+        spacing=0.5,
+    ),
+
+    # fire_bold: yellow text + red-orange outline = burning/fire look.
+    # Good for: energy, motivation, sports highlight, reaction.
+    "fire_bold": ASSPreset(
+        id="fire_bold", font_default="Anton", base_font_size=52,
+        primary_color="&H0000FFFF", secondary_color="&H00FFFFFF",
+        # outline_color: orange-red (#FF4500) → BB=00 GG=45 RR=FF → &H004500FF
+        outline_color="&H004500FF",
+        back_color="&H00000000",
+        bold=-1, border_style=1, outline_default=5, shadow_default=2,
+        alignment=2, margin_l=20, margin_r=20, wrap_max_em=13.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.22,
+        spacing=0.3,
+    ),
+
+    # color_pop: high-contrast yellow on thick black stroke — max-readability pop.
+    # Good for: commentary, listicle, tutorial, any viral short.
+    "color_pop": ASSPreset(
+        id="color_pop", font_default="Bungee", base_font_size=50,
+        primary_color="&H0000FFFF", secondary_color="&H00FFFFFF",
+        outline_color="&H00000000", back_color="&H00000000",
+        bold=-1, border_style=1, outline_default=6, shadow_default=0,
+        alignment=2, margin_l=25, margin_r=25, wrap_max_em=14.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.20,
+        spacing=0.5,
+    ),
+
+    # dark_card: white text inside a dark semi-transparent card box.
+    # Good for: news, tutorial, podcast, educational — clean & professional.
+    "dark_card": ASSPreset(
+        id="dark_card", font_default="Montserrat", base_font_size=38,
+        primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
+        outline_color="&H00000000",
+        # back_color: C8 alpha ≈ 78% opaque black box
+        back_color="&HC8000000",
+        bold=-1, border_style=3, outline_default=14, shadow_default=0,
+        alignment=2, margin_l=30, margin_r=30, wrap_max_em=17.0,
+        bounce_fx=False, auto_scale=True, heavy_scale=False, margin_v_ratio=0.0,
+        spacing=0.6,
+    ),
+
+    # slay_soft: white text + hot-pink outline + soft pink shadow — trendy feminine.
+    # Good for: lifestyle, beauty, fashion, soft-vibe TikTok content.
+    "slay_soft": ASSPreset(
+        id="slay_soft", font_default="Bungee", base_font_size=46,
+        primary_color="&H00FFFFFF", secondary_color="&H00B469FF",
+        # outline_color: hot pink (#FF69B4) → BB=B4 GG=69 RR=FF → &H00B469FF
+        outline_color="&H00B469FF",
+        # back_color: semi-transparent hot-pink shadow
+        back_color="&H60B469FF",
+        bold=-1, border_style=1, outline_default=3, shadow_default=2,
+        alignment=2, margin_l=30, margin_r=30, wrap_max_em=15.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=False, margin_v_ratio=0.20,
+        spacing=0.5,
+    ),
+
+    # bold_stroke: white text + mega-thick black stroke — printed-text impact.
+    # Good for: documentary, hook intro, cinematic title card mid-video.
+    "bold_stroke": ASSPreset(
+        id="bold_stroke", font_default="Anton", base_font_size=54,
+        primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
+        outline_color="&H00000000", back_color="&H00000000",
+        bold=-1, border_style=1, outline_default=8, shadow_default=0,
+        alignment=2, margin_l=20, margin_r=20, wrap_max_em=13.0,
+        bounce_fx=True, auto_scale=True, heavy_scale=True, margin_v_ratio=0.22,
+        spacing=0.3,
+    ),
 }
 
 # Legacy alias table — maps removed/renamed style IDs to canonical preset IDs.
@@ -209,6 +301,9 @@ _STYLE_ALIASES: dict[str, str] = {
     "viral_pop_anton":        "tiktok_bounce_v1",
     "viral_compact_barlow":   "tiktok_bounce_v1",
     "clean_bold_01":          "clean_pro",
+    "pro_karaoke":            "tiktok_bounce_v1",
+    "slay_soft_01":           "slay_soft",
+    "boxed":                  "dark_card",
 }
 
 _DEFAULT_PRESET_ID = "tiktok_bounce_v1"
@@ -254,7 +349,7 @@ def build_ass_style_line(
     if preset.auto_scale and font_size == 0:
         if preset.heavy_scale:
             # Heavy formula: viral_bold / bold_cap — larger font, heavier outline
-            _base = min(max(1, int(play_res_x)), max(1, int(play_res_y)))
+            _base = max(1, int(play_res_y))
             eff_font_size = max(24, int(_base * 0.055))
             eff_outline   = max(1, round(_base * 0.0035))
             eff_shadow    = max(1, round(_base * 0.002))
@@ -264,7 +359,7 @@ def build_ass_style_line(
             eff_outline   = _sc["outline"]
             eff_shadow    = _sc["shadow"]
     else:
-        eff_font_size = max(12, min(120, font_size)) if font_size > 0 else preset.base_font_size
+        eff_font_size = max(12, min(200, font_size)) if font_size > 0 else preset.base_font_size
         eff_outline   = outline_size if outline_size > 0 else preset.outline_default
         eff_shadow    = shadow_size  if shadow_size  > 0 else preset.shadow_default
         # tiktok_bounce_v1 segment mode: slightly lighter values for multi-word blocks

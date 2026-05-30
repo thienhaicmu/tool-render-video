@@ -84,7 +84,7 @@ export function StudioScreen() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState('')
   const [sessionDuration, setSessionDuration] = useState(0)
-  const [sessionSourceMode, setSessionSourceMode] = useState<'youtube' | 'local'>('youtube')
+  const [sessionSourceMode, setSessionSourceMode] = useState<'local'>('local')
   const [sessionOutputDir, setSessionOutputDir] = useState('')
   const [renderedJobId, setRenderedJobId] = useState<string | null>(null)
 
@@ -92,7 +92,7 @@ export function StudioScreen() {
     id: string,
     title: string,
     duration: number,
-    sourceMode: 'youtube' | 'local',
+    sourceMode: 'local',
     outputDir: string,
   ) => {
     setSessionId(id)

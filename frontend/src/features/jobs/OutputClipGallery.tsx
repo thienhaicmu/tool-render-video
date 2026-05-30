@@ -81,7 +81,7 @@ export function OutputClipGallery({ parts, bestPartNo }: OutputClipGalleryProps)
       >
         {sorted.map((part) => {
           const isDone = part.status === 'done'
-          const isFailed = part.status === 'failed' || part.status === 'cancelled'
+          const isFailed = part.status === 'failed' || part.status === 'skipped'
           const isBest = part.part_no === bestPartNo || part.hook_score >= 80
           const hasScore = isDone && (part.hook_score > 0 || part.viral_score > 0)
           const borderCol = isBest && isDone

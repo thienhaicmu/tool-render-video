@@ -8,7 +8,7 @@ import type { RenderRequest } from '../../../types/api'
 
 interface PlanStepProps {
   sessionId: string | null
-  sessionSourceMode: 'youtube' | 'local'
+  sessionSourceMode: 'local'
   sessionOutputDir: string
   onRenderStarted: (jobId: string) => void
 }

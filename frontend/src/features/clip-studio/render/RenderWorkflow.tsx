@@ -36,7 +36,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     clipLock: [], clipExclude: [],
     motionCrop: false,
     subEnabled: true, subStyle: 'tiktok_bounce_v1',
-    subHighlight: true, subFontSize: 72, subTranslate: false, subTranslateLang: 'en',
+    subHighlight: true, subFontSize: 0, subTranslate: false, subTranslateLang: 'en',
     subEmphasis: null, partOrder: 'viral',
     assetLogoPath: null, assetIntroPath: null, assetOutroPath: null, assetMusicProfile: null,
     whisperModel: 'auto',
@@ -211,7 +211,10 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       ai_cloud_provider:          cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' ? cfg.aiCloudProvider : undefined,
       ai_cloud_api_key:           cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' && cfg.aiCloudApiKey ? cfg.aiCloudApiKey : undefined,
       ai_cloud_model:             cfg.aiEnabled && cfg.aiCloudModel ? cfg.aiCloudModel : undefined,
-      ai_content_driven_selection: cfg.aiEnabled && cfg.aiContentDriven || undefined,
+      ai_content_driven_selection: cfg.aiEnabled && (
+        cfg.aiContentDriven ||
+        (cfg.aiAnalysisMode !== 'local' && !!cfg.aiCloudApiKey)
+      ) || undefined,
       multi_variant:       cfg.multiVariant || undefined,
       cta_enabled:         cfg.ctaEnabled || undefined,
       cta_type:            cfg.ctaEnabled ? cfg.ctaType : undefined,

@@ -54,10 +54,9 @@ export interface TimeRange {
 
 export interface RenderRequest {
   // Source group
-  source_mode: 'youtube' | 'local'
+  source_mode: 'local'
   source_quality_mode?: 'standard_1080' | 'high_1440' | 'best_available'
   youtube_url?: string
-  youtube_urls?: string[]
   source_video_path?: string
 
   // Output group
@@ -209,14 +208,14 @@ export interface JobStatus {
 // ── JobPart (from GET /api/jobs/{job_id}/parts) ───────────────────────────────
 
 export type JobPartStatus =
-  | 'done'
-  | 'failed'
+  | 'queued'
   | 'waiting'
   | 'cutting'
   | 'transcribing'
   | 'rendering'
-  | 'downloading'
-  | 'cancelled'
+  | 'done'
+  | 'failed'
+  | 'skipped'
 
 export interface JobPart {
   part_no: number
