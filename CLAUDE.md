@@ -161,7 +161,7 @@ QUEUED → WAITING → CUTTING → TRANSCRIBING → RENDERING → DONE
 
 **Rule:** The signature and emitted event shape of `_emit_render_event` in `render_pipeline.py` is frozen. Do not add, remove, or rename parameters. Do not change the event structure without simultaneously updating every call site in `render_pipeline.py` AND the WebSocket handler in `routes/jobs.py`.
 
-**Why it exists:** `_emit_render_event` is called at every stage boundary across the entire 5,816-line pipeline. Its output is the raw stream fed into the WebSocket connection consumed by the UI. Every call site must emit a consistent shape. There is no schema validation between the emitter and consumer.
+**Why it exists:** `_emit_render_event` is called at every stage boundary across the entire render pipeline (render_pipeline.py + stages/part_renderer.py). Its output is the raw stream fed into the WebSocket connection consumed by the UI. Every call site must emit a consistent shape. There is no schema validation between the emitter and consumer.
 
 **What breaks if violated:** WebSocket events arrive with missing or extra fields. The UI event handler silently ignores malformed events — no error is thrown. Progress tracking stops updating with no user-visible error. All active renders become opaque. The failure is invisible until the user realizes nothing is moving.
 
@@ -249,10 +249,11 @@ Risk order from highest to lowest. Any edit above your assigned risk tier requir
 ### CRITICAL — Full pytest suite + explicit user approval required before any edit
 
 ```
-backend/app/orchestration/render_pipeline.py        # 5,816 lines — all render stages in one file
+backend/app/orchestration/render_pipeline.py        # 2,158 lines — main orchestrator (refactored from 5,816-line monolith)
+backend/app/orchestration/stages/part_renderer.py   # 2,089 lines — per-part rendering: cut→TTS→subtitle→FFmpeg
 backend/app/orchestration/qa_pipeline.py            # output validation gate — never bypass
-backend/app/ai/director/ai_director.py              # 5,718 lines — AI orchestration monolith
-backend/app/services/motion_crop.py                 # 2,464 lines — OpenCV subject tracking
+backend/app/ai/director/ai_director.py              # 4,631 lines — AI orchestration monolith
+backend/app/services/motion_crop.py                 # 2,465 lines — OpenCV subject tracking
 data/app.db                                         # sole job state — never touch directly
 ```
 
@@ -262,7 +263,7 @@ data/app.db                                         # sole job state — never t
 backend/app/models/schemas.py                       # Pydantic API contracts — additive only, never rename
 backend/app/services/job_manager.py                 # in-process queue — thread safety and queue semantics
 backend/app/services/render/ffmpeg_helpers.py       # 560 lines — real FFmpeg execution layer
-backend/app/services/render/legacy_renderer.py      # 491 lines — render variant execution
+backend/app/services/render/legacy_renderer.py      # 491 lines — render_part() core + render_part_smart() wrapper
 backend/app/services/render/clip_ops.py             # 401 lines — clip assembly operations
 backend/app/services/subtitle_engine.py             # subtitle burn-in pipeline
 backend/app/services/db.py                          # DB connection + WAL mode setup
@@ -270,6 +271,8 @@ backend/app/core/ui_gate.py                         # controls which UI is serve
 backend/app/main.py                                 # startup sequence + router mounts
 backend/app/orchestration/asset_pipeline.py         # asset injection stage
 backend/app/orchestration/render_events.py          # event error classification
+backend/app/orchestration/pipeline_pre_render.py    # 789 lines — scene detection + segment planning
+backend/app/orchestration/pipeline_ai_phases.py     # 519 lines — 13 AI influence phases (beat exec, benchmark, learning)
 ```
 
 > ⚠️ CORRECTION — `render_engine.py` is 53 lines and is a thin facade. It is NOT the real FFmpeg execution layer.
@@ -285,6 +288,9 @@ backend/app/routes/editing.py
 backend/app/services/tts_service.py
 backend/app/services/audio_mix_service.py
 backend/app/orchestration/audio_pipeline.py
+backend/app/orchestration/pipeline_helpers.py       # 544 lines — output naming, CTA, subtitle utils, segment builder
+backend/app/orchestration/pipeline_ranking.py       # output scoring and best-clip selection
+backend/app/orchestration/pipeline_render_loop.py   # parallel part dispatch (ThreadPoolExecutor)
 backend/app/services/scene_detector.py
 backend/app/services/segment_builder.py             # clip boundary builder
 ```
@@ -303,11 +309,11 @@ backend/knowledge/**                                # add only — never delete 
 
 ## Critical Warnings
 
-### ⛔ render_pipeline.py — 5,816-Line Monolith
+### ⛔ render_pipeline.py + part_renderer.py — Refactored Dual Monolith
 
-`backend/app/orchestration/render_pipeline.py` contains every render stage, every part status update, every event emission, and every result write in a single 5,816-line file. It is not a normal file and must not be treated as one.
+`backend/app/orchestration/render_pipeline.py` (2,158 lines) is the main render orchestrator. It was refactored from a 5,816-line monolith — stage logic now lives in separate modules (pipeline_pre_render.py, pipeline_ai_phases.py, pipeline_render_loop.py, etc.) and per-part rendering lives in `stages/part_renderer.py` (2,089 lines). Both files are CRITICAL tier. A change in either can silently affect all render paths.
 
-- Full pytest is **required** — not optional — for any change to this file
+- Full pytest is **required** — not optional — for any change to either file
 - A Planner analysis with an explicit per-file change list is required before any edit
 - Explicit user approval is required — "I think it's fine" is not approval
 - Run pytest BEFORE your edit to establish a baseline, then AFTER to verify no regression
@@ -324,9 +330,9 @@ backend/knowledge/**                                # add only — never delete 
 - **NEVER** lower or remove the `ENABLE_DEVTOOLS=1` requirement
 - Any change to `devtools.py` requires explicit HIGH-risk user approval
 
-### ⛔ ai_director.py — 5,718-Line AI Orchestration Monolith
+### ⛔ ai_director.py — 4,631-Line AI Orchestration Monolith
 
-`backend/app/ai/director/ai_director.py` is the AI orchestration monolith — 5,718 lines, nearly the same size as `render_pipeline.py`. Apply the same caution level. Full Planner analysis required. AI safety rule applies: any unhandled exception here kills active render jobs.
+`backend/app/ai/director/ai_director.py` is the AI orchestration monolith — 4,631 lines. Apply the same caution level as render_pipeline.py. Full Planner analysis required. AI safety rule applies: any unhandled exception here kills active render jobs.
 
 ### ⛔ data/app.db — No Backup, No Recovery
 

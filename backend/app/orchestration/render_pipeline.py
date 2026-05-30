@@ -107,12 +107,14 @@ from app.orchestration.pipeline_config import (
     _reserve_source_path_in_dir, _reserve_source_path,
     _sanitize_channel_subdir, _resolve_output_dir,
 )
-from app.orchestration.pipeline_helpers import (
-    _safe_output_name, _smart_output_stem, _map_ai_segments_to_scored,
-    _select_cover_frame_time, _select_cta_text, _append_cta_block_to_srt,
-    _get_effective_playback_speed, _read_srt_meta, _build_variant_segments,
+from app.orchestration.pipeline_subtitle_utils import (
     _aspect_play_res_y, _apply_subtitle_edits_to_srt,
-    _PLATFORM_PROFILES,  # also used directly inside run_render_pipeline
+    _append_cta_block_to_srt, _read_srt_meta,
+)
+from app.orchestration.pipeline_segment_selection import (
+    _safe_output_name, _smart_output_stem, _map_ai_segments_to_scored,
+    _select_cover_frame_time, _select_cta_text, _get_effective_playback_speed,
+    _build_variant_segments, _PLATFORM_PROFILES,
 )
 from app.orchestration.pipeline_ai_phases import (
     run_phase_43_feedback_learning,

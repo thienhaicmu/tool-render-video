@@ -25,7 +25,7 @@ from app.orchestration.pipeline_cache import (
     _score_cache_get, _score_cache_put,
     _transcription_cache_get, _transcription_cache_put,
 )
-from app.orchestration.pipeline_helpers import _PLATFORM_PROFILES, _build_variant_segments
+from app.orchestration.pipeline_segment_selection import _PLATFORM_PROFILES, _build_variant_segments
 from app.orchestration.render_events import _emit_render_event, _job_log, _safe_unlink
 from app.orchestration.visual_analysis import VisualAnalysisResult
 from app.services.clip_scorer import score_scenes_clip, CLIP_SCORER_VERSION

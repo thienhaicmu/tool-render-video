@@ -12,7 +12,7 @@ silent, advisory, and never crashes the render.
 import logging
 
 from app.orchestration.render_events import _job_log, _emit_render_event
-from app.orchestration.pipeline_helpers import _map_ai_segments_to_scored
+from app.orchestration.pipeline_segment_selection import _map_ai_segments_to_scored
 
 logger = logging.getLogger("app.render")
 

@@ -30,13 +30,15 @@ from app.orchestration.part_assets import PartAssets
 from app.orchestration.part_plan import PartExecutionPlan
 from app.orchestration.pipeline_cache import _render_cache_key
 from app.orchestration.pipeline_config import extract_text_from_srt
-from app.orchestration.pipeline_helpers import (
-    _PLATFORM_PROFILES,
+from app.orchestration.pipeline_subtitle_utils import (
     _append_cta_block_to_srt,
     _apply_subtitle_edits_to_srt,
     _aspect_play_res_y,
-    _get_effective_playback_speed,
     _read_srt_meta,
+)
+from app.orchestration.pipeline_segment_selection import (
+    _PLATFORM_PROFILES,
+    _get_effective_playback_speed,
     _select_cover_frame_time,
     _select_cta_text,
 )
