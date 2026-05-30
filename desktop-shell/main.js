@@ -496,6 +496,25 @@ ipcMain.handle('pick-video-file', async () => {
   }
 });
 
+ipcMain.handle('pick-cookies-file', async () => {
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null;
+  try {
+    const result = await dialog.showOpenDialog(win || undefined, {
+      title: 'Choose cookies.txt file (exported from Chrome extension)',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Cookies file', extensions: ['txt'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled || !result.filePaths || !result.filePaths.length) return null;
+    return String(result.filePaths[0] || '');
+  } catch (err) {
+    console.error('[CookiePicker] error:', err);
+    return null;
+  }
+});
+
 ipcMain.handle('app:getVersion', () => app.getVersion());
 
 ipcMain.handle('path:exists', (_event, targetPath) => {

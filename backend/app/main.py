@@ -225,6 +225,20 @@ def startup():
     except Exception as _kw_err:
         logging.getLogger("app.startup").warning("knowledge_warmup: failed to start: %s", _kw_err)
     threading.Thread(target=_run_periodic_cleanup, daemon=True, name="cleanup-loop").start()
+    # Auto-extract Chrome cookies for YouTube auth (non-blocking — best-effort)
+    def _cookie_warmup():
+        try:
+            from app.core.config import COOKIES_DIR
+            from app.services.cookie_extractor import extract_youtube_cookies
+            out = COOKIES_DIR / "youtube_cookies.txt"
+            ok = extract_youtube_cookies(out)
+            if ok:
+                logging.getLogger("app.startup").info("cookie_warmup: YouTube cookies extracted → %s", out)
+            else:
+                logging.getLogger("app.startup").debug("cookie_warmup: no Chrome profile found, skipping")
+        except Exception as _ce:
+            logging.getLogger("app.startup").debug("cookie_warmup: skipped — %s", _ce)
+    threading.Thread(target=_cookie_warmup, daemon=True, name="cookie-warmup").start()
 
 
 @app.get("/api/warmup/status")

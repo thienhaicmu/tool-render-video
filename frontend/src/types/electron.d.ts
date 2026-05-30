@@ -12,6 +12,8 @@ interface ElectronAPI {
   pickVideoFile?: () => Promise<string | null>
   /** Open the given path in the OS file manager / default application. */
   openPath?: (path: string) => Promise<void> | void
+  /** Open a native file picker for cookies.txt, returns the chosen path or null. */
+  pickCookiesFile?: () => Promise<string | null>
 }
 
 declare global {

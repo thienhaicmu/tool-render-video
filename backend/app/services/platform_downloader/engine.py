@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -11,6 +12,37 @@ from .file_naming import build_output_filename, resolve_unique_path
 from .tiktok_handler import get_tiktok_opts
 
 logger = logging.getLogger("app.downloader")
+
+# iOS client kwargs — bypasses YouTube bot/login checks on most videos
+_IOS = {"extractor_args": {"youtube": {"player_client": ["ios"]}}}
+
+
+def _apply_cookies(opts: dict) -> dict:
+    """Add cookie auth to yt-dlp opts.
+
+    Priority:
+      1. YTDLP_COOKIEFILE env var (explicit exported file)
+      2. Auto-extracted Chrome cookies (data/cookies/youtube_cookies.txt)
+      3. YTDLP_COOKIES_FROM_BROWSER env var (yt-dlp native, fails when Chrome running)
+    """
+    cookiefile = (os.getenv("YTDLP_COOKIEFILE", "") or "").strip()
+    if cookiefile:
+        p = Path(cookiefile).expanduser()
+        if p.is_file():
+            opts["cookiefile"] = str(p)
+            return opts
+    try:
+        from app.core.config import COOKIES_DIR
+        auto = COOKIES_DIR / "youtube_cookies.txt"
+        if auto.is_file():
+            opts["cookiefile"] = str(auto)
+            return opts
+    except Exception:
+        pass
+    browser = (os.getenv("YTDLP_COOKIES_FROM_BROWSER", "") or "").strip().lower()
+    if browser:
+        opts["cookiesfrombrowser"] = (browser, None, None, None)
+    return opts
 
 
 def _ensure_ffmpeg_on_path() -> str:
@@ -57,10 +89,13 @@ def get_video_info(url: str) -> dict:
             "skip_download": True,
             "ffmpeg_location": ffmpeg_bin,
         }
+        _apply_cookies(opts)
         platform = detect_platform(url)
         if platform == "tiktok":
             opts.update(get_tiktok_opts())
             opts["skip_download"] = True
+        elif platform == "youtube":
+            opts.update(_IOS)
 
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -114,10 +149,13 @@ def download_video(
     platform = detect_platform(url)
 
     opts = _base_opts(output_dir, job_id, ffmpeg_bin)
+    _apply_cookies(opts)
     if platform == "tiktok":
         tiktok_opts = get_tiktok_opts()
         opts["format"] = tiktok_opts["format"]
         opts["extractor_args"] = tiktok_opts["extractor_args"]
+    elif platform == "youtube":
+        opts.update(_IOS)
 
     def _hook(data: dict):
         if not on_progress:
@@ -135,8 +173,21 @@ def download_video(
 
     opts["progress_hooks"] = [_hook]
 
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+    cookie_src = "file" if "cookiefile" in opts else ("browser" if "cookiesfrombrowser" in opts else "none")
+    logger.info("download.start  job=%s  platform=%s  cookies=%s  url=%s", job_id, platform, cookie_src, url)
+
+    _t_dl = time.monotonic()
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+    except Exception as exc:
+        _elapsed_ms = int((time.monotonic() - _t_dl) * 1000)
+        logger.error(
+            "download.ytdlp_error  job=%s  platform=%s  cookies=%s  elapsed_ms=%d  error=%s",
+            job_id, platform, cookie_src, _elapsed_ms, exc,
+            exc_info=True,
+        )
+        raise
 
     # Find the temp file (_dl_{job_id}.mp4)
     temp_candidates = sorted(
@@ -154,13 +205,22 @@ def download_video(
     final_path = resolve_unique_path(output_dir, filename)
     temp_file.rename(final_path)
 
+    _elapsed_ms = int((time.monotonic() - _t_dl) * 1000)
+    _filesize   = final_path.stat().st_size
+    _height     = int(info.get("height") or 0)
+    _fps        = float(info.get("fps") or 0)
+    logger.info(
+        "download.done  job=%s  platform=%s  cookies=%s  elapsed_ms=%d  size_bytes=%d  res=%dp  fps=%g  file=%s",
+        job_id, platform, cookie_src, _elapsed_ms, _filesize, _height, _fps, final_path.name,
+    )
+
     return {
-        "title": info.get("title") or final_path.stem,
-        "platform": platform,
+        "title":       info.get("title") or final_path.stem,
+        "platform":    platform,
         "output_path": str(final_path),
-        "filename": final_path.name,
-        "height": int(info.get("height") or 0),
-        "fps": float(info.get("fps") or 0),
-        "duration": float(info.get("duration") or 0),
-        "filesize": final_path.stat().st_size,
+        "filename":    final_path.name,
+        "height":      _height,
+        "fps":         _fps,
+        "duration":    float(info.get("duration") or 0),
+        "filesize":    _filesize,
     }

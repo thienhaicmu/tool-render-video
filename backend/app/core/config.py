@@ -40,9 +40,10 @@ else:
     CHANNELS_DIR = DEFAULT_CHANNELS_DIR if has_project_channels else (APP_DATA_DIR / "channels")
 TEMP_DIR    = Path(os.getenv("TEMP_DIR",    str(APP_DATA_DIR / "temp")))
 LOGS_DIR    = APP_DATA_DIR / "logs"
+COOKIES_DIR = APP_DATA_DIR / "cookies"
 REQUEST_LOG = LOGS_DIR / "request.log"   # Type 1: request/validation errors
 
-for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, DATABASE_PATH.parent]:
+for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, COOKIES_DIR, DATABASE_PATH.parent]:
     p.mkdir(parents=True, exist_ok=True)
 
 # AI Cloud Analyzer — server-side defaults read from environment / .env

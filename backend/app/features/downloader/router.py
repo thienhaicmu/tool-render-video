@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -106,7 +107,30 @@ class BatchDownloadStartRequest(BaseModel):
 
 # ── Background worker ─────────────────────────────────────────────────────────
 
-def _run_download(job_id: str, url: str, output_dir: Path) -> None:
+def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -> None:
+    from app.orchestration.workflow_trace import dl_job_start, dl_job_done, dl_job_fail
+
+    _t_start = time.monotonic()
+    _platform = platform or "unknown"
+
+    # Detect cookie source for trace
+    import os as _os
+    from pathlib import Path as _Path
+    _cookie_src = "none"
+    if (_os.getenv("YTDLP_COOKIEFILE") or "").strip():
+        _cookie_src = "file"
+    else:
+        try:
+            from app.core.config import COOKIES_DIR as _CD
+            if (_CD / "youtube_cookies.txt").is_file():
+                _cookie_src = "auto"
+        except Exception:
+            pass
+        if _cookie_src == "none" and (_os.getenv("YTDLP_COOKIES_FROM_BROWSER") or "").strip():
+            _cookie_src = "browser"
+
+    dl_job_start(job_id, url=url, platform=_platform, quality="best", cookies=_cookie_src)
+
     try:
         update_download_job(job_id, status="downloading", progress=1)
 
@@ -115,6 +139,7 @@ def _run_download(job_id: str, url: str, output_dir: Path) -> None:
 
         result = download_video(job_id, url, output_dir, on_progress=_on_progress)
 
+        _elapsed_ms = int((time.monotonic() - _t_start) * 1000)
         update_download_job(
             job_id,
             status="done",
@@ -129,15 +154,21 @@ def _run_download(job_id: str, url: str, output_dir: Path) -> None:
             duration=result["duration"],
             filesize=result["filesize"],
         )
-        logger.info("download.done job_id=%s file=%s", job_id, result["filename"])
+        logger.info(
+            "download.done  job_id=%s  platform=%s  file=%s  size_bytes=%s  elapsed_ms=%d",
+            job_id, _platform, result["filename"], result["filesize"], _elapsed_ms,
+        )
+        dl_job_done(job_id, filename=result["filename"], filesize=result["filesize"], platform=_platform)
     except Exception as exc:
+        _elapsed_ms = int((time.monotonic() - _t_start) * 1000)
         msg = _friendly_error(exc)
         update_download_job(job_id, status="failed", error_msg=msg, progress=0)
         logger.error(
-            "download.failed  job_id=%s  url=%s  friendly=%r  raw=%s",
-            job_id, url, msg, exc,
+            "download.failed  job_id=%s  platform=%s  url=%s  elapsed_ms=%d  friendly=%r  raw=%s",
+            job_id, _platform, url, _elapsed_ms, msg, exc,
             exc_info=True,
         )
+        dl_job_fail(job_id, error=msg, platform=_platform)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -156,7 +187,7 @@ def start_download(req: DownloadStartRequest):
     job_id = str(uuid.uuid4())
     platform = detect_platform(url)
     create_download_job(job_id, url, platform, str(output_dir))
-    _EXECUTOR.submit(_run_download, job_id, url, output_dir)
+    _EXECUTOR.submit(_run_download, job_id, url, output_dir, platform)
     return {"job_id": job_id, "platform": platform}
 
 
@@ -175,7 +206,7 @@ def start_batch(req: BatchDownloadStartRequest):
         job_id = str(uuid.uuid4())
         platform = detect_platform(url)
         create_download_job(job_id, url, platform, str(output_dir))
-        _EXECUTOR.submit(_run_download, job_id, url, output_dir)
+        _EXECUTOR.submit(_run_download, job_id, url, output_dir, platform)
         job_ids.append({"job_id": job_id, "url": url, "platform": platform})
     return {"jobs": job_ids}
 
@@ -226,3 +257,111 @@ async def job_progress_ws(websocket: WebSocket, job_id: str):
             await websocket.close()
         except Exception:
             pass
+
+
+@router.post("/refresh-cookies")
+def refresh_cookies():
+    """Re-extract YouTube cookies from Chrome (auto, read-only SQLite URI).
+    Works for Chrome ≤126 (v10/v11 AES-GCM). Returns ok=True if any cookies written.
+    Chrome 127+ (v20 App-Bound Encryption) requires manual export via browser extension.
+    """
+    try:
+        from app.core.config import COOKIES_DIR
+        from app.services.cookie_extractor import extract_youtube_cookies
+        output_path = COOKIES_DIR / "youtube_cookies.txt"
+        ok = extract_youtube_cookies(output_path)
+        if ok:
+            logger.info("refresh_cookies: cookies written to %s", output_path)
+            return _cookie_status_response()
+        else:
+            logger.warning("refresh_cookies: no Chrome cookies found")
+            return {"ok": False, "present": False,
+                    "detail": "No Chrome profile with YouTube cookies found. "
+                              "Chrome 127+ uses App-Bound Encryption (v20) — "
+                              "use Import File instead."}
+    except Exception as exc:
+        logger.error("refresh_cookies: failed — %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Cookie extraction failed: {exc}") from exc
+
+
+class ImportCookiesRequest(BaseModel):
+    path: str
+
+
+@router.post("/import-cookies")
+def import_cookies(req: ImportCookiesRequest):
+    """Import a manually-exported cookies.txt file (Netscape format).
+
+    Use this for Chrome 127+ where auto-extraction fails due to v20 App-Bound Encryption.
+    Steps:
+      1. Install 'Get cookies.txt LOCALLY' extension in Chrome
+      2. Open youtube.com while logged in
+      3. Click the extension → Export cookies for this tab
+      4. Browse to the saved file and import here
+
+    The file is copied to data/cookies/youtube_cookies.txt and used for all downloads.
+    """
+    import shutil as _shutil
+    src = Path(req.path).expanduser()
+    if not src.is_file():
+        raise HTTPException(status_code=400, detail=f"File not found: {req.path}")
+    if src.stat().st_size == 0:
+        raise HTTPException(status_code=400, detail="File is empty")
+
+    # Validate Netscape format
+    try:
+        first_line = src.read_text(encoding="utf-8", errors="ignore").splitlines()[0]
+        if "Netscape" not in first_line and "HTTP Cookie" not in first_line:
+            raise HTTPException(
+                status_code=400,
+                detail="File does not appear to be a Netscape cookies.txt. "
+                       "Export using 'Get cookies.txt LOCALLY' Chrome extension.",
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Cannot read file: {exc}") from exc
+
+    try:
+        from app.core.config import COOKIES_DIR
+        output_path = COOKIES_DIR / "youtube_cookies.txt"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        _shutil.copy2(str(src), str(output_path))
+        logger.info("import_cookies: copied %s → %s (%d bytes)", src.name, output_path, src.stat().st_size)
+        return _cookie_status_response()
+    except Exception as exc:
+        logger.error("import_cookies: failed — %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to import: {exc}") from exc
+
+
+def _cookie_status_response() -> dict:
+    """Build the cookie-status response dict from the current cookies file."""
+    import time as _time
+    try:
+        from app.core.config import COOKIES_DIR
+        path = COOKIES_DIR / "youtube_cookies.txt"
+        if not path.is_file():
+            return {"ok": False, "present": False}
+
+        age_seconds = int(_time.time() - path.stat().st_mtime)
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        lines = [l for l in text.splitlines() if l and not l.startswith("#")]
+        cookie_count = len(lines)
+        has_v20_warning = "v20(no-decrypt)" in text and "v10/v11=0" in text
+
+        return {
+            "ok": True,
+            "present": True,
+            "path": str(path),
+            "age_seconds": age_seconds,
+            "cookie_count": cookie_count,
+            "has_v20_warning": has_v20_warning,
+        }
+    except Exception:
+        return {"ok": False, "present": False}
+
+
+@router.get("/cookie-status")
+def cookie_status():
+    """Return current cookie file status: present, age, count, v20 warning."""
+    return _cookie_status_response()

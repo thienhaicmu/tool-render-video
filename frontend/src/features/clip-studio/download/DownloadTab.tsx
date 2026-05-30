@@ -42,6 +42,7 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
         background: hov ? '#161C2C' : '#111622',
         border: `1px solid ${isActive ? 'rgba(123,97,255,.3)' : '#1C2438'}`,
         overflow: 'hidden',
+        flexShrink: 0,
         transition: 'border-color .15s, background .12s',
         boxShadow: isActive ? '0 0 0 1px rgba(123,97,255,.15)' : 'none',
       }}
@@ -218,15 +219,37 @@ function EmptyQueue() {
   )
 }
 
+type CookieStatus = {
+  present: boolean
+  age_seconds?: number
+  cookie_count?: number
+  has_v20_warning?: boolean
+  detail?: string
+}
+
 export function DownloadTab({ lang: _lang }: { lang: Lang }) {
-  const [url, setUrl]         = useState('')
-  const [outputDir, setOutputDir] = useState('')
-  const [quality, setQuality] = useState('best')
-  const [jobs, setJobs]       = useState<DownloadJob[]>([])
-  const [adding, setAdding]   = useState(false)
-  const [error, setError]     = useState<string | null>(null)
-  const pollRef               = useRef<ReturnType<typeof setInterval> | null>(null)
-  const inputRef              = useRef<HTMLInputElement>(null)
+  const [url, setUrl]               = useState('')
+  const [outputDir, setOutputDir]   = useState('')
+  const [quality, setQuality]       = useState('best')
+  const [jobs, setJobs]             = useState<DownloadJob[]>([])
+  const [adding, setAdding]         = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const [cookieStatus, setCookieStatus] = useState<CookieStatus | null>(null)
+  const [cookieAction, setCookieAction] = useState<'idle'|'loading'|'ok'|'fail'>('idle')
+  const [showCookiePanel, setShowCookiePanel] = useState(false)
+  const [showCookieHelp, setShowCookieHelp] = useState(false)
+  const [cookiePath, setCookiePath] = useState('')
+  const [cookieError, setCookieError] = useState<string | null>(null)
+  const pollRef                     = useRef<ReturnType<typeof setInterval> | null>(null)
+  const inputRef                    = useRef<HTMLInputElement>(null)
+
+  const fetchCookieStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/downloader/cookie-status')
+      const data = await res.json()
+      setCookieStatus(data)
+    } catch { /* ignore */ }
+  }, [])
 
   const refresh = useCallback(async () => {
     try {
@@ -237,9 +260,10 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
 
   useEffect(() => {
     refresh()
+    fetchCookieStatus()
     pollRef.current = setInterval(refresh, POLL_MS)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [refresh])
+  }, [refresh, fetchCookieStatus])
 
   const pickDir = async () => {
     const dir = await window.electronAPI?.pickDirectory?.()
@@ -269,6 +293,50 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
     } catch { /* ignore */ }
   }
 
+  const handleAutoExtract = async () => {
+    if (cookieAction === 'loading') return
+    setCookieAction('loading')
+    try {
+      const res = await fetch('/api/downloader/refresh-cookies', { method: 'POST' })
+      const data = await res.json()
+      setCookieStatus(data)
+      setCookieAction(data.ok ? 'ok' : 'fail')
+    } catch {
+      setCookieAction('fail')
+    } finally {
+      setTimeout(() => setCookieAction('idle'), 3000)
+    }
+  }
+
+  const handleBrowseCookies = async () => {
+    const filePath = await window.electronAPI?.pickCookiesFile?.()
+    if (filePath) setCookiePath(filePath)
+  }
+
+  const handleImportFile = async () => {
+    const pathToUse = cookiePath.trim()
+    if (!pathToUse || cookieAction === 'loading') return
+    setCookieAction('loading')
+    setCookieError(null)
+    try {
+      const res = await fetch('/api/downloader/import-cookies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: pathToUse }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Import failed')
+      setCookieStatus(data)
+      setCookieAction('ok')
+      setCookiePath('')
+    } catch (e) {
+      setCookieError(e instanceof Error ? e.message : 'Import failed')
+      setCookieAction('fail')
+    } finally {
+      setTimeout(() => setCookieAction('idle'), 3000)
+    }
+  }
+
   const activeCount  = jobs.filter((j) => j.status === 'downloading').length
   const doneCount    = jobs.filter((j) => j.status === 'done').length
   const failedCount  = jobs.filter((j) => j.status === 'failed').length
@@ -290,8 +358,38 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
         flexShrink: 0,
         background: '#0D1019',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: showCookiePanel ? 12 : 14 }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: '#EEF0F8', letterSpacing: '-.01em' }}>Downloader</span>
+
+          {/* Cookie status chip */}
+          <button
+            onClick={() => setShowCookiePanel(p => !p)}
+            title="YouTube cookie settings"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '3px 10px', borderRadius: 6, cursor: 'pointer', flexShrink: 0,
+              border: cookieStatus?.present
+                ? (cookieStatus.has_v20_warning ? '1px solid rgba(255,170,0,.3)' : '1px solid rgba(0,200,150,.3)')
+                : '1px solid rgba(232,64,122,.25)',
+              background: cookieStatus?.present
+                ? (cookieStatus.has_v20_warning ? 'rgba(255,170,0,.08)' : 'rgba(0,200,150,.08)')
+                : 'rgba(232,64,122,.08)',
+              color: cookieStatus?.present
+                ? (cookieStatus.has_v20_warning ? '#FFAA00' : '#00C896')
+                : '#E8407A',
+              fontSize: 10, fontWeight: 600, transition: 'all .15s',
+            }}
+          >
+            <span>{cookieStatus?.present ? (cookieStatus.has_v20_warning ? '⚠' : '✓') : '✗'}</span>
+            <span>
+              {cookieStatus === null ? 'Cookies…'
+                : cookieStatus.present
+                  ? `${cookieStatus.cookie_count ?? '?'} cookies${cookieStatus.has_v20_warning ? ' (v20!)' : ''}`
+                  : 'No cookies'}
+            </span>
+            <span style={{ opacity: .5, fontSize: 9 }}>{showCookiePanel ? '▲' : '▼'}</span>
+          </button>
+
           <div style={{ display: 'flex', gap: 6, marginLeft: 4 }}>
             {activeCount > 0 && (
               <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(123,97,255,.15)', color: '#7B61FF', border: '1px solid rgba(123,97,255,.3)', animation: 'dl-pulse 1.4s infinite' }}>
@@ -315,6 +413,104 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
             )}
           </div>
         </div>
+
+        {/* Cookie panel */}
+        {showCookiePanel && (
+          <div style={{ marginBottom: 12, borderRadius: 8, border: '1px solid #1C2438', background: '#111622', overflow: 'hidden' }}>
+            {/* Row 1: status + auto-extract + help */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px' }}>
+              <span style={{ flex: 1, fontSize: 10, color: cookieStatus?.present ? (cookieStatus.has_v20_warning ? '#FFAA00' : '#00C896') : '#E8407A' }}>
+                {cookieStatus?.present
+                  ? `✓ ${cookieStatus.cookie_count} cookies${cookieStatus.age_seconds != null ? ` · ${Math.round(cookieStatus.age_seconds / 60)}m ago` : ''}`
+                  : '✗ No cookies · YouTube auth will fail'}
+              </span>
+              <button
+                onClick={handleAutoExtract}
+                disabled={cookieAction === 'loading'}
+                title="Auto-extract from Chrome DB (Chrome ≤126)"
+                style={{
+                  padding: '4px 10px', borderRadius: 6, flexShrink: 0,
+                  border: '1px solid #2A3558', background: '#0D1019',
+                  color: cookieAction === 'ok' ? '#00C896' : cookieAction === 'fail' ? '#E8407A' : '#8A93B0',
+                  fontSize: 10, fontWeight: 600, cursor: cookieAction === 'loading' ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap' as const,
+                }}
+              >
+                {cookieAction === 'loading' ? '⟳ …' : cookieAction === 'ok' ? '✓ Done' : '⟳ Auto-extract'}
+              </button>
+              <button
+                onClick={() => setShowCookieHelp(h => !h)}
+                title="How to export cookies from Chrome 127+"
+                style={{
+                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                  border: '1px solid #2A3558', background: showCookieHelp ? '#2A3558' : 'transparent',
+                  color: '#4A5270', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >?</button>
+            </div>
+
+            {/* Row 2: path input + browse + import */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 8px' }}>
+              <input
+                value={cookiePath}
+                onChange={e => { setCookiePath(e.target.value); setCookieError(null) }}
+                placeholder="Paste path to cookies.txt, hoặc bấm 📂"
+                style={{
+                  flex: 1, height: 28, padding: '0 8px', borderRadius: 6,
+                  background: '#0D1019', border: `1px solid ${cookieError ? 'rgba(232,64,122,.4)' : '#2A3558'}`,
+                  color: '#EEF0F8', fontSize: 10, fontFamily: 'monospace', outline: 'none',
+                }}
+              />
+              <button
+                onClick={handleBrowseCookies}
+                title="Browse for cookies.txt file"
+                style={{
+                  height: 28, padding: '0 10px', borderRadius: 6, flexShrink: 0,
+                  border: '1px solid #2A3558', background: '#0D1019',
+                  color: '#8A93B0', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' as const,
+                }}
+              >📂</button>
+              <button
+                onClick={handleImportFile}
+                disabled={!cookiePath.trim() || cookieAction === 'loading'}
+                style={{
+                  height: 28, padding: '0 12px', borderRadius: 6, flexShrink: 0,
+                  border: '1px solid rgba(123,97,255,.35)', background: cookiePath.trim() ? 'rgba(123,97,255,.15)' : 'transparent',
+                  color: cookiePath.trim() ? '#7B61FF' : '#2A3558', fontSize: 10, fontWeight: 700,
+                  cursor: cookiePath.trim() && cookieAction !== 'loading' ? 'pointer' : 'not-allowed',
+                  whiteSpace: 'nowrap' as const, transition: 'all .12s',
+                }}
+              >
+                {cookieAction === 'loading' ? '⟳ Importing…' : 'Import'}
+              </button>
+            </div>
+
+            {/* Error row */}
+            {cookieError && (
+              <div style={{ padding: '0 12px 8px' }}>
+                <div style={{ padding: '6px 10px', borderRadius: 6, background: 'rgba(232,64,122,.08)', border: '1px solid rgba(232,64,122,.2)', fontSize: 10, color: '#E8407A' }}>
+                  ⚠ {cookieError}
+                </div>
+              </div>
+            )}
+
+            {/* Collapsible instructions */}
+            {showCookieHelp && (
+              <div style={{ padding: '0 12px 10px', borderTop: '1px solid #1C2438' }}>
+                <div style={{ paddingTop: 8, fontSize: 10, color: '#7B61FF', fontWeight: 700, marginBottom: 4 }}>
+                  Chrome 127+ — export with extension:
+                </div>
+                <ol style={{ margin: 0, paddingLeft: 16, fontSize: 10, color: '#8A93B0', lineHeight: 1.9 }}>
+                  <li>Cài <strong style={{ color: '#EEF0F8' }}>"Get cookies.txt LOCALLY"</strong> trên Chrome Web Store</li>
+                  <li>Mở <strong style={{ color: '#EEF0F8' }}>youtube.com</strong> — đăng nhập trước</li>
+                  <li>Click extension → <strong style={{ color: '#EEF0F8' }}>Export cookies for this tab</strong></li>
+                  <li>Lưu file → paste path vào ô trên → bấm <strong style={{ color: '#EEF0F8' }}>Import</strong></li>
+                </ol>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* URL input */}
         <div style={{

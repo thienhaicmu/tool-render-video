@@ -119,6 +119,16 @@ def _emit_render_event(
     _append_json_line(LOGS_DIR / "app.log", entry)
     if lvl in {"ERROR", "CRITICAL", "FATAL"}:
         _append_json_line(LOGS_DIR / "error.log", entry)
+    # Feed workflow trace — swallowed, never raises
+    try:
+        from app.orchestration.workflow_trace import _feed_render_event
+        _feed_render_event(
+            job_id=job_id, event=event, step=step,
+            context=context or {}, duration_ms=duration_ms or 0,
+            level=lvl, message=message, exception=exception,
+        )
+    except Exception:
+        pass
 
 
 _PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes to update progress

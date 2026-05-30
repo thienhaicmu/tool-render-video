@@ -224,9 +224,14 @@ def download_public_video(url: str, temp_dir: Path, progress_callback=None) -> d
         if p.is_file():
             opts["cookiefile"] = str(p)
     else:
-        browser_name = (os.getenv("YTDLP_COOKIES_FROM_BROWSER", "") or "").strip().lower()
-        if browser_name:
-            opts["cookiesfrombrowser"] = (browser_name, None, None, None)
+        from app.core.config import COOKIES_DIR
+        _auto = COOKIES_DIR / "youtube_cookies.txt"
+        if _auto.is_file():
+            opts["cookiefile"] = str(_auto)
+        else:
+            browser_name = (os.getenv("YTDLP_COOKIES_FROM_BROWSER", "") or "").strip().lower()
+            if browser_name:
+                opts["cookiesfrombrowser"] = (browser_name, None, None, None)
 
     try:
         with YoutubeDL(opts) as ydl:
@@ -303,9 +308,14 @@ def check_youtube_download_health(url: str) -> dict:
             if p.is_file():
                 opts["cookiefile"] = str(p)
         else:
-            browser_name = (os.getenv("YTDLP_COOKIES_FROM_BROWSER", "") or "").strip().lower()
-            if browser_name:
-                opts["cookiesfrombrowser"] = (browser_name, None, None, None)
+            from app.core.config import COOKIES_DIR
+            _auto = COOKIES_DIR / "youtube_cookies.txt"
+            if _auto.is_file():
+                opts["cookiefile"] = str(_auto)
+            else:
+                browser_name = (os.getenv("YTDLP_COOKIES_FROM_BROWSER", "") or "").strip().lower()
+                if browser_name:
+                    opts["cookiesfrombrowser"] = (browser_name, None, None, None)
         try:
             with YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -430,17 +440,25 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
     common["progress_hooks"] = [_yt_progress_hook]
 
     # Optional cookie auth for age-restricted / login-required videos.
-    # Priority: YTDLP_COOKIEFILE (explicit file) > YTDLP_COOKIES_FROM_BROWSER (live browser).
-    # Set YTDLP_COOKIES_FROM_BROWSER=chrome (or firefox / edge / brave / chromium).
+    # Priority order:
+    #   1. YTDLP_COOKIEFILE (explicit exported cookies file)
+    #   2. Auto-extracted Chrome cookies (bypasses Chrome file-lock via sqlite3 URI)
+    #   3. YTDLP_COOKIES_FROM_BROWSER (yt-dlp native, fails when Chrome is running)
     cookiefile = (os.getenv("YTDLP_COOKIEFILE", "") or "").strip()
     if cookiefile:
         p = Path(cookiefile).expanduser()
         if p.is_file():
             common["cookiefile"] = str(p)
     else:
-        browser_name = (os.getenv("YTDLP_COOKIES_FROM_BROWSER", "") or "").strip().lower()
-        if browser_name:
-            common["cookiesfrombrowser"] = (browser_name, None, None, None)
+        # Try auto-extraction first (works while Chrome is running)
+        from app.core.config import COOKIES_DIR
+        _auto_cookie_path = COOKIES_DIR / "youtube_cookies.txt"
+        if _auto_cookie_path.is_file():
+            common["cookiefile"] = str(_auto_cookie_path)
+        else:
+            browser_name = (os.getenv("YTDLP_COOKIES_FROM_BROWSER", "") or "").strip().lower()
+            if browser_name:
+                common["cookiesfrombrowser"] = (browser_name, None, None, None)
 
     def _try_download(opts: dict) -> dict:
         with YoutubeDL(opts) as ydl:
