@@ -29,8 +29,11 @@ def _append_json_line(path: Path, entry: dict):
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
+    except Exception as exc:
+        try:
+            logger.warning("log.write_failed  path=%s  error=%s", path.name, exc)
+        except Exception:
+            pass  # never raise from a logging helper
 
 
 def _render_error_code(step: str, message: str, exc: Exception | None = None) -> str:
@@ -72,8 +75,11 @@ def _job_log(channel_code: str, job_id: str, message: str, kind: str = "info"):
     try:
         with log_path.open("a", encoding="utf-8") as f:
             f.write(f"[{datetime.utcnow().isoformat()}Z] [{kind.upper()}] {message}\n")
-    except Exception:
-        pass
+    except Exception as exc:
+        try:
+            logger.warning("job_log.write_failed  job=%s  path=%s  error=%s", job_id[:8], log_path.name, exc)
+        except Exception:
+            pass  # never raise from a logging helper
 
 
 def _emit_render_event(

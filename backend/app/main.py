@@ -9,7 +9,11 @@ import threading
 from app.services.db import init_db
 from app.services.channel_service import ensure_channel
 from app.services.maintenance import prune_job_logs, prune_preview_dirs, prune_render_temp_dirs
-from app.core.config import APP_DATA_DIR, CHANNELS_DIR, TEMP_DIR
+from app.core.config import APP_DATA_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR
+from app.core.logging_setup import configure_logging as _configure_logging
+# Configure file-based logging before any other module emits a log event.
+# Uvicorn's console handlers are not touched — this only adds file handlers.
+_configure_logging(LOGS_DIR)
 from app.routes.channels import router as channels_router
 from app.routes.render import router as render_router
 from app.routes.jobs import router as jobs_router

@@ -728,8 +728,10 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
     extract_fail = "Failed to extract any player response" in last_err_text
     proxy_note = "Proxy was disabled for this download." if not proxy_val else f"Proxy used: {proxy_val}."
     logger.error(
-        "download.failed_all_attempts context=%s proxy_used=%s extract_fail=%s tried_formats=%s last_error=%s",
+        "download.failed_all_attempts  context=%s  proxy_used=%s  extract_fail=%s"
+        "  tried_formats=%s  last_error=%s",
         context, bool(proxy_val), extract_fail, attempted_formats[:12], last_err_text[:200],
+        exc_info=last_err,
     )
     if isinstance(last_err, DownloadError):
         if extract_fail:

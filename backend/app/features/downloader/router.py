@@ -133,7 +133,11 @@ def _run_download(job_id: str, url: str, output_dir: Path) -> None:
     except Exception as exc:
         msg = _friendly_error(exc)
         update_download_job(job_id, status="failed", error_msg=msg, progress=0)
-        logger.warning("download.failed job_id=%s error=%s", job_id, exc)
+        logger.error(
+            "download.failed  job_id=%s  url=%s  friendly=%r  raw=%s",
+            job_id, url, msg, exc,
+            exc_info=True,
+        )
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
