@@ -8,122 +8,211 @@ import type { DownloadJob } from '../../../api/platformDownloader'
 
 const POLL_MS = 1500
 
-const STATUS_STYLE: Record<string, { color: string; bg: string; label: string }> = {
-  queued:      { color: '#6b7280', bg: 'rgba(107,114,128,.12)', label: 'Queued' },
-  downloading: { color: '#a855f7', bg: 'rgba(168,85,247,.12)',  label: 'Downloading' },
-  done:        { color: '#34C878', bg: 'rgba(52,200,120,.12)',  label: 'Done' },
-  failed:      { color: '#ef4444', bg: 'rgba(239,68,68,.12)',   label: 'Failed' },
+const PLATFORM_FULL: Record<string, string> = {
+  youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram',
+  facebook: 'Facebook', twitter: 'X (Twitter)', bilibili: 'Bilibili',
+  reddit: 'Reddit', vimeo: 'Vimeo', dailymotion: 'Dailymotion', twitch: 'Twitch',
 }
 
-function JobCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: string) => void }) {
-  const st = STATUS_STYLE[job.status] ?? STATUS_STYLE.queued
+const STATUS_META: Record<string, { color: string; bg: string; border: string; label: string }> = {
+  queued:      { color: '#8A93B0', bg: 'rgba(138,147,176,.10)', border: 'rgba(138,147,176,.2)', label: 'Queued' },
+  downloading: { color: '#7B61FF', bg: 'rgba(123,97,255,.12)',  border: 'rgba(123,97,255,.3)',  label: 'Downloading' },
+  done:        { color: '#00C896', bg: 'rgba(0,200,150,.12)',   border: 'rgba(0,200,150,.25)',  label: 'Done' },
+  failed:      { color: '#E8407A', bg: 'rgba(232,64,122,.12)',  border: 'rgba(232,64,122,.25)', label: 'Failed' },
+}
+const statusMeta = (s: string) => STATUS_META[s] ?? STATUS_META.queued
+
+function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: string) => void }) {
+  const st = statusMeta(job.status)
   const pColor = platformColor(job.platform)
+  const pLabel = platformLabel(job.platform)
+  const pFull  = PLATFORM_FULL[job.platform] || job.platform
   const isActive = job.status === 'downloading'
-  const isDone = job.status === 'done'
+  const isDone   = job.status === 'done'
   const isFailed = job.status === 'failed'
+  const isQueued = job.status === 'queued'
+  const [hov, setHov] = useState(false)
 
   return (
-    <div style={{
-      display: 'flex',
-      borderRadius: 10,
-      overflow: 'hidden',
-      background: 'var(--bg-card)',
-      border: `1px solid ${isActive ? 'rgba(168,85,247,.25)' : 'var(--border)'}`,
-      boxShadow: isActive ? '0 0 12px rgba(168,85,247,.08)' : 'none',
-      transition: 'border-color .15s',
-    }}>
-      {/* Top accent bar */}
-      <div style={{ width: 3, flexShrink: 0, background: `linear-gradient(180deg,${pColor},${pColor}55)` }} />
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        borderRadius: 10,
+        background: hov ? '#161C2C' : '#111622',
+        border: `1px solid ${isActive ? 'rgba(123,97,255,.3)' : '#1C2438'}`,
+        overflow: 'hidden',
+        transition: 'border-color .15s, background .12s',
+        boxShadow: isActive ? '0 0 0 1px rgba(123,97,255,.15)' : 'none',
+      }}
+    >
+      {/* Progress bar at top */}
+      {(isActive || isDone) && (
+        <div style={{ height: 3, background: 'rgba(255,255,255,.05)', position: 'relative' as const }}>
+          <div style={{
+            position: 'absolute' as const, top: 0, left: 0, bottom: 0,
+            width: isDone ? '100%' : `${Math.max(2, job.progress)}%`,
+            background: isDone
+              ? 'linear-gradient(90deg,#00C896,#00E5C8)'
+              : `linear-gradient(90deg,${pColor}cc,#7B61FF)`,
+            transition: 'width .5s ease',
+            boxShadow: isActive ? `0 0 8px ${pColor}80` : 'none',
+          }} />
+        </div>
+      )}
+      {isFailed && <div style={{ height: 3, background: '#E8407A' }} />}
+      {isQueued  && <div style={{ height: 3, background: '#1C2438' }} />}
 
-      <div style={{ flex: 1, padding: '10px 12px', minWidth: 0 }}>
+      <div style={{ padding: '12px 14px' }}>
         {/* Top row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
           {/* Platform badge */}
-          <span style={{
-            fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 4, flexShrink: 0,
-            background: `${pColor}22`, color: pColor, border: `1px solid ${pColor}44`,
-            letterSpacing: '.04em',
+          <div style={{
+            flexShrink: 0, display: 'flex', flexDirection: 'column' as const,
+            alignItems: 'center', gap: 2, width: 36,
           }}>
-            {platformLabel(job.platform)}
-          </span>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: `${pColor}18`, border: `1px solid ${pColor}33`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 800, color: pColor,
+              letterSpacing: '-.02em',
+            }}>
+              {pLabel}
+            </div>
+            <span style={{ fontSize: 8, color: '#4A5270', textAlign: 'center' as const, whiteSpace: 'nowrap' as const }}>
+              {pFull.slice(0, 7)}
+            </span>
+          </div>
 
-          {/* Title */}
-          <span style={{
-            flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-1)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {job.title || job.url}
-          </span>
+          {/* Info */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 12, fontWeight: 600, color: '#EEF0F8',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+              marginBottom: 3,
+            }}>
+              {job.title || job.url}
+            </div>
+            <div style={{ fontSize: 10, color: '#4A5270', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+              {job.url}
+            </div>
+          </div>
 
           {/* Status badge */}
           <span style={{
-            fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20, flexShrink: 0,
-            background: st.bg, color: st.color,
+            fontSize: 9, fontWeight: 800, padding: '3px 8px', borderRadius: 20,
+            background: st.bg, color: st.color, border: `1px solid ${st.border}`,
+            letterSpacing: '.04em', flexShrink: 0,
             animation: isActive ? 'dl-pulse 1.4s ease-in-out infinite' : 'none',
           }}>
-            {st.label}
+            {st.label.toUpperCase()}
           </span>
         </div>
 
-        {/* Progress bar */}
-        {(isActive || isDone) && (
-          <div style={{ height: 3, borderRadius: 99, background: 'rgba(255,255,255,.07)', overflow: 'hidden', marginBottom: 6 }}>
-            <div style={{
-              height: '100%', borderRadius: 99,
-              width: isDone ? '100%' : `${job.progress}%`,
-              background: isDone
-                ? 'linear-gradient(90deg,#34C878,#22c55e)'
-                : `linear-gradient(90deg,${pColor},#a855f7)`,
-              transition: 'width .4s ease',
-              boxShadow: isActive ? `0 0 6px ${pColor}80` : 'none',
-            }} />
-          </div>
-        )}
-
-        {/* Meta row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
-          {isActive && (
-            <>
-              <span style={{ fontSize: 10, color: st.color, fontWeight: 700, fontFamily: 'monospace' }}>
-                {job.progress}%
-              </span>
+        {/* Progress details row */}
+        {isActive && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '8px 10px', background: 'rgba(123,97,255,.06)',
+            borderRadius: 8, border: '1px solid rgba(123,97,255,.12)',
+          }}>
+            <span style={{ fontSize: 22, fontWeight: 800, color: '#7B61FF', fontFamily: 'monospace', lineHeight: 1 }}>
+              {job.progress}%
+            </span>
+            <div style={{ flex: 1 }}>
               {job.speed_str && (
-                <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{job.speed_str}</span>
+                <div style={{ fontSize: 10, color: '#8A93B0', marginBottom: 2 }}>
+                  ↑ {job.speed_str}
+                </div>
               )}
               {job.eta_str && (
-                <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{job.eta_str}</span>
+                <div style={{ fontSize: 10, color: '#4A5270' }}>ETA {job.eta_str}</div>
               )}
-            </>
-          )}
-          {isDone && job.filename && (
-            <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
-              {job.filename}
-            </span>
-          )}
-          {isDone && job.filesize > 0 && (
-            <span style={{ fontSize: 10, color: '#34C878' }}>{formatFilesize(job.filesize)}</span>
-          )}
-          {isFailed && (
-            <span style={{ fontSize: 10, color: '#ef4444' }}>{job.error_msg || 'Download failed'}</span>
-          )}
-          <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>
-            {new Date(job.created_at).toLocaleTimeString()}
-          </span>
-
-          {/* Cancel button */}
-          {(job.status === 'queued' || job.status === 'downloading') && (
+            </div>
             <button
               onClick={() => onCancel(job.id)}
               style={{
-                height: 20, padding: '0 8px', borderRadius: 5, flexShrink: 0,
-                border: '1px solid var(--border)', background: 'transparent',
-                color: 'var(--text-3)', fontSize: 10, fontWeight: 600, cursor: 'pointer',
+                padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
+                border: '1px solid rgba(232,64,122,.3)', background: 'rgba(232,64,122,.08)',
+                color: '#E8407A', fontSize: 10, fontWeight: 700,
               }}
             >
               Cancel
             </button>
-          )}
-        </div>
+          </div>
+        )}
+
+        {isQueued && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 10, color: '#4A5270' }}>Waiting in queue…</span>
+            <button
+              onClick={() => onCancel(job.id)}
+              style={{
+                marginLeft: 'auto', padding: '3px 8px', borderRadius: 5, cursor: 'pointer',
+                border: '1px solid #1C2438', background: 'transparent',
+                color: '#4A5270', fontSize: 10, fontWeight: 600,
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {isDone && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 20, color: '#00C896' }}>✓</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {job.filename && (
+                <div style={{ fontSize: 10, color: '#8A93B0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, fontFamily: 'monospace' }}>
+                  {job.filename}
+                </div>
+              )}
+              {job.filesize > 0 && (
+                <div style={{ fontSize: 10, color: '#00C896', fontWeight: 700, marginTop: 2 }}>
+                  {formatFilesize(job.filesize)}
+                </div>
+              )}
+            </div>
+            {job.filename && (
+              <button
+                onClick={() => { navigator.clipboard.writeText(job.filename).catch(() => {}) }}
+                title="Copy path"
+                style={{
+                  padding: '4px 10px', borderRadius: 6, cursor: 'pointer', flexShrink: 0,
+                  border: '1px solid #1C2438', background: 'transparent',
+                  color: '#8A93B0', fontSize: 10, fontWeight: 600,
+                }}
+              >
+                Copy path
+              </button>
+            )}
+          </div>
+        )}
+
+        {isFailed && (
+          <div style={{
+            padding: '8px 10px', background: 'rgba(232,64,122,.06)',
+            borderRadius: 8, border: '1px solid rgba(232,64,122,.15)',
+          }}>
+            <div style={{ fontSize: 10, color: '#E8407A', lineHeight: 1.5, wordBreak: 'break-word' as const }}>
+              ⚠ {job.error_msg || 'Download failed'}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EmptyQueue() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 40 }}>
+      <div style={{ fontSize: 40, opacity: .15 }}>⬇</div>
+      <div style={{ fontSize: 13, color: '#8A93B0', fontWeight: 600 }}>Paste a URL to start downloading</div>
+      <div style={{ fontSize: 11, color: '#4A5270', textAlign: 'center' as const, lineHeight: 1.6 }}>
+        YouTube · TikTok · Instagram · Facebook<br />
+        Bilibili · Vimeo · Twitch · and more
       </div>
     </div>
   )
@@ -137,6 +226,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
   const [adding, setAdding]   = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const pollRef               = useRef<ReturnType<typeof setInterval> | null>(null)
+  const inputRef              = useRef<HTMLInputElement>(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -158,7 +248,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
 
   const handleAdd = async () => {
     const v = url.trim()
-    if (!v) return
+    if (!v || adding) return
     setAdding(true)
     setError(null)
     try {
@@ -172,125 +262,189 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
     }
   }
 
-  const handleCancel = async (id: string) => {
-    try { await cancelJob(id); await refresh() } catch { /* ignore */ }
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text.startsWith('http')) { setUrl(text); setError(null) }
+    } catch { /* ignore */ }
   }
 
-  const activeCount = jobs.filter((j) => j.status === 'downloading').length
-  const doneCount   = jobs.filter((j) => j.status === 'done').length
-  const failedCount = jobs.filter((j) => j.status === 'failed').length
+  const activeCount  = jobs.filter((j) => j.status === 'downloading').length
+  const doneCount    = jobs.filter((j) => j.status === 'done').length
+  const failedCount  = jobs.filter((j) => j.status === 'failed').length
+  const queuedCount  = jobs.filter((j) => j.status === 'queued').length
+
+  const inputValid = url.trim().startsWith('http')
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' }}>
-      <style>{`@keyframes dl-pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden', background: '#090C13' }}>
+      <style>{`
+        @keyframes dl-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+        @keyframes dl-spin   { to { transform: rotate(360deg) } }
+      `}</style>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={{
-        padding: '14px 20px 12px',
-        borderBottom: '1px solid var(--border)',
+        padding: '14px 20px 16px',
+        borderBottom: '1px solid #1C2438',
         flexShrink: 0,
-        background: 'linear-gradient(180deg,rgba(77,124,255,.04) 0%,transparent 100%)',
+        background: '#0D1019',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>⬇ Downloader</span>
-          <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#EEF0F8', letterSpacing: '-.01em' }}>Downloader</span>
+          <div style={{ display: 'flex', gap: 6, marginLeft: 4 }}>
             {activeCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(168,85,247,.12)', color: '#a855f7', border: '1px solid rgba(168,85,247,.2)' }}>
-                {activeCount} active
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(123,97,255,.15)', color: '#7B61FF', border: '1px solid rgba(123,97,255,.3)', animation: 'dl-pulse 1.4s infinite' }}>
+                {activeCount} downloading
+              </span>
+            )}
+            {queuedCount > 0 && (
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(138,147,176,.1)', color: '#8A93B0' }}>
+                {queuedCount} queued
               </span>
             )}
             {doneCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(52,200,120,.1)', color: '#34C878' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(0,200,150,.1)', color: '#00C896' }}>
                 {doneCount} done
               </span>
             )}
             {failedCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(239,68,68,.1)', color: '#ef4444' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(232,64,122,.1)', color: '#E8407A' }}>
                 {failedCount} failed
               </span>
             )}
           </div>
         </div>
 
-        {/* URL row */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        {/* URL input */}
+        <div style={{
+          display: 'flex',
+          background: '#0D1019',
+          border: `1px solid ${error ? '#E8407A' : inputValid ? 'rgba(123,97,255,.4)' : '#1C2438'}`,
+          borderRadius: 10,
+          overflow: 'hidden',
+          marginBottom: 10,
+          transition: 'border-color .15s',
+        }}>
           <input
+            ref={inputRef}
             value={url}
             onChange={(e) => { setUrl(e.target.value); setError(null) }}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-            placeholder="https://youtube.com/watch?v=... or TikTok / Instagram URL"
+            placeholder="Paste YouTube, TikTok, Instagram, Facebook URL…"
             style={{
-              flex: 1, height: 38, padding: '0 12px',
-              background: 'var(--bg-card)', border: `1px solid ${error ? '#ef4444' : 'var(--border)'}`,
-              borderRadius: 8, fontSize: 12, color: 'var(--text-1)', outline: 'none',
-              fontFamily: 'monospace',
+              flex: 1, height: 42, padding: '0 14px',
+              background: 'transparent', border: 'none', outline: 'none',
+              fontSize: 12, color: '#EEF0F8', fontFamily: 'monospace',
             }}
           />
+          {!url && (
+            <button
+              onClick={handlePaste}
+              title="Paste from clipboard"
+              style={{
+                height: 42, padding: '0 12px', background: 'transparent',
+                border: 'none', borderLeft: '1px solid #1C2438',
+                color: '#4A5270', fontSize: 11, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 4,
+                transition: 'color .12s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#8A93B0')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#4A5270')}
+            >
+              📋 Paste
+            </button>
+          )}
+          {url && (
+            <button
+              onClick={() => { setUrl(''); setError(null) }}
+              style={{
+                height: 42, width: 36, background: 'transparent',
+                border: 'none', borderLeft: '1px solid #1C2438',
+                color: '#4A5270', fontSize: 16, cursor: 'pointer',
+              }}
+            >
+              ×
+            </button>
+          )}
           <button
             onClick={handleAdd}
-            disabled={adding || !url.trim()}
+            disabled={adding || !inputValid}
             style={{
-              height: 38, padding: '0 18px', borderRadius: 8, flexShrink: 0,
-              background: url.trim() ? 'linear-gradient(135deg,#a855f7,#4d7cff)' : 'var(--bg-card)',
-              border: 'none', color: url.trim() ? '#fff' : 'var(--text-3)',
-              fontSize: 12, fontWeight: 700, cursor: url.trim() ? 'pointer' : 'not-allowed',
-              opacity: adding ? .6 : 1,
+              height: 42, padding: '0 20px', flexShrink: 0,
+              background: inputValid
+                ? adding ? 'rgba(123,97,255,.4)' : 'linear-gradient(135deg,#7B61FF,#5B8AFF)'
+                : '#161C2C',
+              border: 'none', borderLeft: '1px solid rgba(255,255,255,.06)',
+              color: inputValid ? '#fff' : '#4A5270',
+              fontSize: 12, fontWeight: 700, cursor: inputValid && !adding ? 'pointer' : 'not-allowed',
+              transition: 'all .12s',
+              display: 'flex', alignItems: 'center', gap: 6,
             }}
           >
-            {adding ? '…' : 'ADD'}
+            {adding ? (
+              <span style={{ display: 'inline-block', animation: 'dl-spin .8s linear infinite' }}>⟳</span>
+            ) : '↓'} {adding ? 'Adding…' : 'Add'}
           </button>
         </div>
 
         {/* Options row */}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>Quality</span>
-          <select
-            value={quality}
-            onChange={(e) => setQuality(e.target.value)}
-            style={{
-              background: 'var(--bg-card)', border: '1px solid var(--border)',
-              borderRadius: 6, padding: '4px 8px', fontSize: 11,
-              color: 'var(--text-1)', outline: 'none', cursor: 'pointer',
-            }}
-          >
-            <option value="best">Best Available</option>
-            <option value="1080">1080p</option>
-            <option value="720">720p</option>
-            <option value="480">480p</option>
-          </select>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, color: '#4A5270', fontWeight: 600 }}>Quality</span>
+            <select
+              value={quality}
+              onChange={(e) => setQuality(e.target.value)}
+              style={{
+                background: '#111622', border: '1px solid #1C2438',
+                borderRadius: 6, padding: '5px 8px', fontSize: 11,
+                color: '#EEF0F8', outline: 'none', cursor: 'pointer',
+              }}
+            >
+              <option value="best">Best</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+            </select>
+          </div>
 
-          <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0, marginLeft: 4 }}>Save to</span>
-          <div
-            onClick={pickDir}
-            style={{
-              flex: 1, height: 28, padding: '0 10px', borderRadius: 6, cursor: 'pointer',
-              background: 'var(--bg-card)', border: '1px solid var(--border)',
-              fontSize: 11, color: outputDir ? 'var(--text-2)' : 'var(--text-3)',
-              display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap' as const,
-              fontFamily: 'monospace',
-            }}
-          >
-            {outputDir || 'Click to choose folder…'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 10, color: '#4A5270', fontWeight: 600, flexShrink: 0 }}>Save to</span>
+            <div
+              onClick={pickDir}
+              style={{
+                flex: 1, height: 30, padding: '0 10px', borderRadius: 6, cursor: 'pointer',
+                background: '#111622', border: '1px solid #1C2438',
+                fontSize: 10, color: outputDir ? '#8A93B0' : '#4A5270',
+                display: 'flex', alignItems: 'center', overflow: 'hidden',
+                fontFamily: 'monospace', whiteSpace: 'nowrap' as const,
+                transition: 'border-color .12s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = '#2A3558')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = '#1C2438')}
+            >
+              📁 {outputDir || 'Click to choose folder…'}
+            </div>
           </div>
         </div>
 
-        {error && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 6 }}>⚠ {error}</div>}
+        {error && (
+          <div style={{
+            marginTop: 10, padding: '8px 12px',
+            background: 'rgba(232,64,122,.08)', border: '1px solid rgba(232,64,122,.2)',
+            borderRadius: 8, fontSize: 11, color: '#E8407A', lineHeight: 1.5,
+          }}>
+            ⚠ {error}
+          </div>
+        )}
       </div>
 
-      {/* ── Job list ── */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {jobs.length === 0 ? (
-          <div style={{
-            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', gap: 12, color: 'var(--text-3)',
-          }}>
-            <span style={{ fontSize: 36, opacity: .2 }}>⬇</span>
-            <span style={{ fontSize: 13 }}>Paste a URL above to start downloading</span>
-            <span style={{ fontSize: 11, opacity: .6 }}>YouTube · TikTok · Instagram · Facebook</span>
-          </div>
-        ) : (
-          jobs.map((job) => <JobCard key={job.id} job={job} onCancel={handleCancel} />)
-        )}
+      {/* Queue */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+        {jobs.length === 0
+          ? <EmptyQueue />
+          : jobs.map((job) => <DownloadCard key={job.id} job={job} onCancel={cancelJob} />)
+        }
       </div>
     </div>
   )
