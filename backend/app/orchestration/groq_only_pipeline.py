@@ -164,13 +164,50 @@ def run_groq_only_pre_render(
             _t0 = time.perf_counter()
             _hb_stop = threading.Event()
 
-            def _hb_fn(_stop=_hb_stop, _m=_model):
+            # Diagnostics so the log shows what's happening, not just silence.
+            _src_size_mb = source_path.stat().st_size / (1024 * 1024)
+            _video_dur = float(source.get("duration") or 0.0)
+            # Rough CPU realtime multipliers for faster-whisper:
+            # tiny ~10x, base ~7x, small ~4x, medium ~2x, large 1x
+            _rt_mult = {"tiny": 10, "base": 7, "small": 4, "medium": 2, "large": 1}.get(_model, 5)
+            _eta_sec = max(5, _video_dur / max(1, _rt_mult))
+            _job_log(
+                effective_channel, job_id,
+                f"groq_only.transcription_started model={_model} engine={_engine} "
+                f"video_dur={_video_dur:.0f}s src_size={_src_size_mb:.1f}MB "
+                f"eta={_eta_sec:.0f}s (CPU estimate)",
+            )
+            _emit_render_event(
+                channel_code=effective_channel, job_id=job_id,
+                event="groq_only.transcription.progress",
+                level="INFO",
+                message=f"Whisper started (model={_model}, eta≈{_eta_sec:.0f}s)",
+                step="render.groq_only.transcribe",
+                context={
+                    "model": _model, "engine": _engine,
+                    "video_duration_sec": _video_dur,
+                    "source_size_mb": round(_src_size_mb, 1),
+                    "eta_sec": int(_eta_sec),
+                },
+            )
+
+            def _hb_fn(_stop=_hb_stop, _m=_model, _eta=_eta_sec):
                 _pct = 16
-                while not _stop.wait(12):
+                _tick = 0
+                while not _stop.wait(5):  # heartbeat every 5s (was 12s)
+                    _tick += 1
                     _el = round(time.perf_counter() - _t0)
+                    _pct_est = min(99, int(100 * _el / max(1, _eta)))
+                    # File-log every tick so user sees liveness in console/log.
+                    _job_log(
+                        effective_channel, job_id,
+                        f"groq_only.transcription.alive elapsed={_el}s "
+                        f"est_progress={_pct_est}% model={_m} eta={_eta:.0f}s",
+                    )
+                    # DB progress: only bump stage % gradually (UI cap).
                     update_job_progress(
                         job_id, JobStage.TRANSCRIBING_FULL, _pct,
-                        f"Groq-only: transcribing… ({_el}s)",
+                        f"Whisper transcribing… {_el}s elapsed (~{_pct_est}% of eta)",
                     )
                     _pct = _pct + 1 if _pct < 22 else 22
 
@@ -179,10 +216,6 @@ def run_groq_only_pre_render(
                 name=f"groq_only_transcribe_hb_{job_id[:8]}",
             )
             _hb.start()
-            _job_log(
-                effective_channel, job_id,
-                f"groq_only.transcription_started model={_model}",
-            )
             try:
                 transcribe_with_adapter(
                     str(source_path), str(full_srt),
@@ -195,9 +228,25 @@ def run_groq_only_pre_render(
                 _ms = int((time.perf_counter() - _t0) * 1000)
                 if full_srt.exists() and full_srt.stat().st_size > 0:
                     _transcription_cache_put(str(source_path), _model, _cache_key, full_srt)
+                _srt_size_kb = full_srt.stat().st_size / 1024 if full_srt.exists() else 0
+                _elapsed_sec = max(0.001, _ms / 1000)
+                _rt_speed = (_video_dur / _elapsed_sec) if _video_dur > 0 else 0.0
                 _job_log(
                     effective_channel, job_id,
-                    f"groq_only.transcription_done model={_model} elapsed_ms={_ms}",
+                    f"groq_only.transcription_done model={_model} elapsed={_elapsed_sec:.1f}s "
+                    f"srt_size={_srt_size_kb:.1f}KB speed={_rt_speed:.1f}x realtime",
+                )
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="groq_only.transcription.done",
+                    level="INFO",
+                    message=f"Whisper done ({_elapsed_sec:.1f}s, {_srt_size_kb:.1f}KB SRT)",
+                    step="render.groq_only.transcribe",
+                    context={
+                        "elapsed_ms": _ms,
+                        "srt_size_bytes": full_srt.stat().st_size if full_srt.exists() else 0,
+                        "realtime_speed": round(_rt_speed, 2),
+                    },
                 )
             except Exception as _exc:
                 _safe_unlink(full_srt)
