@@ -46,37 +46,50 @@ def parse_segment_response(
     """
     Parse Groq's raw text response into validated GroqSegment list.
 
-    Returns None when:
-    - JSON cannot be extracted from the response
-    - Fewer than output_count valid segments remain after validation
+    Returns None only when no valid segments can be parsed at all.
+    When Groq returns fewer valid segments than requested, returns the
+    valid subset (lenient — better some clips than render failure).
     """
     try:
         data = _extract_json_array(raw)
         if not isinstance(data, list):
-            logger.debug("groq_parser: expected list, got %s", type(data).__name__)
+            logger.warning(
+                "groq_parser: expected list, got %s — raw preview: %r",
+                type(data).__name__, raw[:200],
+            )
             return None
 
         segments: list[GroqSegment] = []
+        rejected = 0
         for item in data:
             seg = _parse_item(item, min_sec, max_sec, video_duration)
             if seg is not None:
                 segments.append(seg)
+            else:
+                rejected += 1
 
-        # Sort by score descending, take the top N requested.
+        if not segments:
+            logger.warning(
+                "groq_parser: 0 valid segments out of %d returned by Groq "
+                "(min_sec=%.0f max_sec=%.0f video_dur=%.0f) — raw preview: %r",
+                len(data), min_sec, max_sec, video_duration, raw[:300],
+            )
+            return None
+
+        # Sort by score descending, take up to N requested. Keep all if fewer.
         segments.sort(key=lambda s: s.score, reverse=True)
         result = segments[:output_count]
 
         if len(result) < output_count:
-            logger.debug(
-                "groq_parser: only %d/%d valid segments — falling back",
-                len(result), output_count,
+            logger.info(
+                "groq_parser: %d/%d valid segments (%d rejected) — proceeding with subset",
+                len(result), output_count, rejected,
             )
-            return None
 
         return result
 
     except Exception as exc:
-        logger.debug("groq_parser: unexpected error — %s", exc)
+        logger.warning("groq_parser: unexpected error — %s", exc, exc_info=True)
         return None
 
 
