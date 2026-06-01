@@ -682,8 +682,21 @@ def test_cloud_ai(body: dict):
     api_key  = str(body.get("api_key") or "").strip()
     model    = body.get("model") or None
 
+    # If no API key in body, fall back to server env (Phase I: keys live in .env).
     if not api_key:
-        raise HTTPException(status_code=400, detail="api_key is required")
+        _env_map = {
+            "groq":   _cfg.GROQ_API_KEY,
+            "gemini": getattr(_cfg, "GEMINI_API_KEY", ""),
+            "openai": getattr(_cfg, "OPENAI_API_KEY", ""),
+            "claude": getattr(_cfg, "CLAUDE_API_KEY", ""),
+        }
+        api_key = (_env_map.get(provider) or "").strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No API key for provider={provider} (not in body and "
+                   f"{provider.upper()}_API_KEY env empty)",
+        )
 
     _GROQ_BASE_URL = "https://api.groq.com/openai/v1"
     _TEST_MESSAGES = [

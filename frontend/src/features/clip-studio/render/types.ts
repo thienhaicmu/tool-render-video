@@ -60,9 +60,10 @@ export interface ConfigState {
   aiCloudApiKey:     string
   aiCloudModel:      string
   aiContentDriven:   boolean
-  // Groq segment selection
+  // LLM segment selection (Phase I — multi-provider)
   groqEnabled:          boolean
-  groqModel:            string
+  aiProvider:           'groq' | 'gemini'  // UI only exposes these two
+  groqModel:            string             // also used as gemini model when aiProvider=gemini
   groqContentLanguage:  string
 }
 

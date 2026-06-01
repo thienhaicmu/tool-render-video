@@ -22,8 +22,11 @@ from app.ai.analysis.groq.prompts import build_segment_prompt
 logger = logging.getLogger("app.render.gemini_client")
 logger.info("gemini_provider: module loaded (build=2026-06-01.i1-multi-provider)")
 
-# Gemini 2.0 Flash: fast, free tier 1M tokens/day, 15 RPM, 1M context.
-_DEFAULT_MODEL = "gemini-2.0-flash"
+# Gemini Flash (latest): fast, free tier, 1M context. The "latest" alias
+# auto-tracks the newest Flash release the account has access to —
+# important because raw "gemini-2.0-flash" returns quota-exceeded on many
+# accounts where "gemini-flash-latest" works.
+_DEFAULT_MODEL = "gemini-flash-latest"
 
 # Gemini 1M context lets us send much more transcript than Groq.
 # 60K chars ≈ 15K tokens, still under any sane rate limit, captures

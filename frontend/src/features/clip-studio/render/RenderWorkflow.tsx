@@ -53,7 +53,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     aiCloudApiKey:    localStorage.getItem('rw_ai_cloud_api_key') ?? '',
     aiCloudModel:     '',
     aiContentDriven:  false,
-    groqEnabled:         false,
+    groqEnabled:         true,
+    aiProvider:          (localStorage.getItem('rw_ai_provider') as 'groq' | 'gemini') ?? 'gemini',
     groqModel:           '',
     groqContentLanguage: 'auto',
   }))
@@ -166,6 +167,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   function setCfgKey<K extends keyof ConfigState>(k: K, v: ConfigState[K]) {
     if (k === 'aiCloudApiKey')   localStorage.setItem('rw_ai_cloud_api_key', v as string)
     if (k === 'aiCloudProvider') localStorage.setItem('rw_ai_cloud_provider', v as string)
+    if (k === 'aiProvider')      localStorage.setItem('rw_ai_provider', v as string)
     setCfg((p) => ({ ...p, [k]: v }))
   }
   function applyPreset(id: string) {
@@ -208,11 +210,11 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       voice_gender:        cfg.narrEnabled ? cfg.voiceGender : undefined,
       tts_engine:          cfg.narrEnabled ? cfg.ttsEngine : undefined,
       voice_mix_mode:      cfg.narrEnabled ? cfg.voiceMixMode : undefined,
-      // Groq is the single source of truth for segment selection (post-refactor A-G).
-      // ai_cloud_api_key carries the user-supplied key; backend prefers it over env.
+      // LLM segment selection — API keys come from server .env, not UI.
+      // ai_provider selects which provider's key the server resolves.
       groq_only_mode:        cfg.groqEnabled || undefined,
       groq_analysis_enabled: cfg.groqEnabled || undefined,
-      ai_cloud_api_key:      cfg.groqEnabled && cfg.aiCloudApiKey ? cfg.aiCloudApiKey : undefined,
+      ai_provider:           cfg.groqEnabled ? cfg.aiProvider : undefined,
       groq_model:            cfg.groqEnabled && cfg.groqModel ? cfg.groqModel : undefined,
       groq_content_language: cfg.groqEnabled && cfg.groqContentLanguage !== 'auto' ? cfg.groqContentLanguage : undefined,
       multi_variant:       cfg.multiVariant || undefined,
