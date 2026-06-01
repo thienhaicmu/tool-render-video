@@ -15,7 +15,8 @@ from typing import Optional
 from app.ai.analysis.groq.parser import GroqSegment, parse_segment_response
 from app.ai.analysis.groq.prompts import build_segment_prompt
 
-logger = logging.getLogger("app.ai.analysis.groq.client")
+logger = logging.getLogger("app.render.groq_client")
+logger.info("groq_client: module loaded (build=2026-06-01.h-direct-sdk+json-mode)")
 
 _GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 _DEFAULT_MODEL = "llama-3.1-8b-instant"

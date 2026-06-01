@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-logger = logging.getLogger("app.ai.analysis.groq.parser")
+logger = logging.getLogger("app.render.groq_parser")
 
 # Filesystem-invalid characters on Windows (superset covers Mac/Linux too).
 _INVALID_FS_CHARS = re.compile(r'[/\\:*?"<>|\t\n\r]')
