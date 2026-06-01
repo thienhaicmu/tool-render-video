@@ -47,8 +47,12 @@ Return EXACTLY this JSON shape (no other keys, no markdown, no comments):
 Return up to {output_count} segments. Returning fewer is fine if the transcript is short or low-quality — never invent moments that are not in the transcript.
 """
 
-# Hard cap: prevent excessive token cost on very long transcripts.
-MAX_SRT_CHARS = 12_000
+# Hard cap on transcript size. Vietnamese text tokenizes at ~2 chars/token
+# (vs ~4 for English), so 6000 chars ≈ 3000 tokens — safe under the Groq
+# free tier 6000 TPM limit when combined with the ~1500-token prompt overhead.
+# Override via env GROQ_MAX_SRT_CHARS if you have a paid tier with higher TPM.
+import os as _os
+MAX_SRT_CHARS = int(_os.getenv("GROQ_MAX_SRT_CHARS", "6000"))
 
 
 def build_segment_prompt(

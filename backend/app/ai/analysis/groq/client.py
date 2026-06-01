@@ -19,7 +19,11 @@ logger = logging.getLogger("app.render.groq_client")
 logger.info("groq_client: module loaded (build=2026-06-01.h-direct-sdk+json-mode)")
 
 _GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-_DEFAULT_MODEL = "llama-3.1-8b-instant"
+# llama-3.3-70b-versatile gives noticeably better segment selection quality
+# than the 8b model for Vietnamese transcripts and is well within the free
+# tier limits when input is kept under ~6K SRT chars. Override per-request
+# via payload.groq_model.
+_DEFAULT_MODEL = "llama-3.3-70b-versatile"
 _MAX_TOKENS = 4096   # plenty for ~20 segments × ~200 chars each
 _TEMPERATURE = 0.2
 
@@ -97,10 +101,13 @@ def _run(
     )
 
     resolved_model = model or _DEFAULT_MODEL
+    _prompt_chars = len(system_prompt) + len(user_prompt)
+    _est_tokens = _prompt_chars // 3  # Vietnamese ~2-3 chars/token, conservative estimate
     logger.info(
         "groq_client: calling model=%s output_count=%d min_sec=%.0f max_sec=%.0f "
-        "video_dur=%.0f srt_chars=%d",
-        resolved_model, output_count, min_sec, max_sec, video_duration, len(srt_content),
+        "video_dur=%.0f srt_chars=%d prompt_chars=%d est_tokens=%d",
+        resolved_model, output_count, min_sec, max_sec, video_duration,
+        len(srt_content), _prompt_chars, _est_tokens,
     )
 
     raw = _call_groq(api_key, resolved_model, system_prompt, user_prompt)
