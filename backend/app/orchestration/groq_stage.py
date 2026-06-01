@@ -17,12 +17,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger("app.render.groq_stage")
+logger.info("groq_stage: module loaded (build=2026-06-01.h2-verbose-diagnostics)")
 
 try:
     from app.ai.analysis.groq import select_segments, GroqSegment
     _GROQ_MODULE_AVAILABLE = True
-except ImportError:
+except ImportError as _import_exc:
     _GROQ_MODULE_AVAILABLE = False
+    logger.warning("groq_stage: groq client import FAILED — %s", _import_exc)
 
 
 def run_groq_segment_selection(
@@ -56,24 +58,31 @@ def _run(
     source: dict,
 ) -> Optional[list]:
     if not _GROQ_MODULE_AVAILABLE:
-        logger.debug("groq_stage: module not available")
+        logger.warning("groq_stage: module not available (missing groq SDK)")
         return None
 
     if not full_srt_available or not full_srt.exists():
-        logger.debug("groq_stage: SRT not available — skipping")
+        logger.warning("groq_stage: SRT not available — skipping (path=%s)", full_srt)
         return None
 
     # Read API key: prefer request-level (UI input), fallback to server env.
     from app.core import config as _cfg
-    api_key = (getattr(payload, "ai_cloud_api_key", "") or "").strip() or _cfg.GROQ_API_KEY
+    _payload_key = (getattr(payload, "ai_cloud_api_key", "") or "").strip()
+    _env_key = _cfg.GROQ_API_KEY
+    api_key = _payload_key or _env_key
+    _key_source = "payload" if _payload_key else ("env" if _env_key else "none")
     if not api_key:
-        logger.debug("groq_stage: no GROQ_API_KEY configured")
+        logger.warning("groq_stage: NO API KEY (payload empty AND env GROQ_API_KEY empty)")
         return None
+    logger.info(
+        "groq_stage: api_key source=%s len=%d prefix=%s",
+        _key_source, len(api_key), api_key[:8] + "..." if len(api_key) > 8 else api_key,
+    )
 
     try:
         srt_content = full_srt.read_text(encoding="utf-8", errors="replace")
     except Exception as exc:
-        logger.debug("groq_stage: cannot read SRT — %s", exc)
+        logger.warning("groq_stage: cannot read SRT (%s) — %s", full_srt, exc)
         return None
 
     output_count = max(1, int(getattr(payload, "output_count", 1)))
@@ -84,8 +93,8 @@ def _run(
     language     = getattr(payload, "groq_content_language", None) or "auto"
 
     logger.info(
-        "groq_stage: requesting %d segments %.0f–%.0fs model=%s",
-        output_count, min_sec, max_sec, model or "default",
+        "groq_stage: requesting %d segments %.0f–%.0fs model=%s srt_chars=%d dur=%.0f",
+        output_count, min_sec, max_sec, model or "default", len(srt_content), video_duration,
     )
 
     segments = select_segments(
@@ -100,7 +109,10 @@ def _run(
     )
 
     if not segments:
-        logger.info("groq_stage: no segments returned — keeping local scored")
+        logger.warning(
+            "groq_stage: no segments returned from select_segments() "
+            "— check groq_client logs above for raw API response",
+        )
         return None
 
     # Apply min_quality_score filter
