@@ -182,6 +182,7 @@ export type JobStatusValue =
   | 'running'
   | 'completed'
   | 'completed_with_errors'
+  | 'partial'
   | 'failed'
   | 'interrupted'
   | 'cancelled'

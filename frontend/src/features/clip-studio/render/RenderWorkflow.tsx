@@ -5,7 +5,6 @@ import { useRenderStore } from '../../../stores/renderStore'
 import { useUIStore } from '../../../stores/uiStore'
 import { useRenderSocket } from '../../../hooks/useRenderSocket'
 import { prepareSource, cancelRender, cancelPrepareSource, retryRender, resumeRender } from '../../../api/render'
-import { buildV2Payload, cancelRenderV2 } from '../../../api/render-v2'
 import type { PrepareSourceResponse } from '../../../api/render'
 import { getJobParts, getJobQualitySummary, getJobRanking } from '../../../api/jobs'
 import type { RenderRequest, JobPart, QualityReport, PartRankResult } from '../../../types/api'
@@ -72,11 +71,9 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const [isRetrying, setIsRetrying]         = useState(false)
   const [rawMsgOpen, setRawMsgOpen]         = useState(false)
 
-  const { submitRender, submitRenderV2 } = useRenderStore()
+  const { submitRender } = useRenderStore()
   const addNotification = useUIStore((s) => s.addNotification)
-  const [isV2Job, setIsV2Job] = useState(false)
-  const v2WsPath = isV2Job && jobId ? `/api/v2/render/${encodeURIComponent(jobId)}/ws` : undefined
-  const { stage, jobStatus, progress, jobMessage, isTerminal, isReconnecting: wsReconnecting, liveParts, error: wsError, errorKind } = useRenderSocket(jobId, v2WsPath)
+  const { stage, jobStatus, progress, jobMessage, isTerminal, isReconnecting: wsReconnecting, liveParts, error: wsError, errorKind } = useRenderSocket(jobId)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -250,20 +247,9 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       asset_music_profile: cfg.assetMusicProfile ?? undefined,
     }
     try {
-      // v2 pipeline: local file only, no YouTube → faster, correct Groq ordering
-      const src = sources[0]
-      if (src?.value) {
-        const v2payload = buildV2Payload(cfg, src)
-        const id = await submitRenderV2(v2payload)
-        setIsV2Job(true)
-        setJobId(id)
-        setStep(3)
-      } else {
-        const id = await submitRender(payload)
-        setIsV2Job(false)
-        setJobId(id)
-        setStep(3)
-      }
+      const id = await submitRender(payload)
+      setJobId(id)
+      setStep(3)
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : 'Failed to start render')
     }
@@ -273,8 +259,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     if (!jobId || isCancelling) return
     setIsCancelling(true)
     try {
-      if (isV2Job) { await cancelRenderV2(jobId) }
-      else         { await cancelRender(jobId) }
+      await cancelRender(jobId)
     } catch { /* ignore */ }
     finally { setIsCancelling(false) }
   }

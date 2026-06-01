@@ -3,16 +3,13 @@
  */
 import { create } from 'zustand'
 import { submitRender as apiSubmitRender } from '../api/render'
-import { submitRenderV2 as apiSubmitRenderV2 } from '../api/render-v2'
 import type { RenderRequest, JobStatus } from '../types/api'
-import type { V2RenderRequest } from '../api/render-v2'
 
 export interface RenderStore {
   jobs: Record<string, JobStatus>
   activeJobId: string | null
 
-  submitRender:   (payload: RenderRequest)   => Promise<string>
-  submitRenderV2: (payload: V2RenderRequest) => Promise<string>
+  submitRender: (payload: RenderRequest) => Promise<string>
   updateJobStatus: (jobId: string, status: string) => void
 }
 
@@ -37,15 +34,6 @@ export const useRenderStore = create<RenderStore>((set) => ({
   submitRender: async (payload: RenderRequest): Promise<string> => {
     const response = await apiSubmitRender(payload)
     const jobId = response.job_id
-    set((state) => ({
-      activeJobId: jobId,
-      jobs: { ...state.jobs, [jobId]: _makeJobEntry(jobId) },
-    }))
-    return jobId
-  },
-
-  submitRenderV2: async (payload: V2RenderRequest): Promise<string> => {
-    const jobId = await apiSubmitRenderV2(payload)
     set((state) => ({
       activeJobId: jobId,
       jobs: { ...state.jobs, [jobId]: _makeJobEntry(jobId) },

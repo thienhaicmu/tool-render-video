@@ -12,16 +12,27 @@ export function normalizeProgressPercent(value: number | null | undefined): numb
 /** Map backend stage string to a friendly UI label */
 export function getStageLabel(stage: string | null | undefined): string {
   switch (stage) {
-    case 'starting':         return 'Starting'
-    case 'segment_building': return 'Analyzing Scenes'
-    case 'rendering':        return 'Rendering Parts'
-    case 'finalizing':       return 'Finalizing'
-    case 'complete':         return 'Complete'
-    case 'error':            return 'Error'
+    case 'queued':              return 'Queued'
+    case 'starting':            return 'Starting'
+    case 'running':             return 'Running'
+    case 'analyzing':           return 'Analyzing'
+    case 'downloading':         return 'Downloading'
+    case 'scene_detection':     return 'Detecting Scenes'
+    case 'segment_building':    return 'Analyzing Scenes'
+    case 'transcribing_full':   return 'Transcribing'
+    case 'rendering':           return 'Rendering Parts'
+    case 'rendering_parallel':  return 'Rendering Parts'
+    case 'writing_report':      return 'Writing Report'
+    case 'done':                return 'Complete'
+    case 'failed':              return 'Failed'
+    // legacy values kept for backward compat with stored stage strings
+    case 'finalizing':          return 'Finalizing'
+    case 'complete':            return 'Complete'
+    case 'error':               return 'Error'
     case '':
     case null:
-    case undefined:          return 'Processing'
-    default:                 return 'Processing'
+    case undefined:             return 'Processing'
+    default:                    return 'Processing'
   }
 }
 
@@ -34,6 +45,7 @@ export function getStatusLabel(status: string | null | undefined): string {
     case 'completed_with_errors':   return 'Completed with Errors'
     case 'failed':                  return 'Failed'
     case 'interrupted':             return 'Interrupted'
+    case 'partial':                 return 'Partially Complete'
     case 'cancelled':
     case 'canceled':                return 'Canceled'
     case 'cancelling':              return 'Canceling...'

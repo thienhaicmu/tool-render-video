@@ -81,6 +81,7 @@ export type JobStatusEnum =
   | 'running'
   | 'completed'
   | 'completed_with_errors'
+  | 'partial'
   | 'failed'
   | 'interrupted'
   | 'cancelled'
@@ -89,6 +90,7 @@ export type JobStatusEnum =
 export const TERMINAL_JOB_STATUSES: readonly JobStatusEnum[] = [
   'completed',
   'completed_with_errors',
+  'partial',
   'failed',
   'interrupted',
   'cancelled',
@@ -101,9 +103,20 @@ export function isTerminalStatus(status: string): boolean {
 // ── WebSocket render stages ───────────────────────────────────────────────────
 
 export type RenderStage =
+  | 'queued'
   | 'starting'
+  | 'running'
+  | 'analyzing'
+  | 'downloading'
+  | 'scene_detection'
   | 'segment_building'
+  | 'transcribing_full'
   | 'rendering'
+  | 'rendering_parallel'
+  | 'writing_report'
+  | 'done'
+  | 'failed'
+  // legacy values kept for backward compat
   | 'finalizing'
   | 'complete'
   | 'error'
