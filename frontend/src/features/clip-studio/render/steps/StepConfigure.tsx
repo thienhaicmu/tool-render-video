@@ -845,6 +845,62 @@ export function StepConfigure({
                     )}
                   </div>
 
+                  {/* Groq Segment Selection */}
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-default)' }}>
+                    <div className="tog-row" style={{ alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          Groq segment selection
+                          <span style={{ fontSize: 9, background: 'rgba(251,191,36,.15)', color: '#f59e0b', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>FREE</span>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2, lineHeight: 1.4 }}>
+                          {!cfg.aiCloudApiKey
+                            ? 'Enter Groq API key above (gsk_...) to enable'
+                            : 'Groq reads the transcript and picks the best segments — output filenames are AI-generated'}
+                        </div>
+                      </div>
+                      <Tog
+                        checked={cfg.groqEnabled && !!cfg.aiCloudApiKey}
+                        onChange={(v) => { if (cfg.aiCloudApiKey) setCfgKey('groqEnabled', v) }}
+                      />
+                    </div>
+                    {cfg.groqEnabled && cfg.aiCloudApiKey && (
+                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <input
+                          type="text"
+                          value={cfg.groqModel}
+                          onChange={(e) => setCfgKey('groqModel', e.target.value)}
+                          placeholder="llama-3.1-8b-instant (optional)"
+                          style={{
+                            width: '100%', padding: '5px 8px', fontSize: 11, borderRadius: 4,
+                            border: '1px solid var(--border-default)', background: 'var(--bg-input)',
+                            color: 'var(--text-primary)', boxSizing: 'border-box',
+                          }}
+                        />
+                        <select
+                          value={cfg.groqContentLanguage}
+                          onChange={(e) => setCfgKey('groqContentLanguage', e.target.value)}
+                          style={{
+                            width: '100%', padding: '5px 8px', fontSize: 11, borderRadius: 4,
+                            border: '1px solid var(--border-default)', background: 'var(--bg-input)',
+                            color: 'var(--text-primary)',
+                          }}
+                        >
+                          <option value="auto">Auto-detect language</option>
+                          <option value="vi">Vietnamese</option>
+                          <option value="en">English</option>
+                          <option value="zh">Chinese</option>
+                          <option value="ja">Japanese</option>
+                          <option value="ko">Korean</option>
+                          <option value="th">Thai</option>
+                        </select>
+                        <div style={{ fontSize: 10, color: '#f59e0b', lineHeight: 1.4 }}>
+                          ✦ Groq will name each clip naturally (e.g. "Bí quyết tăng view nhanh.mp4")
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                 </div>
               )}
             </div>

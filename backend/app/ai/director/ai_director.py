@@ -196,6 +196,10 @@ def _bootstrap_hybrid_analyzer(request: Any, chunks: list, context: dict):
         }
         local = _LocalAnalyzer()
 
+        # groq_stage already ran cloud segment selection — skip cloud call here
+        if getattr(request, "groq_analysis_enabled", False) and mode != "cloud":
+            mode = "local"
+
         # "local" mode: skip cloud entirely, no API call
         if mode == "local":
             return _HybridAnalyzer(local=local, cloud=None).analyze(chunks, analysis_ctx)
@@ -208,7 +212,7 @@ def _bootstrap_hybrid_analyzer(request: Any, chunks: list, context: dict):
 
         if req_enabled and req_key:
             provider, api_key, model = req_provider, req_key, req_model
-        elif _CFG_KEY:
+        elif _CFG_ENABLED and _CFG_KEY:
             provider = req_provider or _CFG_PROVIDER
             api_key  = _CFG_KEY
             model    = req_model or (_CFG_MODEL or None)

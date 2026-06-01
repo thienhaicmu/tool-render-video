@@ -103,6 +103,30 @@ def _get_fw_model(model_name: str, device: str, compute_type: str):
 
 
 # ---------------------------------------------------------------------------
+# Public warmup — called at server startup to pre-load model into RAM
+# ---------------------------------------------------------------------------
+
+def warmup_fw_model(model_name: str) -> bool:
+    """Load the faster-whisper model into _FW_MODEL_CACHE before the first job.
+
+    Returns True if the model was loaded (or was already cached), False on any
+    failure. Never raises — startup must not crash due to a missing model.
+    """
+    if not has_faster_whisper():
+        return False
+    try:
+        device, compute_type = _detect_fw_device_compute()
+        _get_fw_model(model_name, device, compute_type)
+        return True
+    except Exception as exc:
+        import logging
+        logging.getLogger("app.startup").warning(
+            "whisper_warmup: failed to pre-load %s — %s", model_name, exc
+        )
+        return False
+
+
+# ---------------------------------------------------------------------------
 # faster-whisper SRT writer
 # ---------------------------------------------------------------------------
 

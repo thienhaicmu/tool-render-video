@@ -114,6 +114,15 @@ app.include_router(files_router)
 app.include_router(editing_router)
 app.include_router(platform_downloader_router)
 app.include_router(feedback_router)
+# v2 API routes — disabled by setting ENABLE_V2=0
+if os.getenv("ENABLE_V2", "1") != "0":
+    try:
+        from v2.api.routes.download import router as v2_download_router
+        from v2.api.routes.render import router as v2_render_router
+        app.include_router(v2_download_router)
+        app.include_router(v2_render_router)
+    except Exception as _v2_err:  # noqa: BLE001
+        logging.getLogger("app.main").warning("v2 routes failed to load: %s", _v2_err)
 # Static file mount — path and name vary by UI version so both can coexist safely
 if _UI_VERSION == "v2":
     # static-v2 index.html uses relative paths (assets/…) so mount at /assets
@@ -213,6 +222,19 @@ def startup():
     recover_pending_render_jobs()
     start_warmup()  # pre-download Whisper models + check deps in background
     _start_groq_health_check()  # non-blocking — logs warning if AI_CLOUD_API_KEY invalid
+    # Pre-load Whisper model into RAM so first job doesn't pay the 5-15s load cost.
+    # Uses WARMUP_WHISPER_MODEL env var (default "small" = balanced preset).
+    def _whisper_model_warmup():
+        try:
+            _wm = os.getenv("WARMUP_WHISPER_MODEL", "small")
+            from app.services.subtitle_transcription_adapters import warmup_fw_model
+            ok = warmup_fw_model(_wm)
+            logging.getLogger("app.startup").info(
+                "whisper_warmup: model=%s loaded=%s", _wm, ok
+            )
+        except Exception as _ww_err:
+            logging.getLogger("app.startup").debug("whisper_warmup: skipped — %s", _ww_err)
+    threading.Thread(target=_whisper_model_warmup, daemon=True, name="whisper-warmup").start()
     # Phase 5.2: warm up local knowledge index in background (non-blocking)
     try:
         from app.ai.rag.knowledge_warmup import warmup_knowledge_index

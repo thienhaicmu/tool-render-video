@@ -16,7 +16,7 @@ function buildClipSlots(liveParts: JobPart[], progress: WsProgressSummary | null
   }
   if (!progress) return []
   const slots: ClipSlot[] = []
-  const active = progress.active_parts ?? []
+  const active = Array.isArray(progress.active_parts) ? progress.active_parts : []
   let no = 1
   for (let i = 0; i < progress.completed_parts; i++) slots.push({ part_no: no++, status: 'done', progress_percent: 100 })
   active.forEach((a) => slots.push({ part_no: a.part_no, status: a.status, progress_percent: a.progress_percent }))
@@ -249,13 +249,13 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
 }
 
 export function StepRendering({
-  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, wsError, t, aspectRatio,
+  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, wsError, wsReconnecting, t, aspectRatio,
   aiAnalysisMode, aiCloudProvider,
 }: {
   jobId: string | null; stage: string; jobStatus: string
   progress: WsProgressSummary | null; jobMessage: string
   isTerminal: boolean; liveParts: JobPart[]
-  wsError: string | null; t: Strings; aspectRatio: string
+  wsError: string | null; wsReconnecting?: boolean; t: Strings; aspectRatio: string
   aiAnalysisMode?: string; aiCloudProvider?: string
 }) {
   const pct         = progress?.overall_progress_percent ?? 0
@@ -389,9 +389,9 @@ export function StepRendering({
         </div>
       )}
 
-      {wsError && !isTerminal && (
+      {!isTerminal && (wsReconnecting || wsError) && (
         <div style={{ padding: '8px 16px', background: 'rgba(234,179,8,.1)', borderBottom: '1px solid rgba(234,179,8,.2)', fontSize: '11px', color: 'var(--warn)', flexShrink: 0 }}>
-          ⚠ {t.rndWsError}
+          {wsReconnecting ? `↻ ${t.rndWsReconnecting}` : `⚠ ${t.rndWsError}`}
         </div>
       )}
 

@@ -431,7 +431,8 @@ export function StepResults({
                         onClick={(e) => e.stopPropagation()}>
                         <button className="clip-ov-btn">▶</button>
                       </a>
-                      <a href={getPartMediaUrl(jobId, part.part_no)} download={`clip_${part.part_no}.mp4`}
+                      <a href={getPartMediaUrl(jobId, part.part_no)}
+                        download={part.clip_name || `clip_${part.part_no}.mp4`}
                         onClick={(e) => e.stopPropagation()}>
                         <button className="clip-ov-btn">⬇</button>
                       </a>
@@ -440,7 +441,18 @@ export function StepResults({
 
                   <div className="clip-info2">
                     <div className="clip-info2-top">
-                      <span className="clip-num-lbl2">Clip {String(part.part_no).padStart(2, '0')}</span>
+                      <span className="clip-num-lbl2">
+                        {part.groq_title || (part.clip_name ? part.clip_name.replace(/\.mp4$/i, '') : `Clip ${String(part.part_no).padStart(2, '0')}`)}
+                      </span>
+                      {part.source === 'groq' && (
+                        <span style={{
+                          fontSize: 7, fontWeight: 700, padding: '1px 6px', borderRadius: 99, flexShrink: 0,
+                          background: 'rgba(251,191,36,.15)', color: '#f59e0b',
+                          letterSpacing: '.05em', textTransform: 'uppercase', border: '1px solid rgba(251,191,36,.3)',
+                        }}>
+                          Groq AI
+                        </span>
+                      )}
                       {tier && <span className={`clip-ai-badge ${tier.cls}`}>{tier.label}</span>}
                       {rank?.confidence_tier && (
                         <span style={{
@@ -456,6 +468,11 @@ export function StepResults({
                     {dispScore !== undefined && (
                       <div className="clip-score-bar-track">
                         <div className="clip-score-bar-fill" style={{ width: `${dispScore}%`, background: scoreCol }} />
+                      </div>
+                    )}
+                    {part.groq_reason && (
+                      <div style={{ fontSize: 9, color: '#f59e0b', marginTop: 2, lineHeight: 1.3, fontStyle: 'italic' }}>
+                        {part.groq_reason}
                       </div>
                     )}
                     {rank?.ranking_reason && (

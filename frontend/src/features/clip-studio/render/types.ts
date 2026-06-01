@@ -60,6 +60,10 @@ export interface ConfigState {
   aiCloudApiKey:     string
   aiCloudModel:      string
   aiContentDriven:   boolean
+  // Groq segment selection
+  groqEnabled:          boolean
+  groqModel:            string
+  groqContentLanguage:  string
 }
 
 export type ClipSlot = {

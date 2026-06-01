@@ -5,6 +5,7 @@ import subprocess
 import threading
 import time
 import logging
+from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin, _summarize_ffmpeg_stderr
@@ -48,7 +49,8 @@ def set_thread_cancel_event(ev) -> None:
 # Consolidates multiple per-attribute probes into one subprocess call per file.
 # Cache is invalidated automatically when file mtime or size changes.
 # Failed probes are never cached — they return zero/None defaults and retry.
-_PROBE_CACHE: dict[tuple, dict] = {}
+_PROBE_CACHE_MAX = 500
+_PROBE_CACHE: OrderedDict[tuple, dict] = OrderedDict()
 _PROBE_CACHE_LOCK = threading.Lock()
 
 
@@ -133,6 +135,8 @@ def probe_video_metadata(path: str, timeout: int = 15) -> dict:
     if key and result["has_video"]:
         with _PROBE_CACHE_LOCK:
             _PROBE_CACHE[key] = result
+            if len(_PROBE_CACHE) > _PROBE_CACHE_MAX:
+                _PROBE_CACHE.popitem(last=False)  # evict oldest entry
     return result
 
 

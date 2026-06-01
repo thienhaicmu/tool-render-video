@@ -15,12 +15,13 @@ export interface RenderSocketState {
   progress: WsProgressSummary | null
   liveParts: JobPart[]          // per-event parts array (all parts, current state)
   isConnected: boolean
+  isReconnecting: boolean       // true while attempting to re-establish a dropped connection
   isTerminal: boolean           // derived from jobStatus
   error: string | null
   errorKind: JobErrorKind | null  // structured error classification, set on FAILED
 }
 
-export function useRenderSocket(jobId: string | null): RenderSocketState {
+export function useRenderSocket(jobId: string | null, wsPathOverride?: string): RenderSocketState {
   const clientRef    = useRef<RenderSocketClient | null>(null)
   const progressRef  = useRef<string>('')   // fingerprint to skip no-op updates
   const partsRef     = useRef<string>('')
@@ -30,9 +31,10 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
   const [jobMessage, setJobMessage] = useState<string | null>(null)
   const [progress, setProgress]     = useState<WsProgressSummary | null>(null)
   const [liveParts, setLiveParts]   = useState<JobPart[]>([])
-  const [isConnected, setIsConnected] = useState(false)
-  const [error, setError]           = useState<string | null>(null)
-  const [errorKind, setErrorKind]   = useState<JobErrorKind | null>(null)
+  const [isConnected, setIsConnected]       = useState(false)
+  const [isReconnecting, setIsReconnecting] = useState(false)
+  const [error, setError]                   = useState<string | null>(null)
+  const [errorKind, setErrorKind]           = useState<JobErrorKind | null>(null)
 
   const updateJobStatus = useRenderStore((s) => s.updateJobStatus)
 
@@ -45,6 +47,7 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
     client.onStageChange((s, msg) => {
       setStage(s)
       setIsConnected(true)
+      setIsReconnecting(false)
       setJobMessage(msg)
     })
 
@@ -73,18 +76,24 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
       updateJobStatus(jobId, status)
     })
 
+    client.onReconnecting(() => {
+      setIsConnected(false)
+      setIsReconnecting(true)
+    })
+
     client.onError((err) => {
       setError(err)
       setIsConnected(false)
+      setIsReconnecting(false)
     })
 
-    client.connect(jobId)
+    client.connect(jobId, wsPathOverride)
 
     return () => {
       client.disconnect()
       clientRef.current = null
     }
-  }, [jobId, updateJobStatus])
+  }, [jobId, wsPathOverride, updateJobStatus])
 
   return {
     stage,
@@ -93,6 +102,7 @@ export function useRenderSocket(jobId: string | null): RenderSocketState {
     progress,
     liveParts,
     isConnected,
+    isReconnecting,
     isTerminal: isTerminalStatus(jobStatus ?? ''),
     error,
     errorKind,

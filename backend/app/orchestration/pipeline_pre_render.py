@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.core.stage import JobStage
+from app.orchestration.groq_stage import run_groq_segment_selection
 from app.orchestration.pipeline_cache import (
     _render_cache_key,
     _scene_cache_get, _scene_cache_put,
@@ -83,7 +84,50 @@ def run_pre_render_scenes(
     full_srt = work_dir / f"{source['slug']}_full.srt"
     full_srt_available = False
     _early_transcription_done = False
-    
+
+    # ── Parallel pre-run: scene detection + transcription concurrently ────────
+    # Activates when BOTH operations are needed simultaneously so we can save
+    # 30–90 s by running them in parallel threads. Results populate the shared
+    # caches; the sequential blocks below then get instant cache hits.
+    # If parallel_analysis fails for either operation the sequential fallback
+    # below runs unchanged — zero blast radius on failure.
+    _need_transcription = (
+        getattr(payload, "ai_early_transcription", False)
+        or getattr(payload, "ai_content_driven_selection", False)
+        or getattr(payload, "groq_analysis_enabled", False)
+    )
+    if payload.auto_detect_scene and _need_transcription and not payload.resume_from_last:
+        try:
+            from app.orchestration.parallel_analysis import run_parallel_analysis
+            _par = run_parallel_analysis(
+                source_path=source_path,
+                full_srt=full_srt,
+                do_scene_detection=True,
+                do_transcription=True,
+                auto_detect_scene=payload.auto_detect_scene,
+                payload=payload,
+                tuned=tuned,
+                retry_count=retry_count,
+                resume_from_last=False,
+                scene_cache_get=_scene_cache_get,
+                scene_cache_put=_scene_cache_put,
+                transcription_cache_get=_transcription_cache_get,
+                transcription_cache_put=_transcription_cache_put,
+            )
+            if _par.full_srt_available:
+                full_srt_available = True
+                _early_transcription_done = True
+            _job_log(
+                effective_channel, job_id,
+                f"parallel_pre_run: scene_ms={_par.scene_ms} transcription_ms={_par.transcription_ms} "
+                f"scene_ok={_par.scene_ok} srt_available={_par.full_srt_available} "
+                f"scene_cache_hit={_par.scene_cache_hit} transcription_cache_hit={_par.transcription_cache_hit}",
+            )
+        except Exception as _par_err:
+            _job_log(effective_channel, job_id,
+                     f"parallel_pre_run: failed — {_par_err}, falling back to sequential",
+                     kind="warning")
+
     set_stage_fn(JobStage.SCENE_DETECTION, 15, "Detecting scenes")
     _emit_render_event(
         channel_code=effective_channel,
@@ -121,7 +165,7 @@ def run_pre_render_scenes(
     _job_log(effective_channel, job_id, f"{'cache_hit' if _scene_cache_hit else 'cache_miss'} type=scene_detect scenes={len(scenes)} elapsed_ms={_scene_ms}")
     _job_log(effective_channel, job_id, f"Scene detection done: {len(scenes)} scenes in {_scene_ms}ms")
     
-    # Layer 4 â†’ Layer 5 boundary: capture Visual Analysis outputs before segment building.
+    # Layer 4 → Layer 5 boundary: capture Visual Analysis outputs before segment building.
     _visual_analysis = VisualAnalysisResult(
         scene_count=len(scenes),
         detection_ms=_scene_ms,
@@ -132,16 +176,17 @@ def run_pre_render_scenes(
         _visual_analysis.scene_count, _visual_analysis.detection_ms, _visual_analysis.cache_hit,
     )
     
-    # â”€â”€ Phase 45: Early transcription for AI content understanding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Phase 45: Early transcription for AI content understanding ──────────
     # Fires before segment building when ai_early_transcription=True OR
     # ai_content_driven_selection=True. Produces full_srt for AI Director and
     # S4.1/S4.2/S4.5 refinements BEFORE the heuristic viral-score filter cuts
-    # the candidate pool. On any failure â†’ full_srt_available stays False,
+    # the candidate pool. On any failure → full_srt_available stays False,
     # render continues unchanged. NEVER raises. NEVER changes stage names.
     if (
         getattr(payload, "ai_early_transcription", False)
         or getattr(payload, "ai_content_driven_selection", False)
-    ):
+        or getattr(payload, "groq_analysis_enabled", False)
+    ) and not _early_transcription_done:
         try:
             _p45_has_audio = has_audio_stream(str(source_path))
             _p45_resume_hit = (
@@ -181,7 +226,7 @@ def run_pre_render_scenes(
                             _el = round(time.perf_counter() - _t_p45)
                             update_job_progress(
                                 job_id, JobStage.TRANSCRIBING_FULL, _pct,
-                                f"Transcribing for AI analysisâ€¦ ({_el}s)"
+                                f"Transcribing for AI analysis… ({_el}s)"
                             )
                             _pct = _pct + 1 if _pct < 22 else 22
     
@@ -243,10 +288,10 @@ def run_pre_render_scenes(
                      f"phase45_early_transcription_outer_failed: {_p45_outer_err}",
                      kind="warning")
     
-    # â”€â”€ Phase 46: Content analysis (single-pass, before segment building) â”€â”€
+    # ── Phase 46: Content analysis (single-pass, before segment building) ──
     # Runs when transcript is available (full_srt_available=True).
     # Produces ContentAnalysisResult shared by AI Director, segment scoring,
-    # and S4.x refinements â€” each consumer reads pre-computed analysis instead
+    # and S4.x refinements — each consumer reads pre-computed analysis instead
     # of re-running analyzers independently. Advisory metadata only.
     # NEVER raises. NEVER modifies payload. NEVER crashes render.
     _content_analysis = None
@@ -283,7 +328,7 @@ def run_pre_render_scenes(
                 kind="warning",
             )
     
-    # â”€â”€ Phase 5.4: Early AI pacing retrieval (before segment building) â”€â”€â”€â”€â”€
+    # ── Phase 5.4: Early AI pacing retrieval (before segment building) ─────
     # Runs only when ai_director_enabled=True. Retrieves knowledge to get
     # pacing hints BEFORE build_segments_from_scenes() so they can influence
     # segment duration config. Results are stored in _early_retrieved_knowledge
@@ -330,7 +375,7 @@ def run_pre_render_scenes(
                 logger.debug("phase54_early_retrieval_failed job_id=%s: %s", job_id, _early_kr_err)
                 _early_retrieved_knowledge = []
     
-            # Map knowledge â†’ execution hints â†’ pacing config
+            # Map knowledge → execution hints → pacing config
             if _early_retrieved_knowledge:
                 try:
                     _early_hint_result = _map_hints(_early_retrieved_knowledge)
@@ -397,7 +442,7 @@ def run_pre_render_scenes(
     # UP28.1 + R3.5: segment score cache probed BEFORE CLIP scoring.
     # Cache key is independent of CLIP output (file mtime/size + scene count + version),
     # so the probe is safe to hoist.  On hit, cached segments already incorporate CLIP
-    # scores from the original cache-miss run â€” returning them is bit-identical.
+    # scores from the original cache-miss run — returning them is bit-identical.
     try:
         _src_st = source_path.stat()
         _score_ck = _render_cache_key(
@@ -413,7 +458,7 @@ def run_pre_render_scenes(
         scored = _cached_scored
         _job_log(effective_channel, job_id, f"score_cache_hit type=segment_scores segments={len(scored)}")
     else:
-        # OQ-5.3: CLIP semantic scoring â€” enriches scene dicts with clip_semantic_score [-8, +20]
+        # OQ-5.3: CLIP semantic scoring — enriches scene dicts with clip_semantic_score [-8, +20]
         # Runs only on cache miss; skipped on re-renders of the same source (R3.5).
         if scenes:
             _t_clip = time.perf_counter()
@@ -425,6 +470,22 @@ def run_pre_render_scenes(
         _job_log(effective_channel, job_id, f"score_cache_miss type=segment_scores segments={len(scored)}")
         if _score_ck:
             _score_cache_put(_score_ck, scored)
+
+    # Groq Segment Analysis — replaces scored[] when groq_analysis_enabled=True.
+    # On failure or when disabled, scored[] is unchanged (local scorer fallback).
+    if getattr(payload, "groq_analysis_enabled", False):
+        _groq_scored = run_groq_segment_selection(
+            full_srt=full_srt,
+            full_srt_available=full_srt_available,
+            scored=scored,
+            payload=payload,
+            source=source,
+        )
+        if _groq_scored is not None:
+            scored = _groq_scored
+            _job_log(effective_channel, job_id,
+                     f"groq_stage: replaced scored with {len(scored)} Groq segments")
+
     # Phase 1: Unified scoring -- AI transcript blend
     # When Phase 46 content analysis produced chunks, run select_ai_segments()
     # to get transcript-based scores and blend them into heuristic viral_score
@@ -470,7 +531,7 @@ def run_pre_render_scenes(
                     )
             except Exception as _us_err:
                 _job_log(effective_channel, job_id, f"unified_scoring_skipped: {_us_err}", kind="warning")
-    # UP26: Clip exclude â€” remove creator-blacklisted timestamp ranges before selection
+    # UP26: Clip exclude — remove creator-blacklisted timestamp ranges before selection
     _clip_exclude = [x for x in (getattr(payload, 'clip_exclude', None) or []) if isinstance(x, dict)]
     if _clip_exclude:
         _before_ex = len(scored)
@@ -490,23 +551,23 @@ def run_pre_render_scenes(
     _apply_motion_boost = _high_motion_count >= HIGH_MOTION_MIN_KEEP
     if _apply_motion_boost:
         _job_log(effective_channel, job_id,
-                 f"high_motion_preference: {_high_motion_count} high-energy clips detected â€” "
+                 f"high_motion_preference: {_high_motion_count} high-energy clips detected — "
                  f"preference boost applied (no eviction); low-motion clips remain in pool")
     # Sort by viral/motion score first for selection (top N), then re-order for output numbering.
-    # viral_score is primary â€” it now incorporates transition quality, not just cut density.
+    # viral_score is primary — it now incorporates transition quality, not just cut density.
     _target_platform = str(getattr(payload, "target_platform", "") or "youtube_shorts").strip().lower()
     _platform_hook_bonus = _PLATFORM_PROFILES.get(_target_platform, {}).get("hook_sort_bonus", 0)
-    # UP20: Creator Style DNA â€” inferred identity nudges (after platform, before default)
+    # UP20: Creator Style DNA — inferred identity nudges (after platform, before default)
     _dna = getattr(payload, "creator_dna", {}) or {}
     _dna_confident    = bool(_dna.get("confident", False))
     _dna_hook_bonus   = 3 if (_dna_confident and float(_dna.get("hook_forward",  0) or 0) >= 0.5) else 0
     _dna_clean_visual = _dna_confident and float(_dna.get("clean_visual", 0) or 0) >= 0.67
     _dna_action_count = int(_dna.get("action_count", 0) or 0)
-    # UP26: Structure bias â€” gentle ranking re-weight (creator intent, above DNA, below explicit lock)
+    # UP26: Structure bias — gentle ranking re-weight (creator intent, above DNA, below explicit lock)
     _sb = str(getattr(payload, 'structure_bias', '') or 'balanced').strip().lower()
     _sb_hook_mult  = 1.25 if _sb == 'hook'  else (0.85 if _sb == 'story' else 1.0)
     _sb_viral_mult = 0.85 if _sb == 'hook'  else (1.15 if _sb == 'story' else 1.0)
-    # UP26: Subtitle emphasis â€” adjust font size before part loop reads payload.sub_font_size
+    # UP26: Subtitle emphasis — adjust font size before part loop reads payload.sub_font_size
     _sub_emphasis = str(getattr(payload, 'subtitle_emphasis', '') or 'balanced').strip().lower()
     if _sub_emphasis in ('subtle', 'aggressive'):
         _base_sz = int(getattr(payload, 'sub_font_size', 0) or 46)
@@ -518,8 +579,8 @@ def run_pre_render_scenes(
             vs = float(s.get("viral_score", 0) or 0) + float(s.get("ai_blend_bonus", 0) or 0)
             hs = float(s.get("hook_text_score") or s.get("hook_timing_score") or
                        s.get("hook_opening_score") or s.get("hook_score") or 0)
-            # mv not yet computed; fallback = vs â†’ vs*0.50 + vs*0.30 + hs*0.20 = vs*0.80 + hs*0.20
-            # UP20.1 Part A: DNA hook bonus â€” same gentle nudge as standard sort path.
+            # mv not yet computed; fallback = vs → vs*0.50 + vs*0.30 + hs*0.20 = vs*0.80 + hs*0.20
+            # UP20.1 Part A: DNA hook bonus — same gentle nudge as standard sort path.
             # UP26: Structure bias multipliers applied after DNA nudge.
             return (vs * 0.80 * _sb_viral_mult) + hs * (0.20 + _dna_hook_bonus / 100) * _sb_hook_mult
         scored.sort(key=_provisional_combined, reverse=True)
@@ -533,15 +594,15 @@ def run_pre_render_scenes(
             ),
             reverse=True,
         )
-    # UP73.3: First-render quality floor â€” drop candidates below viral_score 25.
-    # Procedure: sort (already done) â†’ filter â†’ fallback-to-top-1 â†’ slice.
+    # UP73.3: First-render quality floor — drop candidates below viral_score 25.
+    # Procedure: sort (already done) → filter → fallback-to-top-1 → slice.
     # Micro-safety: skip when pool is â‰¤ 2 to avoid over-pruning sparse content.
     if len(scored) > 2:
         _floor_filtered = [s for s in scored if float(s.get("viral_score", 0) or 0) >= 25]
         scored = _floor_filtered if _floor_filtered else scored[:1]
     if payload.max_export_parts and payload.max_export_parts > 0:
         scored = scored[:payload.max_export_parts]
-    # UP26: Clip lock â€” promote creator-selected timestamp ranges to front of pool (after slice)
+    # UP26: Clip lock — promote creator-selected timestamp ranges to front of pool (after slice)
     _clip_lock = [x for x in (getattr(payload, 'clip_lock', None) or []) if isinstance(x, dict)]
     if _clip_lock:
         def _in_lock_range(seg, _ranges=_clip_lock):
@@ -556,7 +617,7 @@ def run_pre_render_scenes(
         _emit_render_event(channel_code=effective_channel, job_id=job_id, event="clip_locked", level="INFO",
             message=f"UP26 clip_lock: {len(_locked)} segments promoted to front", step="render.steering",
             context={"lock_ranges": len(_clip_lock), "segments_promoted": len(_locked)})
-    # â”€â”€ Multi-variant: replace pool with 3 purposeful single-clip selections â”€â”€
+    # ── Multi-variant: replace pool with 3 purposeful single-clip selections ──
     _multi_variant = bool(getattr(payload, "multi_variant", False))
     if _multi_variant:
         scored = _build_variant_segments(scored, payload)
@@ -602,7 +663,7 @@ def run_pre_render_scenes(
     )
     _job_log(effective_channel, job_id,
              f"platform_bias: target={_target_platform} hook_bonus={_platform_hook_bonus}")
-    # UP20.1 Part B: DNA observability â€” always emit confidence; log applied/suppressed separately.
+    # UP20.1 Part B: DNA observability — always emit confidence; log applied/suppressed separately.
     _dna_hf = float(_dna.get("hook_forward", 0) or 0)
     _dna_cv = float(_dna.get("clean_visual", 0) or 0)
     _dna_ns = float(_dna.get("narrative_structure", 0) or 0)
@@ -627,7 +688,7 @@ def run_pre_render_scenes(
     elif _dna_confident:
         _job_log(
             effective_channel, job_id,
-            f"dna_suppressed: all nudges below threshold â€” "
+            f"dna_suppressed: all nudges below threshold — "
             f"hook_forward={_dna_hf:.2f}(<0.5) clean_visual={_dna_cv:.2f}(<0.67)",
             kind="info",
         )
@@ -646,7 +707,7 @@ def run_pre_render_scenes(
             context={"reason": "timeline_mode", "total_clips": len(scored)},
         )
     elif part_order == "viral" and _combined_enabled:
-        # P4-1: Hook-first sequencing â€” strongest hook at index 0
+        # P4-1: Hook-first sequencing — strongest hook at index 0
         def _hook_score(c):
             return (
                 float(c.get("combined_score") or c.get("market_viral_score") or c.get("viral_score") or 0)
@@ -696,13 +757,13 @@ def run_pre_render_scenes(
             context={"reason": "combined_disabled", "total_clips": len(scored)},
         )
     
-    # â”€â”€ Story arc sequencing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # Lightweight hook â†’ build â†’ payoff reorder applied after score-based
-    # selection.  Deterministic heuristic â€” predictable and explainable.
+    # ── Story arc sequencing ─────────────────────────────────────────────
+    # Lightweight hook → build → payoff reorder applied after score-based
+    # selection.  Deterministic heuristic — predictable and explainable.
     #
     # Conditions: non-timeline mode, 3+ clips, non-montage dominant type.
-    # For montage: energy-first order is already correct â€” skip.
-    # For 1-2 clips: no meaningful arc â€” skip.
+    # For montage: energy-first order is already correct — skip.
+    # For 1-2 clips: no meaningful arc — skip.
     if part_order != "timeline" and len(scored) >= 3 and not _multi_variant:
         _ct_counts: dict[str, int] = {}
         for _s in scored:
@@ -726,9 +787,9 @@ def run_pre_render_scenes(
             _arc_build = [s for s in scored if s is not _arc_hook and s is not _arc_payoff]
     
             # Build order by content type:
-            #   interview/tutorial/vlog â€” source chronological preserves the
+            #   interview/tutorial/vlog — source chronological preserves the
             #     original logic/explanation/narrative structure
-            #   commentary â€” descending viral score: strongest supporting
+            #   commentary — descending viral score: strongest supporting
             #     evidence before diminishing evidence
             if _dominant_ct in ("interview", "tutorial", "vlog"):
                 _arc_build.sort(key=lambda s: float(s.get("start", 0) or 0))

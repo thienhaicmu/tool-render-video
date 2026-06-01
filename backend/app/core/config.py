@@ -52,3 +52,10 @@ AI_CLOUD_ENABLED  : bool = os.getenv("AI_CLOUD_ENABLED", "0") == "1"
 AI_CLOUD_PROVIDER : str  = os.getenv("AI_CLOUD_PROVIDER", "groq")
 AI_CLOUD_API_KEY  : str  = os.getenv("AI_CLOUD_API_KEY", "")
 AI_CLOUD_MODEL    : str  = os.getenv("AI_CLOUD_MODEL", "")
+
+# Groq Segment Analysis — SRT transcript → segment selection
+# GROQ_API_KEY falls back to AI_CLOUD_API_KEY so existing config keeps working.
+GROQ_API_KEY         : str = os.getenv("GROQ_API_KEY", AI_CLOUD_API_KEY)
+GROQ_DEFAULT_MODEL   : str = os.getenv("GROQ_DEFAULT_MODEL", "llama-3.1-8b-instant")
+GROQ_REQUEST_TIMEOUT : int = int(os.getenv("GROQ_REQUEST_TIMEOUT", "30"))
+GROQ_MAX_SRT_CHARS   : int = int(os.getenv("GROQ_MAX_SRT_CHARS", "12000"))

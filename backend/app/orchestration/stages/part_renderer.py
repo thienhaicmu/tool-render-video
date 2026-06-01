@@ -775,8 +775,18 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
         final_part = ctx.output_dir / f"{ctx.output_stem}_{_variant_type}.mp4"
         part_name  = f"{ctx.output_stem}_{_variant_type}.mp4"
     else:
-        final_part = ctx.output_dir / f"{ctx.output_stem}_part_{idx:03d}.mp4"
-        part_name  = f"{ctx.output_stem}_part_{idx:03d}.mp4"
+        _clip_name = str(seg.get("clip_name") or "").strip()
+        if _clip_name:
+            # Groq-provided natural filename — already FS-safe (sanitized by groq/parser.py).
+            # Append part index if a file with the same name already exists (collision guard).
+            _cn_path = ctx.output_dir / f"{_clip_name}.mp4"
+            if _cn_path.exists():
+                _clip_name = f"{_clip_name}_{idx:03d}"
+            final_part = ctx.output_dir / f"{_clip_name}.mp4"
+            part_name  = f"{_clip_name}.mp4"
+        else:
+            final_part = ctx.output_dir / f"{ctx.output_stem}_part_{idx:03d}.mp4"
+            part_name  = f"{ctx.output_stem}_part_{idx:03d}.mp4"
     _sub_target_lang = getattr(ctx.payload, "subtitle_target_language", "en")
     translated_srt_part = ctx.work_dir / f"{ctx.source['slug']}_part_{idx:03d}.{_sub_target_lang}.srt"
     _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx}/{ctx.total_parts} start", kind="debug")

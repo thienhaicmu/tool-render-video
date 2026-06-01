@@ -3,8 +3,12 @@
  * Endpoint: WS /api/jobs/{jobId}/ws
  * Contract: docs/ui/UI_BACKEND_CONTRACT.md §11
  *
- * Reconnect policy: up to 3 attempts with 2-second exponential backoff.
- * Does NOT reconnect if the job has reached a terminal status.
+ * Reconnect policy: up to MAX_RECONNECT_ATTEMPTS with exponential backoff
+ * capped at MAX_RECONNECT_DELAY_MS.  Does NOT reconnect if the job has
+ * reached a terminal status.
+ *
+ * Keepalive: the backend sends {"type":"ping"} every 25 s during long renders.
+ * The client silently ignores these — they exist solely to keep TCP alive.
  */
 import { BASE_URL } from '../api/client'
 import { isProgressEvent, isErrorEvent } from './events'
@@ -15,6 +19,7 @@ type StageHandler = (stage: string, message: string) => void
 type ProgressHandler = (summary: WsProgressSummary, parts: import('../types/api').JobPart[]) => void
 type CompleteHandler = (event: WebSocketEvent) => void
 type ErrorHandler = (error: string) => void
+type ReconnectingHandler = (attempt: number, maxAttempts: number) => void
 
 function computeWsBase(): string {
   if (BASE_URL) {
@@ -28,8 +33,11 @@ function computeWsBase(): string {
   return 'ws://127.0.0.1:8000'
 }
 const WS_BASE = computeWsBase()
-const MAX_RECONNECT_ATTEMPTS = 3
+// 20 attempts covers ~20 minutes of retries (2s → 4s → … → 30s cap).
+// Long renders (55–60 min) can experience transient drops; 3 was too few.
+const MAX_RECONNECT_ATTEMPTS = 20
 const RECONNECT_BASE_DELAY_MS = 2000
+const MAX_RECONNECT_DELAY_MS = 30_000
 
 export class RenderSocketClient {
   private jobId: string | null = null
@@ -38,20 +46,23 @@ export class RenderSocketClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private _connected = false
   private _destroyed = false
+  private _wsUrlOverride: string | null = null
 
   // Handlers
   private stageHandlers: StageHandler[] = []
   private progressHandlers: ProgressHandler[] = []
   private completeHandlers: CompleteHandler[] = []
   private errorHandlers: ErrorHandler[] = []
+  private reconnectingHandlers: ReconnectingHandler[] = []
 
   get isConnected(): boolean {
     return this._connected
   }
 
-  connect(jobId: string): void {
+  connect(jobId: string, wsUrlOverride?: string): void {
     if (this._destroyed) return
     this.jobId = jobId
+    this._wsUrlOverride = wsUrlOverride ?? null
     this.reconnectAttempt = 0
     this._openSocket()
   }
@@ -78,12 +89,18 @@ export class RenderSocketClient {
     this.errorHandlers.push(handler)
   }
 
+  onReconnecting(handler: ReconnectingHandler): void {
+    this.reconnectingHandlers.push(handler)
+  }
+
   // ── Private ────────────────────────────────────────────────────────────────
 
   private _openSocket(): void {
     if (!this.jobId || this._destroyed) return
 
-    const url = `${WS_BASE}/api/jobs/${encodeURIComponent(this.jobId)}/ws`
+    const url = this._wsUrlOverride
+      ? `${WS_BASE}${this._wsUrlOverride}`
+      : `${WS_BASE}/api/jobs/${encodeURIComponent(this.jobId)}/ws`
     const ws = new WebSocket(url)
     this.socket = ws
 
@@ -97,6 +114,12 @@ export class RenderSocketClient {
       try {
         msg = JSON.parse(ev.data as string)
       } catch {
+        return
+      }
+
+      // Ignore server-side keepalive pings ({"type":"ping"}) — they exist
+      // solely to prevent proxy/OS from tearing down idle TCP connections.
+      if (msg && typeof msg === 'object' && (msg as Record<string, unknown>).type === 'ping') {
         return
       }
 
@@ -160,8 +183,10 @@ export class RenderSocketClient {
       this._emitError('max_reconnect_attempts_reached')
       return
     }
-    const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempt)
+    const rawDelay = RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempt)
+    const delay = Math.min(rawDelay, MAX_RECONNECT_DELAY_MS)
     this.reconnectAttempt += 1
+    this.reconnectingHandlers.forEach((h) => h(this.reconnectAttempt, MAX_RECONNECT_ATTEMPTS))
     this.reconnectTimer = setTimeout(() => {
       if (!this._destroyed) {
         this._openSocket()

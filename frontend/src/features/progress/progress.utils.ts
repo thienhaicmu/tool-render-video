@@ -48,6 +48,7 @@ export function getStatusLabel(status: string | null | undefined): string {
  * Determine ConnectionStatus from socket state.
  * - If terminal: always 'terminal'
  * - If connected: 'live'
+ * - If reconnecting: 'reconnecting' (dropped but retrying, not yet failed)
  * - If error and not connected: 'disconnected'
  * - Otherwise (not yet connected, no error): 'connecting'
  */
@@ -55,9 +56,11 @@ export function deriveConnectionStatus(
   isConnected: boolean,
   isTerminal: boolean,
   error: string | null,
+  isReconnecting = false,
 ): ConnectionStatus {
   if (isTerminal) return 'terminal'
   if (isConnected) return 'live'
+  if (isReconnecting) return 'reconnecting'
   if (error) return 'disconnected'
   return 'connecting'
 }

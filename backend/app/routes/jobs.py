@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 _STUCK_THRESHOLD_S = 120   # seconds with no DB update before a part is flagged stuck
 _ACTIVE_STATUSES   = {"waiting", "cutting", "transcribing", "rendering", "downloading"}
 _TERMINAL_STATUSES = frozenset({"completed", "completed_with_errors", "failed", "interrupted", "cancelled"})
+_WS_PING_INTERVAL_S = 25   # keepalive ping interval — prevents proxy/OS from dropping long renders
 
 
 def _classify_error_kind(job: dict) -> str:
@@ -645,10 +646,16 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
     WebSocket endpoint — streams job + parts + summary every 500 ms.
     Closes automatically when the job reaches a terminal state.
     Frontend falls back to HTTP polling if this endpoint fails.
+
+    Keepalive: sends {"type":"ping"} every _WS_PING_INTERVAL_S seconds when
+    no state change occurs.  Prevents proxy/OS from dropping the TCP connection
+    during long renders (55-60 min) that have infrequent DB updates.
     """
     await websocket.accept()
     try:
         last_fp = None
+        loop = asyncio.get_event_loop()
+        last_send_time = loop.time()
         while True:
             job = get_job(job_id)
             if not job:
@@ -671,6 +678,12 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
                     job_payload = {**job, "error_kind": kind}
                 await websocket.send_json({"job": job_payload, "parts": parts, "summary": summary})
                 last_fp = fp
+                last_send_time = loop.time()
+            elif loop.time() - last_send_time >= _WS_PING_INTERVAL_S:
+                # No state change for a while — send a lightweight ping so the
+                # TCP connection is not torn down by proxies or the OS.
+                await websocket.send_json({"type": "ping"})
+                last_send_time = loop.time()
             # Close WS on any terminal status so the stream doesn't linger.
             # Must match TERMINAL_STATUSES in frontend transport.js.
             if is_terminal:

@@ -75,6 +75,8 @@ class TestPUASentinelConstants:
 EXPECTED_PRESET_IDS = {
     "tiktok_bounce_v1", "bold_cap", "story_clean_01", "viral_bold",
     "clean_pro", "boxed_caption", "viral", "clean", "story", "gaming",
+    # Presets added after initial extraction:
+    "bold_stroke", "color_pop", "dark_card", "fire_bold", "neon_glow", "slay_soft",
 }
 
 class TestPresetConstants:
@@ -95,6 +97,8 @@ class TestPresetConstants:
         expected_aliases = {
             "viral_clean_montserrat", "viral_soft_poppins",
             "viral_pop_anton", "viral_compact_barlow", "clean_bold_01",
+            # Aliases added after initial extraction:
+            "boxed", "pro_karaoke", "slay_soft_01",
         }
         assert set(_STYLE_ALIASES.keys()) == expected_aliases
 
@@ -109,7 +113,7 @@ class TestPresetConstants:
         assert p.font_default == "Bungee"
         assert p.primary_color == "&H00FFFFFF"
         assert p.bounce_fx is True
-        assert p.auto_scale is False
+        assert p.auto_scale is True
         assert p.spacing == pytest.approx(0.3)
 
     def test_viral_preset_fields(self):

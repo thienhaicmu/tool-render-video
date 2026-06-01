@@ -57,7 +57,7 @@ function ActiveProgressPanel({
   showCancel: boolean
   payloadJson: string
 }) {
-  const { stage, jobStatus, jobMessage, progress, liveParts, isConnected, isTerminal, error } =
+  const { stage, jobStatus, jobMessage, progress, liveParts, isConnected, isReconnecting, isTerminal, error } =
     useRenderSocket(jobId)
 
   // Track new messages
@@ -76,8 +76,8 @@ function ActiveProgressPanel({
     progress?.overall_progress_percent ?? initialProgress,
   )
   const stageLabel = getStageLabel(stage ?? progress?.current_stage)
-  const connStatus = deriveConnectionStatus(isConnected, isTerminal, error)
-  const activeParts = progress?.active_parts ?? []
+  const connStatus = deriveConnectionStatus(isConnected, isTerminal, error, isReconnecting)
+  const activeParts = Array.isArray(progress?.active_parts) ? progress.active_parts : []
   const completedParts = progress?.completed_parts ?? 0
   const failedParts = progress?.failed_parts ?? 0
   const totalParts = progress?.total_parts ?? 0

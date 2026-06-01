@@ -135,13 +135,13 @@ from app.orchestration.pipeline_ai_phases import (
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
 # final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
-# The base clip is never fed into the final output â€” render_part_smart() always
+# The base clip is never fed into the final output — render_part_smart() always
 # produces the final video unless FEATURE_OVERLAY_AFTER_BASE_CLIP is also enabled.
 _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 
 # Feature flag: composite subtitle overlays onto base_clip.mp4 as the final output.
 # Requires FEATURE_BASE_CLIP_FIRST=1.  OFF by default.
-# When both flags are ON: overlay composite path â†’ fallback render_part_smart() on failure.
+# When both flags are ON: overlay composite path → fallback render_part_smart() on failure.
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
 
 logger = logging.getLogger("app.render")
@@ -153,29 +153,29 @@ logger = logging.getLogger("app.render")
 # _aspect_play_res_y, _apply_subtitle_edits_to_srt, _PLATFORM_PROFILES,
 # _PLAY_RES_Y_MAP, _VARIANT_AGGRESSIVE_SUB, _VARIANT_STORY_SUB,
 # _CTA_TEXTS, _CTA_AUTO_TYPE
-# â†’ moved to app.orchestration.pipeline_helpers (Phase A-1)
+# → moved to app.orchestration.pipeline_helpers (Phase A-1)
 
 # _map_ai_segments_to_scored already imported from pipeline_helpers above
 
 # _RENDER_CACHE_TTL_SEC, _render_cache_key, _scene_cache_get/put,
 # _transcription_cache_get/put, _score_cache_get/put
-# â†’ moved to app.orchestration.pipeline_cache (C-1)
+# → moved to app.orchestration.pipeline_cache (C-1)
 
 # resolve_combined_score_weights, _score_component, _first_score,
 # _RANKING_WEIGHTS, _output_ranking_detail, _output_ranking_reason,
 # _compute_output_ranking_entry
-# â†’ moved to app.orchestration.pipeline_ranking (C-1)
+# → moved to app.orchestration.pipeline_ranking (C-1)
 
 # _maybe_prepend_remotion_hook_intro, _maybe_prepend_asset_intro,
 # _maybe_append_asset_outro, _maybe_apply_asset_logo
-# â†’ moved to app.orchestration.asset_pipeline (Phase 4B)
+# → moved to app.orchestration.asset_pipeline (Phase 4B)
 
-# _maybe_cleanup_narration_audio â†’ moved to app.orchestration.audio_pipeline (Phase 4D)
+# _maybe_cleanup_narration_audio → moved to app.orchestration.audio_pipeline (Phase 4D)
 
 
-# _PROGRESS_TICK_SEC, _render_progress_timer â†’ moved to app.orchestration.render_events (Phase 4D)
+# _PROGRESS_TICK_SEC, _render_progress_timer → moved to app.orchestration.render_events (Phase 4D)
 
-# _resume_output_valid â†’ moved to app.orchestration.qa_pipeline (Phase 4C)
+# _resume_output_valid → moved to app.orchestration.qa_pipeline (Phase 4C)
 
 
 # ---------------------------------------------------------------------------
@@ -193,20 +193,20 @@ _render_active_lock = threading.Lock()
 _render_active_count: list[int] = [0]   # mutable int; guarded by _render_active_lock
 
 
-# _apply_subtitle_edits_to_srt â†’ moved to app.orchestration.pipeline_helpers (Phase A-1)
+# _apply_subtitle_edits_to_srt → moved to app.orchestration.pipeline_helpers (Phase A-1)
 
-# _duration_tolerance, _stall_deadline â†’ moved to app.orchestration.qa_pipeline (Phase 4C)
+# _duration_tolerance, _stall_deadline → moved to app.orchestration.qa_pipeline (Phase 4C)
 
 
-# _render_progress_timer â†’ moved to app.orchestration.render_events (Phase 4D)
+# _render_progress_timer → moved to app.orchestration.render_events (Phase 4D)
 
 
 # HIGH_MOTION_MIN_SCORE, HIGH_MOTION_MIN_KEEP â†' moved to pipeline_pre_render (Phase A-6)
 # _JOB_LOG_DIRS, _job_log, _append_json_line, _render_error_code, _emit_render_event
-# â†’ moved to app.orchestration.render_events (Phase 4B)
+# → moved to app.orchestration.render_events (Phase 4B)
 
 
-# _event_from_stage, _resolve_job_log_dir â†’ moved to app.orchestration.render_events (Phase 4D)
+# _event_from_stage, _resolve_job_log_dir → moved to app.orchestration.render_events (Phase 4D)
 
 
 def _validate_text_layers_or_400(payload: RenderRequest) -> list[dict]:
@@ -222,17 +222,17 @@ def _validate_text_layers_or_400(payload: RenderRequest) -> list[dict]:
 # _resolve_profile, _probe_video_duration, extract_text_from_srt,
 # _reserve_source_path_in_dir, _reserve_source_path,
 # _sanitize_channel_subdir, _resolve_output_dir
-# â†’ moved to app.orchestration.pipeline_config (C-1)
+# → moved to app.orchestration.pipeline_config (C-1)
 
-# _safe_unlink â†’ moved to app.orchestration.render_events (Phase 4B)
+# _safe_unlink → moved to app.orchestration.render_events (Phase 4B)
 
-# _failed_part_progress â†’ moved to app.orchestration.qa_pipeline (Phase 4C)
+# _failed_part_progress → moved to app.orchestration.qa_pipeline (Phase 4C)
 
-# _validate_render_output â†’ moved to app.orchestration.qa_pipeline (Phase 4C)
+# _validate_render_output → moved to app.orchestration.qa_pipeline (Phase 4C)
 
-# _assess_output_quality â†’ moved to app.orchestration.qa_pipeline (Phase 4C)
+# _assess_output_quality → moved to app.orchestration.qa_pipeline (Phase 4C)
 
-# _render_part_failure_detail â†’ moved to app.orchestration.qa_pipeline (Phase 4C)
+# _render_part_failure_detail → moved to app.orchestration.qa_pipeline (Phase 4C)
 
 
 def run_render_pipeline(
@@ -247,7 +247,7 @@ def run_render_pipeline(
     effective_channel = (payload.channel_code or "").strip() or "manual"
     started_at = datetime.utcnow()
 
-    # Market Viral â€” resolve target market once; used by all part workers via closure
+    # Market Viral — resolve target market once; used by all part workers via closure
     _mv_cfg = getattr(payload, "market_viral", None) or {}
     _mv_cfg_enabled = isinstance(_mv_cfg, dict) and bool(_mv_cfg)
     _mv_payload_market = getattr(payload, "ai_target_market", None) or getattr(payload, "viral_market", None)
@@ -446,7 +446,7 @@ def run_render_pipeline(
         sess = load_session_fn(edit_session_id) if edit_session_id else None
         if edit_session_id and not sess:
             raise RuntimeError(
-                f"Editor session '{edit_session_id}' not found â€” "
+                f"Editor session '{edit_session_id}' not found — "
                 "the session may have expired or the server was restarted. "
                 "Please re-open the editor to re-prepare the source."
             )
@@ -609,7 +609,7 @@ def run_render_pipeline(
             source["duration"] = new_dur or max(1, source["duration"] - trim_in)
             source_path = edited_path
             source["filepath"] = str(edited_path)
-            _job_log(effective_channel, job_id, f"Edits applied â†’ {edited_path} | new_duration={source['duration']}s")
+            _job_log(effective_channel, job_id, f"Edits applied → {edited_path} | new_duration={source['duration']}s")
 
         # Pre-render source preflight: catch local files moved/deleted after initial validation
         if detected_source_mode == "local" and not source_path.exists():
@@ -626,7 +626,7 @@ def run_render_pipeline(
             if output_dir.name.lower() in ("video_output", "video_out"):
                 keep_source_dir = output_dir.parent / "source"
             # Only temp-origin files (YouTube downloads, edited locals) need to be
-            # persisted into source/. A user's original local file is already permanent â€”
+            # persisted into source/. A user's original local file is already permanent —
             # copying it would waste disk space (10 GB+) and slow render startup.
             is_temp_source = str(source_path).startswith(str(TEMP_DIR))
             if is_temp_source:
@@ -641,7 +641,7 @@ def run_render_pipeline(
                         _job_log(effective_channel, job_id, f"Source copied to: {keep_path}")
                 source_path = keep_path
             else:
-                # Local original (not temp): render directly from user's file â€” no copy, no hardlink.
+                # Local original (not temp): render directly from user's file — no copy, no hardlink.
                 _job_log(effective_channel, job_id, f"local_source.passthrough path={source_path} (source copy skipped)")
 
         voice_audio_path = None
@@ -720,8 +720,8 @@ def run_render_pipeline(
                     traceback_text=traceback.format_exc(),
                     context={"error_code": "VOICE001"},
                 )
-                # UP24: recovery â€” voice is optional, render continues without it
-                _recovery_notes.append("AI narration failed â€” rendered without voice")
+                # UP24: recovery — voice is optional, render continues without it
+                _recovery_notes.append("AI narration failed — rendered without voice")
                 _emit_render_event(
                     channel_code=effective_channel,
                     job_id=job_id,
@@ -760,7 +760,7 @@ def run_render_pipeline(
         _seg_min_sec = _pre.seg_min_sec
         _seg_max_sec = _pre.seg_max_sec
         # full_srt and full_srt_available initialized before scene detection (Phase 45 hoist).
-        # _early_transcription_done=True means Phase 45 already ran Whisper â€” subtitle block skips.
+        # _early_transcription_done=True means Phase 45 already ran Whisper — subtitle block skips.
         existing_parts = {int(x["part_no"]): x for x in list_job_parts(job_id)}
         _job_log(effective_channel, job_id, f"Segment building done: {total_parts} parts")
         # Diagnostic: per-segment selection summary (always at INFO for QA traceability)
@@ -874,13 +874,13 @@ def run_render_pipeline(
                             _pct = 29
                             while not _stop.wait(12):
                                 _elapsed = round(time.perf_counter() - _t_transcribe)
-                                update_job_progress(job_id, JobStage.TRANSCRIBING_FULL, _pct, f"Still transcribingâ€¦ ({_elapsed}s)")
+                                update_job_progress(job_id, JobStage.TRANSCRIBING_FULL, _pct, f"Still transcribing… ({_elapsed}s)")
                                 _job_log(effective_channel, job_id, f"subtitle_transcription_progress elapsed_sec={_elapsed} model={_m} source={_s}")
                                 _emit_render_event(
                                     channel_code=effective_channel, job_id=job_id,
                                     event="subtitle_transcription_progress",
                                     level="INFO",
-                                    message=f"Still transcribingâ€¦ elapsed={_elapsed}s",
+                                    message=f"Still transcribing… elapsed={_elapsed}s",
                                     step="subtitle.transcribe",
                                     context={"elapsed_sec": _elapsed, "whisper_model": _m, "source": _s},
                                 )
@@ -947,8 +947,8 @@ def run_render_pipeline(
                                 context={"source_path": str(source_path), "whisper_model": _whisper_model, "elapsed_ms": _transcribe_ms},
                                 exception=transcribe_exc,
                             )
-                            # UP24: recovery â€” subtitles optional, render continues without them
-                            _recovery_notes.append("Subtitle transcription failed â€” rendered without subtitles")
+                            # UP24: recovery — subtitles optional, render continues without them
+                            _recovery_notes.append("Subtitle transcription failed — rendered without subtitles")
                             _emit_render_event(
                                 channel_code=effective_channel,
                                 job_id=job_id,
@@ -962,7 +962,7 @@ def run_render_pipeline(
                             _hb_stop.set()
                             _hb.join(timeout=2)
 
-        # â”€â”€ S4.1: Transcript-aware boundary refinement (S4_CANDIDATE_INTELLIGENCE_ENABLED=1) â”€â”€
+        # ── S4.1: Transcript-aware boundary refinement (S4_CANDIDATE_INTELLIGENCE_ENABLED=1) ──
         # Runs after transcription so it works on the first render (no cold-cache requirement).
         # Nudges already-selected segment start/end to align with sentence boundaries (Â±15% max).
         _s4_before = None  # pre-S4.1 boundaries; forwarded to S4.5 for combined-nudge cap
@@ -984,7 +984,7 @@ def run_render_pipeline(
             except Exception as _s4_exc:
                 logger.debug("s4_boundary_refinement_failed job_id=%s: %s", job_id, _s4_exc)
 
-        # â”€â”€ S4.2: Real Retention Proxy (S4_RETENTION_PROXY_ENABLED=1) â”€â”€
+        # ── S4.2: Real Retention Proxy (S4_RETENTION_PROXY_ENABLED=1) ──
         # Applies a bounded Â±15 adjustment to viral_score using multi-signal
         # retention estimation. Works on first render (uses freshly-generated
         # SRT when available; tier-1 signals fire even without transcript).
@@ -998,7 +998,7 @@ def run_render_pipeline(
             except Exception as _s42_exc:
                 logger.debug("s4_retention_proxy_failed job_id=%s: %s", job_id, _s42_exc)
 
-        # â”€â”€ S4.5: Speaker-aware cuts (S4_SPEAKER_AWARE_CUTS_ENABLED=1) â”€â”€
+        # ── S4.5: Speaker-aware cuts (S4_SPEAKER_AWARE_CUTS_ENABLED=1) ──
         # Snaps boundaries to nearby pause midpoints and utterance endpoints.
         # End boundary gets full nudge window (primary); start gets half
         # (detect_silence_trim_offset already handles opening cleanup).
@@ -1017,14 +1017,14 @@ def run_render_pipeline(
             except Exception as _s45_exc:
                 logger.debug("s4_natural_cuts_failed job_id=%s: %s", job_id, _s45_exc)
 
-        # â”€â”€ AI Director Phase 1 â€” safe edit plan (observation only, no override) â”€â”€
+        # ── AI Director Phase 1 — safe edit plan (observation only, no override) ──
         _ai_edit_plan = None
         if getattr(payload, "ai_director_enabled", False):
             try:
                 from app.ai.director.ai_director import create_ai_edit_plan as _create_ai_plan
                 from app.ai.knowledge.knowledge_store_builder import get_pack_knowledge_store as _get_pack_store
 
-                # â”€â”€ Phase 5.2: Build knowledge filters from payload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                # ── Phase 5.2: Build knowledge filters from payload ────────────────
                 _knowledge_filters: dict = {}
                 try:
                     _knowledge_filters = {
@@ -1042,7 +1042,7 @@ def run_render_pipeline(
                     logger.debug("knowledge_filter_build_failed job_id=%s: %s", job_id, _kf_err)
                     _knowledge_filters = {}
 
-                # â”€â”€ Phase 5.2: AI Trace Logger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                # ── Phase 5.2: AI Trace Logger ────────────────────────────────────
                 _ai_tracer = None
                 try:
                     from app.ai.tracing import AITraceLogger
@@ -1051,13 +1051,13 @@ def run_render_pipeline(
                 except Exception as _tracer_err:
                     logger.debug("ai_tracer_init_failed job_id=%s: %s", job_id, _tracer_err)
 
-                # â”€â”€ Phase 5.2: Retrieve knowledge items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                # ── Phase 5.2: Retrieve knowledge items ───────────────────────────
                 # Phase 5.4: Reuse early retrieval results if available (avoids
                 # double FAISS query). _early_retrieved_knowledge is set by the
                 # Phase 5.4 early pacing block above before segment building.
                 _retrieved_knowledge: list = []
                 if _early_retrieved_knowledge:
-                    # Reuse results from Phase 5.4 early retrieval â€” no second query needed
+                    # Reuse results from Phase 5.4 early retrieval — no second query needed
                     _retrieved_knowledge = _early_retrieved_knowledge
                     logger.debug(
                         "phase54_knowledge_reused job_id=%s count=%d (skipping second query)",
@@ -1150,18 +1150,18 @@ def run_render_pipeline(
                     kind="warning",
                 )
 
-        # â”€â”€ Phase 43: Creator feedback learning pack (advisory metadata only) â”€â”€
+        # ── Phase 43: Creator feedback learning pack (advisory metadata only) ──
         run_phase_43_feedback_learning(_ai_edit_plan, payload, job_id, effective_channel)
 
-        # â”€â”€ Phase 44: AI content-driven segment selection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── Phase 44: AI content-driven segment selection ──────────────────────
         scored = run_phase_44_content_selection(
             _ai_edit_plan, scored, payload, effective_channel, job_id
         )
 
-        # â”€â”€ Phase 5.3: Apply execution hints from AI plan (advisory, safe, bounded) â”€â”€
+        # ── Phase 5.3: Apply execution hints from AI plan (advisory, safe, bounded) ──
         # Reads execution_hints from plan.knowledge_injection (set by ai_director).
-        # If ai_director_enabled=False, _ai_edit_plan is None â†’ this block is skipped.
-        # If hints are invalid or absent â†’ behavior unchanged, advisory log only.
+        # If ai_director_enabled=False, _ai_edit_plan is None → this block is skipped.
+        # If hints are invalid or absent → behavior unchanged, advisory log only.
         # NEVER crashes render. NEVER modifies FFmpeg commands or filter graphs.
         _exec_hints: dict = {}
         _phase53_tracer = _ai_tracer if getattr(payload, "ai_director_enabled", False) else None
@@ -1193,9 +1193,9 @@ def run_render_pipeline(
                 except Exception:
                     pass
 
-            # A. Pacing hint â€” Phase 5.4: pacing hints are now APPLIED before
+            # A. Pacing hint — Phase 5.4: pacing hints are now APPLIED before
             #    segment building via _seg_min_sec/_seg_max_sec (see early pacing
-            #    block above). Here we only log for observability â€” no further action.
+            #    block above). Here we only log for observability — no further action.
             _pacing_cut_min = _exec_hints.get("cut_interval_min")
             _pacing_cut_max = _exec_hints.get("cut_interval_max")
             if _pacing_cut_min is not None or _pacing_cut_max is not None:
@@ -1205,7 +1205,7 @@ def run_render_pipeline(
                     job_id, _pacing_cut_min, _pacing_cut_max,
                 )
 
-            # B. Subtitle emphasis hint â€” if a style is suggested, note it.
+            # B. Subtitle emphasis hint — if a style is suggested, note it.
             #    The actual emphasis style is resolved per-part from payload.subtitle_style
             #    and DNA/platform bias. The hint is advisory and cannot override the
             #    per-part resolution without rewriting that logic (out of scope).
@@ -1213,7 +1213,7 @@ def run_render_pipeline(
             if _sub_emph_hint is not None:
                 logger.info(
                     "phase53_subtitle_emphasis_hint_advisory job_id=%s style=%r "
-                    "(advisory only â€” per-part subtitle style resolved from payload)",
+                    "(advisory only — per-part subtitle style resolved from payload)",
                     job_id, _sub_emph_hint,
                 )
                 if _phase53_tracer is not None:
@@ -1232,9 +1232,9 @@ def run_render_pipeline(
                     except Exception:
                         pass
 
-            # C. Hook overlay hint â€” if explicitly disabled, gate the hook overlay.
-            #    This is the one hint that IS applied: hook_overlay_enabled=False â†’ skip overlay.
-            #    hook_overlay_enabled=True or None â†’ keep existing behavior (unchanged).
+            # C. Hook overlay hint — if explicitly disabled, gate the hook overlay.
+            #    This is the one hint that IS applied: hook_overlay_enabled=False → skip overlay.
+            #    hook_overlay_enabled=True or None → keep existing behavior (unchanged).
             _hook_enabled_hint = _exec_hints.get("hook_overlay_enabled")
             if _hook_enabled_hint is False:
                 # AI says: skip hook overlay for this render job
@@ -1254,12 +1254,12 @@ def run_render_pipeline(
                         except Exception:
                             pass
 
-        # â”€â”€ Phase 5.5: Build AI subtitle emphasis config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── Phase 5.5: Build AI subtitle emphasis config ─────────────────────────
         # Runs only when ai_director_enabled=True and _ai_edit_plan is not None.
         # Config is built once per job; applied per-part in the subtitle loop below.
         # NEVER mutates payload. NEVER changes _effective_subtitle_style (preset ID).
         # NEVER alters SRT timestamps. NEVER touches FFmpeg commands.
-        # If AI disabled or no hints â†’ _ai_subtitle_emphasis_config.applied=False â†’ no change.
+        # If AI disabled or no hints → _ai_subtitle_emphasis_config.applied=False → no change.
         _ai_subtitle_emphasis_config = None
         if getattr(payload, "ai_director_enabled", False) and _ai_edit_plan is not None:
             try:
@@ -1301,18 +1301,18 @@ def run_render_pipeline(
                 )
                 _ai_subtitle_emphasis_config = None
 
-        # â”€â”€ Phase 5.7: Build AI visual intensity config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── Phase 5.7: Build AI visual intensity config ───────────────────────────
         # Runs only when ai_director_enabled=True and _ai_edit_plan is not None.
         # Config is built once per job; logged immediately.
-        # Phase 5.7: Safe injection point found â€” visual_intensity_hint parameter
+        # Phase 5.7: Safe injection point found — visual_intensity_hint parameter
         #   added to render_part(), render_part_smart(), render_base_clip().
         #   All three accept visual_intensity_hint with default None (backward compat).
         #   Renderer OWNS the mapping from hint to known effect presets.
-        #   AI passes only "low"/"medium"/"high" â€” never a preset name or filter string.
+        #   AI passes only "low"/"medium"/"high" — never a preset name or filter string.
         # Result when applied=True: render_overrides={"visual_intensity_hint": <value>}
         # render_pipeline extracts this value and passes it to renderer calls below.
         # NEVER mutates payload. NEVER changes payload.effect_preset. NEVER touches FFmpeg.
-        # If AI disabled or no hints â†’ _ai_visual_intensity_config.applied=False â†’ hint=None.
+        # If AI disabled or no hints → _ai_visual_intensity_config.applied=False → hint=None.
         _ai_visual_intensity_config = None
         if getattr(payload, "ai_director_enabled", False) and _ai_edit_plan is not None:
             try:
@@ -1352,7 +1352,7 @@ def run_render_pipeline(
                 )
                 # Phase 5.7: Extract hint from render_overrides when applied=True.
                 # _vis_intensity_hint is used below in per-part renderer calls.
-                # When applied=False: hint is None â†’ renderer uses effect_preset unchanged.
+                # When applied=False: hint is None → renderer uses effect_preset unchanged.
             except Exception as _vis57_err:
                 logger.warning(
                     "phase57_visual_intensity_config_failed job_id=%s: %s", job_id, _vis57_err
@@ -1369,11 +1369,11 @@ def run_render_pipeline(
                 except Exception:
                     pass
 
-        # â”€â”€ Phase 5.7: Extract visual_intensity_hint for per-part renderer calls â”€â”€
+        # ── Phase 5.7: Extract visual_intensity_hint for per-part renderer calls ──
         # When _ai_visual_intensity_config.applied=True, render_overrides contains
         # {"visual_intensity_hint": <value>}. Extract it for use in renderer calls.
         # When applied=False (disabled, invalid, user override): hint=None.
-        # This local variable is read-only â€” payload.effect_preset is NEVER mutated.
+        # This local variable is read-only — payload.effect_preset is NEVER mutated.
         _vis_intensity_hint: "str | None" = None
         if (
             _ai_visual_intensity_config is not None
@@ -1386,12 +1386,12 @@ def run_render_pipeline(
             except Exception:
                 _vis_intensity_hint = None
 
-        # â”€â”€ AI Execution Mode Resolution (Phase 60D) â€” control only â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── AI Execution Mode Resolution (Phase 60D) — control only ─────────────
         # Resolve BEFORE Phase 59 blocks so they can be gated correctly.
         _ai_exec_mode: str = run_phase_60d_execution_mode(_ai_edit_plan, payload, job_id)
         run_phase_60d_mode_off_rollback(_ai_edit_plan, _ai_exec_mode, job_id)
 
-        # â”€â”€ AI Render Influence (Phase 10) â€” bounded opt-in payload adjustments â”€â”€
+        # ── AI Render Influence (Phase 10) — bounded opt-in payload adjustments ──
         _ai_influence_report: dict = {"enabled": False}
         if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False) \
                 and _ai_exec_mode != "off":
@@ -1419,14 +1419,14 @@ def run_render_pipeline(
         elif _ai_edit_plan is not None:
             logger.debug("ai_render_influence_skipped job_id=%s (disabled)", job_id)
 
-        # â”€â”€ AI Beat Execution (Phase 11) â€” metadata-only beat plan â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        # â†’ moved to app.orchestration.pipeline_ai_phases (Phase A-2)
+        # ── AI Beat Execution (Phase 11) — metadata-only beat plan ───────────
+        # → moved to app.orchestration.pipeline_ai_phases (Phase A-2)
         _ai_beat_report: dict = run_phase_11_beat_execution(_ai_edit_plan, payload, job_id)
 
         # Save original scored order before Phase 59C (used by Phase 59D segment gate)
         _scored_original: list = list(scored)
 
-        # â”€â”€ AI Segment Selection Promotion (Phase 59C) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── AI Segment Selection Promotion (Phase 59C) ───────────────────────
         if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False) \
                 and _ai_exec_mode != "off":
             try:
@@ -1472,7 +1472,7 @@ def run_render_pipeline(
                     "ai_segment_promotion_failed job_id=%s: %s", job_id, _seg_err
                 )
 
-        # â”€â”€ AI Quality Gate â€” Segment (Phase 59D) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── AI Quality Gate — Segment (Phase 59D) ────────────────────────────
         if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False) \
                 and _ai_exec_mode != "off":
             try:
@@ -1507,7 +1507,7 @@ def run_render_pipeline(
                     "ai_segment_quality_gate_failed job_id=%s: %s", job_id, _qg_err
                 )
 
-        # â”€â”€ AI advisory phases 60Aâ€“62D â†’ moved to pipeline_ai_phases (Phase A-2) â”€â”€
+        # ── AI advisory phases 60A–62D → moved to pipeline_ai_phases (Phase A-2) ──
         run_phase_60a_execution_metrics(_ai_edit_plan, payload, job_id)
         run_phase_60b_ab_evaluation(_ai_edit_plan, job_id)
         run_phase_60c_creator_benchmark(_ai_edit_plan, job_id)
@@ -1537,7 +1537,7 @@ def run_render_pipeline(
                 hook_score=seg.get("hook_score", 0),
             )
 
-        # UP28.1: source stat for motion path cache key â€” computed once, shared across all parts
+        # UP28.1: source stat for motion path cache key — computed once, shared across all parts
         try:
             _src_stat_for_motion = source_path.stat()
         except Exception:
@@ -1579,7 +1579,7 @@ def run_render_pipeline(
         hw_cap = max(1, min(base - heavy_penalty, hard_ceiling))
 
         # max_parallel_parts == 0 means "adaptive / let backend decide"
-        # max_parallel_parts >= 1 means user ceiling â€” honour it but never exceed hw_cap
+        # max_parallel_parts >= 1 means user ceiling — honour it but never exceed hw_cap
         user_req = int(payload.max_parallel_parts or 0)
         if user_req >= 1:
             max_workers = max(1, min(user_req, hw_cap))
@@ -1699,7 +1699,7 @@ def run_render_pipeline(
             if "mv_viral_score" in _s
         ]
 
-        # â”€â”€ P5-1 Output Ranking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── P5-1 Output Ranking ───────────────────────────────────────────────
         _failed_idx_set = {int(f.get("part_no", 0)) for f in failed_parts}
         _rank_entries: list[dict] = []
         for _r_idx, _r_seg in enumerate(scored, start=1):
@@ -1718,13 +1718,13 @@ def run_render_pipeline(
             if _r_vt:
                 _rank_entry["variant_type"]  = _r_vt
                 _rank_entry["variant_label"] = str(_r_seg.get("variant_label") or _r_vt.replace("_", " ").title())
-            # UP15: cover frame â€” propagate from segment dict (set during _process_one_part)
+            # UP15: cover frame — propagate from segment dict (set during _process_one_part)
             _r_cover_file   = str(_r_seg.get("cover_file") or "")
             _r_cover_offset = float(_r_seg.get("cover_frame_offset") or 0)
             if _r_cover_file:
                 _rank_entry["cover_file"]         = _r_cover_file
                 _rank_entry["cover_frame_offset"] = round(_r_cover_offset, 3)
-            # UP16: CTA â€” propagate cta_applied / cta_text from segment dict
+            # UP16: CTA — propagate cta_applied / cta_text from segment dict
             if _r_seg.get("cta_applied"):
                 _rank_entry["cta_applied"] = True
                 _rank_entry["cta_text"]    = str(_r_seg.get("cta_text") or "")
@@ -1838,7 +1838,7 @@ def run_render_pipeline(
                 },
             )
 
-        # â”€â”€ P5-2 Auto Best Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── P5-2 Auto Best Export ─────────────────────────────────────────────
         _best_exports_list: list[dict] = []
         if getattr(payload, "auto_best_export_enabled", False):
             if _rank_entries:
@@ -1872,7 +1872,7 @@ def run_render_pipeline(
                         job_id=job_id,
                         event="best_export_completed",
                         level="INFO",
-                        message=f"Best export: {len(_best_exports_list)}/{len(_abe_top)} files â†’ {_best_dir}",
+                        message=f"Best export: {len(_best_exports_list)}/{len(_abe_top)} files → {_best_dir}",
                         step="render.best_export",
                         context={
                             "count":          len(_best_exports_list),
@@ -1906,7 +1906,7 @@ def run_render_pipeline(
         if _recovery_notes:
             _final_message += " [" + "; ".join(_recovery_notes) + "]"
 
-        # â”€â”€ Phase 30: AI Output Ranking â€” best-effort, never blocks render â”€â”€
+        # ── Phase 30: AI Output Ranking — best-effort, never blocks render ──
         _ai_output_ranking: dict = {"available": False, "mode": "recommendation_only"}
         try:
             from app.ai.output.output_ranker import rank_variant_outputs as _rank_ai_outputs
@@ -1953,7 +1953,7 @@ def run_render_pipeline(
                 "warnings": [f"ranking_error:{type(_rank_err).__name__}"],
             }
 
-        # â”€â”€ Phase 45: AI Render Quality Evaluation â€” evaluation-only, never blocks render â”€â”€
+        # ── Phase 45: AI Render Quality Evaluation — evaluation-only, never blocks render ──
         _ai_render_quality: dict = {"available": False, "evaluation_mode": "evaluation_only"}
         try:
             from app.ai.quality.quality_evaluator import evaluate_render_quality as _eval_quality
@@ -1979,7 +1979,7 @@ def run_render_pipeline(
                 "warnings": [f"quality_evaluation_error:{type(_quality_err).__name__}"],
             }
 
-        # Phase 49A â€” Build stable UI-safe AI UX metadata contract
+        # Phase 49A — Build stable UI-safe AI UX metadata contract
         _ai_ux_metadata: dict = {"available": False}
         try:
             from app.ai.ux.ai_ux_metadata import build_ai_ux_metadata as _build_ai_ux
@@ -2028,7 +2028,7 @@ def run_render_pipeline(
             progress_percent=100,
             message=_final_message,
         )
-        # â”€â”€ AI Memory write (Phase 3) â€” after job finalized, never blocks render â”€â”€
+        # ── AI Memory write (Phase 3) — after job finalized, never blocks render ──
         if getattr(payload, "ai_director_enabled", False) or _ai_edit_plan is not None:
             try:
                 from app.ai.rag.memory_writer import write_render_memory as _write_mem
@@ -2148,7 +2148,7 @@ def run_render_pipeline(
                 _job_log(effective_channel, job_id, "Temporary files cleaned")
             except Exception as cleanup_err:
                 _job_log(effective_channel, job_id, f"Temp cleanup warning: {cleanup_err}")
-        # Cleanup preview session only on success â€” failed/cancelled renders should
+        # Cleanup preview session only on success — failed/cancelled renders should
         # keep the session alive so the user can retry without re-preparing the source.
         _session_render_succeeded = _final_status in ("completed", "completed_with_errors")
         if edit_session_id and _session_render_succeeded:

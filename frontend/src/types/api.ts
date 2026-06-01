@@ -138,6 +138,13 @@ export interface RenderRequest {
   ai_analysis_mode?: 'local' | 'cloud' | 'hybrid' | null
   ai_content_driven_selection?: boolean
 
+  // Groq segment selection
+  groq_analysis_enabled?: boolean
+  groq_model?: string | null
+  groq_content_language?: string | null
+  groq_min_quality_score?: number
+  groq_selection_strategy?: string | null
+
   // Pro Timeline Steering (UP26)
   clip_lock?: TimeRange[] | null
   clip_exclude?: TimeRange[] | null
@@ -228,6 +235,11 @@ export interface JobPart {
   motion_score: number
   duration: number
   message?: string
+  // Groq-selected clip metadata
+  clip_name?: string
+  groq_title?: string
+  groq_reason?: string
+  source?: string
 }
 
 // ── Quality types (from docs/ui/UI_BACKEND_CONTRACT.md §8) ───────────────────

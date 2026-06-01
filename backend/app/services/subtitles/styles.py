@@ -23,7 +23,7 @@ def _compute_subtitle_scale(play_res_x: int = 1080, play_res_y: int = 1440) -> d
     # Height-based: 1920*0.05 = 96px = 5% → matches TikTok/Reels native subtitle size.
     base = max(1, int(play_res_y))
     return {
-        "font_size": max(24, int(base * 0.05)),
+        "font_size": max(72, int(base * 0.05)),
         "outline":   max(1, round(base * 0.0025)),
         "shadow":    max(1, round(base * 0.002)),
     }
@@ -350,7 +350,7 @@ def build_ass_style_line(
         if preset.heavy_scale:
             # Heavy formula: viral_bold / bold_cap — larger font, heavier outline
             _base = max(1, int(play_res_y))
-            eff_font_size = max(24, int(_base * 0.055))
+            eff_font_size = max(72, int(_base * 0.055))
             eff_outline   = max(1, round(_base * 0.0035))
             eff_shadow    = max(1, round(_base * 0.002))
         else:

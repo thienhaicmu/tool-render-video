@@ -327,6 +327,15 @@ class RenderRequest(BaseModel):
     # Narration (AI-directed)
     narration_style: str = "auto"     # auto|energetic|calm|emotional
 
+    # Groq Segment Analysis — SRT transcript → segment selection
+    # groq_analysis_enabled=False (default) → pipeline unchanged, backward compat.
+    # groq_analysis_enabled=True  → Groq reads SRT, picks segments, replaces local scorer.
+    groq_analysis_enabled: bool = False
+    groq_model: Optional[str] = None              # None = server GROQ_DEFAULT_MODEL
+    groq_content_language: Optional[str] = None   # None = auto-detect from transcript
+    groq_min_quality_score: float = 0.6           # drop Groq segments below this score
+    groq_selection_strategy: str = "top_n"        # "top_n" | "threshold"
+
     @field_validator("target_duration")
     @classmethod
     def _validate_target_duration(cls, v: int) -> int:

@@ -129,6 +129,40 @@ def _detect_mediapipe_faces(
         return []
 
 
+def _has_subject_in_sample(video_path: str, sample_count: int = 24) -> bool:
+    """Sample sparse frames; return True if any face is detected.
+
+    Used as an early-exit gate before the expensive full per-frame MediaPipe
+    scan. Conservative: returns True (assume subject present) on any error or
+    when MediaPipe is unavailable, so the full path is always the safe fallback.
+    """
+    if _get_mp_detector() is None:
+        return True  # MediaPipe not available → assume subject present
+    try:
+        cap = cv2.VideoCapture(video_path)
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total < 1:
+            cap.release()
+            return True
+        step = max(1, total // max(1, sample_count))
+        found = False
+        for i in range(0, total, step):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, float(i))
+            ret, frame = cap.read()
+            if not ret:
+                continue
+            h_f, w_f = frame.shape[:2]
+            det_scale = 320.0 / max(w_f, 1)
+            small = cv2.resize(frame, (int(w_f * det_scale), int(h_f * det_scale)))
+            if _detect_mediapipe_faces(small, det_scale):
+                found = True
+                break
+        cap.release()
+        return found
+    except Exception:
+        return True  # conservative
+
+
 # ---------------------------------------------------------------------------
 # MediaPipe Pose — eye-level anchor for premium framing composition (OQ-3.3)
 # ---------------------------------------------------------------------------
@@ -2160,8 +2194,10 @@ def render_motion_aware_crop(
         out_w, out_h = 1080, 1080
     elif aspect_ratio == "9:16":
         out_w, out_h = 1080, 1920
+    elif aspect_ratio == "16:9":
+        out_w, out_h = 1920, 1080
     else:
-        out_w, out_h = cfg.output_width, cfg.output_height
+        out_w, out_h = 1080, 1440  # 3:4, 4:5, and any unrecognised value
 
     scaled_w = int(round(src_w * (cfg.scale_x_percent / 100.0)))
     scaled_h = int(round(src_h * (cfg.scale_y_percent / 100.0)))
@@ -2202,14 +2238,25 @@ def render_motion_aware_crop(
             _motion_hit = True
             logger.info("motion_cache_hit key=%s centers=%d fps=%.2f", _cache_key[:8], len(centers), detected_fps)
     if not _motion_hit:
-        centers, detected_fps = build_motion_path(
-            input_path,
-            crop_w_src,
-            crop_h_src,
-            cfg,
-            _scene_ranges=scene_ranges,
-            content_type=content_type,
+        # C3b Early exit: skip expensive per-frame MediaPipe scan on videos
+        # with no people. Sample 24 sparse frames first; if no face found,
+        # fall back to faster legacy motion tracking instead of subject tracking.
+        _skip_subject = (
+            cfg.reframe_mode == "subject"
+            and not _has_subject_in_sample(input_path)
         )
+        if _skip_subject:
+            logger.info("motion_crop_early_exit: no face in sample, using motion fallback")
+            centers, detected_fps = _build_motion_path_legacy(input_path, crop_w_src, crop_h_src, cfg)
+        else:
+            centers, detected_fps = build_motion_path(
+                input_path,
+                crop_w_src,
+                crop_h_src,
+                cfg,
+                _scene_ranges=scene_ranges,
+                content_type=content_type,
+            )
         if _cache_key:
             _motion_path_cache_put(_cache_key, centers, detected_fps)
             logger.info("motion_cache_miss key=%s centers=%d fps=%.2f", _cache_key[:8], len(centers), detected_fps)
