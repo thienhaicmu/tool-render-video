@@ -59,3 +59,9 @@ GROQ_API_KEY         : str = os.getenv("GROQ_API_KEY", AI_CLOUD_API_KEY)
 GROQ_DEFAULT_MODEL   : str = os.getenv("GROQ_DEFAULT_MODEL", "llama-3.1-8b-instant")
 GROQ_REQUEST_TIMEOUT : int = int(os.getenv("GROQ_REQUEST_TIMEOUT", "30"))
 GROQ_MAX_SRT_CHARS   : int = int(os.getenv("GROQ_MAX_SRT_CHARS", "12000"))
+
+# Phase D — server-wide default for groq_only_mode on NEW jobs.
+# Applied only when API request does not explicitly set groq_only_mode.
+# Resume/retry of stored jobs always keeps the original payload value
+# (preserves Sacred Contract 2 — stored records never silently flip).
+GROQ_ONLY_DEFAULT    : bool = os.getenv("GROQ_ONLY_DEFAULT", "0") == "1"

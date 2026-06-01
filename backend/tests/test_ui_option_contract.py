@@ -258,37 +258,4 @@ class TestRenderProfileOptions:
         assert req.render_profile in self.DOCUMENTED_PROFILES
 
 
-# ---------------------------------------------------------------------------
-# 7. AI execution hints enum bounds (from contracts.py)
-# ---------------------------------------------------------------------------
-
-class TestAIExecutionHintBounds:
-    def test_execution_hints_subtitle_styles(self):
-        """Allowed subtitle emphasis styles are constrained by validators.py."""
-        from backend.app.ai.validators import _SUBTITLE_STYLES
-        for style in _SUBTITLE_STYLES:
-            assert isinstance(style, str) and style
-
-    def test_execution_hints_subtitle_styles_known_values(self):
-        from backend.app.ai.validators import _SUBTITLE_STYLES
-        for expected in ("subtle", "medium", "strong", "word_only"):
-            assert expected in _SUBTITLE_STYLES
-
-    def test_execution_hints_visual_intensities(self):
-        """Allowed visual intensity values are low/medium/high."""
-        from backend.app.ai.validators import _VISUAL_INTENSITIES
-        assert "low" in _VISUAL_INTENSITIES
-        assert "medium" in _VISUAL_INTENSITIES
-        assert "high" in _VISUAL_INTENSITIES
-
-    def test_cut_interval_bounds_are_positive(self):
-        """AI cut interval clamp values must be positive."""
-        from backend.app.ai.validators import _CUT_MIN, _CUT_MAX
-        assert _CUT_MIN > 0
-        assert _CUT_MAX > _CUT_MIN
-
-    def test_speed_hint_bounds_match_pipeline(self):
-        """AI speed hint clamp must match pipeline speed clamp [0.5, 1.5]."""
-        from backend.app.ai.validators import _SPEED_MIN, _SPEED_MAX
-        assert _SPEED_MIN == 0.5
-        assert _SPEED_MAX == 1.5
+# AI execution hints class removed in Phase G — validators.py module deleted.

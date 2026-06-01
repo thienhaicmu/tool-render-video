@@ -129,55 +129,6 @@ def _smart_output_stem(hook_text: str, source_title: str, job_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# AI segment mapping
-# ---------------------------------------------------------------------------
-
-def _map_ai_segments_to_scored(ai_clips: list, heuristic_scored: list) -> list:
-    """
-    Map AIClipPlan list onto heuristic scored[] dicts via time-overlap matching.
-    Preserves all heuristic score fields (viral_score, motion_score, hook_score).
-    AI's start/end boundaries override heuristic boundaries when overlap >= 30%.
-    AI clips with no matching heuristic segment synthesize a minimal scored dict.
-    """
-    result = []
-    used: set = set()
-    for clip in ai_clips:
-        best_idx, best_ratio = None, 0.0
-        for i, seg in enumerate(heuristic_scored):
-            if i in used:
-                continue
-            s, e = float(seg.get("start", 0)), float(seg.get("end", 0))
-            overlap = max(0.0, min(e, clip.end) - max(s, clip.start))
-            min_dur = min(e - s, clip.end - clip.start)
-            ratio = overlap / min_dur if min_dur > 0 else 0.0
-            if ratio > best_ratio:
-                best_ratio, best_idx = ratio, i
-        if best_idx is not None and best_ratio >= 0.30:
-            seg = dict(heuristic_scored[best_idx])
-            seg["start"] = clip.start
-            seg["end"] = clip.end
-            seg["duration"] = round(clip.end - clip.start, 3)
-            seg["ai_content_selected"] = True
-            seg["ai_select_reason"] = clip.reason
-            seg["ai_select_score"] = clip.score
-            used.add(best_idx)
-            result.append(seg)
-        else:
-            result.append({
-                "start": clip.start,
-                "end": clip.end,
-                "duration": round(clip.end - clip.start, 3),
-                "viral_score": max(0, min(100, int(clip.score))),
-                "motion_score": 0,
-                "hook_score": 0,
-                "ai_content_selected": True,
-                "ai_select_reason": clip.reason,
-                "ai_select_score": clip.score,
-            })
-    return result
-
-
-# ---------------------------------------------------------------------------
 # Cover frame selection
 # ---------------------------------------------------------------------------
 

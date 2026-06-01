@@ -279,19 +279,6 @@ class TestAIDomainInterfaces:
         assert 'select_segments' in m.__all__
         assert 'GroqSegment' in m.__all__
 
-    def test_director_domain_importable(self):
-        import app.ai.director
-        # Module must import without error even if optional deps absent
-
-    def test_platform_domain_importable(self):
-        import app.ai.platform
-
-    def test_quality_domain_importable(self):
-        import app.ai.quality
-
-    def test_quality_gate_domain_importable(self):
-        import app.ai.quality_gate
-
 
 # ── F6: Whisper warmup graceful failure ───────────────────────────────────────
 

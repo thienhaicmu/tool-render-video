@@ -24,6 +24,7 @@ from app.services.db import upsert_job, get_job, list_job_parts, update_job_prog
 from app.services.job_manager import submit_job, is_running
 from app.services.channel_service import ensure_channel
 from app.services.downloader import download_youtube, slugify, check_youtube_download_health
+from app.core import config as _cfg
 from app.core.config import TEMP_DIR, CHANNELS_DIR, REQUEST_LOG
 from app.core.stage import JobStage
 from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin
@@ -603,6 +604,10 @@ def _queue_render_job(job_id: str, effective_channel: str, payload: RenderReques
 @router.post("/process")
 def create_render_job(payload: RenderRequest):
     _coerce_legacy_channel_payload(payload)
+    # Phase D — apply server-wide groq_only default to NEW jobs only when the
+    # API request did not set the field explicitly. Resume/retry paths skip this.
+    if "groq_only_mode" not in payload.model_fields_set and _cfg.GROQ_ONLY_DEFAULT:
+        payload.groq_only_mode = True
     try:
         _validate_render_source(payload)
         _validate_text_layers_or_400(payload)

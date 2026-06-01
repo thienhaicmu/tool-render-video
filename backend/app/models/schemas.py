@@ -336,6 +336,13 @@ class RenderRequest(BaseModel):
     groq_min_quality_score: float = 0.6           # drop Groq segments below this score
     groq_selection_strategy: str = "top_n"        # "top_n" | "threshold"
 
+    # Groq-Only Mode (refactor Phase A) — when True, pipeline uses ONLY Groq output
+    # for segment selection. NO heuristic re-scoring, NO Phase 44 mapping,
+    # NO S4.1/S4.5 boundary nudging, NO AI Director override. Groq becomes the
+    # single source of truth. If Groq fails → job hard-fails (no fallback).
+    # Default False to preserve backward compat (Sacred Contract 2 — additive only).
+    groq_only_mode: bool = False
+
     @field_validator("target_duration")
     @classmethod
     def _validate_target_duration(cls, v: int) -> int:

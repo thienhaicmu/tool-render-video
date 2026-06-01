@@ -235,17 +235,7 @@ def startup():
         except Exception as _ww_err:
             logging.getLogger("app.startup").debug("whisper_warmup: skipped — %s", _ww_err)
     threading.Thread(target=_whisper_model_warmup, daemon=True, name="whisper-warmup").start()
-    # Phase 5.2: warm up local knowledge index in background (non-blocking)
-    try:
-        from app.ai.rag.knowledge_warmup import warmup_knowledge_index
-        logging.getLogger("app.startup").info("knowledge_warmup: starting in background thread")
-        threading.Thread(
-            target=warmup_knowledge_index,
-            daemon=True,
-            name="knowledge-warmup",
-        ).start()
-    except Exception as _kw_err:
-        logging.getLogger("app.startup").warning("knowledge_warmup: failed to start: %s", _kw_err)
+    # RAG knowledge warmup removed in Phase G — RAG/AI Director removed.
     threading.Thread(target=_run_periodic_cleanup, daemon=True, name="cleanup-loop").start()
     # Auto-extract Chrome cookies for YouTube auth (non-blocking — best-effort)
     def _cookie_warmup():

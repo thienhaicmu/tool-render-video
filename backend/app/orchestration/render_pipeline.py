@@ -19,20 +19,18 @@ from app.models.schemas import RenderRequest
 from app.services.db import upsert_job, update_job_progress, upsert_job_part, list_job_parts, close_thread_conn
 from app.services.channel_service import ensure_channel
 from app.services.downloader import slugify
-from app.services.segment_builder import refine_segment_boundaries, refine_cuts_for_naturalness
 from app.services.subtitle_engine import (
     srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time,
     slice_srt_to_text, slice_srt_to_output_timeline,
     has_audio_stream, apply_market_line_break_to_srt,
     apply_market_hook_text_to_srt, apply_hook_subtitle_format, resolve_hook_overlay_text,
-    subtitle_emphasis_pass, parse_srt_blocks, write_srt_blocks,
+    subtitle_emphasis_pass, write_srt_blocks,
     resegment_srt_for_readability,
 )
 from app.services.subtitle_transcription_adapters import transcribe_with_adapter
 from app.services.render_engine import cut_video, render_part_smart, render_base_clip, composite_overlays_on_base_clip, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event, content_type_crf_delta as _crf_delta_for_content_type, extract_thumbnail_frame
 from app.services import cancel_registry
 from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
-from app.services.viral_scorer import apply_retention_proxy
 from app.services.viral_scoring import score_part_for_market as _mv_score_part
 from app.services.report_service import append_rows
 from app.core.config import TEMP_DIR, CHANNELS_DIR, LOGS_DIR, APP_DATA_DIR
@@ -84,7 +82,11 @@ from app.orchestration.qa_pipeline import (
 from app.orchestration.part_plan import PartExecutionPlan
 from app.orchestration.stages.part_renderer import PartRenderContext
 from app.orchestration.pipeline_render_loop import RenderLoopResult as _RenderLoopResult, run_render_loop
-from app.orchestration.pipeline_pre_render import run_pre_render_scenes
+# pipeline_pre_render removed in Phase F1 — all jobs now use groq_only_pipeline.
+from app.orchestration.groq_only_pipeline import (
+    GroqOnlyPipelineError,
+    run_groq_only_pre_render,
+)
 from app.orchestration.part_assets import PartAssets
 from app.orchestration.camera_strategy import CameraStrategy
 from app.orchestration.render_output import RenderOutputResult
@@ -112,25 +114,9 @@ from app.orchestration.pipeline_subtitle_utils import (
     _append_cta_block_to_srt, _read_srt_meta,
 )
 from app.orchestration.pipeline_segment_selection import (
-    _safe_output_name, _smart_output_stem, _map_ai_segments_to_scored,
+    _safe_output_name, _smart_output_stem,
     _select_cover_frame_time, _select_cta_text, _get_effective_playback_speed,
     _build_variant_segments, _PLATFORM_PROFILES,
-)
-from app.orchestration.pipeline_ai_phases import (
-    run_phase_43_feedback_learning,
-    run_phase_44_content_selection,
-    run_phase_60d_execution_mode,
-    run_phase_60d_mode_off_rollback,
-    run_phase_11_beat_execution,
-    run_phase_60a_execution_metrics,
-    run_phase_60b_ab_evaluation,
-    run_phase_60c_creator_benchmark,
-    run_phase_61a_archetype_strategy,
-    run_phase_61d_creator_render_strategy,
-    run_phase_62a_outcome_tracking,
-    run_phase_62b_preference_reinforcement,
-    run_phase_62c_success_patterns,
-    run_phase_62d_learning_calibration,
 )
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
@@ -147,15 +133,13 @@ _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_C
 logger = logging.getLogger("app.render")
 
 
-# _safe_output_name, _smart_output_stem, _map_ai_segments_to_scored,
+# _safe_output_name, _smart_output_stem,
 # _select_cover_frame_time, _select_cta_text, _append_cta_block_to_srt,
 # _get_effective_playback_speed, _read_srt_meta, _build_variant_segments,
 # _aspect_play_res_y, _apply_subtitle_edits_to_srt, _PLATFORM_PROFILES,
 # _PLAY_RES_Y_MAP, _VARIANT_AGGRESSIVE_SUB, _VARIANT_STORY_SUB,
 # _CTA_TEXTS, _CTA_AUTO_TYPE
 # → moved to app.orchestration.pipeline_helpers (Phase A-1)
-
-# _map_ai_segments_to_scored already imported from pipeline_helpers above
 
 # _RENDER_CACHE_TTL_SEC, _render_cache_key, _scene_cache_get/put,
 # _transcription_cache_get/put, _score_cache_get/put
@@ -732,11 +716,16 @@ def run_render_pipeline(
                     context={"recovery_strategy": "skip_voice"},
                 )
 
-        # full_srt hoisted here: Phase 45 early transcription may populate it
-        # before segment building. Existing subtitle block reads _early_transcription_done
-        # and skips Whisper when already done.
-        # Phase A-6: scene detection + segment scoring moved to pipeline_pre_render.run_pre_render_scenes().
-        _pre = run_pre_render_scenes(
+        # Phase F1: legacy pipeline_pre_render path removed. All jobs use
+        # groq_only_pipeline. payload.groq_only_mode is ignored — Groq is the
+        # sole segment authority for every job (new + resume + retry).
+        _emit_render_event(
+            channel_code=effective_channel, job_id=job_id,
+            event="groq_only.mode_active", level="INFO",
+            message="Groq-only mode: Groq is sole segment authority",
+            step="render.groq_only",
+        )
+        _pre = run_groq_only_pre_render(
             source_path=source_path,
             source=source,
             work_dir=work_dir,
@@ -962,561 +951,24 @@ def run_render_pipeline(
                             _hb_stop.set()
                             _hb.join(timeout=2)
 
-        # ── S4.1: Transcript-aware boundary refinement (S4_CANDIDATE_INTELLIGENCE_ENABLED=1) ──
-        # Runs after transcription so it works on the first render (no cold-cache requirement).
-        # Nudges already-selected segment start/end to align with sentence boundaries (Â±15% max).
-        _s4_before = None  # pre-S4.1 boundaries; forwarded to S4.5 for combined-nudge cap
-        if os.getenv("S4_CANDIDATE_INTELLIGENCE_ENABLED") == "1" and full_srt_available and scored:
-            try:
-                _s4_blocks = parse_srt_blocks(str(full_srt))
-                if _s4_blocks:
-                    _s4_before = [(s.get("start"), s.get("end")) for s in scored]
-                    scored = refine_segment_boundaries(
-                        scored, _s4_blocks,
-                        float(_seg_min_sec), float(_seg_max_sec),
-                    )
-                    _s4_adjusted = sum(
-                        1 for i, s in enumerate(scored)
-                        if s.get("candidate_adjustment_reason") and (s.get("start"), s.get("end")) != _s4_before[i]
-                    )
-                    _job_log(effective_channel, job_id,
-                             f"s4_boundary_refinement segments={len(scored)} adjusted={_s4_adjusted}")
-            except Exception as _s4_exc:
-                logger.debug("s4_boundary_refinement_failed job_id=%s: %s", job_id, _s4_exc)
-
-        # ── S4.2: Real Retention Proxy (S4_RETENTION_PROXY_ENABLED=1) ──
-        # Applies a bounded Â±15 adjustment to viral_score using multi-signal
-        # retention estimation. Works on first render (uses freshly-generated
-        # SRT when available; tier-1 signals fire even without transcript).
-        if os.getenv("S4_RETENTION_PROXY_ENABLED") == "1" and scored:
-            try:
-                _s42_blocks = parse_srt_blocks(str(full_srt)) if full_srt_available else None
-                scored = apply_retention_proxy(scored, _s42_blocks)
-                _s42_adj = sum(1 for s in scored if s.get("retention_adjustment_reason"))
-                _job_log(effective_channel, job_id,
-                         f"s4_retention_proxy segments={len(scored)} adjusted={_s42_adj}")
-            except Exception as _s42_exc:
-                logger.debug("s4_retention_proxy_failed job_id=%s: %s", job_id, _s42_exc)
-
-        # ── S4.5: Speaker-aware cuts (S4_SPEAKER_AWARE_CUTS_ENABLED=1) ──
-        # Snaps boundaries to nearby pause midpoints and utterance endpoints.
-        # End boundary gets full nudge window (primary); start gets half
-        # (detect_silence_trim_offset already handles opening cleanup).
-        if os.getenv("S4_SPEAKER_AWARE_CUTS_ENABLED") == "1" and scored:
-            try:
-                _s45_blocks = parse_srt_blocks(str(full_srt)) if full_srt_available else None
-                if _s45_blocks:
-                    scored = refine_cuts_for_naturalness(
-                        scored, _s45_blocks,
-                        float(_seg_min_sec), float(_seg_max_sec),
-                        original_segments=[{"start": s, "end": e} for s, e in _s4_before] if _s4_before else None,
-                    )
-                    _s45_adj = sum(1 for s in scored if s.get("cut_adjustment_reason"))
-                    _job_log(effective_channel, job_id,
-                             f"s4_natural_cuts segments={len(scored)} adjusted={_s45_adj}")
-            except Exception as _s45_exc:
-                logger.debug("s4_natural_cuts_failed job_id=%s: %s", job_id, _s45_exc)
-
-        # ── AI Director Phase 1 — safe edit plan (observation only, no override) ──
+        # Phases 5.3, 5.5, 5.7, 10, 11, 60D removed in Phase G. All consumed _ai_edit_plan
+        # which is permanently None after AI Director removal (Phase E3). Variables below
+        # preserve their default values for downstream consumers (part_renderer kwargs,
+        # result_json fields). Hook overlay state is no longer mutated by AI.
         _ai_edit_plan = None
-        if getattr(payload, "ai_director_enabled", False):
-            try:
-                from app.ai.director.ai_director import create_ai_edit_plan as _create_ai_plan
-                from app.ai.knowledge.knowledge_store_builder import get_pack_knowledge_store as _get_pack_store
-
-                # ── Phase 5.2: Build knowledge filters from payload ────────────────
-                _knowledge_filters: dict = {}
-                try:
-                    _knowledge_filters = {
-                        "platform": getattr(payload, "render_profile", None) or None,
-                        "niche": None,
-                        "style": None,
-                        "duration": source.get("duration", None),
-                        "aspect_ratio": getattr(payload, "aspect_ratio", None) or None,
-                        "subtitle_style": getattr(payload, "subtitle_style", None) or None,
-                        "target_goal": None,
-                    }
-                    # Remove None-valued keys for clarity (query handles None)
-                    _knowledge_filters = {k: v for k, v in _knowledge_filters.items() if v is not None}
-                except Exception as _kf_err:
-                    logger.debug("knowledge_filter_build_failed job_id=%s: %s", job_id, _kf_err)
-                    _knowledge_filters = {}
-
-                # ── Phase 5.2: AI Trace Logger ────────────────────────────────────
-                _ai_tracer = None
-                try:
-                    from app.ai.tracing import AITraceLogger
-                    _ai_tracer = AITraceLogger(job_id)
-                    _ai_tracer.log_input_filters(_knowledge_filters)
-                except Exception as _tracer_err:
-                    logger.debug("ai_tracer_init_failed job_id=%s: %s", job_id, _tracer_err)
-
-                # ── Phase 5.2: Retrieve knowledge items ───────────────────────────
-                # Phase 5.4: Reuse early retrieval results if available (avoids
-                # double FAISS query). _early_retrieved_knowledge is set by the
-                # Phase 5.4 early pacing block above before segment building.
-                _retrieved_knowledge: list = []
-                if _early_retrieved_knowledge:
-                    # Reuse results from Phase 5.4 early retrieval — no second query needed
-                    _retrieved_knowledge = _early_retrieved_knowledge
-                    logger.debug(
-                        "phase54_knowledge_reused job_id=%s count=%d (skipping second query)",
-                        job_id, len(_retrieved_knowledge),
-                    )
-                    if _ai_tracer is not None:
-                        try:
-                            _ai_tracer.log_knowledge_retrieved(_retrieved_knowledge)
-                        except Exception:
-                            pass
-                else:
-                    try:
-                        from app.ai.rag.knowledge_warmup import get_knowledge_index
-                        _kidx = get_knowledge_index()
-                        if _kidx.is_ready():
-                            _retrieved_knowledge = _kidx.query(_knowledge_filters, top_k=10)
-                            logger.info(
-                                "knowledge_retrieved job_id=%s filters=%s count=%d",
-                                job_id, list(_knowledge_filters.keys()), len(_retrieved_knowledge),
-                            )
-                            if _ai_tracer is not None:
-                                _ai_tracer.log_knowledge_retrieved(_retrieved_knowledge)
-                        else:
-                            logger.debug("knowledge_index_not_ready job_id=%s", job_id)
-                            if _ai_tracer is not None:
-                                _ai_tracer.log_fallback("no_index", "knowledge index not ready at render time")
-                    except Exception as _kr_err:
-                        logger.warning("knowledge_retrieval_failed job_id=%s: %s", job_id, _kr_err)
-                        _retrieved_knowledge = []
-                        if _ai_tracer is not None:
-                            try:
-                                _ai_tracer.log_fallback("ai_exception", str(_kr_err))
-                            except Exception:
-                                pass
-
-                if not _retrieved_knowledge:
-                    if _ai_tracer is not None:
-                        try:
-                            _ai_tracer.log_fallback("no_matching_rules", "no knowledge items matched filters")
-                        except Exception:
-                            pass
-
-                _ai_context = {
-                    "job_id": job_id,
-                    "srt_path": str(full_srt) if full_srt_available else None,
-                    "scenes": scenes,
-                    "duration": source.get("duration", 0.0),
-                    "market": getattr(payload, "ai_target_market", None) or getattr(payload, "viral_market", None),
-                    # Phase 4: source path for optional beat analysis
-                    "source_path": str(source_path) if source_path else None,
-                    # Phase 5.2: retrieved knowledge items and filters
-                    "retrieved_knowledge": _retrieved_knowledge,
-                    "knowledge_filters": _knowledge_filters,
-                    # Phase 53A: pack-based semantic knowledge store (LocalKnowledgeStore singleton)
-                    "knowledge_store": _get_pack_store(),
-                    # Phase 46: pre-computed content analysis (ContentAnalysisResult | None)
-                    "content_analysis": _content_analysis,
-                }
-                _ai_edit_plan = _create_ai_plan(payload, _ai_context)
-                if _ai_edit_plan is not None:
-                    _emit_render_event(
-                        channel_code=effective_channel,
-                        job_id=job_id,
-                        event="ai_director_plan_created",
-                        level="INFO",
-                        message=(
-                            f"AI Director plan: mode={_ai_edit_plan.mode} "
-                            f"segments={len(_ai_edit_plan.selected_segments)} "
-                            f"fallback={_ai_edit_plan.fallback_used}"
-                        ),
-                        step="ai_director",
-                        context=_ai_edit_plan.to_dict(),
-                    )
-                    # Phase 5.2: trace render plan summary
-                    if _ai_tracer is not None:
-                        try:
-                            _ai_tracer.log_render_plan_summary({
-                                "mode": _ai_edit_plan.mode,
-                                "segments": len(_ai_edit_plan.selected_segments),
-                                "fallback_used": _ai_edit_plan.fallback_used,
-                                "knowledge_items_used": len(_retrieved_knowledge),
-                                "warnings": list(_ai_edit_plan.warnings),
-                            })
-                        except Exception:
-                            pass
-            except Exception as _ai_err:
-                _job_log(
-                    effective_channel, job_id,
-                    f"ai_director_failed_fallback: {_ai_err}",
-                    kind="warning",
-                )
-
-        # ── Phase 43: Creator feedback learning pack (advisory metadata only) ──
-        run_phase_43_feedback_learning(_ai_edit_plan, payload, job_id, effective_channel)
-
-        # ── Phase 44: AI content-driven segment selection ──────────────────────
-        scored = run_phase_44_content_selection(
-            _ai_edit_plan, scored, payload, effective_channel, job_id
-        )
-
-        # ── Phase 5.3: Apply execution hints from AI plan (advisory, safe, bounded) ──
-        # Reads execution_hints from plan.knowledge_injection (set by ai_director).
-        # If ai_director_enabled=False, _ai_edit_plan is None → this block is skipped.
-        # If hints are invalid or absent → behavior unchanged, advisory log only.
-        # NEVER crashes render. NEVER modifies FFmpeg commands or filter graphs.
+        _ai_tracer = None
         _exec_hints: dict = {}
-        _phase53_tracer = _ai_tracer if getattr(payload, "ai_director_enabled", False) else None
-        if _ai_edit_plan is not None:
-            try:
-                _exec_hints = (
-                    _ai_edit_plan.knowledge_injection.get("execution_hints") or {}
-                ) if isinstance(_ai_edit_plan.knowledge_injection, dict) else {}
-            except Exception:
-                _exec_hints = {}
-
-            if _exec_hints and _phase53_tracer is not None:
-                try:
-                    _phase53_tracer.log_execution_hints(
-                        _exec_hints,
-                        _exec_hints.get("source_knowledge_ids") or [],
-                    )
-                except Exception:
-                    pass
-
-            # Log validation fixups if any
-            if _ai_edit_plan is not None and _phase53_tracer is not None:
-                try:
-                    _fixups_53 = (
-                        _ai_edit_plan.knowledge_injection.get("validation_fixups") or []
-                    ) if isinstance(_ai_edit_plan.knowledge_injection, dict) else []
-                    if _fixups_53:
-                        _phase53_tracer.log_validation_fixup(_fixups_53)
-                except Exception:
-                    pass
-
-            # A. Pacing hint — Phase 5.4: pacing hints are now APPLIED before
-            #    segment building via _seg_min_sec/_seg_max_sec (see early pacing
-            #    block above). Here we only log for observability — no further action.
-            _pacing_cut_min = _exec_hints.get("cut_interval_min")
-            _pacing_cut_max = _exec_hints.get("cut_interval_max")
-            if _pacing_cut_min is not None or _pacing_cut_max is not None:
-                logger.debug(
-                    "phase53_pacing_hint_observed job_id=%s cut_min=%s cut_max=%s "
-                    "(Phase 5.4: pacing applied before segment building via _seg_min_sec/_seg_max_sec)",
-                    job_id, _pacing_cut_min, _pacing_cut_max,
-                )
-
-            # B. Subtitle emphasis hint — if a style is suggested, note it.
-            #    The actual emphasis style is resolved per-part from payload.subtitle_style
-            #    and DNA/platform bias. The hint is advisory and cannot override the
-            #    per-part resolution without rewriting that logic (out of scope).
-            _sub_emph_hint = _exec_hints.get("subtitle_emphasis_style")
-            if _sub_emph_hint is not None:
-                logger.info(
-                    "phase53_subtitle_emphasis_hint_advisory job_id=%s style=%r "
-                    "(advisory only — per-part subtitle style resolved from payload)",
-                    job_id, _sub_emph_hint,
-                )
-                if _phase53_tracer is not None:
-                    try:
-                        _phase53_tracer.log_decision_rejected(
-                            "subtitle_emphasis_hint_advisory_only",
-                            detail={
-                                "hint": "subtitle_emphasis_style",
-                                "value": _sub_emph_hint,
-                                "reason": (
-                                    "subtitle style is resolved per-part from payload.subtitle_style "
-                                    "and DNA/platform bias; hint is advisory"
-                                ),
-                            },
-                        )
-                    except Exception:
-                        pass
-
-            # C. Hook overlay hint — if explicitly disabled, gate the hook overlay.
-            #    This is the one hint that IS applied: hook_overlay_enabled=False → skip overlay.
-            #    hook_overlay_enabled=True or None → keep existing behavior (unchanged).
-            _hook_enabled_hint = _exec_hints.get("hook_overlay_enabled")
-            if _hook_enabled_hint is False:
-                # AI says: skip hook overlay for this render job
-                if _hook_overlay_enabled:
-                    _hook_overlay_enabled = False
-                    logger.info(
-                        "phase53_hook_overlay_disabled_by_ai job_id=%s "
-                        "(knowledge hint hook_overlay_enabled=False overrides payload=True)",
-                        job_id,
-                    )
-                    if _phase53_tracer is not None:
-                        try:
-                            _phase53_tracer.log_execution_hints(
-                                {"hook_overlay_enabled": False, "applied": True},
-                                _exec_hints.get("source_knowledge_ids") or [],
-                            )
-                        except Exception:
-                            pass
-
-        # ── Phase 5.5: Build AI subtitle emphasis config ─────────────────────────
-        # Runs only when ai_director_enabled=True and _ai_edit_plan is not None.
-        # Config is built once per job; applied per-part in the subtitle loop below.
-        # NEVER mutates payload. NEVER changes _effective_subtitle_style (preset ID).
-        # NEVER alters SRT timestamps. NEVER touches FFmpeg commands.
-        # If AI disabled or no hints → _ai_subtitle_emphasis_config.applied=False → no change.
+        _phase53_tracer = None
         _ai_subtitle_emphasis_config = None
-        if getattr(payload, "ai_director_enabled", False) and _ai_edit_plan is not None:
-            try:
-                from app.ai.subtitle_hints import build_ai_subtitle_emphasis_config as _build_sub_emph
-                _ai_subtitle_emphasis_config = _build_sub_emph(_exec_hints, payload)
-                if _phase53_tracer is not None:
-                    try:
-                        _emph_reason = (
-                            "valid_ai_subtitle_hint" if _ai_subtitle_emphasis_config.applied
-                            else str(_ai_subtitle_emphasis_config.rejected_reason or "no_subtitle_emphasis_hint")
-                        )
-                        _phase53_tracer.log_subtitle_emphasis_applied(
-                            {**_ai_subtitle_emphasis_config.to_dict(), "reason": _emph_reason}
-                        )
-                    except Exception:
-                        pass
-                if not _ai_subtitle_emphasis_config.applied and _phase53_tracer is not None:
-                    try:
-                        _phase53_tracer.log_decision_rejected(
-                            str(_ai_subtitle_emphasis_config.rejected_reason or "no_subtitle_emphasis_hint"),
-                            detail={
-                                "hint": "subtitle_emphasis_style",
-                                "value": _ai_subtitle_emphasis_config.emphasis_style,
-                                "phase": "5.5",
-                            },
-                        )
-                    except Exception:
-                        pass
-                logger.debug(
-                    "phase55_subtitle_emphasis_config job_id=%s applied=%s style=%s reason=%s",
-                    job_id,
-                    _ai_subtitle_emphasis_config.applied,
-                    _ai_subtitle_emphasis_config.emphasis_style,
-                    _ai_subtitle_emphasis_config.rejected_reason,
-                )
-            except Exception as _sub55_err:
-                logger.warning(
-                    "phase55_subtitle_emphasis_config_failed job_id=%s: %s", job_id, _sub55_err
-                )
-                _ai_subtitle_emphasis_config = None
-
-        # ── Phase 5.7: Build AI visual intensity config ───────────────────────────
-        # Runs only when ai_director_enabled=True and _ai_edit_plan is not None.
-        # Config is built once per job; logged immediately.
-        # Phase 5.7: Safe injection point found — visual_intensity_hint parameter
-        #   added to render_part(), render_part_smart(), render_base_clip().
-        #   All three accept visual_intensity_hint with default None (backward compat).
-        #   Renderer OWNS the mapping from hint to known effect presets.
-        #   AI passes only "low"/"medium"/"high" — never a preset name or filter string.
-        # Result when applied=True: render_overrides={"visual_intensity_hint": <value>}
-        # render_pipeline extracts this value and passes it to renderer calls below.
-        # NEVER mutates payload. NEVER changes payload.effect_preset. NEVER touches FFmpeg.
-        # If AI disabled or no hints → _ai_visual_intensity_config.applied=False → hint=None.
         _ai_visual_intensity_config = None
-        if getattr(payload, "ai_director_enabled", False) and _ai_edit_plan is not None:
-            try:
-                from app.ai.visual_hints import build_ai_visual_intensity_config as _build_vis_int
-                _ai_visual_intensity_config = _build_vis_int(_exec_hints, payload)
-                _vis_reason = (
-                    str(_ai_visual_intensity_config.rejected_reason)
-                    if _ai_visual_intensity_config.rejected_reason
-                    else "applied"
-                )
-                if _phase53_tracer is not None:
-                    try:
-                        _phase53_tracer.log_visual_intensity_applied(
-                            {**_ai_visual_intensity_config.to_dict(), "reason": _vis_reason}
-                        )
-                    except Exception:
-                        pass
-                # Log decision_rejected only when NOT applied
-                if not _ai_visual_intensity_config.applied and _phase53_tracer is not None:
-                    try:
-                        _phase53_tracer.log_decision_rejected(
-                            _vis_reason,
-                            detail={
-                                "hint": "visual_intensity",
-                                "value": _ai_visual_intensity_config.visual_intensity,
-                                "phase": "5.7",
-                            },
-                        )
-                    except Exception:
-                        pass
-                logger.debug(
-                    "phase57_visual_intensity_config job_id=%s applied=%s intensity=%s reason=%s",
-                    job_id,
-                    _ai_visual_intensity_config.applied,
-                    _ai_visual_intensity_config.visual_intensity,
-                    _ai_visual_intensity_config.rejected_reason,
-                )
-                # Phase 5.7: Extract hint from render_overrides when applied=True.
-                # _vis_intensity_hint is used below in per-part renderer calls.
-                # When applied=False: hint is None → renderer uses effect_preset unchanged.
-            except Exception as _vis57_err:
-                logger.warning(
-                    "phase57_visual_intensity_config_failed job_id=%s: %s", job_id, _vis57_err
-                )
-                _ai_visual_intensity_config = None
-        elif not getattr(payload, "ai_director_enabled", False):
-            # AI disabled: skip entirely, log as advisory
-            if _phase53_tracer is not None:
-                try:
-                    _phase53_tracer.log_decision_rejected(
-                        "ai_disabled",
-                        detail={"hint": "visual_intensity", "phase": "5.7"},
-                    )
-                except Exception:
-                    pass
-
-        # ── Phase 5.7: Extract visual_intensity_hint for per-part renderer calls ──
-        # When _ai_visual_intensity_config.applied=True, render_overrides contains
-        # {"visual_intensity_hint": <value>}. Extract it for use in renderer calls.
-        # When applied=False (disabled, invalid, user override): hint=None.
-        # This local variable is read-only — payload.effect_preset is NEVER mutated.
         _vis_intensity_hint: "str | None" = None
-        if (
-            _ai_visual_intensity_config is not None
-            and _ai_visual_intensity_config.applied
-        ):
-            try:
-                _vis_intensity_hint = (
-                    _ai_visual_intensity_config.render_overrides.get("visual_intensity_hint")
-                )
-            except Exception:
-                _vis_intensity_hint = None
-
-        # ── AI Execution Mode Resolution (Phase 60D) — control only ─────────────
-        # Resolve BEFORE Phase 59 blocks so they can be gated correctly.
-        _ai_exec_mode: str = run_phase_60d_execution_mode(_ai_edit_plan, payload, job_id)
-        run_phase_60d_mode_off_rollback(_ai_edit_plan, _ai_exec_mode, job_id)
-
-        # ── AI Render Influence (Phase 10) — bounded opt-in payload adjustments ──
+        _ai_exec_mode: str = "off"
         _ai_influence_report: dict = {"enabled": False}
-        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False) \
-                and _ai_exec_mode != "off":
-            try:
-                from app.ai.director.render_influence import apply_ai_render_influence as _apply_ai_influence
-                payload, _ai_influence_report = _apply_ai_influence(
-                    payload,
-                    _ai_edit_plan,
-                    context={"job_id": job_id},
-                )
-                logger.info(
-                    "ai_render_influence_applied job_id=%s applied=%d skipped=%d",
-                    job_id,
-                    len(_ai_influence_report.get("applied", [])),
-                    len(_ai_influence_report.get("skipped", [])),
-                )
-            except Exception as _inf_err:
-                _ai_influence_report = {
-                    "enabled": True,
-                    "applied": [],
-                    "skipped": [],
-                    "warnings": [f"influence_module_error:{type(_inf_err).__name__}"],
-                }
-                logger.warning("ai_render_influence_module_failed job_id=%s: %s", job_id, _inf_err)
-        elif _ai_edit_plan is not None:
-            logger.debug("ai_render_influence_skipped job_id=%s (disabled)", job_id)
+        _ai_beat_report: dict = {"enabled": False}
 
-        # ── AI Beat Execution (Phase 11) — metadata-only beat plan ───────────
-        # → moved to app.orchestration.pipeline_ai_phases (Phase A-2)
-        _ai_beat_report: dict = run_phase_11_beat_execution(_ai_edit_plan, payload, job_id)
-
-        # Save original scored order before Phase 59C (used by Phase 59D segment gate)
-        _scored_original: list = list(scored)
-
-        # ── AI Segment Selection Promotion (Phase 59C) ───────────────────────
-        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False) \
-                and _ai_exec_mode != "off":
-            try:
-                from app.ai.segment_promotion.segment_promotion_engine import (
-                    promote_segment_selection as _promote_segments,
-                )
-                scored, _seg_promo = _promote_segments(
-                    scored, _ai_edit_plan, payload, context={"job_id": job_id}
-                )
-                _promo = _seg_promo.get("segment_selection_promotion") or {}
-                try:
-                    _ai_edit_plan.segment_selection_promotion = _promo
-                except Exception:
-                    pass
-                if _promo.get("applied"):
-                    _emit_render_event(
-                        channel_code=effective_channel,
-                        job_id=job_id,
-                        event="ai_segment_promotion_applied",
-                        level="INFO",
-                        message=(
-                            f"AI segment promotion: {_promo.get('selected_count', 0)}"
-                            f"/{_promo.get('total_count', 0)} segments reordered"
-                        ),
-                        step="ai_segment_promotion",
-                        context=_promo,
-                    )
-                    logger.info(
-                        "ai_segment_promotion_applied job_id=%s selected=%d total=%d conf=%.3f",
-                        job_id,
-                        _promo.get("selected_count", 0),
-                        _promo.get("total_count", 0),
-                        _promo.get("confidence", 0.0),
-                    )
-                else:
-                    logger.debug(
-                        "ai_segment_promotion_skipped job_id=%s reason=%s",
-                        job_id,
-                        _promo.get("reason", "not_eligible"),
-                    )
-            except Exception as _seg_err:
-                logger.warning(
-                    "ai_segment_promotion_failed job_id=%s: %s", job_id, _seg_err
-                )
-
-        # ── AI Quality Gate — Segment (Phase 59D) ────────────────────────────
-        if _ai_edit_plan is not None and getattr(payload, "ai_render_influence_enabled", False) \
-                and _ai_exec_mode != "off":
-            try:
-                from app.ai.quality_gate.quality_gate_engine import (
-                    apply_segment_quality_gate as _segment_quality_gate,
-                )
-                scored, _seg_gate = _segment_quality_gate(
-                    scored, _scored_original, _ai_edit_plan, context={"job_id": job_id}
-                )
-                _sg = _seg_gate.get("segment_quality_gate") or {}
-                try:
-                    existing_qg = getattr(_ai_edit_plan, "quality_gated_influence", {}) or {}
-                    existing_qg["segment"] = _sg
-                    _ai_edit_plan.quality_gated_influence = existing_qg
-                except Exception:
-                    pass
-                if _sg.get("applied"):
-                    logger.info(
-                        "ai_segment_quality_gate_applied job_id=%s action=%s reverted=%s",
-                        job_id,
-                        _sg.get("gate_action"),
-                        _sg.get("reverted"),
-                    )
-                else:
-                    logger.debug(
-                        "ai_segment_quality_gate_no_change job_id=%s action=%s",
-                        job_id,
-                        _sg.get("gate_action", "no_change"),
-                    )
-            except Exception as _qg_err:
-                logger.warning(
-                    "ai_segment_quality_gate_failed job_id=%s: %s", job_id, _qg_err
-                )
-
-        # ── AI advisory phases 60A–62D → moved to pipeline_ai_phases (Phase A-2) ──
-        run_phase_60a_execution_metrics(_ai_edit_plan, payload, job_id)
-        run_phase_60b_ab_evaluation(_ai_edit_plan, job_id)
-        run_phase_60c_creator_benchmark(_ai_edit_plan, job_id)
-        run_phase_61a_archetype_strategy(_ai_edit_plan, job_id)
-        run_phase_61d_creator_render_strategy(_ai_edit_plan, job_id)
-        run_phase_62a_outcome_tracking(_ai_edit_plan, job_id)
-        run_phase_62b_preference_reinforcement(_ai_edit_plan, job_id)
-        run_phase_62c_success_patterns(_ai_edit_plan, job_id)
-        run_phase_62d_learning_calibration(_ai_edit_plan, job_id)
+        # AI Segment Promotion (Phase 59C) + Quality Gate (Phase 59D) removed (Phase F4).
+        # Both consumed _ai_edit_plan which is always None after E3.
+        # AI advisory phases 60A–62D also removed (Phase F2).
 
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
@@ -1906,86 +1358,12 @@ def run_render_pipeline(
         if _recovery_notes:
             _final_message += " [" + "; ".join(_recovery_notes) + "]"
 
-        # ── Phase 30: AI Output Ranking — best-effort, never blocks render ──
+        # Phases 30, 45, 49A (AI output ranking, quality evaluation, UX metadata)
+        # removed in Phase G. All consumed _ai_edit_plan which is None after E3.
+        # Result payload keeps the keys with default empty values for consumer compat.
         _ai_output_ranking: dict = {"available": False, "mode": "recommendation_only"}
-        try:
-            from app.ai.output.output_ranker import rank_variant_outputs as _rank_ai_outputs
-            _ai_rank_inputs = [
-                {
-                    "output_id": str(_re.get("part_no") or i),
-                    "path": str(_re.get("output_file") or ""),
-                    "variant_id": str(_re.get("variant_id") or ""),
-                    "output_rank_score": float(_re.get("output_rank_score") or _re.get("output_score") or 0.0),
-                    "failed": False,
-                    "warnings": [],
-                }
-                for i, _re in enumerate(_rank_entries_ordered)
-            ] + [
-                {
-                    "output_id": str(_fp.get("part_no") or f"failed_{i}"),
-                    "path": "",
-                    "variant_id": "",
-                    "output_rank_score": 0.0,
-                    "failed": True,
-                    "warnings": [str(_fp.get("error") or "render_failed")],
-                }
-                for i, _fp in enumerate(failed_parts)
-            ]
-            _ai_rank_result = _rank_ai_outputs(
-                _ai_rank_inputs,
-                edit_plan=_ai_edit_plan,
-                context={"job_id": job_id},
-            )
-            _ai_output_ranking = _ai_rank_result.to_dict()
-            if _ai_edit_plan is not None:
-                _ai_edit_plan.output_ranking = _ai_output_ranking
-            logger.info(
-                "ai_output_ranking_created job_id=%s best=%s outputs=%d",
-                job_id,
-                _ai_output_ranking.get("best_output_id") or "none",
-                len(_ai_output_ranking.get("outputs") or []),
-            )
-        except Exception as _rank_err:
-            logger.warning("ai_output_ranking_skipped job_id=%s: %s", job_id, _rank_err)
-            _ai_output_ranking = {
-                "available": False,
-                "mode": "recommendation_only",
-                "warnings": [f"ranking_error:{type(_rank_err).__name__}"],
-            }
-
-        # ── Phase 45: AI Render Quality Evaluation — evaluation-only, never blocks render ──
         _ai_render_quality: dict = {"available": False, "evaluation_mode": "evaluation_only"}
-        try:
-            from app.ai.quality.quality_evaluator import evaluate_render_quality as _eval_quality
-            _quality_eval = _eval_quality(
-                outputs,
-                edit_plan=_ai_edit_plan,
-                context={"job_id": job_id},
-            )
-            _ai_render_quality = _quality_eval.to_dict()
-            if _ai_edit_plan is not None:
-                _ai_edit_plan.render_quality_evaluation = _ai_render_quality
-            logger.info(
-                "ai_render_quality_evaluated job_id=%s best=%s outputs=%d",
-                job_id,
-                _ai_render_quality.get("best_quality_output_id") or "none",
-                len(_ai_render_quality.get("output_scores") or []),
-            )
-        except Exception as _quality_err:
-            logger.warning("ai_render_quality_evaluation_skipped job_id=%s: %s", job_id, _quality_err)
-            _ai_render_quality = {
-                "available": False,
-                "evaluation_mode": "evaluation_only",
-                "warnings": [f"quality_evaluation_error:{type(_quality_err).__name__}"],
-            }
-
-        # Phase 49A — Build stable UI-safe AI UX metadata contract
         _ai_ux_metadata: dict = {"available": False}
-        try:
-            from app.ai.ux.ai_ux_metadata import build_ai_ux_metadata as _build_ai_ux
-            _ai_ux_metadata = _build_ai_ux(_ai_edit_plan, output_ranking=_ai_output_ranking)
-        except Exception as _ux_err:
-            logger.debug("ai_ux_metadata_skipped job_id=%s: %s", job_id, _ux_err)
 
         _result_payload = {
             "outputs": outputs,
@@ -2006,12 +1384,12 @@ def run_render_pipeline(
             "successful_outputs_count": len(outputs),
             "failed_outputs_count": len(failed_parts),
             "is_partial_success": _is_partial_success,
-            "ai_director": _ai_edit_plan.to_dict() if _ai_edit_plan is not None else {"enabled": False},
+            "ai_director": {"enabled": False},
             "ai_render_influence": _ai_influence_report,
             "ai_beat_execution": _ai_beat_report,
-            "story": _ai_edit_plan.story if _ai_edit_plan is not None else {},
-            "preset_evolution": _ai_edit_plan.preset_evolution if _ai_edit_plan is not None else {},
-            "creator_style": _ai_edit_plan.creator_style if _ai_edit_plan is not None else {},
+            "story": {},
+            "preset_evolution": {},
+            "creator_style": {},
             "ai_output_ranking": _ai_output_ranking,
             "ai_render_quality_evaluation": _ai_render_quality,
             "ai_ux": _ai_ux_metadata,
@@ -2028,20 +1406,7 @@ def run_render_pipeline(
             progress_percent=100,
             message=_final_message,
         )
-        # ── AI Memory write (Phase 3) — after job finalized, never blocks render ──
-        if getattr(payload, "ai_director_enabled", False) or _ai_edit_plan is not None:
-            try:
-                from app.ai.rag.memory_writer import write_render_memory as _write_mem
-                _write_mem(
-                    _result_payload,
-                    context={
-                        "market": getattr(payload, "ai_target_market", None) or getattr(payload, "viral_market", None),
-                        "mode": getattr(payload, "ai_mode", "viral_tiktok"),
-                        "duration": source.get("duration", 0.0),
-                    },
-                )
-            except Exception:
-                pass
+        # AI Memory write (Phase 3) removed in Phase G — consumed _ai_edit_plan (None after E3).
 
         _job_log(
             effective_channel,
