@@ -606,8 +606,13 @@ def create_render_job(payload: RenderRequest):
     _coerce_legacy_channel_payload(payload)
     # Phase D — apply server-wide groq_only default to NEW jobs only when the
     # API request did not set the field explicitly. Resume/retry paths skip this.
+    # When GROQ_ONLY_DEFAULT is the source of groq_only_mode=True, also auto-enable
+    # groq_analysis_enabled (the Groq-only path requires it; hard-failing here would
+    # surprise users who only set the env flag).
     if "groq_only_mode" not in payload.model_fields_set and _cfg.GROQ_ONLY_DEFAULT:
         payload.groq_only_mode = True
+        if "groq_analysis_enabled" not in payload.model_fields_set:
+            payload.groq_analysis_enabled = True
     try:
         _validate_render_source(payload)
         _validate_text_layers_or_400(payload)

@@ -46,9 +46,11 @@ class TestGroqOnlyDefaultOverride:
         assert forwarded.groq_only_mode is False
 
     def test_override_on_flips_field_when_not_set(self):
-        """GROQ_ONLY_DEFAULT=True, request omits field → payload flips to True."""
+        """GROQ_ONLY_DEFAULT=True, request omits field → payload flips to True
+        AND groq_analysis_enabled also auto-enabled to avoid hard-fail."""
         payload = _minimal_payload()
         assert "groq_only_mode" not in payload.model_fields_set
+        assert "groq_analysis_enabled" not in payload.model_fields_set
 
         with patch.object(render_route._cfg, "GROQ_ONLY_DEFAULT", True), \
              patch.object(render_route, "_queue_render_job") as mock_queue, \
@@ -59,6 +61,23 @@ class TestGroqOnlyDefaultOverride:
 
         forwarded = mock_queue.call_args.args[2]
         assert forwarded.groq_only_mode is True
+        assert forwarded.groq_analysis_enabled is True
+
+    def test_override_on_respects_explicit_groq_analysis_disabled(self):
+        """GROQ_ONLY_DEFAULT=True but request explicitly sets groq_analysis_enabled=False
+        → respect explicit value (user will hit hard-fail in pipeline, as intended)."""
+        payload = _minimal_payload(groq_analysis_enabled=False)
+
+        with patch.object(render_route._cfg, "GROQ_ONLY_DEFAULT", True), \
+             patch.object(render_route, "_queue_render_job") as mock_queue, \
+             patch.object(render_route, "_validate_render_source"), \
+             patch.object(render_route, "_validate_text_layers_or_400"), \
+             patch.object(render_route, "_coerce_legacy_channel_payload"):
+            render_route.create_render_job(payload)
+
+        forwarded = mock_queue.call_args.args[2]
+        assert forwarded.groq_only_mode is True
+        assert forwarded.groq_analysis_enabled is False
 
     def test_explicit_false_wins_over_env_default(self):
         """GROQ_ONLY_DEFAULT=True but request explicitly sets False → False wins."""
