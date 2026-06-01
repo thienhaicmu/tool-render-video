@@ -52,10 +52,17 @@ def parse_segment_response(
     """
     try:
         data = _extract_json_array(raw)
+        # JSON mode returns an object — unwrap common segment-array keys.
+        if isinstance(data, dict):
+            for _key in ("segments", "clips", "items", "results", "data"):
+                if isinstance(data.get(_key), list):
+                    data = data[_key]
+                    break
         if not isinstance(data, list):
             logger.warning(
-                "groq_parser: expected list, got %s — raw preview: %r",
-                type(data).__name__, raw[:200],
+                "groq_parser: expected list (or object with 'segments' key), "
+                "got %s — raw preview: %r",
+                type(data).__name__, raw[:300],
             )
             return None
 
@@ -96,24 +103,32 @@ def parse_segment_response(
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _extract_json_array(raw: str) -> object:
-    """Try several strategies to extract a JSON array from raw text."""
+    """Try several strategies to extract a JSON array or object from raw text."""
     raw = raw.strip()
 
-    # 1. Direct parse
+    # 1. Direct parse — handles JSON mode (object) and bare-array responses.
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
         pass
 
-    # 2. Markdown code fence: ```json [...] ```
-    m = re.search(r"```(?:json)?\s*(\[.*?\])\s*```", raw, re.DOTALL)
+    # 2. Markdown code fence: ```json {...} ``` or ```json [...] ```
+    m = re.search(r"```(?:json)?\s*([\[{].*?[\]}])\s*```", raw, re.DOTALL)
     if m:
         try:
             return json.loads(m.group(1))
         except json.JSONDecodeError:
             pass
 
-    # 3. First JSON array anywhere in the text
+    # 3. First JSON object anywhere in the text (greedy — handles nested arrays)
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    # 4. First JSON array anywhere in the text (legacy bare-array path)
     m = re.search(r"\[.*\]", raw, re.DOTALL)
     if m:
         try:

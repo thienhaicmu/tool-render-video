@@ -2,42 +2,50 @@
 prompts.py — Prompt templates for Groq segment selection.
 
 Versioned here so prompts evolve independently of the API client.
+Groq is called in JSON mode, so the response is guaranteed to be a
+single JSON object. We ask for {"segments": [...]} and the parser
+unwraps the array.
 """
 from __future__ import annotations
 
 _SYSTEM = (
-    "Bạn là AI chuyên phân tích transcript video để tạo clip ngắn viral. "
-    "Nhiệm vụ: chọn đúng số đoạn được yêu cầu, đúng thời lượng, trả về JSON hợp lệ. "
-    "KHÔNG giải thích, KHÔNG thêm văn bản ngoài JSON."
+    "You are a video editor AI that selects the best short-form clips "
+    "from a transcript. Return ONLY a single JSON object with a "
+    '"segments" array. No prose, no markdown fences, no explanation.'
 )
 
 _USER_TEMPLATE = """\
-Transcript ({language}):
+Pick the best {output_count} segments from this transcript ({language}) for short-form video clips.
+
+Transcript (timestamps in seconds):
 {srt_content}
 
-RÀNG BUỘC BẮT BUỘC (vi phạm = kết quả bị từ chối):
-1. Trả về ĐÚNG {output_count} đoạn — không hơn, không kém
-2. Mỗi đoạn: end - start phải từ {min_sec}s đến {max_sec}s
-3. Các đoạn KHÔNG chồng nhau (start của đoạn sau >= end của đoạn trước)
-4. clip_name: tên tự nhiên mô tả nội dung, tối đa 60 ký tự
-   — Được phép: chữ cái (kể cả tiếng Việt), số, dấu cách, dấu gạch ngang
-   — KHÔNG dùng: / \\ : * ? " < > | và ký tự xuống dòng
-5. score: số thực 0.0–1.0 (1.0 = xuất sắc nhất)
+HARD CONSTRAINTS (violations are silently dropped — pick safer segments):
+1. Each segment duration (end - start) must be between {min_sec} and {max_sec} seconds.
+2. Segments must NOT overlap. Sort by start time ascending.
+3. start >= 0 and end <= total video duration. Use the transcript timestamps as the source of truth.
+4. clip_name: human-readable filename stem, max 60 chars. Allowed: letters (incl. Vietnamese / CJK), digits, spaces, hyphens. NOT allowed: / \\ : * ? " < > | newlines.
+5. score: float 0.0–1.0 where 1.0 = best.
 
-Ưu tiên chọn: hook mạnh ở đầu đoạn, thông tin có giá trị cao, khoảnh khắc thú vị/cảm xúc.
-Bỏ qua: intro, outro, quảng cáo, đoạn im lặng dài, nội dung lặp lại.
+Prefer: strong hook in the first 3 seconds, valuable info, emotional/funny peaks, complete thoughts.
+Avoid: intros, outros, ads, long silences, repetitive content, mid-sentence cuts.
 
-Trả về JSON array (chỉ JSON, không gì thêm):
-[
-  {{
-    "start": 45.2,
-    "end": 102.8,
-    "score": 0.92,
-    "clip_name": "Bí quyết tăng view nhanh",
-    "title": "Bí quyết tăng view nhanh nhất 2025",
-    "reason": "Hook mạnh ngay giây đầu, kỹ thuật cụ thể có thể áp dụng ngay"
-  }}
-]"""
+Return EXACTLY this JSON shape (no other keys, no markdown, no comments):
+{{
+  "segments": [
+    {{
+      "start": 45.2,
+      "end": 102.8,
+      "score": 0.92,
+      "clip_name": "Hook reveal moment",
+      "title": "The hook everyone missed",
+      "reason": "Strong opening question, payoff at 95s"
+    }}
+  ]
+}}
+
+Return up to {output_count} segments. Returning fewer is fine if the transcript is short or low-quality — never invent moments that are not in the transcript.
+"""
 
 # Hard cap: prevent excessive token cost on very long transcripts.
 MAX_SRT_CHARS = 12_000

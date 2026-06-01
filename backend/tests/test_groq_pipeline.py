@@ -127,6 +127,33 @@ class TestParseSegmentResponse:
         assert result is not None
         assert len(result) == 2
 
+    def test_unwraps_segments_object_from_json_mode(self):
+        """Groq JSON mode returns an object — parser must unwrap {'segments': [...]}."""
+        from app.ai.analysis.groq.parser import parse_segment_response
+        raw = json.dumps({
+            "segments": [
+                {"start": 10, "end": 40, "score": 0.85, "clip_name": "A", "title": "T", "reason": "R"},
+                {"start": 50, "end": 90, "score": 0.75, "clip_name": "B", "title": "T", "reason": "R"},
+            ]
+        })
+        result = parse_segment_response(raw, output_count=2, min_sec=15, max_sec=60, video_duration=300)
+        assert result is not None
+        assert len(result) == 2
+        assert result[0].clip_name == "A"
+
+    def test_accepts_fewer_segments_than_requested(self):
+        """Lenient mode: 2 valid out of 6 requested → return the 2."""
+        from app.ai.analysis.groq.parser import parse_segment_response
+        raw = json.dumps({
+            "segments": [
+                {"start": 10, "end": 40, "score": 0.85, "clip_name": "A", "title": "T", "reason": "R"},
+                {"start": 50, "end": 90, "score": 0.75, "clip_name": "B", "title": "T", "reason": "R"},
+            ]
+        })
+        result = parse_segment_response(raw, output_count=6, min_sec=15, max_sec=60, video_duration=300)
+        assert result is not None
+        assert len(result) == 2  # not None — return subset
+
 
 # ── F2: PartContext round-trip ─────────────────────────────────────────────────
 
