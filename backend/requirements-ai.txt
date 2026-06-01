@@ -4,6 +4,8 @@ sentence-transformers
 faiss-cpu
 librosa
 mediapipe
+# faster-whisper: 4x faster than openai-whisper on the same model+device.
+# Required for groq_only_mode performance — full-video transcription pre-Groq.
 faster-whisper
 whisperx
 # Cloud LLM providers for segment selection (Phase I — multi-provider).

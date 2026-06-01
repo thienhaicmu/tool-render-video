@@ -138,7 +138,13 @@ def run_groq_only_pre_render(
             "groq_only.transcription: resume hit, reusing existing SRT",
         )
     else:
-        _model = tuned["whisper_model"]
+        # For Groq/Gemini segment selection the SRT only needs to convey content,
+        # not word-perfect transcription. Per-clip subtitles are transcribed
+        # SEPARATELY in part_renderer.py with the higher-quality `small` model.
+        # Override here keeps full-video Whisper fast; set GROQ_ONLY_WHISPER_MODEL
+        # to "" (or the tuned default) to disable the override.
+        import os as _os
+        _model = (_os.getenv("GROQ_ONLY_WHISPER_MODEL", "tiny") or tuned["whisper_model"]).strip()
         _engine = getattr(payload, "subtitle_transcription_engine", "default")
         _cache_key = f"{_engine}_{int(bool(getattr(payload, 'highlight_per_word', False)))}"
         _cached = _transcription_cache_get(str(source_path), _model, _cache_key)
