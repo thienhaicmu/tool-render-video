@@ -45,10 +45,14 @@ def select_segments(
         from app.ai.analysis.groq import select_segments as _impl
     elif p == "gemini":
         from app.ai.llm.gemini_provider import select_segments as _impl
+    elif p == "openai":
+        from app.ai.llm.openai_provider import select_segments as _impl
+    elif p == "claude":
+        from app.ai.llm.claude_provider import select_segments as _impl
     else:
         logger.warning(
-            "llm: provider %r not yet implemented (supported so far: groq, gemini)",
-            provider,
+            "llm: provider %r not in SUPPORTED_PROVIDERS=%s",
+            provider, SUPPORTED_PROVIDERS,
         )
         return None
     return _impl(
