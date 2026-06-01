@@ -20,11 +20,56 @@ logger = logging.getLogger("app.render.groq_stage")
 logger.info("groq_stage: module loaded (build=2026-06-01.h2-verbose-diagnostics)")
 
 try:
-    from app.ai.analysis.groq import select_segments, GroqSegment
+    from app.ai.analysis.groq import GroqSegment
+    from app.ai.llm import select_segments as _llm_select, SUPPORTED_PROVIDERS
     _GROQ_MODULE_AVAILABLE = True
 except ImportError as _import_exc:
     _GROQ_MODULE_AVAILABLE = False
-    logger.warning("groq_stage: groq client import FAILED — %s", _import_exc)
+    logger.warning("groq_stage: llm dispatcher import FAILED — %s", _import_exc)
+
+
+def _resolve_api_key(payload: Any, provider: str) -> tuple[str, str]:
+    """Return (api_key, source_label) for the given provider.
+
+    Resolution order per provider:
+      1. Per-provider payload field (e.g. payload.gemini_api_key)
+      2. Generic payload field (payload.ai_cloud_api_key) — UI sends the active provider's key here
+      3. Server env var (GEMINI_API_KEY / GROQ_API_KEY / etc.)
+    """
+    from app.core import config as _cfg
+    _per_provider_attr = {
+        "groq":   "groq_api_key",
+        "gemini": "gemini_api_key",
+        "openai": "openai_api_key",
+        "claude": "claude_api_key",
+    }.get(provider, "")
+    _per_provider_env = {
+        "groq":   "GROQ_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "claude": "CLAUDE_API_KEY",
+    }.get(provider, "")
+
+    if _per_provider_attr:
+        _key = (getattr(payload, _per_provider_attr, "") or "").strip()
+        if _key:
+            return _key, f"payload.{_per_provider_attr}"
+
+    _generic = (getattr(payload, "ai_cloud_api_key", "") or "").strip()
+    if _generic:
+        return _generic, "payload.ai_cloud_api_key"
+
+    if _per_provider_env:
+        import os
+        _env = (os.getenv(_per_provider_env) or "").strip()
+        if _env:
+            return _env, f"env.{_per_provider_env}"
+
+    # Legacy fallback for Groq path that already supports GROQ_API_KEY via _cfg
+    if provider == "groq" and getattr(_cfg, "GROQ_API_KEY", ""):
+        return _cfg.GROQ_API_KEY, "env.GROQ_API_KEY (cfg)"
+
+    return "", "none"
 
 
 def run_groq_segment_selection(
@@ -58,25 +103,30 @@ def _run(
     source: dict,
 ) -> Optional[list]:
     if not _GROQ_MODULE_AVAILABLE:
-        logger.warning("groq_stage: module not available (missing groq SDK)")
+        logger.warning("groq_stage: llm dispatcher not available")
         return None
 
     if not full_srt_available or not full_srt.exists():
         logger.warning("groq_stage: SRT not available — skipping (path=%s)", full_srt)
         return None
 
-    # Read API key: prefer request-level (UI input), fallback to server env.
-    from app.core import config as _cfg
-    _payload_key = (getattr(payload, "ai_cloud_api_key", "") or "").strip()
-    _env_key = _cfg.GROQ_API_KEY
-    api_key = _payload_key or _env_key
-    _key_source = "payload" if _payload_key else ("env" if _env_key else "none")
+    # Resolve provider — env override applied in route handler, else default groq.
+    provider = (getattr(payload, "ai_provider", None) or "groq").strip().lower()
+    if provider not in SUPPORTED_PROVIDERS:
+        logger.warning("groq_stage: unsupported provider %r — falling back to groq", provider)
+        provider = "groq"
+
+    api_key, _key_source = _resolve_api_key(payload, provider)
     if not api_key:
-        logger.warning("groq_stage: NO API KEY (payload empty AND env GROQ_API_KEY empty)")
+        logger.warning(
+            "groq_stage: NO API KEY for provider=%s (checked payload + env)",
+            provider,
+        )
         return None
     logger.info(
-        "groq_stage: api_key source=%s len=%d prefix=%s",
-        _key_source, len(api_key), api_key[:8] + "..." if len(api_key) > 8 else api_key,
+        "groq_stage: provider=%s api_key_source=%s len=%d prefix=%s",
+        provider, _key_source, len(api_key),
+        api_key[:8] + "..." if len(api_key) > 8 else api_key,
     )
 
     try:
@@ -89,15 +139,20 @@ def _run(
     min_sec      = float(getattr(payload, "min_part_sec", 15))
     max_sec      = float(getattr(payload, "max_part_sec", 60))
     video_duration = float(source.get("duration") or 0.0)
+    # groq_model field stays as the universal "selected model" for all providers
+    # (additive: Sacred Contract 2 — never rename existing fields).
     model        = getattr(payload, "groq_model", None) or None
     language     = getattr(payload, "groq_content_language", None) or "auto"
 
     logger.info(
-        "groq_stage: requesting %d segments %.0f–%.0fs model=%s srt_chars=%d dur=%.0f",
-        output_count, min_sec, max_sec, model or "default", len(srt_content), video_duration,
+        "groq_stage: requesting %d segments %.0f–%.0fs provider=%s model=%s "
+        "srt_chars=%d dur=%.0f",
+        output_count, min_sec, max_sec, provider, model or "default",
+        len(srt_content), video_duration,
     )
 
-    segments = select_segments(
+    segments = _llm_select(
+        provider=provider,
         srt_content=srt_content,
         output_count=output_count,
         min_sec=min_sec,

@@ -6,6 +6,9 @@ librosa
 mediapipe
 faster-whisper
 whisperx
-# Cloud AI providers (optional — falls back to openai SDK if not installed)
-groq>=0.4.0
-openai>=1.0.0
+# Cloud LLM providers for segment selection (Phase I — multi-provider).
+# Each is optional; install the one matching your configured ai_provider.
+groq>=0.4.0                # default provider
+openai>=1.0.0              # ai_provider=openai (also used by Groq fallback path)
+google-genai>=2.0.0        # ai_provider=gemini (free 1M tokens/day)
+anthropic>=0.40.0          # ai_provider=claude (paid)

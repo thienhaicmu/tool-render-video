@@ -343,6 +343,17 @@ class RenderRequest(BaseModel):
     # Default False to preserve backward compat (Sacred Contract 2 — additive only).
     groq_only_mode: bool = False
 
+    # Multi-provider LLM (Phase I) — which LLM provider drives segment selection.
+    # Supported: "groq" | "gemini" | "openai" | "claude". Default None means
+    # "use server default" (AI_PROVIDER_DEFAULT env, falls back to "groq").
+    # Per-provider API keys; ai_cloud_api_key remains the legacy generic field
+    # (UI may send the active provider's key there for backward compat).
+    ai_provider: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    claude_api_key: Optional[str] = None
+    groq_api_key: Optional[str] = None
+
     @field_validator("target_duration")
     @classmethod
     def _validate_target_duration(cls, v: int) -> int:

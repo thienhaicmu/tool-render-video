@@ -65,3 +65,14 @@ GROQ_MAX_SRT_CHARS   : int = int(os.getenv("GROQ_MAX_SRT_CHARS", "12000"))
 # Resume/retry of stored jobs always keeps the original payload value
 # (preserves Sacred Contract 2 — stored records never silently flip).
 GROQ_ONLY_DEFAULT    : bool = os.getenv("GROQ_ONLY_DEFAULT", "0") == "1"
+
+# Phase I — server-wide default LLM provider for NEW jobs.
+# Supported: "groq" | "gemini" | "openai" | "claude". Default "groq" to keep
+# stored jobs working. Override to "gemini" for the FREE 1M-token/day tier.
+AI_PROVIDER_DEFAULT  : str  = os.getenv("AI_PROVIDER_DEFAULT", "groq").strip().lower()
+
+# Per-provider API keys (server env fallback). Resolved in groq_stage._resolve_api_key
+# AFTER payload-level keys. Empty = no fallback for that provider.
+GEMINI_API_KEY       : str  = os.getenv("GEMINI_API_KEY", "")
+OPENAI_API_KEY       : str  = os.getenv("OPENAI_API_KEY", "")
+CLAUDE_API_KEY       : str  = os.getenv("CLAUDE_API_KEY", "")

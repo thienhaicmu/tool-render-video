@@ -613,6 +613,10 @@ def create_render_job(payload: RenderRequest):
         payload.groq_only_mode = True
         if "groq_analysis_enabled" not in payload.model_fields_set:
             payload.groq_analysis_enabled = True
+    # Phase I — apply server-wide LLM provider default to NEW jobs only.
+    # Resume/retry: ai_provider stays as stored (None → groq fallback in dispatcher).
+    if "ai_provider" not in payload.model_fields_set:
+        payload.ai_provider = _cfg.AI_PROVIDER_DEFAULT
     try:
         _validate_render_source(payload)
         _validate_text_layers_or_400(payload)
@@ -720,6 +724,40 @@ def test_cloud_ai(body: dict):
                 max_tokens=8,
                 temperature=0.0,
             )
+        elif provider == "gemini":
+            from google import genai as _genai
+            resolved_model = model or "gemini-2.0-flash"
+            client = _genai.Client(api_key=api_key)
+            _gem_resp = client.models.generate_content(
+                model=resolved_model,
+                contents="Reply with the single word: ready",
+                config={"temperature": 0.0, "max_output_tokens": 8},
+            )
+            # Mock OpenAI-style response so the latency_ms path below works.
+            class _R:
+                pass
+            resp = _R()
+            resp.choices = [_R()]
+            resp.choices[0].message = _R()
+            resp.choices[0].message.content = (_gem_resp.text or "").strip()
+        elif provider == "claude":
+            try:
+                from anthropic import Anthropic as _AnthClient
+            except ImportError:
+                raise HTTPException(status_code=501, detail="anthropic SDK not installed")
+            resolved_model = model or "claude-haiku-4-5-20251001"
+            client = _AnthClient(api_key=api_key, timeout=10)
+            _claude_resp = client.messages.create(
+                model=resolved_model,
+                max_tokens=8,
+                messages=[{"role": "user", "content": "Reply with the single word: ready"}],
+            )
+            class _R:
+                pass
+            resp = _R()
+            resp.choices = [_R()]
+            resp.choices[0].message = _R()
+            resp.choices[0].message.content = _claude_resp.content[0].text if _claude_resp.content else ""
         else:
             raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
 
