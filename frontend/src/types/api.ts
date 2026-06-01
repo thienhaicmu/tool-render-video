@@ -138,7 +138,8 @@ export interface RenderRequest {
   ai_analysis_mode?: 'local' | 'cloud' | 'hybrid' | null
   ai_content_driven_selection?: boolean
 
-  // Groq segment selection
+  // Groq segment selection (single source of truth post-refactor A-G)
+  groq_only_mode?: boolean
   groq_analysis_enabled?: boolean
   groq_model?: string | null
   groq_content_language?: string | null

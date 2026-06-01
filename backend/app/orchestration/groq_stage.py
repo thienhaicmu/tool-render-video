@@ -63,9 +63,9 @@ def _run(
         logger.debug("groq_stage: SRT not available — skipping")
         return None
 
-    # Read API key: prefer request-level, fallback to server config.
+    # Read API key: prefer request-level (UI input), fallback to server env.
     from app.core import config as _cfg
-    api_key = _cfg.GROQ_API_KEY
+    api_key = (getattr(payload, "ai_cloud_api_key", "") or "").strip() or _cfg.GROQ_API_KEY
     if not api_key:
         logger.debug("groq_stage: no GROQ_API_KEY configured")
         return None

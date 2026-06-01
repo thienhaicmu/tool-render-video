@@ -208,20 +208,13 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       voice_gender:        cfg.narrEnabled ? cfg.voiceGender : undefined,
       tts_engine:          cfg.narrEnabled ? cfg.ttsEngine : undefined,
       voice_mix_mode:      cfg.narrEnabled ? cfg.voiceMixMode : undefined,
-      ai_director_enabled:        cfg.aiEnabled,
-      ai_analysis_mode:           cfg.aiEnabled ? cfg.aiAnalysisMode : undefined,
-      ai_cloud_enabled:           cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' && !!cfg.aiCloudApiKey,
-      ai_cloud_provider:          cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' ? cfg.aiCloudProvider : undefined,
-      ai_cloud_api_key:           cfg.aiEnabled && cfg.aiAnalysisMode !== 'local' && cfg.aiCloudApiKey ? cfg.aiCloudApiKey : undefined,
-      ai_cloud_model:             cfg.aiEnabled && cfg.aiCloudModel ? cfg.aiCloudModel : undefined,
-      ai_content_driven_selection: cfg.aiEnabled && (
-        cfg.aiContentDriven ||
-        (cfg.aiAnalysisMode !== 'local' && !!cfg.aiCloudApiKey)
-      ) || undefined,
-      // Groq segment selection — uses same API key as cloud AI (aiCloudApiKey)
-      groq_analysis_enabled:  cfg.groqEnabled && !!cfg.aiCloudApiKey || undefined,
-      groq_model:             cfg.groqEnabled && cfg.groqModel ? cfg.groqModel : undefined,
-      groq_content_language:  cfg.groqEnabled && cfg.groqContentLanguage !== 'auto' ? cfg.groqContentLanguage : undefined,
+      // Groq is the single source of truth for segment selection (post-refactor A-G).
+      // ai_cloud_api_key carries the user-supplied key; backend prefers it over env.
+      groq_only_mode:        cfg.groqEnabled || undefined,
+      groq_analysis_enabled: cfg.groqEnabled || undefined,
+      ai_cloud_api_key:      cfg.groqEnabled && cfg.aiCloudApiKey ? cfg.aiCloudApiKey : undefined,
+      groq_model:            cfg.groqEnabled && cfg.groqModel ? cfg.groqModel : undefined,
+      groq_content_language: cfg.groqEnabled && cfg.groqContentLanguage !== 'auto' ? cfg.groqContentLanguage : undefined,
       multi_variant:       cfg.multiVariant || undefined,
       cta_enabled:         cfg.ctaEnabled || undefined,
       cta_type:            cfg.ctaEnabled ? cfg.ctaType : undefined,

@@ -714,193 +714,100 @@ export function StepConfigure({
             </div>
             )}
 
-            {/* AI Director */}
+            {/* GROQ — single source of truth for segment selection */}
             <div className="cfg-section">
-              <div className="tog-row">
+              <div className="cfg-sec-hd">
+                <span>GROQ AI</span>
+                <span className="cfg-sec-api">groq_segment_selection</span>
+              </div>
+              <div className="tog-row" style={{ alignItems: 'flex-start' }}>
                 <div>
-                  <div className="tog-lbl">{t.cfgAIDirector}</div>
-                  <div className="tog-desc">{t.cfgAIDirectorDesc}</div>
+                  <div className="tog-lbl" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Auto-select clips with Groq
+                    <span style={{ fontSize: 9, background: 'rgba(251,191,36,.15)', color: '#f59e0b', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>FREE</span>
+                  </div>
+                  <div className="tog-desc">Groq reads the transcript and picks the best segments. Required.</div>
                 </div>
-                <Tog checked={cfg.aiEnabled} onChange={(v) => setCfgKey('aiEnabled', v)} />
+                <Tog checked={cfg.groqEnabled} onChange={(v) => setCfgKey('groqEnabled', v)} />
               </div>
 
-              {cfg.aiEnabled && (
-                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' as const, color: 'var(--text-tertiary)' }}>
-                    Analyzer
+              {cfg.groqEnabled && (
+                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {/* API key + Test */}
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <input
+                      type="password"
+                      value={cfg.aiCloudApiKey}
+                      onChange={(e) => { setCfgKey('aiCloudApiKey', e.target.value); setTestStatus('idle') }}
+                      placeholder="gsk_..."
+                      style={{
+                        flex: 1, padding: '6px 8px', borderRadius: 6, fontSize: 11,
+                        border: `1px solid ${testStatus === 'ok' ? '#22c55e' : testStatus === 'error' ? '#ef4444' : 'var(--border-default)'}`,
+                        backgroundColor: 'var(--surface-input)',
+                        color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box',
+                      }}
+                    />
+                    <button
+                      onClick={() => { setCfgKey('aiCloudProvider', 'groq'); handleTestConnection() }}
+                      disabled={!cfg.aiCloudApiKey || testStatus === 'testing'}
+                      style={{
+                        padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                        cursor: cfg.aiCloudApiKey && testStatus !== 'testing' ? 'pointer' : 'not-allowed',
+                        border: '1px solid var(--border-default)',
+                        backgroundColor: testStatus === 'ok' ? 'rgba(34,197,94,.15)' : testStatus === 'error' ? 'rgba(239,68,68,.12)' : 'var(--surface-input)',
+                        color: testStatus === 'ok' ? '#22c55e' : testStatus === 'error' ? '#ef4444' : 'var(--text-secondary)',
+                        whiteSpace: 'nowrap', flexShrink: 0,
+                      }}
+                    >
+                      {testStatus === 'testing' ? '...' : testStatus === 'ok' ? '✓' : testStatus === 'error' ? '✗' : 'Test'}
+                    </button>
                   </div>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {(['local', 'cloud', 'hybrid'] as const).map((m) => (
-                      <button key={m} onClick={() => {
-                        setCfgKey('aiAnalysisMode', m)
-                        if (m !== 'local' && cfg.aiCloudApiKey) setCfgKey('aiContentDriven', true)
-                      }} style={{
-                        flex: 1, padding: '5px 0', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                        cursor: 'pointer', border: `1px solid ${cfg.aiAnalysisMode === m ? '#a855f7' : 'var(--border-default)'}`,
-                        backgroundColor: cfg.aiAnalysisMode === m ? 'rgba(168,85,247,.15)' : 'transparent',
-                        color: cfg.aiAnalysisMode === m ? '#a855f7' : 'var(--text-secondary)',
-                        transition: 'all .12s', textTransform: 'capitalize' as const,
-                      }}>
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
-                    {cfg.aiAnalysisMode === 'local' && 'Offline — no API cost'}
-                    {cfg.aiAnalysisMode === 'cloud' && 'Cloud only — best quality'}
-                    {cfg.aiAnalysisMode === 'hybrid' && '70% cloud + 30% local'}
-                  </div>
-
-                  {cfg.aiAnalysisMode !== 'local' && (
-                    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6, marginTop: 4 }}>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        {(['groq', 'openai'] as const).map((p) => (
-                          <button key={p} onClick={() => setCfgKey('aiCloudProvider', p)} style={{
-                            flex: 1, padding: '4px 0', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                            cursor: 'pointer', border: `1px solid ${cfg.aiCloudProvider === p ? '#3b82f6' : 'var(--border-default)'}`,
-                            backgroundColor: cfg.aiCloudProvider === p ? 'rgba(59,130,246,.15)' : 'transparent',
-                            color: cfg.aiCloudProvider === p ? '#3b82f6' : 'var(--text-secondary)',
-                            transition: 'all .12s',
-                          }}>
-                            {p === 'groq' ? 'Groq (Free)' : 'OpenAI'}
-                          </button>
-                        ))}
-                      </div>
-                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                        <input
-                          type="password"
-                          value={cfg.aiCloudApiKey}
-                          onChange={(e) => {
-                            const key = e.target.value
-                            setCfgKey('aiCloudApiKey', key)
-                            setTestStatus('idle')
-                            if (key) setCfgKey('aiContentDriven', true)
-                          }}
-                          placeholder={cfg.aiCloudProvider === 'groq' ? 'gsk_...' : 'sk-...'}
-                          style={{
-                            flex: 1, padding: '6px 8px', borderRadius: 6, fontSize: 11,
-                            border: `1px solid ${testStatus === 'ok' ? '#22c55e' : testStatus === 'error' ? '#ef4444' : 'var(--border-default)'}`,
-                            backgroundColor: 'var(--surface-input)',
-                            color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' as const,
-                          }}
-                        />
-                        <button
-                          onClick={handleTestConnection}
-                          disabled={!cfg.aiCloudApiKey || testStatus === 'testing'}
-                          style={{
-                            padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                            cursor: cfg.aiCloudApiKey && testStatus !== 'testing' ? 'pointer' : 'not-allowed',
-                            border: '1px solid var(--border-default)',
-                            backgroundColor: testStatus === 'ok' ? 'rgba(34,197,94,.15)' : testStatus === 'error' ? 'rgba(239,68,68,.12)' : 'var(--surface-input)',
-                            color: testStatus === 'ok' ? '#22c55e' : testStatus === 'error' ? '#ef4444' : 'var(--text-secondary)',
-                            whiteSpace: 'nowrap' as const, flexShrink: 0,
-                          }}
-                        >
-                          {testStatus === 'testing' ? '...' : testStatus === 'ok' ? '✓' : testStatus === 'error' ? '✗' : 'Test'}
-                        </button>
-                      </div>
-                      {(testStatus === 'ok' || testStatus === 'error') && (
-                        <div style={{ fontSize: 10, color: testStatus === 'ok' ? '#22c55e' : '#ef4444', marginTop: -2 }}>
-                          {testStatus === 'ok' ? `Connected · ${testMsg}` : testMsg}
-                        </div>
-                      )}
-                      <input
-                        type="text"
-                        value={cfg.aiCloudModel}
-                        onChange={(e) => setCfgKey('aiCloudModel', e.target.value)}
-                        placeholder={cfg.aiCloudProvider === 'groq' ? 'llama-3.3-70b-versatile (optional)' : 'gpt-4o-mini (optional)'}
-                        style={{
-                          width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
-                          border: '1px solid var(--border-default)', backgroundColor: 'var(--surface-input)',
-                          color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' as const,
-                        }}
-                      />
+                  {(testStatus === 'ok' || testStatus === 'error') && (
+                    <div style={{ fontSize: 10, color: testStatus === 'ok' ? '#22c55e' : '#ef4444', marginTop: -2 }}>
+                      {testStatus === 'ok' ? `Connected · ${testMsg}` : testMsg}
+                    </div>
+                  )}
+                  {!cfg.aiCloudApiKey && (
+                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                      Get a free key at console.groq.com/keys (server <code>GROQ_API_KEY</code> env also works)
                     </div>
                   )}
 
-                  {/* AI Content-Driven Selection */}
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-default)' }}>
-                    <div className="tog-row" style={{ alignItems: 'flex-start' }}>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-                          AI selects clips
-                        </div>
-                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2, lineHeight: 1.4 }}>
-                          {cfg.aiAnalysisMode === 'local'
-                            ? 'AI picks clips from transcript analysis. Add cloud key for best results.'
-                            : cfg.aiCloudApiKey
-                              ? 'AI overrides heuristic clip ranking with semantic selection.'
-                              : 'Enter API key above to enable cloud-powered clip selection.'}
-                        </div>
-                      </div>
-                      <Tog
-                        checked={cfg.aiContentDriven}
-                        onChange={(v) => setCfgKey('aiContentDriven', v)}
-                      />
-                    </div>
-                    {cfg.aiContentDriven && (
-                      <div style={{ fontSize: 10, color: '#a855f7', marginTop: 4 }}>
-                        ✦ AI will read transcript early and select the best clips semantically
-                      </div>
-                    )}
-                  </div>
+                  {/* Model */}
+                  <input
+                    type="text"
+                    value={cfg.groqModel}
+                    onChange={(e) => setCfgKey('groqModel', e.target.value)}
+                    placeholder="llama-3.1-8b-instant (optional)"
+                    style={{
+                      width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
+                      border: '1px solid var(--border-default)', backgroundColor: 'var(--surface-input)',
+                      color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
 
-                  {/* Groq Segment Selection */}
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-default)' }}>
-                    <div className="tog-row" style={{ alignItems: 'flex-start' }}>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                          Groq segment selection
-                          <span style={{ fontSize: 9, background: 'rgba(251,191,36,.15)', color: '#f59e0b', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>FREE</span>
-                        </div>
-                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2, lineHeight: 1.4 }}>
-                          {!cfg.aiCloudApiKey
-                            ? 'Enter Groq API key above (gsk_...) to enable'
-                            : 'Groq reads the transcript and picks the best segments — output filenames are AI-generated'}
-                        </div>
-                      </div>
-                      <Tog
-                        checked={cfg.groqEnabled && !!cfg.aiCloudApiKey}
-                        onChange={(v) => { if (cfg.aiCloudApiKey) setCfgKey('groqEnabled', v) }}
-                      />
-                    </div>
-                    {cfg.groqEnabled && cfg.aiCloudApiKey && (
-                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <input
-                          type="text"
-                          value={cfg.groqModel}
-                          onChange={(e) => setCfgKey('groqModel', e.target.value)}
-                          placeholder="llama-3.1-8b-instant (optional)"
-                          style={{
-                            width: '100%', padding: '5px 8px', fontSize: 11, borderRadius: 4,
-                            border: '1px solid var(--border-default)', background: 'var(--bg-input)',
-                            color: 'var(--text-primary)', boxSizing: 'border-box',
-                          }}
-                        />
-                        <select
-                          value={cfg.groqContentLanguage}
-                          onChange={(e) => setCfgKey('groqContentLanguage', e.target.value)}
-                          style={{
-                            width: '100%', padding: '5px 8px', fontSize: 11, borderRadius: 4,
-                            border: '1px solid var(--border-default)', background: 'var(--bg-input)',
-                            color: 'var(--text-primary)',
-                          }}
-                        >
-                          <option value="auto">Auto-detect language</option>
-                          <option value="vi">Vietnamese</option>
-                          <option value="en">English</option>
-                          <option value="zh">Chinese</option>
-                          <option value="ja">Japanese</option>
-                          <option value="ko">Korean</option>
-                          <option value="th">Thai</option>
-                        </select>
-                        <div style={{ fontSize: 10, color: '#f59e0b', lineHeight: 1.4 }}>
-                          ✦ Groq will name each clip naturally (e.g. "Bí quyết tăng view nhanh.mp4")
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  {/* Language */}
+                  <select
+                    value={cfg.groqContentLanguage}
+                    onChange={(e) => setCfgKey('groqContentLanguage', e.target.value)}
+                    style={{
+                      width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
+                      border: '1px solid var(--border-default)', backgroundColor: 'var(--surface-input)',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    <option value="auto">Auto-detect language</option>
+                    <option value="vi">Vietnamese</option>
+                    <option value="en">English</option>
+                    <option value="zh">Chinese</option>
+                    <option value="ja">Japanese</option>
+                    <option value="ko">Korean</option>
+                    <option value="th">Thai</option>
+                  </select>
 
+                  <div style={{ fontSize: 10, color: '#f59e0b', lineHeight: 1.4 }}>
+                    ✦ Groq names each clip naturally (e.g. "Bí quyết tăng view nhanh.mp4")
+                  </div>
                 </div>
               )}
             </div>

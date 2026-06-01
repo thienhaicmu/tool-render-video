@@ -98,9 +98,10 @@ def run_groq_only_pre_render(
             "(variant logic disabled in this path)"
         )
     from app.core import config as _cfg
-    if not getattr(_cfg, "GROQ_API_KEY", ""):
+    _payload_key = (getattr(payload, "ai_cloud_api_key", "") or "").strip()
+    if not (_payload_key or getattr(_cfg, "GROQ_API_KEY", "")):
         raise GroqOnlyPipelineError(
-            "groq_only_mode=True requires GROQ_API_KEY to be configured"
+            "groq_only_mode=True requires GROQ_API_KEY (env or ai_cloud_api_key field)"
         )
     if not has_audio_stream(str(source_path)):
         raise GroqOnlyPipelineError(
