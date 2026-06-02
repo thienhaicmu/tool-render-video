@@ -1,26 +1,24 @@
-"""Render-pipeline setup stage — payload normalization + channel resolution.
+"""Render-pipeline setup stage — payload normalization, channel resolution,
+and output-directory preparation.
 
-Sprint 6.D-1.1 — extracted verbatim from render_pipeline.py
-(lines 236–268 of the pre-extraction file). No logic changes;
-pure relocation.
+Sprint 6.D-1.1 — extracted setup_render_pipeline() verbatim from
+render_pipeline.py (lines 236–268 of the pre-1.1 file). No logic changes.
+
+Sprint 6.D-1.2 — extracted prepare_output_dir() verbatim from
+render_pipeline.py (lines 254–286 of the post-1.1 file). No logic changes.
 
 Responsibilities (in order):
-  1. Normalize output_mode, effective_channel, started_at.
-  2. Resolve Market Viral target market (US/EU/JP).
-  3. Resolve hook-apply / hook-overlay flags.
-  4. Ensure channel subdir + resolve output_dir for channel mode;
-     fall back to absolute payload.output_dir for non-channel mode.
-
-This function is the first thing run_render_pipeline executes and has no
-side effects beyond:
-  - ensure_channel(effective_channel) in channel mode
-  - May raise RuntimeError if render_output_subdir is missing in channel mode
-
-The mkdir + WebSocket prepare-events block (formerly lines 269–301) stays
-in run_render_pipeline for now — that's Sprint 6.D-1.2 scope.
+  1. setup_render_pipeline(payload) — derive output_mode, effective_channel,
+     started_at, Market Viral cfg, hook flags, and output_dir (no I/O beyond
+     ensure_channel in channel mode).
+  2. prepare_output_dir(job_id, effective_channel, output_dir) — emit the
+     three render.output.prepare.* WebSocket events and mkdir() the
+     resolved output_dir. Re-raises on mkdir failure (matches pre-1.2
+     behavior — the caller's outer try/except handles propagation).
 """
 from __future__ import annotations
 
+import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +27,7 @@ from typing import Any
 from app.models.schemas import RenderRequest
 from app.services.channel_service import ensure_channel
 from app.orchestration.pipeline_config import _resolve_output_dir
+from app.orchestration.render_events import _emit_render_event
 
 
 @dataclass
@@ -110,3 +109,50 @@ def setup_render_pipeline(payload: RenderRequest) -> PipelineSetupResult:
         hook_overlay_enabled=_hook_overlay_enabled,
         output_dir=output_dir,
     )
+
+
+def prepare_output_dir(job_id: str, effective_channel: str, output_dir: Path) -> None:
+    """Emit prepare-events around output_dir.mkdir(); re-raise on failure.
+
+    Sprint 6.D-1.2 — extracted verbatim from run_render_pipeline. Emits:
+      - render.output.prepare.start (before mkdir)
+      - render.output.prepare.success (after successful mkdir)
+      - render.output.prepare.error (if mkdir raises; then re-raises)
+
+    Side effects only — no return value. Caller's outer try/except handles
+    error propagation (the function intentionally re-raises so the existing
+    top-level exception handler in run_render_pipeline catches it).
+    """
+    _emit_render_event(
+        channel_code=effective_channel,
+        job_id=job_id,
+        event="render.output.prepare.start",
+        level="INFO",
+        message="Preparing output directory",
+        step="render.output.prepare",
+        context={"output_dir": str(output_dir)},
+    )
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.output.prepare.success",
+            level="INFO",
+            message="Output directory ready",
+            step="render.output.prepare",
+            context={"output_dir": str(output_dir)},
+        )
+    except Exception as output_exc:
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="render.output.prepare.error",
+            level="ERROR",
+            message=f"Failed to prepare output directory: {output_exc}",
+            step="render.output.prepare",
+            context={"output_dir": str(output_dir)},
+            exception=output_exc,
+            traceback_text=traceback.format_exc(),
+        )
+        raise

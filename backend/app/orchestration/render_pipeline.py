@@ -88,6 +88,7 @@ from app.orchestration.pipeline_finalize import (
 from app.orchestration.pipeline_setup import (
     PipelineSetupResult,
     setup_render_pipeline,
+    prepare_output_dir,
 )
 from app.orchestration.part_plan import PartExecutionPlan
 from app.orchestration.stages.part_renderer import PartRenderContext
@@ -251,39 +252,9 @@ def run_render_pipeline(
     _hook_score          = _setup.hook_score
     _hook_overlay_enabled = _setup.hook_overlay_enabled
     output_dir           = _setup.output_dir
-    _emit_render_event(
-        channel_code=effective_channel,
-        job_id=job_id,
-        event="render.output.prepare.start",
-        level="INFO",
-        message="Preparing output directory",
-        step="render.output.prepare",
-        context={"output_dir": str(output_dir)},
-    )
-    try:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        _emit_render_event(
-            channel_code=effective_channel,
-            job_id=job_id,
-            event="render.output.prepare.success",
-            level="INFO",
-            message="Output directory ready",
-            step="render.output.prepare",
-            context={"output_dir": str(output_dir)},
-        )
-    except Exception as output_exc:
-        _emit_render_event(
-            channel_code=effective_channel,
-            job_id=job_id,
-            event="render.output.prepare.error",
-            level="ERROR",
-            message=f"Failed to prepare output directory: {output_exc}",
-            step="render.output.prepare",
-            context={"output_dir": str(output_dir)},
-            exception=output_exc,
-            traceback_text=traceback.format_exc(),
-        )
-        raise
+    # Sprint 6.D-1.2: mkdir + render.output.prepare.{start,success,error}
+    # WebSocket emits moved to orchestration/pipeline_setup.prepare_output_dir.
+    prepare_output_dir(job_id, effective_channel, output_dir)
     register_job_log_dir(job_id, _resolve_job_log_dir(output_dir, output_mode, effective_channel))
     work_dir = TEMP_DIR / job_id
     work_dir.mkdir(parents=True, exist_ok=True)
