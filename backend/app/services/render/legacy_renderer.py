@@ -264,7 +264,9 @@ def render_part(
         # CPU fallback runs — so the fallback never competes with other GPU sessions.
         try:
             with NVENC_SEMAPHORE:
-                _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
+                # nvenc_externally_held=True — see Sprint 4.2 note in
+                # base_clip_renderer; avoids semaphore double-acquire.
+                _run_ffmpeg_with_retry(cmd, retry_count=retry_count, nvenc_externally_held=True)
             return
         except Exception as _nvenc_err:
             logger.warning(

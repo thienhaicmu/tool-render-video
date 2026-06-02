@@ -166,72 +166,112 @@ def extract_thumbnail_frame(
     return None
 
 
-def _run_ffmpeg_with_retry(command: list[str], retry_count: int = 2, wait_sec: float = 0.8):
+def _argv_uses_nvenc(args: list[str]) -> bool:
+    """Return True if any argv token names an NVENC codec.
+
+    Sprint 4.2 (audit 2026-06-02 P2-B1): the NVENC_SEMAPHORE is only
+    acquired at a few call sites (base_clip_renderer, legacy_renderer,
+    overlay_compositor). Any other FFmpeg invocation that happens to use
+    an NVENC codec would silently exceed the GPU session limit. This
+    helper enables _run_ffmpeg_with_retry to detect and protect those
+    paths internally.
+    """
+    for token in args:
+        if isinstance(token, str) and "_nvenc" in token.lower():
+            return True
+    return False
+
+
+def _run_ffmpeg_with_retry(
+    command: list[str],
+    retry_count: int = 2,
+    wait_sec: float = 0.8,
+    *,
+    nvenc_externally_held: bool = False,
+):
+    """Run an FFmpeg subprocess with retry, cancel, and timeout protection.
+
+    nvenc_externally_held=True: caller already holds NVENC_SEMAPHORE
+    (e.g. base_clip_renderer at :92, legacy_renderer at :266,
+    overlay_compositor at :133). Skip the internal acquire to avoid
+    double-counting against the GPU session limit.
+
+    nvenc_externally_held=False (default): if the argv uses an NVENC
+    codec, acquire the semaphore here and release after the subprocess
+    completes. Sprint 4.2 closed-gap protection.
+    """
     # Pick up the cancel event registered by render_pipeline for this worker thread.
     cancel_event = getattr(_tls, 'cancel_event', None)
-    attempt = 0
-    while True:
-        attempt += 1
-        try:
-            proc = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            # Run communicate in a daemon thread so the main loop can poll for
-            # cancel/timeout without risking pipe-buffer deadlock.
-            _done = threading.Event()
-            _result: list = [None, None, None]  # [stdout, stderr, returncode]
+    needs_nvenc_lock = (not nvenc_externally_held) and _argv_uses_nvenc(command)
+    if needs_nvenc_lock:
+        NVENC_SEMAPHORE.acquire()
+    try:
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                proc = subprocess.Popen(
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                # Run communicate in a daemon thread so the main loop can poll for
+                # cancel/timeout without risking pipe-buffer deadlock.
+                _done = threading.Event()
+                _result: list = [None, None, None]  # [stdout, stderr, returncode]
 
-            def _communicate(_p=proc, _d=_done, _r=_result):
-                out, err = _p.communicate()
-                _r[0] = out
-                _r[1] = err
-                _r[2] = _p.returncode
-                _d.set()
+                def _communicate(_p=proc, _d=_done, _r=_result):
+                    out, err = _p.communicate()
+                    _r[0] = out
+                    _r[1] = err
+                    _r[2] = _p.returncode
+                    _d.set()
 
-            threading.Thread(target=_communicate, daemon=True).start()
+                threading.Thread(target=_communicate, daemon=True).start()
 
-            deadline = time.monotonic() + _FFMPEG_TIMEOUT_SEC
-            while not _done.wait(timeout=1.0):
-                if cancel_event is not None and cancel_event.is_set():
-                    proc.terminate()
-                    if not _done.wait(timeout=5):
-                        proc.kill()
-                        _done.wait(timeout=2)
-                    raise RuntimeError("FFmpeg cancelled")
-                if time.monotonic() > deadline:
-                    proc.terminate()
-                    if not _done.wait(timeout=5):
-                        proc.kill()
-                        _done.wait(timeout=2)
-                    raise RuntimeError(
-                        f"FFmpeg timed out after {_FFMPEG_TIMEOUT_SEC}s and was killed. "
-                        "Increase FFMPEG_TIMEOUT_SECONDS env var for very long source files."
-                    )
+                deadline = time.monotonic() + _FFMPEG_TIMEOUT_SEC
+                while not _done.wait(timeout=1.0):
+                    if cancel_event is not None and cancel_event.is_set():
+                        proc.terminate()
+                        if not _done.wait(timeout=5):
+                            proc.kill()
+                            _done.wait(timeout=2)
+                        raise RuntimeError("FFmpeg cancelled")
+                    if time.monotonic() > deadline:
+                        proc.terminate()
+                        if not _done.wait(timeout=5):
+                            proc.kill()
+                            _done.wait(timeout=2)
+                        raise RuntimeError(
+                            f"FFmpeg timed out after {_FFMPEG_TIMEOUT_SEC}s and was killed. "
+                            "Increase FFMPEG_TIMEOUT_SECONDS env var for very long source files."
+                        )
 
-            stdout = _result[0] or ""
-            stderr = _result[1] or ""
-            if _result[2] != 0:
-                raise subprocess.CalledProcessError(_result[2], command, stdout, stderr)
-            return subprocess.CompletedProcess(command, _result[2], stdout, stderr)
-        except RuntimeError:
-            raise
-        except subprocess.CalledProcessError as exc:
-            if attempt > retry_count:
-                stderr_text = exc.stderr or ""
-                diag = _summarize_ffmpeg_stderr(stderr_text)
-                stderr_tail = stderr_text[-2000:].strip()
-                raise RuntimeError(
-                    f"FFmpeg render failed: {diag} (exit={exc.returncode})"
-                    + (f"\n{stderr_tail}" if stderr_tail else "")
-                ) from exc
-            time.sleep(wait_sec * attempt)
-        except Exception:
-            if attempt > retry_count:
+                stdout = _result[0] or ""
+                stderr = _result[1] or ""
+                if _result[2] != 0:
+                    raise subprocess.CalledProcessError(_result[2], command, stdout, stderr)
+                return subprocess.CompletedProcess(command, _result[2], stdout, stderr)
+            except RuntimeError:
                 raise
-            time.sleep(wait_sec * attempt)
+            except subprocess.CalledProcessError as exc:
+                if attempt > retry_count:
+                    stderr_text = exc.stderr or ""
+                    diag = _summarize_ffmpeg_stderr(stderr_text)
+                    stderr_tail = stderr_text[-2000:].strip()
+                    raise RuntimeError(
+                        f"FFmpeg render failed: {diag} (exit={exc.returncode})"
+                        + (f"\n{stderr_tail}" if stderr_tail else "")
+                    ) from exc
+                time.sleep(wait_sec * attempt)
+            except Exception:
+                if attempt > retry_count:
+                    raise
+                time.sleep(wait_sec * attempt)
+    finally:
+        if needs_nvenc_lock:
+            NVENC_SEMAPHORE.release()
 
 
 # ---------------------------------------------------------------------------

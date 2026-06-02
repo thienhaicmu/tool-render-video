@@ -131,7 +131,9 @@ def composite_overlays_on_base_clip(
         if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
             try:
                 with NVENC_SEMAPHORE:
-                    _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
+                    # nvenc_externally_held=True — see Sprint 4.2 note in
+                    # base_clip_renderer; avoids semaphore double-acquire.
+                    _run_ffmpeg_with_retry(cmd, retry_count=retry_count, nvenc_externally_held=True)
             except Exception as _nvenc_err:
                 logger.warning(
                     "NVENC overlay composite failed (%s), falling back to CPU for %s",

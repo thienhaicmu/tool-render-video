@@ -222,7 +222,11 @@ def render_base_clip(
         if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
             try:
                 with NVENC_SEMAPHORE:
-                    _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
+                    # nvenc_externally_held=True: the `with` block above already
+                    # holds NVENC_SEMAPHORE. Skip the internal acquire in
+                    # _run_ffmpeg_with_retry to avoid double-counting against
+                    # the GPU session limit (Sprint 4.2, audit 2026-06-02 P2-B1).
+                    _run_ffmpeg_with_retry(cmd, retry_count=retry_count, nvenc_externally_held=True)
             except Exception as _nvenc_err:
                 logger.warning(
                     "NVENC encode failed (%s), falling back to CPU for base_clip %s",
