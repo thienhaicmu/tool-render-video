@@ -110,10 +110,33 @@ def get_conn():
 
 @contextlib.contextmanager
 def db_conn():
-    """Context manager for HTTP-path DB access. Always closes the connection on exit."""
+    """Context manager for HTTP-path DB access.
+
+    Sprint 5.4 (audit 2026-06-02 P2-D5): now a true transaction context.
+    - On normal exit:  commit() — flushes any uncommitted writes.
+    - On exception:    rollback() — drops the implicit transaction so
+                       partial-write state can't be observed by other
+                       connections.
+    - Always:          close() the connection.
+
+    Existing callers that already call `conn.commit()` inside the with-block
+    are unaffected — the redundant commit at exit is a no-op on a connection
+    with no pending changes. Read-only callers also unaffected: commit() on
+    a read-only connection is a no-op.
+
+    Callers that want to abort without raising must `conn.rollback()`
+    explicitly before exiting the with-block (or raise an exception).
+    """
     conn = get_conn()
     try:
         yield conn
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass  # connection may already be broken — close() still runs
+        raise
     finally:
         conn.close()
 

@@ -189,6 +189,60 @@ class TestInitDb:
         finally:
             conn.close()
 
+    def test_db_conn_commits_on_normal_exit(self, tmp_path, monkeypatch):
+        """Sprint 5.4: db_conn() auto-commits on the happy path.
+
+        Caller doesn't need an explicit conn.commit(); writes still land.
+        """
+        db_file = tmp_path / "test.db"
+        _reset_db_path(monkeypatch, db_file)
+        from app.db.connection import db_conn, init_db
+        init_db()
+        with db_conn() as conn:
+            conn.execute(
+                "INSERT INTO creator_prefs (id, prefs_json, updated_at) "
+                "VALUES (1, '{\"a\":1}', CURRENT_TIMESTAMP)"
+            )
+            # No explicit commit() — db_conn should commit on exit.
+        with db_conn() as conn2:
+            row = conn2.execute(
+                "SELECT prefs_json FROM creator_prefs WHERE id = 1"
+            ).fetchone()
+        assert row is not None
+        assert row[0] == '{"a":1}'
+
+    def test_db_conn_rolls_back_on_exception(self, tmp_path, monkeypatch):
+        """Sprint 5.4: db_conn() rolls back when the with-block raises.
+
+        Partial writes inside a failing block must not be observable from a
+        new connection — guards against Contract 7 erosion via partial state.
+        """
+        db_file = tmp_path / "test.db"
+        _reset_db_path(monkeypatch, db_file)
+        from app.db.connection import db_conn, init_db
+        init_db()
+
+        class _Boom(Exception):
+            pass
+
+        with pytest.raises(_Boom):
+            with db_conn() as conn:
+                conn.execute(
+                    "INSERT INTO creator_prefs (id, prefs_json, updated_at) "
+                    "VALUES (1, '{\"bad\":true}', CURRENT_TIMESTAMP)"
+                )
+                raise _Boom("simulated mid-write failure")
+
+        # New connection: the INSERT must have been rolled back.
+        with db_conn() as conn2:
+            row = conn2.execute(
+                "SELECT prefs_json FROM creator_prefs WHERE id = 1"
+            ).fetchone()
+        assert row is None, (
+            "db_conn() did not rollback after exception — partial write "
+            "leaked into the database"
+        )
+
     def test_jobs_table_has_history_indexes(self, tmp_path, monkeypatch):
         """init_db() creates idx_jobs_updated and idx_jobs_status_kind on jobs.
 
