@@ -8,23 +8,16 @@ export type ActivePanel =
   // Canonical navigation
   | 'home'
   | 'clip-studio'
-  | 'studio'
   | 'library'
   | 'publish'
   | 'settings'
   | 'download'
   // Deprecated aliases — preserved for backward compat, do not add new usage
   | 'render'   // JobEmptyState uses this
-  | 'history'  // RenderForm, EditorEmptyState, EditorMetadataPanel use this
+  | 'history'  // EditorEmptyState, EditorMetadataPanel use this
   | 'editor'   // JobDetailDrawer uses this
 
-export type StudioStep =
-  | 'source'
-  | 'configure'
-  | 'analyze'
-  | 'plan'
-  | 'monitor'
-  | 'results'
+// Sprint 5.6: StudioStep + studioStep state removed alongside features/studio/.
 
 export interface Notification {
   id: string
@@ -37,14 +30,12 @@ export interface Notification {
 export interface UIStore {
   sidebarOpen: boolean
   activePanel: ActivePanel
-  studioStep: StudioStep | null
   notifications: Notification[]
   lang: Lang
 
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
   setActivePanel: (panel: ActivePanel) => void
-  setStudioStep: (step: StudioStep | null) => void
   addNotification: (notification: Omit<Notification, 'id'>) => string
   removeNotification: (id: string) => void
   clearNotifications: () => void
@@ -56,7 +47,6 @@ let _notifCounter = 0
 export const useUIStore = create<UIStore>((set) => ({
   sidebarOpen: true,
   activePanel: 'clip-studio',
-  studioStep: null as StudioStep | null,
   notifications: [],
   lang: 'en' as Lang,
 
@@ -71,8 +61,6 @@ export const useUIStore = create<UIStore>((set) => ({
   setActivePanel: (panel: ActivePanel) => {
     set({ activePanel: panel })
   },
-
-  setStudioStep: (step: StudioStep | null) => set({ studioStep: step }),
 
   addNotification: (notification: Omit<Notification, 'id'>): string => {
     const id = `notif_${Date.now()}_${++_notifCounter}`

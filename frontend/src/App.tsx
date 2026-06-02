@@ -1,6 +1,10 @@
 /**
  * App — root component, wraps AppShell with active panel routing.
- * Studio panel bypasses AppShell for a full-screen experience.
+ * ClipStudio panel bypasses AppShell for a full-screen experience.
+ *
+ * Sprint 5.6: retired features/studio/ (the older 6-step flow). All render
+ * work goes through features/clip-studio/ (RenderWorkflow). The legacy
+ * `studio` panel route is removed; uiStore.ActivePanel no longer accepts it.
  */
 import React from 'react'
 import { AppShell } from './layouts/AppShell'
@@ -8,7 +12,6 @@ import { useUIStore } from './stores/uiStore'
 import type { ActivePanel } from './stores/uiStore'
 import { HistoryScreen } from './features/jobs/HistoryScreen'
 import { EditorScreen } from './features/editor/EditorScreen'
-import { StudioScreen } from './features/studio/StudioScreen'
 import { DownloaderScreen } from './features/downloader/DownloaderScreen'
 import { ClipStudio } from './features/clip-studio/ClipStudio'
 import { SettingsScreen } from './features/settings/SettingsScreen'
@@ -27,7 +30,6 @@ const PANEL_MAP: Record<ActivePanel, React.ComponentType> = {
   // Canonical routes
   home:          HistoryScreen,
   'clip-studio': ClipStudio,
-  studio:        StudioScreen,
   library:       HistoryScreen,
   publish:       PublishPlaceholder,
   settings:      SettingsScreen,
@@ -38,7 +40,7 @@ const PANEL_MAP: Record<ActivePanel, React.ComponentType> = {
   editor:        EditorScreen,
 }
 
-const FULLSCREEN_PANELS: ActivePanel[] = ['studio', 'clip-studio']
+const FULLSCREEN_PANELS: ActivePanel[] = ['clip-studio']
 
 export function App() {
   const activePanel = useUIStore((s) => s.activePanel)
