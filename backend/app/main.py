@@ -8,8 +8,8 @@ import logging
 import threading
 from app.services.db import init_db
 from app.services.channel_service import ensure_channel
-from app.services.maintenance import prune_job_logs, prune_preview_dirs, prune_render_temp_dirs
-from app.core.config import APP_DATA_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR
+from app.services.maintenance import prune_job_logs, prune_preview_dirs, prune_render_temp_dirs, prune_render_cache
+from app.core.config import APP_DATA_DIR, CACHE_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR
 from app.core.logging_setup import configure_logging as _configure_logging
 # Configure file-based logging before any other module emits a log event.
 # Uvicorn's console handlers are not touched — this only adds file handlers.
@@ -232,6 +232,9 @@ def startup():
     prune_job_logs(CHANNELS_DIR, keep_last=keep_last, older_than_days=older_days)
     prune_preview_dirs(TEMP_DIR, max_age_hours=6)
     prune_render_temp_dirs(TEMP_DIR)  # clean leftover render temp dirs from previous run
+    # Sprint 5.2: bound render-cache disk growth. TTL 72h matches
+    # _RENDER_CACHE_TTL_SEC in pipeline_cache.py.
+    prune_render_cache(CACHE_DIR, max_age_hours=72)
     # Re-queue any render jobs that were interrupted by a previous server restart
     recover_pending_render_jobs()
     start_warmup()  # pre-download Whisper models + check deps in background

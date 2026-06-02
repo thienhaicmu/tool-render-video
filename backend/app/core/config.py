@@ -41,9 +41,12 @@ else:
 TEMP_DIR    = Path(os.getenv("TEMP_DIR",    str(APP_DATA_DIR / "temp")))
 LOGS_DIR    = APP_DATA_DIR / "logs"
 COOKIES_DIR = APP_DATA_DIR / "cookies"
+# Sprint 5.2: single source of truth for the render cache root used by
+# pipeline_cache.py + motion_crop.py + the maintenance prune helper.
+CACHE_DIR   = APP_DATA_DIR / "cache"
 REQUEST_LOG = LOGS_DIR / "request.log"   # Type 1: request/validation errors
 
-for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, COOKIES_DIR, DATABASE_PATH.parent]:
+for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, COOKIES_DIR, CACHE_DIR, DATABASE_PATH.parent]:
     p.mkdir(parents=True, exist_ok=True)
 
 # AI Cloud Analyzer — server-side defaults read from environment / .env

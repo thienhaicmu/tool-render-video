@@ -73,6 +73,49 @@ def prune_render_temp_dirs(temp_dir: Path) -> dict:
     return {"removed": removed, "kept": kept, "skipped": skipped}
 
 
+def prune_render_cache(cache_dir: Path, max_age_hours: int = 72) -> dict:
+    """Remove cache files older than max_age_hours from cache_dir and its subdirs.
+
+    Sprint 5.2 (audit 2026-06-02 P2-D2): pipeline_cache.py only evicts entries
+    on read access. Sources that are never re-accessed (most one-off renders)
+    accumulate forever. This prune walks every subdirectory of the cache root
+    (scene_detect, transcription, segment_scores, plus any future addition)
+    and removes individual files older than the deadline.
+
+    Per-file try/except so one bad file doesn't abort the whole prune. Per-
+    subdir try/except so an unreadable subdir doesn't kill the loop. Returns
+    {removed, kept} for visibility in the startup log.
+    """
+    if not cache_dir.exists():
+        return {"removed": 0, "kept": 0}
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    removed = kept = 0
+    for subdir in cache_dir.iterdir():
+        if not subdir.is_dir():
+            continue
+        try:
+            for f in subdir.iterdir():
+                if not f.is_file():
+                    continue
+                try:
+                    mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                    if mtime < cutoff:
+                        f.unlink(missing_ok=True)
+                        removed += 1
+                    else:
+                        kept += 1
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    if removed:
+        logger.info(
+            "maintenance: pruned %d stale render cache files (>%dh old) from %s",
+            removed, max_age_hours, cache_dir,
+        )
+    return {"removed": removed, "kept": kept}
+
+
 def prune_job_logs(channels_dir: Path, keep_last: int = 30, older_than_days: int = 10):
     keep_last = max(1, int(keep_last or 30))
     older_than_days = max(1, int(older_than_days or 10))
