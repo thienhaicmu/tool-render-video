@@ -94,6 +94,7 @@ from app.orchestration.pipeline_source_prep import (
     SourcePrepResult,
     prepare_render_source,
 )
+from app.orchestration.pipeline_narration import run_manual_voice_tts
 from app.orchestration.part_plan import PartExecutionPlan
 from app.orchestration.stages.part_renderer import PartRenderContext
 from app.orchestration.pipeline_render_loop import RenderLoopResult as _RenderLoopResult, run_render_loop
@@ -403,84 +404,18 @@ def run_render_pipeline(
         _sub_translate_partial = []
         _sub_translate_failed_parts = []
         _recovery_notes: list[str] = []   # UP24: accumulate fallback events for observability
-        if getattr(payload, "voice_enabled", False) and getattr(payload, "voice_source", "manual") == "manual":
-            if cancel_registry.is_cancelled(job_id):
-                raise cancel_registry.JobCancelledError()
-            try:
-                update_job_progress(job_id, current_stage, current_progress, "Generating AI voice...")
-                _job_log(effective_channel, job_id, "Generating AI narration audio")
-                _emit_render_event(
-                    channel_code=effective_channel,
-                    job_id=job_id,
-                    event="voice_tts_started",
-                    level="INFO",
-                    message="Generating AI voice",
-                    step="voice.tts",
-                    context={"language": payload.voice_language, "gender": payload.voice_gender},
-                )
-                # Infer content type from subtitle_style since manual voice fires before
-                # segment scoring. subtitle_style is the best available creator-intent signal.
-                _manual_voice_ct = {
-                    "viral":   "commentary",
-                    "clean":   "tutorial",
-                    "story":   "vlog",
-                    "gaming":  "montage",
-                }.get((payload.subtitle_style or "").strip().lower(), "vlog")
-                voice_audio_path = generate_narration_audio(
-                    text=str(payload.voice_text or ""),
-                    language=payload.voice_language,
-                    gender=payload.voice_gender,
-                    rate=payload.voice_rate,
-                    job_id=job_id,
-                    voice_id=getattr(payload, "voice_id", None),
-                    content_type=_manual_voice_ct,
-                    tts_engine=getattr(payload, "tts_engine", "edge"),
-                )
-                update_job_progress(job_id, current_stage, current_progress, "AI voice generated")
-                _job_log(effective_channel, job_id, f"AI narration audio ready: {voice_audio_path}")
-                _emit_render_event(
-                    channel_code=effective_channel,
-                    job_id=job_id,
-                    event="voice_tts_completed",
-                    level="INFO",
-                    message="AI voice generated",
-                    step="voice.tts",
-                    context={"audio_path": str(voice_audio_path), "voice_text_length": len(str(payload.voice_text or ""))},
-                )
-                voice_audio_path = _maybe_cleanup_narration_audio(
-                    str(voice_audio_path),
-                    payload,
-                    effective_channel=effective_channel,
-                    job_id=job_id,
-                    source="manual",
-                )
-            except Exception as voice_exc:
-                voice_audio_path = None
-                _voice_tts_failed = True
-                update_job_progress(job_id, current_stage, current_progress, "AI voice failed - continuing with original audio")
-                _job_log(effective_channel, job_id, f"AI voice generation failed: {voice_exc}", kind="error")
-                _emit_render_event(
-                    channel_code=effective_channel,
-                    job_id=job_id,
-                    event="voice_failed",
-                    level="ERROR",
-                    message=f"AI voice generation failed: {voice_exc}",
-                    step="voice.tts",
-                    exception=voice_exc,
-                    traceback_text=traceback.format_exc(),
-                    context={"error_code": "VOICE001"},
-                )
-                # UP24: recovery — voice is optional, render continues without it
-                _recovery_notes.append("AI narration failed — rendered without voice")
-                _emit_render_event(
-                    channel_code=effective_channel,
-                    job_id=job_id,
-                    event="recovery_success",
-                    level="INFO",
-                    message="Recovery: AI narration failed, rendering without voice (original audio preserved)",
-                    step="voice.tts",
-                    context={"recovery_strategy": "skip_voice"},
-                )
+        # Sprint 6.D-1.4: manual-source AI voice TTS moved to
+        # orchestration/pipeline_narration.run_manual_voice_tts.
+        # State init (voice_audio_path / _voice_tts_failed / _voice_mix_ok / ...)
+        # stays above because per-part loop + downstream subtitle code mutate them.
+        voice_audio_path, _voice_tts_failed = run_manual_voice_tts(
+            payload=payload,
+            job_id=job_id,
+            effective_channel=effective_channel,
+            current_stage=current_stage,
+            current_progress=current_progress,
+            recovery_notes=_recovery_notes,
+        )
 
         # Phase F1: legacy pipeline_pre_render path removed. All jobs use
         # groq_only_pipeline. payload.groq_only_mode is ignored — Groq is the
