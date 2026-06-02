@@ -192,7 +192,11 @@ function TranscriptOverlay({ sessionId, subStyle, subEnabled }: { sessionId: str
 }
 
 // ── Step 2 — Configure ────────────────────────────────────────────────────────
-export function StepConfigure({
+// Sprint 5.7: wrapped in React.memo (export below) so the step subtree only
+// re-renders when its props actually change. RenderWorkflow always-mounts
+// all 4 steps and toggles `.active` via class, so without memo every state
+// tick in step 3 (progress) re-renders steps 1, 2, 4 unnecessarily.
+function StepConfigureBase({
   cfg, cfgTab, setCfgTab, setCfgKey, applyPreset,
   sources, prepareResult, pickOutputDir, onChangeSource, t,
 }: {
@@ -937,3 +941,5 @@ export function StepConfigure({
     </div>
   )
 }
+
+export const StepConfigure = React.memo(StepConfigureBase)

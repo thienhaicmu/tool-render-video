@@ -248,7 +248,8 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
   )
 }
 
-export function StepRendering({
+// Sprint 5.7: wrapped in React.memo at export below. See StepConfigure for rationale.
+function StepRenderingBase({
   jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, wsError, wsReconnecting, t, aspectRatio,
   aiAnalysisMode, aiCloudProvider,
 }: {
@@ -438,3 +439,5 @@ export function StepRendering({
     </div>
   )
 }
+
+export const StepRendering = React.memo(StepRenderingBase)

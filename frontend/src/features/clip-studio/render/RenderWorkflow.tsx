@@ -14,6 +14,7 @@ import { PRESETS, RATIO_INFO } from './constants'
 import { StepConfigure } from './steps/StepConfigure'
 import { StepRendering } from './steps/StepRendering'
 import { StepResults } from './steps/StepResults'
+import { ErrorBoundary } from '../../../components/ui/ErrorBoundary'
 
 // ── Root component ────────────────────────────────────────────────────────────
 export function RenderWorkflow({ lang }: { lang: Lang }) {
@@ -401,12 +402,17 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
 
           {/* STEP 2 */}
           <div className={`step-screen${step === 2 ? ' active' : ''}`}>
-            <StepConfigure
-              cfg={cfg} cfgTab={cfgTab} setCfgTab={setCfgTab}
-              setCfgKey={setCfgKey} applyPreset={applyPreset}
-              sources={sources} prepareResult={prepareResult}
-              pickOutputDir={pickOutputDir} onChangeSource={handleChangeSource} t={t}
-            />
+            {/* Sprint 5.7 per-step ErrorBoundary: a render error inside Step 2
+                no longer takes down the whole workflow. User stays on the
+                page and can navigate to other steps. */}
+            <ErrorBoundary>
+              <StepConfigure
+                cfg={cfg} cfgTab={cfgTab} setCfgTab={setCfgTab}
+                setCfgKey={setCfgKey} applyPreset={applyPreset}
+                sources={sources} prepareResult={prepareResult}
+                pickOutputDir={pickOutputDir} onChangeSource={handleChangeSource} t={t}
+              />
+            </ErrorBoundary>
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(1)}>{t.btnBack}</button>
               <div className="screen-footer-info">
@@ -421,21 +427,23 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
 
           {/* STEP 3 */}
           <div className={`step-screen${step === 3 ? ' active' : ''}`}>
-            <StepRendering
-              jobId={jobId}
-              stage={stage ?? ''}
-              jobStatus={jobStatus ?? ''}
-              progress={progress}
-              jobMessage={jobMessage ?? ''}
-              isTerminal={isTerminal}
-              liveParts={liveParts}
-              wsError={wsError}
-              wsReconnecting={wsReconnecting}
-              t={t}
-              aspectRatio={RATIO_INFO[cfg.ratio].api}
-              aiAnalysisMode={cfg.aiAnalysisMode}
-              aiCloudProvider={cfg.aiCloudProvider}
-            />
+            <ErrorBoundary>
+              <StepRendering
+                jobId={jobId}
+                stage={stage ?? ''}
+                jobStatus={jobStatus ?? ''}
+                progress={progress}
+                jobMessage={jobMessage ?? ''}
+                isTerminal={isTerminal}
+                liveParts={liveParts}
+                wsError={wsError}
+                wsReconnecting={wsReconnecting}
+                t={t}
+                aspectRatio={RATIO_INFO[cfg.ratio].api}
+                aiAnalysisMode={cfg.aiAnalysisMode}
+                aiCloudProvider={cfg.aiCloudProvider}
+              />
+            </ErrorBoundary>
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(2)}>{t.btnConfig}</button>
               <div className="screen-footer-info" style={{ gap: '12px' }}>
@@ -512,17 +520,19 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
 
           {/* STEP 4 */}
           <div className={`step-screen${step === 4 ? ' active' : ''}`}>
-            <StepResults
-              jobId={jobId} parts={parts} partScores={partScores} partRanks={partRanks}
-              qualityReports={qualityReports} qualityLoadFailed={qualityLoadFailed}
-              loading={partsLoading} t={t}
-              aspectRatio={RATIO_INFO[cfg.ratio].api}
-              jobStatus={jobStatus ?? ''}
-              onRetry={handleRetryRender} isRetrying={isRetrying}
-              aiAnalysisMode={cfg.aiAnalysisMode}
-              aiCloudProvider={cfg.aiCloudProvider}
-              goal={cfg.videoType}
-            />
+            <ErrorBoundary>
+              <StepResults
+                jobId={jobId} parts={parts} partScores={partScores} partRanks={partRanks}
+                qualityReports={qualityReports} qualityLoadFailed={qualityLoadFailed}
+                loading={partsLoading} t={t}
+                aspectRatio={RATIO_INFO[cfg.ratio].api}
+                jobStatus={jobStatus ?? ''}
+                onRetry={handleRetryRender} isRetrying={isRetrying}
+                aiAnalysisMode={cfg.aiAnalysisMode}
+                aiCloudProvider={cfg.aiCloudProvider}
+                goal={cfg.videoType}
+              />
+            </ErrorBoundary>
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(3)}>{t.btnBackRendering}</button>
               <div className="screen-footer-info">

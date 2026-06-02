@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import type { JobPart, QualityReport, PartRankResult } from '../../../../types/api'
 import { getJobAiSummary, deletePartOutput } from '../../../../api/jobs'
 import type { JobAiSummary, HybridAnalysis } from '../../../../api/jobs'
@@ -84,7 +84,8 @@ function HybridAnalysisBadge({
   return <span className={`res-vtag ${cls}`}>{label}</span>
 }
 
-export function StepResults({
+// Sprint 5.7: wrapped in React.memo at export below. See StepConfigure for rationale.
+function StepResultsBase({
   jobId, parts, partScores, partRanks, qualityReports, qualityLoadFailed,
   loading, t, aspectRatio, jobStatus, onRetry, isRetrying,
   aiAnalysisMode, aiCloudProvider, goal,
@@ -781,3 +782,5 @@ export function StepResults({
     </div>
   )
 }
+
+export const StepResults = React.memo(StepResultsBase)
