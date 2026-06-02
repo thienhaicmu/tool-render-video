@@ -5,6 +5,13 @@ import type { TranscriptSegment, PrepareSourceResponse } from '../../../../api/r
 import type { ConfigState, CfgTab, Source, Ratio } from '../types'
 import type { Strings } from '../i18n'
 import { RATIO_INFO, STYLES, SUB_STYLE_GROUPS, QUALITY_MAP } from '../constants'
+import {
+  DEMO_VARIANTS,
+  DEMO_HIGHLIGHT_COLORS,
+  CARD_CSS_FALLBACK,
+  OVERLAY_VARIANTS,
+  OVERLAY_HIGHLIGHT_COLORS,
+} from '../subtitle-styles'
 import { fmtDuration, Tog } from '../utils'
 
 // ── Subtitle preview — visual approximation of each style ────────────────────
@@ -14,73 +21,8 @@ function SubtitleDemo({ style }: { style: string }) {
     textAlign: 'center', padding: '0 10px', pointerEvents: 'none', zIndex: 2,
   }
 
-  const variants: Record<string, React.CSSProperties> = {
-    pro_karaoke: {
-      fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 700, color: '#fff', letterSpacing: '.5px',
-      textShadow: '0 2px 8px rgba(0,0,0,.9), -1px -1px 0 #000, 1px 1px 0 #000',
-    },
-    tiktok_bounce_v1: {
-      fontFamily: 'var(--fh)', fontSize: '17px', fontWeight: 800, color: '#fff', letterSpacing: '1px',
-      textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000',
-    },
-    viral_bold: {
-      fontFamily: 'var(--fh)', fontSize: '18px', fontWeight: 900, color: '#FFE500', textTransform: 'uppercase',
-      textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000',
-    },
-    bold_cap: {
-      fontFamily: 'var(--fh)', fontSize: '16px', fontWeight: 900, color: '#fff', textTransform: 'uppercase',
-      textShadow: '-1px -1px 0 #000, 1px 1px 0 #000, 0 2px 6px rgba(0,0,0,.8)',
-    },
-    story_clean_01: {
-      fontFamily: 'var(--fb)', fontSize: '13px', fontWeight: 500, color: '#fff',
-      background: 'rgba(0,0,0,.55)', padding: '5px 14px', borderRadius: '2px',
-      display: 'inline-block',
-    },
-    boxed_caption: {
-      fontFamily: 'var(--fb)', fontSize: '13px', fontWeight: 700, color: '#fff',
-      background: '#000', padding: '4px 12px', display: 'inline-block',
-    },
-    clean_pro: {
-      fontFamily: 'var(--fb)', fontSize: '13px', fontWeight: 400, color: '#fff',
-      textShadow: '0 1px 6px rgba(0,0,0,.9)',
-    },
-    gaming: {
-      fontFamily: 'var(--fh)', fontSize: '15px', fontWeight: 700, color: '#00E5C8', letterSpacing: '1px',
-      textShadow: '0 0 12px rgba(0,229,200,.8), -1px -1px 0 #000, 1px 1px 0 #000',
-    },
-    neon_glow: {
-      fontFamily: 'var(--fh)', fontSize: '16px', fontWeight: 900, color: '#fff', letterSpacing: '.5px',
-      textShadow: '0 0 8px #0ff, 0 0 20px #0ff, -2px -2px 0 #0ff, 2px 2px 0 #0ff',
-    },
-    fire_bold: {
-      fontFamily: 'var(--fh)', fontSize: '18px', fontWeight: 900, color: '#FFE500', textTransform: 'uppercase',
-      textShadow: '-2px -2px 0 #FF4500, 2px 2px 0 #FF4500, 0 0 10px rgba(255,69,0,.6)',
-    },
-    color_pop: {
-      fontFamily: 'var(--fh)', fontSize: '18px', fontWeight: 900, color: '#FFE500',
-      textShadow: '-3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000',
-    },
-    dark_card: {
-      fontFamily: 'var(--fb)', fontSize: '13px', fontWeight: 700, color: '#fff',
-      background: 'rgba(0,0,0,.78)', padding: '5px 14px', borderRadius: '4px',
-      display: 'inline-block',
-    },
-    slay_soft: {
-      fontFamily: 'var(--fh)', fontSize: '16px', fontWeight: 800, color: '#fff',
-      textShadow: '-2px -2px 0 #FF69B4, 2px 2px 0 #FF69B4, 0 0 12px rgba(255,105,180,.5)',
-    },
-    bold_stroke: {
-      fontFamily: 'var(--fh)', fontSize: '19px', fontWeight: 900, color: '#fff', textTransform: 'uppercase',
-      textShadow: '-3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000, -3px 0 0 #000, 3px 0 0 #000',
-    },
-  }
-
-  const textStyle = variants[style] ?? variants['pro_karaoke']
-  const hlColor: Record<string, string> = {
-    pro_karaoke: '#00FF00', tiktok_bounce_v1: '#00E5C8', viral_bold: '#fff',
-    bold_cap: '#00E5C8', gaming: '#fff',
-  }
-  const hlC = hlColor[style] ?? 'var(--cyan)'
+  const textStyle = DEMO_VARIANTS[style] ?? DEMO_VARIANTS['pro_karaoke']
+  const hlC = DEMO_HIGHLIGHT_COLORS[style] ?? 'var(--cyan)'
 
   return (
     <div style={baseBox}>
@@ -163,22 +105,6 @@ function SubStyleCard({ id, label, selected, onSelect }: {
     return () => { cancelled = true }
   }, [id])
 
-  // CSS fallbacks — shown only when backend is unavailable
-  const CSS_FALLBACK: Record<string, React.ReactNode> = {
-    tiktok_bounce_v1: <span style={{ color: '#fff', fontSize: '12px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000' }}>BOUNCE</span>,
-    viral_bold:  <span style={{ color: '#FFE500', fontSize: '12px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-1.5px -1.5px 0 #000,1.5px 1.5px 0 #000,1.5px -1.5px 0 #000,-1.5px 1.5px 0 #000' }}>VIRAL</span>,
-    bold_cap:    <span style={{ color: '#fff', fontSize: '12px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-1px -1px 0 #000,1px 1px 0 #000,0 2px 8px rgba(0,0,0,.9)' }}>CAPS</span>,
-    clean_pro:   <span style={{ color: '#fff', fontSize: '11px', fontWeight: 400, fontFamily: 'var(--fb)', textShadow: '0 1px 6px rgba(0,0,0,.9)' }}>Clean</span>,
-    story_clean_01: <span style={{ background: 'rgba(0,0,0,.6)', padding: '2px 8px', borderRadius: '2px', color: '#f6f6f6', fontSize: '10px', fontWeight: 500, fontFamily: 'var(--fb)', display: 'inline-block' }}>Story</span>,
-    gaming:      <span style={{ color: '#00E5C8', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--fh)', letterSpacing: '1px', textShadow: '0 0 10px rgba(0,229,200,.9),-1px -1px 0 #000,1px 1px 0 #000' }}>GAMING</span>,
-    neon_glow:   <span style={{ color: '#fff', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '0 0 8px #0ff,0 0 18px #0ff,-1px -1px 0 #0ff,1px 1px 0 #0ff' }}>NEON</span>,
-    fire_bold:   <span style={{ color: '#FFE500', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-1.5px -1.5px 0 #FF4500,1.5px 1.5px 0 #FF4500,0 0 8px rgba(255,69,0,.7)' }}>FIRE</span>,
-    color_pop:   <span style={{ color: '#FFE500', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000' }}>POP!</span>,
-    dark_card:   <span style={{ background: 'rgba(0,0,0,.78)', padding: '2px 10px', borderRadius: '4px', color: '#fff', fontSize: '10px', fontWeight: 600, fontFamily: 'var(--fb)', display: 'inline-block' }}>Card</span>,
-    slay_soft:   <span style={{ color: '#fff', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textShadow: '-1.5px -1.5px 0 #FF69B4,1.5px 1.5px 0 #FF69B4,0 0 8px rgba(255,105,180,.5)' }}>SLAY</span>,
-    bold_stroke: <span style={{ color: '#fff', fontSize: '13px', fontWeight: 900, fontFamily: 'var(--fh)', textTransform: 'uppercase', textShadow: '-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,-2px 0 0 #000,2px 0 0 #000' }}>STROKE</span>,
-  }
-
   return (
     <div
       className={`sub-style-card${selected ? ' on' : ''}`}
@@ -189,7 +115,7 @@ function SubStyleCard({ id, label, selected, onSelect }: {
           <img src={imgSrc} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
         ) : failed ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
-            {CSS_FALLBACK[id] ?? <span style={{ color: '#888', fontSize: '10px' }}>{label}</span>}
+            {CARD_CSS_FALLBACK[id] ?? <span style={{ color: '#888', fontSize: '10px' }}>{label}</span>}
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
@@ -229,30 +155,8 @@ function TranscriptOverlay({ sessionId, subStyle, subEnabled }: { sessionId: str
   const words = text.trim().split(/\s+/)
   const hlIdx = Math.floor(words.length / 2)
 
-  const variants: Record<string, React.CSSProperties> = {
-    pro_karaoke:      { fontFamily: 'var(--fh)', fontSize: '13px', fontWeight: 800, color: '#fff', textShadow: '-1px -1px 0 #000, 1px 1px 0 #000' },
-    tiktok_bounce_v1: { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 900, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,.9)' },
-    viral_bold:       { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 900, color: '#FFE500', letterSpacing: '1px', textShadow: '-1px -1px 0 #000,1px 1px 0 #000' },
-    bold_cap:         { fontFamily: 'var(--fh)', fontSize: '13px', fontWeight: 900, color: '#fff', textTransform: 'uppercase' as const, textShadow: '0 2px 8px rgba(0,0,0,.9)' },
-    boxed_caption:    { fontFamily: 'var(--fb)', fontSize: '12px', fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,.75)', padding: '3px 8px', borderRadius: '4px' },
-    story_clean_01:   { fontFamily: 'var(--fb)', fontSize: '12px', fontWeight: 400, color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,.9)' },
-    clean_pro:        { fontFamily: 'var(--fb)', fontSize: '13px', fontWeight: 400, color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,.9)' },
-    gaming:           { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 700, color: '#00E5C8', letterSpacing: '1px', textShadow: '0 0 12px rgba(0,229,200,.8)' },
-    neon_glow:        { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 900, color: '#fff', textShadow: '0 0 8px #0ff,0 0 18px #0ff,-1px -1px 0 #0ff,1px 1px 0 #0ff' },
-    fire_bold:        { fontFamily: 'var(--fh)', fontSize: '15px', fontWeight: 900, color: '#FFE500', textTransform: 'uppercase' as const, textShadow: '-1.5px -1.5px 0 #FF4500,1.5px 1.5px 0 #FF4500' },
-    color_pop:        { fontFamily: 'var(--fh)', fontSize: '15px', fontWeight: 900, color: '#FFE500', textShadow: '-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000' },
-    dark_card:        { fontFamily: 'var(--fb)', fontSize: '13px', fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,.78)', padding: '3px 10px', borderRadius: '4px' },
-    slay_soft:        { fontFamily: 'var(--fh)', fontSize: '14px', fontWeight: 900, color: '#fff', textShadow: '-1.5px -1.5px 0 #FF69B4,1.5px 1.5px 0 #FF69B4,0 0 10px rgba(255,105,180,.5)' },
-    bold_stroke:      { fontFamily: 'var(--fh)', fontSize: '15px', fontWeight: 900, color: '#fff', textTransform: 'uppercase' as const, textShadow: '-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,-2px 0 0 #000,2px 0 0 #000' },
-  }
-  const hlColor: Record<string, string> = {
-    pro_karaoke: '#00FF00', tiktok_bounce_v1: '#00E5C8', viral_bold: '#fff',
-    bold_cap: '#00E5C8', gaming: '#fff', neon_glow: '#0ff',
-    fire_bold: '#fff', color_pop: '#fff', dark_card: '#0ff',
-    slay_soft: '#FF69B4', bold_stroke: '#FFE500',
-  }
-  const style = variants[subStyle] ?? variants['clean_pro']
-  const hlC = hlColor[subStyle] ?? 'var(--cyan)'
+  const style = OVERLAY_VARIANTS[subStyle] ?? OVERLAY_VARIANTS['clean_pro']
+  const hlC = OVERLAY_HIGHLIGHT_COLORS[subStyle] ?? 'var(--cyan)'
 
   const showSub = subEnabled
 
