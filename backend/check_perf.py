@@ -1,14 +1,35 @@
-import sqlite3, json, tempfile
+"""check_perf.py — dev-only perf snapshot of recent render jobs + cache size.
+
+Audit 2026-06-02 P3-D7: previously used a hardcoded `sqlite3.connect('../data/app.db')`
+which bypassed the connection module's fallback-path resolution. If the
+primary DB path was unwritable and the runtime had fallen back to
+LOCALAPPDATA, this script would silently read a stale empty DB.
+
+Now imports DATABASE_PATH from app.core.config — same path the live
+runtime uses, including fallback resolution. Also drops the obsolete
+tempfile.gettempdir() / 'render_cache' check (cache root moved to
+APP_DATA_DIR/cache in Sprint 4.4).
+"""
+import json
+import sqlite3
+import sys
 from datetime import datetime
 from pathlib import Path
 
-conn = sqlite3.connect('../data/app.db')
+# Make `app.core.config` importable when run from repo root or backend/.
+_BACKEND = Path(__file__).resolve().parent
+if str(_BACKEND) not in sys.path:
+    sys.path.insert(0, str(_BACKEND))
+
+from app.core.config import CACHE_DIR, DATABASE_PATH  # noqa: E402
+
+conn = sqlite3.connect(str(DATABASE_PATH))
 conn.row_factory = sqlite3.Row
 jobs = conn.execute(
     "SELECT job_id, payload_json, created_at, updated_at FROM jobs ORDER BY created_at DESC LIMIT 10"
 ).fetchall()
 
-print("=== Recent job timings ===")
+print(f"=== Recent job timings (db: {DATABASE_PATH}) ===")
 for j in jobs:
     try:
         c = datetime.fromisoformat(str(j["created_at"]).replace("Z", ""))
@@ -31,17 +52,8 @@ for j in jobs:
 conn.close()
 
 print()
-cache = Path(tempfile.gettempdir()) / "render_cache"
-if cache.exists():
-    files = list(cache.rglob("*"))
-    print(f"Transcription cache: {len(files)} entries at {cache}")
+if CACHE_DIR.exists():
+    files = list(CACHE_DIR.rglob("*"))
+    print(f"App data cache: {len(files)} entries at {CACHE_DIR}")
 else:
-    print("Transcription cache: not found")
-
-# App data cache
-app_cache = Path("../data/cache")
-if app_cache.exists():
-    files = list(app_cache.rglob("*"))
-    print(f"App data cache: {len(files)} entries at {app_cache}")
-else:
-    print("App data cache: not found")
+    print(f"App data cache: not found at {CACHE_DIR}")

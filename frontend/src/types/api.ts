@@ -124,6 +124,15 @@ export interface RenderRequest {
 
   // AI Director
   ai_director_enabled?: boolean
+  // Phase 1+ AI feature flags. Sprint 3 3E Subset B (audit 2026-06-02)
+  // flipped these backend defaults from True to False to honor Sacred
+  // Contract 2; UI now sets them explicitly true via RenderWorkflow
+  // buildPayload. Type added here in P3 follow-up to clear long-standing
+  // TS errors on those buildPayload lines.
+  ai_auto_cut?: boolean
+  ai_use_semantic_hooks?: boolean
+  ai_render_influence_enabled?: boolean
+  ai_beat_pulse_enabled?: boolean
   target_platform?: 'tiktok' | 'youtube_shorts' | 'instagram_reels'
   ai_target_market?: string
   multi_variant?: boolean
@@ -143,6 +152,12 @@ export interface RenderRequest {
   groq_analysis_enabled?: boolean
   groq_model?: string | null
   groq_content_language?: string | null
+  // ai_provider selects which cloud LLM the backend uses to resolve the
+  // server-side API key. "groq" | "gemini" | "openai" | "claude".
+  // Audit 2026-06-02 P3 follow-up: type drift fix — field was in backend
+  // schemas.py:370 but missing from the frontend RenderRequest type, causing
+  // a long-standing TS error in RenderWorkflow.buildPayload.
+  ai_provider?: string | null
   groq_min_quality_score?: number
   groq_selection_strategy?: string | null
 

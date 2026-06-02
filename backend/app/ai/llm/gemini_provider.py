@@ -33,6 +33,12 @@ _DEFAULT_MODEL = "gemini-flash-latest"
 # ~30 min of dense Vietnamese speech.
 _MAX_SRT_CHARS = int(os.getenv("GEMINI_MAX_SRT_CHARS", "60000"))
 
+# Hard upper bound on a single Gemini request. Default 30s mirrors
+# GROQ_REQUEST_TIMEOUT. Without this the SDK falls through to its built-in
+# default (~10 min in google-genai 0.x) which is too long to block a render
+# pipeline on. Audit 2026-06-02 P2-B2 follow-up.
+_REQUEST_TIMEOUT_SEC = int(os.getenv("GEMINI_REQUEST_TIMEOUT", "30"))
+
 _MAX_OUTPUT_TOKENS = 4096
 _TEMPERATURE = 0.2
 
@@ -139,14 +145,17 @@ def _run(
 def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
     """Call Gemini Chat with JSON-object output mode.
 
-    TODO (Sprint 4.5 follow-up, audit 2026-06-02 P2-B2): google-genai SDK's
-    timeout API is via `http_options={'timeout': milliseconds}` on Client(),
-    but the exact signature varies across SDK versions. Add a verified
-    timeout once the deployed google-genai version is pinned. Currently
-    relies on SDK default (~10 min in 0.x; subject to change).
+    Timeout is enforced via http_options on the Client. google-genai accepts
+    a plain dict for http_options (Client converts to HttpOptions internally
+    — see client.py:448-449 in the installed SDK). Timeout value is in
+    MILLISECONDS (client.py:178: `http_opts.timeout / 1000`). The 30s default
+    matches GROQ_REQUEST_TIMEOUT. Override via GEMINI_REQUEST_TIMEOUT env.
     """
     try:
-        client = _genai.Client(api_key=api_key)
+        client = _genai.Client(
+            api_key=api_key,
+            http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000},
+        )
         resp = client.models.generate_content(
             model=model,
             contents=user_prompt,

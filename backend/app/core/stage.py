@@ -16,6 +16,10 @@ class JobStage(str, Enum):
     WRITING_REPORT     = "writing_report"
     DONE               = "done"
     FAILED             = "failed"
+    # Audit 2026-06-02 P3-B1 follow-up — was written as the raw string
+    # "cancelled" at routes/render.py:557 because the enum value was missing.
+    # Sacred Contract 4 lists CANCELLED as a frozen terminal job stage.
+    CANCELLED          = "cancelled"
 
 
 class JobPartStage(str, Enum):

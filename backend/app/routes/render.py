@@ -554,7 +554,14 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
             cleanup_session_fn=_cleanup_preview_session,
         )
     except cancel_registry.JobCancelledError:
-        update_job_progress(job_id, "cancelled", 0, "Job cancelled by user", status="cancelled")
+        # P3-B1: use the JobStage enum constant instead of the raw string
+        # so any future refactor that switches to enum-only validation
+        # doesn't silently break cancellation.
+        update_job_progress(
+            job_id, JobStage.CANCELLED, 0,
+            "Job cancelled by user",
+            status=JobStage.CANCELLED,
+        )
     finally:
         cancel_registry.unregister(job_id)
 
