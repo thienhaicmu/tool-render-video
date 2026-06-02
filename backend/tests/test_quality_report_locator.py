@@ -150,12 +150,36 @@ class TestFindQualityReportPath:
         result = find_quality_report_path(job_id, part_no, video_path)
         assert result is not None
 
-    def test_valid_job_id_max_128_chars(self, video_path, quality_dir, report_data):
+    def test_valid_job_id_max_128_chars(self, video_path, quality_dir, monkeypatch):
+        """The validator must accept a 128-char job_id (the regex upper bound).
+
+        Sprint 6.A fix: the previous version of this test wrote a real sidecar
+        file with `"a" * 128 + "_part_1.json"` to pytest's tmp_path. On Windows
+        the resulting absolute path (~256 chars) sits at the edge of MAX_PATH
+        (260) and write_text() fails with FileNotFoundError on systems where
+        long-path support is not enabled at the OS level. That's a Windows
+        filesystem limitation, not a bug in find_quality_report_path.
+
+        The unit under test is the validator's 128-char boundary. We patch
+        Path.exists() to return True only for the expected sidecar name so
+        find_quality_report_path() can complete without touching the disk.
+        """
         job_id = "a" * 128
         part_no = 1
-        _write_report(quality_dir, job_id, part_no, report_data)
+        expected_name = f"{job_id}_part_{part_no}.json"
+
+        original_exists = Path.exists
+
+        def fake_exists(self: Path) -> bool:
+            if self.name == expected_name:
+                return True
+            return original_exists(self)
+
+        monkeypatch.setattr(Path, "exists", fake_exists)
+
         result = find_quality_report_path(job_id, part_no, video_path)
         assert result is not None
+        assert result.name == expected_name
 
 
 # ---------------------------------------------------------------------------
