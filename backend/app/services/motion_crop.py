@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import os
 import subprocess
@@ -11,39 +9,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from app.core.config import APP_DATA_DIR
-
-# UP28.1 — Motion path cache
-_MOTION_CACHE_TTL_SEC = 72 * 3600
-
-
-def _motion_cache_key(*parts) -> str:
-    return hashlib.md5("|".join(str(p) for p in parts).encode()).hexdigest()
-
-
-def _motion_path_cache_get(key: str):
-    try:
-        cache_file = APP_DATA_DIR / "cache" / "motion_path" / f"{key}.json"
-        if not cache_file.exists():
-            return None
-        if time.time() - cache_file.stat().st_mtime > _MOTION_CACHE_TTL_SEC:
-            cache_file.unlink(missing_ok=True)
-            return None
-        data = json.loads(cache_file.read_text(encoding="utf-8"))
-        centers = [tuple(c) for c in data["centers"]]
-        return centers, float(data["fps"])
-    except Exception:
-        return None
-
-
-def _motion_path_cache_put(key: str, centers: list, fps: float) -> None:
-    try:
-        cache_dir = APP_DATA_DIR / "cache" / "motion_path"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        data = {"centers": [list(c) for c in centers], "fps": fps}
-        (cache_dir / f"{key}.json").write_text(json.dumps(data), encoding="utf-8")
-    except Exception:
-        pass
+# Sprint 6.D-3.1: motion-path cache helpers extracted to a dedicated module.
+# `_MOTION_CACHE_TTL_SEC` and the three functions below are unchanged from
+# their original definitions; this is a pure mechanical relocation.
+from app.services.motion_crop_cache import (
+    _MOTION_CACHE_TTL_SEC,
+    _motion_cache_key,
+    _motion_path_cache_get,
+    _motion_path_cache_put,
+)
 
 import cv2
 import numpy as np
