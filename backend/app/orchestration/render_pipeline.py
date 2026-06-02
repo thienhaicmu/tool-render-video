@@ -90,6 +90,10 @@ from app.orchestration.pipeline_setup import (
     setup_render_pipeline,
     prepare_output_dir,
 )
+from app.orchestration.pipeline_source_prep import (
+    SourcePrepResult,
+    prepare_render_source,
+)
 from app.orchestration.part_plan import PartExecutionPlan
 from app.orchestration.stages.part_renderer import PartRenderContext
 from app.orchestration.pipeline_render_loop import RenderLoopResult as _RenderLoopResult, run_render_loop
@@ -370,225 +374,25 @@ def run_render_pipeline(
     _final_status = ""  # set to terminal status string on success path; empty means failure/cancelled
     edit_session_id = ""  # assigned inside try; pre-init so finally block can reference it safely
     try:
-        _emit_render_event(
-            channel_code=effective_channel,
+        # Sprint 6.D-1.3: source preparation moved to
+        # orchestration/pipeline_source_prep.prepare_render_source.
+        # Exceptions still propagate up to this outer try/except — current_stage
+        # is mutated via _set_stage closure inside the helper.
+        _source_prep = prepare_render_source(
             job_id=job_id,
-            event="render.prepare_source.start",
-            level="INFO",
-            message="Preparing source",
-            step="render.prepare_source",
-            context={"source_mode": payload.source_mode},
+            effective_channel=effective_channel,
+            payload=payload,
+            work_dir=work_dir,
+            output_dir=output_dir,
+            hook_applied_text=_hook_applied_text,
+            set_stage=_set_stage,
+            load_session_fn=load_session_fn,
         )
-        _emit_render_event(
-            channel_code=effective_channel,
-            job_id=job_id,
-            event="render.input.validate.start",
-            level="INFO",
-            message="Validating render input",
-            step="render.input.validate",
-        )
-        _set_stage(JobStage.DOWNLOADING, 5, "Preparing source video")
-        edit_session_id = (getattr(payload, "edit_session_id", None) or "").strip()
-        sess = load_session_fn(edit_session_id) if edit_session_id else None
-        if edit_session_id and not sess:
-            raise RuntimeError(
-                f"Editor session '{edit_session_id}' not found — "
-                "the session may have expired or the server was restarted. "
-                "Please re-open the editor to re-prepare the source."
-            )
-        detected_source_mode = "session" if sess else "local"
-        _emit_render_event(
-            channel_code=effective_channel,
-            job_id=job_id,
-            event="render.prepare_source.detect_input",
-            level="INFO",
-            message=f"Detecting source type: {detected_source_mode}",
-            step="render.prepare_source.detect_input",
-            context={"source_mode": detected_source_mode},
-        )
-        _emit_render_event(
-            channel_code=effective_channel,
-            job_id=job_id,
-            event="render.prepare_source.validate_input",
-            level="INFO",
-            message="Validating source input",
-            step="render.prepare_source.validate_input",
-        )
-        if sess:
-            source_path = Path(sess["video_path"])
-            if not source_path.exists():
-                raise RuntimeError(f"Editor session video not found: {source_path}")
-            source = {
-                "title": sess.get("title", source_path.stem),
-                "slug": slugify(sess.get("title", source_path.stem)),
-                "duration": sess.get("duration") or _probe_video_duration(source_path),
-                "filepath": str(source_path),
-            }
-            _emit_render_event(
-                channel_code=effective_channel,
-                job_id=job_id,
-                event="render.prepare_source.prepare_paths",
-                level="INFO",
-                message="Preparing source paths",
-                step="render.prepare_source.prepare_paths",
-                context={"source_path": str(source_path), "work_dir": str(work_dir)},
-            )
-            _emit_render_event(
-                channel_code=effective_channel,
-                job_id=job_id,
-                event="render.prepare_source.select_strategy",
-                level="INFO",
-                message="Selecting editor-session source strategy",
-                step="render.prepare_source.select_strategy",
-                context={"strategy": "editor_session"},
-            )
-            _job_log(effective_channel, job_id, f"Reusing editor session video: {source_path}")
-        else:
-            if payload.source_mode and payload.source_mode.lower() not in ("local",):
-                raise RuntimeError(
-                    f"Unsupported source_mode '{payload.source_mode}'. "
-                    "Only local video files are supported."
-                )
-            source_path = Path(payload.source_video_path or "").expanduser().resolve()
-            if not source_path.exists() or not source_path.is_file():
-                raise RuntimeError(
-                    f"Render stopped: the source video file was not found.\n"
-                    f"Path: {source_path}\n"
-                    f"Please reopen the editor and verify the file is still accessible."
-                )
-            source = {
-                "title": source_path.stem.replace("_", " ").replace("-", " "),
-                "slug": slugify(source_path.stem),
-                "duration": _probe_video_duration(source_path),
-                "filepath": str(source_path),
-            }
-            _emit_render_event(
-                channel_code=effective_channel,
-                job_id=job_id,
-                event="render.prepare_source.prepare_paths",
-                level="INFO",
-                message="Preparing source paths",
-                step="render.prepare_source.prepare_paths",
-                context={"source_path": str(source_path), "work_dir": str(work_dir)},
-            )
-            _emit_render_event(
-                channel_code=effective_channel,
-                job_id=job_id,
-                event="render.prepare_source.select_strategy",
-                level="INFO",
-                message="Selecting local source strategy",
-                step="render.prepare_source.select_strategy",
-                context={"strategy": "local_source"},
-            )
-            _job_log(effective_channel, job_id, f"Local source selected: {source_path}")
-        _emit_render_event(
-            channel_code=effective_channel,
-            job_id=job_id,
-            event="render.input.validate.success",
-            level="INFO",
-            message="Render input validated",
-            step="render.input.validate",
-            context={"source_path": str(source_path)},
-        )
-        _emit_render_event(
-            channel_code=effective_channel,
-            job_id=job_id,
-            event="render.prepare_source.success",
-            level="INFO",
-            message="Source prepared successfully",
-            step="render.prepare_source.success",
-            context={"source_mode": detected_source_mode, "source_path": str(source_path)},
-        )
-
-        # Compute once; captured by _process_one_part closure and auto_best_export
-        _output_stem = _smart_output_stem(_hook_applied_text, source.get("title", ""), job_id)
-
-        # Apply editor edits: trim and/or volume adjustment
-        trim_in = float(getattr(payload, "edit_trim_in", 0) or 0)
-        trim_out = float(getattr(payload, "edit_trim_out", 0) or 0)
-        edit_volume = float(getattr(payload, "edit_volume", 1.0) or 1.0)
-        needs_trim = trim_in > 0.5 or (trim_out > 0.5 and trim_out < source["duration"] - 0.5)
-        needs_volume = abs(edit_volume - 1.0) > 0.005
-        if needs_trim or needs_volume:
-            edited_path = work_dir / f"edited_{source_path.stem}.mp4"
-            cmd = [get_ffmpeg_bin(), "-y"]
-            if trim_in > 0.5:
-                cmd += ["-ss", f"{trim_in:.3f}"]
-            cmd += ["-i", str(source_path)]
-            if needs_trim and trim_out > 0.5 and trim_out < source["duration"] - 0.5:
-                duration_t = trim_out - (trim_in if trim_in > 0.5 else 0)
-                cmd += ["-t", f"{max(1.0, duration_t):.3f}"]
-            if needs_volume:
-                cmd += ["-af", f"volume={edit_volume:.3f}", "-c:v", "copy", "-c:a", "aac", "-b:a", "256k"]
-            else:
-                cmd += ["-c:v", "copy", "-c:a", "copy"]
-            cmd += ["-avoid_negative_ts", "make_zero", str(edited_path)]
-            _job_log(effective_channel, job_id, f"Applying edits: trim_in={trim_in:.1f}s trim_out={trim_out:.1f}s volume={edit_volume:.2f}")
-            try:
-                subprocess.run(cmd, check=True, capture_output=True, text=True)
-            except subprocess.CalledProcessError as _preprocess_exc:
-                _pp_stderr = _preprocess_exc.stderr or ""
-                _pp_diag = _summarize_ffmpeg_stderr(_pp_stderr)
-                _pp_tail = _pp_stderr[-2000:].strip()
-                _job_log(
-                    effective_channel, job_id,
-                    f"FFmpeg preprocess failed exit={_preprocess_exc.returncode} diag={_pp_diag!r}",
-                    kind="warning",
-                )
-                _emit_render_event(
-                    channel_code=effective_channel,
-                    job_id=job_id,
-                    event="render.ffmpeg.preprocess.error",
-                    level="ERROR",
-                    message=f"FFmpeg preprocess failed: {_pp_diag}",
-                    step="render.preprocess",
-                    context={
-                        "exit_code": _preprocess_exc.returncode,
-                        "diagnostic": _pp_diag,
-                        "stderr_tail": _pp_tail,
-                        "input_path": str(source_path),
-                        "output_path": str(edited_path),
-                    },
-                )
-                raise RuntimeError(f"FFmpeg preprocess failed: {_pp_diag}") from _preprocess_exc
-            new_dur = _probe_video_duration(edited_path)
-            source["duration"] = new_dur or max(1, source["duration"] - trim_in)
-            source_path = edited_path
-            source["filepath"] = str(edited_path)
-            _job_log(effective_channel, job_id, f"Edits applied → {edited_path} | new_duration={source['duration']}s")
-
-        # Pre-render source preflight: catch local files moved/deleted after initial validation
-        if detected_source_mode == "local" and not source_path.exists():
-            raise RuntimeError(
-                f"Render stopped: the source video file was moved or deleted.\n"
-                f"Path: {source_path}\n"
-                f"Please reopen the editor and confirm the file is still accessible."
-            )
-
-        if payload.keep_source_copy:
-            ext = source_path.suffix or ".mp4"
-            keep_source_dir = output_dir / "source"
-            # If output is a typical "video_output/video_out" folder, keep source as sibling under upload/source.
-            if output_dir.name.lower() in ("video_output", "video_out"):
-                keep_source_dir = output_dir.parent / "source"
-            # Only temp-origin files (YouTube downloads, edited locals) need to be
-            # persisted into source/. A user's original local file is already permanent —
-            # copying it would waste disk space (10 GB+) and slow render startup.
-            is_temp_source = str(source_path).startswith(str(TEMP_DIR))
-            if is_temp_source:
-                keep_path = _reserve_source_path_in_dir(keep_source_dir, source["slug"], ext=ext)
-                if not keep_path.exists():
-                    # Move instead of copy when source is in temp dir (instant on same drive, saves I/O + disk)
-                    try:
-                        shutil.move(str(source_path), str(keep_path))
-                        _job_log(effective_channel, job_id, f"Source moved (zero-copy) to: {keep_path}")
-                    except Exception:
-                        shutil.copy2(source_path, keep_path)
-                        _job_log(effective_channel, job_id, f"Source copied to: {keep_path}")
-                source_path = keep_path
-            else:
-                # Local original (not temp): render directly from user's file — no copy, no hardlink.
-                _job_log(effective_channel, job_id, f"local_source.passthrough path={source_path} (source copy skipped)")
+        source                  = _source_prep.source
+        source_path             = _source_prep.source_path
+        edit_session_id         = _source_prep.edit_session_id
+        detected_source_mode    = _source_prep.detected_source_mode
+        _output_stem            = _source_prep.output_stem
 
         voice_audio_path = None
         _voice_tts_failed = False
