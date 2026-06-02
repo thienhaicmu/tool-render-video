@@ -63,3 +63,23 @@ def prune_pending(active_job_ids: "frozenset[str]") -> int:
         stale = _PENDING - active_job_ids
         _PENDING.difference_update(stale)
         return len(stale)
+
+
+def cancel_all_active() -> int:
+    """Signal cancel to every currently registered job event.
+
+    Sprint 4.1 graceful shutdown helper (audit 2026-06-02 P1-B1): job_manager
+    calls this on shutdown so in-flight render workers exit promptly instead
+    of being abandoned with no signal. Worker code polls its cancel event in
+    long-running loops (e.g. ffmpeg_helpers._run_ffmpeg_with_retry) and
+    raises JobCancelledError when set.
+
+    Returns the number of events that were signaled.
+    """
+    with _LOCK:
+        count = 0
+        for ev in _EVENTS.values():
+            if not ev.is_set():
+                ev.set()
+                count += 1
+        return count

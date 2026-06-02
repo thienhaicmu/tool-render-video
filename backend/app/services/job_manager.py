@@ -219,14 +219,73 @@ def pending_count() -> int:
         return len(_pending)
 
 
-def shutdown(wait: bool = True) -> None:
+def shutdown(wait: bool = True, timeout: float = 30.0) -> None:
+    """Stop the scheduler and drain in-flight workers.
+
+    Sprint 4.1 (audit 2026-06-02 P1-B1): graceful shutdown signals cancel
+    to active jobs and waits up to `timeout` seconds for the worker pool to
+    drain. If the deadline elapses, the executor is force-shut and workers
+    are abandoned (matching the previous wait=False behavior).
+
+    Args:
+        wait: if False, force-abandon immediately (backward-compat with the
+              previous unbounded-wait=False behavior). Default True.
+        timeout: max seconds to wait for graceful drain when wait=True.
+                 0 or negative → force-abandon immediately.
+    """
     global _executor, _stopping
     with _cond:
         _stopping = True
         _cond.notify_all()
-    if _executor:
-        _executor.shutdown(wait=wait)
-        _executor = None
+
+    # Signal cancel to every active job FIRST — even when there is no executor
+    # (e.g. test fixtures that registered cancel events but never submitted).
+    # Long-running loops (ffmpeg_helpers, render_pipeline guards) poll their
+    # cancel_event and raise JobCancelledError on set.
+    if wait and timeout > 0:
+        try:
+            from app.services import cancel_registry
+            n = cancel_registry.cancel_all_active()
+            if n:
+                logger.info("Graceful shutdown: signaled cancel to %d active job(s)", n)
+        except Exception as exc:
+            logger.warning("cancel_all_active() failed during shutdown: %s", exc)
+
+    if _executor is None:
+        return
+
+    if not wait or timeout <= 0:
+        # Fast-abandon path. Preserves the old wait=False semantics.
+        try:
+            _executor.shutdown(wait=False)
+        finally:
+            _executor = None
+        return
+
+    # ThreadPoolExecutor.shutdown(wait=True) blocks indefinitely. Bound it by
+    # running the drain in a daemon thread and waiting up to `timeout` here.
+    finished = threading.Event()
+
+    def _drain():
+        try:
+            _executor.shutdown(wait=True, cancel_futures=True)
+        finally:
+            finished.set()
+
+    threading.Thread(target=_drain, daemon=True, name="job-manager-shutdown").start()
+    finished.wait(timeout=timeout)
+    if not finished.is_set():
+        logger.warning(
+            "Graceful shutdown timed out after %.1fs — abandoning in-flight workers",
+            timeout,
+        )
+        # Belt + suspenders: ensure the executor reference is cleared even if
+        # the drain thread is still alive (it's daemon so process exit kills it).
+        try:
+            _executor.shutdown(wait=False)
+        except Exception:
+            pass
+    _executor = None
 
 
 # ---------------------------------------------------------------------------

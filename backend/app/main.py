@@ -319,7 +319,11 @@ def _check_db_fallback_at_startup() -> None:
 
 @app.on_event("shutdown")
 def shutdown():
-    shutdown_job_manager(wait=False)
+    # Sprint 4.1: bounded graceful shutdown. Default 30s gives FFmpeg time
+    # to wrap up a short clip; longer renders are signaled cancel and
+    # abandoned past the deadline. Override via SHUTDOWN_TIMEOUT_SEC.
+    timeout = float(os.getenv("SHUTDOWN_TIMEOUT_SEC", "30"))
+    shutdown_job_manager(wait=True, timeout=timeout)
 
 
 @app.get("/health")
