@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen:openapi": "node scripts/run-python.mjs ../backend/scripts/dump_openapi.py --out ../backend/openapi.json && openapi-typescript ../backend/openapi.json --output src/types/openapi-generated.ts",
+    "check:openapi-drift": "npm run gen:openapi && git diff --exit-code src/types/openapi-generated.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -24,6 +26,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "jsdom": "^24.1.0",
+    "openapi-typescript": "^7.4.4",
     "typescript": "^5.5.3",
     "vite": "^5.3.4",
     "vitest": "^1.6.0"

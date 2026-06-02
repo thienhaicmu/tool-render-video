@@ -69,6 +69,52 @@ jobs:
         working-directory: frontend
         run: npm test
 
+  openapi-drift:
+    name: OpenAPI codegen drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Sprint 5.1: the committed frontend/src/types/openapi-generated.ts
+    # must match what `npm run gen:openapi` produces against the current
+    # backend FastAPI app. If the backend route surface or any Pydantic
+    # field changes without regenerating, this job fails — the engineer
+    # must run `npm run gen:openapi` locally and commit the diff.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend deps (fastapi etc. — needed by dump_openapi.py)
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Regenerate OpenAPI types
+        working-directory: frontend
+        run: npm run gen:openapi
+
+      - name: Diff against committed file
+        working-directory: frontend
+        run: |
+          git diff --exit-code src/types/openapi-generated.ts \
+            || (echo "::error::OpenAPI types drift detected. Run 'npm run gen:openapi' locally and commit the regenerated frontend/src/types/openapi-generated.ts." && exit 1)
+
   devtools-security:
     name: Devtools security gates
     runs-on: windows-latest

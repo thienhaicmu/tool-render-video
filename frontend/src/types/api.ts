@@ -1,6 +1,21 @@
 /**
- * API types derived from backend/app/models/schemas.py and docs/ui/UI_BACKEND_CONTRACT.md
- * Source of truth: Phase 5.10 contract freeze.
+ * API types — the curated, human-readable surface that frontend code
+ * imports from. Hand-maintained to stay readable (with comments,
+ * intentional Optional/never fields, etc.).
+ *
+ * Source of truth for runtime: backend/app/models/schemas.py.
+ * Drift detection: openapi-generated.ts (auto-generated, see Sprint 5.1).
+ * The CI "openapi-drift" job fails if the generated file diverges from
+ * what `npm run gen:openapi` produces against the current FastAPI app.
+ *
+ * When adding or renaming a backend field:
+ *   1. Edit schemas.py.
+ *   2. Run `npm run gen:openapi` — regenerates openapi-generated.ts.
+ *   3. Update this file to expose the new field (or rename), keeping the
+ *      curated style.
+ *   4. Commit both files together.
+ *
+ * Historical reference: Phase 5.10 contract freeze.
  */
 
 // ── Text Layer sub-types ──────────────────────────────────────────────────────
