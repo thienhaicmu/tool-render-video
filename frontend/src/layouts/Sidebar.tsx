@@ -76,20 +76,22 @@ interface NavItem {
 }
 
 // Sprint 5.6 follow-up: the Studio nav item used to route to features/studio/
-// (the older 6-step flow). That feature module was retired in commit e7771e4;
-// the Studio nav button now routes to the canonical clip-studio panel where
-// RenderWorkflow lives. The `as ActivePanel` casts below would have hidden
-// the type error otherwise.
+// (retired in commit e7771e4); now routes to the canonical clip-studio panel.
+//
+// Audit followup_2: dropped the `as ActivePanel` casts that previously hid
+// the type error. Each `panel` literal is now type-checked against the
+// ActivePanel union directly — if uiStore ever removes one of these values
+// from the union, this file will fail compilation immediately.
 const MAIN_NAV: NavItem[] = [
-  { panel: 'home'        as ActivePanel, labelKey: 'nav_home',     icon: <IconHome /> },
-  { panel: 'clip-studio' as ActivePanel, labelKey: 'nav_studio',   icon: <IconScissors /> },
-  { panel: 'library'     as ActivePanel, labelKey: 'nav_library',  icon: <IconGrid /> },
-  { panel: 'download'    as ActivePanel, labelKey: 'nav_download', icon: <IconDownload /> },
-  { panel: 'publish'     as ActivePanel, labelKey: 'nav_publish',  icon: <IconUpload /> },
+  { panel: 'home',        labelKey: 'nav_home',     icon: <IconHome /> },
+  { panel: 'clip-studio', labelKey: 'nav_studio',   icon: <IconScissors /> },
+  { panel: 'library',     labelKey: 'nav_library',  icon: <IconGrid /> },
+  { panel: 'download',    labelKey: 'nav_download', icon: <IconDownload /> },
+  { panel: 'publish',     labelKey: 'nav_publish',  icon: <IconUpload /> },
 ]
 
 const BOTTOM_NAV: NavItem[] = [
-  { panel: 'settings' as ActivePanel, labelKey: 'nav_settings', icon: <IconSettings /> },
+  { panel: 'settings', labelKey: 'nav_settings', icon: <IconSettings /> },
 ]
 
 // ── NavGroup ──────────────────────────────────────────────────────────────────
