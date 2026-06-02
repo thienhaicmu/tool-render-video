@@ -249,34 +249,36 @@ Risk order from highest to lowest. Any edit above your assigned risk tier requir
 ### CRITICAL — Full pytest suite + explicit user approval required before any edit
 
 ```
-backend/app/orchestration/render_pipeline.py        # 2,158 lines — main orchestrator (refactored from 5,816-line monolith)
-backend/app/orchestration/stages/part_renderer.py   # 2,089 lines — per-part rendering: cut→TTS→subtitle→FFmpeg
-backend/app/orchestration/qa_pipeline.py            # output validation gate — never bypass
-backend/app/ai/director/ai_director.py              # 4,631 lines — AI orchestration monolith
-backend/app/services/motion_crop.py                 # 2,465 lines — OpenCV subject tracking
+backend/app/orchestration/render_pipeline.py        # 1,525 lines — main orchestrator (refactored from 5,816-line monolith)
+backend/app/orchestration/stages/part_renderer.py   # 2,101 lines — per-part rendering: cut→TTS→subtitle→FFmpeg
+backend/app/orchestration/qa_pipeline.py            # 385 lines — output validation gate — never bypass
+backend/app/services/motion_crop.py                 # 2,512 lines — OpenCV subject tracking
 data/app.db                                         # sole job state — never touch directly
 ```
+
+> Note: `backend/app/ai/director/ai_director.py` was removed in Phase G (RAG/AI Director retirement, see `main.py:238`). Historic references in older docs/agent definitions can be ignored — the file does not exist.
 
 ### HIGH — Planner + explicit user approval + full pytest recommended
 
 ```
 backend/app/models/schemas.py                       # Pydantic API contracts — additive only, never rename
 backend/app/services/job_manager.py                 # in-process queue — thread safety and queue semantics
-backend/app/services/render/ffmpeg_helpers.py       # 560 lines — real FFmpeg execution layer
+backend/app/services/render/ffmpeg_helpers.py       # 564 lines — real FFmpeg execution layer + NVENC_SEMAPHORE
 backend/app/services/render/legacy_renderer.py      # 491 lines — render_part() core + render_part_smart() wrapper
 backend/app/services/render/clip_ops.py             # 401 lines — clip assembly operations
-backend/app/services/subtitle_engine.py             # subtitle burn-in pipeline
+backend/app/services/subtitle_engine.py             # 46-line facade — real impl in services/subtitles/
 backend/app/services/db.py                          # DB connection + WAL mode setup
 backend/app/core/ui_gate.py                         # controls which UI is served
 backend/app/main.py                                 # startup sequence + router mounts
 backend/app/orchestration/asset_pipeline.py         # asset injection stage
 backend/app/orchestration/render_events.py          # event error classification
-backend/app/orchestration/pipeline_pre_render.py    # 789 lines — scene detection + segment planning
-backend/app/orchestration/pipeline_ai_phases.py     # 519 lines — 13 AI influence phases (beat exec, benchmark, learning)
+backend/app/orchestration/groq_only_pipeline.py     # Groq-only pre-render path
+backend/app/orchestration/parallel_analysis.py      # concurrent scene detect + Whisper threads
 ```
 
 > ⚠️ CORRECTION — `render_engine.py` is 53 lines and is a thin facade. It is NOT the real FFmpeg execution layer.
-> The genuinely dangerous files are `services/render/ffmpeg_helpers.py` (560 lines), `legacy_renderer.py` (491 lines), and `clip_ops.py` (401 lines).
+> The genuinely dangerous files are `services/render/ffmpeg_helpers.py` (564 lines), `legacy_renderer.py` (491 lines), and `clip_ops.py` (401 lines).
+> The NVENC semaphore lives at `services/render/ffmpeg_helpers.py:27-28` — NOT in `render_engine.py`.
 > Any documentation or agent definition that lists `render_engine.py` as the primary FFmpeg risk file is protecting the wrong file.
 
 ### MEDIUM — Planner + focused pytest required
@@ -288,8 +290,10 @@ backend/app/routes/editing.py
 backend/app/services/tts_service.py
 backend/app/services/audio_mix_service.py
 backend/app/orchestration/audio_pipeline.py
-backend/app/orchestration/pipeline_helpers.py       # 544 lines — output naming, CTA, subtitle utils, segment builder
-backend/app/orchestration/pipeline_ranking.py       # output scoring and best-clip selection
+backend/app/orchestration/pipeline_segment_selection.py  # segment selection, variant logic, CTA, output naming
+backend/app/orchestration/pipeline_subtitle_utils.py     # subtitle utils used by render pipeline
+backend/app/orchestration/pipeline_config.py             # render pipeline config helpers
+backend/app/orchestration/pipeline_ranking.py            # output scoring and best-clip selection
 backend/app/orchestration/pipeline_render_loop.py   # parallel part dispatch (ThreadPoolExecutor)
 backend/app/services/scene_detector.py
 backend/app/services/segment_builder.py             # clip boundary builder
@@ -300,10 +304,12 @@ backend/app/services/segment_builder.py             # clip boundary builder
 ```
 backend/app/routes/voice.py
 backend/app/routes/channels.py
-backend/app/routes/download.py
+backend/app/routes/feedback.py
 backend/app/core/config.py                          # env vars and data paths only
 backend/knowledge/**                                # add only — never delete existing entries
 ```
+
+> Note: `routes/download.py` does NOT exist — downloader endpoints live at `backend/app/features/downloader/router.py`, loaded via shim `routes/platform_downloader.py`. Edits there are MEDIUM tier (preserve WS shape + job semantics).
 
 ---
 
@@ -311,7 +317,7 @@ backend/knowledge/**                                # add only — never delete 
 
 ### ⛔ render_pipeline.py + part_renderer.py — Refactored Dual Monolith
 
-`backend/app/orchestration/render_pipeline.py` (2,158 lines) is the main render orchestrator. It was refactored from a 5,816-line monolith — stage logic now lives in separate modules (pipeline_pre_render.py, pipeline_ai_phases.py, pipeline_render_loop.py, etc.) and per-part rendering lives in `stages/part_renderer.py` (2,089 lines). Both files are CRITICAL tier. A change in either can silently affect all render paths.
+`backend/app/orchestration/render_pipeline.py` (1,525 lines) is the main render orchestrator. It was refactored from a 5,816-line monolith — stage logic now lives in separate modules (`pipeline_render_loop.py`, `pipeline_segment_selection.py`, `pipeline_ranking.py`, `pipeline_cache.py`, `pipeline_config.py`, `pipeline_subtitle_utils.py`, `groq_only_pipeline.py`, `parallel_analysis.py`) and per-part rendering lives in `stages/part_renderer.py` (2,101 lines). Both files are CRITICAL tier. A change in either can silently affect all render paths.
 
 - Full pytest is **required** — not optional — for any change to either file
 - A Planner analysis with an explicit per-file change list is required before any edit
@@ -330,17 +336,28 @@ backend/knowledge/**                                # add only — never delete 
 - **NEVER** lower or remove the `ENABLE_DEVTOOLS=1` requirement
 - Any change to `devtools.py` requires explicit HIGH-risk user approval
 
-### ⛔ ai_director.py — 4,631-Line AI Orchestration Monolith
+### ⛔ AI modules — Distributed Across `backend/app/ai/**`
 
-`backend/app/ai/director/ai_director.py` is the AI orchestration monolith — 4,631 lines. Apply the same caution level as render_pipeline.py. Full Planner analysis required. AI safety rule applies: any unhandled exception here kills active render jobs.
+The legacy `ai/director/ai_director.py` monolith was removed in Phase G (RAG/AI Director retirement — see `main.py:238`). Current AI orchestration is distributed across:
+
+- `backend/app/ai/analysis/` — hybrid analyzer + local/cloud providers (Groq, OpenAI)
+- `backend/app/ai/analysis/groq/` — Groq-only pipeline client + prompts
+- `backend/app/ai/llm/` — Claude / Gemini / OpenAI LLM providers
+- `backend/app/ai/visibility/`, `ai/tracing.py`, `ai/diagnostics.py`, `ai/dependencies.py`
+
+The AI safety rule still applies absolutely: any unhandled exception in `backend/app/ai/**` will kill an active render job. Every public entry point in every AI module MUST catch all exceptions and return `None`. Lazy-import optional deps (`torch`, `groq`, `openai`, `google-genai`) via try/except so missing AI extras never break startup.
 
 ### ⛔ data/app.db — No Backup, No Recovery
 
 This is an offline-first desktop application. There is no cloud sync, no replication, no automatic backup. `data/app.db` is the only copy of all job state on the user's machine. Corruption or deletion is permanent. There is no recovery path.
 
-### ⛔ .claude/settings.json and .claude/settings.local.json — Security
+### ⛔ .claude/settings.json — Security (PARTIALLY RESOLVED 2026-06-02)
 
-Both files are currently tracked in git. `settings.json` contains `defaultMode: "bypassPermissions"`. `settings.local.json` contains `permissionMode: "bypassPermissions"`. Anyone who clones this repository gets bypass permissions active. These settings must be cleaned and `settings.local.json` must be removed from git tracking.
+`.claude/settings.json` is tracked in git and currently contains `defaultMode: "default"` (NOT `bypassPermissions` as older docs warned). It holds a ~380-entry Bash/PowerShell allowlist — no secrets, no bypass.
+
+`.claude/settings.local.json` does NOT currently exist in the repo. Older docs warning about a tracked `bypassPermissions` mode are obsolete.
+
+**Still applies:** Never reintroduce `defaultMode: "bypassPermissions"` to a tracked settings file. Local overrides belong in `.claude/settings.local.json` (which should remain gitignored). Periodically prune the allowlist — the current list contains entries for paths that no longer exist (`backend/static/`, `backend/static-v3/`).
 
 ---
 
@@ -350,13 +367,15 @@ These constants and code paths protect hardware resources. They are not performa
 
 ### NVENC_MAX_SESSIONS
 
-**Location:** Semaphore defined in `backend/app/services/render_engine.py`, enforced in FFmpeg execution layer.
+**Location:** Semaphore defined at `backend/app/services/render/ffmpeg_helpers.py:27-28` (`NVENC_SEMAPHORE = threading.Semaphore(_NVENC_SEM_VALUE)`, default value 3, env override `NVENC_MAX_SESSIONS`). Acquired around every NVENC encode in `services/render/legacy_renderer.py:266`, `base_clip_renderer.py:92,224`, `overlay_compositor.py:133`. `services/render_engine.py` only re-exports the symbol — it is a 53-line facade and does NOT own the semaphore.
 
 **What it does:** Limits the number of simultaneous NVENC GPU hardware encoder sessions.
 
 **Why it must not be raised:** NVENC has a hardware-enforced session limit, typically 3–5 on consumer GPUs. When the limit is exceeded, NVIDIA does not gracefully fail the over-limit session — it fails ALL active sessions. Every render currently encoding fails simultaneously with a generic FFmpeg error that does not mention the NVENC limit as the cause.
 
 **What breaks if raised beyond hardware limit:** All concurrent renders fail simultaneously with opaque FFmpeg errors. No warning before failure. Recovery requires restarting all affected jobs. The failure mode is non-obvious and hard to diagnose.
+
+**Known gap (audit 2026-06-02):** The semaphore is acquired only at `base_clip_renderer.py:92` and `legacy_renderer.py:266`. Other FFmpeg call sites (`clip_ops.py`, `motion_crop.py`, `audio_mix_service.py`, `preview/ffmpeg_probers.py`) call FFmpeg without acquiring `NVENC_SEMAPHORE` — if any of those paths happen to invoke an NVENC codec, the limit can be silently exceeded. Future fix: centralize acquire/release inside `_run_ffmpeg_with_retry`, conditioned on argv containing `*_nvenc`.
 
 **Rule:** Never change `NVENC_MAX_SESSIONS` without an explicit user request that includes documented reasoning and knowledge of the target hardware class.
 
@@ -657,7 +676,9 @@ Route ALL render-related requests through Planner before any implementation. Use
 
 ```
 render_pipeline.py mentioned    → CRITICAL tier → Planner required, full pytest required
-ai_director.py mentioned        → CRITICAL tier → same as render_pipeline.py
+part_renderer.py mentioned      → CRITICAL tier → same as render_pipeline.py
+motion_crop.py mentioned        → CRITICAL tier → same as render_pipeline.py
+backend/app/ai/** mentioned     → HIGH tier → AI safety rule (return None, never raise) is absolute
 qa_pipeline.py mentioned        → CRITICAL tier → never bypass contract is absolute
 schemas.py field change         → HIGH tier → additive-only verification first
 API route path mentioned        → HIGH tier → check Frozen API Contracts section first
@@ -736,13 +757,13 @@ Before marking any render-touching task complete:
 
 ## Known Active Issues (Investigation Required Before Touching)
 
-### Issue 1 — Frontend Build Pipeline Gap
+### Issue 1 — Frontend Build Pipeline (RESOLVED 2026-06-02)
 
-`vite.config.ts` builds React source to `backend/static-new/` (gitignored).
-`ui_gate.py` serves from `backend/static-v2/`.
-Running `npm run build` does NOT update the live served UI.
-Frontend is being rebuilt — this gap will be resolved with the new frontend project.
-Do not attempt to fix the build path without a dedicated plan.
+`vite.config.ts:13` now declares `build.outDir = '../backend/static-v2'` with `emptyOutDir: true`.
+`ui_gate.py:53-58` serves from `backend/static-v2/` when `STATIC_UI_VERSION=v2`.
+Running `npm run build` updates the live served UI correctly.
+
+Caveat: `emptyOutDir: true` will wipe `backend/static-v2/` on every build — do not place hand-authored assets there.
 
 ### Issue 2 — Mixed DB Connection Model
 
@@ -751,19 +772,19 @@ Do not attempt to fix the build path without a dedicated plan.
 Both exist in the same module. Do not add callers of a third model.
 Unifying these is future architectural work — requires a dedicated plan and full caller audit.
 
-### Issue 3 — Cache Location Bug
+### Issue 3 — Cache Location (PARTIALLY RESOLVED 2026-06-02)
 
-Scene detection, transcription, and segment score caches write to `tempfile.gettempdir() / "render_cache"`.
-Maintenance cleanup tasks target `APP_DATA_DIR/temp/` — they never reach the system temp directory.
-Cache grows indefinitely with no automatic cleanup.
-Fix requires moving cache root to `APP_DATA_DIR / "cache"` — but cache key format must be preserved during migration or all existing caches invalidate. Do not fix casually.
+Cache root has been moved to `APP_DATA_DIR/cache` (see `pipeline_cache.py:29,45,59,77,86,99` and `services/motion_crop.py:26,41`). The `POST /api/render/cache/clear` endpoint targets the new path.
 
-### Issue 4 — Dual God Files
+**Remaining gap:** `services/maintenance.py` still does NOT prune `APP_DATA_DIR/cache`. TTL (`_RENDER_CACHE_TTL_SEC = 72h`) is only enforced lazily on `_cache_get` reads — caches for sources never re-accessed accumulate forever. Fix: add a `prune_render_cache(cache_dir, max_age_hours=72)` call into the existing maintenance scheduler.
 
-`render_pipeline.py` (5,816 lines) and `ai_director.py` (5,718 lines) are parallel monoliths.
-Both must be treated with full-pytest caution on every change.
-Decomposing either into modules is future architecture work — requires a dedicated multi-phase plan.
-Do not start decomposition without an approved plan. Do not make partial decompositions.
+### Issue 4 — Remaining God Files
+
+`render_pipeline.py` is now 1,525 lines (was 5,816 before Phase A-F refactors). `stages/part_renderer.py` is 2,101 lines. `services/motion_crop.py` is 2,512 lines. All three must be treated with full-pytest caution on every change.
+
+`ai/director/ai_director.py` was removed in Phase G — no longer applicable.
+
+Further decomposition of `render_pipeline.py`, `part_renderer.py`, or `motion_crop.py` is future architecture work — requires a dedicated multi-phase plan. Do not start decomposition without an approved plan. Do not make partial decompositions.
 
 ### Issue 5 — render_engine.py Is a Facade (Documentation Drift)
 
