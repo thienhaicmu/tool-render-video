@@ -87,15 +87,31 @@ def run_groq_only_pre_render(
         GroqOnlyPipelineError: any precondition or stage failure (HARD-FAIL).
         cancel_registry.JobCancelledError: job cancelled mid-flight.
     """
-    # ── 1. Pre-flight validation (all 5 hard-fail conditions) ────────────
+    # ── 1. Pre-flight validation ──────────────────────────────────────────
     if not getattr(payload, "groq_analysis_enabled", False):
-        raise GroqOnlyPipelineError(
-            "groq_only_mode=True requires groq_analysis_enabled=True"
+        # Phase F1: pipeline is now mandatory for all jobs. This guard was written
+        # for the old optional-mode path. Old stored jobs and misconfigured clients
+        # can arrive with groq_analysis_enabled=False; failing them is wrong.
+        logger.warning(
+            "groq_only_pipeline: groq_analysis_enabled=False — continuing anyway "
+            "(pipeline is mandatory since Phase F1; check GROQ_ONLY_DEFAULT env var)"
         )
     if getattr(payload, "multi_variant", False):
-        raise GroqOnlyPipelineError(
-            "groq_only_mode incompatible with multi_variant "
-            "(variant logic disabled in this path)"
+        # multi_variant requires a separate rendering pass not implemented here.
+        # Degrade to single-variant rather than failing the job outright.
+        _job_log(
+            effective_channel, job_id,
+            "multi_variant requested but not supported in groq_only path — "
+            "rendering single variant (set multi_variant=False to suppress this warning)",
+            kind="warning",
+        )
+        _emit_render_event(
+            channel_code=effective_channel,
+            job_id=job_id,
+            event="groq_only.multi_variant_degraded",
+            level="WARNING",
+            message="multi_variant not supported in groq_only path — using single variant",
+            step="render.groq_only.preflight",
         )
     from app.core import config as _cfg
     _payload_key = (getattr(payload, "ai_cloud_api_key", "") or "").strip()

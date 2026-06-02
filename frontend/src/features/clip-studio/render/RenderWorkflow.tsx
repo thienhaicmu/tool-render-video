@@ -54,7 +54,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     aiCloudModel:     '',
     aiContentDriven:  false,
     groqEnabled:         true,
-    aiProvider:          (localStorage.getItem('rw_ai_provider') as 'groq' | 'gemini') ?? 'gemini',
+    aiProvider:          (localStorage.getItem('rw_ai_provider') as 'groq' | 'gemini') ?? 'groq',
     groqModel:           '',
     groqContentLanguage: 'auto',
   }))
@@ -69,6 +69,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const [qualityReports, setQualityReports] = useState<Record<number, QualityReport | null>>({})
   const [qualityLoadFailed, setQualityLoadFailed] = useState(false)
   const [partsLoading, setPartsLoading]     = useState(false)
+  const [allDataLoaded, setAllDataLoaded]   = useState(false)
   const [isRetrying, setIsRetrying]         = useState(false)
   const [rawMsgOpen, setRawMsgOpen]         = useState(false)
 
@@ -81,10 +82,13 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     if (!jobId || !isTerminal) return
     setQualityLoadFailed(false)
     setPartsLoading(true)
-    getJobParts(jobId)
-      .then(setParts)
-      .finally(() => setPartsLoading(false))
-    getJobQualitySummary(jobId, true)
+    setAllDataLoaded(false)
+
+    const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | undefined> =>
+      Promise.race([p, new Promise<undefined>((resolve) => setTimeout(resolve, ms))])
+
+    const partsP = getJobParts(jobId).then(setParts)
+    const qualityP = getJobQualitySummary(jobId, true)
       .then((summary) => {
         const scores: Record<number, number> = {}
         const reports: Record<number, QualityReport | null> = {}
@@ -96,18 +100,28 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
         setQualityReports(reports)
       })
       .catch(() => setQualityLoadFailed(true))
-    getJobRanking(jobId).then(setPartRanks).catch(() => {})
+    const rankingP = getJobRanking(jobId).then(setPartRanks).catch(() => {})
+
+    Promise.all([
+      withTimeout(partsP, 12_000),
+      withTimeout(qualityP, 12_000),
+      withTimeout(rankingP, 12_000),
+    ]).finally(() => {
+      setPartsLoading(false)
+      setAllDataLoaded(true)
+    })
   }, [jobId, isTerminal])
 
-  // Auto-advance to results after completion (success + partial success)
+  // Auto-advance to results after completion (success + partial success).
+  // Gated on allDataLoaded so parts/quality/ranking are ready before the step change.
   useEffect(() => {
-    if (!isTerminal || step !== 3) return
+    if (!isTerminal || step !== 3 || !allDataLoaded) return
     const s = jobStatus ?? ''
     const skipAdvance = s === 'failed' || s === 'interrupted' || s === 'cancelled'
     if (skipAdvance) return
-    const timer = setTimeout(() => setStep(4), 1500)
+    const timer = setTimeout(() => setStep(4), 300)
     return () => clearTimeout(timer)
-  }, [isTerminal, jobStatus, step])
+  }, [isTerminal, jobStatus, step, allDataLoaded])
 
   // E-2 — toast notification on job terminal
   useEffect(() => {

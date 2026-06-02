@@ -14,6 +14,7 @@ Mocking strategy:
 """
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -152,19 +153,46 @@ class TestHardFailPreflight:
              pytest.raises(GroqOnlyPipelineError, match="GROQ_API_KEY"):
             run_groq_only_pre_render(**args)
 
-    def test_groq_only_hard_fails_when_groq_analysis_enabled_is_false(self, tmp_path, monkeypatch):
+    def test_groq_only_warns_and_continues_when_groq_analysis_not_enabled(self, tmp_path, monkeypatch, caplog):
+        # Phase F1: guard downgraded from hard-fail to warning — pipeline must not raise.
         monkeypatch.setattr("app.core.config.GROQ_API_KEY", "test-key")
         payload = _make_payload(groq_analysis_enabled=False)
         args = _make_args(tmp_path, payload)
-        with pytest.raises(GroqOnlyPipelineError, match="groq_analysis_enabled"):
-            run_groq_only_pre_render(**args)
 
-    def test_groq_only_hard_fails_when_multi_variant_enabled(self, tmp_path, monkeypatch):
+        def _fake_transcribe(*a, **kw):
+            _write_srt(args["work_dir"])
+            return None
+
+        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter", side_effect=_fake_transcribe), \
+             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection",
+                   return_value=[_groq_seg(10, 40)]), \
+             caplog.at_level(logging.WARNING, logger="app.render.groq_only"):
+            result = run_groq_only_pre_render(**args)  # must NOT raise
+
+        assert result.total_parts == 1
+        assert any("groq_analysis_enabled=False" in r.message for r in caplog.records)
+
+    def test_groq_only_warns_and_continues_when_multi_variant_enabled(self, tmp_path, monkeypatch, caplog):
+        # multi_variant guard downgraded from hard-fail to graceful degradation.
         monkeypatch.setattr("app.core.config.GROQ_API_KEY", "test-key")
         payload = _make_payload(multi_variant=True)
         args = _make_args(tmp_path, payload)
-        with pytest.raises(GroqOnlyPipelineError, match="multi_variant"):
-            run_groq_only_pre_render(**args)
+
+        def _fake_transcribe(*a, **kw):
+            _write_srt(args["work_dir"])
+            return None
+
+        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter", side_effect=_fake_transcribe), \
+             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection",
+                   return_value=[_groq_seg(10, 40)]), \
+             patch("app.orchestration.groq_only_pipeline._emit_render_event") as mock_emit:
+            result = run_groq_only_pre_render(**args)  # must NOT raise
+
+        assert result.total_parts == 1
+        emitted = [kw.get("event") for _a, kw in mock_emit.call_args_list]
+        assert "groq_only.multi_variant_degraded" in emitted
 
     def test_groq_only_hard_fails_when_source_has_no_audio(self, tmp_path, monkeypatch):
         monkeypatch.setattr("app.core.config.GROQ_API_KEY", "test-key")
