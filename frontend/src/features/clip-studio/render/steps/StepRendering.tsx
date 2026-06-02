@@ -75,11 +75,11 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
   // and rgb(239,68,68) — those have no exact token at present; tracked.
   const ACCENT: Record<string, string> = {
     done:    'var(--status-success)',
-    failed:  '#ef4444',
+    failed:  'var(--color-error)',
     active:  'var(--ai-active)',
-    waiting: '#6b7280',
+    waiting: 'var(--status-waiting)',
   }
-  const accentColor = ACCENT[state] ?? '#6b7280'
+  const accentColor = ACCENT[state] ?? 'var(--status-waiting)'
 
   if (compact) {
     return (
@@ -185,7 +185,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
               height: '100%', borderRadius: 99,
               width: `${isDone ? 100 : isFail || isWait ? 0 : pct}%`,
               background: isDone
-                ? 'linear-gradient(90deg,var(--status-success),#22c55e)'
+                ? 'linear-gradient(90deg,var(--status-success),var(--color-success))'
                 : `linear-gradient(90deg,${accentColor},var(--accent-primary))`,
               transition: 'width .4s ease',
             }} />
@@ -201,7 +201,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               {STEP_NODES.map((n, i) => {
                 const st = i < activeStepIdx ? 'done' : i === activeStepIdx ? 'active' : 'pending'
-                const col = st === 'done' ? 'var(--status-success)' : st === 'active' ? 'var(--ai-active)' : '#6b7280'
+                const col = st === 'done' ? 'var(--status-success)' : st === 'active' ? 'var(--ai-active)' : 'var(--status-waiting)'
                 return (
                   <React.Fragment key={n.key}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>

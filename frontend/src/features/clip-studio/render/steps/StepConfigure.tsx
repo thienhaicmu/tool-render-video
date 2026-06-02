@@ -669,16 +669,16 @@ function StepConfigureBase({
                       style={{
                         flex: 1, padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
                         cursor: testStatus !== 'testing' ? 'pointer' : 'not-allowed',
-                        border: `1px solid ${testStatus === 'ok' ? '#22c55e' : testStatus === 'error' ? '#ef4444' : 'var(--border-default)'}`,
+                        border: `1px solid ${testStatus === 'ok' ? 'var(--color-success)' : testStatus === 'error' ? 'var(--color-error)' : 'var(--border-default)'}`,
                         backgroundColor: testStatus === 'ok' ? 'rgba(34,197,94,.15)' : testStatus === 'error' ? 'rgba(239,68,68,.12)' : 'var(--surface-input)',
-                        color: testStatus === 'ok' ? '#22c55e' : testStatus === 'error' ? '#ef4444' : 'var(--text-secondary)',
+                        color: testStatus === 'ok' ? 'var(--color-success)' : testStatus === 'error' ? 'var(--color-error)' : 'var(--text-secondary)',
                       }}
                     >
                       {testStatus === 'testing' ? 'Testing...' : testStatus === 'ok' ? `✓ ${cfg.aiProvider} OK` : testStatus === 'error' ? `✗ ${testMsg}` : `Test ${cfg.aiProvider} key (server)`}
                     </button>
                   </div>
                   {testStatus === 'ok' && (
-                    <div style={{ fontSize: 10, color: '#22c55e' }}>Connected · {testMsg}</div>
+                    <div style={{ fontSize: 10, color: 'var(--color-success)' }}>Connected · {testMsg}</div>
                   )}
 
                   {/* Model override (optional) */}

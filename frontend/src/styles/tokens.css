@@ -186,6 +186,13 @@
   --score-low:            #E05252;   /* <40 */
   --score-track-bg:       #1A1F2C;
 
+  /* ── Sprint 10 token expansion ─────────────────────────────
+     Added for hex literals previously inline in components. Each maps to
+     a semantic role rather than a literal color name so future palette
+     drift won't have to chase every call site again. */
+  --status-waiting:       #6b7280;   /* clip "waiting"/queued color (Tailwind gray-500) */
+  --confidence-mid:       #eab308;   /* AI confidence tier "moderate" indicator (Tailwind yellow-500) */
+
   /* ── Typography ─────────────────────────────────────────── */
   --font-ui:              'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono:            'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;

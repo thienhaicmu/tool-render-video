@@ -299,7 +299,7 @@ function StepResultsBase({
                 <span style={{
                   fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, marginLeft: 4,
                   background: aiSummary.confidence_tier === 'strong' ? 'rgba(52,200,120,.15)' : 'rgba(234,179,8,.12)',
-                  color: aiSummary.confidence_tier === 'strong' ? '#34c878' : '#eab308',
+                  color: aiSummary.confidence_tier === 'strong' ? 'var(--status-success)' : 'var(--confidence-mid)',
                 }}>
                   {aiSummary.confidence_tier}
                 </span>
@@ -457,7 +457,7 @@ function StepResultsBase({
                         <span style={{
                           fontSize: 7, fontWeight: 700, padding: '1px 5px', borderRadius: 99, flexShrink: 0,
                           background: rank.confidence_tier === 'strong' ? 'rgba(52,200,120,.12)' : 'rgba(234,179,8,.1)',
-                          color: rank.confidence_tier === 'strong' ? 'var(--status-success)' : '#eab308',
+                          color: rank.confidence_tier === 'strong' ? 'var(--status-success)' : 'var(--confidence-mid)',
                           letterSpacing: '.05em', textTransform: 'uppercase',
                         }}>
                           {rank.confidence_tier === 'strong' ? 'STRONG' : rank.confidence_tier === 'worth_testing' ? 'TEST' : 'EXP'}
@@ -628,7 +628,7 @@ function StepResultsBase({
                       <span style={{
                         fontSize: 8, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
                         background: selRank.confidence_tier === 'strong' ? 'rgba(52,200,120,.15)' : 'rgba(234,179,8,.12)',
-                        color: selRank.confidence_tier === 'strong' ? '#34C878' : '#eab308',
+                        color: selRank.confidence_tier === 'strong' ? 'var(--status-success)' : 'var(--confidence-mid)',
                         letterSpacing: '.05em',
                       }}>
                         {selRank.confidence_tier === 'strong' ? 'STRONG' : selRank.confidence_tier === 'worth_testing' ? 'WORTH TESTING' : 'EXPERIMENTAL'}
