@@ -85,6 +85,10 @@ from app.orchestration.pipeline_finalize import (
     FinalizeContext,
     run_render_finalize,
 )
+from app.orchestration.pipeline_setup import (
+    PipelineSetupResult,
+    setup_render_pipeline,
+)
 from app.orchestration.part_plan import PartExecutionPlan
 from app.orchestration.stages.part_renderer import PartRenderContext
 from app.orchestration.pipeline_render_loop import RenderLoopResult as _RenderLoopResult, run_render_loop
@@ -233,39 +237,20 @@ def run_render_pipeline(
     load_session_fn: Callable,
     cleanup_session_fn: Callable,
 ):
-    output_mode = (payload.output_mode or "channel").strip().lower()
-    effective_channel = (payload.channel_code or "").strip() or "manual"
-    started_at = datetime.utcnow()
-
-    # Market Viral — resolve target market once; used by all part workers via closure
-    _mv_cfg = getattr(payload, "market_viral", None) or {}
-    _mv_cfg_enabled = isinstance(_mv_cfg, dict) and bool(_mv_cfg)
-    _mv_payload_market = getattr(payload, "ai_target_market", None) or getattr(payload, "viral_market", None)
-    _mv_market = str(
-        _mv_payload_market
-        or ((_mv_cfg.get("target_market") or "US") if isinstance(_mv_cfg, dict) else "US")
-    ).upper()
-    if _mv_market not in {"US", "EU", "JP"}:
-        _mv_market = "US"
-    if _mv_cfg_enabled:
-        _mv_cfg = {**_mv_cfg, "target_market": _mv_market}
-    else:
-        _mv_cfg = {}
-    _hook_apply_enabled = bool(getattr(payload, "hook_apply_enabled", False))
-    _hook_applied_text = str(getattr(payload, "hook_applied_text", None) or "").strip()
-    _hook_score = getattr(payload, "hook_score", None)
-    _hook_overlay_enabled = bool(getattr(payload, "hook_overlay_enabled", False))
-    if not _hook_applied_text:
-        _hook_apply_enabled = False
-    if output_mode == "channel":
-        ensure_channel(effective_channel)
-        if not (payload.render_output_subdir or "").strip():
-            raise RuntimeError("render_output_subdir is required")
-        output_dir = _resolve_output_dir(effective_channel, payload.output_dir, payload.render_output_subdir)
-    else:
-        output_dir = Path(payload.output_dir).expanduser()
-        if not output_dir.is_absolute():
-            output_dir = (Path.cwd() / output_dir).resolve()
+    # Sprint 6.D-1.1: payload normalization + channel resolution moved
+    # to orchestration/pipeline_setup.py. The local aliases below preserve
+    # the names used throughout the rest of this function.
+    _setup = setup_render_pipeline(payload)
+    output_mode          = _setup.output_mode
+    effective_channel    = _setup.effective_channel
+    started_at           = _setup.started_at
+    _mv_cfg              = _setup.mv_cfg
+    _mv_market           = _setup.mv_market
+    _hook_apply_enabled  = _setup.hook_apply_enabled
+    _hook_applied_text   = _setup.hook_applied_text
+    _hook_score          = _setup.hook_score
+    _hook_overlay_enabled = _setup.hook_overlay_enabled
+    output_dir           = _setup.output_dir
     _emit_render_event(
         channel_code=effective_channel,
         job_id=job_id,
