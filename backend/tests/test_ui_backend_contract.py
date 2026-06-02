@@ -249,9 +249,16 @@ class TestRenderRequestInstantiation:
         assert req.target_platform == "youtube_shorts"
 
     def test_default_ai_director_enabled(self):
+        """Sprint 3 3E Subset A (audit 2026-06-02): flipped to False.
+
+        The AI Director module was removed in Phase G (see main.py:238).
+        The flag remains for backward-compatibility with stored payloads but
+        is now a no-op. Default-False honors Sacred Contract 2 — stored jobs
+        replayed without this field don't falsely claim AI Director was on.
+        """
         from backend.app.models.schemas import RenderRequest
         req = RenderRequest()
-        assert req.ai_director_enabled is True
+        assert req.ai_director_enabled is False
 
     def test_model_dump_is_serializable(self):
         """model_dump() should produce a JSON-serializable dict."""

@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_parts_bulk, get_job, delete_job, clear_part_output, save_error_kind
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR, TEMP_DIR
+from app.models.schemas import JobStatusResponse
 from app.quality.report_locator import load_quality_report_for_part
 from app.quality.report_summary import build_job_quality_summary
 
@@ -356,7 +357,7 @@ def api_queue_status():
     }
 
 
-@router.get("/{job_id}")
+@router.get("/{job_id}", response_model=JobStatusResponse)
 def api_get_job(job_id: str):
     row = get_job(job_id)
     if not row:

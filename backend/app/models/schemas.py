@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Literal, Optional
 
 
@@ -223,13 +223,19 @@ class RenderRequest(BaseModel):
     auto_best_export_enabled: bool = False
     auto_best_export_count: int = 3
 
-    # AI Director (Phase 1) — enabled by default; AI is the primary editor.
-    ai_director_enabled: bool = True
+    # AI Director (Phase 1) — flag retained for backward compatibility with stored
+    # job payloads. Sprint 3 3E Subset A (audit 2026-06-02) flipped this from True
+    # to False because the AI Director module was removed in Phase G
+    # (see app/main.py:238 "RAG/AI Director removed"). Effectively a no-op now;
+    # default-False honors Sacred Contract 2 for replayed historical jobs.
+    ai_director_enabled: bool = False
     ai_mode: str = "viral_tiktok"
     ai_auto_cut: bool = True
     ai_target_duration: Optional[int] = None
     ai_use_semantic_hooks: bool = True
-    ai_use_rag_memory: bool = True
+    # RAG memory was removed in Phase G alongside the AI Director module. Kept
+    # as a no-op flag; default-False per Contract 2 (audit 2026-06-02 Subset A).
+    ai_use_rag_memory: bool = False
     # AI Render Influence (Phase 10) — enabled by default.
     ai_render_influence_enabled: bool = True
     # AI Beat Execution (Phase 11) — opt-in beat-aware planning; defaults preserve old behavior.
@@ -824,3 +830,27 @@ class ProxyPoolUpdate(BaseModel):
         if v is None:
             return None
         return max(0, int(v or 0))
+
+
+# ── Job status response (GET /api/jobs/{job_id}) ─────────────────────────────
+# Mirrors frontend/src/types/api.ts:JobStatus and the day-1 columns of the
+# `jobs` table in app.db. Wired as response_model on routes/jobs.py:359 so the
+# field set is documented and enforced by Pydantic. extra="allow" preserves
+# additive forward-compatibility: future columns reach the wire without
+# breaking the contract, but the documented fields are guaranteed present.
+class JobStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    job_id: str
+    kind: str
+    status: str
+    stage: str = ""
+    progress_percent: int = 0
+    message: str = ""
+    payload_json: Optional[str] = None
+    result_json: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    # error_kind is populated by the handler when status == "failed" — Optional
+    # so non-failed responses (where the field may be NULL in DB) still validate.
+    error_kind: Optional[str] = None
