@@ -56,9 +56,9 @@ describe('Electron cutover — WebSocket client', () => {
 })
 
 describe('Electron cutover — Vite build config', () => {
-  it('vite.config.ts outDir points to static-new', () => {
+  it('vite.config.ts outDir points to static-v2', () => {
     const configSrc = readFileSync(join(ROOT, 'vite.config.ts'), 'utf-8')
-    expect(configSrc).toContain('static-new')
+    expect(configSrc).toContain('static-v2')
   })
 
   it('vite.config.ts has no explicit base that would break same-origin serving', () => {
@@ -115,7 +115,7 @@ describe('Electron cutover — static-v2 build artifact', () => {
   it('static-v2 directory exists after build+copy', () => {
     const staticV2 = join(ROOT, '..', 'backend', 'static-v2')
     if (!existsSync(staticV2)) {
-      console.warn('backend/static-v2 not found — run: cd frontend && npx vite build, then copy backend/static-new/ to backend/static-v2/')
+      console.warn('backend/static-v2 not found — run: cd frontend && npm run build')
       return
     }
     expect(existsSync(join(staticV2, 'index.html'))).toBe(true)

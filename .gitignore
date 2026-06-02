@@ -97,5 +97,4 @@ checkpoints/
 *.bin
 .cache/
 
-backend/static-new/
 frontend/*.tsbuildinfo

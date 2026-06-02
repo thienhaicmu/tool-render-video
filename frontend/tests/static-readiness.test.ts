@@ -3,7 +3,7 @@
  *
  * Tests:
  * - BASE_URL uses import.meta.env.VITE_API_BASE_URL, not hardcoded 127.0.0.1
- * - vite.config.ts outDir points to static-new
+ * - vite.config.ts outDir points to static-v2
  * - No /api/upload/* (old domain) in any src file
  * - getJobHistory is used in history (paginated, not unbounded)
  * - STATIC_UI_VERSION env var is documented in backend
@@ -69,9 +69,9 @@ describe('static-readiness — WebSocket URL', () => {
 // ── Vite build config ─────────────────────────────────────────────────────────
 
 describe('static-readiness — vite.config.ts', () => {
-  it('outDir points to ../backend/static-new', () => {
+  it('outDir points to ../backend/static-v2', () => {
     const content = readFileSync(join(__dirname, '../vite.config.ts'), 'utf-8')
-    expect(content).toContain('static-new')
+    expect(content).toContain('static-v2')
   })
 
   it('has /api proxy pointing to 127.0.0.1:8000', () => {
@@ -136,11 +136,6 @@ describe('static-readiness — STATIC_UI_VERSION', () => {
 // ── .gitignore covers build artifacts ────────────────────────────────────────
 
 describe('static-readiness — .gitignore', () => {
-  it('root .gitignore ignores backend/static-new/', () => {
-    const content = readRoot('.gitignore')
-    expect(content).toContain('backend/static-new/')
-  })
-
   it('frontend/.gitignore ignores *.tsbuildinfo', () => {
     const content = readFileSync(join(__dirname, '../.gitignore'), 'utf-8')
     expect(content).toContain('*.tsbuildinfo')
