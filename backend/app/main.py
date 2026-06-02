@@ -225,6 +225,7 @@ def startup():
     _configure_access_log_filter()
     _configure_error_log_filter()
     init_db()
+    _check_db_fallback_at_startup()
     ensure_channel("k1")
     keep_last = int(os.getenv("LOG_KEEP_LAST", "30"))
     older_days = int(os.getenv("LOG_KEEP_DAYS", "10"))
@@ -271,6 +272,51 @@ def api_warmup_status():
     return warmup_status()
 
 
+def _check_db_fallback_at_startup() -> None:
+    """Sprint 4.4 — surface DB fallback engagement at startup.
+
+    Sacred Contract 7 says `data/app.db` is the sole job state authority.
+    `_resolve_db_path()` will silently fall back to LOCALAPPDATA when the
+    configured primary path is unwritable. This check writes a marker file
+    and logs at CRITICAL so operators can detect the split-DB condition.
+    """
+    try:
+        from app.db.connection import is_fallback_active, get_active_db_path
+        if not is_fallback_active():
+            # Remove stale flag from a previous fallback session
+            try:
+                flag = APP_DATA_DIR / "DB_FALLBACK_ENGAGED.flag"
+                if flag.exists():
+                    flag.unlink()
+            except Exception:
+                pass
+            return
+        active = get_active_db_path()
+        from app.core.config import DATABASE_PATH as _PRIMARY
+        log = logging.getLogger("app.startup")
+        log.critical(
+            "DB_FALLBACK_ENGAGED — primary path %s is not writable; "
+            "data is being written to fallback %s. Sacred Contract 7 erosion: "
+            "job state is now split across two app.db files. Investigate the "
+            "primary path's permissions and restart the app to recover.",
+            _PRIMARY, active,
+        )
+        try:
+            flag = APP_DATA_DIR / "DB_FALLBACK_ENGAGED.flag"
+            flag.write_text(
+                f"timestamp={threading.current_thread().name}\n"
+                f"primary={_PRIMARY}\nactive={active}\n",
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            log.warning("DB_FALLBACK_ENGAGED.flag write failed: %s", exc)
+    except Exception as exc:
+        # Never raise from a startup hook — fall through and let the app boot
+        logging.getLogger("app.startup").warning(
+            "_check_db_fallback_at_startup failed: %s", exc,
+        )
+
+
 @app.on_event("shutdown")
 def shutdown():
     shutdown_job_manager(wait=False)
@@ -278,7 +324,27 @@ def shutdown():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "ui_version": _UI_VERSION}
+    """Health endpoint — adds DB-path visibility (Sprint 4.4).
+
+    db_path is the currently-active SQLite path (after fallback resolution).
+    db_fallback_active=True signals that data is being written to the
+    LOCALAPPDATA fallback instead of the configured primary path. Clients
+    (frontend, Electron, monitoring) can surface this to the operator.
+    """
+    db_path = ""
+    db_fallback_active = False
+    try:
+        from app.db.connection import get_active_db_path, is_fallback_active
+        db_path = str(get_active_db_path())
+        db_fallback_active = is_fallback_active()
+    except Exception:
+        pass
+    return {
+        "status": "ok",
+        "ui_version": _UI_VERSION,
+        "db_path": db_path,
+        "db_fallback_active": db_fallback_active,
+    }
 
 
 @app.get("/")

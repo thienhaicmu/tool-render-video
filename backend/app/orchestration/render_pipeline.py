@@ -55,6 +55,8 @@ from app.orchestration.render_events import (
     _emit_render_event,
     _event_from_stage,
     _job_log,
+    register_job_log_dir,
+    unregister_job_log_dir,
     _render_error_code,
     _render_progress_timer,
     _resolve_job_log_dir,
@@ -293,7 +295,7 @@ def run_render_pipeline(
             traceback_text=traceback.format_exc(),
         )
         raise
-    _JOB_LOG_DIRS[job_id] = _resolve_job_log_dir(output_dir, output_mode, effective_channel)
+    register_job_log_dir(job_id, _resolve_job_log_dir(output_dir, output_mode, effective_channel))
     work_dir = TEMP_DIR / job_id
     work_dir.mkdir(parents=True, exist_ok=True)
     tuned = _resolve_profile(payload)
@@ -1521,5 +1523,5 @@ def run_render_pipeline(
                 cleanup_session_fn(edit_session_id)
             except Exception:
                 pass
-        _JOB_LOG_DIRS.pop(job_id, None)
+        unregister_job_log_dir(job_id)
         close_thread_conn()  # release render thread's cached DB connection

@@ -77,6 +77,27 @@ def _resolve_db_path() -> Path:
         )
 
 
+def get_active_db_path() -> Path:
+    """Return the DB path currently in use (after resolution + fallback).
+
+    Idempotent. Triggers fallback resolution on first call if not yet resolved.
+    """
+    return _resolve_db_path()
+
+
+def is_fallback_active() -> bool:
+    """Return True if the resolved DB path differs from DATABASE_PATH (env).
+
+    Sprint 4.4 (audit 2026-06-02 P2-B4): exposes the silent-fallback state
+    so operators can detect when data is being written to the LOCALAPPDATA
+    fallback instead of the configured primary path. Sacred Contract 7
+    erosion signal — main.py uses this at startup to drop a flag file +
+    enrich /health.
+    """
+    active = _resolve_db_path()
+    return Path(active).resolve() != Path(DATABASE_PATH).resolve()
+
+
 def get_conn():
     db_path = _resolve_db_path()
     conn = sqlite3.connect(str(db_path), timeout=30)

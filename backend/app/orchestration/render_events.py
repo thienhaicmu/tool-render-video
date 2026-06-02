@@ -14,7 +14,24 @@ from app.services.db import upsert_job_part
 
 logger = logging.getLogger("app.render")
 
+# Maps job_id -> log directory for the active render. Read by _job_log()
+# and _emit_render_event() to route per-job log lines. Cleaned up by
+# unregister_job_log_dir() at job completion (see render_pipeline.py finally
+# block). Mutations guarded by _JOB_LOG_DIRS_LOCK — Sprint 4.3, audit 2026-06-02.
 _JOB_LOG_DIRS: dict[str, Path] = {}
+_JOB_LOG_DIRS_LOCK = threading.Lock()
+
+
+def register_job_log_dir(job_id: str, log_dir: Path) -> None:
+    """Register the log directory for a render job. Idempotent."""
+    with _JOB_LOG_DIRS_LOCK:
+        _JOB_LOG_DIRS[job_id] = log_dir
+
+
+def unregister_job_log_dir(job_id: str) -> None:
+    """Remove a job's log-dir entry. Safe to call multiple times."""
+    with _JOB_LOG_DIRS_LOCK:
+        _JOB_LOG_DIRS.pop(job_id, None)
 
 
 def _safe_unlink(path: Path):
