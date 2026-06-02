@@ -70,19 +70,31 @@ Logical sections inside `run_render_pipeline`:
 7. Lines ~1180–1280: output ranking + result_json assembly
 8. Lines ~1280–1525: finalize, manifest writing, cleanup
 
-Proposed extractions (least to most risky):
+Proposed extractions (revised after planning pushback — see §11 changelog):
+
+The original plan ordered these least → most risky. After re-examination,
+**1.5 (finalize block) is actually the safest first move** because it's
+the last contiguous block of `run_render_pipeline` — a natural cleavage
+point at end-of-function, not a middle-of-function slice. Doing 1.5 first
+drops the function by ~245 lines in one safe commit and makes the
+remaining ~1280-line middle easier to slice for 1.1–1.4.
 
 | Phase | Extract | Target module | Risk |
 |---|---|---|---|
+| **6.D-1.5** | Finalize block (~1280–1525) — **execute first** | `orchestration/pipeline_finalize.py` | MEDIUM (touches Sprint 6.A backup + Sprint 6.C metrics hooks; both are 5-line additive blocks that copy verbatim) |
 | **6.D-1.1** | Payload normalization + channel resolution (~232–300) | `orchestration/pipeline_setup.py` | LOW |
 | **6.D-1.2** | Output-dir + manifest setup (~290–340) | (same file as 1.1) | LOW |
 | **6.D-1.3** | Source preparation block (~300–450) | `orchestration/pipeline_source_prep.py` | MEDIUM |
 | **6.D-1.4** | TTS narration block (~450–700) | `orchestration/pipeline_narration.py` | MEDIUM |
-| **6.D-1.5** | Finalize block (~1280–1525) | `orchestration/pipeline_finalize.py` | HIGH (touches Sprint 6.A backup + Sprint 6.C metrics hooks) |
 
 **Stop condition:** if any extraction would drop `run_render_pipeline`
 below ~600 lines, stop. The 800-line ceiling is the goal; over-extraction
 creates indirection without value.
+
+**Risk re-categorization for 1.5:** downgraded from HIGH (in original plan)
+to MEDIUM because the touchpoints with Sprint 6.A and 6.C are isolated
+5-line additive blocks. The actual blast radius of moving 245 lines of
+finalize is small — pytest covers the upsert + manifest writing paths.
 
 ### §3.2 — part_renderer.py (2101 lines)
 
@@ -134,7 +146,7 @@ Verified structure (selected highlights):
 - Lines 2113–2139: `build_motion_path` (dispatcher)
 - Lines 2139–2512: `render_motion_aware_crop` (~370 lines — FFmpeg invocation)
 
-Proposed extractions:
+Proposed extractions (revised after planning pushback — see §11 changelog):
 
 | Phase | Extract | Target module | Risk |
 |---|---|---|---|
@@ -142,8 +154,11 @@ Proposed extractions:
 | **6.D-3.2** | `MotionCropConfig` + `_apply_content_type_to_cfg` | `services/motion_crop_config.py` | LOW |
 | **6.D-3.3** | Generic helpers (codec flags, fonts, ffprobe, IoU, smoothing) | `services/motion_crop_utils.py` | LOW |
 | **6.D-3.4** | `_ByteTrackSubject` + tracker creation | `services/motion_crop_tracker.py` | MEDIUM |
-| **6.D-3.5** | Subject detection + scoring helpers (~30 functions) | `services/motion_crop_detection.py` | MEDIUM |
-| **6.D-3.6** | `build_subject_path` + `build_subject_path_scene` | `services/motion_crop_path.py` | HIGH (largest single move) |
+| **6.D-3.5a** | Detection helpers (`_detect_subjects_in_frame`, `_pick_best_subject`, `prepare_detection_frame`) | `services/motion_crop_detection.py` | MEDIUM |
+| **6.D-3.5b** | Scoring helpers (`_score_subject_candidate`, `_is_plausible_subject`, `_filter_subject_candidates`, `_same_subject`, `_subject_*`) | `services/motion_crop_scoring.py` | MEDIUM |
+| **6.D-3.5c** | Trackerless guard helpers (`_apply_trackerless_center_guard`, `_trackerless_*`) | `services/motion_crop_trackerless.py` | MEDIUM |
+| **6.D-3.6a** | `build_subject_path` (~330 LOC, contiguous) | `services/motion_crop_path.py` | HIGH |
+| **6.D-3.6b** | `build_subject_path_scene` (~520 LOC — may need further split during execution if interior seams exist) | (same file as 3.6a) | HIGH |
 | **6.D-3.7** | Legacy motion path + scene-range detection | `services/motion_crop_legacy.py` | LOW (rarely-used code path) |
 | **6.D-3.8** | `render_motion_aware_crop` stays in `motion_crop.py` | — | (target file ends at ~370 lines after all extractions) |
 
@@ -265,14 +280,17 @@ sessions at one phase per session.
 | 6.D-3.2 | motion_crop.py | services/motion_crop_config.py | LOW |
 | 6.D-3.3 | motion_crop.py | services/motion_crop_utils.py | LOW |
 | 6.D-3.4 | motion_crop.py | services/motion_crop_tracker.py | MEDIUM |
-| 6.D-3.5 | motion_crop.py | services/motion_crop_detection.py | MEDIUM |
-| 6.D-3.6 | motion_crop.py | services/motion_crop_path.py | HIGH |
+| 6.D-3.5a | motion_crop.py | services/motion_crop_detection.py | MEDIUM |
+| 6.D-3.5b | motion_crop.py | services/motion_crop_scoring.py | MEDIUM |
+| 6.D-3.5c | motion_crop.py | services/motion_crop_trackerless.py | MEDIUM |
+| 6.D-3.6a | motion_crop.py | services/motion_crop_path.py (build_subject_path) | HIGH |
+| 6.D-3.6b | motion_crop.py | services/motion_crop_path.py (build_subject_path_scene; may split further) | HIGH |
 | 6.D-3.7 | motion_crop.py | services/motion_crop_legacy.py | LOW |
+| 6.D-1.5 | render_pipeline.py | orchestration/pipeline_finalize.py | MEDIUM (downgraded — execute first) |
 | 6.D-1.1 | render_pipeline.py | orchestration/pipeline_setup.py | LOW |
 | 6.D-1.2 | render_pipeline.py | (same file as 1.1) | LOW |
 | 6.D-1.3 | render_pipeline.py | orchestration/pipeline_source_prep.py | MEDIUM |
 | 6.D-1.4 | render_pipeline.py | orchestration/pipeline_narration.py | MEDIUM |
-| 6.D-1.5 | render_pipeline.py | orchestration/pipeline_finalize.py | HIGH |
 | 6.D-2.1 | part_renderer.py | stages/part_render_context.py | LOW |
 | 6.D-2.2 | part_renderer.py | stages/part_asset_planner.py | MEDIUM |
 | 6.D-2.3 | part_renderer.py | stages/part_cut.py | HIGH |
@@ -282,3 +300,12 @@ sessions at one phase per session.
 To execute a phase, the user says e.g. **"execute Sprint 6.D-3.1"** —
 that session reads this plan, executes only the named phase, gates on
 green pytest, and stops.
+
+---
+
+## §11 — Changelog
+
+| Date | Change |
+|---|---|
+| Initial commit (`419bb32`) | Original plan: 17 phases, motion_crop 7 / render_pipeline 5 / part_renderer 5. |
+| Pushback revision (this commit) | Phase 3.5 split into 3.5a/b/c (the original "~30 functions" violated §7 stop condition #5). Phase 3.6 split into 3.6a/b (original 850 LOC violated same rule). render_pipeline phases reordered to put 1.5 first because it's the safest contiguous end-of-function slice; downgraded from HIGH to MEDIUM. Total phases now 20 (was 17). |
