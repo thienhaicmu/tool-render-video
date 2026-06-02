@@ -75,12 +75,17 @@ interface NavItem {
   icon: React.ReactNode
 }
 
+// Sprint 5.6 follow-up: the Studio nav item used to route to features/studio/
+// (the older 6-step flow). That feature module was retired in commit e7771e4;
+// the Studio nav button now routes to the canonical clip-studio panel where
+// RenderWorkflow lives. The `as ActivePanel` casts below would have hidden
+// the type error otherwise.
 const MAIN_NAV: NavItem[] = [
-  { panel: 'home'    as ActivePanel, labelKey: 'nav_home',     icon: <IconHome /> },
-  { panel: 'studio'  as ActivePanel, labelKey: 'nav_studio',   icon: <IconScissors /> },
-  { panel: 'library' as ActivePanel, labelKey: 'nav_library',  icon: <IconGrid /> },
-  { panel: 'download'as ActivePanel, labelKey: 'nav_download', icon: <IconDownload /> },
-  { panel: 'publish' as ActivePanel, labelKey: 'nav_publish',  icon: <IconUpload /> },
+  { panel: 'home'        as ActivePanel, labelKey: 'nav_home',     icon: <IconHome /> },
+  { panel: 'clip-studio' as ActivePanel, labelKey: 'nav_studio',   icon: <IconScissors /> },
+  { panel: 'library'     as ActivePanel, labelKey: 'nav_library',  icon: <IconGrid /> },
+  { panel: 'download'    as ActivePanel, labelKey: 'nav_download', icon: <IconDownload /> },
+  { panel: 'publish'     as ActivePanel, labelKey: 'nav_publish',  icon: <IconUpload /> },
 ]
 
 const BOTTOM_NAV: NavItem[] = [

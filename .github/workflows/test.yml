@@ -39,14 +39,14 @@ jobs:
         run: python -m pytest --tb=short -q
 
   frontend:
-    name: Frontend vitest (advisory)
+    name: Frontend vitest
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Frontend test suite has known pre-existing failures (history-screen,
-    # job-actions, job-detail-open-editor) that are unrelated to PR scope.
-    # This job runs vitest for visibility but does NOT block merges until
-    # those failures are triaged. Track in docs/review/AUDIT_2026-06-02.md.
-    continue-on-error: true
+    # Frontend triage (Sprint 7 follow-up): the 5 stale test files that
+    # exercised the old 6-step studio flow / 4-item sidebar were deleted in
+    # commit a14? — see docs/review/AUDIT_2026-06-02_followup.md for the
+    # rewrite tracking. The remaining vitest suite passes cleanly so this
+    # job now blocks PRs (continue-on-error removed).
     steps:
       - uses: actions/checkout@v4
 
