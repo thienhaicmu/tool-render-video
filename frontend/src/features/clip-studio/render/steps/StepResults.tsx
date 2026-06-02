@@ -457,7 +457,7 @@ function StepResultsBase({
                         <span style={{
                           fontSize: 7, fontWeight: 700, padding: '1px 5px', borderRadius: 99, flexShrink: 0,
                           background: rank.confidence_tier === 'strong' ? 'rgba(52,200,120,.12)' : 'rgba(234,179,8,.1)',
-                          color: rank.confidence_tier === 'strong' ? '#34C878' : '#eab308',
+                          color: rank.confidence_tier === 'strong' ? 'var(--status-success)' : '#eab308',
                           letterSpacing: '.05em', textTransform: 'uppercase',
                         }}>
                           {rank.confidence_tier === 'strong' ? 'STRONG' : rank.confidence_tier === 'worth_testing' ? 'TEST' : 'EXP'}

@@ -15,10 +15,10 @@ const PLATFORM_FULL: Record<string, string> = {
 }
 
 const STATUS_META: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  queued:      { color: '#8A93B0', bg: 'rgba(138,147,176,.10)', border: 'rgba(138,147,176,.2)', label: 'Queued' },
-  downloading: { color: '#7B61FF', bg: 'rgba(123,97,255,.12)',  border: 'rgba(123,97,255,.3)',  label: 'Downloading' },
-  done:        { color: '#00C896', bg: 'rgba(0,200,150,.12)',   border: 'rgba(0,200,150,.25)',  label: 'Done' },
-  failed:      { color: '#E8407A', bg: 'rgba(232,64,122,.12)',  border: 'rgba(232,64,122,.25)', label: 'Failed' },
+  queued:      { color: 'var(--text-2)', bg: 'rgba(138,147,176,.10)', border: 'rgba(138,147,176,.2)', label: 'Queued' },
+  downloading: { color: 'var(--accent)', bg: 'rgba(123,97,255,.12)',  border: 'rgba(123,97,255,.3)',  label: 'Downloading' },
+  done:        { color: 'var(--ok)', bg: 'rgba(0,200,150,.12)',   border: 'rgba(0,200,150,.25)',  label: 'Done' },
+  failed:      { color: 'var(--fail)', bg: 'rgba(232,64,122,.12)',  border: 'rgba(232,64,122,.25)', label: 'Failed' },
 }
 const statusMeta = (s: string) => STATUS_META[s] ?? STATUS_META.queued
 
@@ -54,14 +54,14 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
             position: 'absolute' as const, top: 0, left: 0, bottom: 0,
             width: isDone ? '100%' : `${Math.max(2, job.progress)}%`,
             background: isDone
-              ? 'linear-gradient(90deg,#00C896,#00E5C8)'
-              : `linear-gradient(90deg,${pColor}cc,#7B61FF)`,
+              ? 'linear-gradient(90deg,var(--ok),var(--cyan))'
+              : `linear-gradient(90deg,${pColor}cc,var(--accent))`,
             transition: 'width .5s ease',
             boxShadow: isActive ? `0 0 8px ${pColor}80` : 'none',
           }} />
         </div>
       )}
-      {isFailed && <div style={{ height: 3, background: '#E8407A' }} />}
+      {isFailed && <div style={{ height: 3, background: 'var(--fail)' }} />}
       {isQueued  && <div style={{ height: 3, background: '#1C2438' }} />}
 
       <div style={{ padding: '12px 14px' }}>
@@ -81,7 +81,7 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
             }}>
               {pLabel}
             </div>
-            <span style={{ fontSize: 8, color: '#4A5270', textAlign: 'center' as const, whiteSpace: 'nowrap' as const }}>
+            <span style={{ fontSize: 8, color: 'var(--text-3)', textAlign: 'center' as const, whiteSpace: 'nowrap' as const }}>
               {pFull.slice(0, 7)}
             </span>
           </div>
@@ -89,13 +89,13 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
           {/* Info */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              fontSize: 12, fontWeight: 600, color: '#EEF0F8',
+              fontSize: 12, fontWeight: 600, color: 'var(--text-1)',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
               marginBottom: 3,
             }}>
               {job.title || job.url}
             </div>
-            <div style={{ fontSize: 10, color: '#4A5270', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
               {job.url}
             </div>
           </div>
@@ -118,17 +118,17 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
             padding: '8px 10px', background: 'rgba(123,97,255,.06)',
             borderRadius: 8, border: '1px solid rgba(123,97,255,.12)',
           }}>
-            <span style={{ fontSize: 22, fontWeight: 800, color: '#7B61FF', fontFamily: 'monospace', lineHeight: 1 }}>
+            <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent)', fontFamily: 'monospace', lineHeight: 1 }}>
               {job.progress}%
             </span>
             <div style={{ flex: 1 }}>
               {job.speed_str && (
-                <div style={{ fontSize: 10, color: '#8A93B0', marginBottom: 2 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 2 }}>
                   ↑ {job.speed_str}
                 </div>
               )}
               {job.eta_str && (
-                <div style={{ fontSize: 10, color: '#4A5270' }}>ETA {job.eta_str}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-3)' }}>ETA {job.eta_str}</div>
               )}
             </div>
             <button
@@ -136,7 +136,7 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
               style={{
                 padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
                 border: '1px solid rgba(232,64,122,.3)', background: 'rgba(232,64,122,.08)',
-                color: '#E8407A', fontSize: 10, fontWeight: 700,
+                color: 'var(--fail)', fontSize: 10, fontWeight: 700,
               }}
             >
               Cancel
@@ -146,13 +146,13 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
 
         {isQueued && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 10, color: '#4A5270' }}>Waiting in queue…</span>
+            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Waiting in queue…</span>
             <button
               onClick={() => onCancel(job.id)}
               style={{
                 marginLeft: 'auto', padding: '3px 8px', borderRadius: 5, cursor: 'pointer',
                 border: '1px solid #1C2438', background: 'transparent',
-                color: '#4A5270', fontSize: 10, fontWeight: 600,
+                color: 'var(--text-3)', fontSize: 10, fontWeight: 600,
               }}
             >
               Cancel
@@ -162,15 +162,15 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
 
         {isDone && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 20, color: '#00C896' }}>✓</span>
+            <span style={{ fontSize: 20, color: 'var(--ok)' }}>✓</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               {job.filename && (
-                <div style={{ fontSize: 10, color: '#8A93B0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, fontFamily: 'monospace' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, fontFamily: 'monospace' }}>
                   {job.filename}
                 </div>
               )}
               {job.filesize > 0 && (
-                <div style={{ fontSize: 10, color: '#00C896', fontWeight: 700, marginTop: 2 }}>
+                <div style={{ fontSize: 10, color: 'var(--ok)', fontWeight: 700, marginTop: 2 }}>
                   {formatFilesize(job.filesize)}
                 </div>
               )}
@@ -182,7 +182,7 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
                 style={{
                   padding: '4px 10px', borderRadius: 6, cursor: 'pointer', flexShrink: 0,
                   border: '1px solid #1C2438', background: 'transparent',
-                  color: '#8A93B0', fontSize: 10, fontWeight: 600,
+                  color: 'var(--text-2)', fontSize: 10, fontWeight: 600,
                 }}
               >
                 Copy path
@@ -196,7 +196,7 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
             padding: '8px 10px', background: 'rgba(232,64,122,.06)',
             borderRadius: 8, border: '1px solid rgba(232,64,122,.15)',
           }}>
-            <div style={{ fontSize: 10, color: '#E8407A', lineHeight: 1.5, wordBreak: 'break-word' as const }}>
+            <div style={{ fontSize: 10, color: 'var(--fail)', lineHeight: 1.5, wordBreak: 'break-word' as const }}>
               ⚠ {job.error_msg || 'Download failed'}
             </div>
           </div>
@@ -210,8 +210,8 @@ function EmptyQueue() {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 40 }}>
       <div style={{ fontSize: 40, opacity: .15 }}>⬇</div>
-      <div style={{ fontSize: 13, color: '#8A93B0', fontWeight: 600 }}>Paste a URL to start downloading</div>
-      <div style={{ fontSize: 11, color: '#4A5270', textAlign: 'center' as const, lineHeight: 1.6 }}>
+      <div style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>Paste a URL to start downloading</div>
+      <div style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center' as const, lineHeight: 1.6 }}>
         YouTube · TikTok · Instagram · Facebook<br />
         Bilibili · Vimeo · Twitch · and more
       </div>
@@ -359,7 +359,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
         background: '#0D1019',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: showCookiePanel ? 12 : 14 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#EEF0F8', letterSpacing: '-.01em' }}>Downloader</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-.01em' }}>Downloader</span>
 
           {/* Cookie status chip */}
           <button
@@ -375,8 +375,8 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
                 ? (cookieStatus.has_v20_warning ? 'rgba(255,170,0,.08)' : 'rgba(0,200,150,.08)')
                 : 'rgba(232,64,122,.08)',
               color: cookieStatus?.present
-                ? (cookieStatus.has_v20_warning ? '#FFAA00' : '#00C896')
-                : '#E8407A',
+                ? (cookieStatus.has_v20_warning ? '#FFAA00' : 'var(--ok)')
+                : 'var(--fail)',
               fontSize: 10, fontWeight: 600, transition: 'all .15s',
             }}
           >
@@ -392,22 +392,22 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
 
           <div style={{ display: 'flex', gap: 6, marginLeft: 4 }}>
             {activeCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(123,97,255,.15)', color: '#7B61FF', border: '1px solid rgba(123,97,255,.3)', animation: 'dl-pulse 1.4s infinite' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(123,97,255,.15)', color: 'var(--accent)', border: '1px solid rgba(123,97,255,.3)', animation: 'dl-pulse 1.4s infinite' }}>
                 {activeCount} downloading
               </span>
             )}
             {queuedCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(138,147,176,.1)', color: '#8A93B0' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(138,147,176,.1)', color: 'var(--text-2)' }}>
                 {queuedCount} queued
               </span>
             )}
             {doneCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(0,200,150,.1)', color: '#00C896' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(0,200,150,.1)', color: 'var(--ok)' }}>
                 {doneCount} done
               </span>
             )}
             {failedCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(232,64,122,.1)', color: '#E8407A' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(232,64,122,.1)', color: 'var(--fail)' }}>
                 {failedCount} failed
               </span>
             )}
@@ -419,7 +419,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
           <div style={{ marginBottom: 12, borderRadius: 8, border: '1px solid #1C2438', background: '#111622', overflow: 'hidden' }}>
             {/* Row 1: status + auto-extract + help */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px' }}>
-              <span style={{ flex: 1, fontSize: 10, color: cookieStatus?.present ? (cookieStatus.has_v20_warning ? '#FFAA00' : '#00C896') : '#E8407A' }}>
+              <span style={{ flex: 1, fontSize: 10, color: cookieStatus?.present ? (cookieStatus.has_v20_warning ? '#FFAA00' : 'var(--ok)') : 'var(--fail)' }}>
                 {cookieStatus?.present
                   ? `✓ ${cookieStatus.cookie_count} cookies${cookieStatus.age_seconds != null ? ` · ${Math.round(cookieStatus.age_seconds / 60)}m ago` : ''}`
                   : '✗ No cookies · YouTube auth will fail'}
@@ -431,7 +431,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
                 style={{
                   padding: '4px 10px', borderRadius: 6, flexShrink: 0,
                   border: '1px solid #2A3558', background: '#0D1019',
-                  color: cookieAction === 'ok' ? '#00C896' : cookieAction === 'fail' ? '#E8407A' : '#8A93B0',
+                  color: cookieAction === 'ok' ? 'var(--ok)' : cookieAction === 'fail' ? 'var(--fail)' : 'var(--text-2)',
                   fontSize: 10, fontWeight: 600, cursor: cookieAction === 'loading' ? 'not-allowed' : 'pointer',
                   whiteSpace: 'nowrap' as const,
                 }}
@@ -444,7 +444,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
                 style={{
                   width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
                   border: '1px solid #2A3558', background: showCookieHelp ? '#2A3558' : 'transparent',
-                  color: '#4A5270', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                  color: 'var(--text-3)', fontSize: 11, fontWeight: 700, cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >?</button>
@@ -459,7 +459,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
                 style={{
                   flex: 1, height: 28, padding: '0 8px', borderRadius: 6,
                   background: '#0D1019', border: `1px solid ${cookieError ? 'rgba(232,64,122,.4)' : '#2A3558'}`,
-                  color: '#EEF0F8', fontSize: 10, fontFamily: 'monospace', outline: 'none',
+                  color: 'var(--text-1)', fontSize: 10, fontFamily: 'monospace', outline: 'none',
                 }}
               />
               <button
@@ -468,7 +468,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
                 style={{
                   height: 28, padding: '0 10px', borderRadius: 6, flexShrink: 0,
                   border: '1px solid #2A3558', background: '#0D1019',
-                  color: '#8A93B0', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' as const,
+                  color: 'var(--text-2)', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' as const,
                 }}
               >📂</button>
               <button
@@ -477,7 +477,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
                 style={{
                   height: 28, padding: '0 12px', borderRadius: 6, flexShrink: 0,
                   border: '1px solid rgba(123,97,255,.35)', background: cookiePath.trim() ? 'rgba(123,97,255,.15)' : 'transparent',
-                  color: cookiePath.trim() ? '#7B61FF' : '#2A3558', fontSize: 10, fontWeight: 700,
+                  color: cookiePath.trim() ? 'var(--accent)' : '#2A3558', fontSize: 10, fontWeight: 700,
                   cursor: cookiePath.trim() && cookieAction !== 'loading' ? 'pointer' : 'not-allowed',
                   whiteSpace: 'nowrap' as const, transition: 'all .12s',
                 }}
@@ -489,7 +489,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
             {/* Error row */}
             {cookieError && (
               <div style={{ padding: '0 12px 8px' }}>
-                <div style={{ padding: '6px 10px', borderRadius: 6, background: 'rgba(232,64,122,.08)', border: '1px solid rgba(232,64,122,.2)', fontSize: 10, color: '#E8407A' }}>
+                <div style={{ padding: '6px 10px', borderRadius: 6, background: 'rgba(232,64,122,.08)', border: '1px solid rgba(232,64,122,.2)', fontSize: 10, color: 'var(--fail)' }}>
                   ⚠ {cookieError}
                 </div>
               </div>
@@ -498,14 +498,14 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
             {/* Collapsible instructions */}
             {showCookieHelp && (
               <div style={{ padding: '0 12px 10px', borderTop: '1px solid #1C2438' }}>
-                <div style={{ paddingTop: 8, fontSize: 10, color: '#7B61FF', fontWeight: 700, marginBottom: 4 }}>
+                <div style={{ paddingTop: 8, fontSize: 10, color: 'var(--accent)', fontWeight: 700, marginBottom: 4 }}>
                   Chrome 127+ — export with extension:
                 </div>
-                <ol style={{ margin: 0, paddingLeft: 16, fontSize: 10, color: '#8A93B0', lineHeight: 1.9 }}>
-                  <li>Cài <strong style={{ color: '#EEF0F8' }}>"Get cookies.txt LOCALLY"</strong> trên Chrome Web Store</li>
-                  <li>Mở <strong style={{ color: '#EEF0F8' }}>youtube.com</strong> — đăng nhập trước</li>
-                  <li>Click extension → <strong style={{ color: '#EEF0F8' }}>Export cookies for this tab</strong></li>
-                  <li>Lưu file → paste path vào ô trên → bấm <strong style={{ color: '#EEF0F8' }}>Import</strong></li>
+                <ol style={{ margin: 0, paddingLeft: 16, fontSize: 10, color: 'var(--text-2)', lineHeight: 1.9 }}>
+                  <li>Cài <strong style={{ color: 'var(--text-1)' }}>"Get cookies.txt LOCALLY"</strong> trên Chrome Web Store</li>
+                  <li>Mở <strong style={{ color: 'var(--text-1)' }}>youtube.com</strong> — đăng nhập trước</li>
+                  <li>Click extension → <strong style={{ color: 'var(--text-1)' }}>Export cookies for this tab</strong></li>
+                  <li>Lưu file → paste path vào ô trên → bấm <strong style={{ color: 'var(--text-1)' }}>Import</strong></li>
                 </ol>
               </div>
             )}
@@ -516,7 +516,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
         <div style={{
           display: 'flex',
           background: '#0D1019',
-          border: `1px solid ${error ? '#E8407A' : inputValid ? 'rgba(123,97,255,.4)' : '#1C2438'}`,
+          border: `1px solid ${error ? 'var(--fail)' : inputValid ? 'rgba(123,97,255,.4)' : '#1C2438'}`,
           borderRadius: 10,
           overflow: 'hidden',
           marginBottom: 10,
@@ -531,7 +531,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
             style={{
               flex: 1, height: 42, padding: '0 14px',
               background: 'transparent', border: 'none', outline: 'none',
-              fontSize: 12, color: '#EEF0F8', fontFamily: 'monospace',
+              fontSize: 12, color: 'var(--text-1)', fontFamily: 'monospace',
             }}
           />
           {!url && (
@@ -541,12 +541,12 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
               style={{
                 height: 42, padding: '0 12px', background: 'transparent',
                 border: 'none', borderLeft: '1px solid #1C2438',
-                color: '#4A5270', fontSize: 11, cursor: 'pointer',
+                color: 'var(--text-3)', fontSize: 11, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: 4,
                 transition: 'color .12s',
               }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#8A93B0')}
-              onMouseLeave={e => (e.currentTarget.style.color = '#4A5270')}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-2)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
             >
               📋 Paste
             </button>
@@ -557,7 +557,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
               style={{
                 height: 42, width: 36, background: 'transparent',
                 border: 'none', borderLeft: '1px solid #1C2438',
-                color: '#4A5270', fontSize: 16, cursor: 'pointer',
+                color: 'var(--text-3)', fontSize: 16, cursor: 'pointer',
               }}
             >
               ×
@@ -572,7 +572,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
                 ? adding ? 'rgba(123,97,255,.4)' : 'linear-gradient(135deg,#7B61FF,#5B8AFF)'
                 : '#161C2C',
               border: 'none', borderLeft: '1px solid rgba(255,255,255,.06)',
-              color: inputValid ? '#fff' : '#4A5270',
+              color: inputValid ? '#fff' : 'var(--text-3)',
               fontSize: 12, fontWeight: 700, cursor: inputValid && !adding ? 'pointer' : 'not-allowed',
               transition: 'all .12s',
               display: 'flex', alignItems: 'center', gap: 6,
@@ -587,14 +587,14 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
         {/* Options row */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 10, color: '#4A5270', fontWeight: 600 }}>Quality</span>
+            <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 600 }}>Quality</span>
             <select
               value={quality}
               onChange={(e) => setQuality(e.target.value)}
               style={{
                 background: '#111622', border: '1px solid #1C2438',
                 borderRadius: 6, padding: '5px 8px', fontSize: 11,
-                color: '#EEF0F8', outline: 'none', cursor: 'pointer',
+                color: 'var(--text-1)', outline: 'none', cursor: 'pointer',
               }}
             >
               <option value="best">Best</option>
@@ -605,13 +605,13 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 10, color: '#4A5270', fontWeight: 600, flexShrink: 0 }}>Save to</span>
+            <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 600, flexShrink: 0 }}>Save to</span>
             <div
               onClick={pickDir}
               style={{
                 flex: 1, height: 30, padding: '0 10px', borderRadius: 6, cursor: 'pointer',
                 background: '#111622', border: '1px solid #1C2438',
-                fontSize: 10, color: outputDir ? '#8A93B0' : '#4A5270',
+                fontSize: 10, color: outputDir ? 'var(--text-2)' : 'var(--text-3)',
                 display: 'flex', alignItems: 'center', overflow: 'hidden',
                 fontFamily: 'monospace', whiteSpace: 'nowrap' as const,
                 transition: 'border-color .12s',
@@ -628,7 +628,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
           <div style={{
             marginTop: 10, padding: '8px 12px',
             background: 'rgba(232,64,122,.08)', border: '1px solid rgba(232,64,122,.2)',
-            borderRadius: 8, fontSize: 11, color: '#E8407A', lineHeight: 1.5,
+            borderRadius: 8, fontSize: 11, color: 'var(--fail)', lineHeight: 1.5,
           }}>
             ⚠ {error}
           </div>

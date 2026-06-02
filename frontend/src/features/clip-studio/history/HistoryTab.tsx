@@ -7,16 +7,16 @@ const FILTERS = ['All', 'Done', 'Failed', 'Running'] as const
 type Filter = typeof FILTERS[number]
 
 const S: Record<string, { color: string; bg: string; border: string; label: string; icon: string }> = {
-  completed:             { color: '#00C896', bg: 'rgba(0,200,150,.12)',   border: 'rgba(0,200,150,.25)',   label: 'Done',        icon: '✓' },
-  completed_with_errors: { color: '#F0A020', bg: 'rgba(240,160,32,.12)',  border: 'rgba(240,160,32,.25)',  label: 'Partial',     icon: '⚠' },
-  failed:                { color: '#E8407A', bg: 'rgba(232,64,122,.12)',  border: 'rgba(232,64,122,.25)',  label: 'Failed',      icon: '✕' },
-  running:               { color: '#7B61FF', bg: 'rgba(123,97,255,.12)',  border: 'rgba(123,97,255,.3)',   label: 'Running',     icon: '⟳' },
-  queued:                { color: '#8A93B0', bg: 'rgba(138,147,176,.10)', border: 'rgba(138,147,176,.2)',  label: 'Queued',      icon: '○' },
-  interrupted:           { color: '#F0A020', bg: 'rgba(240,160,32,.12)',  border: 'rgba(240,160,32,.25)',  label: 'Interrupted', icon: '!' },
-  cancelled:             { color: '#4A5270', bg: 'rgba(74,82,112,.10)',   border: 'rgba(74,82,112,.2)',    label: 'Cancelled',   icon: '—' },
-  cancelling:            { color: '#4A5270', bg: 'rgba(74,82,112,.10)',   border: 'rgba(74,82,112,.2)',    label: 'Cancelling',  icon: '…' },
+  completed:             { color: 'var(--ok)', bg: 'rgba(0,200,150,.12)',   border: 'rgba(0,200,150,.25)',   label: 'Done',        icon: '✓' },
+  completed_with_errors: { color: 'var(--warn)', bg: 'rgba(240,160,32,.12)',  border: 'rgba(240,160,32,.25)',  label: 'Partial',     icon: '⚠' },
+  failed:                { color: 'var(--fail)', bg: 'rgba(232,64,122,.12)',  border: 'rgba(232,64,122,.25)',  label: 'Failed',      icon: '✕' },
+  running:               { color: 'var(--accent)', bg: 'rgba(123,97,255,.12)',  border: 'rgba(123,97,255,.3)',   label: 'Running',     icon: '⟳' },
+  queued:                { color: 'var(--text-2)', bg: 'rgba(138,147,176,.10)', border: 'rgba(138,147,176,.2)',  label: 'Queued',      icon: '○' },
+  interrupted:           { color: 'var(--warn)', bg: 'rgba(240,160,32,.12)',  border: 'rgba(240,160,32,.25)',  label: 'Interrupted', icon: '!' },
+  cancelled:             { color: 'var(--text-3)', bg: 'rgba(74,82,112,.10)',   border: 'rgba(74,82,112,.2)',    label: 'Cancelled',   icon: '—' },
+  cancelling:            { color: 'var(--text-3)', bg: 'rgba(74,82,112,.10)',   border: 'rgba(74,82,112,.2)',    label: 'Cancelling',  icon: '…' },
 }
-const sm = (s: string) => S[s] ?? { color: '#8A93B0', bg: 'rgba(138,147,176,.10)', border: 'rgba(138,147,176,.2)', label: s.replace(/_/g, ' '), icon: '?' }
+const sm = (s: string) => S[s] ?? { color: 'var(--text-2)', bg: 'rgba(138,147,176,.10)', border: 'rgba(138,147,176,.2)', label: s.replace(/_/g, ' '), icon: '?' }
 
 function fmtDate(raw: string) {
   const d = new Date(raw)
@@ -96,20 +96,20 @@ function JobRow({ job, onOpen }: { job: HistoryItem; onOpen: (j: HistoryItem) =>
       {/* Title + meta */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontSize: 12, fontWeight: 600, color: '#EEF0F8',
+          fontSize: 12, fontWeight: 600, color: 'var(--text-1)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
           marginBottom: 4,
         }}>
           {job.title || job.source_hint || `Render Job #${job.job_id.slice(0, 8)}`}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
-          <span style={{ fontSize: 10, color: '#4A5270', fontFamily: 'monospace' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'monospace' }}>
             {job.job_id.slice(0, 8)}
           </span>
           {job.completed_count > 0 && (
             <span style={{
               fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10,
-              background: 'rgba(0,200,150,.1)', color: '#00C896',
+              background: 'rgba(0,200,150,.1)', color: 'var(--ok)',
               border: '1px solid rgba(0,200,150,.2)',
             }}>
               ✓ {job.completed_count} clip{job.completed_count !== 1 ? 's' : ''}
@@ -118,14 +118,14 @@ function JobRow({ job, onOpen }: { job: HistoryItem; onOpen: (j: HistoryItem) =>
           {job.failed_count > 0 && (
             <span style={{
               fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10,
-              background: 'rgba(232,64,122,.1)', color: '#E8407A',
+              background: 'rgba(232,64,122,.1)', color: 'var(--fail)',
               border: '1px solid rgba(232,64,122,.2)',
             }}>
               ✕ {job.failed_count} failed
             </span>
           )}
           {isRunning && job.total_count > 0 && (
-            <ProgressRing done={job.completed_count} total={job.total_count} color="#7B61FF" />
+            <ProgressRing done={job.completed_count} total={job.total_count} color="var(--accent)" />
           )}
         </div>
       </div>
@@ -137,16 +137,16 @@ function JobRow({ job, onOpen }: { job: HistoryItem; onOpen: (j: HistoryItem) =>
             <div style={{
               height: '100%', borderRadius: 2,
               width: `${pct}%`,
-              background: 'linear-gradient(90deg,#7B61FF,#00E5C8)',
+              background: 'linear-gradient(90deg,var(--accent),var(--cyan))',
               transition: 'width .4s ease',
             }} />
           </div>
-          <div style={{ fontSize: 9, color: '#7B61FF', textAlign: 'center' as const, marginTop: 2 }}>{pct}%</div>
+          <div style={{ fontSize: 9, color: 'var(--accent)', textAlign: 'center' as const, marginTop: 2 }}>{pct}%</div>
         </div>
       )}
 
       {/* Date */}
-      <span style={{ fontSize: 10, color: '#4A5270', flexShrink: 0, whiteSpace: 'nowrap' as const, minWidth: 70, textAlign: 'right' as const }}>
+      <span style={{ fontSize: 10, color: 'var(--text-3)', flexShrink: 0, whiteSpace: 'nowrap' as const, minWidth: 70, textAlign: 'right' as const }}>
         {fmtDate(job.created_at)}
       </span>
 
@@ -160,7 +160,7 @@ function JobRow({ job, onOpen }: { job: HistoryItem; onOpen: (j: HistoryItem) =>
       </span>
 
       {/* Arrow */}
-      <span style={{ fontSize: 10, color: '#4A5270', opacity: hov ? 1 : 0, transition: 'opacity .1s', flexShrink: 0 }}>›</span>
+      <span style={{ fontSize: 10, color: 'var(--text-3)', opacity: hov ? 1 : 0, transition: 'opacity .1s', flexShrink: 0 }}>›</span>
     </div>
   )
 }
@@ -169,14 +169,14 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
   return (
     <div style={{
       padding: '8px 20px 6px',
-      fontSize: 10, fontWeight: 700, color: '#4A5270',
+      fontSize: 10, fontWeight: 700, color: 'var(--text-3)',
       letterSpacing: '.08em', textTransform: 'uppercase' as const,
       borderBottom: '1px solid rgba(255,255,255,.04)',
       display: 'flex', alignItems: 'center', gap: 8,
       background: '#090C13',
     }}>
       {label}
-      <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 8, background: 'rgba(255,255,255,.06)', color: '#8A93B0' }}>
+      <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 8, background: 'rgba(255,255,255,.06)', color: 'var(--text-2)' }}>
         {count}
       </span>
     </div>
@@ -203,24 +203,24 @@ function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void 
         {/* Drawer header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #1C2438', display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#EEF0F8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
               {job.title || job.source_hint || 'Render Job'}
             </div>
-            <div style={{ fontSize: 10, color: '#4A5270', marginTop: 2, fontFamily: 'monospace' }}>#{job.job_id}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2, fontFamily: 'monospace' }}>#{job.job_id}</div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#4A5270', fontSize: 18, cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 18, cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>×</button>
         </div>
 
         {/* Stats grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: '#1C2438', margin: 16, borderRadius: 10, overflow: 'hidden' }}>
           {[
             { label: 'Status', value: st.label, color: st.color },
-            { label: 'Clips done', value: `${job.completed_count}`, color: '#00C896' },
-            { label: 'Failed', value: `${job.failed_count}`, color: job.failed_count > 0 ? '#E8407A' : '#4A5270' },
-            { label: 'Total', value: `${job.total_count}`, color: '#EEF0F8' },
+            { label: 'Clips done', value: `${job.completed_count}`, color: 'var(--ok)' },
+            { label: 'Failed', value: `${job.failed_count}`, color: job.failed_count > 0 ? 'var(--fail)' : 'var(--text-3)' },
+            { label: 'Total', value: `${job.total_count}`, color: 'var(--text-1)' },
           ].map(({ label, value, color }) => (
             <div key={label} style={{ background: '#111622', padding: '12px 14px' }}>
-              <div style={{ fontSize: 9, color: '#4A5270', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 4 }}>{label}</div>
+              <div style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 4 }}>{label}</div>
               <div style={{ fontSize: 16, fontWeight: 700, color }}>{value}</div>
             </div>
           ))}
@@ -229,8 +229,8 @@ function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void 
         {/* Summary text */}
         {job.summary_text && (
           <div style={{ padding: '0 16px 16px' }}>
-            <div style={{ fontSize: 10, color: '#4A5270', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 6 }}>Summary</div>
-            <div style={{ fontSize: 11, color: '#8A93B0', lineHeight: 1.6, background: '#0D1019', padding: '10px 12px', borderRadius: 8, border: '1px solid #1C2438' }}>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 6 }}>Summary</div>
+            <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.6, background: '#0D1019', padding: '10px 12px', borderRadius: 8, border: '1px solid #1C2438' }}>
               {job.summary_text}
             </div>
           </div>
@@ -239,9 +239,9 @@ function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void 
         {/* Output dir */}
         {job.output_dir && (
           <div style={{ padding: '0 16px 16px' }}>
-            <div style={{ fontSize: 10, color: '#4A5270', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 6 }}>Output folder</div>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 6 }}>Output folder</div>
             <div style={{
-              fontSize: 10, color: '#8A93B0', fontFamily: 'monospace',
+              fontSize: 10, color: 'var(--text-2)', fontFamily: 'monospace',
               background: '#0D1019', padding: '8px 10px', borderRadius: 6,
               border: '1px solid #1C2438', wordBreak: 'break-all' as const,
             }}>
@@ -257,7 +257,7 @@ function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void 
               onClick={() => { navigator.clipboard.writeText(job.output_dir!).catch(() => {}) }}
               style={{
                 padding: '10px', borderRadius: 8, background: '#161C2C',
-                border: '1px solid #2A3558', color: '#EEF0F8', fontSize: 11,
+                border: '1px solid #2A3558', color: 'var(--text-1)', fontSize: 11,
                 fontWeight: 600, cursor: 'pointer',
               }}
             >
@@ -330,21 +330,21 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
         background: '#0D1019',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#EEF0F8', letterSpacing: '-.01em' }}>History</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-.01em' }}>History</span>
 
           <div style={{ display: 'flex', gap: 6, marginLeft: 4 }}>
             {runningCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(123,97,255,.15)', color: '#7B61FF', border: '1px solid rgba(123,97,255,.3)' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(123,97,255,.15)', color: 'var(--accent)', border: '1px solid rgba(123,97,255,.3)' }}>
                 {runningCount} running
               </span>
             )}
             {doneCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(0,200,150,.1)', color: '#00C896' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(0,200,150,.1)', color: 'var(--ok)' }}>
                 {doneCount} done
               </span>
             )}
             {failedCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(232,64,122,.1)', color: '#E8407A' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(232,64,122,.1)', color: 'var(--fail)' }}>
                 {failedCount} failed
               </span>
             )}
@@ -353,7 +353,7 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
           <button
             onClick={() => { setLoading(true); refresh().finally(() => setLoading(false)) }}
             title="Refresh"
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#4A5270', fontSize: 14, cursor: 'pointer', padding: 4, lineHeight: 1 }}
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 14, cursor: 'pointer', padding: 4, lineHeight: 1 }}
           >
             ↻
           </button>
@@ -369,7 +369,7 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
                 style={{
                   padding: '4px 12px', borderRadius: 6, cursor: 'pointer', border: 'none',
                   background: filter === f ? '#1B2235' : 'transparent',
-                  color: filter === f ? '#EEF0F8' : '#4A5270',
+                  color: filter === f ? 'var(--text-1)' : 'var(--text-3)',
                   fontSize: 11, fontWeight: 700,
                   transition: 'all .12s',
                 }}
@@ -384,14 +384,14 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
             background: '#0D1019', border: '1px solid #1C2438', borderRadius: 8, padding: '0 10px',
             height: 32,
           }}>
-            <span style={{ fontSize: 11, color: '#4A5270' }}>🔍</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>🔍</span>
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search…"
               style={{
                 background: 'none', border: 'none', outline: 'none',
-                fontSize: 11, color: '#EEF0F8', width: 160,
+                fontSize: 11, color: 'var(--text-1)', width: 160,
               }}
             />
           </div>
@@ -401,13 +401,13 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
       {/* List */}
       <div style={{ flex: 1, overflow: 'auto' }}>
         {loading && (
-          <div style={{ padding: 40, textAlign: 'center' as const, color: '#4A5270', fontSize: 12 }}>Loading…</div>
+          <div style={{ padding: 40, textAlign: 'center' as const, color: 'var(--text-3)', fontSize: 12 }}>Loading…</div>
         )}
         {!loading && error && (
-          <div style={{ padding: 40, textAlign: 'center' as const, color: '#E8407A', fontSize: 12 }}>⚠ {error}</div>
+          <div style={{ padding: 40, textAlign: 'center' as const, color: 'var(--fail)', fontSize: 12 }}>⚠ {error}</div>
         )}
         {!loading && !error && filtered.length === 0 && (
-          <div style={{ padding: 60, textAlign: 'center' as const, color: '#4A5270' }}>
+          <div style={{ padding: 60, textAlign: 'center' as const, color: 'var(--text-3)' }}>
             <div style={{ fontSize: 32, marginBottom: 12, opacity: .3 }}>📋</div>
             <div style={{ fontSize: 13, marginBottom: 6 }}>No jobs found</div>
             <div style={{ fontSize: 11, opacity: .6 }}>

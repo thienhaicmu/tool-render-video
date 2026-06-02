@@ -69,10 +69,14 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
 
   const thumbUrl = jobId ? getPartThumbnailUrl(jobId, slot.part_no) : null
 
+  // Audit followup_4: status color map sourced from design tokens so
+  // theme drift can't fork into per-file palettes. Status-success/
+  // ai-active map to the semantic intent. Waiting/error use rgb(107,114,128)
+  // and rgb(239,68,68) — those have no exact token at present; tracked.
   const ACCENT: Record<string, string> = {
-    done:    '#34C878',
+    done:    'var(--status-success)',
     failed:  '#ef4444',
-    active:  '#a855f7',
+    active:  'var(--ai-active)',
     waiting: '#6b7280',
   }
   const accentColor = ACCENT[state] ?? '#6b7280'
@@ -99,7 +103,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
         )}
         {isDone && jobId && (
           <a href={getPartMediaUrl(jobId, slot.part_no)} target="_blank" rel="noreferrer"
-            style={{ fontSize: 9, color: '#34C878', textDecoration: 'none', fontWeight: 700, letterSpacing: '.04em', flexShrink: 0 }}>
+            style={{ fontSize: 9, color: 'var(--status-success)', textDecoration: 'none', fontWeight: 700, letterSpacing: '.04em', flexShrink: 0 }}>
             ▶
           </a>
         )}
@@ -148,7 +152,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
             <div style={{
               height: '100%',
               width: `${pct}%`,
-              background: `linear-gradient(90deg,${accentColor},#4d7cff)`,
+              background: `linear-gradient(90deg,${accentColor},var(--accent-primary))`,
               transition: 'width .4s ease',
             }} />
           </div>
@@ -181,8 +185,8 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
               height: '100%', borderRadius: 99,
               width: `${isDone ? 100 : isFail || isWait ? 0 : pct}%`,
               background: isDone
-                ? 'linear-gradient(90deg,#34C878,#22c55e)'
-                : `linear-gradient(90deg,${accentColor},#4d7cff)`,
+                ? 'linear-gradient(90deg,var(--status-success),#22c55e)'
+                : `linear-gradient(90deg,${accentColor},var(--accent-primary))`,
               transition: 'width .4s ease',
             }} />
           </div>
@@ -197,7 +201,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               {STEP_NODES.map((n, i) => {
                 const st = i < activeStepIdx ? 'done' : i === activeStepIdx ? 'active' : 'pending'
-                const col = st === 'done' ? '#34C878' : st === 'active' ? '#a855f7' : '#6b7280'
+                const col = st === 'done' ? 'var(--status-success)' : st === 'active' ? 'var(--ai-active)' : '#6b7280'
                 return (
                   <React.Fragment key={n.key}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -214,7 +218,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
                       <span style={{ fontSize: 9, color: col, fontWeight: st === 'active' ? 700 : 500 }}>{n.label}</span>
                     </div>
                     {i < STEP_NODES.length - 1 && (
-                      <div style={{ flex: 1, height: 1, background: i < activeStepIdx ? '#34C878' : 'rgba(255,255,255,.1)', maxWidth: 20 }} />
+                      <div style={{ flex: 1, height: 1, background: i < activeStepIdx ? 'var(--status-success)' : 'rgba(255,255,255,.1)', maxWidth: 20 }} />
                     )}
                   </React.Fragment>
                 )
@@ -237,7 +241,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
             <a
               href={getPartMediaUrl(jobId, slot.part_no)}
               target="_blank" rel="noreferrer"
-              style={{ fontSize: 9, color: '#34C878', textDecoration: 'none', fontWeight: 700, letterSpacing: '.04em' }}
+              style={{ fontSize: 9, color: 'var(--status-success)', textDecoration: 'none', fontWeight: 700, letterSpacing: '.04em' }}
             >
               ▶ PREVIEW
             </a>
