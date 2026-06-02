@@ -27,6 +27,26 @@ from app.services.motion_crop_config import (
     _apply_content_type_to_cfg,
     MotionCropConfig,
 )
+# Sprint 6.D-3.3: generic helpers (codec flags, font detection, ffprobe,
+# math primitives, OpenCV cascade/IoU) extracted to a dedicated module.
+# Re-exported here so existing callers in motion_crop.py + external tests
+# (test_probe_unification, test_motion_crop_guards, test_render_audit_p0_fixes)
+# keep their existing import paths working unchanged.
+from app.services.motion_crop_utils import (
+    _codec_flags,
+    _safe_filter_path,
+    _detect_windows_fontfile,
+    _detect_windows_fonts_dir,
+    _get_custom_fonts_dir,
+    ffprobe_video_info,
+    has_audio_stream,
+    clamp,
+    ema,
+    _smoothstep,
+    _gaussian_smooth_1d,
+    _load_cascade,
+    _iou_xywh,
+)
 
 import cv2
 import numpy as np
@@ -224,150 +244,15 @@ def _get_eye_anchor_rel(
 # keep using them via `app.services.motion_crop` import paths.
 
 
-def _codec_flags(resolved_codec: str, video_crf: int, video_preset: str = "slow") -> list[str]:
-    """Return encoder flags for the motion-crop FFmpeg command.
-
-    NVENC path uses unconstrained VBR (no -maxrate cap) since motion-crop
-    pipes raw frames and operates under tighter latency constraints.
-    CPU paths delegate to encoder_helpers.codec_extra_flags for a single
-    source of truth on libx264/libx265 tuning parameters.
-    """
-    if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
-        return [
-            "-rc", "vbr_hq", "-cq", str(video_crf), "-b:v", "0",
-            "-spatial_aq", "1", "-temporal_aq", "1", "-aq-strength", "8",
-            "-rc-lookahead", "32", "-bf", "3",
-        ]
-    return _codec_extra_flags_shared(resolved_codec, video_crf, video_preset)
-
-
-def _safe_filter_path(path: str) -> str:
-    return str(path).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
-
-
-def _detect_windows_fontfile() -> str | None:
-    windir = os.environ.get("WINDIR")
-    if not windir:
-        return None
-    fonts_dir = Path(windir) / "Fonts"
-    for name in ("arial.ttf", "segoeui.ttf", "tahoma.ttf"):
-        p = fonts_dir / name
-        if p.exists():
-            return str(p)
-    return None
-
-
-def _detect_windows_fonts_dir() -> str | None:
-    windir = os.environ.get("WINDIR")
-    if not windir:
-        return None
-    p = Path(windir) / "Fonts"
-    return str(p) if p.exists() else None
-
-
-def _get_custom_fonts_dir() -> str | None:
-    """Return path to bundled fonts directory."""
-    here = Path(__file__).resolve()
-    candidates = [
-        here.parents[2] / "fonts",  # backend/fonts (current project layout)
-        here.parents[3] / "fonts",  # legacy: repo/fonts
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Video probe helpers
-# ---------------------------------------------------------------------------
-
-def ffprobe_video_info(video_path: str) -> Tuple[int, int, float]:
-    """Return (width, height, fps) via the shared cached probe service.
-
-    Delegates to render_engine.probe_video_metadata() which caches results by
-    (abspath, mtime_ns, size_bytes) — zero subprocess cost on repeat calls to the
-    same unmodified file.  Falls back to fps=30.0 when the probe cannot determine
-    a valid frame rate.
-
-    Deferred import used to break the render_engine ↔ motion_crop module-level
-    circular dependency (render_engine imports motion_crop at its own module level).
-    """
-    from app.services.render_engine import probe_video_metadata
-    meta = probe_video_metadata(video_path)
-    fps = meta["fps"] if meta["fps"] > 0 else 30.0
-    return meta["width"], meta["height"], fps
-
-
-def has_audio_stream(video_path: str) -> bool:
-    """Return True when the file has at least one audio stream (uses cached probe)."""
-    from app.services.render_engine import _has_audio_stream
-    return _has_audio_stream(video_path)
-
-
-# ---------------------------------------------------------------------------
-# Math helpers
-# ---------------------------------------------------------------------------
-
-def clamp(v: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, v))
-
-
-def ema(prev: float, new: float, alpha: float) -> float:
-    return prev * (1.0 - alpha) + new * alpha
-
-
-def _smoothstep(t: float) -> float:
-    """Classic cubic smoothstep: slow-in → fast-mid → slow-out, result in [0, 1].
-
-    t is clamped to [0, 1] before evaluation so callers don't need to pre-clamp.
-    Used for cinematic camera easing — no overshoot, C1-continuous at both ends.
-    """
-    t = clamp(t, 0.0, 1.0)
-    return t * t * (3.0 - 2.0 * t)
-
-
-def _gaussian_smooth_1d(arr: np.ndarray, window: int) -> np.ndarray:
-    """Apply Gaussian smoothing to a 1D array using convolution."""
-    if window < 3 or len(arr) < 3:
-        return arr.copy()
-    half = window // 2
-    sigma = window / 6.0
-    k = np.arange(-half, half + 1, dtype=float)
-    kernel = np.exp(-(k ** 2) / (2 * sigma ** 2))
-    kernel /= kernel.sum()
-    # Reflect-pad to avoid border shrinkage
-    padded = np.pad(arr, half, mode="reflect")
-    smoothed = np.convolve(padded, kernel, mode="valid")
-    return smoothed[: len(arr)]
+# Sprint 6.D-3.3: 13 generic helpers (codec flags, fonts, ffprobe, math,
+# cascade/IoU) → moved to app.services.motion_crop_utils. Re-exported at
+# the top of this file so existing callers in this module + tests keep
+# their import paths.
 
 
 # ---------------------------------------------------------------------------
 # CapCut-style Auto Reframe: Subject detection & tracking
 # ---------------------------------------------------------------------------
-
-def _load_cascade(filename: str) -> Optional[cv2.CascadeClassifier]:
-    """Load an OpenCV Haar cascade, return None if unavailable."""
-    try:
-        path = cv2.data.haarcascades + filename
-        cascade = cv2.CascadeClassifier(path)
-        return cascade if not cascade.empty() else None
-    except Exception:
-        return None
-
-
-def _iou_xywh(a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> float:
-    """Intersection-over-Union for two (x, y, w, h) boxes. Returns [0, 1]."""
-    ax, ay, aw, ah = a
-    bx, by, bw, bh = b
-    ix = max(ax, bx)
-    iy = max(ay, by)
-    iw = max(0, min(ax + aw, bx + bw) - ix)
-    ih = max(0, min(ay + ah, by + bh) - iy)
-    inter = iw * ih
-    union = aw * ah + bw * bh - inter
-    return float(inter) / max(float(union), 1.0)
-
 
 class _ByteTrackSubject:
     """Kalman-inspired single-subject tracker for reframe stability.
