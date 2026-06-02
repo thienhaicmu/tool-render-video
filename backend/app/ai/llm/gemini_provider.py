@@ -137,7 +137,14 @@ def _run(
 
 
 def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-    """Call Gemini Chat with JSON-object output mode."""
+    """Call Gemini Chat with JSON-object output mode.
+
+    TODO (Sprint 4.5 follow-up, audit 2026-06-02 P2-B2): google-genai SDK's
+    timeout API is via `http_options={'timeout': milliseconds}` on Client(),
+    but the exact signature varies across SDK versions. Add a verified
+    timeout once the deployed google-genai version is pinned. Currently
+    relies on SDK default (~10 min in 0.x; subject to change).
+    """
     try:
         client = _genai.Client(api_key=api_key)
         resp = client.models.generate_content(

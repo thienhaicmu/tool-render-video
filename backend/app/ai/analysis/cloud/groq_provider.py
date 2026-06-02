@@ -11,6 +11,7 @@ from typing import Optional
 
 from app.ai.analysis.cloud.base import CloudAnalyzerBase
 from app.ai.analysis.cloud.prompt_builder import get_system_prompt
+from app.core.config import GROQ_REQUEST_TIMEOUT
 
 logger = logging.getLogger("app.ai.analysis.cloud.groq")
 
@@ -41,10 +42,13 @@ class GroqProvider(CloudAnalyzerBase):
         return "groq"
 
     def _call_api(self, prompt: str) -> Optional[str]:
-        # Try native groq SDK first
+        # Try native groq SDK first.
+        # timeout=GROQ_REQUEST_TIMEOUT (default 30s, env override GROQ_REQUEST_TIMEOUT)
+        # prevents a hung Groq endpoint from stalling the render pipeline —
+        # added 2026-06-02 (Sprint 4.5, audit P2-B2).
         if _GROQ_SDK_AVAILABLE:
             try:
-                client = _GroqClient(api_key=self._api_key)
+                client = _GroqClient(api_key=self._api_key, timeout=GROQ_REQUEST_TIMEOUT)
                 resp = client.chat.completions.create(
                     model=self._model,
                     messages=[
@@ -61,7 +65,11 @@ class GroqProvider(CloudAnalyzerBase):
         # Fallback: Groq is OpenAI-compatible — use openai SDK with custom base_url
         if _OPENAI_COMPAT_AVAILABLE:
             try:
-                client = _openai.OpenAI(api_key=self._api_key, base_url=_GROQ_BASE_URL)
+                client = _openai.OpenAI(
+                    api_key=self._api_key,
+                    base_url=_GROQ_BASE_URL,
+                    timeout=GROQ_REQUEST_TIMEOUT,
+                )
                 resp = client.chat.completions.create(
                     model=self._model,
                     messages=[
