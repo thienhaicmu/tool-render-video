@@ -355,6 +355,19 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_feedback_channel ON clip_feedback(channel_code, goal)"
     )
     conn.commit()
+
+    # Sprint 6.B: apply any pending migrations beyond the baseline schema.
+    # Migration files live in app/db/migration_steps/ (empty in this commit;
+    # convention documented in that package's __init__.py). The runner adds
+    # a schema_versions table if missing and is idempotent. Failures are
+    # logged at WARNING but do NOT prevent app startup — the baseline
+    # schema above remains usable even if a later migration is buggy.
+    try:
+        from app.db.migrations import run_pending_migrations
+        run_pending_migrations(conn)
+    except Exception as exc:
+        logger.warning("schema migrations failed (non-fatal): %s", exc)
+
     conn.close()
 
 

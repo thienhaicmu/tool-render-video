@@ -179,8 +179,12 @@ class TestInitDbLiveTablesPresent:
             tables = _get_tables(conn)
             # Exclude the write-check helper table if present
             real_tables = {t for t in tables if t != "__db_write_check"}
+            # Sprint 6.B added schema_versions to track applied migrations.
+            # Empty in fresh DBs; the table itself is always created by
+            # the migration runner that init_db() invokes at the end.
             assert real_tables == {
-                "jobs", "job_parts", "creator_prefs", "download_jobs", "clip_feedback",
+                "jobs", "job_parts", "creator_prefs", "download_jobs",
+                "clip_feedback", "schema_versions",
             }, (
                 f"Unexpected tables after init_db(): {real_tables}"
             )
