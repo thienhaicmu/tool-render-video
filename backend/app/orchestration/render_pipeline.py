@@ -1409,6 +1409,15 @@ def run_render_pipeline(
             message=_final_message,
         )
         # AI Memory write (Phase 3) removed in Phase G — consumed _ai_edit_plan (None after E3).
+        # Sprint 6.A: opportunistic db backup after a completed render. Wrapped
+        # so any backup failure CANNOT propagate into the render pipeline.
+        # Triggers every Nth job or after the configured time interval (see
+        # app.services.db_backup). Sacred Contract 7 follow-up.
+        try:
+            from app.services.db_backup import maybe_snapshot_after_job
+            maybe_snapshot_after_job()
+        except Exception:
+            pass
 
         _job_log(
             effective_channel,
