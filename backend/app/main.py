@@ -106,7 +106,20 @@ app.include_router(render_router)
 app.include_router(jobs_router)
 # Security: POST /api/dev/command executes arbitrary shell commands with no auth.
 # Disabled by default. Set ENABLE_DEVTOOLS=1 only in trusted local dev environments.
+# Hard-block: refuses to mount unless uvicorn is bound to a loopback host
+# (fail closed — see app/core/devtools_safety.py).
 if os.getenv("ENABLE_DEVTOOLS") == "1":
+    from app.core.devtools_safety import (
+        assert_devtools_safe,
+        detect_uvicorn_bind_host,
+    )
+    _devtools_host = detect_uvicorn_bind_host()
+    assert_devtools_safe(_devtools_host)
+    logging.getLogger("app.security").warning(
+        "DEVTOOLS ENABLED on loopback host %s — POST /api/dev/command executes "
+        "arbitrary shell commands without authentication. Disable in production.",
+        _devtools_host,
+    )
     from app.routes.devtools import router as devtools_router
     app.include_router(devtools_router)
 app.include_router(voice_router)
