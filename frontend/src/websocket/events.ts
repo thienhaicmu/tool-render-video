@@ -30,10 +30,20 @@ export enum RenderStage {
 }
 
 /**
- * Type guard: incoming WS message is a progress event (has 'job' key).
+ * Type guard: incoming WS message is a progress event.
+ * Per Sacred Contract 6 (CLAUDE.md), every progress event must carry the
+ * three top-level keys job, parts, summary. A regression that drops any
+ * one of them must NOT pass this guard, or the UI will read stale/empty
+ * values silently.
  */
 export function isProgressEvent(msg: unknown): msg is WebSocketEvent {
-  return typeof msg === 'object' && msg !== null && 'job' in msg
+  return (
+    typeof msg === 'object' &&
+    msg !== null &&
+    'job' in msg &&
+    'parts' in msg &&
+    'summary' in msg
+  )
 }
 
 /**

@@ -2,9 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import type { JobPart, QualityReport, PartRankResult } from '../../../../types/api'
 import { getJobAiSummary, deletePartOutput } from '../../../../api/jobs'
 import type { JobAiSummary, HybridAnalysis } from '../../../../api/jobs'
+import {
+  submitClipFeedback,
+  getClipFeedback,
+  deleteClipFeedback,
+} from '../../../../api/feedback'
 import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
-import { BASE_URL } from '../../../../api/client'
 
 function aiTier(score: number): { label: string; cls: string } {
   if (score >= 85) return { label: 'VIRAL READY', cls: 'tier-viral' }
@@ -115,21 +119,17 @@ export function StepResults({
     setFeedbackRatings(prev => ({ ...prev, [partNo]: newRating }))
     try {
       if (newRating === null) {
-        await fetch(`${BASE_URL}/api/feedback/jobs/${encodeURIComponent(jobId)}/parts/${partNo}`, { method: 'DELETE' })
+        await deleteClipFeedback(jobId, partNo)
       } else {
-        await fetch(`${BASE_URL}/api/feedback/jobs/${encodeURIComponent(jobId)}/parts/${partNo}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rating: newRating,
-            goal: goal ?? '',
-            channel_code: '',
-            hook_type: 'none',
-            clip_type: 'unknown',
-            start_sec: 0,
-            end_sec: part.duration ?? 0,
-            duration_sec: part.duration ?? 0,
-          }),
+        await submitClipFeedback(jobId, partNo, {
+          rating: newRating,
+          goal: goal ?? '',
+          channel_code: '',
+          hook_type: 'none',
+          clip_type: 'unknown',
+          start_sec: 0,
+          end_sec: part.duration ?? 0,
+          duration_sec: part.duration ?? 0,
         })
       }
     } catch { /* fire-and-forget — UI already updated */ }
@@ -141,11 +141,9 @@ export function StepResults({
     const doneParts = parts.filter(p => p.status === 'done')
     doneParts.forEach(async (p) => {
       try {
-        const res = await fetch(`${BASE_URL}/api/feedback/jobs/${encodeURIComponent(jobId)}/parts/${p.part_no}`)
-        if (!res.ok) return
-        const data = await res.json()
-        if (data?.rating) {
-          setFeedbackRatings(prev => ({ ...prev, [p.part_no]: data.rating as 1 | -1 }))
+        const record = await getClipFeedback(jobId, p.part_no)
+        if (record?.rating) {
+          setFeedbackRatings(prev => ({ ...prev, [p.part_no]: record.rating }))
         }
       } catch { /* ignore */ }
     })
