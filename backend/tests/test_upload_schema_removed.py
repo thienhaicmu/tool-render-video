@@ -192,14 +192,30 @@ class TestInitDbLiveTablesPresent:
 
 class TestDropUploadTables:
     def _make_old_db(self, db_path: Path):
-        """Create a DB file that simulates an old install with all upload tables."""
+        """Create a DB file that simulates an old install with all upload tables.
+
+        The `jobs` table here mirrors the day-1 core columns (job_id, kind,
+        channel_code, status, created_at, updated_at) — anything narrower is
+        not representative of any real install. _ensure_columns(jobs, …) will
+        still add the later-added columns (stage, payload_json, …) during
+        init_db().
+        """
         conn = sqlite3.connect(str(db_path))
         for table in _UPLOAD_TABLES:
             conn.execute(
                 f"CREATE TABLE IF NOT EXISTS {table} (id INTEGER PRIMARY KEY)"
             )
         conn.execute(
-            "CREATE TABLE IF NOT EXISTS jobs (job_id TEXT PRIMARY KEY)"
+            """
+            CREATE TABLE IF NOT EXISTS jobs (
+                job_id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL DEFAULT '',
+                channel_code TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT '',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
         )
         conn.commit()
         conn.close()

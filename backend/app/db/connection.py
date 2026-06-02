@@ -235,6 +235,17 @@ def init_db():
             "updated_at": "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
         },
     )
+    # ── Indexes on jobs (additive — supports history pagination + status/kind filters)
+    # Audit 2026-06-02 found list_jobs_page (ORDER BY updated_at DESC, created_at DESC)
+    # and startup recovery (filter by status + kind) were doing full table scans.
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_jobs_updated "
+        "ON jobs(updated_at DESC, created_at DESC)"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_jobs_status_kind "
+        "ON jobs(status, kind)"
+    )
     # ── Creator preferences (singleton row, id always = 1) ──────────────────────
     cur.execute(
         """

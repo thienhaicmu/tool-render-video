@@ -189,6 +189,34 @@ class TestInitDb:
         finally:
             conn.close()
 
+    def test_jobs_table_has_history_indexes(self, tmp_path, monkeypatch):
+        """init_db() creates idx_jobs_updated and idx_jobs_status_kind on jobs.
+
+        Added by Sprint 2 Task 2C — see docs/review/AUDIT_2026-06-02.md.
+        Without these, list_jobs_page does a full table scan + sort on every
+        history fetch, and startup recovery scans every row to filter by
+        status/kind.
+        """
+        db_file = tmp_path / "test.db"
+        _reset_db_path(monkeypatch, db_file)
+        from app.db.connection import get_conn, init_db
+        init_db()
+        conn = get_conn()
+        try:
+            cur = conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='index' AND tbl_name='jobs'"
+            )
+            names = {row[0] for row in cur.fetchall()}
+        finally:
+            conn.close()
+        assert "idx_jobs_updated" in names, (
+            f"idx_jobs_updated missing — only have {names}"
+        )
+        assert "idx_jobs_status_kind" in names, (
+            f"idx_jobs_status_kind missing — only have {names}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # _json_dumps / _json_loads
