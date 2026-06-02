@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import type { JobPart, QualityReport, PartRankResult } from '../../../../types/api'
-import { getJobAiSummary, deletePartOutput } from '../../../../api/jobs'
-import type { JobAiSummary, HybridAnalysis } from '../../../../api/jobs'
+import type { JobPart, QualityReport, PartRankResult } from '@/types/api'
+import { getJobAiSummary, deletePartOutput } from '@/api/jobs'
+import type { JobAiSummary, HybridAnalysis } from '@/api/jobs'
 import {
   submitClipFeedback,
   getClipFeedback,
   deleteClipFeedback,
-} from '../../../../api/feedback'
+} from '@/api/feedback'
 import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 

@@ -4,13 +4,13 @@
  * Never polled — fetched once on open (and on manual refresh).
  */
 import { useEffect, useCallback } from 'react'
-import { Button } from '../../components/ui/Button'
+import { Button } from '@/components/ui/Button'
 import { QualityLoadingState } from './QualityLoadingState'
 import { QualityEmptyState } from './QualityEmptyState'
 import { QualityErrorState } from './QualityErrorState'
 import { QualitySummaryCard } from './QualitySummaryCard'
 import { QualityPartList } from './QualityPartList'
-import { useQualityStore } from '../../stores/qualityStore'
+import { useQualityStore } from '@/stores/qualityStore'
 import './QualityPanel.css'
 
 export interface QualityPanelProps {

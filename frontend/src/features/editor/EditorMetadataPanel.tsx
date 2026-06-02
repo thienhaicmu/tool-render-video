@@ -3,11 +3,11 @@
  * Provides Apply Trim, Re-render Selection, and Export Clip actions.
  */
 import { useState } from 'react'
-import { Button } from '../../components/ui/Button'
+import { Button } from '@/components/ui/Button'
 import { formatTime } from './editor.utils'
-import { useUIStore } from '../../stores/uiStore'
-import { trimJobPart, rerenderSelection, exportClip } from '../../api/editing'
-import { _formatApiError } from '../../lib/errors'
+import { useUIStore } from '@/stores/uiStore'
+import { trimJobPart, rerenderSelection, exportClip } from '@/api/editing'
+import { _formatApiError } from '@/lib/errors'
 
 export interface EditorMetadataPanelProps {
   jobId: string

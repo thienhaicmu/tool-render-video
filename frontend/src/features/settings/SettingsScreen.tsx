@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { apiFetch } from '../../api/client'
+import { apiFetch } from '@/api/client'
 
 interface CacheInfo {
   total_mb: number

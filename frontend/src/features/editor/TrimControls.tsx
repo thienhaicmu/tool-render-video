@@ -3,7 +3,7 @@
  * UI-only; no backend calls.
  */
 import { useState, useEffect } from 'react'
-import { Button } from '../../components/ui/Button'
+import { Button } from '@/components/ui/Button'
 import { formatTime, clamp, validateTrim } from './editor.utils'
 
 export interface TrimControlsProps {

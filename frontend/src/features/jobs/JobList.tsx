@@ -4,7 +4,7 @@ import { JobLoadingState } from './JobLoadingState'
 import { JobErrorState } from './JobErrorState'
 import { JobEmptyState } from './JobEmptyState'
 import { dateGroup } from './jobs.utils'
-import type { HistoryItem } from '../../types/api'
+import type { HistoryItem } from '@/types/api'
 
 export interface JobListProps {
   items: HistoryItem[]

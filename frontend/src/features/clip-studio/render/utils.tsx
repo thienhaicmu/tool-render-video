@@ -1,4 +1,4 @@
-import { BASE_URL } from '../../../api/client'
+import { BASE_URL } from '@/api/client'
 
 export function getPartThumbnailUrl(jobId: string, partNo: number): string {
   return `${BASE_URL}/api/render/jobs/${encodeURIComponent(jobId)}/parts/${partNo}/thumbnail?t=0.5&w=320`

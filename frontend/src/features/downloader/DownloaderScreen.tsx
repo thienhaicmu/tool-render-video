@@ -3,7 +3,7 @@ import {
   startBatch, listJobs, cancelJob, subscribeJob,
   formatFilesize, platformLabel, platformColor,
   type DownloadJob,
-} from '../../api/platformDownloader'
+} from '@/api/platformDownloader'
 
 const QUALITY_OPTS = [
   { v: 'best',  l: 'Best'  },

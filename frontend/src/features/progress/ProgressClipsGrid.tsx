@@ -2,7 +2,7 @@
  * ProgressClipsGrid — compact visual grid of all clips during render.
  * Replaces ProgressPartList for the new layout.
  */
-import type { JobPart } from '../../types/api'
+import type { JobPart } from '@/types/api'
 
 export interface ProgressClipsGridProps {
   liveParts: JobPart[]

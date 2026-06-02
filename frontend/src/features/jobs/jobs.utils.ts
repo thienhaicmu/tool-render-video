@@ -1,8 +1,8 @@
 /**
  * Utility functions for the jobs/history feature module.
  */
-import type { HistoryItem } from '../../types/api'
-import { isTerminalStatus } from '../../types/enums'
+import type { HistoryItem } from '@/types/api'
+import { isTerminalStatus } from '@/types/enums'
 
 export { isTerminalStatus }
 

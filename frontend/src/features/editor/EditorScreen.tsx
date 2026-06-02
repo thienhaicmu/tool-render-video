@@ -3,9 +3,9 @@
  * Phase 6.5: preview + UI-only trim (no backend mutations).
  */
 import { useEffect, useState, useCallback } from 'react'
-import { useEditorStore } from '../../stores/editorStore'
-import { getJobParts } from '../../api/jobs'
-import type { JobPart } from '../../types/api'
+import { useEditorStore } from '@/stores/editorStore'
+import { getJobParts } from '@/api/jobs'
+import type { JobPart } from '@/types/api'
 import { buildThumbnailUrl } from './editor.utils'
 import { VideoPreview } from './VideoPreview'
 import { TrimControls } from './TrimControls'

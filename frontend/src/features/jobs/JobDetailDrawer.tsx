@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { AiSummaryCard } from './AiSummaryCard'
 import { formatDateTime } from './jobs.utils'
-import { getJob, getJobParts } from '../../api/jobs'
-import { retryRender, resumeRender } from '../../api/render'
-import { deleteJob } from '../../api/jobs'
-import { useEditorStore } from '../../stores/editorStore'
-import { useUIStore } from '../../stores/uiStore'
-import { ApiError } from '../../api/client'
-import type { JobStatus, JobPart } from '../../types/api'
+import { getJob, getJobParts } from '@/api/jobs'
+import { retryRender, resumeRender } from '@/api/render'
+import { deleteJob } from '@/api/jobs'
+import { useEditorStore } from '@/stores/editorStore'
+import { useUIStore } from '@/stores/uiStore'
+import { ApiError } from '@/api/client'
+import type { JobStatus, JobPart } from '@/types/api'
 
 export interface JobDetailDrawerProps {
   jobId: string

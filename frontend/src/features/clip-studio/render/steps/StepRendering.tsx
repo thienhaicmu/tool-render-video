@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import type { JobPart, WsProgressSummary } from '../../../../types/api'
+import type { JobPart, WsProgressSummary } from '@/types/api'
 import type { ClipSlot } from '../types'
 import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'

@@ -1,6 +1,6 @@
 import { JobActionsMenu } from './JobActionsMenu'
 import { formatRelativeTime, isActiveStatus } from './jobs.utils'
-import type { HistoryItem } from '../../types/api'
+import type { HistoryItem } from '@/types/api'
 
 const STATUS_CFG: Record<string, { color: string; label: string }> = {
   completed:             { color: 'var(--ok)',     label: 'Xong'       },

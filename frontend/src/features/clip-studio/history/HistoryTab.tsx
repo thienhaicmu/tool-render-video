@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Lang } from '../ClipStudio'
-import { getJobHistory } from '../../../api/jobs'
-import type { HistoryItem } from '../../../types/api'
+import { getJobHistory } from '@/api/jobs'
+import type { HistoryItem } from '@/types/api'
 
 const FILTERS = ['All', 'Done', 'Failed', 'Running'] as const
 type Filter = typeof FILTERS[number]

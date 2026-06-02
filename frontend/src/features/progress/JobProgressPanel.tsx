@@ -6,12 +6,12 @@
  * - Terminal jobs: no connection, shows static summary
  */
 import { useState, useEffect, useRef } from 'react'
-import { ProgressBar } from '../../components/ui/ProgressBar'
-import { Button } from '../../components/ui/Button'
-import { useRenderSocket } from '../../hooks/useRenderSocket'
-import { useUIStore } from '../../stores/uiStore'
-import { cancelRender } from '../../api/render'
-import { isTerminalStatus } from '../../types/enums'
+import { ProgressBar } from '@/components/ui/ProgressBar'
+import { Button } from '@/components/ui/Button'
+import { useRenderSocket } from '@/hooks/useRenderSocket'
+import { useUIStore } from '@/stores/uiStore'
+import { cancelRender } from '@/api/render'
+import { isTerminalStatus } from '@/types/enums'
 import { isActiveStatus } from '../jobs/jobs.utils'
 import { ConnectionStatusBadge } from './ConnectionStatusBadge'
 import { ProgressStageTimeline } from './ProgressStageTimeline'

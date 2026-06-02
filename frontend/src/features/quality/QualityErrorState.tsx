@@ -1,7 +1,7 @@
 /**
  * QualityErrorState — shown when quality fetch fails with a non-404 error.
  */
-import { Button } from '../../components/ui/Button'
+import { Button } from '@/components/ui/Button'
 import './QualityPanel.css'
 
 export interface QualityErrorStateProps {

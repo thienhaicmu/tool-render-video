@@ -3,8 +3,8 @@ import type { Lang } from '../ClipStudio'
 import {
   listJobs, startDownload, cancelJob,
   platformLabel, platformColor, formatFilesize,
-} from '../../../api/platformDownloader'
-import type { DownloadJob } from '../../../api/platformDownloader'
+} from '@/api/platformDownloader'
+import type { DownloadJob } from '@/api/platformDownloader'
 
 const POLL_MS = 1500
 

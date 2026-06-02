@@ -1,8 +1,8 @@
 /**
  * EditorEmptyState — shown when no media is selected.
  */
-import { Button } from '../../components/ui/Button'
-import { useUIStore } from '../../stores/uiStore'
+import { Button } from '@/components/ui/Button'
+import { useUIStore } from '@/stores/uiStore'
 
 export function EditorEmptyState() {
   const setActivePanel = useUIStore((s) => s.setActivePanel)

@@ -2,7 +2,7 @@
  * QualityPartList — renders the list of QualityPartCard components.
  */
 import { QualityPartCard } from './QualityPartCard'
-import type { QualityPartSummary } from '../../types/api'
+import type { QualityPartSummary } from '@/types/api'
 import './QualityPanel.css'
 
 export interface QualityPartListProps {

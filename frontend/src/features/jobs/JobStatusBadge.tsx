@@ -1,8 +1,8 @@
 /**
  * JobStatusBadge — maps a job status string to a labeled Badge.
  */
-import { Badge } from '../../components/ui/Badge'
-import type { BadgeVariant } from '../../components/ui/Badge'
+import { Badge } from '@/components/ui/Badge'
+import type { BadgeVariant } from '@/components/ui/Badge'
 
 interface StatusConfig {
   label: string

@@ -1,5 +1,5 @@
 import type { Lang } from '../ClipStudio'
-import type { JobErrorKind } from '../../../types/api'
+import type { JobErrorKind } from '@/types/api'
 
 const T = {
   EN: {

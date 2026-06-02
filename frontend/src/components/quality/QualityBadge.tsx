@@ -4,7 +4,7 @@
  */
 import React from 'react'
 import { Badge } from '../ui/Badge'
-import { getQualityLabel, getQualityVariant } from '../../lib/constants'
+import { getQualityLabel, getQualityVariant } from '@/lib/constants'
 
 export interface QualityBadgeProps {
   score: number

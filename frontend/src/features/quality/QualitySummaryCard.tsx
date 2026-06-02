@@ -1,9 +1,9 @@
 /**
  * QualitySummaryCard — shows aggregate quality stats for a job.
  */
-import { Badge } from '../../components/ui/Badge'
-import { QualityBadge } from '../../components/quality/QualityBadge'
-import type { QualitySummaryAggregate } from '../../types/api'
+import { Badge } from '@/components/ui/Badge'
+import { QualityBadge } from '@/components/quality/QualityBadge'
+import type { QualitySummaryAggregate } from '@/types/api'
 import './QualityPanel.css'
 
 export interface QualitySummaryCardProps {

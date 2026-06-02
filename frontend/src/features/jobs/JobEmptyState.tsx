@@ -1,8 +1,8 @@
 /**
  * JobEmptyState — shown when history list is empty with no active filters.
  */
-import { Button } from '../../components/ui/Button'
-import { useUIStore } from '../../stores/uiStore'
+import { Button } from '@/components/ui/Button'
+import { useUIStore } from '@/stores/uiStore'
 
 export function JobEmptyState() {
   const setActivePanel = useUIStore((s) => s.setActivePanel)

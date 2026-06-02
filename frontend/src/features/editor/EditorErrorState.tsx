@@ -1,7 +1,7 @@
 /**
  * EditorErrorState — shown when loading job parts fails.
  */
-import { Button } from '../../components/ui/Button'
+import { Button } from '@/components/ui/Button'
 
 export interface EditorErrorStateProps {
   error: string

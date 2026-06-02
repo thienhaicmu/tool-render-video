@@ -3,8 +3,8 @@
  * Auto-removes after 5 seconds. Type-appropriate colors.
  */
 import React, { useEffect } from 'react'
-import { useUIStore } from '../../stores/uiStore'
-import type { Notification } from '../../stores/uiStore'
+import { useUIStore } from '@/stores/uiStore'
+import type { Notification } from '@/stores/uiStore'
 
 export function Notifications() {
   const notifications = useUIStore((s) => s.notifications)

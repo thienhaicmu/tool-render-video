@@ -2,8 +2,8 @@
  * JobActionsMenu — action buttons for a job card.
  * Handles Cancel / Retry / Re-run / Details / Delete.
  */
-import { Button } from '../../components/ui/Button'
-import type { HistoryItem } from '../../types/api'
+import { Button } from '@/components/ui/Button'
+import type { HistoryItem } from '@/types/api'
 import { canCancel, canRetry, canRerun, canDelete } from './jobs.utils'
 
 export interface JobActionsMenuProps {

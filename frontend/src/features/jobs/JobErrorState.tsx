@@ -1,7 +1,7 @@
 /**
  * JobErrorState — shown when the history fetch fails.
  */
-import { Button } from '../../components/ui/Button'
+import { Button } from '@/components/ui/Button'
 
 export interface JobErrorStateProps {
   error: string

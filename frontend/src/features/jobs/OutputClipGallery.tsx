@@ -1,7 +1,7 @@
 /**
  * OutputClipGallery — grid of rendered clips with scores after job completion.
  */
-import type { JobPart } from '../../types/api'
+import type { JobPart } from '@/types/api'
 
 export interface OutputClipGalleryProps {
   parts: JobPart[]

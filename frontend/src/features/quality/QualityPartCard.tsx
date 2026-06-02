@@ -2,13 +2,13 @@
  * QualityPartCard — expandable card showing quality info for one render part.
  */
 import { useState } from 'react'
-import { Badge } from '../../components/ui/Badge'
-import { QualityBadge } from '../../components/quality/QualityBadge'
-import { QualityIssueList } from '../../components/quality/QualityIssueList'
+import { Badge } from '@/components/ui/Badge'
+import { QualityBadge } from '@/components/quality/QualityBadge'
+import { QualityIssueList } from '@/components/quality/QualityIssueList'
 import { QualityLoadingState } from './QualityLoadingState'
 import { QualityTraceRefs } from './QualityTraceRefs'
-import { useQualityStore } from '../../stores/qualityStore'
-import type { QualityPartSummary } from '../../types/api'
+import { useQualityStore } from '@/stores/qualityStore'
+import type { QualityPartSummary } from '@/types/api'
 import './QualityPanel.css'
 
 export interface QualityPartCardProps {

@@ -3,7 +3,7 @@
  * Source: docs/design/components.md component #4
  */
 import { useEffect, useRef } from 'react'
-import { animateScore } from '../../lib/animateScore'
+import { animateScore } from '@/lib/animateScore'
 
 export type ScoreBadgeSize = 'xl' | 'lg' | 'md' | 'sm'
 

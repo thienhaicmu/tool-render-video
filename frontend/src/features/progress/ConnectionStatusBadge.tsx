@@ -1,8 +1,8 @@
 /**
  * ConnectionStatusBadge — shows WebSocket connection state.
  */
-import { Badge } from '../../components/ui/Badge'
-import type { BadgeVariant } from '../../components/ui/Badge'
+import { Badge } from '@/components/ui/Badge'
+import type { BadgeVariant } from '@/components/ui/Badge'
 import type { ConnectionStatus } from './progress.types'
 
 export interface ConnectionStatusBadgeProps {

@@ -1,7 +1,7 @@
 /**
  * ProgressPartItem — compact card for a single active render part.
  */
-import { ProgressBar } from '../../components/ui/ProgressBar'
+import { ProgressBar } from '@/components/ui/ProgressBar'
 import { getPartLabel, normalizeProgressPercent } from './progress.utils'
 
 export interface ProgressPartItemProps {

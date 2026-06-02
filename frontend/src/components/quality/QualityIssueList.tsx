@@ -3,7 +3,7 @@
  */
 import React from 'react'
 import { Badge } from '../ui/Badge'
-import type { QualityIssue } from '../../types/api'
+import type { QualityIssue } from '@/types/api'
 import type { BadgeVariant } from '../ui/Badge'
 
 export interface QualityIssueListProps {
