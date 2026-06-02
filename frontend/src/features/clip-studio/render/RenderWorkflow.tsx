@@ -237,6 +237,15 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       cta_type:            cfg.ctaEnabled ? cfg.ctaType : undefined,
       hook_apply_enabled:  cfg.hookApplyEnabled || undefined,
       hook_overlay_enabled: cfg.hookOverlayEnabled || undefined,
+      // Sprint 3 3E Subset B (audit 2026-06-02): backend flipped these 4
+      // defaults from True to False to honor Sacred Contract 2. New UI jobs
+      // explicitly set them True here so current new-job behavior is
+      // unchanged; stored historical payloads that omitted these fields no
+      // longer silently activate the features on Resume/Retry.
+      ai_auto_cut:                 true,
+      ai_use_semantic_hooks:       true,
+      ai_render_influence_enabled: true,
+      ai_beat_pulse_enabled:       true,
       motion_aware_crop:   cfg.focusMode === 'face' || cfg.focusMode === 'object',
       target_platform:     cfg.platform,
       effect_preset:       cfg.style,

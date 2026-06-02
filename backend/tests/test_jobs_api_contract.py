@@ -98,14 +98,21 @@ class TestGetJobNotFound:
         assert resp.status_code == 404
 
 
-class TestRenderRequestContractTwoSubsetA:
-    """Sprint 3 3E Subset A — flip ai_director_enabled and ai_use_rag_memory
-    defaults to False (modules were removed in Phase G).
+class TestRenderRequestContractTwo:
+    """Sprint 3 3E Subsets A + B — Sacred Contract 2 compliance for
+    RenderRequest bool fields that were defaulting True.
 
-    Verifies the defaults so that a stored payload missing these fields, when
-    deserialized into RenderRequest, does NOT silently claim those features
-    were active.
+    Subset A (Sprint 3): ai_director_enabled, ai_use_rag_memory — both
+    represent modules removed in Phase G, now no-ops.
+
+    Subset B (current commit): hook_apply_enabled, ai_auto_cut,
+    ai_use_semantic_hooks, ai_render_influence_enabled, ai_beat_pulse_enabled
+    — live phase features. New-job behavior preserved by UI explicit-True in
+    RenderWorkflow.buildPayload; stored historical payloads missing these
+    fields no longer silently activate the features on Resume/Retry.
     """
+
+    # ── Subset A (Phase G removed modules) ──────────────────────────────
 
     def test_ai_director_enabled_defaults_false(self):
         from app.models.schemas import RenderRequest
@@ -125,9 +132,54 @@ class TestRenderRequestContractTwoSubsetA:
             "falsely claim the feature was on."
         )
 
-    def test_explicit_true_still_accepted(self):
+    # ── Subset B (live phase features) ──────────────────────────────────
+
+    def test_hook_apply_enabled_defaults_false(self):
+        from app.models.schemas import RenderRequest
+        req = RenderRequest()
+        assert req.hook_apply_enabled is False
+
+    def test_ai_auto_cut_defaults_false(self):
+        from app.models.schemas import RenderRequest
+        req = RenderRequest()
+        assert req.ai_auto_cut is False
+
+    def test_ai_use_semantic_hooks_defaults_false(self):
+        from app.models.schemas import RenderRequest
+        req = RenderRequest()
+        assert req.ai_use_semantic_hooks is False
+
+    def test_ai_render_influence_enabled_defaults_false(self):
+        from app.models.schemas import RenderRequest
+        req = RenderRequest()
+        assert req.ai_render_influence_enabled is False
+
+    def test_ai_beat_pulse_enabled_defaults_false(self):
+        from app.models.schemas import RenderRequest
+        req = RenderRequest()
+        assert req.ai_beat_pulse_enabled is False
+
+    # ── Backward compat: explicit True still accepted ───────────────────
+
+    def test_subset_a_explicit_true_still_accepted(self):
         """Stored historical payloads that explicitly set True still load."""
         from app.models.schemas import RenderRequest
         req = RenderRequest(ai_director_enabled=True, ai_use_rag_memory=True)
         assert req.ai_director_enabled is True
         assert req.ai_use_rag_memory is True
+
+    def test_subset_b_explicit_true_still_accepted(self):
+        """Same backward-compat guarantee for the 5 phase-feature fields."""
+        from app.models.schemas import RenderRequest
+        req = RenderRequest(
+            hook_apply_enabled=True,
+            ai_auto_cut=True,
+            ai_use_semantic_hooks=True,
+            ai_render_influence_enabled=True,
+            ai_beat_pulse_enabled=True,
+        )
+        assert req.hook_apply_enabled is True
+        assert req.ai_auto_cut is True
+        assert req.ai_use_semantic_hooks is True
+        assert req.ai_render_influence_enabled is True
+        assert req.ai_beat_pulse_enabled is True

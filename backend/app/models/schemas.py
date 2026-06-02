@@ -214,7 +214,13 @@ class RenderRequest(BaseModel):
     viral_market: Optional[str] = None
     ai_target_market: Optional[str] = None
     hook_applied_text: Optional[str] = None
-    hook_apply_enabled: bool = True
+    # Sprint 3 3E Subset B (audit 2026-06-02): flipped True → False to honor
+    # Sacred Contract 2. Also fixes a latent UI bug: the OLD pattern
+    # `cfg.hookApplyEnabled || undefined` in buildPayload would send
+    # undefined when the user toggled the UI checkbox OFF, and the
+    # default-True backend would still apply the hook. After this flip, the
+    # OFF case correctly inherits False.
+    hook_apply_enabled: bool = False
     hook_overlay_enabled: bool = False
     hook_score: Optional[float] = None
     subtitle_edits: Optional[list] = None
@@ -230,17 +236,24 @@ class RenderRequest(BaseModel):
     # default-False honors Sacred Contract 2 for replayed historical jobs.
     ai_director_enabled: bool = False
     ai_mode: str = "viral_tiktok"
-    ai_auto_cut: bool = True
+    # Sprint 3 3E Subset B: flipped True → False to honor Contract 2.
+    # New UI jobs explicitly set this True via RenderWorkflow.buildPayload so
+    # the user-facing default is unchanged; stored historical job payloads
+    # that omit the field no longer silently activate the feature on replay.
+    ai_auto_cut: bool = False
     ai_target_duration: Optional[int] = None
-    ai_use_semantic_hooks: bool = True
+    # Sprint 3 3E Subset B: flipped True → False (same Contract 2 rationale).
+    ai_use_semantic_hooks: bool = False
     # RAG memory was removed in Phase G alongside the AI Director module. Kept
     # as a no-op flag; default-False per Contract 2 (audit 2026-06-02 Subset A).
     ai_use_rag_memory: bool = False
-    # AI Render Influence (Phase 10) — enabled by default.
-    ai_render_influence_enabled: bool = True
+    # AI Render Influence (Phase 10) — Sprint 3 3E Subset B: was True by
+    # default. Flipped to False; UI sets True explicitly for new jobs.
+    ai_render_influence_enabled: bool = False
     # AI Beat Execution (Phase 11) — opt-in beat-aware planning; defaults preserve old behavior.
     ai_beat_execution_enabled: bool = False
-    ai_beat_pulse_enabled: bool = True
+    # Sprint 3 3E Subset B: flipped True → False (Contract 2).
+    ai_beat_pulse_enabled: bool = False
     ai_beat_transition_enabled: bool = False
     # AI Timing Mutation (Phase 19) — opt-in; false = advisory-only, no segment timing changes.
     ai_timing_mutation_enabled: bool = False
