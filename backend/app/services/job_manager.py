@@ -114,6 +114,14 @@ def _scheduler_loop() -> None:
             neg_pri, seq, job_id, fn, args, kwargs = heapq.heappop(_pending)
             _pending_job_ids.discard(job_id)
             _active_job_ids.add(job_id)
+            # Sprint 6.C: queue-depth gauges. Sample inside the lock so the
+            # snapshot reflects a consistent state of the heap/active set.
+            try:
+                from app.services.metrics import JOB_QUEUE_ACTIVE, JOB_QUEUE_PENDING
+                JOB_QUEUE_PENDING.set(len(_pending))
+                JOB_QUEUE_ACTIVE.set(len(_active_job_ids))
+            except Exception:
+                pass
 
         # DB write + executor.submit both happen outside the lock so they
         # don't block other threads from enqueuing.
@@ -132,6 +140,13 @@ def _scheduler_loop() -> None:
                     _cond.notify_all()  # a slot just opened — wake the scheduler
                     # Snapshot valid IDs while holding the lock for prune below
                     _valid_ids = frozenset(_active_job_ids) | frozenset(e[2] for e in _pending)
+                    # Sprint 6.C: refresh the active gauge after a slot opens.
+                    try:
+                        from app.services.metrics import JOB_QUEUE_ACTIVE, JOB_QUEUE_PENDING
+                        JOB_QUEUE_PENDING.set(len(_pending))
+                        JOB_QUEUE_ACTIVE.set(len(_active_job_ids))
+                    except Exception:
+                        pass
                 # Prune stale _PENDING cancel signals for jobs no longer alive
                 try:
                     from app.services import cancel_registry

@@ -101,9 +101,21 @@ def snapshot_db(target_dir: Path | None = None) -> Path | None:
             "db_backup: snapshot %s → %s (%d bytes)",
             src_path, dest, dest.stat().st_size,
         )
+        # Sprint 6.C: success counter (lazy import keeps this module
+        # decoupled from the metrics layer's optional dep).
+        try:
+            from app.services.metrics import DB_BACKUPS_TOTAL
+            DB_BACKUPS_TOTAL.labels(result="success").inc()
+        except Exception:
+            pass
         return dest
     except Exception as exc:
         logger.warning("db_backup: snapshot failed: %s", exc)
+        try:
+            from app.services.metrics import DB_BACKUPS_TOTAL
+            DB_BACKUPS_TOTAL.labels(result="failure").inc()
+        except Exception:
+            pass
         return None
 
 

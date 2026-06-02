@@ -10,6 +10,7 @@ opencv-python-headless==4.10.0.84
 python-multipart==0.0.9
 edge-tts==7.2.8
 deep-translator==1.11.4
+prometheus-client>=0.19,<1.0
 
 # Optional local AI dependencies (do NOT install automatically):
 # sentence-transformers

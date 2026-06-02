@@ -203,8 +203,24 @@ def _run_ffmpeg_with_retry(
     # Pick up the cancel event registered by render_pipeline for this worker thread.
     cancel_event = getattr(_tls, 'cancel_event', None)
     needs_nvenc_lock = (not nvenc_externally_held) and _argv_uses_nvenc(command)
+    # Sprint 6.C: instrumentation hooks. The metrics module's no-op shim
+    # absorbs any failure if prometheus_client is unavailable.
+    from app.services.metrics import (
+        FFMPEG_DURATION,
+        FFMPEG_INVOCATIONS_TOTAL,
+        NVENC_ACQUIRE_WAIT,
+        NVENC_ACTIVE_SESSIONS,
+    )
     if needs_nvenc_lock:
+        _nvenc_wait_start = time.monotonic()
         NVENC_SEMAPHORE.acquire()
+        try:
+            NVENC_ACQUIRE_WAIT.observe(time.monotonic() - _nvenc_wait_start)
+            NVENC_ACTIVE_SESSIONS.inc()
+        except Exception:
+            pass
+    _ffmpeg_start = time.monotonic()
+    _final_result = "ok"
     try:
         attempt = 0
         while True:
@@ -253,10 +269,19 @@ def _run_ffmpeg_with_retry(
                 if _result[2] != 0:
                     raise subprocess.CalledProcessError(_result[2], command, stdout, stderr)
                 return subprocess.CompletedProcess(command, _result[2], stdout, stderr)
-            except RuntimeError:
+            except RuntimeError as rt_exc:
+                # Categorize for the metric label. Re-raise unchanged.
+                _msg = str(rt_exc).lower()
+                if "cancelled" in _msg:
+                    _final_result = "cancelled"
+                elif "timed out" in _msg:
+                    _final_result = "timeout"
+                else:
+                    _final_result = "failed"
                 raise
             except subprocess.CalledProcessError as exc:
                 if attempt > retry_count:
+                    _final_result = "failed"
                     stderr_text = exc.stderr or ""
                     diag = _summarize_ffmpeg_stderr(stderr_text)
                     stderr_tail = stderr_text[-2000:].strip()
@@ -267,10 +292,20 @@ def _run_ffmpeg_with_retry(
                 time.sleep(wait_sec * attempt)
             except Exception:
                 if attempt > retry_count:
+                    _final_result = "failed"
                     raise
                 time.sleep(wait_sec * attempt)
     finally:
+        try:
+            FFMPEG_INVOCATIONS_TOTAL.labels(result=_final_result).inc()
+            FFMPEG_DURATION.labels(result=_final_result).observe(time.monotonic() - _ffmpeg_start)
+        except Exception:
+            pass
         if needs_nvenc_lock:
+            try:
+                NVENC_ACTIVE_SESSIONS.dec()
+            except Exception:
+                pass
             NVENC_SEMAPHORE.release()
 
 

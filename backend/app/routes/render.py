@@ -541,7 +541,13 @@ def preview_transcript(session_id: str):
 
 def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = False):
     from app.services import cancel_registry
+    from app.services.metrics import RENDER_JOB_DURATION, RENDER_JOBS_TOTAL
     ev = cancel_registry.register(job_id)
+    # Sprint 6.C: instrument terminal status + wallclock per job. `final_status`
+    # is initialized to "succeeded" because the happy path falls through the
+    # try block without setting it. Cancellation + failure paths overwrite it.
+    start_monotonic = time.monotonic()
+    final_status = "succeeded"
     try:
         # A cancel requested while the job was still queued pre-sets the event
         if ev.is_set():
@@ -562,7 +568,19 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
             "Job cancelled by user",
             status=JobStage.CANCELLED,
         )
+        final_status = "cancelled"
+    except Exception:
+        final_status = "failed"
+        raise
     finally:
+        duration = time.monotonic() - start_monotonic
+        try:
+            RENDER_JOBS_TOTAL.labels(status=final_status).inc()
+            RENDER_JOB_DURATION.labels(status=final_status).observe(duration)
+        except Exception:
+            # Metrics must NEVER fail a render. The no-op shim covers the
+            # missing-prometheus path; this except catches anything else.
+            pass
         cancel_registry.unregister(job_id)
 
 
