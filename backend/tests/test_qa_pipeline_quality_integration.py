@@ -155,3 +155,79 @@ class TestQualityIntelligenceIntegration:
             )
         expected = tmp_path / "quality" / f"{job_id}_part_{part_no}.json"
         assert expected.exists()
+
+
+# ---------------------------------------------------------------------------
+# Track C bug fix C1 (2026-06-03) — verify _assess_render_quality_intelligence
+# actually runs from run_part_done. The pre-fix code referenced an undefined
+# `srt_path` (typo for `srt_part`) which made this a silent no-op.
+# ---------------------------------------------------------------------------
+
+class TestQualityIntelligenceCallSiteActivation:
+    """Track C bug C1 regression guard.
+
+    Before 2026-06-03, run_part_done passed `srt_path` (undefined NameError)
+    to _assess_render_quality_intelligence, which got caught by the
+    surrounding try/except, making the call a no-op for ALL renders. This
+    test asserts the call now fires with the correct srt_path argument
+    when srt_part exists. If the typo is ever reintroduced, the test
+    will fail because mock_assess.called would stay False.
+    """
+
+    def test_run_part_done_calls_assess_quality_when_srt_exists(self, tmp_path):
+        """When srt_part exists on disk, _assess_render_quality_intelligence
+        must be invoked with srt_path=srt_part — proving the C1 fix is live."""
+        from app.orchestration.stages.part_done import run_part_done
+
+        # Minimal real file setup
+        srt_part = tmp_path / "p.srt"
+        srt_part.write_text("1\n00:00:00,000 --> 00:00:02,000\nhello\n", encoding="utf-8")
+        ass_part = tmp_path / "p.ass"
+        ass_part.write_text("ass-content", encoding="utf-8")
+        final_part = tmp_path / "p.mp4"
+        final_part.write_bytes(b"v" * 100)
+        raw_part = tmp_path / "p_raw.mp4"
+        raw_part.write_bytes(b"v" * 100)
+
+        # Minimal PartRenderContext stand-in — only fields actually accessed
+        # in run_part_done are populated. The rest are MagicMock'd.
+        ctx = MagicMock()
+        ctx.job_id = "test_job"
+        ctx.effective_channel = "manual"
+        ctx.output_dir = tmp_path
+        ctx.output_stem = "test"
+        ctx.target_platform = "tiktok"
+        ctx.payload.cleanup_temp_files = False
+        ctx.ai_edit_plan = None
+        ctx.source = {"title": "T"}
+
+        seg = {"start": 0.0, "end": 5.0, "duration": 5.0,
+               "viral_score": 50, "motion_score": 50, "hook_score": 50,
+               "priority_rank": 1}
+
+        with patch(
+            "app.orchestration.stages.part_done._assess_render_quality_intelligence"
+        ) as mock_assess, patch(
+            "app.orchestration.stages.part_done.extract_thumbnail_frame",
+            return_value=None,  # skip cover frame work
+        ), patch(
+            "app.orchestration.stages.part_done.upsert_job_part"
+        ):
+            run_part_done(
+                ctx=ctx, idx=1, seg=seg,
+                raw_part=raw_part, srt_part=srt_part, ass_part=ass_part,
+                final_part=final_part, part_name="p.mp4",
+                srt_meta={}, variant_type="", part_subtitle_enabled=True,
+            )
+
+        # C1 fix asserts: the helper WAS called (NameError before fix would
+        # have prevented this).
+        assert mock_assess.called, (
+            "Track C C1 fix regression: _assess_render_quality_intelligence "
+            "was not invoked. The srt_path typo may have been reintroduced."
+        )
+        # And the srt_path argument should be the actual SRT file we passed in.
+        call_kwargs = mock_assess.call_args.kwargs
+        assert call_kwargs["srt_path"] == srt_part, (
+            f"Expected srt_path=srt_part ({srt_part}), got {call_kwargs['srt_path']!r}"
+        )

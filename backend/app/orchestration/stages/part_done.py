@@ -47,16 +47,15 @@ Sacred Contracts honored:
   - #7 Sole DB writer: 1 upsert_job_part(JobPartStage.DONE, ...) call
        routes through app.services.db unchanged.
 
-Known-bug preservation (from pre-2.5d code):
-  Line 942 of the pre-extraction file referenced `srt_path` which was
-  never defined in process_one_part's scope (typo for `srt_part`). The
-  resulting NameError was caught by the surrounding `try/except
-  Exception: pass` at lines 939+961, making _assess_render_quality_intelligence
-  effectively a silent no-op. Per the "no while I'm here" convention
-  used throughout Sprint 6.D, the bug is preserved verbatim here —
-  the `if srt_path is not None ...` line will continue to raise
-  NameError and be caught by the same outer try/except. Fixing the
-  typo is a separate concern out-of-scope for this pure-relocation commit.
+Bug fix history (Track C C1, 2026-06-03):
+  The pre-extraction code at the original line 942 referenced `srt_path`
+  which was never defined (typo for `srt_part`). NameError was caught
+  by the surrounding try/except, making _assess_render_quality_intelligence
+  effectively a silent no-op for ALL renders. Sprint 6.D-2.5d preserved
+  the typo verbatim per the no-while-I-am-here convention. Track C bug
+  fix C1 corrected the typo on 2026-06-03 — the function now actually
+  runs when SRT is available. See ledger entry
+  AUDIT_2026-06-02_followup_5.md for full impact assessment.
 
 Logger note (same pattern as 6.D-2.1 through 2.5a):
   `logger = logging.getLogger("app.render")` preserved verbatim.
@@ -111,8 +110,15 @@ def run_part_done(
     try:
         _qi_srt = ass_part if part_subtitle_enabled and ass_part and ass_part.suffix == ".srt" else None
         _qi_srt_path: Path | None = None
-        if srt_path is not None and Path(str(srt_path)).exists():  # noqa: F821 — preserved bug: srt_path is undefined, caught by except below
-            _qi_srt_path = Path(str(srt_path))
+        # Track C bug fix C1 (2026-06-03): the original code referenced
+        # `srt_path` here (undefined NameError caught by surrounding try/except),
+        # which made _assess_render_quality_intelligence a silent no-op.
+        # Restored to use `srt_part` — the function parameter holding the
+        # per-part SRT file path — which is the most likely original intent.
+        # See docs/review/AUDIT_2026-06-02_followup_5.md for the full impact
+        # assessment.
+        if srt_part is not None and Path(str(srt_part)).exists():
+            _qi_srt_path = Path(str(srt_part))
         elif _qi_srt is not None and Path(str(_qi_srt)).exists():
             _qi_srt_path = Path(str(_qi_srt))
         _qi_manifest: Path | None = None
