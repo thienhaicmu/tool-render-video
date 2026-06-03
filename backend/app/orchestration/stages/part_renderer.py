@@ -110,6 +110,17 @@ from app.orchestration.stages.part_asset_planner import prepare_part_assets
 # to a dedicated module. Re-exported so the internal caller below keeps
 # the bare reference; CutStageResult is consumed only inside process_one_part.
 from app.orchestration.stages.part_cut import CutStageResult, run_cut_stage
+# Sprint 6.D-2.4: RENDER pre-flight (encoding params + progress-timer
+# thread + cache key + PartExecutionPlan + CameraStrategy + feature-flag
+# warning) extracted to a dedicated module. The encode-progress thread
+# is STARTED inside run_render_preflight and the caller is responsible
+# for encode_stop.set() + encode_timer.join() after the FFmpeg render
+# completes. Plan §3.2 phase 2.4 was re-scoped here because the original
+# TRANSCRIBE scope was already absorbed into prepare_part_assets (2.2).
+from app.orchestration.stages.part_render_setup import (
+    RenderPreflightResult,
+    run_render_preflight,
+)
 
 
 def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
@@ -216,107 +227,29 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
     overlay_title = (ctx.payload.title_overlay_text or "").strip() or ctx.source["title"]
     upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.RENDERING, 70, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Rendering final video")
 
-    _vf_ct = seg.get("content_type_hint", "vlog")
-    _vf_crf_delta = _crf_delta_for_content_type(_vf_ct)
-    _part_video_crf = max(11, min(28, ctx.tuned["video_crf"] + _vf_crf_delta))
-    _vf_bitrate_profile = (
-        "high" if _vf_ct == "montage" else
-        "low" if _vf_ct in ("interview", "tutorial") else "standard"
+    # Sprint 6.D-2.4: RENDER pre-flight (encoding params + progress-timer
+    # thread + cache key + PartExecutionPlan + CameraStrategy +
+    # feature-flag warning) moved to part_render_setup.run_render_preflight.
+    # 13 returned fields aliased back to original local names so the
+    # downstream FFmpeg core block stays byte-for-byte unchanged.
+    _preflight = run_render_preflight(
+        ctx, idx, seg, part_name, str(final_part),
+        _effective_start, _trim_offset, _visual_trim,
+        _force_accurate_cut, part_subtitle_enabled,
     )
-    _vf_subtitle_bump = not ctx.payload.motion_aware_crop and _vf_ct in ("interview", "commentary")
-    logger.info(
-        "visual_finish_applied part=%d content_type=%s crf=%d(delta=%+d) "
-        "bitrate_profile=%s subtitle_safety_bump=%s",
-        idx, _vf_ct, _part_video_crf, _vf_crf_delta,
-        _vf_bitrate_profile, _vf_subtitle_bump,
-    )
-
-    _encode_stop = threading.Event()
-    _encode_timer = threading.Thread(
-        target=_render_progress_timer,
-        args=(
-            _encode_stop, ctx.job_id, idx, part_name, seg,
-            str(final_part),
-            time.monotonic(),
-            max(float(seg.get("duration") or 0), 1.0),
-            ctx.effective_channel,
-        ),
-        daemon=True,
-        name=f"progress-timer-{ctx.job_id[:8]}-p{idx}",
-    )
-    _encode_timer.start()
-    _t_encode = time.perf_counter()
-    _t_render = time.perf_counter()
-    _motion_ck = None
-    _motion_crop_fallback: list = []
-    if ctx.payload.motion_aware_crop and ctx.src_stat_for_motion is not None:
-        try:
-            _motion_ck = _render_cache_key(
-                str(ctx.source_path),
-                ctx.src_stat_for_motion.st_mtime,
-                ctx.src_stat_for_motion.st_size,
-                round(_effective_start, 3),
-                round(float(seg["end"]), 3),
-                str(ctx.payload.aspect_ratio),
-                float(ctx.payload.frame_scale_x),
-                float(ctx.payload.frame_scale_y),
-                str(getattr(ctx.payload, "reframe_mode", "subject")),
-                str(seg.get("content_type_hint", "vlog")),
-            )
-        except Exception:
-            _motion_ck = None
-    _part_plan = PartExecutionPlan(
-        part_no=idx,
-        source_start=float(seg["start"]),
-        source_end=float(seg["end"]),
-        effective_start=_effective_start,
-        trim_offset_sec=_trim_offset,
-        visual_trim_sec=_visual_trim,
-        force_accurate_cut=_force_accurate_cut,
-        subtitle_enabled=part_subtitle_enabled,
-        motion_aware_crop=bool(ctx.payload.motion_aware_crop),
-        reframe_mode=str(getattr(ctx.payload, "reframe_mode", "subject")),
-        frame_scale_x=int(ctx.payload.frame_scale_x),
-        frame_scale_y=int(ctx.payload.frame_scale_y),
-        content_type=_vf_ct,
-        video_crf=_part_video_crf,
-        bitrate_profile=_vf_bitrate_profile,
-        voice_enabled=bool(getattr(ctx.payload, "voice_enabled", False)),
-        voice_source=str(getattr(ctx.payload, "voice_source", "none")),
-        playback_speed=float(
-            max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.07)
-                   + _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)))
-        ),
-    )
-    logger.info(
-        "part_execution_plan part=%d trim=%.3f+%.3f accurate_cut=%s "
-        "subtitle=%s crop=%s reframe=%s voice=%s speed=%.3f crf=%d",
-        _part_plan.part_no, _part_plan.trim_offset_sec, _part_plan.visual_trim_sec,
-        _part_plan.force_accurate_cut, _part_plan.subtitle_enabled,
-        _part_plan.motion_aware_crop, _part_plan.reframe_mode,
-        _part_plan.voice_enabled, _part_plan.playback_speed, _part_plan.video_crf,
-    )
-    _camera_strategy = CameraStrategy(
-        aspect_ratio=ctx.payload.aspect_ratio,
-        frame_scale_x=int(ctx.payload.frame_scale_x),
-        frame_scale_y=int(ctx.payload.frame_scale_y),
-        motion_aware_crop=bool(ctx.payload.motion_aware_crop),
-        reframe_mode=str(getattr(ctx.payload, "reframe_mode", "subject")),
-        content_type=_vf_ct,
-    )
-    logger.info(
-        "camera_strategy part=%d mode=%s crop=%s reframe=%s aspect=%s scale=%dx%d",
-        idx, _camera_strategy.camera_mode, _camera_strategy.motion_aware_crop,
-        _camera_strategy.reframe_mode, _camera_strategy.aspect_ratio,
-        _camera_strategy.frame_scale_x, _camera_strategy.frame_scale_y,
-    )
-    if _FEATURE_OVERLAY_AFTER_BASE_CLIP and not _FEATURE_BASE_CLIP_FIRST:
-        logger.warning(
-            "overlay_flag_ignored job_id=%s part=%d: "
-            "FEATURE_OVERLAY_AFTER_BASE_CLIP=1 requires FEATURE_BASE_CLIP_FIRST=1 "
-            "— using render_part_smart() for final output",
-            ctx.job_id, idx,
-        )
+    _vf_ct                = _preflight.vf_ct
+    _vf_crf_delta         = _preflight.vf_crf_delta
+    _part_video_crf       = _preflight.part_video_crf
+    _vf_bitrate_profile   = _preflight.vf_bitrate_profile
+    _vf_subtitle_bump     = _preflight.vf_subtitle_bump
+    _encode_stop          = _preflight.encode_stop
+    _encode_timer         = _preflight.encode_timer
+    _t_encode             = _preflight.t_encode
+    _t_render             = _preflight.t_render
+    _motion_ck            = _preflight.motion_ck
+    _motion_crop_fallback = _preflight.motion_crop_fallback
+    _part_plan            = _preflight.part_plan
+    _camera_strategy      = _preflight.camera_strategy
 
     if _FEATURE_BASE_CLIP_FIRST:
         _base_clip_out = ctx.work_dir / f"part_{idx}" / "base_clip.mp4"
