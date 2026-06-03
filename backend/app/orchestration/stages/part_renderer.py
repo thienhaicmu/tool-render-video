@@ -106,6 +106,10 @@ from app.orchestration.stages.part_render_context import PartRenderContext
 # Re-exported here so the internal caller (process_one_part below)
 # keeps using `prepare_part_assets(...)` via the bare reference.
 from app.orchestration.stages.part_asset_planner import prepare_part_assets
+# Sprint 6.D-2.3: CUT stage (post-WAITING / pre-RENDERING block) extracted
+# to a dedicated module. Re-exported so the internal caller below keeps
+# the bare reference; CutStageResult is consumed only inside process_one_part.
+from app.orchestration.stages.part_cut import CutStageResult, run_cut_stage
 
 
 def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
@@ -179,174 +183,24 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
 
     upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.WAITING, 5, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), "", "Waiting for worker")
 
-    _trim_offset = 0.0
     _t_part_start = time.perf_counter()
-    _cut_ms = _first_frame_scan_ms = 0
     _subtitle_ass_ms = 0
     _render_ms = _micro_pacing_ms = _quality_validation_ms = 0
 
-    try:
-        _trim_offset = detect_silence_trim_offset(str(ctx.source_path), seg["start"], seg["end"])
-    except Exception:
-        _trim_offset = 0.0
-    if _trim_offset > 0 and (seg["end"] - seg["start"] - _trim_offset) < 3.0:
-        _trim_offset = 0.0
-    if _trim_offset > 0:
-        _emit_render_event(
-            channel_code=ctx.effective_channel,
-            job_id=ctx.job_id,
-            event="silence_trim_applied",
-            level="INFO",
-            message=f"Silence trim: {_trim_offset:.3f}s removed from part {idx} start",
-            step="render.silence_trim",
-            context={
-                "part_no": idx,
-                "trim_offset_sec": _trim_offset,
-                "original_start": seg["start"],
-                "effective_start": seg["start"] + _trim_offset,
-            },
-        )
-        _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx} silence trim: {_trim_offset:.3f}s offset applied")
-    _effective_start = seg["start"] + _trim_offset
-
-    _visual_trim = 0.0
-    _force_accurate_cut = False
-    try:
-        logger.info("first_frame_scan_started part_no=%d effective_start=%.3f", idx, _effective_start)
-        _t_ff = time.perf_counter()
-        _visual_trim = detect_bad_first_frame(str(ctx.source_path), _effective_start, seg["end"])
-        _first_frame_scan_ms = int((time.perf_counter() - _t_ff) * 1000)
-        logger.info("first_frame_scan_ms=%d part=%d shift=%.3f", _first_frame_scan_ms, idx, _visual_trim)
-    except Exception:
-        _visual_trim = 0.0
-    if _visual_trim > 0:
-        _candidate_total = _trim_offset + _visual_trim
-        if (seg["end"] - seg["start"] - _candidate_total) >= 3.0:
-            _trim_offset = _candidate_total
-            _effective_start = seg["start"] + _trim_offset
-            _force_accurate_cut = True
-            _emit_render_event(
-                channel_code=ctx.effective_channel,
-                job_id=ctx.job_id,
-                event="first_frame_shift_applied",
-                level="INFO",
-                message=f"Bad first frame detected: shifted part {idx} start by {_visual_trim:.3f}s",
-                step="render.first_frame_scan",
-                context={
-                    "part_no": idx,
-                    "visual_trim_sec": _visual_trim,
-                    "total_trim_sec": _trim_offset,
-                    "effective_start": _effective_start,
-                    "force_accurate_cut": True,
-                },
-            )
-            _job_log(ctx.effective_channel, ctx.job_id,
-                f"first_frame_shift_applied part={idx} visual_trim={_visual_trim:.3f}s "
-                f"total_trim={_trim_offset:.3f}s effective_start={_effective_start:.3f}s accurate_cut=True")
-
-    _effective_end = seg['end']
-    if (
-        getattr(ctx.payload, 'ai_timing_mutation_enabled', False)
-        and ctx.ai_edit_plan is not None
-        and ctx.ai_edit_plan.timing_apply.get('applied_mutations')
-    ):
-        _mutations = ctx.ai_edit_plan.timing_apply['applied_mutations']
-        _min_sec = float(getattr(ctx.payload, 'min_part_sec', 15) or 15)
-
-        _ai_setup_delta = sum(
-            float(m.get('delta_sec', 0.0))
-            for m in _mutations
-            if (
-                m.get('mutation_type') == 'tighten_setup'
-                and m.get('safe') is True
-                and seg['start'] <= float(m.get('start_sec', -1)) <= seg['start'] + 5.0
-            )
-        )
-        if _ai_setup_delta > 0:
-            _ai_setup_delta = min(_ai_setup_delta, max(0.0, _effective_end - _effective_start - _min_sec))
-        if _ai_setup_delta > 0:
-            _trim_offset += _ai_setup_delta
-            _effective_start = seg['start'] + _trim_offset
-
-        _ai_outro_delta = sum(
-            float(m.get('delta_sec', 0.0))
-            for m in _mutations
-            if (
-                m.get('mutation_type') == 'shorten_outro'
-                and m.get('safe') is True
-                and seg['end'] - 5.0 <= float(m.get('end_sec', -1)) <= seg['end']
-            )
-        )
-        if _ai_outro_delta > 0:
-            _ai_outro_delta = min(_ai_outro_delta, max(0.0, _effective_end - _effective_start - _min_sec))
-        if _ai_outro_delta > 0:
-            _effective_end -= _ai_outro_delta
-
-    _part_platform_delta = float(
-        _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)
-    )
-    _part_timeline = TimelineMap(
-        source_start=float(_effective_start),
-        source_end=float(_effective_end),
-        effective_speed=_get_effective_playback_speed(ctx.payload, ctx.target_platform),
-        trim_offset=float(_trim_offset),
-    )
-    _part_manifest = BaseClipManifest(
-        job_id=ctx.job_id,
-        part_no=idx,
-        source_path=str(ctx.source_path),
-        source_start=float(_effective_start),
-        source_end=float(_effective_end),
-        payload_speed=float(ctx.payload.playback_speed or 1.07),
-        platform=ctx.target_platform,
-        platform_delta=_part_platform_delta,
-        effective_speed=_part_timeline.effective_speed,
-        variant_type=seg.get("variant_type"),
-        variant_speed=(
-            float(seg["variant_playback_speed"])
-            if seg.get("variant_playback_speed") is not None else None
-        ),
-        silence_trim_offset=float(_trim_offset - _visual_trim)
-            if _visual_trim > 0 else float(_trim_offset),
-        visual_trim_offset=float(_visual_trim),
-        timeline=_part_timeline,
-        ai_enabled=bool(getattr(ctx.payload, "ai_director_enabled", False)),
-        ai_mode=getattr(ctx.ai_edit_plan, "mode", None) if ctx.ai_edit_plan is not None else None,
-        ai_selected=(
-            any(
-                min(seg["end"], clip.end) - max(seg["start"], clip.start)
-                >= 0.5 * min(seg["end"] - seg["start"], clip.end - clip.start)
-                for clip in ctx.ai_edit_plan.selected_segments
-            )
-            if ctx.ai_edit_plan is not None and ctx.ai_edit_plan.selected_segments
-            else False
-        ),
-        ai_speed_hint=None,
-    )
-    write_manifest(ctx.work_dir, _part_manifest)
-
-    upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
-    if not (ctx.payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
-        _t_cut = time.perf_counter()
-        cut_video(str(ctx.source_path), str(raw_part), _effective_start, _effective_end,
-                  retry_count=ctx.retry_count, force_accurate_cut=_force_accurate_cut)
-        _cut_ms = int((time.perf_counter() - _t_cut) * 1000)
-        logger.info("cut_video_ms=%d part=%d", _cut_ms, idx)
-        if _force_accurate_cut:
-            _emit_render_event(
-                channel_code=ctx.effective_channel,
-                job_id=ctx.job_id,
-                event="accurate_cut_forced",
-                level="INFO",
-                message=f"Accurate re-encode cut used for part {idx} (bad first frame shift)",
-                step="render.cut",
-                context={"part_no": idx, "effective_start": _effective_start},
-            )
-        _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx} cut done", kind="debug")
-    else:
-        _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx} cut skipped (raw exists)", kind="debug")
-    _part_manifest.cut_path = str(raw_part)
-    write_manifest(ctx.work_dir, _part_manifest)
+    # Sprint 6.D-2.3: CUT stage (post-WAITING / pre-RENDERING) moved to
+    # app.orchestration.stages.part_cut.run_cut_stage. All 9 returned
+    # fields are aliased back to their original local names so the
+    # downstream RENDER block stays byte-for-byte unchanged.
+    _cut = run_cut_stage(ctx, idx, seg, raw_part, part_name, final_part)
+    _trim_offset         = _cut.trim_offset
+    _effective_start     = _cut.effective_start
+    _effective_end       = _cut.effective_end
+    _force_accurate_cut  = _cut.force_accurate_cut
+    _visual_trim         = _cut.visual_trim
+    _part_timeline       = _cut.part_timeline
+    _part_manifest       = _cut.part_manifest
+    _cut_ms              = _cut.cut_ms
+    _first_frame_scan_ms = _cut.first_frame_scan_ms
 
     (_part_assets, _srt_count, _srt_meta,
      _hook_subtitle_formatted, _subtitle_ass_ms) = prepare_part_assets(
