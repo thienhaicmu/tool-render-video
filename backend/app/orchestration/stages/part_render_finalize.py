@@ -77,17 +77,18 @@ Sacred Contracts honored:
        * No threshold values lowered.
        * No exception path that returns success.
 
-Known-bug preservation (no-while-I'm-here convention):
-  - `_mv_score_part` (line 459 of pre-2.5c) is used WITHOUT import in
-    part_renderer.py. The resulting NameError is caught by the
-    surrounding `try: ... except Exception: pass` at the market viral
-    scoring block. This makes the entire market_viral_scored emit a
-    silent no-op. The bug is preserved in this commit: the new module
-    does NOT import _mv_score_part (no symbol at all in the module).
-    NameError continues to fire, continues to be caught by the same
-    outer try/except. Per CLAUDE.md, fixing this typo would change
-    runtime behavior (would actually run market_viral scoring and emit
-    its event) — out-of-scope for this pure-relocation commit.
+Bug fix history (Track C C2, 2026-06-03):
+  Phase A-1..A-4 refactor on 2026-05-28 (commit 765616d) extracted
+  process_one_part to stages/part_renderer.py but FORGOT to copy
+  the `from app.services.viral_scoring import score_part_for_market
+  as _mv_score_part` line. The call site below kept working
+  syntactically but raised a silent NameError caught by the
+  surrounding try/except — making market_viral_scored emit a no-op
+  for 6 days. Sprint 6.D-2.5c preserved the bug verbatim during the
+  finalize extraction. Track C bug fix C2 restores the missing
+  import on 2026-06-03. See ledger entry
+  AUDIT_2026-06-02_followup_6.md for full timeline + impact
+  assessment.
 
 Cycle risk: NONE.
   Verified before extraction: run_part_finalize does not call any
@@ -143,6 +144,14 @@ from app.orchestration.stages.part_render_encode import RenderEncodeResult
 from app.orchestration.stages.part_render_setup import RenderPreflightResult
 from app.services.manifest_writer import manifest_path as _manifest_path
 from app.services.render_engine import apply_micro_pacing
+# Track C bug fix C2 (2026-06-03): restore the missing import that the
+# Phase A-1..A-4 refactor on 2026-05-28 (commit 765616d) lost when it
+# extracted process_one_part into stages/part_renderer.py. The call
+# site at line ~361 below has been raising a silent NameError caught
+# by try/except for 6 days, making market_viral_scored a no-op.
+# See docs/review/AUDIT_2026-06-02_followup_6.md for the timeline +
+# impact assessment.
+from app.services.viral_scoring import score_part_for_market as _mv_score_part
 
 # Preserve original logger name (same pattern as 6.D-2.1 through 2.5d).
 logger = logging.getLogger("app.render")
