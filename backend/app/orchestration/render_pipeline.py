@@ -1,79 +1,71 @@
 ﻿
-import hashlib
-import json
+# Sprint 6.D dead-import cleanup: most heavy service-level imports that
+# the original run_render_pipeline used directly now live inside the
+# extracted stage modules (orchestration/pipeline_*.py and
+# orchestration/stages/part_*.py). Imports retained below split into
+# two groups:
+#   1. Symbols actually used by run_render_pipeline body or module-level
+#      constants (e.g. JOB_SEMAPHORE, _MAX_CONCURRENT_JOBS).
+#   2. Re-exports preserved for external consumers — routes/render.py
+#      imports several render_events / qa_pipeline / pipeline_config
+#      symbols from here, and the tests/* suite imports asset / audio /
+#      qa / event helpers from this module's namespace. These are
+#      marked with a noqa comment carrying the F401 code.
 import os
-import re
 import shutil
-import tempfile
+import subprocess  # noqa: F401 (re-exported for mock.patch in tests/test_render_pipeline_guards.py)
 import threading
 import time
 import traceback
 import logging
-import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+
 from fastapi import HTTPException
+
 from app.models.schemas import RenderRequest
-from app.services.db import upsert_job, update_job_progress, upsert_job_part, list_job_parts, close_thread_conn
-from app.services.channel_service import ensure_channel
-from app.services.downloader import slugify
-from app.services.subtitle_engine import (
-    srt_to_ass_bounce, srt_to_ass_karaoke, slice_srt_by_time,
-    slice_srt_to_text, slice_srt_to_output_timeline,
-    has_audio_stream, apply_market_line_break_to_srt,
-    apply_market_hook_text_to_srt, apply_hook_subtitle_format, resolve_hook_overlay_text,
-    subtitle_emphasis_pass, write_srt_blocks,
-    resegment_srt_for_readability,
+from app.services.db import (
+    upsert_job,
+    update_job_progress,
+    upsert_job_part,
+    list_job_parts,
+    close_thread_conn,
 )
-from app.services.subtitle_transcription_adapters import transcribe_with_adapter
-from app.services.render_engine import cut_video, render_part_smart, render_base_clip, composite_overlays_on_base_clip, nvenc_available, resolve_ffmpeg_threads, detect_silence_trim_offset, apply_micro_pacing, detect_bad_first_frame, set_thread_cancel_event, content_type_crf_delta as _crf_delta_for_content_type, extract_thumbnail_frame
+from app.services.subtitle_engine import has_audio_stream
 from app.services import cancel_registry
 from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
-from app.services.viral_scoring import score_part_for_market as _mv_score_part
 from app.services.report_service import append_rows
-from app.core.config import TEMP_DIR, CHANNELS_DIR, LOGS_DIR, APP_DATA_DIR
-from app.core.stage import JobStage, JobPartStage, STAGE_TO_EVENT
-from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin, _summarize_ffmpeg_stderr
-from app.services.text_overlay import normalize_text_layers, MAX_TEXT_LAYERS
-from app.services.tts_service import generate_narration_mp3, generate_narration_audio
-from app.services.audio_mix_service import mix_narration_audio
-from app.services.audio_cleanup_adapters import cleanup_audio_with_adapter
-from app.services.translation_service import translate_srt_file
-from app.services.remotion_adapter import (
-    generate_hook_intro, prepend_intro_clip, resolve_intro_preset,
-    append_outro_clip, apply_logo_watermark,  # UP27
-)
+from app.core.config import TEMP_DIR
+from app.core.stage import JobStage, JobPartStage
 from app.ai.visibility.ai_visibility_summary import attach_ai_visibility_summaries
-from app.domain.timeline import TimelineMap
-from app.domain.manifests import BaseClipManifest
-from app.services.manifest_writer import write_manifest, manifest_path as _manifest_path
+from app.services.remotion_adapter import (  # noqa: F401 (re-exported for mock.patch in tests/test_remotion_adapter.py)
+    generate_hook_intro,
+    prepend_intro_clip,
+)
 from app.orchestration.render_events import (
-    _JOB_LOG_DIRS,
-    _append_json_line,
+    _JOB_LOG_DIRS,  # noqa: F401 (re-exported for tests/test_asset_pipeline.py)
+    _append_json_line,  # noqa: F401 (re-exported for routes/render.py)
     _emit_render_event,
     _event_from_stage,
     _job_log,
     register_job_log_dir,
     unregister_job_log_dir,
-    _render_error_code,
-    _render_progress_timer,
+    _render_progress_timer,  # noqa: F401 (re-exported for tests/test_render_events.py + test_render_pipeline_guards.py)
     _resolve_job_log_dir,
     _safe_unlink,
 )
-from app.orchestration.asset_pipeline import (
+from app.orchestration.asset_pipeline import (  # noqa: F401 (re-exported for tests/test_asset_pipeline.py + test_remotion_adapter.py)
     _maybe_append_asset_outro,
     _maybe_apply_asset_logo,
     _maybe_prepend_asset_intro,
     _maybe_prepend_remotion_hook_intro,
 )
 from app.orchestration.audio_pipeline import (
-    _maybe_cleanup_narration_audio,
+    _maybe_cleanup_narration_audio,  # noqa: F401 (re-exported for tests/test_audio_cleanup_pipeline.py + test_audio_pipeline.py)
 )
-from app.orchestration.qa_pipeline import (
+from app.orchestration.qa_pipeline import (  # noqa: F401 (re-exported for tests/test_qa_pipeline.py::test_qa_functions_re_exported_from_render_pipeline asserts all 7)
     _assess_output_quality,
-    _assess_render_quality_intelligence,
     _duration_tolerance,
     _failed_part_progress,
     _render_part_failure_detail,
@@ -81,58 +73,22 @@ from app.orchestration.qa_pipeline import (
     _stall_deadline,
     _validate_render_output,
 )
-from app.orchestration.pipeline_finalize import (
-    FinalizeContext,
-    run_render_finalize,
-)
-from app.orchestration.pipeline_setup import (
-    PipelineSetupResult,
-    setup_render_pipeline,
-    prepare_output_dir,
-)
-from app.orchestration.pipeline_source_prep import (
-    SourcePrepResult,
-    prepare_render_source,
-)
+from app.orchestration.pipeline_finalize import FinalizeContext, run_render_finalize
+from app.orchestration.pipeline_setup import setup_render_pipeline, prepare_output_dir
+from app.orchestration.pipeline_source_prep import prepare_render_source
 from app.orchestration.pipeline_narration import run_manual_voice_tts
-from app.orchestration.part_plan import PartExecutionPlan
-from app.orchestration.stages.part_renderer import PartRenderContext
-from app.orchestration.pipeline_render_loop import RenderLoopResult as _RenderLoopResult, run_render_loop
+from app.orchestration.stages.part_renderer import PartRenderContext  # noqa: F401 (passed via PartRenderContext init in run_render_loop)
+from app.orchestration.pipeline_render_loop import run_render_loop
 # pipeline_pre_render removed in Phase F1 — all jobs now use groq_only_pipeline.
-from app.orchestration.groq_only_pipeline import (
-    GroqOnlyPipelineError,
-    run_groq_only_pre_render,
-)
-from app.orchestration.part_assets import PartAssets
-from app.orchestration.camera_strategy import CameraStrategy
-from app.orchestration.render_output import RenderOutputResult
+from app.orchestration.groq_only_pipeline import run_groq_only_pre_render
 from app.orchestration.pipeline_cache import (
-    _RENDER_CACHE_TTL_SEC,
-    _render_cache_key,
-    _scene_cache_get, _scene_cache_put,
-    _transcription_cache_get, _transcription_cache_put,
-    _score_cache_get, _score_cache_put,
+    _transcription_cache_get,
+    _transcription_cache_put,
 )
-from app.orchestration.pipeline_ranking import (
-    resolve_combined_score_weights,
-    _score_component, _first_score,
-    _output_ranking_detail, _output_ranking_reason,
-    _compute_output_ranking_entry,
-)
+from app.orchestration.pipeline_ranking import _compute_output_ranking_entry
 from app.orchestration.pipeline_config import (
-    _resolve_profile, _probe_video_duration,
-    extract_text_from_srt,
-    _reserve_source_path_in_dir, _reserve_source_path,
-    _sanitize_channel_subdir, _resolve_output_dir,
-)
-from app.orchestration.pipeline_subtitle_utils import (
-    _aspect_play_res_y, _apply_subtitle_edits_to_srt,
-    _append_cta_block_to_srt, _read_srt_meta,
-)
-from app.orchestration.pipeline_segment_selection import (
-    _safe_output_name, _smart_output_stem,
-    _select_cover_frame_time, _select_cta_text, _get_effective_playback_speed,
-    _build_variant_segments, _PLATFORM_PROFILES,
+    _resolve_profile,
+    _probe_video_duration,  # noqa: F401 (re-exported for routes/render.py)
 )
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the

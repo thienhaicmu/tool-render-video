@@ -1,95 +1,25 @@
 """
 Per-part render logic extracted from run_render_pipeline() inner closures (Phase A-3).
 PartRenderContext carries all closure-captured state.
+
+After Sprint 6.D-2.x decomposition, this file is a thin orchestrator
+skeleton: process_one_part owns the frozen JobPartStage state-machine
+transitions and delegates layer work to 7 stages/* helpers. The
+imports below reflect that smaller surface — most service-level helpers
+that the original process_one_part used directly now live inside the
+extracted stage modules. See docs/review/SPRINT_6D_PLAN.md.
 """
 from __future__ import annotations
 
 import logging
 import os
-import subprocess
-import threading
 import time
-import traceback
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
 
-from app.core.config import TEMP_DIR
 from app.core.stage import JobPartStage
-from app.domain.manifests import BaseClipManifest
-from app.domain.timeline import TimelineMap
-from app.orchestration.asset_pipeline import (
-    _maybe_append_asset_outro,
-    _maybe_apply_asset_logo,
-    _maybe_prepend_asset_intro,
-    _maybe_prepend_remotion_hook_intro,
-)
-from app.orchestration.audio_pipeline import _maybe_cleanup_narration_audio
-from app.orchestration.camera_strategy import CameraStrategy
-from app.orchestration.part_assets import PartAssets
-from app.orchestration.part_plan import PartExecutionPlan
-from app.orchestration.pipeline_cache import _render_cache_key
-from app.orchestration.pipeline_config import extract_text_from_srt
-from app.orchestration.pipeline_subtitle_utils import (
-    _append_cta_block_to_srt,
-    _apply_subtitle_edits_to_srt,
-    _aspect_play_res_y,
-    _read_srt_meta,
-)
-from app.orchestration.pipeline_segment_selection import (
-    _PLATFORM_PROFILES,
-    _get_effective_playback_speed,
-    _select_cover_frame_time,
-    _select_cta_text,
-)
-from app.orchestration.pipeline_ranking import resolve_combined_score_weights
-from app.orchestration.qa_pipeline import (
-    _assess_output_quality,
-    _assess_render_quality_intelligence,
-    _resume_output_valid,
-    _validate_render_output,
-)
-from app.orchestration.render_events import (
-    _emit_render_event,
-    _job_log,
-    _render_progress_timer,
-    _safe_unlink,
-)
-from app.orchestration.render_output import RenderOutputResult
-from app.services.audio_mix_service import mix_narration_audio
+from app.orchestration.qa_pipeline import _resume_output_valid
+from app.orchestration.render_events import _job_log
 from app.services.db import upsert_job_part
-from app.services.manifest_writer import manifest_path as _manifest_path
-from app.services.manifest_writer import write_manifest
-from app.services.render_engine import (
-    apply_micro_pacing,
-    composite_overlays_on_base_clip,
-    content_type_crf_delta as _crf_delta_for_content_type,
-    cut_video,
-    detect_bad_first_frame,
-    detect_silence_trim_offset,
-    extract_thumbnail_frame,
-    render_base_clip,
-    render_part_smart,
-    set_thread_cancel_event,
-)
-from app.services.subtitle_engine import (
-    apply_hook_subtitle_format,
-    apply_market_hook_text_to_srt,
-    apply_market_line_break_to_srt,
-    parse_srt_blocks,
-    resegment_srt_for_readability,
-    resolve_hook_overlay_text,
-    slice_srt_to_output_timeline,
-    slice_srt_to_text,
-    srt_to_ass_bounce,
-    srt_to_ass_karaoke,
-    subtitle_emphasis_pass,
-    write_srt_blocks,
-)
-from app.services.subtitle_transcription_adapters import transcribe_with_adapter
-from app.services.text_overlay import MAX_TEXT_LAYERS
-from app.services.translation_service import translate_srt_file
-from app.services.tts_service import generate_narration_audio
+from app.services.render_engine import set_thread_cancel_event
 
 logger = logging.getLogger("app.render")
 
@@ -109,7 +39,7 @@ from app.orchestration.stages.part_asset_planner import prepare_part_assets
 # Sprint 6.D-2.3: CUT stage (post-WAITING / pre-RENDERING block) extracted
 # to a dedicated module. Re-exported so the internal caller below keeps
 # the bare reference; CutStageResult is consumed only inside process_one_part.
-from app.orchestration.stages.part_cut import CutStageResult, run_cut_stage
+from app.orchestration.stages.part_cut import CutStageResult, run_cut_stage  # noqa: F401 (CutStageResult re-exported)
 # Sprint 6.D-2.4: RENDER pre-flight (encoding params + progress-timer
 # thread + cache key + PartExecutionPlan + CameraStrategy + feature-flag
 # warning) extracted to a dedicated module. The encode-progress thread
@@ -118,7 +48,7 @@ from app.orchestration.stages.part_cut import CutStageResult, run_cut_stage
 # completes. Plan §3.2 phase 2.4 was re-scoped here because the original
 # TRANSCRIBE scope was already absorbed into prepare_part_assets (2.2).
 from app.orchestration.stages.part_render_setup import (
-    RenderPreflightResult,
+    RenderPreflightResult,  # noqa: F401 (re-exported)
     run_render_preflight,
 )
 # Sprint 6.D-2.5a: FFmpeg encode core (base_clip + overlay composite +
@@ -128,7 +58,7 @@ from app.orchestration.stages.part_render_setup import (
 # the encode-progress thread (started in run_render_preflight) lives
 # inside run_render_encode's finally block.
 from app.orchestration.stages.part_render_encode import (
-    RenderEncodeResult,
+    RenderEncodeResult,  # noqa: F401 (re-exported)
     run_render_encode,
 )
 # Sprint 6.D-2.5d: Per-part DONE block (quality intelligence + cover
