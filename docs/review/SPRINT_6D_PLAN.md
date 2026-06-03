@@ -265,8 +265,9 @@ Captured from the planning conversation:
 | `render_pipeline.py` | 1525 | ~500–700 (`run_render_pipeline` skeleton) | 5 | 6.D-1.5 (finalize) |
 | `part_renderer.py` | 2101 | ~800–1000 (process_one_part may stay) | 5 | 6.D-2.5 (render+validate) |
 
-**Total Sprint 6.D scope:** 17 commits across 3 files. Estimated 5–8
-sessions at one phase per session.
+**Total Sprint 6.D scope:** 23 commits across 3 files (after 2.4 re-scope
+and 2.5 split — see §11 changelog). Estimated 5–8 sessions at one phase
+per session.
 
 **Net diff per phase:** ~+300 / −300 LOC (pure moves; lines relocate).
 
@@ -294,8 +295,11 @@ sessions at one phase per session.
 | 6.D-2.1 | part_renderer.py | stages/part_render_context.py | LOW |
 | 6.D-2.2 | part_renderer.py | stages/part_asset_planner.py | MEDIUM |
 | 6.D-2.3 | part_renderer.py | stages/part_cut.py | HIGH |
-| 6.D-2.4 | part_renderer.py | stages/part_transcribe.py | HIGH |
-| 6.D-2.5 | part_renderer.py | stages/part_render_encode.py | CRITICAL |
+| 6.D-2.4 | part_renderer.py | stages/part_render_setup.py (was: part_transcribe.py — RE-SCOPED, see §11 entry 3) | HIGH |
+| 6.D-2.5a | part_renderer.py | stages/part_render_encode.py (FFmpeg encode core, ~216 LOC) | HIGH |
+| 6.D-2.5b | part_renderer.py | stages/part_voice_mix.py (voice TTS + audio mix, ~230 LOC) | HIGH |
+| 6.D-2.5c | part_renderer.py | stages/part_render_finalize.py (pacing + scoring + qa_pipeline, ~430 LOC) | CRITICAL |
+| 6.D-2.5d | part_renderer.py | stages/part_done.py (quality intel + cover + DONE, ~100 LOC) | HIGH |
 
 To execute a phase, the user says e.g. **"execute Sprint 6.D-3.1"** —
 that session reads this plan, executes only the named phase, gates on
@@ -308,4 +312,5 @@ green pytest, and stops.
 | Date | Change |
 |---|---|
 | Initial commit (`419bb32`) | Original plan: 17 phases, motion_crop 7 / render_pipeline 5 / part_renderer 5. |
-| Pushback revision (this commit) | Phase 3.5 split into 3.5a/b/c (the original "~30 functions" violated §7 stop condition #5). Phase 3.6 split into 3.6a/b (original 850 LOC violated same rule). render_pipeline phases reordered to put 1.5 first because it's the safest contiguous end-of-function slice; downgraded from HIGH to MEDIUM. Total phases now 20 (was 17). |
+| Pushback revision (`0d8f643`) | Phase 3.5 split into 3.5a/b/c (the original "~30 functions" violated §7 stop condition #5). Phase 3.6 split into 3.6a/b (original 850 LOC violated same rule). render_pipeline phases reordered to put 1.5 first because it's the safest contiguous end-of-function slice; downgraded from HIGH to MEDIUM. Total phases now 20 (was 17). |
+| Mid-execution revision (this commit) | **Phase 2.4 re-scoped.** Plan originally listed 2.4 as "TRANSCRIBE stage block → `part_transcribe.py`". By the time 2.4 ran (after 2.2 had extracted `prepare_part_assets` to `part_asset_planner.py`), all per-part TRANSCRIBE logic — `transcribe_with_adapter(...)`, `_read_srt_meta`, per-part SRT writes — already lived inside `prepare_part_assets`. No TRANSCRIBE-only block remained in `process_one_part`. Phase 2.4 was re-scoped to **"RENDER pre-flight"** → `stages/part_render_setup.py` (encoding params + progress-timer thread + cache key + PartExecutionPlan + CameraStrategy + feature-flag warning, ~100 LOC). Executed in commit `ef12803`. **Phase 2.5 split into 2.5a/b/c/d.** Original plan listed 2.5 as a single CRITICAL ~600 LOC commit. Audit at the start of 2.5 found ~977 LOC remaining in process_one_part (lines 254-1230 post-2.4), with Sacred Contract #8 (`qa_pipeline`) surface concentrated in one ~270-LOC sub-block. Single commit would be 3.3× the §7 advisory cap of 300 LOC. Split into: **2.5a** FFmpeg encode core (~216 LOC, HIGH) → `part_render_encode.py`; **2.5b** voice TTS + audio mix (~230 LOC, HIGH) → `part_voice_mix.py`; **2.5c** pacing + intro/outro + scoring + qa_pipeline validation (~430 LOC, **CRITICAL** — Sacred Contract #8 surface) → `part_render_finalize.py`; **2.5d** quality intel + cover frame + `JobPartStage.DONE` + cleanup (~100 LOC, HIGH — Sacred Contract #5 terminal transition) → `part_done.py`. Recommended execution order: 2.5a → 2.5d → 2.5b → 2.5c (saves the CRITICAL phase for last when surrounding seams are settled). Total phases now 23 (was 20 was 17). |
