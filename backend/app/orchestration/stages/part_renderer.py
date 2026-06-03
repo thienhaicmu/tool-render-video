@@ -121,6 +121,16 @@ from app.orchestration.stages.part_render_setup import (
     RenderPreflightResult,
     run_render_preflight,
 )
+# Sprint 6.D-2.5a: FFmpeg encode core (base_clip + overlay composite +
+# render_part_smart fallback + encode-thread lifecycle close + motion-crop
+# recovery emit + visual_finish_applied emit) extracted to a dedicated
+# module. The encode_stop.set() + encode_timer.join() pair that closes
+# the encode-progress thread (started in run_render_preflight) lives
+# inside run_render_encode's finally block.
+from app.orchestration.stages.part_render_encode import (
+    RenderEncodeResult,
+    run_render_encode,
+)
 
 
 def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
@@ -251,222 +261,19 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
     _part_plan            = _preflight.part_plan
     _camera_strategy      = _preflight.camera_strategy
 
-    if _FEATURE_BASE_CLIP_FIRST:
-        _base_clip_out = ctx.work_dir / f"part_{idx}" / "base_clip.mp4"
-        try:
-            _base_clip_out.parent.mkdir(parents=True, exist_ok=True)
-            _bc_bgm_path = str(getattr(ctx.payload, "reup_bgm_path", None) or "").strip()
-            _bc_bgm_ok = (
-                getattr(ctx.payload, "reup_bgm_enable", False)
-                and _bc_bgm_path
-                and Path(_bc_bgm_path).is_file()
-            )
-            _bc_meta = render_base_clip(
-                input_path=str(raw_part),
-                output_path=str(_base_clip_out),
-                timeline=_part_timeline,
-                aspect_ratio=ctx.payload.aspect_ratio,
-                scale_x=ctx.payload.frame_scale_x,
-                scale_y=ctx.payload.frame_scale_y,
-                motion_aware_crop=ctx.payload.motion_aware_crop,
-                reframe_mode=getattr(ctx.payload, "reframe_mode", "subject"),
-                effect_preset=ctx.payload.effect_preset,
-                transition_sec=ctx.tuned["transition_sec"],
-                video_codec=ctx.payload.video_codec,
-                video_crf=_part_video_crf,
-                video_preset=ctx.tuned["video_preset"],
-                audio_bitrate=ctx.payload.audio_bitrate,
-                retry_count=ctx.retry_count,
-                encoder_mode=ctx.payload.encoder_mode,
-                output_fps=ctx.payload.output_fps,
-                loudnorm_enabled=getattr(ctx.payload, "loudnorm_enabled", False),
-                ffmpeg_threads=ctx.ffmpeg_threads,
-                content_type=seg.get("content_type_hint", "vlog"),
-                _motion_cache_key=_motion_ck,
-                reup_bgm_enable=getattr(ctx.payload, "reup_bgm_enable", False),
-                reup_bgm_path=getattr(ctx.payload, "reup_bgm_path", None),
-                reup_bgm_gain=getattr(ctx.payload, "reup_bgm_gain", 0.18),
-                visual_intensity_hint=ctx.vis_intensity_hint,
-            )
-            _part_manifest.base_clip_path = str(_base_clip_out)
-            _part_manifest.base_clip_duration = _bc_meta.get("duration")
-            _part_manifest.base_clip_fps = _bc_meta.get("fps")
-            _part_manifest.base_clip_width = _bc_meta.get("width")
-            _part_manifest.base_clip_height = _bc_meta.get("height")
-            _part_manifest.base_clip_has_audio = _bc_meta.get("has_audio")
-            _part_manifest.base_clip_created_at = _bc_meta.get("created_at")
-            _part_manifest.base_clip_bgm_applied = bool(_bc_bgm_ok)
-            write_manifest(ctx.work_dir, _part_manifest)
-            logger.info(
-                "base_clip_rendered part=%d path=%s duration=%.3fs",
-                idx, _base_clip_out, _bc_meta.get("duration", 0.0),
-            )
-        except Exception as _bc_err:
-            logger.warning(
-                "base_clip_render_failed part=%d err=%s — render_part_smart continues",
-                idx, _bc_err,
-            )
-
-    _overlay_composite_succeeded = False
-    if (
-        _FEATURE_BASE_CLIP_FIRST
-        and _FEATURE_OVERLAY_AFTER_BASE_CLIP
-        and _part_manifest.base_clip_path is not None
-    ):
-        _overlay_dir = Path(_part_manifest.base_clip_path).parent
-        _overlay_srt = _overlay_dir / "subtitle_output_timeline.srt"
-        _overlay_ass = _overlay_dir / "subtitle_output_timeline.ass"
-        try:
-            _overlay_ass_path: "str | None" = None
-            if part_subtitle_enabled and ctx.full_srt_available and ctx.full_srt.exists():
-                _ot_meta = slice_srt_to_output_timeline(
-                    source_srt_path=str(ctx.full_srt),
-                    output_srt_path=str(_overlay_srt),
-                    source_start=_part_timeline.source_start,
-                    source_end=_part_timeline.source_end,
-                    timeline=_part_timeline,
-                )
-                if _ot_meta.get("subtitle_count", 0) > 0:
-                    _overlay_play_res_y = _aspect_play_res_y(ctx.payload.aspect_ratio)
-                    _overlay_margin_v = getattr(ctx.payload, "sub_margin_v", 180)
-                    if (
-                        not ctx.payload.motion_aware_crop
-                        and seg.get("content_type_hint") in ("interview", "commentary")
-                    ):
-                        _overlay_margin_v += 40
-                    srt_to_ass_bounce(
-                        str(_overlay_srt),
-                        str(_overlay_ass),
-                        subtitle_style=_effective_subtitle_style,
-                        scale_y=ctx.payload.frame_scale_y,
-                        font_name=getattr(ctx.payload, "sub_font", "Bungee"),
-                        font_size=getattr(ctx.payload, "sub_font_size", 0),
-                        margin_v=_overlay_margin_v,
-                        play_res_y=_overlay_play_res_y,
-                        play_res_x=1080,
-                        x_percent=getattr(ctx.payload, "sub_x_percent", 50.0),
-                        highlight_per_word=getattr(ctx.payload, "highlight_per_word", True),
-                    )
-                    _overlay_ass_path = str(_overlay_ass)
-                    _part_manifest.overlay_srt_path = str(_overlay_srt)
-                    _part_manifest.overlay_ass_path = str(_overlay_ass)
-
-            _oc_meta = composite_overlays_on_base_clip(
-                base_clip_path=_part_manifest.base_clip_path,
-                output_path=str(final_part),
-                timeline=_part_timeline,
-                subtitle_ass=_overlay_ass_path,
-                text_layers=_part_text_layers_overlay if _part_text_layers_overlay else None,
-                title_text=overlay_title if ctx.payload.add_title_overlay else None,
-                video_codec=ctx.payload.video_codec,
-                video_crf=_part_video_crf,
-                video_preset=ctx.tuned["video_preset"],
-                audio_bitrate=ctx.payload.audio_bitrate,
-                retry_count=ctx.retry_count,
-                encoder_mode=ctx.payload.encoder_mode,
-                ffmpeg_threads=ctx.ffmpeg_threads,
-            )
-            _part_manifest.overlay_rendered_path = str(final_part)
-            _part_manifest.rendered_path = str(final_part)
-            _part_manifest.overlay_text_layers_applied = len(_part_text_layers_overlay or [])
-            write_manifest(ctx.work_dir, _part_manifest)
-            logger.info(
-                "overlay_composite_succeeded part=%d path=%s subtitle=%s",
-                idx, final_part, _overlay_ass_path is not None,
-            )
-            _overlay_composite_succeeded = True
-        except Exception as _oc_err:
-            logger.warning(
-                "overlay_composite_failed job_id=%s part=%d base_clip=%s err=%s "
-                "— falling back to render_part_smart",
-                ctx.job_id, idx, _part_manifest.base_clip_path, _oc_err,
-            )
-
-    try:
-        if not _overlay_composite_succeeded:
-            render_part_smart(
-                str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if ctx.payload.add_title_overlay else "",
-                ctx.payload.aspect_ratio, ctx.payload.frame_scale_x, ctx.payload.frame_scale_y,
-                ctx.payload.motion_aware_crop,
-                reframe_mode=ctx.payload.reframe_mode,
-                add_subtitle=part_subtitle_enabled,
-                add_title_overlay=ctx.payload.add_title_overlay,
-                effect_preset=ctx.payload.effect_preset,
-                transition_sec=ctx.tuned["transition_sec"],
-                video_codec=ctx.payload.video_codec,
-                video_crf=_part_video_crf,
-                video_preset=ctx.tuned["video_preset"],
-                audio_bitrate=ctx.payload.audio_bitrate,
-                retry_count=ctx.retry_count,
-                encoder_mode=ctx.payload.encoder_mode,
-                output_fps=ctx.payload.output_fps,
-                reup_mode=ctx.payload.reup_mode,
-                reup_overlay_enable=ctx.payload.reup_overlay_enable,
-                reup_overlay_opacity=ctx.payload.reup_overlay_opacity,
-                reup_bgm_enable=ctx.payload.reup_bgm_enable,
-                reup_bgm_path=ctx.payload.reup_bgm_path,
-                reup_bgm_gain=ctx.payload.reup_bgm_gain,
-                playback_speed=float(
-                    seg.get("variant_playback_speed")
-                    or max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.07)
-                           + _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)))
-                ),
-                text_layers=_part_text_layers,
-                loudnorm_enabled=getattr(ctx.payload, "loudnorm_enabled", False),
-                ffmpeg_threads=ctx.ffmpeg_threads,
-                content_type=seg.get("content_type_hint", "vlog"),
-                _motion_cache_key=_motion_ck,
-                _fallback_flag=_motion_crop_fallback,
-                visual_intensity_hint=ctx.vis_intensity_hint,
-            )
-    finally:
-        _encode_stop.set()
-        _encode_timer.join(timeout=5.0)
-    _render_ms = int((time.perf_counter() - _t_render) * 1000)
-    logger.info("render_part_ms=%d part=%d codec=%s crop=%s",
-                _render_ms, idx, ctx.payload.video_codec, ctx.payload.motion_aware_crop)
-    _part_manifest.rendered_path = str(final_part)
-    write_manifest(ctx.work_dir, _part_manifest)
-    if _motion_ck:
-        _job_log(ctx.effective_channel, ctx.job_id, f"rerender_fast_path part={idx} motion_cache_key={_motion_ck[:8]} render_ms={_render_ms}")
-    if _motion_crop_fallback:
-        ctx.recovery_notes.append("Motion crop unavailable — used standard crop")
-        _emit_render_event(
-            channel_code=ctx.effective_channel,
-            job_id=ctx.job_id,
-            event="recovery_success",
-            level="WARNING",
-            message=f"Recovery: motion crop failed for part {idx}, standard crop used",
-            step="render.motion_crop",
-            context={
-                "recovery_strategy": "fallback_standard_crop",
-                "part_no": idx,
-                "reason": _motion_crop_fallback[0],
-            },
-        )
-    _emit_render_event(
-        channel_code=ctx.effective_channel,
-        job_id=ctx.job_id,
-        event="visual_finish_applied",
-        level="INFO",
-        message=f"Visual finish: part {idx} content_type={_vf_ct} crf={_part_video_crf}({_vf_crf_delta:+d}) bitrate={_vf_bitrate_profile}",
-        step="render.visual_finish",
-        context={
-            "part_no": idx,
-            "content_type": _vf_ct,
-            "visual_finish_score": min(100, max(0, 50 + (_part_video_crf - ctx.tuned["video_crf"]) * -5)),
-            "clarity_level": "enhanced" if _vf_ct in ("tutorial", "interview") else (
-                "reduced" if _vf_ct == "montage" else "standard"
-            ),
-            "compression_risk": "low" if _vf_ct in ("interview", "tutorial") else (
-                "high" if _vf_ct == "montage" else "medium"
-            ),
-            "subtitle_visibility": "adjusted" if _vf_subtitle_bump else "standard",
-            "crf_applied": _part_video_crf,
-            "crf_delta": _vf_crf_delta,
-            "bitrate_profile": _vf_bitrate_profile,
-        },
+    # Sprint 6.D-2.5a: FFmpeg encode core (base_clip + overlay composite +
+    # render_part_smart fallback + encode-thread lifecycle close + motion-crop
+    # recovery + visual_finish_applied) moved to part_render_encode.run_render_encode.
+    # The single returned field is aliased back to its original local name
+    # so the downstream voice/mix/finalize blocks stay byte-for-byte unchanged.
+    _encode = run_render_encode(
+        ctx, idx, seg, raw_part, ass_part, final_part,
+        part_subtitle_enabled, overlay_title,
+        _part_manifest, _part_timeline,
+        _part_text_layers, _part_text_layers_overlay,
+        _effective_subtitle_style, _preflight,
     )
+    _render_ms = _encode.render_ms
     _part_subtitle_voice_path = None
     if (
         getattr(ctx.payload, "voice_enabled", False)
