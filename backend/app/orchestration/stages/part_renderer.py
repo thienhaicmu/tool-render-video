@@ -131,6 +131,12 @@ from app.orchestration.stages.part_render_encode import (
     RenderEncodeResult,
     run_render_encode,
 )
+# Sprint 6.D-2.5d: Per-part DONE block (quality intelligence + cover
+# frame + JobPartStage.DONE terminal upsert + cleanup + return dict)
+# extracted to a dedicated module. The terminal stage transition
+# (Sacred Contract #5) moves WITH this helper since it is the natural
+# return point of process_one_part.
+from app.orchestration.stages.part_done import run_part_done
 
 
 def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
@@ -936,102 +942,12 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
             },
         )
 
-    try:
-        _qi_srt = ass_part if part_subtitle_enabled and ass_part and ass_part.suffix == ".srt" else None
-        _qi_srt_path: Path | None = None
-        if srt_path is not None and Path(str(srt_path)).exists():  # noqa: F821 — preserved bug: srt_path is undefined, caught by except below
-            _qi_srt_path = Path(str(srt_path))
-        elif _qi_srt is not None and Path(str(_qi_srt)).exists():
-            _qi_srt_path = Path(str(_qi_srt))
-        _qi_manifest: Path | None = None
-        try:
-            from app.ai.tracing import _DEFAULT_LOG_DIR as _ai_log_dir
-            _qi_ai_trace = _ai_log_dir / f"{ctx.job_id}_ai_trace.jsonl"
-            _qi_ai_trace = _qi_ai_trace if _qi_ai_trace.exists() else None
-        except Exception:
-            _qi_ai_trace = None
-        _assess_render_quality_intelligence(
-            video_path=final_part,
-            part_no=idx,
-            job_id=ctx.job_id,
-            srt_path=_qi_srt_path,
-            manifest_path=_qi_manifest,
-            ai_trace_path=_qi_ai_trace,
-        )
-    except Exception:
-        pass
-
-    try:
-        _clip_dur = max(1.0, float(seg.get("duration") or 0))
-        _cover_hint_ratio: float | None = None
-        try:
-            if ctx.ai_edit_plan is not None:
-                _plan_hint = (ctx.ai_edit_plan.clip_cover_hints or {}).get(idx - 1) or {}
-                _raw_ratio = _plan_hint.get("preferred_offset_ratio")
-                if _raw_ratio is not None:
-                    _cover_hint_ratio = float(_raw_ratio)
-        except Exception:
-            pass
-        _cover_offset, _cover_reason = _select_cover_frame_time(
-            clip_duration=_clip_dur,
-            hook_score=float(seg.get("hook_score") or 0),
-            srt_meta=_srt_meta,
-            target_platform=ctx.target_platform,
-            variant_type=str(seg.get("variant_type") or ""),
-            cover_hint_ratio=_cover_hint_ratio,
-        )
-        _cover_quality_reasons: list = []
-        _cover_bytes = None
-        if os.getenv("S4_THUMBNAIL_QUALITY_ENABLED") == "1":
-            try:
-                from app.services.thumbnail_quality import select_best_thumbnail
-                _t_thumb = time.perf_counter()
-                _cover_bytes, _cover_offset, _cover_quality_reasons = select_best_thumbnail(
-                    str(final_part), _cover_offset, _clip_dur, width=640
-                )
-                _thumb_ms = int((time.perf_counter() - _t_thumb) * 1000)
-                logger.debug("s4_thumbnail_select_ms part=%d ms=%d offset=%.3f", idx, _thumb_ms, _cover_offset)
-            except Exception as _s43_exc:
-                logger.debug("s4_thumbnail_quality_failed part=%d: %s", idx, _s43_exc)
-        if not _cover_bytes:
-            _cover_bytes = extract_thumbnail_frame(str(final_part), _cover_offset, width=640)
-        if _cover_bytes:
-            _cover_stem = (
-                f"{ctx.output_stem}_{_variant_type}_cover" if _variant_type
-                else f"{ctx.output_stem}_part_{idx:03d}_cover"
-            )
-            _cover_path = ctx.output_dir / f"{_cover_stem}.jpg"
-            _cover_path.write_bytes(_cover_bytes)
-            seg["cover_file"] = str(_cover_path)
-            seg["cover_frame_offset"] = _cover_offset
-            _emit_render_event(
-                channel_code=ctx.effective_channel,
-                job_id=ctx.job_id,
-                event="cover_frame_selected",
-                level="INFO",
-                message=f"Smart cover: part {idx} offset={_cover_offset:.3f}s",
-                step="render.cover",
-                context={
-                    "part_no":        idx,
-                    "cover_file":     str(_cover_path),
-                    "frame_offset":   _cover_offset,
-                    "cover_reason":   _cover_reason,
-                    "target_platform": ctx.target_platform,
-                    "variant_type":   str(seg.get("variant_type") or ""),
-                    "thumbnail_quality_reason": _cover_quality_reasons,
-                },
-            )
-            _job_log(
-                ctx.effective_channel, ctx.job_id,
-                f"cover_frame_selected part_no={idx} offset={_cover_offset:.3f}s "
-                f"platform={ctx.target_platform} reason={_cover_reason!r}",
-            )
-    except Exception as _cov_exc:
-        logger.warning("cover_frame_extraction_failed part=%d: %s", idx, _cov_exc)
-    upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Completed")
-    row = [ctx.job_id, ctx.effective_channel, ctx.source["title"], idx, seg["start"], seg["end"], seg["duration"], seg["viral_score"], seg["priority_rank"], str(final_part)]
-    if ctx.payload.cleanup_temp_files:
-        _safe_unlink(raw_part)
-        _safe_unlink(srt_part)
-        _safe_unlink(ass_part)
-    return {"idx": idx, "output": str(final_part), "row": row, "skipped": False}
+    # Sprint 6.D-2.5d: Per-part DONE block (quality intelligence +
+    # cover frame + JobPartStage.DONE terminal upsert + cleanup +
+    # return dict) moved to part_done.run_part_done. The function
+    # returns the dict shape that process_one_part has always handed
+    # back to its caller (pipeline_render_loop.run_render_loop).
+    return run_part_done(
+        ctx, idx, seg, raw_part, srt_part, ass_part, final_part,
+        part_name, _srt_meta, _variant_type, part_subtitle_enabled,
+    )
