@@ -90,6 +90,19 @@ from app.services.motion_crop_scoring import (
     _score_subject_candidate,
     _same_subject,
 )
+# Sprint 6.D-3.5c: trackerless guard helpers extracted to a dedicated
+# module. The new module imports its dependencies directly from
+# motion_crop_scoring + motion_crop_utils to avoid a load-time cycle
+# (motion_crop.py imports trackerless at its top, so this module
+# cannot import-back through motion_crop). Re-exported so existing
+# internal call sites keep their bare references.
+from app.services.motion_crop_trackerless import (
+    _trackerless_offcenter_ratio,
+    _trackerless_detection_confidence,
+    _trackerless_hold_frames_for_confidence,
+    _trackerless_crop_side_fill_ratio,
+    _apply_trackerless_center_guard,
+)
 
 import cv2
 import numpy as np
@@ -180,120 +193,8 @@ def _untracked_hold_frames(cfg: MotionCropConfig, detect_interval: int) -> int:
     return max(4, min(cfg.lost_subject_hold_frames, max(6, detect_interval // 2)))
 
 
-def _trackerless_offcenter_ratio(
-    subject: Tuple[int, int, int, int],
-    frame_w: int,
-    crop_w: int,
-) -> float:
-    cx, _ = _subject_center(subject)
-    pan_half_range = max(1.0, float(frame_w - crop_w) / 2.0)
-    return abs(cx - frame_w / 2.0) / pan_half_range
-
-
-def _trackerless_detection_confidence(
-    subject: Tuple[int, int, int, int],
-    frame_w: int,
-    frame_h: int,
-    crop_w: int,
-    subject_kind: str = "face",
-    previous_subject: Optional[Tuple[int, int, int, int]] = None,
-    confirm_count: int = 1,
-) -> float:
-    area_ratio = _subject_area_ratio(subject, frame_w, frame_h)
-    edge_overlap = _subject_edge_overlap_ratio(subject, frame_w)
-    offcenter_ratio = _trackerless_offcenter_ratio(subject, frame_w, crop_w)
-
-    if subject_kind == "face":
-        score = 0.25
-    elif subject_kind == "body":
-        score = 0.18
-    else:
-        score = 0.15
-
-    score += 0.25 * clamp(confirm_count / 3.0, 0.0, 1.0)
-
-    if 0.02 <= area_ratio <= 0.12:
-        score += 0.18
-    elif 0.010 <= area_ratio < 0.02 or 0.12 < area_ratio <= 0.18:
-        score += 0.10
-    else:
-        score += 0.04
-
-    score += 0.15 * clamp(1.0 - offcenter_ratio, 0.0, 1.0)
-    score += 0.10 * clamp(1.0 - edge_overlap, 0.0, 1.0)
-
-    if previous_subject is not None and _same_subject(previous_subject, subject):
-        score += 0.07
-
-    if offcenter_ratio > 0.35:
-        score -= 0.12
-    if edge_overlap > 0.30:
-        score -= 0.08
-
-    return clamp(score, 0.0, 1.0)
-
-
-def _trackerless_hold_frames_for_confidence(base_hold_frames: int, confidence_score: float) -> int:
-    if confidence_score < 0.55:
-        return max(3, base_hold_frames - 4)
-    if confidence_score < 0.78:
-        return max(4, base_hold_frames - 2)
-    return base_hold_frames
-
-
-def _trackerless_crop_side_fill_ratio(
-    target_cx: float,
-    frame_w: int,
-    crop_w: int,
-    band_ratio: float = 0.28,
-) -> float:
-    crop_left = clamp(target_cx - crop_w / 2.0, 0.0, frame_w - crop_w)
-    crop_right = crop_left + crop_w
-    left_band = frame_w * band_ratio
-    right_band = frame_w * (1.0 - band_ratio)
-    left_overlap = max(0.0, min(crop_right, left_band) - crop_left)
-    right_overlap = max(0.0, crop_right - max(crop_left, right_band))
-    return max(left_overlap, right_overlap) / max(1.0, float(crop_w))
-
-
-def _apply_trackerless_center_guard(
-    target_cx: float,
-    default_cx: float,
-    frame_w: int,
-    crop_w: int,
-    confidence_score: float,
-    stable_count: int,
-) -> Tuple[float, bool, str]:
-    if confidence_score >= 0.82 and stable_count >= 3:
-        return target_cx, False, "none"
-
-    side_fill_ratio = _trackerless_crop_side_fill_ratio(target_cx, frame_w, crop_w)
-    if confidence_score < 0.55:
-        max_offset = crop_w * 0.18
-        if side_fill_ratio > 0.18:
-            max_offset = min(max_offset, crop_w * 0.14)
-        reason = "weak_trackerless_guard"
-    elif confidence_score < 0.78:
-        max_offset = crop_w * 0.28
-        if side_fill_ratio > 0.22:
-            max_offset = min(max_offset, crop_w * 0.22)
-            reason = "edge_fill_guard"
-        else:
-            reason = "medium_trackerless_guard"
-    else:
-        max_offset = crop_w * (0.32 + min(0.10, stable_count * 0.02))
-        if side_fill_ratio > 0.24:
-            max_offset = min(max_offset, crop_w * 0.26)
-            reason = "edge_fill_guard"
-        else:
-            reason = "none"
-
-    dx = target_cx - default_cx
-    if abs(dx) <= max_offset:
-        return target_cx, False, "none" if side_fill_ratio <= 0.22 else reason
-
-    guarded_cx = default_cx + math.copysign(max_offset, dx)
-    return guarded_cx, True, reason
+# Sprint 6.D-3.5c: 5 trackerless guard helpers → moved to
+# app.services.motion_crop_trackerless. Re-exported at top of this file.
 
 
 # Sprint 6.D-3.5b: _is_plausible_subject, _filter_subject_candidates,
