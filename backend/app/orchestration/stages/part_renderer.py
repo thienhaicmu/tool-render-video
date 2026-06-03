@@ -97,61 +97,11 @@ _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
 
 
-@dataclass
-class PartRenderContext:
-    # Job identity
-    job_id: str
-    effective_channel: str
-    total_parts: int
-    retry_count: int
-    # I/O paths
-    work_dir: Path
-    output_dir: Path
-    source_path: Path
-    source: dict
-    output_stem: str
-    # Payload
-    payload: Any
-    # Resume
-    existing_parts: dict
-    # AI state
-    ai_edit_plan: Any
-    vis_intensity_hint: Any
-    # Platform/render config
-    target_platform: str
-    tuned: dict
-    ffmpeg_threads: int
-    # Cancel
-    cancel_registry: Any
-    # Motion
-    src_stat_for_motion: Any
-    # Subtitle
-    full_srt: Path
-    full_srt_available: bool
-    subtitle_enabled_by_idx: dict
-    subtitle_cutoff: float
-    # Voice
-    voice_audio_path: Any
-    # Market/hook
-    mv_market: str
-    mv_cfg: dict
-    hook_apply_enabled: bool
-    hook_applied_text: str
-    hook_score: Any
-    hook_overlay_enabled: bool
-    # AI subtitle
-    dna_clean_visual: bool
-    ai_subtitle_emphasis_config: Any
-    # Text layers
-    normalized_text_layers: Any
-    # Mutable shared lists (passed by reference — same list object as outer scope)
-    voice_part_tts_attempts: list = field(default_factory=list)
-    voice_mix_ok: list = field(default_factory=list)
-    sub_translate_attempts: list = field(default_factory=list)
-    sub_translate_partial: list = field(default_factory=list)
-    sub_translate_clean: list = field(default_factory=list)
-    sub_translate_failed_parts: list = field(default_factory=list)
-    recovery_notes: list = field(default_factory=list)
+# Sprint 6.D-2.1: PartRenderContext dataclass extracted to a dedicated
+# module. Re-exported here so existing external consumers
+# (pipeline_render_loop.py, render_pipeline.py) keep their existing
+# import paths working unchanged.
+from app.orchestration.stages.part_render_context import PartRenderContext
 
 
 def prepare_part_assets(
