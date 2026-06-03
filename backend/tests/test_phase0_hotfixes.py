@@ -63,18 +63,24 @@ class TestSubtitleTimingInvariant:
     def test_per_part_subtitle_transcribes_raw_clip(self):
         """Per-part subtitle logic must call transcribe_with_adapter on the already-cut
         raw_part clip, not slice the full-source SRT.
-        Logic lives in part_renderer.py (Phase A-3 extraction) — check both modules."""
+        Logic lives in part_renderer.py (Phase A-3 extraction) or, after Sprint 6.D-2.2,
+        in stages/part_asset_planner.py — scan all three modules."""
         from app.orchestration import render_pipeline
-        from app.orchestration.stages import part_renderer
+        from app.orchestration.stages import part_renderer, part_asset_planner
 
-        src = inspect.getsource(render_pipeline) + inspect.getsource(part_renderer)
+        src = (
+            inspect.getsource(render_pipeline)
+            + inspect.getsource(part_renderer)
+            + inspect.getsource(part_asset_planner)
+        )
         assert "SUBTITLE_PER_PART_MODEL" in src, (
             "per-part transcription model config (SUBTITLE_PER_PART_MODEL) must exist "
-            "in render_pipeline.py or part_renderer.py"
+            "in render_pipeline.py, part_renderer.py, or part_asset_planner.py"
         )
         assert "str(raw_part)" in src, (
             "transcribe_with_adapter() must receive str(raw_part) so subtitle timestamps "
-            "start at 0 by construction — must exist in render_pipeline.py or part_renderer.py"
+            "start at 0 by construction — must exist in render_pipeline.py, "
+            "part_renderer.py, or part_asset_planner.py"
         )
 
 
