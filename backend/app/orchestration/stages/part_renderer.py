@@ -137,6 +137,13 @@ from app.orchestration.stages.part_render_encode import (
 # (Sacred Contract #5) moves WITH this helper since it is the natural
 # return point of process_one_part.
 from app.orchestration.stages.part_done import run_part_done
+# Sprint 6.D-2.5b: Per-part voice TTS + audio mix block (subtitle and
+# translated_subtitle voice paths + mix_narration_audio with atomic
+# file swap) extracted to a dedicated module. Side-effect-only —
+# mutates ctx.voice_part_tts_attempts / voice_mix_ok lists,
+# part_manifest.narration_path, and overwrites final_part with the
+# mixed video.
+from app.orchestration.stages.part_voice_mix import run_part_voice_mix
 
 
 def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
@@ -280,237 +287,14 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
         _effective_subtitle_style, _preflight,
     )
     _render_ms = _encode.render_ms
-    _part_subtitle_voice_path = None
-    if (
-        getattr(ctx.payload, "voice_enabled", False)
-        and getattr(ctx.payload, "voice_source", "manual") == "subtitle"
-        and ctx.voice_audio_path is None
-    ):
-        _part_srt = srt_part if srt_part.exists() and srt_part.stat().st_size > 0 else None
-        _part_srt_inmem_text: str | None = None
-        if _part_srt is None and ctx.full_srt_available:
-            try:
-                _part_srt_inmem_text = slice_srt_to_text(str(ctx.full_srt), seg["start"], seg["end"])
-                _part_srt = ctx.full_srt
-                _job_log(ctx.effective_channel, ctx.job_id, f"voice.srt_in_memory part_no={idx} (no temp file written)", kind="debug")
-            except Exception:
-                _part_srt = None
-        if _part_srt:
-            _part_narration_text = _part_srt_inmem_text if _part_srt_inmem_text is not None else extract_text_from_srt(str(_part_srt))
-            if _part_narration_text.strip():
-                ctx.voice_part_tts_attempts.append(idx)
-                _part_mp3 = str(TEMP_DIR / ctx.job_id / "voice" / f"part_{idx:03d}.mp3")
-                if ctx.cancel_registry.is_cancelled(ctx.job_id):
-                    raise ctx.cancel_registry.JobCancelledError()
-                try:
-                    _job_log(ctx.effective_channel, ctx.job_id, f"Generating AI narration for part {idx}/{ctx.total_parts} from subtitle", kind="debug")
-                    _emit_render_event(
-                        channel_code=ctx.effective_channel,
-                        job_id=ctx.job_id,
-                        event="voice_tts_started",
-                        level="INFO",
-                        message=f"Generating AI voice from subtitle (part {idx})",
-                        step="voice.tts",
-                        context={"part_no": idx, "language": ctx.payload.voice_language, "source": "subtitle"},
-                    )
-                    _part_subtitle_voice_path = generate_narration_audio(
-                        text=_part_narration_text,
-                        language=ctx.payload.voice_language,
-                        gender=ctx.payload.voice_gender,
-                        rate=ctx.payload.voice_rate,
-                        job_id=ctx.job_id,
-                        voice_id=getattr(ctx.payload, "voice_id", None),
-                        output_path=_part_mp3,
-                        content_type=str(seg.get("content_type_hint") or "vlog"),
-                        tts_engine=getattr(ctx.payload, "tts_engine", "edge"),
-                    )
-                    _emit_render_event(
-                        channel_code=ctx.effective_channel,
-                        job_id=ctx.job_id,
-                        event="voice_tts_completed",
-                        level="INFO",
-                        message=f"AI voice from subtitle generated (part {idx})",
-                        step="voice.tts",
-                        context={"part_no": idx, "audio_path": _part_subtitle_voice_path, "voice_text_length": len(_part_narration_text)},
-                    )
-                    _part_subtitle_voice_path = _maybe_cleanup_narration_audio(
-                        str(_part_subtitle_voice_path),
-                        ctx.payload,
-                        effective_channel=ctx.effective_channel,
-                        job_id=ctx.job_id,
-                        part_no=idx,
-                        source="subtitle",
-                    )
-                except Exception as _part_tts_exc:
-                    _part_subtitle_voice_path = None
-                    _job_log(ctx.effective_channel, ctx.job_id, f"voice_part_tts_failed part_no={idx}: {_part_tts_exc}", kind="error")
-                    _job_log(ctx.effective_channel, ctx.job_id, f"Narration generation failed for part {idx}. Continuing without narration.", kind="warning")
-                    _emit_render_event(
-                        channel_code=ctx.effective_channel,
-                        job_id=ctx.job_id,
-                        event="voice_failed",
-                        level="ERROR",
-                        message=f"AI voice (subtitle, part {idx}) failed: {_part_tts_exc}",
-                        step="voice.tts",
-                        exception=_part_tts_exc,
-                        traceback_text=traceback.format_exc(),
-                        context={"part_no": idx, "error_code": "VOICE001"},
-                    )
-            else:
-                _job_log(ctx.effective_channel, ctx.job_id, f"VOICE_SUBTITLE_EMPTY: part {idx} subtitle text empty; narration skipped", kind="warning")
-        else:
-            _job_log(ctx.effective_channel, ctx.job_id, f"voice_subtitle_source_missing part_no={idx} source=subtitle; narration skipped", kind="warning")
-            _emit_render_event(
-                channel_code=ctx.effective_channel,
-                job_id=ctx.job_id,
-                event="voice_subtitle_source_missing",
-                level="WARNING",
-                message=f"Subtitle voice source missing for part {idx}; narration skipped",
-                step="voice.tts",
-                context={"part_no": idx, "source": "subtitle"},
-            )
-    elif (
-        getattr(ctx.payload, "voice_enabled", False)
-        and getattr(ctx.payload, "voice_source", "manual") == "translated_subtitle"
-        and ctx.voice_audio_path is None
-    ):
-        _tgt_lang_voice = getattr(ctx.payload, "subtitle_target_language", "en")
-        if not ctx.payload.voice_language.lower().startswith(_tgt_lang_voice.lower()):
-            _job_log(ctx.effective_channel, ctx.job_id, f"VOICE_LANGUAGE_TARGET_MISMATCH: voice_language={ctx.payload.voice_language} target={_tgt_lang_voice}", kind="warning")
-        _voice_srt = translated_srt_part if translated_srt_part.exists() and translated_srt_part.stat().st_size > 0 else None
-        if _voice_srt is None:
-            _job_log(ctx.effective_channel, ctx.job_id, f"VOICE_TRANSLATED_SUBTITLE_MISSING: part {idx} translated SRT not found; falling back to original", kind="warning")
-            _voice_srt = srt_part if srt_part.exists() and srt_part.stat().st_size > 0 else None
-        _voice_srt_inmem_text: str | None = None
-        if _voice_srt is None and ctx.full_srt_available:
-            try:
-                _voice_srt_inmem_text = slice_srt_to_text(str(ctx.full_srt), seg["start"], seg["end"])
-                _voice_srt = ctx.full_srt
-                _job_log(ctx.effective_channel, ctx.job_id, f"voice.translated_srt_in_memory part_no={idx} (no temp file written)", kind="debug")
-            except Exception:
-                _voice_srt = None
-        if _voice_srt:
-            _part_narration_text = _voice_srt_inmem_text if _voice_srt_inmem_text is not None else extract_text_from_srt(str(_voice_srt))
-            if _part_narration_text.strip():
-                ctx.voice_part_tts_attempts.append(idx)
-                _part_mp3 = str(TEMP_DIR / ctx.job_id / "voice" / f"part_{idx:03d}.mp3")
-                try:
-                    _job_log(ctx.effective_channel, ctx.job_id, f"voice_translated_subtitle_tts_started part_no={idx}", kind="debug")
-                    _emit_render_event(
-                        channel_code=ctx.effective_channel,
-                        job_id=ctx.job_id,
-                        event="voice_translated_subtitle_tts_started",
-                        level="INFO",
-                        message=f"Generating AI voice from translated subtitle (part {idx})",
-                        step="voice.tts",
-                        context={"part_no": idx, "language": ctx.payload.voice_language, "target": _tgt_lang_voice},
-                    )
-                    _part_subtitle_voice_path = generate_narration_audio(
-                        text=_part_narration_text,
-                        language=ctx.payload.voice_language,
-                        gender=ctx.payload.voice_gender,
-                        rate=ctx.payload.voice_rate,
-                        job_id=ctx.job_id,
-                        voice_id=getattr(ctx.payload, "voice_id", None),
-                        output_path=_part_mp3,
-                        content_type=str(seg.get("content_type_hint") or "vlog"),
-                        tts_engine=getattr(ctx.payload, "tts_engine", "edge"),
-                    )
-                    _emit_render_event(
-                        channel_code=ctx.effective_channel,
-                        job_id=ctx.job_id,
-                        event="voice_translated_subtitle_tts_completed",
-                        level="INFO",
-                        message=f"AI voice from translated subtitle generated (part {idx})",
-                        step="voice.tts",
-                        context={"part_no": idx, "audio_path": _part_subtitle_voice_path, "voice_text_length": len(_part_narration_text)},
-                    )
-                    _part_subtitle_voice_path = _maybe_cleanup_narration_audio(
-                        str(_part_subtitle_voice_path),
-                        ctx.payload,
-                        effective_channel=ctx.effective_channel,
-                        job_id=ctx.job_id,
-                        part_no=idx,
-                        source="translated_subtitle",
-                    )
-                except Exception as _part_tts_exc:
-                    _part_subtitle_voice_path = None
-                    _job_log(ctx.effective_channel, ctx.job_id, f"voice_translated_subtitle_tts_failed part_no={idx}: {_part_tts_exc}", kind="error")
-                    _job_log(ctx.effective_channel, ctx.job_id, f"Narration generation failed for part {idx}. Continuing without narration.", kind="warning")
-                    _emit_render_event(
-                        channel_code=ctx.effective_channel,
-                        job_id=ctx.job_id,
-                        event="voice_failed",
-                        level="ERROR",
-                        message=f"AI voice (translated subtitle, part {idx}) failed: {_part_tts_exc}",
-                        step="voice.tts",
-                        exception=_part_tts_exc,
-                        traceback_text=traceback.format_exc(),
-                        context={"part_no": idx, "error_code": "VOICE001"},
-                    )
-            else:
-                _job_log(ctx.effective_channel, ctx.job_id, f"VOICE_SUBTITLE_EMPTY: part {idx} translated subtitle text empty; narration skipped", kind="warning")
-        else:
-            _job_log(ctx.effective_channel, ctx.job_id, f"voice_subtitle_source_missing part_no={idx} source=translated_subtitle; narration skipped", kind="warning")
-            _emit_render_event(
-                channel_code=ctx.effective_channel,
-                job_id=ctx.job_id,
-                event="voice_subtitle_source_missing",
-                level="WARNING",
-                message=f"Translated subtitle voice source missing for part {idx}; narration skipped",
-                step="voice.tts",
-                context={"part_no": idx, "source": "translated_subtitle"},
-            )
-    _final_voice_path = ctx.voice_audio_path or _part_subtitle_voice_path
-    if _final_voice_path:
-        _part_manifest.narration_path = str(_final_voice_path)
-        write_manifest(ctx.work_dir, _part_manifest)
-        mixed_part = final_part.with_name(final_part.stem + ".voice_tmp.mp4")
-        try:
-            _job_log(ctx.effective_channel, ctx.job_id, f"Mixing AI narration into part {idx}/{ctx.total_parts}", kind="debug")
-            _emit_render_event(
-                channel_code=ctx.effective_channel,
-                job_id=ctx.job_id,
-                event="voice_mix_started",
-                level="INFO",
-                message="Mixing narration audio",
-                step="voice.mix",
-                context={"part_no": idx, "mix_mode": ctx.payload.voice_mix_mode},
-            )
-            mix_narration_audio(
-                video_path=str(final_part),
-                narration_audio_path=str(_final_voice_path),
-                mix_mode=ctx.payload.voice_mix_mode,
-                output_path=str(mixed_part),
-                playback_speed=_get_effective_playback_speed(ctx.payload, ctx.target_platform),
-            )
-            os.replace(str(mixed_part), str(final_part))
-            _job_log(ctx.effective_channel, ctx.job_id, f"voice_mix_completed part_no={idx}/{ctx.total_parts}")
-            ctx.voice_mix_ok.append(idx)
-            _emit_render_event(
-                channel_code=ctx.effective_channel,
-                job_id=ctx.job_id,
-                event="voice_mix_completed",
-                level="INFO",
-                message="Voice narration completed",
-                step="voice.mix",
-                context={"part_no": idx, "output_file": str(final_part)},
-            )
-        except Exception as mix_exc:
-            _safe_unlink(mixed_part)
-            _job_log(ctx.effective_channel, ctx.job_id, f"voice_mix_failed part_no={idx}: {mix_exc}", kind="error")
-            _emit_render_event(
-                channel_code=ctx.effective_channel,
-                job_id=ctx.job_id,
-                event="voice_failed",
-                level="ERROR",
-                message=f"voice_mix_failed part_no={idx}: {mix_exc}",
-                step="voice.mix",
-                context={"part_no": idx, "output_file": str(final_part), "error_code": "VOICE001"},
-                exception=mix_exc,
-                traceback_text=traceback.format_exc(),
-            )
-
+    # Sprint 6.D-2.5b: Voice TTS + audio mix block (subtitle and
+    # translated_subtitle paths + mix_narration_audio with atomic file
+    # swap) moved to part_voice_mix.run_part_voice_mix. Side-effect-only:
+    # mutates ctx.voice_part_tts_attempts / voice_mix_ok, manifest.narration_path,
+    # and overwrites final_part in-place when narration was generated.
+    run_part_voice_mix(
+        ctx, idx, seg, srt_part, translated_srt_part, final_part, _part_manifest,
+    )
     _micro_pacing_applied = False
     _micro_pacing_trim_sec = 0.0
     if ctx.cancel_registry.is_cancelled(ctx.job_id):

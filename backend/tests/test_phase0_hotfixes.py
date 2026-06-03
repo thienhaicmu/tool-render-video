@@ -217,14 +217,20 @@ class TestMixNarrationAudioAtempo:
     def test_render_pipeline_passes_playback_speed_to_mix(self):
         """mix_narration_audio() must receive playback_speed=_get_effective_playback_speed.
         Omitting it silently uses default (1.0) and skips atempo at all speeds.
-        Logic lives in part_renderer.py (Phase A-3 extraction) — check both modules."""
+        Logic lives in part_renderer.py (Phase A-3 extraction) or, after Sprint 6.D-2.5b,
+        in stages/part_voice_mix.py — scan all three modules."""
         from app.orchestration import render_pipeline
-        from app.orchestration.stages import part_renderer
+        from app.orchestration.stages import part_renderer, part_voice_mix
 
-        src = inspect.getsource(render_pipeline) + inspect.getsource(part_renderer)
+        src = (
+            inspect.getsource(render_pipeline)
+            + inspect.getsource(part_renderer)
+            + inspect.getsource(part_voice_mix)
+        )
         assert "playback_speed=_get_effective_playback_speed" in src, (
             "playback_speed=_get_effective_playback_speed(...) must be passed to "
-            "mix_narration_audio() in render_pipeline.py or part_renderer.py"
+            "mix_narration_audio() in render_pipeline.py, part_renderer.py, "
+            "or part_voice_mix.py"
         )
 
 
